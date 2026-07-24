@@ -64,11 +64,8 @@ resulting from the use or misuse of this software.
                   </div>
                   <div class="w-full truncate">
                     <div class="flex items-center w-full">
-                      <p class="font-semibold">{{ getUser(chat.other_user_id).username || 'Anonymous' }}</p>
-                      <p class="hidden md:block text-sm text-dark ml-2 truncate">
-                        @{{ chat.other_user_id }}
-                      </p>
-                      <p class="text-sm text-dark ml-auto">
+                      <p class="font-semibold truncate min-w-0">{{ getUser(chat.other_user_id).username || 'Anonymous' }}</p>
+                      <p class="text-sm text-dark ml-auto whitespace-nowrap flex-none pl-2">
                         {{ $filters.timeago(chat.updated_at) }}
                       </p>
                     </div>

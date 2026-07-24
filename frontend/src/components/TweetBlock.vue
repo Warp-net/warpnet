@@ -38,14 +38,14 @@ resulting from the use or misuse of this software.
   <div
       v-if="!deleted"
       ref="tweetRoot"
-      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex cursor-pointer"
+      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest transition-colors duration-150 flex cursor-pointer"
       @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
       <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
-          class="h-12 w-12 rounded-full flex-none object-cover bg-transparent"
+          class="h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
           :alt="`${tweet.username || 'User'} avatar`"
         />
       </button>

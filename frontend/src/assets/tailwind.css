@@ -164,6 +164,60 @@ button.rounded-full > i.fa {
   min-height: 2rem;
 }
 
+/* Brand-colored form controls: checkboxes, radios and selects render in the
+   magenta accent instead of the default OS blue, so the sign-up
+   acknowledgements and Settings toggles stay on-palette in every theme. */
+input[type="checkbox"],
+input[type="radio"],
+select {
+  accent-color: #C5007F;
+}
+
+/* Micro-interactions on the tweet action icons: a quick squash on press gives
+   tactile feedback, and liking / retweeting pops the icon as it changes color.
+   Applying the animation via the color class means it re-fires each time the
+   action is toggled on. */
+button.rounded-full > i.fas,
+button.rounded-full > i.far {
+  transition: transform 0.12s ease;
+}
+button.rounded-full:active > i.fas,
+button.rounded-full:active > i.far {
+  transform: scale(0.86);
+}
+@keyframes icon-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.45); }
+  55%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+i.fa-heart.text-red-600,
+i.fa-retweet.text-green-500 {
+  animation: icon-pop 0.32s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  button.rounded-full:active > i.fas,
+  button.rounded-full:active > i.far { transform: none; }
+  i.fa-heart.text-red-600,
+  i.fa-retweet.text-green-500 { animation: none; }
+}
+
+/* Active side-nav item: a persistent brand pill for the current route so the
+   selected destination reads at a glance (distinct from the hover tint).
+   Plain theme-scoped selectors keep it correct across all three themes. */
+.nav-active {
+  background-color: theme("colors.lightblue");
+  color: theme("colors.blue");
+}
+.dark .nav-active {
+  background-color: theme("colors.darktheme.foreground");
+  color: theme("colors.darktheme.text");
+}
+.mastodon .nav-active {
+  background-color: theme("colors.mastodon.foreground");
+  color: theme("colors.mastodon.text");
+}
+
 /* Toast notification container */
 .toast-container {
   position: fixed;

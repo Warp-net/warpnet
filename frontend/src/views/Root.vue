@@ -27,6 +27,13 @@ resulting from the use or misuse of this software.
     <div class="flex w-full md:w-1/2 h-full bg-blue p-5 md:p-0">
       <div class="flex items-center justify-center w-full h-full">
         <div class="flex flex-col">
+          <div class="flex items-center mb-12">
+            <svg viewBox="0 0 100 100" class="w-10 h-10 text-white mr-3" fill="none" stroke="currentColor"
+                 stroke-width="12" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M25 36 L36.5 64 L50 50 L63.5 64 L75 36" />
+            </svg>
+            <span class="text-white font-extrabold text-3xl tracking-tight">Warpnet</span>
+          </div>
           <div class="flex items-center">
             <i class="fas fa-search text-white text-2xl mr-5"></i>
             <p class="text-white font-bold text-xl">Follow your interests.</p>
@@ -95,10 +102,27 @@ resulting from the use or misuse of this software.
 
       <div
         class="modal-main bg-white w-11/12 max-w-md mx-auto rounded-lg z-50 overflow-y-auto max-h-full"
+        style="height: auto; min-height: 22rem; max-height: 85vh;"
         role="dialog"
         aria-modal="true"
         aria-label="Create your account"
       >
+        <!-- Slim progress bar so the 4-step wizard reads as visible progress,
+             not just the "Step N of 4" text. -->
+        <div class="px-8 pt-4 pb-1">
+          <div
+            class="h-1.5 w-full bg-lightblue rounded-full overflow-hidden"
+            role="progressbar"
+            :aria-valuenow="signupStep"
+            aria-valuemin="1"
+            aria-valuemax="4"
+          >
+            <div
+              class="h-full bg-blue rounded-full transition-all duration-300 ease-out"
+              :style="{ width: (signupStep / 4 * 100) + '%' }"
+            ></div>
+          </div>
+        </div>
         <div v-if="showModal === 'step1'">
           <div class="pl-1 pr-4 py-1 h-12">
             <button
@@ -349,6 +373,10 @@ export default {
     // the node will later reject on the final step.
     isPasswordStrong() {
       return isPasswordStrong(this.password);
+    },
+    // Current sign-up step (1–4), drives the modal progress bar.
+    signupStep() {
+      return { step1: 1, step2: 2, step3: 3, step4: 4 }[this.showModal] || 1;
     },
   },
   async mounted() {

@@ -82,7 +82,7 @@ resulting from the use or misuse of this software.
           </div>
           <div
             v-if="!profile.background_image"
-            class="bg-gray-400 h-full max-h-full"
+            class="bg-gradient-to-br from-blue to-darkblue h-full max-h-full"
           ></div>
         </div>
 

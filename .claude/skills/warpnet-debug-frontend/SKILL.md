@@ -70,7 +70,6 @@ Most Warpnet bugs are cross-stack: the symptom is in the UI but the cause is one
 1. Read the handler's actual return type.
 2. Align the client DTO field-for-field: every JSON tag on the Go struct, no extras.
 3. Drop any client-side logic that depends on the phantom fields (e.g. the `resolveUser(fromUserId)` step in the notification mapper).
-4. Add a regression-protecting subtest in `test/api_sync_test.go` (see `TestAPISync_ResponsePayloads`). If the test doesn't already cover this route, audit-extend it.
 
 **Prevention.** `test/api_sync_test.go::TestAPISync_ResponsePayloads` walks each handler's success-path return, resolves the response struct via the same event→domain alias chain, and asserts that the client DTO's keys are a subset of the backend's wire keys. Re-run it whenever any of the three layers (`event.go`, `domain/warpnet.go`, `WarpnetDtos.kt`) changes:
 
@@ -78,7 +77,7 @@ Most Warpnet bugs are cross-stack: the symptom is in the UI but the cause is one
 go test ./test/ -run TestAPISync_ResponsePayloads -count=1
 ```
 
-The handler's return statement is the ground truth — see the `warpnet-debug-backend` skill and `test/api_sync_test.go`.
+The handler's return statement is the ground truth — see the `warpnet-debug-backend` skill.
 
 ## § Stream-call serialisation bottleneck
 

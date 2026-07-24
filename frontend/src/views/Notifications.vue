@@ -104,8 +104,8 @@ resulting from the use or misuse of this software.
               :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
               @click="openNotification(notification)"
             >
-              <div class="w-full">
-                <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
+              <div class="w-full flex items-center">
+                <div class="flex flex-row items-center mr-3 md:mr-4 text-2xl flex-none">
                   <i
                     v-if="notification.type === 'reply'"
                     class="pt-1 fas fa-comment text-blue"
@@ -163,8 +163,8 @@ resulting from the use or misuse of this software.
               :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
               @click="openNotification(notification)"
             >
-              <div class="w-full">
-                <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
+              <div class="w-full flex items-center">
+                <div class="flex flex-row items-center mr-3 md:mr-4 text-2xl flex-none">
                   <img
                     :src="avatarFor(notification)"
                     class="h-8 w-8 ml-2 rounded-full flex-none"

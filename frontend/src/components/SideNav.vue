@@ -71,6 +71,7 @@ resulting from the use or misuse of this software.
       <div>
         <button
           @click="open('Home')"
+          :class="{ 'nav-active': $route.name === 'Home' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Home"
         >
@@ -88,6 +89,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="open('Notifications')"
+          :class="{ 'nav-active': $route.name === 'Notifications' }"
           class="relative hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Notifications"
         >
@@ -114,6 +116,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="open('Chats')"
+          :class="{ 'nav-active': $route.name === 'Chats' || $route.name === 'Messages' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Messages"
         >
@@ -138,6 +141,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="$router.push({ name: 'Bookmarks' })"
+          :class="{ 'nav-active': $route.name === 'Bookmarks' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Bookmarks"
         >
@@ -155,6 +159,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="open('Profile')"
+          :class="{ 'nav-active': $route.name === 'Profile' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Profile"
         >
@@ -172,6 +177,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="$router.push({ name: 'Settings' })"
+          :class="{ 'nav-active': $route.name && $route.name.startsWith('Settings') }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Settings"
         >
