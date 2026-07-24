@@ -107,7 +107,6 @@ warpnet --node.network mainnet   # the live network
 
 - [Go 1.26+](https://go.dev/doc/install)
 - [Wails v2.10.2](https://github.com/wailsapp/wails) (for the desktop client)
-- *Optional:* [Serena + `gopls` symbolic tooling](docs/SERENA.md) — LSP-backed code navigation for Claude Code
 
 ### Run a member node with the desktop UI
 

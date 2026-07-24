@@ -49,7 +49,7 @@ frontend/node_modules
 # scripts
 *.py
 
-# Serena MCP (gopls LSP) project cache/memory - see docs/SERENA.md
+# Serena MCP (gopls LSP) project cache/memory - see .claude/SERENA.md
 .serena/
 
 # Secrets
