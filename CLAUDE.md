@@ -28,6 +28,3 @@ Prefer Serena's symbolic tools (`find_symbol`, `find_referencing_symbols`, `repl
     - Ensure correctness.
     - Ensure relevance.
     - Discard low-value or incorrect suggestions.
-
-## Versioning
-- Increment the patch version in the `version` file on every commit.

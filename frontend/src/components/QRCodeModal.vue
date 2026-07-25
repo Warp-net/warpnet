@@ -106,6 +106,20 @@ resulting from the use or misuse of this software.
         <p>No QR code is currently available. Please try again later.</p>
       </div>
 
+      <!-- Fallback for when scanning isn't possible: copy the exact raw
+           connection data encoded in the QR (the Base45 pairing payload). -->
+      <div v-if="qrPayload" class="flex justify-center mb-4">
+        <button
+          type="button"
+          @click="copyPayload"
+          class="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          :aria-label="copied ? 'Connection data copied to clipboard' : 'Copy connection data to clipboard'"
+        >
+          <i :class="copied ? 'fas fa-check text-green-600' : 'far fa-copy'" aria-hidden="true"></i>
+          {{ copied ? "Copied!" : "Copy connection data" }}
+        </button>
+      </div>
+
       <!-- Step-by-step. Kept terse so the modal stays glanceable; the
            SVG above carries most of the "what is happening" message. -->
       <ol class="text-sm text-gray-700 space-y-2 list-decimal list-inside">
@@ -134,11 +148,60 @@ export default {
       type: String,
       required: false,
     },
+    qrPayload: {
+      type: String,
+      required: false,
+    },
   },
   emits: ["close"],
+  data() {
+    return {
+      copied: false,
+    };
+  },
+  watch: {
+    // Reset the button label when the dialog is closed so reopening it never
+    // shows a stale "Copied!" from a previous session.
+    show(open) {
+      if (!open) {
+        this.copied = false;
+        if (this._copyResetTimer) {
+          clearTimeout(this._copyResetTimer);
+          this._copyResetTimer = null;
+        }
+      }
+    },
+  },
   methods: {
     close() {
       this.$emit("close");
+    },
+    async copyPayload() {
+      if (!this.qrPayload) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(this.qrPayload);
+        } else {
+          // Fallback for insecure contexts / older browsers without the
+          // async Clipboard API.
+          const ta = document.createElement("textarea");
+          ta.value = this.qrPayload;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        this.copied = true;
+        if (this._copyResetTimer) clearTimeout(this._copyResetTimer);
+        this._copyResetTimer = setTimeout(() => {
+          this.copied = false;
+          this._copyResetTimer = null;
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy connection data:", err);
+      }
     },
     handleEscape(event) {
       if (event.key === "Escape") {
@@ -151,6 +214,10 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener("keydown", this.handleEscape);
+    if (this._copyResetTimer) {
+      clearTimeout(this._copyResetTimer);
+      this._copyResetTimer = null;
+    }
   },
 };
 </script>

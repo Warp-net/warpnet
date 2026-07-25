@@ -26,6 +26,7 @@ resulting from the use or misuse of this software.
     <QRCodeModal
       :show="qrModalOpen"
       :qrData="qrCode"
+      :qrPayload="qrPayload"
       @close="closeQR"
     />
   </div>
@@ -285,6 +286,7 @@ export default {
       newNotifications: 0,
       qrModalOpen: false,
       qrCode: "",
+      qrPayload: "",
       unsubscribeNotifications: null,
       unsubscribeOwner: null,
     };
@@ -353,8 +355,10 @@ export default {
     },
     signInByQR() {
         // warpnetService.getQR() is a synchronous in-memory lookup,
-        // no await needed.
+        // no await needed. getQRPayload() returns the raw Base45 string the
+        // QR encodes, for the modal's "copy connection data" button.
         this.qrCode = warpnetService.getQR();
+        this.qrPayload = warpnetService.getQRPayload();
         this.qrModalOpen = true;
     },
     async closeQR() {

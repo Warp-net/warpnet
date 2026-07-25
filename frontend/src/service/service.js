@@ -109,6 +109,10 @@ const OWNER_STORAGE = "warpnet.owner";
 // sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
 // reload without persisting the pairing secret to disk. Cleared on logout.
 const QR_STORAGE = "warpnet.qr";
+// sessionStorage key for the raw pairing payload (the exact Base45 string the
+// QR encodes). Kept alongside QR_STORAGE, on the same ephemeral terms, so the
+// modal's "copy connection data" button works after a reload.
+const QR_PAYLOAD_STORAGE = "warpnet.qr.payload";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
 // Subscribers to owner-profile changes (username/avatar edits). The owner
@@ -183,6 +187,25 @@ export const warpnetService = {
             if (qr) stateMap.set(key, qr)
         }
         return qr || ""
+    },
+
+    // The raw pairing payload is the exact Base45 string encoded into the QR
+    // image (see getQR); the Android client decodes the same string. Stored
+    // separately so copying it never has to reverse the rendered PNG.
+    setQRPayload(payload) {
+        const key = `QR_PAYLOAD`;
+        stateMap.set(key, payload)
+        try { sessionStorage.setItem(QR_PAYLOAD_STORAGE, payload) } catch (e) {}
+    },
+
+    getQRPayload() {
+        const key = `QR_PAYLOAD`;
+        let payload = stateMap.get(key)
+        if (!payload) {
+            try { payload = sessionStorage.getItem(QR_PAYLOAD_STORAGE) || "" } catch (e) { payload = "" }
+            if (payload) stateMap.set(key, payload)
+        }
+        return payload || ""
     },
 
     setCursor(key, cursor) {
@@ -301,6 +324,7 @@ export const warpnetService = {
 
         const qrCode = await buildQRCode(qrData)
         warpnetService.setQR(qrCode)
+        warpnetService.setQRPayload(qrData)
 
         startRefreshNotifications()
     },
@@ -318,6 +342,7 @@ export const warpnetService = {
         stateMap.clear()
         try { localStorage.removeItem(OWNER_STORAGE) } catch (e) {}
         try { sessionStorage.removeItem(QR_STORAGE) } catch (e) {}
+        try { sessionStorage.removeItem(QR_PAYLOAD_STORAGE) } catch (e) {}
         try {
             localStorage.removeItem(`first_run_seen`)
         } catch (e) {}
