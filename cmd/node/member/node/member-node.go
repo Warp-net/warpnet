@@ -101,6 +101,12 @@ func NewMemberNode(
 	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
+	// Apply the owner's configured ActivityPub gateway id (empty falls back to
+	// the built-in default) before seeding the entry user and starting discovery.
+	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(owner.UserId); err == nil {
+		mastodon.SetGatewayNodeID(gw.NodeID)
+	}
+
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	mastodon.SeedEntryUser(database.NewUserRepo(db))
 
@@ -620,6 +626,14 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		{
 			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
 			handler.StreamUpdateNotificationSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_GATEWAY_SETTINGS,
+			handler.StreamGetGatewaySettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_GATEWAY_SETTINGS,
+			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
 		},
 	}
 }

@@ -37,15 +37,34 @@ const (
 	// Network is the User.Network tag for accounts bridged in from Mastodon.
 	Network = "mastodon"
 
-	// GatewayNodeID is the libp2p peer id of the ActivityPub gateway,
+	// DefaultGatewayNodeID is the libp2p peer id of the ActivityPub gateway,
 	// deterministically derived from its fixed seed. It is the home node of
-	// every bridged Mastodon user.
-	GatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
+	// every bridged Mastodon user, and the fallback when the owner has not
+	// configured a different gateway in settings.
+	DefaultGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
 
 	// EntryHandle is the single Mastodon account seeded locally as the entry
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"
 )
+
+// gatewayNodeID is the effective gateway peer id. It defaults to
+// DefaultGatewayNodeID and is overridden once at node startup from the owner's
+// settings (see SetGatewayNodeID); it is not mutated afterwards.
+var gatewayNodeID = DefaultGatewayNodeID
+
+// GatewayNodeID returns the effective ActivityPub gateway peer id.
+func GatewayNodeID() string { return gatewayNodeID }
+
+// SetGatewayNodeID overrides the effective gateway peer id from the owner's
+// settings. Called once at startup, before seeding and discovery; an empty id
+// is ignored so DefaultGatewayNodeID stands.
+func SetGatewayNodeID(id string) {
+	if id == "" {
+		return
+	}
+	gatewayNodeID = id
+}
 
 // UserSeeder is the subset of the user repository the seeding needs.
 type UserSeeder interface {
@@ -59,7 +78,7 @@ func SeedEntryUser(repo UserSeeder) {
 	u := domain.User{
 		Id:       EntryHandle,
 		Username: "Warpnet",
-		NodeId:   GatewayNodeID,
+		NodeId:   gatewayNodeID,
 		Network:  Network,
 	}
 	if _, err := repo.Create(u); err != nil {

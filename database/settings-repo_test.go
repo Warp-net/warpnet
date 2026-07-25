@@ -72,6 +72,34 @@ func (s *SettingsRepoTestSuite) TestEmptyUserId() {
 	s.Error(s.repo.SetNotificationSettings("", domain.NotificationSettings{}))
 }
 
+func (s *SettingsRepoTestSuite) TestGatewayDefaultsWhenUnset() {
+	user := uuid.New().String()
+	got, err := s.repo.GetGatewaySettings(user)
+	s.Require().NoError(err)
+	s.Empty(got.NodeID)
+}
+
+func (s *SettingsRepoTestSuite) TestGatewaySetGet() {
+	user := uuid.New().String()
+	want := domain.GatewaySettings{NodeID: "12D3KooWCustomGateway"}
+	s.Require().NoError(s.repo.SetGatewaySettings(user, want))
+
+	got, err := s.repo.GetGatewaySettings(user)
+	s.Require().NoError(err)
+	s.Equal(want.NodeID, got.NodeID)
+
+	// Gateway settings must not collide with notification settings for the same user.
+	ns, err := s.repo.GetNotificationSettings(user)
+	s.Require().NoError(err)
+	s.False(ns.EmailEnabled)
+}
+
+func (s *SettingsRepoTestSuite) TestGatewayEmptyUserId() {
+	_, err := s.repo.GetGatewaySettings("")
+	s.Error(err)
+	s.Error(s.repo.SetGatewaySettings("", domain.GatewaySettings{}))
+}
+
 func TestSettingsRepoTestSuite(t *testing.T) {
 	suite.Run(t, new(SettingsRepoTestSuite))
 }

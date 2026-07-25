@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -38,6 +39,12 @@ import (
 type SettingsStorer interface {
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
+}
+
+// GatewaySettingsStorer is the narrow surface the gateway-settings handlers need.
+type GatewaySettingsStorer interface {
+	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
+	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 }
 
 // SettingsAuthStorer resolves the local node owner.
@@ -76,5 +83,45 @@ func StreamUpdateNotificationSettingsHandler(
 			return nil, err
 		}
 		return event.GetNotificationSettingsResponse(ev), nil
+	}
+}
+
+func StreamGetGatewaySettingsHandler(
+	repo GatewaySettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		owner := authRepo.GetOwner()
+		settings, err := repo.GetGatewaySettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		if settings.NodeID == "" {
+			settings.NodeID = mastodon.DefaultGatewayNodeID
+		}
+		return event.GetGatewaySettingsResponse(settings), nil
+	}
+}
+
+func StreamUpdateGatewaySettingsHandler(
+	repo GatewaySettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.UpdateGatewaySettingsEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		owner := authRepo.GetOwner()
+		if owner.UserId == "" {
+			return nil, warpnet.WarpError("update gateway settings: empty owner")
+		}
+		if ev.NodeID == "" {
+			ev.NodeID = mastodon.DefaultGatewayNodeID
+		}
+		if err := repo.SetGatewaySettings(owner.UserId, ev); err != nil {
+			return nil, err
+		}
+		return event.GetGatewaySettingsResponse(ev), nil
 	}
 }

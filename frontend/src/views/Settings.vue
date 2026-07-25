@@ -70,6 +70,7 @@ export default {
         { name: 'SettingsMutes', label: 'Muted users', hint: 'Users you have muted', icon: 'fas fa-volume-mute' },
         { name: 'SettingsFilters', label: 'Filters', hint: 'Hide tweets matching keywords', icon: 'fas fa-filter' },
         { name: 'SettingsNotifications', label: 'Email notifications', hint: 'Send notifications to your email', icon: 'fas fa-envelope' },
+        { name: 'SettingsGateway', label: 'Fediverse gateway', hint: 'ActivityPub gateway node id', icon: 'fas fa-network-wired' },
       ],
     };
   },

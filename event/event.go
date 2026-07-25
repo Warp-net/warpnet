@@ -532,6 +532,16 @@ type GetNotificationSettingsResponse = domain.NotificationSettings
 // UpdateNotificationSettingsEvent defines model for UpdateNotificationSettingsEvent.
 type UpdateNotificationSettingsEvent = domain.NotificationSettings
 
+// GetGatewaySettingsEvent defines model for GetGatewaySettingsEvent.
+// The owner is resolved server-side, so the request carries no fields.
+type GetGatewaySettingsEvent struct{}
+
+// GetGatewaySettingsResponse defines model for GetGatewaySettingsResponse.
+type GetGatewaySettingsResponse = domain.GatewaySettings
+
+// UpdateGatewaySettingsEvent defines model for UpdateGatewaySettingsEvent.
+type UpdateGatewaySettingsEvent = domain.GatewaySettings
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`

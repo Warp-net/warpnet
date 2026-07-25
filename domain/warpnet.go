@@ -354,6 +354,12 @@ type NotificationSettings struct {
 	Types map[NotificationType]bool `json:"types"`
 }
 
+// GatewaySettings holds the ActivityPub gateway peer id this node bridges
+// through. An empty NodeID means "use the built-in default".
+type GatewaySettings struct {
+	NodeID string `json:"node_id"`
+}
+
 type ModerationResult bool
 
 const (

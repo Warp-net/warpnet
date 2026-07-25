@@ -48,6 +48,8 @@ const (
 	PRIVATE_POST_NOTIFICATIONS_READ    = "/private/post/notifications/read/0.0.0"
 	PRIVATE_GET_NOTIFICATION_SETTINGS  = "/private/get/notification/settings/0.0.0"
 	PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
+	PRIVATE_GET_GATEWAY_SETTINGS       = "/private/get/gateway/settings/0.0.0"
+	PRIVATE_POST_GATEWAY_SETTINGS      = "/private/post/gateway/settings/0.0.0"
 	PRIVATE_GET_MESSAGE                = "/private/get/message/0.0.0"
 	PRIVATE_GET_MESSAGES               = "/private/get/messages/0.0.0"
 	PRIVATE_GET_TIMELINE               = "/private/get/timeline/0.0.0"
