@@ -185,6 +185,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/gateway",
+    name: "SettingsGateway",
+    component: () =>
+      import(/* webpackChunkName: "settings-gateway" */ "../views/Settings/Gateway.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/who-to-follow",
     name: "WhoToFollow",
     component: () =>

@@ -304,7 +304,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if info.IsRelay() {
 		return
 	}
-	if pi.ID.String() == mastodon.GatewayNodeID {
+	if pi.ID.String() == mastodon.GatewayNodeID() {
 		return
 	}
 

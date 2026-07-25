@@ -53,6 +53,13 @@ func settingsKey(userId string) local_store.DatabaseKey {
 		Build()
 }
 
+func gatewaySettingsKey(userId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("gateway").
+		Build()
+}
+
 // GetNotificationSettings returns the user's notification settings, or a
 // zero-value (email disabled) record when none has been saved yet.
 func (repo *SettingsRepo) GetNotificationSettings(userId string) (domain.NotificationSettings, error) {
@@ -96,6 +103,54 @@ func (repo *SettingsRepo) SetNotificationSettings(userId string, s domain.Notifi
 	}
 	defer txn.Rollback()
 	if err := txn.Set(settingsKey(userId), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+// GetGatewaySettings returns the user's gateway settings, or a zero-value
+// (empty NodeID) record when none has been saved yet.
+func (repo *SettingsRepo) GetGatewaySettings(userId string) (domain.GatewaySettings, error) {
+	if userId == "" {
+		return domain.GatewaySettings{}, local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.GatewaySettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(gatewaySettingsKey(userId))
+	if local_store.IsNotFoundError(err) {
+		return domain.GatewaySettings{}, nil
+	}
+	if err != nil {
+		return domain.GatewaySettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.GatewaySettings{}, err
+	}
+	var s domain.GatewaySettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.GatewaySettings{}, err
+	}
+	return s, nil
+}
+
+// SetGatewaySettings persists the user's gateway settings.
+func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySettings) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(gatewaySettingsKey(userId), bt); err != nil {
 		return err
 	}
 	return txn.Commit()

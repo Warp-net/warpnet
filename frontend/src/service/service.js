@@ -37,6 +37,8 @@ export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0
 export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
 export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
+export const PRIVATE_GET_GATEWAY_SETTINGS = "/private/get/gateway/settings/0.0.0"
+export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -934,6 +936,29 @@ export const warpnetService = {
         });
         if (!resp || resp.code || !('email_enabled' in resp)) {
             throw new Error(resp?.message || 'Failed to save notification settings');
+        }
+        return resp;
+    },
+
+    // getGatewaySettings returns the node's ActivityPub gateway settings; the
+    // node fills node_id with the built-in default when nothing is stored yet.
+    async getGatewaySettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_GATEWAY_SETTINGS,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    // updateGatewaySettings persists the gateway node id and confirms the node
+    // echoed it back. An empty id makes the node fall back to its default.
+    async updateGatewaySettings(nodeId) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_GATEWAY_SETTINGS,
+            body: { node_id: (nodeId || '').trim() },
+        });
+        if (!resp || resp.code || !('node_id' in resp)) {
+            throw new Error(resp?.message || 'Failed to save gateway settings');
         }
         return resp;
     },
