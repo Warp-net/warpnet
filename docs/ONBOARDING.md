@@ -1200,10 +1200,14 @@ Every new `.go` file carries the AGPLv3 header — copy the block from
 
 ### Versioning
 
-The `version` file holds a semver patch **bumped on every commit**. On non-`main`
-branches a git hook does it for you (and keeps `snap/snapcraft.yaml` in sync);
-install once with `make setup-hooks` (`git config core.hooksPath .githooks`).
-The pre-push hook tags `v<version>` and pushes to GitHub + the Codeberg mirror.
+The `version` file holds a semver string that is `//go:embed`-ed into the binary.
+Releases are cut by the **Release** GitHub Actions workflow
+(`.github/workflows/release.yaml`), dispatched manually with a `bump` choice
+(`patch`/`minor`/`major`, default `patch`). That workflow bumps `version`, keeps
+`snap/snapcraft.yaml` and the warpdroid F-Droid `versionCode`/changelog in sync,
+commits the bump to `main`, tags `v<version>`, and pushes the tag to GitHub +
+the Codeberg mirror before building the release artifacts. Don't bump the
+version by hand.
 
 ### Branches & PRs
 

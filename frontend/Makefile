@@ -5,6 +5,3 @@ rebuild:
 	npm install --prefer-offline --no-audit
 	npm prune
 	npm run build
-
-setup-hooks:
-	git config core.hooksPath .githooks

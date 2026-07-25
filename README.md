@@ -129,7 +129,7 @@ warpnet --node.network mainnet   # the live network
 ```
 
 
-> **Heads up:** the `version` file and `snap/snapcraft.yaml` are bumped automatically by the pre-commit hook on non-`main` branches. Run `make setup-hooks` once and let it do its job — don't edit the version by hand.
+> **Heads up:** the `version` file and `snap/snapcraft.yaml` are bumped automatically by the **Release** GitHub Actions workflow (`.github/workflows/release.yaml`) when a release is cut — don't edit the version by hand.
 
 ## How it works
 

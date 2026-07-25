@@ -32,9 +32,6 @@ check-heap:
 update-deps:
 	go get -v -u all && go mod vendor
 
-setup-hooks:
-	git config core.hooksPath .githooks
-
 ssh-do:
 	ssh root@207.154.221.44
 
