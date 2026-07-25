@@ -8,7 +8,7 @@ if [ -n "$WARPNET_PREPUSH" ]; then
 fi
 export WARPNET_PREPUSH=1
 
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
     exit 0
 fi
 

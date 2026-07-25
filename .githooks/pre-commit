@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
     exit 0
 fi
 
