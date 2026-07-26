@@ -22,12 +22,16 @@ describe("QRCodeModal copy connection data", () => {
     expect(withPayload.text()).toContain("Copy connection data");
   });
 
-  it("copies the exact raw payload to the clipboard and flips the label", async () => {
+  it("copies the exact payload to the clipboard verbatim and flips the label", async () => {
+    const json = '{"node_id":"12D3KooWAbc","user_id":"01H0","token":"t"}';
     const wrapper = mount(QRCodeModal, {
-      props: { show: true, qrData: "data:image/png;base64,x", qrPayload: "RAWCONNDATA123" },
+      props: { show: true, qrData: "data:image/png;base64,x", qrPayload: json },
     });
     await wrapper.find("button[aria-label^='Copy connection data']").trigger("click");
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("RAWCONNDATA123");
+    // Copied verbatim — plain JSON in, plain JSON out (no compression/encoding).
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(json);
+    const copied = navigator.clipboard.writeText.mock.calls[0][0];
+    expect(() => JSON.parse(copied)).not.toThrow();
     await wrapper.vm.$nextTick();
     expect(wrapper.text()).toContain("Copied!");
   });

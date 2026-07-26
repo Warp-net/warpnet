@@ -111,9 +111,9 @@ const OWNER_STORAGE = "warpnet.owner";
 // sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
 // reload without persisting the pairing secret to disk. Cleared on logout.
 const QR_STORAGE = "warpnet.qr";
-// sessionStorage key for the raw pairing payload (the exact Base45 string the
-// QR encodes). Kept alongside QR_STORAGE, on the same ephemeral terms, so the
-// modal's "copy connection data" button works after a reload.
+// sessionStorage key for the pairing connection data: the plain AuthNodeInfo
+// JSON the QR encodes, kept uncompressed so the modal's "copy connection data"
+// button yields readable data. Same ephemeral terms as QR_STORAGE.
 const QR_PAYLOAD_STORAGE = "warpnet.qr.payload";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
@@ -191,9 +191,9 @@ export const warpnetService = {
         return qr || ""
     },
 
-    // The raw pairing payload is the exact Base45 string encoded into the QR
-    // image (see getQR); the Android client decodes the same string. Stored
-    // separately so copying it never has to reverse the rendered PNG.
+    // The pairing connection data is the plain AuthNodeInfo JSON that the QR
+    // image encodes in compressed form (see getQR). Stored uncompressed so
+    // copying it yields readable data without reversing the rendered PNG.
     setQRPayload(payload) {
         const key = `QR_PAYLOAD`;
         stateMap.set(key, payload)
@@ -326,7 +326,11 @@ export const warpnetService = {
 
         const qrCode = await buildQRCode(qrData)
         warpnetService.setQR(qrCode)
-        warpnetService.setQRPayload(qrData)
+        // Store the plain AuthNodeInfo JSON (not the gzip+Base45 QR form) so the
+        // modal's "copy connection data" button yields readable, uncompressed
+        // data. fullPayload still carries the token captured above, before it
+        // was nulled on resp.
+        warpnetService.setQRPayload(fullPayload)
 
         startRefreshNotifications()
     },

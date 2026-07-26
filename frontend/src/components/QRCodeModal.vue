@@ -106,8 +106,8 @@ resulting from the use or misuse of this software.
         <p>No QR code is currently available. Please try again later.</p>
       </div>
 
-      <!-- Fallback for when scanning isn't possible: copy the exact raw
-           connection data encoded in the QR (the Base45 pairing payload). -->
+      <!-- Fallback for when scanning isn't possible: copy the connection data
+           the QR carries, as plain uncompressed AuthNodeInfo JSON. -->
       <div v-if="qrPayload" class="flex justify-center mb-4">
         <button
           type="button"
