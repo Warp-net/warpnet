@@ -48,9 +48,6 @@ const renderTweet = (tweet) =>
         $filters: { timeago: () => 'just now' },
         $router: { push: vi.fn() },
       },
-      stubs: {
-        ReplyOverlay: true,
-      },
     },
   });
 

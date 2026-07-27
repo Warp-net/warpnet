@@ -232,13 +232,6 @@ resulting from the use or misuse of this software.
         </div>
       </div>
     </div>
-    <ReplyOverlay
-        v-if="showReplyOverlay"
-        :tweet="tweet" :profile="profile"
-        :showReplyOverlay="showReplyOverlay"
-        @close="showReplyOverlay = false"
-        @replied="loadTweetStats(tweet.id, tweet.user_id)"
-    />
     <LikersOverlay
         :show="showLikersOverlay"
         :tweetId="tweet.id"
@@ -277,7 +270,6 @@ export default {
   name: "Tweet",
   props: ["tweet"],
   components: {
-    ReplyOverlay: defineAsyncComponent(() => import('./ReplyOverlay.vue')),
     LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
@@ -288,7 +280,6 @@ export default {
   data() {
     return {
       profile: {},
-      showReplyOverlay: false,
       showLikersOverlay: false,
       showRetweetersOverlay: false,
       showEditOverlay: false,
@@ -519,25 +510,6 @@ export default {
         this.tweet.text = updated.text;
       }
     },
-    async get() {
-      let t = undefined
-      if (!this.tweet.parent_id || this.tweet.parent_id === this.tweet.root_id) {
-        const getObject = {
-          userId: this.tweet.user_id,
-          tweetId: this.tweet.id,
-        }
-        t =  await warpnetService.getTweet(getObject);
-      } else {
-        const getObject = {
-          parentId: this.tweet.parent_id,
-          rootId: this.tweet.root_id,
-          replyId: this.tweet.id,
-          userId: this.tweet.user_id,
-        }
-        t =  await warpnetService.getReply(getObject);
-      }
-      this.showReplyOverlay = true;
-    },
     openReport() {
       this.showDropdown = false;
       this.showReportDialog = true;
@@ -594,7 +566,7 @@ export default {
       }
     },
     replyToTweet() {
-      this.showReplyOverlay = true;
+      this.openTweetPage();
     },
     async retweet() {
       const owner = warpnetService.getOwnerProfile();
