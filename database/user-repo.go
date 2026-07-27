@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/oklog/ulid/v2"
 	"maps"
 	"math"
@@ -167,6 +168,9 @@ func (repo *UserRepo) CreateWithTTL(user domain.User, ttl time.Duration) (domain
 // Best-effort: a store error is logged, not returned.
 func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
+		return
+	}
+	if user.Network == mastodon.Network {
 		return
 	}
 	name := user.Username
