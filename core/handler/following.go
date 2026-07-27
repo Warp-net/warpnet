@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -70,6 +71,37 @@ type FollowingStorer interface {
 	AddFollowRequest(targetUserId, followerId string) error
 	RemoveFollowRequest(targetUserId, followerId string) error
 	ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error)
+}
+
+// cacheBridgedUser resolves a Fediverse follower's profile from the ActivityPub
+// gateway (the home node of every bridged user) and stores it locally. Without
+// it the follower has no local record, so notifications read as the raw "ap:"
+// id and the followers list renders an empty row.
+func cacheBridgedUser(
+	streamer FollowNodeStreamer, userRepo FollowingUserStorer, followerId string,
+) (domain.User, error) {
+	if !mastodon.IsBridgedID(followerId) {
+		return domain.User{}, database.ErrUserNotFound
+	}
+	resp, err := streamer.GenericStream(
+		mastodon.GatewayNodeID(),
+		event.PUBLIC_GET_USER,
+		event.GetUserEvent{UserId: domain.ID(followerId)},
+	)
+	if err != nil {
+		log.Warnf("follow handler: resolving bridged follower %s: %v", followerId, err)
+		return domain.User{}, err
+	}
+	var u domain.User
+	if err := json.Unmarshal(resp, &u); err != nil || u.Id == "" || u.Username == "" {
+		log.Warnf("follow handler: bridged follower %s: unexpected response", followerId)
+		return domain.User{}, database.ErrUserNotFound
+	}
+	if _, err := userRepo.Create(u); err != nil {
+		// The notification still reads correctly without the cached copy.
+		log.Warnf("follow handler: caching bridged follower %s: %v", followerId, err)
+	}
+	return u, nil
 }
 
 func StreamFollowHandler(
@@ -115,6 +147,9 @@ func StreamFollowHandler(
 				followerUser, followerErr := userRepo.Get(ev.FollowerId)
 				if followerErr != nil && !errors.Is(followerErr, database.ErrUserNotFound) {
 					return nil, followerErr
+				}
+				if errors.Is(followerErr, database.ErrUserNotFound) {
+					followerUser, followerErr = cacheBridgedUser(streamer, userRepo, ev.FollowerId)
 				}
 				if followerErr == nil {
 					notifyUsername = followerUser.Username

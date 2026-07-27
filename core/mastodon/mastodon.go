@@ -31,7 +31,11 @@ resulting from the use or misuse of this software.
 // whose home node is the gateway, so it resolves like any other remote user.
 package mastodon
 
-import "github.com/Warp-net/warpnet/domain"
+import (
+	"strings"
+
+	"github.com/Warp-net/warpnet/domain"
+)
 
 const (
 	// Network is the User.Network tag for accounts bridged in from Mastodon.
@@ -46,7 +50,15 @@ const (
 	// EntryHandle is the single Mastodon account seeded locally as the entry
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"
+
+	// BridgedIDPrefix marks a user id the gateway minted for a remote Fediverse
+	// actor it learned through the follow graph (the actor url, encoded). Such a
+	// user has no local record, so it resolves through the gateway node.
+	BridgedIDPrefix = "ap:"
 )
+
+// IsBridgedID reports whether the id is a gateway-minted Fediverse actor id.
+func IsBridgedID(id string) bool { return strings.HasPrefix(id, BridgedIDPrefix) }
 
 // gatewayNodeID is the effective gateway peer id. It defaults to
 // DefaultGatewayNodeID and is overridden once at node startup from the owner's

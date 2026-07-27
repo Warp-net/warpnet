@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -324,6 +325,53 @@ func TestStreamFollowHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err == nil {
 			t.Fatal("expected error from remote error response")
+		}
+	})
+}
+
+// TestCacheBridgedUser covers resolving a Fediverse follower through the
+// gateway: a raw "ap:" id in the follow notification (and an empty row in the
+// followers list) is what the caller sees without it.
+func TestCacheBridgedUser(t *testing.T) {
+	bridged := mastodon.BridgedIDPrefix + "aHR0cHM6Ly9tYXN0b2Rvbi5zb2NpYWwvdXNlcnMvd2FycG5ldA"
+
+	t.Run("resolves and caches", func(t *testing.T) {
+		var askedNode, created string
+		streamer := stubFollowStreamer{
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
+				askedNode = nodeId
+				if path != event.PUBLIC_GET_USER {
+					t.Fatalf("path = %q, want %q", path, event.PUBLIC_GET_USER)
+				}
+				return json.Marshal(domain.User{Id: bridged, Username: "Warpnet", Network: "mastodon"})
+			},
+		}
+		repo := stubFollowUserRepo{createFn: func(u domain.User) (domain.User, error) {
+			created = u.Username
+			return u, nil
+		}}
+
+		u, err := cacheBridgedUser(streamer, repo, bridged)
+		if err != nil {
+			t.Fatalf("err = %v", err)
+		}
+		if u.Username != "Warpnet" || created != "Warpnet" {
+			t.Fatalf("user = %+v, cached = %q", u, created)
+		}
+		if askedNode != mastodon.GatewayNodeID() {
+			t.Fatalf("asked node %q, want the gateway", askedNode)
+		}
+	})
+
+	t.Run("skips a local id", func(t *testing.T) {
+		streamer := stubFollowStreamer{
+			genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+				t.Fatal("must not stream for a local user id")
+				return nil, nil
+			},
+		}
+		if _, err := cacheBridgedUser(streamer, stubFollowUserRepo{}, "01LOCALUSER"); err == nil {
+			t.Fatal("err = nil, want not-found")
 		}
 	})
 }

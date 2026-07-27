@@ -169,6 +169,11 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
 		return
 	}
+	// A bridged account from another network did not join Warpnet: it is only
+	// cached locally so it renders as a profile instead of a raw id.
+	if user.Network != "" && user.Network != DefaultWarpnetUserNetwork {
+		return
+	}
 	name := user.Username
 	if name == "" {
 		name = user.Id
