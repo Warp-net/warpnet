@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -62,8 +61,7 @@ func StreamGetWhoToFollowHandler(
 			if user.IsOffline { // exclude offline
 				continue
 			}
-			fmt.Println("+++++++++++++", user.Id, owner.UserId, "++++++++++++++++++++")
-			fmt.Println()
+
 			if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
 				continue
 			}
