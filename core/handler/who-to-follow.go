@@ -7,6 +7,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+	"strings"
 )
 
 func StreamGetWhoToFollowHandler(
@@ -60,7 +61,7 @@ func StreamGetWhoToFollowHandler(
 			if user.IsOffline { // exclude offline
 				continue
 			}
-			if user.Id == owner.UserId || user.NodeId == owner.NodeId { // exclude me
+			if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
 				continue
 			}
 			// if profile from Warpnet - don't show other network recommendations
