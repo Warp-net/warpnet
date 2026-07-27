@@ -81,8 +81,10 @@ resulting from the use or misuse of this software.
           </div>
         </div>
 
-        <!-- ReplyBlock -->
-        <div v-if="profile.network === 'warpnet'" class="p-3 flex flex-row">
+        <!-- ReplyBlock. profile is the tweet author, so gating the composer on
+             its network hid it for bridged (mastodon) tweets, which the gateway
+             federates as AP replies just fine. -->
+        <div class="p-3 flex flex-row">
           <div class="flex-none mr-4">
             <img
               :src="`${profile.avatar || '/default_profile.png'}`"

@@ -632,9 +632,6 @@ export default {
       }
     },
     async like() {
-      if (this.tweet.network && this.tweet.network !== "warpnet") {
-        return
-      }
       const owner = warpnetService.getOwnerProfile();
       if (!owner) return;
       let likesNum = 0
@@ -660,6 +657,14 @@ export default {
       }
 
       this.likesCount.set(this.tweet.id, likesNum);
+      // A bridged tweet's real like count lives on the remote instance, not in
+      // this node's CRDT counter (which only knows our own like), so refresh
+      // from the author's node the way retweet() does.
+      try {
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+      } catch (err) {
+        console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
+      }
     },
     getLikesCount(tweetId) {
       return this.likesCount.get(tweetId);

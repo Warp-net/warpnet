@@ -11,6 +11,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type stubFollowRepo struct {
@@ -324,6 +325,113 @@ func TestStreamFollowHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err == nil {
 			t.Fatal("expected error from remote error response")
+		}
+	})
+}
+
+// TestStreamFollowHandlerFetchesUnknownFollower covers the rule that a follower
+// we don't know yet is resolved from the node that delivered the follow before
+// the follow is stored — on any network. Without it the follower stays an id, so
+// the notification reads as that raw id and the followers list has an empty row.
+func TestStreamFollowHandlerFetchesUnknownFollower(t *testing.T) {
+	owner := "owner-1"
+	unknown := "ap:aHR0cHM6Ly9tYXN0b2Rvbi5zb2NpYWwvdXNlcnMvd2FycG5ldA"
+	senderPeer, _ := peer.Decode("QmcEPrat8ShnCph8WjkREzt5CPXF2RwhYxYBALDcLC1iV6")
+	senderStream := stubPairStream{conn: stubPairConn{remotePeerID: senderPeer}}
+
+	userRepo := func(created *domain.User) stubFollowUserRepo {
+		return stubFollowUserRepo{
+			getFn: func(userId string) (domain.User, error) {
+				if userId == unknown {
+					return domain.User{}, database.ErrUserNotFound
+				}
+				return domain.User{Id: userId}, nil
+			},
+			createFn: func(u domain.User) (domain.User, error) { *created = u; return u, nil },
+		}
+	}
+
+	t.Run("resolves from the sender, then stores the follow", func(t *testing.T) {
+		var created domain.User
+		var askedNode, notified string
+		streamer := stubFollowStreamer{
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
+				askedNode = nodeId
+				if path != event.PUBLIC_GET_USER {
+					t.Fatalf("path = %q, want %q", path, event.PUBLIC_GET_USER)
+				}
+				return json.Marshal(domain.User{Id: unknown, Username: "Warpnet"})
+			},
+		}
+		followed := false
+		h := StreamFollowHandler(
+			stubFollowBroadcaster{},
+			stubFollowRepo{followFn: func(string, string) error { followed = true; return nil }},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			userRepo(&created),
+			stubModerationNotifier{addFn: func(not domain.Notification) error { notified = not.Text; return nil }},
+			streamer,
+		)
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: unknown, FollowingId: owner}), senderStream); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if askedNode != senderPeer.String() {
+			t.Fatalf("asked %q, want the delivering node %q", askedNode, senderPeer)
+		}
+		if created.Username != "Warpnet" {
+			t.Fatalf("follower not stored: %+v", created)
+		}
+		if !followed {
+			t.Fatal("follow was not stored")
+		}
+		if notified != "Warpnet started following you" {
+			t.Fatalf("notification = %q", notified)
+		}
+	})
+
+	t.Run("a follower already in the db is not requested", func(t *testing.T) {
+		followed := false
+		h := StreamFollowHandler(
+			stubFollowBroadcaster{},
+			stubFollowRepo{followFn: func(string, string) error { followed = true; return nil }},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, Username: "Vadim"}, nil
+			}},
+			stubModerationNotifier{},
+			stubFollowStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+				t.Fatal("a known follower must not be requested from the network")
+				return nil, nil
+			}},
+		)
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: "known-1", FollowingId: owner}), senderStream); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !followed {
+			t.Fatal("follow was not stored")
+		}
+	})
+
+	t.Run("unresolvable follower is not followed", func(t *testing.T) {
+		var created domain.User
+		streamer := stubFollowStreamer{
+			genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+				return nil, errors.New("node unreachable")
+			},
+		}
+		h := StreamFollowHandler(
+			stubFollowBroadcaster{},
+			stubFollowRepo{followFn: func(string, string) error {
+				t.Fatal("follow must not be stored for an unresolved follower")
+				return nil
+			}},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			userRepo(&created),
+			stubModerationNotifier{},
+			streamer,
+		)
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: unknown, FollowingId: owner}), senderStream); err == nil {
+			t.Fatal("expected error")
 		}
 	})
 }
