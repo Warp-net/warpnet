@@ -22,65 +22,80 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="w-full rounded-lg bg-lightest my-4">
-    <div class="p-3">
-      <p class="text-lg font-bold">Who to follow</p>
-    </div>
-    <!-- No v-if here: on one element Vue 3 evaluates v-if BEFORE v-for, so
-         "profile" resolved to the component prop, not the loop item — the
-         whole list was gated on an unrelated prop. -->
-    <div v-for="profile in profiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
-      <img 
-        @click="pushToProfilePage(profile.id)" 
-        :src="profile.avatar || '/default_profile.png'"
-        class="w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
-        :alt="profile.username"
-      />
-      <div class="hidden lg:block ml-4">
-        <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer">{{ profile.username }}</p>
-        <p class="text-left text-sm leading-tight text-dark">{{ profile.id.slice(0, 8) }}...</p>
+  <div>
+    <div v-for="section in sections" :key="section.key" class="w-full rounded-lg bg-lightest my-4">
+      <div class="p-3 flex items-center">
+        <p class="text-lg font-bold">Who to follow</p>
+        <img v-if="section.key === 'warpnet'" src="@/assets/logo-transparent.png" alt="Warpnet" class="w-5 h-5 ml-2 object-contain" />
+        <i v-else class="fab fa-mastodon text-lg ml-2 text-[#6364FF]" role="img" aria-label="Mastodon"></i>
+      </div>
+      <!-- No v-if here: on one element Vue 3 evaluates v-if BEFORE v-for, so
+           "profile" resolved to the component prop, not the loop item — the
+           whole list was gated on an unrelated prop. -->
+      <div v-for="profile in section.profiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
+        <img
+          @click="pushToProfilePage(profile.id)"
+          :src="profile.avatar || '/default_profile.png'"
+          class="w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
+          :alt="profile.username"
+        />
+        <div class="hidden lg:block ml-4 min-w-0">
+          <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer truncate max-w-[9rem]">{{ profile.username }}</p>
+          <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]">{{ profile.id.slice(0, 8) }}...</p>
+        </div>
+        <button
+          v-if="!isFollowing(profile.id)"
+          @click="follow(profile.id)"
+          :disabled="isPending(profile.id)"
+          class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
+        >
+          Follow
+        </button>
+        <button
+            v-if="isFollowing(profile.id)"
+            @click="unfollow(profile.id)"
+            :disabled="isPending(profile.id)"
+            class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
+        >
+          <span class="group-hover:hidden">Following</span>
+          <span class="hidden group-hover:inline">Unfollow</span>
+        </button>
       </div>
       <button
-        v-if="!isFollowing(profile.id)"
-        @click="follow(profile.id)"
-        :disabled="isPending(profile.id)"
-        class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
+          @click="showMore()"
+          class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
       >
-        Follow
-      </button>
-      <button
-          v-if="isFollowing(profile.id)"
-          @click="unfollow(profile.id)"
-          :disabled="isPending(profile.id)"
-          class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
-      >
-        <span class="group-hover:hidden">Following</span>
-        <span class="hidden group-hover:inline">Unfollow</span>
+        Show More
       </button>
     </div>
-    <button
-        v-if="profiles.length > 0"
-        @click="showMore()"
-        class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
-    >
-      Show More
-    </button>
   </div>
 </template>
 
 <script>
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {isMastodonUser} from "@/lib/network";
+
+const sectionLimit = 5;
 
 export default {
   name: 'WhoToFollow',
   props: ["profile"],
   data() {
     return {
-      profiles: [],
+      warpnetProfiles: [],
+      mastodonProfiles: [],
       followingStatus: new Map(),
       pending: new Set(),
     };
+  },
+  computed: {
+    sections() {
+      return [
+        {key: 'warpnet', profiles: this.warpnetProfiles},
+        {key: 'mastodon', profiles: this.mastodonProfiles},
+      ].filter(s => s.profiles.length > 0);
+    },
   },
   methods: {
     async pushToProfilePage(profileId) {
@@ -131,7 +146,8 @@ export default {
           p.avatar = await warpnetService.getImage({userId: p.id, key: p.avatar_key});
         })
       );
-      this.profiles = [...this.profiles];
+      this.warpnetProfiles = [...this.warpnetProfiles];
+      this.mastodonProfiles = [...this.mastodonProfiles];
     },
     showMore() {
       this.$router.push({ name: "WhoToFollow" });
@@ -139,13 +155,32 @@ export default {
    },
   async created() {
     console.log("loading component:", this.$options.name);
-    // Who-to-follow is always scoped to the signed-in owner.
-    this.profiles = await warpnetService.getWhoToFollow(true, 5)
-    for (const p of this.profiles) {
+    // Who-to-follow is always scoped to the signed-in owner. The backend
+    // returns both networks mixed, so keep paging (bounded) until each
+    // section has its fill or the feed ends.
+    let cursorReset = true;
+    for (let round = 0; round < 5; round++) {
+      const batch = await warpnetService.getWhoToFollow(cursorReset, sectionLimit * 2);
+      cursorReset = false;
+      if (!batch || batch.length === 0) {
+        break;
+      }
+      for (const p of batch) {
+        const group = isMastodonUser(p) ? this.mastodonProfiles : this.warpnetProfiles;
+        if (group.length < sectionLimit) {
+          group.push(p);
+        }
+      }
+      if (this.warpnetProfiles.length >= sectionLimit && this.mastodonProfiles.length >= sectionLimit) {
+        break;
+      }
+    }
+    const profiles = [...this.warpnetProfiles, ...this.mastodonProfiles];
+    for (const p of profiles) {
       const status = await warpnetService.isFollowing(p.id);
       this.followingStatus.set(p.id, status);
     }
-    await this.loadAvatars(this.profiles);
+    await this.loadAvatars(profiles);
   },
 };
 </script>

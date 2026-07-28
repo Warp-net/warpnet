@@ -40,7 +40,22 @@ resulting from the use or misuse of this software.
         </div>
 
         <Loader :loading="loading" />
-        <Users v-if="profiles" :users="profiles" :loading="loading" />
+
+        <div v-if="warpnetProfiles.length > 0">
+          <h2 class="px-5 pt-3 text-left text-lg font-bold">
+            <img src="@/assets/logo-transparent.png" alt="Warpnet" class="w-5 h-5 inline-block object-contain" />
+          </h2>
+          <Users :users="warpnetProfiles" :loading="loading" />
+        </div>
+        <div v-if="mastodonProfiles.length > 0">
+          <h2 class="px-5 pt-3 text-left text-lg font-bold">
+            <i class="fab fa-mastodon text-[#6364FF]" role="img" aria-label="Mastodon"></i>
+          </h2>
+          <Users :users="mastodonProfiles" :loading="loading" />
+        </div>
+        <div v-if="!loading && profiles.length === 0" class="flex justify-center py-6">
+          <span>No results</span>
+        </div>
 
         <button
           v-if="hasMore && !loading"
@@ -67,6 +82,7 @@ import SearchBar from "../components/SearchBar.vue";
 import Users from "../components/Users.vue";
 import Loader from "../components/Loader.vue";
 import {warpnetService} from "@/service/service";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "WhoToFollow",
@@ -83,6 +99,14 @@ export default {
       profiles: [],
       hasMore: true,
     };
+  },
+  computed: {
+    warpnetProfiles() {
+      return this.profiles.filter((p) => !isMastodonUser(p));
+    },
+    mastodonProfiles() {
+      return this.profiles.filter((p) => isMastodonUser(p));
+    },
   },
   methods: {
     goHome() {

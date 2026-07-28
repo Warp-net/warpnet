@@ -434,7 +434,7 @@ function generateResponse(arg) {
             if (!gotMsg) return {code:404, message:"Message not found"};
             return gotMsg;
 
-        case PUBLIC_DELETE_MESSAGE:
+        case PRIVATE_DELETE_MESSAGE:
             mockMap.delete("message:"+arg.body.message_id);
             return {code:0,message:"Accepted"};
 
