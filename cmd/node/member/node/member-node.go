@@ -332,11 +332,15 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 		log.Warningf("member: stream: failed to get user: %v", err)
 		return
 	}
+	if u.IsOffline {
+		return
+	}
 	u.IsOffline = true
 	_, err = m.userRepo.Update(u.Id, u)
-	if err != nil {
+	// The flag is monotonic: a commit conflict means a concurrent
+	// stream failure already stored the same thing — not an error.
+	if err != nil && !errors.Is(err, database.ErrConflict) {
 		log.Warningf("member: stream: failed to set user offline: %v", err)
-		return
 	}
 }
 
