@@ -28,6 +28,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
+	"github.com/libp2p/go-libp2p/p2p/host/observedaddrs"
 	"reflect"
 	"slices"
 	"time"
@@ -41,6 +42,10 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	log "github.com/sirupsen/logrus"
 )
+
+func init() {
+	observedaddrs.ActivationThresh = 2 // TODO increase if there more than 1 user
+}
 
 var CommonOptions = []libp2p.Option{
 	libp2p.WithDialTimeout(DefaultTimeout),
