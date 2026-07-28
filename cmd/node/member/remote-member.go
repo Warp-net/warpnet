@@ -1,3 +1,5 @@
+//go:build !echo && remote
+
 /*
 
 Warpnet - Decentralized Social Network
@@ -29,14 +31,14 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	handlers2 "github.com/Warp-net/warpnet/cmd/node/business/handlers"
+	node2 "github.com/Warp-net/warpnet/cmd/node/member/node"
+	"github.com/Warp-net/warpnet/cmd/node/member/remote"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	bnode "github.com/Warp-net/warpnet/cmd/node/business/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -79,19 +81,19 @@ func main() {
 
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
-		log.Errorf("business: generate PSK: %v", err)
+		log.Errorf("remote: generate PSK: %v", err)
 		return
 	}
 
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
-		log.Errorf("business: bootstrap infos: %v", err)
+		log.Errorf("remote: bootstrap infos: %v", err)
 		return
 	}
 
 	db, err := localstore.New(config.Config().Database.Path, localstore.DefaultOptions())
 	if err != nil {
-		log.Errorf("business: open db: %v", err)
+		log.Errorf("remote: open db: %v", err)
 		return
 	}
 	defer db.Close()
@@ -101,13 +103,13 @@ func main() {
 	authRepo := database.NewAuthRepo(db, network)
 	authService := auth.NewAuthService(ctx, authRepo, userRepo, readyChan)
 
-	staticHandler, err := handlers2.NewStaticHandler()
+	staticHandler, err := remote.NewStaticHandler()
 	if err != nil {
-		log.Errorf("business: static handler load: %v", err)
+		log.Errorf("remote: static handler load: %v", err)
 		return
 	}
 
-	bridgeHandler := handlers2.NewBridgeHandler(
+	bridgeHandler := remote.NewBridgeHandler(
 		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
 		authService,
 		psk,
@@ -116,21 +118,19 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws", bridgeHandler.Handle())
-	mux.HandleFunc("/healthz", handlers2.HealthHandler())
-	mux.HandleFunc("/readyz", handlers2.ReadyHandler())
 	mux.Handle("/", staticHandler)
 
 	srv := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	defer srv.Shutdown(ctx) //nolint:errcheck
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("business: serve http: %v", err)
+			log.Errorf("remote: serve http: %v", err)
 		}
 	}()
 
-	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost:%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
+	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
 
-	var node *bnode.BusinessNode
+	var node *node2.MemberNode
 	defer func() {
 		if node != nil {
 			node.Stop()
@@ -143,22 +143,22 @@ func main() {
 		case <-ctx.Done():
 			return
 		case <-interruptChan:
-			log.Infoln("business node interrupted...")
+			log.Infoln("remote node interrupted...")
 			return
 		case info = <-readyChan:
-			log.Infoln("business: database authentication passed")
+			log.Infoln("remote: database authentication passed")
 		}
 
 		if node == nil {
 			privateKey := authService.PrivateKey()
 			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
 			if err != nil {
-				log.Errorf("business: node ID: %v", err)
+				log.Errorf("remote: node ID: %v", err)
 				return
 			}
 
 			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
-			node, err = bnode.NewBusinessNode(
+			node, err = node2.NewMemberNode(
 				ctx,
 				privateKey,
 				psk,
@@ -169,12 +169,12 @@ func main() {
 				m,
 			)
 			if err != nil {
-				log.Errorf("business: init node: %v", err)
+				log.Errorf("remote: init node: %v", err)
 				return
 			}
 
 			if err := node.Start(); err != nil {
-				log.Errorf("business: start node: %v", err)
+				log.Errorf("remote: start node: %v", err)
 				return
 			}
 

@@ -235,7 +235,7 @@ func (c *clientNode) connect(peerInfo string) error {
 	}()
 
 	if peerInfo == "" {
-		return fmt.Errorf("not connected to desktop node")
+		return fmt.Errorf("not connected to node node")
 	}
 
 	var (
@@ -301,7 +301,7 @@ func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
 	desktopPeerID := c.desktopPeerID
 	c.mu.RUnlock()
 	if desktopPeerID == "" {
-		return nil, fmt.Errorf("not connected to desktop node")
+		return nil, fmt.Errorf("not connected to node node")
 	}
 
 	if protocolID == "" {
@@ -357,7 +357,7 @@ func closeWrite(s network.Stream) {
 }
 
 // sign produces a base64-encoded Ed25519 signature over body using the libp2p
-// identity key. The format matches security.Sign on the desktop side, so the
+// identity key. The format matches security.Sign on the node side, so the
 // node's auth middleware (warpnet/core/middleware/auth.go) verifies it
 // against the peer ID extracted from the libp2p connection.
 func (c *clientNode) sign(body []byte) (string, error) {
@@ -381,7 +381,7 @@ func (c *clientNode) getPeerID() string {
 	return c.host.ID().String()
 }
 
-// IsConnected checks if connected to the desktop node
+// IsConnected checks if connected to the node node
 func (c *clientNode) isConnected() bool {
 	c.flushEvents()
 	c.mu.RLock()
@@ -396,7 +396,7 @@ func (c *clientNode) isConnected() bool {
 }
 
 // connectedness returns the libp2p Connectedness#String for the paired
-// desktop peer. Surface for the Kotlin ConnectionMonitor, which owns the
+// node peer. Surface for the Kotlin ConnectionMonitor, which owns the
 // reconnect loop; Go only reports the snapshot. Returns "NotConnected"
 // when no peer is paired yet.
 func (c *clientNode) connectedness() string {
@@ -437,7 +437,7 @@ func (c *clientNode) pause() {
 	}
 }
 
-// resume re-dials the paired desktop peer in the background. Kicked from
+// resume re-dials the paired node peer in the background. Kicked from
 // the Android onStart lifecycle callback, which runs on the main thread,
 // so the actual host.Connect runs in a goroutine bounded by a 10s
 // ceiling — a dead peer can't wedge subsequent lifecycle callbacks.
@@ -470,10 +470,10 @@ func (c *clientNode) close() error {
 }
 
 // refreshPeerAddrs adds the supplied newline-separated multiaddrs to the
-// paired desktop peer's peerstore entry with a permanent TTL. The pair
+// paired node peer's peerstore entry with a permanent TTL. The pair
 // handler on the fat node returns its current public addresses on every
 // call, so periodically re-pairing keeps the thin client's peerstore in
-// sync with the fat node's IP / port changes — handy when the desktop
+// sync with the fat node's IP / port changes — handy when the node
 // moves between networks.
 func (c *clientNode) refreshPeerAddrs(addrs string) error {
 	c.flushEvents()

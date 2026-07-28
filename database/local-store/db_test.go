@@ -347,7 +347,7 @@ func TestDBTestSuite(t *testing.T) {
 	suite.Run(t, new(DBTestSuite))
 }
 
-// TestReopenAfterClose covers the long-lived-node lifecycle the business node
+// TestReopenAfterClose covers the long-lived-node lifecycle the remote node
 // relies on: a logout closes the database and a later login reopens it on the
 // same handle, so data must survive the cycle and a second Close (and a
 // redundant one) must not double-close the lifecycle channel.

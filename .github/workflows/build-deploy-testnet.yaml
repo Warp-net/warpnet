@@ -126,11 +126,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.business
+          file: Dockerfile.remote
           push: true
           tags: ghcr.io/warp-net/warpnet-vadim:latest
-          cache-from: type=gha,scope=business
-          cache-to: type=gha,mode=max,scope=business
+          cache-from: type=gha,scope=remote
+          cache-to: type=gha,mode=max,scope=remote
 
   deploy:
     runs-on: ubuntu-latest

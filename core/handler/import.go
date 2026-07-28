@@ -52,7 +52,7 @@ type ImportTweetStorer interface {
 }
 
 // StreamImportTweetHandler stores one pre-parsed original tweet streamed from
-// the client (business browser dashboard or desktop member node). The client
+// the client (remote browser dashboard or node member node). The client
 // unzips and filters the X archive itself — dropping retweets, replies, GIFs
 // and videos — and streams only the kept tweets one by one, so the node never
 // buffers the whole archive. Photos arrive as raw base64 and go through the

@@ -1,4 +1,4 @@
-//go:build echo
+//go:build echo && !remote
 
 /*
 

@@ -252,7 +252,7 @@ jobs:
             warpnet_windows_amd64.zip
             warpnet_windows_amd64_checksums.txt
 
-  # APK release runs in parallel with the desktop matrix. Same tag
+  # APK release runs in parallel with the node matrix. Same tag
   # input — both jobs attach their artifacts to the same GitHub
   # Release.
   release-warpdroid:

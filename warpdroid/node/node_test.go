@@ -56,7 +56,7 @@ func TestNewClientRejectsInvalidPrivKey(t *testing.T) {
 }
 
 // TestClientNodeSign_VerifiesAgainstLibp2pPubKey ensures that a body signed by
-// clientNode.sign verifies against the matching ed25519 public key the desktop
+// clientNode.sign verifies against the matching ed25519 public key the node
 // side derives from the libp2p peer ID (see warpnet.FromIDToPubKey).
 func TestClientNodeSign_VerifiesAgainstLibp2pPubKey(t *testing.T) {
 	priv := freshKey(t)

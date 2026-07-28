@@ -22,20 +22,31 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package handlers
+package remote
 
-import "net/http"
+import (
+	"io/fs"
+	"net/http"
+	"strings"
 
-func HealthHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	root "github.com/Warp-net/warpnet"
+)
+
+func NewStaticHandler() (http.Handler, error) {
+	sub, err := fs.Sub(root.GetStaticEmbedded(), "frontend/dist")
+	if err != nil {
+		return nil, err
 	}
-}
-
-func ReadyHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ready"))
-	}
+	fileServer := http.FileServer(http.FS(sub))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name == "" {
+			name = "index.html"
+		}
+		if _, err := fs.Stat(sub, name); err != nil {
+			http.ServeFileFS(w, r, sub, "index.html")
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	}), nil
 }

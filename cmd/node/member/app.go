@@ -384,7 +384,7 @@ func (a *App) close(_ context.Context) {
 	close(a.readyChan)
 }
 
-// setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).
+// setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .node file is owned by deeplink.Register).
 func setLinuxDesktopIcon(iconData []byte) {
 	if runtime.GOOS != "linux" {
 		return

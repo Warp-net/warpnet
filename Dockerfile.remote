@@ -17,7 +17,7 @@ ENV GOCACHE=/root/.cache/go-build
 
 # Serves the embedded frontend/dist over HTTP/WS; no Wails build step.
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/business
+    go build -tags remote -ldflags "-s -w" -gcflags=all=-l -mod=vendor -v -o warpnet ./cmd/node/member/remote-member.go
 
 FROM ubuntu:24.04
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs

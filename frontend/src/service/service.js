@@ -1453,12 +1453,12 @@ export const warpnetService = {
 
     isDesktopNode() {
         // Desktop member node (Wails) → native dialog + node reads the .zip
-        // off local disk. Browser dashboard (business node) → file upload.
+        // off local disk. Browser dashboard (remote node) → file upload.
         return IsDesktop();
     },
 
     // importTweet streams one pre-parsed original tweet (text + up to four
-    // base64 photos) to the node, which stores it on arrival. The business
+    // base64 photos) to the node, which stores it on arrival. The remote
     // browser dashboard parses and filters the X archive client-side and calls
     // this once per kept tweet, so the node never buffers the whole archive.
     async importTweet({id, text = "", createdAt = "", images = []}) {

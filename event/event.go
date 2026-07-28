@@ -111,7 +111,7 @@ type ImportTwitterArchiveResponse struct {
 
 // ImportTweetEvent defines model for ImportTweetEvent.
 //
-// One pre-parsed original tweet streamed from the business browser dashboard.
+// One pre-parsed original tweet streamed from the remote browser dashboard.
 // The browser unzips and filters the X archive client-side (dropping retweets,
 // replies, GIFs and videos) and streams only the kept tweets, so the node
 // never buffers the whole archive. Images are raw base64 of the still photos

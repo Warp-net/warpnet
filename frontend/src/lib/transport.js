@@ -23,8 +23,8 @@ resulting from the use or misuse of this software.
 */
 
 // transport bridges the frontend to its node, keeping the exact signatures the
-// service layer already calls. Under Wails (desktop/member) it delegates to the
-// bound Go App. Otherwise — the business node's browser dashboard — it speaks a
+// service layer already calls. Under Wails (node/member) it delegates to the
+// bound Go App. Otherwise — the remote node's browser dashboard — it speaks a
 // single WebSocket: login, logout, is-first-run and every node call ride one
 // connection. The connection carries its own auth (a successful login
 // authenticates the socket), and every frame after login is AES-256-GCM sealed
@@ -293,8 +293,8 @@ export async function ConsumePendingDeepLink() {
   return "";
 }
 
-// IsDesktop reports whether the Wails desktop runtime is present (member
-// node). The browser dashboard (business node) returns false and must upload
+// IsDesktop reports whether the Wails node runtime is present (member
+// node). The browser dashboard (remote node) returns false and must upload
 // the archive via an <input type=file> instead of the native dialog.
 export function IsDesktop() {
   return hasWails();

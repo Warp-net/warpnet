@@ -396,7 +396,7 @@ CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" \
   --node.network testnet --node.port 4002 --node.seed moderatorlocalhost
 
 # Business (headless node + browser dashboard). Password is REQUIRED — see §9.
-go run ./cmd/node/business \
+go run ./cmd/node/remote \
   --node.network testnet --node.server.port 4999 --node.server.password 'choose-a-secret'
 
 # Echo (headless bot member, in-memory store — great for tests/local swarms)
@@ -534,7 +534,7 @@ cd cmd/node/member && wails build -devtools -tags webkit2_41
 **C. In a plain browser via a business node (no GTK/Wails needed):**
 
 ```bash
-go run ./cmd/node/business --node.network testnet \
+go run ./cmd/node/remote --node.network testnet \
   --node.server.port 4999 --node.server.password 'secret'
 # then open http://localhost:4999 in your browser
 ```

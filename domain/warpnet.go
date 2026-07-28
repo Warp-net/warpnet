@@ -38,7 +38,7 @@ import (
 type ID = string
 
 // QRByteModeCapacity is the maximum payload (bytes) that fits in a QR code at
-// version 40 with error correction level 'L' in byte mode. The desktop UI
+// version 40 with error correction level 'L' in byte mode. The node UI
 // renders the AuthNodeInfo envelope as a pairing QR; JSON payloads larger
 // than this cannot be encoded and the QR modal renders blank.
 const QRByteModeCapacity = 2953
@@ -283,9 +283,9 @@ type User struct {
 	LastSeen           *time.Time `json:"last_seen,omitempty"`
 	NodeId             string     `json:"node_id"`
 	Network            string     `json:"network"`
-	// Role mirrors NodeInfo.Role: "" for a regular user, "business" for a
-	// business account. Stamped from the node's NodeInfo when the user is
-	// cached (discovery) so clients can badge business accounts.
+	// Role mirrors NodeInfo.Role: "" for a regular user, "remote" for a
+	// remote account. Stamped from the node's NodeInfo when the user is
+	// cached (discovery) so clients can badge remote accounts.
 	Role          string            `json:"role,omitempty"`
 	RoundTripTime int64             `json:"rtt"`
 	TweetsCount   int64             `json:"tweets_count"`

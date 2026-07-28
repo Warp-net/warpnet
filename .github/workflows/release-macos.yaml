@@ -1,6 +1,6 @@
 name: Release macOS (signed)
 
-# Builds, signs and notarizes the macOS desktop client when a GitHub
+# Builds, signs and notarizes the macOS node client when a GitHub
 # Release is published, then attaches the signed .dmg and a zipped,
 # notarized .app to that Release.
 #

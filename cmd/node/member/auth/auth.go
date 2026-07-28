@@ -221,7 +221,7 @@ func (as *AuthService) AuthLogout() {
 }
 
 // Reset clears the authenticated guard so the same process can log in again
-// after a logout. The business node keeps its node running and reopens the
+// after a logout. The remote node keeps its node running and reopens the
 // database on the next login; the member app stops its node on logout and
 // never re-logs-in in-process, so it does not call this.
 func (as *AuthService) Reset() {

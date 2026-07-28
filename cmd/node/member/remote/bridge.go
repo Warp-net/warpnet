@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package handlers
+package remote
 
 import (
 	"crypto/ed25519"
@@ -113,7 +113,7 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Errorf("business: ws upgrade: %v", err)
+			log.Errorf("remote: ws upgrade: %v", err)
 			return
 		}
 
@@ -131,11 +131,11 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		respond := func(req event.Message, encrypted bool) {
 			out, err := json.Marshal(b.dispatch(req))
 			if err != nil {
-				log.Errorf("business: ws marshal: %v", err)
+				log.Errorf("remote: ws marshal: %v", err)
 				return
 			}
 			if out, err = b.codec.Encode(out, encrypted); err != nil {
-				log.Errorf("business: ws encode: %v", err)
+				log.Errorf("remote: ws encode: %v", err)
 				return
 			}
 			writeMx.Lock()
@@ -155,7 +155,7 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			plain, encrypted := b.codec.Decode(frame)
 			var req event.Message
 			if err := json.Unmarshal(plain, &req); err != nil {
-				log.Warnf("business: ws envelope: %v", err)
+				log.Warnf("remote: ws envelope: %v", err)
 				continue
 			}
 
@@ -186,7 +186,7 @@ func (b *BridgeHandler) AttachNode(n Node) {
 func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Errorf("business: dispatch panic: %v", r)
+			log.Errorf("remote: dispatch panic: %v", r)
 		}
 	}()
 	resp := event.Message{
@@ -223,7 +223,7 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	}
 	loginResp, err := b.auth.AuthLogin(ev, b.psk)
 	if err != nil {
-		log.Errorf("business: auth: %v", err)
+		log.Errorf("remote: auth: %v", err)
 		return newErrorResp(err.Error())
 	}
 	bt, err := json.Marshal(loginResp)

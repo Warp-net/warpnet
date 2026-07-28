@@ -143,7 +143,7 @@ export default {
       this.$emit('close');
     },
     chooseAndImport() {
-      // Both the browser dashboard and the desktop (Wails) webview pick the
+      // Both the browser dashboard and the node (Wails) webview pick the
       // .zip with a file input; the archive is unzipped and filtered in the
       // client and streamed tweet-by-tweet, so neither uploads the whole file.
       this.$refs.fileInput.click();
