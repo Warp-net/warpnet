@@ -93,6 +93,8 @@ const (
 
 var DefaultIteratorOptions = badger.DefaultIteratorOptions
 
+var ErrConflict = badger.ErrConflict
+
 type (
 	Item       = badger.Item
 	Entry      = badger.Entry
@@ -973,7 +975,6 @@ func IsNotFoundError(err error) bool {
 		return false
 	}
 }
-
 func ToDatastoreErrNotFound(err error) error {
 	switch {
 	case err == nil:

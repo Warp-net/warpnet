@@ -46,6 +46,7 @@ import (
 var (
 	ErrUserNotFound      = local_store.DBError("user not found")
 	ErrUserAlreadyExists = local_store.DBError("user already exists")
+	ErrConflict          = local_store.ErrConflict
 )
 
 const (
