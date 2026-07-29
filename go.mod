@@ -10,7 +10,7 @@ tool (
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
-	github.com/Warp-net/libp2p-camouflage-transport v0.0.1
+	github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260729135240-f4615f8bb3b2
 	github.com/dgraph-io/badger/v4 v4.9.3
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
