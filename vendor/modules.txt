@@ -62,7 +62,7 @@ github.com/ProtonMail/go-crypto/openpgp/packet
 github.com/ProtonMail/go-crypto/openpgp/s2k
 github.com/ProtonMail/go-crypto/openpgp/x25519
 github.com/ProtonMail/go-crypto/openpgp/x448
-# github.com/Warp-net/libp2p-camouflage-transport v0.0.2-0.20260729185445-946ff90433f4
+# github.com/Warp-net/libp2p-camouflage-transport v0.0.3-0.20260729193308-a3374d881528
 ## explicit; go 1.26.0
 github.com/Warp-net/libp2p-camouflage-transport
 # github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d

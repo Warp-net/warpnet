@@ -39,10 +39,9 @@ import (
 
 const defaultFragmentSize = 2
 
-// SpoofConn wraps a manet.Conn and transparently splits Write calls into
-// small TCP segments while the connection is in the handshake phase (the
-// first handshakeLen bytes). After the handshake, writes pass through
-// without modification.
+// SpoofConn wraps a manet.Conn and splits Write calls during the handshake
+// phase (the first handshakeLen bytes). After the handshake, writes pass
+// through without modification.
 type SpoofConn struct {
 	manet.Conn
 
@@ -54,9 +53,8 @@ type SpoofConn struct {
 	sni          []byte
 }
 
-// NewSpoofConn wraps conn. When sni is non-empty, handshake writes carrying
-// it are cut once inside the name; otherwise the whole handshake prefix is
-// chunked into fragmentSize segments.
+// NewSpoofConn wraps conn. A non-empty sni switches to a single split
+// inside the name instead of chunking the handshake prefix.
 func NewSpoofConn(conn manet.Conn, fragmentSize, handshakeLen int, maxDelay time.Duration, sni string) *SpoofConn {
 	return &SpoofConn{
 		Conn:         conn,
@@ -86,10 +84,6 @@ func (c *SpoofConn) Write(b []byte) (int, error) {
 	return c.fragmentedWrite(b)
 }
 
-// sniSplitWrite cuts b once inside the SNI so the name never appears whole
-// in a single segment. Buffers that do not carry it go out unmodified: a
-// browser sends its ClientHello in one segment, and shredding every
-// handshake byte is itself a signature no browser produces.
 func (c *SpoofConn) sniSplitWrite(b []byte) (int, error) {
 	i := bytes.Index(b, c.sni)
 	if i < 0 {
@@ -112,7 +106,6 @@ func (c *SpoofConn) sniSplitWrite(b []byte) (int, error) {
 	return n + m, err
 }
 
-// trackedWrite writes all of b, counting the bytes toward handshakeLen.
 func (c *SpoofConn) trackedWrite(b []byte) (int, error) {
 	total := 0
 	for len(b) > 0 {
