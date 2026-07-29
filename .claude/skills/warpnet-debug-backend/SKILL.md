@@ -121,8 +121,8 @@ git checkout warpdroid/warpnet-transport/src/main/kotlin/site/warpnet/transport/
 ## Running your own fat node in Docker (testnet)
 
 Most of the dances above start with *"log into the fat node first."* When you don't have
-the user's desktop node in front of you, stand up your own headless **business node**
-(`cmd/node/business` — the same binary `warpnet-testnet-verify` uses) in a Docker
+the user's desktop node in front of you, stand up your own headless **remote node**
+(`cmd/node/member/remote-member.go` — the same binary `warpnet-testnet-verify` uses) in a Docker
 container on `testnet`. It boots the whole stack (BadgerDB, auth, libp2p host, every
 handler) and serves the dashboard `/ws` bridge on a port you can drive or open in a
 browser. This gives you a live node to reproduce a symptom against without touching the

@@ -1,26 +1,26 @@
 ---
 name: warpnet-testnet-verify
-description: Use this skill whenever a Warpnet change needs to be verified by actually running it in the testnet network — any task phrased as "test this in testnet", "verify the feature works", "check it end-to-end", "does the handler actually respond", "prove the route works on a real node", "smoke-test before pushing", or when you've just added/changed a handler, DTO, or protocol path and want runtime confirmation rather than just `go test`. This skill MANDATES bringing up a real business node (`cmd/node/business`) on `--node.network=testnet` and driving it over its `/ws` bridge — that is the required verification vehicle, not an optional one. Do NOT use this skill to design a new handler (use `warpnet-add-handler`) or to diagnose a cross-layer bug whose symptom you already have (use `warpnet-debug-stack`). Use it to confirm a change is live and correct on an actual node.
+description: Use this skill whenever a Warpnet change needs to be verified by actually running it in the testnet network — any task phrased as "test this in testnet", "verify the feature works", "check it end-to-end", "does the handler actually respond", "prove the route works on a real node", "smoke-test before pushing", or when you've just added/changed a handler, DTO, or protocol path and want runtime confirmation rather than just `go test`. This skill MANDATES bringing up a real remote node (`cmd/node/member/remote-member.go`) on `--node.network=testnet` and driving it over its `/ws` bridge — that is the required verification vehicle, not an optional one. Do NOT use this skill to design a new handler (use `warpnet-add-handler`) or to diagnose a cross-layer bug whose symptom you already have (use `warpnet-debug-stack`). Use it to confirm a change is live and correct on an actual node.
 ---
 
-# Verifying Warpnet changes in testnet via a business node
+# Verifying Warpnet changes in testnet via a remote node
 
 `go test` proves the pieces compile and the unit logic holds. It does **not** prove
 that a route is registered, that the libp2p self-stream reaches the handler, that the
 auth-signed envelope decodes, or that the wire payload is what the frontend will read.
 The only artifact that exercises the whole request path in one process is the
-**business node** (`cmd/node/business`): a single Go binary that serves the embedded
+**remote node** (`cmd/node/member/remote-member.go`): a single Go binary that serves the embedded
 `frontend/dist` over HTTP and bridges the dashboard to the node's own handlers over a
 WebSocket at `/ws`. Every non-auth call it receives is signed and routed through
 `node.SelfStream(...)` — the exact code path a real client hits.
 
-**This skill's rule: a change is not "verified in testnet" until a business node has
+**This skill's rule: a change is not "verified in testnet" until a remote node has
 been built from your working tree, started on `--node.network=testnet`, logged in, and
 answered the route you changed with the payload you expect.** Running the binary is
 mandatory, not a nice-to-have. `go test` alone is never sufficient to close a
 "verify in testnet" task.
 
-Why the *business* node specifically (and not the member/desktop node):
+Why the *remote* node specifically (and not the member/desktop node):
 
 - It's headless and driveable from a script — no Wails, no browser, no GUI event loop.
 - Its `/ws` bridge speaks the same `event.Message` envelope the Vue frontend uses, so
@@ -31,9 +31,9 @@ Why the *business* node specifically (and not the member/desktop node):
 ## The mandatory verification loop
 
 ```
-1. build     go build -mod=vendor -o <scratch>/business ./cmd/node/business
+1. build     go build -mod=vendor -o <scratch>/remote ./cmd/node/remote
 2. fresh     rm -rf ~/.warpdata/testnet          # only for a clean first-run/register
-3. run       <scratch>/business --node.network=testnet \
+3. run       <scratch>/remote --node.network=testnet \
                  --node.server.password='TestPass123!' --node.server.port=4999 &
 4. wait      curl -s -o /dev/null -w '%{http_code}' localhost:4999/healthz   # → 200
 5. drive     ws://localhost:4999/ws :  is-first-run → login → <your route(s)>
@@ -48,22 +48,22 @@ Steps 1, 3, and 5 are non-negotiable for any "verify in testnet" task. Skipping 
 
 ```bash
 SB=<your scratch dir>
-go build -mod=vendor -o "$SB/business" ./cmd/node/business
+go build -mod=vendor -o "$SB/remote" ./cmd/node/remote
 ```
 
 Always `-mod=vendor` (the repo vendors everything; see `CLAUDE.md`). Build from the
 branch you're verifying — a stale binary verifies nothing. The build needs the Go
-toolchain pinned in `Dockerfile.business` (currently Go 1.26.x); the CI Docker image is
+toolchain pinned in `Dockerfile.remote` (currently Go 1.26.x); the CI Docker image is
 the source of truth for the version.
 
 ## Step 2/3 — run on testnet
 
 ```bash
-"$SB/business" \
+"$SB/remote" \
   --node.network=testnet \
   --node.server.password='TestPass123!' \
   --node.server.port=4999 \
-  --logging.level=info > "$SB/business.log" 2>&1 &
+  --logging.level=info > "$SB/remote.log" 2>&1 &
 ```
 
 Key flags (all from `config/config.go`, override via `--flag` or `NODE_*` env):
@@ -99,11 +99,7 @@ same `node_id` every run. Change the password and you get a different account.
 
 ## Step 4 — liveness vs readiness
 
-`/healthz` and `/readyz` both **always return 200** — they are process-liveness probes
-(`cmd/node/business/handlers/auxiliary.go`), they do **not** gate on the node being
-attached. Use them only to confirm the HTTP server is up. Real readiness = you logged in
-and a routed call (e.g. admin stats) returned data. Don't treat `readyz=200` as "the
-node is ready to serve routes".
+Deprecated
 
 ## Step 5 — drive the `/ws` bridge
 
@@ -134,7 +130,7 @@ everything else is signed and forwarded to `node.SelfStream`:
 
 The required order: **`is-first-run` → login → wait a few seconds for the node to attach
 → your route(s).** Login returns `domain.AuthNodeInfo` (`user_id`, `token`, `psk`,
-`node_id`, `addresses`, `role":"business"`, `bootstrap_peers`, `network`). A successful
+`node_id`, `addresses`, `role":"member"`, `bootstrap_peers`, `network`). A successful
 `node_id` means the host started.
 
 ### Reference probe client
@@ -232,7 +228,7 @@ skill creates belongs in the repo.
 
 ## Gotchas
 
-- **The node attaches only after login.** The main loop in `cmd/node/business/main.go`
+- **The node attaches only after login.** The main loop in `cmd/node/member/remote-member.go`
   blocks on `readyChan` and constructs the libp2p node on the first successful login,
   then `AttachNode`s it. Calling a route before that ⇒ `not attached server node`.
 - **`healthz`/`readyz` are liveness only** — both hard-coded to 200. Don't use them as a
@@ -278,7 +274,7 @@ private network = nothing connects. Build every binary from the same working tre
 ```bash
 SB=<scratch>
 go build -mod=vendor -o "$SB/relay"    ./cmd/node/relay
-go build -mod=vendor -o "$SB/business" ./cmd/node/business
+go build -mod=vendor -o "$SB/remote" ./cmd/node/remote
 
 # 1) bootstrap (relay) node — fixed seed → deterministic ID, TCP on --node.port
 "$SB/relay" --node.network=testnet --node.port=4000 \
@@ -288,9 +284,9 @@ RELAY_ID=$(grep -oP 'RELAY NODE STARTED WITH ID \K[^ ]+' "$SB/relay.log" | head 
 BOOT="/ip4/127.0.0.1/tcp/4000/p2p/$RELAY_ID"
 
 # 2) two app nodes, each bootstrapping off the relay; distinct ports + db dirs
-"$SB/business" --node.network=testnet --node.server.password='TestPass123!' \
+"$SB/remote" --node.network=testnet --node.server.password='TestPass123!' \
     --node.port=4001 --node.server.port=4999 --database.dir=storage-a --node.bootstrap="$BOOT" &
-"$SB/business" --node.network=testnet --node.server.password='TestPass123!' \
+"$SB/remote" --node.network=testnet --node.server.password='TestPass123!' \
     --node.port=4002 --node.server.port=5000 --database.dir=storage-b --node.bootstrap="$BOOT" &
 
 # 3) log into BOTH over /ws — this boots each node's libp2p host (see the flow above)
