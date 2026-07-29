@@ -39,15 +39,6 @@ import (
 // every connection, so that traversal can be diagnosed without turning on
 // libp2p's global debug logging.
 
-// shortID trims a peer ID to its last 6 characters, matching the node event log.
-func shortID(id warpnet.WarpPeerID) string {
-	s := id.String()
-	if len(s) <= 6 {
-		return s
-	}
-	return "..." + s[len(s)-6:]
-}
-
 // holePunchTracer reports every step of the DCUtR exchange. Outcomes are logged
 // at info, individual attempts at debug: a punch normally takes up to three
 // attempts, and only the outcome is interesting once it works.
@@ -57,7 +48,7 @@ func (holePunchTracer) Trace(evt *holepunch.Event) {
 	if evt == nil {
 		return
 	}
-	peer := shortID(evt.Remote)
+	peer := evt.Remote.ShortString()
 
 	switch e := evt.Evt.(type) {
 	case *holepunch.StartHolePunchEvt:
@@ -69,7 +60,7 @@ func (holePunchTracer) Trace(evt *holepunch.Event) {
 		log.Debugf("holepunch: attempt %d: peer %s", e.Attempt, peer)
 	case *holepunch.EndHolePunchEvt:
 		if e.Success {
-			log.Infof("holepunch: success: peer %s, took %s", peer, e.EllapsedTime)
+			log.Infof("holepunch: SUCCESS: peer %s, took %s", peer, e.EllapsedTime)
 			return
 		}
 		log.Warnf("holepunch: failed: peer %s, took %s, reason: %s", peer, e.EllapsedTime, e.Error)
@@ -77,7 +68,7 @@ func (holePunchTracer) Trace(evt *holepunch.Event) {
 		// A successful direct dial means the peer was reachable without any
 		// punching, so DCUtR stops there.
 		if e.Success {
-			log.Infof("holepunch: direct dial succeeded, no punch needed: peer %s, took %s", peer, e.EllapsedTime)
+			log.Infof("holepunch: SUCCESS - direct dial succeeded, no punch needed: peer %s, took %s", peer, e.EllapsedTime)
 			return
 		}
 		log.Debugf("holepunch: direct dial failed, punching: peer %s, took %s", peer, e.EllapsedTime)
@@ -98,7 +89,7 @@ func (connTracer) Connected(n network.Network, c network.Conn) {
 	if c == nil {
 		return
 	}
-	peer := shortID(c.RemotePeer())
+	peer := c.RemotePeer().ShortString()
 	addr := c.RemoteMultiaddr()
 
 	if isRelayed(c) {
@@ -111,7 +102,7 @@ func (connTracer) Connected(n network.Network, c network.Conn) {
 	// hole punching works in the wild.
 	for _, other := range n.ConnsToPeer(c.RemotePeer()) {
 		if other != c && isRelayed(other) {
-			log.Infof("holepunch: upgraded relay to direct: peer %s, address %s", peer, addr)
+			log.Infof("holepunch: SUCCESS - upgraded relay to direct: peer %s, address %s", peer, addr)
 			return
 		}
 	}
@@ -123,7 +114,7 @@ func (connTracer) Disconnected(n network.Network, c network.Conn) {
 		return
 	}
 	if !isRelayed(c) {
-		log.Debugf("holepunch: direct connection closed: peer %s", shortID(c.RemotePeer()))
+		log.Debugf("holepunch: direct connection closed: peer %s", c.RemotePeer().ShortString())
 		return
 	}
 	// libp2p drops the relayed connection once a punch succeeds. Seeing the
@@ -132,11 +123,11 @@ func (connTracer) Disconnected(n network.Network, c network.Conn) {
 	// empty connection set says nothing about traversal.
 	for _, other := range n.ConnsToPeer(c.RemotePeer()) {
 		if other != c && !isRelayed(other) {
-			log.Infof("holepunch: relayed connection closed, staying direct: peer %s", shortID(c.RemotePeer()))
+			log.Infof("holepunch: relayed connection closed, staying direct: peer %s", c.RemotePeer().ShortString())
 			return
 		}
 	}
-	log.Debugf("holepunch: relayed connection closed: peer %s", shortID(c.RemotePeer()))
+	log.Debugf("holepunch: relayed connection closed: peer %s", c.RemotePeer().ShortString())
 }
 
 func isRelayed(c network.Conn) bool {
