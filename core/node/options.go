@@ -40,6 +40,7 @@ import (
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
+	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -59,7 +60,7 @@ var CommonOptions = []libp2p.Option{
 	libp2p.EnableAutoNATv2(),
 	libp2p.EnableRelay(),
 	libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
-	libp2p.EnableHolePunching(),
+	libp2p.EnableHolePunching(holepunch.WithTracer(holePunchTracer{})),
 	libp2p.EnableNATService(),
 	libp2p.NATPortMap(),
 }
