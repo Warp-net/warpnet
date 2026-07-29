@@ -130,6 +130,12 @@ func NewRelayNode(
 		),
 		libp2p.Routing(dHashTable.StartRouting),
 		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
+		// A relay serves circuit v2 only after AutoNAT reports public
+		// reachability, and until then peers reject it as "doesn't speak circuit
+		// v2". This node is deployed on a static public address by definition,
+		// so state that instead of waiting to be probed - NATed peers need the
+		// relay before they can help confirm it.
+		libp2p.ForceReachabilityPublic(),
 	}
 	opts = append(opts, node.CommonOptions...)
 
