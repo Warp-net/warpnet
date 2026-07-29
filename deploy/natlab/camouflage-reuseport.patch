@@ -1,0 +1,47 @@
+diff --git a/vendor/github.com/Warp-net/libp2p-camouflage-transport/camouflage.go b/vendor/github.com/Warp-net/libp2p-camouflage-transport/camouflage.go
+index f4f4320d..19f7aca8 100644
+--- a/vendor/github.com/Warp-net/libp2p-camouflage-transport/camouflage.go
++++ b/vendor/github.com/Warp-net/libp2p-camouflage-transport/camouflage.go
+@@ -37,6 +37,7 @@ import (
+ 	"github.com/libp2p/go-libp2p/core/network"
+ 	"github.com/libp2p/go-libp2p/core/peer"
+ 	"github.com/libp2p/go-libp2p/core/transport"
++	"github.com/libp2p/go-libp2p/p2p/net/reuseport"
+ 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+ 	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
+ 	ma "github.com/multiformats/go-multiaddr"
+@@ -147,6 +148,7 @@ func WithHandshakeTimeout(d time.Duration) Option {
+ // traffic fragmentation to evade DPI.
+ type CamouflageTransport struct {
+ 	inner     *tcp.TcpTransport
++	reuse     reuseport.Transport
+ 	upgrader  transport.Upgrader
+ 	rcmgr     network.ResourceManager
+ 	sharedTCP *tcpreuse.ConnMgr
+@@ -314,6 +316,9 @@ func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (
+ 	if t.sharedTCP != nil {
+ 		return t.sharedTCP.DialContext(ctx, raddr)
+ 	}
++	if tcpreuse.ReuseportIsAvailable() {
++		return t.reuse.DialContext(ctx, raddr)
++	}
+ 	var d manet.Dialer
+ 	return d.DialContext(ctx, raddr)
+ }
+@@ -335,7 +340,15 @@ func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, er
+ 			return nil, err
+ 		}
+ 	} else {
+-		mal, err := manet.Listen(laddr)
++		var (
++			mal manet.Listener
++			err error
++		)
++		if tcpreuse.ReuseportIsAvailable() {
++			mal, err = t.reuse.Listen(laddr)
++		} else {
++			mal, err = manet.Listen(laddr)
++		}
+ 		if err != nil {
+ 			return nil, err
+ 		}
