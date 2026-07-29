@@ -130,6 +130,8 @@ func NewWarpNode(
 		return nil, fmt.Errorf("node: failed to init node: %w", err)
 	}
 
+	node.Network().Notify(connTracer{})
+
 	pool, err := stream.NewStreamPool(ctx, node)
 	if err != nil {
 		return nil, err
