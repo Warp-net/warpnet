@@ -50,13 +50,12 @@ const (
 	DefaultFragmentSize = 2
 
 	// DefaultHandshakeLen is the number of initial bytes subject to
-	// fragmentation. This covers the TLS ClientHello (~500 bytes) with margin.
-	DefaultHandshakeLen = 1024
+	// fragmentation. This covers the whole TLS ClientHello.
+	DefaultHandshakeLen = 2048
 
 	// DefaultMaxDelay is the upper bound for the random delay inserted
-	// between handshake fragments. Keeping this small avoids noticeable
-	// connection latency.
-	DefaultMaxDelay = 5 * time.Millisecond
+	// between handshake fragments. Zero disables the delay.
+	DefaultMaxDelay = 0
 
 	defaultConnectTimeout = 60 * time.Second
 
@@ -163,7 +162,10 @@ type CamouflageTransport struct {
 	camoConfig         *CamouflageConfig // built once in constructor
 }
 
-var _ transport.Transport = (*CamouflageTransport)(nil)
+var (
+	_ transport.Transport   = (*CamouflageTransport)(nil)
+	_ transport.DialUpdater = (*CamouflageTransport)(nil)
+)
 
 // NewCamouflageTransport creates a DPI-evasion transport. The constructor
 // signature is compatible with libp2p.Transport() dependency injection:
@@ -218,13 +220,24 @@ func NewCamouflageTransport(
 // Dial dials the remote peer, wrapping the raw TCP connection with
 // SpoofConn + real TLS camouflage before the Noise handshake.
 func (t *CamouflageTransport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (transport.CapableConn, error) {
+	return t.DialWithUpdates(ctx, raddr, p, nil)
+}
+
+// DialWithUpdates dials the remote peer and reports dial progress on
+// updateChan.
+func (t *CamouflageTransport) DialWithUpdates(
+	ctx context.Context,
+	raddr ma.Multiaddr,
+	p peer.ID,
+	updateChan chan<- transport.DialUpdate,
+) (transport.CapableConn, error) {
 	connScope, err := t.rcmgr.OpenConnection(network.DirOutbound, true, raddr)
 	if err != nil {
 		log.Printf("dpi: resource manager blocked outgoing connection to %s: %v", p, err)
 		return nil, err
 	}
 
-	c, err := t.dialWithScope(ctx, raddr, p, connScope)
+	c, err := t.dialWithScope(ctx, raddr, p, connScope, updateChan)
 	if err != nil {
 		connScope.Done()
 		return nil, err
@@ -237,6 +250,7 @@ func (t *CamouflageTransport) dialWithScope(
 	raddr ma.Multiaddr,
 	p peer.ID,
 	connScope network.ConnManagementScope,
+	updateChan chan<- transport.DialUpdate,
 ) (transport.CapableConn, error) {
 	if err := connScope.SetPeer(p); err != nil {
 		log.Printf("dpi: resource manager blocked connection for peer %s: %v", p, err)
@@ -248,8 +262,29 @@ func (t *CamouflageTransport) dialWithScope(
 		return nil, err
 	}
 
+	if updateChan != nil {
+		select {
+		case updateChan <- transport.DialUpdate{Kind: transport.UpdateKindHandshakeProgressed, Addr: raddr}:
+		default:
+		}
+	}
+
+	return t.upgradeDialed(ctx, rawConn, p, connScope)
+}
+
+func (t *CamouflageTransport) upgradeDialed(
+	ctx context.Context,
+	rawConn manet.Conn,
+	p peer.ID,
+	connScope network.ConnManagementScope,
+) (transport.CapableConn, error) {
 	setLinger(rawConn, 0)
 	tryKeepAlive(rawConn, true)
+
+	direction := network.DirOutbound
+	if ok, isClient, _ := network.GetSimultaneousConnect(ctx); ok && !isClient {
+		direction = network.DirInbound
+	}
 
 	// Layer 1: TCP fragmentation – fragments the TLS ClientHello into
 	// small TCP segments to defeat first-segment DPI.
@@ -257,17 +292,13 @@ func (t *CamouflageTransport) dialWithScope(
 
 	// Layer 2: Real TLS tunnel – uTLS presents a genuine browser
 	// ClientHello fingerprint; all subsequent traffic is encrypted TLS.
-	camouflaged, err := NewCamouflageConn(wrapped, true, t.camoConfig)
+	camouflaged, err := NewCamouflageConn(wrapped, direction == network.DirOutbound, t.camoConfig)
 	if err != nil {
 		log.Printf("dpi: camouflage connection failed: %v", err)
 		_ = rawConn.Close()
 		return nil, err
 	}
 
-	direction := network.DirOutbound
-	if ok, isClient, _ := network.GetSimultaneousConnect(ctx); ok && !isClient {
-		direction = network.DirInbound
-	}
 	return t.upgrader.Upgrade(ctx, t, camouflaged, direction, p, connScope)
 }
 
