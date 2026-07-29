@@ -39,7 +39,7 @@ tries to answer **"why is it built this way?"**, not just "what is it".
 6. [Building from source](#6-building-from-source)
 7. [Working on the desktop frontend (Vue + Wails)](#7-working-on-the-desktop-frontend-vue--wails)
 8. [Working on the Android client (warpdroid + the AAR)](#8-working-on-the-android-client-warpdroid--the-aar)
-9. [The business node: one UI, served over the wire](#9-the-business-node-one-ui-served-over-the-wire)
+9. [The remote node: one UI, served over the wire](#9-the-remote-node-one-ui-served-over-the-wire)
 10. [Running locally](#10-running-locally)
 11. [Configuration reference](#11-configuration-reference)
 12. [How it works under the hood](#12-how-it-works-under-the-hood)
@@ -162,7 +162,7 @@ strings (`event/paths.go`) and the same `{path, body, …}` request envelope.
    (no network boundary)        (network boundary → encrypted)     (network boundary → signed)
         │                                 │                                 │
   Vue desktop app                  Vue browser dashboard              Android app (Tusky fork)
-  on the MEMBER node               on the BUSINESS node               warpdroid/  (via gomobile AAR)
+  on the MEMBER node               on the remote node               warpdroid/  (via gomobile AAR)
   (frontend/, §7)                  (§9)                               (§8)
 ```
 
@@ -183,7 +183,7 @@ different build of the same codebase.
 | **member** | `cmd/node/member/main.go` | The full "fat" node most people run. Holds local data, serves the desktop UI, pairs with mobile devices, participates in the P2P network. | `CGO_ENABLED=1`, `-tags webkit2_41` (Wails) |
 | **relay** | `cmd/node/relay/main.go` | Stable, stateless entry points. Help new nodes find peers via the DHT and provide NAT-traversal relaying. | `CGO_ENABLED=0`, pure Go |
 | **moderator** | `cmd/node/moderator/main.go` | Runs an on-device LLM (Llama Guard 3) to evaluate reported content. | `CGO_ENABLED=1`, `-tags=llama` |
-| **business** | `cmd/node/business/main.go` | A headless node that serves the same UI to a **browser** over an encrypted WebSocket (for server/hosted deployments). | no special CGO/tags (plain `go build`) |
+| **remote** | `cmd/node/remote/main.go` | A headless node that serves the same UI to a **browser** over an encrypted WebSocket (for server/hosted deployments). | no special CGO/tags (plain `go build`) |
 | **echo** | `cmd/node/member/echo-member.go` | A headless "bot" member node with an in-memory store, to populate a local network and for tests. | `CGO_ENABLED=0`, `-tags echo` |
 
 > [!NOTE]
@@ -192,15 +192,15 @@ different build of the same codebase.
 > for the Wails desktop UI → needs cgo. The **moderator** links llama.cpp →
 > needs cgo. The **relay** and **echo** roles are pure Go on purpose, so they
 > compile to tiny static binaries that run in `distroless` containers. The
-> **business** node’s `Dockerfile.business` does **not** set `CGO_ENABLED` at
-> all — it’s an ordinary `go build ./cmd/node/business` with no cgo libraries
+> **remote** node’s `Dockerfile.remote` does **not** set `CGO_ENABLED` at
+> all — it’s an ordinary `go build ./cmd/node/remote` with no cgo libraries
 > required.
 
 > [!TIP]
 > **Mental model:** *relays* are thin signposts, *members* are the network
-> itself, *moderators* are optional opt-in referees, *business* is "Warpnet on a
+> itself, *moderators* are optional opt-in referees, *remote* is "Warpnet on a
 > server, used from a browser", and *echo* is a test bot. Only **member** has a
-> desktop GUI; only **member** and **business** serve the UI at all.
+> desktop GUI; only **member** and **remote** serve the UI at all.
 
 Note the older docs’ "bootstrap node": there is **no** `cmd/node/bootstrap`. The
 **relay** role is what acts as a bootstrap/entry point now.
@@ -220,7 +220,7 @@ warpnet/
 │   │   └── node/         #   member-node.go — wires the whole node together
 │   ├── relay/            #   relay node
 │   ├── moderator/        #   LLM moderator node
-│   └── business/         #   headless node + browser dashboard (HTTP/WS)
+│   └── remote/         #   headless node + browser dashboard (HTTP/WS)
 ├── core/                 # the heart — networking, routing, handlers
 │   ├── node/             #   WarpNode: libp2p host, stream dispatch, middleware glue
 │   ├── stream/           #   WarpRoute type, peer streaming, in-process loopback
@@ -238,7 +238,7 @@ warpnet/
 ├── event/                # the wire protocol: paths.go (routes) + event.go (DTOs)
 ├── security/             # keys, signing, Noise/PSK, codebase-hash integrity
 ├── config/               # node configuration (flags / env / defaults)
-├── frontend/             # Vue 3 UI (served by member via Wails, by business via WS)
+├── frontend/             # Vue 3 UI (served by member via Wails, by remote via WS)
 ├── warpdroid/            # Android client (Tusky fork) + gomobile AAR bridge
 ├── warpfone/             # iOS client (placeholder — not implemented yet)
 ├── metrics/              # Prometheus push-metrics client
@@ -264,9 +264,9 @@ instead of reverse-engineering a bespoke architecture first:
 | MVC role | Warpnet | What lives there |
 |---|---|---|
 | **Router** | `event/paths.go` + handler registration (`setupHandlers`) | The route strings and which handler each one dispatches to. |
-| **Controller** | `core/handler/<feature>.go` (one per route) | Request handling and business logic — the unit you add. |
+| **Controller** | `core/handler/<feature>.go` (one per route) | Request handling and remote logic — the unit you add. |
 | **Model** | `database/<feature>-repo.go` + `domain/` | Persistence (repositories over BadgerDB) and the domain types. |
-| **View** | `frontend/` (Vue SPA) + the Android/business clients | What the user sees; reaches the controller over one of the three transports (§2). |
+| **View** | `frontend/` (Vue SPA) + the Android/remote clients | What the user sees; reaches the controller over one of the three transports (§2). |
 
 "Add a feature" then decomposes into the same moves a Rails/Django/Spring/Laravel
 dev already knows: declare a route, write a controller, touch the model, render
@@ -277,7 +277,7 @@ path.
 > **Why force a familiar shape onto a P2P node?** Underneath, this is not a web
 > app: there is no HTTP server, the "router" dispatches **libp2p streams**, and
 > the very same controller is reached three ways — in-process (Wails desktop),
-> over a WebSocket (business), or across the network from a remote peer (§12).
+> over a WebSocket (remote), or across the network from a remote peer (§12).
 > None of that has to be understood up front. Presenting the codebase as MVC is
 > a deliberate onboarding decision — it lets a new contributor be productive in
 > the one layer they care about (a handler, a repo, a Vue view) before they
@@ -395,7 +395,7 @@ CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" \
   go run -tags=llama cmd/node/moderator/main.go \
   --node.network testnet --node.port 4002 --node.seed moderatorlocalhost
 
-# Business (headless node + browser dashboard). Password is REQUIRED — see §9.
+# remote (headless node + browser dashboard). Password is REQUIRED — see §9.
 go run ./cmd/node/remote \
   --node.network testnet --node.server.port 4999 --node.server.password 'choose-a-secret'
 
@@ -415,7 +415,7 @@ go run -tags echo cmd/node/member/echo-member.go \
 
 CGO is `1` for **member** (GTK/WebKit) and **moderator** (llama.cpp), `0` for
 **relay** and **echo** (so they static-link into distroless containers), and
-unset/default for **business** (no cgo needed). These come straight from the
+unset/default for **remote** (no cgo needed). These come straight from the
 `Dockerfile.*` files, so they match what ships.
 
 ---
@@ -431,7 +431,7 @@ your changes.
 `frontend/` is a **Vue 3** single-page app (Vue 3.5, built with
 `vue-cli-service`/Webpack, styled with Tailwind, tested with Vitest). It lives
 **in-tree** and is the *same* app for both the desktop (member) and the browser
-dashboard (business) — only the transport differs.
+dashboard (remote) — only the transport differs.
 
 ### How the UI talks to the node — the bridge
 
@@ -459,7 +459,7 @@ You almost never think about libp2p in the frontend. You call **one function**,
      auto-generated by Wails into `frontend/wailsjs/go/main/App.js` from the
      exported methods on the Go `App` struct (`Call`, `IsFirstRun`,
      `ConsumePendingDeepLink`). Regenerated whenever you run `wails build`/`wails dev`.
-   - **Browser (business):** otherwise it opens a single **WebSocket** to `/ws`
+   - **Browser (remote):** otherwise it opens a single **WebSocket** to `/ws`
      and rides every request on it, **AES-256-GCM encrypted** with
      `SHA-256(password)` (see §9).
 
@@ -531,7 +531,7 @@ cd cmd/node/member && wails build -devtools -tags webkit2_41
 > trade-off: when you change the UI you must rebuild **and commit**
 > `frontend/dist` alongside your source, so the embedded copy stays in sync.
 
-**C. In a plain browser via a business node (no GTK/Wails needed):**
+**C. In a plain browser via a remote node (no GTK/Wails needed):**
 
 ```bash
 go run ./cmd/node/remote --node.network testnet \
@@ -542,7 +542,7 @@ go run ./cmd/node/remote --node.network testnet \
 This serves the same Vue app to your browser over the encrypted WebSocket. It’s
 the easiest path if you can’t (or don’t want to) build the Wails/GTK desktop
 stack. For pure visual/component work, `cd frontend && npm run serve` gives Vue
-hot-reload (point it at a running business node for live data).
+hot-reload (point it at a running remote node for live data).
 
 ---
 
@@ -699,29 +699,29 @@ rebuild the AAR **and** update the Kotlin mirrors (`ProtocolIds.kt`, DTOs).
 
 ---
 
-## 9. The business node: one UI, served over the wire
+## 9. The remote node: one UI, served over the wire
 
-The business node is the answer to: *"How do I run Warpnet on a server and use
+The remote node is the answer to: *"How do I run Warpnet on a server and use
 it from a browser, when the desktop node bakes its UI into a GTK window?"* It’s
 also the clearest example of *why* the frontend is decoupled from the backend.
 
-### Member vs business: where the UI runs
+### Member vs remote: where the UI runs
 
 - On the **member** node, the Vue app runs **inside** the process (Wails
   webview). The UI↔node link is an **in-process function call**
   (`window.go.main.App.Call`). There is no network on that boundary, so there is
   nothing to authenticate or encrypt there — it’s one program.
-- On the **business** node there is **no desktop webview**. The node runs
+- On the **remote** node there is **no desktop webview**. The node runs
   headless and instead **serves the same Vue app over HTTP** and bridges the UI
   to the node over a **WebSocket**. Now the UI↔node boundary *is* a network hop
   (possibly across the internet), so it **must** be authenticated and encrypted.
 
 That is the entire reason the frontend is "split from the backend" in the
-business node: the same UI, but reached over the wire instead of in-process.
+remote node: the same UI, but reached over the wire instead of in-process.
 
-### How it’s wired (`cmd/node/business/main.go`)
+### How it’s wired (`cmd/node/remote/main.go`)
 
-The business node starts a plain `net/http` server that:
+The remote node starts a plain `net/http` server that:
 
 - serves the embedded Vue app at `/` (`StaticHandler`),
 - bridges the browser to the node at `/ws` (`BridgeHandler`),
@@ -804,8 +804,8 @@ Wipe testnet data with `make prune-testnet` (`rm -rf ~/.warpdata/testnet/*`).
 
 The **member node cannot run in Docker** — it needs the desktop GUI. The
 headless roles do: `deploy/` has docker-compose stacks (relays + moderator +
-business), and each role has its own Dockerfile (`Dockerfile.relay`,
-`.moderator`, `.business`, `.echo`).
+remote), and each role has its own Dockerfile (`Dockerfile.relay`,
+`.moderator`, `.remote`, `.echo`).
 
 ### Metrics (optional)
 
@@ -840,8 +840,8 @@ names are the flag uppercased with dots → underscores (`node.port` → `NODE_P
 | `--node.print-psk` | `NODE_PRINT_PSK` | `false` | Print the network PSK on startup (handy for relays/moderators). |
 | `--node.metrics.gateway` | `NODE_METRICS_GATEWAY` | `207.154.221.44:4091` | Prometheus push-gateway address. |
 | `--node.moderator.modelpath` | `NODE_MODERATOR_MODELPATH` | `…/Llama-Guard-3-1B.Q8_0.gguf` | Path to the GGUF model (moderator role). |
-| `--node.server.port` | `NODE_SERVER_PORT` | `4999` | Dashboard HTTP/WS port (business role). |
-| `--node.server.password` | `NODE_SERVER_PASSWORD` | *(empty)* | Pre-shared secret that encrypts dashboard WS traffic (business role — required). |
+| `--node.server.port` | `NODE_SERVER_PORT` | `4999` | Dashboard HTTP/WS port (remote role). |
+| `--node.server.password` | `NODE_SERVER_PASSWORD` | *(empty)* | Pre-shared secret that encrypts dashboard WS traffic (remote role — required). |
 | `--logging.level` | `LOGGING_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `--logging.format` | `LOGGING_FORMAT` | `text` | `text` or `json`. |
 | `--database.dir` | `DATABASE_DIR` | `storage` | Subdirectory under `~/.warpdata/<network>/`. |
@@ -874,7 +874,7 @@ LOGGING_LEVEL=debug ./build/bin/warpnet --node.network testnet   # verbose logs
 |---|---|---|
 | `core/node` | libp2p host; registers handlers behind middleware; `SelfStream` + peer streaming. | The seam where "a local UI call" and "a remote peer request" converge on one handler. |
 | `core/stream` | `WarpRoute` type; in-process loopback + peer stream pool. | Lets the same route run locally or across the network unchanged. |
-| `core/handler` | One handler per route (50+). | All business logic; the unit a contributor adds. |
+| `core/handler` | One handler per route (50+). | All remote logic; the unit a contributor adds. |
 | `core/middleware` | Signature auth, logging, unwrap, idempotency. | No server = no trusted caller, so every request is verified and de-duplicated. |
 | `core/discovery` | Tracks peers online/offline across DHT/mDNS/gossip/stream. | No directory server, so peers must be found and health-checked continuously. |
 | `core/dht` / `core/mdns` | Kademlia routing & bootstrap; LAN discovery. | Decentralized "phone book". |
@@ -1231,8 +1231,8 @@ frontend fixes, better error messages/docs, or running a public relay node.
 | Two nodes won’t see each other | Different `--node.network`, or **version mismatch** — the PSK is derived from `(network, version)`. Match both. |
 | UI changes don’t show up (desktop) | `wails.json` has `skipfrontend: true` and the binary embeds `frontend/dist`. Run `make frontend` **then** rebuild the binary (or use `wails dev`). See §7. |
 | Android shows blank rows/fields, desktop is fine | DTO/route **drift**: Kotlin Moshi DTO or `ProtocolIds.kt` out of sync with Go. Realign and rebuild the AAR. See §8/§13. |
-| Business node won’t start | `--node.server.password` is **required** (it’s the WS channel key). See §9. |
-| Member node won’t start in Docker | By design — it needs the Wails GUI. Run relay/moderator/business/echo in Docker. |
+| remote node won’t start | `--node.server.password` is **required** (it’s the WS channel key). See §9. |
+| Member node won’t start in Docker | By design — it needs the Wails GUI. Run relay/moderator/remote/echo in Docker. |
 | Moderator fails to start | Missing GGUF model at `--node.moderator.modelpath`, or built without `-tags=llama` / cgo. |
 | `wails build` fails on Linux | Missing GTK/WebKit dev libs — install the `apt` packages in §6 and use `-tags webkit2_41`. |
 | Running on macOS | Not supported — builds are unsigned and Gatekeeper blocks them (§5). |
