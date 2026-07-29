@@ -1,3 +1,5 @@
+//go:build !echo && !remote
+
 package main
 
 import (
