@@ -29,6 +29,7 @@ package camouflage
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p/p2p/net/reuseport"
 	"net"
 	"strings"
 	"sync"
@@ -150,6 +151,7 @@ type CamouflageTransport struct {
 	upgrader  transport.Upgrader
 	rcmgr     network.ResourceManager
 	sharedTCP *tcpreuse.ConnMgr
+	reuse     reuseport.Transport
 
 	fragmentSize   int
 	handshakeLen   int
@@ -314,18 +316,13 @@ func (t *CamouflageTransport) dialRaw(ctx context.Context, raddr ma.Multiaddr) (
 	if t.sharedTCP != nil {
 		return t.sharedTCP.DialContext(ctx, raddr)
 	}
+	if tcpreuse.ReuseportIsAvailable() {
+		return t.reuse.DialContext(ctx, raddr)
+	}
 	var d manet.Dialer
 	return d.DialContext(ctx, raddr)
 }
 
-// Listen creates a TCP listener whose accepted connections are wrapped
-// with SpoofConn + real TLS camouflage so that the TLS handshake
-// completes before the Noise upgrade.
-//
-// When sharedTCP is available, we register as DemultiplexedConnType_TLS
-// so that the tcpreuse demultiplexer routes incoming TLS ClientHello
-// connections (first byte 0x16) to this transport. Without this, the
-// shared port cannot dispatch connections to us.
 func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, error) {
 	var gated transport.GatedMaListener
 	if t.sharedTCP != nil {
@@ -335,7 +332,15 @@ func (t *CamouflageTransport) Listen(laddr ma.Multiaddr) (transport.Listener, er
 			return nil, err
 		}
 	} else {
-		mal, err := manet.Listen(laddr)
+		var (
+			mal manet.Listener
+			err error
+		)
+		if tcpreuse.ReuseportIsAvailable() {
+			mal, err = t.reuse.Listen(laddr)
+		} else {
+			mal, err = manet.Listen(laddr)
+		}
 		if err != nil {
 			return nil, err
 		}
