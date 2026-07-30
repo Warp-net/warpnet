@@ -38,10 +38,8 @@ github.com/RaduBerinde/axisds v0.1.0 h1:YItk/RmU5nvlsv/awo2Fjx97Mfpt4JfgtEVAGPrL
 github.com/RaduBerinde/axisds v0.1.0/go.mod h1:UHGJonU9z4YYGKJxSaC6/TNcLOBptpmM5m2Cksbnw0Y=
 github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 h1:bsU8Tzxr/PNz75ayvCnxKZWEYdLMPDkUgticP4a4Bvk=
 github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54/go.mod h1:0tr7FllbE9gJkHq7CVeeDDFAFKQVy5RnCSSNBOvdqbc=
-github.com/Warp-net/libp2p-camouflage-transport v0.0.3-0.20260729193308-a3374d881528 h1:OKqvxPGbhiND0N9zN5oVfpunoFfSt07kSaI5bj3dSmY=
-github.com/Warp-net/libp2p-camouflage-transport v0.0.3-0.20260729193308-a3374d881528/go.mod h1:DqeFU1UysMPjS/3HNFtiTFl+CU79WxRYinrfaPo72ow=
-github.com/Warp-net/libp2p-camouflage-transport v0.0.3-0.20260729212934-cd9b1ff6e7b9 h1:m7NS25kehK9vRpMg7L3R7k2km9HO3sRPPTnbLWl/HH4=
-github.com/Warp-net/libp2p-camouflage-transport v0.0.3-0.20260729212934-cd9b1ff6e7b9/go.mod h1:Ki1TfLYtJgF4vxRYfZwfk8m4FJOVxP8eVmr6VemVkpQ=
+github.com/Warp-net/libp2p-camouflage-transport v0.0.3 h1:rmkVl3+zHQqduXIAf6KEhM/4Y1eb1lXiIkHt4j7YgBY=
+github.com/Warp-net/libp2p-camouflage-transport v0.0.3/go.mod h1:Ki1TfLYtJgF4vxRYfZwfk8m4FJOVxP8eVmr6VemVkpQ=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d h1:licZJFw2RwpHMqeKTCYkitsPqHNxTmd4SNR5r94FGM8=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d/go.mod h1:asat636LX7Bqt5lYEZ27JNDcqxfjdBQuJ/MM4CN/Lzo=
 github.com/alecthomas/assert/v2 v2.11.0 h1:2Q9r3ki8+JYXvGsDyBXwH3LcJ+WK5D0gc5E8vS6K3D0=
