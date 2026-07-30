@@ -31,7 +31,10 @@ resulting from the use or misuse of this software.
 // whose home node is the gateway, so it resolves like any other remote user.
 package mastodon
 
-import "github.com/Warp-net/warpnet/domain"
+import (
+	"errors"
+	"github.com/Warp-net/warpnet/domain"
+)
 
 const (
 	// Network is the User.Network tag for accounts bridged in from Mastodon.
@@ -47,6 +50,8 @@ const (
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"
 )
+
+var ErrNotSupported = errors.New("not supported functionality")
 
 // gatewayNodeID is the effective gateway peer id. It defaults to
 // DefaultGatewayNodeID and is overridden once at node startup from the owner's

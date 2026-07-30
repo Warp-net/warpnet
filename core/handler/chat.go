@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
 
@@ -93,6 +94,7 @@ func StreamCreateChatHandler(
 		if ev.OwnerId == ev.OtherUserId { // self chat
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
+
 		if ev.OwnerId != ownNodeInfo.OwnerId { // other user created chat
 			log.Infoln("new chat!")
 			return event.ChatCreatedResponse(ownerChat), nil
@@ -104,6 +106,9 @@ func StreamCreateChatHandler(
 		}
 		if err != nil {
 			return nil, err
+		}
+		if otherUser.Network == mastodon.Network {
+			return nil, mastodon.ErrNotSupported
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {
@@ -325,6 +330,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, err)
 			msg.Status = statusUndelivered
 			return event.NewMessageResponse(msg), nil
+		}
+		if otherUser.Network == mastodon.Network {
+			return nil, mastodon.ErrNotSupported
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {
