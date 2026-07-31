@@ -392,6 +392,9 @@ export default {
       });
     },
     async selected(user) {
+      if (user?.network === 'mastodon') {
+        return
+      }
       console.log("selected messages user", JSON.stringify(user))
 
       if (!this.ownerProfile.user_id || !user.id) {
@@ -482,6 +485,9 @@ export default {
     async loadChatUser(userId) {
       const u = await warpnetService.getProfile(userId)
       u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
+      if (u?.network === 'mastodon') {
+        return
+      }
       this.usersMap.set(u.id, u)
     },
     async loadMore() {

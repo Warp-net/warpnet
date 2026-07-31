@@ -175,6 +175,9 @@ export default {
 
       const u = await warpnetService.getProfile(userId)
       u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
+      if (u?.network === 'mastodon') {
+        return
+      }
       this.usersMap.set(u.id, u)
     },
     async loadMore() {
