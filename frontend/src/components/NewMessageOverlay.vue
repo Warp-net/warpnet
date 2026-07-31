@@ -84,6 +84,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {dismissable} from "@/lib/modal.mixin";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "NewMessageOverlay",
@@ -114,7 +115,9 @@ export default {
       this.loading = true;
       try {
         const resp = await warpnetService.searchUsers(q);
-        const matches = resp?.users || [];
+        // Bridged accounts (Mastodon) have no direct messages - keep them
+        // out of the picker instead of failing on the createChat call.
+        const matches = (resp?.users || []).filter((u) => !isMastodonUser(u));
         this.users = await Promise.all(matches.map(async (u) => {
           try {
             if (u.avatar_key && !u.avatar) {
@@ -145,7 +148,8 @@ export default {
       return;
     }
     this.loading = true;
-    this.users = await warpnetService.getUsers({profileId:this.profileId, cursorReset:true})
+    const users = await warpnetService.getUsers({profileId:this.profileId, cursorReset:true})
+    this.users = (users || []).filter((u) => !isMastodonUser(u));
     for (const i in this.users) {
       const u = this.users[i]
       const image = await warpnetService.getImage({userId:u.id, key:u.avatar_key})

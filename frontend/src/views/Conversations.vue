@@ -41,7 +41,7 @@ resulting from the use or misuse of this software.
         <!-- chats -->
         <Loader :loading="loading" />
         <div v-if="!loading">
-          <div v-if="chats.length === 0" class="flex flex-col items-center justify-center w-full pt-10">
+          <div v-if="visibleChats.length === 0" class="flex flex-col items-center justify-center w-full pt-10">
             <div class="w-3/4 flex flex-col items-center justify-center text-center">
               <p class="font-bold text-lg">No messages yet</p>
               <p class="text-sm text-dark">Start a conversation with someone you follow.</p>
@@ -51,8 +51,8 @@ resulting from the use or misuse of this software.
               >New Message</button>
             </div>
           </div>
-          <div v-for="chat in chats" :key="chat.id">
-            <div v-if="(getUser(chat.other_user_id))">
+          <div v-for="chat in visibleChats" :key="chat.id">
+            <div>
               <div class="cursor-pointer">
                 <div class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
                   @click="selectChat(chat)">
@@ -102,6 +102,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "Chats",
@@ -121,6 +122,13 @@ export default {
       refreshTimer: null,
       refreshInFlight: false,
     };
+  },
+  computed: {
+    // Only chats whose other user resolved are listed. Bridged Mastodon
+    // accounts never land in the map, so their legacy chats stay hidden.
+    visibleChats() {
+      return this.chats.filter((c) => this.usersMap.has(c.other_user_id));
+    },
   },
   methods: {
     newMessage() {
@@ -145,6 +153,9 @@ export default {
 
       if (!user || !user.id) {
         console.error("conversations: cannot select absent user", JSON.stringify(user))
+        return;
+      }
+      if (isMastodonUser(user)) {
         return;
       }
       this.showNewMessageModal = false;
@@ -175,7 +186,9 @@ export default {
 
       const u = await warpnetService.getProfile(userId)
       u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
-      if (u?.network === 'mastodon') {
+      // Leaving a bridged user out of the map hides the whole chat row:
+      // the list only renders chats whose other user resolved.
+      if (isMastodonUser(u)) {
         return
       }
       this.usersMap.set(u.id, u)

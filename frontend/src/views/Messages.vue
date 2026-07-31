@@ -41,12 +41,12 @@ resulting from the use or misuse of this software.
       <Loader :loading="loading" />
 
       <template v-if="!loading">
-        <div v-if="chats.length === 0" class="flex flex-col items-center justify-center pt-10">
+        <div v-if="visibleChats.length === 0" class="flex flex-col items-center justify-center pt-10">
           <p class="font-bold text-lg">No chats yet</p>
           <p class="text-sm text-dark">Wait until someone starts a chat here.</p>
         </div>
 
-        <div v-for="chat in chats" :key="chat.id"
+        <div v-for="chat in visibleChats" :key="chat.id"
              class="cursor-pointer"
              :class="chat.id === active?.id ? 'border-r-2 border-blue' : ''"
              @click="selectChat(chat)">
@@ -225,6 +225,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "Messages",
@@ -254,6 +255,14 @@ export default {
       refreshTimer: null,
       refreshInFlight: false,
     };
+  },
+  computed: {
+    // Only chats whose other user resolved are listed. Bridged Mastodon
+    // accounts never land in the map, so their legacy chats stay hidden
+    // instead of rendering as a clickable "Anonymous" row.
+    visibleChats() {
+      return this.chats.filter((c) => this.usersMap.has(c.other_user_id));
+    },
   },
   methods: {
     newMessage() {
@@ -392,7 +401,7 @@ export default {
       });
     },
     async selected(user) {
-      if (user?.network === 'mastodon') {
+      if (isMastodonUser(user)) {
         return
       }
       console.log("selected messages user", JSON.stringify(user))
@@ -485,7 +494,9 @@ export default {
     async loadChatUser(userId) {
       const u = await warpnetService.getProfile(userId)
       u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
-      if (u?.network === 'mastodon') {
+      // Leaving a bridged user out of the map hides the whole chat row:
+      // the list only renders chats whose other user resolved.
+      if (isMastodonUser(u)) {
         return
       }
       this.usersMap.set(u.id, u)
