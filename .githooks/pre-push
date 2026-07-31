@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# Mirrors pushed code to the Codeberg mirror (codeberg.org/Warpnet/warpnet).
+# Tags are not mirrored here: the Release workflow owns tagging.
+
+# Re-entry guard: the mirror push below invokes `git push` again, which would
+# otherwise re-trigger this hook (this recursion previously spawned runaway
+# hook/`git push codeberg` processes that hung for hours).
+if [ -n "${WARPNET_PREPUSH:-}" ]; then
+    exit 0
+fi
+export WARPNET_PREPUSH=1
+
+# Never mirror a push that is already aimed at the mirror.
+case "${2:-}" in
+    *codeberg.org*) exit 0 ;;
+esac
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+# Only the long-lived branches exist on the mirror; feature branches stay local.
+case "$BRANCH" in
+    main|develop) ;;
+    *) exit 0 ;;
+esac
+
+echo "Pre-push hook: mirroring $BRANCH to codeberg..."
+
+# Best-effort: bounded by a timeout so an unreachable or slow mirror can never
+# block the push, and --no-verify keeps the inner push out of this hook.
+timeout --kill-after=5 20 git push --no-verify codeberg "$BRANCH" \
+    || echo "warn: mirroring $BRANCH to codeberg failed or timed out (continuing)"
+
+exit 0
