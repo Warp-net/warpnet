@@ -35,11 +35,13 @@ import {
     PRIVATE_POST_LOGIN,
     PRIVATE_POST_TWEET,
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_UPLOAD_VIDEO,
     PRIVATE_POST_USER,
     PRIVATE_DELETE_MESSAGE,
     PUBLIC_GET_FOLLOWINGS,
     PUBLIC_GET_FOLLOWERS,
     PUBLIC_GET_IMAGE,
+    PUBLIC_GET_VIDEO,
     PUBLIC_GET_TWEET,
     PUBLIC_GET_TWEET_STATS,
     PUBLIC_GET_TWEETS,
@@ -128,6 +130,7 @@ function generateResponse(arg) {
                 text : arg.body.text || "",
                 image_key : arg.body.image_key || "",
                 image_keys : arg.body.image_keys || [],
+                video_key : arg.body.video_key || undefined,
                 created_at : arg.body.created_at || Date.now().toString(),
                 parent_id: null,
                 retweeted_by: null,
@@ -232,6 +235,22 @@ function generateResponse(arg) {
             const gotImg = mockMap.get("image:"+arg.body.key);
             if (!gotImg) return {code:404, message:"Image not found"};
             return {file: gotImg};
+
+        case PRIVATE_POST_UPLOAD_VIDEO:
+            if (!arg.body.video) return {code:500, message:"a video must be provided"};
+            const videoKey = "vid_"+generateUUID();
+            mockMap.set("video:"+videoKey, arg.body.video);
+            return {key: videoKey};
+
+        case PUBLIC_GET_VIDEO:
+            const gotVideo = mockMap.get("video:"+arg.body.key);
+            if (!gotVideo) return {code:404, message:"Video not found"};
+            // Mirror the node: a deferred caller learns the size but gets no
+            // payload until it asks for the bytes.
+            if (arg.body.deferred) {
+                return {file: "", size: gotVideo.length, deferred: true};
+            }
+            return {file: gotVideo, size: gotVideo.length};
 
         case PUBLIC_GET_WHOTOFOLLOW:
             const allUsers = [];

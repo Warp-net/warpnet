@@ -62,8 +62,11 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		// The per-tweet streaming import route carries one tweet plus up to
 		// four base64 photos; allow it a larger ceiling than other routes.
 		limit := int64(MaxLimit)
-		if string(route) == event.PRIVATE_POST_IMPORT_TWITTER_TWEET {
+		switch string(route) {
+		case event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
 			limit = int64(ImportTweetMaxLimit)
+		case event.PRIVATE_POST_UPLOAD_VIDEO:
+			limit = int64(VideoMaxLimit)
 		}
 		reader := io.LimitReader(s, limit)
 		data, err := io.ReadAll(reader)

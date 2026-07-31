@@ -96,6 +96,8 @@ export const PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"
 export const PRIVATE_DELETE_MESSAGE = "/private/delete/message/0.0.0"
 export const PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
+export const PRIVATE_POST_UPLOAD_VIDEO = "/private/post/video/0.0.0"
+export const PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
@@ -108,6 +110,9 @@ const stateMap = new Map();
 // tab or reloading the page restores the session instead of bouncing to the
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
+// localStorage mirror of the user's data-saver preference (canonically stored
+// in user metadata), so video rendering can consult it synchronously.
+const DATA_SAVER_STORAGE_KEY = "warpnet.datasaver";
 // sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
 // reload without persisting the pairing secret to disk. Cleared on logout.
 const QR_STORAGE = "warpnet.qr";
@@ -153,6 +158,7 @@ const inflightPostRequests = new Map();
 // by the UI (disabled buttons during upload).
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_UPLOAD_VIDEO,
     PRIVATE_POST_IMPORT_TWITTER_TWEET,
 ]);
 
@@ -522,6 +528,56 @@ export const warpnetService = {
         }
         stateMap.set(cacheKey, result.file);
         return result.file;
+    },
+
+    async uploadVideo(videoFile) {
+        if (!videoFile) {
+            return ''
+        }
+
+        const request = {
+            path: PRIVATE_POST_UPLOAD_VIDEO,
+            timestamp: new Date().toISOString(),
+            body: {
+                video: videoFile,
+            },
+        }
+
+        const result = await this.sendToNode(request);
+        return result && result.key ? result.key : '';
+    },
+
+    // getVideo deliberately does NOT populate stateMap: a single base64 video
+    // can be tens of megabytes, and the unbounded image cache pattern would
+    // grow without limit as the user scrolls. The <video> element keeps the
+    // payload alive for as long as it is mounted, so replays are free anyway.
+    //
+    // Pass deferred: true to learn the size without downloading the payload —
+    // that is what data-saver mode and thin clients use to render a
+    // placeholder instead of pulling megabytes nobody asked to watch.
+    async getVideo({userId, key, deferred = false}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const request = {
+            path: PUBLIC_GET_VIDEO,
+            body: {
+                user_id: userId,
+                key: key,
+                deferred: deferred,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result) {
+            return null
+        }
+        return {
+            file: result.file || '',
+            size: result.size || 0,
+            deferred: !!result.deferred,
+        };
     },
 
     async getMyTimeline(cursorReset) {
@@ -1444,7 +1500,7 @@ export const warpnetService = {
         return tweetsResp.tweets;
     },
 
-    async createTweet({text, imageKeys}) {
+    async createTweet({text, imageKeys, videoKey}) {
         const owner = this.getOwnerProfile()
 
         const request ={
@@ -1456,6 +1512,9 @@ export const warpnetService = {
                 image_keys: imageKeys || [],
                 created_at: new Date().toISOString(),
             },
+        }
+        if (videoKey) {
+            request.body.video_key = videoKey;
         }
 
         return await this.sendToNode(request);
@@ -2057,6 +2116,7 @@ export const warpnetService = {
     async updateAccountSource(prefs) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
+        this.cacheDataSaver(!!prefs.dataSaver);
         return await this.sendToNode({
             path: PRIVATE_POST_USER,
             body: {
@@ -2064,9 +2124,29 @@ export const warpnetService = {
                     privacy: prefs.privacy || 'public',
                     sensitive: prefs.sensitive ? 'true' : 'false',
                     language: prefs.language || 'en',
+                    data_saver: prefs.dataSaver ? 'true' : 'false',
                 },
             },
         });
+    },
+
+    // The data-saver flag lives in user metadata, but rendering a tweet must
+    // not await a profile round-trip to decide whether to pull a video. Mirror
+    // it locally so the check stays synchronous.
+    cacheDataSaver(enabled) {
+        try {
+            localStorage.setItem(DATA_SAVER_STORAGE_KEY, enabled ? 'true' : 'false');
+        } catch (e) {
+            console.warn('failed to cache data saver preference', e);
+        }
+    },
+
+    isDataSaverEnabled() {
+        try {
+            return localStorage.getItem(DATA_SAVER_STORAGE_KEY) === 'true';
+        } catch (e) {
+            return false;
+        }
     },
 
     async getNodeInfo(){

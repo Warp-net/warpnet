@@ -95,16 +95,33 @@ resulting from the use or misuse of this software.
               </button>
             </div>
           </div>
+          <div v-if="videoAttachment" class="relative inline-block mt-2 mb-2">
+            <video
+                :src="videoAttachment.url"
+                controls
+                preload="metadata"
+                class="max-h-64 rounded border border-lighter"
+            ></video>
+            <button
+                @click="removeVideoAttachment"
+                type="button"
+                class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500"
+                title="Remove video"
+            >
+              <i class="fas fa-times text-red-600 hover:text-white"></i>
+            </button>
+            <div v-if="!videoKey" class="text-xs text-dark mt-1">Uploading video…</div>
+          </div>
           <div class="flex items-center justify-between border-t border-lighter pt-2">
             <div class="flex items-center">
               <button
                   @click="openFileInput('imageUrlFileInput')"
                   class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
-                  :class="{'opacity-50 cursor-not-allowed': imageAttachments.length >= 4}"
+                  :class="{'opacity-50 cursor-not-allowed': imageAttachDisabled}"
                   type="button"
-                  :disabled="imageAttachments.length >= 4"
+                  :disabled="imageAttachDisabled"
                   aria-label="Attach image"
-                  :title="imageAttachments.length >= 4 ? 'Maximum 4 images' : 'Attach image'"
+                  :title="imageAttachTitle"
               >
                 <i class="far fa-image" aria-hidden="true"></i>
               </button>
@@ -116,9 +133,24 @@ resulting from the use or misuse of this software.
                   multiple
                   class="hidden"
               />
-              <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Attach video (coming soon)" title="Coming soon">
+              <button
+                  @click="openFileInput('videoFileInput')"
+                  class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                  :class="{'opacity-50 cursor-not-allowed': videoAttachDisabled}"
+                  type="button"
+                  :disabled="videoAttachDisabled"
+                  aria-label="Attach video"
+                  :title="videoAttachTitle"
+              >
                 <i class="fas fa-film" aria-hidden="true"></i>
               </button>
+              <input
+                  @change="videoFileChange"
+                  ref="videoFileInput"
+                  :accept="acceptedVideoTypes"
+                  type="file"
+                  class="hidden"
+              />
               <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Add poll (coming soon)" title="Coming soon">
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
@@ -130,9 +162,9 @@ resulting from the use or misuse of this software.
               @click="addNewTweet"
               type="button"
               class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
-              :class="(tweet.text.trim() && pendingReads === 0 && !posting) ? '' : 'opacity-50 cursor-not-allowed'"
-              :disabled="!tweet.text.trim() || pendingReads > 0 || posting"
-              :title="pendingReads > 0 ? 'Uploading image…' : ''"
+              :class="(tweet.text.trim() && pendingReads === 0 && !posting && !videoUploading) ? '' : 'opacity-50 cursor-not-allowed'"
+              :disabled="!tweet.text.trim() || pendingReads > 0 || posting || videoUploading"
+              :title="videoUploading ? 'Uploading video…' : (pendingReads > 0 ? 'Uploading image…' : '')"
             >
               <span v-if="!posting">Tweet</span>
               <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Posting…</span>
@@ -199,6 +231,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
+import {acceptedVideoAccept, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 
 export default {
   name: "Home",
@@ -228,11 +261,35 @@ export default {
       imageKeys: [],
       pendingReads: 0,
       altModalIndex: -1,
-      videoAttachment: undefined,
+      videoAttachment: null,
+      videoKey: '',
+      videoUploading: false,
       posting: false,
       loadingMore: false,
       endOfFeed: false,
     };
+  },
+  computed: {
+    acceptedVideoTypes() {
+      return acceptedVideoAccept;
+    },
+    // A post carries either images or one video, never both — it keeps the
+    // feed layout unambiguous and matches the single video_key on the wire.
+    imageAttachDisabled() {
+      return this.imageAttachments.length >= 4 || !!this.videoAttachment;
+    },
+    imageAttachTitle() {
+      if (this.videoAttachment) return 'Remove the video to attach images';
+      return this.imageAttachments.length >= 4 ? 'Maximum 4 images' : 'Attach image';
+    },
+    videoAttachDisabled() {
+      return !!this.videoAttachment || this.imageAttachments.length > 0;
+    },
+    videoAttachTitle() {
+      if (this.videoAttachment) return 'Only one video per post';
+      if (this.imageAttachments.length > 0) return 'Remove images to attach a video';
+      return 'Attach video (MP4 or MOV)';
+    },
   },
   methods: {
     focusCompose() {
@@ -254,8 +311,13 @@ export default {
       }
     },
     onImageDrop(event) {
-      const files = Array.from(event.dataTransfer?.files || [])
-          .filter(f => f.type && f.type.startsWith('image/'));
+      const dropped = Array.from(event.dataTransfer?.files || []);
+      const videos = dropped.filter(f => f.type && f.type.startsWith('video/'));
+      if (videos.length > 0 && !this.videoAttachDisabled) {
+        this.addVideoFile(videos[0]);
+        return;
+      }
+      const files = dropped.filter(f => f.type && f.type.startsWith('image/'));
       if (files.length === 0) return;
       this.addImageFiles(files);
     },
@@ -292,6 +354,58 @@ export default {
       this.imageAttachments.splice(index, 1);
       this.imageKeys.splice(index, 1);
     },
+    async videoFileChange() {
+      const input = this.$refs.videoFileInput;
+      const file = input && input.files && input.files[0];
+      if (input) {
+        input.value = '';
+      }
+      if (!file) return;
+      await this.addVideoFile(file);
+    },
+    async addVideoFile(file) {
+      const problem = validateVideoFile(file);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+
+      // Preview from an object URL rather than the base64 payload: the data
+      // URL is only needed transiently for the upload itself.
+      this.videoAttachment = {url: URL.createObjectURL(file), name: file.name};
+      this.videoKey = '';
+      this.videoUploading = true;
+
+      try {
+        const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
+        const key = await warpnetService.uploadVideo(dataUrl);
+        if (!key) {
+          throw new Error('node returned an empty video key');
+        }
+        this.videoKey = key;
+      } catch (err) {
+        console.error('Failed to upload video:', err);
+        toast.error('Failed to upload video. Please try again.');
+        this.removeVideoAttachment();
+      } finally {
+        this.videoUploading = false;
+      }
+    },
+    readFileAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('file read failed'));
+        reader.readAsDataURL(file);
+      });
+    },
+    removeVideoAttachment() {
+      if (this.videoAttachment && this.videoAttachment.url) {
+        URL.revokeObjectURL(this.videoAttachment.url);
+      }
+      this.videoAttachment = null;
+      this.videoKey = '';
+    },
     openAltModal(index) {
       this.altModalIndex = index;
     },
@@ -310,11 +424,12 @@ export default {
           const extra = await warpnetService.uploadImages(missing);
           imageKeys = imageKeys.concat(extra);
         }
-        await warpnetService.createTweet({text: draftText, imageKeys});
+        await warpnetService.createTweet({text: draftText, imageKeys, videoKey: this.videoKey});
 
         this.tweet.text = "";
         this.imageAttachments = [];
         this.imageKeys = [];
+        this.removeVideoAttachment();
         this.endOfFeed = false;
 
         this.timeline = await warpnetService.getMyTimeline(true);
@@ -449,6 +564,9 @@ export default {
     if (this._deepLinkFocusHandler) {
       window.removeEventListener("focus", this._deepLinkFocusHandler);
       this._deepLinkFocusHandler = null;
+    }
+    if (this.videoAttachment && this.videoAttachment.url) {
+      URL.revokeObjectURL(this.videoAttachment.url);
     }
   },
 };

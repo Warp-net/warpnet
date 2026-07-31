@@ -407,6 +407,39 @@ type GetImageResponse struct {
 	File string `json:"file"`
 }
 
+// UploadVideoEvent defines model for UploadVideoEvent.
+type UploadVideoEvent struct {
+	// Video mime type + "," + base64
+	Video string `json:"video"`
+}
+
+// UploadVideoResponse defines model for UploadVideoResponse.
+type UploadVideoResponse struct {
+	Key string `json:"key"`
+}
+
+// GetVideoEvent defines model for GetVideoEvent.
+type GetVideoEvent struct {
+	UserId string `json:"user_id"`
+	Key    string `json:"key"`
+	// Deferred asks the node to describe the video without shipping its
+	// bytes, so thin clients and metered connections can render a
+	// placeholder and fetch the payload only when playback is requested.
+	Deferred bool `json:"deferred,omitempty"`
+}
+
+// GetVideoResponse defines model for GetVideoResponse.
+type GetVideoResponse struct {
+	// Video mime type + "," + base64. Empty when the caller asked for a
+	// deferred response.
+	File string `json:"file"`
+	// Size is the stored payload size in bytes, always reported so a
+	// deferred caller can show the download cost before playing.
+	Size int64 `json:"size,omitempty"`
+	// Deferred echoes that the bytes were withheld on purpose.
+	Deferred bool `json:"deferred,omitempty"`
+}
+
 type ChallengeEvent struct {
 	Coordinates []ChallengeSample `json:"samples"`
 }

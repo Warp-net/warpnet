@@ -59,7 +59,12 @@ const (
 	// route: one tweet plus up to four base64 photos. The browser parses and
 	// filters the archive client-side and streams kept tweets one by one, so
 	// the node never buffers the whole archive.
-	ImportTweetMaxLimit   = units.MiB * 32
+	ImportTweetMaxLimit = units.MiB * 32
+	// VideoMaxLimit is the inbound cap for the video upload route. A 50 MiB
+	// video (handler.maxVideoSize) becomes ~67 MiB once base64-encoded, plus
+	// the signed envelope around it; 72 MiB leaves room for both so the
+	// handler's own size check is what actually rejects oversized uploads.
+	VideoMaxLimit         = units.MiB * 72
 	InternalNodeErrorCode = 5000
 )
 

@@ -357,6 +357,11 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 // far longer than the default one-minute self-stream budget.
 const importStreamDeadline = 10 * time.Minute
 
+// videoStreamDeadline is the loopback-stream I/O deadline for video upload,
+// which pushes a base64 payload up to middleware.VideoMaxLimit through the
+// signing and storage path and outlasts the default one-minute budget.
+const videoStreamDeadline = 5 * time.Minute
+
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
 		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
@@ -377,8 +382,11 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	// Most self-streams finish near-instantly; a streamed import tweet stores
 	// up to four photos through the image pipeline and needs a longer window.
 	deadline := time.Minute
-	if string(path) == warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET {
+	switch string(path) {
+	case warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET:
 		deadline = importStreamDeadline
+	case warpevent.PRIVATE_POST_UPLOAD_VIDEO, warpevent.PUBLIC_GET_VIDEO:
+		deadline = videoStreamDeadline
 	}
 
 	_ = streamServer.SetDeadline(time.Now().Add(deadline))

@@ -173,6 +173,7 @@ func StreamNewTweetHandler(
 				UserId:    tweet.UserId,
 				Username:  tweet.Username,
 				ImageKeys: tweet.ImageKeys,
+				VideoKey:  tweet.VideoKey,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
@@ -211,6 +212,7 @@ func handleNewReply(
 		UserId:       ev.UserId,
 		Username:     ev.Username,
 		ImageKeys:    ev.ImageKeys,
+		VideoKey:     ev.VideoKey,
 	}, ev.UserId == ownNodeInfo.OwnerId)
 	if err != nil {
 		log.Errorf("reply handler failed: %v", err)
@@ -264,6 +266,7 @@ func handleNewReply(
 			UserId:       reply.UserId,
 			Username:     reply.Username,
 			ImageKeys:    reply.ImageKeys,
+			VideoKey:     reply.VideoKey,
 		},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {

@@ -22,7 +22,7 @@
       </div>
 
       <div v-if="!loading && tweet && !notFound">
-        <TweetBlock ref="rootTweet" :tweet="tweet" />
+        <TweetBlock ref="rootTweet" :tweet="tweet" :autoloadVideo="autoloadVideo" />
 
         <div class="border-t border-lighter p-3 flex flex-col gap-2">
           <textarea
@@ -73,6 +73,14 @@ export default {
       replyText: '',
       posting: false,
     };
+  },
+  computed: {
+    // Opening a single post is an explicit request to see it, so its video
+    // may load up front — unless the user asked us to save data, in which
+    // case even here it waits for a tap.
+    autoloadVideo() {
+      return !warpnetService.isDataSaverEnabled();
+    },
   },
   methods: {
     async loadTweet() {
