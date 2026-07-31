@@ -31,6 +31,24 @@ body {
   height: 100%;
 }
 
+/* App.vue's fixed top banners (network / node connection) would otherwise sit
+   on top of every view's header. They publish their measured height here, and
+   the padding reserves it — box-sizing is border-box, so body still ends at the
+   bottom of the viewport. Views size themselves with h-screen (100vh), which
+   ignores that padding, so the utility is patched once here instead of in the
+   22 view files that use it. */
+:root {
+  --top-banner-h: 0px;
+}
+
+body {
+  padding-top: var(--top-banner-h);
+}
+
+.h-screen {
+  height: calc(100vh - var(--top-banner-h));
+}
+
 /* Preserve clean look for mouse users, but show focus ring for keyboard nav */
 button:focus:not(:focus-visible),
 input:focus:not(:focus-visible) {

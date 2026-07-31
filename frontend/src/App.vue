@@ -24,8 +24,10 @@ resulting from the use or misuse of this software.
 <template>
   <div id="app" class="w-full h-full">
     <!-- Both global banners overlay the top of every view, so they share one
-         stack instead of covering each other when shown together. -->
-    <div class="fixed top-0 inset-x-0 z-[100]">
+         stack instead of covering each other when shown together. The stack's
+         height is published as --top-banner-h (see tailwind.css) so the views
+         below start under it rather than behind it. -->
+    <div ref="banners" class="fixed top-0 inset-x-0 z-[100]">
       <!-- Global node-connection banner: for a P2P app the local node can drop,
            so the user must always be able to see it and recover. -->
       <div
@@ -76,7 +78,12 @@ export default {
   name: "App",
   components: { ToastHost },
   data() {
-    return { connection, owner: warpnetService.getOwnerProfile(), unsubscribeOwner: null };
+    return {
+      connection,
+      owner: warpnetService.getOwnerProfile(),
+      unsubscribeOwner: null,
+      bannerObserver: null,
+    };
   },
   computed: {
     // Held back until the owner is known: before login the node has not
@@ -104,6 +111,12 @@ export default {
     reconnect() {
       window.location.reload();
     },
+    // Measured rather than hardcoded: the stack is one bar or two, and either
+    // wraps to a second line on a narrow window.
+    syncBannerHeight() {
+      const height = this.$refs.banners?.offsetHeight || 0;
+      document.documentElement.style.setProperty("--top-banner-h", `${height}px`);
+    },
   },
   mounted() {
     // The network arrives with the login response, so the banner has to react
@@ -111,6 +124,12 @@ export default {
     this.unsubscribeOwner = warpnetService.subscribeOwner((owner) => {
       this.owner = owner;
     });
+
+    if (this.$refs.banners) {
+      this.bannerObserver = new ResizeObserver(() => this.syncBannerHeight());
+      this.bannerObserver.observe(this.$refs.banners);
+    }
+    this.syncBannerHeight();
 
     // Hot-path: Go side fires "deeplink:open" when a second
     // process or macOS OnUrlOpen hands a warpnet:// URL to the
@@ -146,6 +165,8 @@ export default {
   beforeUnmount() {
     EventsOff(DEEP_LINK_EVENT);
     this.unsubscribeOwner?.();
+    this.bannerObserver?.disconnect();
+    document.documentElement.style.removeProperty("--top-banner-h");
   },
 };
 </script>
