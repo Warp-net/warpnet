@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isMastodonUser } from '@/lib/network';
+import { isMastodonUser, isExperimentalNetwork } from '@/lib/network';
 
 const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
 
@@ -28,5 +28,29 @@ describe('isMastodonUser', () => {
 
   it('handles a missing user', () => {
     expect(isMastodonUser(null)).toBe(false);
+  });
+});
+
+describe('isExperimentalNetwork', () => {
+  it('treats the production network as not experimental', () => {
+    expect(isExperimentalNetwork('warpnet')).toBe(false);
+  });
+
+  it('accepts the unnormalized mainnet alias as production', () => {
+    expect(isExperimentalNetwork('mainnet')).toBe(false);
+  });
+
+  it('flags the testnet', () => {
+    expect(isExperimentalNetwork('testnet')).toBe(true);
+  });
+
+  it('flags an unknown network rather than staying silent', () => {
+    expect(isExperimentalNetwork('devnet')).toBe(true);
+    expect(isExperimentalNetwork('')).toBe(true);
+    expect(isExperimentalNetwork(undefined)).toBe(true);
+  });
+
+  it('ignores surrounding whitespace and case', () => {
+    expect(isExperimentalNetwork('  Warpnet  ')).toBe(false);
   });
 });

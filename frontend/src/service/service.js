@@ -294,9 +294,12 @@ export const warpnetService = {
         // Seed the owner profile from the flat AuthNodeInfo first so any
         // sendToNode call below has node_id/user_id available; getProfile
         // is fetched on a best-effort basis to back-fill the username.
+        // network is the node's own private network ("warpnet" for production,
+        // "testnet" for testing); App.vue banners any non-production one.
         warpnetService.setOwnerProfile({
             user_id: resp.user_id,
             node_id: resp.node_id,
+            network: resp.network,
         })
         try {
             const profile = await this.getProfile(resp.user_id)
@@ -304,6 +307,7 @@ export const warpnetService = {
                 warpnetService.setOwnerProfile({
                     user_id: resp.user_id,
                     node_id: resp.node_id,
+                    network: resp.network,
                     username: profile.username,
                 })
             }
@@ -346,6 +350,12 @@ export const warpnetService = {
         }
         stopRefreshNotifications()
         stateMap.clear()
+        // The owner is dropped here rather than through setOwnerProfile, so
+        // subscribers have to be told explicitly or they keep rendering the
+        // signed-out owner.
+        for (const cb of ownerSubscribers) {
+            cb(undefined);
+        }
         try { localStorage.removeItem(OWNER_STORAGE) } catch (e) {}
         try { sessionStorage.removeItem(QR_STORAGE) } catch (e) {}
         try { sessionStorage.removeItem(QR_PAYLOAD_STORAGE) } catch (e) {}
