@@ -85,30 +85,41 @@ func StreamCreateChatHandler(
 			return nil, warpnet.WarpError("owner ID or other user ID is empty")
 		}
 
+		ownNodeInfo := streamer.NodeInfo()
+		isSelfChat := ev.OwnerId == ev.OtherUserId
+		isOtherUserChat := ev.OwnerId != ownNodeInfo.OwnerId
+
+		// The lookup the streaming below needs anyway, hoisted above the
+		// write: Mastodon has no direct messages, so a bridged recipient is
+		// refused before the chat is stored.
+		var otherUser domain.User
+		var otherUserErr error
+		if !isSelfChat && !isOtherUserChat {
+			otherUser, otherUserErr = userRepo.Get(ev.OtherUserId)
+			if otherUser.Network == mastodon.Network {
+				return nil, mastodon.ErrNotSupported
+			}
+		}
+
 		ownerChat, err := repo.CreateChat(ev.ChatId, ev.OwnerId, ev.OtherUserId)
 		if err != nil {
 			return nil, err
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
-		if ev.OwnerId == ev.OtherUserId { // self chat
+		if isSelfChat {
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
-		if ev.OwnerId != ownNodeInfo.OwnerId { // other user created chat
+		if isOtherUserChat {
 			log.Infoln("new chat!")
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
-		otherUser, err := userRepo.Get(ev.OtherUserId)
-		if errors.Is(err, database.ErrUserNotFound) {
+		if errors.Is(otherUserErr, database.ErrUserNotFound) {
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
-		if err != nil {
-			return nil, err
-		}
-		if otherUser.Network == mastodon.Network {
-			return nil, mastodon.ErrNotSupported
+		if otherUserErr != nil {
+			return nil, otherUserErr
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {
@@ -285,6 +296,19 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, warpnet.WarpError("not authorized for this chat")
 		}
 
+		// The lookup the delivery below needs anyway, hoisted above the write:
+		// Mastodon has no direct messages, so a bridged recipient is refused
+		// before the message is stored.
+		isSelfChat := ev.SenderId == ev.ReceiverId
+		var otherUser domain.User
+		var otherUserErr error
+		if !isSelfChat && !isOwnerReceiver {
+			otherUser, otherUserErr = userRepo.Get(ev.ReceiverId)
+			if otherUser.Network == mastodon.Network {
+				return nil, mastodon.ErrNotSupported
+			}
+		}
+
 		now := time.Now()
 		msg := domain.ChatMessage{
 			Id:         ev.Id,
@@ -300,7 +324,6 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, err
 		}
 
-		isSelfChat := ev.SenderId == ev.ReceiverId
 		if isSelfChat {
 			return event.NewMessageResponse(msg), nil
 		}
@@ -322,17 +345,13 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return event.NewMessageResponse(msg), nil
 		}
 
-		otherUser, err := userRepo.Get(ev.ReceiverId)
-		if errors.Is(err, database.ErrUserNotFound) {
+		if errors.Is(otherUserErr, database.ErrUserNotFound) {
 			return event.NewMessageResponse(msg), nil
 		}
-		if err != nil {
-			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, err)
+		if otherUserErr != nil {
+			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, otherUserErr)
 			msg.Status = statusUndelivered
 			return event.NewMessageResponse(msg), nil
-		}
-		if otherUser.Network == mastodon.Network {
-			return nil, mastodon.ErrNotSupported
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {

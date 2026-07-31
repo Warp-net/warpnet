@@ -149,7 +149,7 @@ resulting from the use or misuse of this software.
                 @cancel="showReportDialog = false"
               />
               <button
-                v-if="isFollower()"
+                v-if="isFollower() && !isBridgedProfile"
                 @click="sendMessage()"
                 class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 text-blue font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue"
                 aria-label="Send message"
@@ -367,6 +367,7 @@ import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "Profile",
@@ -425,6 +426,11 @@ export default {
       const m = moment(this.profile.last_seen);
       return m.isValid() ? m.fromNow() : "";
     },
+    // Bridged networks (Mastodon) have no direct messages, so the profile
+    // hides its Send message button instead of offering a dead action.
+    isBridgedProfile() {
+      return isMastodonUser(this.profile);
+    },
   },
   methods: {
     isMySelf(profileId) {
@@ -448,6 +454,7 @@ export default {
     async sendMessage() {
       const owner = warpnetService.getOwnerProfile();
       if (!owner?.user_id || !this.profile?.id) return;
+      if (this.isBridgedProfile) return;
       try {
         // Open (creating if needed) the DM with this user, then route to it.
         // The Messages route is namespaced under the owner's id and requires

@@ -31,11 +31,11 @@ Why the *remote* node specifically (and not the member/desktop node):
 ## The mandatory verification loop
 
 ```
-1. build     go build -mod=vendor -o <scratch>/remote ./cmd/node/remote
+1. build     go build -mod=vendor -tags remote -o <scratch>/remote ./cmd/node/member
 2. fresh     rm -rf ~/.warpdata/testnet          # only for a clean first-run/register
 3. run       <scratch>/remote --node.network=testnet \
                  --node.server.password='TestPass123!' --node.server.port=4999 &
-4. wait      curl -s -o /dev/null -w '%{http_code}' localhost:4999/healthz   # → 200
+4. wait      curl -s -o /dev/null -w '%{http_code}' localhost:4999/   # → 200 once serving
 5. drive     ws://localhost:4999/ws :  is-first-run → login → <your route(s)>
 6. assert    inspect the JSON body of the reply to your route
 7. teardown  kill the node; rm -rf ~/.warpdata/testnet if you want a clean slate
@@ -48,8 +48,13 @@ Steps 1, 3, and 5 are non-negotiable for any "verify in testnet" task. Skipping 
 
 ```bash
 SB=<your scratch dir>
-go build -mod=vendor -o "$SB/remote" ./cmd/node/remote
+go build -mod=vendor -tags remote -o "$SB/remote" ./cmd/node/member
 ```
+
+`cmd/node/member` holds three mutually-exclusive `main` files gated by build tags —
+`main.go` (`!echo && !remote`, the Wails desktop node), `echo-member.go` (`echo`) and
+`remote-member.go` (`!echo && remote`). Without `-tags remote` you build the desktop
+node, which needs GTK/WebKit and serves no `/ws`.
 
 Always `-mod=vendor` (the repo vendors everything; see `CLAUDE.md`). Build from the
 branch you're verifying — a stale binary verifies nothing. The build needs the Go
@@ -231,8 +236,11 @@ skill creates belongs in the repo.
 - **The node attaches only after login.** The main loop in `cmd/node/member/remote-member.go`
   blocks on `readyChan` and constructs the libp2p node on the first successful login,
   then `AttachNode`s it. Calling a route before that ⇒ `not attached server node`.
-- **`healthz`/`readyz` are liveness only** — both hard-coded to 200. Don't use them as a
-  readiness gate; assert on an actual routed reply instead.
+- **There are no health endpoints.** `/healthz` and `/readyz` went away with the business
+  node; the remote node registers only `/ws` and `/`. `StaticHandler` is an SPA fallback,
+  so `/healthz` still answers 200 — with `index.html`. Any path is therefore a liveness
+  probe for the HTTP server and nothing else. Never use one as a readiness gate; assert on
+  an actual routed reply instead.
 - **This sandbox can't reach the real testnet — and no network policy fixes it.**
   Outbound egress here is restricted to **TCP ports 80 and 443** (verified: any host on
   :443 connects; :53, :22, and libp2p's `:4011/4022/4033` all fail; UDP/QUIC is blocked).
@@ -274,7 +282,7 @@ private network = nothing connects. Build every binary from the same working tre
 ```bash
 SB=<scratch>
 go build -mod=vendor -o "$SB/relay"    ./cmd/node/relay
-go build -mod=vendor -o "$SB/remote" ./cmd/node/remote
+go build -mod=vendor -tags remote -o "$SB/remote" ./cmd/node/member
 
 # 1) bootstrap (relay) node — fixed seed → deterministic ID, TCP on --node.port
 "$SB/relay" --node.network=testnet --node.port=4000 \

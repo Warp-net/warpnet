@@ -79,7 +79,7 @@ func StreamGetNotificationsHandler(
 
 // StreamGetPushesHandler returns notifications newer than the given
 // cursor (delta pull) via ReverseList, keeping the response cursor as a
-// high-water mark. The plain notifications route stays on List so the node
+// high-water mark. The plain notifications route stays on List so the desktop
 // UI's older-page pagination (cursor -> end) is unaffected.
 func StreamGetPushesHandler(
 	repo NotifierFetcher,

@@ -26,7 +26,7 @@ resulting from the use or misuse of this software.
 // its node. transport.js updates it from the socket lifecycle; App.vue renders
 // a banner from it so the user always knows when the node is unreachable.
 //
-// Status values: "online" | "connecting" | "offline". Under Wails (node
+// Status values: "online" | "connecting" | "offline". Under Wails (desktop
 // member node) there is no WebSocket, so the state simply stays "online".
 import { reactive } from "vue";
 

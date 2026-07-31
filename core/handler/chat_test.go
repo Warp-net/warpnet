@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -154,6 +155,25 @@ func TestStreamCreateChatHandler(t *testing.T) {
 		_, err := StreamCreateChatHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewChatEvent{}), nil)
 		if err == nil || err.Error() != "owner ID or other user ID is empty" {
 			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("mastodon user rejected before the chat is stored", func(t *testing.T) {
+		users := stubUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == other {
+				return domain.User{Id: userId, Network: mastodon.Network}, nil
+			}
+			return domain.User{Id: userId, NodeId: "node-2"}, nil
+		}}
+		repo := stubChatRepo{createChatFn: func(chatId *string, ownerId, otherUserId string) (domain.Chat, error) {
+			t.Fatal("chat must not be created for a Mastodon user")
+			return domain.Chat{}, nil
+		}}
+		_, err := StreamCreateChatHandler(repo, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(
+			marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil,
+		)
+		if !errors.Is(err, mastodon.ErrNotSupported) {
+			t.Fatalf("expected ErrNotSupported, got: %v", err)
 		}
 	})
 
@@ -344,6 +364,20 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("a", messageLimit+1), SenderId: owner, ReceiverId: receiver}), nil)
 	if err == nil || err.Error() != "message is too long" {
 		t.Fatalf("unexpected err: %v", err)
+	}
+
+	// Mastodon has no direct messages: refused before the message is stored.
+	_, err = makeHandler(stubChatRepo{createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) {
+		t.Fatal("message must not be stored for a Mastodon user")
+		return domain.ChatMessage{}, nil
+	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) {
+		if userId == receiver {
+			return domain.User{Id: userId, Network: mastodon.Network}, nil
+		}
+		return domain.User{Id: userId, NodeId: "node-2"}, nil
+	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	if !errors.Is(err, mastodon.ErrNotSupported) {
+		t.Fatalf("expected ErrNotSupported, got: %v", err)
 	}
 
 	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: "u1", ReceiverId: "u2"}), nil)

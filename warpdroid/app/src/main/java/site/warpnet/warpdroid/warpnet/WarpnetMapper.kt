@@ -68,6 +68,7 @@ object WarpnetMapper {
         avatar = warpnetImageUrl(id, avatarKey),
         staticAvatar = warpnetImageUrl(id, avatarKey),
         note = bio,
+        network = network,
     )
 
     /**

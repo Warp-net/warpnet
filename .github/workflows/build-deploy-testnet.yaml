@@ -122,7 +122,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Business Docker image
+      - name: Build and push remote Docker image
         uses: docker/build-push-action@v6
         with:
           context: .

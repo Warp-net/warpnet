@@ -37,7 +37,10 @@ data class TimelineUser(
     val note: String,
     val bot: Boolean = false,
     // optional for backward compatibility
-    val emojis: List<Emoji> = emptyList()
+    val emojis: List<Emoji> = emptyList(),
+    // Origin network of the account, mirroring [User.network]. Empty on
+    // older nodes. Drives the direct-message exclusion of bridged accounts.
+    val network: String = ""
 ) {
 
     val name: String
@@ -46,4 +49,14 @@ data class TimelineUser(
         } else {
             displayName
         }
+
+    /**
+     * Bridged accounts come from a foreign network (e.g. Mastodon) which has
+     * no direct messages. Older nodes leave [network] empty, so fall back to
+     * the id shape: Warpnet ids are ULIDs, fediverse ones are "user@host".
+     */
+    val isBridged: Boolean
+        get() = if (network.isNotBlank()) network !in WARPNET_NETWORKS else id.contains('@')
 }
+
+private val WARPNET_NETWORKS = setOf("warpnet", "testnet", "mainnet")

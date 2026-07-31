@@ -40,3 +40,16 @@ export function isMastodonUser(user) {
     }
     return !ULID_RE.test(user.id || '');
 }
+
+// The node's own private network, as reported by the login response. The node
+// normalizes "mainnet" to "warpnet" (config/config.go), so production reports
+// itself as "warpnet"; both names are accepted here in case one reaches us
+// unnormalized.
+const PRODUCTION_NETWORKS = ['warpnet', 'mainnet'];
+
+// Anything that is not explicitly the production network — "testnet", a local
+// dev network, or a node too old to report one — is experimental, so an
+// unknown value warns rather than stays silent.
+export function isExperimentalNetwork(network) {
+    return !PRODUCTION_NETWORKS.includes((network || '').trim().toLowerCase());
+}

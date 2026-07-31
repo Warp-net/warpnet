@@ -106,7 +106,7 @@ func IsConnected() string {
 }
 
 // Connectedness returns the current libp2p connectedness to the paired
-// node peer as a stringly-typed snapshot. Returned values mirror
+// desktop peer as a stringly-typed snapshot. Returned values mirror
 // network.Connectedness#String — "Connected", "Limited", "NotConnected",
 // "CanConnect", "CannotConnect" — plus "Uninitialised" when no client
 // instance exists. The Kotlin ConnectionMonitor polls this every couple
@@ -149,7 +149,7 @@ func Resume() {
 }
 
 // RefreshPeerAddrs merges the supplied newline-separated multiaddrs into
-// the libp2p peerstore for the paired node peer. Called by the Kotlin
+// the libp2p peerstore for the paired desktop peer. Called by the Kotlin
 // side after parsing a /private/post/pair response, which now carries
 // the fat node's current public addresses on every successful pair.
 func RefreshPeerAddrs(addrs string) string {
