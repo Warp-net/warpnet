@@ -1213,6 +1213,16 @@ commits the bump to `main`, tags `v<version>`, and pushes the tag to GitHub +
 the Codeberg mirror before building the release artifacts. Don't bump the
 version by hand.
 
+### Codeberg mirror
+
+Pushing `main` or `develop` also mirrors that branch to
+[codeberg.org/Warpnet/warpnet](https://codeberg.org/Warpnet/warpnet) via the
+`.githooks/pre-push` hook; install it once with `make setup-hooks`
+(`git config core.hooksPath .githooks`). The mirror push is best-effort and
+bounded by a timeout, so an unreachable Codeberg never blocks the push to
+GitHub. Feature branches are not mirrored, and tags are left to the Release
+workflow above.
+
 ### Branches & PRs
 
 1. Fork, then branch: `git checkout -b <IssueNumber>/<ShortFeatureName>`.
