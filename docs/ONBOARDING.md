@@ -183,7 +183,7 @@ different build of the same codebase.
 | **member** | `cmd/node/member/main.go` | The full "fat" node most people run. Holds local data, serves the desktop UI, pairs with mobile devices, participates in the P2P network. | `CGO_ENABLED=1`, `-tags webkit2_41` (Wails) |
 | **relay** | `cmd/node/relay/main.go` | Stable, stateless entry points. Help new nodes find peers via the DHT and provide NAT-traversal relaying. | `CGO_ENABLED=0`, pure Go |
 | **moderator** | `cmd/node/moderator/main.go` | Runs an on-device LLM (Llama Guard 3) to evaluate reported content. | `CGO_ENABLED=1`, `-tags=llama` |
-| **remote** | `cmd/node/remote/main.go` | A headless node that serves the same UI to a **browser** over an encrypted WebSocket (for server/hosted deployments). | no special CGO/tags (plain `go build`) |
+| **remote** | `cmd/node/member/remote-member.go` | A headless node that serves the same UI to a **browser** over an encrypted WebSocket (for server/hosted deployments). | no CGO setting, `-tags remote` |
 | **echo** | `cmd/node/member/echo-member.go` | A headless "bot" member node with an in-memory store, to populate a local network and for tests. | `CGO_ENABLED=0`, `-tags echo` |
 
 > [!NOTE]
@@ -193,8 +193,8 @@ different build of the same codebase.
 > needs cgo. The **relay** and **echo** roles are pure Go on purpose, so they
 > compile to tiny static binaries that run in `distroless` containers. The
 > **remote** node’s `Dockerfile.remote` does **not** set `CGO_ENABLED` at
-> all — it’s an ordinary `go build ./cmd/node/remote` with no cgo libraries
-> required.
+> all — it’s an ordinary `go build -tags remote ./cmd/node/member` with no cgo
+> libraries required.
 
 > [!TIP]
 > **Mental model:** *relays* are thin signposts, *members* are the network
@@ -214,13 +214,14 @@ A map of the main `warpnet` repo. Start here and you won't get lost.
 ```
 warpnet/
 ├── cmd/node/             # entry points, one dir per role
-│   ├── member/           #   the fat node + desktop app (main.go, app.go, echo-member.go)
+│   ├── member/           #   one package, three entry points picked by build tag:
+│   │   │                 #   main.go (desktop), echo-member.go, remote-member.go
 │   │   ├── auth/         #   login / identity / keypair derivation
 │   │   ├── deeplink/     #   warpnet:// URL scheme handling (per-OS)
-│   │   └── node/         #   member-node.go — wires the whole node together
+│   │   ├── node/         #   member-node.go — wires the whole node together
+│   │   └── remote/       #   HTTP/WS bridge + static server for the browser dashboard
 │   ├── relay/            #   relay node
-│   ├── moderator/        #   LLM moderator node
-│   └── remote/         #   headless node + browser dashboard (HTTP/WS)
+│   └── moderator/        #   LLM moderator node
 ├── core/                 # the heart — networking, routing, handlers
 │   ├── node/             #   WarpNode: libp2p host, stream dispatch, middleware glue
 │   ├── stream/           #   WarpRoute type, peer streaming, in-process loopback
@@ -396,7 +397,7 @@ CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" \
   --node.network testnet --node.port 4002 --node.seed moderatorlocalhost
 
 # remote (headless node + browser dashboard). Password is REQUIRED — see §9.
-go run ./cmd/node/remote \
+go run -tags remote ./cmd/node/member \
   --node.network testnet --node.server.port 4999 --node.server.password 'choose-a-secret'
 
 # Echo (headless bot member, in-memory store — great for tests/local swarms)
@@ -411,6 +412,7 @@ go run -tags echo cmd/node/member/echo-member.go \
 | `webkit2_41` | member (desktop) | Selects the WebKit2GTK 4.1 bindings Wails uses to render the UI. |
 | `llama` | moderator | Compiles in the `moderation` engine and its llama.cpp cgo bindings. |
 | `echo` | echo bot | Swaps in the in-memory store and bot behavior. |
+| `remote` | remote node | Swaps the Wails desktop entry point for the headless HTTP/WS one. |
 | `mobile` | Android AAR | Gates the gomobile bridge in `warpdroid/node/` (see §8). |
 
 CGO is `1` for **member** (GTK/WebKit) and **moderator** (llama.cpp), `0` for
@@ -534,7 +536,7 @@ cd cmd/node/member && wails build -devtools -tags webkit2_41
 **C. In a plain browser via a remote node (no GTK/Wails needed):**
 
 ```bash
-go run ./cmd/node/remote --node.network testnet \
+go run -tags remote ./cmd/node/member --node.network testnet \
   --node.server.port 4999 --node.server.password 'secret'
 # then open http://localhost:4999 in your browser
 ```
@@ -719,16 +721,18 @@ also the clearest example of *why* the frontend is decoupled from the backend.
 That is the entire reason the frontend is "split from the backend" in the
 remote node: the same UI, but reached over the wire instead of in-process.
 
-### How it’s wired (`cmd/node/remote/main.go`)
+### How it’s wired (`cmd/node/member/remote-member.go`)
 
-The remote node starts a plain `net/http` server that:
+The remote node starts a plain `net/http` server with exactly two routes:
 
 - serves the embedded Vue app at `/` (`StaticHandler`),
 - bridges the browser to the node at `/ws` (`BridgeHandler`),
-- exposes `/healthz` and `/readyz`,
 
 and prints `NODE IS LISTENING ON 'localhost:<port>'. PUT THIS ADDRESS INTO A
-BROWSER`. The WebSocket frames are sealed with **AES-256-GCM** using
+BROWSER`. There are **no health endpoints** — the old business node's
+`/healthz` and `/readyz` went away with it. `StaticHandler` is an SPA fallback,
+so any other path (including `/healthz`) serves `index.html` with a 200; that
+tells you the HTTP server is up and nothing more. The WebSocket frames are sealed with **AES-256-GCM** using
 `key = SHA-256(password)` — the very same `--node.server.password` you launch it
 with. The browser’s `transport.js` derives the identical key from the password
 the user types, so:

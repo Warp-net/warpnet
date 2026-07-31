@@ -283,9 +283,9 @@ type User struct {
 	LastSeen           *time.Time `json:"last_seen,omitempty"`
 	NodeId             string     `json:"node_id"`
 	Network            string     `json:"network"`
-	// Role mirrors NodeInfo.Role: "" for a regular user, "remote" for a
-	// remote account. Stamped from the node's NodeInfo when the user is
-	// cached (discovery) so clients can badge remote accounts.
+	// Role mirrors NodeInfo.Type. Only a remote node stamps it, and it reports
+	// "member" like every other member node; the desktop node leaves it empty.
+	// Nothing reads it since the "business" badge was dropped.
 	Role          string            `json:"role,omitempty"`
 	RoundTripTime int64             `json:"rtt"`
 	TweetsCount   int64             `json:"tweets_count"`

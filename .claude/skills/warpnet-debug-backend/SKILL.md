@@ -1,6 +1,6 @@
 ---
 name: warpnet-debug-backend
-description: Use this skill when a Warpnet bug lives in the Go node/backend — the fat/business/member node, its handlers, storage, or libp2p layer. Symptoms and triggers include "Transaction Conflict. Please retry" in node logs, the libp2p connection flapping every ~25-30s (yamux keep-alive), "context deadline exceeded" on a specific server RPC, a handler emitting the wrong or zero-value payload on the wire, gossip/timeline delivery failing (a followed user's tweets never arrive), CRDT stat double-counting, BadgerDB MVCC / scan-then-write conflicts, or standing up a real business node in Docker on testnet to reproduce a symptom against a live node. Also use to verify the wire contract from the server side (test/api_sync_test.go) — the handler's return statement is the ground truth for what a client will parse. Do NOT use this skill for pure client rendering/parsing/UI bugs (use warpnet-debug-frontend) or to add a new route or feature (use warpnet-add-handler).
+description: Use this skill when a Warpnet bug lives in the Go node/backend — the fat/member/remote node, its handlers, storage, or libp2p layer. Symptoms and triggers include "Transaction Conflict. Please retry" in node logs, the libp2p connection flapping every ~25-30s (yamux keep-alive), "context deadline exceeded" on a specific server RPC, a handler emitting the wrong or zero-value payload on the wire, gossip/timeline delivery failing (a followed user's tweets never arrive), CRDT stat double-counting, BadgerDB MVCC / scan-then-write conflicts, or standing up a real remote node in Docker on testnet to reproduce a symptom against a live node. Also use to verify the wire contract from the server side (test/api_sync_test.go) — the handler's return statement is the ground truth for what a client will parse. Do NOT use this skill for pure client rendering/parsing/UI bugs (use warpnet-debug-frontend) or to add a new route or feature (use warpnet-add-handler).
 ---
 
 # Debugging backend bugs in Warpnet (Go node)
@@ -150,11 +150,13 @@ To exercise the UI against this node (notifications triage, the base UI test pla
 
 ### 1. Build the image from the working tree
 
-The build uses `Dockerfile.business` (Go toolchain from `go.dev` over 443, vendored
-modules, embeds `frontend/dist`). Run from the repo root:
+The build uses `Dockerfile.remote` (Go toolchain from `go.dev` over 443, vendored
+modules, embeds `frontend/dist`). It builds `cmd/node/member/remote-member.go` with
+`-tags remote` — without that tag you get the desktop member node instead. Run from
+the repo root:
 
 ```bash
-docker build -f Dockerfile.business -t warpnet-business:claude .
+docker build -f Dockerfile.remote -t warpnet-remote:claude .
 ```
 
 ### 2. Run the container on testnet
@@ -178,10 +180,10 @@ docker run -d --name warpnet-claude-testnet \
   -e LOGGING_FORMAT=json \
   -v warpnet-claude-testnet-data:/root/.warpdata \
   -p 4999:4999 \
-  warpnet-business:claude
+  warpnet-remote:claude
 
-# wait for the HTTP server, then confirm liveness (always 200 — see below)
-until curl -sf -o /dev/null localhost:4999/healthz; do sleep 1; done
+# wait for the HTTP server to start serving the dashboard (see the caveat below)
+until curl -sf -o /dev/null localhost:4999/; do sleep 1; done
 ```
 
 Because the volume is dedicated and named, you can `docker rm` / rebuild the image and
@@ -197,7 +199,7 @@ Or, to keep it alongside the other testnet services, add a service to
     container_name: claude-testnet
     build:
       context: ..
-      dockerfile: Dockerfile.business
+      dockerfile: Dockerfile.remote
     network_mode: host
     restart: always
     environment:
@@ -216,9 +218,11 @@ volumes:
   warpnet-claude-testnet-data:
 ```
 
-**Liveness ≠ readiness.** `/healthz` and `/readyz` are hard-coded to 200; the libp2p node
-and its handlers don't exist until someone logs in over `/ws`. Any routed call before
-login returns `{"code":500,"message":"not attached server node"}`.
+**Liveness ≠ readiness.** The remote node registers only `/ws` and `/` — `/healthz` and
+`/readyz` were dropped along with the business node, and the SPA fallback answers any
+other path with `index.html` and a 200. So a 200 means the HTTP server is up, nothing
+more: the libp2p node and its handlers don't exist until someone logs in over `/ws`. Any
+routed call before login returns `{"code":500,"message":"not attached server node"}`.
 
 ### 3. Register the `Claude` account and set the avatar
 

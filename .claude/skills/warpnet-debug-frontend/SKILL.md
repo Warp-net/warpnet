@@ -317,7 +317,7 @@ browser context, which resets the singleton. Reopen the tab whenever the node be
 
 ## Driving the UI against a node
 
-Stand up a business node per the `warpnet-debug-backend` skill (Docker on testnet), then walk the UI as a real user. The obligations below apply on every session where you drive the node.
+Stand up a remote node per the `warpnet-debug-backend` skill (Docker on testnet), then walk the UI as a real user. The obligations below apply on every session where you drive the node.
 
 ### 0. Verify the visual interface with screenshots — only screenshots
 
