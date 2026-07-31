@@ -38,7 +38,7 @@ import (
 type ID = string
 
 // QRByteModeCapacity is the maximum payload (bytes) that fits in a QR code at
-// version 40 with error correction level 'L' in byte mode. The node UI
+// version 40 with error correction level 'L' in byte mode. The desktop UI
 // renders the AuthNodeInfo envelope as a pairing QR; JSON payloads larger
 // than this cannot be encoded and the QR modal renders blank.
 const QRByteModeCapacity = 2953

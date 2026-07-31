@@ -35,7 +35,7 @@
 
         <!--
           The Warpnet OAuth login flow and its oauth2redirect:// deep link have
-          been removed. Warpdroid pairs with a Warpnet node node instead;
+          been removed. Warpdroid pairs with a Warpnet desktop node instead;
           see Phase 3 (stubbed for now) in docs/warpnet-protocol.md.
         -->
         <activity
