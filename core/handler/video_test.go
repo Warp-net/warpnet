@@ -89,6 +89,46 @@ func TestUploadVideo_Success(t *testing.T) {
 	assert.True(t, strings.HasPrefix(string(repo.stored), "data:video/mp4;base64,"))
 }
 
+func extractVideoMetaBox(t *testing.T, stored database.Base64Video) []byte {
+	t.Helper()
+
+	_, encoded, ok := strings.Cut(string(stored), ",")
+	assert.True(t, ok, "stored video must be a data URL")
+
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	assert.NoError(t, err)
+
+	idx := bytes.Index(raw, warpnetMetaUUID[:])
+	assert.GreaterOrEqual(t, idx, 0, "warpnet meta uuid box not found")
+
+	sealed, err := base64.StdEncoding.DecodeString(string(raw[idx+len(warpnetMetaUUID):]))
+	assert.NoError(t, err)
+
+	return sealed
+}
+
+// Video carries the same sealed metadata as images, but through a uuid box
+// rather than EXIF. Without this the video path could regress unnoticed.
+func TestUploadVideo_EmbedsSealedMetaBox(t *testing.T) {
+	repo := &videoRepoStub{}
+	h := StreamUploadVideoHandler(n{}, repo, u{})
+
+	bt, err := json.Marshal(event.UploadVideoEvent{Video: mp4DataURL(minimalMP4())})
+	assert.NoError(t, err)
+
+	_, err = h(bt, s{})
+	assert.NoError(t, err)
+	first := extractVideoMetaBox(t, repo.stored)
+	assertSealedMediaMeta(t, first)
+
+	_, err = h(bt, s{})
+	assert.NoError(t, err)
+	second := extractVideoMetaBox(t, repo.stored)
+	assertSealedMediaMeta(t, second)
+
+	assert.NotEqual(t, first, second, "each upload must seal under a fresh salt and nonce")
+}
+
 func TestUploadVideo_NoVideo(t *testing.T) {
 	h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
 
