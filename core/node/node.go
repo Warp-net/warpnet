@@ -41,7 +41,6 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
 	"github.com/libp2p/go-libp2p"
@@ -94,6 +93,7 @@ type WarpNode struct {
 	startTime        time.Time
 	eventsSub        event.Subscription
 	mw               *middleware.WarpMiddleware
+	policies         stream.RoutePolicies
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
@@ -200,6 +200,13 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	outbox := stream.NewOutbox(n.ctx, store)
 	outbox.Run(n.streamer)
 	n.outbox = outbox
+}
+
+// SetRoutePolicies installs the per-route transport budgets declared by the
+// node implementation that owns the handlers. Routes left out get defaults.
+func (n *WarpNode) SetRoutePolicies(policies stream.RoutePolicies) {
+	n.policies = policies
+	n.mw.SetRoutePolicies(policies)
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
@@ -353,16 +360,6 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 	return n.prioritizer
 }
 
-// importStreamDeadline is the loopback-stream I/O deadline for the Twitter
-// archive import route, which parses and stores a whole archive and needs
-// far longer than the default one-minute self-stream budget.
-const importStreamDeadline = 10 * time.Minute
-
-// videoStreamDeadline is the loopback-stream I/O deadline for video upload,
-// which pushes a base64 payload up to middleware.VideoMaxLimit through the
-// signing and storage path and outlasts the default one-minute budget.
-const videoStreamDeadline = 5 * time.Minute
-
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
 		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
@@ -382,15 +379,9 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 
 	// Most self-streams finish near-instantly; a streamed import tweet stores
 	// up to four photos through the image pipeline and needs a longer window.
-	deadline := time.Minute
-	switch string(path) {
-	case warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET:
-		deadline = importStreamDeadline
-	case warpevent.PRIVATE_POST_UPLOAD_VIDEO, warpevent.PUBLIC_GET_VIDEO:
-		deadline = videoStreamDeadline
-	}
+	policy := n.policies.For(path)
 
-	_ = streamServer.SetDeadline(time.Now().Add(deadline))
+	_ = streamServer.SetDeadline(time.Now().Add(policy.IODeadline))
 	go handler(streamServer) // handler closes server stream by itself
 
 	bt, ok := data.([]byte)
@@ -404,14 +395,14 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	// Refuse an over-limit payload before writing any of it. The receiving
 	// middleware stops reading at the cap, which would leave this write
 	// blocked until the deadline with nothing to report back.
-	if maxLen := middleware.RouteMaxLimit(string(path)); int64(len(bt)) > maxLen {
+	if maxLen := policy.MaxInboundSize; int64(len(bt)) > maxLen {
 		return nil, fmt.Errorf( //nolint:err113
 			"node: selfstream: %s: request is %s but the limit for this route is %s",
 			path, units.HumanSize(float64(len(bt))), units.HumanSize(float64(maxLen)),
 		)
 	}
 
-	_ = streamClient.SetDeadline(time.Now().Add(deadline))
+	_ = streamClient.SetDeadline(time.Now().Add(policy.IODeadline))
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
 	}

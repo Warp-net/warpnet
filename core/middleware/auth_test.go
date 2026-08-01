@@ -11,7 +11,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
 )
 
 func TestIsFresh(t *testing.T) {
@@ -63,17 +62,17 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 		_, _ = s.Write([]byte(`{"ok":true}`))
 	})
 
-	client, server := stream.NewLoopbackStream(
-		"peer1", warpnet.WarpProtocolID(event.PUBLIC_GET_USER),
-	)
+	const route = "/private/post/video/0.0.0"
+	const limit = int64(64 << 10)
+	mw.SetRoutePolicies(stream.RoutePolicies{route: {MaxInboundSize: limit}})
+
+	client, server := stream.NewLoopbackStream("peer1", warpnet.WarpProtocolID(route))
 	go handler(server)
 
 	// Substantially over the cap, so the middleware stops reading with a
 	// large amount still outstanding — that is the shape that deadlocks. A
 	// payload of exactly limit+1 is fully drained by the sentinel read and
-	// would not reproduce it. Uses a default-limit route to keep the
-	// allocation small while exercising identical logic.
-	limit := RouteMaxLimit(event.PUBLIC_GET_USER)
+	// would not reproduce it.
 	payload := bytes.Repeat([]byte("A"), int(limit)*3)
 
 	done := make(chan struct{})
@@ -102,10 +101,13 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	mw := NewWarpMiddleware("peer1")
 	defer mw.Close()
 
-	limit := RouteMaxLimit(event.PRIVATE_POST_UPLOAD_VIDEO)
-	client, server := stream.NewLoopbackStream(
-		"peer1", warpnet.WarpProtocolID(event.PRIVATE_POST_UPLOAD_VIDEO),
-	)
+	const route = "/private/post/video/0.0.0"
+	const limit = int64(64 << 10)
+	// An override above the default must actually be honoured, otherwise a
+	// legitimate large upload would be cut at the default ceiling.
+	mw.SetRoutePolicies(stream.RoutePolicies{route: {MaxInboundSize: limit}})
+
+	client, server := stream.NewLoopbackStream("peer1", warpnet.WarpProtocolID(route))
 	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
 
 	// Exactly at the ceiling: rejected later for being invalid JSON, but it
@@ -130,31 +132,5 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 
 	if len(resp) == 0 {
 		t.Error("a payload at the ceiling must still get a response")
-	}
-}
-
-func TestRouteMaxLimit(t *testing.T) {
-	if got := RouteMaxLimit(event.PRIVATE_POST_UPLOAD_VIDEO); got != int64(VideoMaxLimit) {
-		t.Errorf("video route limit = %d, want %d", got, VideoMaxLimit)
-	}
-	if got := RouteMaxLimit(event.PRIVATE_POST_IMPORT_TWITTER_TWEET); got != int64(ImportTweetMaxLimit) {
-		t.Errorf("import route limit = %d, want %d", got, ImportTweetMaxLimit)
-	}
-	if got := RouteMaxLimit(event.PUBLIC_GET_USER); got != int64(MaxLimit) {
-		t.Errorf("default route limit = %d, want %d", got, MaxLimit)
-	}
-}
-
-// The node's decoded-video ceiling has to stay reachable: base64 inflates by
-// 4/3, so the envelope cap must exceed that or the handler's clear
-// "video is too large" error is replaced by a stream reset.
-func TestVideoLimitLeavesRoomForBase64(t *testing.T) {
-	const maxDecodedVideo = 50 * 1024 * 1024 // handler.maxVideoSize
-	base64Size := int64(maxDecodedVideo) * 4 / 3
-	if int64(VideoMaxLimit) <= base64Size {
-		t.Fatalf(
-			"VideoMaxLimit %d must exceed the base64 size %d of a maximum video",
-			VideoMaxLimit, base64Size,
-		)
 	}
 }

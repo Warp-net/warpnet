@@ -30,9 +30,8 @@ package middleware
 import (
 	"time"
 
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/docker/go-units"
 )
 
 type middlewareError string
@@ -54,39 +53,20 @@ const (
 // messageFreshnessWindow caps how far a signed timestamp may drift from now.
 const messageFreshnessWindow = 5 * time.Minute
 
-const (
-	MaxLimit = units.MiB * 5 // TODO size limit???
-	// ImportTweetMaxLimit is the inbound cap for the per-tweet streaming import
-	// route: one tweet plus up to four base64 photos. The browser parses and
-	// filters the archive client-side and streams kept tweets one by one, so
-	// the node never buffers the whole archive.
-	ImportTweetMaxLimit = units.MiB * 32
-	// VideoMaxLimit is the inbound cap for the video upload route. A 50 MiB
-	// video (handler.maxVideoSize) becomes ~67 MiB once base64-encoded, plus
-	// the signed envelope around it; 72 MiB leaves room for both so the
-	// handler's own size check is what actually rejects oversized uploads.
-	VideoMaxLimit         = units.MiB * 72
-	InternalNodeErrorCode = 5000
-)
-
-// RouteMaxLimit returns the inbound byte ceiling for a route. Callers on the
-// sending side use it to refuse an oversized payload up front: a handler that
-// stops reading mid-payload leaves the writer blocked, so the cap has to be
-// enforced before the first byte goes out, not only after.
-func RouteMaxLimit(route string) int64 {
-	switch route {
-	case event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
-		return int64(ImportTweetMaxLimit)
-	case event.PRIVATE_POST_UPLOAD_VIDEO:
-		return int64(VideoMaxLimit)
-	default:
-		return int64(MaxLimit)
-	}
-}
+const InternalNodeErrorCode = 5000
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
+	// policies is supplied by the node that owns this middleware; a nil map
+	// simply yields defaults for every route.
+	policies stream.RoutePolicies
+}
+
+// SetRoutePolicies installs the per-route transport budgets. The middleware
+// enforces them but does not decide them.
+func (p *WarpMiddleware) SetRoutePolicies(policies stream.RoutePolicies) {
+	p.policies = policies
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
