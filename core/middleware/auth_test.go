@@ -68,7 +68,7 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 	// Past the cap with bytes still outstanding — that is the shape that
 	// deadlocks. A payload of exactly limit+1 is fully drained by the
 	// sentinel read and would not reproduce it.
-	limit := int64(stream.MaxInboundSize)
+	limit := int64(MaxLimit)
 	payload := bytes.Repeat([]byte("A"), int(limit)+4096)
 
 	done := make(chan struct{})
@@ -97,7 +97,7 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	mw := NewWarpMiddleware("peer1")
 	defer mw.Close()
 
-	limit := int64(stream.MaxInboundSize)
+	limit := int64(MaxLimit)
 	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
 

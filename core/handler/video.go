@@ -50,7 +50,7 @@ import (
 
 const (
 	// maxVideoSize caps the decoded upload. It must stay below what
-	// stream.MaxInboundSize allows once base64 inflates the payload by 4/3
+	// middleware.MaxLimit allows once base64 inflates the payload by 4/3
 	// and the signed envelope is added: 36 MiB becomes 48 MiB encoded,
 	// leaving 2 MiB of headroom. Raising it past that would make this check
 	// unreachable and turn an oversized upload back into a truncated read.

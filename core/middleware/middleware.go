@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/docker/go-units"
 )
 
 type middlewareError string
@@ -52,7 +53,10 @@ const (
 // messageFreshnessWindow caps how far a signed timestamp may drift from now.
 const messageFreshnessWindow = 5 * time.Minute
 
-const InternalNodeErrorCode = 5000
+const (
+	MaxLimit              = units.MiB * 50
+	InternalNodeErrorCode = 5000
+)
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache

@@ -59,7 +59,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		limit := int64(stream.MaxInboundSize)
+		limit := int64(MaxLimit)
 		// Read one byte past the ceiling so an oversized payload is
 		// detectable rather than silently truncated into invalid JSON.
 		reader := io.LimitReader(s, limit+1)

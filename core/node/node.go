@@ -41,8 +41,8 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/docker/go-units"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
@@ -352,6 +352,11 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 	return n.prioritizer
 }
 
+// importStreamDeadline is the loopback-stream I/O deadline for the Twitter
+// archive import route, which parses and stores a whole archive and needs
+// far longer than the default one-minute self-stream budget.
+const importStreamDeadline = 10 * time.Minute
+
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
 		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
@@ -372,7 +377,14 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	// Most self-streams finish near-instantly; a streamed import tweet stores
 	// up to four photos through the image pipeline and needs a longer window.
 
-	_ = streamServer.SetDeadline(time.Now().Add(stream.IODeadline))
+	// Most self-streams finish near-instantly; a streamed import tweet stores
+	// up to four photos through the image pipeline and needs a longer window.
+	deadline := time.Minute
+	if string(path) == warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET {
+		deadline = importStreamDeadline
+	}
+
+	_ = streamServer.SetDeadline(time.Now().Add(deadline))
 	go handler(streamServer) // handler closes server stream by itself
 
 	bt, ok := data.([]byte)
@@ -383,17 +395,7 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		}
 	}
 
-	// Refuse an over-limit payload before writing any of it. The receiving
-	// middleware stops reading at the cap, which would leave this write
-	// blocked until the deadline with nothing to report back.
-	if maxLen := int64(stream.MaxInboundSize); int64(len(bt)) > maxLen {
-		return nil, fmt.Errorf( //nolint:err113
-			"node: selfstream: %s: request is %s but the limit for this route is %s",
-			path, units.HumanSize(float64(len(bt))), units.HumanSize(float64(maxLen)),
-		)
-	}
-
-	_ = streamClient.SetDeadline(time.Now().Add(stream.IODeadline))
+	_ = streamClient.SetDeadline(time.Now().Add(deadline))
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
 	}

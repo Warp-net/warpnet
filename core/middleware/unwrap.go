@@ -32,7 +32,6 @@ import (
 	"errors"
 	"io"
 
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -55,7 +54,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			data = typedStream.Body
 			messageID = typedStream.MessageId
 		default:
-			reader := io.LimitReader(s, stream.MaxInboundSize)
+			reader := io.LimitReader(s, MaxLimit)
 			d, err := io.ReadAll(reader)
 			if err != nil && !errors.Is(err, io.EOF) {
 				log.Errorf("middleware: reading from stream: %v", err)
