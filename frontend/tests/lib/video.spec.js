@@ -1,11 +1,14 @@
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {
     isAcceptedVideo,
     validateVideoFile,
     acceptedVideoAccept,
     MAX_VIDEO_BYTES,
+    POSTER_MAX_WIDTH,
+    POSTER_SEEK_SECONDS,
     normalizeVideoDataUrl,
     mimeForFile,
+    captureVideoPoster,
 } from '@/lib/video';
 
 const file = (type, name, size = 1024) => ({type, name, size});
@@ -102,6 +105,99 @@ describe('normalizeVideoDataUrl', () => {
     it('leaves the value alone when the file is not a known video', () => {
         const input = 'data:application/octet-stream;base64,AAAA';
         expect(normalizeVideoDataUrl(input, file('', 'notes.txt'))).toBe(input);
+    });
+});
+
+describe('captureVideoPoster', () => {
+    const fakeEnv = (overrides = {}) => {
+        const video = {};
+        const canvas = {
+            getContext: () => ({drawImage: () => {}}),
+            toDataURL: () => 'data:image/jpeg;base64,POSTER',
+        };
+        return {
+            video,
+            canvas,
+            env: {
+                createElement: tag => (tag === 'video' ? video : canvas),
+                createObjectURL: () => 'blob:clip',
+                revokeObjectURL: vi.fn(),
+                ...overrides,
+            },
+        };
+    };
+
+    const decode = (video, {duration = 10, width = 1280, height = 720} = {}) => {
+        video.duration = duration;
+        video.videoWidth = width;
+        video.videoHeight = height;
+        video.onloadeddata();
+    };
+
+    it('returns a JPEG data URL for a decodable clip', async () => {
+        const {video, env} = fakeEnv();
+        const pending = captureVideoPoster(file('video/mp4', 'clip.mp4'), env);
+
+        decode(video);
+        video.onseeked();
+
+        await expect(pending).resolves.toBe('data:image/jpeg;base64,POSTER');
+        expect(env.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
+    });
+
+    it('takes the frame a second in, past any fade-in', async () => {
+        const {video, env} = fakeEnv();
+        const pending = captureVideoPoster(file('video/mp4', 'clip.mp4'), env);
+
+        decode(video);
+        expect(video.currentTime).toBe(POSTER_SEEK_SECONDS);
+
+        video.onseeked();
+        await pending;
+    });
+
+    it('falls back to the midpoint of a clip shorter than that', async () => {
+        const {video, env} = fakeEnv();
+        const pending = captureVideoPoster(file('video/mp4', 'blink.mp4'), env);
+
+        decode(video, {duration: 0.8});
+        expect(video.currentTime).toBe(0.4);
+
+        video.onseeked();
+        await pending;
+    });
+
+    it('downscales a large frame to the poster width', async () => {
+        const {video, canvas, env} = fakeEnv();
+        const pending = captureVideoPoster(file('video/mp4', 'uhd.mp4'), env);
+
+        decode(video, {width: 1920, height: 1080});
+        video.onseeked();
+        await pending;
+
+        expect(canvas.width).toBe(POSTER_MAX_WIDTH);
+        expect(canvas.height).toBe(360);
+    });
+
+    it('resolves null when the browser cannot decode the file', async () => {
+        const {video, env} = fakeEnv();
+        const pending = captureVideoPoster(file('video/quicktime', 'hevc.mov'), env);
+
+        video.onerror();
+
+        await expect(pending).resolves.toBeNull();
+        expect(env.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
+    });
+
+    it('resolves null when the decoder never reports back', async () => {
+        const {env} = fakeEnv();
+        await expect(
+            captureVideoPoster(file('video/mp4', 'stuck.mp4'), {...env, timeoutMs: 0}),
+        ).resolves.toBeNull();
+    });
+
+    it('resolves null without a file', async () => {
+        await expect(captureVideoPoster(null)).resolves.toBeNull();
     });
 });
 

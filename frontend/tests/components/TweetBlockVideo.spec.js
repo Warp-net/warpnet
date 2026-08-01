@@ -140,6 +140,50 @@ describe('TweetBlock video', () => {
     });
   });
 
+  it('shows the captured frame on the placeholder instead of as an attachment', async () => {
+    warpnetService.getImage.mockImplementation(({key}) =>
+      Promise.resolve(key ? `data:image/jpeg;base64,${key}` : null));
+    const {container, getByLabelText} = renderTweet({...videoTweet, image_keys: ['poster1']});
+
+    await waitFor(() => {
+      expect(getByLabelText('Play video').querySelector('img')).not.toBeNull();
+    });
+    expect(getByLabelText('Play video').querySelector('img').getAttribute('src'))
+      .toBe('data:image/jpeg;base64,poster1');
+    expect(container.querySelector('img[alt="Tweet image"]')).toBeNull();
+    expect(warpnetService.getVideo).not.toHaveBeenCalled();
+  });
+
+  it('hands the captured frame to the player as its poster', async () => {
+    warpnetService.getImage.mockImplementation(({key}) =>
+      Promise.resolve(key ? `data:image/jpeg;base64,${key}` : null));
+    const {container, getByLabelText} = renderTweet({...videoTweet, image_keys: ['poster1']});
+
+    await waitFor(() => {
+      expect(getByLabelText('Play video').querySelector('img')).not.toBeNull();
+    });
+    await fireEvent.click(getByLabelText('Play video'));
+
+    await waitFor(() => {
+      expect(container.querySelector('video')?.getAttribute('poster'))
+        .toBe('data:image/jpeg;base64,poster1');
+    });
+  });
+
+  it('still renders attachments as a gallery on a post without a video', async () => {
+    warpnetService.getImage.mockImplementation(({key}) =>
+      Promise.resolve(key ? `data:image/jpeg;base64,${key}` : null));
+    const {container} = renderTweet({
+      ...videoTweet,
+      video_key: undefined,
+      image_keys: ['img1', 'img2'],
+    });
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('img[alt="Tweet image"]').length).toBe(2);
+    });
+  });
+
   it('renders no video block for a tweet without a video key', async () => {
     const {container} = renderTweet({...videoTweet, video_key: undefined});
 
