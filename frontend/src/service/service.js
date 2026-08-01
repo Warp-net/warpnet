@@ -544,6 +544,12 @@ export const warpnetService = {
         }
 
         const result = await this.sendToNode(request);
+        // The node reports refusals (unsupported container, too large, over
+        // the request ceiling) as a ResponseError body. Surface that text
+        // instead of a generic failure, so the person knows what to change.
+        if (result && !result.key && result.message) {
+            throw new Error(result.message);
+        }
         return result && result.key ? result.key : '';
     },
 

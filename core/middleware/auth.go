@@ -59,20 +59,30 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		// The per-tweet streaming import route carries one tweet plus up to
-		// four base64 photos; allow it a larger ceiling than other routes.
-		limit := int64(MaxLimit)
-		switch string(route) {
-		case event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
-			limit = int64(ImportTweetMaxLimit)
-		case event.PRIVATE_POST_UPLOAD_VIDEO:
-			limit = int64(VideoMaxLimit)
-		}
-		reader := io.LimitReader(s, limit)
+		// Routes carrying bulk media (a tweet import, a video upload) get a
+		// larger ceiling than the rest; see RouteMaxLimit.
+		limit := RouteMaxLimit(string(route))
+		// Read one byte past the ceiling so an oversized payload is
+		// detectable rather than silently truncated into invalid JSON.
+		reader := io.LimitReader(s, limit+1)
 		data, err := io.ReadAll(reader)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Errorf("middleware: auth: reading from stream: %v", err)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
+
+		if int64(len(data)) > limit {
+			// Do NOT try to write a response here. The peer is still
+			// blocked writing the rest of its payload, so it is not reading
+			// yet; writing would block this handler too and deadlock both
+			// sides until their deadlines expire. Resetting is what actually
+			// unblocks the peer's write.
+			log.Errorf(
+				"middleware: auth: %s: payload exceeds the %d byte limit for this route",
+				route, limit,
+			)
+			_ = s.Reset()
 			return
 		}
 

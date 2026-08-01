@@ -385,7 +385,7 @@ export default {
         this.videoKey = key;
       } catch (err) {
         console.error('Failed to upload video:', err);
-        toast.error('Failed to upload video. Please try again.');
+        toast.error(err?.message || 'Failed to upload video. Please try again.');
         this.removeVideoAttachment();
       } finally {
         this.videoUploading = false;

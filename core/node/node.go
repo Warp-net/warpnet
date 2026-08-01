@@ -43,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/docker/go-units"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
@@ -398,6 +399,16 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		if err != nil {
 			return nil, fmt.Errorf("node: selfstream: marshal data %w %s", err, data)
 		}
+	}
+
+	// Refuse an over-limit payload before writing any of it. The receiving
+	// middleware stops reading at the cap, which would leave this write
+	// blocked until the deadline with nothing to report back.
+	if maxLen := middleware.RouteMaxLimit(string(path)); int64(len(bt)) > maxLen {
+		return nil, fmt.Errorf( //nolint:err113
+			"node: selfstream: %s: request is %s but the limit for this route is %s",
+			path, units.HumanSize(float64(len(bt))), units.HumanSize(float64(maxLen)),
+		)
 	}
 
 	_ = streamClient.SetDeadline(time.Now().Add(deadline))

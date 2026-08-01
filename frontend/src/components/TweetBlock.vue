@@ -160,7 +160,7 @@ resulting from the use or misuse of this software.
             class="rounded-lg border border-lighter p-4 text-sm text-dark"
             role="alert"
         >
-          <i class="fas fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+          <i class="fas fa-exclamation-triangle mr-1" aria-hidden="true"></i>
           {{ videoError }}
           <button
               @click.stop="loadVideo"
@@ -177,7 +177,7 @@ resulting from the use or misuse of this software.
             :aria-label="videoLoading ? 'Loading video' : 'Play video'"
         >
           <i
-              :class="videoLoading ? 'fas fa-circle-notch fa-spin' : 'fas fa-circle-play'"
+              :class="videoLoading ? 'fas fa-circle-notch fa-spin' : 'fas fa-play-circle'"
               class="text-3xl mb-2"
               aria-hidden="true"
           ></i>

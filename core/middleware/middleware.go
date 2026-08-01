@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
 	"github.com/docker/go-units"
 )
 
@@ -67,6 +68,21 @@ const (
 	VideoMaxLimit         = units.MiB * 72
 	InternalNodeErrorCode = 5000
 )
+
+// RouteMaxLimit returns the inbound byte ceiling for a route. Callers on the
+// sending side use it to refuse an oversized payload up front: a handler that
+// stops reading mid-payload leaves the writer blocked, so the cap has to be
+// enforced before the first byte goes out, not only after.
+func RouteMaxLimit(route string) int64 {
+	switch route {
+	case event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
+		return int64(ImportTweetMaxLimit)
+	case event.PRIVATE_POST_UPLOAD_VIDEO:
+		return int64(VideoMaxLimit)
+	default:
+		return int64(MaxLimit)
+	}
+}
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache

@@ -154,7 +154,13 @@ func (s *LoopbackStream) CloseWrite() error {
 	return s.writeConn.Close()
 }
 
+// Reset tears down both halves of the pipe. It must not stay a no-op: a
+// handler that stops reading early (e.g. an over-limit payload) leaves the
+// peer blocked mid-Write, and only closing the pipes makes that Write return
+// instead of hanging until its deadline.
 func (s *LoopbackStream) Reset() error {
+	_ = s.CloseWrite()
+	_ = s.CloseRead()
 	return nil
 }
 

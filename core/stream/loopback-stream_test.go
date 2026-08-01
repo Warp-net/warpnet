@@ -200,3 +200,31 @@ func TestLoopbackConn_Scope(t *testing.T) {
 	conn := r.Conn()
 	assert.Nil(t, conn.Scope())
 }
+
+// Reset must actually tear the pipe down. While it was a no-op, a handler
+// that stopped reading early left the peer blocked in Write until its
+// deadline, which surfaced as an upload hanging with no response at all.
+func TestLoopbackStreamResetUnblocksBlockedWriter(t *testing.T) {
+	client, server := NewLoopbackStream("peer1", "/test/proto")
+
+	writeReturned := make(chan struct{})
+	go func() {
+		defer close(writeReturned)
+		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
+		// Far more than any pipe buffer, so this blocks until the other
+		// side either reads it or tears the stream down.
+		_, _ = client.Write(make([]byte, 8<<20))
+	}()
+
+	// Give the writer a moment to actually block, then reset.
+	time.Sleep(50 * time.Millisecond)
+	if err := server.Reset(); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+
+	select {
+	case <-writeReturned:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Reset did not unblock the blocked writer")
+	}
+}
