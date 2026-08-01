@@ -60,8 +60,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		)
 
 		limit := int64(MaxLimit)
-		// Read one byte past the ceiling so an oversized payload is
-		// detectable rather than silently truncated into invalid JSON.
 		reader := io.LimitReader(s, limit+1)
 		data, err := io.ReadAll(reader)
 		if err != nil && !errors.Is(err, io.EOF) {
@@ -71,11 +69,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 		}
 
 		if int64(len(data)) > limit {
-			// Do NOT try to write a response here. The peer is still
-			// blocked writing the rest of its payload, so it is not reading
-			// yet; writing would block this handler too and deadlock both
-			// sides until their deadlines expire. Resetting is what actually
-			// unblocks the peer's write.
 			log.Errorf(
 				"middleware: auth: %s: payload exceeds the %d byte limit for this route",
 				route, limit,

@@ -75,9 +75,6 @@ export default {
     };
   },
   computed: {
-    // Opening a single post is an explicit request to see it, so its video
-    // may load up front — unless the user asked us to save data, in which
-    // case even here it waits for a tap.
     autoloadVideo() {
       return !warpnetService.isDataSaverEnabled();
     },

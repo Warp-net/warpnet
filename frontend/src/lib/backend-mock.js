@@ -79,7 +79,6 @@ if (process.env.NODE_ENV === 'development') {
     };
 }
 
-
 function generateResponse(arg) {
     switch (arg.path) {
         case PRIVATE_POST_LOGIN:
@@ -209,7 +208,6 @@ function generateResponse(arg) {
                 mockMap.set("user:"+nu.id, nu)
             }
 
-
             for (const [key, value] of mockMap) {
                 if (key.startsWith("user:")) {
                     usersList.push(value)
@@ -245,8 +243,6 @@ function generateResponse(arg) {
         case PUBLIC_GET_VIDEO:
             const gotVideo = mockMap.get("video:"+arg.body.key);
             if (!gotVideo) return {code:404, message:"Video not found"};
-            // Mirror the node: a deferred caller learns the size but gets no
-            // payload until it asks for the bytes.
             if (arg.body.deferred) {
                 return {file: "", size: gotVideo.length, deferred: true};
             }
@@ -269,7 +265,6 @@ function generateResponse(arg) {
                 }
             }
             return {users: allUsers.slice(0, 3)};
-
 
         case PUBLIC_POST_FOLLOW:
             const followKey = "follow:"+arg.body.followerId+":"+arg.body.followingId;

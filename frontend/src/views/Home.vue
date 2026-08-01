@@ -273,8 +273,6 @@ export default {
     acceptedVideoTypes() {
       return acceptedVideoAccept;
     },
-    // A post carries either images or one video, never both — it keeps the
-    // feed layout unambiguous and matches the single video_key on the wire.
     imageAttachDisabled() {
       return this.imageAttachments.length >= 4 || !!this.videoAttachment;
     },
@@ -370,8 +368,6 @@ export default {
         return;
       }
 
-      // Preview from an object URL rather than the base64 payload: the data
-      // URL is only needed transiently for the upload itself.
       this.videoAttachment = {url: URL.createObjectURL(file), name: file.name};
       this.videoKey = '';
       this.videoUploading = true;

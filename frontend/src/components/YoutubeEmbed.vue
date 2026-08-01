@@ -1,7 +1,5 @@
-<!-- Warpnet - Decentralized Social Network -->
 <template>
   <div class="mt-2 rounded-lg border border-lighter overflow-hidden">
-    <!--
       Facade first: no request reaches YouTube (not even for a thumbnail)
       until the user presses play, so merely scrolling past a link doesn't
       disclose the reader to Google.

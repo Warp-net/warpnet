@@ -3,20 +3,16 @@
 Warpnet - Decentralized Social Network
 Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
-
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
-
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
-
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
@@ -26,10 +22,6 @@ resulting from the use or misuse of this software.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 package handler
-
-// The interfaces and helpers shared with the image pipeline —
-// MediaNodeInformer, MediaUserFetcher, MediaStreamer and
-// buildEncryptedMediaMeta — are declared in image.go.
 
 import (
 	"bytes"
@@ -49,11 +41,6 @@ import (
 )
 
 const (
-	// maxVideoSize caps the decoded upload. It must stay below what
-	// middleware.MaxLimit allows once base64 inflates the payload by 4/3
-	// and the signed envelope is added: 36 MiB becomes 48 MiB encoded,
-	// leaving 2 MiB of headroom. Raising it past that would make this check
-	// unreachable and turn an oversized upload back into a truncated read.
 	maxVideoSize = units.MiB * 36
 
 	ErrTooLargeVideo    warpnet.WarpError = "video is too large: 36 MiB is the maximum"
@@ -67,18 +54,11 @@ const (
 	boxUUIDSize   = 16
 )
 
-// warpnetMetaUUID identifies the top-level ISO-BMFF `uuid` box carrying the
-// encrypted ownership blob — the video counterpart of the EXIF
-// ImageDescription stamp. Readers that don't recognise the UUID skip the box,
-// so the file stays playable everywhere.
 var warpnetMetaUUID = [16]byte{
 	0x77, 0x61, 0x72, 0x70, 0x6e, 0x65, 0x74, 0x00, // "warpnet\0"
 	0x6d, 0x65, 0x74, 0x61, 0x00, 0x00, 0x00, 0x01, // "meta\0\0\0\1"
 }
 
-// acceptedVideoPrefixes maps the MIME types the node accepts to the data-URL
-// prefix it stores. Rebuilding the prefix from this table keeps a caller from
-// smuggling an arbitrary data URL into every viewer's player.
 var acceptedVideoPrefixes = map[string]string{
 	"video/mp4":       "data:video/mp4;base64,",
 	"video/quicktime": "data:video/quicktime;base64,",
@@ -119,10 +99,6 @@ func StreamUploadVideoHandler(
 	}
 }
 
-// processAndStoreVideo validates the container, stamps the encrypted
-// ownership blob into it and stores the result. Unlike the image path there
-// is no re-encode: the node has no codec, so the uploaded bytes are kept
-// verbatim and playback is left to the client's system codecs.
 func processAndStoreVideo(
 	file string,
 	encryptedMeta []byte,
@@ -134,10 +110,6 @@ func processAndStoreVideo(
 		return "", ErrInvalidBase64Signature
 	}
 
-	// The stored prefix is echoed straight back into the client's player, so
-	// it is rebuilt from a fixed allow-list rather than trusted from the
-	// caller. It also must not be normalised to mp4: nothing is transcoded
-	// here, so the declared type has to keep matching the actual bytes.
 	prefix, ok := videoDataPrefix(parts[0])
 	if !ok {
 		return "", ErrUnsupportedVideo
@@ -219,15 +191,10 @@ func StreamGetVideoHandler(
 			return event.GetVideoResponse{File: ""}, nil
 		}
 
-		// Serve the persisted copy first so a video already pulled from its
-		// owner doesn't need another round-trip on every view.
 		if cached, cErr := mediaRepo.GetVideo(ev.UserId, ev.Key); cErr == nil && cached != "" {
 			return newVideoResponse(cached, ev.Deferred), nil
 		}
 
-		// A deferred caller only wants to know the video exists; skip the
-		// (potentially large) remote fetch entirely rather than pulling the
-		// payload just to drop it.
 		if ev.Deferred {
 			return event.GetVideoResponse{File: "", Deferred: true}, nil
 		}
@@ -257,8 +224,6 @@ func StreamGetVideoHandler(
 	}
 }
 
-// newVideoResponse reports the payload size either way, so a deferred caller
-// can show the download cost before committing to it.
 func newVideoResponse(video database.Base64Video, deferred bool) event.GetVideoResponse {
 	if deferred {
 		return event.GetVideoResponse{
@@ -270,8 +235,6 @@ func newVideoResponse(video database.Base64Video, deferred bool) event.GetVideoR
 	return event.GetVideoResponse{File: string(video), Size: int64(len(video))}
 }
 
-// videoDataPrefix validates the "data:<mime>;base64" header of an uploaded
-// data URL and returns the prefix to store the payload under.
 func videoDataPrefix(header string) (string, bool) {
 	header = strings.TrimPrefix(header, "data:")
 	mime, params, _ := strings.Cut(header, ";")
@@ -282,13 +245,7 @@ func videoDataPrefix(header string) (string, bool) {
 	return prefix, ok
 }
 
-// isISOBaseMediaFile reports whether b looks like an ISO base media file
-// (MP4 / M4V / QuickTime MOV). Only the container is checked: per the
-// project's stance, decoding is the client system's job, so an exotic codec
-// inside a valid MP4 is accepted and simply won't play without codecs.
 func isISOBaseMediaFile(b []byte) bool {
-	// Walk the leading top-level boxes looking for `ftyp`. Some muxers emit
-	// a `wide`, `free` or `skip` box before it.
 	for offset := 0; offset+boxHeaderSize <= len(b); {
 		size := int(binary.BigEndian.Uint32(b[offset : offset+4]))
 		boxType := string(b[offset+4 : offset+boxHeaderSize])
@@ -296,8 +253,6 @@ func isISOBaseMediaFile(b []byte) bool {
 		if boxType == "ftyp" {
 			return true
 		}
-		// Only these may legally precede ftyp; anything else means this is
-		// not an ISO base media file.
 		if boxType != "wide" && boxType != "free" && boxType != "skip" {
 			return false
 		}
@@ -309,9 +264,6 @@ func isISOBaseMediaFile(b []byte) bool {
 	return false
 }
 
-// amendVideoMetadata appends a top-level `uuid` box holding the encrypted
-// {node,user,MAC} blob. Appending is non-destructive: unlike the image path
-// there is no re-encode, so the original stream is preserved byte for byte.
 func amendVideoMetadata(videoBytes, metadata []byte) ([]byte, error) {
 	encodedMetadata := base64.StdEncoding.EncodeToString(metadata)
 

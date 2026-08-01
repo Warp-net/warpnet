@@ -47,11 +47,6 @@ func TestIsFresh_DefaultsWindow(t *testing.T) {
 	}
 }
 
-// An over-limit payload used to deadlock: the middleware stopped reading at
-// the cap and then blocked writing an error to a peer that was itself still
-// blocked writing its payload. Both sides sat until their deadlines, so the
-// caller saw nothing at all. The middleware must instead reset the stream,
-// which is what unblocks the peer's write.
 func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 	mw := NewWarpMiddleware("peer1")
 	defer mw.Close()
@@ -65,9 +60,6 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go handler(server)
 
-	// Past the cap with bytes still outstanding — that is the shape that
-	// deadlocks. A payload of exactly limit+1 is fully drained by the
-	// sentinel read and would not reproduce it.
 	limit := int64(MaxLimit)
 	payload := bytes.Repeat([]byte("A"), int(limit)+4096)
 
@@ -91,8 +83,6 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 	}
 }
 
-// A payload that fits must still be processed normally, so the +1 sentinel
-// read doesn't cost a legitimate upload at exactly the ceiling.
 func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	mw := NewWarpMiddleware("peer1")
 	defer mw.Close()
@@ -101,8 +91,6 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
 
-	// Exactly at the ceiling: rejected later for being invalid JSON, but it
-	// must be read in full rather than tripping the size guard.
 	payload := bytes.Repeat([]byte("A"), int(limit))
 
 	done := make(chan struct{})

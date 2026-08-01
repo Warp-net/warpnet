@@ -33,8 +33,6 @@ describe('extractYoutubeId', () => {
         expect(extractYoutubeId(undefined)).toBeNull();
     });
 
-    // An id is exactly 11 chars; a longer token must not be truncated into a
-    // bogus id, which would embed the wrong video.
     it('rejects an over-long id rather than truncating it', () => {
         expect(extractYoutubeId('https://youtu.be/dQw4w9WgXcQEXTRA')).toBeNull();
     });
@@ -46,8 +44,6 @@ describe('extractYoutubeId', () => {
 });
 
 describe('youtube URLs', () => {
-    // Playback must go through the nocookie host, and the id must be encoded
-    // so a crafted value cannot break out of the URL.
     it('builds a nocookie embed URL', () => {
         const url = youtubeEmbedUrl('dQw4w9WgXcQ');
         expect(url).toContain('youtube-nocookie.com/embed/dQw4w9WgXcQ');

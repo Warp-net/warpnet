@@ -314,10 +314,6 @@ export default {
   name: "Tweet",
   props: {
     tweet: {type: Object, required: true},
-    // Feed rows never pull video bytes on their own — a timeline of video
-    // posts would otherwise download tens of megabytes nobody asked to
-    // watch. The single-post page opts in, unless the user turned on
-    // data saver.
     autoloadVideo: {type: Boolean, default: false},
   },
   components: {
@@ -365,8 +361,6 @@ export default {
     };
   },
   computed: {
-    // Only preview a YouTube link when the post has no attached video, so a
-    // post never shows two players at once.
     youtubeId() {
       if (this.tweet && this.tweet.video_key) return null;
       return extractYoutubeId(this.tweet && this.tweet.text);
@@ -578,9 +572,6 @@ export default {
         this.videoLoading = false;
       }
     },
-    // The node stores the uploaded stream verbatim and never transcodes, so
-    // playback depends on the codecs installed on this machine. Say so
-    // instead of leaving a silent black rectangle.
     onVideoError() {
       this.videoSrc = '';
       this.videoError = 'This video cannot be played. Your system may be missing the required video codec.';

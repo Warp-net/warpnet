@@ -49,8 +49,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Shared test doubles for the media handlers.
-
 type (
 	n struct{}
 	m struct{}
@@ -294,5 +292,3 @@ func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
 	assert.Equal(t, "data:image/png;base64,CACHED", resp.File)
 	assert.False(t, streamed, "warm foreign cache must not hit the gateway")
 }
-
-// --- video ---------------------------------------------------------------

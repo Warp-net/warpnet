@@ -73,8 +73,6 @@ const (
 	userMetaKey = "user"
 	macMetaKey  = "MAC"
 
-	// ErrInvalidBase64Signature is shared: both media kinds arrive as a
-	// "<mime>,<base64>" data URL and fail the same way.
 	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 media data"
 )
 
@@ -147,12 +145,6 @@ func StreamGetMediaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
 	}
 }
 
-// buildEncryptedMediaMeta fetches the owner user and produces the
-// AES-encrypted {node,user,MAC} blob embedded into uploaded media EXIF.
-// The encryption password is random and immediately discarded (see the
-// file header), so the metadata stands as proof of ownership without
-// leaking its contents. Shared by the image-upload and archive-import
-// handlers.
 func buildEncryptedMediaMeta(
 	info MediaNodeInformer,
 	userRepo MediaUserFetcher,

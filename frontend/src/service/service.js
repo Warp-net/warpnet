@@ -110,8 +110,6 @@ const stateMap = new Map();
 // tab or reloading the page restores the session instead of bouncing to the
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
-// localStorage mirror of the user's data-saver preference (canonically stored
-// in user metadata), so video rendering can consult it synchronously.
 const DATA_SAVER_STORAGE_KEY = "warpnet.datasaver";
 // sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
 // reload without persisting the pairing secret to disk. Cleared on logout.
@@ -544,23 +542,12 @@ export const warpnetService = {
         }
 
         const result = await this.sendToNode(request);
-        // The node reports refusals (unsupported container, too large, over
-        // the request ceiling) as a ResponseError body. Surface that text
-        // instead of a generic failure, so the person knows what to change.
         if (result && !result.key && result.message) {
             throw new Error(result.message);
         }
         return result && result.key ? result.key : '';
     },
 
-    // getVideo deliberately does NOT populate stateMap: a single base64 video
-    // can be tens of megabytes, and the unbounded image cache pattern would
-    // grow without limit as the user scrolls. The <video> element keeps the
-    // payload alive for as long as it is mounted, so replays are free anyway.
-    //
-    // Pass deferred: true to learn the size without downloading the payload —
-    // that is what data-saver mode and thin clients use to render a
-    // placeholder instead of pulling megabytes nobody asked to watch.
     async getVideo({userId, key, deferred = false}) {
         if (!key || key.length === 0) {
             return null
@@ -1219,7 +1206,6 @@ export const warpnetService = {
         });
         return resp || { users: [], cursor: 'end' };
     },
-
 
     async pinTweet(tweetId) {
         const owner = this.getOwnerProfile()
@@ -2136,9 +2122,6 @@ export const warpnetService = {
         });
     },
 
-    // The data-saver flag lives in user metadata, but rendering a tweet must
-    // not await a profile round-trip to decide whether to pull a video. Mirror
-    // it locally so the check stays synchronous.
     cacheDataSaver(enabled) {
         try {
             localStorage.setItem(DATA_SAVER_STORAGE_KEY, enabled ? 'true' : 'false');

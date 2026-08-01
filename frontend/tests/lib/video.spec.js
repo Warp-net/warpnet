@@ -27,7 +27,6 @@ describe('isAcceptedVideo', () => {
         expect(isAcceptedVideo(file('image/png', 'not-a-video.png'))).toBe(false);
     });
 
-    // Some platforms report an empty MIME type for a picked file.
     it('falls back to the extension when the MIME type is missing', () => {
         expect(isAcceptedVideo(file('', 'holiday.MP4'))).toBe(true);
         expect(isAcceptedVideo(file('', 'holiday.mov'))).toBe(true);
@@ -61,7 +60,6 @@ describe('validateVideoFile', () => {
         expect(validateVideoFile(file('video/mp4', 'edge.mp4', MAX_VIDEO_BYTES))).toBeNull();
     });
 
-    // Format is checked before size, so a huge WebM reports the real problem.
     it('reports the format problem before the size problem', () => {
         const msg = validateVideoFile(file('video/webm', 'big.webm', MAX_VIDEO_BYTES * 2));
         expect(msg).toContain('Unsupported');
@@ -76,8 +74,6 @@ describe('acceptedVideoAccept', () => {
 });
 
 describe('normalizeVideoDataUrl', () => {
-    // The node's allow-list only knows video MIME types; a browser that
-    // reported none would otherwise get the upload rejected.
     it('rewrites an octet-stream header using the extension', () => {
         const out = normalizeVideoDataUrl(
             'data:application/octet-stream;base64,AAAA',

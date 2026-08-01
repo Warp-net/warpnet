@@ -3,20 +3,16 @@
 Warpnet - Decentralized Social Network
 Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
 <github.com.mecdy@passmail.net>
-
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
-
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
-
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
@@ -43,9 +39,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// minimalMP4 is a 24-byte ISO base media file: one `ftyp` box with major
-// brand "isom". Enough for the container check, which is all the node does —
-// decoding is left to the client's system codecs.
 func minimalMP4() []byte {
 	return []byte{
 		0x00, 0x00, 0x00, 0x18, // box size = 24
@@ -123,8 +116,6 @@ func TestUploadVideo_MissingBase64Signature(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidBase64Signature)
 }
 
-// Unsupported containers must be rejected with a message that names what is
-// actually accepted, rather than failing somewhere deep in storage.
 func TestUploadVideo_UnsupportedFormatRejected(t *testing.T) {
 	cases := map[string][]byte{
 		"webm/matroska": {0x1A, 0x45, 0xDF, 0xA3, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
@@ -173,12 +164,9 @@ func TestIsISOBaseMediaFile(t *testing.T) {
 	assert.False(t, isISOBaseMediaFile([]byte{0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0}))
 	assert.False(t, isISOBaseMediaFile([]byte("short")))
 	assert.False(t, isISOBaseMediaFile(nil))
-	// A zero-sized leading box must not spin the scan forever.
 	assert.False(t, isISOBaseMediaFile([]byte{0x00, 0x00, 0x00, 0x00, 'f', 'r', 'e', 'e'}))
 }
 
-// The ownership blob must ride inside the file, mirroring the EXIF stamp on
-// images, and must not disturb the original stream.
 func TestAmendVideoMetadata_AppendsUUIDBox(t *testing.T) {
 	original := minimalMP4()
 	meta := []byte("encrypted-owner-blob")
@@ -216,7 +204,6 @@ type videoStreamerStub struct {
 
 func (v videoStreamerStub) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 	if v.streamed != nil {
-		*v.streamed = true
 	}
 	return json.Marshal(event.GetVideoResponse{File: "from-peer"})
 }
@@ -242,9 +229,6 @@ func TestGetVideo_ServesOwnVideo(t *testing.T) {
 	assert.False(t, resp.Deferred)
 }
 
-// A deferred request is how a thin client or a metered connection avoids
-// paying for a video nobody has asked to play yet: it learns the size but
-// receives no bytes.
 func TestGetVideo_DeferredWithholdsBytes(t *testing.T) {
 	stored := database.Base64Video("data:video/mp4;base64,STORED")
 	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{})
@@ -262,8 +246,6 @@ func TestGetVideo_DeferredWithholdsBytes(t *testing.T) {
 	assert.Equal(t, int64(len(stored)), resp.Size, "size must still be reported")
 }
 
-// A deferred request for a video this node does not hold must not trigger a
-// remote fetch — that would pull megabytes only to discard them.
 func TestGetVideo_DeferredSkipsRemoteFetch(t *testing.T) {
 	var streamed bool
 	h := StreamGetVideoHandler(
@@ -284,8 +266,6 @@ func TestGetVideo_DeferredSkipsRemoteFetch(t *testing.T) {
 	assert.False(t, streamed, "deferred request must not hit the peer")
 }
 
-// The stored prefix is echoed into every viewer's <video src>, so it must be
-// rebuilt from the allow-list rather than trusted from the uploader.
 func TestVideoDataPrefix(t *testing.T) {
 	mp4, ok := videoDataPrefix("data:video/mp4;base64")
 	assert.True(t, ok)
@@ -305,8 +285,6 @@ func TestVideoDataPrefix(t *testing.T) {
 	assert.False(t, ok, "non-base64 data URLs are not accepted")
 }
 
-// A QuickTime upload must stay labelled QuickTime: nothing is transcoded, so
-// normalising every video to video/mp4 would misdescribe the stored bytes.
 func TestUploadVideo_PreservesDeclaredContainer(t *testing.T) {
 	repo := &videoRepoStub{}
 	h := StreamUploadVideoHandler(n{}, repo, u{})

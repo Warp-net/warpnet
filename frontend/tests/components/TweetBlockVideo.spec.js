@@ -82,8 +82,6 @@ const renderTweet = (tweet, props = {}) =>
   });
 
 describe('TweetBlock video', () => {
-  // The whole point of tap-to-load: a timeline row must not pull megabytes of
-  // video for a post the reader never chose to watch.
   it('does not fetch the video payload when rendered in a feed', async () => {
     const {getByLabelText} = renderTweet(videoTweet);
 
@@ -109,7 +107,6 @@ describe('TweetBlock video', () => {
       .toBe('data:video/mp4;base64,AAAA');
   });
 
-  // Opening a single post is an explicit request to view it.
   it('autoloads the video when autoloadVideo is set', async () => {
     const {container} = renderTweet(videoTweet, {autoloadVideo: true});
 
@@ -129,8 +126,6 @@ describe('TweetBlock video', () => {
     });
   });
 
-  // The node never transcodes, so an unplayable file means the machine is
-  // missing a codec. Say that rather than showing a black rectangle.
   it('explains a codec failure when the video element errors', async () => {
     const {getByLabelText, container, getByRole} = renderTweet(videoTweet);
 
@@ -163,8 +158,6 @@ describe('TweetBlock YouTube preview', () => {
     });
 
     await findByLabelText('Play YouTube video dQw4w9WgXcQ');
-    // No iframe until the user opts in — merely rendering the row must not
-    // disclose the reader to Google.
     expect(container.querySelector('iframe')).toBeNull();
   });
 
@@ -182,7 +175,6 @@ describe('TweetBlock YouTube preview', () => {
       .toContain('youtube-nocookie.com/embed/dQw4w9WgXcQ');
   });
 
-  // An attached video wins; showing both players at once would be confusing.
   it('suppresses the YouTube card when the post has its own video', async () => {
     const {container, getByLabelText} = renderTweet({
       ...videoTweet,
