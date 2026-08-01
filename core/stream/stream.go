@@ -43,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/docker/go-units"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/oklog/ulid/v2"
@@ -51,6 +52,18 @@ import (
 )
 
 const (
+	// MaxInboundSize is the inbound ceiling for every request, whatever the
+	// route. It has to cover the largest thing any handler accepts: a video
+	// upload, whose payload is base64 (so 4/3 of the file) plus the signed
+	// envelope around it. handler.maxVideoSize is set below that headroom so
+	// an oversized video gets a clear error instead of being truncated.
+	MaxInboundSize = units.MiB * 50
+
+	// IODeadline bounds a single request/response exchange. It is generous
+	// because the same ceiling covers a streamed archive import, which parses
+	// and stores a tweet with photos before replying.
+	IODeadline = 10 * time.Minute
+
 	sendTimeout    = 10 * time.Second
 	retryBudget    = 10 * time.Second
 	maxSendRetries = 5
