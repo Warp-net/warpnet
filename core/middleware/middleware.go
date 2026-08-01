@@ -30,7 +30,6 @@ package middleware
 import (
 	"time"
 
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
@@ -58,15 +57,6 @@ const InternalNodeErrorCode = 5000
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
-	// policies is supplied by the node that owns this middleware; a nil map
-	// simply yields defaults for every route.
-	policies stream.RoutePolicies
-}
-
-// SetRoutePolicies installs the per-route transport budgets. The middleware
-// enforces them but does not decide them.
-func (p *WarpMiddleware) SetRoutePolicies(policies stream.RoutePolicies) {
-	p.policies = policies
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {

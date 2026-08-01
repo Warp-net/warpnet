@@ -93,7 +93,6 @@ type WarpNode struct {
 	startTime        time.Time
 	eventsSub        event.Subscription
 	mw               *middleware.WarpMiddleware
-	policies         stream.RoutePolicies
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
@@ -200,13 +199,6 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	outbox := stream.NewOutbox(n.ctx, store)
 	outbox.Run(n.streamer)
 	n.outbox = outbox
-}
-
-// SetRoutePolicies installs the per-route transport budgets declared by the
-// node implementation that owns the handlers. Routes left out get defaults.
-func (n *WarpNode) SetRoutePolicies(policies stream.RoutePolicies) {
-	n.policies = policies
-	n.mw.SetRoutePolicies(policies)
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
@@ -379,9 +371,8 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 
 	// Most self-streams finish near-instantly; a streamed import tweet stores
 	// up to four photos through the image pipeline and needs a longer window.
-	policy := n.policies.For(path)
 
-	_ = streamServer.SetDeadline(time.Now().Add(policy.IODeadline))
+	_ = streamServer.SetDeadline(time.Now().Add(stream.IODeadline))
 	go handler(streamServer) // handler closes server stream by itself
 
 	bt, ok := data.([]byte)
@@ -395,14 +386,14 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 	// Refuse an over-limit payload before writing any of it. The receiving
 	// middleware stops reading at the cap, which would leave this write
 	// blocked until the deadline with nothing to report back.
-	if maxLen := policy.MaxInboundSize; int64(len(bt)) > maxLen {
+	if maxLen := int64(stream.MaxInboundSize); int64(len(bt)) > maxLen {
 		return nil, fmt.Errorf( //nolint:err113
 			"node: selfstream: %s: request is %s but the limit for this route is %s",
 			path, units.HumanSize(float64(len(bt))), units.HumanSize(float64(maxLen)),
 		)
 	}
 
-	_ = streamClient.SetDeadline(time.Now().Add(policy.IODeadline))
+	_ = streamClient.SetDeadline(time.Now().Add(stream.IODeadline))
 	if _, err := streamClient.Write(bt); err != nil {
 		return nil, err
 	}

@@ -29,7 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"time"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -46,7 +45,6 @@ import (
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/docker/go-units"
 	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
 )
@@ -406,36 +404,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
 
-	m.node.SetRoutePolicies(memberRoutePolicies())
 	m.node.SetStreamHandlers(hs...)
-}
-
-// memberRoutePolicies lists the routes whose transport budget differs from
-// the default. Only a member node hosts these handlers — it is the node that
-// stores media and imports archives — so it is the one that states what they
-// are allowed to carry and how long they may take.
-func memberRoutePolicies() stream.RoutePolicies {
-	return stream.RoutePolicies{
-		// One tweet plus up to four base64 photos. The browser filters the
-		// archive client-side and streams kept tweets one by one, so the node
-		// never buffers the whole archive.
-		event.PRIVATE_POST_IMPORT_TWITTER_TWEET: {
-			MaxInboundSize: units.MiB * 32,
-			IODeadline:     10 * time.Minute,
-		},
-		// A 50 MiB video (handler.maxVideoSize) becomes ~67 MiB once
-		// base64-encoded, plus the signed envelope around it. The headroom
-		// leaves the handler's own size check as what rejects an oversized
-		// upload, instead of the payload being silently truncated.
-		event.PRIVATE_POST_UPLOAD_VIDEO: {
-			MaxInboundSize: units.MiB * 72,
-			IODeadline:     5 * time.Minute,
-		},
-		// Serving a video back is a small request but a large, slow response.
-		event.PUBLIC_GET_VIDEO: {
-			IODeadline: 5 * time.Minute,
-		},
-	}
 }
 
 //nolint:govet

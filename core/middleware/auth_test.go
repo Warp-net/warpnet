@@ -62,18 +62,14 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 		_, _ = s.Write([]byte(`{"ok":true}`))
 	})
 
-	const route = "/private/post/video/0.0.0"
-	const limit = int64(64 << 10)
-	mw.SetRoutePolicies(stream.RoutePolicies{route: {MaxInboundSize: limit}})
-
-	client, server := stream.NewLoopbackStream("peer1", warpnet.WarpProtocolID(route))
+	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go handler(server)
 
-	// Substantially over the cap, so the middleware stops reading with a
-	// large amount still outstanding — that is the shape that deadlocks. A
-	// payload of exactly limit+1 is fully drained by the sentinel read and
-	// would not reproduce it.
-	payload := bytes.Repeat([]byte("A"), int(limit)*3)
+	// Past the cap with bytes still outstanding — that is the shape that
+	// deadlocks. A payload of exactly limit+1 is fully drained by the
+	// sentinel read and would not reproduce it.
+	limit := int64(stream.MaxInboundSize)
+	payload := bytes.Repeat([]byte("A"), int(limit)+4096)
 
 	done := make(chan struct{})
 	go func() {
@@ -101,13 +97,8 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	mw := NewWarpMiddleware("peer1")
 	defer mw.Close()
 
-	const route = "/private/post/video/0.0.0"
-	const limit = int64(64 << 10)
-	// An override above the default must actually be honoured, otherwise a
-	// legitimate large upload would be cut at the default ceiling.
-	mw.SetRoutePolicies(stream.RoutePolicies{route: {MaxInboundSize: limit}})
-
-	client, server := stream.NewLoopbackStream("peer1", warpnet.WarpProtocolID(route))
+	limit := int64(stream.MaxInboundSize)
+	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
 
 	// Exactly at the ceiling: rejected later for being invalid JSON, but it

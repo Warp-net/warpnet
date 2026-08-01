@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Client-side gate for video attachments. The node re-checks everything here
-// (see core/handler/media.go); this exists so an unusable file is refused
+// (see core/handler/video.go); this exists so an unusable file is refused
 // instantly instead of after a multi-megabyte round trip.
 
 // Mirrors handler.maxVideoSize on the node.
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 36 * 1024 * 1024;
 
 // The node only accepts ISO base media files, because that is where it can
 // stamp the ownership metadata (an MP4 `uuid` box), mirroring the EXIF stamp
@@ -69,7 +69,7 @@ export function validateVideoFile(file) {
     }
     if (file.size > MAX_VIDEO_BYTES) {
         const mb = Math.round(file.size / (1024 * 1024));
-        return `Video is too large (${mb} MB). The maximum size is 50 MB.`;
+        return `Video is too large (${mb} MB). The maximum size is 36 MB.`;
     }
     return null;
 }

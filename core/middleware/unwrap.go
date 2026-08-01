@@ -55,7 +55,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 			data = typedStream.Body
 			messageID = typedStream.MessageId
 		default:
-			reader := io.LimitReader(s, p.policies.For(stream.FromPrIDToRoute(s.Protocol())).MaxInboundSize)
+			reader := io.LimitReader(s, stream.MaxInboundSize)
 			d, err := io.ReadAll(reader)
 			if err != nil && !errors.Is(err, io.EOF) {
 				log.Errorf("middleware: reading from stream: %v", err)

@@ -54,7 +54,7 @@ describe('validateVideoFile', () => {
 
     it('reports the actual size when the file is too big', () => {
         const msg = validateVideoFile(file('video/mp4', 'big.mp4', MAX_VIDEO_BYTES + 1));
-        expect(msg).toContain('50 MB');
+        expect(msg).toContain('36 MB');
     });
 
     it('allows a file exactly at the limit', () => {

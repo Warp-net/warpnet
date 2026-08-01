@@ -59,9 +59,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		// Routes carrying bulk media get a larger ceiling than the rest;
-		// the serving node declares that alongside its handlers.
-		limit := p.policies.For(route).MaxInboundSize
+		limit := int64(stream.MaxInboundSize)
 		// Read one byte past the ceiling so an oversized payload is
 		// detectable rather than silently truncated into invalid JSON.
 		reader := io.LimitReader(s, limit+1)

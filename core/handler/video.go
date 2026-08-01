@@ -45,11 +45,14 @@ import (
 )
 
 const (
-	// maxVideoSize caps the decoded upload. Kept in step with
-	// stream.VideoMaxInboundSize, which caps the base64 envelope carrying it.
-	maxVideoSize = units.MiB * 50
+	// maxVideoSize caps the decoded upload. It must stay below what
+	// stream.MaxInboundSize allows once base64 inflates the payload by 4/3
+	// and the signed envelope is added: 36 MiB becomes 48 MiB encoded,
+	// leaving 2 MiB of headroom. Raising it past that would make this check
+	// unreachable and turn an oversized upload back into a truncated read.
+	maxVideoSize = units.MiB * 36
 
-	ErrTooLargeVideo    warpnet.WarpError = "video is too large: 50 MiB is the maximum"
+	ErrTooLargeVideo    warpnet.WarpError = "video is too large: 36 MiB is the maximum"
 	ErrEmptyVideoKey    warpnet.WarpError = "empty video key"
 	ErrNoVideoProvided  warpnet.WarpError = "a video must be provided"
 	ErrUnsupportedVideo warpnet.WarpError = "unsupported video format: only MP4 and MOV (QuickTime) files are accepted"
