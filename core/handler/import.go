@@ -72,7 +72,7 @@ func StreamImportTweetHandler(
 			return nil, warpnet.WarpError("import: empty tweet id")
 		}
 
-		encryptedMeta, ownerUser, err := buildEncryptedImageMeta(info, userRepo)
+		encryptedMeta, ownerUser, err := buildEncryptedMediaMeta(info, userRepo)
 		if err != nil {
 			return nil, fmt.Errorf("import: %w", err)
 		}

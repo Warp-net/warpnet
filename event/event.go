@@ -407,6 +407,30 @@ type GetImageResponse struct {
 	File string `json:"file"`
 }
 
+// UploadVideoEvent defines model for UploadVideoEvent.
+type UploadVideoEvent struct {
+	Video string `json:"video"`
+}
+
+// UploadVideoResponse defines model for UploadVideoResponse.
+type UploadVideoResponse struct {
+	Key string `json:"key"`
+}
+
+// GetVideoEvent defines model for GetVideoEvent.
+type GetVideoEvent struct {
+	UserId   string `json:"user_id"`
+	Key      string `json:"key"`
+	Deferred bool   `json:"deferred,omitempty"`
+}
+
+// GetVideoResponse defines model for GetVideoResponse.
+type GetVideoResponse struct {
+	File     string `json:"file"`
+	Size     int64  `json:"size,omitempty"`
+	Deferred bool   `json:"deferred,omitempty"`
+}
+
 type ChallengeEvent struct {
 	Coordinates []ChallengeSample `json:"samples"`
 }

@@ -30,6 +30,17 @@
           <input type="checkbox" v-model="prefs.sensitive" class="mr-2" />
           <span class="font-bold">Mark media as sensitive by default</span>
         </label>
+        <label class="flex items-start">
+          <input type="checkbox" v-model="prefs.dataSaver" class="mr-2 mt-1" />
+          <span>
+            <span class="font-bold">Data saver</span>
+            <span class="block text-sm text-dark">
+              Never download a video until you press play. Videos in the
+              timeline already wait for a tap; this extends that to opened
+              posts too.
+            </span>
+          </span>
+        </label>
         <label class="block">
           <span class="font-bold">Default language</span>
           <input
@@ -78,7 +89,7 @@ export default {
       savedMessage: '',
       saveError: false,
       ownerProfile: {},
-      prefs: { privacy: 'public', sensitive: false, language: 'en' },
+      prefs: { privacy: 'public', sensitive: false, language: 'en', dataSaver: false },
     };
   },
   methods: {
@@ -113,6 +124,8 @@ export default {
         this.prefs.privacy = meta.privacy || 'public';
         this.prefs.sensitive = meta.sensitive === 'true';
         this.prefs.language = meta.language || 'en';
+        this.prefs.dataSaver = meta.data_saver === 'true';
+        warpnetService.cacheDataSaver(this.prefs.dataSaver);
       }
     } catch (err) {
       console.error('Failed to load preferences:', err);

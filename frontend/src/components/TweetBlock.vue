@@ -142,6 +142,49 @@ resulting from the use or misuse of this software.
       <div v-else-if="tweetImages.length >= 4" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
         <img v-for="(img, i) in tweetImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
       </div>
+      <YoutubeEmbed v-if="youtubeId" :videoId="youtubeId" />
+      <div v-if="tweet.video_key" class="mt-2">
+        <video
+            v-if="videoSrc"
+            :src="videoSrc"
+            controls
+            autoplay
+            playsinline
+            preload="metadata"
+            class="rounded-lg max-w-full border border-lighter bg-black"
+            @error="onVideoError"
+            @click.stop
+        ></video>
+        <div
+            v-else-if="videoError"
+            class="rounded-lg border border-lighter p-4 text-sm text-dark"
+            role="alert"
+        >
+          <i class="fas fa-exclamation-triangle mr-1" aria-hidden="true"></i>
+          {{ videoError }}
+          <button
+              @click.stop="loadVideo"
+              type="button"
+              class="ml-2 underline hover:text-blue"
+          >Try again</button>
+        </div>
+        <button
+            v-else
+            @click.stop="loadVideo"
+            type="button"
+            :disabled="videoLoading"
+            class="w-full rounded-lg border border-lighter bg-lighter hover:bg-lightblue transition-colors py-8 flex flex-col items-center justify-center text-dark"
+            :aria-label="videoLoading ? 'Loading video' : 'Play video'"
+        >
+          <i
+              :class="videoLoading ? 'fas fa-circle-notch fa-spin' : 'fas fa-play-circle'"
+              class="text-3xl mb-2"
+              aria-hidden="true"
+          ></i>
+          <span class="text-sm font-semibold">{{ videoLoading ? 'Loading video…' : 'Play video' }}</span>
+          <span v-if="!videoLoading" class="text-xs mt-1">Loads only when you play it</span>
+        </button>
+      </div>
       <div
         v-if="viewedImage"
         class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4 cursor-pointer"
@@ -265,10 +308,14 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {extractYoutubeId} from "@/lib/youtube";
 
 export default {
   name: "Tweet",
-  props: ["tweet"],
+  props: {
+    tweet: {type: Object, required: true},
+    autoloadVideo: {type: Boolean, default: false},
+  },
   components: {
     LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
@@ -276,6 +323,7 @@ export default {
     QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
     ReportDialog: defineAsyncComponent(() => import('./ReportDialog.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
+    YoutubeEmbed: defineAsyncComponent(() => import('./YoutubeEmbed.vue')),
   },
   data() {
     return {
@@ -302,12 +350,21 @@ export default {
       repliesCount: new Map(),
       viewsCount: new Map(),
       tweetImages: [],
+      videoSrc: '',
+      videoLoading: false,
+      videoError: '',
       viewedImage: null,
       viewObserver: null,
       viewRecorded: false,
       viewInFlight: false,
       statsRetried: false,
     };
+  },
+  computed: {
+    youtubeId() {
+      if (this.tweet && this.tweet.video_key) return null;
+      return extractYoutubeId(this.tweet && this.tweet.text);
+    },
   },
   methods: {
     async refreshInteractionState() {
@@ -490,6 +547,34 @@ export default {
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
+    },
+    async loadVideo() {
+      if (this.videoLoading || this.videoSrc) return;
+      const key = this.tweet && this.tweet.video_key;
+      if (!key) return;
+
+      this.videoError = '';
+      this.videoLoading = true;
+      try {
+        const video = await warpnetService.getVideo({
+          userId: this.tweet.user_id,
+          key,
+        });
+        if (!video || !video.file) {
+          this.videoError = "This video isn't available right now. The author's node may be offline.";
+          return;
+        }
+        this.videoSrc = video.file;
+      } catch (err) {
+        console.error(`failed to load tweet video [${this.tweet.id}]`, err);
+        this.videoError = 'Failed to load the video.';
+      } finally {
+        this.videoLoading = false;
+      }
+    },
+    onVideoError() {
+      this.videoSrc = '';
+      this.videoError = 'This video cannot be played. Your system may be missing the required video codec.';
     },
     openImageView(img) {
       this.viewedImage = img;
@@ -789,6 +874,10 @@ export default {
       );
       this.tweetImages = loadedImages.filter(img => img);
       this.profile.avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key})
+
+      if (this.tweet.video_key && this.autoloadVideo) {
+        this.loadVideo();
+      }
     } catch (err) {
       console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
     }

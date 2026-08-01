@@ -236,7 +236,7 @@ The avatar is a two-step flow that mirrors the Vue client
 (`frontend/src/service/service.js`: `uploadImages` → `editMyProfile`):
 
 1. `POST /private/post/image/0.0.0` with `{image1:"data:image/png;base64,<logo>", image2..4:""}`
-   → returns `{key1,...}` (the handler re-encodes to JPEG and stores it; `core/handler/media.go`).
+   → returns `{key1,...}` (the handler re-encodes to JPEG and stores it; `core/handler/image.go`).
 2. `POST /private/post/user/0.0.0` with `{username:"Claude", avatar_key:"<key1>"}` — sets
    `domain.User.AvatarKey` on the owner profile.
 

@@ -22,7 +22,7 @@
       </div>
 
       <div v-if="!loading && tweet && !notFound">
-        <TweetBlock ref="rootTweet" :tweet="tweet" />
+        <TweetBlock ref="rootTweet" :tweet="tweet" :autoloadVideo="autoloadVideo" />
 
         <div class="border-t border-lighter p-3 flex flex-col gap-2">
           <textarea
@@ -73,6 +73,11 @@ export default {
       replyText: '',
       posting: false,
     };
+  },
+  computed: {
+    autoloadVideo() {
+      return !warpnetService.isDataSaverEnabled();
+    },
   },
   methods: {
     async loadTweet() {

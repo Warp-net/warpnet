@@ -155,6 +155,8 @@ func (s *LoopbackStream) CloseWrite() error {
 }
 
 func (s *LoopbackStream) Reset() error {
+	_ = s.CloseWrite()
+	_ = s.CloseRead()
 	return nil
 }
 

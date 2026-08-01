@@ -40,7 +40,6 @@ const (
 	MediaRepoName     = "/MEDIA"
 	ImageSubNamespace = "IMAGES"
 	ImageMetaSubNS    = "IMAGES_META"
-	// VideoSubNamespace is reserved — videos are not yet supported.
 	VideoSubNamespace = "VIDEOS"
 )
 
@@ -62,6 +61,8 @@ type MediaRepo struct {
 type (
 	Base64Image string
 	ImageKey    string
+	Base64Video string
+	VideoKey    string
 )
 
 func NewMediaRepo(db MediaStorer) *MediaRepo {
@@ -188,4 +189,66 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img Base64Imag
 
 	week := time.Hour * 24 * 7
 	return repo.db.SetWithTTL(mediaKey, []byte(img), week)
+}
+
+func (repo *MediaRepo) GetVideo(userId, key string) (Base64Video, error) {
+	if repo == nil {
+		return "", ErrMediaRepoNotInit
+	}
+	if key == "" || userId == "" {
+		return "", ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+		AddRootID(VideoSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	data, err := repo.db.Get(mediaKey)
+	if local_store.IsNotFoundError(err) {
+		return "", ErrMediaNotFound
+	}
+
+	return Base64Video(data), err
+}
+
+func (repo *MediaRepo) SetVideo(userId string, video Base64Video) (_ VideoKey, err error) {
+	if repo == nil {
+		return "", ErrMediaRepoNotInit
+	}
+	if len(video) == 0 || len(userId) == 0 {
+		return "", local_store.DBError("no data for video set")
+	}
+	h := security.ConvertToSHA256([]byte(video))
+	key := hex.EncodeToString(h)
+
+	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+		AddRootID(VideoSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	return VideoKey(key), repo.db.Set(mediaKey, []byte(video))
+}
+
+func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video Base64Video) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if len(video) == 0 || len(userId) == 0 {
+		return local_store.DBError("no data for video set provided")
+	}
+	if key == "" {
+		return local_store.DBError("no key for video set provided")
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+		AddRootID(VideoSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	week := time.Hour * 24 * 7
+	return repo.db.SetWithTTL(mediaKey, []byte(video), week)
 }

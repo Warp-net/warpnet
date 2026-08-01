@@ -54,12 +54,7 @@ const (
 const messageFreshnessWindow = 5 * time.Minute
 
 const (
-	MaxLimit = units.MiB * 5 // TODO size limit???
-	// ImportTweetMaxLimit is the inbound cap for the per-tweet streaming import
-	// route: one tweet plus up to four base64 photos. The browser parses and
-	// filters the archive client-side and streams kept tweets one by one, so
-	// the node never buffers the whole archive.
-	ImportTweetMaxLimit   = units.MiB * 32
+	MaxLimit              = units.MiB * 50
 	InternalNodeErrorCode = 5000
 )
 

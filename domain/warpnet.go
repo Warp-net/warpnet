@@ -181,6 +181,7 @@ type Tweet struct {
 	UserId        string           `json:"user_id"`
 	Username      string           `json:"username"`
 	ImageKeys     []string         `json:"image_keys,omitempty"`
+	VideoKey      *string          `json:"video_key,omitempty"`
 	Network       string           `json:"network"`
 	Moderation    *TweetModeration `json:"moderation,omitempty"`
 	Pinned        bool             `json:"pinned,omitempty"`

@@ -69,29 +69,24 @@ import (
 */
 
 const (
-	imageDescriptionTag = "ImageDescription"
-
 	nodeMetaKey = "node"
 	userMetaKey = "user"
 	macMetaKey  = "MAC"
 
-	imagePrefix = "data:image/jpeg;base64,"
-
-	ErrTooLargeImage          warpnet.WarpError = "image is too large"
-	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 image data"
-	ErrEmptyImageKey          warpnet.WarpError = "empty image key"
-	ErrNoImagesProvided       warpnet.WarpError = "at least one image must be provided"
-	ErrInvalidEXIF            warpnet.WarpError = "invalid exif type: not a segment list"
+	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 media data"
 )
 
 type MediaNodeInformer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-type MediaStorer interface {
-	GetImage(userId, key string) (database.Base64Image, error)
-	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
-	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
+type MediaUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
+type MediaStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
 }
 
 // MediaMetaStorer is the slice of MediaRepo the alt-text / focal-point
@@ -150,8 +145,49 @@ func StreamGetMediaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
 	}
 }
 
-type MediaUserFetcher interface {
-	Get(userId string) (user domain.User, err error)
+func buildEncryptedMediaMeta(
+	info MediaNodeInformer,
+	userRepo MediaUserFetcher,
+) (encryptedMeta []byte, ownerUser domain.User, err error) {
+	nodeInfo := info.NodeInfo()
+	ownerUser, err = userRepo.Get(nodeInfo.OwnerId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return nil, ownerUser, err
+	}
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: fetching user: %w", err)
+	}
+
+	metaData := map[string]any{
+		nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
+	}
+	metaBytes, err := json.Marshal(metaData)
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: marshalling meta data: %w", err)
+	}
+
+	encryptedMeta, err = security.EncryptAES(metaBytes, nil) // unknown password
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: AES encrypting: %w", err)
+	}
+	return encryptedMeta, ownerUser, nil
+}
+
+const (
+	imageDescriptionTag = "ImageDescription"
+
+	imagePrefix = "data:image/jpeg;base64,"
+
+	ErrTooLargeImage    warpnet.WarpError = "image is too large"
+	ErrEmptyImageKey    warpnet.WarpError = "empty image key"
+	ErrNoImagesProvided warpnet.WarpError = "at least one image must be provided"
+	ErrInvalidEXIF      warpnet.WarpError = "invalid exif type: not a segment list"
+)
+
+type MediaStorer interface {
+	GetImage(userId, key string) (database.Base64Image, error)
+	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
+	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
 }
 
 func StreamUploadImageHandler(
@@ -178,7 +214,7 @@ func StreamUploadImageHandler(
 			return nil, ErrNoImagesProvided
 		}
 
-		encryptedMeta, ownerUser, err := buildEncryptedImageMeta(info, userRepo)
+		encryptedMeta, ownerUser, err := buildEncryptedMediaMeta(info, userRepo)
 		if err != nil {
 			return nil, err
 		}
@@ -203,40 +239,6 @@ func StreamUploadImageHandler(
 			Key4: keys[3],
 		}, nil
 	}
-}
-
-// buildEncryptedImageMeta fetches the owner user and produces the
-// AES-encrypted {node,user,MAC} blob embedded into uploaded media EXIF.
-// The encryption password is random and immediately discarded (see the
-// file header), so the metadata stands as proof of ownership without
-// leaking its contents. Shared by the image-upload and archive-import
-// handlers.
-func buildEncryptedImageMeta(
-	info MediaNodeInformer,
-	userRepo MediaUserFetcher,
-) (encryptedMeta []byte, ownerUser domain.User, err error) {
-	nodeInfo := info.NodeInfo()
-	ownerUser, err = userRepo.Get(nodeInfo.OwnerId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return nil, ownerUser, err
-	}
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: fetching user: %w", err)
-	}
-
-	metaData := map[string]any{
-		nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
-	}
-	metaBytes, err := json.Marshal(metaData)
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: marshalling meta data: %w", err)
-	}
-
-	encryptedMeta, err = security.EncryptAES(metaBytes, nil) // unknown password
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: AES encrypting: %w", err)
-	}
-	return encryptedMeta, ownerUser, nil
 }
 
 func processAndStoreImage(
@@ -288,11 +290,6 @@ func processAndStoreImage(
 	}
 
 	return string(key), nil
-}
-
-type MediaStreamer interface {
-	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
-	NodeInfo() warpnet.NodeInfo
 }
 
 func StreamGetImageHandler(

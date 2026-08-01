@@ -4,8 +4,13 @@
 package middleware
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 func TestIsFresh(t *testing.T) {
@@ -39,5 +44,72 @@ func TestIsFresh_DefaultsWindow(t *testing.T) {
 	}
 	if p.isFresh(time.Now().Add(-messageFreshnessWindow - time.Minute)) {
 		t.Fatal("expected stale message to fail with default window")
+	}
+}
+
+func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
+	mw := NewWarpMiddleware("peer1")
+	defer mw.Close()
+
+	var handlerCalled bool
+	handler := mw.AuthMiddleware(func(s warpnet.WarpStream) {
+		handlerCalled = true
+		_, _ = s.Write([]byte(`{"ok":true}`))
+	})
+
+	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
+	go handler(server)
+
+	limit := int64(MaxLimit)
+	payload := bytes.Repeat([]byte("A"), int(limit)+4096)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
+		_, _ = client.Write(payload)
+		_ = client.CloseWrite()
+		_, _ = io.ReadAll(client)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("oversized payload deadlocked the caller")
+	}
+
+	if handlerCalled {
+		t.Error("an over-limit payload must never reach the wrapped handler")
+	}
+}
+
+func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
+	mw := NewWarpMiddleware("peer1")
+	defer mw.Close()
+
+	limit := int64(MaxLimit)
+	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
+	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
+
+	payload := bytes.Repeat([]byte("A"), int(limit))
+
+	done := make(chan struct{})
+	var resp []byte
+	go func() {
+		defer close(done)
+		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
+		_, _ = client.Write(payload)
+		_ = client.CloseWrite()
+		resp, _ = io.ReadAll(client)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("payload at the limit deadlocked")
+	}
+
+	if len(resp) == 0 {
+		t.Error("a payload at the ceiling must still get a response")
 	}
 }
