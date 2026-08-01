@@ -123,30 +123,31 @@ resulting from the use or misuse of this software.
           <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
         </template>
       </div>
-      <div v-if="tweetImages.length === 1" class="mt-2">
+      <div v-if="galleryImages.length === 1" class="mt-2">
         <img
-            :src="tweetImages[0]"
+            :src="galleryImages[0]"
             alt="Tweet image"
             class="rounded-lg max-w-full border border-lighter cursor-zoom-in"
-            @click.stop="openImageView(tweetImages[0])"
+            @click.stop="openImageView(galleryImages[0])"
         />
       </div>
-      <div v-else-if="tweetImages.length === 2" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
-        <img v-for="(img, i) in tweetImages" :key="i" :src="img" alt="Tweet image" class="w-full h-48 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
+      <div v-else-if="galleryImages.length === 2" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
+        <img v-for="(img, i) in galleryImages" :key="i" :src="img" alt="Tweet image" class="w-full h-48 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
       </div>
-      <div v-else-if="tweetImages.length === 3" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter" style="height:300px">
-        <img :src="tweetImages[0]" alt="Tweet image" class="row-span-2 w-full h-full object-cover cursor-zoom-in" style="grid-row: span 2" @click.stop="openImageView(tweetImages[0])" />
-        <img :src="tweetImages[1]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(tweetImages[1])" />
-        <img :src="tweetImages[2]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(tweetImages[2])" />
+      <div v-else-if="galleryImages.length === 3" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter" style="height:300px">
+        <img :src="galleryImages[0]" alt="Tweet image" class="row-span-2 w-full h-full object-cover cursor-zoom-in" style="grid-row: span 2" @click.stop="openImageView(galleryImages[0])" />
+        <img :src="galleryImages[1]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(galleryImages[1])" />
+        <img :src="galleryImages[2]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(galleryImages[2])" />
       </div>
-      <div v-else-if="tweetImages.length >= 4" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
-        <img v-for="(img, i) in tweetImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
+      <div v-else-if="galleryImages.length >= 4" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
+        <img v-for="(img, i) in galleryImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
       </div>
       <YoutubeEmbed v-if="youtubeId" :videoId="youtubeId" />
-      <div v-if="tweet.video_key" class="mt-2">
+      <div v-if="hasVideo" class="mt-2">
         <video
             v-if="videoSrc"
             :src="videoSrc"
+            :poster="videoPoster || undefined"
             controls
             autoplay
             playsinline
@@ -173,16 +174,36 @@ resulting from the use or misuse of this software.
             @click.stop="loadVideo"
             type="button"
             :disabled="videoLoading"
-            class="w-full rounded-lg border border-lighter bg-lighter hover:bg-lightblue transition-colors py-8 flex flex-col items-center justify-center text-dark"
+            class="relative w-full overflow-hidden rounded-lg border border-lighter transition-colors flex flex-col items-center justify-center"
+            :class="videoPoster ? 'bg-black' : 'bg-lighter hover:bg-lightblue py-8 text-dark'"
             :aria-label="videoLoading ? 'Loading video' : 'Play video'"
         >
-          <i
-              :class="videoLoading ? 'fas fa-circle-notch fa-spin' : 'fas fa-play-circle'"
-              class="text-3xl mb-2"
+          <img
+              v-if="videoPoster"
+              :src="videoPoster"
+              alt=""
               aria-hidden="true"
-          ></i>
-          <span class="text-sm font-semibold">{{ videoLoading ? 'Loading video…' : 'Play video' }}</span>
-          <span v-if="!videoLoading" class="text-xs mt-1">Loads only when you play it</span>
+              class="w-full max-h-96 object-contain"
+          />
+          <span
+              class="flex flex-col items-center justify-center"
+              :class="videoPoster ? 'absolute inset-0' : ''"
+          >
+            <!-- Over a still the label needs its own dark backing: a frame can
+                 be any brightness, so a light one would swallow white text. -->
+            <span
+                class="flex flex-col items-center"
+                :class="videoPoster ? 'rounded-lg bg-black bg-opacity-80 px-4 py-3 text-white' : ''"
+            >
+              <i
+                  :class="videoLoading ? 'fas fa-circle-notch fa-spin' : 'fas fa-play-circle'"
+                  class="text-3xl mb-2"
+                  aria-hidden="true"
+              ></i>
+              <span class="text-sm font-semibold">{{ videoLoading ? 'Loading video…' : 'Play video' }}</span>
+              <span v-if="!videoLoading" class="text-xs mt-1">Loads only when you play it</span>
+            </span>
+          </span>
         </button>
       </div>
       <div
@@ -362,8 +383,20 @@ export default {
   },
   computed: {
     youtubeId() {
-      if (this.tweet && this.tweet.video_key) return null;
+      if (this.hasVideo) return null;
       return extractYoutubeId(this.tweet && this.tweet.text);
+    },
+    hasVideo() {
+      return !!(this.tweet && this.tweet.video_key);
+    },
+    // A video post carries its first frame as the first image key (see the
+    // composer in Home.vue), so it stands in as the poster rather than being
+    // shown as a separate attachment.
+    videoPoster() {
+      return this.hasVideo ? (this.tweetImages[0] || '') : '';
+    },
+    galleryImages() {
+      return this.hasVideo ? [] : this.tweetImages;
     },
   },
   methods: {

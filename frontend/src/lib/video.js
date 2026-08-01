@@ -42,6 +42,87 @@ export function normalizeVideoDataUrl(dataUrl, file) {
     return `data:${mime};base64,${dataUrl.slice(comma + 1)}`;
 }
 
+export const POSTER_MAX_WIDTH = 640;
+export const POSTER_SEEK_SECONDS = 1;
+export const POSTER_TIMEOUT_MS = 10000;
+
+// Grabs a frame near the start of a freshly picked video so the post can show a
+// still instead of a blank placeholder. Best effort: resolves to null whenever
+// the browser cannot decode the file (e.g. HEVC .mov outside Safari).
+export function captureVideoPoster(file, opts = {}) {
+    const {
+        maxWidth = POSTER_MAX_WIDTH,
+        seekSeconds = POSTER_SEEK_SECONDS,
+        timeoutMs = POSTER_TIMEOUT_MS,
+        createElement = tag => (typeof document === "undefined" ? null : document.createElement(tag)),
+        createObjectURL = f => (typeof URL === "undefined" || !URL.createObjectURL ? null : URL.createObjectURL(f)),
+        revokeObjectURL = url => {
+            if (typeof URL !== "undefined" && URL.revokeObjectURL) URL.revokeObjectURL(url);
+        },
+    } = opts;
+
+    return new Promise(resolve => {
+        const video = file ? createElement("video") : null;
+        const url = video ? createObjectURL(file) : null;
+        if (!url) {
+            resolve(null);
+            return;
+        }
+
+        let settled = false;
+        const finish = poster => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            video.onloadeddata = null;
+            video.onseeked = null;
+            video.onerror = null;
+            revokeObjectURL(url);
+            resolve(poster || null);
+        };
+        const timer = setTimeout(() => finish(null), timeoutMs);
+
+        video.onerror = () => finish(null);
+        video.onloadeddata = () => {
+            const duration = Number(video.duration);
+            // The opening second is often a fade-in or a black lead-in, so take
+            // the frame a second in, or the midpoint of a clip too short for that.
+            const target = Number.isFinite(duration) && duration > 0
+                ? Math.min(seekSeconds, duration / 2)
+                : seekSeconds;
+            if (target > 0) {
+                video.currentTime = target;
+                return;
+            }
+            finish(drawPoster(video, maxWidth, createElement));
+        };
+        video.onseeked = () => finish(drawPoster(video, maxWidth, createElement));
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.src = url;
+    });
+}
+
+function drawPoster(video, maxWidth, createElement) {
+    const {videoWidth: width, videoHeight: height} = video;
+    if (!width || !height) return null;
+
+    const canvas = createElement("canvas");
+    const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+    if (!ctx) return null;
+
+    const scale = Math.min(1, maxWidth / width);
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL("image/jpeg", 0.7);
+    } catch (err) {
+        return null;
+    }
+}
+
 export function validateVideoFile(file) {
     if (!file) {
         return "No video file selected.";

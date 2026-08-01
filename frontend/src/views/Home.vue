@@ -231,7 +231,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
-import {acceptedVideoAccept, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
+import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 
 export default {
   name: "Home",
@@ -263,6 +263,7 @@ export default {
       altModalIndex: -1,
       videoAttachment: null,
       videoKey: '',
+      videoPosterKey: '',
       videoUploading: false,
       posting: false,
       loadingMore: false,
@@ -370,7 +371,13 @@ export default {
 
       this.videoAttachment = {url: URL.createObjectURL(file), name: file.name};
       this.videoKey = '';
+      this.videoPosterKey = '';
       this.videoUploading = true;
+
+      const posterKey = await this.uploadVideoPoster(file);
+      if (this.videoAttachment) {
+        this.videoPosterKey = posterKey;
+      }
 
       try {
         const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
@@ -387,6 +394,18 @@ export default {
         this.videoUploading = false;
       }
     },
+    // Best effort: a still beats an empty placeholder in the feed, but a clip
+    // the browser cannot decode must still post without one.
+    async uploadVideoPoster(file) {
+      try {
+        const poster = await captureVideoPoster(file);
+        if (!poster) return '';
+        return await warpnetService.uploadImage(poster) || '';
+      } catch (err) {
+        console.error('Failed to upload video poster:', err);
+        return '';
+      }
+    },
     readFileAsDataURL(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -401,6 +420,7 @@ export default {
       }
       this.videoAttachment = null;
       this.videoKey = '';
+      this.videoPosterKey = '';
     },
     openAltModal(index) {
       this.altModalIndex = index;
@@ -419,6 +439,12 @@ export default {
         if (missing.length > 0) {
           const extra = await warpnetService.uploadImages(missing);
           imageKeys = imageKeys.concat(extra);
+        }
+        if (this.videoKey && this.videoPosterKey) {
+          // The captured frame rides along as the first image so readers can
+          // see a still without fetching the clip. The composer never mixes
+          // images and video, so it stays unambiguous on the other side.
+          imageKeys = [this.videoPosterKey, ...imageKeys];
         }
         await warpnetService.createTweet({text: draftText, imageKeys, videoKey: this.videoKey});
 
