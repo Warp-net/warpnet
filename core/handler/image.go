@@ -57,8 +57,9 @@ import (
 
 	The system embeds encrypted metadata (node and user information) into the EXIF segment of media files
 	during upload.
-	A weak password is randomly generated for each file, used for encryption via Argon2id + AES-256-GCM,
-	and immediately discarded.
+	A weak password is randomly generated for each upload, used for encryption via Argon2id + AES-256-GCM,
+	and immediately discarded. Files uploaded together share one blob: they carry identical metadata,
+	so a per-file password would not raise the cost of recovering it.
 	The password is never stored or logged.
 	Decryption is only possible through brute-force attacks, requiring massive computational resources.
 	Ordinary users cannot recover the metadata; only powerful entities (e.g., government data centers) can.

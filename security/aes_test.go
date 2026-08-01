@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package security
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,4 +46,63 @@ func TestAESEncryptDecrypt_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, in, out)
+}
+
+func TestAESEncryptDecrypt_WrongPassword(t *testing.T) {
+	in := []byte("Hello, this is a secret message.")
+
+	cipherData, err := EncryptAES(in, []byte("right"))
+	assert.NoError(t, err)
+
+	_, err = decryptAES(cipherData, []byte("wrong"))
+	assert.Error(t, err)
+}
+
+// The nil-password branch is the one media uploads actually use
+// (core/handler/image.go). It was previously untested.
+func TestAESEncrypt_WeakPasswordBranch(t *testing.T) {
+	in := []byte(`{"MAC":"3c:52:82:1a:9b:04"}`)
+
+	sealed, err := EncryptAES(in, nil)
+	assert.NoError(t, err)
+
+	// Salt and nonce are public and embedded, per the scheme's design.
+	assert.Len(t, sealed, saltSize+nonceSize+len(in)+tagSize)
+
+	salt, nonce := sealed[:saltSize], sealed[saltSize:saltSize+nonceSize]
+	assert.NotEqual(t, make([]byte, saltSize), salt, "salt must not be all-zero")
+	assert.NotEqual(t, make([]byte, nonceSize), nonce, "nonce must not be all-zero")
+
+	// The plaintext must not survive anywhere in the output.
+	assert.False(t, bytes.Contains(sealed, in))
+}
+
+// Regression: the key used to come from a shuffled time.Now().Unix() with a
+// fixed all-zero nonce, so two calls in the same second reused the same
+// (key, nonce) pair and the whole thing was brute-forceable in milliseconds.
+func TestAESEncrypt_WeakPasswordIsNotDerivedFromClock(t *testing.T) {
+	in := []byte("same plaintext, same second")
+
+	first, err := EncryptAES(in, nil)
+	assert.NoError(t, err)
+
+	second, err := EncryptAES(in, nil)
+	assert.NoError(t, err)
+
+	assert.NotEqual(t, first[:saltSize], second[:saltSize], "salt must be per-call random")
+	assert.NotEqual(t,
+		first[saltSize:saltSize+nonceSize], second[saltSize:saltSize+nonceSize],
+		"nonce must be per-call random",
+	)
+	assert.NotEqual(t, first[saltSize+nonceSize:], second[saltSize+nonceSize:],
+		"identical plaintext must not produce identical ciphertext",
+	)
+}
+
+func TestAESDecrypt_TooShort(t *testing.T) {
+	_, err := decryptAES(make([]byte, saltSize-1), []byte("pw"))
+	assert.ErrorIs(t, err, ErrCiphertextTooShort)
+
+	_, err = decryptAES(make([]byte, saltSize+nonceSize-1), []byte("pw"))
+	assert.ErrorIs(t, err, ErrCiphertextTooShort)
 }
