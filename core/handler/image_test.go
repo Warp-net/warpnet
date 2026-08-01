@@ -271,6 +271,99 @@ func validateExif(t *testing.T, data []byte) {
 	assert.True(t, isFound, "validate: meta data not found")
 }
 
+// Layout produced by security.EncryptAES and embedded verbatim into media
+// files: salt || nonce || ciphertext || tag. Pinned here so that a change to
+// the sealing format cannot land without the media handlers noticing — the
+// security package tests alone would not catch it.
+const (
+	metaSaltSize  = 16
+	metaNonceSize = 12
+	metaTagSize   = 16
+)
+
+func assertSealedMediaMeta(t *testing.T, sealed []byte) {
+	t.Helper()
+
+	assert.Greater(t, len(sealed), metaSaltSize+metaNonceSize+metaTagSize,
+		"sealed meta must carry salt, nonce, ciphertext and tag")
+
+	salt := sealed[:metaSaltSize]
+	nonce := sealed[metaSaltSize : metaSaltSize+metaNonceSize]
+
+	// Regression: the key used to come from a shuffled clock reading with a
+	// fixed all-zero nonce, which made the metadata brute-forceable in ms.
+	assert.NotEqual(t, make([]byte, metaSaltSize), salt, "salt must be random, not all-zero")
+	assert.NotEqual(t, make([]byte, metaNonceSize), nonce, "nonce must be random, not all-zero")
+
+	for _, marker := range []string{nodeMetaKey, userMetaKey, macMetaKey} {
+		assert.False(t, bytes.Contains(sealed, []byte(marker)),
+			"plaintext marker %q must not survive sealing", marker)
+	}
+}
+
+func readExifMeta(t *testing.T, data []byte) []byte {
+	t.Helper()
+
+	parser := jis.NewJpegMediaParser()
+
+	intfc, err := parser.ParseBytes(data)
+	assert.NoError(t, err)
+
+	sl, ok := intfc.(*jis.SegmentList)
+	assert.True(t, ok, "read exif meta: not a segment list")
+
+	_, _, exifTags, err := sl.DumpExif()
+	assert.NoError(t, err)
+
+	for _, et := range exifTags {
+		if et.TagName != imageDescriptionTag {
+			continue
+		}
+		decoded, err := base64.StdEncoding.DecodeString(et.FormattedFirst)
+		assert.NoError(t, err)
+		return decoded
+	}
+
+	t.Fatal("read exif meta: image description tag not found")
+	return nil
+}
+
+func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
+	meta, _, err := buildEncryptedMediaMeta(n{}, u{})
+	assert.NoError(t, err)
+
+	assertSealedMediaMeta(t, meta)
+
+	parts := strings.SplitN(testImagePNG, ",", 2)
+
+	imgBytes, err := base64.StdEncoding.DecodeString(parts[1])
+	assert.NoError(t, err)
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	assert.NoError(t, err)
+
+	var imageBuf bytes.Buffer
+	err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100})
+	assert.NoError(t, err)
+
+	amended, err := amendExifMetadata(imageBuf.Bytes(), meta)
+	assert.NoError(t, err)
+
+	// The blob must survive the EXIF round trip byte for byte.
+	assert.Equal(t, meta, readExifMeta(t, amended))
+}
+
+func TestMediaMeta_EachUploadSealsAfresh(t *testing.T) {
+	first, _, err := buildEncryptedMediaMeta(n{}, u{})
+	assert.NoError(t, err)
+
+	second, _, err := buildEncryptedMediaMeta(n{}, u{})
+	assert.NoError(t, err)
+
+	assert.NotEqual(t, first, second, "identical metadata must not seal identically")
+	assert.NotEqual(t, first[:metaSaltSize], second[:metaSaltSize], "salt must be per-upload")
+}
+
 // A warm cache for a known foreign (e.g. Mastodon) user must be served from
 // disk without a gateway round-trip, so avatars survive node restarts.
 func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
