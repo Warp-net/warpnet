@@ -27,6 +27,10 @@ resulting from the use or misuse of this software.
 
 package handler
 
+// The interfaces and helpers shared with the image pipeline —
+// MediaNodeInformer, MediaUserFetcher, MediaStreamer and
+// buildEncryptedMediaMeta — are declared in image.go.
+
 import (
 	"bytes"
 	"encoding/base64"
