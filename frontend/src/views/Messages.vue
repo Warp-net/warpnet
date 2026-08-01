@@ -118,7 +118,7 @@ resulting from the use or misuse of this software.
       <div class="px-5 py-2 border-b border-lighter bg-white flex items-center justify-center">
         <i class="fas fa-lock text-xs text-dark mr-2" aria-hidden="true"></i>
         <p class="text-xs text-dark text-center">
-          Messages are end-to-end encrypted and stored only on your device and theirs.
+          Message sending is end-to-end encrypted and stored only on your device and theirs.
         </p>
       </div>
 
