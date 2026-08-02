@@ -338,6 +338,14 @@ func storeTweet(
 
 // Get retrieves a tweet by its ID
 func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err error) {
+	// The prefix builder panics on an empty root, so reject malformed
+	// identifiers here instead of letting a peer's request kill the node.
+	if userID == "" {
+		return tweet, local.DBError("get tweet: no user id")
+	}
+	if tweetID == "" {
+		return tweet, local.DBError("get tweet: no tweet id")
+	}
 	t, _, err := get(repo.db, userID, tweetID)
 	return t, err
 }

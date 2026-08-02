@@ -79,8 +79,10 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-	pflag.Parse()
+	if !isTestBinary() {
+		pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+		pflag.Parse()
+	}
 
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
@@ -151,6 +153,22 @@ func init() {
 			Format: logFormat(strings.TrimSpace(strings.ToLower(viper.GetString("logging.format")))),
 		},
 	}
+}
+
+// isTestBinary reports whether this process is a `go test` binary. pflag.Parse
+// there would swallow the -test.* arguments and, through AddGoFlagSet, mark
+// flag.CommandLine as parsed with no arguments, silently disabling -test.run,
+// -test.v and -test.coverprofile for every package importing config.
+func isTestBinary() bool {
+	if strings.HasSuffix(strings.TrimSuffix(os.Args[0], ".exe"), ".test") {
+		return true
+	}
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-test.") || strings.HasPrefix(arg, "--test.") {
+			return true
+		}
+	}
+	return false
 }
 
 func Config() config {

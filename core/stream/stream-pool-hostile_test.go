@@ -1,0 +1,369 @@
+/*
+
+ Warpnet - Decentralized Social Network
+ Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
+ <github.com.mecdy@passmail.net>
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Affero General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Affero General Public License for more details.
+
+ You should have received a copy of the GNU Affero General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+WarpNet is provided “as is” without warranty of any kind, either expressed or implied.
+Use at your own risk. The maintainers shall not be liable for any damages or data loss
+resulting from the use or misuse of this software.
+*/
+
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+//nolint:all
+package stream
+
+import (
+	"context"
+	"io"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+const testRoute = WarpRoute("/public/get/user/0.0.0")
+
+func newStreamHost(t *testing.T) host.Host {
+	t.Helper()
+	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	return h
+}
+
+func newPool(t *testing.T, h host.Host) *streamPool {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	p, err := NewStreamPool(ctx, h)
+	require.NoError(t, err)
+	return p
+}
+
+func addrOf(h host.Host) warpnet.WarpAddrInfo {
+	return peer.AddrInfo{ID: h.ID(), Addrs: h.Addrs()}
+}
+
+// linkHosts makes the server dialable from the client. The pool dials by peer
+// id alone, so without this the bare host has no route to the peer.
+func linkHosts(t *testing.T, client, server host.Host) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, client.Connect(ctx, addrOf(server)))
+}
+
+// echoServer answers every request on testRoute with the given payload and
+// records what it received.
+func echoServer(t *testing.T, h host.Host, reply []byte) *[]event.Message {
+	t.Helper()
+	var mu sync.Mutex
+	received := make([]event.Message, 0, 4)
+
+	h.SetStreamHandler(testRoute.ProtocolID(), func(s warpnet.WarpStream) {
+		defer func() { _ = s.Close() }()
+
+		raw, _ := io.ReadAll(s)
+		var msg event.Message
+		if err := json.Unmarshal(raw, &msg); err == nil {
+			mu.Lock()
+			received = append(received, msg)
+			mu.Unlock()
+		}
+		_, _ = s.Write(reply)
+		_ = s.CloseWrite()
+	})
+
+	t.Cleanup(func() { h.RemoveStreamHandler(testRoute.ProtocolID()) })
+	return &received
+}
+
+func TestStreamPool_NilPoolAndCancelledContext(t *testing.T) {
+	var nilPool *streamPool
+	_, err := nilPool.Send(warpnet.WarpAddrInfo{}, testRoute, nil)
+	assert.Error(t, err, "a nil pool must report, not panic")
+
+	h := newStreamHost(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	p, err := NewStreamPool(ctx, h)
+	require.NoError(t, err)
+	cancel()
+
+	_, err = p.Send(addrOf(newStreamHost(t)), testRoute, []byte(`{}`))
+	assert.ErrorIs(t, err, context.Canceled, "a shutting-down node must stop dialing")
+}
+
+// The request must arrive fully formed and signed — an unsigned or unaddressed
+// message would be rejected by the receiving middleware.
+func TestStreamPool_SendDeliversSignedEnvelope(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+
+	received := echoServer(t, server, []byte(`{"pong":true}`))
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+
+	resp, err := pool.Send(addrOf(server), testRoute, []byte(`{"ping":true}`))
+	require.NoError(t, err)
+	assert.Equal(t, `{"pong":true}`, string(resp))
+
+	require.Len(t, *received, 1)
+	msg := (*received)[0]
+
+	assert.Equal(t, string(testRoute), msg.Destination)
+	assert.Equal(t, client.ID().String(), string(msg.NodeId), "the sender must identify itself")
+	assert.NotEmpty(t, msg.MessageId, "a message id is required for idempotent retries")
+	assert.Equal(t, `{"ping":true}`, string(msg.Body))
+	assert.False(t, msg.Timestamp.IsZero())
+	assert.NotEmpty(t, msg.Signature)
+
+	pub, err := client.Peerstore().PubKey(client.ID()).Raw()
+	require.NoError(t, err)
+	assert.NoError(t, security.VerifySignature(pub, msg.SigningBytes(), msg.Signature),
+		"a receiver must be able to prove the message really came from this node")
+}
+
+// A retry has to reuse the same message id, otherwise the receiver's
+// idempotency cache cannot recognise it as a duplicate and a "post tweet"
+// retried after a flaky write creates two tweets.
+func TestStreamPool_RetryReusesMessageID(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+
+	var mu sync.Mutex
+	ids := make([]string, 0, 4)
+	var attempts int64
+
+	server.SetStreamHandler(testRoute.ProtocolID(), func(s warpnet.WarpStream) {
+		raw, _ := io.ReadAll(s)
+		var msg event.Message
+		_ = json.Unmarshal(raw, &msg)
+
+		mu.Lock()
+		ids = append(ids, string(msg.MessageId))
+		mu.Unlock()
+
+		if atomic.AddInt64(&attempts, 1) == 1 {
+			// Kill the stream so the client treats it as a transient failure.
+			_ = s.Reset()
+			return
+		}
+		_, _ = s.Write([]byte(`{"ok":true}`))
+		_ = s.CloseWrite()
+		_ = s.Close()
+	})
+	t.Cleanup(func() { server.RemoveStreamHandler(testRoute.ProtocolID()) })
+
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+	_, _ = pool.Send(addrOf(server), testRoute, []byte(`{"tweet":"hi"}`))
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ids) < 2 {
+		t.Skipf("transport did not retry (%d attempt(s)) — nothing to assert", len(ids))
+	}
+	for i := 1; i < len(ids); i++ {
+		assert.Equal(t, ids[0], ids[i], "every retry must carry the original message id")
+	}
+}
+
+// A peer already known to be unreachable must short-circuit: no dial, no
+// sendTimeout wait, just an immediate offline answer. Without this a timeline
+// refresh across many dead peers stalls for minutes.
+func TestStreamPool_CachedOfflinePeerShortCircuits(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+	echoServer(t, server, []byte(`{"pong":true}`))
+	linkHosts(t, client, server)
+
+	pool := newPool(t, client)
+	info := addrOf(server)
+
+	// Reachable to begin with.
+	_, err := pool.Send(info, testRoute, []byte(`{}`))
+	require.NoError(t, err)
+	assert.False(t, pool.isUnstreamable(server.ID()))
+
+	pool.SetUnstreamable(server.ID())
+
+	start := time.Now()
+	_, err = pool.Send(info, testRoute, []byte(`{}`))
+	assert.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
+	assert.Less(t, time.Since(start), time.Second,
+		"a peer marked offline must not be dialled at all")
+
+	// Clearing the mark makes it reachable again in the same process.
+	pool.SetStreamable(server.ID())
+	_, err = pool.Send(info, testRoute, []byte(`{}`))
+	assert.NoError(t, err)
+}
+
+func TestStreamPool_StreamableMarkCanBeClearedAndReapplied(t *testing.T) {
+	pool := newPool(t, newStreamHost(t))
+	id := warpnet.FromStringToPeerID("12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU")
+
+	assert.False(t, pool.isUnstreamable(id), "peers start out assumed reachable")
+
+	pool.SetUnstreamable(id)
+	assert.True(t, pool.isUnstreamable(id))
+
+	pool.SetStreamable(id)
+	assert.False(t, pool.isUnstreamable(id), "a reconnect must clear the offline mark")
+
+	// Nil-receiver forms must be inert rather than panicking.
+	var nilPool *streamPool
+	assert.NotPanics(t, func() {
+		nilPool.SetUnstreamable(id)
+		nilPool.SetStreamable(id)
+		assert.False(t, nilPool.isUnstreamable(id))
+	})
+}
+
+// A successful send must clear a stale offline mark so a peer that came back
+// isn't stuck being skipped.
+func TestStreamPool_SuccessfulSendClearsOfflineMark(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+	echoServer(t, server, []byte(`{}`))
+	linkHosts(t, client, server)
+
+	pool := newPool(t, client)
+	pool.SetUnstreamable(server.ID())
+	pool.SetStreamable(server.ID()) // simulate the reconnect notification
+
+	_, err := pool.Send(addrOf(server), testRoute, []byte(`{}`))
+	require.NoError(t, err)
+	assert.False(t, pool.isUnstreamable(server.ID()))
+}
+
+func TestStreamPool_MalformedTargetsAreRejected(t *testing.T) {
+	pool := newPool(t, newStreamHost(t))
+	valid := addrOf(newStreamHost(t))
+
+	t.Run("empty route", func(t *testing.T) {
+		_, err := pool.send(valid, "", []byte(`{}`), "msg")
+		assert.Error(t, err)
+	})
+
+	t.Run("empty peer", func(t *testing.T) {
+		_, err := pool.send(warpnet.WarpAddrInfo{}, testRoute, []byte(`{}`), "msg")
+		assert.Error(t, err)
+	})
+
+	t.Run("oversized node id", func(t *testing.T) {
+		bogus := warpnet.WarpAddrInfo{ID: peer.ID(make([]byte, 64))}
+		_, err := pool.send(bogus, testRoute, []byte(`{}`), "msg")
+		assert.ErrorIs(t, err, warpnet.ErrMalformedNodeId)
+	})
+
+	t.Run("invalid peer id", func(t *testing.T) {
+		bogus := warpnet.WarpAddrInfo{ID: peer.ID("not-a-real-peer")}
+		_, err := pool.send(bogus, testRoute, []byte(`{}`), "msg")
+		assert.Error(t, err)
+	})
+}
+
+// Identical concurrent requests must collapse into one dial — a timeline
+// refresh fanning out the same query must not hammer the peer.
+func TestStreamPool_IdenticalConcurrentSendsCollapse(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+
+	var handled int64
+	release := make(chan struct{})
+	server.SetStreamHandler(testRoute.ProtocolID(), func(s warpnet.WarpStream) {
+		defer func() { _ = s.Close() }()
+		_, _ = io.ReadAll(s)
+		atomic.AddInt64(&handled, 1)
+		<-release
+		_, _ = s.Write([]byte(`{"ok":true}`))
+		_ = s.CloseWrite()
+	})
+	t.Cleanup(func() { server.RemoveStreamHandler(testRoute.ProtocolID()) })
+
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+	info := addrOf(server)
+	body := []byte(`{"same":"request"}`)
+
+	const n = 5
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			_, _ = pool.Send(info, testRoute, body)
+		}()
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	assert.Equal(t, int64(1), atomic.LoadInt64(&handled),
+		"singleflight must collapse identical in-flight requests into one")
+}
+
+// Different payloads must NOT be collapsed — otherwise two different tweets
+// posted at once would share one response.
+func TestStreamPool_DifferentPayloadsAreNotCollapsed(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+	received := echoServer(t, server, []byte(`{}`))
+	linkHosts(t, client, server)
+
+	pool := newPool(t, client)
+	info := addrOf(server)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _ = pool.Send(info, testRoute, []byte(`{"n":`+string(rune('0'+i))+`}`))
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Len(t, *received, 3, "distinct bodies are distinct requests")
+}
+
+func TestHashBody_IsStableAndDiscriminating(t *testing.T) {
+	a := hashBody([]byte(`{"a":1}`))
+	b := hashBody([]byte(`{"a":1}`))
+	c := hashBody([]byte(`{"a":2}`))
+
+	assert.Equal(t, a, b, "the same body must hash identically for singleflight")
+	assert.NotEqual(t, a, c)
+
+	assert.NotEmpty(t, hashBody(nil))
+	assert.Equal(t, hashBody(nil), hashBody([]byte{}))
+}

@@ -319,6 +319,11 @@ func (db *DB) runEventualGC() {
 }
 
 func (db *DB) Stats() map[string]string {
+	// The dashboard polls this; a stopped store must report nothing rather
+	// than dereference a nil badger handle.
+	if db == nil || !db.isRunning.Load() {
+		return map[string]string{}
+	}
 	lsm, vlog := db.badger.Size()
 	size := lsm + vlog
 
@@ -887,9 +892,12 @@ func (db *DB) GC() {
 	if !db.isRunning.Load() {
 		return
 	}
+	// RunValueLogGC returns nil only when it actually rewrote a file, so keep
+	// going while that holds and stop on anything else. Looping on ErrNoRewrite
+	// alone would spin a core forever in in-memory mode (ErrGCInMemoryMode) or
+	// on a persistent I/O error.
 	for {
-		err := db.badger.RunValueLogGC(discardRatio)
-		if errors.Is(err, badger.ErrNoRewrite) {
+		if err := db.badger.RunValueLogGC(discardRatio); err != nil {
 			return
 		}
 	}

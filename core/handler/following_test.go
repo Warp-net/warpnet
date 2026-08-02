@@ -21,6 +21,10 @@ type stubFollowRepo struct {
 	getFollowingsFn func(userId string, limit *uint64, cursor *string) ([]string, string, error)
 	isFollowingFn   func(ownerId, otherUserId string) bool
 	isFollowerFn    func(ownerId, otherUserId string) bool
+
+	addFollowRequestFn    func(targetUserId, followerId string) error
+	removeFollowRequestFn func(targetUserId, followerId string) error
+	listFollowRequestsFn  func(targetUserId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func (s stubFollowRepo) Follow(from, to string) error {
@@ -54,14 +58,23 @@ func (s stubFollowRepo) IsFollowing(ownerId, otherUserId string) bool {
 	return false
 }
 func (s stubFollowRepo) AddFollowRequest(targetUserId, followerId string) error {
+	if s.addFollowRequestFn != nil {
+		return s.addFollowRequestFn(targetUserId, followerId)
+	}
 	return nil
 }
 
 func (s stubFollowRepo) RemoveFollowRequest(targetUserId, followerId string) error {
+	if s.removeFollowRequestFn != nil {
+		return s.removeFollowRequestFn(targetUserId, followerId)
+	}
 	return nil
 }
 
 func (s stubFollowRepo) ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error) {
+	if s.listFollowRequestsFn != nil {
+		return s.listFollowRequestsFn(targetUserId, limit, cursor)
+	}
 	return nil, "end", nil
 }
 
