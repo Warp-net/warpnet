@@ -111,6 +111,49 @@ resulting from the use or misuse of this software.
             </button>
             <div v-if="!videoKey" class="text-xs text-dark mt-1">Uploading video…</div>
           </div>
+          <div v-if="poll" class="mt-2 mb-2 border border-lighter rounded p-3">
+            <div v-for="(option, index) in poll.options" :key="index" class="flex items-center mb-2">
+              <label :for="`poll-option-${index}`" class="sr-only">Choice {{ index + 1 }}</label>
+              <input
+                  :id="`poll-option-${index}`"
+                  v-model="poll.options[index]"
+                  type="text"
+                  :placeholder="`Choice ${index + 1}`"
+                  :maxlength="pollOptionCharLimit"
+                  class="w-full px-3 py-2 border border-lighter rounded focus:outline-none"
+              />
+              <button
+                  v-if="poll.options.length > pollMinOptions"
+                  @click="removePollOption(index)"
+                  type="button"
+                  class="ml-2 rounded-full w-9 h-9 flex-none flex items-center justify-center hover:bg-lighter"
+                  :aria-label="`Remove choice ${index + 1}`"
+                  title="Remove choice"
+              >
+                <i class="fas fa-times text-dark" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="flex items-center justify-between">
+              <button
+                  v-if="poll.options.length < pollMaxOptions"
+                  @click="addPollOption"
+                  type="button"
+                  class="text-sm text-blue hover:underline"
+              >
+                <i class="fas fa-plus mr-1" aria-hidden="true"></i>Add a choice
+              </button>
+              <span v-else></span>
+              <div class="flex items-center text-sm">
+                <label for="poll-length" class="text-dark mr-2">Poll length</label>
+                <!-- bg-white, not the UA default: the global CSS themes input
+                     and textarea but not select, so without a mapped surface
+                     the themed text lands on light grey in dark mode. -->
+                <select id="poll-length" v-model="poll.durationHours" class="bg-white border border-lighter rounded px-2 py-1">
+                  <option v-for="d in pollDurations" :key="d.hours" :value="d.hours">{{ d.label }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="flex items-center justify-between border-t border-lighter pt-2">
             <div class="flex items-center">
               <button
@@ -150,7 +193,15 @@ resulting from the use or misuse of this software.
                   type="file"
                   class="hidden"
               />
-              <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Add poll (coming soon)" title="Coming soon">
+              <button
+                  @click="togglePoll"
+                  class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                  :class="poll ? 'text-white bg-blue' : 'text-blue'"
+                  type="button"
+                  aria-label="Add poll"
+                  :aria-pressed="!!poll"
+                  :title="poll ? 'Remove poll' : 'Add poll'"
+              >
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
               <div class="relative mr-3" data-emoji-anchor>
@@ -175,9 +226,9 @@ resulting from the use or misuse of this software.
               @click="addNewTweet"
               type="button"
               class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
-              :class="(tweet.text.trim() && pendingReads === 0 && !posting && !videoUploading) ? '' : 'opacity-50 cursor-not-allowed'"
-              :disabled="!tweet.text.trim() || pendingReads > 0 || posting || videoUploading"
-              :title="videoUploading ? 'Uploading video…' : (pendingReads > 0 ? 'Uploading image…' : '')"
+              :class="(tweet.text.trim() && pendingReads === 0 && !posting && !videoUploading && pollReady) ? '' : 'opacity-50 cursor-not-allowed'"
+              :disabled="!tweet.text.trim() || pendingReads > 0 || posting || videoUploading || !pollReady"
+              :title="videoUploading ? 'Uploading video…' : (pendingReads > 0 ? 'Uploading image…' : (!pollReady ? 'Fill in every poll choice' : ''))"
             >
               <span v-if="!posting">Tweet</span>
               <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Posting…</span>
@@ -248,6 +299,18 @@ import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validate
 import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
 
 const tweetCharLimit = 280;
+// Mirrors domain.PollMinOptions / PollMaxOptions / PollOptionRuneLimit — the
+// node rejects a poll outside these bounds.
+const pollMinOptions = 2;
+const pollMaxOptions = 4;
+const pollOptionCharLimit = 25;
+const pollDurations = [
+  {hours: 1, label: '1 hour'},
+  {hours: 6, label: '6 hours'},
+  {hours: 24, label: '1 day'},
+  {hours: 72, label: '3 days'},
+  {hours: 168, label: '7 days'},
+];
 
 export default {
   name: "Home",
@@ -286,6 +349,7 @@ export default {
       loadingMore: false,
       endOfFeed: false,
       showEmojiPicker: false,
+      poll: null,
     };
   },
   watch: {
@@ -318,6 +382,24 @@ export default {
       if (this.videoAttachment) return 'Only one video per post';
       if (this.imageAttachments.length > 0) return 'Remove images to attach a video';
       return 'Attach video (MP4 or MOV)';
+    },
+    pollMinOptions() {
+      return pollMinOptions;
+    },
+    pollMaxOptions() {
+      return pollMaxOptions;
+    },
+    pollOptionCharLimit() {
+      return pollOptionCharLimit;
+    },
+    pollDurations() {
+      return pollDurations;
+    },
+    // A half-filled poll would be rejected by the node, so hold the post
+    // button until every choice has text.
+    pollReady() {
+      if (!this.poll) return true;
+      return this.poll.options.every(o => o.trim());
     },
   },
   methods: {
@@ -467,8 +549,29 @@ export default {
     openAltModal(index) {
       this.altModalIndex = index;
     },
+    togglePoll() {
+      this.poll = this.poll ? null : {options: ['', ''], durationHours: 24};
+    },
+    addPollOption() {
+      if (this.poll.options.length >= pollMaxOptions) return;
+      this.poll.options.push('');
+    },
+    removePollOption(index) {
+      if (this.poll.options.length <= pollMinOptions) return;
+      this.poll.options.splice(index, 1);
+    },
+    // The wire carries an absolute deadline, not a duration, so every node
+    // reading the tweet closes the poll at the same moment.
+    pollPayload() {
+      if (!this.poll) return null;
+      const expiresAt = new Date(Date.now() + this.poll.durationHours * 3600000);
+      return {
+        options: this.poll.options.map(o => o.trim()),
+        expiresAt: expiresAt.toISOString(),
+      };
+    },
     async addNewTweet() {
-      if (this.posting || !this.tweet.text.trim()) return;
+      if (this.posting || !this.tweet.text.trim() || !this.pollReady) return;
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
       this.posting = true;
@@ -488,11 +591,14 @@ export default {
           // images and video, so it stays unambiguous on the other side.
           imageKeys = [this.videoPosterKey, ...imageKeys];
         }
-        await warpnetService.createTweet({text: draftText, imageKeys, videoKey: this.videoKey});
+        await warpnetService.createTweet({
+          text: draftText, imageKeys, videoKey: this.videoKey, poll: this.pollPayload(),
+        });
 
         this.tweet.text = "";
         this.imageAttachments = [];
         this.imageKeys = [];
+        this.poll = null;
         this.removeVideoAttachment();
         this.endOfFeed = false;
 

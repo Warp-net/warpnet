@@ -187,6 +187,7 @@ type Tweet struct {
 	Pinned        bool             `json:"pinned,omitempty"`
 	QuotedTweetId *string          `json:"quoted_tweet_id,omitempty"`
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
+	Poll          *Poll            `json:"poll,omitempty"`
 }
 
 // IsReply reports whether the tweet is a reply, i.e. it hangs off a parent
@@ -197,6 +198,27 @@ func (t *Tweet) IsReply() bool {
 
 func (t *Tweet) IsModerated() bool {
 	return t.Moderation != nil
+}
+
+const (
+	PollMinOptions      = 2
+	PollMaxOptions      = 4
+	PollOptionRuneLimit = 25
+)
+
+// Poll is an optional single-choice poll carried by a tweet. Only the
+// immutable definition lives here, so it travels with the tweet through
+// every existing distribution path (storage, gossip, timeline snapshots).
+// The votes themselves are held per node by the poll repo, keyed by tweet
+// id, and aggregated across the network the same way likes are.
+type Poll struct {
+	Options   []string  `json:"options"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// IsClosed reports whether the poll has stopped accepting votes.
+func (p *Poll) IsClosed() bool {
+	return p != nil && !p.ExpiresAt.IsZero() && time.Now().After(p.ExpiresAt)
 }
 
 type ModelType string

@@ -104,6 +104,7 @@ resulting from the use or misuse of this software.
       <p v-else class="pb-2 bg-red-300">
         Moderated: {{ tweet.moderation.reason }}.
       </p>
+      <PollWidget v-if="hasPoll" :tweet="tweet" />
       <div
         v-if="tweet.quoted_tweet_id"
         class="mb-2 border border-lighter rounded p-3 bg-lightest text-sm"
@@ -345,6 +346,7 @@ export default {
     ReportDialog: defineAsyncComponent(() => import('./ReportDialog.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
     YoutubeEmbed: defineAsyncComponent(() => import('./YoutubeEmbed.vue')),
+    PollWidget: defineAsyncComponent(() => import('./PollWidget.vue')),
   },
   data() {
     return {
@@ -388,6 +390,9 @@ export default {
     },
     hasVideo() {
       return !!(this.tweet && this.tweet.video_key);
+    },
+    hasPoll() {
+      return !!(this.tweet && this.tweet.poll && this.tweet.poll.options && this.tweet.poll.options.length > 0);
     },
     // A video post carries its first frame as the first image key (see the
     // composer in Home.vue), so it stands in as the poster rather than being

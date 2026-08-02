@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -283,6 +284,55 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: string(longText)}), nil)
 		if err == nil || err.Error() != "tweet text is too long" {
 			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("poll validation", func(t *testing.T) {
+		expires := time.Now().Add(time.Hour)
+		longOption := strings.Repeat("a", domain.PollOptionRuneLimit+1)
+		for _, tt := range []struct {
+			name string
+			poll *domain.Poll
+			want string
+		}{
+			{"too few options", &domain.Poll{Options: []string{"only"}, ExpiresAt: expires}, "poll: too few options"},
+			{"too many options", &domain.Poll{Options: []string{"a", "b", "c", "d", "e"}, ExpiresAt: expires}, "poll: too many options"},
+			{"no expiration", &domain.Poll{Options: []string{"a", "b"}}, "poll: empty expiration time"},
+			{"blank option", &domain.Poll{Options: []string{"a", "  "}, ExpiresAt: expires}, "poll: empty option"},
+			{"option too long", &domain.Poll{Options: []string{"a", longOption}, ExpiresAt: expires}, "poll: option is too long"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+				_, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "vote", Poll: tt.poll}), nil)
+				if err == nil || err.Error() != tt.want {
+					t.Fatalf("unexpected err: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("poll is broadcast to followers", func(t *testing.T) {
+		poll := &domain.Poll{Options: []string{"yes", "no"}, ExpiresAt: time.Now().Add(time.Hour)}
+		var published []byte
+		broadcaster := stubTweetBroadcaster{publishFn: func(_, _ string, bt []byte) error {
+			published = bt
+			return nil
+		}}
+		repo := stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+			tweet.Id = "tweet-1"
+			return tweet, nil
+		}}
+		h := StreamNewTweetHandler(broadcaster, stubAuth{owner: domain.Owner{UserId: owner}}, repo, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+
+		if _, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "vote", Poll: poll}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		var broadcast domain.Tweet
+		if err := json.Unmarshal(published, &broadcast); err != nil {
+			t.Fatalf("unmarshal broadcast: %v", err)
+		}
+		if broadcast.Poll == nil || len(broadcast.Poll.Options) != 2 {
+			t.Fatalf("followers must receive the poll, got: %+v", broadcast.Poll)
 		}
 	})
 

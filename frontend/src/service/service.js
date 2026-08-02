@@ -104,6 +104,8 @@ export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
 export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
+export const PUBLIC_POST_POLL_VOTE     = "/public/post/poll/vote/0.0.0"
+export const PUBLIC_GET_POLL           = "/public/get/poll/0.0.0"
 
 const stateMap = new Map();
 // localStorage key for the owner profile; persisted on login so reopening the
@@ -1492,7 +1494,7 @@ export const warpnetService = {
         return tweetsResp.tweets;
     },
 
-    async createTweet({text, imageKeys, videoKey}) {
+    async createTweet({text, imageKeys, videoKey, poll}) {
         const owner = this.getOwnerProfile()
 
         const request ={
@@ -1507,6 +1509,12 @@ export const warpnetService = {
         }
         if (videoKey) {
             request.body.video_key = videoKey;
+        }
+        if (poll) {
+            request.body.poll = {
+                options: poll.options,
+                expires_at: poll.expiresAt,
+            };
         }
 
         return await this.sendToNode(request);
@@ -1799,6 +1807,44 @@ export const warpnetService = {
 
         const unlikeResp = await this.sendToNode(request);
         return unlikeResp.count;
+    },
+
+    // voteInPoll casts a final vote on a tweet's poll and returns the tally
+    // the node knows about, in the same shape as getPollResults.
+    async voteInPoll(tweetId, userId, option, optionsNum) {
+        const owner = this.getOwnerProfile()
+
+        const request = {
+            path: PUBLIC_POST_POLL_VOTE,
+            body: {
+                user_id: userId,
+                tweet_id: tweetId,
+                owner_id: owner.user_id,
+                option: option,
+                options_num: optionsNum,
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    // getPollResults returns {votes, total_votes, voted_option}. votes is the
+    // per-option tally in option order; voted_option is null until this user
+    // has voted.
+    async getPollResults(tweetId, userId, optionsNum) {
+        const owner = this.getOwnerProfile()
+
+        const request = {
+            path: PUBLIC_GET_POLL,
+            body: {
+                user_id: userId,
+                tweet_id: tweetId,
+                owner_id: owner.user_id,
+                options_num: optionsNum,
+            },
+        }
+
+        return await this.sendToNode(request);
     },
 
     // viewTweet returns the new view count on success, or `null` if

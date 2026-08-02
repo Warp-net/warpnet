@@ -352,6 +352,7 @@ type memberRepos struct {
 	timelineRepo     *database.TimelineRepo
 	tweetRepo        *database.TweetRepo
 	likeRepo         *database.LikeRepo
+	pollRepo         *database.PollRepo
 	chatRepo         *database.ChatRepo
 	mediaRepo        *database.MediaRepo
 	notificationRepo *database.NotificationsRepo
@@ -378,6 +379,7 @@ func (m *MemberNode) setupHandlers(
 		timelineRepo:     database.NewTimelineRepo(db),
 		tweetRepo:        database.NewTweetRepo(db, statsDB),
 		likeRepo:         database.NewLikeRepo(db, statsDB),
+		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
@@ -524,6 +526,14 @@ func (m *MemberNode) engagementHandlers(
 		{
 			event.PRIVATE_GET_LIKES,
 			handler.StreamGetLikesHandler(r.likeRepo),
+		},
+		{
+			event.PUBLIC_POST_POLL_VOTE,
+			handler.StreamPollVoteHandler(r.pollRepo, r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_POLL,
+			handler.StreamGetPollHandler(r.pollRepo, r.tweetRepo, userRepo, m),
 		},
 	}
 }
