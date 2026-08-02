@@ -92,7 +92,13 @@ type ChatMessage struct {
 	ReceiverId string    `json:"receiver_id"`
 	SenderId   string    `json:"sender_id"`
 	Text       string    `json:"text"`
-	Status     string    `json:"status,omitempty"`
+
+	// ImageKey holds the video's still frame when VideoKey is set, the same
+	// convention tweets use with the first of their image keys.
+	ImageKey *string `json:"image_key,omitempty"`
+	VideoKey *string `json:"video_key,omitempty"`
+
+	Status string `json:"status,omitempty"`
 }
 
 // Error defines model for Error.

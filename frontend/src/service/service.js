@@ -2037,7 +2037,7 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async sendDirectMessage({chatId, receiverId, text, imageKey}) {
+    async sendDirectMessage({chatId, receiverId, text, imageKey, videoKey}) {
         const owner = this.getOwnerProfile();
         const request = {
             path: PUBLIC_POST_MESSAGE,
@@ -2047,6 +2047,12 @@ export const warpnetService = {
                 chat_id: chatId,
                 text: text,
             },
+        }
+        if (imageKey) {
+            request.body.image_key = imageKey;
+        }
+        if (videoKey) {
+            request.body.video_key = videoKey;
         }
 
         return await this.sendToNode(request);

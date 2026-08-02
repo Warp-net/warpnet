@@ -251,7 +251,23 @@ func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpn
 
 const messageLimit = 5000
 
+// Media keys are hex SHA-256 digests handed out by the media store. Anything
+// longer is a peer stuffing the chat database instead of naming an attachment.
+const mediaKeyLimit = 128
+
 const statusUndelivered = "undelivered"
+
+// mediaKey normalizes an attachment key: an absent one and an empty one mean
+// the same thing, and an oversized one is rejected outright.
+func mediaKey(key *string) (*string, bool) {
+	if key == nil || *key == "" {
+		return nil, true
+	}
+	if len(*key) > mediaKeyLimit {
+		return nil, false
+	}
+	return key, true
+}
 
 // StreamNewMessageHandler is for sending a new message
 func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ModerationNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
@@ -261,7 +277,17 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		if err != nil {
 			return nil, err
 		}
-		if ev.ChatId == "" || !strings.Contains(ev.ChatId, ":") || ev.Text == "" {
+		if ev.ChatId == "" || !strings.Contains(ev.ChatId, ":") {
+			return nil, warpnet.WarpError("message parameters are invalid")
+		}
+		imageKey, isImageKeyValid := mediaKey(ev.ImageKey)
+		videoKey, isVideoKeyValid := mediaKey(ev.VideoKey)
+		if !isImageKeyValid || !isVideoKeyValid {
+			return nil, warpnet.WarpError("message attachment key is invalid")
+		}
+		// An attachment is a message in itself, so text is only required
+		// when nothing is attached.
+		if ev.Text == "" && imageKey == nil && videoKey == nil {
 			return nil, warpnet.WarpError("message parameters are invalid")
 		}
 		if ev.SenderId == "" || ev.ReceiverId == "" {
@@ -319,6 +345,8 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			SenderId:   ev.SenderId,
 			ReceiverId: ev.ReceiverId,
 			Text:       ev.Text,
+			ImageKey:   imageKey,
+			VideoKey:   videoKey,
 			CreatedAt:  now,
 		}
 
@@ -369,6 +397,8 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 				SenderId:   ownerId,
 				ReceiverId: ev.ReceiverId,
 				Text:       ev.Text,
+				ImageKey:   imageKey,
+				VideoKey:   videoKey,
 				CreatedAt:  now,
 			}),
 		)

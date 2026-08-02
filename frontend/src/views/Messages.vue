@@ -140,7 +140,13 @@ resulting from the use or misuse of this software.
               </button>
               <div class="text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl" :class="message.pending ? 'bg-blue opacity-70' : 'bg-blue'">
                 <p v-if="message.text">{{ message.text }}</p>
-                <img v-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
+                <ChatVideo
+                    v-if="message.video_key"
+                    :videoKey="message.video_key"
+                    :senderId="message.sender_id"
+                    :poster="message.image || ''"
+                />
+                <img v-else-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
               </div>
               <p class="text-xs text-dark ml-2">
                 <span v-if="message.pending"><i class="fas fa-clock" aria-hidden="true"></i> Sending…</span>
@@ -156,7 +162,13 @@ resulting from the use or misuse of this software.
               />
               <div class="bg-lighter text-black py-2 px-4 rounded-tr-3xl rounded-tl-xl rounded-br-3xl">
                 <p v-if="message.text">{{ message.text }}</p>
-                <img v-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
+                <ChatVideo
+                    v-if="message.video_key"
+                    :videoKey="message.video_key"
+                    :senderId="message.sender_id"
+                    :poster="message.image || ''"
+                />
+                <img v-else-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
               </div>
               <p class="text-xs text-dark ml-2">{{ $filters.time(message.created_at) }}</p>
             </div>
@@ -173,11 +185,39 @@ resulting from the use or misuse of this software.
             <i class="fas fa-times text-red-600 group-hover:text-white text-xs" aria-hidden="true"></i>
           </button>
         </div>
+        <div v-if="videoAttachment" class="relative inline-block mb-2">
+          <!-- h-24, not max-h-*: this build generates no max-h utilities. -->
+          <video :src="videoAttachment.url" preload="metadata" class="h-24 rounded border border-lighter"></video>
+          <button @click="removeVideoAttachment" type="button" class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500 group" title="Remove video" aria-label="Remove video">
+            <i class="fas fa-times text-red-600 group-hover:text-white text-xs" aria-hidden="true"></i>
+          </button>
+          <p v-if="videoUploading" class="text-xs text-dark mt-1">Uploading video…</p>
+        </div>
         <div class="flex items-center">
-          <button @click="openFileInput()" type="button" class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue" aria-label="Attach image">
+          <button
+              @click="openFileInput()"
+              type="button"
+              class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+              :class="{'opacity-50 cursor-not-allowed': imageAttachDisabled}"
+              :disabled="imageAttachDisabled"
+              aria-label="Attach image"
+              :title="imageAttachTitle"
+          >
             <i class="far fa-image text-blue text-lg" aria-hidden="true"></i>
           </button>
           <input ref="messageImageInput" @change="fileChange()" accept="image/*" type="file" class="hidden" />
+          <button
+              @click="openVideoInput()"
+              type="button"
+              class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+              :class="{'opacity-50 cursor-not-allowed': videoAttachDisabled}"
+              :disabled="videoAttachDisabled"
+              aria-label="Attach video"
+              :title="videoAttachTitle"
+          >
+            <i class="fas fa-film text-blue text-lg" aria-hidden="true"></i>
+          </button>
+          <input ref="messageVideoInput" @change="videoFileChange()" :accept="acceptedVideoTypes" type="file" class="hidden" />
           <div class="relative mr-2" data-emoji-anchor>
             <button
                 type="button"
@@ -206,10 +246,11 @@ resulting from the use or misuse of this software.
           />
           <button
               @click="sendMessage"
-              :disabled="sending || (!text.length && !imageAttachment)"
+              :disabled="sendDisabled"
               class="ml-4 w-9 h-9 rounded-full flex items-center justify-center"
-              :class="(sending || (!text.length && !imageAttachment)) ? 'opacity-50 cursor-default' : 'hover:bg-lightblue'"
+              :class="sendDisabled ? 'opacity-50 cursor-default' : 'hover:bg-lightblue'"
               aria-label="Send message"
+              :title="videoUploading ? 'Uploading video…' : ''"
           >
             <i class="text-blue text-xl" :class="sending ? 'fas fa-circle-notch fa-spin' : 'fas fa-arrow-right'" aria-hidden="true"></i>
           </button>
@@ -254,6 +295,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {isMastodonUser} from "@/lib/network";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 
 // Mirrors messageLimit in core/handler/chat.go.
 const messageCharLimit = 5000;
@@ -266,6 +308,7 @@ export default {
     NewMessageOverlay: defineAsyncComponent(() => import('@/components/NewMessageOverlay.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
     EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
+    ChatVideo: defineAsyncComponent(() => import('@/components/ChatVideo.vue')),
   },
   data() {
     return {
@@ -282,6 +325,11 @@ export default {
       active: undefined,
       text: '',
       imageAttachment: undefined,
+      videoAttachment: undefined,
+      videoKey: '',
+      videoPosterKey: '',
+      videoPoster: '',
+      videoUploading: false,
       usersMap: new Map(),
       otherUser: undefined,
       refreshTimer: null,
@@ -303,6 +351,29 @@ export default {
     // instead of rendering as a clickable "Anonymous" row.
     visibleChats() {
       return this.chats.filter((c) => this.usersMap.has(c.other_user_id));
+    },
+    acceptedVideoTypes() {
+      return acceptedVideoAccept;
+    },
+    // A message carries either images or a video, never both: the still frame
+    // of a video already occupies the message's single image slot.
+    imageAttachDisabled() {
+      return !!this.videoAttachment;
+    },
+    imageAttachTitle() {
+      return this.videoAttachment ? 'Remove the video to attach an image' : 'Attach image';
+    },
+    videoAttachDisabled() {
+      return !!this.videoAttachment || !!this.imageAttachment;
+    },
+    videoAttachTitle() {
+      if (this.videoAttachment) return 'Only one video per message';
+      if (this.imageAttachment) return 'Remove the image to attach a video';
+      return 'Attach video (MP4 or MOV)';
+    },
+    sendDisabled() {
+      if (this.sending || this.videoUploading) return true;
+      return !this.text.length && !this.imageAttachment && !this.videoAttachment;
     },
   },
   methods: {
@@ -338,6 +409,94 @@ export default {
         this.$refs.messageImageInput.value = '';
       }
     },
+    openVideoInput() {
+      this.$refs.messageVideoInput.click();
+    },
+    async videoFileChange() {
+      const input = this.$refs.messageVideoInput;
+      const file = input && input.files && input.files[0];
+      if (input) {
+        input.value = '';
+      }
+      if (!file) return;
+
+      const problem = validateVideoFile(file);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+
+      this.removeVideoAttachment();
+      // The blob URL identifies this upload: if the user removes the clip or
+      // picks another while it is in flight, this run must stop touching the
+      // composer instead of attaching a key the user no longer wants. Compare
+      // the URL, not the object — Vue hands back a reactive proxy of it, which
+      // never equals the raw object by identity.
+      const url = URL.createObjectURL(file);
+      this.videoAttachment = {url, name: file.name};
+      this.videoUploading = true;
+      const isCurrent = () => this.videoAttachment && this.videoAttachment.url === url;
+
+      // The still frame is uploaded as an ordinary image and travels in the
+      // message's image key, so the recipient sees a preview without
+      // fetching the clip.
+      const poster = await this.captureAndUploadPoster(file);
+      if (isCurrent()) {
+        this.videoPoster = poster.dataUrl;
+        this.videoPosterKey = poster.key;
+      }
+
+      try {
+        const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
+        const key = await warpnetService.uploadVideo(dataUrl);
+        if (!isCurrent()) return;
+        if (!key) {
+          throw new Error('node returned an empty video key');
+        }
+        this.videoKey = key;
+      } catch (err) {
+        console.error('Failed to upload video:', err);
+        if (!isCurrent()) return;
+        toast.error(err?.message || 'Failed to upload video. Please try again.');
+        this.removeVideoAttachment();
+      } finally {
+        if (!this.videoAttachment || isCurrent()) {
+          this.videoUploading = false;
+        }
+      }
+    },
+    // Best effort: a clip the browser cannot decode must still send without
+    // a preview frame.
+    async captureAndUploadPoster(file) {
+      try {
+        const dataUrl = await captureVideoPoster(file);
+        if (!dataUrl) return {dataUrl: '', key: ''};
+        return {dataUrl, key: await warpnetService.uploadImage(dataUrl) || ''};
+      } catch (err) {
+        console.error('Failed to upload video poster:', err);
+        return {dataUrl: '', key: ''};
+      }
+    },
+    readFileAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('file read failed'));
+        reader.readAsDataURL(file);
+      });
+    },
+    removeVideoAttachment() {
+      if (this.videoAttachment && this.videoAttachment.url) {
+        URL.revokeObjectURL(this.videoAttachment.url);
+      }
+      this.videoAttachment = undefined;
+      this.videoKey = '';
+      this.videoPosterKey = '';
+      this.videoPoster = '';
+      if (this.$refs.messageVideoInput) {
+        this.$refs.messageVideoInput.value = '';
+      }
+    },
     gotoHome() {
       this.$router.push({
         name: "Home",
@@ -351,11 +510,15 @@ export default {
       });
     },
     async sendMessage() {
-      if (this.sending) return;
-      if (!this.active?.other_user_id || (this.text.length === 0 && !this.imageAttachment)) return;
+      if (this.sendDisabled) return;
+      if (!this.active?.other_user_id) return;
 
       const sentText = this.text;
       const sentImage = this.imageAttachment;
+      const sentVideo = this.videoAttachment;
+      const sentVideoKey = this.videoKey;
+      const sentVideoPosterKey = this.videoPosterKey;
+      const sentVideoPoster = this.videoPoster;
 
       // Optimistic bubble with a temp id and a "Sending…" status, so the
       // message shows immediately instead of vanishing until the refetch.
@@ -365,14 +528,15 @@ export default {
         pending: true,
         sender_id: this.ownerProfile.user_id,
         text: sentText,
-        image: sentImage || undefined,
+        image: sentImage || sentVideoPoster || undefined,
+        video_key: sentVideoKey || undefined,
         created_at: new Date().toISOString(),
       }];
       this.scrollToEnd();
 
       this.sending = true;
       try {
-        await this.deliverMessage(sentText, sentImage);
+        await this.deliverMessage(sentText, sentImage, sentVideoKey, sentVideoPosterKey);
         // The local node accepted the message (queued to its outbox and
         // re-sent when the recipient comes online), so it's safe to clear
         // the composer now.
@@ -381,6 +545,7 @@ export default {
         if (this.$refs.messageImageInput) {
           this.$refs.messageImageInput.value = '';
         }
+        this.removeVideoAttachment();
       } catch (err) {
         // The local node itself rejected the send — nothing was queued.
         // Drop the optimistic bubble and keep the text so the user can retry.
@@ -388,12 +553,16 @@ export default {
         this.messages = this.messages.filter((m) => m.id !== tempId);
         this.text = sentText;
         this.imageAttachment = sentImage;
+        this.videoAttachment = sentVideo;
+        this.videoKey = sentVideoKey;
+        this.videoPosterKey = sentVideoPosterKey;
+        this.videoPoster = sentVideoPoster;
         toast.error(err?.message || "Couldn't send the message. Please try again.");
       } finally {
         this.sending = false;
       }
     },
-    async deliverMessage(sentText, sentImage) {
+    async deliverMessage(sentText, sentImage, sentVideoKey, sentVideoPosterKey) {
       if (!this.active.id) {
         const chat = await warpnetService.createChat(this.active.other_user_id);
         if (!chat || !chat.id) {
@@ -412,7 +581,8 @@ export default {
         }
       }
 
-      let imageKey = '';
+      // A video message carries its still frame in the image key instead.
+      let imageKey = sentVideoKey ? sentVideoPosterKey : '';
       if (sentImage) {
         imageKey = await warpnetService.uploadImage(sentImage);
       }
@@ -422,6 +592,7 @@ export default {
         receiverId: this.active.other_user_id,
         text: sentText,
         imageKey: imageKey,
+        videoKey: sentVideoKey,
       });
 
       // Past this point the message is safely queued on the node. Refreshing
@@ -432,7 +603,8 @@ export default {
 
         const chatIndex = this.chats.findIndex((c) => c.id === this.active.id);
         if (chatIndex !== -1) {
-          const preview = sentText || (imageKey ? '[image]' : this.chats[chatIndex].last_message);
+          const attachmentPreview = sentVideoKey ? '[video]' : (imageKey ? '[image]' : '');
+          const preview = sentText || attachmentPreview || this.chats[chatIndex].last_message;
           this.chats.splice(chatIndex, 1, {
             ...this.chats[chatIndex],
             last_message: preview,

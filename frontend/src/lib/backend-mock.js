@@ -436,6 +436,7 @@ function generateResponse(arg) {
                 receiver_id: arg.body.receiver_id,
                 text: arg.body.text,
                 image_key: arg.body.image_key || "",
+                video_key: arg.body.video_key || "",
                 created_at: new Date().toISOString(),
             };
             const targetChat = mockMap.get("chat:"+arg.body.chat_id);
