@@ -1,0 +1,72 @@
+name: Heap Escape Analysis
+
+# Informational only: reports how many variables the compiler moves from the
+# stack to the heap. It never fails the build on the numbers it reports.
+
+env:
+  GO_VERSION: "1.26.0"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  escape-analysis:
+    name: Stack to heap escape rate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Collect escape analysis
+        run: |
+          go build -gcflags=-m ./... 2> escape-analysis.log \
+            || echo "::warning::build reported errors, the report only covers packages that compiled"
+
+      - name: Report escape rate
+        id: report
+        run: |
+          LC_ALL=C awk -v out="$GITHUB_OUTPUT" \
+            -f .github/scripts/heap-escape-report.awk escape-analysis.log \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment the report on the pull request
+        if: github.event_name == 'pull_request'
+        continue-on-error: true # forks get a read only token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          MARKER: "<!-- heap-escape-analysis -->"
+        run: |
+          {
+            echo "$MARKER"
+            LC_ALL=C awk -v details=1 \
+              -f .github/scripts/heap-escape-report.awk escape-analysis.log
+          } > escape-comment.md
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                 --jq "[.[] | select(.body | startswith(\"$MARKER\"))] | .[0].id // empty")
+          if [ -n "$id" ]; then # refresh the existing report instead of stacking a new one
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" \
+              -F body=@escape-comment.md > /dev/null
+          else
+            gh pr comment "$PR" --body-file escape-comment.md
+          fi
+
+      - name: Upload escape analysis log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: heap-escape-analysis
+          path: escape-analysis.log
