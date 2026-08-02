@@ -87,7 +87,9 @@ func init() {
 	// there is nothing to import anyway.
 	pflag.Parse()
 
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	// Dashes are replaced too: without it "node.print-psk" would map to
+	// NODE_PRINT-PSK, which no shell or compose file can set.
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 
 	_ = viper.BindPFlags(pflag.CommandLine)
