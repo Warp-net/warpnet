@@ -5,8 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubBlockUserResolver struct {
@@ -254,5 +258,158 @@ func TestStreamUnmuteHandler(t *testing.T) {
 		if resp != event.Accepted {
 			t.Fatal("expected Accepted")
 		}
+	})
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	bt, err := json.Marshal(v)
+	require.NoError(t, err)
+	return bt
+}
+
+func TestStreamGetMutesHandler(t *testing.T) {
+	t.Run("malformed payload is rejected", func(t *testing.T) {
+		_, err := StreamGetMutesHandler(stubMutesRepo{})([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("empty user id is rejected", func(t *testing.T) {
+		_, err := StreamGetMutesHandler(stubMutesRepo{})(mustJSON(t, event.GetMutesEvent{}), nil)
+		assert.Error(t, err, "an anonymous request must not enumerate someone's mute list")
+	})
+
+	t.Run("storage failure surfaces", func(t *testing.T) {
+		repo := stubMutesRepo{listFn: func(string, *uint64, *string) ([]string, string, error) {
+			return nil, "", errors.New("db down")
+		}}
+		_, err := StreamGetMutesHandler(repo)(mustJSON(t, event.GetMutesEvent{UserId: "u1"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("ids and cursor are passed through", func(t *testing.T) {
+		var gotUser string
+		var gotLimit *uint64
+		var gotCursor *string
+		repo := stubMutesRepo{listFn: func(m string, l *uint64, c *string) ([]string, string, error) {
+			gotUser, gotLimit, gotCursor = m, l, c
+			return []string{"muted-a", "muted-b"}, "next-page", nil
+		}}
+
+		limit := uint64(2)
+		cursor := "page-1"
+		out, err := StreamGetMutesHandler(repo)(mustJSON(t, event.GetMutesEvent{
+			UserId: "u1", Limit: &limit, Cursor: &cursor,
+		}), nil)
+		require.NoError(t, err)
+
+		resp, ok := out.(event.GetMutesResponse)
+		require.True(t, ok)
+		assert.Equal(t, []domain.ID{"muted-a", "muted-b"}, resp.Ids)
+		assert.Equal(t, "next-page", resp.Cursor)
+		assert.Equal(t, "u1", gotUser)
+		require.NotNil(t, gotLimit)
+		assert.Equal(t, uint64(2), *gotLimit)
+		require.NotNil(t, gotCursor)
+		assert.Equal(t, "page-1", *gotCursor)
+	})
+
+	t.Run("empty mute list is an empty slice not nil", func(t *testing.T) {
+		repo := stubMutesRepo{listFn: func(string, *uint64, *string) ([]string, string, error) {
+			return nil, "", nil
+		}}
+		out, err := StreamGetMutesHandler(repo)(mustJSON(t, event.GetMutesEvent{UserId: "u1"}), nil)
+		require.NoError(t, err)
+
+		resp := out.(event.GetMutesResponse)
+		assert.NotNil(t, resp.Ids, "clients decode an absent array as a parse failure")
+		assert.Empty(t, resp.Ids)
+	})
+}
+
+func TestEscalateToPeerBlocklist(t *testing.T) {
+	t.Run("nil dependencies are a no-op", func(t *testing.T) {
+		assert.NotPanics(t, func() { escalateToPeerBlocklist(nil, &stubPeerBlocklister{}, "u") })
+		assert.NotPanics(t, func() { escalateToPeerBlocklist(stubBlockUserResolver{}, nil, "u") })
+	})
+
+	t.Run("blocks the target's node", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		escalateToPeerBlocklist(stubBlockUserResolver{}, peers, "victim")
+		assert.Equal(t, []string{"node-victim"}, peers.captured)
+	})
+
+	t.Run("unknown user is skipped quietly", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		users := stubBlockUserResolver{getFn: func(string) (domain.User, error) {
+			return domain.User{}, database.ErrUserNotFound
+		}}
+		escalateToPeerBlocklist(users, peers, "ghost")
+		assert.Empty(t, peers.captured)
+	})
+
+	t.Run("lookup failure is swallowed", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		users := stubBlockUserResolver{getFn: func(string) (domain.User, error) {
+			return domain.User{}, errors.New("db down")
+		}}
+		escalateToPeerBlocklist(users, peers, "victim")
+		assert.Empty(t, peers.captured)
+	})
+
+	t.Run("user without a node id is skipped", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		users := stubBlockUserResolver{getFn: func(id string) (domain.User, error) {
+			return domain.User{Id: id, NodeId: ""}, nil
+		}}
+		escalateToPeerBlocklist(users, peers, "bridged")
+		assert.Empty(t, peers.captured)
+	})
+
+	t.Run("blocklist failure does not propagate", func(t *testing.T) {
+		peers := &stubPeerBlocklister{blocklistFn: func(string) error { return errors.New("nope") }}
+		assert.NotPanics(t, func() {
+			escalateToPeerBlocklist(stubBlockUserResolver{}, peers, "victim")
+		})
+	})
+}
+
+func TestRemovePeerBlocklist(t *testing.T) {
+	t.Run("nil dependencies are a no-op", func(t *testing.T) {
+		assert.NotPanics(t, func() { removePeerBlocklist(nil, &stubPeerBlocklister{}, "u") })
+		assert.NotPanics(t, func() { removePeerBlocklist(stubBlockUserResolver{}, nil, "u") })
+	})
+
+	t.Run("unblocks the target's node", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		removePeerBlocklist(stubBlockUserResolver{}, peers, "victim")
+		assert.Equal(t, []string{"node-victim"}, peers.removed)
+	})
+
+	t.Run("unknown user is skipped", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		users := stubBlockUserResolver{getFn: func(string) (domain.User, error) {
+			return domain.User{}, database.ErrUserNotFound
+		}}
+		removePeerBlocklist(users, peers, "ghost")
+		assert.Empty(t, peers.removed)
+	})
+
+	t.Run("lookup failure is swallowed", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		users := stubBlockUserResolver{getFn: func(string) (domain.User, error) {
+			return domain.User{}, errors.New("db down")
+		}}
+		removePeerBlocklist(users, peers, "victim")
+		assert.Empty(t, peers.removed)
+	})
+
+	t.Run("user without a node id is skipped", func(t *testing.T) {
+		peers := &stubPeerBlocklister{}
+		users := stubBlockUserResolver{getFn: func(id string) (domain.User, error) {
+			return domain.User{Id: id}, nil
+		}}
+		removePeerBlocklist(users, peers, "bridged")
+		assert.Empty(t, peers.removed)
 	})
 }

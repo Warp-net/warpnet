@@ -319,6 +319,9 @@ func (db *DB) runEventualGC() {
 }
 
 func (db *DB) Stats() map[string]string {
+	if db == nil || !db.isRunning.Load() {
+		return map[string]string{}
+	}
 	lsm, vlog := db.badger.Size()
 	size := lsm + vlog
 
@@ -888,8 +891,7 @@ func (db *DB) GC() {
 		return
 	}
 	for {
-		err := db.badger.RunValueLogGC(discardRatio)
-		if errors.Is(err, badger.ErrNoRewrite) {
+		if err := db.badger.RunValueLogGC(discardRatio); err != nil {
 			return
 		}
 	}

@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package config
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,10 +78,9 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 
 	_ = viper.BindPFlags(pflag.CommandLine)

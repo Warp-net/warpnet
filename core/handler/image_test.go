@@ -31,6 +31,7 @@ package handler
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/jpeg"
 	"strings"
@@ -47,6 +48,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type (
@@ -384,4 +386,324 @@ func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "data:image/png;base64,CACHED", resp.File)
 	assert.False(t, streamed, "warm foreign cache must not hit the gateway")
+}
+
+const (
+	ownerID      = "owner-id"
+	selfNodeID   = "12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
+	remoteNodeID = "12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU"
+)
+
+type mediaStreamerDouble struct {
+	ownerId  string
+	nodeId   string
+	response []byte
+	err      error
+
+	streamedTo []string
+}
+
+func (m *mediaStreamerDouble) NodeInfo() warpnet.NodeInfo {
+	id := m.nodeId
+	if id == "" {
+		id = selfNodeID
+	}
+	pid := warpnet.FromStringToPeerID(id)
+	owner := m.ownerId
+	if owner == "" {
+		owner = ownerID
+	}
+	return warpnet.NodeInfo{OwnerId: owner, ID: pid}
+}
+
+func (m *mediaStreamerDouble) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	m.streamedTo = append(m.streamedTo, nodeId)
+	return m.response, m.err
+}
+
+type imageRepoDouble struct {
+	images     map[string]database.Base64Image
+	getErr     error
+	getPartial database.Base64Image
+
+	foreignStored map[string]database.Base64Image
+	foreignErr    error
+}
+
+func newImageRepoDouble() *imageRepoDouble {
+	return &imageRepoDouble{
+		images:        map[string]database.Base64Image{},
+		foreignStored: map[string]database.Base64Image{},
+	}
+}
+
+func (r *imageRepoDouble) GetImage(userId, key string) (database.Base64Image, error) {
+	if r.getErr != nil {
+		return r.getPartial, r.getErr
+	}
+	img, ok := r.images[userId+"/"+key]
+	if !ok {
+		return "", database.ErrMediaNotFound
+	}
+	return img, nil
+}
+
+func (r *imageRepoDouble) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+	r.images[userId+"/key"] = img
+	return "key", nil
+}
+
+func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+	if r.foreignErr != nil {
+		return r.foreignErr
+	}
+	r.foreignStored[userId+"/"+key] = img
+	return nil
+}
+
+type videoRepoDouble struct {
+	videos     map[string]database.Base64Video
+	getErr     error
+	getPartial database.Base64Video
+
+	foreignStored map[string]database.Base64Video
+}
+
+func newVideoRepoDouble() *videoRepoDouble {
+	return &videoRepoDouble{
+		videos:        map[string]database.Base64Video{},
+		foreignStored: map[string]database.Base64Video{},
+	}
+}
+
+func (r *videoRepoDouble) GetVideo(userId, key string) (database.Base64Video, error) {
+	if r.getErr != nil {
+		return r.getPartial, r.getErr
+	}
+	v, ok := r.videos[userId+"/"+key]
+	if !ok {
+		return "", database.ErrMediaNotFound
+	}
+	return v, nil
+}
+
+func (r *videoRepoDouble) SetVideo(userId string, video database.Base64Video) (database.VideoKey, error) {
+	r.videos[userId+"/key"] = video
+	return "key", nil
+}
+
+func (r *videoRepoDouble) SetForeignVideoWithTTL(userId, key string, video database.Base64Video) error {
+	r.foreignStored[userId+"/"+key] = video
+	return nil
+}
+
+type mediaUserDouble struct {
+	users map[string]domain.User
+	err   error
+}
+
+func (d mediaUserDouble) Get(userId string) (domain.User, error) {
+	if d.err != nil {
+		return domain.User{}, d.err
+	}
+	u, ok := d.users[userId]
+	if !ok {
+		return domain.User{}, database.ErrUserNotFound
+	}
+	return u, nil
+}
+
+func TestStreamGetImageHandler(t *testing.T) {
+	t.Run("malformed payload", func(t *testing.T) {
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
+		_, err := h([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("empty key is rejected", func(t *testing.T) {
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID}), nil)
+		assert.ErrorIs(t, err, ErrEmptyImageKey)
+	})
+
+	t.Run("own missing image answers empty, not an error", func(t *testing.T) {
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "gone"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: ""}, out)
+	})
+
+	t.Run("own image is served from local storage", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
+
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,MINE"}, out)
+	})
+
+	t.Run("missing user id defaults to this node's owner", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
+
+		streamer := &mediaStreamerDouble{}
+		h := StreamGetImageHandler(streamer, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetImageEvent{Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,MINE"}, out)
+		assert.Empty(t, streamer.streamedTo, "an own-image read must not hit the network")
+	})
+
+	t.Run("empty payload with a storage error degrades to a placeholder", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.getErr = errors.New("disk on fire")
+
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: ""}, out)
+	})
+
+	t.Run("storage error with partial data surfaces", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.getErr = errors.New("disk on fire")
+		repo.getPartial = "data:image/jpeg;base64,TRUNCATED"
+
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("unknown remote user falls back to whatever is cached", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.images["stranger/avatar"] = "data:image/jpeg;base64,CACHED"
+
+		streamer := &mediaStreamerDouble{}
+		h := StreamGetImageHandler(streamer, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "stranger", Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,CACHED"}, out)
+		assert.Empty(t, streamer.streamedTo, "an unknown user has no node to ask")
+	})
+
+	t.Run("user lookup failure surfaces", func(t *testing.T) {
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(),
+			mediaUserDouble{err: errors.New("db down")})
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "someone", Key: "avatar"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("own alias is not streamed to", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"alias": {Id: "alias", NodeId: selfNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "alias", Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: ""}, out)
+		assert.Empty(t, streamer.streamedTo)
+	})
+
+	t.Run("cached foreign image short-circuits the network", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.images["remote/avatar"] = "data:image/jpeg;base64,CACHED"
+
+		streamer := &mediaStreamerDouble{}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: remoteNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, repo, users)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,CACHED"}, out)
+		assert.Empty(t, streamer.streamedTo)
+	})
+
+	t.Run("offline peer degrades to an empty image", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{err: warpnet.ErrNodeIsOffline}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: remoteNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: ""}, out)
+	})
+
+	t.Run("transport failure surfaces", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{err: errors.New("connection reset")}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: remoteNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("garbage from the peer is rejected", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{response: []byte("<html>nope</html>")}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: remoteNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("fetched foreign image is cached for next time", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		streamer := &mediaStreamerDouble{
+			response: mustJSON(t, event.GetImageResponse{File: "data:image/jpeg;base64,REMOTE"}),
+		}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: remoteNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, repo, users)
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{remoteNodeID}, streamer.streamedTo)
+		assert.Equal(t, database.Base64Image("data:image/jpeg;base64,REMOTE"),
+			repo.foreignStored["remote/avatar"])
+	})
+
+	t.Run("cache write failure still returns the image", func(t *testing.T) {
+		repo := newImageRepoDouble()
+		repo.foreignErr = errors.New("disk full")
+		streamer := &mediaStreamerDouble{
+			response: mustJSON(t, event.GetImageResponse{File: "data:image/jpeg;base64,REMOTE"}),
+		}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: remoteNodeID},
+		}}
+
+		h := StreamGetImageHandler(streamer, repo, users)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		require.NoError(t, err)
+		assert.NotNil(t, out)
+	})
+}
+
+func TestAmendExifMetadata_RejectsNonJPEG(t *testing.T) {
+	_, err := amendExifMetadata([]byte("this is not a jpeg"), []byte("meta"))
+	assert.Error(t, err, "a non-JPEG upload must not be parsed as one")
+
+	_, err = amendExifMetadata(nil, []byte("meta"))
+	assert.Error(t, err)
+}
+
+func TestJSONHelperRoundTrip(t *testing.T) {
+	bt := mustJSON(t, event.GetImageEvent{UserId: "u", Key: "k"})
+	var back event.GetImageEvent
+	require.NoError(t, json.Unmarshal(bt, &back))
+	assert.Equal(t, domain.ID("u"), back.UserId)
+	assert.Equal(t, "k", back.Key)
 }
