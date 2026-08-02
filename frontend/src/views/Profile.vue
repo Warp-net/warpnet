@@ -244,19 +244,17 @@ resulting from the use or misuse of this software.
             </button>
             <button
               type="button"
-              disabled
-              title="Coming soon"
-              aria-label="Tweets & replies (coming soon)"
-              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
+              @click="selectTab('replies')"
+              class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              :class="activeTab === 'replies' ? 'border-blue' : ''"
             >
-              Tweets & replies
+              Tweets and threads
             </button>
             <button
               type="button"
-              disabled
-              title="Coming soon"
-              aria-label="Media (coming soon)"
-              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
+              @click="selectTab('media')"
+              class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              :class="activeTab === 'media' ? 'border-blue' : ''"
             >
               Media
             </button>
@@ -315,6 +313,37 @@ resulting from the use or misuse of this software.
             <p class="mt-1">Their tweets are hidden. Use the menu above to unblock if you change your mind.</p>
           </div>
           <Tweets v-if="!noUser && !isBlocked" :tweets="sortedTweets" />
+        </template>
+
+        <!-- tweets and threads -->
+        <template v-else-if="activeTab === 'replies'">
+          <Loader :loading="repliesLoading" />
+          <div
+            v-if="!repliesLoading && tweetsAndReplies.length === 0"
+            class="flex flex-col items-center justify-center w-full pt-10 px-5"
+          >
+            <p class="font-bold text-lg">Nothing here yet</p>
+            <p class="text-sm text-dark text-center">
+              Tweets and the replies continuing their threads will show up here.
+            </p>
+          </div>
+          <Tweets v-if="!noUser && !isBlocked" :tweets="tweetsAndReplies" />
+        </template>
+
+        <!-- media -->
+        <template v-else-if="activeTab === 'media'">
+          <Loader :loading="mediaLoading" />
+          <div
+            v-if="!mediaLoading && mediaTweets.length === 0"
+            class="flex flex-col items-center justify-center w-full pt-10 px-5"
+          >
+            <p class="font-bold text-lg">No photos or videos yet</p>
+            <p class="text-sm text-dark text-center">
+              <span>{{ isSelf ? "Tweets you post" : `Tweets ${profile.username || "this user"} posts` }}</span>
+              with a photo or a video will show up here.
+            </p>
+          </div>
+          <Tweets v-if="!noUser && !isBlocked" :tweets="mediaTweets" />
         </template>
 
         <!-- likes -->
@@ -409,6 +438,10 @@ export default {
       likes: [],
       likesLoading: false,
       likesLoaded: false,
+      replies: [],
+      repliesLoading: false,
+      repliesScanned: 0,
+      mediaLoading: false,
     };
   },
   computed: {
@@ -420,6 +453,17 @@ export default {
     },
     likedTweets() {
       return this.likes.map(l => l.tweet);
+    },
+    // Tweets and the profile owner's replies in one chronological feed.
+    tweetsAndReplies() {
+      return this.tweets.concat(this.replies).sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      );
+    },
+    mediaTweets() {
+      return this.tweets.filter(
+        t => t && ((t.image_keys && t.image_keys.length > 0) || t.video_key)
+      );
     },
     lastSeenText() {
       if (this.isSelf || !this.profile || !this.profile.last_seen) return "";
@@ -646,12 +690,29 @@ export default {
         this.likes = this.likes.concat(items);
         return;
       }
+      await this.loadMoreTweets();
+      if (this.activeTab === 'replies') {
+        await this.loadReplies();
+      }
+    },
+    // Returns only the tweets this page actually added: the media and replies
+    // tabs page through the profile until they find something, and a repeated
+    // page would both duplicate keys and loop forever.
+    async loadMoreTweets() {
       const tweets = await warpnetService.getTweets({userId:this.profile.id, cursorReset:false});
-      this.tweets = this.tweets.concat(tweets);
+      const known = new Set(this.tweets.map(t => t && t.id));
+      const fresh = tweets.filter(t => t && t.id && !known.has(t.id));
+      this.tweets = this.tweets.concat(fresh);
+      return fresh;
     },
     async selectTab(tab) {
       this.activeTab = tab;
-      if (tab !== 'likes' || this.likesLoaded) return;
+      if (tab === 'likes') return this.loadLikes();
+      if (tab === 'replies') return this.loadReplies();
+      if (tab === 'media') return this.fillMediaTab();
+    },
+    async loadLikes() {
+      if (this.likesLoaded || this.likesLoading) return;
       this.likesLoading = true;
       try {
         const resp = await warpnetService.getLikes(true);
@@ -661,6 +722,75 @@ export default {
         console.error('Failed to load likes:', err);
       } finally {
         this.likesLoading = false;
+      }
+    },
+    // A reply is stored under the tweet it answers, not under its author, so
+    // the replies a profile can reach are the ones its owner left in their
+    // own threads: walk the loaded tweets and keep those.
+    async loadReplies() {
+      if (this.repliesLoading) return;
+      // Tweets loaded while another tab was open still need a scan.
+      const pending = this.tweets.slice(this.repliesScanned);
+      if (pending.length === 0) return;
+      this.repliesLoading = true;
+      this.repliesScanned = this.tweets.length;
+      try {
+        await this.collectReplies(pending);
+      } catch (err) {
+        console.error('Failed to load replies:', err);
+      } finally {
+        this.repliesLoading = false;
+      }
+    },
+    async collectReplies(tweets) {
+      const known = new Set(this.replies.map(r => r.id));
+      const batchSize = 4; // one request per tweet, but not all at once
+      for (let i = 0; i < tweets.length; i += batchSize) {
+        const pages = await Promise.all(
+          tweets.slice(i, i + batchSize).map(t => this.threadReplies(t))
+        );
+        const own = [];
+        for (const reply of pages.flat()) {
+          if (!reply || !reply.id || reply.user_id !== this.profile.id) continue;
+          if (known.has(reply.id)) continue;
+          known.add(reply.id);
+          own.push(reply);
+        }
+        if (own.length !== 0) this.replies = this.replies.concat(own);
+      }
+    },
+    async threadReplies(tweet) {
+      if (!tweet || !tweet.id) return [];
+      const root = tweet.root_id || tweet.id;
+      try {
+        const page = await warpnetService.getReplies({
+          rootId: root,
+          parentId: tweet.id,
+          // user_id is the root author only when this tweet is the root itself.
+          rootUserId: root === tweet.id ? tweet.user_id : undefined,
+          cursorReset: true,
+        });
+        return Array.isArray(page) ? page : [];
+      } catch (err) {
+        console.warn(`failed to load replies of ${tweet.id}:`, err);
+        return [];
+      }
+    },
+    // The media tab filters the tweets already loaded, so a page carrying no
+    // photo or video leaves it empty with nothing to scroll: pull further
+    // pages until something shows up or the profile runs out of tweets.
+    async fillMediaTab() {
+      if (this.mediaLoading) return;
+      this.mediaLoading = true;
+      try {
+        for (let i = 0; i < 5 && this.mediaTweets.length === 0; i++) {
+          const tweets = await this.loadMoreTweets();
+          if (tweets.length === 0) break;
+        }
+      } catch (err) {
+        console.error('Failed to load media:', err);
+      } finally {
+        this.mediaLoading = false;
       }
     },
     closeProfileMenu() {
