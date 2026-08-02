@@ -435,7 +435,7 @@ function generateResponse(arg) {
                 sender_id: arg.body.sender_id,
                 receiver_id: arg.body.receiver_id,
                 text: arg.body.text,
-                image_key: arg.body.image_key || "",
+                image_keys: arg.body.image_keys || [],
                 video_key: arg.body.video_key || "",
                 created_at: new Date().toISOString(),
             };

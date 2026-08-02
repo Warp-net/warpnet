@@ -93,12 +93,21 @@ type ChatMessage struct {
 	SenderId   string    `json:"sender_id"`
 	Text       string    `json:"text"`
 
-	// ImageKey holds the video's still frame when VideoKey is set, the same
-	// convention tweets use with the first of their image keys.
-	ImageKey *string `json:"image_key,omitempty"`
-	VideoKey *string `json:"video_key,omitempty"`
+	// ImageKeys holds the video's still frame as its only entry when VideoKey
+	// is set, the same convention tweets use with the first of their image keys.
+	ImageKeys []string `json:"image_keys,omitempty"`
+	VideoKey  *string  `json:"video_key,omitempty"`
 
 	Status string `json:"status,omitempty"`
+}
+
+// IsEmpty reports whether the message carries nothing at all. Spelled out
+// field by field because ImageKeys makes ChatMessage uncomparable, so the
+// zero-value check this replaces no longer compiles.
+func (m ChatMessage) IsEmpty() bool {
+	return m.ChatId == "" && m.Id == "" && m.SenderId == "" && m.ReceiverId == "" &&
+		m.Text == "" && len(m.ImageKeys) == 0 && m.VideoKey == nil &&
+		m.Status == "" && m.CreatedAt.IsZero()
 }
 
 // Error defines model for Error.

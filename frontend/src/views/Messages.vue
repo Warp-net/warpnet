@@ -144,9 +144,26 @@ resulting from the use or misuse of this software.
                     v-if="message.video_key"
                     :videoKey="message.video_key"
                     :senderId="message.sender_id"
-                    :poster="message.image || ''"
+                    :poster="(message.images && message.images[0]) || ''"
                 />
-                <img v-else-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
+                <img
+                    v-else-if="message.images && message.images.length === 1"
+                    :src="message.images[0]"
+                    alt="Attachment"
+                    class="max-w-xs rounded-lg mt-1"
+                />
+                <div
+                    v-else-if="message.images && message.images.length > 1"
+                    class="mt-1 grid grid-cols-2 gap-1 max-w-xs rounded-lg overflow-hidden"
+                >
+                  <img
+                      v-for="(img, i) in message.images"
+                      :key="i"
+                      :src="img"
+                      alt="Attachment"
+                      class="w-full h-24 object-cover"
+                  />
+                </div>
               </div>
               <p class="text-xs text-dark ml-2">
                 <span v-if="message.pending"><i class="fas fa-clock" aria-hidden="true"></i> Sending…</span>
@@ -166,9 +183,26 @@ resulting from the use or misuse of this software.
                     v-if="message.video_key"
                     :videoKey="message.video_key"
                     :senderId="message.sender_id"
-                    :poster="message.image || ''"
+                    :poster="(message.images && message.images[0]) || ''"
                 />
-                <img v-else-if="message.image" :src="message.image" alt="Attachment" class="max-w-xs rounded-lg mt-1" />
+                <img
+                    v-else-if="message.images && message.images.length === 1"
+                    :src="message.images[0]"
+                    alt="Attachment"
+                    class="max-w-xs rounded-lg mt-1"
+                />
+                <div
+                    v-else-if="message.images && message.images.length > 1"
+                    class="mt-1 grid grid-cols-2 gap-1 max-w-xs rounded-lg overflow-hidden"
+                >
+                  <img
+                      v-for="(img, i) in message.images"
+                      :key="i"
+                      :src="img"
+                      alt="Attachment"
+                      class="w-full h-24 object-cover"
+                  />
+                </div>
               </div>
               <p class="text-xs text-dark ml-2">{{ $filters.time(message.created_at) }}</p>
             </div>
@@ -179,11 +213,14 @@ resulting from the use or misuse of this software.
 
       <!-- Input -->
       <div class="px-5 py-3 border-t border-lighter bg-white">
-        <div v-if="imageAttachment" class="relative inline-block mb-2">
-          <img :src="imageAttachment" alt="Image preview" class="w-24 h-24 object-cover rounded border border-lighter" />
-          <button @click="removeImageAttachment" type="button" class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500 group" title="Remove image" aria-label="Remove image">
-            <i class="fas fa-times text-red-600 group-hover:text-white text-xs" aria-hidden="true"></i>
-          </button>
+        <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mb-2">
+          <div v-for="(img, index) in imageAttachments" :key="index" class="relative inline-block">
+            <img :src="img" alt="Image preview" class="w-24 h-24 object-cover rounded border border-lighter" />
+            <button @click="removeImageAttachment(index)" type="button" class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500 group" title="Remove image" aria-label="Remove image">
+              <i class="fas fa-times text-red-600 group-hover:text-white text-xs" aria-hidden="true"></i>
+            </button>
+            <span v-if="!imageKeys[index]" class="absolute bottom-1 left-1 bg-white bg-opacity-90 rounded px-1 text-xs text-dark">…</span>
+          </div>
         </div>
         <div v-if="videoAttachment" class="relative inline-block mb-2">
           <!-- h-24, not max-h-*: this build generates no max-h utilities. -->
@@ -205,7 +242,7 @@ resulting from the use or misuse of this software.
           >
             <i class="far fa-image text-blue text-lg" aria-hidden="true"></i>
           </button>
-          <input ref="messageImageInput" @change="fileChange()" accept="image/*" type="file" class="hidden" />
+          <input ref="messageImageInput" @change="fileChange()" accept="image/*" type="file" multiple class="hidden" />
           <button
               @click="openVideoInput()"
               type="button"
@@ -300,6 +337,9 @@ import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validate
 // Mirrors messageLimit in core/handler/chat.go.
 const messageCharLimit = 5000;
 
+// Mirrors maxMessageImages in core/handler/chat.go.
+const maxMessageImages = 4;
+
 export default {
   name: "Messages",
   components: {
@@ -324,7 +364,8 @@ export default {
       ownerProfile: undefined,
       active: undefined,
       text: '',
-      imageAttachment: undefined,
+      imageAttachments: [],
+      imageKeys: [],
       videoAttachment: undefined,
       videoKey: '',
       videoPosterKey: '',
@@ -356,24 +397,27 @@ export default {
       return acceptedVideoAccept;
     },
     // A message carries either images or a video, never both: the still frame
-    // of a video already occupies the message's single image slot.
+    // of a video already occupies the message's image keys.
     imageAttachDisabled() {
-      return !!this.videoAttachment;
+      return !!this.videoAttachment || this.imageAttachments.length >= maxMessageImages;
     },
     imageAttachTitle() {
-      return this.videoAttachment ? 'Remove the video to attach an image' : 'Attach image';
+      if (this.videoAttachment) return 'Remove the video to attach images';
+      return this.imageAttachments.length >= maxMessageImages
+          ? `Maximum ${maxMessageImages} images`
+          : 'Attach image';
     },
     videoAttachDisabled() {
-      return !!this.videoAttachment || !!this.imageAttachment;
+      return !!this.videoAttachment || this.imageAttachments.length > 0;
     },
     videoAttachTitle() {
       if (this.videoAttachment) return 'Only one video per message';
-      if (this.imageAttachment) return 'Remove the image to attach a video';
+      if (this.imageAttachments.length > 0) return 'Remove images to attach a video';
       return 'Attach video (MP4 or MOV)';
     },
     sendDisabled() {
       if (this.sending || this.videoUploading) return true;
-      return !this.text.length && !this.imageAttachment && !this.videoAttachment;
+      return !this.text.length && this.imageAttachments.length === 0 && !this.videoAttachment;
     },
   },
   methods: {
@@ -396,15 +440,41 @@ export default {
       this.$refs.messageImageInput.click();
     },
     fileChange() {
-      const file = this.$refs.messageImageInput.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => this.imageAttachment = reader.result;
-      reader.onerror = (error) => console.error("Error reading file", error);
+      const input = this.$refs.messageImageInput;
+      const files = Array.from((input && input.files) || []);
+      if (input) {
+        input.value = '';
+      }
+      // Upload as they are picked, so send only has to hand over the keys.
+      for (const file of files.slice(0, maxMessageImages - this.imageAttachments.length)) {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          if (this.imageAttachments.length >= maxMessageImages) return;
+          const slot = this.imageAttachments.length;
+          this.imageAttachments.push(reader.result);
+          this.imageKeys.push('');
+          try {
+            const key = await warpnetService.uploadImage(reader.result);
+            if (key) this.imageKeys[slot] = key;
+          } catch (err) {
+            console.error('Failed to upload image:', err);
+            toast.error('Failed to upload image. Please try again.');
+          }
+        };
+        reader.onerror = (error) => console.error("Error reading file", error);
+        reader.readAsDataURL(file);
+      }
     },
-    removeImageAttachment() {
-      this.imageAttachment = undefined;
+    removeImageAttachment(index) {
+      this.imageAttachments.splice(index, 1);
+      this.imageKeys.splice(index, 1);
+      if (this.$refs.messageImageInput) {
+        this.$refs.messageImageInput.value = '';
+      }
+    },
+    clearImageAttachments() {
+      this.imageAttachments = [];
+      this.imageKeys = [];
       if (this.$refs.messageImageInput) {
         this.$refs.messageImageInput.value = '';
       }
@@ -514,7 +584,8 @@ export default {
       if (!this.active?.other_user_id) return;
 
       const sentText = this.text;
-      const sentImage = this.imageAttachment;
+      const sentImages = [...this.imageAttachments];
+      const sentImageKeys = [...this.imageKeys];
       const sentVideo = this.videoAttachment;
       const sentVideoKey = this.videoKey;
       const sentVideoPosterKey = this.videoPosterKey;
@@ -528,7 +599,7 @@ export default {
         pending: true,
         sender_id: this.ownerProfile.user_id,
         text: sentText,
-        image: sentImage || sentVideoPoster || undefined,
+        images: sentVideoPoster ? [sentVideoPoster] : sentImages,
         video_key: sentVideoKey || undefined,
         created_at: new Date().toISOString(),
       }];
@@ -536,15 +607,12 @@ export default {
 
       this.sending = true;
       try {
-        await this.deliverMessage(sentText, sentImage, sentVideoKey, sentVideoPosterKey);
+        await this.deliverMessage(sentText, sentImages, sentImageKeys, sentVideoKey, sentVideoPosterKey);
         // The local node accepted the message (queued to its outbox and
         // re-sent when the recipient comes online), so it's safe to clear
         // the composer now.
         this.text = '';
-        this.imageAttachment = undefined;
-        if (this.$refs.messageImageInput) {
-          this.$refs.messageImageInput.value = '';
-        }
+        this.clearImageAttachments();
         this.removeVideoAttachment();
       } catch (err) {
         // The local node itself rejected the send — nothing was queued.
@@ -552,7 +620,8 @@ export default {
         console.error('Failed to send message:', err);
         this.messages = this.messages.filter((m) => m.id !== tempId);
         this.text = sentText;
-        this.imageAttachment = sentImage;
+        this.imageAttachments = sentImages;
+        this.imageKeys = sentImageKeys;
         this.videoAttachment = sentVideo;
         this.videoKey = sentVideoKey;
         this.videoPosterKey = sentVideoPosterKey;
@@ -562,7 +631,7 @@ export default {
         this.sending = false;
       }
     },
-    async deliverMessage(sentText, sentImage, sentVideoKey, sentVideoPosterKey) {
+    async deliverMessage(sentText, sentImages, sentImageKeys, sentVideoKey, sentVideoPosterKey) {
       if (!this.active.id) {
         const chat = await warpnetService.createChat(this.active.other_user_id);
         if (!chat || !chat.id) {
@@ -581,17 +650,21 @@ export default {
         }
       }
 
-      // A video message carries its still frame in the image key instead.
-      let imageKey = sentVideoKey ? sentVideoPosterKey : '';
-      if (sentImage) {
-        imageKey = await warpnetService.uploadImage(sentImage);
+      // A video message carries its still frame instead of any images.
+      let imageKeys = sentVideoKey ? [sentVideoPosterKey].filter(Boolean) : sentImageKeys.filter(Boolean);
+      if (!sentVideoKey) {
+        // Slots whose eager upload failed (offline, retried) go up now.
+        const missing = sentImages.filter((_, i) => !sentImageKeys[i]);
+        if (missing.length > 0) {
+          imageKeys = imageKeys.concat(await warpnetService.uploadImages(missing));
+        }
       }
 
       await warpnetService.sendDirectMessage({
         chatId: this.active.id,
         receiverId: this.active.other_user_id,
         text: sentText,
-        imageKey: imageKey,
+        imageKeys: imageKeys,
         videoKey: sentVideoKey,
       });
 
@@ -603,7 +676,7 @@ export default {
 
         const chatIndex = this.chats.findIndex((c) => c.id === this.active.id);
         if (chatIndex !== -1) {
-          const attachmentPreview = sentVideoKey ? '[video]' : (imageKey ? '[image]' : '');
+          const attachmentPreview = sentVideoKey ? '[video]' : (imageKeys.length > 0 ? '[image]' : '');
           const preview = sentText || attachmentPreview || this.chats[chatIndex].last_message;
           this.chats.splice(chatIndex, 1, {
             ...this.chats[chatIndex],
@@ -624,6 +697,19 @@ export default {
         pin();
         setTimeout(pin, 100);
       });
+    },
+    // Attachment keys ride on the message; the bytes come from the sender's
+    // node. A video message carries its still frame as its only image key.
+    async hydrateMedia(msgs) {
+      await Promise.all(msgs.map(async (msg) => {
+        const keys = msg.image_keys || [];
+        if (keys.length === 0) return;
+        const images = await Promise.all(keys.map(
+            (key) => warpnetService.getImage({userId: msg.sender_id, key})
+                .catch(() => ''),
+        ));
+        msg.images = images.filter(Boolean);
+      }));
     },
     async selected(user) {
       if (isMastodonUser(user)) {
@@ -666,11 +752,7 @@ export default {
       this.messages = await warpnetService.getDirectMessages(
           {chatId: chat.id, cursorReset: true},
       );
-      await Promise.all(this.messages.map(async (msg) => {
-        if (msg.image_key) {
-          msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
-        }
-      }));
+      await this.hydrateMedia(this.messages);
       this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       this.scrollToEnd();
     },
@@ -733,11 +815,7 @@ export default {
       )
       const known = new Set(this.messages.map((m) => m && m.id));
       const fresh = olderMessages.filter((m) => m && m.id && !known.has(m.id));
-      await Promise.all(fresh.map(async (msg) => {
-        if (msg.image_key) {
-          msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
-        }
-      }));
+      await this.hydrateMedia(fresh);
       this.messages = [...fresh, ...this.messages];
       this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     },
@@ -784,11 +862,7 @@ export default {
         const known = new Set(this.messages.map((m) => m && m.id));
         const fresh = page.filter((m) => m && m.id && !known.has(m.id));
         if (fresh.length === 0) return;
-        await Promise.all(fresh.map(async (msg) => {
-          if (msg.image_key) {
-            msg.image = await warpnetService.getImage({userId: msg.sender_id, key: msg.image_key});
-          }
-        }));
+        await this.hydrateMedia(fresh);
         if (this.active?.id !== activeId) return;
         const wasNearBottom = this.isNearBottom();
         this.messages = [...this.messages, ...fresh]

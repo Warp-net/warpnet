@@ -255,6 +255,9 @@ const messageLimit = 5000
 // longer is a peer stuffing the chat database instead of naming an attachment.
 const mediaKeyLimit = 128
 
+// Same ceiling as a tweet: the upload route carries four images at most.
+const maxMessageImages = 4
+
 const statusUndelivered = "undelivered"
 
 // mediaKey normalizes an attachment key: an absent one and an empty one mean
@@ -269,6 +272,25 @@ func mediaKey(key *string) (*string, bool) {
 	return key, true
 }
 
+// mediaKeys drops the empty entries a client may pad the list with and refuses
+// a list that is oversized in either dimension.
+func mediaKeys(keys []string) ([]string, bool) {
+	if len(keys) > maxMessageImages {
+		return nil, false
+	}
+	var kept []string
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if len(key) > mediaKeyLimit {
+			return nil, false
+		}
+		kept = append(kept, key)
+	}
+	return kept, true
+}
+
 // StreamNewMessageHandler is for sending a new message
 func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ModerationNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -280,14 +302,14 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		if ev.ChatId == "" || !strings.Contains(ev.ChatId, ":") {
 			return nil, warpnet.WarpError("message parameters are invalid")
 		}
-		imageKey, isImageKeyValid := mediaKey(ev.ImageKey)
+		imageKeys, areImageKeysValid := mediaKeys(ev.ImageKeys)
 		videoKey, isVideoKeyValid := mediaKey(ev.VideoKey)
-		if !isImageKeyValid || !isVideoKeyValid {
+		if !areImageKeysValid || !isVideoKeyValid {
 			return nil, warpnet.WarpError("message attachment key is invalid")
 		}
 		// An attachment is a message in itself, so text is only required
 		// when nothing is attached.
-		if ev.Text == "" && imageKey == nil && videoKey == nil {
+		if ev.Text == "" && len(imageKeys) == 0 && videoKey == nil {
 			return nil, warpnet.WarpError("message parameters are invalid")
 		}
 		if ev.SenderId == "" || ev.ReceiverId == "" {
@@ -345,7 +367,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			SenderId:   ev.SenderId,
 			ReceiverId: ev.ReceiverId,
 			Text:       ev.Text,
-			ImageKey:   imageKey,
+			ImageKeys:  imageKeys,
 			VideoKey:   videoKey,
 			CreatedAt:  now,
 		}
@@ -397,7 +419,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 				SenderId:   ownerId,
 				ReceiverId: ev.ReceiverId,
 				Text:       ev.Text,
-				ImageKey:   imageKey,
+				ImageKeys:  imageKeys,
 				VideoKey:   videoKey,
 				CreatedAt:  now,
 			}),
