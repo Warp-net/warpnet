@@ -33,6 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
@@ -149,4 +150,126 @@ type StatsStorer interface {
 	Decrement(key ds.Key) error
 	GetAggregatedStat(key ds.Key) (uint64, error)
 	Close() error
+}
+
+// Collaborator interfaces for the repos memberRepos bundles: the node wires
+// concrete repos in, handlers and tests can wire anything that fits.
+type BlocksProvider interface {
+	Block(blockerId string, blockeeId string) error
+	List(blockerId string, limit *uint64, cursor *string) ([]string, string, error)
+	Unblock(blockerId string, blockeeId string) error
+}
+
+type BookmarkProvider interface {
+	Bookmark(userId string, tweetId string, ownerUserId string) error
+	List(userId string, limit *uint64, cursor *string) ([]domain.Bookmark, string, error)
+	Unbookmark(userId string, tweetId string) error
+}
+
+type ChatProvider interface {
+	CreateChat(chatId *string, ownerId string, otherUserId string) (domain.Chat, error)
+	CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error)
+	DeleteChat(chatId string) error
+	DeleteMessage(chatId string, id string) error
+	GetChat(chatId string) (chat domain.Chat, err error)
+	GetMessage(chatId string, id string) (domain.ChatMessage, error)
+	GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error)
+	ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error)
+}
+
+type FilterProvider interface {
+	AddKeyword(userId string, filterId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
+	Create(userId string, f domain.Filter) (domain.Filter, error)
+	Delete(userId string, filterId string) error
+	DeleteKeyword(userId string, keywordId string) error
+	Get(userId string, filterId string) (domain.Filter, error)
+	List(userId string, limit *uint64, cursor *string) ([]domain.Filter, string, error)
+	Update(userId string, f domain.Filter) (domain.Filter, error)
+	UpdateKeyword(userId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
+}
+
+type LikesProvider interface {
+	Like(tweetId string, userId string, isTransitive bool) (likesNum uint64, err error)
+	Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
+	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
+	LikesCount(tweetId string) (likesNum uint64, err error)
+	RemoveLiked(userId string, tweetId string) error
+	SetLiked(userId string, tweetId string, ownerUserId string) error
+	Unlike(tweetId string, userId string, isTransitive bool) (likesNum uint64, err error)
+}
+
+type MediaProvider interface {
+	GetImage(userId string, key string) (database.Base64Image, error)
+	GetImageMeta(userId string, key string) (database.MediaMeta, error)
+	GetVideo(userId string, key string) (database.Base64Video, error)
+	SetForeignImageWithTTL(userId string, key string, img database.Base64Image) error
+	SetForeignVideoWithTTL(userId string, key string, video database.Base64Video) error
+	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
+	SetImageMeta(userId string, key string, meta database.MediaMeta) error
+	SetVideo(userId string, video database.Base64Video) (_ database.VideoKey, err error)
+}
+
+type MutesProvider interface {
+	List(muterId string, limit *uint64, cursor *string) ([]string, string, error)
+	Mute(muterId string, muteeId string) error
+	Unmute(muterId string, muteeId string) error
+}
+
+type NotificationProvider interface {
+	Get(userId string, notificationId string) (domain.Notification, error)
+	List(userId string, limit *uint64, cursor *string) ([]domain.Notification, string, error)
+	MarkAllRead(userId string) error
+	MarkRead(userId string, notificationId string) error
+	ReverseList(userId string, cursor *string, limit *uint64) ([]domain.Notification, string, error)
+	UnreadCount(userId string) (uint64, error)
+}
+
+type PollProvider interface {
+	Results(tweetId string, optionsNum int) (votes []uint64, err error)
+	Vote(tweetId string, userId string, option int, isTransitive bool) error
+	Voted(tweetId string, userId string) (option int, ok bool, err error)
+}
+
+type SettingsProvider interface {
+	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
+	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
+	SetGatewaySettings(userId string, s domain.GatewaySettings) error
+	SetNotificationSettings(userId string, s domain.NotificationSettings) error
+}
+
+type SubscriptionProvider interface {
+	Subscribe(selfId string, targetUserId string) error
+	Unsubscribe(selfId string, targetUserId string) error
+}
+
+type TimelineProvider interface {
+	AddTweetToTimeline(userId string, tweet domain.Tweet) error
+	DeleteTweetFromTimeline(userID string, tweetID string) error
+	GetTimeline(string, *uint64, *string) ([]domain.Tweet, string, error)
+}
+
+type TweetsProvider interface {
+	AddReply(reply domain.Tweet, isTransitive bool) (domain.Tweet, error)
+	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
+	Blocklist(tweetId string) error
+	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
+	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
+	Delete(userID string, tweetID string) error
+	DeleteReply(parentID string, replyID string, isTransitive bool) (domain.Tweet, error)
+	Get(userID string, tweetID string) (tweet domain.Tweet, err error)
+	GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+	GetReply(parentID string, replyID string) (domain.Tweet, error)
+	GetViewsCount(tweetId string) (uint64, error)
+	IsBlocklisted(tweetId string) bool
+	List(string, *uint64, *string) ([]domain.Tweet, string, error)
+	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
+	Pin(userId string, tweetId string) (domain.Tweet, error)
+	RecordView(tweetId string, viewerId string) (uint64, error)
+	RepliesCount(tweetId string) (likesNum uint64, err error)
+	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
+	RetweetsCount(tweetId string) (uint64, error)
+	TweetsCount(userId string) (uint64, error)
+	UnRetweet(retweetedByUserID string, tweetId string, isTransitive bool) error
+	Unpin(userId string, tweetId string) (domain.Tweet, error)
+	Update(tweet domain.Tweet) error
 }

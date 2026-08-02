@@ -349,19 +349,19 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 // handler-list builders below so the registration func itself stays
 // small (golangci-lint maintidx).
 type memberRepos struct {
-	timelineRepo     *database.TimelineRepo
-	tweetRepo        *database.TweetRepo
-	likeRepo         *database.LikeRepo
-	pollRepo         *database.PollRepo
-	chatRepo         *database.ChatRepo
-	mediaRepo        *database.MediaRepo
-	notificationRepo *database.NotificationsRepo
-	settingsRepo     *database.SettingsRepo
-	bookmarkRepo     *database.BookmarkRepo
-	blocksRepo       *database.BlocksRepo
-	mutesRepo        *database.MutesRepo
-	subsRepo         *database.SubscriptionsRepo
-	filterRepo       *database.FilterRepo
+	timelineRepo     TimelineProvider
+	tweetRepo        TweetsProvider
+	likeRepo         LikesProvider
+	pollRepo         PollProvider
+	chatRepo         ChatProvider
+	mediaRepo        MediaProvider
+	notificationRepo NotificationProvider
+	settingsRepo     SettingsProvider
+	bookmarkRepo     BookmarkProvider
+	blocksRepo       BlocksProvider
+	mutesRepo        MutesProvider
+	subsRepo         SubscriptionProvider
+	filterRepo       FilterProvider
 }
 
 func (m *MemberNode) setupHandlers(
