@@ -28,15 +28,18 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func minimalMP4() []byte {
@@ -347,4 +350,181 @@ func TestUploadVideo_RejectsNonVideoDataURL(t *testing.T) {
 
 	_, err = h(bt, s{})
 	assert.ErrorIs(t, err, ErrUnsupportedVideo)
+}
+
+// --- videos ---------------------------------------------------------------
+
+func TestStreamGetVideoHandler(t *testing.T) {
+	remoteUsers := mediaUserDouble{users: map[string]domain.User{
+		"remote": {Id: "remote", NodeId: remoteNodeID},
+	}}
+
+	t.Run("malformed payload", func(t *testing.T) {
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
+		_, err := h([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("empty key is rejected", func(t *testing.T) {
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID}), nil)
+		assert.ErrorIs(t, err, ErrEmptyVideoKey)
+	})
+
+	t.Run("own missing video answers empty", func(t *testing.T) {
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "gone"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
+	})
+
+	t.Run("empty payload with a storage error degrades to a placeholder", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+		repo.getErr = errors.New("disk on fire")
+
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
+	})
+
+	t.Run("storage error with partial data surfaces", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+		repo.getErr = errors.New("disk on fire")
+		repo.getPartial = "data:video/mp4;base64,TRUNCATED"
+
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip"}), nil)
+		assert.Error(t, err)
+	})
+
+	// Deferred reads are how the timeline avoids shipping megabytes per row:
+	// the size must arrive so the player can lay out, but not the bytes.
+	t.Run("deferred own video withholds bytes but reports size", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+		repo.videos[ownerID+"/clip"] = "data:video/mp4;base64,PAYLOAD"
+
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip", Deferred: true}), nil)
+		require.NoError(t, err)
+
+		resp := out.(event.GetVideoResponse)
+		assert.Empty(t, resp.File)
+		assert.True(t, resp.Deferred)
+		assert.Equal(t, int64(len("data:video/mp4;base64,PAYLOAD")), resp.Size)
+	})
+
+	t.Run("unknown user falls back to cache", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+		repo.videos["stranger/clip"] = "data:video/mp4;base64,CACHED"
+
+		streamer := &mediaStreamerDouble{}
+		h := StreamGetVideoHandler(streamer, repo, mediaUserDouble{})
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "stranger", Key: "clip"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "data:video/mp4;base64,CACHED", out.(event.GetVideoResponse).File)
+		assert.Empty(t, streamer.streamedTo)
+	})
+
+	t.Run("user lookup failure surfaces", func(t *testing.T) {
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(),
+			mediaUserDouble{err: errors.New("db down")})
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "someone", Key: "clip"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("own alias is not streamed to", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"alias": {Id: "alias", NodeId: selfNodeID},
+		}}
+
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), users)
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "alias", Key: "clip"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
+		assert.Empty(t, streamer.streamedTo)
+	})
+
+	// A deferred remote read must never fan out to the author's node — that
+	// is the whole point of deferring.
+	t.Run("deferred remote video does not hit the network", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{}
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip", Deferred: true}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetVideoResponse{File: "", Deferred: true}, out)
+		assert.Empty(t, streamer.streamedTo)
+	})
+
+	t.Run("offline peer degrades to an empty video", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{err: warpnet.ErrNodeIsOffline}
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
+	})
+
+	t.Run("transport failure surfaces", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{err: errors.New("reset")}
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("garbage from the peer is rejected", func(t *testing.T) {
+		streamer := &mediaStreamerDouble{response: []byte("not json")}
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("fetched foreign video is cached", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+		streamer := &mediaStreamerDouble{
+			response: mustJSON(t, event.GetVideoResponse{File: "data:video/mp4;base64,REMOTE"}),
+		}
+
+		h := StreamGetVideoHandler(streamer, repo, remoteUsers)
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, "data:video/mp4;base64,REMOTE", out.(event.GetVideoResponse).File)
+		assert.Equal(t, database.Base64Video("data:video/mp4;base64,REMOTE"),
+			repo.foreignStored["remote/clip"])
+	})
+
+	// An empty answer must not be written to the cache — otherwise a transient
+	// blank permanently poisons the entry.
+	t.Run("empty remote answer is not cached", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+		streamer := &mediaStreamerDouble{response: mustJSON(t, event.GetVideoResponse{File: ""})}
+
+		h := StreamGetVideoHandler(streamer, repo, remoteUsers)
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
+		require.NoError(t, err)
+		assert.Empty(t, repo.foreignStored)
+	})
+}
+
+func TestNewVideoResponse(t *testing.T) {
+	video := database.Base64Video("data:video/mp4;base64,ABC")
+
+	full := newVideoResponse(video, false)
+	assert.Equal(t, string(video), full.File)
+	assert.Equal(t, int64(len(video)), full.Size)
+	assert.False(t, full.Deferred)
+
+	deferred := newVideoResponse(video, true)
+	assert.Empty(t, deferred.File)
+	assert.Equal(t, int64(len(video)), deferred.Size, "size must survive deferral for layout")
+	assert.True(t, deferred.Deferred)
+
+	empty := newVideoResponse("", false)
+	assert.Empty(t, empty.File)
+	assert.Zero(t, empty.Size)
 }
