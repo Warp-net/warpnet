@@ -178,7 +178,26 @@ resulting from the use or misuse of this software.
             <i class="far fa-image text-blue text-lg" aria-hidden="true"></i>
           </button>
           <input ref="messageImageInput" @change="fileChange()" accept="image/*" type="file" class="hidden" />
+          <div class="relative mr-2" data-emoji-anchor>
+            <button
+                type="button"
+                @click="showEmojiPicker = !showEmojiPicker"
+                class="rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                aria-label="Add emoji"
+                title="Add emoji"
+                :aria-expanded="showEmojiPicker"
+            >
+              <i class="far fa-smile text-blue text-lg" aria-hidden="true"></i>
+            </button>
+            <EmojiPicker
+                v-if="showEmojiPicker"
+                drop-up
+                @select="insertEmoji"
+                @close="showEmojiPicker = false"
+            />
+          </div>
           <input
+              ref="messageInput"
               v-model="text"
               type="search"
               class="flex-1 px-4 py-2 rounded-full bg-lighter focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue text-sm"
@@ -234,6 +253,10 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {isMastodonUser} from "@/lib/network";
+import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+
+// Mirrors messageLimit in core/handler/chat.go.
+const messageCharLimit = 5000;
 
 export default {
   name: "Messages",
@@ -242,6 +265,7 @@ export default {
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     NewMessageOverlay: defineAsyncComponent(() => import('@/components/NewMessageOverlay.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
+    EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
   data() {
     return {
@@ -262,7 +286,16 @@ export default {
       otherUser: undefined,
       refreshTimer: null,
       refreshInFlight: false,
+      showEmojiPicker: false,
     };
+  },
+  watch: {
+    // The node caps a message at 5000 runes; keep the composer on the same
+    // unit so an emoji-heavy message is never silently rejected on send.
+    text(value) {
+      const clamped = clampRunes(value, messageCharLimit);
+      if (clamped !== value) this.text = clamped;
+    },
   },
   computed: {
     // Only chats whose other user resolved are listed. Bridged Mastodon
@@ -273,6 +306,18 @@ export default {
     },
   },
   methods: {
+    insertEmoji(emoji) {
+      const field = this.$refs.messageInput;
+      const next = insertEmoji({
+        text: this.text,
+        emoji,
+        field,
+        limit: messageCharLimit,
+      });
+      if (!next) return;
+      this.text = next.text;
+      this.$nextTick(() => focusCaret(field, next.caret));
+    },
     newMessage() {
       this.showNewMessageModal = true;
     },

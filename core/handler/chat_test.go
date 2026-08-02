@@ -366,6 +366,18 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
+	// The limit counts runes: a message of emoji is four bytes per character,
+	// so a byte-counted limit would reject this one at a quarter of its length.
+	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("😀", messageLimit), SenderId: owner, ReceiverId: receiver}), nil)
+	if err != nil && err.Error() == "message is too long" {
+		t.Fatalf("emoji message within the rune limit was rejected: %v", err)
+	}
+
+	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("😀", messageLimit+1), SenderId: owner, ReceiverId: receiver}), nil)
+	if err == nil || err.Error() != "message is too long" {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
 	// Mastodon has no direct messages: refused before the message is stored.
 	_, err = makeHandler(stubChatRepo{createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) {
 		t.Fatal("message must not be stored for a Mastodon user")

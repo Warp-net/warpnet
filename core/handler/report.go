@@ -35,6 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 	"strings"
+	"unicode/utf8"
 )
 
 const MaxReportReasonLen = 256
@@ -96,7 +97,10 @@ func validateReport(ev event.ReportEvent) error {
 	if ev.Reason == "" {
 		return ErrReportNoReason
 	}
-	if len(ev.Reason) > MaxReportReasonLen {
+	// Runes, not bytes: a reason written in Cyrillic or carrying emoji costs
+	// two to four bytes per character, so a byte limit would cut it short of
+	// the 256 characters the UI offers.
+	if utf8.RuneCountInString(ev.Reason) > MaxReportReasonLen {
 		return ErrReportReasonLong
 	}
 	switch ev.Type {
