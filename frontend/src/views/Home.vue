@@ -99,7 +99,7 @@ resulting from the use or misuse of this software.
                 :src="videoAttachment.url"
                 controls
                 preload="metadata"
-                class="max-h-64 rounded border border-lighter"
+                class="max-h-[16rem] rounded border border-lighter"
             ></video>
             <button
                 @click="removeVideoAttachment"

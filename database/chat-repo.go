@@ -241,7 +241,7 @@ func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 }
 
 func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error) {
-	if msg == (domain.ChatMessage{}) {
+	if msg.IsEmpty() {
 		return msg, local_store.DBError("empty message")
 	}
 	if msg.ChatId == "" {

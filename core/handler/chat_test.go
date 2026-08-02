@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -519,6 +520,114 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
 	if err != nil || resp.(event.NewMessageResponse).Status != "" {
 		t.Fatalf("expected delivered result: %#v err=%v", resp, err)
+	}
+}
+
+func TestStreamNewMessageHandlerAttachments(t *testing.T) {
+	owner := "owner-1"
+	receiver := "receiver-1"
+	chatID := "owner-1:receiver-1"
+
+	makeHandler := func(repo stubChatRepo, streamer stubStreamer) warpnet.WarpHandlerFunc {
+		streamer.nodeInfo.OwnerId = owner
+		return StreamNewMessageHandler(repo, stubUserRepo{}, stubModerationNotifier{}, streamer)
+	}
+	ownChat := func(chatId string) (domain.Chat, error) {
+		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
+	}
+
+	posterKey, videoKey := "poster-key", "video-key"
+
+	capture := func(stored *domain.ChatMessage, forwarded *event.NewMessageEvent) (stubChatRepo, stubStreamer) {
+		return stubChatRepo{getChatFn: ownChat, createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) {
+				*stored = msg
+				msg.Id = "msg-1"
+				return msg, nil
+			}},
+			stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				*forwarded, _ = data.(event.NewMessageEvent)
+				return []byte("{}"), nil
+			}}
+	}
+
+	// A video says enough on its own, so an attached message needs no text —
+	// and the keys have to reach the recipient's node, not just the local one.
+	var stored domain.ChatMessage
+	var forwarded event.NewMessageEvent
+	repo, streamer := capture(&stored, &forwarded)
+	resp, err := makeHandler(repo, streamer)(marshal(t, event.NewMessageEvent{
+		ChatId: chatID, SenderId: owner, ReceiverId: receiver,
+		ImageKeys: []string{posterKey}, VideoKey: &videoKey,
+	}), nil)
+	if err != nil {
+		t.Fatalf("video-only message rejected: %v", err)
+	}
+	if valueOr(stored.VideoKey, "") != videoKey || !slices.Equal(stored.ImageKeys, []string{posterKey}) {
+		t.Fatalf("attachment keys not stored: %#v", stored)
+	}
+	if valueOr(forwarded.VideoKey, "") != videoKey || !slices.Equal(forwarded.ImageKeys, []string{posterKey}) {
+		t.Fatalf("attachment keys not forwarded to the recipient node: %#v", forwarded)
+	}
+	if status := resp.(event.NewMessageResponse).Status; status != "" {
+		t.Fatalf("expected delivered result, got status %q", status)
+	}
+
+	// A gallery of images travels the same way, and the padding an empty slot
+	// leaves behind is dropped rather than stored as a blank key.
+	gallery := []string{"k1", "", "k2", "k3"}
+	stored, forwarded = domain.ChatMessage{}, event.NewMessageEvent{}
+	repo, streamer = capture(&stored, &forwarded)
+	_, err = makeHandler(repo, streamer)(marshal(t, event.NewMessageEvent{
+		ChatId: chatID, SenderId: owner, ReceiverId: receiver, ImageKeys: gallery,
+	}), nil)
+	if err != nil {
+		t.Fatalf("image-only message rejected: %v", err)
+	}
+	if want := []string{"k1", "k2", "k3"}; !slices.Equal(stored.ImageKeys, want) {
+		t.Fatalf("image keys = %v, want %v", stored.ImageKeys, want)
+	}
+	if want := []string{"k1", "k2", "k3"}; !slices.Equal(forwarded.ImageKeys, want) {
+		t.Fatalf("forwarded image keys = %v, want %v", forwarded.ImageKeys, want)
+	}
+
+	// An empty key is no key at all, so a message with nothing else is invalid.
+	empty := ""
+	_, err = makeHandler(stubChatRepo{getChatFn: ownChat}, stubStreamer{})(marshal(t, event.NewMessageEvent{
+		ChatId: chatID, SenderId: owner, ReceiverId: receiver, VideoKey: &empty,
+		ImageKeys: []string{"", ""},
+	}), nil)
+	if err == nil || err.Error() != "message parameters are invalid" {
+		t.Fatalf("unexpected err for empty attachment keys: %v", err)
+	}
+
+	// Keys are digests handed out by the media store, not free-form payload.
+	oversized := strings.Repeat("k", mediaKeyLimit+1)
+	rejects := stubChatRepo{getChatFn: ownChat, createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) {
+		t.Fatal("invalid attachment keys must not be stored")
+		return domain.ChatMessage{}, nil
+	}}
+	_, err = makeHandler(rejects, stubStreamer{})(marshal(t, event.NewMessageEvent{
+		ChatId: chatID, SenderId: owner, ReceiverId: receiver, Text: "ok", VideoKey: &oversized,
+	}), nil)
+	if err == nil || err.Error() != "message attachment key is invalid" {
+		t.Fatalf("unexpected err for oversized video key: %v", err)
+	}
+
+	_, err = makeHandler(rejects, stubStreamer{})(marshal(t, event.NewMessageEvent{
+		ChatId: chatID, SenderId: owner, ReceiverId: receiver, Text: "ok",
+		ImageKeys: []string{"k1", oversized},
+	}), nil)
+	if err == nil || err.Error() != "message attachment key is invalid" {
+		t.Fatalf("unexpected err for oversized image key: %v", err)
+	}
+
+	// More images than the upload route can carry is a malformed message.
+	_, err = makeHandler(rejects, stubStreamer{})(marshal(t, event.NewMessageEvent{
+		ChatId: chatID, SenderId: owner, ReceiverId: receiver, Text: "ok",
+		ImageKeys: []string{"k1", "k2", "k3", "k4", "k5"},
+	}), nil)
+	if err == nil || err.Error() != "message attachment key is invalid" {
+		t.Fatalf("unexpected err for too many image keys: %v", err)
 	}
 }
 
