@@ -86,9 +86,6 @@ func newTestNode(t *testing.T) *WarpNode {
 	return n
 }
 
-// signedEnvelope builds the wire message a self-stream expects: a full
-// event.Message signed with this node's own key. Anything less is rejected by
-// the auth middleware, which is exactly what the loopback path must enforce.
 func signedEnvelope(t *testing.T, n *WarpNode, path stream.WarpRoute, body []byte) []byte {
 	t.Helper()
 
@@ -109,10 +106,6 @@ func signedEnvelope(t *testing.T, n *WarpNode, path stream.WarpRoute, body []byt
 	require.NoError(t, err)
 	return bt
 }
-
-// ---------------------------------------------------------------------------
-// Construction and identity.
-// ---------------------------------------------------------------------------
 
 func TestWarpNode_StartsAndReportsItself(t *testing.T) {
 	n := newTestNode(t)
@@ -141,8 +134,6 @@ func TestWarpNode_NilReceiverIsInert(t *testing.T) {
 	assert.NotPanics(t, func() { n.SetOutbox(nil) })
 }
 
-// A node identity must be derived from the supplied key, so a restart with the
-// same seed keeps the same peer id and followers stay reachable.
 func TestWarpIdentity_IsDeterministicAndSingular(t *testing.T) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
@@ -161,7 +152,6 @@ func TestWarpIdentity_IsDeterministicAndSingular(t *testing.T) {
 
 	assert.Equal(t, id, second.Node().ID(), "the same key must yield the same peer id")
 
-	// Supplying two identities is a configuration error, not a silent pick.
 	_, err = NewWarpNode(ctx, WarpIdentity(priv), WarpIdentity(priv))
 	assert.ErrorIs(t, err, ErrMultipleIdentities)
 }
@@ -171,12 +161,6 @@ func TestWarpIdentity_PanicsOnMalformedKey(t *testing.T) {
 		"a malformed node key must fail loudly at startup, not produce a random identity")
 }
 
-// ---------------------------------------------------------------------------
-// Handler registration.
-// ---------------------------------------------------------------------------
-
-// An invalid route must abort startup — a silently unregistered handler makes
-// the feature look broken at runtime with no clue why.
 func TestSetStreamHandlers_PanicsOnInvalidRoute(t *testing.T) {
 	n := newTestNode(t)
 
@@ -200,10 +184,6 @@ func TestSetStreamHandlers_RegistersOnTheHost(t *testing.T) {
 	assert.Contains(t, n.BaseNodeInfo().Protocols, warpnet.WarpProtocolID(echoRoute))
 }
 
-// ---------------------------------------------------------------------------
-// SelfStream — the loopback path gossip uses to replay messages locally.
-// ---------------------------------------------------------------------------
-
 func TestSelfStream_RoundTripsThroughTheRegisteredHandler(t *testing.T) {
 	n := newTestNode(t)
 
@@ -222,8 +202,6 @@ func TestSelfStream_RoundTripsThroughTheRegisteredHandler(t *testing.T) {
 	assert.Equal(t, `{"ping":true}`, string(seen), "the handler must see the message body, not the envelope")
 }
 
-// An unsigned or forged self-stream must be refused just like a remote one —
-// the loopback path is not a way around authentication.
 func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 	n := newTestNode(t)
 
@@ -236,12 +214,10 @@ func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 		},
 	})
 
-	// A bare body with no envelope at all.
 	resp, err := n.SelfStream(echoRoute, []byte(`{"ping":true}`))
 	require.NoError(t, err)
 	assert.NotContains(t, string(resp), `"ok":true`)
 
-	// A well-formed envelope with no signature.
 	unsigned, err := json.Marshal(warpevent.Message{
 		Body:      []byte(`{}`),
 		MessageId: "no-signature",
@@ -252,7 +228,6 @@ func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(resp), `"ok":true`)
 
-	// A signature that does not match the body.
 	forged := signedEnvelope(t, n, echoRoute, []byte(`{"original":true}`))
 	var msg warpevent.Message
 	require.NoError(t, json.Unmarshal(forged, &msg))
@@ -277,8 +252,6 @@ func TestSelfStream_RejectsEmptyDataAndUnknownRoute(t *testing.T) {
 	assert.Error(t, err, "an unregistered route must be reported, not silently dropped")
 }
 
-// A handler that fails must still produce an answer rather than hanging the
-// caller waiting for bytes.
 func TestSelfStream_HandlerErrorStillAnswers(t *testing.T) {
 	n := newTestNode(t)
 
@@ -306,12 +279,6 @@ func TestSelfStream_HandlerErrorStillAnswers(t *testing.T) {
 	assert.Contains(t, string(resp), "handler exploded")
 }
 
-// ---------------------------------------------------------------------------
-// Remote streaming.
-// ---------------------------------------------------------------------------
-
-// A node must never open a network stream to itself: that is a guaranteed
-// deadlock against its own handler.
 func TestStream_RefusesSelfRequest(t *testing.T) {
 	n := newTestNode(t)
 
@@ -370,10 +337,6 @@ func TestStopNode_IsSafeToCallTwice(t *testing.T) {
 	assert.NotPanics(t, func() { n.StopNode() }, "shutdown must be idempotent")
 }
 
-// ---------------------------------------------------------------------------
-// Reachability prioritisation.
-// ---------------------------------------------------------------------------
-
 type recordingConnManager struct {
 	warpnet.WarpConnManager
 
@@ -398,8 +361,6 @@ func (m *recordingConnManager) get(p warpnet.WarpPeerID) (int, bool) {
 	return v, ok
 }
 
-// A publicly reachable peer is more valuable to keep connected than a private
-// one — the connection manager trims by this weight under pressure.
 func TestReachabilityManager_RanksByReachability(t *testing.T) {
 	cases := []struct {
 		reach warpnet.WarpReachability
@@ -439,8 +400,6 @@ func TestReachabilityManager_MinAndMaxPriority(t *testing.T) {
 	assert.Equal(t, 100, got, "a relay must be the last connection dropped")
 }
 
-// A peer whose reachability flaps must not be re-tagged on every event —
-// otherwise the connection manager churns instead of stabilising.
 func TestReachabilityManager_SuppressesFlapping(t *testing.T) {
 	cm := newRecordingConnManager()
 	m := newNodeReachabilityManager(cm)
@@ -450,7 +409,6 @@ func TestReachabilityManager_SuppressesFlapping(t *testing.T) {
 	first, ok := cm.get(pid)
 	require.True(t, ok)
 
-	// Immediately contradicting itself must be ignored while the mark is warm.
 	m.SetPriority(pid, warpnet.ReachabilityPrivate)
 	m.SetMinPriority(pid)
 	m.SetMaxPriority(pid)
@@ -459,11 +417,6 @@ func TestReachabilityManager_SuppressesFlapping(t *testing.T) {
 	assert.Equal(t, first, second, "a flapping peer must keep its first verdict")
 }
 
-// ---------------------------------------------------------------------------
-// libp2p option helpers.
-// ---------------------------------------------------------------------------
-
-// A node must never list itself as its own relay candidate.
 func TestEnableAutoRelayWithStaticRelays_DropsSelf(t *testing.T) {
 	self := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 	other := warpnet.FromStringToPeerID("12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU")
@@ -481,8 +434,6 @@ func TestEnableAutoRelayWithStaticRelays_DropsSelf(t *testing.T) {
 	assert.NotEmpty(t, n.Node().ID().String())
 }
 
-// With no relays left after filtering, auto-relay must simply stay off rather
-// than failing startup.
 func TestEnableAutoRelayWithStaticRelays_EmptyListIsInert(t *testing.T) {
 	self := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 
@@ -505,9 +456,6 @@ func TestEmptyOption_IsANoOp(t *testing.T) {
 	assert.NotNil(t, n.Node())
 }
 
-// The dial timeouts are set through reflection into private libp2p fields; if
-// upstream renames them the option must report it instead of silently leaving
-// the default in place.
 func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -545,10 +493,6 @@ func TestWithDefaultTCPConnectionTimeout_ReportsMissingField(t *testing.T) {
 	tr := &warpnet.TCPTransport{}
 	assert.NoError(t, WithDefaultTCPConnectionTimeout(5*time.Second)(tr))
 }
-
-// ---------------------------------------------------------------------------
-// Tracers must survive malformed events rather than taking the node down.
-// ---------------------------------------------------------------------------
 
 func TestHolePunchTracer_ToleratesNilAndUnknownEvents(t *testing.T) {
 	tr := holePunchTracer{}

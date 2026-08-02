@@ -43,8 +43,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// silentBroadcaster satisfies the CRDT Broadcaster contract without a network:
-// Broadcast is a sink and Next blocks until the store shuts down.
 type silentBroadcaster struct {
 	mu        sync.Mutex
 	published [][]byte
@@ -68,7 +66,6 @@ func (b *silentBroadcaster) count() int {
 	return len(b.published)
 }
 
-// noProviderRouter never finds providers — the store must work standalone.
 type noProviderRouter struct{}
 
 func (noProviderRouter) FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo {
@@ -126,8 +123,6 @@ func TestCRDTStats_IncrementAccumulates(t *testing.T) {
 	}
 }
 
-// A like followed by an unlike must land back on zero — and a stray extra
-// unlike must not wrap the unsigned counter around to 2^64-1.
 func TestCRDTStats_DecrementClampsAtZero(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 	key := datastore.NewKey("/TWEETS/LIKES/tweet-clamp")
@@ -146,7 +141,6 @@ func TestCRDTStats_DecrementClampsAtZero(t *testing.T) {
 		assert.Equal(t, uint64(0), got, "extra unlike %d must not underflow", i+1)
 	}
 
-	// The counter must still be able to climb back up afterwards.
 	require.NoError(t, store.Increment(key))
 	got, err = store.GetAggregatedStat(key)
 	require.NoError(t, err)
@@ -178,8 +172,6 @@ func TestCRDTStats_CountersAreIsolatedPerKey(t *testing.T) {
 	assert.Equal(t, uint64(0), got, "another tweet must stay untouched")
 }
 
-// A key that is a prefix of another must not absorb its counts — otherwise
-// "/tweet-1" would report the sum of every "/tweet-1x" in the network.
 func TestCRDTStats_PrefixSiblingsDoNotBleed(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 
@@ -233,8 +225,6 @@ func TestCRDTStats_EveryWriteIsBroadcast(t *testing.T) {
 		"local-only counters would never converge across the network")
 }
 
-// Two processes on the same node id must not clobber each other: each mints a
-// fresh generation, so a restart adds a sub-counter rather than overwriting.
 func TestCRDTStats_GenerationIsUniquePerProcess(t *testing.T) {
 	seen := make(map[string]struct{}, 64)
 	for i := 0; i < 64; i++ {
@@ -270,8 +260,6 @@ func TestCRDTStats_CounterCodecRoundTrip(t *testing.T) {
 		assert.Equal(t, v, decodeCounter(encodeCounter(v)))
 	}
 
-	// Truncated or absent values must read as zero rather than panicking on a
-	// short slice — peers can and do ship malformed deltas.
 	assert.Equal(t, uint64(0), decodeCounter(nil))
 	assert.Equal(t, uint64(0), decodeCounter([]byte{}))
 	assert.Equal(t, uint64(0), decodeCounter([]byte{1, 2, 3}))

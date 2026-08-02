@@ -52,8 +52,6 @@ func TestWarpError_IsComparable(t *testing.T) {
 	assert.True(t, errors.Is(wrapped, sentinel), "sentinels must survive wrapping")
 }
 
-// A handler whose path is malformed must be rejected at registration time —
-// a bad route silently swallows every request sent to it.
 func TestWarpStreamHandler_IsValid(t *testing.T) {
 	cases := []struct {
 		path string
@@ -85,8 +83,6 @@ func TestWarpStreamHandler_StringNamesThePath(t *testing.T) {
 	assert.Contains(t, wh.String(), "/public/get/user/0.0.0")
 }
 
-// Relay detection has to keep working for the two legacy encodings, otherwise
-// old bootstrap nodes get treated as ordinary peers and pollute the timeline.
 func TestNodeInfo_RoleDetection(t *testing.T) {
 	assert.True(t, NodeInfo{Type: RelayNode}.IsRelay())
 	assert.True(t, NodeInfo{OwnerId: RelayNode}.IsRelay(), "pre-Type relays marked the role in OwnerId")
@@ -121,8 +117,6 @@ func TestFromBytesToPeerID_RejectsGarbage(t *testing.T) {
 	assert.Empty(t, string(FromBytesToPeerID([]byte("junk"))))
 }
 
-// A peer id round-trips through its public key: this is what lets a node
-// verify that a signed gossip message really came from the claimed author.
 func TestPeerIDPublicKeyRoundTrip(t *testing.T) {
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
@@ -168,8 +162,6 @@ func TestNewMultiaddr(t *testing.T) {
 	}
 }
 
-// Announcing a private or loopback address to the DHT is how a node ends up
-// unreachable and how peers waste dial attempts.
 func TestIsPublicMultiAddress(t *testing.T) {
 	public := []string{
 		"/ip4/8.8.8.8/tcp/4001",
@@ -198,7 +190,6 @@ func TestIsPublicMultiAddress(t *testing.T) {
 		assert.Falsef(t, IsPublicMultiAddress(a), "%s must not be announced as public", s)
 	}
 
-	// An address with no IP component at all cannot be judged public.
 	dns, err := NewMultiaddr("/dns4/example.com/tcp/4001")
 	require.NoError(t, err)
 	assert.False(t, IsPublicMultiAddress(dns))
@@ -239,7 +230,6 @@ func TestAddrInfoParsing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, info.ID, info2.ID)
 
-	// Missing the /p2p/ component means we have no idea who we'd be dialling.
 	_, err = AddrInfoFromString("/ip4/1.2.3.4/tcp/4001")
 	assert.Error(t, err)
 
@@ -248,8 +238,6 @@ func TestAddrInfoParsing(t *testing.T) {
 }
 
 func TestHostStatsAreAlwaysPopulated(t *testing.T) {
-	// These feed the dashboard; they must never panic or hand back nil maps
-	// regardless of what the host OS reports.
 	assert.NotPanics(t, func() {
 		mem := GetMemoryStats()
 		assert.NotNil(t, mem)
@@ -263,8 +251,6 @@ func TestHostStatsAreAlwaysPopulated(t *testing.T) {
 }
 
 func TestNewConfigurableLimiter_FallsBackOnGarbage(t *testing.T) {
-	// A corrupt limits file must not take the node down — it falls back to
-	// the built-in defaults.
 	assert.NotPanics(t, func() {
 		l := NewConfigurableLimiter(strings.NewReader("{ this is not json"))
 		assert.NotNil(t, l)

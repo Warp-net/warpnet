@@ -53,8 +53,6 @@ const (
 	peerID2 = "12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ"
 )
 
-// --- test doubles ---------------------------------------------------------
-
 type fakeNode struct {
 	mu sync.Mutex
 
@@ -77,8 +75,6 @@ type fakeNode struct {
 }
 
 func newFakeNode() *fakeNode {
-	// A real in-memory peerstore: DiscoveryHandlerStream consults it to decide
-	// whether a peer is already known.
 	store, err := pstoremem.NewPeerstore()
 	if err != nil {
 		panic(err)
@@ -241,8 +237,6 @@ func (f *fakeMetrics) snapshot() ([]string, []string) {
 	return append([]string(nil), f.online...), append([]string(nil), f.offline...)
 }
 
-// --- helpers --------------------------------------------------------------
-
 func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fakeNodeRepo, *fakeMetrics) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -263,8 +257,6 @@ func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fak
 
 func infoJSON(t *testing.T, info warpnet.NodeInfo) []byte {
 	t.Helper()
-	// An empty peer id does not survive a JSON round trip, so give every
-	// synthetic NodeInfo the identity of the peer it describes.
 	if info.ID == "" {
 		info.ID = warpnet.FromStringToPeerID(peerID)
 	}
@@ -276,8 +268,6 @@ func infoJSON(t *testing.T, info warpnet.NodeInfo) []byte {
 func discovered(id string) discoveredPeer {
 	return discoveredPeer{ID: warpnet.FromStringToPeerID(id), Source: sourceGossip}
 }
-
-// --- enqueue / routing ----------------------------------------------------
 
 func TestEnqueue_IgnoresSelfAndEmptyPeers(t *testing.T) {
 	s, _, _, _, _ := newService(t)
@@ -309,8 +299,6 @@ func TestEnqueue_AcceptsRealPeersFromEverySource(t *testing.T) {
 	assert.True(t, sources[sourceStream])
 }
 
-// A flood of discoveries must be shed rather than blocking the caller or
-// growing without bound.
 func TestEnqueue_RateLimiterShedsFloods(t *testing.T) {
 	s, _, _, _, _ := newService(t)
 
@@ -329,9 +317,6 @@ func TestEnqueue_NilServiceIsInert(t *testing.T) {
 	})
 }
 
-// --- handleAsMember -------------------------------------------------------
-
-// A blocked peer must be refused before any connection is attempted.
 func TestHandleAsMember_BlocklistedPeerIsNeverDialled(t *testing.T) {
 	s, node, users, nodes, metrics := newService(t)
 	nodes.blocklisted[peerID] = true
@@ -376,8 +361,6 @@ func TestHandleAsMember_BackoffAndDialFailureAreReportedOffline(t *testing.T) {
 	}
 }
 
-// An alias of a node we already know is not a new peer — it must be pinned as
-// high-priority and skipped, not re-registered as another user.
 func TestHandleAsMember_KnownAliasIsPinnedAndSkipped(t *testing.T) {
 	s, node, users, _, metrics := newService(t)
 
@@ -398,7 +381,6 @@ func TestHandleAsMember_KnownAliasIsPinnedAndSkipped(t *testing.T) {
 	assert.Contains(t, online, peerID)
 }
 
-// A peer that cannot describe itself is useless — nothing may be stored from it.
 func TestHandleAsMember_RejectsUnusableNodeInfo(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -425,8 +407,6 @@ func TestHandleAsMember_RejectsUnusableNodeInfo(t *testing.T) {
 	}
 }
 
-// Relays and moderators are infrastructure, not people — they must never end up
-// in the user list.
 func TestHandleAsMember_InfrastructurePeersAreNotUsers(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -477,12 +457,9 @@ func TestHandleAsMember_RegistersGenuinelyNewUser(t *testing.T) {
 	online, _ := metrics.snapshot()
 	assert.Contains(t, online, peerID)
 
-	// The advertised alias must be remembered so we don't re-interrogate it.
 	assert.True(t, s.aliasCache.Contains(warpnet.FromStringToPeerID(peerID2)))
 }
 
-// A user we already know and believe is online must not be re-fetched on every
-// rediscovery — that is a stream storm on a busy network.
 func TestHandleAsMember_KnownOnlineUserIsNotRefetched(t *testing.T) {
 	s, node, users, _, _ := newService(t)
 
@@ -499,7 +476,6 @@ func TestHandleAsMember_KnownOnlineUserIsNotRefetched(t *testing.T) {
 	assert.Zero(t, created)
 }
 
-// A user who was marked offline must be refreshed when they reappear.
 func TestHandleAsMember_OfflineUserIsRefreshed(t *testing.T) {
 	s, node, users, _, _ := newService(t)
 
@@ -514,7 +490,6 @@ func TestHandleAsMember_OfflineUserIsRefreshed(t *testing.T) {
 		"a peer that came back must be re-read")
 }
 
-// A rediscovered user must be updated rather than duplicated.
 func TestHandleAsMember_ExistingUserIsUpdatedNotDuplicated(t *testing.T) {
 	s, node, users, _, _ := newService(t)
 
@@ -551,8 +526,6 @@ func TestHandleAsMember_NilDependenciesAreInert(t *testing.T) {
 	defer bare.Close()
 	assert.NotPanics(t, func() { bare.handleAsMember(discovered(peerID)) })
 }
-
-// --- handleAsRelay --------------------------------------------------------
 
 func TestHandleAsRelay_SkipsSelfAndEmptyPeers(t *testing.T) {
 	s, node, _, _, _ := newService(t)
@@ -625,8 +598,6 @@ func TestHandleAsModerator_IsObserveOnly(t *testing.T) {
 	assert.Zero(t, created)
 }
 
-// --- requestNodeUser ------------------------------------------------------
-
 func TestRequestNodeUser_RejectsEmptyUserAndBadPayloads(t *testing.T) {
 	s, node, _, _, _ := newService(t)
 	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
@@ -648,8 +619,6 @@ func TestRequestNodeUser_RejectsEmptyUserAndBadPayloads(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// The node id and liveness must be stamped by us, never trusted from the
-// payload — otherwise a peer could claim to host somebody else's account.
 func TestRequestNodeUser_StampsNodeIdentityAndRTT(t *testing.T) {
 	s, node, _, _, _ := newService(t)
 	node.userResp = []byte(`{"id":"owner","username":"u","node_id":"someone-elses-node","isOffline":true}`)
@@ -662,8 +631,6 @@ func TestRequestNodeUser_StampsNodeIdentityAndRTT(t *testing.T) {
 	assert.False(t, user.IsOffline, "a peer that just answered is online")
 	assert.GreaterOrEqual(t, user.RoundTripTime, int64(0))
 }
-
-// --- lifecycle ------------------------------------------------------------
 
 func TestRun_RoutesByNodeRoleAndStopsCleanly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

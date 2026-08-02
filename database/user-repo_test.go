@@ -350,10 +350,6 @@ func (s *UserRepoTestSuite) TestList_NoFixedKeyLeak() {
 	s.Equal(1, seen["leakcheck3"])
 }
 
-// ---------------------------------------------------------------------------
-// Profile updates — partial payloads must never erase a profile.
-// ---------------------------------------------------------------------------
-
 func (s *UserRepoTestSuite) createUser(u domain.User) domain.User {
 	s.T().Helper()
 	if u.Id == "" {
@@ -369,8 +365,6 @@ func (s *UserRepoTestSuite) TestUpdateOfUnknownUserFails() {
 	s.Error(err, "updating a profile that was never created must not create it")
 }
 
-// A client that only changes the bio sends only the bio — every other field
-// must survive untouched.
 func (s *UserRepoTestSuite) TestPartialUpdateKeepsUntouchedFields() {
 	site := "https://example.org"
 	original := s.createUser(domain.User{
@@ -410,7 +404,6 @@ func (s *UserRepoTestSuite) TestUpdatePersistsAndIsReadableBack() {
 	s.Equal("bob", got.Username)
 }
 
-// A peer that doesn't report a role must not wipe a role we already learned.
 func (s *UserRepoTestSuite) TestUpdateNeverClearsRole() {
 	original := s.createUser(domain.User{Username: "carol", Role: "member"})
 
@@ -423,8 +416,6 @@ func (s *UserRepoTestSuite) TestUpdateNeverClearsRole() {
 	s.Equal("moderator", updated.Role, "an explicit role must still win")
 }
 
-// Moderation strikes accumulate across reports — resetting them would let an
-// abuser wipe their record by triggering one more update.
 func (s *UserRepoTestSuite) TestModerationStrikesAccumulate() {
 	original := s.createUser(domain.User{Username: "dave"})
 
@@ -442,7 +433,6 @@ func (s *UserRepoTestSuite) TestModerationStrikesAccumulate() {
 	s.Require().NoError(err)
 	s.Equal(uint8(3), updated.Moderation.Strikes, "strikes must add up, not overwrite")
 
-	// An update that carries no verdict must leave the record alone.
 	updated, err = s.repo.Update(original.Id, domain.User{Bio: "unrelated change"})
 	s.Require().NoError(err)
 	s.Require().NotNil(updated.Moderation)
@@ -463,7 +453,6 @@ func (s *UserRepoTestSuite) TestMetadataMergesInsteadOfReplacing() {
 	s.Equal("they/them", updated.Metadata["pronouns"], "existing metadata must survive")
 	s.Equal("Berlin", updated.Metadata["location"])
 
-	// A repeated key is overwritten, not duplicated.
 	updated, err = s.repo.Update(original.Id, domain.User{
 		Metadata: map[string]string{"location": "Lisbon"},
 	})
@@ -472,8 +461,6 @@ func (s *UserRepoTestSuite) TestMetadataMergesInsteadOfReplacing() {
 	s.Len(updated.Metadata, 2)
 }
 
-// Liveness fields are authoritative on every update — unlike profile text they
-// must track the latest observation, including back to "online".
 func (s *UserRepoTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
 	original := s.createUser(domain.User{Username: "frank"})
 
@@ -488,8 +475,6 @@ func (s *UserRepoTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
 	s.Equal(int64(20), updated.RoundTripTime)
 }
 
-// Rebinding a user to a new node must make them findable by that node id —
-// otherwise a migrated account becomes unreachable.
 func (s *UserRepoTestSuite) TestUpdateRebindsNodeIndex() {
 	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
 

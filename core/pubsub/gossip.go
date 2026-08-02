@@ -253,7 +253,6 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 	if topicName == "" {
 		return ErrPubsubEmptyTopic
 	}
-	// Close may have torn the router down while we waited for the lock.
 	if g.pubsub == nil {
 		return ErrPubsubNotInit
 	}
@@ -267,9 +266,6 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 		g.topics[topicName] = topic
 	}
 
-	// Already subscribed: swap the handler instead of opening a second relay
-	// and subscription. Unsubscribe only tears one of each down, so the extras
-	// would keep the topic open forever and make leaving it impossible.
 	if _, subscribed := g.relayCancelFuncs[topicName]; subscribed {
 		g.handlersMap[topicName] = h
 		return nil
@@ -315,9 +311,6 @@ func (g *Gossip) Unsubscribe(topics ...string) (err error) {
 			}
 		}
 
-		// The relay holds a reference to the topic, so it has to go first —
-		// otherwise Close reports outstanding handlers and the topic is never
-		// actually left.
 		if _, ok := g.relayCancelFuncs[topicName]; ok {
 			g.relayCancelFuncs[topicName]()
 		}
@@ -384,7 +377,6 @@ func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	// Close may have torn the router down while we waited for the lock.
 	if g.pubsub == nil {
 		return ErrPubsubNotInit
 	}
@@ -439,7 +431,6 @@ func (g *Gossip) PublishRaw(topicName string, data []byte) (err error) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	// Close may have torn the router down while we waited for the lock.
 	if g.pubsub == nil {
 		return ErrPubsubNotInit
 	}

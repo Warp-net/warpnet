@@ -141,10 +141,6 @@ func TestStreamGetTweetRetweetersHandler(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Engagement forwarding — reading likers/retweeters off the author's node.
-// ---------------------------------------------------------------------------
-
 func TestForwardToOwner(t *testing.T) {
 	ev := event.GetTweetLikersEvent{TweetId: "t1", OwnerUserId: "author"}
 
@@ -158,7 +154,6 @@ func TestForwardToOwner(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	// Asking ourselves over the network would be an infinite loop.
 	t.Run("owner is this node's owner stays local", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{info: warpnet.NodeInfo{OwnerId: "author"}}
 		_, ok, err := forwardToOwner("author", streamer, stubLikedUserFetcher{}, event.PUBLIC_GET_TWEET_LIKERS, ev)
@@ -188,8 +183,6 @@ func TestForwardToOwner(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	// An offline author must degrade to whatever this node already knows,
-	// not surface an error to the reader.
 	t.Run("offline owner degrades to the local index", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{
 			info: warpnet.NodeInfo{OwnerId: "me"},
@@ -216,8 +209,6 @@ func TestForwardToOwner(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	// A malicious or simply outdated peer can answer with garbage — the reader
-	// must still get this node's own view instead of an error.
 	t.Run("unparseable remote answer degrades to the local index", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{
 			info:     warpnet.NodeInfo{OwnerId: "me"},
@@ -280,7 +271,6 @@ func TestHydrateUsers(t *testing.T) {
 		assert.Len(t, got, 2)
 	})
 
-	// A failing batch read must not blank the whole engagement list.
 	t.Run("batch failure falls back to per-id reads", func(t *testing.T) {
 		users := stubLikedUserFetcher{
 			batchFn: func(ids ...string) ([]domain.User, error) {
@@ -295,7 +285,6 @@ func TestHydrateUsers(t *testing.T) {
 		assert.Equal(t, "user-a", got[0].Username)
 	})
 
-	// One deleted account must not erase everyone else from the list.
 	t.Run("individually missing users are skipped not fatal", func(t *testing.T) {
 		users := stubLikedUserFetcher{
 			batchFn: func(ids ...string) ([]domain.User, error) { return nil, nil },

@@ -42,8 +42,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// liveConnector is a PubsubServerNodeConnector backed by a real in-process
-// libp2p host so the gossip router actually starts.
 type liveConnector struct {
 	host    warpnet.P2PNode
 	ownerId string
@@ -102,7 +100,6 @@ func TestMemberPubSub_NilAndUnstartedAreInert(t *testing.T) {
 	require.NotNil(t, ps.Gossip())
 	assert.False(t, ps.Gossip().IsGossipRunning())
 
-	// Nothing may be published before the router is up.
 	assert.Error(t, ps.SubscribeUserUpdate("someone"))
 	assert.Error(t, ps.UnsubscribeUserUpdate("someone"))
 	assert.Error(t, ps.PublishReport(event.ReportEvent{}))
@@ -112,7 +109,6 @@ func TestMemberPubSub_NilAndUnstartedAreInert(t *testing.T) {
 func TestMemberPubSub_RunIsIdempotent(t *testing.T) {
 	ps, conn := newRunningPubSub(t, "owner-1")
 
-	// A second Run must be a no-op rather than replacing the live router.
 	assert.NotPanics(t, func() { ps.Run(conn) })
 	assert.True(t, ps.Gossip().IsGossipRunning())
 
@@ -120,24 +116,18 @@ func TestMemberPubSub_RunIsIdempotent(t *testing.T) {
 	assert.Equal(t, conn.host.ID().String(), ps.NodeID())
 }
 
-// Following someone subscribes to their update topic; unfollowing must actually
-// leave it, otherwise an unfollowed account keeps filling the timeline.
 func TestMemberPubSub_FollowAndUnfollowTopicLifecycle(t *testing.T) {
 	ps, _ := newRunningPubSub(t, "owner-1")
 
 	require.NoError(t, ps.SubscribeUserUpdate("author-42"))
 
-	// Re-following is harmless.
 	assert.NoError(t, ps.SubscribeUserUpdate("author-42"))
 
 	assert.NoError(t, ps.UnsubscribeUserUpdate("author-42"))
 
-	// Unfollowing someone never followed must not error either.
 	assert.NoError(t, ps.UnsubscribeUserUpdate("never-followed"))
 }
 
-// Subscribing to your own update topic would loop every one of your posts back
-// into your own node.
 func TestMemberPubSub_CannotFollowSelf(t *testing.T) {
 	ps, conn := newRunningPubSub(t, "owner-1")
 
@@ -161,8 +151,6 @@ func TestPrefollowHandlers_BuildsOneTopicPerUser(t *testing.T) {
 	assert.Empty(t, PrefollowHandlers(), "no follows means no topics")
 }
 
-// The reporter identity must be stamped by the node, not taken from the
-// payload — otherwise anyone could file a report as somebody else.
 func TestMemberPubSub_PublishReportStampsReporterIdentity(t *testing.T) {
 	ps, conn := newRunningPubSub(t, "owner-1")
 

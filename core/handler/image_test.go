@@ -394,8 +394,6 @@ const (
 	remoteNodeID = "12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU"
 )
 
-// --- configurable doubles -------------------------------------------------
-
 type mediaStreamerDouble struct {
 	ownerId  string
 	nodeId   string
@@ -515,8 +513,6 @@ func (d mediaUserDouble) Get(userId string) (domain.User, error) {
 	return u, nil
 }
 
-// --- images ---------------------------------------------------------------
-
 func TestStreamGetImageHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
@@ -530,8 +526,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.ErrorIs(t, err, ErrEmptyImageKey)
 	})
 
-	// A missing avatar must render as a placeholder, not break the whole
-	// profile view with an error.
 	t.Run("own missing image answers empty, not an error", func(t *testing.T) {
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "gone"}), nil)
@@ -549,7 +543,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,MINE"}, out)
 	})
 
-	// An unset user id means "mine" — it must never resolve to a random peer.
 	t.Run("missing user id defaults to this node's owner", func(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
@@ -562,8 +555,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.Empty(t, streamer.streamedTo, "an own-image read must not hit the network")
 	})
 
-	// An unreadable-but-empty payload degrades to a placeholder: an avatar is
-	// never worth failing a whole profile render over.
 	t.Run("empty payload with a storage error degrades to a placeholder", func(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.getErr = errors.New("disk on fire")
@@ -574,8 +565,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
 	})
 
-	// A partially-read payload is different: the data is suspect, so the read
-	// must fail loudly rather than hand back a corrupt image.
 	t.Run("storage error with partial data surfaces", func(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.getErr = errors.New("disk on fire")
@@ -605,8 +594,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// An alias of this very node must not be asked over the network — that is
-	// a self-call that would deadlock or loop.
 	t.Run("own alias is not streamed to", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{}
 		users := mediaUserDouble{users: map[string]domain.User{
@@ -620,8 +607,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.Empty(t, streamer.streamedTo)
 	})
 
-	// A cached foreign avatar must win so a profile view doesn't cost a
-	// round-trip on every render.
 	t.Run("cached foreign image short-circuits the network", func(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.images["remote/avatar"] = "data:image/jpeg;base64,CACHED"
@@ -638,7 +623,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 		assert.Empty(t, streamer.streamedTo)
 	})
 
-	// An offline author means "no picture yet", not a failed profile load.
 	t.Run("offline peer degrades to an empty image", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{err: warpnet.ErrNodeIsOffline}
 		users := mediaUserDouble{users: map[string]domain.User{
@@ -691,7 +675,6 @@ func TestStreamGetImageHandler(t *testing.T) {
 			repo.foreignStored["remote/avatar"])
 	})
 
-	// A cache write failure must not lose the image the reader already asked for.
 	t.Run("cache write failure still returns the image", func(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.foreignErr = errors.New("disk full")
@@ -718,7 +701,6 @@ func TestAmendExifMetadata_RejectsNonJPEG(t *testing.T) {
 }
 
 func TestJSONHelperRoundTrip(t *testing.T) {
-	// Guards the helper the media tests rely on.
 	bt := mustJSON(t, event.GetImageEvent{UserId: "u", Key: "k"})
 	var back event.GetImageEvent
 	require.NoError(t, json.Unmarshal(bt, &back))

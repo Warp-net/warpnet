@@ -780,10 +780,6 @@ func (s *TweetRepoLifecycleTestSuite) newTweet(userId, text string) domain.Tweet
 	return tweet
 }
 
-// ---------------------------------------------------------------------------
-// Creation defaults — a tweet arriving over the wire is only half-filled.
-// ---------------------------------------------------------------------------
-
 func (s *TweetRepoLifecycleTestSuite) TestCreateFillsMissingFields() {
 	userId := ulid.Make().String()
 
@@ -796,15 +792,11 @@ func (s *TweetRepoLifecycleTestSuite) TestCreateFillsMissingFields() {
 	s.Equal("warpnet", tweet.Network, "network must default rather than stay blank")
 }
 
-// A completely empty payload is not a post — it must be rejected instead of
-// creating a ghost row that shows up in someone's timeline.
 func (s *TweetRepoLifecycleTestSuite) TestCreateRejectsEmptyTweet() {
 	_, err := s.repo.Create(ulid.Make().String(), domain.Tweet{})
 	s.Error(err)
 }
 
-// A caller-supplied ID must be honoured — gossip replays the same tweet from
-// several peers and they all have to converge on one row, not N copies.
 func (s *TweetRepoLifecycleTestSuite) TestCreateHonoursSuppliedIDAndIsIdempotentOnRead() {
 	userId := ulid.Make().String()
 	id := ulid.Make().String()
@@ -813,7 +805,6 @@ func (s *TweetRepoLifecycleTestSuite) TestCreateHonoursSuppliedIDAndIsIdempotent
 	s.Require().NoError(err)
 	s.Equal(id, created.Id)
 
-	// Re-delivering the same tweet must not fan out into a second row.
 	_, err = s.repo.Create(userId, domain.Tweet{Id: id, UserId: userId, Text: "gossiped"})
 	s.Require().NoError(err)
 
@@ -845,10 +836,6 @@ func (s *TweetRepoLifecycleTestSuite) TestCreatePreservesExoticText() {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Moderation blocklist.
-// ---------------------------------------------------------------------------
-
 func (s *TweetRepoLifecycleTestSuite) TestBlocklistIsPerTweetAndDefaultsOpen() {
 	userId := ulid.Make().String()
 	bad := s.newTweet(userId, "spam")
@@ -860,7 +847,6 @@ func (s *TweetRepoLifecycleTestSuite) TestBlocklistIsPerTweetAndDefaultsOpen() {
 	s.True(s.repo.IsBlocklisted(bad.Id))
 	s.False(s.repo.IsBlocklisted(good.Id), "moderating one tweet must not censor another")
 
-	// Blocklisting twice is idempotent.
 	s.Require().NoError(s.repo.Blocklist(bad.Id))
 	s.True(s.repo.IsBlocklisted(bad.Id))
 }
@@ -870,10 +856,6 @@ func (s *TweetRepoLifecycleTestSuite) TestBlocklistIgnoresEmptyIDAndUnknownIsFre
 	s.False(s.repo.IsBlocklisted(""))
 	s.False(s.repo.IsBlocklisted(ulid.Make().String()), "unknown tweets are not moderated")
 }
-
-// ---------------------------------------------------------------------------
-// Update — the edit path.
-// ---------------------------------------------------------------------------
 
 func (s *TweetRepoLifecycleTestSuite) TestUpdateRejectsMissingIdentifiers() {
 	s.Error(s.repo.Update(domain.Tweet{UserId: "u"}))
@@ -907,8 +889,6 @@ func (s *TweetRepoLifecycleTestSuite) TestUpdateRewritesTextAndStampsUpdatedAt()
 	s.Equal(tweet.CreatedAt.Unix(), got.CreatedAt.Unix(), "editing must not rewrite history")
 }
 
-// An update carrying no text must not blank the post — clients send partial
-// payloads (e.g. moderation verdicts) and that must never erase content.
 func (s *TweetRepoLifecycleTestSuite) TestUpdateWithEmptyTextKeepsOriginal() {
 	userId := ulid.Make().String()
 	tweet := s.newTweet(userId, "keep me")
@@ -945,7 +925,6 @@ func (s *TweetRepoLifecycleTestSuite) TestUpdateAttachesModerationVerdictWithout
 	s.True(got.IsModerated())
 }
 
-// One user must not be able to edit another user's tweet by guessing its ID.
 func (s *TweetRepoLifecycleTestSuite) TestUpdateCannotCrossUserBoundary() {
 	author := ulid.Make().String()
 	attacker := ulid.Make().String()
@@ -958,10 +937,6 @@ func (s *TweetRepoLifecycleTestSuite) TestUpdateCannotCrossUserBoundary() {
 	s.Require().NoError(err)
 	s.Equal("authored by victim", got.Text)
 }
-
-// ---------------------------------------------------------------------------
-// Edit history.
-// ---------------------------------------------------------------------------
 
 func (s *TweetRepoLifecycleTestSuite) TestAppendEditValidatesEveryRequiredField() {
 	_, err := s.repo.AppendEdit(domain.TweetEdit{UserId: "u", Text: "t"})
@@ -1005,17 +980,11 @@ func (s *TweetRepoLifecycleTestSuite) TestAppendEditKeepsEveryRevision() {
 	s.Len(ids, 5)
 }
 
-// ---------------------------------------------------------------------------
-// Retweets — counters are the classic place a social network goes wrong.
-// ---------------------------------------------------------------------------
-
 func (s *TweetRepoLifecycleTestSuite) TestUnRetweetRejectsEmptyIdentifiers() {
 	s.Error(s.repo.UnRetweet("", "tweet", false))
 	s.Error(s.repo.UnRetweet("user", "", false))
 }
 
-// Undoing a retweet must decrement exactly once and never underflow the counter
-// into eighteen quintillion retweets.
 func (s *TweetRepoLifecycleTestSuite) TestUnRetweetNeverUnderflowsCounter() {
 	author := ulid.Make().String()
 	tweet := s.newTweet(author, "boost me")
@@ -1040,8 +1009,6 @@ func (s *TweetRepoLifecycleTestSuite) TestUnRetweetNeverUnderflowsCounter() {
 		s.Equal(uint64(len(boosters)-i-1), count)
 	}
 
-	// A user who never boosted cannot drive the counter below zero. UnRetweet
-	// reports that there was nothing to undo, and the count stays clamped.
 	s.Error(s.repo.UnRetweet(ulid.Make().String(), tweet.Id, false))
 
 	count, err = s.repo.RetweetsCount(tweet.Id)
@@ -1049,8 +1016,6 @@ func (s *TweetRepoLifecycleTestSuite) TestUnRetweetNeverUnderflowsCounter() {
 	s.Equal(uint64(0), count, "counter must clamp at zero, never wrap")
 }
 
-// UnRetweet is not idempotent by design: undoing something that was never done
-// is reported rather than silently accepted, and it must not invent a counter.
 func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfNeverRetweetedTweetIsRejected() {
 	author := ulid.Make().String()
 	tweet := s.newTweet(author, "nobody boosted this")
@@ -1097,7 +1062,6 @@ func (s *TweetRepoLifecycleTestSuite) TestRetweetersRejectsEmptyIDAndListsDistin
 	s.Equal(uint64(len(boosters)), count)
 }
 
-// The same user boosting twice must not inflate the retweeter list.
 func (s *TweetRepoLifecycleTestSuite) TestDoubleRetweetDoesNotDuplicateRetweeter() {
 	author := ulid.Make().String()
 	booster := ulid.Make().String()
@@ -1123,10 +1087,6 @@ func (s *TweetRepoLifecycleTestSuite) TestRetweetWithoutRetweeterIsRejected() {
 	s.Error(err, "a retweet with no retweeting user is malformed")
 }
 
-// ---------------------------------------------------------------------------
-// Counts, deletion and reply threading.
-// ---------------------------------------------------------------------------
-
 func (s *TweetRepoLifecycleTestSuite) TestDeleteRemovesTweetAndReportsSecondAttempt() {
 	userId := ulid.Make().String()
 	tweet := s.newTweet(userId, "delete me")
@@ -1136,16 +1096,12 @@ func (s *TweetRepoLifecycleTestSuite) TestDeleteRemovesTweetAndReportsSecondAtte
 	_, err := s.repo.Get(userId, tweet.Id)
 	s.ErrorIs(err, ErrTweetNotFound)
 
-	// Deleting again is reported rather than silently accepted — but it must
-	// stay an error, never a panic or a resurrected row.
 	s.Error(s.repo.Delete(userId, tweet.Id))
 
 	_, err = s.repo.Get(userId, tweet.Id)
 	s.ErrorIs(err, ErrTweetNotFound)
 }
 
-// A malformed request from a peer must produce an error, never a panic that
-// takes the whole node down.
 func (s *TweetRepoLifecycleTestSuite) TestGetRejectsEmptyIdentifiers() {
 	_, err := s.repo.Get("", ulid.Make().String())
 	s.Error(err)
@@ -1185,7 +1141,6 @@ func (s *TweetRepoLifecycleTestSuite) TestReplyToOwnTweetThreadsAndCounts() {
 	s.Require().NoError(err)
 	s.Equal("first reply", got.Text)
 
-	// Deleting the reply must bring the counter back down, not leave it stuck.
 	_, err = s.repo.DeleteReply(parent.Id, reply.Id, false)
 	s.Require().NoError(err)
 

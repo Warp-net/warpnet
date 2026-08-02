@@ -352,8 +352,6 @@ func TestUploadVideo_RejectsNonVideoDataURL(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUnsupportedVideo)
 }
 
-// --- videos ---------------------------------------------------------------
-
 func TestStreamGetVideoHandler(t *testing.T) {
 	remoteUsers := mediaUserDouble{users: map[string]domain.User{
 		"remote": {Id: "remote", NodeId: remoteNodeID},
@@ -398,8 +396,6 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// Deferred reads are how the timeline avoids shipping megabytes per row:
-	// the size must arrive so the player can lay out, but not the bytes.
 	t.Run("deferred own video withholds bytes but reports size", func(t *testing.T) {
 		repo := newVideoRepoDouble()
 		repo.videos[ownerID+"/clip"] = "data:video/mp4;base64,PAYLOAD"
@@ -446,8 +442,6 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		assert.Empty(t, streamer.streamedTo)
 	})
 
-	// A deferred remote read must never fan out to the author's node — that
-	// is the whole point of deferring.
 	t.Run("deferred remote video does not hit the network", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{}
 		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
@@ -498,8 +492,6 @@ func TestStreamGetVideoHandler(t *testing.T) {
 			repo.foreignStored["remote/clip"])
 	})
 
-	// An empty answer must not be written to the cache — otherwise a transient
-	// blank permanently poisons the entry.
 	t.Run("empty remote answer is not cached", func(t *testing.T) {
 		repo := newVideoRepoDouble()
 		streamer := &mediaStreamerDouble{response: mustJSON(t, event.GetVideoResponse{File: ""})}

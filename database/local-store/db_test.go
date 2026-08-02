@@ -388,7 +388,6 @@ func liveDB(t *testing.T) *DB {
 	return db
 }
 
-// deadDB is a database that was created but never started.
 func deadDB(t *testing.T) *DB {
 	t.Helper()
 	db, err := New("", DefaultOptions().WithInMemory(true))
@@ -396,10 +395,6 @@ func deadDB(t *testing.T) *DB {
 	require.True(t, db.IsClosed())
 	return db
 }
-
-// ---------------------------------------------------------------------------
-// Lifecycle.
-// ---------------------------------------------------------------------------
 
 func TestDB_RunRequiresCredentials(t *testing.T) {
 	db, err := New("", DefaultOptions().WithInMemory(true))
@@ -410,7 +405,6 @@ func TestDB_RunRequiresCredentials(t *testing.T) {
 	assert.True(t, db.IsClosed())
 }
 
-// Re-running an open database must not drop the data written so far.
 func TestDB_RunIsIdempotent(t *testing.T) {
 	db := liveDB(t)
 
@@ -442,8 +436,6 @@ func TestDB_CloseIsIdempotentAndNilSafe(t *testing.T) {
 	assert.True(t, nilDB.IsClosed(), "a nil database is definitionally closed")
 }
 
-// Every entry point must degrade to ErrNotRunning rather than dereferencing a
-// nil badger handle when the store is down.
 func TestDB_DeadStoreRefusesEveryOperation(t *testing.T) {
 	db := deadDB(t)
 	key := DatabaseKey("/A/key")
@@ -497,12 +489,6 @@ func TestDB_PathAndInnerHandleOnLiveStore(t *testing.T) {
 	assert.NotEmpty(t, db.Stats())
 }
 
-// ---------------------------------------------------------------------------
-// Read-only transactions.
-// ---------------------------------------------------------------------------
-
-// A read transaction must see committed data but refuse to write — that is the
-// whole reason it skips conflict tracking.
 func TestNewReadTxn_ReadsButCannotWrite(t *testing.T) {
 	db := liveDB(t)
 	key := DatabaseKey("/A/readonly")
@@ -520,10 +506,6 @@ func TestNewReadTxn_ReadsButCannotWrite(t *testing.T) {
 	assert.Error(t, txn.Set(DatabaseKey("/A/nope"), []byte("x")),
 		"a read-only transaction must refuse writes")
 }
-
-// ---------------------------------------------------------------------------
-// Batch writes.
-// ---------------------------------------------------------------------------
 
 func TestBatchSet_WritesEveryEntry(t *testing.T) {
 	db := liveDB(t)
@@ -560,8 +542,6 @@ func TestBatchSet_EmptyInputIsANoOp(t *testing.T) {
 	assert.NoError(t, txn.BatchSet([]ListItem{}))
 }
 
-// A batch larger than one badger transaction must still land in full — an
-// archive import writes far more than a single transaction can hold.
 func TestBatchSet_SplitsOversizedTransactions(t *testing.T) {
 	db := liveDB(t)
 
@@ -582,16 +562,11 @@ func TestBatchSet_SplitsOversizedTransactions(t *testing.T) {
 	require.NoError(t, txn.BatchSet(items), "an oversized batch must be split, not rejected")
 	_ = txn.Commit()
 
-	// Spot-check both ends of the range to prove nothing was silently dropped.
 	for _, idx := range []int{0, n / 2, n - 1} {
 		_, err := db.Get(DatabaseKey(fmt.Sprintf("/BIGBATCH/key-%05d", idx)))
 		assert.NoErrorf(t, err, "entry %d must have been written", idx)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Sequences.
-// ---------------------------------------------------------------------------
 
 func TestNextSequence_IsStrictlyIncreasing(t *testing.T) {
 	db := liveDB(t)
@@ -613,10 +588,6 @@ func TestNextSequence_IsStrictlyIncreasing(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Error mapping.
-// ---------------------------------------------------------------------------
-
 func TestNotFoundErrorMapping(t *testing.T) {
 	assert.False(t, IsNotFoundError(nil))
 	assert.True(t, IsNotFoundError(badger.ErrKeyNotFound))
@@ -629,8 +600,6 @@ func TestNotFoundErrorMapping(t *testing.T) {
 	assert.ErrorIs(t, ToDatastoreErrNotFound(ds.ErrNotFound), ds.ErrNotFound)
 	assert.ErrorIs(t, ToDatastoreErrNotFound(fmt.Errorf("wrapped: %w", badger.ErrKeyNotFound)), ds.ErrNotFound)
 
-	// A genuine failure must NOT be laundered into "not found" — that would
-	// make a broken disk look like an empty timeline.
 	real := errors.New("disk on fire")
 	assert.ErrorIs(t, ToDatastoreErrNotFound(real), real)
 }
@@ -642,12 +611,6 @@ func TestDBError_Sentinels(t *testing.T) {
 	assert.True(t, errors.Is(fmt.Errorf("wrapped: %w", ErrNotRunning), ErrNotRunning))
 }
 
-// ---------------------------------------------------------------------------
-// Key building.
-// ---------------------------------------------------------------------------
-
-// The writer/reader segments are currently inert; pinning that keeps a future
-// re-enable from silently changing every stored key's shape.
 func TestPrefixBuilder_WriterAndReaderSegmentsAreInert(t *testing.T) {
 	pb := &PrefixBuilder{}
 
@@ -663,10 +626,6 @@ func TestDatabaseKey_DatastoreKeyRoundTrip(t *testing.T) {
 	assert.NotEmpty(t, key.Bytes())
 	assert.Equal(t, key.String(), string(key.Bytes()))
 }
-
-// ---------------------------------------------------------------------------
-// Expiry and size on a live store.
-// ---------------------------------------------------------------------------
 
 func TestGetExpirationAndSize(t *testing.T) {
 	db := liveDB(t)
@@ -697,7 +656,6 @@ func TestGetExpirationAndSize(t *testing.T) {
 	assert.True(t, IsNotFoundError(err))
 }
 
-// A key written with a TTL already in the past must not be readable.
 func TestSetWithTTL_AlreadyExpiredIsInvisible(t *testing.T) {
 	db := liveDB(t)
 	key := DatabaseKey("/A/stale")

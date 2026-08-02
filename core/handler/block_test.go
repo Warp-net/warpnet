@@ -268,10 +268,6 @@ func mustJSON(t *testing.T, v any) []byte {
 	return bt
 }
 
-// ---------------------------------------------------------------------------
-// Mutes listing.
-// ---------------------------------------------------------------------------
-
 func TestStreamGetMutesHandler(t *testing.T) {
 	t.Run("malformed payload is rejected", func(t *testing.T) {
 		_, err := StreamGetMutesHandler(stubMutesRepo{})([]byte("{"), nil)
@@ -331,10 +327,6 @@ func TestStreamGetMutesHandler(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Peer-blocklist escalation — a social block must reach the network layer.
-// ---------------------------------------------------------------------------
-
 func TestEscalateToPeerBlocklist(t *testing.T) {
 	t.Run("nil dependencies are a no-op", func(t *testing.T) {
 		assert.NotPanics(t, func() { escalateToPeerBlocklist(nil, &stubPeerBlocklister{}, "u") })
@@ -347,8 +339,6 @@ func TestEscalateToPeerBlocklist(t *testing.T) {
 		assert.Equal(t, []string{"node-victim"}, peers.captured)
 	})
 
-	// A user we have never seen has no node to ban — the social block still
-	// stands, so this must stay silent rather than blow up the handler.
 	t.Run("unknown user is skipped quietly", func(t *testing.T) {
 		peers := &stubPeerBlocklister{}
 		users := stubBlockUserResolver{getFn: func(string) (domain.User, error) {
@@ -367,8 +357,6 @@ func TestEscalateToPeerBlocklist(t *testing.T) {
 		assert.Empty(t, peers.captured)
 	})
 
-	// A bridged or alias account has no node of its own; banning "" would ban
-	// nothing at best and everything at worst.
 	t.Run("user without a node id is skipped", func(t *testing.T) {
 		peers := &stubPeerBlocklister{}
 		users := stubBlockUserResolver{getFn: func(id string) (domain.User, error) {

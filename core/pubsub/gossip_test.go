@@ -152,9 +152,6 @@ func TestGossipErrors(t *testing.T) {
 	assert.Equal(t, "gossip: topic name is empty", ErrPubsubEmptyTopic.Error())
 }
 
-// liveNode is a minimal GossipNodeConnector backed by a real in-process libp2p
-// host, so the gossip paths that need a working pubsub router are exercised
-// end to end rather than stubbed out.
 type liveNode struct {
 	host warpnet.P2PNode
 
@@ -198,7 +195,6 @@ func newLiveNode(t *testing.T) *liveNode {
 	return &liveNode{host: h}
 }
 
-// runningGossip returns a Gossip already attached to a live host.
 func runningGossip(t *testing.T, handlers ...TopicHandler) (*Gossip, *liveNode) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -222,10 +218,6 @@ func connect(t *testing.T, a, b *liveNode) {
 	require.NoError(t, err)
 }
 
-// ---------------------------------------------------------------------------
-// Lifecycle.
-// ---------------------------------------------------------------------------
-
 func TestGossip_RunTwiceIsRejected(t *testing.T) {
 	g, node := runningGossip(t)
 
@@ -247,20 +239,14 @@ func TestGossip_CloseIsIdempotentAndDisablesEverything(t *testing.T) {
 	require.NoError(t, g.Close())
 	assert.False(t, g.IsGossipRunning())
 
-	// Closing twice must not panic on the nil-ed out maps.
 	assert.NoError(t, g.Close())
 
-	// Every public entry point degrades to "not initialised" after close.
 	assert.ErrorIs(t, g.Subscribe(TopicHandler{TopicName: "t", Handler: func([]byte) error { return nil }}), ErrPubsubNotInit)
 	assert.ErrorIs(t, g.SubscribeRaw("t", func([]byte) error { return nil }), ErrPubsubNotInit)
 	assert.ErrorIs(t, g.Unsubscribe("topic"), ErrPubsubNotInit)
 	assert.ErrorIs(t, g.Publish(event.Message{}, "topic"), ErrPubsubNotInit)
 	assert.ErrorIs(t, g.PublishRaw("topic", []byte("{}")), ErrPubsubNotInit)
 }
-
-// ---------------------------------------------------------------------------
-// Subscription bookkeeping.
-// ---------------------------------------------------------------------------
 
 func TestGossip_SubscribeRejectsEmptyTopic(t *testing.T) {
 	g, _ := runningGossip(t)
@@ -279,8 +265,6 @@ func TestGossip_ResubscribeReusesTopicAndReplacesHandler(t *testing.T) {
 	assert.Equal(t, 1, subs, "re-subscribing must reuse the joined topic, not leak a second subscription")
 }
 
-// Re-subscribing must leave the topic in a state where it can still be left:
-// a leaked relay would keep an unfollowed author's posts flowing forever.
 func TestGossip_ResubscribeStillAllowsUnsubscribe(t *testing.T) {
 	g, _ := runningGossip(t)
 
@@ -342,12 +326,6 @@ func TestGossip_SubscribersOnJoinedTopicWithoutPeers(t *testing.T) {
 	assert.Empty(t, g.NotSubscribers("not-joined"))
 }
 
-// ---------------------------------------------------------------------------
-// Publishing — every gossip message must be signed and fully addressed.
-// ---------------------------------------------------------------------------
-
-// captureTopic subscribes on the same node so we can read back exactly what
-// Publish put on the wire.
 func captureTopic(t *testing.T, g *Gossip, topic string) <-chan []byte {
 	t.Helper()
 	out := make(chan []byte, 8)
@@ -394,8 +372,6 @@ func TestGossip_PublishSignsAndFillsEnvelope(t *testing.T) {
 		"a forged or unsigned gossip message must never be indistinguishable from a real one")
 }
 
-// A signature must not validate once the body has been tampered with — that is
-// the whole point of signing timeline gossip.
 func TestGossip_SignatureBreaksOnTamperedBody(t *testing.T) {
 	g, node := runningGossip(t)
 	received := captureTopic(t, g, "tamper")
@@ -423,8 +399,6 @@ func TestGossip_SignatureBreaksOnTamperedBody(t *testing.T) {
 		"rewriting the body must invalidate the signature")
 }
 
-// Gossip replays the same event from many peers; a caller-set message id must
-// survive so receivers can deduplicate.
 func TestGossip_PublishPreservesSuppliedIdentity(t *testing.T) {
 	g, _ := runningGossip(t)
 	received := captureTopic(t, g, "identity")
@@ -485,10 +459,6 @@ func TestGossip_PublishRawDeliversBytesVerbatim(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Cross-node delivery — the actual social fan-out.
-// ---------------------------------------------------------------------------
-
 func TestGossip_MessageReachesAnotherNodeHandler(t *testing.T) {
 	const topic = "/warpnet/test/timeline"
 
@@ -510,7 +480,6 @@ func TestGossip_MessageReachesAnotherNodeHandler(t *testing.T) {
 
 	require.NoError(t, sender.SubscribeRaw(topic, func([]byte) error { return nil }))
 
-	// Give gossipsub time to graft the mesh, then publish until it lands.
 	deadline := time.After(30 * time.Second)
 	tick := time.NewTicker(300 * time.Millisecond)
 	defer tick.Stop()
@@ -535,10 +504,6 @@ func TestGossip_MessageReachesAnotherNodeHandler(t *testing.T) {
 		}
 	}
 }
-
-// ---------------------------------------------------------------------------
-// SelfPublish — the fallback for topics with no registered handler.
-// ---------------------------------------------------------------------------
 
 func TestGossip_SelfPublishResignsAndForwards(t *testing.T) {
 	g, node := runningGossip(t)
@@ -594,10 +559,6 @@ func TestGossip_SelfPublishPropagatesStreamError(t *testing.T) {
 	assert.ErrorIs(t, g.SelfPublish(data), assert.AnError)
 }
 
-// ---------------------------------------------------------------------------
-// Peer-info publishing.
-// ---------------------------------------------------------------------------
-
 func TestGossip_PublishPeerInfoAlwaysAdvertisesSelf(t *testing.T) {
 	g, node := runningGossip(t)
 	received := captureTopic(t, g, pubSubDiscoveryTopic)
@@ -627,8 +588,6 @@ func TestGossip_PublishPeerInfoIncludesConnectedPeerAndRespectsLimit(t *testing.
 	other := newLiveNode(t)
 	connect(t, node, other)
 
-	// The startup publish may still be in flight, so republish and scan until a
-	// message that knows about the new peer shows up.
 	deadline := time.After(20 * time.Second)
 	for {
 		require.NoError(t, g.publishPeerInfo())

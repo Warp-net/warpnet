@@ -225,10 +225,6 @@ func (s *FollowRepoGraphTestSuite) counts(userId string) (followers, followings 
 	return followers, followings
 }
 
-// ---------------------------------------------------------------------------
-// Direction — mixing up follower and following is the classic social bug.
-// ---------------------------------------------------------------------------
-
 func (s *FollowRepoGraphTestSuite) TestFollowIsDirectedNotMutual() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
@@ -276,15 +272,10 @@ func (s *FollowRepoGraphTestSuite) TestMutualFollowKeepsBothSidesConsistent() {
 	s.Equal(uint64(1), bobFollowers)
 	s.Equal(uint64(1), bobFollowings)
 
-	// Unfollowing one direction must leave the other intact.
 	s.Require().NoError(s.repo.Unfollow(alice, bob))
 	s.False(s.repo.IsFollowing(alice, bob))
 	s.True(s.repo.IsFollowing(bob, alice), "bob still follows alice")
 }
-
-// ---------------------------------------------------------------------------
-// Counter integrity under repeated / bogus operations.
-// ---------------------------------------------------------------------------
 
 func (s *FollowRepoGraphTestSuite) TestDoubleFollowDoesNotInflateCounters() {
 	alice := uuid.New().String()
@@ -304,7 +295,6 @@ func (s *FollowRepoGraphTestSuite) TestDoubleFollowDoesNotInflateCounters() {
 	s.Len(followers, 1)
 }
 
-// Unfollowing someone you never followed must not push the counters below zero.
 func (s *FollowRepoGraphTestSuite) TestUnfollowWithoutFollowNeverUnderflows() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
@@ -333,7 +323,6 @@ func (s *FollowRepoGraphTestSuite) TestRepeatedUnfollowStaysAtZero() {
 	}
 }
 
-// Follow → unfollow → follow must settle at exactly one, not two.
 func (s *FollowRepoGraphTestSuite) TestRefollowAfterUnfollowSettlesAtOne() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
@@ -391,10 +380,6 @@ func (s *FollowRepoGraphTestSuite) TestManyFollowersCountMatchesListing() {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Malformed input must never panic the node.
-// ---------------------------------------------------------------------------
-
 func (s *FollowRepoGraphTestSuite) TestSelfFollowIsRejected() {
 	alice := uuid.New().String()
 	s.Error(s.repo.Follow(alice, alice))
@@ -436,10 +421,6 @@ func (s *FollowRepoGraphTestSuite) TestUnknownUserHasEmptyGraphNotAnError() {
 	s.False(s.repo.IsFollower(stranger, uuid.New().String()))
 }
 
-// ---------------------------------------------------------------------------
-// Follow requests — the locked-account flow.
-// ---------------------------------------------------------------------------
-
 func (s *FollowRepoGraphTestSuite) TestFollowRequestLifecycle() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
@@ -458,7 +439,6 @@ func (s *FollowRepoGraphTestSuite) TestFollowRequestLifecycle() {
 	s.Require().NoError(err)
 	s.Equal([]string{follower}, pending)
 
-	// Approval path: the request is cleared and a real follow edge is created.
 	s.Require().NoError(s.repo.RemoveFollowRequest(target, follower))
 	s.Require().NoError(s.repo.Follow(follower, target))
 
@@ -489,7 +469,6 @@ func (s *FollowRepoGraphTestSuite) TestRemoveFollowRequestIsIdempotent() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
 
-	// Rejecting a request that was never made is a harmless no-op.
 	s.Require().NoError(s.repo.RemoveFollowRequest(target, follower))
 
 	s.Require().NoError(s.repo.AddFollowRequest(target, follower))
@@ -501,7 +480,6 @@ func (s *FollowRepoGraphTestSuite) TestRemoveFollowRequestIsIdempotent() {
 	s.False(has)
 }
 
-// A pending request is not a follow — it must not leak into the graph or counts.
 func (s *FollowRepoGraphTestSuite) TestPendingRequestIsNotAFollow() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
@@ -544,7 +522,6 @@ func (s *FollowRepoGraphTestSuite) TestFollowRequestRejectsEmptyIdentifiers() {
 	_, _, err := s.repo.ListFollowRequests("", nil, nil)
 	s.Error(err)
 
-	// Reads with missing identifiers answer "no" instead of blowing up.
 	has, err := s.repo.HasFollowRequest("", "f")
 	s.NoError(err)
 	s.False(has)

@@ -81,8 +81,6 @@ func addrOf(h host.Host) warpnet.WarpAddrInfo {
 	return peer.AddrInfo{ID: h.ID(), Addrs: h.Addrs()}
 }
 
-// linkHosts makes the server dialable from the client. The pool dials by peer
-// id alone, so without this the bare host has no route to the peer.
 func linkHosts(t *testing.T, client, server host.Host) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -90,8 +88,6 @@ func linkHosts(t *testing.T, client, server host.Host) {
 	require.NoError(t, client.Connect(ctx, addrOf(server)))
 }
 
-// echoServer answers every request on testRoute with the given payload and
-// records what it received.
 func echoServer(t *testing.T, h host.Host, reply []byte) *[]event.Message {
 	t.Helper()
 	var mu sync.Mutex
@@ -130,8 +126,6 @@ func TestStreamPool_NilPoolAndCancelledContext(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled, "a shutting-down node must stop dialing")
 }
 
-// The request must arrive fully formed and signed — an unsigned or unaddressed
-// message would be rejected by the receiving middleware.
 func TestStreamPool_SendDeliversSignedEnvelope(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
@@ -160,9 +154,6 @@ func TestStreamPool_SendDeliversSignedEnvelope(t *testing.T) {
 		"a receiver must be able to prove the message really came from this node")
 }
 
-// A retry has to reuse the same message id, otherwise the receiver's
-// idempotency cache cannot recognise it as a duplicate and a "post tweet"
-// retried after a flaky write creates two tweets.
 func TestStreamPool_RetryReusesMessageID(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
@@ -181,7 +172,6 @@ func TestStreamPool_RetryReusesMessageID(t *testing.T) {
 		mu.Unlock()
 
 		if atomic.AddInt64(&attempts, 1) == 1 {
-			// Kill the stream so the client treats it as a transient failure.
 			_ = s.Reset()
 			return
 		}
@@ -205,9 +195,6 @@ func TestStreamPool_RetryReusesMessageID(t *testing.T) {
 	}
 }
 
-// A peer already known to be unreachable must short-circuit: no dial, no
-// sendTimeout wait, just an immediate offline answer. Without this a timeline
-// refresh across many dead peers stalls for minutes.
 func TestStreamPool_CachedOfflinePeerShortCircuits(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
@@ -217,7 +204,6 @@ func TestStreamPool_CachedOfflinePeerShortCircuits(t *testing.T) {
 	pool := newPool(t, client)
 	info := addrOf(server)
 
-	// Reachable to begin with.
 	_, err := pool.Send(info, testRoute, []byte(`{}`))
 	require.NoError(t, err)
 	assert.False(t, pool.isUnstreamable(server.ID()))
@@ -230,7 +216,6 @@ func TestStreamPool_CachedOfflinePeerShortCircuits(t *testing.T) {
 	assert.Less(t, time.Since(start), time.Second,
 		"a peer marked offline must not be dialled at all")
 
-	// Clearing the mark makes it reachable again in the same process.
 	pool.SetStreamable(server.ID())
 	_, err = pool.Send(info, testRoute, []byte(`{}`))
 	assert.NoError(t, err)
@@ -248,7 +233,6 @@ func TestStreamPool_StreamableMarkCanBeClearedAndReapplied(t *testing.T) {
 	pool.SetStreamable(id)
 	assert.False(t, pool.isUnstreamable(id), "a reconnect must clear the offline mark")
 
-	// Nil-receiver forms must be inert rather than panicking.
 	var nilPool *streamPool
 	assert.NotPanics(t, func() {
 		nilPool.SetUnstreamable(id)
@@ -257,8 +241,6 @@ func TestStreamPool_StreamableMarkCanBeClearedAndReapplied(t *testing.T) {
 	})
 }
 
-// A successful send must clear a stale offline mark so a peer that came back
-// isn't stuck being skipped.
 func TestStreamPool_SuccessfulSendClearsOfflineMark(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
@@ -301,8 +283,6 @@ func TestStreamPool_MalformedTargetsAreRejected(t *testing.T) {
 	})
 }
 
-// Identical concurrent requests must collapse into one dial — a timeline
-// refresh fanning out the same query must not hammer the peer.
 func TestStreamPool_IdenticalConcurrentSendsCollapse(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
@@ -342,8 +322,6 @@ func TestStreamPool_IdenticalConcurrentSendsCollapse(t *testing.T) {
 		"singleflight must collapse identical in-flight requests into one")
 }
 
-// Different payloads must NOT be collapsed — otherwise two different tweets
-// posted at once would share one response.
 func TestStreamPool_DifferentPayloadsAreNotCollapsed(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)

@@ -42,11 +42,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The configuration is built once in init(), so it cannot be re-derived inside
-// a running test. Every case below therefore re-executes this very test binary
-// as a child process with the flags and environment under test, and has the
-// child print back what init() produced.
-
 const (
 	helperEnvVar = "WARPNET_CONFIG_TEST_HELPER"
 	helperMarker = "WARPNET_CONFIG_JSON "
@@ -55,7 +50,6 @@ const (
 	helperModeFlags  = "flags"
 )
 
-// snapshot is the child's view of the parsed configuration.
 type snapshot struct {
 	HostV4         string   `json:"host_v4"`
 	HostV6         string   `json:"host_v6"`
@@ -74,8 +68,6 @@ type snapshot struct {
 	IsTestnet      bool     `json:"is_testnet"`
 	Version        string   `json:"version"`
 
-	// TestRunFlag is what the standard flag package saw for -test.run. It is
-	// the regression guard for config init eating the testing flags.
 	TestRunFlag string `json:"test_run_flag"`
 }
 
@@ -104,9 +96,6 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 
 	case helperModeFlags:
-		// Exactly what testing.M.Run() does before running any test. If config
-		// init has marked flag.CommandLine as parsed, this is a no-op and the
-		// flag keeps its zero value.
 		flag.Parse()
 		var run string
 		if f := flag.Lookup("test.run"); f != nil {
@@ -128,7 +117,6 @@ func emit(s snapshot) {
 	fmt.Println(helperMarker + string(bt))
 }
 
-// run re-executes this test binary in helper mode and returns what it printed.
 func run(t *testing.T, mode string, args []string, env map[string]string) snapshot {
 	t.Helper()
 
@@ -152,8 +140,6 @@ func run(t *testing.T, mode string, args []string, env map[string]string) snapsh
 	return snapshot{}
 }
 
-// childEnv strips every variable the config reads so a stale value in the
-// developer's shell cannot make a "defaults" case pass by accident.
 func childEnv(mode string, extra map[string]string) []string {
 	managed := []string{
 		"NODE_HOST_V4", "NODE_HOST_V6", "NODE_PORT", "NODE_SEED", "NODE_NETWORK",
@@ -196,13 +182,6 @@ func withEnv(t *testing.T, env map[string]string) snapshot {
 	return run(t, helperModeConfig, nil, env)
 }
 
-// ---------------------------------------------------------------------------
-// Regression guard for the flag-parsing breakage.
-// ---------------------------------------------------------------------------
-
-// Importing config must not consume the testing flags. When it did, -run, -v
-// and -coverprofile silently stopped working in every package importing it,
-// and coverage for those packages was reported as empty.
 func TestConfigInitDoesNotSwallowTestingFlags(t *testing.T) {
 	got := run(t, helperModeFlags, []string{"-test.run=SomePattern"}, nil)
 	assert.Equal(t, "SomePattern", got.TestRunFlag,
@@ -213,10 +192,6 @@ func TestConfigInitLeavesTestingFlagsEmptyWhenNotGiven(t *testing.T) {
 	got := run(t, helperModeFlags, nil, nil)
 	assert.Empty(t, got.TestRunFlag)
 }
-
-// ---------------------------------------------------------------------------
-// Defaults.
-// ---------------------------------------------------------------------------
 
 func TestDefaults(t *testing.T) {
 	c := withFlags(t)
@@ -236,8 +211,6 @@ func TestDefaults(t *testing.T) {
 	assert.NotEmpty(t, c.Version)
 }
 
-// A node with no explicit seed must still get a stable, non-empty one, and it
-// must be derived from the settings that identify this node.
 func TestDefaultSeedIsDerivedAndStable(t *testing.T) {
 	first := withFlags(t)
 	second := withFlags(t)
@@ -251,10 +224,6 @@ func TestDefaultSeedIsDerivedAndStable(t *testing.T) {
 	assert.Contains(t, first.Seed, warpnetNetwork)
 	assert.Contains(t, first.Seed, "4001")
 }
-
-// ---------------------------------------------------------------------------
-// Flags.
-// ---------------------------------------------------------------------------
 
 func TestFlagsAreApplied(t *testing.T) {
 	c := withFlags(t,
@@ -296,10 +265,6 @@ func TestFlagsAcceptEqualsForm(t *testing.T) {
 	assert.Equal(t, "4444", c.Port)
 }
 
-// ---------------------------------------------------------------------------
-// Environment variables.
-// ---------------------------------------------------------------------------
-
 func TestEnvVarsAreApplied(t *testing.T) {
 	c := withEnv(t, map[string]string{
 		"NODE_HOST_V4":             "192.168.0.10",
@@ -333,11 +298,6 @@ func TestEnvVarsAreApplied(t *testing.T) {
 	assert.Contains(t, c.DatabasePath, filepath.Join(testNetNetwork, "envdb"))
 }
 
-// Docker and systemd units set the network through the environment; a
-// half-configured env must leave everything else on its default.
-// node.print-psk is the only setting whose name contains a dash. The env key
-// replacer has to fold it too, otherwise the variable would be NODE_PRINT-PSK,
-// which no shell or compose file can express.
 func TestDashedSettingIsReachableThroughEnv(t *testing.T) {
 	c := withEnv(t, map[string]string{"NODE_PRINT_PSK": "true"})
 	assert.True(t, c.IsPskPrinted)
@@ -355,12 +315,6 @@ func TestEnvVarAloneDoesNotDisturbTheRest(t *testing.T) {
 	assert.Equal(t, "info", c.LoggingLevel)
 }
 
-// ---------------------------------------------------------------------------
-// Precedence.
-// ---------------------------------------------------------------------------
-
-// An explicit command-line flag is the most specific instruction there is, so
-// it must win over an inherited environment variable.
 func TestFlagOverridesEnv(t *testing.T) {
 	c := run(t, helperModeConfig,
 		[]string{"--node.network", testNetNetwork, "--node.port", "4002", "--logging.level", "debug"},
@@ -376,12 +330,6 @@ func TestFlagOverridesEnv(t *testing.T) {
 	assert.Equal(t, "debug", c.LoggingLevel)
 }
 
-// ---------------------------------------------------------------------------
-// Derived values.
-// ---------------------------------------------------------------------------
-
-// "mainnet" is the user-facing name of the production network; internally it
-// must resolve to the same network as the default.
 func TestMainnetAliasesToWarpnet(t *testing.T) {
 	c := withFlags(t, "--node.network", "mainnet")
 
@@ -401,8 +349,6 @@ func TestBootstrapListFollowsTheNetwork(t *testing.T) {
 		"a testnet node must not dial the production bootstrap nodes")
 }
 
-// Custom bootstrap peers are prepended to, not substituted for, the built-in
-// ones, so a node with a bad custom peer can still reach the network.
 func TestCustomBootstrapIsAddedToTheDefaults(t *testing.T) {
 	custom := "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
 
@@ -424,8 +370,6 @@ func TestCustomBootstrapAcceptsACommaSeparatedList(t *testing.T) {
 	assert.Equal(t, b, c.Bootstrap[1])
 }
 
-// An unknown network gets no bootstrap peers at all rather than silently
-// falling back to production ones.
 func TestUnknownNetworkGetsNoBootstrapPeers(t *testing.T) {
 	c := withFlags(t, "--node.network", "somethingelse")
 
@@ -434,8 +378,6 @@ func TestUnknownNetworkGetsNoBootstrapPeers(t *testing.T) {
 	assert.False(t, c.IsTestnet)
 }
 
-// Networks must not share a data directory, otherwise a testnet run would
-// overwrite the production database.
 func TestDatabasePathIsSeparatedPerNetworkAndDir(t *testing.T) {
 	main := withFlags(t)
 	test := withFlags(t, "--node.network", testNetNetwork)
@@ -449,8 +391,6 @@ func TestDatabasePathIsSeparatedPerNetworkAndDir(t *testing.T) {
 	assert.NotEqual(t, main.DatabasePath, custom.DatabasePath)
 }
 
-// Whitespace around values arrives from shell scripts and compose files; it
-// must not end up inside a directory name or a log level.
 func TestSurroundingWhitespaceIsTrimmed(t *testing.T) {
 	c := withFlags(t,
 		"--node.network", "  "+testNetNetwork+"  ",
@@ -475,10 +415,6 @@ func TestLoggingFormatIsCaseInsensitive(t *testing.T) {
 	c = withFlags(t, "--logging.format", "Text")
 	assert.Equal(t, string(TextFormat), c.LoggingFormat)
 }
-
-// ---------------------------------------------------------------------------
-// Pure helpers — no child process needed.
-// ---------------------------------------------------------------------------
 
 func TestIsTestnet(t *testing.T) {
 	assert.True(t, node{Network: testNetNetwork}.IsTestnet())
@@ -508,7 +444,6 @@ func TestAddrInfos(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// An address without /p2p/ names no peer, so it cannot be dialled.
 	t.Run("address without a peer id is rejected", func(t *testing.T) {
 		_, err := node{Bootstrap: []string{"/ip4/1.2.3.4/tcp/4001"}}.AddrInfos()
 		assert.Error(t, err)

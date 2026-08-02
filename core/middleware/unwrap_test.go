@@ -46,8 +46,6 @@ import (
 
 const testProto = warpnet.WarpProtocolID("/public/post/tweet/0.0.0")
 
-// roundTrip drives one request through the unwrap middleware over a real
-// loopback stream and returns whatever the middleware wrote back.
 func roundTrip(t *testing.T, mw *WarpMiddleware, handler warpnet.WarpHandlerFunc, request []byte) []byte {
 	t.Helper()
 
@@ -105,8 +103,6 @@ func TestUnwrap_ByteAndStringResponsesGoOutVerbatim(t *testing.T) {
 	assert.Equal(t, `{"str":true}`, string(str))
 }
 
-// The request body must reach the handler untouched — truncation or
-// re-encoding here would corrupt every post on the network.
 func TestUnwrap_HandlerSeesExactRequestBytes(t *testing.T) {
 	mw := newMW(t)
 
@@ -120,8 +116,6 @@ func TestUnwrap_HandlerSeesExactRequestBytes(t *testing.T) {
 	assert.Equal(t, payload, seen)
 }
 
-// A handler that answers nothing must still produce a response, otherwise the
-// caller hangs waiting for bytes that never come.
 func TestUnwrap_NilResponseBecomesAnErrorEnvelope(t *testing.T) {
 	mw := newMW(t)
 
@@ -147,8 +141,6 @@ func TestUnwrap_HandlerErrorBecomesResponseError(t *testing.T) {
 	assert.Contains(t, out.Message, "handler exploded")
 }
 
-// An offline peer is an expected condition on a P2P social network, not an
-// internal failure — the handler's own answer must survive.
 func TestUnwrap_OfflineErrorKeepsHandlerResponse(t *testing.T) {
 	mw := newMW(t)
 
@@ -160,8 +152,6 @@ func TestUnwrap_OfflineErrorKeepsHandlerResponse(t *testing.T) {
 		"an offline peer must not be rewritten into an internal error")
 }
 
-// A response the encoder cannot represent must fail closed — writing half an
-// object would leave the caller parsing garbage.
 func TestUnwrap_UnencodableResponseWritesNothing(t *testing.T) {
 	mw := newMW(t)
 
@@ -171,8 +161,6 @@ func TestUnwrap_UnencodableResponseWritesNothing(t *testing.T) {
 
 	assert.Empty(t, resp)
 }
-
-// --- WarpStreamBody / idempotency -----------------------------------------
 
 func bodyStream(t *testing.T, proto warpnet.WarpProtocolID, body []byte, messageID string) (*warpnet.WarpStreamBody, warpnet.WarpStream) {
 	t.Helper()
@@ -206,8 +194,6 @@ func TestUnwrap_BodyStreamUsesPreReadPayload(t *testing.T) {
 	assert.Equal(t, `{"pre":"read"}`, seen, "a pre-read body must not be re-read from the wire")
 }
 
-// The same message id replayed by the same peer must run the handler once —
-// a retried "post tweet" must not create two tweets.
 func TestUnwrap_IdempotentReplayRunsHandlerOnce(t *testing.T) {
 	mw := newMW(t)
 
@@ -231,7 +217,6 @@ func TestUnwrap_IdempotentReplayRunsHandlerOnce(t *testing.T) {
 	}
 }
 
-// A failing handler must not be cached: the next retry has to reach it again.
 func TestUnwrap_FailedResponseIsNotCached(t *testing.T) {
 	mw := newMW(t)
 
@@ -256,7 +241,6 @@ func TestUnwrap_FailedResponseIsNotCached(t *testing.T) {
 		"a transient failure must not be pinned for the whole TTL")
 }
 
-// Concurrent replays of one id must collapse onto a single handler run.
 func TestUnwrap_ConcurrentReplaysShareOneHandlerRun(t *testing.T) {
 	mw := newMW(t)
 
@@ -293,7 +277,6 @@ func TestUnwrap_ConcurrentReplaysShareOneHandlerRun(t *testing.T) {
 		"in-flight duplicates must share one handler invocation")
 }
 
-// A message id without idempotency tracking still has to work normally.
 func TestUnwrap_NonIdempotentProtocolAlwaysRunsHandler(t *testing.T) {
 	mw := newMW(t)
 

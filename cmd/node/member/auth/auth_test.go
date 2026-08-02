@@ -131,8 +131,6 @@ func (f *fakeUserRepo) snapshot() ([]domain.User, []domain.User) {
 	return append([]domain.User(nil), f.created...), append([]domain.User(nil), f.updated...)
 }
 
-// newService wires an AuthService whose node-startup handshake is answered by a
-// background goroutine, mirroring how the node replies on authReady.
 func newService(t *testing.T, authRepo *fakeAuthRepo, userRepo *fakeUserRepo, reply *domain.AuthNodeInfo) *AuthService {
 	t.Helper()
 
@@ -158,10 +156,6 @@ func newService(t *testing.T, authRepo *fakeAuthRepo, userRepo *fakeUserRepo, re
 	return as
 }
 
-// ---------------------------------------------------------------------------
-// Password policy — the only gate between an attacker and the local database.
-// ---------------------------------------------------------------------------
-
 func TestValidatePassword_RejectsWeakSecrets(t *testing.T) {
 	cases := []struct {
 		pw   string
@@ -174,8 +168,6 @@ func TestValidatePassword_RejectsWeakSecrets(t *testing.T) {
 		{"ABCDEFG1!", ErrPasswordLowerCaseRequired},
 		{"Abcdefgh!", ErrPasswordDigitRequired},
 		{strings.Repeat("Aa1!", 9), ErrMaxPasswordLength},
-		// The character classes are ASCII-only: Cyrillic letters satisfy
-		// neither the upper nor the lower requirement.
 		{"ПАРОЛЬ1A!", ErrPasswordLowerCaseRequired},
 		{"пароль1a!", ErrPasswordUpperCaseRequired},
 	}
@@ -196,7 +188,6 @@ func TestValidatePassword_AcceptsStrongSecrets(t *testing.T) {
 	}
 }
 
-// A password made only of spaces must not sneak past the length check.
 func TestAuthLogin_TrimsPasswordBeforeValidating(t *testing.T) {
 	repo := newFakeAuthRepo()
 	as := newService(t, repo, &fakeUserRepo{}, nil)
@@ -219,10 +210,6 @@ func TestAuthLogin_SurroundingWhitespaceIsIgnored(t *testing.T) {
 		"the trimmed password must be what unlocks the database")
 }
 
-// ---------------------------------------------------------------------------
-// Login flow.
-// ---------------------------------------------------------------------------
-
 func TestAuthLogin_WrongCredentialsAreRejected(t *testing.T) {
 	repo := newFakeAuthRepo()
 	repo.authErr = errors.New("wrong password")
@@ -238,7 +225,6 @@ func TestAuthLogin_WrongCredentialsAreRejected(t *testing.T) {
 	assert.Empty(t, created, "a failed login must not create an account")
 }
 
-// The first login on a fresh node registers the owner and their user record.
 func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 	repo := newFakeAuthRepo()
 	users := &fakeUserRepo{}
@@ -260,8 +246,6 @@ func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 	assert.Equal(t, created[0].Id, updated[0].Id, "the same identity must be carried through")
 }
 
-// Logging in as a different user against an existing database must fail —
-// otherwise one account's data would be re-labelled as another's.
 func TestAuthLogin_UsernameMismatchIsRejected(t *testing.T) {
 	repo := newFakeAuthRepo()
 	repo.owner = domain.Owner{UserId: "existing-id", Username: "alice"}
@@ -316,8 +300,6 @@ func TestAuthLogin_UserCreationFailureAborts(t *testing.T) {
 	assert.False(t, as.IsAuthenticated())
 }
 
-// A second concurrent login attempt in one process must be refused — the node
-// is already bound to an identity.
 func TestAuthLogin_SecondLoginIsRefusedUntilReset(t *testing.T) {
 	repo := newFakeAuthRepo()
 	users := &fakeUserRepo{}
@@ -329,12 +311,10 @@ func TestAuthLogin_SecondLoginIsRefusedUntilReset(t *testing.T) {
 	_, err = as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
 	assert.ErrorIs(t, err, ErrAlreadyAuthenticated)
 
-	// Reset is what lets the remote node accept a fresh login in-process.
 	as.Reset()
 	assert.False(t, as.IsAuthenticated())
 }
 
-// If the node never comes up, login must fail rather than hang forever.
 func TestAuthLogin_CancelledStartupAborts(t *testing.T) {
 	repo := newFakeAuthRepo()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -361,10 +341,6 @@ func TestAuthLogin_CancelledStartupAborts(t *testing.T) {
 		t.Fatal("login hung after node startup was cancelled")
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Accessors and logout.
-// ---------------------------------------------------------------------------
 
 func TestAuthService_AccessorsAndLogout(t *testing.T) {
 	repo := newFakeAuthRepo()

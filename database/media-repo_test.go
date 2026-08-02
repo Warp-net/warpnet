@@ -129,10 +129,6 @@ func TestMediaRepoTestSuite(t *testing.T) {
 	suite.Run(t, new(MediaRepoTestSuite))
 }
 
-// ---------------------------------------------------------------------------
-// Media storage — content-addressed blobs.
-// ---------------------------------------------------------------------------
-
 func (s *MediaRepoTestSuite) TestNilMediaRepoNeverPanics() {
 	var repo *MediaRepo
 
@@ -152,8 +148,6 @@ func (s *MediaRepoTestSuite) TestNilMediaRepoNeverPanics() {
 	s.ErrorIs(repo.SetForeignVideoWithTTL("u", "k", "vid"), ErrMediaRepoNotInit)
 }
 
-// Media is content-addressed: the same bytes must always produce the same key,
-// so re-uploading an image doesn't duplicate megabytes of storage.
 func (s *MediaRepoTestSuite) TestImageKeyIsContentAddressed() {
 	user := uuid.New().String()
 	img := Base64Video("data:image/jpeg;base64,AAAA")
@@ -180,8 +174,6 @@ func (s *MediaRepoTestSuite) TestImageRoundTripAndIsolation() {
 	s.Require().NoError(err)
 	s.Equal(Base64Image("data:image/jpeg;base64,ALICE"), got)
 
-	// The same content key under another user must not resolve — media is
-	// namespaced per owner.
 	_, err = s.repo.GetImage(bob, string(key))
 	s.ErrorIs(err, ErrMediaNotFound)
 }
@@ -244,8 +236,6 @@ func (s *MediaRepoTestSuite) TestForeignMediaIsReadableUnderTheGivenKey() {
 	s.Equal(Base64Video("data:video/mp4;base64,REMOTE"), vid)
 }
 
-// Images and videos live in separate namespaces: a video key must never
-// resolve as an image, even when the bytes happen to match.
 func (s *MediaRepoTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
 	user := uuid.New().String()
 	payload := "data:application/octet-stream;base64,SAME"
@@ -264,12 +254,6 @@ func (s *MediaRepoTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
 	s.ErrorIs(err, ErrMediaNotFound)
 }
 
-// ---------------------------------------------------------------------------
-// Alt-text / focal point metadata.
-// ---------------------------------------------------------------------------
-
-// "Never described" and "described as empty" must be indistinguishable to the
-// caller, so a missing record is a zero value rather than an error.
 func (s *MediaRepoTestSuite) TestImageMetaDefaultsToZeroValue() {
 	user := uuid.New().String()
 
@@ -293,7 +277,6 @@ func (s *MediaRepoTestSuite) TestImageMetaRoundTripAndOverwrite() {
 	s.InDelta(-0.5, meta.FocusX, 0.0001)
 	s.InDelta(0.25, meta.FocusY, 0.0001)
 
-	// Editing alt-text must replace, not merge.
 	s.Require().NoError(s.repo.SetImageMeta(user, "key", MediaMeta{Description: "corrected"}))
 	meta, err = s.repo.GetImageMeta(user, "key")
 	s.Require().NoError(err)
@@ -336,8 +319,6 @@ func (s *MediaRepoTestSuite) TestImageMetaRejectsEmptyIdentifiers() {
 	s.Equal(MediaMeta{}, meta)
 }
 
-// Metadata lives beside the blob, so describing an image must not touch the
-// (potentially megabyte-sized) payload.
 func (s *MediaRepoTestSuite) TestImageMetaDoesNotDisturbTheBlob() {
 	user := uuid.New().String()
 	key, err := s.repo.SetImage(user, "data:image/jpeg;base64,PAYLOAD")

@@ -175,8 +175,6 @@ func (repo *FollowRepo) IsFollower(ownerId, otherUserId string) bool {
 }
 
 func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
-	// Mirrors Follow: the prefix builder panics on an empty root, so a
-	// malformed unfollow must be rejected rather than crash the node.
 	if fromUserId == "" || toUserId == "" {
 		return local_store.DBError("invalid unfollow params")
 	}
@@ -223,8 +221,6 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 	if err := txn.Delete(fixedFollowingKey); err != nil {
 		return err
 	}
-	// The sortable keys are absent when there was no follow edge to begin with;
-	// deleting an empty key is a storage error, so skip it and stay idempotent.
 	if len(sortableFollowingKey) != 0 {
 		if err := txn.Delete(local_store.DatabaseKey(sortableFollowingKey)); err != nil {
 			return err

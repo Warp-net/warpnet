@@ -116,8 +116,6 @@ func TestAESKeyFromPassword_IsStableAndDistinct(t *testing.T) {
 	assert.Equal(t, a, b, "the same dashboard password must derive the same key")
 	assert.NotEqual(t, a, c, "a different password must not collide")
 
-	// An empty password still yields a usable key rather than a nil slice that
-	// would silently disable encryption.
 	assert.Len(t, AESKeyFromPassword(""), 32)
 }
 
@@ -136,8 +134,6 @@ func TestAESCodec_RoundTrip(t *testing.T) {
 	assert.Equal(t, plain, got)
 }
 
-// Two encryptions of the same plaintext must differ — a deterministic nonce
-// would leak that a user re-sent the same message.
 func TestAESCodec_NonceIsFresh(t *testing.T) {
 	codec := AESCodec{Key: AESKeyFromPassword("secret")}
 	plain := []byte("same message")
@@ -156,8 +152,6 @@ func TestAESCodec_NonceIsFresh(t *testing.T) {
 	assert.Equal(t, one, two)
 }
 
-// A codec with no key is the "no dashboard password" configuration: traffic
-// passes through untouched and is honestly reported as unencrypted.
 func TestAESCodec_NoKeyIsPassthrough(t *testing.T) {
 	codec := AESCodec{}
 	payload := []byte("plain text")
@@ -180,9 +174,6 @@ func TestAESCodec_EncodeRespectsEncryptedFlag(t *testing.T) {
 	assert.Equal(t, payload, out, "a frame marked plain must go out plain")
 }
 
-// The wrong password must not decrypt someone else's dashboard traffic. The
-// codec degrades to "plaintext" rather than returning garbage as if it were
-// authentic.
 func TestAESCodec_WrongKeyDoesNotDecrypt(t *testing.T) {
 	sender := AESCodec{Key: AESKeyFromPassword("correct-password")}
 	attacker := AESCodec{Key: AESKeyFromPassword("guessed-password")}
@@ -197,8 +188,6 @@ func TestAESCodec_WrongKeyDoesNotDecrypt(t *testing.T) {
 	assert.Equal(t, sealed, got, "the frame is handed back untouched")
 }
 
-// GCM is authenticated: flipping a byte must fail the tag, not yield a mangled
-// but accepted message.
 func TestAESCodec_TamperedCiphertextIsRejected(t *testing.T) {
 	codec := AESCodec{Key: AESKeyFromPassword("secret")}
 
@@ -206,7 +195,6 @@ func TestAESCodec_TamperedCiphertextIsRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	tampered := bytes.Clone(sealed)
-	// Flip a character in the middle of the base64 body.
 	idx := len(tampered) / 2
 	if tampered[idx] == 'A' {
 		tampered[idx] = 'B'
@@ -278,7 +266,6 @@ func TestAESGCM_RejectsInvalidKeySizes(t *testing.T) {
 func TestAESGCM_ShortCiphertextIsReported(t *testing.T) {
 	key := AESKeyFromPassword("secret")
 
-	// Valid base64 that decodes to fewer bytes than the nonce.
 	_, err := aesGCMDecrypt(key, []byte("QUJD"))
 	assert.ErrorIs(t, err, ErrCiphertextTooShort)
 }

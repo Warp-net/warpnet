@@ -78,17 +78,8 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
-	// Deliberately no pflag.CommandLine.AddGoFlagSet(flag.CommandLine): pflag
-	// re-parses every added Go flag set with no arguments, which marks the
-	// standard flag.CommandLine as parsed. The testing package registers its
-	// -test.* flags there later and then skips flag.Parse() because it already
-	// looks parsed, so -run, -v and -coverprofile silently stop working in
-	// every package that imports this one. Nothing here registers Go flags, so
-	// there is nothing to import anyway.
 	pflag.Parse()
 
-	// Dashes are replaced too: without it "node.print-psk" would map to
-	// NODE_PRINT-PSK, which no shell or compose file can set.
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 

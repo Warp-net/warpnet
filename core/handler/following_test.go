@@ -825,10 +825,6 @@ func TestStreamGetFollowingsHandler(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Follow requests — the locked-account gate.
-// ---------------------------------------------------------------------------
-
 func TestStreamGetFollowRequestsHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
 		_, err := StreamGetFollowRequestsHandler(stubFollowRepo{})([]byte("{"), nil)
@@ -887,8 +883,6 @@ func TestStreamAuthorizeFollowRequestHandler(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// Approving must create the edge in the follower→target direction. Getting
-	// this backwards would make the account owner follow their own applicant.
 	t.Run("approval creates the follow in the right direction", func(t *testing.T) {
 		var followFrom, followTo string
 		var removedTarget, removedFollower string
@@ -915,8 +909,6 @@ func TestStreamAuthorizeFollowRequestHandler(t *testing.T) {
 		assert.Equal(t, "applicant", removedFollower)
 	})
 
-	// If the follow cannot be stored, the request must stay pending so the
-	// owner can retry — silently dropping it would strand the applicant.
 	t.Run("failed follow leaves the request pending", func(t *testing.T) {
 		removeCalled := false
 		repo := stubFollowRepo{
@@ -959,7 +951,6 @@ func TestStreamRejectFollowRequestHandler(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// Rejecting must never create a follow edge — that is the whole point.
 	t.Run("rejection removes the request and follows nobody", func(t *testing.T) {
 		followCalled := false
 		var removedTarget, removedFollower string
