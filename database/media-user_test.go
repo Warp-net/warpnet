@@ -39,7 +39,7 @@ import (
 	"go.uber.org/goleak"
 )
 
-type MediaUserHostileTestSuite struct {
+type MediaUserTestSuite struct {
 	suite.Suite
 
 	db    *local_store.DB
@@ -47,7 +47,7 @@ type MediaUserHostileTestSuite struct {
 	users *UserRepo
 }
 
-func (s *MediaUserHostileTestSuite) SetupSuite() {
+func (s *MediaUserTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
@@ -58,7 +58,7 @@ func (s *MediaUserHostileTestSuite) SetupSuite() {
 	s.users = NewUserRepo(s.db)
 }
 
-func (s *MediaUserHostileTestSuite) TearDownSuite() {
+func (s *MediaUserTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
@@ -66,7 +66,7 @@ func (s *MediaUserHostileTestSuite) TearDownSuite() {
 // Media storage — content-addressed blobs.
 // ---------------------------------------------------------------------------
 
-func (s *MediaUserHostileTestSuite) TestNilMediaRepoNeverPanics() {
+func (s *MediaUserTestSuite) TestNilMediaRepoNeverPanics() {
 	var repo *MediaRepo
 
 	_, err := repo.GetImage("u", "k")
@@ -87,7 +87,7 @@ func (s *MediaUserHostileTestSuite) TestNilMediaRepoNeverPanics() {
 
 // Media is content-addressed: the same bytes must always produce the same key,
 // so re-uploading an image doesn't duplicate megabytes of storage.
-func (s *MediaUserHostileTestSuite) TestImageKeyIsContentAddressed() {
+func (s *MediaUserTestSuite) TestImageKeyIsContentAddressed() {
 	user := uuid.New().String()
 	img := Base64Video("data:image/jpeg;base64,AAAA")
 
@@ -102,7 +102,7 @@ func (s *MediaUserHostileTestSuite) TestImageKeyIsContentAddressed() {
 	s.NotEqual(first, other, "different bytes must not collide")
 }
 
-func (s *MediaUserHostileTestSuite) TestImageRoundTripAndIsolation() {
+func (s *MediaUserTestSuite) TestImageRoundTripAndIsolation() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -119,7 +119,7 @@ func (s *MediaUserHostileTestSuite) TestImageRoundTripAndIsolation() {
 	s.ErrorIs(err, ErrMediaNotFound)
 }
 
-func (s *MediaUserHostileTestSuite) TestVideoRoundTripAndIsolation() {
+func (s *MediaUserTestSuite) TestVideoRoundTripAndIsolation() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -134,7 +134,7 @@ func (s *MediaUserHostileTestSuite) TestVideoRoundTripAndIsolation() {
 	s.ErrorIs(err, ErrMediaNotFound)
 }
 
-func (s *MediaUserHostileTestSuite) TestMediaRejectsEmptyInput() {
+func (s *MediaUserTestSuite) TestMediaRejectsEmptyInput() {
 	user := uuid.New().String()
 
 	_, err := s.media.SetImage(user, "")
@@ -163,7 +163,7 @@ func (s *MediaUserHostileTestSuite) TestMediaRejectsEmptyInput() {
 	s.Error(s.media.SetForeignVideoWithTTL("", "k", "data"))
 }
 
-func (s *MediaUserHostileTestSuite) TestForeignMediaIsReadableUnderTheGivenKey() {
+func (s *MediaUserTestSuite) TestForeignMediaIsReadableUnderTheGivenKey() {
 	user := uuid.New().String()
 
 	s.Require().NoError(s.media.SetForeignImageWithTTL(user, "remote-key", "data:image/jpeg;base64,REMOTE"))
@@ -179,7 +179,7 @@ func (s *MediaUserHostileTestSuite) TestForeignMediaIsReadableUnderTheGivenKey()
 
 // Images and videos live in separate namespaces: a video key must never
 // resolve as an image, even when the bytes happen to match.
-func (s *MediaUserHostileTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
+func (s *MediaUserTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
 	user := uuid.New().String()
 	payload := "data:application/octet-stream;base64,SAME"
 
@@ -203,7 +203,7 @@ func (s *MediaUserHostileTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
 
 // "Never described" and "described as empty" must be indistinguishable to the
 // caller, so a missing record is a zero value rather than an error.
-func (s *MediaUserHostileTestSuite) TestImageMetaDefaultsToZeroValue() {
+func (s *MediaUserTestSuite) TestImageMetaDefaultsToZeroValue() {
 	user := uuid.New().String()
 
 	meta, err := s.media.GetImageMeta(user, "never-described")
@@ -211,7 +211,7 @@ func (s *MediaUserHostileTestSuite) TestImageMetaDefaultsToZeroValue() {
 	s.Equal(MediaMeta{}, meta)
 }
 
-func (s *MediaUserHostileTestSuite) TestImageMetaRoundTripAndOverwrite() {
+func (s *MediaUserTestSuite) TestImageMetaRoundTripAndOverwrite() {
 	user := uuid.New().String()
 
 	s.Require().NoError(s.media.SetImageMeta(user, "key", MediaMeta{
@@ -235,10 +235,10 @@ func (s *MediaUserHostileTestSuite) TestImageMetaRoundTripAndOverwrite() {
 	s.Zero(meta.FocusY)
 }
 
-func (s *MediaUserHostileTestSuite) TestImageMetaSurvivesHostileDescriptions() {
+func (s *MediaUserTestSuite) TestImageMetaSurvivesExoticDescriptions() {
 	user := uuid.New().String()
 
-	hostile := []string{
+	inputs := []string{
 		strings.Repeat("описание ", 500),
 		`<img src=x onerror="alert(1)">`,
 		"line\nbreak\ttab",
@@ -246,7 +246,7 @@ func (s *MediaUserHostileTestSuite) TestImageMetaSurvivesHostileDescriptions() {
 		`{"json":"injection"}`,
 	}
 
-	for i, desc := range hostile {
+	for i, desc := range inputs {
 		key := uuid.New().String()
 		s.Require().NoErrorf(s.media.SetImageMeta(user, key, MediaMeta{Description: desc}), "case %d", i)
 
@@ -256,7 +256,7 @@ func (s *MediaUserHostileTestSuite) TestImageMetaSurvivesHostileDescriptions() {
 	}
 }
 
-func (s *MediaUserHostileTestSuite) TestImageMetaRejectsEmptyIdentifiers() {
+func (s *MediaUserTestSuite) TestImageMetaRejectsEmptyIdentifiers() {
 	s.Error(s.media.SetImageMeta("", "k", MediaMeta{}))
 	s.Error(s.media.SetImageMeta("u", "", MediaMeta{}))
 
@@ -271,7 +271,7 @@ func (s *MediaUserHostileTestSuite) TestImageMetaRejectsEmptyIdentifiers() {
 
 // Metadata lives beside the blob, so describing an image must not touch the
 // (potentially megabyte-sized) payload.
-func (s *MediaUserHostileTestSuite) TestImageMetaDoesNotDisturbTheBlob() {
+func (s *MediaUserTestSuite) TestImageMetaDoesNotDisturbTheBlob() {
 	user := uuid.New().String()
 	key, err := s.media.SetImage(user, "data:image/jpeg;base64,PAYLOAD")
 	s.Require().NoError(err)
@@ -287,7 +287,7 @@ func (s *MediaUserHostileTestSuite) TestImageMetaDoesNotDisturbTheBlob() {
 // Profile updates — partial payloads must never erase a profile.
 // ---------------------------------------------------------------------------
 
-func (s *MediaUserHostileTestSuite) createUser(u domain.User) domain.User {
+func (s *MediaUserTestSuite) createUser(u domain.User) domain.User {
 	s.T().Helper()
 	if u.Id == "" {
 		u.Id = uuid.New().String()
@@ -297,14 +297,14 @@ func (s *MediaUserHostileTestSuite) createUser(u domain.User) domain.User {
 	return created
 }
 
-func (s *MediaUserHostileTestSuite) TestUpdateOfUnknownUserFails() {
+func (s *MediaUserTestSuite) TestUpdateOfUnknownUserFails() {
 	_, err := s.users.Update(uuid.New().String(), domain.User{Username: "ghost"})
 	s.Error(err, "updating a profile that was never created must not create it")
 }
 
 // A client that only changes the bio sends only the bio — every other field
 // must survive untouched.
-func (s *MediaUserHostileTestSuite) TestPartialUpdateKeepsUntouchedFields() {
+func (s *MediaUserTestSuite) TestPartialUpdateKeepsUntouchedFields() {
 	site := "https://example.org"
 	original := s.createUser(domain.User{
 		Username:           "alice",
@@ -331,7 +331,7 @@ func (s *MediaUserHostileTestSuite) TestPartialUpdateKeepsUntouchedFields() {
 	s.Require().NotNil(updated.UpdatedAt)
 }
 
-func (s *MediaUserHostileTestSuite) TestUpdatePersistsAndIsReadableBack() {
+func (s *MediaUserTestSuite) TestUpdatePersistsAndIsReadableBack() {
 	original := s.createUser(domain.User{Username: "bob", Bio: "before"})
 
 	_, err := s.users.Update(original.Id, domain.User{Bio: "after"})
@@ -344,7 +344,7 @@ func (s *MediaUserHostileTestSuite) TestUpdatePersistsAndIsReadableBack() {
 }
 
 // A peer that doesn't report a role must not wipe a role we already learned.
-func (s *MediaUserHostileTestSuite) TestUpdateNeverClearsRole() {
+func (s *MediaUserTestSuite) TestUpdateNeverClearsRole() {
 	original := s.createUser(domain.User{Username: "carol", Role: "member"})
 
 	updated, err := s.users.Update(original.Id, domain.User{Bio: "hi", Role: ""})
@@ -358,7 +358,7 @@ func (s *MediaUserHostileTestSuite) TestUpdateNeverClearsRole() {
 
 // Moderation strikes accumulate across reports — resetting them would let an
 // abuser wipe their record by triggering one more update.
-func (s *MediaUserHostileTestSuite) TestModerationStrikesAccumulate() {
+func (s *MediaUserTestSuite) TestModerationStrikesAccumulate() {
 	original := s.createUser(domain.User{Username: "dave"})
 
 	reason := "spam"
@@ -383,7 +383,7 @@ func (s *MediaUserHostileTestSuite) TestModerationStrikesAccumulate() {
 	s.True(updated.Moderation.IsModerated)
 }
 
-func (s *MediaUserHostileTestSuite) TestMetadataMergesInsteadOfReplacing() {
+func (s *MediaUserTestSuite) TestMetadataMergesInsteadOfReplacing() {
 	original := s.createUser(domain.User{
 		Username: "erin",
 		Metadata: map[string]string{"pronouns": "they/them"},
@@ -407,7 +407,7 @@ func (s *MediaUserHostileTestSuite) TestMetadataMergesInsteadOfReplacing() {
 
 // Liveness fields are authoritative on every update — unlike profile text they
 // must track the latest observation, including back to "online".
-func (s *MediaUserHostileTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
+func (s *MediaUserTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
 	original := s.createUser(domain.User{Username: "frank"})
 
 	updated, err := s.users.Update(original.Id, domain.User{IsOffline: true, RoundTripTime: 500})
@@ -423,7 +423,7 @@ func (s *MediaUserHostileTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdat
 
 // Rebinding a user to a new node must make them findable by that node id —
 // otherwise a migrated account becomes unreachable.
-func (s *MediaUserHostileTestSuite) TestUpdateRebindsNodeIndex() {
+func (s *MediaUserTestSuite) TestUpdateRebindsNodeIndex() {
 	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
 
 	_, err := s.users.Update(original.Id, domain.User{NodeId: "node-new"})
@@ -434,21 +434,21 @@ func (s *MediaUserHostileTestSuite) TestUpdateRebindsNodeIndex() {
 	s.Equal(original.Id, got.Id)
 }
 
-func (s *MediaUserHostileTestSuite) TestUpdateHandlesHostileProfileText() {
+func (s *MediaUserTestSuite) TestUpdateHandlesExoticProfileText() {
 	original := s.createUser(domain.User{Username: "heidi"})
 
-	hostile := strings.Repeat("я", 3000)
+	longText := strings.Repeat("я", 3000)
 	updated, err := s.users.Update(original.Id, domain.User{
-		Bio:      hostile,
+		Bio:      longText,
 		Username: `<script>alert(1)</script>`,
 	})
 	s.Require().NoError(err)
-	s.Equal(hostile, updated.Bio)
+	s.Equal(longText, updated.Bio)
 	s.Equal(`<script>alert(1)</script>`, updated.Username, "escaping is the client's job, storage must be verbatim")
 }
 
-func TestMediaUserHostileTestSuite(t *testing.T) {
+func TestMediaUserTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	suite.Run(t, new(MediaUserHostileTestSuite))
+	suite.Run(t, new(MediaUserTestSuite))
 }

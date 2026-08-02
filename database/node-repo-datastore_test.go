@@ -53,7 +53,7 @@ func notRunningDB(t *testing.T) *local_store.DB {
 	return db
 }
 
-type NodeRepoHostileTestSuite struct {
+type NodeRepoDatastoreTestSuite struct {
 	suite.Suite
 
 	db   *local_store.DB
@@ -61,7 +61,7 @@ type NodeRepoHostileTestSuite struct {
 	ctx  context.Context
 }
 
-func (s *NodeRepoHostileTestSuite) SetupSuite() {
+func (s *NodeRepoDatastoreTestSuite) SetupSuite() {
 	var err error
 	s.ctx = context.Background()
 
@@ -74,7 +74,7 @@ func (s *NodeRepoHostileTestSuite) SetupSuite() {
 	s.repo = NewNodeRepo(s.db)
 }
 
-func (s *NodeRepoHostileTestSuite) TearDownSuite() {
+func (s *NodeRepoDatastoreTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
@@ -85,7 +85,7 @@ func (s *NodeRepoHostileTestSuite) TearDownSuite() {
 // A peer that keeps misbehaving must climb the ladder and then stay pinned at
 // PermanentBlock. If Next() ever wrapped around, a serial abuser would silently
 // fall back to a one-hour ban.
-func (s *NodeRepoHostileTestSuite) TestBlocklistEscalationLadderSaturates() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistEscalationLadderSaturates() {
 	peer := "12D3KooWEscalate"
 
 	expected := []BlockLevel{InitialBlock, MediumBlock, AdvancedBlock, PermanentBlock}
@@ -107,7 +107,7 @@ func (s *NodeRepoHostileTestSuite) TestBlocklistEscalationLadderSaturates() {
 	}
 }
 
-func (s *NodeRepoHostileTestSuite) TestBlockLevelNextSaturates() {
+func (s *NodeRepoDatastoreTestSuite) TestBlockLevelNextSaturates() {
 	s.Equal(MediumBlock, InitialBlock.Next())
 	s.Equal(AdvancedBlock, MediumBlock.Next())
 	s.Equal(PermanentBlock, AdvancedBlock.Next())
@@ -118,7 +118,7 @@ func (s *NodeRepoHostileTestSuite) TestBlockLevelNextSaturates() {
 
 // Unblocking is rehabilitation: the term resets so the peer starts again at
 // InitialBlock rather than being instantly re-banned at the old severity.
-func (s *NodeRepoHostileTestSuite) TestBlocklistRemoveResetsEscalation() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistRemoveResetsEscalation() {
 	peer := "12D3KooWRehab"
 
 	s.Require().NoError(s.repo.BlocklistExponential(peer))
@@ -141,7 +141,7 @@ func (s *NodeRepoHostileTestSuite) TestBlocklistRemoveResetsEscalation() {
 }
 
 // A social block ("I never want to see this person") must not expire on its own.
-func (s *NodeRepoHostileTestSuite) TestBlocklistPermanentIsNotAnEscalationStep() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistPermanentIsNotAnEscalationStep() {
 	peer := "12D3KooWSocialBlock"
 
 	s.Require().NoError(s.repo.BlocklistPermanent(peer))
@@ -164,7 +164,7 @@ func (s *NodeRepoHostileTestSuite) TestBlocklistPermanentIsNotAnEscalationStep()
 }
 
 // An escalated ban must be upgradable to a permanent, user-driven block.
-func (s *NodeRepoHostileTestSuite) TestEscalatedPeerCanBeSociallyBlocked() {
+func (s *NodeRepoDatastoreTestSuite) TestEscalatedPeerCanBeSociallyBlocked() {
 	peer := "12D3KooWUpgrade"
 
 	s.Require().NoError(s.repo.BlocklistExponential(peer))
@@ -178,7 +178,7 @@ func (s *NodeRepoHostileTestSuite) TestEscalatedPeerCanBeSociallyBlocked() {
 
 // Never ban a peer we know nothing about, and never ban "everyone" because an
 // empty peer ID slipped through from a malformed wire message.
-func (s *NodeRepoHostileTestSuite) TestBlocklistRejectsEmptyPeerAndUnknownIsFree() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistRejectsEmptyPeerAndUnknownIsFree() {
 	s.Error(s.repo.BlocklistExponential(""))
 	s.Error(s.repo.BlocklistPermanent(""))
 
@@ -193,7 +193,7 @@ func (s *NodeRepoHostileTestSuite) TestBlocklistRejectsEmptyPeerAndUnknownIsFree
 	s.NoError(s.repo.BlocklistRemove("12D3KooWNeverBlocked"))
 }
 
-func (s *NodeRepoHostileTestSuite) TestBlocklistTermOfUnknownPeerIsZeroValue() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistTermOfUnknownPeerIsZeroValue() {
 	term, err := s.repo.BlocklistTerm("12D3KooWFreshFace")
 	s.Require().NoError(err)
 	s.Require().NotNil(term)
@@ -203,7 +203,7 @@ func (s *NodeRepoHostileTestSuite) TestBlocklistTermOfUnknownPeerIsZeroValue() {
 
 // Bans are per-peer: blocking one abuser must not leak onto a neighbour whose
 // ID merely shares a prefix.
-func (s *NodeRepoHostileTestSuite) TestBlocklistDoesNotLeakAcrossPrefixSiblings() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistDoesNotLeakAcrossPrefixSiblings() {
 	victim := "12D3KooWPrefix"
 	sibling := "12D3KooWPrefixSibling"
 
@@ -216,7 +216,7 @@ func (s *NodeRepoHostileTestSuite) TestBlocklistDoesNotLeakAcrossPrefixSiblings(
 // Datastore contract — nil repo / dead DB / cancelled context.
 // ---------------------------------------------------------------------------
 
-func (s *NodeRepoHostileTestSuite) TestNilRepoNeverPanics() {
+func (s *NodeRepoDatastoreTestSuite) TestNilRepoNeverPanics() {
 	var repo *NodeRepo
 	key := datastore.NewKey("nil/key")
 
@@ -250,7 +250,7 @@ func (s *NodeRepoHostileTestSuite) TestNilRepoNeverPanics() {
 	s.NoError(repo.Close())
 }
 
-func (s *NodeRepoHostileTestSuite) TestDeadDatabaseDegradesToErrNotRunning() {
+func (s *NodeRepoDatastoreTestSuite) TestDeadDatabaseDegradesToErrNotRunning() {
 	dead := notRunningDB(s.T())
 	repo := NewNodeRepo(dead)
 	key := datastore.NewKey("dead/key")
@@ -282,7 +282,7 @@ func (s *NodeRepoHostileTestSuite) TestDeadDatabaseDegradesToErrNotRunning() {
 
 // A cancelled context must abort every call before it touches storage —
 // otherwise a shutting-down node keeps writing peer records.
-func (s *NodeRepoHostileTestSuite) TestCancelledContextAbortsEveryCall() {
+func (s *NodeRepoDatastoreTestSuite) TestCancelledContextAbortsEveryCall() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -319,7 +319,7 @@ func (s *NodeRepoHostileTestSuite) TestCancelledContextAbortsEveryCall() {
 // Missing keys, sizes and expirations.
 // ---------------------------------------------------------------------------
 
-func (s *NodeRepoHostileTestSuite) TestMissingKeyReportsDatastoreErrNotFound() {
+func (s *NodeRepoDatastoreTestSuite) TestMissingKeyReportsDatastoreErrNotFound() {
 	missing := datastore.NewKey("definitely/not/here")
 
 	_, err := s.repo.Get(s.ctx, missing)
@@ -342,7 +342,7 @@ func (s *NodeRepoHostileTestSuite) TestMissingKeyReportsDatastoreErrNotFound() {
 	s.NoError(s.repo.Delete(s.ctx, missing))
 }
 
-func (s *NodeRepoHostileTestSuite) TestGetSizeMatchesStoredPayload() {
+func (s *NodeRepoDatastoreTestSuite) TestGetSizeMatchesStoredPayload() {
 	key := datastore.NewKey("size/key")
 	value := []byte(strings.Repeat("x", 4096))
 	s.Require().NoError(s.repo.Put(s.ctx, key, value))
@@ -352,7 +352,7 @@ func (s *NodeRepoHostileTestSuite) TestGetSizeMatchesStoredPayload() {
 	s.Equal(len(value), size)
 }
 
-func (s *NodeRepoHostileTestSuite) TestEmptyValueRoundTripsAsPresentNotMissing() {
+func (s *NodeRepoDatastoreTestSuite) TestEmptyValueRoundTripsAsPresentNotMissing() {
 	key := datastore.NewKey("empty/value")
 	s.Require().NoError(s.repo.Put(s.ctx, key, []byte{}))
 
@@ -369,7 +369,7 @@ func (s *NodeRepoHostileTestSuite) TestEmptyValueRoundTripsAsPresentNotMissing()
 	s.Zero(size)
 }
 
-func (s *NodeRepoHostileTestSuite) TestExpirationIsZeroWithoutTTLAndSetWithIt() {
+func (s *NodeRepoDatastoreTestSuite) TestExpirationIsZeroWithoutTTLAndSetWithIt() {
 	noTTL := datastore.NewKey("expiry/none")
 	s.Require().NoError(s.repo.Put(s.ctx, noTTL, []byte("v")))
 	exp, err := s.repo.GetExpiration(s.ctx, noTTL)
@@ -385,7 +385,7 @@ func (s *NodeRepoHostileTestSuite) TestExpirationIsZeroWithoutTTLAndSetWithIt() 
 
 // The peerstore writes keys that contain ':' and long base32 blobs — exactly the
 // shape called out in the node-repo prefix comment. They must survive a round trip.
-func (s *NodeRepoHostileTestSuite) TestAwkwardKeysRoundTrip() {
+func (s *NodeRepoDatastoreTestSuite) TestAwkwardKeysRoundTrip() {
 	awkward := []string{
 		"peers/keys/AASAQAISEAXNRKHMX2O3AA26JM7NGIWUPOGIITJ2UHHXGX4OWIEKPNAW6YCSK/priv",
 		"peers/addrs/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
@@ -414,7 +414,7 @@ func (s *NodeRepoHostileTestSuite) TestAwkwardKeysRoundTrip() {
 // Batch semantics.
 // ---------------------------------------------------------------------------
 
-func (s *NodeRepoHostileTestSuite) TestBatchIsInvisibleUntilCommit() {
+func (s *NodeRepoDatastoreTestSuite) TestBatchIsInvisibleUntilCommit() {
 	key := datastore.NewKey("batch/pending")
 
 	b, err := s.repo.Batch(s.ctx)
@@ -432,7 +432,7 @@ func (s *NodeRepoHostileTestSuite) TestBatchIsInvisibleUntilCommit() {
 	s.Equal([]byte("staged"), got)
 }
 
-func (s *NodeRepoHostileTestSuite) TestBatchCancelDiscardsEverything() {
+func (s *NodeRepoDatastoreTestSuite) TestBatchCancelDiscardsEverything() {
 	key := datastore.NewKey("batch/discarded")
 
 	b, err := s.repo.Batch(s.ctx)
@@ -455,7 +455,7 @@ func (s *NodeRepoHostileTestSuite) TestBatchCancelDiscardsEverything() {
 	s.ErrorIs(b.Commit(s.ctx), ErrNilNodeRepo)
 }
 
-func (s *NodeRepoHostileTestSuite) TestBatchDeleteAndReuseAfterCommit() {
+func (s *NodeRepoDatastoreTestSuite) TestBatchDeleteAndReuseAfterCommit() {
 	key := datastore.NewKey("batch/delete")
 	s.Require().NoError(s.repo.Put(s.ctx, key, []byte("doomed")))
 
@@ -473,7 +473,7 @@ func (s *NodeRepoHostileTestSuite) TestBatchDeleteAndReuseAfterCommit() {
 	s.ErrorIs(b.Commit(s.ctx), ErrNilNodeRepo)
 }
 
-func (s *NodeRepoHostileTestSuite) TestBatchRespectsCancelledContext() {
+func (s *NodeRepoDatastoreTestSuite) TestBatchRespectsCancelledContext() {
 	key := datastore.NewKey("batch/ctx")
 
 	b, err := s.repo.Batch(s.ctx)
@@ -491,7 +491,7 @@ func (s *NodeRepoHostileTestSuite) TestBatchRespectsCancelledContext() {
 	s.False(has)
 }
 
-func (s *NodeRepoHostileTestSuite) TestBatchLastWriteWins() {
+func (s *NodeRepoDatastoreTestSuite) TestBatchLastWriteWins() {
 	key := datastore.NewKey("batch/overwrite")
 
 	b, err := s.repo.Batch(s.ctx)
@@ -509,7 +509,7 @@ func (s *NodeRepoHostileTestSuite) TestBatchLastWriteWins() {
 // Query semantics — the surface DHT/peerstore scans rely on.
 // ---------------------------------------------------------------------------
 
-func (s *NodeRepoHostileTestSuite) seedQuerySet(prefix string, n int) {
+func (s *NodeRepoDatastoreTestSuite) seedQuerySet(prefix string, n int) {
 	s.T().Helper()
 	for i := 0; i < n; i++ {
 		key := datastore.NewKey(prefix + "/" + string(rune('a'+i)))
@@ -517,7 +517,7 @@ func (s *NodeRepoHostileTestSuite) seedQuerySet(prefix string, n int) {
 	}
 }
 
-func (s *NodeRepoHostileTestSuite) collect(q query.Query) []query.Entry {
+func (s *NodeRepoDatastoreTestSuite) collect(q query.Query) []query.Entry {
 	s.T().Helper()
 	res, err := s.repo.Query(s.ctx, q)
 	s.Require().NoError(err)
@@ -532,7 +532,7 @@ func (s *NodeRepoHostileTestSuite) collect(q query.Query) []query.Entry {
 	return entries
 }
 
-func (s *NodeRepoHostileTestSuite) TestQueryKeysOnlyOmitsValuesButKeepsSize() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryKeysOnlyOmitsValuesButKeepsSize() {
 	s.seedQuerySet("keysonly", 3)
 
 	entries := s.collect(query.Query{Prefix: "keysonly", KeysOnly: true})
@@ -543,7 +543,7 @@ func (s *NodeRepoHostileTestSuite) TestQueryKeysOnlyOmitsValuesButKeepsSize() {
 	}
 }
 
-func (s *NodeRepoHostileTestSuite) TestQueryLimitAndOffsetPaginateWithoutGaps() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryLimitAndOffsetPaginateWithoutGaps() {
 	s.seedQuerySet("paging", 6)
 
 	all := s.collect(query.Query{Prefix: "paging"})
@@ -568,7 +568,7 @@ func (s *NodeRepoHostileTestSuite) TestQueryLimitAndOffsetPaginateWithoutGaps() 
 	s.Len(over, 6)
 }
 
-func (s *NodeRepoHostileTestSuite) TestQueryDescendingOrderIsExactReverse() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryDescendingOrderIsExactReverse() {
 	s.seedQuerySet("descending", 4)
 
 	asc := s.collect(query.Query{Prefix: "descending"})
@@ -585,7 +585,7 @@ func (s *NodeRepoHostileTestSuite) TestQueryDescendingOrderIsExactReverse() {
 
 // An order the storage layer cannot push down must fall back to the naive
 // in-memory sort instead of silently returning unordered rows.
-func (s *NodeRepoHostileTestSuite) TestQueryUnsupportedOrderFallsBackToNaiveSort() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryUnsupportedOrderFallsBackToNaiveSort() {
 	prefix := "naiveorder"
 	s.Require().NoError(s.repo.Put(s.ctx, datastore.NewKey(prefix+"/a"), []byte("ccc")))
 	s.Require().NoError(s.repo.Put(s.ctx, datastore.NewKey(prefix+"/b"), []byte("aaa")))
@@ -602,7 +602,7 @@ func (s *NodeRepoHostileTestSuite) TestQueryUnsupportedOrderFallsBackToNaiveSort
 	s.Equal([]byte("ccc"), entries[2].Value)
 }
 
-func (s *NodeRepoHostileTestSuite) TestQueryFilterExcludesNonMatchingKeys() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryFilterExcludesNonMatchingKeys() {
 	prefix := "filtered"
 	s.Require().NoError(s.repo.Put(s.ctx, datastore.NewKey(prefix+"/keep"), []byte("1")))
 	s.Require().NoError(s.repo.Put(s.ctx, datastore.NewKey(prefix+"/drop"), []byte("2")))
@@ -618,7 +618,7 @@ func (s *NodeRepoHostileTestSuite) TestQueryFilterExcludesNonMatchingKeys() {
 	s.Equal("/"+prefix+"/keep", entries[0].Key)
 }
 
-func (s *NodeRepoHostileTestSuite) TestQueryReturnExpirationsSurfacesTTL() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryReturnExpirationsSurfacesTTL() {
 	prefix := "expiring"
 	s.Require().NoError(s.repo.PutWithTTL(s.ctx, datastore.NewKey(prefix+"/a"), []byte("v"), time.Hour))
 
@@ -627,14 +627,14 @@ func (s *NodeRepoHostileTestSuite) TestQueryReturnExpirationsSurfacesTTL() {
 	s.WithinDuration(time.Now().Add(time.Hour), entries[0].Expiration, time.Minute)
 }
 
-func (s *NodeRepoHostileTestSuite) TestQueryOnEmptyPrefixNamespaceIsEmptyNotAll() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryOnEmptyPrefixNamespaceIsEmptyNotAll() {
 	entries := s.collect(query.Query{Prefix: "no/such/namespace/at/all"})
 	s.Empty(entries, "an unknown prefix must not fall back to a full scan")
 }
 
 // Query results carry datastore-relative keys, never the internal NODES prefix —
 // leaking it would corrupt every key the DHT writes back.
-func (s *NodeRepoHostileTestSuite) TestQueryKeysAreStripedOfInternalNamespace() {
+func (s *NodeRepoDatastoreTestSuite) TestQueryKeysAreStripedOfInternalNamespace() {
 	s.Require().NoError(s.repo.Put(s.ctx, datastore.NewKey("stripped/key"), []byte("v")))
 
 	entries := s.collect(query.Query{Prefix: "stripped"})
@@ -643,14 +643,14 @@ func (s *NodeRepoHostileTestSuite) TestQueryKeysAreStripedOfInternalNamespace() 
 	s.NotContains(entries[0].Key, nodesPrefix)
 }
 
-func (s *NodeRepoHostileTestSuite) TestResultKeyFromStorageKeyEdgeCases() {
+func (s *NodeRepoDatastoreTestSuite) TestResultKeyFromStorageKeyEdgeCases() {
 	s.Equal(requiredPrefixSlash, s.repo.resultKeyFromStorageKey(s.repo.prefix))
 	s.Equal("/peers/x", s.repo.resultKeyFromStorageKey(s.repo.prefix+"/peers/x"))
 	// A key that does not belong to us is returned untouched rather than mangled.
 	s.Equal("/OTHER/peers/x", s.repo.resultKeyFromStorageKey("/OTHER/peers/x"))
 }
 
-func (s *NodeRepoHostileTestSuite) TestStorageQueryPrefixAlwaysTerminatesWithSlash() {
+func (s *NodeRepoDatastoreTestSuite) TestStorageQueryPrefixAlwaysTerminatesWithSlash() {
 	s.Equal("/NODES/", string(s.repo.storageQueryPrefix("")))
 	s.Equal("/NODES/peers/", string(s.repo.storageQueryPrefix("peers")))
 	s.Equal("/NODES/peers/", string(s.repo.storageQueryPrefix("/peers")))
@@ -658,7 +658,7 @@ func (s *NodeRepoHostileTestSuite) TestStorageQueryPrefixAlwaysTerminatesWithSla
 	s.Equal("/NODES/peers/", string(s.repo.storageQueryPrefix("/peers/")))
 }
 
-func (s *NodeRepoHostileTestSuite) TestBuildRootKeyKeepsRootSlash() {
+func (s *NodeRepoDatastoreTestSuite) TestBuildRootKeyKeepsRootSlash() {
 	s.Equal("peers/x", buildRootKey(datastore.NewKey("/peers/x")))
 	s.Equal("peers/x", buildRootKey(datastore.NewKey("peers/x")))
 	// datastore.NewKey("") normalises to "/" — trimming it away would produce an
@@ -666,7 +666,7 @@ func (s *NodeRepoHostileTestSuite) TestBuildRootKeyKeepsRootSlash() {
 	s.Equal("/", buildRootKey(datastore.NewKey("")))
 }
 
-func (s *NodeRepoHostileTestSuite) TestFilterHelperInvertsMatch() {
+func (s *NodeRepoDatastoreTestSuite) TestFilterHelperInvertsMatch() {
 	entry := query.Entry{Key: "/a", Value: []byte("v")}
 
 	s.False(filter(nil, entry), "no filters means nothing is excluded")
@@ -678,7 +678,7 @@ func (s *NodeRepoHostileTestSuite) TestFilterHelperInvertsMatch() {
 	}, entry), "a non-matching filter must exclude the entry")
 }
 
-func (s *NodeRepoHostileTestSuite) TestPutOverwritesAndDeleteIsFinal() {
+func (s *NodeRepoDatastoreTestSuite) TestPutOverwritesAndDeleteIsFinal() {
 	key := datastore.NewKey("overwrite/key")
 
 	s.Require().NoError(s.repo.Put(s.ctx, key, []byte("v1")))
@@ -696,7 +696,7 @@ func (s *NodeRepoHostileTestSuite) TestPutOverwritesAndDeleteIsFinal() {
 	s.NoError(s.repo.Delete(s.ctx, key))
 }
 
-func (s *NodeRepoHostileTestSuite) TestSyncAndDiskUsageOnLiveDB() {
+func (s *NodeRepoDatastoreTestSuite) TestSyncAndDiskUsageOnLiveDB() {
 	s.Require().NoError(s.repo.Put(s.ctx, datastore.NewKey("sync/key"), []byte("v")))
 	s.Require().NoError(s.repo.Sync(s.ctx, datastore.NewKey("sync/key")))
 
@@ -704,8 +704,8 @@ func (s *NodeRepoHostileTestSuite) TestSyncAndDiskUsageOnLiveDB() {
 	s.Require().NoError(err)
 }
 
-func TestNodeRepoHostileTestSuite(t *testing.T) {
+func TestNodeRepoDatastoreTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	suite.Run(t, new(NodeRepoHostileTestSuite))
+	suite.Run(t, new(NodeRepoDatastoreTestSuite))
 }

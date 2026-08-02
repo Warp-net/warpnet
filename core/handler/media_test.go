@@ -43,9 +43,9 @@ import (
 )
 
 const (
-	hostileOwnerID    = "owner-id"
-	hostileSelfNode   = "12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
-	hostileRemoteNode = "12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU"
+	ownerID      = "owner-id"
+	selfNodeID   = "12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
+	remoteNodeID = "12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU"
 )
 
 // --- configurable doubles -------------------------------------------------
@@ -62,12 +62,12 @@ type mediaStreamerDouble struct {
 func (m *mediaStreamerDouble) NodeInfo() warpnet.NodeInfo {
 	id := m.nodeId
 	if id == "" {
-		id = hostileSelfNode
+		id = selfNodeID
 	}
 	pid := warpnet.FromStringToPeerID(id)
 	owner := m.ownerId
 	if owner == "" {
-		owner = hostileOwnerID
+		owner = ownerID
 	}
 	return warpnet.NodeInfo{OwnerId: owner, ID: pid}
 }
@@ -171,7 +171,7 @@ func (d mediaUserDouble) Get(userId string) (domain.User, error) {
 
 // --- images ---------------------------------------------------------------
 
-func TestStreamGetImageHandler_Hostile(t *testing.T) {
+func TestStreamGetImageHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
 		_, err := h([]byte("{"), nil)
@@ -180,7 +180,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 
 	t.Run("empty key is rejected", func(t *testing.T) {
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
-		_, err := h(mustJSON(t, event.GetImageEvent{UserId: hostileOwnerID}), nil)
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID}), nil)
 		assert.ErrorIs(t, err, ErrEmptyImageKey)
 	})
 
@@ -188,17 +188,17 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 	// profile view with an error.
 	t.Run("own missing image answers empty, not an error", func(t *testing.T) {
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
-		out, err := h(mustJSON(t, event.GetImageEvent{UserId: hostileOwnerID, Key: "gone"}), nil)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "gone"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
 	})
 
 	t.Run("own image is served from local storage", func(t *testing.T) {
 		repo := newImageRepoDouble()
-		repo.images[hostileOwnerID+"/avatar"] = "data:image/jpeg;base64,MINE"
+		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
 
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
-		out, err := h(mustJSON(t, event.GetImageEvent{UserId: hostileOwnerID, Key: "avatar"}), nil)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,MINE"}, out)
 	})
@@ -206,7 +206,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 	// An unset user id means "mine" — it must never resolve to a random peer.
 	t.Run("missing user id defaults to this node's owner", func(t *testing.T) {
 		repo := newImageRepoDouble()
-		repo.images[hostileOwnerID+"/avatar"] = "data:image/jpeg;base64,MINE"
+		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
 
 		streamer := &mediaStreamerDouble{}
 		h := StreamGetImageHandler(streamer, repo, mediaUserDouble{})
@@ -223,7 +223,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 		repo.getErr = errors.New("disk on fire")
 
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
-		out, err := h(mustJSON(t, event.GetImageEvent{UserId: hostileOwnerID, Key: "avatar"}), nil)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
 	})
@@ -236,7 +236,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 		repo.getPartial = "data:image/jpeg;base64,TRUNCATED"
 
 		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
-		_, err := h(mustJSON(t, event.GetImageEvent{UserId: hostileOwnerID, Key: "avatar"}), nil)
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
 		assert.Error(t, err)
 	})
 
@@ -264,7 +264,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 	t.Run("own alias is not streamed to", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"alias": {Id: "alias", NodeId: hostileSelfNode},
+			"alias": {Id: "alias", NodeId: selfNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
@@ -282,7 +282,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 
 		streamer := &mediaStreamerDouble{}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: hostileRemoteNode},
+			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, repo, users)
@@ -296,7 +296,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 	t.Run("offline peer degrades to an empty image", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{err: warpnet.ErrNodeIsOffline}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: hostileRemoteNode},
+			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
@@ -308,7 +308,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 	t.Run("transport failure surfaces", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{err: errors.New("connection reset")}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: hostileRemoteNode},
+			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
@@ -319,7 +319,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 	t.Run("garbage from the peer is rejected", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{response: []byte("<html>nope</html>")}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: hostileRemoteNode},
+			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
@@ -333,14 +333,14 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 			response: mustJSON(t, event.GetImageResponse{File: "data:image/jpeg;base64,REMOTE"}),
 		}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: hostileRemoteNode},
+			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, repo, users)
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, []string{hostileRemoteNode}, streamer.streamedTo)
+		assert.Equal(t, []string{remoteNodeID}, streamer.streamedTo)
 		assert.Equal(t, database.Base64Image("data:image/jpeg;base64,REMOTE"),
 			repo.foreignStored["remote/avatar"])
 	})
@@ -353,7 +353,7 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 			response: mustJSON(t, event.GetImageResponse{File: "data:image/jpeg;base64,REMOTE"}),
 		}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: hostileRemoteNode},
+			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
 		h := StreamGetImageHandler(streamer, repo, users)
@@ -365,9 +365,9 @@ func TestStreamGetImageHandler_Hostile(t *testing.T) {
 
 // --- videos ---------------------------------------------------------------
 
-func TestStreamGetVideoHandler_Hostile(t *testing.T) {
+func TestStreamGetVideoHandler(t *testing.T) {
 	remoteUsers := mediaUserDouble{users: map[string]domain.User{
-		"remote": {Id: "remote", NodeId: hostileRemoteNode},
+		"remote": {Id: "remote", NodeId: remoteNodeID},
 	}}
 
 	t.Run("malformed payload", func(t *testing.T) {
@@ -378,13 +378,13 @@ func TestStreamGetVideoHandler_Hostile(t *testing.T) {
 
 	t.Run("empty key is rejected", func(t *testing.T) {
 		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
-		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: hostileOwnerID}), nil)
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID}), nil)
 		assert.ErrorIs(t, err, ErrEmptyVideoKey)
 	})
 
 	t.Run("own missing video answers empty", func(t *testing.T) {
 		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
-		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: hostileOwnerID, Key: "gone"}), nil)
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "gone"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
 	})
@@ -394,7 +394,7 @@ func TestStreamGetVideoHandler_Hostile(t *testing.T) {
 		repo.getErr = errors.New("disk on fire")
 
 		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
-		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: hostileOwnerID, Key: "clip"}), nil)
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
 	})
@@ -405,7 +405,7 @@ func TestStreamGetVideoHandler_Hostile(t *testing.T) {
 		repo.getPartial = "data:video/mp4;base64,TRUNCATED"
 
 		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
-		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: hostileOwnerID, Key: "clip"}), nil)
+		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip"}), nil)
 		assert.Error(t, err)
 	})
 
@@ -413,10 +413,10 @@ func TestStreamGetVideoHandler_Hostile(t *testing.T) {
 	// the size must arrive so the player can lay out, but not the bytes.
 	t.Run("deferred own video withholds bytes but reports size", func(t *testing.T) {
 		repo := newVideoRepoDouble()
-		repo.videos[hostileOwnerID+"/clip"] = "data:video/mp4;base64,PAYLOAD"
+		repo.videos[ownerID+"/clip"] = "data:video/mp4;base64,PAYLOAD"
 
 		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
-		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: hostileOwnerID, Key: "clip", Deferred: true}), nil)
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip", Deferred: true}), nil)
 		require.NoError(t, err)
 
 		resp := out.(event.GetVideoResponse)
@@ -447,7 +447,7 @@ func TestStreamGetVideoHandler_Hostile(t *testing.T) {
 	t.Run("own alias is not streamed to", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"alias": {Id: "alias", NodeId: hostileSelfNode},
+			"alias": {Id: "alias", NodeId: selfNodeID},
 		}}
 
 		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), users)
@@ -522,7 +522,7 @@ func TestStreamGetVideoHandler_Hostile(t *testing.T) {
 	})
 }
 
-func TestNewVideoResponse_Hostile(t *testing.T) {
+func TestNewVideoResponse(t *testing.T) {
 	video := database.Base64Video("data:video/mp4;base64,ABC")
 
 	full := newVideoResponse(video, false)

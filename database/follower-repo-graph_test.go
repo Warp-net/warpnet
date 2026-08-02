@@ -38,14 +38,14 @@ import (
 	"go.uber.org/goleak"
 )
 
-type FollowRepoHostileTestSuite struct {
+type FollowRepoGraphTestSuite struct {
 	suite.Suite
 
 	db   *local_store.DB
 	repo *FollowRepo
 }
 
-func (s *FollowRepoHostileTestSuite) SetupSuite() {
+func (s *FollowRepoGraphTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
@@ -55,11 +55,11 @@ func (s *FollowRepoHostileTestSuite) SetupSuite() {
 	s.repo = NewFollowRepo(s.db)
 }
 
-func (s *FollowRepoHostileTestSuite) TearDownSuite() {
+func (s *FollowRepoGraphTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
-func (s *FollowRepoHostileTestSuite) counts(userId string) (followers, followings uint64) {
+func (s *FollowRepoGraphTestSuite) counts(userId string) (followers, followings uint64) {
 	s.T().Helper()
 	var err error
 	followers, err = s.repo.GetFollowersCount(userId)
@@ -73,7 +73,7 @@ func (s *FollowRepoHostileTestSuite) counts(userId string) (followers, following
 // Direction — mixing up follower and following is the classic social bug.
 // ---------------------------------------------------------------------------
 
-func (s *FollowRepoHostileTestSuite) TestFollowIsDirectedNotMutual() {
+func (s *FollowRepoGraphTestSuite) TestFollowIsDirectedNotMutual() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -102,7 +102,7 @@ func (s *FollowRepoHostileTestSuite) TestFollowIsDirectedNotMutual() {
 	s.Equal([]string{bob}, followings, "alice's followings list is exactly [bob]")
 }
 
-func (s *FollowRepoHostileTestSuite) TestMutualFollowKeepsBothSidesConsistent() {
+func (s *FollowRepoGraphTestSuite) TestMutualFollowKeepsBothSidesConsistent() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -130,7 +130,7 @@ func (s *FollowRepoHostileTestSuite) TestMutualFollowKeepsBothSidesConsistent() 
 // Counter integrity under repeated / bogus operations.
 // ---------------------------------------------------------------------------
 
-func (s *FollowRepoHostileTestSuite) TestDoubleFollowDoesNotInflateCounters() {
+func (s *FollowRepoGraphTestSuite) TestDoubleFollowDoesNotInflateCounters() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -149,7 +149,7 @@ func (s *FollowRepoHostileTestSuite) TestDoubleFollowDoesNotInflateCounters() {
 }
 
 // Unfollowing someone you never followed must not push the counters below zero.
-func (s *FollowRepoHostileTestSuite) TestUnfollowWithoutFollowNeverUnderflows() {
+func (s *FollowRepoGraphTestSuite) TestUnfollowWithoutFollowNeverUnderflows() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -163,7 +163,7 @@ func (s *FollowRepoHostileTestSuite) TestUnfollowWithoutFollowNeverUnderflows() 
 	s.False(s.repo.IsFollowing(alice, bob))
 }
 
-func (s *FollowRepoHostileTestSuite) TestRepeatedUnfollowStaysAtZero() {
+func (s *FollowRepoGraphTestSuite) TestRepeatedUnfollowStaysAtZero() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -178,7 +178,7 @@ func (s *FollowRepoHostileTestSuite) TestRepeatedUnfollowStaysAtZero() {
 }
 
 // Follow → unfollow → follow must settle at exactly one, not two.
-func (s *FollowRepoHostileTestSuite) TestRefollowAfterUnfollowSettlesAtOne() {
+func (s *FollowRepoGraphTestSuite) TestRefollowAfterUnfollowSettlesAtOne() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
 
@@ -196,7 +196,7 @@ func (s *FollowRepoHostileTestSuite) TestRefollowAfterUnfollowSettlesAtOne() {
 	s.Len(followers, 1, "re-following must not leave a stale duplicate row")
 }
 
-func (s *FollowRepoHostileTestSuite) TestManyFollowersCountMatchesListing() {
+func (s *FollowRepoGraphTestSuite) TestManyFollowersCountMatchesListing() {
 	star := uuid.New().String()
 
 	const n = 12
@@ -239,7 +239,7 @@ func (s *FollowRepoHostileTestSuite) TestManyFollowersCountMatchesListing() {
 // Malformed input must never panic the node.
 // ---------------------------------------------------------------------------
 
-func (s *FollowRepoHostileTestSuite) TestSelfFollowIsRejected() {
+func (s *FollowRepoGraphTestSuite) TestSelfFollowIsRejected() {
 	alice := uuid.New().String()
 	s.Error(s.repo.Follow(alice, alice))
 
@@ -248,7 +248,7 @@ func (s *FollowRepoHostileTestSuite) TestSelfFollowIsRejected() {
 	s.Equal(uint64(0), followings)
 }
 
-func (s *FollowRepoHostileTestSuite) TestEmptyIdentifiersAreRejectedNotPanicking() {
+func (s *FollowRepoGraphTestSuite) TestEmptyIdentifiersAreRejectedNotPanicking() {
 	s.Error(s.repo.Follow("", "b"))
 	s.Error(s.repo.Follow("a", ""))
 	s.Error(s.repo.Unfollow("", "b"))
@@ -261,7 +261,7 @@ func (s *FollowRepoHostileTestSuite) TestEmptyIdentifiersAreRejectedNotPanicking
 	s.Error(err)
 }
 
-func (s *FollowRepoHostileTestSuite) TestUnknownUserHasEmptyGraphNotAnError() {
+func (s *FollowRepoGraphTestSuite) TestUnknownUserHasEmptyGraphNotAnError() {
 	stranger := uuid.New().String()
 
 	followers, followings := s.counts(stranger)
@@ -284,7 +284,7 @@ func (s *FollowRepoHostileTestSuite) TestUnknownUserHasEmptyGraphNotAnError() {
 // Follow requests — the locked-account flow.
 // ---------------------------------------------------------------------------
 
-func (s *FollowRepoHostileTestSuite) TestFollowRequestLifecycle() {
+func (s *FollowRepoGraphTestSuite) TestFollowRequestLifecycle() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
 
@@ -316,7 +316,7 @@ func (s *FollowRepoHostileTestSuite) TestFollowRequestLifecycle() {
 	s.Empty(pending)
 }
 
-func (s *FollowRepoHostileTestSuite) TestRepeatedFollowRequestDoesNotDuplicate() {
+func (s *FollowRepoGraphTestSuite) TestRepeatedFollowRequestDoesNotDuplicate() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
 
@@ -329,7 +329,7 @@ func (s *FollowRepoHostileTestSuite) TestRepeatedFollowRequestDoesNotDuplicate()
 	s.Len(pending, 1, "spamming the follow button must queue one request, not three")
 }
 
-func (s *FollowRepoHostileTestSuite) TestRemoveFollowRequestIsIdempotent() {
+func (s *FollowRepoGraphTestSuite) TestRemoveFollowRequestIsIdempotent() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
 
@@ -346,7 +346,7 @@ func (s *FollowRepoHostileTestSuite) TestRemoveFollowRequestIsIdempotent() {
 }
 
 // A pending request is not a follow — it must not leak into the graph or counts.
-func (s *FollowRepoHostileTestSuite) TestPendingRequestIsNotAFollow() {
+func (s *FollowRepoGraphTestSuite) TestPendingRequestIsNotAFollow() {
 	target := uuid.New().String()
 	follower := uuid.New().String()
 
@@ -359,7 +359,7 @@ func (s *FollowRepoHostileTestSuite) TestPendingRequestIsNotAFollow() {
 	s.Equal(uint64(0), targetFollowers, "a pending request must not count as a follower")
 }
 
-func (s *FollowRepoHostileTestSuite) TestFollowRequestsAreScopedPerTarget() {
+func (s *FollowRepoGraphTestSuite) TestFollowRequestsAreScopedPerTarget() {
 	targetA := uuid.New().String()
 	targetB := uuid.New().String()
 	follower := uuid.New().String()
@@ -379,7 +379,7 @@ func (s *FollowRepoHostileTestSuite) TestFollowRequestsAreScopedPerTarget() {
 	s.Empty(pendingB)
 }
 
-func (s *FollowRepoHostileTestSuite) TestFollowRequestRejectsEmptyIdentifiers() {
+func (s *FollowRepoGraphTestSuite) TestFollowRequestRejectsEmptyIdentifiers() {
 	s.Error(s.repo.AddFollowRequest("", "f"))
 	s.Error(s.repo.AddFollowRequest("t", ""))
 	s.Error(s.repo.RemoveFollowRequest("", "f"))
@@ -397,7 +397,7 @@ func (s *FollowRepoHostileTestSuite) TestFollowRequestRejectsEmptyIdentifiers() 
 	s.False(has)
 }
 
-func (s *FollowRepoHostileTestSuite) TestListFollowRequestsPaginates() {
+func (s *FollowRepoGraphTestSuite) TestListFollowRequestsPaginates() {
 	target := uuid.New().String()
 
 	const n = 7
@@ -427,8 +427,8 @@ func (s *FollowRepoHostileTestSuite) TestListFollowRequestsPaginates() {
 	s.Len(seen, n)
 }
 
-func TestFollowRepoHostileTestSuite(t *testing.T) {
+func TestFollowRepoGraphTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	suite.Run(t, new(FollowRepoHostileTestSuite))
+	suite.Run(t, new(FollowRepoGraphTestSuite))
 }

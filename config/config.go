@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package config
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,10 +78,14 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
-	if !isTestBinary() {
-		pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-		pflag.Parse()
-	}
+	// Deliberately no pflag.CommandLine.AddGoFlagSet(flag.CommandLine): pflag
+	// re-parses every added Go flag set with no arguments, which marks the
+	// standard flag.CommandLine as parsed. The testing package registers its
+	// -test.* flags there later and then skips flag.Parse() because it already
+	// looks parsed, so -run, -v and -coverprofile silently stop working in
+	// every package that imports this one. Nothing here registers Go flags, so
+	// there is nothing to import anyway.
+	pflag.Parse()
 
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
@@ -153,22 +156,6 @@ func init() {
 			Format: logFormat(strings.TrimSpace(strings.ToLower(viper.GetString("logging.format")))),
 		},
 	}
-}
-
-// isTestBinary reports whether this process is a `go test` binary. pflag.Parse
-// there would swallow the -test.* arguments and, through AddGoFlagSet, mark
-// flag.CommandLine as parsed with no arguments, silently disabling -test.run,
-// -test.v and -test.coverprofile for every package importing config.
-func isTestBinary() bool {
-	if strings.HasSuffix(strings.TrimSuffix(os.Args[0], ".exe"), ".test") {
-		return true
-	}
-	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "-test.") || strings.HasPrefix(arg, "--test.") {
-			return true
-		}
-	}
-	return false
 }
 
 func Config() config {

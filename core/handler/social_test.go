@@ -54,7 +54,7 @@ func mustJSON(t *testing.T, v any) []byte {
 // Mutes listing.
 // ---------------------------------------------------------------------------
 
-func TestStreamGetMutesHandler_Hostile(t *testing.T) {
+func TestStreamGetMutesHandler(t *testing.T) {
 	t.Run("malformed payload is rejected", func(t *testing.T) {
 		_, err := StreamGetMutesHandler(stubMutesRepo{})([]byte("{"), nil)
 		assert.Error(t, err)
@@ -117,7 +117,7 @@ func TestStreamGetMutesHandler_Hostile(t *testing.T) {
 // Follow requests — the locked-account gate.
 // ---------------------------------------------------------------------------
 
-func TestStreamGetFollowRequestsHandler_Hostile(t *testing.T) {
+func TestStreamGetFollowRequestsHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
 		_, err := StreamGetFollowRequestsHandler(stubFollowRepo{})([]byte("{"), nil)
 		assert.Error(t, err)
@@ -159,7 +159,7 @@ func TestStreamGetFollowRequestsHandler_Hostile(t *testing.T) {
 	})
 }
 
-func TestStreamAuthorizeFollowRequestHandler_Hostile(t *testing.T) {
+func TestStreamAuthorizeFollowRequestHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
 		_, err := StreamAuthorizeFollowRequestHandler(stubFollowRepo{})([]byte("{"), nil)
 		assert.Error(t, err)
@@ -231,7 +231,7 @@ func TestStreamAuthorizeFollowRequestHandler_Hostile(t *testing.T) {
 	})
 }
 
-func TestStreamRejectFollowRequestHandler_Hostile(t *testing.T) {
+func TestStreamRejectFollowRequestHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
 		_, err := StreamRejectFollowRequestHandler(stubFollowRepo{})([]byte("{"), nil)
 		assert.Error(t, err)
@@ -301,7 +301,7 @@ func (f *fakeEngagementStreamer) GenericStream(nodeId string, path stream.WarpRo
 	return f.response, f.err
 }
 
-func TestEscalateToPeerBlocklist_Hostile(t *testing.T) {
+func TestEscalateToPeerBlocklist(t *testing.T) {
 	t.Run("nil dependencies are a no-op", func(t *testing.T) {
 		assert.NotPanics(t, func() { escalateToPeerBlocklist(nil, &stubPeerBlocklister{}, "u") })
 		assert.NotPanics(t, func() { escalateToPeerBlocklist(stubBlockUserResolver{}, nil, "u") })
@@ -352,7 +352,7 @@ func TestEscalateToPeerBlocklist_Hostile(t *testing.T) {
 	})
 }
 
-func TestRemovePeerBlocklist_Hostile(t *testing.T) {
+func TestRemovePeerBlocklist(t *testing.T) {
 	t.Run("nil dependencies are a no-op", func(t *testing.T) {
 		assert.NotPanics(t, func() { removePeerBlocklist(nil, &stubPeerBlocklister{}, "u") })
 		assert.NotPanics(t, func() { removePeerBlocklist(stubBlockUserResolver{}, nil, "u") })
@@ -396,7 +396,7 @@ func TestRemovePeerBlocklist_Hostile(t *testing.T) {
 // Engagement forwarding — reading likers/retweeters off the author's node.
 // ---------------------------------------------------------------------------
 
-func TestForwardToOwner_Hostile(t *testing.T) {
+func TestForwardToOwner(t *testing.T) {
 	ev := event.GetTweetLikersEvent{TweetId: "t1", OwnerUserId: "author"}
 
 	t.Run("no owner or no streamer stays local", func(t *testing.T) {
@@ -467,7 +467,7 @@ func TestForwardToOwner_Hostile(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	// A hostile or simply outdated peer can answer with garbage — the reader
+	// A malicious or simply outdated peer can answer with garbage — the reader
 	// must still get this node's own view instead of an error.
 	t.Run("unparseable remote answer degrades to the local index", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{
@@ -517,7 +517,7 @@ func TestForwardToOwner_Hostile(t *testing.T) {
 	})
 }
 
-func TestHydrateUsers_Hostile(t *testing.T) {
+func TestHydrateUsers(t *testing.T) {
 	t.Run("no ids yields nothing", func(t *testing.T) {
 		assert.Nil(t, hydrateUsers(stubLikedUserFetcher{}, nil))
 		assert.Nil(t, hydrateUsers(stubLikedUserFetcher{}, []string{}))
