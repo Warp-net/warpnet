@@ -37,8 +37,16 @@ import (
 )
 
 const (
-	PollRepoName      = "/POLLS"
-	VoterSubNamespace = "VOTER"
+	PollRepoName = "/POLLS"
+
+	// Poll-owned key segments. They deliberately duplicate the values likes
+	// use rather than borrowing LikeRepoName's constants: the two keyspaces
+	// are independent, and sharing a constant would silently move the poll
+	// keys if likes ever renamed theirs.
+	VotesSubNamespace     = "VOTES" // per-option vote counters
+	VotesIncrSubNamespace = "INCR"
+	VotesDecrSubNamespace = "DECR"
+	VoterSubNamespace     = "VOTER" // per-voter record of the option they picked
 )
 
 var ErrPollAlreadyVoted = local_store.DBError("poll already voted")
@@ -62,9 +70,13 @@ func NewPollRepo(db PollStorer, statsDb PollStatsStorer) *PollRepo {
 	return &PollRepo{db: db, statsDb: statsDb}
 }
 
-func pollVotesKey(tweetId string, option int) local_store.DatabaseKey {
+// pollVotesKey addresses one option's counter. direction is
+// VotesIncrSubNamespace or VotesDecrSubNamespace, mirroring the PN-counter
+// split the CRDT stats store uses.
+func pollVotesKey(tweetId string, option int, direction string) local_store.DatabaseKey {
 	return local_store.NewPrefixBuilder(PollRepoName).
-		AddSubPrefix(IncrSubNamespace).
+		AddSubPrefix(VotesSubNamespace).
+		AddSubPrefix(direction).
 		AddRootID(tweetId).
 		AddParentId(strconv.Itoa(option)).
 		Build()
@@ -97,7 +109,7 @@ func (repo *PollRepo) Vote(tweetId, userId string, option int, isTransitive bool
 		return local_store.DBError("negative poll option")
 	}
 
-	votesKey := pollVotesKey(tweetId, option)
+	votesKey := pollVotesKey(tweetId, option, VotesIncrSubNamespace)
 	voterKey := pollVoterKey(tweetId, userId)
 
 	txn, err := repo.db.NewTxn()
@@ -175,20 +187,42 @@ func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, e
 	return votes, nil
 }
 
-// optionVotes reads one option's counter. A missing counter means nobody
-// picked that option yet, which is zero rather than an error.
+// optionVotes reads one option's tally. It prefers the network-wide (CRDT)
+// total and falls back to this node's own counters.
+//
+// The CRDT store keeps its own positive/negative split for whichever key it
+// is handed, so only the INCR key goes to it — same as likes, where an
+// unlike decrements that very key. The local fallback is the plain
+// difference of the two counters.
 func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
-	votesKey := pollVotesKey(tweetId, option)
+	incrKey := pollVotesKey(tweetId, option, VotesIncrSubNamespace)
 
 	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(votesKey.DatastoreKey())
+		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey())
 		if err == nil {
 			return total, nil
 		}
 		log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
 	}
 
-	bt, err := repo.db.Get(votesKey)
+	incr, err := repo.localCounter(incrKey)
+	if err != nil {
+		return 0, err
+	}
+	decr, err := repo.localCounter(pollVotesKey(tweetId, option, VotesDecrSubNamespace))
+	if err != nil {
+		return 0, err
+	}
+	if decr >= incr {
+		return 0, nil
+	}
+	return incr - decr, nil
+}
+
+// localCounter reads a counter this node keeps. A missing key means nothing
+// has been counted there yet, which is zero rather than an error.
+func (repo *PollRepo) localCounter(key local_store.DatabaseKey) (uint64, error) {
+	bt, err := repo.db.Get(key)
 	if local_store.IsNotFoundError(err) {
 		return 0, nil
 	}

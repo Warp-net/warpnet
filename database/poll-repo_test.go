@@ -79,6 +79,25 @@ func (s *PollRepoTestSuite) TestVoteAndResults() {
 	s.Equal(1, option)
 }
 
+func (s *PollRepoTestSuite) TestResults_SubtractsDecrements() {
+	tweetId := ulid.Make().String()
+	s.Require().NoError(s.repo.Vote(tweetId, ulid.Make().String(), 0, true))
+	s.Require().NoError(s.repo.Vote(tweetId, ulid.Make().String(), 0, true))
+
+	// Nothing retracts a vote today, so bump the DECR counter directly: it
+	// proves INCR and DECR address different keys and that the read composes
+	// both halves instead of ignoring one.
+	txn, err := s.db.NewTxn()
+	s.Require().NoError(err)
+	_, err = txn.Increment(pollVotesKey(tweetId, 0, VotesDecrSubNamespace))
+	s.Require().NoError(err)
+	s.Require().NoError(txn.Commit())
+
+	votes, err := s.repo.Results(tweetId, 2)
+	s.Require().NoError(err)
+	s.Equal([]uint64{1, 0}, votes)
+}
+
 func (s *PollRepoTestSuite) TestVote_IsFinal() {
 	tweetId := ulid.Make().String()
 	userId := ulid.Make().String()
