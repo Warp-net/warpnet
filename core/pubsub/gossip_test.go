@@ -317,6 +317,38 @@ func TestGossip_UnsubscribeRemovesTopicAndHandler(t *testing.T) {
 	assert.Zero(t, subCount)
 }
 
+func TestGossip_RouterTornDownWhileWaitingForTheLock(t *testing.T) {
+	g, _ := runningGossip(t)
+
+	require.NoError(t, g.SubscribeRaw("before", func([]byte) error { return nil }))
+
+	g.mx.Lock()
+	g.pubsub = nil
+	g.mx.Unlock()
+	require.True(t, g.IsGossipRunning())
+
+	assert.ErrorIs(t, g.SubscribeRaw("after", func([]byte) error { return nil }), ErrPubsubNotInit)
+	assert.ErrorIs(t, g.Publish(event.Message{Body: json.RawMessage(`{}`)}, "after"), ErrPubsubNotInit)
+	assert.ErrorIs(t, g.PublishRaw("after", []byte(`{}`)), ErrPubsubNotInit)
+}
+
+func TestGossip_UnsubscribeReportsATopicItCannotClose(t *testing.T) {
+	g, _ := runningGossip(t)
+
+	require.NoError(t, g.SubscribeRaw("stuck", func([]byte) error { return nil }))
+
+	g.mx.RLock()
+	topic := g.topics["stuck"]
+	g.mx.RUnlock()
+	require.NotNil(t, topic)
+
+	strayRelay, err := topic.Relay()
+	require.NoError(t, err)
+	defer strayRelay()
+
+	assert.Error(t, g.Unsubscribe("stuck"))
+}
+
 func TestGossip_SubscribersOnJoinedTopicWithoutPeers(t *testing.T) {
 	g, _ := runningGossip(t)
 	require.NoError(t, g.SubscribeRaw("lonely", func([]byte) error { return nil }))

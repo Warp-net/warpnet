@@ -3,6 +3,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -558,6 +559,49 @@ func (s *FollowRepoGraphTestSuite) TestListFollowRequestsPaginates() {
 		cursor = &next
 	}
 	s.Len(seen, n)
+}
+
+type failingDeleteStore struct {
+	FollowerStorer
+	failOn func(key string) bool
+}
+
+func (f failingDeleteStore) NewTxn() (local_store.WarpTransactioner, error) {
+	txn, err := f.FollowerStorer.NewTxn()
+	if err != nil {
+		return nil, err
+	}
+	return failingDeleteTxn{WarpTransactioner: txn, failOn: f.failOn}, nil
+}
+
+type failingDeleteTxn struct {
+	local_store.WarpTransactioner
+	failOn func(key string) bool
+}
+
+func (f failingDeleteTxn) Delete(key local_store.DatabaseKey) error {
+	if f.failOn(key.String()) {
+		return local_store.DBError("delete failed")
+	}
+	return f.WarpTransactioner.Delete(key)
+}
+
+func (s *FollowRepoGraphTestSuite) TestUnfollowReportsAFailedIndexDelete() {
+	for _, sub := range []string{followingSubName, followerSubName} {
+		alice := uuid.New().String()
+		bob := uuid.New().String()
+		s.Require().NoError(s.repo.Follow(alice, bob))
+
+		broken := NewFollowRepo(failingDeleteStore{
+			FollowerStorer: s.db,
+			failOn: func(key string) bool {
+				return strings.Contains(key, sub) && !strings.Contains(key, string(local_store.FixedRangeKey))
+			},
+		})
+
+		s.Errorf(broken.Unfollow(alice, bob), "a failed %s index delete must not be swallowed", sub)
+		s.True(s.repo.IsFollowing(alice, bob), "a failed unfollow must leave the edge in place")
+	}
 }
 
 func TestFollowRepoGraphTestSuite(t *testing.T) {

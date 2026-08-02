@@ -160,7 +160,7 @@ func TestStreamPool_RetryReusesMessageID(t *testing.T) {
 
 	var mu sync.Mutex
 	ids := make([]string, 0, 4)
-	var attempts int64
+	var attempts atomic.Int64
 
 	server.SetStreamHandler(testRoute.ProtocolID(), func(s warpnet.WarpStream) {
 		raw, _ := io.ReadAll(s)
@@ -171,7 +171,7 @@ func TestStreamPool_RetryReusesMessageID(t *testing.T) {
 		ids = append(ids, string(msg.MessageId))
 		mu.Unlock()
 
-		if atomic.AddInt64(&attempts, 1) == 1 {
+		if attempts.Add(1) == 1 {
 			_ = s.Reset()
 			return
 		}
@@ -287,12 +287,12 @@ func TestStreamPool_IdenticalConcurrentSendsCollapse(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
 
-	var handled int64
+	var handled atomic.Int64
 	release := make(chan struct{})
 	server.SetStreamHandler(testRoute.ProtocolID(), func(s warpnet.WarpStream) {
 		defer func() { _ = s.Close() }()
 		_, _ = io.ReadAll(s)
-		atomic.AddInt64(&handled, 1)
+		handled.Add(1)
 		<-release
 		_, _ = s.Write([]byte(`{"ok":true}`))
 		_ = s.CloseWrite()
@@ -307,7 +307,7 @@ func TestStreamPool_IdenticalConcurrentSendsCollapse(t *testing.T) {
 	const n = 5
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			defer wg.Done()
 			_, _ = pool.Send(info, testRoute, body)
@@ -318,7 +318,7 @@ func TestStreamPool_IdenticalConcurrentSendsCollapse(t *testing.T) {
 	close(release)
 	wg.Wait()
 
-	assert.Equal(t, int64(1), atomic.LoadInt64(&handled),
+	assert.Equal(t, int64(1), handled.Load(),
 		"singleflight must collapse identical in-flight requests into one")
 }
 
@@ -332,7 +332,7 @@ func TestStreamPool_DifferentPayloadsAreNotCollapsed(t *testing.T) {
 	info := addrOf(server)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

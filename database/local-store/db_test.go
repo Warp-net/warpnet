@@ -514,10 +514,10 @@ func TestBatchSet_WritesEveryEntry(t *testing.T) {
 	require.NoError(t, err)
 
 	items := make([]ListItem, 0, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		items = append(items, ListItem{
 			Key:   fmt.Sprintf("/BATCH/key-%03d", i),
-			Value: []byte(fmt.Sprintf("value-%03d", i)),
+			Value: fmt.Appendf(nil, "value-%03d", i),
 		})
 	}
 
@@ -552,7 +552,7 @@ func TestBatchSet_SplitsOversizedTransactions(t *testing.T) {
 	const n = 700
 
 	items := make([]ListItem, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		items = append(items, ListItem{
 			Key:   fmt.Sprintf("/BIGBATCH/key-%05d", i),
 			Value: payload,
@@ -573,7 +573,7 @@ func TestNextSequence_IsStrictlyIncreasing(t *testing.T) {
 
 	seen := make(map[uint64]struct{}, 50)
 	var last uint64
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		n, err := db.NextSequence()
 		require.NoError(t, err)
 
@@ -600,8 +600,8 @@ func TestNotFoundErrorMapping(t *testing.T) {
 	assert.ErrorIs(t, ToDatastoreErrNotFound(ds.ErrNotFound), ds.ErrNotFound)
 	assert.ErrorIs(t, ToDatastoreErrNotFound(fmt.Errorf("wrapped: %w", badger.ErrKeyNotFound)), ds.ErrNotFound)
 
-	real := errors.New("disk on fire")
-	assert.ErrorIs(t, ToDatastoreErrNotFound(real), real)
+	failure := errors.New("disk on fire")
+	assert.ErrorIs(t, ToDatastoreErrNotFound(failure), failure)
 }
 
 func TestDBError_Sentinels(t *testing.T) {
