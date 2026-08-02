@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Warp-net/warpnet/domain"
@@ -94,6 +95,32 @@ func TestStreamReportHandler(t *testing.T) {
 		}), nil)
 		if err == nil {
 			t.Fatal("expected error: oversized reason should be rejected")
+		}
+	})
+
+	// The limit counts runes: a non-ASCII reason is several bytes per
+	// character, and a byte-counted limit would reject it far short of 256.
+	t.Run("non-ascii reason within the rune limit accepted", func(t *testing.T) {
+		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
+			TargetUserID: "user",
+			TargetNodeID: "node",
+			Reason:       strings.Repeat("я", MaxReportReasonLen),
+			Type:         domain.ModerationUserType,
+		}), nil)
+		if err != nil {
+			t.Fatalf("non-ascii reason within the limit was rejected: %v", err)
+		}
+	})
+
+	t.Run("non-ascii reason past the rune limit rejected", func(t *testing.T) {
+		_, err := mkHandler(stubReportPublisher{})(marshal(t, event.ReportEvent{
+			TargetUserID: "user",
+			TargetNodeID: "node",
+			Reason:       strings.Repeat("я", MaxReportReasonLen+1),
+			Type:         domain.ModerationUserType,
+		}), nil)
+		if !errors.Is(err, ErrReportReasonLong) {
+			t.Fatalf("expected ErrReportReasonLong, got: %v", err)
 		}
 	})
 

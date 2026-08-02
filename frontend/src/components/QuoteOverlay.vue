@@ -19,13 +19,32 @@
       </div>
       <div class="p-5">
         <textarea
+          ref="composer"
           v-model="text"
           rows="4"
-          maxlength="280"
           placeholder="Add a comment"
           class="w-full rounded border border-lighter bg-white p-2 focus:outline-none focus:ring-2 focus:ring-blue"
         ></textarea>
-        <div class="text-right text-xs text-dark">{{ text.length }} / 280</div>
+        <div class="flex items-center justify-between">
+          <div class="relative" data-emoji-anchor>
+            <button
+              type="button"
+              @click="showEmojiPicker = !showEmojiPicker"
+              class="text-lg text-blue rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+              aria-label="Add emoji"
+              title="Add emoji"
+              :aria-expanded="showEmojiPicker"
+            >
+              <i class="far fa-smile" aria-hidden="true"></i>
+            </button>
+            <EmojiPicker
+              v-if="showEmojiPicker"
+              @select="insertEmoji"
+              @close="showEmojiPicker = false"
+            />
+          </div>
+          <span class="text-xs text-dark">{{ textLength }} / 280</span>
+        </div>
 
         <div class="mt-3 border border-lighter rounded p-3 bg-lightest text-sm">
           <p class="font-bold">{{ tweet.username || 'Anonymous' }}
@@ -53,23 +72,58 @@
 <script>
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {defineAsyncComponent} from "vue";
 import {dismissable} from "@/lib/modal.mixin";
+import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+
+const tweetCharLimit = 280;
 
 export default {
   name: "QuoteOverlay",
-  mixins: [dismissable("close")],
+  components: {
+    EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
+  },
+  // Escape closes the emoji picker first when it is open, so a stray Escape
+  // never throws away a draft that is still being written.
+  mixins: [dismissable({handler: "onEscape"})],
   props: {
     show: { type: Boolean, default: false },
     tweet: { type: Object, required: true },
   },
   emits: ['close', 'posted'],
   data() {
-    return { text: '', saving: false };
+    return { text: '', saving: false, showEmojiPicker: false };
+  },
+  computed: {
+    textLength() {
+      return runeLength(this.text);
+    },
   },
   watch: {
+    // Runes, not UTF-16 units: matches the 280 the node enforces.
+    text(value) {
+      const clamped = clampRunes(value, tweetCharLimit);
+      if (clamped !== value) this.text = clamped;
+    },
     show(v) { if (v) this.text = ''; },
   },
   methods: {
+    insertEmoji(emoji) {
+      const field = this.$refs.composer;
+      const next = insertEmoji({
+        text: this.text,
+        emoji,
+        field,
+        limit: tweetCharLimit,
+      });
+      if (!next) return;
+      this.text = next.text;
+      this.$nextTick(() => focusCaret(field, next.caret));
+    },
+    onEscape() {
+      if (this.showEmojiPicker) return;
+      this.$emit("close");
+    },
     async submit() {
       const body = this.text.trim();
       if (!body) return;

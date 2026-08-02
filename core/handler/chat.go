@@ -33,6 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -266,7 +267,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		if ev.SenderId == "" || ev.ReceiverId == "" {
 			return nil, warpnet.WarpError("sender and receiver parameters are invalid")
 		}
-		if len(ev.Text) > messageLimit {
+		// Runes, not bytes: a message of emoji costs four bytes per character,
+		// so a byte limit would reject it at a quarter of the advertised length.
+		if utf8.RuneCountInString(ev.Text) > messageLimit {
 			return nil, warpnet.WarpError("message is too long")
 		}
 

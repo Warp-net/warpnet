@@ -41,6 +41,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
@@ -386,9 +387,12 @@ func (e *echoBot) messageSeenKey(m event.NewMessageEvent) string {
 
 func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	prefix := echoChatReply + ": "
-	available := messageLimit - len(prefix)
-	if len(incomingText) > available {
-		return prefix + incomingText[:available]
+	// Runes, not bytes: the chat handler counts runes, and cutting the text at
+	// a byte offset would split an emoji and echo back U+FFFD.
+	available := messageLimit - utf8.RuneCountInString(prefix)
+	runes := []rune(incomingText)
+	if len(runes) > available {
+		return prefix + string(runes[:available])
 	}
 	return prefix + incomingText
 }

@@ -61,14 +61,13 @@ resulting from the use or misuse of this software.
             id="compose-tweet"
             ref="composeTweet"
             v-model="tweet.text"
-            maxlength="280"
             placeholder="What's happening?"
             class="w-full focus:outline-none mt-3 pb-3"
           ></textarea>
           <div
             class="text-right text-xs"
-            :class="tweet.text.length >= 280 ? 'text-red-600 font-semibold' : (tweet.text.length >= 260 ? 'text-yellow-600' : 'text-dark')"
-          >{{ tweet.text.length }} / 280</div>
+            :class="tweetLength >= 280 ? 'text-red-600 font-semibold' : (tweetLength >= 260 ? 'text-yellow-600' : 'text-dark')"
+          >{{ tweetLength }} / 280</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
@@ -154,9 +153,23 @@ resulting from the use or misuse of this software.
               <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Add poll (coming soon)" title="Coming soon">
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
-              <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Add emoji (coming soon)" title="Coming soon">
-                <i class="far fa-smile" aria-hidden="true"></i>
-              </button>
+              <div class="relative mr-3" data-emoji-anchor>
+                <button
+                    type="button"
+                    @click="showEmojiPicker = !showEmojiPicker"
+                    class="text-lg text-blue rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                    aria-label="Add emoji"
+                    title="Add emoji"
+                    :aria-expanded="showEmojiPicker"
+                >
+                  <i class="far fa-smile" aria-hidden="true"></i>
+                </button>
+                <EmojiPicker
+                    v-if="showEmojiPicker"
+                    @select="insertEmoji"
+                    @close="showEmojiPicker = false"
+                />
+              </div>
             </div>
             <button
               @click="addNewTweet"
@@ -232,6 +245,9 @@ import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
+import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+
+const tweetCharLimit = 280;
 
 export default {
   name: "Home",
@@ -243,6 +259,7 @@ export default {
     InfoOverlay: defineAsyncComponent(() => import('@/components/InfoOverlay.vue')),
     AltTextModal: defineAsyncComponent(() => import('@/components/AltTextModal.vue')),
     ImportTweetsModal: defineAsyncComponent(() => import('@/components/ImportTweetsModal.vue')),
+    EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
   data() {
     return {
@@ -268,9 +285,22 @@ export default {
       posting: false,
       loadingMore: false,
       endOfFeed: false,
+      showEmojiPicker: false,
     };
   },
+  watch: {
+    // The node caps a tweet at 280 runes, so the composer has to cap on runes
+    // too. A plain maxlength would count UTF-16 units and stop people halfway
+    // through their allowance as soon as they use emoji.
+    "tweet.text"(value) {
+      const clamped = clampRunes(value, tweetCharLimit);
+      if (clamped !== value) this.tweet.text = clamped;
+    },
+  },
   computed: {
+    tweetLength() {
+      return runeLength(this.tweet.text);
+    },
     acceptedVideoTypes() {
       return acceptedVideoAccept;
     },
@@ -291,6 +321,18 @@ export default {
     },
   },
   methods: {
+    insertEmoji(emoji) {
+      const field = this.$refs.composeTweet;
+      const next = insertEmoji({
+        text: this.tweet.text,
+        emoji,
+        field,
+        limit: tweetCharLimit,
+      });
+      if (!next) return;
+      this.tweet.text = next.text;
+      this.$nextTick(() => focusCaret(field, next.caret));
+    },
     focusCompose() {
       this.$nextTick(() => {
         const el = this.$refs.composeTweet;
