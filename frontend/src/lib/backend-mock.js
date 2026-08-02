@@ -56,7 +56,9 @@ import {
     PUBLIC_POST_UNFOLLOW,
     PUBLIC_POST_UNLIKE,
     PUBLIC_POST_UNRETWEET,
-    PUBLIC_POST_VIEW
+    PUBLIC_POST_VIEW,
+    PUBLIC_POST_POLL_VOTE,
+    PUBLIC_GET_POLL
 } from "@/service/service";
 import {generateUUID} from "@/lib/uuid";
 
@@ -130,6 +132,7 @@ function generateResponse(arg) {
                 image_key : arg.body.image_key || "",
                 image_keys : arg.body.image_keys || [],
                 video_key : arg.body.video_key || undefined,
+                poll : arg.body.poll || undefined,
                 created_at : arg.body.created_at || Date.now().toString(),
                 parent_id: null,
                 retweeted_by: null,
@@ -335,6 +338,23 @@ function generateResponse(arg) {
             mockMap.set("stats:"+arg.body.tweet_id, unlikeStats)
             return {count: unlikeStats.likes_count};
 
+        case PUBLIC_POST_POLL_VOTE: {
+            const pollKey = "poll:"+arg.body.tweet_id
+            const tally = mockMap.get(pollKey) || {votes: new Array(arg.body.options_num || 0).fill(0), voters: {}}
+            if (!(arg.body.owner_id in tally.voters)) {
+                tally.voters[arg.body.owner_id] = arg.body.option
+                tally.votes[arg.body.option] = (tally.votes[arg.body.option] || 0) + 1
+                mockMap.set(pollKey, tally)
+            }
+            return pollResults(tally, arg.body.owner_id);
+        }
+
+        case PUBLIC_GET_POLL: {
+            const tally = mockMap.get("poll:"+arg.body.tweet_id)
+            if (!tally) return {tweet_id: arg.body.tweet_id, votes: new Array(arg.body.options_num || 0).fill(0), total_votes: 0};
+            return pollResults(tally, arg.body.owner_id);
+        }
+
         case PUBLIC_POST_VIEW: {
             // NOTE: this mock uses an "infinite" dedup window — once a viewer
             // has been seen for a tweet, the count never re-increments for
@@ -485,6 +505,15 @@ function newUser() {
         latency: 0,
         tweets_count: 0,
         metadata: {},
+    }
+}
+
+function pollResults(tally, ownerId) {
+    const voted = tally.voters[ownerId];
+    return {
+        votes: tally.votes,
+        total_votes: tally.votes.reduce((sum, n) => sum + n, 0),
+        voted_option: voted === undefined ? undefined : voted,
     }
 }
 

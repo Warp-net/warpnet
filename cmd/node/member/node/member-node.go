@@ -349,18 +349,19 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 // handler-list builders below so the registration func itself stays
 // small (golangci-lint maintidx).
 type memberRepos struct {
-	timelineRepo     *database.TimelineRepo
-	tweetRepo        *database.TweetRepo
-	likeRepo         *database.LikeRepo
-	chatRepo         *database.ChatRepo
-	mediaRepo        *database.MediaRepo
-	notificationRepo *database.NotificationsRepo
-	settingsRepo     *database.SettingsRepo
-	bookmarkRepo     *database.BookmarkRepo
-	blocksRepo       *database.BlocksRepo
-	mutesRepo        *database.MutesRepo
-	subsRepo         *database.SubscriptionsRepo
-	filterRepo       *database.FilterRepo
+	timelineRepo     TimelineProvider
+	tweetRepo        TweetsProvider
+	likeRepo         LikesProvider
+	pollRepo         PollProvider
+	chatRepo         ChatProvider
+	mediaRepo        MediaProvider
+	notificationRepo NotificationProvider
+	settingsRepo     SettingsProvider
+	bookmarkRepo     BookmarkProvider
+	blocksRepo       BlocksProvider
+	mutesRepo        MutesProvider
+	subsRepo         SubscriptionProvider
+	filterRepo       FilterProvider
 }
 
 func (m *MemberNode) setupHandlers(
@@ -378,6 +379,7 @@ func (m *MemberNode) setupHandlers(
 		timelineRepo:     database.NewTimelineRepo(db),
 		tweetRepo:        database.NewTweetRepo(db, statsDB),
 		likeRepo:         database.NewLikeRepo(db, statsDB),
+		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
@@ -524,6 +526,14 @@ func (m *MemberNode) engagementHandlers(
 		{
 			event.PRIVATE_GET_LIKES,
 			handler.StreamGetLikesHandler(r.likeRepo),
+		},
+		{
+			event.PUBLIC_POST_POLL_VOTE,
+			handler.StreamPollVoteHandler(r.pollRepo, r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_POLL,
+			handler.StreamGetPollHandler(r.pollRepo, r.tweetRepo, userRepo, m),
 		},
 	}
 }

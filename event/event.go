@@ -332,6 +332,48 @@ type NewUserEvent = domain.User
 // Owner defines model for Owner.
 type Owner = domain.Owner
 
+// PollVoteEvent defines model for PollVoteEvent.
+//
+// Same actor/target convention as LikeEvent: UserId is the tweet author
+// (the routing key), OwnerId is the voter. Option is the zero-based index
+// into the tweet's poll options.
+type PollVoteEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	OwnerId domain.ID `json:"owner_id"`
+	Option  int       `json:"option"`
+
+	// OptionsNum is how many options the voter's copy of the tweet shows.
+	// The counters are stored per option index, so it sizes the results the
+	// vote replies with on a node that doesn't hold the tweet itself.
+	OptionsNum int `json:"options_num"`
+}
+
+// GetPollEvent defines model for GetPollEvent.
+type GetPollEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	OwnerId domain.ID `json:"owner_id"`
+
+	// OptionsNum is how many options the caller's copy of the tweet shows.
+	// The vote counters are stored per option index, so the reader needs it
+	// to know how many to fetch.
+	OptionsNum int `json:"options_num"`
+}
+
+// PollResultsResponse defines model for PollResultsResponse.
+type PollResultsResponse struct {
+	TweetId domain.ID `json:"tweet_id"`
+
+	// Votes holds the vote count per option, in option order.
+	Votes      []uint64 `json:"votes"`
+	TotalVotes uint64   `json:"total_votes"`
+
+	// VotedOption is the option the requesting user picked, nil if they
+	// haven't voted.
+	VotedOption *int `json:"voted_option,omitempty"`
+}
+
 // ReTweetsCountResponse defines model for ReTweetsCountResponse.
 type ReTweetsCountResponse = LikesCountResponse
 

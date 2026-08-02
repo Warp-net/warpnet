@@ -131,6 +131,9 @@ func StreamNewTweetHandler(
 		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
 			return nil, warpnet.WarpError("tweet text is too long")
 		}
+		if err := validatePoll(ev.Poll); err != nil {
+			return nil, err
+		}
 
 		// A reply is a tweet with a parent: it lives inside its thread, not
 		// in the timeline, so it never reaches the follower-broadcast path.
@@ -174,6 +177,7 @@ func StreamNewTweetHandler(
 				Username:  tweet.Username,
 				ImageKeys: tweet.ImageKeys,
 				VideoKey:  tweet.VideoKey,
+				Poll:      tweet.Poll,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
 			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
@@ -182,6 +186,35 @@ func StreamNewTweetHandler(
 		}
 		return tweet, nil
 	}
+}
+
+// validatePoll checks the poll definition a tweet carries. The definition is
+// immutable once the tweet exists, so this is the only chance to reject a
+// malformed one. Whether the poll has already closed is deliberately not
+// checked here: a tweet can legitimately reach a peer after its poll ended,
+// and the vote handler is what refuses a late vote.
+func validatePoll(p *domain.Poll) error {
+	if p == nil {
+		return nil
+	}
+	if len(p.Options) < domain.PollMinOptions {
+		return warpnet.WarpError("poll: too few options")
+	}
+	if len(p.Options) > domain.PollMaxOptions {
+		return warpnet.WarpError("poll: too many options")
+	}
+	if p.ExpiresAt.IsZero() {
+		return warpnet.WarpError("poll: empty expiration time")
+	}
+	for _, opt := range p.Options {
+		if strings.TrimSpace(opt) == "" {
+			return warpnet.WarpError("poll: empty option")
+		}
+		if utf8.RuneCountInString(opt) > domain.PollOptionRuneLimit {
+			return warpnet.WarpError("poll: option is too long")
+		}
+	}
+	return nil
 }
 
 // handleNewReply stores a reply in its thread, notifies the parent tweet's
@@ -213,6 +246,7 @@ func handleNewReply(
 		Username:     ev.Username,
 		ImageKeys:    ev.ImageKeys,
 		VideoKey:     ev.VideoKey,
+		Poll:         ev.Poll,
 	}, ev.UserId == ownNodeInfo.OwnerId)
 	if err != nil {
 		log.Errorf("reply handler failed: %v", err)
@@ -267,6 +301,7 @@ func handleNewReply(
 			Username:     reply.Username,
 			ImageKeys:    reply.ImageKeys,
 			VideoKey:     reply.VideoKey,
+			Poll:         reply.Poll,
 		},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
