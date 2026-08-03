@@ -10,10 +10,23 @@ import (
 	"strings"
 )
 
+type WhoToFollowAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
+type WhoToFollowUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
+}
+
+type WhoToFollowFollowsLister interface {
+	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
+}
+
 func StreamGetWhoToFollowHandler(
-	authRepo UserAuthStorer,
-	userRepo UserFetcher,
-	followRepo UserFollowsCounter,
+	authRepo WhoToFollowAuthStorer,
+	userRepo WhoToFollowUserFetcher,
+	followRepo WhoToFollowFollowsLister,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent

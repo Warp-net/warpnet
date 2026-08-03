@@ -98,6 +98,10 @@ type TweetFollowChecker interface {
 	IsFollowing(ownerId, authorId string) bool
 }
 
+type TweetNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamNewTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
@@ -105,7 +109,7 @@ func StreamNewTweetHandler(
 	timelineRepo TimelineUpdater,
 	followRepo TweetFollowChecker,
 	userRepo TweetUserFetcher,
-	notifyRepo ModerationNotifier,
+	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -224,7 +228,7 @@ func handleNewReply(
 	ev domain.Tweet,
 	replyRepo TweetsStorer,
 	userRepo TweetUserFetcher,
-	notifyRepo ModerationNotifier,
+	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
 ) (any, error) {
 	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)

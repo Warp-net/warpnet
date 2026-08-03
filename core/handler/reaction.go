@@ -67,10 +67,14 @@ type ReactionsStorer interface {
 	RemoveReacted(userId, tweetId string) error
 }
 
+type ReactionNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamReactionHandler(
 	repo ReactionsStorer,
 	userRepo ReactedUserFetcher,
-	notifyRepo ModerationNotifier,
+	notifyRepo ReactionNotifier,
 	streamer ReactionStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {

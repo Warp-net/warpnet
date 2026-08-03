@@ -49,9 +49,6 @@ type RetweetersLister interface {
 	Retweeters(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-// EngagementUserFetcher hydrates an engagement list into users. The batch
-// read is what the list path wants; the single read covers both the
-// per-id fallback and resolving the tweet author to forward to.
 type EngagementUserFetcher interface {
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	Get(userId string) (user domain.User, err error)

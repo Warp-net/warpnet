@@ -109,12 +109,16 @@ func fetchFollower(
 	return follower, nil
 }
 
+type FollowNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamFollowHandler(
 	broadcaster FollowingBroadcaster,
 	followRepo FollowingStorer,
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
-	notifyRepo ModerationNotifier,
+	notifyRepo FollowNotifier,
 	streamer FollowNodeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {

@@ -45,8 +45,6 @@ type ViewsStorer interface {
 	GetViewsCount(tweetId string) (uint64, error)
 }
 
-// ViewUserFetcher resolves the tweet author, whose node the view is
-// forwarded to. One user per view, so no batch read.
 type ViewUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 }
