@@ -25,9 +25,14 @@ resulting from the use or misuse of this software.
   <!-- The gap above the button is padding rather than margin, so the
        element's box reaches the button and the pointer can travel onto the
        bar without leaving the hover area that opened it. -->
-  <div class="absolute bottom-full left-0 pb-2 z-40" data-reaction-bar>
+  <!-- Anchored right and sized to its content: the containing block is the
+       quarter-width cell the reaction button lives in, so a left-anchored
+       row runs off the column and a percentage-width one is squeezed into
+       four cramped rows. w-max keeps one row, growing leftwards over the
+       cells beside it. -->
+  <div class="absolute bottom-full right-0 pb-2 z-40" data-reaction-bar>
     <div
-      class="flex items-center gap-1 rounded-full border border-lighter bg-white px-2 py-1 shadow-lg"
+      class="flex w-max items-center gap-1 rounded-full border border-lighter bg-white px-2 py-1 shadow-lg"
       role="menu"
       aria-label="React"
     >
@@ -42,17 +47,18 @@ resulting from the use or misuse of this software.
         :title="emoji"
         @click.stop="$emit('select', emoji)"
       >{{ emoji }}</button>
+      <!-- A text glyph, not a Font Awesome icon: the icons come from a CDN
+           kit, so on a node without internet the whole row would lose its
+           "more" affordance. -->
       <button
         type="button"
         role="menuitem"
-        class="w-8 h-8 flex items-center justify-center rounded-full text-dark hover:bg-lightblue flat-btn"
+        class="w-8 h-8 flex items-center justify-center rounded-full border border-lighter text-lg leading-none hover:bg-lightblue flat-btn"
         aria-label="More emoji"
         title="More emoji"
         :aria-expanded="showPicker"
         @click.stop="showPicker = !showPicker"
-      >
-        <i class="fas fa-plus text-xs" aria-hidden="true"></i>
-      </button>
+      >+</button>
     </div>
     <EmojiPicker
       v-if="showPicker"
