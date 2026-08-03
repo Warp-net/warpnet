@@ -99,7 +99,7 @@ func (repo *ReactionRepo) React(tweetId, userId, emoji string, isTransitive bool
 	prev, err := txn.Get(reactorKey)
 	switch {
 	case err == nil:
-		return repo.switchReaction(txn, reactorKey, tweetId, storedReaction(prev, userId), emoji, isTransitive)
+		return repo.switchReaction(txn, reactorKey, tweetId, storedReaction(prev, userId), emoji)
 	case local_store.IsNotFoundError(err):
 		return repo.addReaction(txn, reactorKey, reactionKey, tweetId, emoji, isTransitive)
 	default:
@@ -134,20 +134,17 @@ func (repo *ReactionRepo) addReaction(
 	if err := repo.statsDb.Increment(reactionKey.DatastoreKey()); err != nil {
 		log.Warnf("react: stats db increment: %v", err)
 	}
-	if err := repo.statsDb.Increment(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
-		log.Warnf("react: stats db reaction increment: %v", err)
-	}
 	return reactionsCount, nil
 }
 
 // switchReaction moves an existing reaction to a different emoji. The
-// reaction itself stays, so only the per-emoji tallies move and the total
-// counter is left alone. Commits txn.
+// reaction itself stays, so only this node's per-emoji tallies move: the
+// total is untouched and there is nothing to mirror into the CRDT.
+// Commits txn.
 func (repo *ReactionRepo) switchReaction(
 	txn local_store.WarpTransactioner,
 	reactorKey local_store.DatabaseKey,
 	tweetId, prevEmoji, emoji string,
-	isTransitive bool,
 ) (reactionsCount uint64, err error) {
 	if prevEmoji == emoji { // nothing to move
 		_ = txn.Commit()
@@ -165,23 +162,7 @@ func (repo *ReactionRepo) switchReaction(
 	if err = txn.Commit(); err != nil {
 		return 0, err
 	}
-	repo.moveReactionStat(tweetId, prevEmoji, emoji, isTransitive)
 	return repo.ReactionsCount(tweetId)
-}
-
-// moveReactionStat mirrors a switch into the network-wide (CRDT) per-emoji
-// counters. Best effort: the local counters are already committed and back
-// the read-time fallback.
-func (repo *ReactionRepo) moveReactionStat(tweetId, from, to string, isTransitive bool) {
-	if repo.statsDb == nil || !isTransitive {
-		return
-	}
-	if err := repo.statsDb.Decrement(reactionCountKey(tweetId, from).DatastoreKey()); err != nil {
-		log.Warnf("react: stats db reaction decrement: %v", err)
-	}
-	if err := repo.statsDb.Increment(reactionCountKey(tweetId, to).DatastoreKey()); err != nil {
-		log.Warnf("react: stats db reaction increment: %v", err)
-	}
 }
 
 func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (reactionsCount uint64, err error) {
@@ -233,9 +214,6 @@ func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (re
 	if err := repo.statsDb.Decrement(unreactionKey.DatastoreKey()); err != nil {
 		log.Warnf("unreact: stats db decrement: %v", err)
 	}
-	if err := repo.statsDb.Decrement(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
-		log.Warnf("unreact: stats db reaction decrement: %v", err)
-	}
 
 	return reactionsCount, nil
 }
@@ -273,20 +251,15 @@ func (repo *ReactionRepo) Reactions(tweetId string) (map[string]uint64, error) {
 		reactions = make(map[string]uint64, len(items))
 		named     uint64
 	)
+	// Local counters only, deliberately. The author's node is where every
+	// reaction is propagated, so its own counters are the whole picture, and
+	// the per-emoji CRDT keys merge independently of each other and of the
+	// total — reading them here let the breakdown contradict both the total
+	// and the reactor's own emoji while deltas were still in flight.
 	for _, item := range items {
 		emoji := keyID(item.Key)
-		if emoji == "" {
-			continue
-		}
 		count := decodeCount(item.Value)
-		if repo.statsDb != nil {
-			if total, statErr := repo.statsDb.GetAggregatedStat(
-				local_store.DatabaseKey(item.Key).DatastoreKey(),
-			); statErr == nil {
-				count = total
-			}
-		}
-		if count == 0 {
+		if emoji == "" || count == 0 {
 			continue
 		}
 		reactions[emoji] = count

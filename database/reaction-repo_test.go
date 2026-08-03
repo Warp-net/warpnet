@@ -34,6 +34,7 @@ import (
 
 	"go.uber.org/goleak"
 
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/suite"
@@ -333,4 +334,87 @@ func (s *ReactionRepoTestSuite) TestReactions_InvalidParams() {
 
 	_, err = s.repo.Reaction(ulid.Make().String(), "")
 	s.Error(err)
+}
+
+// crdtSkew is a stats store whose per-key values can be nudged out of step
+// with each other, the way independently merging CRDT deltas are in a real
+// cluster.
+type crdtSkew struct {
+	vals map[string]uint64
+}
+
+func (c *crdtSkew) GetAggregatedStat(key ds.Key) (uint64, error) { return c.vals[key.String()], nil }
+
+func (c *crdtSkew) Increment(key ds.Key) error {
+	c.vals[key.String()]++
+	return nil
+}
+
+func (c *crdtSkew) Decrement(key ds.Key) error {
+	if c.vals[key.String()] > 0 {
+		c.vals[key.String()]--
+	}
+	return nil
+}
+
+// A switch, then a stale per-emoji CRDT view: the breakdown must follow the
+// reaction that is actually stored, never the emoji the CRDT still carries.
+func (s *ReactionRepoTestSuite) TestReactions_SurviveSkewedCRDT() {
+	skew := &crdtSkew{vals: map[string]uint64{}}
+	repo := NewReactionRepo(s.db, skew)
+
+	tweetId := ulid.Make().String()
+	userId := ulid.Make().String()
+
+	_, err := repo.React(tweetId, userId, "❤️", true)
+	s.Require().NoError(err)
+	_, err = repo.React(tweetId, userId, "🔥", true) // switch
+	s.Require().NoError(err)
+
+	// The heart's delta hasn't been retracted and the fire's hasn't landed.
+	skew.vals[reactionCountKey(tweetId, "❤️").DatastoreKey().String()] = 1
+	skew.vals[reactionCountKey(tweetId, "🔥").DatastoreKey().String()] = 0
+
+	reactions, err := repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Equal(map[string]uint64{"🔥": 1}, reactions)
+
+	emoji, err := repo.Reaction(tweetId, userId)
+	s.Require().NoError(err)
+	s.Equal("🔥", emoji, "the chip and the reactor's own emoji must agree")
+
+	total, err := repo.ReactionsCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(total, sumCounts(reactions), "the breakdown must add up to the total")
+}
+
+// Taking a reaction back must clear the chip even while the per-emoji CRDT
+// delta is still in flight — the counter and the breakdown reached zero
+// together on the screenshot that started this.
+func (s *ReactionRepoTestSuite) TestReactions_UnreactClearsSkewedChip() {
+	skew := &crdtSkew{vals: map[string]uint64{}}
+	repo := NewReactionRepo(s.db, skew)
+
+	tweetId := ulid.Make().String()
+	userId := ulid.Make().String()
+
+	_, err := repo.React(tweetId, userId, "❤️", true)
+	s.Require().NoError(err)
+	total, err := repo.Unreact(tweetId, userId, true)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), total)
+
+	skew.vals[reactionCountKey(tweetId, "❤️").DatastoreKey().String()] = 1 // stale
+
+	reactions, err := repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Empty(reactions)
+}
+
+func sumCounts(m map[string]uint64) uint64 {
+	var sum uint64
+	for _, v := range m {
+		sum += v
+	}
+	return sum
 }
