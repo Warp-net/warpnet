@@ -119,6 +119,10 @@ export default {
     // Composers pinned to the bottom of the viewport (the DM input) need the
     // panel above the button; anything higher up on the page opens downwards.
     dropUp: {type: Boolean, default: false},
+    // Which tab opens first. The composer wants the emoji you reuse most,
+    // but a reaction row opens on a full category: with one or two recents
+    // the panel is a mostly empty box.
+    initialCategory: {type: String, default: ""},
   },
   emits: ["select", "close"],
   data() {
@@ -128,7 +132,8 @@ export default {
       tone: loadTone(),
       toneOpen: false,
       recent,
-      active: recent.length > 0 ? RECENT_TAB : EMOJI_CATEGORIES[0].id,
+      active: this.initialCategory ||
+        (recent.length > 0 ? RECENT_TAB : EMOJI_CATEGORIES[0].id),
       tones: SKIN_TONES,
     };
   },
