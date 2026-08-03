@@ -69,7 +69,7 @@
     <string name="description_visibility_private">Последователи</string>
     <string name="description_visibility_public">Публично</string>
     <string name="description_post_bookmarked">Отметнато</string>
-    <string name="description_post_liked">Поставено в любими</string>
+    <string name="description_post_reacted">Поставено в любими</string>
     <string name="description_post_retweeted">Реблог</string>
     <string name="description_post_media_no_description_placeholder">Няма описание</string>
     <string name="description_post_cw">Предупреждение за съдържание: %1$s</string>
@@ -77,13 +77,13 @@
     <string name="conversation_more_recipients">%1$s, %2$s и %3$d други</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s и %2$s</string>
-    <string name="title_liked_by">Поставено в любими от</string>
+    <string name="title_reacted_by">Поставено в любими от</string>
     <string name="title_retweeted_by">Споделено от</string>
     <plurals name="retweets">
         <item quantity="one">%1$s Споделяне</item>
         <item quantity="other">%1$s Споделяния</item>
     </plurals>
-    <plurals name="favs">
+    <plurals name="reactions_plural">
         <item quantity="one">%1$s Любимо</item>
         <item quantity="other">%1$s Любими</item>
     </plurals>
@@ -193,8 +193,8 @@
     <string name="notification_subscription_name">Нови публикации</string>
     <string name="notification_poll_description">Известия за приключили анкети</string>
     <string name="notification_poll_name">Резултати от анкети</string>
-    <string name="notification_like_description">Известия, когато публикациите ви бъдат означени като любими</string>
-    <string name="notification_like_name">Любими</string>
+    <string name="notification_reaction_description">Известия, когато публикациите ви бъдат означени като любими</string>
+    <string name="notification_reaction_name">Любими</string>
     <string name="notification_retweet_description">Известия, когато публикациите ви се споделят</string>
     <string name="post_text_size_smallest">Най-малък</string>
     <string name="description_visibility_unlisted">Скрито</string>
@@ -268,7 +268,7 @@
     <string name="title_links_dialog">Връзки</string>
     <string name="title_mentions_dialog">Споменавания</string>
     <string name="title_hashtags_dialog">Хаштагове</string>
-    <string name="action_open_faved_by">Показване на любими</string>
+    <string name="action_open_reacted_by">Показване на любими</string>
     <string name="action_open_retweeted_by">Показване на споделяния</string>
     <string name="action_open_retweeter">Отваряне на споделилия автор</string>
     <string name="action_add_tab">Добавяне на раздел</string>
@@ -307,7 +307,7 @@
     <string name="action_view_blocks">Блокирани потребители</string>
     <string name="action_view_mutes">Заглушени потребители</string>
     <string name="action_view_bookmarks">Отметки</string>
-    <string name="action_view_likes">Любими</string>
+    <string name="action_view_reactions">Любими</string>
     <string name="action_view_account_preferences">Предпочитания за акаунта</string>
     <string name="action_view_preferences">Предпочитания</string>
     <string name="action_view_profile">Профил</string>
@@ -330,9 +330,9 @@
     <string name="action_login">Вписване с Warpnet</string>
     <string name="action_compose">Композиране</string>
     <string name="action_more">Още</string>
-    <string name="action_unlike">Премахване от любими</string>
+    <string name="action_unreact">Премахване от любими</string>
     <string name="action_bookmark">Отмятане</string>
-    <string name="action_like">Поставяне в любими</string>
+    <string name="action_react">Поставяне в любими</string>
     <string name="action_unretweet">Премахване на споделяне</string>
     <string name="action_retweet">Споделяне</string>
     <string name="action_reply">Отговор</string>
@@ -342,7 +342,7 @@
     <string name="notification_subscription_format">%1$s току-що публикува</string>
     <string name="notification_follow_request_format">%1$s поиска да ви последва</string>
     <string name="notification_follow_format">%1$s ви последва</string>
-    <string name="notification_like_format">%1$s постави вашата публикация в любими</string>
+    <string name="notification_reaction_format">%1$s постави вашата публикация в любими</string>
     <string name="notification_retweet_format">%1$s сподели вашата публикация</string>
     <string name="message_empty">Нищо тук.</string>
     <string name="post_content_show_less">Сгъване</string>
@@ -364,7 +364,7 @@
     <string name="title_blocks">Блокирани потребители</string>
     <string name="title_mutes">Заглушени потребители</string>
     <string name="title_bookmarks">Отметки</string>
-    <string name="title_likes">Любими</string>
+    <string name="title_reactions">Любими</string>
     <string name="title_followers">Последователи</string>
     <string name="title_follows">Следвани</string>
     <string name="title_posts_pinned">Закачени</string>
@@ -513,7 +513,7 @@
     <string name="notification_update_name">Редакции на публикации</string>
     <string name="pref_reading_order_newest_first">Първо най-новите</string>
     <string name="pref_reading_order_oldest_first">Първо най-старите</string>
-    <string name="pref_title_confirm_likes">Питане за потвърждение преди слагане в любими</string>
+    <string name="pref_title_confirm_reactions">Питане за потвърждение преди слагане в любими</string>
     <string name="dialog_delete_filter_positive_action">Изтриване</string>
     <string name="dialog_delete_filter_text">Да се изтрие ли филтър \'%1$s\'?</string>
     <string name="no_lists">Нямате списъци.</string>

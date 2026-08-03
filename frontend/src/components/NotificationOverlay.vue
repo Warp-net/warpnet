@@ -49,7 +49,7 @@ import {dismissable} from "@/lib/modal.mixin";
 
 const iconByType = {
   reply: 'fas fa-comment text-blue',
-  like: 'fas fa-heart text-red-600',
+  reaction: 'fas fa-heart text-red-600',
   retweet: 'fas fa-retweet text-green-500',
   follow: 'fas fa-user-plus text-blue',
   mention: 'fas fa-at text-blue',

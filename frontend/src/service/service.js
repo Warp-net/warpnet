@@ -26,6 +26,7 @@ import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
 import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
+import {DEFAULT_REACTION} from "@/lib/emoji";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -42,7 +43,7 @@ export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
-export const PRIVATE_GET_LIKES = "/private/get/likes/0.0.0"
+export const PRIVATE_GET_REACTIONS = "/private/get/reactions/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
 export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
@@ -51,7 +52,7 @@ export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
 export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
 export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
 export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
-export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
+export const PUBLIC_GET_TWEET_REACTORS = "/public/get/tweet/reactors/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
 export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
@@ -70,7 +71,7 @@ export const PRIVATE_DELETE_FILTER = "/private/delete/filter/0.0.0"
 export const PRIVATE_POST_FILTER_KEYWORD = "/private/post/filter/keyword/0.0.0"
 export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
 export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
-export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
+export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
@@ -83,7 +84,7 @@ export const PUBLIC_GET_USERS = "/public/get/users/0.0.0"
 export const PUBLIC_GET_WHOTOFOLLOW = "/public/get/whotofollow/0.0.0"
 export const PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
 export const PUBLIC_POST_FOLLOW = "/public/post/follow/0.0.0"
-export const PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
+export const PUBLIC_POST_REACT = "/public/post/react/0.0.0"
 export const PUBLIC_POST_RETWEET = "/public/post/retweet/0.0.0"
 export const PUBLIC_POST_UNRETWEET = "/public/post/unretweet/0.0.0"
 export const PUBLIC_POST_CHAT = "/public/post/chat/0.0.0"
@@ -1183,9 +1184,9 @@ export const warpnetService = {
         });
     },
 
-    async getTweetLikers(tweetId, ownerUserId, cursor) {
+    async getTweetReactors(tweetId, ownerUserId, cursor) {
         const resp = await this.sendToNode({
-            path: PUBLIC_GET_TWEET_LIKERS,
+            path: PUBLIC_GET_TWEET_REACTORS,
             body: {
                 tweet_id: tweetId,
                 owner_user_id: ownerUserId,
@@ -1345,8 +1346,8 @@ export const warpnetService = {
         return bookmarkedIdsCache.has(tweetId);
     },
 
-    async getLikes(cursorReset) {
-        let cursor = this.getCursor('likes')
+    async getReactions(cursorReset) {
+        let cursor = this.getCursor('reactions')
         if (cursorReset) {
             cursor = ''
         }
@@ -1356,7 +1357,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { items: [], cursor: endCursor };
         const request = {
-            path: PRIVATE_GET_LIKES,
+            path: PRIVATE_GET_REACTIONS,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -1365,10 +1366,10 @@ export const warpnetService = {
         }
         const resp = await this.sendToNode(request);
         if (!resp) return { items: [], cursor: endCursor };
-        this.setCursor('likes', resp.cursor || 'end')
+        this.setCursor('reactions', resp.cursor || 'end')
 
         // Same reference-only wire shape as bookmarks: the backend returns
-        // the liked index entries (tweet_id + owner_user_id), each hydrated
+        // the reacted index entries (tweet_id + owner_user_id), each hydrated
         // into the full Tweet so the view renders it like a timeline tweet.
         const rawItems = resp.items || [];
         const hydrated = await Promise.all(rawItems.map(async (b) => {
@@ -1380,7 +1381,7 @@ export const warpnetService = {
                 });
                 return tweet ? { ...b, tweet } : null;
             } catch (e) {
-                console.warn('like hydrate failed:', b, e);
+                console.warn('reaction hydrate failed:', b, e);
                 return null;
             }
         }));
@@ -1777,27 +1778,31 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async likeTweet(tweetId, userId) {
+    // reactToTweet reacts to a tweet with `emoji` (the node defaults to a heart
+    // when none is named) and returns {count, reactions} — the total across
+    // every reaction plus its per-emoji breakdown.
+    async reactToTweet(tweetId, userId, emoji) {
         const owner = this.getOwnerProfile()
 
         const request = {
-            path: PUBLIC_POST_LIKE,
+            path: PUBLIC_POST_REACT,
             body: {
                 user_id: userId,
                 tweet_id: tweetId,
                 owner_id: owner.user_id,
+                emoji: emoji || '',
             },
         }
 
-        const likeResp = await this.sendToNode(request);
-        return likeResp.count;
+        const reactResp = await this.sendToNode(request);
+        return {count: reactResp.count || 0, reactions: reactResp.reactions || {}};
     },
 
-    async unlikeTweet(tweetId, userId) {
+    async unreactTweet(tweetId, userId) {
         const owner = this.getOwnerProfile()
 
         const request = {
-            path: PUBLIC_POST_UNLIKE,
+            path: PUBLIC_POST_UNREACT,
             body: {
                 user_id: userId,
                 tweet_id: tweetId,
@@ -1805,8 +1810,8 @@ export const warpnetService = {
             },
         }
 
-        const unlikeResp = await this.sendToNode(request);
-        return unlikeResp.count;
+        const unreactResp = await this.sendToNode(request);
+        return {count: unreactResp.count || 0, reactions: unreactResp.reactions || {}};
     },
 
     // voteInPoll casts a final vote on a tweet's poll and returns the tally
@@ -1899,27 +1904,37 @@ export const warpnetService = {
         return await this.sendToNode(request)
     },
 
-    async setLiker(tweetId, profileId, profileObj) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
+    // The cached value is the reaction emoji. Likes cached before reactions
+    // existed stored "1", which reads back as the default heart.
+    async setReactor(tweetId, profileId, profileObj, emoji) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
         stateMap.set(cacheKey, profileObj)
-        localStorage.setItem(cacheKey, "1")
+        localStorage.setItem(cacheKey, emoji || DEFAULT_REACTION)
     },
 
-    async hasLiker(tweetId, profileId) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
-        if (stateMap.has(cacheKey)) {
-            return true
+    async hasReactor(tweetId, profileId) {
+        return !!(await this.getReactorEmoji(tweetId, profileId))
+    },
+
+    // Only localStorage answers this: stateMap holds the reactor's profile
+    // object, not their emoji, so its presence says nothing about which
+    // reaction was left.
+    async getReactorEmoji(tweetId, profileId) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
+        const cached = localStorage.getItem(cacheKey)
+        if (!cached) {
+            return ""
         }
-        return localStorage.getItem(cacheKey) === "1"
+        return cached === "1" ? DEFAULT_REACTION : cached
     },
 
-    async getLiker(tweetId, profileId) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
+    async getReactor(tweetId, profileId) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
         return stateMap.get(cacheKey)
     },
 
-    async deleteLiker(tweetId, profileId) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
+    async deleteReactor(tweetId, profileId) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
         stateMap.delete(cacheKey)
         localStorage.removeItem(cacheKey)
     },

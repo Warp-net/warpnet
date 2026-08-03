@@ -98,6 +98,10 @@ type TweetFollowChecker interface {
 	IsFollowing(ownerId, authorId string) bool
 }
 
+type TweetNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamNewTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
@@ -105,7 +109,7 @@ func StreamNewTweetHandler(
 	timelineRepo TimelineUpdater,
 	followRepo TweetFollowChecker,
 	userRepo TweetUserFetcher,
-	notifyRepo ModerationNotifier,
+	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -224,7 +228,7 @@ func handleNewReply(
 	ev domain.Tweet,
 	replyRepo TweetsStorer,
 	userRepo TweetUserFetcher,
-	notifyRepo ModerationNotifier,
+	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
 ) (any, error) {
 	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
@@ -567,11 +571,13 @@ func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev 
 	return resp, true
 }
 
-type LikeTweetStorer interface {
-	Like(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
-	Unlike(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
-	LikesCount(tweetId string) (likesNum uint64, err error)
-	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
+type ReactionTweetStorer interface {
+	React(tweetId, userId, emoji string, isTransitive bool) (reactionsNum uint64, err error)
+	Unreact(tweetId, userId string, isTransitive bool) (reactionsNum uint64, err error)
+	ReactionsCount(tweetId string) (reactionsNum uint64, err error)
+	Reactors(tweetId string, limit *uint64, cursor *string) (reactors []string, cur string, err error)
+	Reactions(tweetId string) (map[string]uint64, error)
+	Reaction(tweetId, userId string) (string, error)
 }
 
 func StreamDeleteTweetHandler(
@@ -579,7 +585,7 @@ func StreamDeleteTweetHandler(
 	authRepo OwnerTweetStorer,
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
-	likeRepo LikeTweetStorer,
+	reactionRepo ReactionTweetStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
@@ -606,7 +612,7 @@ func StreamDeleteTweetHandler(
 		// Deleting an own tweet only cleans up local state here; the shared
 		// (CRDT) like/retweet counts are owned by the actors' own nodes, so
 		// this node must not adjust them (isTransitive=false).
-		if _, err := likeRepo.Unlike(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), false); err != nil {
+		if _, err := reactionRepo.Unreact(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), false); err != nil {
 			log.Errorf("delete tweet: unliking tweet: %v", err)
 		}
 
@@ -704,12 +710,12 @@ type RetweetsTweetStorer interface {
 }
 
 type RepliesTweetCounter interface {
-	RepliesCount(tweetId string) (likesNum uint64, err error)
+	RepliesCount(tweetId string) (reactionsNum uint64, err error)
 }
 
-// CRDTLikesCounter provides CRDT-based likes counting
-type CRDTLikesCounter interface {
-	GetLikesCount(tweetID string) (uint64, error)
+// CRDTReactionsCounter provides CRDT-based likes counting
+type CRDTReactionsCounter interface {
+	GetReactionsCount(tweetID string) (uint64, error)
 }
 
 // CRDTRetweetsCounter provides CRDT-based retweets counting
@@ -724,7 +730,7 @@ type CRDTRepliesCounter interface {
 
 func StreamGetTweetStatsHandler(
 	tweetRepo TweetsStorer,
-	likeRepo LikeTweetStorer,
+	reactionRepo ReactionTweetStorer,
 	retweetRepo RetweetsTweetStorer,
 	replyRepo RepliesTweetCounter,
 	userRepo TweetUserFetcher,
@@ -773,6 +779,13 @@ func StreamGetTweetStatsHandler(
 						return nil, fmt.Errorf("fetching tweet stats response: %w", err)
 					}
 
+					// The author's node answered with its own owner's
+					// reaction; ours is only knowable here.
+					stats.MyReaction = ownReaction(
+						reactionRepo,
+						strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix),
+						ownNodeInfo.OwnerId,
+					)
 					return stats, nil
 				}
 			}
@@ -782,13 +795,14 @@ func StreamGetTweetStatsHandler(
 		}
 
 		var (
-			retweetsCount uint64
-			likesCount    uint64
-			repliesCount  uint64
-			viewsCount    uint64
-			ctx, cancelF  = context.WithDeadline(context.Background(), time.Now().Add(time.Second*5)) //nolint:mnd
-			g, _          = errgroup.WithContext(ctx)
-			tweetId       = strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+			retweetsCount  uint64
+			reactionsCount uint64
+			repliesCount   uint64
+			viewsCount     uint64
+			reactions      map[string]uint64
+			ctx, cancelF   = context.WithDeadline(context.Background(), time.Now().Add(time.Second*5)) //nolint:mnd
+			g, _           = errgroup.WithContext(ctx)
+			tweetId        = strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		)
 		defer cancelF()
 
@@ -799,12 +813,19 @@ func StreamGetTweetStatsHandler(
 			}
 			return retweetsErr
 		})
-		g.Go(func() (likesErr error) {
-			likesCount, likesErr = likeRepo.LikesCount(tweetId)
-			if errors.Is(likesErr, database.ErrLikesNotFound) {
+		g.Go(func() (reactionsErr error) {
+			reactionsCount, reactionsErr = reactionRepo.ReactionsCount(tweetId)
+			if errors.Is(reactionsErr, database.ErrReactionsNotFound) {
 				return nil
 			}
-			return likesErr
+			return reactionsErr
+		})
+		g.Go(func() (reactionsErr error) {
+			reactions, reactionsErr = reactionRepo.Reactions(tweetId)
+			if errors.Is(reactionsErr, database.ErrReactionsNotFound) {
+				return nil
+			}
+			return reactionsErr
 		})
 		g.Go(func() (repliesErr error) {
 			repliesCount, repliesErr = replyRepo.RepliesCount(tweetId)
@@ -824,11 +845,13 @@ func StreamGetTweetStatsHandler(
 			log.Errorf("get tweet stats: %s %v", buf, err)
 		}
 		return event.TweetStatsResponse{
-			TweetId:       ev.TweetId,
-			ViewsCount:    viewsCount,
-			RetweetsCount: retweetsCount,
-			LikeCount:     likesCount,
-			RepliesCount:  repliesCount,
+			TweetId:        ev.TweetId,
+			ViewsCount:     viewsCount,
+			RetweetsCount:  retweetsCount,
+			ReactionsCount: reactionsCount,
+			RepliesCount:   repliesCount,
+			Reactions:      reactions,
+			MyReaction:     ownReaction(reactionRepo, tweetId, ownNodeInfo.OwnerId),
 		}, nil
 	}
 }
@@ -976,4 +999,19 @@ func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
 		return repo.Pin(ev.UserId, ev.TweetId)
 	}
 	return repo.Unpin(ev.UserId, ev.TweetId)
+}
+
+// ownReaction reports the emoji this node's owner put on the tweet. A
+// reactor's row always lives on their own node, so the answer stays correct
+// even when the counts themselves came from the author's node.
+func ownReaction(repo ReactionTweetStorer, tweetId, ownerId string) string {
+	if ownerId == "" {
+		return ""
+	}
+	emoji, err := repo.Reaction(tweetId, ownerId)
+	if err != nil {
+		log.Warnf("tweet stats: own reaction: %v", err)
+		return ""
+	}
+	return emoji
 }

@@ -8,7 +8,8 @@ vi.mock('@/service/service', () => ({
     getImage: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
-    hasLiker: vi.fn(),
+    hasReactor: vi.fn(),
+    getReactorEmoji: vi.fn(),
     hasRetweeter: vi.fn(),
     viewTweet: vi.fn(),
   },
@@ -81,11 +82,12 @@ beforeEach(() => {
     tweet_id: 't1',
     tweets_count: 0,
     retweets_count: 0,
-    likes_count: 0,
+    reactions_count: 0,
     replies_count: 0,
     views_count: 0,
   });
-  warpnetService.hasLiker.mockResolvedValue(false);
+  warpnetService.hasReactor.mockResolvedValue(false);
+  warpnetService.getReactorEmoji.mockResolvedValue('');
   warpnetService.hasRetweeter.mockResolvedValue(false);
   warpnetService.viewTweet.mockResolvedValue(7);
 });
@@ -253,7 +255,7 @@ describe('TweetBlock view tracking', () => {
       tweet_id: 't1',
       tweets_count: 0,
       retweets_count: 0,
-      likes_count: 0,
+      reactions_count: 0,
       replies_count: 0,
       views_count: 7,
     });

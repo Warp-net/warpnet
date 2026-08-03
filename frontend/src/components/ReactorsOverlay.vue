@@ -8,7 +8,7 @@
   >
     <div class="bg-white rounded-lg w-full max-w-md max-h-[80vh] flex flex-col">
       <div class="px-5 py-3 border-b border-lighter flex items-center">
-        <h2 class="font-bold text-lg">Liked by</h2>
+        <h2 class="font-bold text-lg">Reacted by</h2>
         <button
           @click="$emit('close')"
           class="ml-auto text-dark hover:text-black"
@@ -20,7 +20,7 @@
       <div class="overflow-y-auto flex-1">
         <Loader :loading="loading" />
         <div v-if="!loading && users.length === 0" class="p-5 text-center text-dark">
-          No likes yet
+          No reactions yet
         </div>
         <div v-for="u in users" :key="u.id" class="px-5 py-3 border-b border-lighter flex items-center">
           <img :src="u.avatar || '/default_profile.png'" class="h-10 w-10 rounded-full object-cover" alt="" />
@@ -42,7 +42,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 
 export default {
-  name: "LikersOverlay",
+  name: "ReactorsOverlay",
   components: {
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
   },
@@ -71,7 +71,7 @@ export default {
     async load() {
       this.loading = true;
       try {
-        const resp = await warpnetService.getTweetLikers(this.tweetId, this.ownerUserId);
+        const resp = await warpnetService.getTweetReactors(this.tweetId, this.ownerUserId);
         const list = resp?.users || [];
         this.users = await Promise.all(list.map(async (u) => {
           try {
@@ -82,7 +82,7 @@ export default {
           return u;
         }));
       } catch (err) {
-        console.error('Failed to load likers:', err);
+        console.error('Failed to load reactors:', err);
         this.users = [];
       } finally {
         this.loading = false;

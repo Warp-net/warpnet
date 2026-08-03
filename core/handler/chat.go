@@ -291,8 +291,12 @@ func mediaKeys(keys []string) ([]string, bool) {
 	return kept, true
 }
 
+type ChatNotifier interface {
+	Add(not domain.Notification) error
+}
+
 // StreamNewMessageHandler is for sending a new message
-func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ModerationNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
+func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ChatNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewMessageEvent
 		err := json.Unmarshal(buf, &ev)

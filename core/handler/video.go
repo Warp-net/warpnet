@@ -32,8 +32,10 @@ import (
 	"math"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
@@ -71,10 +73,23 @@ type VideoStorer interface {
 	SetForeignVideoWithTTL(userId, key string, video database.Base64Video) error
 }
 
+type VideoNodeInformer interface {
+	NodeInfo() warpnet.NodeInfo
+}
+
+type VideoUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
+type VideoStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
 func StreamUploadVideoHandler(
-	info MediaNodeInformer,
+	info VideoNodeInformer,
 	mediaRepo VideoStorer,
-	userRepo MediaUserFetcher,
+	userRepo VideoUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UploadVideoEvent
@@ -144,9 +159,9 @@ func processAndStoreVideo(
 }
 
 func StreamGetVideoHandler(
-	streamer MediaStreamer,
+	streamer VideoStreamer,
 	mediaRepo VideoStorer,
-	userRepo MediaUserFetcher,
+	userRepo VideoUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetVideoEvent

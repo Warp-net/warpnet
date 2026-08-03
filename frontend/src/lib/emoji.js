@@ -43,6 +43,17 @@ export function clampRunes(text, limit) {
   return runes.length <= limit ? text : runes.slice(0, limit).join("");
 }
 
+// DEFAULT_REACTION mirrors domain.DefaultReaction: the emoji a like
+// carries when none was named, and what every pre-reactions like reads
+// back as.
+export const DEFAULT_REACTION = "❤️";
+
+// QUICK_REACTIONS is the row offered on long-press, Telegram-style. The
+// full picker sits behind the "more" button next to it, so this list only
+// has to cover the common cases. Kept in sync with warpdroid's
+// TweetReactions.kt.
+export const QUICK_REACTIONS = ["❤️", "👍", "👎", "🔥", "🎉", "😁", "😢", "🤔"];
+
 export const SKIN_TONES = [
   { id: 0, modifier: "", label: "Default", swatch: "✋" },
   { id: 1, modifier: "\u{1F3FB}", label: "Light", swatch: "✋\u{1F3FB}" },

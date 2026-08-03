@@ -164,18 +164,18 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun like(statusId: String, authorId: String, like: Boolean) {
+    fun react(statusId: String, authorId: String, react: Boolean, emoji: String = "") {
         viewModelScope.launch {
-            if (like) {
-                warpnetApi.likeStatus(statusId, authorId)
+            if (react) {
+                warpnetApi.reactToStatus(statusId, authorId, emoji)
             } else {
-                warpnetApi.unlikeStatus(statusId, authorId)
+                warpnetApi.unreactStatus(statusId, authorId)
             }.fold(
                 onSuccess = { status ->
                     eventHub.dispatch(TweetChangedEvent(status))
                 },
                 onFailure = { e ->
-                    Timber.tag(TAG).w(e, "Failed to like")
+                    Timber.tag(TAG).w(e, "Failed to react")
                 }
             )
         }

@@ -62,6 +62,10 @@ type ModerationTimelelineDeleter interface {
 	DeleteTweetFromTimeline(userID, tweetID string) error
 }
 
+type ModerationAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
 // StreamModerationResultHandler receives a verdict from a moderator and
 // applies it locally so this node's view of the offending object is
 // downgraded. Two design notes:
@@ -80,7 +84,7 @@ func StreamModerationResultHandler(
 	tweetRepo ModerationTweetUpdater,
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
-	authRepo NotifierAuthStorer,
+	authRepo ModerationAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationResultEvent
@@ -178,7 +182,7 @@ func StreamModerationResultHandler(
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the
 // moderator sets only on the reporter-bound delivery.
-func notifyReporter(notifier ModerationNotifier, authRepo NotifierAuthStorer, ev event.ModerationResultEvent) {
+func notifyReporter(notifier ModerationNotifier, authRepo ModerationAuthStorer, ev event.ModerationResultEvent) {
 	if notifier == nil || authRepo == nil || ev.ReporterID == "" {
 		return
 	}

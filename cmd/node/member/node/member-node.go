@@ -351,7 +351,7 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 type memberRepos struct {
 	timelineRepo     TimelineProvider
 	tweetRepo        TweetsProvider
-	likeRepo         LikesProvider
+	reactionRepo     ReactionsProvider
 	pollRepo         PollProvider
 	chatRepo         ChatProvider
 	mediaRepo        MediaProvider
@@ -378,7 +378,7 @@ func (m *MemberNode) setupHandlers(
 	r := &memberRepos{
 		timelineRepo:     database.NewTimelineRepo(db),
 		tweetRepo:        database.NewTweetRepo(db, statsDB),
-		likeRepo:         database.NewLikeRepo(db, statsDB),
+		reactionRepo:     database.NewReactionRepo(db, statsDB),
 		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
@@ -460,7 +460,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.likeRepo, userRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
@@ -472,7 +472,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
-			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.likeRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.reactionRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
@@ -504,28 +504,28 @@ func (m *MemberNode) engagementHandlers(
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PUBLIC_POST_LIKE,
-			handler.StreamLikeHandler(r.likeRepo, userRepo, m.notifier, m),
+			event.PUBLIC_POST_REACT,
+			handler.StreamReactionHandler(r.reactionRepo, userRepo, m.notifier, m),
 		},
 		{
-			event.PUBLIC_POST_UNLIKE,
-			handler.StreamUnlikeHandler(r.likeRepo, userRepo, m),
+			event.PUBLIC_POST_UNREACT,
+			handler.StreamUnreactionHandler(r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_POST_VIEW,
 			handler.StreamViewHandler(r.tweetRepo, userRepo, m),
 		},
 		{
-			event.PUBLIC_GET_TWEET_LIKERS,
-			handler.StreamGetTweetLikersHandler(r.likeRepo, userRepo, m),
+			event.PUBLIC_GET_TWEET_REACTORS,
+			handler.StreamGetTweetReactorsHandler(r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEET_RETWEETERS,
 			handler.StreamGetTweetRetweetersHandler(r.tweetRepo, userRepo, m),
 		},
 		{
-			event.PRIVATE_GET_LIKES,
-			handler.StreamGetLikesHandler(r.likeRepo),
+			event.PRIVATE_GET_REACTIONS,
+			handler.StreamGetReactionsHandler(r.reactionRepo),
 		},
 		{
 			event.PUBLIC_POST_POLL_VOTE,

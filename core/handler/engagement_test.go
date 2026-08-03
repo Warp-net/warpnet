@@ -30,13 +30,13 @@ func (f *fakeEngagementStreamer) GenericStream(nodeId string, path stream.WarpRo
 	return f.response, f.err
 }
 
-type stubLikersRepo struct {
-	likersFn func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+type stubReactorsRepo struct {
+	reactorsFn func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-func (s stubLikersRepo) Likers(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
-	if s.likersFn != nil {
-		return s.likersFn(tweetId, limit, cursor)
+func (s stubReactorsRepo) Reactors(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
+	if s.reactorsFn != nil {
+		return s.reactorsFn(tweetId, limit, cursor)
 	}
 	return nil, "end", nil
 }
@@ -52,12 +52,12 @@ func (s stubRetweetersRepo) Retweeters(tweetId string, limit *uint64, cursor *st
 	return nil, "end", nil
 }
 
-type stubLikedUserFetcher struct {
+type stubReactedUserFetcher struct {
 	batchFn func(ids ...string) ([]domain.User, error)
 	getFn   func(id string) (domain.User, error)
 }
 
-func (s stubLikedUserFetcher) GetBatch(ids ...string) ([]domain.User, error) {
+func (s stubReactedUserFetcher) GetBatch(ids ...string) ([]domain.User, error) {
 	if s.batchFn != nil {
 		return s.batchFn(ids...)
 	}
@@ -68,39 +68,39 @@ func (s stubLikedUserFetcher) GetBatch(ids ...string) ([]domain.User, error) {
 	return out, nil
 }
 
-func (s stubLikedUserFetcher) Get(id string) (domain.User, error) {
+func (s stubReactedUserFetcher) Get(id string) (domain.User, error) {
 	if s.getFn != nil {
 		return s.getFn(id)
 	}
 	return domain.User{Id: id}, nil
 }
 
-func TestStreamGetTweetLikersHandler(t *testing.T) {
+func TestStreamGetTweetReactorsHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamGetTweetLikersHandler(stubLikersRepo{}, stubLikedUserFetcher{}, nil)([]byte("{"), nil)
+		_, err := StreamGetTweetReactorsHandler(stubReactorsRepo{}, stubReactedUserFetcher{}, nil)([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty tweet id", func(t *testing.T) {
-		_, err := StreamGetTweetLikersHandler(stubLikersRepo{}, stubLikedUserFetcher{}, nil)(marshal(t, event.GetTweetLikersEvent{}), nil)
+		_, err := StreamGetTweetReactorsHandler(stubReactorsRepo{}, stubReactedUserFetcher{}, nil)(marshal(t, event.GetTweetReactorsEvent{}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("boom")
-		_, err := StreamGetTweetLikersHandler(stubLikersRepo{likersFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
+		_, err := StreamGetTweetReactorsHandler(stubReactorsRepo{reactorsFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 			return nil, "", repoErr
-		}}, stubLikedUserFetcher{}, nil)(marshal(t, event.GetTweetLikersEvent{TweetId: "t"}), nil)
+		}}, stubReactedUserFetcher{}, nil)(marshal(t, event.GetTweetReactorsEvent{TweetId: "t"}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
 	t.Run("happy path hydrates users", func(t *testing.T) {
-		resp, err := StreamGetTweetLikersHandler(stubLikersRepo{likersFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
+		resp, err := StreamGetTweetReactorsHandler(stubReactorsRepo{reactorsFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 			return []string{"u1", "u2"}, "end", nil
-		}}, stubLikedUserFetcher{}, nil)(marshal(t, event.GetTweetLikersEvent{TweetId: "t"}), nil)
+		}}, stubReactedUserFetcher{}, nil)(marshal(t, event.GetTweetReactorsEvent{TweetId: "t"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -116,13 +116,13 @@ func TestStreamGetTweetLikersHandler(t *testing.T) {
 
 func TestStreamGetTweetRetweetersHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamGetTweetRetweetersHandler(stubRetweetersRepo{}, stubLikedUserFetcher{}, nil)([]byte("{"), nil)
+		_, err := StreamGetTweetRetweetersHandler(stubRetweetersRepo{}, stubReactedUserFetcher{}, nil)([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty tweet id", func(t *testing.T) {
-		_, err := StreamGetTweetRetweetersHandler(stubRetweetersRepo{}, stubLikedUserFetcher{}, nil)(marshal(t, event.GetTweetRetweetersEvent{}), nil)
+		_, err := StreamGetTweetRetweetersHandler(stubRetweetersRepo{}, stubReactedUserFetcher{}, nil)(marshal(t, event.GetTweetRetweetersEvent{}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -130,7 +130,7 @@ func TestStreamGetTweetRetweetersHandler(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		resp, err := StreamGetTweetRetweetersHandler(stubRetweetersRepo{retweetersFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 			return []string{"r1"}, "end", nil
-		}}, stubLikedUserFetcher{}, nil)(marshal(t, event.GetTweetRetweetersEvent{TweetId: "t"}), nil)
+		}}, stubReactedUserFetcher{}, nil)(marshal(t, event.GetTweetRetweetersEvent{TweetId: "t"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -142,21 +142,21 @@ func TestStreamGetTweetRetweetersHandler(t *testing.T) {
 }
 
 func TestForwardToOwner(t *testing.T) {
-	ev := event.GetTweetLikersEvent{TweetId: "t1", OwnerUserId: "author"}
+	ev := event.GetTweetReactorsEvent{TweetId: "t1", OwnerUserId: "author"}
 
 	t.Run("no owner or no streamer stays local", func(t *testing.T) {
-		_, ok, err := forwardToOwner("", &fakeEngagementStreamer{}, stubLikedUserFetcher{}, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("", &fakeEngagementStreamer{}, stubReactedUserFetcher{}, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 
-		_, ok, err = forwardToOwner("author", nil, stubLikedUserFetcher{}, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err = forwardToOwner("author", nil, stubReactedUserFetcher{}, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
 
 	t.Run("owner is this node's owner stays local", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{info: warpnet.NodeInfo{OwnerId: "author"}}
-		_, ok, err := forwardToOwner("author", streamer, stubLikedUserFetcher{}, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, stubReactedUserFetcher{}, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 		assert.Empty(t, streamer.calls, "a node must never stream to itself")
@@ -164,10 +164,10 @@ func TestForwardToOwner(t *testing.T) {
 
 	t.Run("unknown owner stays local", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{info: warpnet.NodeInfo{OwnerId: "me"}}
-		users := stubLikedUserFetcher{getFn: func(string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
 		}}
-		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 		assert.Empty(t, streamer.calls)
@@ -175,10 +175,10 @@ func TestForwardToOwner(t *testing.T) {
 
 	t.Run("owner lookup error propagates", func(t *testing.T) {
 		streamer := &fakeEngagementStreamer{info: warpnet.NodeInfo{OwnerId: "me"}}
-		users := stubLikedUserFetcher{getFn: func(string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(string) (domain.User, error) {
 			return domain.User{}, errors.New("db down")
 		}}
-		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		assert.Error(t, err)
 		assert.False(t, ok)
 	})
@@ -188,10 +188,10 @@ func TestForwardToOwner(t *testing.T) {
 			info: warpnet.NodeInfo{OwnerId: "me"},
 			err:  warpnet.ErrNodeIsOffline,
 		}
-		users := stubLikedUserFetcher{getFn: func(id string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "remote-node"}, nil
 		}}
-		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -201,10 +201,10 @@ func TestForwardToOwner(t *testing.T) {
 			info: warpnet.NodeInfo{OwnerId: "me"},
 			err:  errors.New("connection reset"),
 		}
-		users := stubLikedUserFetcher{getFn: func(id string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "remote-node"}, nil
 		}}
-		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		assert.Error(t, err)
 		assert.False(t, ok)
 	})
@@ -214,10 +214,10 @@ func TestForwardToOwner(t *testing.T) {
 			info:     warpnet.NodeInfo{OwnerId: "me"},
 			response: []byte("<html>not json</html>"),
 		}
-		users := stubLikedUserFetcher{getFn: func(id string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "remote-node"}, nil
 		}}
-		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -227,10 +227,10 @@ func TestForwardToOwner(t *testing.T) {
 			info:     warpnet.NodeInfo{OwnerId: "me"},
 			response: mustJSON(t, event.UsersResponse{}),
 		}
-		users := stubLikedUserFetcher{getFn: func(id string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "remote-node"}, nil
 		}}
-		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		_, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -240,18 +240,18 @@ func TestForwardToOwner(t *testing.T) {
 			info: warpnet.NodeInfo{OwnerId: "me"},
 			response: mustJSON(t, event.UsersResponse{
 				Cursor: "remote-cursor",
-				Users:  []domain.User{{Id: "liker-1"}},
+				Users:  []domain.User{{Id: "reactor-1"}},
 			}),
 		}
-		users := stubLikedUserFetcher{getFn: func(id string) (domain.User, error) {
+		users := stubReactedUserFetcher{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "remote-node"}, nil
 		}}
-		out, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_LIKERS, ev)
+		out, ok, err := forwardToOwner("author", streamer, users, event.PUBLIC_GET_TWEET_REACTORS, ev)
 		require.NoError(t, err)
 		require.True(t, ok)
 		assert.Equal(t, "remote-cursor", out.Cursor)
 		require.Len(t, out.Users, 1)
-		assert.Equal(t, "liker-1", out.Users[0].Id)
+		assert.Equal(t, "reactor-1", out.Users[0].Id)
 		require.Len(t, streamer.calls, 1)
 		assert.True(t, strings.HasPrefix(streamer.calls[0], "remote-node "))
 	})
@@ -259,12 +259,12 @@ func TestForwardToOwner(t *testing.T) {
 
 func TestHydrateUsers(t *testing.T) {
 	t.Run("no ids yields nothing", func(t *testing.T) {
-		assert.Nil(t, hydrateUsers(stubLikedUserFetcher{}, nil))
-		assert.Nil(t, hydrateUsers(stubLikedUserFetcher{}, []string{}))
+		assert.Nil(t, hydrateUsers(stubReactedUserFetcher{}, nil))
+		assert.Nil(t, hydrateUsers(stubReactedUserFetcher{}, []string{}))
 	})
 
 	t.Run("batch result is used as-is", func(t *testing.T) {
-		users := stubLikedUserFetcher{batchFn: func(ids ...string) ([]domain.User, error) {
+		users := stubReactedUserFetcher{batchFn: func(ids ...string) ([]domain.User, error) {
 			return []domain.User{{Id: "a"}, {Id: "b"}}, nil
 		}}
 		got := hydrateUsers(users, []string{"a", "b"})
@@ -272,7 +272,7 @@ func TestHydrateUsers(t *testing.T) {
 	})
 
 	t.Run("batch failure falls back to per-id reads", func(t *testing.T) {
-		users := stubLikedUserFetcher{
+		users := stubReactedUserFetcher{
 			batchFn: func(ids ...string) ([]domain.User, error) {
 				return nil, errors.New("batch exploded")
 			},
@@ -286,7 +286,7 @@ func TestHydrateUsers(t *testing.T) {
 	})
 
 	t.Run("individually missing users are skipped not fatal", func(t *testing.T) {
-		users := stubLikedUserFetcher{
+		users := stubReactedUserFetcher{
 			batchFn: func(ids ...string) ([]domain.User, error) { return nil, nil },
 			getFn: func(id string) (domain.User, error) {
 				if id == "gone" {
@@ -302,7 +302,7 @@ func TestHydrateUsers(t *testing.T) {
 	})
 
 	t.Run("all users missing yields an empty list", func(t *testing.T) {
-		users := stubLikedUserFetcher{
+		users := stubReactedUserFetcher{
 			batchFn: func(ids ...string) ([]domain.User, error) { return nil, errors.New("x") },
 			getFn: func(string) (domain.User, error) {
 				return domain.User{}, database.ErrUserNotFound

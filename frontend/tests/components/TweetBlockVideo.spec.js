@@ -8,7 +8,7 @@ vi.mock('@/service/service', () => ({
     getVideo: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
-    hasLiker: vi.fn(),
+    hasReactor: vi.fn(),
     hasRetweeter: vi.fn(),
     viewTweet: vi.fn(),
   },
@@ -50,9 +50,9 @@ beforeEach(() => {
   warpnetService.getOwnerProfile.mockReturnValue({user_id: 'viewer1', node_id: 'node-viewer'});
   warpnetService.getTweetStats.mockResolvedValue({
     tweet_id: 't1', tweets_count: 0, retweets_count: 0,
-    likes_count: 0, replies_count: 0, views_count: 0,
+    reactions_count: 0, replies_count: 0, views_count: 0,
   });
-  warpnetService.hasLiker.mockResolvedValue(false);
+  warpnetService.hasReactor.mockResolvedValue(false);
   warpnetService.hasRetweeter.mockResolvedValue(false);
   warpnetService.viewTweet.mockResolvedValue(7);
 });

@@ -29,7 +29,7 @@
     <string name="title_posts_pinned">Angeheftet</string>
     <string name="title_follows">Folge ich</string>
     <string name="title_followers">Follower</string>
-    <string name="title_likes">Liken</string>
+    <string name="title_reactions">Liken</string>
     <string name="title_mutes">Stummgeschaltete Profile</string>
     <string name="title_blocks">Blockierte Profile</string>
     <string name="title_follow_requests">Follower-Anfragen</string>
@@ -48,7 +48,7 @@
     <string name="post_content_show_less">Einklappen</string>
     <string name="message_empty">Hier ist nichts.</string>
     <string name="notification_retweet_format">%1$s teilte deinen Beitrag</string>
-    <string name="notification_like_format">%1$s favorisierte deinen Beitrag</string>
+    <string name="notification_reaction_format">%1$s favorisierte deinen Beitrag</string>
     <string name="notification_follow_format">%1$s folgt dir</string>
     <string name="report_username_format">\@%1$s melden</string>
     <string name="report_comment_hint">Ergänzende Hinweise?</string>
@@ -56,8 +56,8 @@
     <string name="action_reply">Antworten</string>
     <string name="action_retweet">Teilen</string>
     <string name="action_unretweet">Teilen rückgängig machen</string>
-    <string name="action_like">Favorisieren</string>
-    <string name="action_unlike">Aus Liken entfernen</string>
+    <string name="action_react">Favorisieren</string>
+    <string name="action_unreact">Aus Liken entfernen</string>
     <string name="action_more">Mehr</string>
     <string name="action_compose">Beitrag erstellen</string>
     <string name="action_login">Mit Warpnet anmelden</string>
@@ -78,7 +78,7 @@
     <string name="action_view_profile">Profil</string>
     <string name="action_view_preferences">Einstellungen</string>
     <string name="action_view_account_preferences">Profileinstellungen</string>
-    <string name="action_view_likes">Liken</string>
+    <string name="action_view_reactions">Liken</string>
     <string name="action_view_mutes">Stummgeschaltete Profile</string>
     <string name="action_view_blocks">Blockierte Profile</string>
     <string name="action_view_follow_requests">Follower-Anfragen</string>
@@ -105,7 +105,7 @@
     <string name="action_emoji_keyboard">Emoji-Tastatur</string>
     <string name="action_add_tab">Tab hinzufügen</string>
     <string name="action_open_retweeted_by">Geteilte Beiträge anzeigen</string>
-    <string name="action_open_faved_by">Liken anzeigen</string>
+    <string name="action_open_reacted_by">Liken anzeigen</string>
     <string name="title_hashtags_dialog">Hashtags</string>
     <string name="title_mentions_dialog">Erwähnungen</string>
     <string name="title_links_dialog">Links</string>
@@ -192,8 +192,8 @@
     <string name="notification_follow_description">Benachrichtigungen über neue Follower</string>
     <string name="notification_retweet_name">Geteilte Beiträge</string>
     <string name="notification_retweet_description">Benachrichtigungen, wenn deine Beiträge geteilt werden</string>
-    <string name="notification_like_name">Favorisierte Beiträge</string>
-    <string name="notification_like_description">Benachrichtigungen, wenn deine Beiträge favorisiert werden</string>
+    <string name="notification_reaction_name">Favorisierte Beiträge</string>
+    <string name="notification_reaction_description">Benachrichtigungen, wenn deine Beiträge favorisiert werden</string>
     <string name="notification_mention_format">%1$s hat dich erwähnt</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s und %4$d andere</string>
     <string name="notification_summary_medium">%1$s, %2$s, und %3$s</string>
@@ -279,12 +279,12 @@
     <string name="label_remote_account">Das Profil wird möglicherweise unvollständig wiedergegeben. Hier klicken, um das vollständige Profil im Browser zu öffnen.</string>
     <string name="unpin_action">Vom Profil lösen</string>
     <string name="pin_action">Im Profil anheften</string>
-    <string name="title_liked_by">Favorisiert von</string>
+    <string name="title_reacted_by">Favorisiert von</string>
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s und %2$s</string>
     <string name="conversation_more_recipients">%1$s, %2$s und %3$d mehr</string>
     <string name="description_post_media_no_description_placeholder">Keine Beschreibung</string>
-    <string name="description_post_liked">Favorisiert</string>
+    <string name="description_post_reacted">Favorisiert</string>
     <string name="description_visibility_public">Öffentlich</string>
     <string name="description_visibility_private">Follower</string>
     <string name="description_visibility_direct">Direkt</string>
@@ -300,7 +300,7 @@
     <string name="pick_hashtag_hint">Hashtag ohne #</string>
     <string name="action_open_retweeter">Autor*in des geteilten Beitrags öffnen</string>
     <string name="pref_title_public_filter_keywords">Öffentliche Timelines</string>
-    <plurals name="favs">
+    <plurals name="reactions_plural">
         <item quantity="one">%1$s-mal favorisiert</item>
         <item quantity="other">%1$s-mal favorisiert</item>
     </plurals>
@@ -470,7 +470,7 @@
     <string name="abbreviated_in_years">in %1$d J.</string>
     <string name="abbreviated_in_seconds">in %1$d Sek.</string>
     <string name="action_unbookmark">Lesezeichen entfernen</string>
-    <string name="pref_title_confirm_likes">Vor dem Favorisieren bestätigen</string>
+    <string name="pref_title_confirm_reactions">Vor dem Favorisieren bestätigen</string>
     <string name="dialog_delete_conversation_warning">Diese Unterhaltung wirklich löschen?</string>
     <string name="action_delete_conversation">Unterhaltung löschen</string>
     <string name="duration_30_days">30 Tage</string>
@@ -578,7 +578,7 @@
     <string name="socket_timeout_exception">Kontaktaufnahme mit dem Server dauerte zu lange</string>
     <string name="ui_error_bookmark">Beitrag konnte nicht als Lesezeichen gespeichert werden: %1$s</string>
     <string name="ui_error_retweet">Beitrag konnte nicht geteilt werden: %1$s</string>
-    <string name="ui_error_like">Beitrag konnte nicht favorisiert werden: %1$s</string>
+    <string name="ui_error_react">Beitrag konnte nicht favorisiert werden: %1$s</string>
     <string name="ui_error_vote">Abstimmen bei der Umfrage schlug fehl: %1$s</string>
     <string name="ui_error_accept_follow_request">Akzeptieren der Follower-Anfrage schlug fehl: %1$s</string>
     <string name="ui_success_accepted_follow_request">Follower-Anfrage akzeptiert</string>
@@ -751,7 +751,7 @@
     <string name="reject_follow_request_failure">Fehler beim Ablehnen der Folgeanfrage von %1$s: %2$s</string>
     <string name="retweet_privacy_unlisted_description">Gleich wie Öffentlich, ohne in öffentlichen Timelines angezeigt zu werden</string>
     <string name="retweet_confirm">Diesen Beitrag teilen?</string>
-    <string name="like_confirm">Diesen Beitrag favorisieren?</string>
+    <string name="reaction_confirm">Diesen Beitrag favorisieren?</string>
     <string name="retweet_privacy_public_description">Alle können sehen dass du den Beitrag teilst</string>
     <string name="retweet_privacy_followers_only_description">Nur deine Follower können sehen dass du den Beitrag teilst</string>
     <string name="action_remove_account">Account entfernen</string>

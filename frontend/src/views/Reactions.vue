@@ -20,16 +20,16 @@
       <Loader :loading="loading" />
 
       <div
-        v-if="!loading && likes.length === 0"
+        v-if="!loading && reactions.length === 0"
         class="flex flex-col items-center justify-center pt-10 px-5"
       >
-        <p class="font-bold text-lg">Nothing liked yet</p>
+        <p class="font-bold text-lg">Nothing reacted yet</p>
         <p class="text-sm text-dark text-center">
           Tweets you like will show up here so you can always find your way back to them.
         </p>
       </div>
 
-      <template v-for="l in likes" :key="l.tweet_id || l.tweet?.id">
+      <template v-for="l in reactions" :key="l.tweet_id || l.tweet?.id">
         <TweetBlock v-if="l.tweet && l.tweet.id" :tweet="l.tweet" />
       </template>
     </div>
@@ -52,7 +52,7 @@ export default {
   data() {
     return {
       loading: true,
-      likes: [],
+      reactions: [],
       done: false,
       ownerProfile: {},
     };
@@ -64,21 +64,21 @@ export default {
     },
     async loadMore() {
       if (this.done || this.loading) return;
-      const resp = await warpnetService.getLikes(false);
+      const resp = await warpnetService.getReactions(false);
       const items = resp?.items || [];
       if (items.length === 0) { this.done = true; return; }
-      this.likes = this.likes.concat(items);
+      this.reactions = this.reactions.concat(items);
     },
   },
   async created() {
     console.log("loading component:", this.$options.name);
     this.ownerProfile = warpnetService.getOwnerProfile();
     try {
-      const resp = await warpnetService.getLikes(true);
-      this.likes = resp?.items || [];
-      if (this.likes.length === 0 && (resp?.cursor === 'end')) this.done = true;
+      const resp = await warpnetService.getReactions(true);
+      this.reactions = resp?.items || [];
+      if (this.reactions.length === 0 && (resp?.cursor === 'end')) this.done = true;
     } catch (err) {
-      console.error('Failed to load likes:', err);
+      console.error('Failed to load reactions:', err);
     } finally {
       this.loading = false;
     }

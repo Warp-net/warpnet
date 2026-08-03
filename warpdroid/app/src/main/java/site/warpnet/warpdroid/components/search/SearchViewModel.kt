@@ -72,7 +72,7 @@ class SearchViewModel @Inject constructor(
     }
 
     /**
-     * Statuses can be changed through local interaction (e.g. favs/retweet), so we need a PagingSource and a RemoteMediator.
+     * Statuses can be changed through local interaction (e.g. reactions/retweet), so we need a PagingSource and a RemoteMediator.
      * Accounts and Hashtags are only displayed, so a PagingSource is enough.
      */
 

@@ -115,7 +115,7 @@ import site.warpnet.warpdroid.util.unsafeLazy
 import site.warpnet.warpdroid.util.viewAccount
 import site.warpnet.warpdroid.util.viewMedia
 import site.warpnet.warpdroid.util.viewThread
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmReaction
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
@@ -545,7 +545,7 @@ class TimelineFragment :
                             statuses.refresh()
                         }
 
-                        TimelineViewModel.Kind.LIKES,
+                        TimelineViewModel.Kind.REACTIONS,
                         TimelineViewModel.Kind.BOOKMARKS,
                         TimelineViewModel.Kind.USER_PINNED,
                         TimelineViewModel.Kind.QUOTES -> return@collect
@@ -637,18 +637,19 @@ class TimelineFragment :
         }
     }
 
-    override fun onLike(
+    override fun onReact(
         viewData: TweetViewData.Concrete,
         like: Boolean,
-        state: SparkButtonState?
+        state: SparkButtonState?,
+        emoji: String
     ) {
         if (like) {
-            confirmLike(preferences) {
-                viewModel.like(viewData.actionableId, viewData.actionableAccountId, true)
+            confirmReaction(preferences) {
+                viewModel.react(viewData.actionableId, viewData.actionableAccountId, true, emoji)
                 state?.animate()
             }
         } else {
-            viewModel.like(viewData.actionableId, viewData.actionableAccountId, false)
+            viewModel.react(viewData.actionableId, viewData.actionableAccountId, false)
         }
     }
 

@@ -60,7 +60,7 @@ func (s *OutboxRepoSuite) TestEnqueueAndListFIFO() {
 
 	first, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{"n":1}`))
 	s.Require().NoError(err)
-	second, err := s.repo.Enqueue(node, "/public/post/like/0.0.0", []byte(`{"n":2}`))
+	second, err := s.repo.Enqueue(node, "/public/post/react/0.0.0", []byte(`{"n":2}`))
 	s.Require().NoError(err)
 
 	entries, err := s.repo.ListByNode(node)
@@ -69,7 +69,7 @@ func (s *OutboxRepoSuite) TestEnqueueAndListFIFO() {
 	s.Equal(first.MessageId, entries[0].MessageId)
 	s.Equal(second.MessageId, entries[1].MessageId)
 	s.Equal([]byte(`{"n":1}`), []byte(entries[0].Body))
-	s.Equal("/public/post/like/0.0.0", entries[1].Destination)
+	s.Equal("/public/post/react/0.0.0", entries[1].Destination)
 }
 
 func (s *OutboxRepoSuite) TestDelete() {
@@ -90,7 +90,7 @@ func (s *OutboxRepoSuite) TestListNodesDistinct() {
 
 	_, err := s.repo.Enqueue(nodeA, "/public/post/message/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
-	_, err = s.repo.Enqueue(nodeA, "/public/post/like/0.0.0", []byte(`{}`))
+	_, err = s.repo.Enqueue(nodeA, "/public/post/react/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
 	_, err = s.repo.Enqueue(nodeB, "/public/post/message/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)

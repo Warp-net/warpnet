@@ -50,17 +50,18 @@ import {
     PUBLIC_GET_WHOTOFOLLOW,
     PUBLIC_POST_CHAT,
     PUBLIC_POST_FOLLOW,
-    PUBLIC_POST_LIKE,
+    PUBLIC_POST_REACT,
     PUBLIC_POST_MESSAGE,
     PUBLIC_POST_RETWEET,
     PUBLIC_POST_UNFOLLOW,
-    PUBLIC_POST_UNLIKE,
+    PUBLIC_POST_UNREACT,
     PUBLIC_POST_UNRETWEET,
     PUBLIC_POST_VIEW,
     PUBLIC_POST_POLL_VOTE,
     PUBLIC_GET_POLL
 } from "@/service/service";
 import {generateUUID} from "@/lib/uuid";
+import {DEFAULT_REACTION} from "@/lib/emoji";
 
 const mockMap = new Map();
 
@@ -326,17 +327,38 @@ function generateResponse(arg) {
             }
             return {cursor: "end", followings: followingsList, follower_id: arg.body.user_id};
 
-        case PUBLIC_POST_LIKE:
-            let likeStats = mockMap.get("stats:"+arg.body.tweet_id)
-            likeStats.likes_count++
-            mockMap.set("stats:"+arg.body.tweet_id, likeStats)
-            return {count: likeStats.likes_count};
+        case PUBLIC_POST_REACT: {
+            // A user holds one reaction per tweet: switching emoji moves the
+            // per-emoji tallies and leaves the total alone, like the node does.
+            const reactStats = mockMap.get("stats:"+arg.body.tweet_id)
+            const emoji = arg.body.emoji || DEFAULT_REACTION
+            const previous = reactStats.my_reaction
+            if (previous !== emoji) {
+                if (previous) {
+                    reactStats.reactions[previous]--
+                    if (reactStats.reactions[previous] <= 0) delete reactStats.reactions[previous]
+                } else {
+                    reactStats.reactions_count++
+                }
+                reactStats.reactions[emoji] = (reactStats.reactions[emoji] || 0) + 1
+                reactStats.my_reaction = emoji
+            }
+            mockMap.set("stats:"+arg.body.tweet_id, reactStats)
+            return {count: reactStats.reactions_count, reactions: {...reactStats.reactions}};
+        }
 
-        case PUBLIC_POST_UNLIKE:
-            let unlikeStats = mockMap.get("stats:"+arg.body.tweet_id)
-            unlikeStats.likes_count--
-            mockMap.set("stats:"+arg.body.tweet_id, unlikeStats)
-            return {count: unlikeStats.likes_count};
+        case PUBLIC_POST_UNREACT: {
+            const unreactStats = mockMap.get("stats:"+arg.body.tweet_id)
+            const held = unreactStats.my_reaction
+            if (held) {
+                unreactStats.reactions_count--
+                unreactStats.reactions[held]--
+                if (unreactStats.reactions[held] <= 0) delete unreactStats.reactions[held]
+                unreactStats.my_reaction = ""
+            }
+            mockMap.set("stats:"+arg.body.tweet_id, unreactStats)
+            return {count: unreactStats.reactions_count, reactions: {...unreactStats.reactions}};
+        }
 
         case PUBLIC_POST_POLL_VOTE: {
             const pollKey = "poll:"+arg.body.tweet_id
@@ -521,8 +543,10 @@ function newStats(id) {
     return {
         tweet_id: id,
         retweets_count: 0,
-        likes_count: 0,
+        reactions_count: 0,
         replies_count: 0,
         views_count: 0,
+        reactions: {},
+        my_reaction: "",
     }
 }

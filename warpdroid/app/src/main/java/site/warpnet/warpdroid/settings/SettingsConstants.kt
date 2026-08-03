@@ -77,7 +77,7 @@ object PrefKeys {
     const val SHOW_SELF_USERNAME = "showSelfUsername"
     const val SHOW_CARDS_IN_TIMELINES = "showCardsInTimelines"
     const val CONFIRM_RETWEETS = "confirmRetweets"
-    const val CONFIRM_LIKES = "confirmLikes"
+    const val CONFIRM_REACTIONS = "confirmReactions"
     const val CONFIRM_FOLLOWS = "confirmFollows"
     const val ENABLE_SWIPE_FOR_TABS = "enableSwipeForTabs"
     const val ANIMATE_CUSTOM_EMOJIS = "animateCustomEmojis"

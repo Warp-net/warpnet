@@ -71,7 +71,7 @@ data class WarpnetUser(
 )
 
 // Wire shape mirrors domain.Notification on the fat node. The actor is
-// already embedded in [text] ("Alice liked your tweet"); the wire does not
+// already embedded in [text] ("Alice reacted your tweet"); the wire does not
 // carry a separate from_user_id or tweet_id.
 @JsonClass(generateAdapter = true)
 data class WarpnetNotification(
@@ -136,11 +136,17 @@ data class NewUnfollowEvent(
     @Json(name = "following_id") val followeeId: String,
 )
 
+/**
+ * A like carries the reaction emoji it was made with. An empty [emoji]
+ * is what every pre-reactions client sends, and the node reads it as the
+ * default heart.
+ */
 @JsonClass(generateAdapter = true)
-data class LikeEvent(
+data class ReactionEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
     @Json(name = "owner_id") val ownerId: String,
+    @Json(name = "emoji") val emoji: String = "",
 )
 
 /**
@@ -266,7 +272,7 @@ data class GetBlocksResponse(
 )
 
 @JsonClass(generateAdapter = true)
-data class GetTweetLikersEvent(
+data class GetTweetReactorsEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "owner_user_id") val ownerUserId: String,
     val cursor: String = "",
@@ -449,23 +455,26 @@ data class UsersResponse(
 )
 
 /**
- * Standalone counter response returned by `PUBLIC_POST_LIKE` /
- * `PUBLIC_POST_UNLIKE` / `PUBLIC_POST_RETWEET` / `PUBLIC_POST_UNRETWEET`.
+ * Standalone counter response returned by `PUBLIC_POST_REACT` /
+ * `PUBLIC_POST_UNREACT` / `PUBLIC_POST_RETWEET` / `PUBLIC_POST_UNRETWEET`.
  *
- * Wire format is `{"count": N}` (warpnet's `event.LikesCountResponse`
+ * Wire format is `{"count": N}` (warpnet's `event.ReactionsCountResponse`
  * marshals its single `Count` field as `count`). The previous
- * `@Json(name = "likes_count")` here always parsed to 0 — that name
- * lives on the inner `likes_count` field of [TweetStatsResponse],
+ * `@Json(name = "reactions_count")` here always parsed to 0 — that name
+ * lives on the inner `reactions_count` field of [TweetStatsResponse],
  * not on this standalone response.
  */
 @JsonClass(generateAdapter = true)
-data class LikesCountResponse(
-    @Json(name = "count") val likesCount: Long = 0,
+data class ReactionsCountResponse(
+    @Json(name = "count") val reactionsCount: Long = 0,
+    // Per-emoji breakdown of [reactionsCount]; absent from a node that
+    // predates reactions.
+    @Json(name = "reactions") val reactions: Map<String, Long> = emptyMap(),
 )
 
 /**
  * Standalone counter response returned by `PUBLIC_POST_VIEW`. Same
- * `{"count": N}` wire shape as [LikesCountResponse]; we keep a
+ * `{"count": N}` wire shape as [ReactionsCountResponse]; we keep a
  * dedicated type so call sites can read `count` without confusing
  * it with the like/retweet counter.
  */
@@ -512,9 +521,13 @@ data class IsFollowerResponse(
 data class TweetStatsResponse(
     @Json(name = "tweet_id") val tweetId: String = "",
     @Json(name = "retweets_count") val retweetsCount: Long = 0,
-    @Json(name = "likes_count") val likesCount: Long = 0,
+    @Json(name = "reactions_count") val reactionsCount: Long = 0,
     @Json(name = "replies_count") val repliesCount: Long = 0,
     @Json(name = "views_count") val viewsCount: Long = 0,
+    // Per-emoji breakdown of likes_count, and the reaction this device's
+    // own user holds ("" when they haven't reacted).
+    @Json(name = "reactions") val reactions: Map<String, Long> = emptyMap(),
+    @Json(name = "my_reaction") val myReaction: String = "",
 )
 
 @JsonClass(generateAdapter = true)

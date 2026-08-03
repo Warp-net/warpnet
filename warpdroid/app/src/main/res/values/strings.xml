@@ -59,7 +59,7 @@
     <string name="follow_requests_empty">No follow requests</string>
     <string name="notification_verb_mention">mentioned you</string>
     <string name="notification_verb_retweet">retweeted your tweet</string>
-    <string name="notification_verb_like">liked your tweet</string>
+    <string name="notification_verb_reaction">liked your tweet</string>
     <string name="notification_verb_follow">followed you</string>
     <string name="notification_verb_follow_request">requested to follow you</string>
     <string name="notification_verb_quote">quoted your tweet</string>
@@ -84,7 +84,7 @@
     <string name="title_posts_pinned">Pinned</string>
     <string name="title_follows">Follows</string>
     <string name="title_followers">Followers</string>
-    <string name="title_likes">Likes</string>
+    <string name="title_reactions">Reactions</string>
     <string name="title_bookmarks">Bookmarks</string>
     <string name="title_mutes">Muted users</string>
     <string name="title_blocks">Blocked users</string>
@@ -119,7 +119,7 @@
     <string name="message_empty">Nothing here.</string>
 
     <string name="notification_retweet_format">%1$s retweeted your post</string>
-    <string name="notification_like_format">%1$s liked your post</string>
+    <string name="notification_reaction_format">%1$s reacted to your post</string>
     <string name="notification_pleroma_reaction_format">%1$s reacted to your post</string>
     <string name="notification_follow_format">%1$s followed you</string>
     <string name="notification_follow_request_format">%1$s requested to follow you</string>
@@ -135,15 +135,16 @@
 
     <string name="report_username_format">Report @%1$s</string>
     <string name="report_comment_hint">Additional comments?</string>
-    <string name="account_network_warning">You are leaving the trusted Warpnet zone. This profile is bridged from %1$s. Anything you do here (post, reply, like, follow) leaves the peer-to-peer network and is stored on %1$s\'s servers — you no longer own or control that data. Moderation there is performed by human administrators, not by Warpnet\'s automated (LLM) moderation.</string>
+    <string name="account_network_warning">You are leaving the trusted Warpnet zone. This profile is bridged from %1$s. Anything you do here (post, reply, react, follow) leaves the peer-to-peer network and is stored on %1$s\'s servers — you no longer own or control that data. Moderation there is performed by human administrators, not by Warpnet\'s automated (LLM) moderation.</string>
 
     <string name="action_quick_reply">Quick Reply</string>
     <string name="action_reply">Reply</string>
     <string name="action_retweet">Retweet</string>
     <string name="action_unretweet">Remove retweet</string>
     <string name="action_quote">Quote</string>
-    <string name="action_like">Like</string>
-    <string name="action_unlike">Remove like</string>
+    <string name="action_react">React</string>
+    <string name="action_unreact">Remove reaction</string>
+    <string name="action_more_reactions">More emoji</string>
     <string name="action_bookmark">Bookmark</string>
     <string name="action_unbookmark">Remove bookmark</string>
     <string name="action_more">More</string>
@@ -185,7 +186,7 @@
     <string name="action_view_profile">Profile</string>
     <string name="action_view_preferences">Preferences</string>
     <string name="action_view_account_preferences">Account preferences</string>
-    <string name="action_view_likes">Likes</string>
+    <string name="action_view_reactions">Reactions</string>
     <string name="action_view_bookmarks">Bookmarks</string>
     <string name="action_view_mutes">Muted users</string>
     <string name="action_view_blocks">Blocked users</string>
@@ -225,7 +226,7 @@
     <string name="action_follow_hashtag">Follow a new hashtag</string>
     <string name="action_open_retweeter">Open retweet author</string>
     <string name="action_open_retweeted_by">Show retweets</string>
-    <string name="action_open_faved_by">Show likes</string>
+    <string name="action_open_reacted_by">Show reactions</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_details">Details</string>
     <string name="action_add_reaction">add reaction</string>
@@ -407,8 +408,8 @@
     <string name="notification_follow_request_description">Notifications about follow requests</string>
     <string name="notification_retweet_name">Retweets</string>
     <string name="notification_retweet_description">Notifications when your posts get retweeted</string>
-    <string name="notification_like_name">Likes</string>
-    <string name="notification_like_description">Notifications when your posts get a like</string>
+    <string name="notification_reaction_name">Reactions</string>
+    <string name="notification_reaction_description">Notifications when your posts get a reaction</string>
     <string name="notification_poll_name">Poll results</string>
     <string name="notification_poll_description">Notifications about polls that have ended</string>
     <string name="notification_subscription_name">New posts</string>
@@ -606,9 +607,9 @@
         <item quantity="other">%1$s Replies</item>
     </plurals>
 
-    <plurals name="favs">
-        <item quantity="one">%1$s Like</item>
-        <item quantity="other">%1$s Likes</item>
+    <plurals name="reactions_plural">
+        <item quantity="one">%1$s Reaction</item>
+        <item quantity="other">%1$s Reactions</item>
     </plurals>
 
     <plurals name="retweets">
@@ -630,7 +631,7 @@
     <string name="label_translated">Translated from %1$s with %2$s</string>
 
     <string name="title_retweeted_by">Retweeted by</string>
-    <string name="title_liked_by">Liked by</string>
+    <string name="title_reacted_by">Reacted by</string>
 
     <string name="conversation_1_recipients">%1$s</string>
     <string name="conversation_2_recipients">%1$s and %2$s</string>
@@ -651,7 +652,7 @@
     <string name="description_post_retweeted">
         Retweeted
     </string>
-    <string name="description_post_liked">
+    <string name="description_post_reacted">
         Liked
     </string>
     <string name="description_post_bookmarked">
@@ -785,7 +786,7 @@
     <string name="pref_title_show_self_username">Show username in toolbars</string>
     <string name="pref_title_show_cards_in_timelines">Show link previews in timelines</string>
     <string name="pref_title_confirm_retweets">Show confirmation before retweeting</string>
-    <string name="pref_title_confirm_likes">Show confirmation before liking</string>
+    <string name="pref_title_confirm_reactions">Show confirmation before reacting</string>
     <string name="pref_title_confirm_follows">Show confirmation before following</string>
     <string name="pref_title_hide_top_toolbar">Hide the title of the top toolbar</string>
     <string name="pref_title_wellbeing_mode">Wellbeing</string>
@@ -860,7 +861,7 @@
     <string name="ui_error_unknown">unknown reason</string>
     <string name="ui_error_bookmark">Bookmarking post failed: %1$s</string>
     <string name="ui_error_clear_notifications">Clearing notifications failed: %1$s</string>
-    <string name="ui_error_like">Liking post failed: %1$s</string>
+    <string name="ui_error_react">Liking post failed: %1$s</string>
     <string name="ui_error_retweet">Retweeting post failed: %1$s</string>
     <string name="ui_error_vote">Voting in poll failed: %1$s</string>
     <string name="ui_error_accept_follow_request">Accepting follow request failed: %1$s</string>
@@ -990,7 +991,7 @@
     <string name="retweet_privacy_followers_only_description">Only your followers can see your retweet</string>
 
     <string name="retweet_confirm">Retweet this post?</string>
-    <string name="like_confirm">Like this post?</string>
+    <string name="reaction_confirm">React to this post?</string>
 
     <string name="edit_image_rotate">Rotate</string>
     <string name="edit_image_flip">Flip</string>

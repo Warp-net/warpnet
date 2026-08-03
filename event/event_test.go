@@ -76,13 +76,13 @@ func TestPaths_PublicRoutes(t *testing.T) {
 		PUBLIC_GET_WHOTOFOLLOW,
 		PUBLIC_POST_CHAT,
 		PUBLIC_POST_FOLLOW,
-		PUBLIC_POST_LIKE,
+		PUBLIC_POST_REACT,
 		PUBLIC_POST_MESSAGE,
 		PUBLIC_POST_RETWEET,
 		PUBLIC_POST_IS_FOLLOWING,
 		PUBLIC_POST_IS_FOLLOWER,
 		PUBLIC_POST_UNFOLLOW,
-		PUBLIC_POST_UNLIKE,
+		PUBLIC_POST_UNREACT,
 		PUBLIC_POST_UNRETWEET,
 		PUBLIC_POST_VIEW,
 		PUBLIC_GET_IMAGE,
@@ -97,7 +97,7 @@ func TestPaths_VersionSuffix(t *testing.T) {
 		PRIVATE_POST_PAIR,
 		PUBLIC_GET_INFO,
 		PRIVATE_POST_LOGIN,
-		PUBLIC_POST_LIKE,
+		PUBLIC_POST_REACT,
 	}
 	for _, r := range routes {
 		assert.Contains(t, r, "/0.0.0")
@@ -114,7 +114,7 @@ func TestMessage_RoundTrip(t *testing.T) {
 		Body:        json.RawMessage(`{"hello":"world"}`),
 		MessageId:   "msg-1",
 		NodeId:      "node-1",
-		Destination: PUBLIC_POST_LIKE,
+		Destination: PUBLIC_POST_REACT,
 		Timestamp:   ts,
 		Version:     "0.7.224",
 		Signature:   "sig",
@@ -122,7 +122,7 @@ func TestMessage_RoundTrip(t *testing.T) {
 
 	data, err := json.Marshal(in)
 	assert.NoError(t, err)
-	assert.Contains(t, string(data), `"path":"`+PUBLIC_POST_LIKE+`"`)
+	assert.Contains(t, string(data), `"path":"`+PUBLIC_POST_REACT+`"`)
 	assert.NotContains(t, string(data), `"destination"`)
 
 	var out Message
@@ -161,17 +161,17 @@ func TestGetAllTweetsEvent_OmitEmpty(t *testing.T) {
 	assert.Equal(t, limit, *out.Limit)
 }
 
-// TestLikeEvent_RoundTrip pins the snake_case wire keys the clients rely on.
-func TestLikeEvent_RoundTrip(t *testing.T) {
-	in := LikeEvent{TweetId: "tweet-1", UserId: "user-1", OwnerId: "owner-1"}
+// TestReactionEvent_RoundTrip pins the snake_case wire keys the clients rely on.
+func TestReactionEvent_RoundTrip(t *testing.T) {
+	in := ReactionEvent{TweetId: "tweet-1", UserId: "user-1", OwnerId: "owner-1", Emoji: "🔥"}
 
 	data, err := json.Marshal(in)
 	assert.NoError(t, err)
-	for _, key := range []string{`"tweet_id"`, `"user_id"`, `"owner_id"`} {
+	for _, key := range []string{`"tweet_id"`, `"user_id"`, `"owner_id"`, `"emoji"`} {
 		assert.True(t, strings.Contains(string(data), key), "missing key %s", key)
 	}
 
-	var out LikeEvent
+	var out ReactionEvent
 	assert.NoError(t, json.Unmarshal(data, &out))
 	assert.Equal(t, in, out)
 }

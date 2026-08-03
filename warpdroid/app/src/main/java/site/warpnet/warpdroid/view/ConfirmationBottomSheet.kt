@@ -80,15 +80,15 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
                 binding.retweetPrivacyDropdown.setText(selectedOption.getName())
             }
         } else {
-            binding.confirmTextView.setText(R.string.like_confirm)
+            binding.confirmTextView.setText(R.string.reaction_confirm)
             binding.confirmTextView.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_star_24dp, 0, 0, 0)
             binding.confirmTextView.compoundDrawableTintList = ColorStateList.valueOf(
-                requireContext().getColor(R.color.likeButtonActiveColor)
+                requireContext().getColor(R.color.reactionButtonActiveColor)
             )
 
             binding.retweetPrivacyLayout.hide()
 
-            binding.confirmButton.setText(R.string.action_like)
+            binding.confirmButton.setText(R.string.action_react)
 
             binding.confirmButton.setOnClickListener {
                 setFragmentResult(KEY_CONFIRM, bundleOf())
@@ -144,7 +144,7 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
 
     enum class Mode {
         RETWEET,
-        LIKE
+        REACTION
     }
 
     companion object {
@@ -171,11 +171,11 @@ class ConfirmationBottomSheet : BottomSheetDialogFragment(R.layout.bottomsheet_c
             }
         }
 
-        fun Fragment.confirmLike(preferences: SharedPreferences, onConfirmed: () -> Unit) {
-            if (preferences.getBoolean(PrefKeys.CONFIRM_LIKES, false)) {
+        fun Fragment.confirmReaction(preferences: SharedPreferences, onConfirmed: () -> Unit) {
+            if (preferences.getBoolean(PrefKeys.CONFIRM_REACTIONS, false)) {
                 val bottomSheet = ConfirmationBottomSheet()
                 bottomSheet.arguments = bundleOf(
-                    ARG_MODE to Mode.LIKE
+                    ARG_MODE to Mode.REACTION
                 )
                 bottomSheet.show(childFragmentManager, TAG)
                 childFragmentManager.setFragmentResultListener(KEY_CONFIRM, this) { _, _ ->

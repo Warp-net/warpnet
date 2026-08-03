@@ -40,7 +40,7 @@ abstract class TimelineViewModel(
 
     val activeAccountFlow = accountManager.activeAccount(viewModelScope)
     // ViewModel construction races AccountManager's first emit on some
-    // entry points (notably the BOOKMARKS / LIKES TweetListActivity flow
+    // entry points (notably the BOOKMARKS / REACTIONS TweetListActivity flow
     // when the process was just resumed). The stub account is always
     // present in the underlying flow, so we fall back to it here rather
     // than NPE on `!!` and tear the whole activity down.
@@ -201,7 +201,7 @@ abstract class TimelineViewModel(
         USER(isOrdered = true),
         USER_PINNED(isOrdered = false),
         USER_WITH_REPLIES(isOrdered = true),
-        LIKES(isOrdered = false),
+        REACTIONS(isOrdered = false),
         BOOKMARKS(isOrdered = false),
         QUOTES(isOrdered = true);
 

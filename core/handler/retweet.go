@@ -66,11 +66,15 @@ type RetweetTimelineUpdater interface {
 	AddTweetToTimeline(userId string, tweet domain.Tweet) error
 }
 
+type RetweetNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamNewReTweetHandler(
 	userRepo RetweetedUserFetcher,
 	tweetRepo ReTweetsStorer,
 	timelineRepo RetweetTimelineUpdater,
-	notifyRepo ModerationNotifier,
+	notifyRepo RetweetNotifier,
 	streamer RetweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {

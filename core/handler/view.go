@@ -31,6 +31,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -44,7 +45,16 @@ type ViewsStorer interface {
 	GetViewsCount(tweetId string) (uint64, error)
 }
 
-func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer LikeStreamer) warpnet.WarpHandlerFunc {
+type ViewUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
+type ViewStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
+func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer ViewStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ViewEvent
 		err := json.Unmarshal(buf, &ev)
@@ -87,7 +97,7 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 	}
 }
 
-func forwardViewToAuthor(ev event.ViewEvent, userRepo LikedUserFetcher, streamer LikeStreamer) uint64 {
+func forwardViewToAuthor(ev event.ViewEvent, userRepo ViewUserFetcher, streamer ViewStreamer) uint64 {
 	author, err := userRepo.Get(ev.UserId)
 	if errors.Is(err, database.ErrUserNotFound) {
 		return 0

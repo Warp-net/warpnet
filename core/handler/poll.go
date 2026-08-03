@@ -58,10 +58,14 @@ type PollStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+type PollUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
 func StreamPollVoteHandler(
 	repo PollVotesStorer,
 	tweetRepo PollTweetFetcher,
-	userRepo LikedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -100,7 +104,7 @@ func StreamPollVoteHandler(
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
-		// Mirrors the like path: the network-wide (CRDT) counter is bumped
+		// Mirrors the reaction path: the network-wide (CRDT) counter is bumped
 		// only on the voter's own node, so a vote stored on both the voter's
 		// and the author's node is counted once.
 		err := repo.Vote(tweetId, ev.OwnerId, ev.Option, ev.OwnerId == ownNodeInfo.OwnerId)
@@ -127,7 +131,7 @@ func StreamPollVoteHandler(
 func StreamGetPollHandler(
 	repo PollVotesStorer,
 	tweetRepo PollTweetFetcher,
-	userRepo LikedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -178,7 +182,7 @@ func localPoll(tweetRepo PollTweetFetcher, authorId, tweetId string) (domain.Pol
 // already recorded here and the CRDT counter carries it across.
 func propagateVote(
 	ev event.PollVoteEvent,
-	userRepo LikedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 	ownNodeInfo warpnet.NodeInfo,
 ) {
@@ -216,7 +220,7 @@ func propagateVote(
 // handle the read locally.
 func forwardPollRead(
 	ev event.GetPollEvent,
-	userRepo LikedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 ) (event.PollResultsResponse, bool) {
 	ownNodeInfo := streamer.NodeInfo()

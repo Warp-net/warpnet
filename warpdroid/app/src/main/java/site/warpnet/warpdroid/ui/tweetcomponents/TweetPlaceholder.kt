@@ -115,9 +115,9 @@ private fun PlaceholderButtons(
         modifier = modifier
             .heightIn(min = 36.dp)
     ) {
-        val (replyButton, retweetButton, favButton, bookmarkButton, moreButton) = createRefs()
+        val (replyButton, retweetButton, reactionButton, bookmarkButton, moreButton) = createRefs()
 
-        createHorizontalChain(replyButton, retweetButton, favButton, bookmarkButton, moreButton, chainStyle = ChainStyle.SpreadInside)
+        createHorizontalChain(replyButton, retweetButton, reactionButton, bookmarkButton, moreButton, chainStyle = ChainStyle.SpreadInside)
 
         Icon(
             painter = painterResource(R.drawable.ic_reply_24dp),
@@ -138,7 +138,7 @@ private fun PlaceholderButtons(
                 .size(24.dp)
                 .constrainAs(retweetButton) {
                     start.linkTo(replyButton.end)
-                    end.linkTo(favButton.start)
+                    end.linkTo(reactionButton.start)
                     centerVerticallyTo(parent)
                 }
         )
@@ -149,7 +149,7 @@ private fun PlaceholderButtons(
             contentDescription = null,
             modifier = Modifier
                 .size(24.dp)
-                .constrainAs(favButton) {
+                .constrainAs(reactionButton) {
                     start.linkTo(retweetButton.end)
                     end.linkTo(bookmarkButton.start)
                     centerVerticallyTo(parent)
@@ -163,7 +163,7 @@ private fun PlaceholderButtons(
             modifier = Modifier
                 .size(24.dp)
                 .constrainAs(bookmarkButton) {
-                    start.linkTo(favButton.end)
+                    start.linkTo(reactionButton.end)
                     end.linkTo(moreButton.start)
                     centerVerticallyTo(parent)
                 }

@@ -25,7 +25,7 @@
     <string name="title_posts_with_replies">Gydag ymatebion</string>
     <string name="title_follows">Yn dilyn</string>
     <string name="title_followers">Dilynwyr</string>
-    <string name="title_likes">Ffefrynnau</string>
+    <string name="title_reactions">Ffefrynnau</string>
     <string name="title_mutes">Defnyddwyr wedi\'u tewi</string>
     <string name="title_blocks">Defnyddwyr wedi\'u rhwystro</string>
     <string name="title_follow_requests">Ceisiadau i\'ch dilyn</string>
@@ -41,14 +41,14 @@
     <string name="post_content_show_more">Chwyddo</string>
     <string name="post_content_show_less">Lleihau</string>
     <string name="notification_retweet_format">Hybodd %1$s eich neges</string>
-    <string name="notification_like_format">Hoffodd %1$s eich neges</string>
+    <string name="notification_reaction_format">Hoffodd %1$s eich neges</string>
     <string name="notification_follow_format">Mae %1$s yn eich dilyn</string>
     <string name="report_username_format">Adrodd @%1$s</string>
     <string name="report_comment_hint">Sylwadau ychwanegol?</string>
     <string name="action_quick_reply">Ymateb yn gyflym</string>
     <string name="action_reply">Ymateb</string>
     <string name="action_retweet">Hybu</string>
-    <string name="action_like">Hoffi</string>
+    <string name="action_react">Hoffi</string>
     <string name="action_more">Mwy</string>
     <string name="action_compose">Creu</string>
     <string name="action_login">Mewngofnodi â Warpnet</string>
@@ -68,7 +68,7 @@
     <string name="action_close">Cau</string>
     <string name="action_view_profile">Proffil</string>
     <string name="action_view_preferences">Dewisiadau</string>
-    <string name="action_view_likes">Ffefrynnau</string>
+    <string name="action_view_reactions">Ffefrynnau</string>
     <string name="action_view_mutes">Defnyddwyr wedi\'u tewi</string>
     <string name="action_view_blocks">Defnyddwyr wedi\'u rhwystro</string>
     <string name="action_view_follow_requests">Ceisiadau i\'ch dilyn</string>
@@ -166,8 +166,8 @@
     <string name="notification_follow_description">Hysbysiadau am ddilynwyr newydd</string>
     <string name="notification_retweet_name">Hybiau</string>
     <string name="notification_retweet_description">Hysbysiadau pan gaiff eich negeseuon eu hybu</string>
-    <string name="notification_like_name">Ffefrynnau</string>
-    <string name="notification_like_description">Hysbysiadau pan gaiff eich negeseuon eu marcio fel ffefryn</string>
+    <string name="notification_reaction_name">Ffefrynnau</string>
+    <string name="notification_reaction_description">Hysbysiadau pan gaiff eich negeseuon eu marcio fel ffefryn</string>
     <string name="notification_mention_format">Crybwyllodd %1$s chi</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s a %4$d eraill</string>
     <string name="notification_summary_medium">%1$s, %2$s, a %3$s</string>
@@ -257,7 +257,7 @@
     <string name="title_domain_mutes">Parthau cudd</string>
     <string name="message_empty">Dim byd yma.</string>
     <string name="action_unretweet">Dileu hwb</string>
-    <string name="action_unlike">Dileu ffefryn</string>
+    <string name="action_unreact">Dileu ffefryn</string>
     <string name="action_delete_and_redraft">Dileu ac ailddrafftio</string>
     <string name="action_view_account_preferences">Dewisiadau\'ch cyfrif</string>
     <string name="action_view_domain_mutes">Parthau cudd</string>
@@ -326,9 +326,9 @@
     <string name="title_scheduled_posts">Negeseuon wedi\'u hamserlennu</string>
     <string name="error_loading_account_details">Wedi methu llwytho manylion y cyfrif</string>
     <string name="pref_title_timelines">Ffrydiau</string>
-    <string name="title_liked_by">Hoffwyd gan</string>
+    <string name="title_reacted_by">Hoffwyd gan</string>
     <string name="error_image_edit_failed">Methu golygu\'r ddelwedd.</string>
-    <string name="description_post_liked">Hoffwyd</string>
+    <string name="description_post_reacted">Hoffwyd</string>
     <string name="saving_draft">Yn cadw drafft…</string>
     <string name="action_dismiss">Diystyru</string>
     <string name="action_details">Manylion</string>
@@ -347,7 +347,7 @@
     <string name="about_tusky_version">Warpnet %1$s</string>
     <string name="title_hashtags_dialog">Hashnodau</string>
     <string name="pref_main_nav_position_option_bottom">Gwaelod</string>
-    <string name="action_open_faved_by">Dangos ffefrynnau</string>
+    <string name="action_open_reacted_by">Dangos ffefrynnau</string>
     <string name="report_description_1">Bydd yr adroddiad yn cael ei anfon at gymedrolwyr eich gweinydd. Gallwch chi esbonio pan rydych chi\'n adrodd ar y cyfrif hwn isod:</string>
     <string name="warning_scheduling_interval">Mae gan Warpnet egwyl amserlennu o o leiaf 5 munud.</string>
     <string name="follow_requests_info">Er nad yw eich cyfrif wedi\'i gloi, roedd staff %1$s yn meddwl efallai yr hoffech chi adolygu\'r ceisiadau i\'ch dilyn o\'r cyfrifon hyn eich hun.</string>
@@ -427,7 +427,7 @@
     <string name="tusky_compose_post_quicksetting_label">Ysgrifennu Neges</string>
     <string name="mute_domain_warning">Ydych chi\'n siŵr eich bod am rwystro %1$s gyfan? Fyddwch chi ddim yn gweld dim cynnwys o\'r parth hwnnw mewn unrhyw ffrwd gyhoeddus na chwaith yn eich hysbysiadau. Bydd eich dilynwyr o\'r parth hwnnw yn cael eu dileu.</string>
     <string name="duration_indefinite">Dim diwedd</string>
-    <plurals name="favs">
+    <plurals name="reactions_plural">
         <item quantity="zero">%1$s Ffefrynnau</item>
         <item quantity="one">%1$s Ffefryn</item>
         <item quantity="two">%1$s Ffefryn</item>
@@ -464,7 +464,7 @@
     <string name="limit_notifications">Cyfyngu ar hysbysiadau ffrwd</string>
     <string name="post_lookup_error_format">Gwall wrth chwilio am y neges %1$s</string>
     <string name="pref_title_show_self_username">Dangos enw defnyddiwr mewn bariau offer</string>
-    <string name="pref_title_confirm_likes">Dangos cadarnhad cyn hoffi</string>
+    <string name="pref_title_confirm_reactions">Dangos cadarnhad cyn hoffi</string>
     <string name="pref_title_hide_top_toolbar">Cuddio teitl y bar offer uchaf</string>
     <string name="instance_rule_title">Rheolau %1$s</string>
     <string name="language_display_name_format">%1$s (%2$s)</string>
@@ -626,7 +626,7 @@
     <string name="ui_error_unknown">rheswm anhysbys</string>
     <string name="ui_error_bookmark">Methodd tudalnodi\'r neges: %1$s</string>
     <string name="ui_error_clear_notifications">Methodd clirio hysbysiadau: %1$s</string>
-    <string name="ui_error_like">Methodd hoffi\'r neges: %1$s</string>
+    <string name="ui_error_react">Methodd hoffi\'r neges: %1$s</string>
     <string name="ui_error_retweet">Methodd hybu\'r neges: %1$s</string>
     <string name="ui_error_vote">Methodd y pleidleisio: %1$s</string>
     <string name="ui_error_accept_follow_request">Methodd derbyn y cais i ddilyn: %1$s</string>
@@ -805,7 +805,7 @@
     <string name="retweet_privacy_unlisted_description">Yr un fath â chyhoeddus ond ni fydd byth yn ymddangos mewn ffrydiau cyhoeddus</string>
     <string name="retweet_privacy_followers_only_description">Dim ond eich dilynwyr sy\'n gallu gweld eich hybu</string>
     <string name="retweet_confirm">Hybu\'r neges hon?</string>
-    <string name="like_confirm">Hoffi\'r neges hon?</string>
+    <string name="reaction_confirm">Hoffi\'r neges hon?</string>
     <string name="confirm_dismiss_poll">Cael gwared ar newidiadau\'r pôl?</string>
     <string name="edit_image_rotate">Cylchdroi</string>
     <string name="edit_image_flip_horizontally">Fflipio\'n llorweddol</string>

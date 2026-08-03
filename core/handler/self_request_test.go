@@ -60,7 +60,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	ownerTweetUserRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: ownerNodeID}, nil
 	}}
-	ownerLikeUserRepo := stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
+	ownerReactionUserRepo := stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: ownerNodeID}, nil
 	}}
 	ownerRetweetUserRepo := stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
@@ -122,7 +122,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, ownerTweetUserRepo, streamer)
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, ownerTweetUserRepo, streamer)
 		if _, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetID, UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -187,24 +187,24 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		}
 	})
 
-	t.Run("StreamLikeHandler - own tweet", func(t *testing.T) {
+	t.Run("StreamReactionHandler - own tweet", func(t *testing.T) {
 		streamer := stubStreamer{
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		h := StreamLikeHandler(stubLikeRepo{}, ownerLikeUserRepo, stubModerationNotifier{}, streamer)
-		if _, err := h(marshal(t, event.LikeEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), nil); err != nil {
+		h := StreamReactionHandler(stubReactionRepo{}, ownerReactionUserRepo, stubModerationNotifier{}, streamer)
+		if _, err := h(marshal(t, event.ReactionEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
-	t.Run("StreamUnlikeHandler - own tweet", func(t *testing.T) {
+	t.Run("StreamUnreactionHandler - own tweet", func(t *testing.T) {
 		streamer := stubStreamer{
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		h := StreamUnlikeHandler(stubLikeRepo{}, ownerLikeUserRepo, streamer)
-		if _, err := h(marshal(t, event.UnlikeEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), nil); err != nil {
+		h := StreamUnreactionHandler(stubReactionRepo{}, ownerReactionUserRepo, streamer)
+		if _, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -294,7 +294,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		h := StreamViewHandler(stubViewRepo{}, ownerLikeUserRepo, streamer)
+		h := StreamViewHandler(stubViewRepo{}, ownerReactionUserRepo, streamer)
 		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetID, UserId: owner, ViewerId: "stranger"}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

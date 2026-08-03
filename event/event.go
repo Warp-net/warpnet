@@ -199,11 +199,11 @@ type GetIsFollowingEvent struct {
 
 type GetIsFollowerEvent = GetIsFollowingEvent
 
-// GetLikersResponse defines model for GetLikersResponse.
-type GetLikersResponse = UsersResponse
+// GetReactorsResponse defines model for GetReactorsResponse.
+type GetReactorsResponse = UsersResponse
 
-// GetLikesCountEvent defines model for GetLikesCountEvent.
-type GetLikesCountEvent struct {
+// GetReactionsCountEvent defines model for GetReactionsCountEvent.
+type GetReactionsCountEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 }
 
@@ -219,7 +219,7 @@ type GetTweetStatsEvent struct {
 }
 
 // GetReTweetsCountEvent defines model for GetReTweetsCountEvent.
-type GetReTweetsCountEvent = GetLikesCountEvent
+type GetReTweetsCountEvent = GetReactionsCountEvent
 
 // GetRetweetersResponse defines model for GetRetweetersResponse.
 type GetRetweetersResponse = UsersResponse
@@ -248,16 +248,24 @@ type GetUserEvent struct {
 	NodeId string `json:"node_id,omitempty"`
 }
 
-// LikeEvent defines model for LikeEvent.
-type LikeEvent struct {
+// ReactionEvent defines model for ReactionEvent.
+//
+// Emoji names the reaction. Clients that predate reactions omit it and
+// the node reads them as domain.DefaultReaction.
+type ReactionEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 	UserId  domain.ID `json:"user_id"`
 	OwnerId domain.ID `json:"owner_id"`
+	Emoji   string    `json:"emoji,omitempty"`
 }
 
-// LikesCountResponse defines model for LikesCountResponse.
-type LikesCountResponse struct {
-	Count uint64 `json:"count"`
+// ReactionsCountResponse defines model for ReactionsCountResponse.
+//
+// Count is the total across every reaction; Reactions breaks it down per
+// emoji so a client can repaint the chips without a second round-trip.
+type ReactionsCountResponse struct {
+	Count     uint64            `json:"count"`
+	Reactions map[string]uint64 `json:"reactions,omitempty"`
 }
 
 // LoginEvent defines model for LoginEvent.
@@ -334,7 +342,7 @@ type Owner = domain.Owner
 
 // PollVoteEvent defines model for PollVoteEvent.
 //
-// Same actor/target convention as LikeEvent: UserId is the tweet author
+// Same actor/target convention as ReactionEvent: UserId is the tweet author
 // (the routing key), OwnerId is the voter. Option is the zero-based index
 // into the tweet's poll options.
 type PollVoteEvent struct {
@@ -375,7 +383,7 @@ type PollResultsResponse struct {
 }
 
 // ReTweetsCountResponse defines model for ReTweetsCountResponse.
-type ReTweetsCountResponse = LikesCountResponse
+type ReTweetsCountResponse = ReactionsCountResponse
 
 // TweetsResponse defines model for TweetsResponse.
 type TweetsResponse struct {
@@ -384,12 +392,23 @@ type TweetsResponse struct {
 	UserId domain.ID      `json:"user_id"`
 }
 
+// TweetStatsResponse defines model for TweetStatsResponse.
+//
+// Reactions is the per-emoji breakdown of ReactionsCount. MyReaction is the
+// emoji the node's own owner put on the tweet ("" when they haven't
+// reacted) — it is always answered from the local store, so it stays
+// correct even when the counts come from the author's node.
 type TweetStatsResponse struct {
-	TweetId       domain.ID `json:"tweet_id"`
-	RetweetsCount uint64    `json:"retweets_count"`
-	LikeCount     uint64    `json:"likes_count"`
-	RepliesCount  uint64    `json:"replies_count"`
-	ViewsCount    uint64    `json:"views_count"`
+	TweetId        domain.ID         `json:"tweet_id"`
+	RetweetsCount  uint64            `json:"retweets_count"`
+	ReactionsCount uint64            `json:"reactions_count"`
+	RepliesCount   uint64            `json:"replies_count"`
+	ViewsCount     uint64            `json:"views_count"`
+	Reactions      map[string]uint64 `json:"reactions,omitempty"`
+	// Always emitted, empty string included: an absent key is how a client
+	// tells an old node (which knows nothing of reactions) from this node
+	// saying "you haven't reacted".
+	MyReaction string `json:"my_reaction"`
 }
 
 type IDsResponse struct {
@@ -397,8 +416,8 @@ type IDsResponse struct {
 	Users  []domain.ID `json:"users"`
 }
 
-// UnlikeEvent defines model for UnlikeEvent.
-type UnlikeEvent = LikeEvent
+// UnreactionEvent defines model for UnreactionEvent.
+type UnreactionEvent = ReactionEvent
 
 // ViewEvent defines model for ViewEvent.
 // UserId is the tweet author's id; ViewerId is the viewer's id.
@@ -409,7 +428,7 @@ type ViewEvent struct {
 }
 
 // ViewsCountResponse defines model for ViewsCountResponse.
-type ViewsCountResponse = LikesCountResponse
+type ViewsCountResponse = ReactionsCountResponse
 
 // UnretweetEvent defines model for UnretweetEvent.
 type UnretweetEvent struct {
@@ -642,11 +661,11 @@ type GetBookmarksResponse struct {
 	Cursor string         `json:"cursor"`
 }
 
-// GetLikesEvent defines model for GetLikesEvent.
-type GetLikesEvent = GetBookmarksEvent
+// GetReactionsEvent defines model for GetReactionsEvent.
+type GetReactionsEvent = GetBookmarksEvent
 
-// GetLikesResponse defines model for GetLikesResponse.
-type GetLikesResponse = GetBookmarksResponse
+// GetReactionsResponse defines model for GetReactionsResponse.
+type GetReactionsResponse = GetBookmarksResponse
 
 // PinTweetEvent defines model for PinTweetEvent.
 type PinTweetEvent struct {
@@ -694,8 +713,8 @@ type GetMutesEvent = GetBlocksEvent
 // GetMutesResponse defines model for GetMutesResponse.
 type GetMutesResponse = GetBlocksResponse
 
-// GetTweetLikersEvent defines model for GetTweetLikersEvent.
-type GetTweetLikersEvent struct {
+// GetTweetReactorsEvent defines model for GetTweetReactorsEvent.
+type GetTweetReactorsEvent struct {
 	TweetId     domain.ID `json:"tweet_id"`
 	OwnerUserId domain.ID `json:"owner_user_id"`
 	Cursor      *string   `json:"cursor,omitempty"`
@@ -703,7 +722,7 @@ type GetTweetLikersEvent struct {
 }
 
 // GetTweetRetweetersEvent defines model for GetTweetRetweetersEvent.
-type GetTweetRetweetersEvent = GetTweetLikersEvent
+type GetTweetRetweetersEvent = GetTweetReactorsEvent
 
 // SubscribeUserEvent defines model for SubscribeUserEvent.
 type SubscribeUserEvent struct {

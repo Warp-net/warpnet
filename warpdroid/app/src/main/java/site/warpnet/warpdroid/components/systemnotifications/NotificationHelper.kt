@@ -257,7 +257,7 @@ class NotificationHelper @Inject constructor(
             Notification.Type.FollowRequest -> account.notificationsFollowRequested
             Notification.Type.Retweet -> account.notificationsRetweeted
             Notification.Type.PleromaEmojiReaction,
-            Notification.Type.Like -> account.notificationsLiked
+            Notification.Type.Reaction -> account.notificationsReacted
             Notification.Type.SignUp -> account.notificationsAdmin
             Notification.Type.Update -> account.notificationsUpdates
             else -> account.notificationsOther
@@ -558,7 +558,7 @@ class NotificationHelper @Inject constructor(
             Notification.Type.Status -> context.getString(R.string.notification_subscription_format, accountName)
             Notification.Type.Follow -> context.getString(R.string.notification_follow_format, accountName)
             Notification.Type.FollowRequest -> context.getString(R.string.notification_follow_request_format, accountName)
-            Notification.Type.Like -> context.getString(R.string.notification_like_format, accountName)
+            Notification.Type.Reaction -> context.getString(R.string.notification_reaction_format, accountName)
             Notification.Type.PleromaEmojiReaction -> context.getString(R.string.notification_pleroma_reaction_format, accountName)
             Notification.Type.Retweet -> context.getString(R.string.notification_retweet_format, accountName)
             Notification.Type.SignUp -> context.getString(R.string.notification_sign_up_format, accountName)
@@ -579,7 +579,7 @@ class NotificationHelper @Inject constructor(
             Notification.Type.FollowRequest,
             Notification.Type.SignUp -> return "@" + notification.account.username
             Notification.Type.Mention,
-            Notification.Type.Like,
+            Notification.Type.Reaction,
             Notification.Type.Retweet,
             Notification.Type.Status -> return if (!notification.status?.spoilerText.isNullOrEmpty() && !alwaysOpenSpoiler) {
                 notification.status.spoilerText

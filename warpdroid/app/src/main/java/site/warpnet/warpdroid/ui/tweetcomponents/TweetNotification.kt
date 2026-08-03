@@ -66,7 +66,7 @@ import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.viewdata.NotificationViewData
 
 /**
- * Notification when someone liked or retweeted a post
+ * Notification when someone reacted or retweeted a post
  */
 @Composable
 fun TweetNotification(
@@ -278,7 +278,7 @@ fun TweetNotificationPreview() {
         TweetNotification(
             notificationViewData = NotificationViewData.Concrete(
                 id = "1",
-                type = Notification.Type.Like,
+                type = Notification.Type.Reaction,
                 account = fakeTimelineUser,
                 statusViewData = fakeTweetViewData(),
                 event = null,
