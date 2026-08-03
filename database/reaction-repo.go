@@ -308,22 +308,38 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 		AddRootID(tweetId).
 		Build()
 
+	// The two counters see different slices of the truth, so the answer is
+	// whichever knows more. The CRDT is bumped once per reaction, by the
+	// reactor's node alone, and reaches everyone else only once its delta
+	// replicates. The local counter is bumped by every node the reaction
+	// passes through, so the author's node — where all of them land — has
+	// the full tally before any of that replicates. Preferring the CRDT
+	// undercounted every reaction made from another node.
+	var networkTotal uint64
 	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())
-		if err == nil {
-			return total, nil
+		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())
+		if statErr != nil {
+			log.Warnf("get reactions stat: %v", statErr)
+		} else {
+			networkTotal = total
 		}
-		log.Warnf("get reactions stat: %v", err)
 	}
 
 	bt, err := repo.db.Get(reactionKey)
 	if local_store.IsNotFoundError(err) {
-		return 0, ErrReactionsNotFound
+		if networkTotal == 0 {
+			return 0, ErrReactionsNotFound
+		}
+		return networkTotal, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	return binary.BigEndian.Uint64(bt), nil
+	localTotal := binary.BigEndian.Uint64(bt)
+	if networkTotal > localTotal {
+		return networkTotal, nil
+	}
+	return localTotal, nil
 }
 
 type reactorIDs = []string

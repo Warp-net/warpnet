@@ -418,3 +418,30 @@ func sumCounts(m map[string]uint64) uint64 {
 	}
 	return sum
 }
+
+// A reaction that arrived from another node is stored here but never bumps
+// this node's CRDT delta — only the reactor's own node does that. The author's
+// node must still count it, which is what the two-node run caught: the total
+// stayed one short of the breakdown for every remote reaction.
+func (s *ReactionRepoTestSuite) TestReactionsCount_CountsPropagatedReactions() {
+	skew := &crdtSkew{vals: map[string]uint64{}}
+	repo := NewReactionRepo(s.db, skew)
+
+	tweetId := ulid.Make().String()
+	own := ulid.Make().String()
+	fromAnotherNode := ulid.Make().String()
+
+	_, err := repo.React(tweetId, own, "👍", true) // local + CRDT
+	s.Require().NoError(err)
+	_, err = repo.React(tweetId, fromAnotherNode, "🔥", false) // propagated: local only
+	s.Require().NoError(err)
+
+	total, err := repo.ReactionsCount(tweetId)
+	s.Require().NoError(err)
+	s.Equal(uint64(2), total)
+
+	reactions, err := repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Equal(map[string]uint64{"👍": 1, "🔥": 1}, reactions)
+	s.Equal(total, sumCounts(reactions), "the count must match the chips")
+}
