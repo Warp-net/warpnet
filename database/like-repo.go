@@ -29,6 +29,8 @@ package database
 
 import (
 	"encoding/binary"
+	"errors"
+	"strings"
 	"time"
 
 	ds "github.com/Warp-net/warpnet/database/datastore"
@@ -43,7 +45,13 @@ const (
 	IncrSubNamespace  = "INCR"
 	LikerSubNamespace = "LIKER"
 	LikedSubNamespace = "LIKED" // per-user index of liked tweet refs
+	ReactSubNamespace = "REACT" // per-emoji counters, one key per reaction
 )
+
+// maxReactionKinds bounds one page of the per-emoji tally. Beyond it the
+// breakdown is reported as-is instead of folding the remainder into
+// DefaultReaction, which would inflate hearts.
+const maxReactionKinds = uint64(128)
 
 var ErrLikesNotFound = local_store.DBError("like not found")
 
@@ -67,30 +75,71 @@ func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer) *LikeRepo {
 	return &LikeRepo{db: db, statsDb: statsDb}
 }
 
+func likesCountKey(tweetId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(IncrSubNamespace).
+		AddRootID(tweetId).
+		Build()
+}
+
+func likerKey(tweetId, userId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikerSubNamespace).
+		AddRootID(tweetId).
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(userId).
+		Build()
+}
+
+func reactionCountKey(tweetId, emoji string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(ReactSubNamespace).
+		AddRootID(tweetId).
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(emoji).
+		Build()
+}
+
+// keyID returns the last segment of a database key — the liker's user id
+// for a LIKER key, the emoji for a REACT key.
+func keyID(key string) string {
+	return key[strings.LastIndex(key, local_store.Delimeter)+1:]
+}
+
+// storedReaction decodes the emoji a liker row carries. Rows written before
+// reactions existed stored the liker's own id as the value, so they read
+// back as hearts.
+func storedReaction(value []byte, userId string) string {
+	emoji := string(value)
+	if emoji == "" || emoji == userId {
+		return domain.DefaultReaction
+	}
+	return emoji
+}
+
 // isTransitive tells whether this action should propagate to the network-wide
 // (CRDT) counter, which is replicated ("transits") across nodes. The caller
 // (handler) sets it true only on the acting user's own node, so an action
 // observed on more than one node is counted once. The local per-node counter
 // is always updated (it backs the read-time fallback).
-func (repo *LikeRepo) Like(tweetId, userId string, isTransitive bool) (likesCount uint64, err error) {
+//
+// A user holds at most one reaction per tweet: reacting again with a
+// different emoji moves the per-emoji tallies but leaves the like itself
+// (and therefore the total counter) alone.
+func (repo *LikeRepo) Like(tweetId, userId, emoji string, isTransitive bool) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
 	}
 	if userId == "" {
 		return 0, local_store.DBError("empty user id")
 	}
+	emoji, err = domain.NormalizeReaction(emoji)
+	if err != nil {
+		return 0, err
+	}
 
-	likeKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(IncrSubNamespace).
-		AddRootID(tweetId).
-		Build()
-
-	likerKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(LikerSubNamespace).
-		AddRootID(tweetId).
-		AddRange(local_store.NoneRangeKey).
-		AddParentId(userId).
-		Build()
+	likeKey := likesCountKey(tweetId)
+	reactorKey := likerKey(tweetId, userId)
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -98,17 +147,47 @@ func (repo *LikeRepo) Like(tweetId, userId string, isTransitive bool) (likesCoun
 	}
 	defer txn.Rollback()
 
-	_, err = txn.Get(likerKey)
-	if !local_store.IsNotFoundError(err) {
-		_ = txn.Commit()
-		return repo.LikesCount(tweetId) // like exists
+	prev, err := txn.Get(reactorKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return 0, err
+	}
+	if err == nil { // like exists
+		prevEmoji := storedReaction(prev, userId)
+		if prevEmoji == emoji {
+			_ = txn.Commit()
+			return repo.LikesCount(tweetId)
+		}
+		if err = txn.Set(reactorKey, []byte(emoji)); err != nil {
+			return 0, err
+		}
+		if _, err = txn.Decrement(reactionCountKey(tweetId, prevEmoji)); err != nil {
+			return 0, err
+		}
+		if _, err = txn.Increment(reactionCountKey(tweetId, emoji)); err != nil {
+			return 0, err
+		}
+		if err = txn.Commit(); err != nil {
+			return 0, err
+		}
+		if repo.statsDb != nil && isTransitive {
+			if err := repo.statsDb.Decrement(reactionCountKey(tweetId, prevEmoji).DatastoreKey()); err != nil {
+				log.Warnf("like: stats db reaction decrement: %v", err)
+			}
+			if err := repo.statsDb.Increment(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
+				log.Warnf("like: stats db reaction increment: %v", err)
+			}
+		}
+		return repo.LikesCount(tweetId)
 	}
 
-	if err = txn.Set(likerKey, []byte(userId)); err != nil {
+	if err = txn.Set(reactorKey, []byte(emoji)); err != nil {
 		return 0, err
 	}
 	likesCount, err = txn.Increment(likeKey)
 	if err != nil {
+		return 0, err
+	}
+	if _, err = txn.Increment(reactionCountKey(tweetId, emoji)); err != nil {
 		return 0, err
 	}
 	if err = txn.Commit(); err != nil {
@@ -119,6 +198,9 @@ func (repo *LikeRepo) Like(tweetId, userId string, isTransitive bool) (likesCoun
 	}
 	if err := repo.statsDb.Increment(likeKey.DatastoreKey()); err != nil {
 		log.Warnf("like: stats db increment: %v", err)
+	}
+	if err := repo.statsDb.Increment(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
+		log.Warnf("like: stats db reaction increment: %v", err)
 	}
 	return likesCount, nil
 }
@@ -131,17 +213,8 @@ func (repo *LikeRepo) Unlike(tweetId, userId string, isTransitive bool) (likesCo
 		return 0, local_store.DBError("empty user id")
 	}
 
-	unlikeKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(IncrSubNamespace).
-		AddRootID(tweetId).
-		Build()
-
-	unlikerKey := local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(LikerSubNamespace).
-		AddRootID(tweetId).
-		AddRange(local_store.NoneRangeKey).
-		AddParentId(userId).
-		Build()
+	unlikeKey := likesCountKey(tweetId)
+	unlikerKey := likerKey(tweetId, userId)
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -149,11 +222,15 @@ func (repo *LikeRepo) Unlike(tweetId, userId string, isTransitive bool) (likesCo
 	}
 	defer txn.Rollback()
 
-	_, err = txn.Get(unlikerKey)
+	prev, err := txn.Get(unlikerKey)
 	if local_store.IsNotFoundError(err) { // already unliked
 		_ = txn.Commit()
 		return repo.LikesCount(tweetId)
 	}
+	if err != nil {
+		return 0, err
+	}
+	emoji := storedReaction(prev, userId)
 	if err = txn.Delete(unlikerKey); err != nil {
 		return 0, err
 	}
@@ -162,6 +239,9 @@ func (repo *LikeRepo) Unlike(tweetId, userId string, isTransitive bool) (likesCo
 		return 0, txn.Commit()
 	}
 	if err != nil {
+		return 0, err
+	}
+	if _, err = txn.Decrement(reactionCountKey(tweetId, emoji)); err != nil {
 		return 0, err
 	}
 	if err := txn.Commit(); err != nil {
@@ -174,8 +254,106 @@ func (repo *LikeRepo) Unlike(tweetId, userId string, isTransitive bool) (likesCo
 	if err := repo.statsDb.Decrement(unlikeKey.DatastoreKey()); err != nil {
 		log.Warnf("unlike: stats db decrement: %v", err)
 	}
+	if err := repo.statsDb.Decrement(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
+		log.Warnf("unlike: stats db reaction decrement: %v", err)
+	}
 
 	return likesCount, nil
+}
+
+// Reactions returns the per-emoji tally for a tweet. Likes stored before
+// reactions existed carry no per-emoji counter, so whatever the total
+// counter holds beyond the sum of the named emoji is attributed to
+// DefaultReaction — old hearts stay hearts.
+func (repo *LikeRepo) Reactions(tweetId string) (map[string]uint64, error) {
+	if tweetId == "" {
+		return nil, local_store.DBError("empty tweet id")
+	}
+
+	prefix := local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(ReactSubNamespace).
+		AddRootID(tweetId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	limit := maxReactionKinds
+	items, _, err := txn.List(prefix, &limit, nil)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return nil, err
+	}
+	if err = txn.Commit(); err != nil {
+		return nil, err
+	}
+
+	var (
+		reactions = make(map[string]uint64, len(items))
+		named     uint64
+	)
+	for _, item := range items {
+		emoji := keyID(item.Key)
+		if emoji == "" {
+			continue
+		}
+		count := decodeCount(item.Value)
+		if repo.statsDb != nil {
+			if total, statErr := repo.statsDb.GetAggregatedStat(
+				local_store.DatabaseKey(item.Key).DatastoreKey(),
+			); statErr == nil {
+				count = total
+			}
+		}
+		if count == 0 {
+			continue
+		}
+		reactions[emoji] = count
+		named += count
+	}
+	if uint64(len(items)) >= limit { // page truncated, remainder is unknowable
+		return reactions, nil
+	}
+
+	total, err := repo.LikesCount(tweetId)
+	if err != nil && !errors.Is(err, ErrLikesNotFound) {
+		return nil, err
+	}
+	if total > named {
+		reactions[domain.DefaultReaction] += total - named
+	}
+	return reactions, nil
+}
+
+// Reaction reports the emoji this user put on the tweet, or an empty
+// string when they haven't reacted to it.
+func (repo *LikeRepo) Reaction(tweetId, userId string) (string, error) {
+	if tweetId == "" {
+		return "", local_store.DBError("empty tweet id")
+	}
+	if userId == "" {
+		return "", local_store.DBError("empty user id")
+	}
+
+	bt, err := repo.db.Get(likerKey(tweetId, userId))
+	if local_store.IsNotFoundError(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return storedReaction(bt, userId), nil
+}
+
+// decodeCount reads a counter value written by the store's Increment,
+// tolerating a short or missing value.
+func decodeCount(value []byte) uint64 {
+	if len(value) < 8 { //nolint:mnd
+		return 0
+	}
+	return binary.BigEndian.Uint64(value)
 }
 
 func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
@@ -236,7 +414,12 @@ func (repo *LikeRepo) Likers(tweetId string, limit *uint64, cursor *string) (_ l
 
 	likers := make(likedUserIDs, 0, len(items))
 	for _, item := range items {
-		userId := string(item.Value)
+		// The value holds the reaction emoji, so the liker comes from the
+		// key — which is also where pre-reaction rows carry it.
+		userId := keyID(item.Key)
+		if userId == "" {
+			continue
+		}
 		likers = append(likers, userId)
 	}
 	return likers, cur, nil

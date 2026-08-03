@@ -34,10 +34,13 @@ interface TweetActionListener : LinkListener {
     )
 
     /**
-     * Like the post represented by [viewData]
+     * React to the post represented by [viewData]
      * @param state Optional SparkButtonState to trigger delayed animation
+     * @param emoji The reaction to leave; empty means the node's default
+     *              heart. Ignored when [like] is false — taking a reaction
+     *              back removes whichever one is held.
      */
-    fun onLike(viewData: TweetViewData.Concrete, like: Boolean, state: SparkButtonState?)
+    fun onLike(viewData: TweetViewData.Concrete, like: Boolean, state: SparkButtonState?, emoji: String = "")
 
     fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean)
 

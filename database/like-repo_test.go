@@ -67,12 +67,12 @@ func (s *LikeRepoTestSuite) TestLikeAndUnlike() {
 	tweetId := ulid.Make().String()
 
 	// Like
-	likes, err := s.repo.Like(tweetId, userId, true)
+	likes, err := s.repo.Like(tweetId, userId, "", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
 	// Like again (should not increment)
-	likes, err = s.repo.Like(tweetId, userId, true)
+	likes, err = s.repo.Like(tweetId, userId, "", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
@@ -109,10 +109,10 @@ func (s *LikeRepoTestSuite) TestLike_InvalidParams() {
 	tweetId := ulid.Make().String()
 	userId := ulid.Make().String()
 
-	_, err := s.repo.Like("", userId, true)
+	_, err := s.repo.Like("", userId, "", true)
 	s.Error(err)
 
-	_, err = s.repo.Like(tweetId, "", true)
+	_, err = s.repo.Like(tweetId, "", "", true)
 	s.Error(err)
 
 	_, err = s.repo.Unlike("", userId, true)
@@ -222,9 +222,9 @@ func (s *LikeRepoTestSuite) TestLikers_Multiple() {
 	user1 := ulid.Make().String()
 	user2 := ulid.Make().String()
 
-	_, err := s.repo.Like(tweetId, user1, true)
+	_, err := s.repo.Like(tweetId, user1, "", true)
 	s.Require().NoError(err)
-	_, err = s.repo.Like(tweetId, user2, true)
+	_, err = s.repo.Like(tweetId, user2, "", true)
 	s.Require().NoError(err)
 
 	limit := uint64(10)
@@ -232,4 +232,105 @@ func (s *LikeRepoTestSuite) TestLikers_Multiple() {
 	s.Require().NoError(err)
 	s.Require().Len(likers, 2)
 	s.ElementsMatch([]string{user1, user2}, likers)
+}
+
+func (s *LikeRepoTestSuite) TestReactions_SwitchKeepsTotal() {
+	tweetId := ulid.Make().String()
+	user1 := ulid.Make().String()
+	user2 := ulid.Make().String()
+
+	_, err := s.repo.Like(tweetId, user1, "🔥", true)
+	s.Require().NoError(err)
+	total, err := s.repo.Like(tweetId, user2, "", true) // no emoji named -> heart
+	s.Require().NoError(err)
+	s.Equal(uint64(2), total)
+
+	reactions, err := s.repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Equal(map[string]uint64{"🔥": 1, "❤️": 1}, reactions)
+
+	// Switching moves the per-emoji tallies but not the like itself.
+	total, err = s.repo.Like(tweetId, user1, "👍", true)
+	s.Require().NoError(err)
+	s.Equal(uint64(2), total)
+
+	reactions, err = s.repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Equal(map[string]uint64{"👍": 1, "❤️": 1}, reactions)
+
+	emoji, err := s.repo.Reaction(tweetId, user1)
+	s.Require().NoError(err)
+	s.Equal("👍", emoji)
+
+	// Unliking drops both the total and the emoji it was counted under.
+	total, err = s.repo.Unlike(tweetId, user1, true)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), total)
+
+	reactions, err = s.repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Equal(map[string]uint64{"❤️": 1}, reactions)
+
+	emoji, err = s.repo.Reaction(tweetId, user1)
+	s.Require().NoError(err)
+	s.Empty(emoji)
+}
+
+func (s *LikeRepoTestSuite) TestReactions_LegacyLikeIsAHeart() {
+	tweetId := ulid.Make().String()
+	legacyUser := ulid.Make().String()
+	newUser := ulid.Make().String()
+
+	// A like written before reactions existed: the liker's own id as the
+	// value and no per-emoji counter at all.
+	txn, err := s.db.NewTxn()
+	s.Require().NoError(err)
+	s.Require().NoError(txn.Set(likerKey(tweetId, legacyUser), []byte(legacyUser)))
+	_, err = txn.Increment(likesCountKey(tweetId))
+	s.Require().NoError(err)
+	s.Require().NoError(txn.Commit())
+
+	emoji, err := s.repo.Reaction(tweetId, legacyUser)
+	s.Require().NoError(err)
+	s.Equal("❤️", emoji)
+
+	_, err = s.repo.Like(tweetId, newUser, "🔥", true)
+	s.Require().NoError(err)
+
+	// The total counter knows about the legacy like, the per-emoji keys
+	// don't — the remainder is attributed to hearts.
+	reactions, err := s.repo.Reactions(tweetId)
+	s.Require().NoError(err)
+	s.Equal(map[string]uint64{"🔥": 1, "❤️": 1}, reactions)
+
+	limit := uint64(10)
+	likers, _, err := s.repo.Likers(tweetId, &limit, nil)
+	s.Require().NoError(err)
+	s.ElementsMatch([]string{legacyUser, newUser}, likers)
+}
+
+func (s *LikeRepoTestSuite) TestLike_RejectsMalformedEmoji() {
+	tweetId := ulid.Make().String()
+	userId := ulid.Make().String()
+
+	_, err := s.repo.Like(tweetId, userId, "🔥/💧", true) // key delimiter
+	s.Error(err)
+
+	_, err = s.repo.Like(tweetId, userId, "not an emoji at all", true)
+	s.Error(err)
+
+	likers, _, err := s.repo.Likers(tweetId, nil, nil)
+	s.Require().NoError(err)
+	s.Empty(likers) // nothing was stored
+}
+
+func (s *LikeRepoTestSuite) TestReactions_InvalidParams() {
+	_, err := s.repo.Reactions("")
+	s.Error(err)
+
+	_, err = s.repo.Reaction("", ulid.Make().String())
+	s.Error(err)
+
+	_, err = s.repo.Reaction(ulid.Make().String(), "")
+	s.Error(err)
 }

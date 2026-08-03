@@ -249,15 +249,23 @@ type GetUserEvent struct {
 }
 
 // LikeEvent defines model for LikeEvent.
+//
+// Emoji names the reaction. Clients that predate reactions omit it and
+// the node reads them as domain.DefaultReaction.
 type LikeEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 	UserId  domain.ID `json:"user_id"`
 	OwnerId domain.ID `json:"owner_id"`
+	Emoji   string    `json:"emoji,omitempty"`
 }
 
 // LikesCountResponse defines model for LikesCountResponse.
+//
+// Count is the total across every reaction; Reactions breaks it down per
+// emoji so a client can repaint the chips without a second round-trip.
 type LikesCountResponse struct {
-	Count uint64 `json:"count"`
+	Count     uint64            `json:"count"`
+	Reactions map[string]uint64 `json:"reactions,omitempty"`
 }
 
 // LoginEvent defines model for LoginEvent.
@@ -384,12 +392,23 @@ type TweetsResponse struct {
 	UserId domain.ID      `json:"user_id"`
 }
 
+// TweetStatsResponse defines model for TweetStatsResponse.
+//
+// Reactions is the per-emoji breakdown of LikeCount. MyReaction is the
+// emoji the node's own owner put on the tweet ("" when they haven't
+// reacted) — it is always answered from the local store, so it stays
+// correct even when the counts come from the author's node.
 type TweetStatsResponse struct {
-	TweetId       domain.ID `json:"tweet_id"`
-	RetweetsCount uint64    `json:"retweets_count"`
-	LikeCount     uint64    `json:"likes_count"`
-	RepliesCount  uint64    `json:"replies_count"`
-	ViewsCount    uint64    `json:"views_count"`
+	TweetId       domain.ID         `json:"tweet_id"`
+	RetweetsCount uint64            `json:"retweets_count"`
+	LikeCount     uint64            `json:"likes_count"`
+	RepliesCount  uint64            `json:"replies_count"`
+	ViewsCount    uint64            `json:"views_count"`
+	Reactions     map[string]uint64 `json:"reactions,omitempty"`
+	// Always emitted, empty string included: an absent key is how a client
+	// tells an old node (which knows nothing of reactions) from this node
+	// saying "you haven't reacted".
+	MyReaction string `json:"my_reaction"`
 }
 
 type IDsResponse struct {

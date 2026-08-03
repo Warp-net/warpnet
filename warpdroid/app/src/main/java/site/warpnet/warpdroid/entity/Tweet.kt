@@ -48,6 +48,12 @@ data class Tweet(
     @Json(name = "views_count") val viewsCount: Int = 0,
     val retweeted: Boolean = false,
     val liked: Boolean = false,
+    /** Per-emoji breakdown of [likesCount]; empty on a node that predates
+     *  reactions, where the count is hearts only. */
+    val reactions: Map<String, Long> = emptyMap(),
+    /** The reaction this user holds on the tweet, "" when none. A user has
+     *  at most one, so reacting again replaces it. */
+    @Json(name = "my_reaction") val myReaction: String = "",
     val bookmarked: Boolean = false,
     val sensitive: Boolean,
     @Json(name = "spoiler_text") val spoilerText: String,

@@ -163,11 +163,11 @@ func TestGetAllTweetsEvent_OmitEmpty(t *testing.T) {
 
 // TestLikeEvent_RoundTrip pins the snake_case wire keys the clients rely on.
 func TestLikeEvent_RoundTrip(t *testing.T) {
-	in := LikeEvent{TweetId: "tweet-1", UserId: "user-1", OwnerId: "owner-1"}
+	in := LikeEvent{TweetId: "tweet-1", UserId: "user-1", OwnerId: "owner-1", Emoji: "🔥"}
 
 	data, err := json.Marshal(in)
 	assert.NoError(t, err)
-	for _, key := range []string{`"tweet_id"`, `"user_id"`, `"owner_id"`} {
+	for _, key := range []string{`"tweet_id"`, `"user_id"`, `"owner_id"`, `"emoji"`} {
 		assert.True(t, strings.Contains(string(data), key), "missing key %s", key)
 	}
 

@@ -217,6 +217,9 @@ class WarpnetRepository @Inject constructor(
             retweetsCount = stats.retweetsCount.clampToInt(),
             repliesCount = stats.repliesCount.clampToInt(),
             viewsCount = stats.viewsCount.clampToInt(),
+            reactions = stats.reactions,
+            myReaction = stats.myReaction,
+            liked = stats.myReaction.isNotEmpty(),
         )
     }
 
@@ -363,20 +366,22 @@ class WarpnetRepository @Inject constructor(
      * where either is empty (core/handler/like.go:79-87), so callers
      * must supply both.
      */
-    suspend fun likeStatus(tweetId: String, userId: String, ownerId: String): Long {
+    suspend fun likeStatus(tweetId: String, userId: String, ownerId: String, emoji: String = ""): LikesCountResponse {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_LIKE,
-            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
+            likeEventAdapter.toJson(
+                LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId, emoji = emoji),
+            ),
         )
-        return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
+        return likesCountAdapter.fromJson(raw) ?: LikesCountResponse()
     }
 
-    suspend fun unlikeStatus(tweetId: String, userId: String, ownerId: String): Long {
+    suspend fun unlikeStatus(tweetId: String, userId: String, ownerId: String): LikesCountResponse {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_UNLIKE,
             likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
-        return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
+        return likesCountAdapter.fromJson(raw) ?: LikesCountResponse()
     }
 
     // -----------------------------------------------------------------
@@ -1306,6 +1311,9 @@ class WarpnetRepository @Inject constructor(
                 retweetsCount = s.retweetsCount.clampToInt(),
                 repliesCount = s.repliesCount.clampToInt(),
                 viewsCount = s.viewsCount.clampToInt(),
+                reactions = s.reactions,
+                myReaction = s.myReaction,
+                liked = s.myReaction.isNotEmpty(),
             )
         }
     }

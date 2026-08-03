@@ -9,6 +9,7 @@ vi.mock('@/service/service', () => ({
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
     hasLiker: vi.fn(),
+    getLikerReaction: vi.fn(),
     hasRetweeter: vi.fn(),
     viewTweet: vi.fn(),
   },
@@ -86,6 +87,7 @@ beforeEach(() => {
     views_count: 0,
   });
   warpnetService.hasLiker.mockResolvedValue(false);
+  warpnetService.getLikerReaction.mockResolvedValue('');
   warpnetService.hasRetweeter.mockResolvedValue(false);
   warpnetService.viewTweet.mockResolvedValue(7);
 });

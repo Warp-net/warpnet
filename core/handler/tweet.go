@@ -568,10 +568,27 @@ func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev 
 }
 
 type LikeTweetStorer interface {
-	Like(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
+	Like(tweetId, userId, emoji string, isTransitive bool) (likesNum uint64, err error)
 	Unlike(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
+	Reactions(tweetId string) (map[string]uint64, error)
+	Reaction(tweetId, userId string) (string, error)
+}
+
+// ownReaction reports the emoji this node's owner put on the tweet. A
+// liker's row always lives on their own node, so the answer stays correct
+// even when the counts themselves came from the author's node.
+func ownReaction(repo LikeTweetStorer, tweetId, ownerId string) string {
+	if ownerId == "" {
+		return ""
+	}
+	emoji, err := repo.Reaction(tweetId, ownerId)
+	if err != nil {
+		log.Warnf("tweet stats: own reaction: %v", err)
+		return ""
+	}
+	return emoji
 }
 
 func StreamDeleteTweetHandler(
@@ -773,6 +790,13 @@ func StreamGetTweetStatsHandler(
 						return nil, fmt.Errorf("fetching tweet stats response: %w", err)
 					}
 
+					// The author's node answered with its own owner's
+					// reaction; ours is only knowable here.
+					stats.MyReaction = ownReaction(
+						likeRepo,
+						strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix),
+						ownNodeInfo.OwnerId,
+					)
 					return stats, nil
 				}
 			}
@@ -786,6 +810,7 @@ func StreamGetTweetStatsHandler(
 			likesCount    uint64
 			repliesCount  uint64
 			viewsCount    uint64
+			reactions     map[string]uint64
 			ctx, cancelF  = context.WithDeadline(context.Background(), time.Now().Add(time.Second*5)) //nolint:mnd
 			g, _          = errgroup.WithContext(ctx)
 			tweetId       = strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
@@ -805,6 +830,13 @@ func StreamGetTweetStatsHandler(
 				return nil
 			}
 			return likesErr
+		})
+		g.Go(func() (reactionsErr error) {
+			reactions, reactionsErr = likeRepo.Reactions(tweetId)
+			if errors.Is(reactionsErr, database.ErrLikesNotFound) {
+				return nil
+			}
+			return reactionsErr
 		})
 		g.Go(func() (repliesErr error) {
 			repliesCount, repliesErr = replyRepo.RepliesCount(tweetId)
@@ -829,6 +861,8 @@ func StreamGetTweetStatsHandler(
 			RetweetsCount: retweetsCount,
 			LikeCount:     likesCount,
 			RepliesCount:  repliesCount,
+			Reactions:     reactions,
+			MyReaction:    ownReaction(likeRepo, tweetId, ownNodeInfo.OwnerId),
 		}, nil
 	}
 }

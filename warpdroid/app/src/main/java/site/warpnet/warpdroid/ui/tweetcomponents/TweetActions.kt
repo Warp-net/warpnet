@@ -79,7 +79,7 @@ fun statusActions(
             stringResource(R.string.action_like)
         },
         action = {
-            listener.onLike(statusViewData, !status.liked, null)
+            listener.onLike(statusViewData, !status.liked, null, status.myReaction)
         }
     )
 

@@ -14,20 +14,27 @@ import (
 )
 
 type stubLikeRepo struct {
-	likeFn        func(tweetId, userId string) (uint64, error)
+	likeFn        func(tweetId, userId, emoji string) (uint64, error)
 	unlikeFn      func(tweetId, userId string) (uint64, error)
 	likesCountFn  func(tweetId string) (uint64, error)
 	likersFn      func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 	setLikedFn    func(userId, tweetId, ownerUserId string) error
 	removeLikedFn func(userId, tweetId string) error
 	likedFn       func(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
+	reactionsFn   func(tweetId string) (map[string]uint64, error)
 }
 
-func (s stubLikeRepo) Like(tweetId, userId string, _ bool) (uint64, error) {
+func (s stubLikeRepo) Like(tweetId, userId, emoji string, _ bool) (uint64, error) {
 	if s.likeFn != nil {
-		return s.likeFn(tweetId, userId)
+		return s.likeFn(tweetId, userId, emoji)
 	}
 	return 1, nil
+}
+func (s stubLikeRepo) Reactions(tweetId string) (map[string]uint64, error) {
+	if s.reactionsFn != nil {
+		return s.reactionsFn(tweetId)
+	}
+	return nil, nil
 }
 func (s stubLikeRepo) Unlike(tweetId, userId string, _ bool) (uint64, error) {
 	if s.unlikeFn != nil {
@@ -123,7 +130,7 @@ func TestStreamLikeHandler(t *testing.T) {
 
 	t.Run("like repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
-		h := StreamLikeHandler(stubLikeRepo{likeFn: func(tweetId, userId string) (uint64, error) {
+		h := StreamLikeHandler(stubLikeRepo{likeFn: func(tweetId, userId, emoji string) (uint64, error) {
 			return 0, repoErr
 		}}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
@@ -240,7 +247,7 @@ func TestStreamLikeHandler(t *testing.T) {
 
 	t.Run("strips retweet prefix from tweet id", func(t *testing.T) {
 		var capturedTweetId string
-		h := StreamLikeHandler(stubLikeRepo{likeFn: func(tweetId, userId string) (uint64, error) {
+		h := StreamLikeHandler(stubLikeRepo{likeFn: func(tweetId, userId, emoji string) (uint64, error) {
 			capturedTweetId = tweetId
 			return 1, nil
 		}}, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
@@ -266,6 +273,43 @@ func TestStreamLikeHandler(t *testing.T) {
 		}
 		if resp.(event.LikesCountResponse).Count != 1 {
 			t.Fatalf("unexpected count: %v", resp)
+		}
+	})
+
+	t.Run("carries the reaction and echoes the breakdown", func(t *testing.T) {
+		var (
+			storedEmoji   string
+			forwardederev event.LikeEvent
+		)
+		repo := stubLikeRepo{
+			likeFn: func(tweetId, userId, emoji string) (uint64, error) {
+				storedEmoji = emoji
+				return 3, nil
+			},
+			reactionsFn: func(tweetId string) (map[string]uint64, error) {
+				return map[string]uint64{"🔥": 2, "❤️": 1}, nil
+			},
+		}
+		h := StreamLikeHandler(repo, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				forwardederev = data.(event.LikeEvent)
+				return []byte("{}"), nil
+			},
+		})
+		resp, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner, Emoji: "🔥"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if storedEmoji != "🔥" {
+			t.Fatalf("expected the emoji to reach the repo, got %q", storedEmoji)
+		}
+		if forwardederev.Emoji != "🔥" {
+			t.Fatalf("expected the emoji to be forwarded to the author's node, got %q", forwardederev.Emoji)
+		}
+		countResp := resp.(event.LikesCountResponse)
+		if countResp.Count != 3 || countResp.Reactions["🔥"] != 2 || countResp.Reactions["❤️"] != 1 {
+			t.Fatalf("unexpected response: %+v", countResp)
 		}
 	})
 }

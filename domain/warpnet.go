@@ -28,8 +28,11 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
 
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
@@ -141,6 +144,39 @@ type Bookmark struct {
 type Like struct {
 	TweetId string `json:"tweet_id"`
 	UserId  string `json:"user_id"`
+	Emoji   string `json:"emoji,omitempty"`
+}
+
+// DefaultReaction is the emoji a like carries when the client named none:
+// every like made before reactions existed, and every like from a client
+// that still speaks the old wire shape.
+const DefaultReaction = "❤️"
+
+// maxReactionRunes caps a reaction so an emoji can never blow up a
+// database key. The longest sensible sequence (flag + skin tone + ZWJ
+// family) stays well under it.
+const maxReactionRunes = 8
+
+// NormalizeReaction validates a reaction emoji arriving off the wire and
+// substitutes DefaultReaction when the caller named none. Reactions become
+// database key segments, so anything with a delimiter, whitespace or a
+// control character is rejected rather than silently coerced.
+func NormalizeReaction(emoji string) (string, error) {
+	if emoji == "" {
+		return DefaultReaction, nil
+	}
+	if !utf8.ValidString(emoji) {
+		return "", warpnet.WarpError("reaction: not a valid utf-8 string")
+	}
+	if utf8.RuneCountInString(emoji) > maxReactionRunes {
+		return "", warpnet.WarpError("reaction: too long")
+	}
+	for _, r := range emoji {
+		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return "", warpnet.WarpError("reaction: forbidden character")
+		}
+	}
+	return emoji, nil
 }
 
 // LikedTweet defines model for LikedTweet — one entry of a user's

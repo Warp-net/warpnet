@@ -640,11 +640,12 @@ class TimelineFragment :
     override fun onLike(
         viewData: TweetViewData.Concrete,
         like: Boolean,
-        state: SparkButtonState?
+        state: SparkButtonState?,
+        emoji: String
     ) {
         if (like) {
             confirmLike(preferences) {
-                viewModel.like(viewData.actionableId, viewData.actionableAccountId, true)
+                viewModel.like(viewData.actionableId, viewData.actionableAccountId, true, emoji)
                 state?.animate()
             }
         } else {

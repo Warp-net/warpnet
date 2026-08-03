@@ -164,10 +164,10 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun like(statusId: String, authorId: String, like: Boolean) {
+    fun like(statusId: String, authorId: String, like: Boolean, emoji: String = "") {
         viewModelScope.launch {
             if (like) {
-                warpnetApi.likeStatus(statusId, authorId)
+                warpnetApi.likeStatus(statusId, authorId, emoji)
             } else {
                 warpnetApi.unlikeStatus(statusId, authorId)
             }.fold(

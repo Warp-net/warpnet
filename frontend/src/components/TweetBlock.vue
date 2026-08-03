@@ -217,6 +217,23 @@ resulting from the use or misuse of this software.
       >
         <img :src="viewedImage" alt="Tweet image (full size)" class="max-w-full max-h-full object-contain rounded" />
       </div>
+      <div v-if="reactionChips.length" class="flex flex-wrap gap-1 mt-2">
+        <button
+          v-for="chip in reactionChips"
+          :key="chip.emoji"
+          type="button"
+          class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition-colors flat-btn"
+          :class="chip.emoji === myReaction
+            ? 'border-blue bg-lightblue text-blue font-semibold'
+            : 'border-lighter hover:bg-lightblue'"
+          :aria-pressed="chip.emoji === myReaction"
+          :aria-label="`${chip.count} reacted with ${chip.emoji}`"
+          @click.stop="react(chip.emoji)"
+        >
+          <span class="leading-none">{{ chip.emoji }}</span>
+          <span class="text-xs">{{ chip.count }}</span>
+        </button>
+      </div>
       <div class="flex w-full mt-1">
         <div class="flex items-center text-sm text-dark w-1/4">
           <button
@@ -268,15 +285,23 @@ resulting from the use or misuse of this software.
             @click.stop="showRetweetersOverlay = true"
           >{{ getRetweetsCount(tweet.id) || '?'}}</button>
         </div>
-        <div class="flex items-center text-sm text-dark w-1/4">
+        <div class="flex items-center text-sm text-dark w-1/4 relative"
+             @mouseenter="scheduleReactionBar"
+             @mouseleave="closeReactionBarOnLeave">
           <button
-            @click.stop="like()"
+            @click.stop="toggleOwnReaction()"
+            @pointerdown="startLongPress"
+            @pointerup="cancelLongPress"
+            @pointercancel="cancelLongPress"
+            @contextmenu.prevent="showReactionBar = true"
             type="button"
             class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 transition-colors"
-            :aria-label="liked ? 'Unlike' : 'Like'"
-            :title="liked ? 'Unlike' : 'Like'"
+            :aria-label="myReaction ? 'Remove reaction' : 'React'"
+            :title="myReaction ? 'Remove reaction' : 'React (hold for more)'"
+            :aria-expanded="showReactionBar"
           >
-            <i class="fas fa-heart" :class="liked ? 'text-red-600' : ''" aria-hidden="true"></i>
+            <span v-if="myReaction" class="text-lg leading-none">{{ myReaction }}</span>
+            <i v-else class="fas fa-heart" aria-hidden="true"></i>
           </button>
           <button
             v-if="getLikesCount(tweet.id) > 0"
@@ -284,6 +309,12 @@ resulting from the use or misuse of this software.
             class="hover:underline flat-btn"
             @click.stop="showLikersOverlay = true"
           >{{ getLikesCount(tweet.id) }}</button>
+          <ReactionBar
+            v-if="showReactionBar"
+            :selected="myReaction"
+            @select="react"
+            @close="showReactionBar = false"
+          />
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <span
@@ -331,6 +362,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {extractYoutubeId} from "@/lib/youtube";
+import {DEFAULT_REACTION} from "@/lib/emoji";
 
 export default {
   name: "Tweet",
@@ -347,6 +379,7 @@ export default {
     ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
     YoutubeEmbed: defineAsyncComponent(() => import('./YoutubeEmbed.vue')),
     PollWidget: defineAsyncComponent(() => import('./PollWidget.vue')),
+    ReactionBar: defineAsyncComponent(() => import('./ReactionBar.vue')),
   },
   data() {
     return {
@@ -366,7 +399,9 @@ export default {
       isOwner: false,
       bookmarked: false,
       label: "You Retweeted",
-      liked: false,
+      myReaction: "",
+      reactions: {},
+      showReactionBar: false,
       retweeted: false,
       likesCount: new Map(),
       retweetsCount: new Map(),
@@ -403,18 +438,31 @@ export default {
     galleryImages() {
       return this.hasVideo ? [] : this.tweetImages;
     },
+    // Chips are ordered by popularity, with the emoji itself breaking ties
+    // so the row doesn't reshuffle between refreshes.
+    reactionChips() {
+      return Object.entries(this.reactions)
+        .filter(([, count]) => count > 0)
+        .map(([emoji, count]) => ({emoji, count}))
+        .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji));
+    },
   },
   methods: {
     async refreshInteractionState() {
       const owner = warpnetService.getOwnerProfile();
       if (!owner) {
-        this.liked = false;
+        this.myReaction = "";
         this.retweeted = false;
         this.bookmarked = false;
         return;
       }
 
-      this.liked = await warpnetService.hasLiker(this.tweet.id, owner.user_id);
+      // The local cache only paints the button until the node answers; it
+      // must never clobber that answer, which can land first.
+      const cached = await warpnetService.getLikerReaction(this.tweet.id, owner.user_id);
+      if (!this._reactionAnswered) {
+        this.myReaction = cached;
+      }
       this.retweeted = this.tweet.retweeted_by === owner.user_id
         || await warpnetService.hasRetweeter(this.tweet.id, owner.user_id);
       this.bookmarked = await warpnetService.hasBookmark(this.tweet.id);
@@ -726,32 +774,88 @@ export default {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
     },
-    async like() {
+    // Holding the button (or hovering it on a mouse) opens the emoji row;
+    // a plain click reacts with the default heart, or takes back whatever
+    // reaction is already there.
+    startLongPress() {
+      this.cancelLongPress();
+      // Cleared here rather than on release: a hold that ends off the
+      // button never produces the click this flag guards against, and a
+      // stale flag would swallow the next real one.
+      this._barOpenedByHold = false;
+      this._longPressTimer = setTimeout(() => {
+        this._longPressTimer = null;
+        this._barOpenedByHold = true;
+        this.showReactionBar = true;
+      }, 450);
+    },
+    cancelLongPress() {
+      if (this._longPressTimer) {
+        clearTimeout(this._longPressTimer);
+        this._longPressTimer = null;
+      }
+    },
+    scheduleReactionBar() {
+      // Touch devices report no hover; there the long press opens the row.
+      if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+      this.cancelReactionBar();
+      this._hoverTimer = setTimeout(() => {
+        this._hoverTimer = null;
+        this.showReactionBar = true;
+      }, 600);
+    },
+    cancelReactionBar() {
+      if (this._hoverTimer) {
+        clearTimeout(this._hoverTimer);
+        this._hoverTimer = null;
+      }
+    },
+    // The bar is a child of the hovered area, so moving onto it doesn't
+    // count as leaving; anything else does and takes the bar with it.
+    closeReactionBarOnLeave() {
+      this.cancelReactionBar();
+      this.showReactionBar = false;
+    },
+    toggleOwnReaction() {
+      this.cancelLongPress();
+      if (this._barOpenedByHold) { // the click that ended the hold
+        this._barOpenedByHold = false;
+        return;
+      }
+      this.react(this.myReaction || DEFAULT_REACTION);
+    },
+    // react sets the given emoji as the viewer's reaction, or removes it
+    // when they already hold that one — a user has at most one reaction
+    // per tweet, so switching is a single like call.
+    async react(emoji) {
       const owner = warpnetService.getOwnerProfile();
       if (!owner) return;
-      let likesNum = 0
-      const alreadyLiked = this.liked
+      this.showReactionBar = false;
+
+      const removing = this.myReaction === emoji;
+      let resp;
       try {
-        if (!alreadyLiked) {
-          likesNum = await warpnetService.likeTweet(this.tweet.id, this.tweet.user_id)
+        if (removing) {
+          resp = await warpnetService.unlikeTweet(this.tweet.id, this.tweet.user_id)
         } else {
-          likesNum = await warpnetService.unlikeTweet(this.tweet.id, this.tweet.user_id)
+          resp = await warpnetService.likeTweet(this.tweet.id, this.tweet.user_id, emoji)
         }
       } catch (err) {
-        console.error(`failed to like/unlike tweet [${this.tweet.id}]`, err);
-        toast.error(err?.message || "Couldn't update like. Please try again.");
+        console.error(`failed to react to tweet [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update reaction. Please try again.");
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
         return;
       }
-      if (!alreadyLiked) {
-        await warpnetService.setLiker(this.tweet.id, owner.user_id, owner)
-        this.liked = true;
-      } else {
+      if (removing) {
         await warpnetService.deleteLiker(this.tweet.id, owner.user_id)
-        this.liked = false;
+        this.myReaction = "";
+      } else {
+        await warpnetService.setLiker(this.tweet.id, owner.user_id, owner, emoji)
+        this.myReaction = emoji;
       }
 
-      this.likesCount.set(this.tweet.id, likesNum);
+      this.reactions = resp.reactions;
+      this.likesCount.set(this.tweet.id, resp.count);
       // A bridged tweet's real like count lives on the remote instance, not in
       // this node's CRDT counter (which only knows our own like), so refresh
       // from the author's node the way retweet() does.
@@ -790,6 +894,15 @@ export default {
       }
 
       this.likesCount.set(stats.tweet_id, stats.likes_count);
+      this.reactions = stats.reactions || {};
+      // my_reaction is answered from our own node, so it outranks the
+      // local cache — it survives a browser reset and other devices. An
+      // absent key means an older node that knows nothing of reactions;
+      // there the cache stays in charge.
+      if (stats.my_reaction !== undefined) {
+        this._reactionAnswered = true;
+        this.myReaction = stats.my_reaction || "";
+      }
       this.retweetsCount.set(stats.tweet_id, stats.retweets_count);
       this.repliesCount.set(stats.tweet_id, stats.replies_count);
       // Views are monotonically non-decreasing: a stale read raced with
@@ -952,6 +1065,8 @@ export default {
       clearTimeout(this._statsRetryTimer);
       this._statsRetryTimer = null;
     }
+    this.cancelLongPress();
+    this.cancelReactionBar();
     this.teardownOutsideClose();
   },
 };

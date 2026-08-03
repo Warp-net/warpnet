@@ -136,11 +136,17 @@ data class NewUnfollowEvent(
     @Json(name = "following_id") val followeeId: String,
 )
 
+/**
+ * A like carries the reaction emoji it was made with. An empty [emoji]
+ * is what every pre-reactions client sends, and the node reads it as the
+ * default heart.
+ */
 @JsonClass(generateAdapter = true)
 data class LikeEvent(
     @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
     @Json(name = "owner_id") val ownerId: String,
+    @Json(name = "emoji") val emoji: String = "",
 )
 
 /**
@@ -461,6 +467,9 @@ data class UsersResponse(
 @JsonClass(generateAdapter = true)
 data class LikesCountResponse(
     @Json(name = "count") val likesCount: Long = 0,
+    // Per-emoji breakdown of [likesCount]; absent from a node that
+    // predates reactions.
+    @Json(name = "reactions") val reactions: Map<String, Long> = emptyMap(),
 )
 
 /**
@@ -515,6 +524,10 @@ data class TweetStatsResponse(
     @Json(name = "likes_count") val likesCount: Long = 0,
     @Json(name = "replies_count") val repliesCount: Long = 0,
     @Json(name = "views_count") val viewsCount: Long = 0,
+    // Per-emoji breakdown of likes_count, and the reaction this device's
+    // own user holds ("" when they haven't reacted).
+    @Json(name = "reactions") val reactions: Map<String, Long> = emptyMap(),
+    @Json(name = "my_reaction") val myReaction: String = "",
 )
 
 @JsonClass(generateAdapter = true)

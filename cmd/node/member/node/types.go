@@ -189,10 +189,12 @@ type FilterProvider interface {
 }
 
 type LikesProvider interface {
-	Like(tweetId string, userId string, isTransitive bool) (likesNum uint64, err error)
+	Like(tweetId string, userId string, emoji string, isTransitive bool) (likesNum uint64, err error)
 	Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
 	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
 	LikesCount(tweetId string) (likesNum uint64, err error)
+	Reaction(tweetId string, userId string) (emoji string, err error)
+	Reactions(tweetId string) (reactions map[string]uint64, err error)
 	RemoveLiked(userId string, tweetId string) error
 	SetLiked(userId string, tweetId string, ownerUserId string) error
 	Unlike(tweetId string, userId string, isTransitive bool) (likesNum uint64, err error)

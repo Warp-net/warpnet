@@ -144,6 +144,9 @@
     <string name="action_quote">Quote</string>
     <string name="action_like">Like</string>
     <string name="action_unlike">Remove like</string>
+    <string name="action_react">React</string>
+    <string name="action_unreact">Remove reaction</string>
+    <string name="action_more_reactions">More emoji</string>
     <string name="action_bookmark">Bookmark</string>
     <string name="action_unbookmark">Remove bookmark</string>
     <string name="action_more">More</string>

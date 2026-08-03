@@ -16,13 +16,17 @@
 package site.warpnet.warpdroid.ui.tweetcomponents
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -36,13 +40,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import at.connyduck.sparkbutton.compose.SparkButton
 import at.connyduck.sparkbutton.compose.rememberSparkButtonState
 import site.warpnet.warpdroid.R
@@ -57,8 +64,6 @@ import site.warpnet.warpdroid.ui.warpdroidBlueLight
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.ui.warpdroidGreenDark
 import site.warpnet.warpdroid.ui.warpdroidGreenLight
-import site.warpnet.warpdroid.ui.warpdroidOrange
-import site.warpnet.warpdroid.ui.warpdroidOrangeLight
 import site.warpnet.warpdroid.util.formatNumber
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
@@ -101,229 +106,264 @@ fun TweetButtons(
         }
     }
 
-    // Plain Row instead of ConstraintLayout with a horizontal chain: each
-    // row of TweetButtons gets measured once per LazyList item, and the
-    // chain solver was a measurable cost on first frame of Profile / Home.
-    // LTR/RTL is handled natively by Row.
-    Row(
-        modifier = modifier
-            .clearAndSetSemantics {
-                contentDescription = description
+    // The chips sit above the button row, so both live in a Column while
+    // the row keeps its own (cleared) semantics — the chips are separately
+    // actionable and need to keep theirs.
+    Column(modifier = modifier) {
+        ReactionChips(
+            status = status,
+            onReact = { emoji ->
+                // Tapping the reaction you already hold takes it back.
+                listener.onLike(statusViewData, emoji != status.myReaction, null, emoji)
             },
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // TODO: properly connect these to the confirmation bottom sheet once it is in Compose
-        var retweeted by remember(status.retweeted) { mutableStateOf(status.retweeted) }
-        var liked by remember(status.liked) { mutableStateOf(status.liked) }
-        var bookmarked by remember(status.bookmarked) { mutableStateOf(status.bookmarked) }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = {
-                    listener.onReply(statusViewData)
+        )
+        // Plain Row instead of ConstraintLayout with a horizontal chain: each
+        // row of TweetButtons gets measured once per LazyList item, and the
+        // chain solver was a measurable cost on first frame of Profile / Home.
+        // LTR/RTL is handled natively by Row.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clearAndSetSemantics {
+                    contentDescription = description
                 },
-            ) {
-                Icon(
-                    painter = if (status.isReply) {
-                        painterResource(R.drawable.ic_reply_all_24dp)
-                    } else {
-                        painterResource(R.drawable.ic_reply_24dp)
-                    },
-                    tint = warpdroidColors.tertiaryTextColor,
-                    contentDescription = null
-                )
-            }
-            if (!statusViewData.isDetailed) {
-                Text(
-                    text = if (showStats) {
-                        formatNumber(status.repliesCount.toLong(), 1000)
-                    } else if (status.repliesCount == 0) {
-                        "0"
-                    } else if (status.repliesCount == 1) {
-                        "1"
-                    } else {
-                        stringResource(R.string.tweet_count_one_plus)
-                    },
-                    color = warpdroidColors.tertiaryTextColor,
-                    style = LocalPreferences.current.statusTextStyles.medium,
-                )
-            }
-        }
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // TODO: properly connect these to the confirmation bottom sheet once it is in Compose
+            var retweeted by remember(status.retweeted) { mutableStateOf(status.retweeted) }
+            var liked by remember(status.liked) { mutableStateOf(status.liked) }
+            var bookmarked by remember(status.bookmarked) { mutableStateOf(status.bookmarked) }
 
-        // Warpnet only emits Tweet.Visibility.PUBLIC (WarpnetMapper.toTweet
-        // hardcodes it), so the DIRECT / PRIVATE Tusky branches that used
-        // to render a mail or lock icon in place of the retweet button
-        // never fired here. Inlining the public path directly.
-        //
-        // Vue desktop UX: tapping retweet on a not-yet-retweeted post
-        // opens a small menu with "Retweet" / "Quote"; tapping on an
-        // already-retweeted post untoggles directly without a menu.
-        // SparkButton's reveal animation is kept for the plain retweet
-        // path because that's where the celebration fires; the quote
-        // path opens a new screen so the animation would never play.
-        //
-        // The DropdownMenu is wrapped in an inner Box with .wrapContentSize
-        // so Popup's anchor-positioning code reads a tight, stable
-        // bounding box right under the icon. Without that the menu
-        // appeared at apparently-random screen positions on different
-        // tweet rows.
-        val retweetSparkButtonState = rememberSparkButtonState()
-        var showRetweetMenu by remember { mutableStateOf(false) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.wrapContentSize()) {
-                SparkButton(
-                    animateOnClick = false,
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
                     onClick = {
-                        if (retweeted) {
-                            listener.onRetweet(statusViewData, false, null, state = retweetSparkButtonState)
-                        } else {
-                            showRetweetMenu = true
-                        }
+                        listener.onReply(statusViewData)
                     },
-                    state = retweetSparkButtonState,
-                    primaryColor = warpdroidBlueDark,
-                    secondaryColor = warpdroidBlueLight,
                 ) {
-                    if (retweeted) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_repeat_active_24dp),
-                            tint = colorScheme.primary,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
+                    Icon(
+                        painter = if (status.isReply) {
+                            painterResource(R.drawable.ic_reply_all_24dp)
+                        } else {
+                            painterResource(R.drawable.ic_reply_24dp)
+                        },
+                        tint = warpdroidColors.tertiaryTextColor,
+                        contentDescription = null
+                    )
+                }
+                if (!statusViewData.isDetailed) {
+                    Text(
+                        text = if (showStats) {
+                            formatNumber(status.repliesCount.toLong(), 1000)
+                        } else if (status.repliesCount == 0) {
+                            "0"
+                        } else if (status.repliesCount == 1) {
+                            "1"
+                        } else {
+                            stringResource(R.string.tweet_count_one_plus)
+                        },
+                        color = warpdroidColors.tertiaryTextColor,
+                        style = LocalPreferences.current.statusTextStyles.medium,
+                    )
+                }
+            }
+
+            // Warpnet only emits Tweet.Visibility.PUBLIC (WarpnetMapper.toTweet
+            // hardcodes it), so the DIRECT / PRIVATE Tusky branches that used
+            // to render a mail or lock icon in place of the retweet button
+            // never fired here. Inlining the public path directly.
+            //
+            // Vue desktop UX: tapping retweet on a not-yet-retweeted post
+            // opens a small menu with "Retweet" / "Quote"; tapping on an
+            // already-retweeted post untoggles directly without a menu.
+            // SparkButton's reveal animation is kept for the plain retweet
+            // path because that's where the celebration fires; the quote
+            // path opens a new screen so the animation would never play.
+            //
+            // The DropdownMenu is wrapped in an inner Box with .wrapContentSize
+            // so Popup's anchor-positioning code reads a tight, stable
+            // bounding box right under the icon. Without that the menu
+            // appeared at apparently-random screen positions on different
+            // tweet rows.
+            val retweetSparkButtonState = rememberSparkButtonState()
+            var showRetweetMenu by remember { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.wrapContentSize()) {
+                    SparkButton(
+                        animateOnClick = false,
+                        onClick = {
+                            if (retweeted) {
+                                listener.onRetweet(statusViewData, false, null, state = retweetSparkButtonState)
+                            } else {
+                                showRetweetMenu = true
+                            }
+                        },
+                        state = retweetSparkButtonState,
+                        primaryColor = warpdroidBlueDark,
+                        secondaryColor = warpdroidBlueLight,
+                    ) {
+                        if (retweeted) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_repeat_active_24dp),
+                                tint = colorScheme.primary,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_repeat_24dp),
+                                tint = warpdroidColors.tertiaryTextColor,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = showRetweetMenu,
+                        onDismissRequest = { showRetweetMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_retweet)) },
+                            onClick = {
+                                showRetweetMenu = false
+                                listener.onRetweet(statusViewData, true, null, state = retweetSparkButtonState)
+                            },
                         )
-                    } else {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_repeat_24dp),
-                            tint = warpdroidColors.tertiaryTextColor,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_quote)) },
+                            onClick = {
+                                showRetweetMenu = false
+                                listener.onQuote(statusViewData)
+                            },
                         )
                     }
                 }
-                DropdownMenu(
-                    expanded = showRetweetMenu,
-                    onDismissRequest = { showRetweetMenu = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_retweet)) },
-                        onClick = {
-                            showRetweetMenu = false
-                            listener.onRetweet(statusViewData, true, null, state = retweetSparkButtonState)
+                if (showStats) {
+                    Text(
+                        text = formatNumber(status.retweetsCount.toLong(), 1000),
+                        color = if (retweeted) {
+                            colorScheme.primary
+                        } else {
+                            warpdroidColors.tertiaryTextColor
                         },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_quote)) },
-                        onClick = {
-                            showRetweetMenu = false
-                            listener.onQuote(statusViewData)
-                        },
+                        style = LocalPreferences.current.statusTextStyles.medium,
+                        modifier = Modifier.padding(start = 4.dp),
                     )
                 }
             }
-            if (showStats) {
-                Text(
-                    text = formatNumber(status.retweetsCount.toLong(), 1000),
-                    color = if (retweeted) {
-                        colorScheme.primary
-                    } else {
-                        warpdroidColors.tertiaryTextColor
-                    },
-                    style = LocalPreferences.current.statusTextStyles.medium,
-                    modifier = Modifier.padding(start = 4.dp),
-                )
-            }
-        }
 
-        val sparkButtonState = rememberSparkButtonState()
-        Row(verticalAlignment = Alignment.CenterVertically) {
+            // A tap reacts with the emoji you already hold (taking it back) or
+            // with the default heart; holding opens the emoji row. This one is
+            // a plain clickable rather than a SparkButton: SparkButton's own
+            // clickable consumes the pointer-up on the Main pass, so a wrapping
+            // combinedClickable would never see the tap, and a long press would
+            // still fire its click on release.
+            var showReactionMenu by remember { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.wrapContentSize()) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .combinedClickable(
+                                onClick = {
+                                    val emoji = status.myReaction.ifEmpty { DEFAULT_REACTION }
+                                    listener.onLike(statusViewData, !liked, null, emoji)
+                                },
+                                onLongClick = { showReactionMenu = true },
+                            )
+                            .padding(12.dp),
+                    ) {
+                        if (liked) {
+                            // Once reacted the button shows the emoji itself, so
+                            // the choice is readable without opening the row.
+                            Text(
+                                text = status.myReaction.ifEmpty { DEFAULT_REACTION },
+                                fontSize = 18.sp,
+                                textAlign = TextAlign.Center,
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_star_24dp),
+                                tint = warpdroidColors.tertiaryTextColor,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    ReactionPickerMenu(
+                        expanded = showReactionMenu,
+                        selected = status.myReaction,
+                        onDismiss = { showReactionMenu = false },
+                        onSelect = { emoji ->
+                            showReactionMenu = false
+                            listener.onLike(statusViewData, emoji != status.myReaction, null, emoji)
+                        },
+                    )
+                }
+                if (showStats) {
+                    Text(
+                        text = formatNumber(status.likesCount.toLong(), 1000),
+                        color = if (liked) {
+                            warpdroidColors.likeButtonActiveColor
+                        } else {
+                            warpdroidColors.tertiaryTextColor
+                        },
+                        style = LocalPreferences.current.statusTextStyles.medium,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+
             SparkButton(
-                animateOnClick = false,
+                animateOnClick = !bookmarked,
                 onClick = {
-                    listener.onLike(statusViewData, !liked, state = sparkButtonState)
+                    bookmarked = !bookmarked
+                    listener.onBookmark(statusViewData, bookmarked)
                 },
-                state = sparkButtonState,
-                primaryColor = warpdroidOrange,
-                secondaryColor = warpdroidOrangeLight,
+                primaryColor = warpdroidGreenDark,
+                secondaryColor = warpdroidGreenLight,
             ) {
-                if (liked) {
+                if (bookmarked) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_star_24dp_filled),
-                        tint = warpdroidColors.likeButtonActiveColor,
+                        painter = painterResource(R.drawable.ic_bookmark_24dp_filled),
+                        tint = warpdroidColors.bookmarkButtonActiveColor,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )
                 } else {
                     Icon(
-                        painter = painterResource(R.drawable.ic_star_24dp),
+                        painter = painterResource(R.drawable.ic_bookmark_24dp),
                         tint = warpdroidColors.tertiaryTextColor,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )
                 }
             }
-            if (showStats) {
-                Text(
-                    text = formatNumber(status.likesCount.toLong(), 1000),
-                    color = if (liked) {
-                        warpdroidColors.likeButtonActiveColor
-                    } else {
-                        warpdroidColors.tertiaryTextColor
-                    },
-                    style = LocalPreferences.current.statusTextStyles.medium,
-                    modifier = Modifier.padding(start = 4.dp),
-                )
-            }
-        }
 
-        SparkButton(
-            animateOnClick = !bookmarked,
-            onClick = {
-                bookmarked = !bookmarked
-                listener.onBookmark(statusViewData, bookmarked)
-            },
-            primaryColor = warpdroidGreenDark,
-            secondaryColor = warpdroidGreenLight,
-        ) {
-            if (bookmarked) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_bookmark_24dp_filled),
-                    tint = warpdroidColors.bookmarkButtonActiveColor,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-            } else {
-                Icon(
-                    painter = painterResource(R.drawable.ic_bookmark_24dp),
-                    tint = warpdroidColors.tertiaryTextColor,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-
-        var moreVisible by remember { mutableStateOf(false) }
-        Box {
-            IconButton(
-                onClick = {
-                    moreVisible = !moreVisible
+            var moreVisible by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = {
+                        moreVisible = !moreVisible
+                    }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_more_horiz_24dp),
+                        tint = warpdroidColors.tertiaryTextColor,
+                        contentDescription = null
+                    )
                 }
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_more_horiz_24dp),
-                    tint = warpdroidColors.tertiaryTextColor,
-                    contentDescription = null
+                TweetMoreMenu(
+                    viewData = statusViewData,
+                    expanded = moreVisible,
+                    onDismissRequest = {
+                        moreVisible = !moreVisible
+                    },
+                    accounts = accounts,
+                    listener = listener
                 )
             }
-            TweetMoreMenu(
-                viewData = statusViewData,
-                expanded = moreVisible,
-                onDismissRequest = {
-                    moreVisible = !moreVisible
-                },
-                accounts = accounts,
-                listener = listener
-            )
         }
     }
 }

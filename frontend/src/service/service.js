@@ -26,6 +26,7 @@ import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
 import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
+import {DEFAULT_REACTION} from "@/lib/emoji";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -1777,7 +1778,10 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async likeTweet(tweetId, userId) {
+    // likeTweet reacts to a tweet with `emoji` (the node defaults to a heart
+    // when none is named) and returns {count, reactions} — the total across
+    // every reaction plus its per-emoji breakdown.
+    async likeTweet(tweetId, userId, emoji) {
         const owner = this.getOwnerProfile()
 
         const request = {
@@ -1786,11 +1790,12 @@ export const warpnetService = {
                 user_id: userId,
                 tweet_id: tweetId,
                 owner_id: owner.user_id,
+                emoji: emoji || '',
             },
         }
 
         const likeResp = await this.sendToNode(request);
-        return likeResp.count;
+        return {count: likeResp.count || 0, reactions: likeResp.reactions || {}};
     },
 
     async unlikeTweet(tweetId, userId) {
@@ -1806,7 +1811,7 @@ export const warpnetService = {
         }
 
         const unlikeResp = await this.sendToNode(request);
-        return unlikeResp.count;
+        return {count: unlikeResp.count || 0, reactions: unlikeResp.reactions || {}};
     },
 
     // voteInPoll casts a final vote on a tweet's poll and returns the tally
@@ -1899,18 +1904,28 @@ export const warpnetService = {
         return await this.sendToNode(request)
     },
 
-    async setLiker(tweetId, profileId, profileObj) {
+    // The cached value is the reaction emoji. Likes cached before reactions
+    // existed stored "1", which reads back as the default heart.
+    async setLiker(tweetId, profileId, profileObj, emoji) {
         const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
         stateMap.set(cacheKey, profileObj)
-        localStorage.setItem(cacheKey, "1")
+        localStorage.setItem(cacheKey, emoji || DEFAULT_REACTION)
     },
 
     async hasLiker(tweetId, profileId) {
+        return !!(await this.getLikerReaction(tweetId, profileId))
+    },
+
+    // Only localStorage answers this: stateMap holds the liker's profile
+    // object, not their emoji, so its presence says nothing about which
+    // reaction was left.
+    async getLikerReaction(tweetId, profileId) {
         const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
-        if (stateMap.has(cacheKey)) {
-            return true
+        const cached = localStorage.getItem(cacheKey)
+        if (!cached) {
+            return ""
         }
-        return localStorage.getItem(cacheKey) === "1"
+        return cached === "1" ? DEFAULT_REACTION : cached
     },
 
     async getLiker(tweetId, profileId) {

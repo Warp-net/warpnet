@@ -106,11 +106,12 @@ class SearchStatusesFragment :
     override fun onLike(
         viewData: TweetViewData.Concrete,
         like: Boolean,
-        state: SparkButtonState?
+        state: SparkButtonState?,
+        emoji: String
     ) {
         if (like) {
             confirmLike(preferences) {
-                viewModel.like(viewData.id, viewData.accountId, true)
+                viewModel.like(viewData.id, viewData.accountId, true, emoji)
                 state?.animate()
             }
         } else {

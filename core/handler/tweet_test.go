@@ -171,13 +171,27 @@ type stubTweetLikeRepo struct {
 	unlikeFn     func(tweetId, userId string) (uint64, error)
 	likesCountFn func(tweetId string) (uint64, error)
 	likersFn     func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+	reactionsFn  func(tweetId string) (map[string]uint64, error)
+	reactionFn   func(tweetId, userId string) (string, error)
 }
 
-func (s stubTweetLikeRepo) Like(tweetId, userId string, _ bool) (uint64, error) {
+func (s stubTweetLikeRepo) Like(tweetId, userId, _ string, _ bool) (uint64, error) {
 	if s.likeFn != nil {
 		return s.likeFn(tweetId, userId)
 	}
 	return 0, nil
+}
+func (s stubTweetLikeRepo) Reactions(tweetId string) (map[string]uint64, error) {
+	if s.reactionsFn != nil {
+		return s.reactionsFn(tweetId)
+	}
+	return nil, nil
+}
+func (s stubTweetLikeRepo) Reaction(tweetId, userId string) (string, error) {
+	if s.reactionFn != nil {
+		return s.reactionFn(tweetId, userId)
+	}
+	return "", nil
 }
 func (s stubTweetLikeRepo) Unlike(tweetId, userId string, _ bool) (uint64, error) {
 	if s.unlikeFn != nil {
@@ -1130,13 +1144,27 @@ type mockLikeStorer struct {
 	UnlikeFunc     func(string, string) (uint64, error)
 	LikesCountFunc func(string) (uint64, error)
 	LikersFunc     func(string, *uint64, *string) ([]string, string, error)
+	ReactionsFunc  func(string) (map[string]uint64, error)
+	ReactionFunc   func(string, string) (string, error)
 }
 
-func (m *mockLikeStorer) Like(tweetId, userId string, _ bool) (uint64, error) {
+func (m *mockLikeStorer) Like(tweetId, userId, _ string, _ bool) (uint64, error) {
 	if m.LikeFunc != nil {
 		return m.LikeFunc(tweetId, userId)
 	}
 	return 0, nil
+}
+func (m *mockLikeStorer) Reactions(tweetId string) (map[string]uint64, error) {
+	if m.ReactionsFunc != nil {
+		return m.ReactionsFunc(tweetId)
+	}
+	return nil, nil
+}
+func (m *mockLikeStorer) Reaction(tweetId, userId string) (string, error) {
+	if m.ReactionFunc != nil {
+		return m.ReactionFunc(tweetId, userId)
+	}
+	return "", nil
 }
 func (m *mockLikeStorer) Unlike(tweetId, userId string, _ bool) (uint64, error) {
 	if m.UnlikeFunc != nil {
