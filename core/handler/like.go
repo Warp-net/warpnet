@@ -67,19 +67,6 @@ type LikesStorer interface {
 	RemoveLiked(userId, tweetId string) error
 }
 
-// getReactionsWithDefault is a best-effort per-emoji tally for a
-// like/unlike response: the count itself already succeeded, so a failing
-// lookup must not fail the request — it falls back to an empty map, which
-// marshals away under the field's omitempty just like a nil one.
-func getReactionsWithDefault(repo LikesStorer, tweetId string) map[string]uint64 {
-	reactions, err := repo.Reactions(tweetId)
-	if err != nil {
-		log.Warnf("like handler: reactions breakdown: %v", err)
-		return map[string]uint64{}
-	}
-	return reactions
-}
-
 func StreamLikeHandler(
 	repo LikesStorer,
 	userRepo LikedUserFetcher,
@@ -291,4 +278,17 @@ func StreamGetLikesHandler(repo LikedTweetsLister) warpnet.WarpHandlerFunc {
 		}
 		return event.GetLikesResponse{Items: items, Cursor: cur}, nil
 	}
+}
+
+// getReactionsWithDefault is a best-effort per-emoji tally for a
+// like/unlike response: the count itself already succeeded, so a failing
+// lookup must not fail the request — it falls back to an empty map, which
+// marshals away under the field's omitempty just like a nil one.
+func getReactionsWithDefault(repo LikesStorer, tweetId string) map[string]uint64 {
+	reactions, err := repo.Reactions(tweetId)
+	if err != nil {
+		log.Warnf("like handler: reactions breakdown: %v", err)
+		return map[string]uint64{}
+	}
+	return reactions
 }

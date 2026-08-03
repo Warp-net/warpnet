@@ -576,21 +576,6 @@ type LikeTweetStorer interface {
 	Reaction(tweetId, userId string) (string, error)
 }
 
-// ownReaction reports the emoji this node's owner put on the tweet. A
-// liker's row always lives on their own node, so the answer stays correct
-// even when the counts themselves came from the author's node.
-func ownReaction(repo LikeTweetStorer, tweetId, ownerId string) string {
-	if ownerId == "" {
-		return ""
-	}
-	emoji, err := repo.Reaction(tweetId, ownerId)
-	if err != nil {
-		log.Warnf("tweet stats: own reaction: %v", err)
-		return ""
-	}
-	return emoji
-}
-
 func StreamDeleteTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
@@ -1010,4 +995,19 @@ func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
 		return repo.Pin(ev.UserId, ev.TweetId)
 	}
 	return repo.Unpin(ev.UserId, ev.TweetId)
+}
+
+// ownReaction reports the emoji this node's owner put on the tweet. A
+// liker's row always lives on their own node, so the answer stays correct
+// even when the counts themselves came from the author's node.
+func ownReaction(repo LikeTweetStorer, tweetId, ownerId string) string {
+	if ownerId == "" {
+		return ""
+	}
+	emoji, err := repo.Reaction(tweetId, ownerId)
+	if err != nil {
+		log.Warnf("tweet stats: own reaction: %v", err)
+		return ""
+	}
+	return emoji
 }

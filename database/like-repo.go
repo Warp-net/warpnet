@@ -75,57 +75,6 @@ func NewLikeRepo(db LikeStorer, statsDb LikeStatsStorer) *LikeRepo {
 	return &LikeRepo{db: db, statsDb: statsDb}
 }
 
-func likesCountKey(tweetId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(IncrSubNamespace).
-		AddRootID(tweetId).
-		Build()
-}
-
-func likerKey(tweetId, userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(LikerSubNamespace).
-		AddRootID(tweetId).
-		AddRange(local_store.NoneRangeKey).
-		AddParentId(userId).
-		Build()
-}
-
-func reactionCountKey(tweetId, emoji string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(LikeRepoName).
-		AddSubPrefix(ReactSubNamespace).
-		AddRootID(tweetId).
-		AddRange(local_store.NoneRangeKey).
-		AddParentId(emoji).
-		Build()
-}
-
-// keyID returns the last segment of a database key — the liker's user id
-// for a LIKER key, the emoji for a REACT key.
-func keyID(key string) string {
-	return key[strings.LastIndex(key, local_store.Delimeter)+1:]
-}
-
-// storedReaction decodes the emoji a liker row carries. Rows written before
-// reactions existed stored the liker's own id as the value, so they read
-// back as hearts.
-func storedReaction(value []byte, userId string) string {
-	emoji := string(value)
-	if emoji == "" || emoji == userId {
-		return domain.DefaultReaction
-	}
-	return emoji
-}
-
-// isTransitive tells whether this action should propagate to the network-wide
-// (CRDT) counter, which is replicated ("transits") across nodes. The caller
-// (handler) sets it true only on the acting user's own node, so an action
-// observed on more than one node is counted once. The local per-node counter
-// is always updated (it backs the read-time fallback).
-//
-// A user holds at most one reaction per tweet: reacting again with a
-// different emoji moves the per-emoji tallies but leaves the like itself
-// (and therefore the total counter) alone.
 func (repo *LikeRepo) Like(tweetId, userId, emoji string, isTransitive bool) (likesCount uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
@@ -377,15 +326,6 @@ func (repo *LikeRepo) Reaction(tweetId, userId string) (string, error) {
 	return storedReaction(bt, userId), nil
 }
 
-// decodeCount reads a counter value written by the store's Increment,
-// tolerating a short or missing value.
-func decodeCount(value []byte) uint64 {
-	if len(value) < 8 { //nolint:mnd
-		return 0
-	}
-	return binary.BigEndian.Uint64(value)
-}
-
 func (repo *LikeRepo) LikesCount(tweetId string) (likesNum uint64, err error) {
 	if tweetId == "" {
 		return 0, local_store.DBError("empty tweet id")
@@ -583,4 +523,65 @@ func (repo *LikeRepo) Liked(userId string, limit *uint64, cursor *string) ([]dom
 		liked = append(liked, lt)
 	}
 	return liked, cur, nil
+}
+
+func likesCountKey(tweetId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(IncrSubNamespace).
+		AddRootID(tweetId).
+		Build()
+}
+
+func likerKey(tweetId, userId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(LikerSubNamespace).
+		AddRootID(tweetId).
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(userId).
+		Build()
+}
+
+func reactionCountKey(tweetId, emoji string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(LikeRepoName).
+		AddSubPrefix(ReactSubNamespace).
+		AddRootID(tweetId).
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(emoji).
+		Build()
+}
+
+// keyID returns the last segment of a database key — the liker's user id
+// for a LIKER key, the emoji for a REACT key.
+func keyID(key string) string {
+	return key[strings.LastIndex(key, local_store.Delimeter)+1:]
+}
+
+// storedReaction decodes the emoji a liker row carries. Rows written before
+// reactions existed stored the liker's own id as the value, so they read
+// back as hearts.
+func storedReaction(value []byte, userId string) string {
+	emoji := string(value)
+	if emoji == "" || emoji == userId {
+		return domain.DefaultReaction
+	}
+	return emoji
+}
+
+// isTransitive tells whether this action should propagate to the network-wide
+// (CRDT) counter, which is replicated ("transits") across nodes. The caller
+// (handler) sets it true only on the acting user's own node, so an action
+// observed on more than one node is counted once. The local per-node counter
+// is always updated (it backs the read-time fallback).
+//
+// A user holds at most one reaction per tweet: reacting again with a
+// different emoji moves the per-emoji tallies but leaves the like itself
+// (and therefore the total counter) alone.
+
+// decodeCount reads a counter value written by the store's Increment,
+// tolerating a short or missing value.
+func decodeCount(value []byte) uint64 {
+	if len(value) < 8 { //nolint:mnd
+		return 0
+	}
+	return binary.BigEndian.Uint64(value)
 }
