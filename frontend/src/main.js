@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 import "./lib/backend-mock"
 import { createApp } from "vue";
 import App from "./App.vue";
+import "@fortawesome/fontawesome-free/css/all.min.css";
 import "./assets/tailwind.css";
 import router from "./router";
 import directives from "./directives";

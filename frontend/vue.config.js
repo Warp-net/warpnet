@@ -45,5 +45,20 @@ module.exports = {
                 Buffer: ['buffer', 'Buffer'],
             }),
         ],
+        module: {
+            rules: [
+                // Font Awesome ships every webfont format its 2018-era CSS
+                // lists — eot for IE, svg for pre-Chrome-38, ttf. Emitting
+                // them costs 2.3 MB in a dist that gets embedded into the
+                // node binary, and no browser that can run this app asks for
+                // them: woff2 comes first in the src list that any of them
+                // support.
+                {
+                    test: /[\\/]@fortawesome[\\/].*\.(eot|ttf|svg)$/,
+                    type: 'asset/resource',
+                    generator: {emit: false},
+                },
+            ],
+        },
     },
 };
