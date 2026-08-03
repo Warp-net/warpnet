@@ -693,7 +693,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
                     }
                 },
                 primaryDrawerItem {
-                    nameRes = R.string.title_likes
+                    nameRes = R.string.title_reactions
                     iconRes = R.drawable.ic_star_24dp
                     onClick = {
                         val intent = TweetListActivity.newLikesIntent(context)

@@ -111,7 +111,7 @@ resulting from the use or misuse of this software.
                     class="pt-1 fas fa-comment text-blue"
                   ></i>
                   <i
-                    v-if="notification.type === 'like'"
+                    v-if="notification.type === 'reaction'"
                     class="pt-1 fas fa-heart text-red-600"
                   ></i>
                   <i

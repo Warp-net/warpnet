@@ -213,7 +213,7 @@ class NotificationsActivity : BaseActivity() {
                     modifier = Modifier.padding(end = 12.dp),
                 )
                 // The backend pre-composes the actor + verb into [text]
-                // (e.g. "Echo liked your tweet"), surfaced via account.name.
+                // (e.g. "Echo reacted your tweet"), surfaced via account.name.
                 Text(
                     text = n.account.name,
                     fontWeight = FontWeight.SemiBold,
@@ -229,7 +229,7 @@ class NotificationsActivity : BaseActivity() {
         Notification.Type.Reply -> R.drawable.ic_reply_24dp
         Notification.Type.Message -> R.drawable.ic_mail_24dp
         Notification.Type.Retweet -> R.drawable.ic_repeat_24dp
-        Notification.Type.Like,
+        Notification.Type.Reaction,
         Notification.Type.PleromaEmojiReaction -> R.drawable.ic_star_24dp_filled
         Notification.Type.Follow,
         Notification.Type.FollowRequest,

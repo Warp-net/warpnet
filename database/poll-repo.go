@@ -40,7 +40,7 @@ const (
 	PollRepoName = "/POLLS"
 
 	// Poll-owned key segments. They deliberately duplicate the values likes
-	// use rather than borrowing LikeRepoName's constants: the two keyspaces
+	// use rather than borrowing ReactionRepoName's constants: the two keyspaces
 	// are independent, and sharing a constant would silently move the poll
 	// keys if likes ever renamed theirs.
 	VotesSubNamespace     = "VOTES" // per-option vote counters
@@ -95,7 +95,7 @@ func pollVoterKey(tweetId, userId string) local_store.DatabaseKey {
 // final: a second call for the same voter returns ErrPollAlreadyVoted and
 // changes nothing, so a replayed or propagated event can't inflate a count.
 //
-// isTransitive carries the same meaning as in LikeRepo: the network-wide
+// isTransitive carries the same meaning as in ReactionRepo: the network-wide
 // (CRDT) counter is bumped only on the voter's own node, so a vote stored on
 // both the voter's and the author's node is counted once.
 func (repo *PollRepo) Vote(tweetId, userId string, option int, isTransitive bool) error {
@@ -167,7 +167,7 @@ func (repo *PollRepo) Voted(tweetId, userId string) (option int, ok bool, err er
 }
 
 // Results returns the vote count for each of the poll's optionsNum options,
-// in option order. Like the other engagement counters it prefers the
+// in option order. React the other engagement counters it prefers the
 // network-wide (CRDT) total and falls back to this node's own counter.
 func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, err error) {
 	if tweetId == "" {

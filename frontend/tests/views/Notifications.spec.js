@@ -85,7 +85,7 @@ describe('Notifications.vue', () => {
           id: 'n1',
           type: 'like',
           user_id: 'bob',
-          text: 'bob liked your tweet',
+          text: 'bob reacted your tweet',
           created_at: new Date().toISOString(),
         },
         {
@@ -100,7 +100,7 @@ describe('Notifications.vue', () => {
 
     renderNotifications();
 
-    expect(await screen.findByText('bob liked your tweet')).toBeInTheDocument();
+    expect(await screen.findByText('bob reacted your tweet')).toBeInTheDocument();
     expect(screen.getByText('carol followed you')).toBeInTheDocument();
     expect(screen.queryByText(/No notifications yet/i)).not.toBeInTheDocument();
   });
@@ -134,21 +134,21 @@ describe('Notifications.vue', () => {
           id: 'n2',
           type: 'like',
           user_id: 'carol',
-          text: 'carol liked your tweet',
+          text: 'carol reacted your tweet',
           created_at: new Date().toISOString(),
         },
       ],
     });
 
     renderNotifications();
-    await screen.findByText('carol liked your tweet');
+    await screen.findByText('carol reacted your tweet');
 
     await fireEvent.click(screen.getByRole('button', { name: 'Mentions' }));
 
     await waitFor(() => {
       expect(screen.getByText('bob mentioned you')).toBeInTheDocument();
       expect(
-        screen.queryByText('carol liked your tweet')
+        screen.queryByText('carol reacted your tweet')
       ).not.toBeInTheDocument();
     });
     expect(routerReplace).toHaveBeenCalledWith(
@@ -167,7 +167,7 @@ describe('Notifications.vue', () => {
           id: 'n1',
           type: 'like',
           user_id: 'bob',
-          text: 'bob liked your tweet',
+          text: 'bob reacted your tweet',
           created_at: new Date().toISOString(),
         },
       ],
@@ -176,7 +176,7 @@ describe('Notifications.vue', () => {
     renderNotifications({ query: { m: 'Mentions' } });
 
     expect(await screen.findByText(/No mentions yet/i)).toBeInTheDocument();
-    expect(screen.queryByText('bob liked your tweet')).not.toBeInTheDocument();
+    expect(screen.queryByText('bob reacted your tweet')).not.toBeInTheDocument();
   });
 
   it('marks everything read on open with a single node-side call', async () => {

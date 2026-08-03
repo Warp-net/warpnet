@@ -188,16 +188,16 @@ type FilterProvider interface {
 	UpdateKeyword(userId string, kw domain.FilterKeyword) (domain.FilterKeyword, error)
 }
 
-type LikesProvider interface {
-	Like(tweetId string, userId string, emoji string, isTransitive bool) (likesNum uint64, err error)
-	Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
-	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
-	LikesCount(tweetId string) (likesNum uint64, err error)
+type ReactionsProvider interface {
+	React(tweetId string, userId string, emoji string, isTransitive bool) (reactionsNum uint64, err error)
+	Reacted(userId string, limit *uint64, cursor *string) ([]domain.ReactedTweet, string, error)
+	Reactors(tweetId string, limit *uint64, cursor *string) (reactors []string, cur string, err error)
+	ReactionsCount(tweetId string) (reactionsNum uint64, err error)
 	Reaction(tweetId string, userId string) (emoji string, err error)
 	Reactions(tweetId string) (reactions map[string]uint64, err error)
-	RemoveLiked(userId string, tweetId string) error
-	SetLiked(userId string, tweetId string, ownerUserId string) error
-	Unlike(tweetId string, userId string, isTransitive bool) (likesNum uint64, err error)
+	RemoveReacted(userId string, tweetId string) error
+	SetReacted(userId string, tweetId string, ownerUserId string) error
+	Unreact(tweetId string, userId string, isTransitive bool) (reactionsNum uint64, err error)
 }
 
 type MediaProvider interface {
@@ -267,7 +267,7 @@ type TweetsProvider interface {
 	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
 	Pin(userId string, tweetId string) (domain.Tweet, error)
 	RecordView(tweetId string, viewerId string) (uint64, error)
-	RepliesCount(tweetId string) (likesNum uint64, err error)
+	RepliesCount(tweetId string) (reactionsNum uint64, err error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	RetweetsCount(tweetId string) (uint64, error)
 	TweetsCount(userId string) (uint64, error)

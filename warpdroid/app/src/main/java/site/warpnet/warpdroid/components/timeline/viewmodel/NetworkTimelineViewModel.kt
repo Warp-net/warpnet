@@ -351,7 +351,7 @@ class NetworkTimelineViewModel @Inject constructor(
                 pinned = null
             )
 
-            Kind.LIKES -> api.likes(
+            Kind.REACTIONS -> api.likes(
                 maxId = maxId,
                 minId = minId,
                 sinceId = sinceId,

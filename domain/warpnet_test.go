@@ -28,7 +28,7 @@ func TestNotificationType_String(t *testing.T) {
 	assert.Equal(t, "moderation", NotificationModerationType.String())
 	assert.Equal(t, "retweet", NotificationRetweetType.String())
 	assert.Equal(t, "follow", NotificationFollowType.String())
-	assert.Equal(t, "like", NotificationLikeType.String())
+	assert.Equal(t, "reaction", NotificationReactionType.String())
 	assert.Equal(t, "mention", NotificationMentionType.String())
 	assert.Equal(t, "reply", NotificationReplyType.String())
 }

@@ -40,7 +40,7 @@ interface TweetActionListener : LinkListener {
      *              heart. Ignored when [like] is false — taking a reaction
      *              back removes whichever one is held.
      */
-    fun onLike(viewData: TweetViewData.Concrete, like: Boolean, state: SparkButtonState?, emoji: String = "")
+    fun onReact(viewData: TweetViewData.Concrete, like: Boolean, state: SparkButtonState?, emoji: String = "")
 
     fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean)
 

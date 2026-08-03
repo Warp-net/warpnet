@@ -82,8 +82,8 @@ fun TweetButtons(
             append(stringResource(R.string.description_post_retweeted))
             append(", ")
         }
-        if (status.liked) {
-            append(stringResource(R.string.description_post_liked))
+        if (status.reacted) {
+            append(stringResource(R.string.description_post_reacted))
             append(", ")
         }
         if (status.bookmarked) {
@@ -99,8 +99,8 @@ fun TweetButtons(
                 append(pluralStringResource(R.plurals.retweets, status.retweetsCount, status.retweetsCount))
                 append(", ")
             }
-            if (status.likesCount > 0) {
-                append(pluralStringResource(R.plurals.favs, status.likesCount, status.likesCount))
+            if (status.reactionsCount > 0) {
+                append(pluralStringResource(R.plurals.reactions_plural, status.reactionsCount, status.reactionsCount))
                 append(", ")
             }
         }
@@ -114,7 +114,7 @@ fun TweetButtons(
             status = status,
             onReact = { emoji ->
                 // Tapping the reaction you already hold takes it back.
-                listener.onLike(statusViewData, emoji != status.myReaction, null, emoji)
+                listener.onReact(statusViewData, emoji != status.myReaction, null, emoji)
             },
         )
         // Plain Row instead of ConstraintLayout with a horizontal chain: each
@@ -132,7 +132,7 @@ fun TweetButtons(
         ) {
             // TODO: properly connect these to the confirmation bottom sheet once it is in Compose
             var retweeted by remember(status.retweeted) { mutableStateOf(status.retweeted) }
-            var liked by remember(status.liked) { mutableStateOf(status.liked) }
+            var reacted by remember(status.reacted) { mutableStateOf(status.reacted) }
             var bookmarked by remember(status.bookmarked) { mutableStateOf(status.bookmarked) }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,13 +268,13 @@ fun TweetButtons(
                             .combinedClickable(
                                 onClick = {
                                     val emoji = status.myReaction.ifEmpty { DEFAULT_REACTION }
-                                    listener.onLike(statusViewData, !liked, null, emoji)
+                                    listener.onReact(statusViewData, !reacted, null, emoji)
                                 },
                                 onLongClick = { showReactionMenu = true },
                             )
                             .padding(12.dp),
                     ) {
-                        if (liked) {
+                        if (reacted) {
                             // Once reacted the button shows the emoji itself, so
                             // the choice is readable without opening the row.
                             Text(
@@ -297,15 +297,15 @@ fun TweetButtons(
                         onDismiss = { showReactionMenu = false },
                         onSelect = { emoji ->
                             showReactionMenu = false
-                            listener.onLike(statusViewData, emoji != status.myReaction, null, emoji)
+                            listener.onReact(statusViewData, emoji != status.myReaction, null, emoji)
                         },
                     )
                 }
                 if (showStats) {
                     Text(
-                        text = formatNumber(status.likesCount.toLong(), 1000),
-                        color = if (liked) {
-                            warpdroidColors.likeButtonActiveColor
+                        text = formatNumber(status.reactionsCount.toLong(), 1000),
+                        color = if (reacted) {
+                            warpdroidColors.reactionButtonActiveColor
                         } else {
                             warpdroidColors.tertiaryTextColor
                         },

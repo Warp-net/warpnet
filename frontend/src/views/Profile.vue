@@ -261,21 +261,21 @@ resulting from the use or misuse of this software.
             <button
               v-if="isSelf"
               type="button"
-              @click="selectTab('likes')"
+              @click="selectTab('reactions')"
               class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
-              :class="activeTab === 'likes' ? 'border-blue' : ''"
+              :class="activeTab === 'reactions' ? 'border-blue' : ''"
             >
-              Likes
+              Reactions
             </button>
             <button
               v-else
               type="button"
               disabled
-              title="Only your own likes are visible"
-              aria-label="Likes (own profile only)"
+              title="Only your own reactions are visible"
+              aria-label="Reactions (own profile only)"
               class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
             >
-              Likes
+              Reactions
             </button>
           </div>
         </div>
@@ -346,19 +346,19 @@ resulting from the use or misuse of this software.
           <Tweets v-if="!noUser && !isBlocked" :tweets="mediaTweets" />
         </template>
 
-        <!-- likes -->
-        <template v-else-if="activeTab === 'likes'">
-          <Loader :loading="likesLoading" />
+        <!-- reactions -->
+        <template v-else-if="activeTab === 'reactions'">
+          <Loader :loading="reactionsLoading" />
           <div
-            v-if="!likesLoading && likes.length === 0"
+            v-if="!reactionsLoading && likes.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10 px-5"
           >
-            <p class="font-bold text-lg">Nothing liked yet</p>
+            <p class="font-bold text-lg">Nothing reacted yet</p>
             <p class="text-sm text-dark text-center">
-              Tweets you like will show up here so you can always find your way back to them.
+              Tweets you react to will show up here so you can always find your way back to them.
             </p>
           </div>
-          <Tweets :tweets="likedTweets" />
+          <Tweets :tweets="reactedTweets" />
         </template>
       </div>
       <DefaultRightBar
@@ -435,9 +435,9 @@ export default {
       showReportDialog: false,
       showNetworkWarning: true,
       activeTab: 'tweets',
-      likes: [],
-      likesLoading: false,
-      likesLoaded: false,
+      reactions: [],
+      reactionsLoading: false,
+      reactionsLoaded: false,
       replies: [],
       repliesLoading: false,
       repliesScanned: 0,
@@ -451,8 +451,8 @@ export default {
       const rest = this.tweets.filter(t => !(t && t.pinned));
       return pinned.concat(rest);
     },
-    likedTweets() {
-      return this.likes.map(l => l.tweet);
+    reactedTweets() {
+      return this.reactions.map(r => r.tweet);
     },
     // Tweets and the profile owner's replies in one chronological feed.
     tweetsAndReplies() {
@@ -683,11 +683,11 @@ export default {
       }
     },
     async loadMore() {
-      if (this.activeTab === 'likes') {
-        if (this.likesLoading) return;
-        const resp = await warpnetService.getLikes(false);
+      if (this.activeTab === 'reactions') {
+        if (this.reactionsLoading) return;
+        const resp = await warpnetService.getReactions(false);
         const items = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
-        this.likes = this.likes.concat(items);
+        this.reactions = this.reactions.concat(items);
         return;
       }
       await this.loadMoreTweets();
@@ -707,21 +707,21 @@ export default {
     },
     async selectTab(tab) {
       this.activeTab = tab;
-      if (tab === 'likes') return this.loadLikes();
+      if (tab === 'reactions') return this.loadReactions();
       if (tab === 'replies') return this.loadReplies();
       if (tab === 'media') return this.fillMediaTab();
     },
-    async loadLikes() {
-      if (this.likesLoaded || this.likesLoading) return;
-      this.likesLoading = true;
+    async loadReactions() {
+      if (this.reactionsLoaded || this.reactionsLoading) return;
+      this.reactionsLoading = true;
       try {
-        const resp = await warpnetService.getLikes(true);
-        this.likes = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
-        this.likesLoaded = true;
+        const resp = await warpnetService.getReactions(true);
+        this.reactions = (resp?.items || []).filter(r => r.tweet && r.tweet.id);
+        this.reactionsLoaded = true;
       } catch (err) {
-        console.error('Failed to load likes:', err);
+        console.error('Failed to load reactions:', err);
       } finally {
-        this.likesLoading = false;
+        this.reactionsLoading = false;
       }
     },
     // A reply is stored under the tweet it answers, not under its author, so

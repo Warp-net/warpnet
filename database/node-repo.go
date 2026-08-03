@@ -758,7 +758,7 @@ func (d *NodeRepo) BlocklistExponential(peerId string) error {
 }
 
 // BlocklistPermanent puts peerId on the peer-level blocklist with no
-// TTL (PermanentBlock). Unlike Blocklist (which escalates the
+// TTL (PermanentBlock). Unreact Blocklist (which escalates the
 // BlockLevel and writes the matching expiring entry), this is what
 // social blocks resolve to: the user explicitly decided to block,
 // and the ban stays until they unblock.

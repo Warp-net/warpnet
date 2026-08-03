@@ -27,7 +27,7 @@
     <string name="title_posts_with_replies">Com respostas</string>
     <string name="title_follows">Segue</string>
     <string name="title_followers">Seguidores</string>
-    <string name="title_likes">Favoritos</string>
+    <string name="title_reactions">Favoritos</string>
     <string name="title_mutes">Usuários silenciados</string>
     <string name="title_blocks">Usuários bloqueados</string>
     <string name="title_follow_requests">Seguidores pendentes</string>
@@ -41,7 +41,7 @@
     <string name="post_content_warning_show_more">Mostrar mais</string>
     <string name="post_content_warning_show_less">Mostrar menos</string>
     <string name="notification_retweet_format">%1$s impulsionou seu post</string>
-    <string name="notification_like_format">%1$s favoritou seu post</string>
+    <string name="notification_reaction_format">%1$s favoritou seu post</string>
     <string name="notification_follow_format">%1$s seguiu você</string>
     <string name="report_username_format">Denunciar @%1$s</string>
     <string name="report_comment_hint">Comentários adicionais?</string>
@@ -49,8 +49,8 @@
     <string name="action_reply">Responder</string>
     <string name="action_retweet">Impulsionar</string>
     <string name="action_unretweet">Remover impulso</string>
-    <string name="action_like">Favoritar</string>
-    <string name="action_unlike">Desfavoritar</string>
+    <string name="action_react">Favoritar</string>
+    <string name="action_unreact">Desfavoritar</string>
     <string name="action_more">Mais</string>
     <string name="action_compose">Escrever</string>
     <string name="action_login">Entrar com Warpnet</string>
@@ -70,7 +70,7 @@
     <string name="action_close">Fechar</string>
     <string name="action_view_profile">Perfil</string>
     <string name="action_view_preferences">Preferências</string>
-    <string name="action_view_likes">Favoritos</string>
+    <string name="action_view_reactions">Favoritos</string>
     <string name="action_view_mutes">Usuários silenciados</string>
     <string name="action_view_blocks">Usuários bloqueados</string>
     <string name="action_view_follow_requests">Seguidores pendentes</string>
@@ -97,7 +97,7 @@
     <string name="action_emoji_keyboard">Teclado de emojis</string>
     <string name="action_add_tab">Adicionar aba</string>
     <string name="action_open_retweeted_by">Mostrar impulsos</string>
-    <string name="action_open_faved_by">Mostrar favoritos</string>
+    <string name="action_open_reacted_by">Mostrar favoritos</string>
     <string name="title_mentions_dialog">Menções</string>
     <string name="title_links_dialog">Links</string>
     <string name="download_image">Baixando %1$s</string>
@@ -178,8 +178,8 @@
     <string name="notification_follow_description">Notificações sobre novos seguidores</string>
     <string name="notification_retweet_name">Impulsos</string>
     <string name="notification_retweet_description">Notificações quando seus posts são impulsionados</string>
-    <string name="notification_like_name">Favoritos</string>
-    <string name="notification_like_description">Notificações quando seus posts forem marcados como favoritos</string>
+    <string name="notification_reaction_name">Favoritos</string>
+    <string name="notification_reaction_description">Notificações quando seus posts forem marcados como favoritos</string>
     <string name="notification_mention_format">%1$s mencionou você</string>
     <string name="notification_summary_large">%1$s, %2$s, %3$s e %4$d outros</string>
     <string name="notification_summary_medium">%1$s, %2$s e %3$s</string>
@@ -262,7 +262,7 @@
     <string name="profile_metadata_content_label">Conteúdo</string>
     <string name="pref_title_absolute_time">Usar tempo absoluto</string>
     <string name="title_retweeted_by">Impulsionado por</string>
-    <string name="title_liked_by">Favoritado por</string>
+    <string name="title_reacted_by">Favoritado por</string>
     <string name="description_visibility_public">Público</string>
     <string name="description_visibility_private">Seguidores</string>
     <string name="error_network">Ocorreu um erro de rede. Por favor, verifique sua conexão e tente novamente.</string>
@@ -306,7 +306,7 @@
     <string name="label_remote_account">As informações abaixo podem refletir incompletamente o perfil do usuário. Toque aqui para abrir o perfil completo no navegador.</string>
     <string name="unpin_action">Desafixar</string>
     <string name="pin_action">Fixar</string>
-    <plurals name="favs">
+    <plurals name="reactions_plural">
         <item quantity="one">%1$s favorito</item>
         <item quantity="many">%1$s de favoritos</item>
         <item quantity="other">%1$s favoritos</item>
@@ -323,7 +323,7 @@
     <string name="description_post_cw">Aviso de conteúdo: %1$s</string>
     <string name="description_post_media_no_description_placeholder">Sem descrição</string>
     <string name="description_post_retweeted">Impulsionado</string>
-    <string name="description_post_liked">Favoritado</string>
+    <string name="description_post_reacted">Favoritado</string>
     <string name="description_visibility_unlisted">Não-listado</string>
     <string name="description_visibility_direct">Direto</string>
     <string name="hint_list_name">Nome da lista</string>
@@ -479,7 +479,7 @@
     <string name="action_delete_conversation">Excluir conversa</string>
     <string name="dialog_delete_list_warning">Deseja excluir a lista %1$s?</string>
     <string name="action_unbookmark">Remover marcador</string>
-    <string name="pref_title_confirm_likes">Mostrar confirmação antes de favoritar</string>
+    <string name="pref_title_confirm_reactions">Mostrar confirmação antes de favoritar</string>
     <string name="duration_30_days">30 dias</string>
     <string name="duration_60_days">60 dias</string>
     <string name="duration_90_days">90 dias</string>
@@ -708,7 +708,7 @@
     <string name="socket_timeout_exception">O contato com o seu servidor demorou muito tempo</string>
     <string name="ui_error_unknown">razão desconhecida</string>
     <string name="ui_error_clear_notifications">Falha ao limpar notificações: %1$s</string>
-    <string name="ui_error_like">Falha ao favoritar posts: %1$s</string>
+    <string name="ui_error_react">Falha ao favoritar posts: %1$s</string>
     <string name="ui_error_vote">Falha ao votar na enquete: %1$s</string>
     <string name="ui_error_accept_follow_request">Falha ao aceitar a solicitação para seguir: %1$s</string>
     <string name="ui_error_reject_follow_request">Falha ao rejeitar a solicitação para seguir: %1$s</string>
@@ -768,7 +768,7 @@
     </plurals>
     <string name="notification_info_reply">Resposta</string>
     <string name="action_accept_notification_request">Aceitar</string>
-    <string name="like_confirm">Favoritar este post?</string>
+    <string name="reaction_confirm">Favoritar este post?</string>
     <string name="report_problem_with_post">Qual é o problema com este post?</string>
     <string name="notification_info_private_mention">Menção privada</string>
     <string name="notification_info_mention">Menção</string>

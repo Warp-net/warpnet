@@ -97,20 +97,20 @@ func TestNotificationsDeliveredToRecipient_Reply(t *testing.T) {
 	}
 }
 
-func TestNotificationsDeliveredToRecipient_Like(t *testing.T) {
+func TestNotificationsDeliveredToRecipient_Reaction(t *testing.T) {
 	repo := newNotificationsRepo(t)
 
 	tweetOwner := "alice"
-	liker := "bob"
+	reactor := "bob"
 
-	h := StreamLikeHandler(
-		stubLikeRepo{},
-		stubLikeUserRepo{},
+	h := StreamReactionHandler(
+		stubReactionRepo{},
+		stubReactionUserRepo{},
 		repo,
 		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}},
 	)
 
-	ev := event.LikeEvent{TweetId: "tweet-1", OwnerId: liker, UserId: tweetOwner}
+	ev := event.ReactionEvent{TweetId: "tweet-1", OwnerId: reactor, UserId: tweetOwner}
 	if _, err := h(marshal(t, ev), nil); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
@@ -119,12 +119,12 @@ func TestNotificationsDeliveredToRecipient_Like(t *testing.T) {
 	if len(r.Notifications) != 1 {
 		t.Fatalf("expected 1 notification for %q, got %d", tweetOwner, len(r.Notifications))
 	}
-	if r.Notifications[0].Type != domain.NotificationLikeType {
-		t.Fatalf("expected like type, got: %v", r.Notifications[0].Type)
+	if r.Notifications[0].Type != domain.NotificationReactionType {
+		t.Fatalf("expected reaction type, got: %v", r.Notifications[0].Type)
 	}
 
-	if other := listNotificationsFor(t, repo, liker); len(other.Notifications) != 0 {
-		t.Fatalf("liker should not receive the notification, got %d", len(other.Notifications))
+	if other := listNotificationsFor(t, repo, reactor); len(other.Notifications) != 0 {
+		t.Fatalf("reactor should not receive the notification, got %d", len(other.Notifications))
 	}
 }
 
@@ -241,16 +241,16 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 		}
 	})
 
-	t.Run("self like", func(t *testing.T) {
+	t.Run("self reaction", func(t *testing.T) {
 		repo := newNotificationsRepo(t)
 		owner := "alice"
-		h := StreamLikeHandler(
-			stubLikeRepo{},
-			stubLikeUserRepo{},
+		h := StreamReactionHandler(
+			stubReactionRepo{},
+			stubReactionUserRepo{},
 			repo,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}},
 		)
-		ev := event.LikeEvent{TweetId: "tweet-1", OwnerId: owner, UserId: owner}
+		ev := event.ReactionEvent{TweetId: "tweet-1", OwnerId: owner, UserId: owner}
 		if _, err := h(marshal(t, ev), nil); err != nil {
 			t.Fatalf("handler: %v", err)
 		}

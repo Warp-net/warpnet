@@ -140,8 +140,8 @@ type Bookmark struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// Like defines model for Like.
-type Like struct {
+// React defines model for React.
+type React struct {
 	TweetId string `json:"tweet_id"`
 	UserId  string `json:"user_id"`
 	Emoji   string `json:"emoji,omitempty"`
@@ -179,11 +179,11 @@ func NormalizeReaction(emoji string) (string, error) {
 	return emoji, nil
 }
 
-// LikedTweet defines model for LikedTweet — one entry of a user's
-// "tweets I liked" index. OwnerUserId is the tweet author's id, stored
+// ReactedTweet defines model for ReactedTweet — one entry of a user's
+// "tweets I reacted" index. OwnerUserId is the tweet author's id, stored
 // alongside so clients can fetch the tweet without an extra resolution
 // round-trip.
-type LikedTweet struct {
+type ReactedTweet struct {
 	UserId      string    `json:"user_id"`
 	TweetId     string    `json:"tweet_id"`
 	OwnerUserId string    `json:"owner_user_id"`
@@ -392,7 +392,7 @@ const (
 	NotificationModerationType NotificationType = "moderation"
 	NotificationRetweetType    NotificationType = "retweet"
 	NotificationFollowType     NotificationType = "follow"
-	NotificationLikeType       NotificationType = "like"
+	NotificationReactionType   NotificationType = "reaction"
 	NotificationMentionType    NotificationType = "mention"
 	NotificationReplyType      NotificationType = "reply"
 	NotificationMessageType    NotificationType = "message"

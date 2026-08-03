@@ -78,7 +78,7 @@ func TestService_AddFansOutAndJoinsErrors(t *testing.T) {
 func TestStoreChannel_Persists(t *testing.T) {
 	store := &fakeStore{}
 	svc := New(NewStoreChannel(store))
-	if err := svc.Add(domain.Notification{Type: domain.NotificationLikeType, RecepientId: "u"}); err != nil {
+	if err := svc.Add(domain.Notification{Type: domain.NotificationReactionType, RecepientId: "u"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	if len(store.added) != 1 {
@@ -106,15 +106,15 @@ func TestEmailChannel_SendsWhenOptedIn(t *testing.T) {
 
 func TestEmailChannel_SkipsWhenNotOptedIn(t *testing.T) {
 	cases := map[string]domain.NotificationSettings{
-		"disabled":     {EmailEnabled: false, Recipient: "a@b.c", Types: map[domain.NotificationType]bool{domain.NotificationLikeType: true}},
-		"no recipient": {EmailEnabled: true, Types: map[domain.NotificationType]bool{domain.NotificationLikeType: true}},
+		"disabled":     {EmailEnabled: false, Recipient: "a@b.c", Types: map[domain.NotificationType]bool{domain.NotificationReactionType: true}},
+		"no recipient": {EmailEnabled: true, Types: map[domain.NotificationType]bool{domain.NotificationReactionType: true}},
 		"type off":     {EmailEnabled: true, Recipient: "a@b.c", Types: map[domain.NotificationType]bool{domain.NotificationFollowType: true}},
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
 			sender := newFakeSender()
 			svc := New(NewEmailChannel(fakeSettings{cfg: cfg}, sender))
-			if err := svc.Add(domain.Notification{Type: domain.NotificationLikeType, RecepientId: "u"}); err != nil {
+			if err := svc.Add(domain.Notification{Type: domain.NotificationReactionType, RecepientId: "u"}); err != nil {
 				t.Fatalf("add: %v", err)
 			}
 			time.Sleep(100 * time.Millisecond)

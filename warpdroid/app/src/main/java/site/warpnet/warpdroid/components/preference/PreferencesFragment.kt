@@ -221,8 +221,8 @@ class PreferencesFragment : BasePreferencesFragment() {
 
                 switchPreference {
                     setDefaultValue(false)
-                    key = PrefKeys.CONFIRM_LIKES
-                    setTitle(R.string.pref_title_confirm_likes)
+                    key = PrefKeys.CONFIRM_REACTIONS
+                    setTitle(R.string.pref_title_confirm_reactions)
                 }
 
                 switchPreference {
@@ -262,11 +262,11 @@ class PreferencesFragment : BasePreferencesFragment() {
                             val notificationFilter = account.notificationsFilter.toMutableSet()
 
                             if (value == true) {
-                                notificationFilter.add(NotificationChannelData.LIKE)
+                                notificationFilter.add(NotificationChannelData.REACTION)
                                 notificationFilter.add(NotificationChannelData.FOLLOW)
                                 notificationFilter.add(NotificationChannelData.RETWEET)
                             } else {
-                                notificationFilter.remove(NotificationChannelData.LIKE)
+                                notificationFilter.remove(NotificationChannelData.REACTION)
                                 notificationFilter.remove(NotificationChannelData.FOLLOW)
                                 notificationFilter.remove(NotificationChannelData.RETWEET)
                             }

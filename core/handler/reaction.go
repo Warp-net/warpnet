@@ -40,99 +40,99 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type LikeTweetsStorer interface {
+type ReactionTweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	Delete(userID, tweetID string) error
 }
 
-type LikedUserFetcher interface {
+type ReactedUserFetcher interface {
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	Get(userId string) (users domain.User, err error)
 }
 
-type LikeStreamer interface {
+type ReactionStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 }
 
-type LikesStorer interface {
-	Like(tweetId, userId, emoji string, isTransitive bool) (likesNum uint64, err error)
-	Unlike(tweetId, userId string, isTransitive bool) (likesNum uint64, err error)
-	LikesCount(tweetId string) (likesNum uint64, err error)
-	Likers(tweetId string, limit *uint64, cursor *string) (likers []string, cur string, err error)
+type ReactionsStorer interface {
+	React(tweetId, userId, emoji string, isTransitive bool) (reactionsNum uint64, err error)
+	Unreact(tweetId, userId string, isTransitive bool) (reactionsNum uint64, err error)
+	ReactionsCount(tweetId string) (reactionsNum uint64, err error)
+	Reactors(tweetId string, limit *uint64, cursor *string) (reactors []string, cur string, err error)
 	Reactions(tweetId string) (map[string]uint64, error)
-	SetLiked(userId, tweetId, ownerUserId string) error
-	RemoveLiked(userId, tweetId string) error
+	SetReacted(userId, tweetId, ownerUserId string) error
+	RemoveReacted(userId, tweetId string) error
 }
 
-func StreamLikeHandler(
-	repo LikesStorer,
-	userRepo LikedUserFetcher,
+func StreamReactionHandler(
+	repo ReactionsStorer,
+	userRepo ReactedUserFetcher,
 	notifyRepo ModerationNotifier,
-	streamer LikeStreamer,
+	streamer ReactionStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.LikeEvent
+		var ev event.ReactionEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
 		if ev.OwnerId == "" {
-			return nil, warpnet.WarpError("like: empty owner id")
+			return nil, warpnet.WarpError("react: empty owner id")
 		}
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("like: empty user id")
+			return nil, warpnet.WarpError("react: empty user id")
 		}
 		if ev.TweetId == "" {
-			return nil, warpnet.WarpError("like: empty tweet id")
+			return nil, warpnet.WarpError("react: empty tweet id")
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		ownNodeInfo := streamer.NodeInfo()
-		// The network-wide (CRDT) like counter is bumped only on the liker's
-		// own node, so a like observed on both the liker's and the author's
+		// The network-wide (CRDT) reaction counter is bumped only on the reactor's
+		// own node, so a reaction observed on both the reactor's and the author's
 		// node is counted once.
-		num, err := repo.Like(tweetId, ev.OwnerId, ev.Emoji, ev.OwnerId == ownNodeInfo.OwnerId) // store my reaction
+		num, err := repo.React(tweetId, ev.OwnerId, ev.Emoji, ev.OwnerId == ownNodeInfo.OwnerId) // store my reaction
 		if err != nil {
-			log.Errorf("like handler failed: %v", err)
+			log.Errorf("reaction handler failed: %v", err)
 			return nil, err
 		}
-		// Best-effort "tweets I liked" index; the like itself already
+		// Best-effort "tweets I reacted" index; the reaction itself already
 		// succeeded, so an index failure must not fail the request.
-		if err := repo.SetLiked(ev.OwnerId, tweetId, ev.UserId); err != nil {
-			log.Warnf("like handler: liked index: %v", err)
+		if err := repo.SetReacted(ev.OwnerId, tweetId, ev.UserId); err != nil {
+			log.Warnf("reaction handler: reacted index: %v", err)
 		}
 		// Every exit below answers the same shape, and nothing they do
 		// changes the local tally, so build it once.
-		resp := event.LikesCountResponse{Count: num, Reactions: getReactionsWithDefault(repo, tweetId)}
+		resp := event.ReactionsCountResponse{Count: num, Reactions: getReactionsWithDefault(repo, tweetId)}
 
-		isOwnTweetLike := ev.OwnerId == ev.UserId
-		if isOwnTweetLike { // own tweet like
+		isOwnTweetReaction := ev.OwnerId == ev.UserId
+		if isOwnTweetReaction { // own tweet reaction
 			return resp, nil
 		}
 
-		isSomeoneLikedMe := ev.OwnerId != ownNodeInfo.OwnerId
-		if isSomeoneLikedMe { // likes exchange finished
+		isSomeoneReactedToMe := ev.OwnerId != ownNodeInfo.OwnerId
+		if isSomeoneReactedToMe { // reactions exchange finished
 			notifyUsername := ev.OwnerId
-			liker, likerErr := userRepo.Get(ev.OwnerId)
-			if likerErr == nil {
-				notifyUsername = liker.Username
+			reactor, reactorErr := userRepo.Get(ev.OwnerId)
+			if reactorErr == nil {
+				notifyUsername = reactor.Username
 			}
 			if err := notifyRepo.Add(domain.Notification{
-				Type:        domain.NotificationLikeType,
-				Text:        notifyUsername + " liked your tweet",
+				Type:        domain.NotificationReactionType,
+				Text:        notifyUsername + " reacted your tweet",
 				RecepientId: ev.UserId,
 				ActorId:     ev.OwnerId,
 				TweetId:     tweetId,
 			}); err != nil {
-				log.Errorf("like handler: adding notification: %v", err)
+				log.Errorf("reaction handler: adding notification: %v", err)
 			}
 			return resp, nil
 		}
 
-		likedUser, err := userRepo.Get(ev.UserId)
+		reactedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
 			return resp, nil
 		}
@@ -140,14 +140,14 @@ func StreamLikeHandler(
 			return nil, err
 		}
 
-		if likedUser.NodeId == ownNodeInfo.ID.String() {
+		if reactedUser.NodeId == ownNodeInfo.ID.String() {
 			return resp, nil
 		}
 
-		likeDataResp, err := streamer.GenericStream(
-			likedUser.NodeId,
-			event.PUBLIC_POST_LIKE,
-			event.LikeEvent{
+		reactionDataResp, err := streamer.GenericStream(
+			reactedUser.NodeId,
+			event.PUBLIC_POST_REACT,
+			event.ReactionEvent{
 				TweetId: ev.TweetId,
 				OwnerId: ev.OwnerId,
 				UserId:  ev.UserId,
@@ -162,17 +162,17 @@ func StreamLikeHandler(
 		}
 
 		var possibleError event.ResponseError
-		if _ = json.Unmarshal(likeDataResp, &possibleError); possibleError.Message != "" {
-			log.Errorf("unmarshal other like error response: %s", possibleError.Message)
+		if _ = json.Unmarshal(reactionDataResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other reaction error response: %s", possibleError.Message)
 		}
 
 		return resp, nil
 	}
 }
 
-func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer LikeStreamer) warpnet.WarpHandlerFunc {
+func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, streamer ReactionStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.UnlikeEvent
+		var ev event.UnreactionEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
@@ -187,29 +187,29 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		ownNodeInfo := streamer.NodeInfo()
-		// Mirror the like path: only the unliker's own node adjusts the
+		// Mirror the reaction path: only the unreactor's own node adjusts the
 		// network-wide (CRDT) counter.
-		num, err := repo.Unlike(tweetId, ev.OwnerId, ev.OwnerId == ownNodeInfo.OwnerId)
+		num, err := repo.Unreact(tweetId, ev.OwnerId, ev.OwnerId == ownNodeInfo.OwnerId)
 		if err != nil {
-			log.Errorf("unlike handler failed: %v", err)
+			log.Errorf("unreaction handler failed: %v", err)
 			return nil, err
 		}
-		if err := repo.RemoveLiked(ev.OwnerId, tweetId); err != nil {
-			log.Warnf("unlike handler: liked index: %v", err)
+		if err := repo.RemoveReacted(ev.OwnerId, tweetId); err != nil {
+			log.Warnf("unreaction handler: reacted index: %v", err)
 		}
-		resp := event.LikesCountResponse{Count: num, Reactions: getReactionsWithDefault(repo, tweetId)}
+		resp := event.ReactionsCountResponse{Count: num, Reactions: getReactionsWithDefault(repo, tweetId)}
 
-		isOwnTweetDislike := ev.OwnerId == ev.UserId
-		if isOwnTweetDislike { // own tweet like
+		isOwnTweetUnreaction := ev.OwnerId == ev.UserId
+		if isOwnTweetUnreaction { // own tweet reaction
 			return resp, nil
 		}
 
-		isSomeoneDislikedMe := ev.OwnerId != ownNodeInfo.OwnerId
-		if isSomeoneDislikedMe { // likes exchange finished
+		isSomeoneUnreactedToMe := ev.OwnerId != ownNodeInfo.OwnerId
+		if isSomeoneUnreactedToMe { // reactions exchange finished
 			return resp, nil
 		}
 
-		unlikedUser, err := userRepo.Get(ev.UserId)
+		unreactedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
 			return resp, nil
 		}
@@ -217,14 +217,14 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			return nil, err
 		}
 
-		if unlikedUser.NodeId == ownNodeInfo.ID.String() {
+		if unreactedUser.NodeId == ownNodeInfo.ID.String() {
 			return resp, nil
 		}
 
-		unlikeDataResp, err := streamer.GenericStream(
-			unlikedUser.NodeId,
-			event.PUBLIC_POST_UNLIKE,
-			event.UnlikeEvent{
+		unreactionDataResp, err := streamer.GenericStream(
+			unreactedUser.NodeId,
+			event.PUBLIC_POST_UNREACT,
+			event.UnreactionEvent{
 				TweetId: ev.TweetId,
 				UserId:  ev.UserId,
 				OwnerId: ev.OwnerId,
@@ -238,37 +238,37 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 		}
 
 		var possibleError event.ResponseError
-		if _ = json.Unmarshal(unlikeDataResp, &possibleError); possibleError.Message != "" {
-			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
+		if _ = json.Unmarshal(unreactionDataResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other unreaction error response: %s", possibleError.Message)
 		}
 
 		return resp, nil
 	}
 }
 
-type LikedTweetsLister interface {
-	Liked(userId string, limit *uint64, cursor *string) ([]domain.LikedTweet, string, error)
+type ReactedTweetsLister interface {
+	Reacted(userId string, limit *uint64, cursor *string) ([]domain.ReactedTweet, string, error)
 }
 
-// StreamGetLikesHandler returns one page of the local user's "tweets I
-// liked" index, newest first. Same reference-only wire shape as bookmarks:
+// StreamGetReactionsHandler returns one page of the local user's "tweets I
+// reacted" index, newest first. Same reference-only wire shape as bookmarks:
 // clients hydrate each tweet via PUBLIC_GET_TWEET using OwnerUserId.
-func StreamGetLikesHandler(repo LikedTweetsLister) warpnet.WarpHandlerFunc {
+func StreamGetReactionsHandler(repo ReactedTweetsLister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetLikesEvent
+		var ev event.GetReactionsEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
 		if ev.UserId == "" {
-			return nil, warpnet.WarpError("likes: empty user id")
+			return nil, warpnet.WarpError("reactions: empty user id")
 		}
 
-		liked, cur, err := repo.Liked(ev.UserId, ev.Limit, ev.Cursor)
+		reacted, cur, err := repo.Reacted(ev.UserId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
-		items := make([]event.BookmarkItem, 0, len(liked))
-		for _, lt := range liked {
+		items := make([]event.BookmarkItem, 0, len(reacted))
+		for _, lt := range reacted {
 			items = append(items, event.BookmarkItem{
 				UserId:      lt.UserId,
 				TweetId:     lt.TweetId,
@@ -276,7 +276,7 @@ func StreamGetLikesHandler(repo LikedTweetsLister) warpnet.WarpHandlerFunc {
 				CreatedAt:   lt.CreatedAt,
 			})
 		}
-		return event.GetLikesResponse{Items: items, Cursor: cur}, nil
+		return event.GetReactionsResponse{Items: items, Cursor: cur}, nil
 	}
 }
 
@@ -284,10 +284,10 @@ func StreamGetLikesHandler(repo LikedTweetsLister) warpnet.WarpHandlerFunc {
 // like/unlike response: the count itself already succeeded, so a failing
 // lookup must not fail the request — it falls back to an empty map, which
 // marshals away under the field's omitempty just like a nil one.
-func getReactionsWithDefault(repo LikesStorer, tweetId string) map[string]uint64 {
+func getReactionsWithDefault(repo ReactionsStorer, tweetId string) map[string]uint64 {
 	reactions, err := repo.Reactions(tweetId)
 	if err != nil {
-		log.Warnf("like handler: reactions breakdown: %v", err)
+		log.Warnf("reaction handler: reactions breakdown: %v", err)
 		return map[string]uint64{}
 	}
 	return reactions

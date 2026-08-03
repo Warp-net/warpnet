@@ -41,8 +41,8 @@ import site.warpnet.transport.dto.GetTweetStatsEvent
 import site.warpnet.transport.dto.GetUserEvent
 import site.warpnet.transport.dto.IsFollowerResponse
 import site.warpnet.transport.dto.IsFollowingResponse
-import site.warpnet.transport.dto.LikeEvent
-import site.warpnet.transport.dto.LikesCountResponse
+import site.warpnet.transport.dto.ReactionEvent
+import site.warpnet.transport.dto.ReactionsCountResponse
 import site.warpnet.transport.dto.NewFollowEvent
 import site.warpnet.transport.dto.NewUnfollowEvent
 import site.warpnet.transport.dto.TweetStatsResponse
@@ -85,7 +85,7 @@ class WarpnetRepository @Inject constructor(
     private val tweetsRespAdapter = moshi.adapter<TweetsResponse>()
     private val notificationsRespAdapter = moshi.adapter<GetNotificationsResponse>()
     private val notificationRespAdapter = moshi.adapter<site.warpnet.transport.dto.WarpnetNotification>()
-    private val likesCountAdapter = moshi.adapter<LikesCountResponse>()
+    private val reactionsCountAdapter = moshi.adapter<ReactionsCountResponse>()
     private val tweetStatsRespAdapter = moshi.adapter<TweetStatsResponse>()
     private val usersRespAdapter = moshi.adapter<UsersResponse>()
     private val followersRespAdapter = moshi.adapter<FollowersResponse>()
@@ -110,7 +110,7 @@ class WarpnetRepository @Inject constructor(
     private val muteEventAdapter = moshi.adapter<site.warpnet.transport.dto.MuteEvent>()
     private val getBlocksEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksEvent>()
     private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
-    private val getTweetLikersAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetLikersEvent>()
+    private val getTweetReactorsAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetReactorsEvent>()
     private val subscribeUserAdapter = moshi.adapter<site.warpnet.transport.dto.SubscribeUserEvent>()
     private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
     private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
@@ -136,7 +136,7 @@ class WarpnetRepository @Inject constructor(
     private val getIsFollowingAdapter = moshi.adapter<GetIsFollowingEvent>()
     private val newFollowAdapter = moshi.adapter<NewFollowEvent>()
     private val newUnfollowAdapter = moshi.adapter<NewUnfollowEvent>()
-    private val likeEventAdapter = moshi.adapter<LikeEvent>()
+    private val reactionEventAdapter = moshi.adapter<ReactionEvent>()
     private val viewEventAdapter = moshi.adapter<ViewEvent>()
     private val viewsCountAdapter = moshi.adapter<ViewsCountResponse>()
     private val newTweetAdapter = moshi.adapter<WarpnetTweet>()
@@ -213,13 +213,13 @@ class WarpnetRepository @Inject constructor(
         val base = tweet.toTweet(author = runCatching { getUser(tweet.userId) }.getOrNull())
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
-            likesCount = stats.likesCount.clampToInt(),
+            reactionsCount = stats.reactionsCount.clampToInt(),
             retweetsCount = stats.retweetsCount.clampToInt(),
             repliesCount = stats.repliesCount.clampToInt(),
             viewsCount = stats.viewsCount.clampToInt(),
             reactions = stats.reactions,
             myReaction = stats.myReaction,
-            liked = stats.myReaction.isNotEmpty(),
+            reacted = stats.myReaction.isNotEmpty(),
         )
     }
 
@@ -361,27 +361,27 @@ class WarpnetRepository @Inject constructor(
 
     /**
      * [userId] is the **tweet author's** id (matches Warpnet's
-     * `event.LikeEvent.user_id` semantics); [ownerId] is the **liker's**
+     * `event.ReactionEvent.user_id` semantics); [ownerId] is the **liker's**
      * id (the paired-node user). The backend handler rejects requests
      * where either is empty (core/handler/like.go:79-87), so callers
      * must supply both.
      */
-    suspend fun likeStatus(tweetId: String, userId: String, ownerId: String, emoji: String = ""): LikesCountResponse {
+    suspend fun reactToStatus(tweetId: String, userId: String, ownerId: String, emoji: String = ""): ReactionsCountResponse {
         val raw = client.request(
-            ProtocolIds.PUBLIC_POST_LIKE,
-            likeEventAdapter.toJson(
-                LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId, emoji = emoji),
+            ProtocolIds.PUBLIC_POST_REACT,
+            reactionEventAdapter.toJson(
+                ReactionEvent(tweetId = tweetId, userId = userId, ownerId = ownerId, emoji = emoji),
             ),
         )
-        return likesCountAdapter.fromJson(raw) ?: LikesCountResponse()
+        return reactionsCountAdapter.fromJson(raw) ?: ReactionsCountResponse()
     }
 
-    suspend fun unlikeStatus(tweetId: String, userId: String, ownerId: String): LikesCountResponse {
+    suspend fun unreactStatus(tweetId: String, userId: String, ownerId: String): ReactionsCountResponse {
         val raw = client.request(
-            ProtocolIds.PUBLIC_POST_UNLIKE,
-            likeEventAdapter.toJson(LikeEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
+            ProtocolIds.PUBLIC_POST_UNREACT,
+            reactionEventAdapter.toJson(ReactionEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
-        return likesCountAdapter.fromJson(raw) ?: LikesCountResponse()
+        return reactionsCountAdapter.fromJson(raw) ?: ReactionsCountResponse()
     }
 
     // -----------------------------------------------------------------
@@ -506,7 +506,7 @@ class WarpnetRepository @Inject constructor(
             ProtocolIds.PUBLIC_POST_RETWEET,
             newTweetAdapter.toJson(payload),
         )
-        return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
+        return reactionsCountAdapter.fromJson(raw)?.reactionsCount ?: 0
     }
 
     suspend fun unretweetStatus(tweetId: String, retweeterId: String): Long {
@@ -514,7 +514,7 @@ class WarpnetRepository @Inject constructor(
             ProtocolIds.PUBLIC_POST_UNRETWEET,
             unretweetAdapter.toJson(UnretweetEvent(tweetId = tweetId, retweeterId = retweeterId)),
         )
-        return likesCountAdapter.fromJson(raw)?.likesCount ?: 0
+        return reactionsCountAdapter.fromJson(raw)?.reactionsCount ?: 0
     }
 
     // -----------------------------------------------------------------
@@ -822,14 +822,14 @@ class WarpnetRepository @Inject constructor(
     }
 
     // -----------------------------------------------------------------
-    // Engagement lists (who liked / retweeted a tweet)
+    // Engagement lists (who reacted / retweeted a tweet)
     // -----------------------------------------------------------------
 
-    suspend fun getTweetLikers(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
+    suspend fun getTweetReactors(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_TWEET_LIKERS,
-            getTweetLikersAdapter.toJson(
-                site.warpnet.transport.dto.GetTweetLikersEvent(
+            ProtocolIds.PUBLIC_GET_TWEET_REACTORS,
+            getTweetReactorsAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetReactorsEvent(
                     tweetId = tweetId,
                     ownerUserId = ownerUserId,
                     cursor = cursor,
@@ -844,8 +844,8 @@ class WarpnetRepository @Inject constructor(
     suspend fun getTweetRetweeters(tweetId: String, ownerUserId: String, cursor: String = "", limit: Int = 40): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET_RETWEETERS,
-            getTweetLikersAdapter.toJson(
-                site.warpnet.transport.dto.GetTweetLikersEvent(
+            getTweetReactorsAdapter.toJson(
+                site.warpnet.transport.dto.GetTweetReactorsEvent(
                     tweetId = tweetId,
                     ownerUserId = ownerUserId,
                     cursor = cursor,
@@ -1017,17 +1017,17 @@ class WarpnetRepository @Inject constructor(
     }
 
     /**
-     * Fetch one page of tweets the user liked, newest first. The wire shape
+     * Fetch one page of tweets the user reacted, newest first. The wire shape
      * is identical to bookmarks (Go aliases GetLikesEvent/GetLikesResponse to
      * the bookmark types), so the bookmark DTOs and adapters are reused.
      */
-    suspend fun getLikes(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.warpdroid.entity.Tweet>, String> {
+    suspend fun getReactions(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.warpdroid.entity.Tweet>, String> {
         if (userId.isBlank()) {
             return emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
         return runCatching {
             val raw = client.request(
-                ProtocolIds.PRIVATE_GET_LIKES,
+                ProtocolIds.PRIVATE_GET_REACTIONS,
                 getBookmarksEventAdapter.toJson(
                     GetBookmarksEvent(userId = userId, cursor = cursor, limit = limit),
                 ),
@@ -1037,12 +1037,12 @@ class WarpnetRepository @Inject constructor(
             if (page.items.isEmpty()) {
                 return@runCatching emptyList<site.warpnet.warpdroid.entity.Tweet>() to page.cursor
             }
-            val tweets = page.items.mapNotNull { liked ->
-                runCatching { getStatus(tweetId = liked.tweetId, userId = liked.ownerUserId) }.getOrNull()
+            val tweets = page.items.mapNotNull { reacted ->
+                runCatching { getStatus(tweetId = reacted.tweetId, userId = reacted.ownerUserId) }.getOrNull()
             }
             tweets to page.cursor
         }.getOrElse { e ->
-            Timber.tag(TAG).w(e, "getLikes($userId) failed")
+            Timber.tag(TAG).w(e, "getReactions($userId) failed")
             emptyList<site.warpnet.warpdroid.entity.Tweet>() to ""
         }
     }
@@ -1307,13 +1307,13 @@ class WarpnetRepository @Inject constructor(
             val withQuote = baseTweets(t)
             val s = stats[t.id]?.await() ?: return@map withQuote
             withQuote.copy(
-                likesCount = s.likesCount.clampToInt(),
+                reactionsCount = s.reactionsCount.clampToInt(),
                 retweetsCount = s.retweetsCount.clampToInt(),
                 repliesCount = s.repliesCount.clampToInt(),
                 viewsCount = s.viewsCount.clampToInt(),
                 reactions = s.reactions,
                 myReaction = s.myReaction,
-                liked = s.myReaction.isNotEmpty(),
+                reacted = s.myReaction.isNotEmpty(),
             )
         }
     }

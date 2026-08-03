@@ -461,7 +461,7 @@ class WarpnetApi @Inject constructor(
     ): Response<List<TimelineUser>> {
         val active = accountManager.activeAccount ?: return stubList()
         return paginated {
-            warpnet.getTweetLikers(
+            warpnet.getTweetReactors(
                 tweetId = statusId,
                 ownerUserId = active.accountId,
                 cursor = maxId.orEmpty(),
@@ -527,14 +527,14 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    // Warpnet's LikeEvent semantics: user_id = tweet author, owner_id = liker
+    // Warpnet's ReactionEvent semantics: user_id = tweet author, owner_id = liker
     // (core/handler/like.go:79-87). [authorId] is the actionable status'
     // author id (TweetViewData.actionableAccountId); the liker is the
     // locally active account.
-    suspend fun likeStatus(statusId: String, authorId: String, emoji: String = ""): NetworkResult<Tweet> {
-        val active = accountManager.activeAccount ?: return stubFailure("likeStatus")
+    suspend fun reactToStatus(statusId: String, authorId: String, emoji: String = ""): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("reactToStatus")
         return result {
-            warpnet.likeStatus(
+            warpnet.reactToStatus(
                 tweetId = statusId,
                 userId = authorId,
                 ownerId = active.accountId,
@@ -544,10 +544,10 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    suspend fun unlikeStatus(statusId: String, authorId: String): NetworkResult<Tweet> {
-        val active = accountManager.activeAccount ?: return stubFailure("unlikeStatus")
+    suspend fun unreactStatus(statusId: String, authorId: String): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("unreactStatus")
         return result {
-            warpnet.unlikeStatus(tweetId = statusId, userId = authorId, ownerId = active.accountId)
+            warpnet.unreactStatus(tweetId = statusId, userId = authorId, ownerId = active.accountId)
             warpnet.getStatus(tweetId = statusId, userId = active.accountId)
         }
     }
@@ -846,7 +846,7 @@ class WarpnetApi @Inject constructor(
     ): Response<List<Tweet>> {
         val active = accountManager.activeAccount ?: return stubList()
         return paginated {
-            warpnet.getLikes(
+            warpnet.getReactions(
                 userId = active.accountId,
                 cursor = maxId.orEmpty(),
                 limit = limit ?: 40,

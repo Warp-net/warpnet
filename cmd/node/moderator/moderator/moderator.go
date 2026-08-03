@@ -161,7 +161,7 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 
 // notifyReporter re-sends the verdict to the reporter's node on the same
 // route as the broadcast, but with ReporterID set so it notifies them.
-// Unlike the followers broadcast (FAIL-only, shadow-ban), the reporter is
+// Unreact the followers broadcast (FAIL-only, shadow-ban), the reporter is
 // told about both outcomes — silence on an OK verdict reads as "the report
 // was lost". Best-effort: a delivery failure must not abort moderation.
 func (m *Moderator) notifyReporter(

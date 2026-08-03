@@ -30,10 +30,10 @@ enum class NotificationChannelData(
         R.string.notification_retweet_description
     ),
 
-    LIKE(
-        listOf(Notification.Type.Like, Notification.Type.PleromaEmojiReaction),
-        R.string.notification_like_name,
-        R.string.notification_like_description
+    REACTION(
+        listOf(Notification.Type.Reaction, Notification.Type.PleromaEmojiReaction),
+        R.string.notification_reaction_name,
+        R.string.notification_reaction_description
     ),
 
     FOLLOW(

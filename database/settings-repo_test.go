@@ -49,8 +49,8 @@ func (s *SettingsRepoTestSuite) TestSetGet() {
 		SMTPPassword: "secret",
 		SMTPUseTLS:   false,
 		Types: map[domain.NotificationType]bool{
-			domain.NotificationNewUserType: true,
-			domain.NotificationLikeType:    false,
+			domain.NotificationNewUserType:  true,
+			domain.NotificationReactionType: false,
 		},
 	}
 	s.Require().NoError(s.repo.SetNotificationSettings(user, want))
@@ -63,7 +63,7 @@ func (s *SettingsRepoTestSuite) TestSetGet() {
 	s.Equal(want.SMTPPort, got.SMTPPort)
 	s.Equal(want.SMTPPassword, got.SMTPPassword)
 	s.True(got.Types[domain.NotificationNewUserType])
-	s.False(got.Types[domain.NotificationLikeType])
+	s.False(got.Types[domain.NotificationReactionType])
 }
 
 func (s *SettingsRepoTestSuite) TestEmptyUserId() {

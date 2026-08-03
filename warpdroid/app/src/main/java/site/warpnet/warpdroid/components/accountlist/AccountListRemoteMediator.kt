@@ -110,7 +110,7 @@ class AccountListRemoteMediator(
                 val statusId = requireId(viewModel.type, viewModel.accountId)
                 api.statusRetweetedBy(statusId, fromId)
             }
-            Type.LIKED -> {
+            Type.REACTED -> {
                 val statusId = requireId(viewModel.type, viewModel.accountId)
                 api.statusLikedBy(statusId, fromId)
             }

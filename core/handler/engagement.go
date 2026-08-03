@@ -39,9 +39,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// LikersLister is the narrow surface the likers handler needs.
-type LikersLister interface {
-	Likers(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+// ReactorsLister is the narrow surface the reactors handler needs.
+type ReactorsLister interface {
+	Reactors(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 // RetweetersLister is the narrow surface the retweeters handler needs.
@@ -57,27 +57,27 @@ type EngagementStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-func StreamGetTweetLikersHandler(
-	repo LikersLister,
-	userRepo LikedUserFetcher,
+func StreamGetTweetReactorsHandler(
+	repo ReactorsLister,
+	userRepo ReactedUserFetcher,
 	streamer EngagementStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetTweetLikersEvent
+		var ev event.GetTweetReactorsEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
 		if ev.TweetId == "" {
-			return nil, warpnet.WarpError("likers: empty tweet id")
+			return nil, warpnet.WarpError("reactors: empty tweet id")
 		}
 
-		if out, ok, err := forwardToOwner(ev.OwnerUserId, streamer, userRepo, event.PUBLIC_GET_TWEET_LIKERS, ev); err != nil {
+		if out, ok, err := forwardToOwner(ev.OwnerUserId, streamer, userRepo, event.PUBLIC_GET_TWEET_REACTORS, ev); err != nil {
 			return nil, err
 		} else if ok {
 			return out, nil
 		}
 
-		ids, cur, err := repo.Likers(ev.TweetId, ev.Limit, ev.Cursor)
+		ids, cur, err := repo.Reactors(ev.TweetId, ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +88,7 @@ func StreamGetTweetLikersHandler(
 
 func StreamGetTweetRetweetersHandler(
 	repo RetweetersLister,
-	userRepo LikedUserFetcher,
+	userRepo ReactedUserFetcher,
 	streamer EngagementStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -122,7 +122,7 @@ func StreamGetTweetRetweetersHandler(
 func forwardToOwner(
 	ownerUserId string,
 	streamer EngagementStreamer,
-	userRepo LikedUserFetcher,
+	userRepo ReactedUserFetcher,
 	path stream.WarpRoute,
 	ev any,
 ) (event.UsersResponse, bool, error) {
@@ -165,7 +165,7 @@ func forwardToOwner(
 	return out, true, nil
 }
 
-func hydrateUsers(userRepo LikedUserFetcher, ids []string) []domain.User {
+func hydrateUsers(userRepo ReactedUserFetcher, ids []string) []domain.User {
 	if len(ids) == 0 {
 		return nil
 	}

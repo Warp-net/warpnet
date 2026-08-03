@@ -9,7 +9,7 @@ vi.mock('@/service/service', () => ({
     getUsers: vi.fn(),
     getTweets: vi.fn(),
     getReplies: vi.fn(),
-    getLikes: vi.fn(),
+    getReactions: vi.fn(),
     getFollowers: vi.fn(),
     getFollowings: vi.fn(),
     isFollowing: vi.fn(),
@@ -90,7 +90,7 @@ beforeEach(() => {
   warpnetService.isUserBlocked.mockResolvedValue(false);
   warpnetService.isUserMuted.mockResolvedValue(false);
   warpnetService.getReplies.mockResolvedValue([]);
-  warpnetService.getLikes.mockResolvedValue({ items: [] });
+  warpnetService.getReactions.mockResolvedValue({ items: [] });
   warpnetService.getTweets.mockImplementation(({ cursorReset }) =>
     Promise.resolve(cursorReset ? [photoTweet, textTweet] : [])
   );

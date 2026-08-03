@@ -304,11 +304,11 @@ resulting from the use or misuse of this software.
             <i v-else class="fas fa-heart" aria-hidden="true"></i>
           </button>
           <button
-            v-if="getLikesCount(tweet.id) > 0"
+            v-if="getReactionsCount(tweet.id) > 0"
             type="button"
             class="hover:underline flat-btn"
-            @click.stop="showLikersOverlay = true"
-          >{{ getLikesCount(tweet.id) }}</button>
+            @click.stop="showReactorsOverlay = true"
+          >{{ getReactionsCount(tweet.id) }}</button>
           <ReactionBar
             v-if="showReactionBar"
             :selected="myReaction"
@@ -328,11 +328,11 @@ resulting from the use or misuse of this software.
         </div>
       </div>
     </div>
-    <LikersOverlay
-        :show="showLikersOverlay"
+    <ReactorsOverlay
+        :show="showReactorsOverlay"
         :tweetId="tweet.id"
         :ownerUserId="tweet.user_id"
-        @close="showLikersOverlay = false"
+        @close="showReactorsOverlay = false"
     />
     <RetweetersOverlay
         :show="showRetweetersOverlay"
@@ -371,7 +371,7 @@ export default {
     autoloadVideo: {type: Boolean, default: false},
   },
   components: {
-    LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
+    ReactorsOverlay: defineAsyncComponent(() => import('./ReactorsOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
     QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
@@ -384,7 +384,7 @@ export default {
   data() {
     return {
       profile: {},
-      showLikersOverlay: false,
+      showReactorsOverlay: false,
       showRetweetersOverlay: false,
       showEditOverlay: false,
       showQuoteOverlay: false,
@@ -403,7 +403,7 @@ export default {
       reactions: {},
       showReactionBar: false,
       retweeted: false,
-      likesCount: new Map(),
+      reactionsCount: new Map(),
       retweetsCount: new Map(),
       repliesCount: new Map(),
       viewsCount: new Map(),
@@ -459,7 +459,7 @@ export default {
 
       // The local cache only paints the button until the node answers; it
       // must never clobber that answer, which can land first.
-      const cached = await warpnetService.getLikerReaction(this.tweet.id, owner.user_id);
+      const cached = await warpnetService.getReactorEmoji(this.tweet.id, owner.user_id);
       if (!this._reactionAnswered) {
         this.myReaction = cached;
       }
@@ -826,7 +826,7 @@ export default {
     },
     // react sets the given emoji as the viewer's reaction, or removes it
     // when they already hold that one — a user has at most one reaction
-    // per tweet, so switching is a single like call.
+    // per tweet, so switching is a single react call.
     async react(emoji) {
       const owner = warpnetService.getOwnerProfile();
       if (!owner) return;
@@ -836,9 +836,9 @@ export default {
       let resp;
       try {
         if (removing) {
-          resp = await warpnetService.unlikeTweet(this.tweet.id, this.tweet.user_id)
+          resp = await warpnetService.unreactTweet(this.tweet.id, this.tweet.user_id)
         } else {
-          resp = await warpnetService.likeTweet(this.tweet.id, this.tweet.user_id, emoji)
+          resp = await warpnetService.reactToTweet(this.tweet.id, this.tweet.user_id, emoji)
         }
       } catch (err) {
         console.error(`failed to react to tweet [${this.tweet.id}]`, err);
@@ -847,17 +847,17 @@ export default {
         return;
       }
       if (removing) {
-        await warpnetService.deleteLiker(this.tweet.id, owner.user_id)
+        await warpnetService.deleteReactor(this.tweet.id, owner.user_id)
         this.myReaction = "";
       } else {
-        await warpnetService.setLiker(this.tweet.id, owner.user_id, owner, emoji)
+        await warpnetService.setReactor(this.tweet.id, owner.user_id, owner, emoji)
         this.myReaction = emoji;
       }
 
       this.reactions = resp.reactions;
-      this.likesCount.set(this.tweet.id, resp.count);
-      // A bridged tweet's real like count lives on the remote instance, not in
-      // this node's CRDT counter (which only knows our own like), so refresh
+      this.reactionsCount.set(this.tweet.id, resp.count);
+      // A bridged tweet's real reaction count lives on the remote instance, not
+      // in this node's CRDT counter (which only knows our own), so refresh
       // from the author's node the way retweet() does.
       try {
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
@@ -865,8 +865,8 @@ export default {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
     },
-    getLikesCount(tweetId) {
-      return this.likesCount.get(tweetId);
+    getReactionsCount(tweetId) {
+      return this.reactionsCount.get(tweetId);
     },
     getRetweetsCount(tweetId) {
       return this.retweetsCount.get(tweetId);
@@ -893,7 +893,7 @@ export default {
         return;
       }
 
-      this.likesCount.set(stats.tweet_id, stats.likes_count);
+      this.reactionsCount.set(stats.tweet_id, stats.reactions_count);
       this.reactions = stats.reactions || {};
       // my_reaction is answered from our own node, so it outranks the
       // local cache — it survives a browser reset and other devices. An

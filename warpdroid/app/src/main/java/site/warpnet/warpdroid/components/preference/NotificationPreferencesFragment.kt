@@ -95,12 +95,12 @@ class NotificationPreferencesFragment : BasePreferencesFragment() {
                 }
 
                 switchPreference {
-                    setTitle(R.string.notification_like_name)
-                    setSummary(R.string.notification_like_description)
+                    setTitle(R.string.notification_reaction_name)
+                    setSummary(R.string.notification_reaction_description)
                     isIconSpaceReserved = false
-                    isChecked = activeAccount.notificationsLiked
+                    isChecked = activeAccount.notificationsReacted
                     setOnPreferenceChangeListener { _, newValue ->
-                        updateAccount { copy(notificationsLiked = newValue as Boolean) }
+                        updateAccount { copy(notificationsReacted = newValue as Boolean) }
                         true
                     }
                 }

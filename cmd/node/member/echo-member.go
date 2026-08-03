@@ -397,11 +397,11 @@ func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	return prefix + incomingText
 }
 
-func (e *echoBot) likeTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+func (e *echoBot) reactToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	_, err := e.node.GenericStream(
 		requesterNodeID,
-		event.PUBLIC_POST_LIKE,
-		event.LikeEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
+		event.PUBLIC_POST_REACT,
+		event.ReactionEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
 	)
 	return err
 }

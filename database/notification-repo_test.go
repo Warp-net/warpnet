@@ -40,8 +40,8 @@ func (s *NotificationsRepoTestSuite) TestAddAndListNotifications() {
 	userId := uuid.New().String()
 
 	not1 := domain.Notification{
-		Type:        domain.NotificationLikeType,
-		Text:        "someone liked your tweet",
+		Type:        domain.NotificationReactionType,
+		Text:        "someone reacted your tweet",
 		RecepientId: userId,
 		IsRead:      false,
 		CreatedAt:   time.Now().Add(-2 * time.Second),
@@ -94,7 +94,7 @@ func (s *NotificationsRepoTestSuite) TestUnreadCountWalksAllPages() {
 
 	for i := 0; i < 7; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
-			Type:        domain.NotificationLikeType,
+			Type:        domain.NotificationReactionType,
 			Text:        "unread",
 			RecepientId: userId,
 			IsRead:      false,
@@ -123,7 +123,7 @@ func (s *NotificationsRepoTestSuite) TestMarkRead() {
 	userId := uuid.New().String()
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type:        domain.NotificationLikeType,
+		Type:        domain.NotificationReactionType,
 		Text:        "unread",
 		RecepientId: userId,
 	}))
@@ -169,7 +169,7 @@ func (s *NotificationsRepoTestSuite) TestMarkAllReadWalksAllPages() {
 
 	for i := 0; i < 8; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
-			Type:        domain.NotificationLikeType,
+			Type:        domain.NotificationReactionType,
 			Text:        "unread",
 			RecepientId: userId,
 		}))
@@ -198,10 +198,10 @@ func (s *NotificationsRepoTestSuite) TestMarkAllRead_DoesNotTouchOtherUsers() {
 	userB := uuid.New().String()
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type: domain.NotificationLikeType, Text: "a", RecepientId: userA,
+		Type: domain.NotificationReactionType, Text: "a", RecepientId: userA,
 	}))
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type: domain.NotificationLikeType, Text: "b", RecepientId: userB,
+		Type: domain.NotificationReactionType, Text: "b", RecepientId: userB,
 	}))
 
 	s.Require().NoError(s.repo.MarkAllRead(userA))
@@ -223,7 +223,7 @@ func (s *NotificationsRepoTestSuite) TestUnreadCount_EmptyUser() {
 
 func (s *NotificationsRepoTestSuite) TestAddNotification_MissingUserId() {
 	not := domain.Notification{
-		Type: domain.NotificationLikeType,
+		Type: domain.NotificationReactionType,
 		Text: "test",
 	}
 	err := s.repo.Add(not)
@@ -269,7 +269,7 @@ func (s *NotificationsRepoTestSuite) TestAddMultipleNotificationTypes() {
 	userId := uuid.New().String()
 
 	types := []domain.NotificationType{
-		domain.NotificationLikeType,
+		domain.NotificationReactionType,
 		domain.NotificationReplyType,
 		domain.NotificationRetweetType,
 		domain.NotificationFollowType,
@@ -299,7 +299,7 @@ func (s *NotificationsRepoTestSuite) TestListNotifications_Pagination() {
 
 	for i := 0; i < 5; i++ {
 		not := domain.Notification{
-			Type:        domain.NotificationLikeType,
+			Type:        domain.NotificationReactionType,
 			Text:        "notification",
 			RecepientId: userId,
 			CreatedAt:   time.Now().Add(-time.Duration(5-i) * time.Second),
@@ -324,8 +324,8 @@ func (s *NotificationsRepoTestSuite) TestGetNotification() {
 	userId := uuid.New().String()
 	not := domain.Notification{
 		Id:          uuid.New().String(),
-		Type:        domain.NotificationLikeType,
-		Text:        "liked",
+		Type:        domain.NotificationReactionType,
+		Text:        "reacted",
 		RecepientId: userId,
 		CreatedAt:   time.Now(),
 	}
@@ -361,7 +361,7 @@ func (s *NotificationsRepoTestSuite) TestNotificationsIsolatedByUser() {
 	userId2 := uuid.New().String()
 
 	err := s.repo.Add(domain.Notification{
-		Type:        domain.NotificationLikeType,
+		Type:        domain.NotificationReactionType,
 		Text:        "for user1",
 		RecepientId: userId1,
 	})
@@ -392,7 +392,7 @@ func (s *NotificationsRepoTestSuite) TestReverseList_ReturnsOnlyNewerThanCursor(
 	for i := 0; i < 3; i++ {
 		s.Require().NoError(s.repo.Add(domain.Notification{
 			Id:          uuid.New().String(),
-			Type:        domain.NotificationLikeType,
+			Type:        domain.NotificationReactionType,
 			Text:        "n",
 			RecepientId: userId,
 			CreatedAt:   base.Add(time.Duration(i) * time.Second),
@@ -434,7 +434,7 @@ func (s *NotificationsRepoTestSuite) TestReverseList_NewerThanCursor() {
 	userId := uuid.New().String()
 
 	s.Require().NoError(s.repo.Add(domain.Notification{
-		Type:        domain.NotificationLikeType,
+		Type:        domain.NotificationReactionType,
 		Text:        "first",
 		RecepientId: userId,
 		CreatedAt:   time.Now().Add(-2 * time.Second),

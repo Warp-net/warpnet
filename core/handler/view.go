@@ -44,7 +44,7 @@ type ViewsStorer interface {
 	GetViewsCount(tweetId string) (uint64, error)
 }
 
-func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer LikeStreamer) warpnet.WarpHandlerFunc {
+func StreamViewHandler(repo ViewsStorer, userRepo ReactedUserFetcher, streamer ReactionStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ViewEvent
 		err := json.Unmarshal(buf, &ev)
@@ -87,7 +87,7 @@ func StreamViewHandler(repo ViewsStorer, userRepo LikedUserFetcher, streamer Lik
 	}
 }
 
-func forwardViewToAuthor(ev event.ViewEvent, userRepo LikedUserFetcher, streamer LikeStreamer) uint64 {
+func forwardViewToAuthor(ev event.ViewEvent, userRepo ReactedUserFetcher, streamer ReactionStreamer) uint64 {
 	author, err := userRepo.Get(ev.UserId)
 	if errors.Is(err, database.ErrUserNotFound) {
 		return 0

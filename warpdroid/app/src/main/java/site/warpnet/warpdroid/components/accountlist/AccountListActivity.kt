@@ -35,7 +35,7 @@ class AccountListActivity : BottomSheetActivity() {
         MUTES,
         FOLLOW_REQUESTS,
         RETWEETED,
-        LIKED
+        REACTED
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,7 +55,7 @@ class AccountListActivity : BottomSheetActivity() {
                 Type.FOLLOWERS -> setTitle(R.string.title_followers)
                 Type.FOLLOWS -> setTitle(R.string.title_follows)
                 Type.RETWEETED -> setTitle(R.string.title_retweeted_by)
-                Type.LIKED -> setTitle(R.string.title_liked_by)
+                Type.REACTED -> setTitle(R.string.title_reacted_by)
             }
             setDisplayHomeAsUpEnabled(true)
             setDisplayShowHomeEnabled(true)

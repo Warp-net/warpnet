@@ -43,10 +43,10 @@ import (
 const testPeerA = "12D3KooWT37h7ojLbHwwFdzHeRakaP8cyakXYPspK7kVsWYNCY1x"
 
 const (
-	routeMessage = WarpRoute("/public/post/message/0.0.0")
-	routeLike    = WarpRoute("/public/post/like/0.0.0")
-	routeFollow  = WarpRoute("/public/post/follow/0.0.0")
-	routeGetUser = WarpRoute("/public/get/user/0.0.0")
+	routeMessage  = WarpRoute("/public/post/message/0.0.0")
+	routeReaction = WarpRoute("/public/post/react/0.0.0")
+	routeFollow   = WarpRoute("/public/post/follow/0.0.0")
+	routeGetUser  = WarpRoute("/public/get/user/0.0.0")
 )
 
 type fakeStore struct {
@@ -200,7 +200,7 @@ func TestRunReplaysQueuedFromPreviousRun(t *testing.T) {
 func TestFlushDeliversAllAndClearsPending(t *testing.T) {
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeMessage))
-	mustEnqueue(store, testPeerA, string(routeLike))
+	mustEnqueue(store, testPeerA, string(routeReaction))
 
 	sender := &fakeSender{results: []error{nil, nil}}
 	o := newTestOutbox(t, store, sender)
@@ -219,7 +219,7 @@ func TestFlushDeliversAllAndClearsPending(t *testing.T) {
 func TestFlushStopsOnOfflinePreservingFIFO(t *testing.T) {
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeMessage))
-	mustEnqueue(store, testPeerA, string(routeLike))
+	mustEnqueue(store, testPeerA, string(routeReaction))
 	mustEnqueue(store, testPeerA, string(routeFollow))
 
 	sender := &fakeSender{results: []error{nil, warpnet.ErrNodeIsOffline}}
@@ -229,7 +229,7 @@ func TestFlushStopsOnOfflinePreservingFIFO(t *testing.T) {
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Len(t, entries, 2, "only the first delivered; rest kept")
-	require.Equal(t, string(routeLike), entries[0].Destination, "FIFO order preserved")
+	require.Equal(t, string(routeReaction), entries[0].Destination, "FIFO order preserved")
 	require.Equal(t, 2, sender.callCount(), "stopped after offline, third not attempted")
 }
 
@@ -249,7 +249,7 @@ func TestFlushTreatsResponseReadAsDelivered(t *testing.T) {
 func TestFlushKeepsRejectedForTTL(t *testing.T) {
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeMessage))
-	mustEnqueue(store, testPeerA, string(routeLike))
+	mustEnqueue(store, testPeerA, string(routeReaction))
 
 	sender := &fakeSender{results: []error{warpnet.WarpError("rejected"), nil}}
 	o := newTestOutbox(t, store, sender)

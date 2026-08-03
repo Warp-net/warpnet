@@ -36,7 +36,7 @@ func TestStreamViewHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamViewHandler(stubViewRepo{}, stubLikeUserRepo{}, stubStreamer{})
+		h := StreamViewHandler(stubViewRepo{}, stubReactionUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -44,7 +44,7 @@ func TestStreamViewHandler(t *testing.T) {
 	})
 
 	t.Run("empty fields rejected", func(t *testing.T) {
-		h := StreamViewHandler(stubViewRepo{}, stubLikeUserRepo{}, stubStreamer{})
+		h := StreamViewHandler(stubViewRepo{}, stubReactionUserRepo{}, stubStreamer{})
 		if _, err := h(marshal(t, event.ViewEvent{UserId: author, ViewerId: owner}), nil); err == nil {
 			t.Fatal("expected tweet id error")
 		}
@@ -63,7 +63,7 @@ func TestStreamViewHandler(t *testing.T) {
 				capturedViewerId = viewerId
 				return 1, nil
 			},
-		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
+		}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
 		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), nil)
 		if err != nil {
@@ -85,7 +85,7 @@ func TestStreamViewHandler(t *testing.T) {
 				capturedViewerId = viewerId
 				return 42, nil
 			},
-		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
+		}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
 		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
 		if err != nil {
@@ -106,7 +106,7 @@ func TestStreamViewHandler(t *testing.T) {
 				capturedTweetId = tweetId
 				return 1, nil
 			},
-		}, stubLikeUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
+		}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
 		_, err := h(marshal(t, event.ViewEvent{TweetId: domain.RetweetPrefix + tweetId, UserId: author, ViewerId: owner}), nil)
 		if err != nil {
@@ -121,7 +121,7 @@ func TestStreamViewHandler(t *testing.T) {
 		forwarded := false
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) { return 5, nil },
-		}, stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
+		}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: "remote-node"}, nil
 		}}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
@@ -151,7 +151,7 @@ func TestStreamViewHandler(t *testing.T) {
 				return 9, nil
 			},
 			getFn: func(tweetId string) (uint64, error) { return 9, nil },
-		}, stubLikeUserRepo{}, stubStreamer{
+		}, stubReactionUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, errors.New("network down")
@@ -177,7 +177,7 @@ func TestStreamViewHandler(t *testing.T) {
 				recordCalled = true
 				return 0, nil
 			},
-		}, stubLikeUserRepo{getFn: func(userId string) (domain.User, error) {
+		}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: "remote-node"}, nil
 		}}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},

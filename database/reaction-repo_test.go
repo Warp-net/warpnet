@@ -39,14 +39,14 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type LikeRepoTestSuite struct {
+type ReactionRepoTestSuite struct {
 	suite.Suite
 
 	db   *local_store.DB
-	repo *LikeRepo
+	repo *ReactionRepo
 }
 
-func (s *LikeRepoTestSuite) SetupSuite() {
+func (s *ReactionRepoTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
@@ -55,193 +55,193 @@ func (s *LikeRepoTestSuite) SetupSuite() {
 	err = authRepo.Authenticate("test", "test")
 	s.Require().NoError(err)
 
-	s.repo = NewLikeRepo(s.db, nil)
+	s.repo = NewReactionRepo(s.db, nil)
 }
 
-func (s *LikeRepoTestSuite) TearDownSuite() {
+func (s *ReactionRepoTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
-func (s *LikeRepoTestSuite) TestLikeAndUnlike() {
+func (s *ReactionRepoTestSuite) TestReactAndUnreact() {
 	userId := ulid.Make().String()
 	tweetId := ulid.Make().String()
 
-	// Like
-	likes, err := s.repo.Like(tweetId, userId, "", true)
+	// React
+	likes, err := s.repo.React(tweetId, userId, "", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
-	// Like again (should not increment)
-	likes, err = s.repo.Like(tweetId, userId, "", true)
+	// React again (should not increment)
+	likes, err = s.repo.React(tweetId, userId, "", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
 	// Check count directly
-	count, err := s.repo.LikesCount(tweetId)
+	count, err := s.repo.ReactionsCount(tweetId)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), count)
 
-	// Check likers
+	// Check reactors
 	limit := uint64(10)
-	likers, cur, err := s.repo.Likers(tweetId, &limit, nil)
+	reactors, cur, err := s.repo.Reactors(tweetId, &limit, nil)
 	s.Require().NoError(err)
-	s.Len(likers, 1)
+	s.Len(reactors, 1)
 	s.Equal(cur, "end")
-	s.Equal(userId, likers[0])
+	s.Equal(userId, reactors[0])
 
-	// Unlike
-	likes, err = s.repo.Unlike(tweetId, userId, true)
+	// Unreact
+	likes, err = s.repo.Unreact(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), likes)
 
-	// Unlike again (should not fail)
-	likes, err = s.repo.Unlike(tweetId, userId, true)
+	// Unreact again (should not fail)
+	likes, err = s.repo.Unreact(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), likes)
 
-	// Check likers now
-	likers, _, err = s.repo.Likers(tweetId, &limit, nil)
+	// Check reactors now
+	reactors, _, err = s.repo.Reactors(tweetId, &limit, nil)
 	s.Require().NoError(err)
-	s.Len(likers, 0)
+	s.Len(reactors, 0)
 }
 
-func (s *LikeRepoTestSuite) TestLike_InvalidParams() {
+func (s *ReactionRepoTestSuite) TestReact_InvalidParams() {
 	tweetId := ulid.Make().String()
 	userId := ulid.Make().String()
 
-	_, err := s.repo.Like("", userId, "", true)
+	_, err := s.repo.React("", userId, "", true)
 	s.Error(err)
 
-	_, err = s.repo.Like(tweetId, "", "", true)
+	_, err = s.repo.React(tweetId, "", "", true)
 	s.Error(err)
 
-	_, err = s.repo.Unlike("", userId, true)
+	_, err = s.repo.Unreact("", userId, true)
 	s.Error(err)
 
-	_, err = s.repo.Unlike(tweetId, "", true)
+	_, err = s.repo.Unreact(tweetId, "", true)
 	s.Error(err)
 
-	_, err = s.repo.LikesCount("")
+	_, err = s.repo.ReactionsCount("")
 	s.Error(err)
 
-	_, _, err = s.repo.Likers("", nil, nil)
+	_, _, err = s.repo.Reactors("", nil, nil)
 	s.Error(err)
 }
 
-func (s *LikeRepoTestSuite) TestLikesCount_NotFound() {
+func (s *ReactionRepoTestSuite) TestReactionsCount_NotFound() {
 	id := ulid.Make().String()
-	_, err := s.repo.LikesCount(id)
-	s.EqualError(err, ErrLikesNotFound.Error())
+	_, err := s.repo.ReactionsCount(id)
+	s.EqualError(err, ErrReactionsNotFound.Error())
 }
 
-func (s *LikeRepoTestSuite) TestLikers_Empty() {
+func (s *ReactionRepoTestSuite) TestReactors_Empty() {
 	tweetId := ulid.Make().String()
 	limit := uint64(10)
-	likers, cur, err := s.repo.Likers(tweetId, &limit, nil)
+	reactors, cur, err := s.repo.Reactors(tweetId, &limit, nil)
 	s.Require().NoError(err)
-	s.Empty(likers)
+	s.Empty(reactors)
 	s.Equal(cur, "end")
 }
 
-func TestLikeRepoTestSuite(t *testing.T) {
+func TestReactionRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	suite.Run(t, new(LikeRepoTestSuite))
+	suite.Run(t, new(ReactionRepoTestSuite))
 }
 
-func (s *LikeRepoTestSuite) TestLikedIndex() {
+func (s *ReactionRepoTestSuite) TestReactedIndex() {
 	userId := ulid.Make().String()
 	ownerId := ulid.Make().String()
 	tweetId := ulid.Make().String()
 
-	// Empty before anything is liked.
+	// Empty before anything is reacted.
 	limit := uint64(10)
-	liked, cur, err := s.repo.Liked(userId, &limit, nil)
+	reacted, cur, err := s.repo.Reacted(userId, &limit, nil)
 	s.Require().NoError(err)
-	s.Empty(liked)
+	s.Empty(reacted)
 	s.Equal("end", cur)
 
-	// Index a liked tweet.
-	err = s.repo.SetLiked(userId, tweetId, ownerId)
+	// Index a reacted tweet.
+	err = s.repo.SetReacted(userId, tweetId, ownerId)
 	s.Require().NoError(err)
 
 	// Indexing again is a no-op, not a duplicate.
-	err = s.repo.SetLiked(userId, tweetId, ownerId)
+	err = s.repo.SetReacted(userId, tweetId, ownerId)
 	s.Require().NoError(err)
 
-	liked, cur, err = s.repo.Liked(userId, &limit, nil)
+	reacted, cur, err = s.repo.Reacted(userId, &limit, nil)
 	s.Require().NoError(err)
-	s.Require().Len(liked, 1)
+	s.Require().Len(reacted, 1)
 	s.Equal("end", cur)
-	s.Equal(userId, liked[0].UserId)
-	s.Equal(tweetId, liked[0].TweetId)
-	s.Equal(ownerId, liked[0].OwnerUserId)
+	s.Equal(userId, reacted[0].UserId)
+	s.Equal(tweetId, reacted[0].TweetId)
+	s.Equal(ownerId, reacted[0].OwnerUserId)
 
-	// A later like must come back first (newest-liked-first ordering).
+	// A later like must come back first (newest-reacted-first ordering).
 	laterTweetId := ulid.Make().String()
 	time.Sleep(2 * time.Millisecond)
-	err = s.repo.SetLiked(userId, laterTweetId, ownerId)
+	err = s.repo.SetReacted(userId, laterTweetId, ownerId)
 	s.Require().NoError(err)
 
-	liked, _, err = s.repo.Liked(userId, &limit, nil)
+	reacted, _, err = s.repo.Reacted(userId, &limit, nil)
 	s.Require().NoError(err)
-	s.Require().Len(liked, 2)
-	s.Equal(laterTweetId, liked[0].TweetId)
-	s.Equal(tweetId, liked[1].TweetId)
+	s.Require().Len(reacted, 2)
+	s.Equal(laterTweetId, reacted[0].TweetId)
+	s.Equal(tweetId, reacted[1].TweetId)
 
-	err = s.repo.RemoveLiked(userId, laterTweetId)
+	err = s.repo.RemoveReacted(userId, laterTweetId)
 	s.Require().NoError(err)
 
 	// Remove and verify the index is empty again.
-	err = s.repo.RemoveLiked(userId, tweetId)
+	err = s.repo.RemoveReacted(userId, tweetId)
 	s.Require().NoError(err)
 
 	// Removing again should not fail.
-	err = s.repo.RemoveLiked(userId, tweetId)
+	err = s.repo.RemoveReacted(userId, tweetId)
 	s.Require().NoError(err)
 
-	liked, _, err = s.repo.Liked(userId, &limit, nil)
+	reacted, _, err = s.repo.Reacted(userId, &limit, nil)
 	s.Require().NoError(err)
-	s.Empty(liked)
+	s.Empty(reacted)
 }
 
-func (s *LikeRepoTestSuite) TestLikedIndex_InvalidParams() {
+func (s *ReactionRepoTestSuite) TestReactedIndex_InvalidParams() {
 	id := ulid.Make().String()
 
-	s.Error(s.repo.SetLiked("", id, id))
-	s.Error(s.repo.SetLiked(id, "", id))
-	s.Error(s.repo.SetLiked(id, id, ""))
-	s.Error(s.repo.RemoveLiked("", id))
-	s.Error(s.repo.RemoveLiked(id, ""))
-	_, _, err := s.repo.Liked("", nil, nil)
+	s.Error(s.repo.SetReacted("", id, id))
+	s.Error(s.repo.SetReacted(id, "", id))
+	s.Error(s.repo.SetReacted(id, id, ""))
+	s.Error(s.repo.RemoveReacted("", id))
+	s.Error(s.repo.RemoveReacted(id, ""))
+	_, _, err := s.repo.Reacted("", nil, nil)
 	s.Error(err)
 }
 
-func (s *LikeRepoTestSuite) TestLikers_Multiple() {
+func (s *ReactionRepoTestSuite) TestReactors_Multiple() {
 	tweetId := ulid.Make().String()
 	user1 := ulid.Make().String()
 	user2 := ulid.Make().String()
 
-	_, err := s.repo.Like(tweetId, user1, "", true)
+	_, err := s.repo.React(tweetId, user1, "", true)
 	s.Require().NoError(err)
-	_, err = s.repo.Like(tweetId, user2, "", true)
+	_, err = s.repo.React(tweetId, user2, "", true)
 	s.Require().NoError(err)
 
 	limit := uint64(10)
-	likers, _, err := s.repo.Likers(tweetId, &limit, nil)
+	reactors, _, err := s.repo.Reactors(tweetId, &limit, nil)
 	s.Require().NoError(err)
-	s.Require().Len(likers, 2)
-	s.ElementsMatch([]string{user1, user2}, likers)
+	s.Require().Len(reactors, 2)
+	s.ElementsMatch([]string{user1, user2}, reactors)
 }
 
-func (s *LikeRepoTestSuite) TestReactions_SwitchKeepsTotal() {
+func (s *ReactionRepoTestSuite) TestReactions_SwitchKeepsTotal() {
 	tweetId := ulid.Make().String()
 	user1 := ulid.Make().String()
 	user2 := ulid.Make().String()
 
-	_, err := s.repo.Like(tweetId, user1, "🔥", true)
+	_, err := s.repo.React(tweetId, user1, "🔥", true)
 	s.Require().NoError(err)
-	total, err := s.repo.Like(tweetId, user2, "", true) // no emoji named -> heart
+	total, err := s.repo.React(tweetId, user2, "", true) // no emoji named -> heart
 	s.Require().NoError(err)
 	s.Equal(uint64(2), total)
 
@@ -249,8 +249,8 @@ func (s *LikeRepoTestSuite) TestReactions_SwitchKeepsTotal() {
 	s.Require().NoError(err)
 	s.Equal(map[string]uint64{"🔥": 1, "❤️": 1}, reactions)
 
-	// Switching moves the per-emoji tallies but not the like itself.
-	total, err = s.repo.Like(tweetId, user1, "👍", true)
+	// Switching moves the per-emoji tallies but not the reaction itself.
+	total, err = s.repo.React(tweetId, user1, "👍", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(2), total)
 
@@ -263,7 +263,7 @@ func (s *LikeRepoTestSuite) TestReactions_SwitchKeepsTotal() {
 	s.Equal("👍", emoji)
 
 	// Unliking drops both the total and the emoji it was counted under.
-	total, err = s.repo.Unlike(tweetId, user1, true)
+	total, err = s.repo.Unreact(tweetId, user1, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), total)
 
@@ -276,17 +276,17 @@ func (s *LikeRepoTestSuite) TestReactions_SwitchKeepsTotal() {
 	s.Empty(emoji)
 }
 
-func (s *LikeRepoTestSuite) TestReactions_LegacyLikeIsAHeart() {
+func (s *ReactionRepoTestSuite) TestReactions_LegacyReactionIsAHeart() {
 	tweetId := ulid.Make().String()
 	legacyUser := ulid.Make().String()
 	newUser := ulid.Make().String()
 
-	// A like written before reactions existed: the liker's own id as the
+	// A like written before reactions existed: the reactor's own id as the
 	// value and no per-emoji counter at all.
 	txn, err := s.db.NewTxn()
 	s.Require().NoError(err)
-	s.Require().NoError(txn.Set(likerKey(tweetId, legacyUser), []byte(legacyUser)))
-	_, err = txn.Increment(likesCountKey(tweetId))
+	s.Require().NoError(txn.Set(reactorKey(tweetId, legacyUser), []byte(legacyUser)))
+	_, err = txn.Increment(reactionsCountKey(tweetId))
 	s.Require().NoError(err)
 	s.Require().NoError(txn.Commit())
 
@@ -294,7 +294,7 @@ func (s *LikeRepoTestSuite) TestReactions_LegacyLikeIsAHeart() {
 	s.Require().NoError(err)
 	s.Equal("❤️", emoji)
 
-	_, err = s.repo.Like(tweetId, newUser, "🔥", true)
+	_, err = s.repo.React(tweetId, newUser, "🔥", true)
 	s.Require().NoError(err)
 
 	// The total counter knows about the legacy like, the per-emoji keys
@@ -304,27 +304,27 @@ func (s *LikeRepoTestSuite) TestReactions_LegacyLikeIsAHeart() {
 	s.Equal(map[string]uint64{"🔥": 1, "❤️": 1}, reactions)
 
 	limit := uint64(10)
-	likers, _, err := s.repo.Likers(tweetId, &limit, nil)
+	reactors, _, err := s.repo.Reactors(tweetId, &limit, nil)
 	s.Require().NoError(err)
-	s.ElementsMatch([]string{legacyUser, newUser}, likers)
+	s.ElementsMatch([]string{legacyUser, newUser}, reactors)
 }
 
-func (s *LikeRepoTestSuite) TestLike_RejectsMalformedEmoji() {
+func (s *ReactionRepoTestSuite) TestReact_RejectsMalformedEmoji() {
 	tweetId := ulid.Make().String()
 	userId := ulid.Make().String()
 
-	_, err := s.repo.Like(tweetId, userId, "🔥/💧", true) // key delimiter
+	_, err := s.repo.React(tweetId, userId, "🔥/💧", true) // key delimiter
 	s.Error(err)
 
-	_, err = s.repo.Like(tweetId, userId, "not an emoji at all", true)
+	_, err = s.repo.React(tweetId, userId, "not an emoji at all", true)
 	s.Error(err)
 
-	likers, _, err := s.repo.Likers(tweetId, nil, nil)
+	reactors, _, err := s.repo.Reactors(tweetId, nil, nil)
 	s.Require().NoError(err)
-	s.Empty(likers) // nothing was stored
+	s.Empty(reactors) // nothing was stored
 }
 
-func (s *LikeRepoTestSuite) TestReactions_InvalidParams() {
+func (s *ReactionRepoTestSuite) TestReactions_InvalidParams() {
 	_, err := s.repo.Reactions("")
 	s.Error(err)
 

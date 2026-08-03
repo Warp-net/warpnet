@@ -24,7 +24,7 @@ func TestWarpRoute_IsPrivate(t *testing.T) {
 
 func TestWarpRoute_IsGet(t *testing.T) {
 	assert.True(t, WarpRoute("/public/get/info/0.0.0").IsGet())
-	assert.False(t, WarpRoute("/public/post/like/0.0.0").IsGet())
+	assert.False(t, WarpRoute("/public/post/react/0.0.0").IsGet())
 }
 
 func TestWarpRoutes_FromRoutesToPrIDs(t *testing.T) {
