@@ -57,12 +57,13 @@ resulting from the use or misuse of this software.
         aria-label="More emoji"
         title="More emoji"
         :aria-expanded="showPicker"
-        @click.stop="showPicker = !showPicker"
+        @click.stop="togglePicker"
       >+</button>
     </div>
     <EmojiPicker
       v-if="showPicker"
-      drop-up
+      :drop-up="pickerDropUp"
+      initial-category="smileys"
       @select="pick"
       @close="showPicker = false"
     />
@@ -73,6 +74,10 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {QUICK_REACTIONS} from "@/lib/emoji";
 import {dismissable} from "@/lib/modal.mixin";
+
+// What EmojiPicker occupies (search row, category tabs, h-56 grid) plus the
+// sticky header it must not slide under.
+const spaceNeededAbove = 430;
 
 export default {
   name: "ReactionBar",
@@ -90,6 +95,7 @@ export default {
     return {
       quickReactions: QUICK_REACTIONS,
       showPicker: false,
+      pickerDropUp: true,
     };
   },
   mounted() {
@@ -105,6 +111,14 @@ export default {
     document.removeEventListener("mousedown", this.__outsideHandler);
   },
   methods: {
+    // Upwards by default, but a row near the top of the viewport has to
+    // open downwards or the panel's head ends up under the header.
+    togglePicker() {
+      if (!this.showPicker) {
+        this.pickerDropUp = this.$el.getBoundingClientRect().top > spaceNeededAbove;
+      }
+      this.showPicker = !this.showPicker;
+    },
     pick(emoji) {
       this.showPicker = false;
       this.$emit("select", emoji);
