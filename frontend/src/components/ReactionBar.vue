@@ -25,9 +25,14 @@ resulting from the use or misuse of this software.
   <!-- The gap above the button is padding rather than margin, so the
        element's box reaches the button and the pointer can travel onto the
        bar without leaving the hover area that opened it. -->
-  <div class="absolute bottom-full left-0 pb-2 z-40" data-reaction-bar>
+  <!-- Anchored right and sized to its content: the containing block is the
+       quarter-width cell the reaction button lives in, so a left-anchored
+       row runs off the column and a percentage-width one is squeezed into
+       four cramped rows. w-max keeps one row, growing leftwards over the
+       cells beside it. -->
+  <div class="absolute bottom-full right-0 pb-2 z-40" data-reaction-bar>
     <div
-      class="flex items-center gap-1 rounded-full border border-lighter bg-white px-2 py-1 shadow-lg"
+      class="flex w-max items-center gap-1 rounded-full border border-lighter bg-white px-2 py-1 shadow-lg"
       role="menu"
       aria-label="React"
     >
