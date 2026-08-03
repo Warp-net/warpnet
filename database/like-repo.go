@@ -148,38 +148,24 @@ func (repo *LikeRepo) Like(tweetId, userId, emoji string, isTransitive bool) (li
 	defer txn.Rollback()
 
 	prev, err := txn.Get(reactorKey)
-	if err != nil && !local_store.IsNotFoundError(err) {
+	switch {
+	case err == nil:
+		return repo.switchReaction(txn, reactorKey, tweetId, storedReaction(prev, userId), emoji, isTransitive)
+	case local_store.IsNotFoundError(err):
+		return repo.addReaction(txn, reactorKey, likeKey, tweetId, emoji, isTransitive)
+	default:
 		return 0, err
 	}
-	if err == nil { // like exists
-		prevEmoji := storedReaction(prev, userId)
-		if prevEmoji == emoji {
-			_ = txn.Commit()
-			return repo.LikesCount(tweetId)
-		}
-		if err = txn.Set(reactorKey, []byte(emoji)); err != nil {
-			return 0, err
-		}
-		if _, err = txn.Decrement(reactionCountKey(tweetId, prevEmoji)); err != nil {
-			return 0, err
-		}
-		if _, err = txn.Increment(reactionCountKey(tweetId, emoji)); err != nil {
-			return 0, err
-		}
-		if err = txn.Commit(); err != nil {
-			return 0, err
-		}
-		if repo.statsDb != nil && isTransitive {
-			if err := repo.statsDb.Decrement(reactionCountKey(tweetId, prevEmoji).DatastoreKey()); err != nil {
-				log.Warnf("like: stats db reaction decrement: %v", err)
-			}
-			if err := repo.statsDb.Increment(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
-				log.Warnf("like: stats db reaction increment: %v", err)
-			}
-		}
-		return repo.LikesCount(tweetId)
-	}
+}
 
+// addReaction records a user's first reaction on a tweet: the total counter
+// and the emoji's own counter both go up by one. Commits txn.
+func (repo *LikeRepo) addReaction(
+	txn local_store.WarpTransactioner,
+	reactorKey, likeKey local_store.DatabaseKey,
+	tweetId, emoji string,
+	isTransitive bool,
+) (likesCount uint64, err error) {
 	if err = txn.Set(reactorKey, []byte(emoji)); err != nil {
 		return 0, err
 	}
@@ -203,6 +189,50 @@ func (repo *LikeRepo) Like(tweetId, userId, emoji string, isTransitive bool) (li
 		log.Warnf("like: stats db reaction increment: %v", err)
 	}
 	return likesCount, nil
+}
+
+// switchReaction moves an existing reaction to a different emoji. The like
+// itself stays, so only the per-emoji tallies move and the total counter is
+// left alone. Commits txn.
+func (repo *LikeRepo) switchReaction(
+	txn local_store.WarpTransactioner,
+	reactorKey local_store.DatabaseKey,
+	tweetId, prevEmoji, emoji string,
+	isTransitive bool,
+) (likesCount uint64, err error) {
+	if prevEmoji == emoji { // nothing to move
+		_ = txn.Commit()
+		return repo.LikesCount(tweetId)
+	}
+	if err = txn.Set(reactorKey, []byte(emoji)); err != nil {
+		return 0, err
+	}
+	if _, err = txn.Decrement(reactionCountKey(tweetId, prevEmoji)); err != nil {
+		return 0, err
+	}
+	if _, err = txn.Increment(reactionCountKey(tweetId, emoji)); err != nil {
+		return 0, err
+	}
+	if err = txn.Commit(); err != nil {
+		return 0, err
+	}
+	repo.moveReactionStat(tweetId, prevEmoji, emoji, isTransitive)
+	return repo.LikesCount(tweetId)
+}
+
+// moveReactionStat mirrors a switch into the network-wide (CRDT) per-emoji
+// counters. Best effort: the local counters are already committed and back
+// the read-time fallback.
+func (repo *LikeRepo) moveReactionStat(tweetId, from, to string, isTransitive bool) {
+	if repo.statsDb == nil || !isTransitive {
+		return
+	}
+	if err := repo.statsDb.Decrement(reactionCountKey(tweetId, from).DatastoreKey()); err != nil {
+		log.Warnf("like: stats db reaction decrement: %v", err)
+	}
+	if err := repo.statsDb.Increment(reactionCountKey(tweetId, to).DatastoreKey()); err != nil {
+		log.Warnf("like: stats db reaction increment: %v", err)
+	}
 }
 
 func (repo *LikeRepo) Unlike(tweetId, userId string, isTransitive bool) (likesCount uint64, err error) {
