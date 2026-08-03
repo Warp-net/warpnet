@@ -49,9 +49,17 @@ type RetweetersLister interface {
 	Retweeters(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
+// EngagementUserFetcher hydrates an engagement list into users. The batch
+// read is what the list path wants; the single read covers both the
+// per-id fallback and resolving the tweet author to forward to.
+type EngagementUserFetcher interface {
+	GetBatch(userIds ...string) (users []domain.User, err error)
+	Get(userId string) (user domain.User, err error)
+}
+
 // EngagementStreamer forwards the lookup to the tweet author's node when
-// the canonical engagement record lives elsewhere — mirrors the like.go
-// propagation pattern.
+// the canonical engagement record lives elsewhere — mirrors the
+// reaction.go propagation pattern.
 type EngagementStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
@@ -59,7 +67,7 @@ type EngagementStreamer interface {
 
 func StreamGetTweetReactorsHandler(
 	repo ReactorsLister,
-	userRepo ReactedUserFetcher,
+	userRepo EngagementUserFetcher,
 	streamer EngagementStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -88,7 +96,7 @@ func StreamGetTweetReactorsHandler(
 
 func StreamGetTweetRetweetersHandler(
 	repo RetweetersLister,
-	userRepo ReactedUserFetcher,
+	userRepo EngagementUserFetcher,
 	streamer EngagementStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -122,7 +130,7 @@ func StreamGetTweetRetweetersHandler(
 func forwardToOwner(
 	ownerUserId string,
 	streamer EngagementStreamer,
-	userRepo ReactedUserFetcher,
+	userRepo EngagementUserFetcher,
 	path stream.WarpRoute,
 	ev any,
 ) (event.UsersResponse, bool, error) {
@@ -165,7 +173,7 @@ func forwardToOwner(
 	return out, true, nil
 }
 
-func hydrateUsers(userRepo ReactedUserFetcher, ids []string) []domain.User {
+func hydrateUsers(userRepo EngagementUserFetcher, ids []string) []domain.User {
 	if len(ids) == 0 {
 		return nil
 	}
