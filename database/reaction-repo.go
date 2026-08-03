@@ -53,7 +53,7 @@ const (
 // DefaultReaction, which would inflate hearts.
 const maxReactionKinds = uint64(128)
 
-var ErrReactionsNotFound = local_store.DBError("like not found")
+var ErrReactionsNotFound = local_store.DBError("reaction not found")
 
 type ReactionStorer interface {
 	Get(key local_store.DatabaseKey) ([]byte, error)
@@ -140,9 +140,9 @@ func (repo *ReactionRepo) addReaction(
 	return reactionsCount, nil
 }
 
-// switchReaction moves an existing reaction to a different emoji. The like
-// itself stays, so only the per-emoji tallies move and the total counter is
-// left alone. Commits txn.
+// switchReaction moves an existing reaction to a different emoji. The
+// reaction itself stays, so only the per-emoji tallies move and the total
+// counter is left alone. Commits txn.
 func (repo *ReactionRepo) switchReaction(
 	txn local_store.WarpTransactioner,
 	reactorKey local_store.DatabaseKey,
@@ -340,7 +340,7 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 		if err == nil {
 			return total, nil
 		}
-		log.Warnf("get likes stat: %v", err)
+		log.Warnf("get reactions stat: %v", err)
 	}
 
 	bt, err := repo.db.Get(reactionKey)

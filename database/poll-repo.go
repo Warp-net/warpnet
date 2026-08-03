@@ -167,7 +167,7 @@ func (repo *PollRepo) Voted(tweetId, userId string) (option int, ok bool, err er
 }
 
 // Results returns the vote count for each of the poll's optionsNum options,
-// in option order. React the other engagement counters it prefers the
+// in option order. Like the other engagement counters it prefers the
 // network-wide (CRDT) total and falls back to this node's own counter.
 func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, err error) {
 	if tweetId == "" {

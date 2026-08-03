@@ -99,7 +99,7 @@ func StreamReactionHandler(
 			log.Errorf("reaction handler failed: %v", err)
 			return nil, err
 		}
-		// Best-effort "tweets I reacted" index; the reaction itself already
+		// Best-effort "tweets I reacted to" index; the reaction itself already
 		// succeeded, so an index failure must not fail the request.
 		if err := repo.SetReacted(ev.OwnerId, tweetId, ev.UserId); err != nil {
 			log.Warnf("reaction handler: reacted index: %v", err)
@@ -251,7 +251,7 @@ type ReactedTweetsLister interface {
 }
 
 // StreamGetReactionsHandler returns one page of the local user's "tweets I
-// reacted" index, newest first. Same reference-only wire shape as bookmarks:
+// reacted to" index, newest first. Same reference-only wire shape as bookmarks:
 // clients hydrate each tweet via PUBLIC_GET_TWEET using OwnerUserId.
 func StreamGetReactionsHandler(repo ReactedTweetsLister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -281,7 +281,7 @@ func StreamGetReactionsHandler(repo ReactedTweetsLister) warpnet.WarpHandlerFunc
 }
 
 // getReactionsWithDefault is a best-effort per-emoji tally for a
-// like/unlike response: the count itself already succeeded, so a failing
+// react/unreact response: the count itself already succeeded, so a failing
 // lookup must not fail the request — it falls back to an empty map, which
 // marshals away under the field's omitempty just like a nil one.
 func getReactionsWithDefault(repo ReactionsStorer, tweetId string) map[string]uint64 {

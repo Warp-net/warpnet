@@ -140,16 +140,16 @@ type Bookmark struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// React defines model for React.
-type React struct {
+// Reaction defines model for Reaction.
+type Reaction struct {
 	TweetId string `json:"tweet_id"`
 	UserId  string `json:"user_id"`
 	Emoji   string `json:"emoji,omitempty"`
 }
 
-// DefaultReaction is the emoji a like carries when the client named none:
-// every like made before reactions existed, and every like from a client
-// that still speaks the old wire shape.
+// DefaultReaction is the emoji a reaction carries when the client named
+// none: every reaction made before emoji existed, and every one from a
+// client that still speaks the old wire shape.
 const DefaultReaction = "❤️"
 
 // maxReactionRunes caps a reaction so an emoji can never blow up a
@@ -180,7 +180,7 @@ func NormalizeReaction(emoji string) (string, error) {
 }
 
 // ReactedTweet defines model for ReactedTweet — one entry of a user's
-// "tweets I reacted" index. OwnerUserId is the tweet author's id, stored
+// "tweets I reacted to" index. OwnerUserId is the tweet author's id, stored
 // alongside so clients can fetch the tweet without an extra resolution
 // round-trip.
 type ReactedTweet struct {
@@ -261,7 +261,7 @@ const (
 // immutable definition lives here, so it travels with the tweet through
 // every existing distribution path (storage, gossip, timeline snapshots).
 // The votes themselves are held per node by the poll repo, keyed by tweet
-// id, and aggregated across the network the same way likes are.
+// id, and aggregated across the network the same way reactions are.
 type Poll struct {
 	Options   []string  `json:"options"`
 	ExpiresAt time.Time `json:"expires_at"`

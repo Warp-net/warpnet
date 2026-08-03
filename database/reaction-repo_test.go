@@ -66,12 +66,12 @@ func (s *ReactionRepoTestSuite) TestReactAndUnreact() {
 	userId := ulid.Make().String()
 	tweetId := ulid.Make().String()
 
-	// React
+	// React with the default
 	likes, err := s.repo.React(tweetId, userId, "", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
-	// React again (should not increment)
+	// React again (must not increment)
 	likes, err = s.repo.React(tweetId, userId, "", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
@@ -89,12 +89,12 @@ func (s *ReactionRepoTestSuite) TestReactAndUnreact() {
 	s.Equal(cur, "end")
 	s.Equal(userId, reactors[0])
 
-	// Unreact
+	// Take the reaction back
 	likes, err = s.repo.Unreact(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), likes)
 
-	// Unreact again (should not fail)
+	// Take it back again (must not fail)
 	likes, err = s.repo.Unreact(tweetId, userId, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(0), likes)
@@ -154,7 +154,7 @@ func (s *ReactionRepoTestSuite) TestReactedIndex() {
 	ownerId := ulid.Make().String()
 	tweetId := ulid.Make().String()
 
-	// Empty before anything is reacted.
+	// Empty before anything is reacted to.
 	limit := uint64(10)
 	reacted, cur, err := s.repo.Reacted(userId, &limit, nil)
 	s.Require().NoError(err)
@@ -177,7 +177,7 @@ func (s *ReactionRepoTestSuite) TestReactedIndex() {
 	s.Equal(tweetId, reacted[0].TweetId)
 	s.Equal(ownerId, reacted[0].OwnerUserId)
 
-	// A later like must come back first (newest-reacted-first ordering).
+	// A later reaction must come back first (newest-first ordering).
 	laterTweetId := ulid.Make().String()
 	time.Sleep(2 * time.Millisecond)
 	err = s.repo.SetReacted(userId, laterTweetId, ownerId)

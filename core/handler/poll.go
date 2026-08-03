@@ -58,10 +58,17 @@ type PollStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+// PollUserFetcher resolves the poll author, whose node a vote is forwarded
+// to. The vote path only ever looks up that one user, so unlike the
+// reaction side there is no batch read here.
+type PollUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
 func StreamPollVoteHandler(
 	repo PollVotesStorer,
 	tweetRepo PollTweetFetcher,
-	userRepo ReactedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -127,7 +134,7 @@ func StreamPollVoteHandler(
 func StreamGetPollHandler(
 	repo PollVotesStorer,
 	tweetRepo PollTweetFetcher,
-	userRepo ReactedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -178,7 +185,7 @@ func localPoll(tweetRepo PollTweetFetcher, authorId, tweetId string) (domain.Pol
 // already recorded here and the CRDT counter carries it across.
 func propagateVote(
 	ev event.PollVoteEvent,
-	userRepo ReactedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 	ownNodeInfo warpnet.NodeInfo,
 ) {
@@ -216,7 +223,7 @@ func propagateVote(
 // handle the read locally.
 func forwardPollRead(
 	ev event.GetPollEvent,
-	userRepo ReactedUserFetcher,
+	userRepo PollUserFetcher,
 	streamer PollStreamer,
 ) (event.PollResultsResponse, bool) {
 	ownNodeInfo := streamer.NodeInfo()
