@@ -385,7 +385,11 @@ func (d *NodeRepo) query(tx *local_store.Txn, q datastore.Query) (_ datastore.Re
 		defer tx.Discard()
 		defer it.Close()
 
-		it.Rewind()
+		if opt.Reverse {
+			it.Seek(append(append([]byte{}, opt.Prefix...), 0xFF))
+		} else {
+			it.Rewind()
+		}
 
 		for skipped := 0; skipped < q.Offset && it.Valid(); it.Next() {
 			if d.db.IsClosed() {
@@ -678,7 +682,7 @@ const (
 )
 
 const (
-	noExpiryBlockDuration time.Duration = 0
+	noExpiryBlockDuration time.Duration = local_store.PermanentTTL
 	advancedBlockDuration               = 7 * 24 * time.Hour
 	mediumBlockDuration                 = 24 * time.Hour
 	initialBlockDuration                = time.Hour
@@ -782,8 +786,6 @@ func (d *NodeRepo) BlocklistPermanent(peerId string) error {
 		AddRootID(peerId).
 		Build()
 
-	// noExpiryBlockDuration = 0 means no TTL — the entry persists until
-	// BlocklistRemove is called.
 	if err := txn.SetWithTTL(blocklistUserKey, []byte{}, noExpiryBlockDuration); err != nil {
 		return err
 	}

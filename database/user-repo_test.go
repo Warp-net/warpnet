@@ -34,11 +34,11 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/goleak"
-
-	"github.com/Warp-net/warpnet/database/local-store"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/goleak"
 )
 
 type UserRepoTestSuite struct {
@@ -348,4 +348,153 @@ func (s *UserRepoTestSuite) TestList_NoFixedKeyLeak() {
 	s.Equal(1, seen["leakcheck1"])
 	s.Equal(1, seen["leakcheck2"])
 	s.Equal(1, seen["leakcheck3"])
+}
+
+func (s *UserRepoTestSuite) createUser(u domain.User) domain.User {
+	s.T().Helper()
+	if u.Id == "" {
+		u.Id = uuid.New().String()
+	}
+	created, err := s.repo.Create(u)
+	s.Require().NoError(err)
+	return created
+}
+
+func (s *UserRepoTestSuite) TestUpdateOfUnknownUserFails() {
+	_, err := s.repo.Update(uuid.New().String(), domain.User{Username: "ghost"})
+	s.Error(err, "updating a profile that was never created must not create it")
+}
+
+func (s *UserRepoTestSuite) TestPartialUpdateKeepsUntouchedFields() {
+	site := "https://example.org"
+	original := s.createUser(domain.User{
+		Username:           "alice",
+		Bio:                "original bio",
+		Birthdate:          "1990-01-01",
+		AvatarKey:          "avatar-1",
+		BackgroundImageKey: "bg-1",
+		Website:            &site,
+		NodeId:             "node-1",
+		Network:            "warpnet",
+	})
+
+	updated, err := s.repo.Update(original.Id, domain.User{Bio: "new bio"})
+	s.Require().NoError(err)
+
+	s.Equal("new bio", updated.Bio)
+	s.Equal("alice", updated.Username, "an unset username must not blank the profile")
+	s.Equal("1990-01-01", updated.Birthdate)
+	s.Equal("avatar-1", updated.AvatarKey)
+	s.Equal("bg-1", updated.BackgroundImageKey)
+	s.Require().NotNil(updated.Website)
+	s.Equal(site, *updated.Website)
+	s.Equal("node-1", updated.NodeId)
+	s.Require().NotNil(updated.UpdatedAt)
+}
+
+func (s *UserRepoTestSuite) TestUpdatePersistsAndIsReadableBack() {
+	original := s.createUser(domain.User{Username: "bob", Bio: "before"})
+
+	_, err := s.repo.Update(original.Id, domain.User{Bio: "after"})
+	s.Require().NoError(err)
+
+	got, err := s.repo.Get(original.Id)
+	s.Require().NoError(err)
+	s.Equal("after", got.Bio)
+	s.Equal("bob", got.Username)
+}
+
+func (s *UserRepoTestSuite) TestUpdateNeverClearsRole() {
+	original := s.createUser(domain.User{Username: "carol", Role: "member"})
+
+	updated, err := s.repo.Update(original.Id, domain.User{Bio: "hi", Role: ""})
+	s.Require().NoError(err)
+	s.Equal("member", updated.Role, "an empty role from a peer must not clear the known one")
+
+	updated, err = s.repo.Update(original.Id, domain.User{Role: "moderator"})
+	s.Require().NoError(err)
+	s.Equal("moderator", updated.Role, "an explicit role must still win")
+}
+
+func (s *UserRepoTestSuite) TestModerationStrikesAccumulate() {
+	original := s.createUser(domain.User{Username: "dave"})
+
+	reason := "spam"
+	updated, err := s.repo.Update(original.Id, domain.User{
+		Moderation: &domain.UserModeration{IsModerated: true, Strikes: 1, Reason: &reason},
+	})
+	s.Require().NoError(err)
+	s.Require().NotNil(updated.Moderation)
+	s.Equal(uint8(1), updated.Moderation.Strikes)
+
+	updated, err = s.repo.Update(original.Id, domain.User{
+		Moderation: &domain.UserModeration{IsModerated: true, Strikes: 2},
+	})
+	s.Require().NoError(err)
+	s.Equal(uint8(3), updated.Moderation.Strikes, "strikes must add up, not overwrite")
+
+	updated, err = s.repo.Update(original.Id, domain.User{Bio: "unrelated change"})
+	s.Require().NoError(err)
+	s.Require().NotNil(updated.Moderation)
+	s.Equal(uint8(3), updated.Moderation.Strikes)
+	s.True(updated.Moderation.IsModerated)
+}
+
+func (s *UserRepoTestSuite) TestMetadataMergesInsteadOfReplacing() {
+	original := s.createUser(domain.User{
+		Username: "erin",
+		Metadata: map[string]string{"pronouns": "they/them"},
+	})
+
+	updated, err := s.repo.Update(original.Id, domain.User{
+		Metadata: map[string]string{"location": "Berlin"},
+	})
+	s.Require().NoError(err)
+	s.Equal("they/them", updated.Metadata["pronouns"], "existing metadata must survive")
+	s.Equal("Berlin", updated.Metadata["location"])
+
+	updated, err = s.repo.Update(original.Id, domain.User{
+		Metadata: map[string]string{"location": "Lisbon"},
+	})
+	s.Require().NoError(err)
+	s.Equal("Lisbon", updated.Metadata["location"])
+	s.Len(updated.Metadata, 2)
+}
+
+func (s *UserRepoTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
+	original := s.createUser(domain.User{Username: "frank"})
+
+	updated, err := s.repo.Update(original.Id, domain.User{IsOffline: true, RoundTripTime: 500})
+	s.Require().NoError(err)
+	s.True(updated.IsOffline)
+	s.Equal(int64(500), updated.RoundTripTime)
+
+	updated, err = s.repo.Update(original.Id, domain.User{IsOffline: false, RoundTripTime: 20})
+	s.Require().NoError(err)
+	s.False(updated.IsOffline, "a peer coming back online must be reflected")
+	s.Equal(int64(20), updated.RoundTripTime)
+}
+
+func (s *UserRepoTestSuite) TestUpdateRebindsNodeIndex() {
+	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
+
+	_, err := s.repo.Update(original.Id, domain.User{NodeId: "node-new"})
+	s.Require().NoError(err)
+
+	got, err := s.repo.GetByNodeID("node-new")
+	s.Require().NoError(err)
+	s.Equal(original.Id, got.Id)
+}
+
+func (s *UserRepoTestSuite) TestUpdateHandlesExoticProfileText() {
+	original := s.createUser(domain.User{Username: "heidi"})
+
+	longText := strings.Repeat("я", 3000)
+	updated, err := s.repo.Update(original.Id, domain.User{
+		Bio:      longText,
+		Username: `<script>alert(1)</script>`,
+	})
+	s.Require().NoError(err)
+	s.Equal(longText, updated.Bio)
+	s.Equal(`<script>alert(1)</script>`, updated.Username, "escaping is the client's job, storage must be verbatim")
 }

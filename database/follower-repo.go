@@ -175,6 +175,10 @@ func (repo *FollowRepo) IsFollower(ownerId, otherUserId string) bool {
 }
 
 func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
+	if fromUserId == "" || toUserId == "" {
+		return local_store.DBError("invalid unfollow params")
+	}
+
 	fixedFollowingKey := local_store.NewPrefixBuilder(FollowRepoName).
 		AddSubPrefix(followingSubName).
 		AddRootID(toUserId).
@@ -217,14 +221,18 @@ func (repo *FollowRepo) Unfollow(fromUserId, toUserId string) error {
 	if err := txn.Delete(fixedFollowingKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(local_store.DatabaseKey(sortableFollowingKey)); err != nil {
-		return err
+	if len(sortableFollowingKey) != 0 {
+		if err := txn.Delete(local_store.DatabaseKey(sortableFollowingKey)); err != nil {
+			return err
+		}
 	}
 	if err := txn.Delete(fixedFollowerKey); err != nil {
 		return err
 	}
-	if err := txn.Delete(local_store.DatabaseKey(sortableFollowerKey)); err != nil {
-		return err
+	if len(sortableFollowerKey) != 0 {
+		if err := txn.Delete(local_store.DatabaseKey(sortableFollowerKey)); err != nil {
+			return err
+		}
 	}
 	if _, err := txn.Decrement(followingsCountKey); err != nil {
 		return err

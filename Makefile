@@ -27,7 +27,8 @@ prune-testnet:
 	rm -rf $(HOME)/.warpdata/testnet/*
 
 check-heap:
-	go build -gcflags="-m" main.go
+	@go build -gcflags="-m" ./... 2> /tmp/warpnet-escape.log || true
+	@LC_ALL=C awk -f .github/scripts/heap-escape-report.awk /tmp/warpnet-escape.log
 
 update-deps:
 	go get -v -u all && go mod vendor
