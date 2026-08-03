@@ -67,10 +67,10 @@ type LikesStorer interface {
 	RemoveLiked(userId, tweetId string) error
 }
 
-// reactionsOf is a best-effort per-emoji breakdown for a like/unlike
+// reactionBreakdown is a best-effort per-emoji tally for a like/unlike
 // response: the count itself already succeeded, so a failing breakdown
 // must not fail the request.
-func reactionsOf(repo LikesStorer, tweetId string) map[string]uint64 {
+func reactionBreakdown(repo LikesStorer, tweetId string) map[string]uint64 {
 	reactions, err := repo.Reactions(tweetId)
 	if err != nil {
 		log.Warnf("like handler: reactions breakdown: %v", err)
@@ -119,7 +119,7 @@ func StreamLikeHandler(
 
 		isOwnTweetLike := ev.OwnerId == ev.UserId
 		if isOwnTweetLike { // own tweet like
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 
 		isSomeoneLikedMe := ev.OwnerId != ownNodeInfo.OwnerId
@@ -138,19 +138,19 @@ func StreamLikeHandler(
 			}); err != nil {
 				log.Errorf("like handler: adding notification: %v", err)
 			}
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 
 		likedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 
 		if likedUser.NodeId == ownNodeInfo.ID.String() {
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 
 		likeDataResp, err := streamer.GenericStream(
@@ -164,7 +164,7 @@ func StreamLikeHandler(
 			},
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 		if err != nil {
 			return nil, err
@@ -175,7 +175,7 @@ func StreamLikeHandler(
 			log.Errorf("unmarshal other like error response: %s", possibleError.Message)
 		}
 
-		return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+		return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 	}
 }
 
@@ -209,24 +209,24 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 
 		isOwnTweetDislike := ev.OwnerId == ev.UserId
 		if isOwnTweetDislike { // own tweet like
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 
 		isSomeoneDislikedMe := ev.OwnerId != ownNodeInfo.OwnerId
 		if isSomeoneDislikedMe { // likes exchange finished
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 
 		unlikedUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
 
 		if unlikedUser.NodeId == ownNodeInfo.ID.String() {
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 
 		unlikeDataResp, err := streamer.GenericStream(
@@ -239,7 +239,7 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			},
 		)
 		if errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+			return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 		}
 		if err != nil {
 			return nil, err
@@ -250,7 +250,7 @@ func StreamUnlikeHandler(repo LikesStorer, userRepo LikedUserFetcher, streamer L
 			log.Errorf("unmarshal other unlike error response: %s", possibleError.Message)
 		}
 
-		return event.LikesCountResponse{Count: num, Reactions: reactionsOf(repo, tweetId)}, nil
+		return event.LikesCountResponse{Count: num, Reactions: reactionBreakdown(repo, tweetId)}, nil
 	}
 }
 
