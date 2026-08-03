@@ -276,6 +276,23 @@ func TestStreamLikeHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("answers an empty breakdown when the lookup fails", func(t *testing.T) {
+		repo := stubLikeRepo{
+			reactionsFn: func(tweetId string) (map[string]uint64, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		h := StreamLikeHandler(repo, stubLikeUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.LikeEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), nil)
+		if err != nil {
+			t.Fatalf("a failing breakdown must not fail the like: %v", err)
+		}
+		countResp := resp.(event.LikesCountResponse)
+		if countResp.Reactions == nil || len(countResp.Reactions) != 0 {
+			t.Fatalf("expected an empty map, got %#v", countResp.Reactions)
+		}
+	})
+
 	t.Run("carries the reaction and echoes the breakdown", func(t *testing.T) {
 		var (
 			storedEmoji   string
