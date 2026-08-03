@@ -138,9 +138,8 @@ func (repo *ReactionRepo) addReaction(
 }
 
 // switchReaction moves an existing reaction to a different emoji. The
-// reaction itself stays, so only this node's per-emoji tallies move: the
-// total is untouched and there is nothing to mirror into the CRDT.
-// Commits txn.
+// reaction itself stays, so only the per-emoji tallies move and the total
+// counter is left alone. Commits txn.
 func (repo *ReactionRepo) switchReaction(
 	txn local_store.WarpTransactioner,
 	reactorKey local_store.DatabaseKey,
@@ -251,11 +250,6 @@ func (repo *ReactionRepo) Reactions(tweetId string) (map[string]uint64, error) {
 		reactions = make(map[string]uint64, len(items))
 		named     uint64
 	)
-	// Local counters only, deliberately. The author's node is where every
-	// reaction is propagated, so its own counters are the whole picture, and
-	// the per-emoji CRDT keys merge independently of each other and of the
-	// total — reading them here let the breakdown contradict both the total
-	// and the reactor's own emoji while deltas were still in flight.
 	for _, item := range items {
 		emoji := keyID(item.Key)
 		count := decodeCount(item.Value)
@@ -308,13 +302,6 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 		AddRootID(tweetId).
 		Build()
 
-	// The two counters see different slices of the truth, so the answer is
-	// whichever knows more. The CRDT is bumped once per reaction, by the
-	// reactor's node alone, and reaches everyone else only once its delta
-	// replicates. The local counter is bumped by every node the reaction
-	// passes through, so the author's node — where all of them land — has
-	// the full tally before any of that replicates. Preferring the CRDT
-	// undercounted every reaction made from another node.
 	var networkTotal uint64
 	if repo.statsDb != nil {
 		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())

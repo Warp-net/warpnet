@@ -336,9 +336,6 @@ func (s *ReactionRepoTestSuite) TestReactions_InvalidParams() {
 	s.Error(err)
 }
 
-// crdtSkew is a stats store whose per-key values can be nudged out of step
-// with each other, the way independently merging CRDT deltas are in a real
-// cluster.
 type crdtSkew struct {
 	vals map[string]uint64
 }
@@ -357,8 +354,6 @@ func (c *crdtSkew) Decrement(key ds.Key) error {
 	return nil
 }
 
-// A switch, then a stale per-emoji CRDT view: the breakdown must follow the
-// reaction that is actually stored, never the emoji the CRDT still carries.
 func (s *ReactionRepoTestSuite) TestReactions_SurviveSkewedCRDT() {
 	skew := &crdtSkew{vals: map[string]uint64{}}
 	repo := NewReactionRepo(s.db, skew)
@@ -371,7 +366,6 @@ func (s *ReactionRepoTestSuite) TestReactions_SurviveSkewedCRDT() {
 	_, err = repo.React(tweetId, userId, "🔥", true) // switch
 	s.Require().NoError(err)
 
-	// The heart's delta hasn't been retracted and the fire's hasn't landed.
 	skew.vals[reactionCountKey(tweetId, "❤️").DatastoreKey().String()] = 1
 	skew.vals[reactionCountKey(tweetId, "🔥").DatastoreKey().String()] = 0
 
@@ -388,9 +382,6 @@ func (s *ReactionRepoTestSuite) TestReactions_SurviveSkewedCRDT() {
 	s.Equal(total, sumCounts(reactions), "the breakdown must add up to the total")
 }
 
-// Taking a reaction back must clear the chip even while the per-emoji CRDT
-// delta is still in flight — the counter and the breakdown reached zero
-// together on the screenshot that started this.
 func (s *ReactionRepoTestSuite) TestReactions_UnreactClearsSkewedChip() {
 	skew := &crdtSkew{vals: map[string]uint64{}}
 	repo := NewReactionRepo(s.db, skew)
@@ -419,10 +410,6 @@ func sumCounts(m map[string]uint64) uint64 {
 	return sum
 }
 
-// A reaction that arrived from another node is stored here but never bumps
-// this node's CRDT delta — only the reactor's own node does that. The author's
-// node must still count it, which is what the two-node run caught: the total
-// stayed one short of the breakdown for every remote reaction.
 func (s *ReactionRepoTestSuite) TestReactionsCount_CountsPropagatedReactions() {
 	skew := &crdtSkew{vals: map[string]uint64{}}
 	repo := NewReactionRepo(s.db, skew)
