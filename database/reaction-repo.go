@@ -99,7 +99,7 @@ func (repo *ReactionRepo) React(tweetId, userId, emoji string, isTransitive bool
 	prev, err := txn.Get(reactorKey)
 	switch {
 	case err == nil:
-		return repo.switchReaction(txn, reactorKey, tweetId, storedReaction(prev, userId), emoji, isTransitive)
+		return repo.switchReaction(txn, reactorKey, tweetId, storedReaction(prev, userId), emoji)
 	case local_store.IsNotFoundError(err):
 		return repo.addReaction(txn, reactorKey, reactionKey, tweetId, emoji, isTransitive)
 	default:
@@ -134,9 +134,6 @@ func (repo *ReactionRepo) addReaction(
 	if err := repo.statsDb.Increment(reactionKey.DatastoreKey()); err != nil {
 		log.Warnf("react: stats db increment: %v", err)
 	}
-	if err := repo.statsDb.Increment(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
-		log.Warnf("react: stats db reaction increment: %v", err)
-	}
 	return reactionsCount, nil
 }
 
@@ -147,7 +144,6 @@ func (repo *ReactionRepo) switchReaction(
 	txn local_store.WarpTransactioner,
 	reactorKey local_store.DatabaseKey,
 	tweetId, prevEmoji, emoji string,
-	isTransitive bool,
 ) (reactionsCount uint64, err error) {
 	if prevEmoji == emoji { // nothing to move
 		_ = txn.Commit()
@@ -165,23 +161,7 @@ func (repo *ReactionRepo) switchReaction(
 	if err = txn.Commit(); err != nil {
 		return 0, err
 	}
-	repo.moveReactionStat(tweetId, prevEmoji, emoji, isTransitive)
 	return repo.ReactionsCount(tweetId)
-}
-
-// moveReactionStat mirrors a switch into the network-wide (CRDT) per-emoji
-// counters. Best effort: the local counters are already committed and back
-// the read-time fallback.
-func (repo *ReactionRepo) moveReactionStat(tweetId, from, to string, isTransitive bool) {
-	if repo.statsDb == nil || !isTransitive {
-		return
-	}
-	if err := repo.statsDb.Decrement(reactionCountKey(tweetId, from).DatastoreKey()); err != nil {
-		log.Warnf("react: stats db reaction decrement: %v", err)
-	}
-	if err := repo.statsDb.Increment(reactionCountKey(tweetId, to).DatastoreKey()); err != nil {
-		log.Warnf("react: stats db reaction increment: %v", err)
-	}
 }
 
 func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (reactionsCount uint64, err error) {
@@ -233,9 +213,6 @@ func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (re
 	if err := repo.statsDb.Decrement(unreactionKey.DatastoreKey()); err != nil {
 		log.Warnf("unreact: stats db decrement: %v", err)
 	}
-	if err := repo.statsDb.Decrement(reactionCountKey(tweetId, emoji).DatastoreKey()); err != nil {
-		log.Warnf("unreact: stats db reaction decrement: %v", err)
-	}
 
 	return reactionsCount, nil
 }
@@ -275,18 +252,8 @@ func (repo *ReactionRepo) Reactions(tweetId string) (map[string]uint64, error) {
 	)
 	for _, item := range items {
 		emoji := keyID(item.Key)
-		if emoji == "" {
-			continue
-		}
 		count := decodeCount(item.Value)
-		if repo.statsDb != nil {
-			if total, statErr := repo.statsDb.GetAggregatedStat(
-				local_store.DatabaseKey(item.Key).DatastoreKey(),
-			); statErr == nil {
-				count = total
-			}
-		}
-		if count == 0 {
+		if emoji == "" || count == 0 {
 			continue
 		}
 		reactions[emoji] = count
@@ -335,22 +302,31 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 		AddRootID(tweetId).
 		Build()
 
+	var networkTotal uint64
 	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())
-		if err == nil {
-			return total, nil
+		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())
+		if statErr != nil {
+			log.Warnf("get reactions stat: %v", statErr)
+		} else {
+			networkTotal = total
 		}
-		log.Warnf("get reactions stat: %v", err)
 	}
 
 	bt, err := repo.db.Get(reactionKey)
 	if local_store.IsNotFoundError(err) {
-		return 0, ErrReactionsNotFound
+		if networkTotal == 0 {
+			return 0, ErrReactionsNotFound
+		}
+		return networkTotal, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	return binary.BigEndian.Uint64(bt), nil
+	localTotal := binary.BigEndian.Uint64(bt)
+	if networkTotal > localTotal {
+		return networkTotal, nil
+	}
+	return localTotal, nil
 }
 
 type reactorIDs = []string
