@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isMastodonUser, isExperimentalNetwork } from '@/lib/network';
+import {
+  isMastodonUser,
+  isExperimentalNetwork,
+  isMastodonTweet,
+  mastodonInstance,
+} from '@/lib/network';
 
 const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
 
@@ -28,6 +33,37 @@ describe('isMastodonUser', () => {
 
   it('handles a missing user', () => {
     expect(isMastodonUser(null)).toBe(false);
+  });
+});
+
+describe('isMastodonTweet', () => {
+  it('classifies by the network tag first', () => {
+    expect(isMastodonTweet({ user_id: ULID, network: 'mastodon' })).toBe(true);
+    expect(isMastodonTweet({ user_id: 'bob@mastodon.social', network: 'warpnet' })).toBe(false);
+    expect(isMastodonTweet({ user_id: 'x', network: 'testnet' })).toBe(false);
+    expect(isMastodonTweet({ user_id: 'x', network: 'mainnet' })).toBe(false);
+  });
+
+  it('falls back to the user_id shape without a tag', () => {
+    expect(isMastodonTweet({ user_id: 'bob@mastodon.social' })).toBe(true);
+    expect(isMastodonTweet({ user_id: ULID })).toBe(false);
+  });
+
+  it('handles a missing tweet', () => {
+    expect(isMastodonTweet(null)).toBe(false);
+  });
+});
+
+describe('mastodonInstance', () => {
+  it('extracts the instance from a fediverse handle', () => {
+    expect(mastodonInstance('bob@mastodon.social')).toBe('mastodon.social');
+  });
+
+  it('returns empty for non-handles', () => {
+    expect(mastodonInstance(ULID)).toBe('');
+    expect(mastodonInstance('')).toBe('');
+    expect(mastodonInstance(undefined)).toBe('');
+    expect(mastodonInstance('@leading-only')).toBe('');
   });
 });
 

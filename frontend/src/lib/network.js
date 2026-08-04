@@ -41,6 +41,25 @@ export function isMastodonUser(user) {
     return !ULID_RE.test(user.id || '');
 }
 
+// Same discriminator for a single tweet: the gateway stamps bridged tweets
+// with a foreign network ("mastodon"); older cached rows fall back to the
+// id shape (bridged user_id is a fediverse handle, not a ULID).
+export function isMastodonTweet(tweet) {
+    if (!tweet) {
+        return false;
+    }
+    if (tweet.network) {
+        return !WARPNET_NETWORKS.includes(tweet.network);
+    }
+    return !ULID_RE.test(tweet.user_id || '');
+}
+
+// "bob@mastodon.social" -> "mastodon.social"; '' when the id is not a handle.
+export function mastodonInstance(userId) {
+    const at = (userId || '').lastIndexOf('@');
+    return at > 0 ? userId.slice(at + 1) : '';
+}
+
 // The node's own private network, as reported by the login response. The node
 // normalizes "mainnet" to "warpnet" (config/config.go), so production reports
 // itself as "warpnet"; both names are accepted here in case one reaches us
