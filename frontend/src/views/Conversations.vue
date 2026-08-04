@@ -211,7 +211,14 @@ export default {
       if (isMastodonUser(u)) {
         return
       }
-      u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key})
+      // A failed avatar fetch must not reject loadChatUser: normalizeChats
+      // awaits these in a Promise.all, so one broken avatar would hide the
+      // whole list. The row falls back to the default profile image.
+      try {
+        u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key})
+      } catch (err) {
+        console.warn('conversations: failed to load avatar for', u.id, err)
+      }
       this.usersMap.set(u.id, u)
     },
     // The row shows the participant who is not the owner, so the ids are

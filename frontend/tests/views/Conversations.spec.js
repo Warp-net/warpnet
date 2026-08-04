@@ -204,6 +204,30 @@ describe('Conversations.vue', () => {
     expect(screen.queryByText(/No messages yet/i)).not.toBeInTheDocument();
   });
 
+  // The avatar fetch runs inside the same Promise.all as the profile
+  // fetches; a rejection there must not sink the whole list.
+  it('keeps the chat row when the avatar fetch fails', async () => {
+    warpnetService.getChats.mockResolvedValue([
+      {
+        id: 'chat-avatar',
+        owner_id: ALICE,
+        other_user_id: BOB,
+        last_message: 'yo',
+      },
+    ]);
+    warpnetService.getProfile.mockImplementation(async (id) => ({
+      id,
+      username: id,
+      avatar_key: 'some-key',
+    }));
+    warpnetService.getImage.mockRejectedValue(new Error('ERR_TIMEOUT'));
+
+    renderConversations();
+
+    expect(await screen.findByText(BOB)).toBeInTheDocument();
+    expect(screen.getByText('yo')).toBeInTheDocument();
+  });
+
   it('clears the loader when the chat list request fails', async () => {
     warpnetService.getChats.mockRejectedValue(new Error('node unreachable'));
 
