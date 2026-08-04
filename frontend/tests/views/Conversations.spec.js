@@ -221,6 +221,28 @@ describe('Conversations.vue', () => {
     expect(screen.getByText('yo')).toBeInTheDocument();
   });
 
+  it('renders the list without waiting for a slow avatar', async () => {
+    warpnetService.getChats.mockResolvedValue([
+      {
+        id: 'chat-slow',
+        owner_id: ALICE,
+        other_user_id: BOB,
+        last_message: 'zzz',
+      },
+    ]);
+    warpnetService.getProfile.mockImplementation(async (id) => ({
+      id,
+      username: id,
+      avatar_key: 'some-key',
+    }));
+    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+
+    renderConversations();
+
+    expect(await screen.findByText(BOB, undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.getByText('zzz')).toBeInTheDocument();
+  });
+
   it('clears the loader when the chat list request fails', async () => {
     warpnetService.getChats.mockRejectedValue(new Error('node unreachable'));
 

@@ -118,6 +118,7 @@ export default {
       chats: [],
       profileId: "",
       usersMap: new Map(),
+      pendingUsers: new Set(),
       otherUser: undefined,
       refreshTimer: null,
       refreshInFlight: false,
@@ -187,36 +188,51 @@ export default {
       if (known && known.username) {
         return
       }
-
-      let u
-      try {
-        u = await warpnetService.getProfile(userId)
-      } catch (err) {
-        console.error('conversations: failed to load chat user', userId, err)
+      if (this.pendingUsers.has(userId)) {
+        return
       }
-      if (!u || !u.id) {
-        console.warn('conversations: unresolved chat user, showing placeholder', userId)
-        if (!isMastodonUser({id: userId})) {
-          this.usersMap.set(userId, {id: userId})
+      this.pendingUsers.add(userId)
+      try {
+        let u
+        try {
+          u = await warpnetService.getProfile(userId)
+        } catch (err) {
+          console.error('conversations: failed to load chat user', userId, err)
         }
-        return
+        if (!u || !u.id) {
+          console.warn('conversations: unresolved chat user, showing placeholder', userId)
+          if (!isMastodonUser({id: userId})) {
+            this.usersMap.set(userId, {id: userId})
+          }
+          return
+        }
+        // Leaving a bridged user out of the map hides the whole chat row:
+        // the list only renders chats whose other user resolved.
+        if (isMastodonUser(u)) {
+          this.usersMap.delete(userId)
+          return
+        }
+        this.usersMap.set(userId, u)
+        try {
+          const avatar = await warpnetService.getImage({userId: userId, key: u.avatar_key})
+          if (avatar) {
+            this.usersMap.set(userId, {...u, avatar})
+          }
+        } catch (err) {
+          console.warn('conversations: failed to load avatar for', userId, err)
+        }
+      } finally {
+        this.pendingUsers.delete(userId)
       }
-      // Leaving a bridged user out of the map hides the whole chat row:
-      // the list only renders chats whose other user resolved.
-      if (isMastodonUser(u)) {
-        return
-      }
-      try {
-        u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key})
-      } catch (err) {
-        console.warn('conversations: failed to load avatar for', u.id, err)
-      }
-      this.usersMap.set(u.id, u)
     },
     normalizeChats(chats) {
       for (const chat of chats) {
         if (chat.owner_id !== this.profileId) {
           [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+        }
+        const uid = chat.other_user_id;
+        if (uid && !this.usersMap.has(uid) && !isMastodonUser({id: uid})) {
+          this.usersMap.set(uid, {id: uid});
         }
       }
       return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
@@ -224,7 +240,7 @@ export default {
     async loadMore() {
       try {
         const chats = await warpnetService.getChats(false);
-        await this.normalizeChats(chats);
+        this.normalizeChats(chats);
         const known = new Set(this.chats.map((c) => c.id));
         this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
       } catch (err) {
@@ -243,7 +259,7 @@ export default {
         const savedCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedCursor);
-        await this.normalizeChats(chats);
+        this.normalizeChats(chats);
         if (chats.length > 0) {
           const freshIds = new Set(chats.map((c) => c.id));
           this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
@@ -261,11 +277,15 @@ export default {
       this.profileId = this.$route.params.id
       try {
         warpnetService.markMessageNotificationsRead().catch(() => {});
-        await this.loadChatUser(this.profileId)
+        this.loadChatUser(this.profileId)
 
         const chats = await warpnetService.getChats(true);
-        await this.normalizeChats(chats);
+        const hydration = this.normalizeChats(chats);
         this.chats = chats;
+        await Promise.race([
+          hydration,
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ]);
       } catch (err) {
         console.error('Failed to load chats:', err);
       } finally {
