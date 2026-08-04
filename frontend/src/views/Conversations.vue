@@ -183,8 +183,6 @@ export default {
       if (!userId || userId.length === 0) {
         return
       }
-      // A resolved profile is kept; a placeholder is retried by the next poll,
-      // so a peer that was unreachable at load time fills in when it returns.
       const known = this.usersMap.get(userId)
       if (known && known.username) {
         return
@@ -196,9 +194,6 @@ export default {
       } catch (err) {
         console.error('conversations: failed to load chat user', userId, err)
       }
-      // An unresolved profile (peer offline, user unknown to the node, request
-      // failed) carries no id. It still has to land in the map, or the chat row
-      // is filtered out and the whole list reads as empty.
       if (!u || !u.id) {
         console.warn('conversations: unresolved chat user, showing placeholder', userId)
         if (!isMastodonUser({id: userId})) {
@@ -211,9 +206,6 @@ export default {
       if (isMastodonUser(u)) {
         return
       }
-      // A failed avatar fetch must not reject loadChatUser: normalizeChats
-      // awaits these in a Promise.all, so one broken avatar would hide the
-      // whole list. The row falls back to the default profile image.
       try {
         u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key})
       } catch (err) {
@@ -221,16 +213,12 @@ export default {
       }
       this.usersMap.set(u.id, u)
     },
-    // The row shows the participant who is not the owner, so the ids are
-    // normalized before their profiles are fetched.
     normalizeChats(chats) {
       for (const chat of chats) {
         if (chat.owner_id !== this.profileId) {
           [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
         }
       }
-      // In parallel: one round trip per chat awaited in sequence held the
-      // spinner for the sum of them.
       return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
     },
     async loadMore() {
@@ -279,9 +267,6 @@ export default {
         await this.normalizeChats(chats);
         this.chats = chats;
       } catch (err) {
-        // Without this the view is stuck on the spinner for good: loading was
-        // cleared on the success path only, and the poll timer below was never
-        // reached, so nothing retried once the node answered again.
         console.error('Failed to load chats:', err);
       } finally {
         this.loading = false;

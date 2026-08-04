@@ -58,8 +58,6 @@ afterAll(() => {
   warnSpy.mockRestore();
 });
 
-// Warpnet user ids are ULIDs; the view hides bridged (non-ULID) accounts, so
-// the fixtures have to look like real ids.
 const ALICE = '01KY0357FD1DS8X2E6HHHVXJBG';
 const BOB = '01KTRA1Q83VBTES33BRQV79JN6';
 const CAROL = '01KSGHBHKG0N77T6A3RZV8WSH5';
@@ -181,9 +179,6 @@ describe('Conversations.vue', () => {
     expect(warpnetService.createChat).not.toHaveBeenCalled();
   });
 
-  // The node keeps chats whose peer it cannot resolve (an offline node, a user
-  // record without a node id): the row has to stay, or the list reads as empty
-  // while the node is returning chats.
   it('still lists a chat whose other user could not be resolved', async () => {
     warpnetService.getChats.mockResolvedValue([
       {
@@ -204,8 +199,6 @@ describe('Conversations.vue', () => {
     expect(screen.queryByText(/No messages yet/i)).not.toBeInTheDocument();
   });
 
-  // The avatar fetch runs inside the same Promise.all as the profile
-  // fetches; a rejection there must not sink the whole list.
   it('keeps the chat row when the avatar fetch fails', async () => {
     warpnetService.getChats.mockResolvedValue([
       {
@@ -233,8 +226,6 @@ describe('Conversations.vue', () => {
 
     renderConversations();
 
-    // The empty state only renders once loading is false; before the fix a
-    // failed request left the spinner up until the page was reloaded.
     expect(await screen.findByText(/No messages yet/i)).toBeInTheDocument();
   });
 });
