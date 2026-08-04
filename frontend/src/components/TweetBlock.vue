@@ -104,7 +104,7 @@ resulting from the use or misuse of this software.
         />
       </div>
       <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2" v-linkify>
-        {{ tweet.text }}
+        {{ displayText }}
       </p>
       <p v-else class="pb-2 bg-red-300">
         Moderated: {{ tweet.moderation.reason }}.
@@ -368,7 +368,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {extractYoutubeId} from "@/lib/youtube";
 import {DEFAULT_REACTION} from "@/lib/emoji";
-import {isMastodonTweet, mastodonInstance} from "@/lib/network";
+import {decodeHtmlEntities, isMastodonTweet, mastodonInstance} from "@/lib/network";
 
 export default {
   name: "Tweet",
@@ -430,6 +430,10 @@ export default {
     },
     instanceLabel() {
       return mastodonInstance(this.tweet && this.tweet.user_id) || 'Mastodon';
+    },
+    displayText() {
+      const text = (this.tweet && this.tweet.text) || '';
+      return this.isBridged ? decodeHtmlEntities(text) : text;
     },
     youtubeId() {
       if (this.hasVideo) return null;
@@ -627,7 +631,9 @@ export default {
           this.quotedUnavailable = true;
           return;
         }
-        this.quotedSourceText = src.text || '';
+        this.quotedSourceText = isMastodonTweet(src)
+          ? decodeHtmlEntities(src.text || '')
+          : (src.text || '');
         this.quotedSourceUsername = src.username || '';
       } catch (err) {
         console.warn('failed to load quoted source:', err);

@@ -300,10 +300,18 @@ export function createTimelineMerger({
         }
     }
 
+    // The newest created_at this source has ever fetched (0 if none) — the
+    // reference point for "is this actually new?" checks outside the merger.
+    function sourceNewestTs(id) {
+        const s = state.find((x) => x.id === id);
+        return s ? s.newestTs : 0;
+    }
+
     return {
         nextPage,
         refreshNewest,
         reset,
+        sourceNewestTs,
         get done() {
             return isDone();
         },

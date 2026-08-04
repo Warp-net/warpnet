@@ -5,6 +5,7 @@ import {
   isMastodonTweet,
   mastodonInstance,
   isOwnTweetEcho,
+  decodeHtmlEntities,
 } from '@/lib/network';
 
 const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
@@ -65,6 +66,20 @@ describe('mastodonInstance', () => {
     expect(mastodonInstance('')).toBe('');
     expect(mastodonInstance(undefined)).toBe('');
     expect(mastodonInstance('@leading-only')).toBe('');
+  });
+});
+
+describe('decodeHtmlEntities', () => {
+  it('decodes the entities the gateway leaves in bridged text', () => {
+    expect(decodeHtmlEntities('Linux&#39;s &amp; Unix &quot;systems&quot;'))
+      .toBe(`Linux's & Unix "systems"`);
+    expect(decodeHtmlEntities('a &lt;tag&gt; stays text')).toBe('a <tag> stays text');
+  });
+
+  it('passes plain text through untouched', () => {
+    expect(decodeHtmlEntities('no entities here')).toBe('no entities here');
+    expect(decodeHtmlEntities('')).toBe('');
+    expect(decodeHtmlEntities(undefined)).toBe(undefined);
   });
 });
 

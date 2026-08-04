@@ -60,6 +60,19 @@ export function mastodonInstance(userId) {
     return at > 0 ? userId.slice(at + 1) : '';
 }
 
+// The gateway's HTML-to-text pass strips tags but leaves character entities
+// (&#39;, &amp;, …) encoded, so bridged text needs a decode before display.
+// Parsing happens inside a detached <textarea>, which never executes markup,
+// and the result is rendered as text — never as HTML.
+export function decodeHtmlEntities(text) {
+    if (!text || text.indexOf('&') === -1) {
+        return text;
+    }
+    const el = document.createElement('textarea');
+    el.innerHTML = text;
+    return el.value;
+}
+
 // The owner's own tweet coming back as a fediverse boost: the post federated
 // out through the gateway, someone on Mastodon boosted it, and the boost
 // returns either as an inbound retweet in the local timeline (author = the

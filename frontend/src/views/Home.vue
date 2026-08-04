@@ -670,11 +670,16 @@ export default {
           // In merged mode "unseen" no longer implies "new": Mastodon rows
           // displace older Warpnet tweets off the merged first page, and the
           // poll would dump those stale tweets on top of the feed. Prepend
-          // only what is newer than the newest Warpnet row already shown —
-          // the scroll path emits the rest in order.
-          const newest = Math.max(0, ...this.timeline
-            .filter((t) => t && !isMastodonTweet(t))
-            .map((t) => new Date(t.created_at).getTime() || 0));
+          // only what is newer than the newest Warpnet tweet the merger has
+          // ever fetched (the visible feed may hold no Warpnet rows at all
+          // when followed Mastodon accounts out-post it) — the scroll path
+          // emits the rest in order.
+          const newest = Math.max(
+            this._merger.sourceNewestTs('warpnet'),
+            ...this.timeline
+              .filter((t) => t && !isMastodonTweet(t))
+              .map((t) => new Date(t.created_at).getTime() || 0),
+          );
           fresh = fresh.filter((t) => (new Date(t.created_at).getTime() || 0) > newest);
         }
         if (fresh.length > 0) {

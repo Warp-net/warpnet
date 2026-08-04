@@ -113,4 +113,18 @@ describe('TweetBlock bridged badge', () => {
     });
     await waitFor(() => expect(getByText('Mastodon')).toBeTruthy());
   });
+
+  it('decodes html entities in bridged text but not in warpnet text', async () => {
+    const { getByText } = renderTweet({
+      ...bridgedTweet,
+      text: 'Linux&#39;s kernel &amp; more',
+    });
+    await waitFor(() => expect(getByText(/Linux's kernel & more/)).toBeTruthy());
+
+    const { getByText: getWarpnet } = renderTweet({
+      ...warpnetTweet,
+      text: 'literal &#39; stays',
+    });
+    await waitFor(() => expect(getWarpnet(/literal &#39; stays/)).toBeTruthy());
+  });
 });

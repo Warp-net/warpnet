@@ -180,6 +180,41 @@ describe('Home unified timeline', () => {
     }
   });
 
+  it('keeps the poll quiet when mastodon rows fill the whole first page', async () => {
+    // Followed Mastodon accounts out-post the local network: page 1 holds no
+    // warpnet rows at all. The 10s poll must still not resurface the stale
+    // warpnet backlog on top — the reference is the merger's warpnet source,
+    // not the visible feed.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      warpnetService.getMyTimeline.mockResolvedValue([
+        wTweet('w1', '2026-01-01T10:00:00Z'),
+        wTweet('w2', '2026-01-01T09:00:00Z'),
+      ]);
+      warpnetService.listFollowingIds.mockResolvedValue(['bob@mastodon.social']);
+      warpnetService.getUserTweetsPage.mockResolvedValue({
+        tweets: Array.from({ length: 20 }, (_, n) =>
+          mTweet(`m${n}`, `2026-01-02T10:${String(59 - n).padStart(2, '0')}:00Z`)),
+        cursor: 'end',
+      });
+
+      renderHome();
+      await waitFor(() => expect(screen.getByText('mastodon m0')).toBeInTheDocument());
+      expect(screen.queryByText('warpnet w1')).not.toBeInTheDocument();
+
+      vi.advanceTimersByTime(10000);
+      await waitFor(() => expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(2));
+      await new Promise((r) => setTimeout(r, 0));
+
+      // stale warpnet rows stay off the top; the scroll path will emit them
+      const rows = screen.getAllByRole('article').map((el) => el.textContent.trim());
+      expect(rows[0]).toBe('mastodon m0');
+      expect(screen.queryByText('warpnet w1')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drops boosts that echo the owner’s own federated tweet', async () => {
     warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-03T10:00:00Z')]);
     warpnetService.listFollowingIds.mockResolvedValue(['bob@mastodon.social']);
