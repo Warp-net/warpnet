@@ -298,7 +298,7 @@ import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
 import {createTimelineMerger} from "@/lib/unified-timeline";
-import {isMastodonTweet, isMastodonUser} from "@/lib/network";
+import {isMastodonTweet, isMastodonUser, isOwnTweetEcho} from "@/lib/network";
 
 const tweetCharLimit = 280;
 // Mastodon sources are polled much slower than the 10s local-timeline poll:
@@ -708,6 +708,7 @@ export default {
       // its keyword-filter refetch loop keep working unchanged. The page
       // fetched above seeds the first call instead of being refetched.
       let seeded = firstPage;
+      const ownerId = warpnetService.getOwnerProfile()?.user_id;
       this._merger = createTimelineMerger({
         sources: [
           {
@@ -722,7 +723,12 @@ export default {
           },
           ...handles.map((handle) => ({
             id: handle,
-            fetchPage: (cursor) => warpnetService.getUserTweetsPage({userId: handle, cursor}),
+            fetchPage: async (cursor) => {
+              const page = await warpnetService.getUserTweetsPage({userId: handle, cursor});
+              // A followee boosting the owner's own federated tweet echoes
+              // it back — drop it, same as getMyTimeline does locally.
+              return {...page, tweets: page.tweets.filter((t) => !isOwnTweetEcho(t, ownerId))};
+            },
           })),
         ],
         applyFilters: (tweets) => warpnetService.applyHomeFilters(tweets),

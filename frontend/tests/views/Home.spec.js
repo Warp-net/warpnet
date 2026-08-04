@@ -180,6 +180,30 @@ describe('Home unified timeline', () => {
     }
   });
 
+  it('drops boosts that echo the owner’s own federated tweet', async () => {
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-03T10:00:00Z')]);
+    warpnetService.listFollowingIds.mockResolvedValue(['bob@mastodon.social']);
+    warpnetService.getUserTweetsPage.mockResolvedValue({
+      tweets: [
+        mTweet('m1', '2026-01-02T10:00:00Z'),
+        {
+          id: 'https://gw.ts.net/users/owner1/statuses/w9',
+          user_id: 'owner1@gw.ts.net',
+          text: 'my own tweet echoed back',
+          created_at: '2026-01-04T10:00:00Z',
+          network: 'mastodon',
+          retweeted_by: 'bob@mastodon.social',
+        },
+      ],
+      cursor: 'end',
+    });
+
+    renderHome();
+
+    await waitFor(() => expect(screen.getByText('mastodon m1')).toBeInTheDocument());
+    expect(screen.queryByText('my own tweet echoed back')).not.toBeInTheDocument();
+  });
+
   it('leaves blocked and muted bridged handles out of the fan-out', async () => {
     warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-02T10:00:00Z')]);
     warpnetService.listFollowingIds.mockResolvedValue([

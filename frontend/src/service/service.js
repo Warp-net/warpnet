@@ -27,6 +27,7 @@ import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
 import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
 import {DEFAULT_REACTION} from "@/lib/emoji";
+import {isOwnTweetEcho} from "@/lib/network";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -613,7 +614,12 @@ export const warpnetService = {
                 return []
             }
 
-            const visible = await this.applyHomeFilters(timelineResp.tweets);
+            // Own tweets that federated out and came back as fediverse
+            // boosts are an echo, not news — keep them out of the feed.
+            const withoutEchoes = timelineResp.tweets.filter(
+                t => !isOwnTweetEcho(t, owner.user_id),
+            );
+            const visible = await this.applyHomeFilters(withoutEchoes);
             if (visible.length > 0 || cursor === endCursor) {
                 return visible;
             }

@@ -4,6 +4,7 @@ import {
   isExperimentalNetwork,
   isMastodonTweet,
   mastodonInstance,
+  isOwnTweetEcho,
 } from '@/lib/network';
 
 const ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
@@ -64,6 +65,48 @@ describe('mastodonInstance', () => {
     expect(mastodonInstance('')).toBe('');
     expect(mastodonInstance(undefined)).toBe('');
     expect(mastodonInstance('@leading-only')).toBe('');
+  });
+});
+
+describe('isOwnTweetEcho', () => {
+  const OWNER = ULID;
+
+  it('flags the inbound-retweet echo (own ULID boosted by a fediverse handle)', () => {
+    expect(isOwnTweetEcho(
+      { id: 'tweet1', user_id: OWNER, retweeted_by: 'warpnet@mastodon.social' },
+      OWNER,
+    )).toBe(true);
+  });
+
+  it('flags the fan-out echo (owner as a bridged actor or a gateway status URL)', () => {
+    expect(isOwnTweetEcho(
+      { id: 'https://gw.ts.net/x', user_id: `${OWNER}@gw.ts.net`, retweeted_by: 'bob@mastodon.social' },
+      OWNER,
+    )).toBe(true);
+    expect(isOwnTweetEcho(
+      { id: `https://gw.ts.net/users/${OWNER}/statuses/tweet1`, user_id: 'other', retweeted_by: 'bob@mastodon.social' },
+      OWNER,
+    )).toBe(true);
+  });
+
+  it('keeps retweets by warpnet users and by the owner themselves', () => {
+    expect(isOwnTweetEcho(
+      { id: 'tweet1', user_id: OWNER, retweeted_by: '01BX5ZZKBKACTAV9WEVGEMMVRY' },
+      OWNER,
+    )).toBe(false);
+    expect(isOwnTweetEcho(
+      { id: 'tweet1', user_id: OWNER, retweeted_by: OWNER },
+      OWNER,
+    )).toBe(false);
+  });
+
+  it('keeps foreign boosts and plain tweets', () => {
+    expect(isOwnTweetEcho(
+      { id: 'https://m.s/1', user_id: 'alice@m.s', retweeted_by: 'bob@mastodon.social' },
+      OWNER,
+    )).toBe(false);
+    expect(isOwnTweetEcho({ id: 'tweet1', user_id: OWNER }, OWNER)).toBe(false);
+    expect(isOwnTweetEcho(null, OWNER)).toBe(false);
   });
 });
 

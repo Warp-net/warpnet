@@ -60,6 +60,25 @@ export function mastodonInstance(userId) {
     return at > 0 ? userId.slice(at + 1) : '';
 }
 
+// The owner's own tweet coming back as a fediverse boost: the post federated
+// out through the gateway, someone on Mastodon boosted it, and the boost
+// returns either as an inbound retweet in the local timeline (author = the
+// owner's ULID) or through the per-handle fan-out, where the gateway renders
+// the owner as a bridged actor (`<ulid>@<gateway-host>` / a `/statuses/` URL).
+// A retweet by a Warpnet user or by the owner themselves is not an echo.
+export function isOwnTweetEcho(tweet, ownerId) {
+    if (!tweet || !ownerId || !tweet.retweeted_by) {
+        return false;
+    }
+    if (!isMastodonUser({id: tweet.retweeted_by})) {
+        return false;
+    }
+    const author = tweet.user_id || '';
+    return author === ownerId
+        || author.startsWith(`${ownerId}@`)
+        || (typeof tweet.id === 'string' && tweet.id.includes(`/${ownerId}/statuses/`));
+}
+
 // The node's own private network, as reported by the login response. The node
 // normalizes "mainnet" to "warpnet" (config/config.go), so production reports
 // itself as "warpnet"; both names are accepted here in case one reaches us

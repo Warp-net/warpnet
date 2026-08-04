@@ -75,6 +75,36 @@ describe('getUserTweetsPage', () => {
   });
 });
 
+describe('getMyTimeline echo filter', () => {
+  it('drops own tweets that came back as fediverse boosts', async () => {
+    Call.mockImplementation(async (req) => {
+      if (req.path.includes('/timeline/')) {
+        return {
+          code: 200,
+          body: {
+            tweets: [
+              { id: 't1', user_id: 'owner1', text: 'mine', created_at: '2026-01-01T10:00:00Z' },
+              {
+                id: 't2',
+                user_id: 'owner1',
+                text: 'echoed boost',
+                created_at: '2026-01-02T10:00:00Z',
+                retweeted_by: 'warpnet@mastodon.social',
+              },
+            ],
+            cursor: 'end',
+          },
+        };
+      }
+      return { code: 200, body: {} };
+    });
+
+    const tweets = await warpnetService.getMyTimeline(true);
+
+    expect(tweets.map((t) => t.id)).toEqual(['t1']);
+  });
+});
+
 describe('listFollowingIds', () => {
   it('paginates to the end and drops the self id', async () => {
     Call
