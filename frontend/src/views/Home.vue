@@ -360,6 +360,11 @@ export default {
       const clamped = clampRunes(value, tweetCharLimit);
       if (clamped !== value) this.tweet.text = clamped;
     },
+    '$route.query.compose'(val) {
+      if (val) {
+        this.focusCompose();
+      }
+    },
   },
   computed: {
     tweetLength() {
@@ -718,13 +723,6 @@ export default {
     if (this.$route.query.compose) {
       this.focusCompose();
     }
-  },
-  watch: {
-    '$route.query.compose'(val) {
-      if (val) {
-        this.focusCompose();
-      }
-    },
   },
   beforeUnmount() {
     if (this._timelineTimer) {
