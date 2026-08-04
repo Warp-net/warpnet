@@ -183,24 +183,58 @@ export default {
       if (!userId || userId.length === 0) {
         return
       }
+      // A resolved profile is kept; a placeholder is retried by the next poll,
+      // so a peer that was unreachable at load time fills in when it returns.
+      const known = this.usersMap.get(userId)
+      if (known && known.username) {
+        return
+      }
 
-      const u = await warpnetService.getProfile(userId)
-      u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
+      let u
+      try {
+        u = await warpnetService.getProfile(userId)
+      } catch (err) {
+        console.error('conversations: failed to load chat user', userId, err)
+      }
+      // An unresolved profile (peer offline, user unknown to the node, request
+      // failed) carries no id. It still has to land in the map, or the chat row
+      // is filtered out and the whole list reads as empty.
+      if (!u || !u.id) {
+        console.warn('conversations: unresolved chat user, showing placeholder', userId)
+        if (!isMastodonUser({id: userId})) {
+          this.usersMap.set(userId, {id: userId})
+        }
+        return
+      }
       // Leaving a bridged user out of the map hides the whole chat row:
       // the list only renders chats whose other user resolved.
       if (isMastodonUser(u)) {
         return
       }
+      u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key})
       this.usersMap.set(u.id, u)
     },
-    async loadMore() {
-      const chats = await warpnetService.getChats(false);
+    // The row shows the participant who is not the owner, so the ids are
+    // normalized before their profiles are fetched.
+    normalizeChats(chats) {
       for (const chat of chats) {
-        await this.loadChatUser(chat.other_user_id)
-        await this.loadChatUser(chat.owner_id)
+        if (chat.owner_id !== this.profileId) {
+          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+        }
       }
-      const known = new Set(this.chats.map((c) => c.id));
-      this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
+      // In parallel: one round trip per chat awaited in sequence held the
+      // spinner for the sum of them.
+      return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
+    },
+    async loadMore() {
+      try {
+        const chats = await warpnetService.getChats(false);
+        await this.normalizeChats(chats);
+        const known = new Set(this.chats.map((c) => c.id));
+        this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
+      } catch (err) {
+        console.error('Failed to load more chats:', err);
+      }
     },
     // Poll-driven live updates (no server push on the bridge): re-fetch
     // page 1 of the chat list and merge by id so new incoming chats and
@@ -214,13 +248,7 @@ export default {
         const savedCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedCursor);
-        for (const chat of chats) {
-          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
-          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
-          if (chat.owner_id !== this.profileId) {
-            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-          }
-        }
+        await this.normalizeChats(chats);
         if (chats.length > 0) {
           const freshIds = new Set(chats.map((c) => c.id));
           this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
@@ -236,21 +264,21 @@ export default {
   async created() {
       console.log("loading component:", this.$options.name);
       this.profileId = this.$route.params.id
-      warpnetService.markMessageNotificationsRead().catch(() => {});
-      await this.loadChatUser(this.profileId)
+      try {
+        warpnetService.markMessageNotificationsRead().catch(() => {});
+        await this.loadChatUser(this.profileId)
 
-      const chats = await warpnetService.getChats(true);
-
-      for (const chat of chats) {
-        await this.loadChatUser(chat.owner_id)
-        await this.loadChatUser(chat.other_user_id)
-
-        if (chat.owner_id !== this.profileId) {
-          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-        }
+        const chats = await warpnetService.getChats(true);
+        await this.normalizeChats(chats);
+        this.chats = chats;
+      } catch (err) {
+        // Without this the view is stuck on the spinner for good: loading was
+        // cleared on the success path only, and the poll timer below was never
+        // reached, so nothing retried once the node answered again.
+        console.error('Failed to load chats:', err);
+      } finally {
+        this.loading = false;
       }
-      this.chats = chats;
-      this.loading = false;
 
       this.refreshTimer = setInterval(() => this.refreshChats(), 3000);
     },
