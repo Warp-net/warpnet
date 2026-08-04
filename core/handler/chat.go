@@ -473,7 +473,7 @@ func StreamDeleteMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) warp
 }
 
 // Handler for getting messages in a chat
-func StreamGetMessagesHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
+func StreamGetMessagesHandler(repo ChatStorer, _ OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllMessagesEvent
 		err := json.Unmarshal(buf, &ev)
