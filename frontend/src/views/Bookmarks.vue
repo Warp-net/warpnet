@@ -62,12 +62,26 @@ export default {
       if (window.history.length > 1) this.$router.back();
       else this.$router.push({ name: "Home" });
     },
+    async hydrateBookmarks(items) {
+      await Promise.all(items.map(async (b) => {
+        try {
+          const tweet = await warpnetService.getTweet({
+            userId: b.owner_user_id || this.ownerProfile.user_id,
+            tweetId: b.tweet_id,
+          });
+          if (tweet && tweet.id) b.tweet = tweet;
+        } catch (e) {
+          console.warn('bookmark hydrate failed:', b, e);
+        }
+      }));
+    },
     async loadMore() {
       if (this.done || this.loading) return;
       const resp = await warpnetService.getBookmarks(false);
       const items = resp?.items || [];
       if (items.length === 0) { this.done = true; return; }
       this.bookmarks = this.bookmarks.concat(items);
+      this.hydrateBookmarks(this.bookmarks.slice(-items.length));
     },
   },
   async created() {
@@ -77,6 +91,10 @@ export default {
       const resp = await warpnetService.getBookmarks(true);
       this.bookmarks = resp?.items || [];
       if (this.bookmarks.length === 0 && (resp?.cursor === 'end')) this.done = true;
+      await Promise.race([
+        this.hydrateBookmarks(this.bookmarks),
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
     } catch (err) {
       console.error('Failed to load bookmarks:', err);
     } finally {
