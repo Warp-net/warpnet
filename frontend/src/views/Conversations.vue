@@ -183,24 +183,53 @@ export default {
       if (!userId || userId.length === 0) {
         return
       }
+      const known = this.usersMap.get(userId)
+      if (known && known.username) {
+        return
+      }
 
-      const u = await warpnetService.getProfile(userId)
-      u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
+      let u
+      try {
+        u = await warpnetService.getProfile(userId)
+      } catch (err) {
+        console.error('conversations: failed to load chat user', userId, err)
+      }
+      if (!u || !u.id) {
+        console.warn('conversations: unresolved chat user, showing placeholder', userId)
+        if (!isMastodonUser({id: userId})) {
+          this.usersMap.set(userId, {id: userId})
+        }
+        return
+      }
       // Leaving a bridged user out of the map hides the whole chat row:
       // the list only renders chats whose other user resolved.
       if (isMastodonUser(u)) {
         return
       }
+      try {
+        u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key})
+      } catch (err) {
+        console.warn('conversations: failed to load avatar for', u.id, err)
+      }
       this.usersMap.set(u.id, u)
     },
-    async loadMore() {
-      const chats = await warpnetService.getChats(false);
+    normalizeChats(chats) {
       for (const chat of chats) {
-        await this.loadChatUser(chat.other_user_id)
-        await this.loadChatUser(chat.owner_id)
+        if (chat.owner_id !== this.profileId) {
+          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+        }
       }
-      const known = new Set(this.chats.map((c) => c.id));
-      this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
+      return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
+    },
+    async loadMore() {
+      try {
+        const chats = await warpnetService.getChats(false);
+        await this.normalizeChats(chats);
+        const known = new Set(this.chats.map((c) => c.id));
+        this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
+      } catch (err) {
+        console.error('Failed to load more chats:', err);
+      }
     },
     // Poll-driven live updates (no server push on the bridge): re-fetch
     // page 1 of the chat list and merge by id so new incoming chats and
@@ -214,13 +243,7 @@ export default {
         const savedCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedCursor);
-        for (const chat of chats) {
-          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
-          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
-          if (chat.owner_id !== this.profileId) {
-            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-          }
-        }
+        await this.normalizeChats(chats);
         if (chats.length > 0) {
           const freshIds = new Set(chats.map((c) => c.id));
           this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
@@ -236,21 +259,18 @@ export default {
   async created() {
       console.log("loading component:", this.$options.name);
       this.profileId = this.$route.params.id
-      warpnetService.markMessageNotificationsRead().catch(() => {});
-      await this.loadChatUser(this.profileId)
+      try {
+        warpnetService.markMessageNotificationsRead().catch(() => {});
+        await this.loadChatUser(this.profileId)
 
-      const chats = await warpnetService.getChats(true);
-
-      for (const chat of chats) {
-        await this.loadChatUser(chat.owner_id)
-        await this.loadChatUser(chat.other_user_id)
-
-        if (chat.owner_id !== this.profileId) {
-          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-        }
+        const chats = await warpnetService.getChats(true);
+        await this.normalizeChats(chats);
+        this.chats = chats;
+      } catch (err) {
+        console.error('Failed to load chats:', err);
+      } finally {
+        this.loading = false;
       }
-      this.chats = chats;
-      this.loading = false;
 
       this.refreshTimer = setInterval(() => this.refreshChats(), 3000);
     },
