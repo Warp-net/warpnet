@@ -297,8 +297,13 @@ import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+import {createTimelineMerger} from "@/lib/unified-timeline";
+import {isMastodonTweet, isMastodonUser} from "@/lib/network";
 
 const tweetCharLimit = 280;
+// Mastodon sources are polled much slower than the 10s local-timeline poll:
+// every page is a per-handle fan-out through the gateway.
+const mastodonRefreshMs = 75000;
 // Mirrors domain.PollMinOptions / PollMaxOptions / PollOptionRuneLimit — the
 // node rejects a poll outside these bounds.
 const pollMinOptions = 2;
@@ -607,7 +612,7 @@ export default {
         this.removeVideoAttachment();
         this.endOfFeed = false;
 
-        this.timeline = await warpnetService.getMyTimeline(true);
+        await this.loadInitial();
       } catch (err) {
         console.error('Failed to post tweet:', err);
         toast.error('Failed to post tweet. Please try again.');
@@ -619,13 +624,27 @@ export default {
       if (this.loadingMore || this.endOfFeed) return;
       this.loadingMore = true;
       try {
-        const timeline = await warpnetService.getMyTimeline(false);
-        const known = new Set(this.timeline.map((t) => t && t.id));
-        const fresh = timeline.filter((t) => t && t.id && !known.has(t.id));
-        if (fresh.length === 0) {
-          this.endOfFeed = true;
+        if (this._merger) {
+          const {tweets, done} = await this._merger.nextPage();
+          const known = new Set(this.timeline.map((t) => t && t.id));
+          const fresh = tweets.filter((t) => t && t.id && !known.has(t.id));
+          if (fresh.length > 0) {
+            this.timeline = this.timeline.concat(fresh);
+          }
+          // An empty page alone must not end the feed: a source that missed
+          // this page's budget (or failed once) retries on the next scroll.
+          if (done) {
+            this.endOfFeed = true;
+          }
         } else {
-          this.timeline = this.timeline.concat(fresh);
+          const timeline = await warpnetService.getMyTimeline(false);
+          const known = new Set(this.timeline.map((t) => t && t.id));
+          const fresh = timeline.filter((t) => t && t.id && !known.has(t.id));
+          if (fresh.length === 0) {
+            this.endOfFeed = true;
+          } else {
+            this.timeline = this.timeline.concat(fresh);
+          }
         }
       } catch (err) {
         console.error('Failed to load more tweets:', err);
@@ -646,7 +665,18 @@ export default {
         const page = await warpnetService.getMyTimeline(true);
         warpnetService.setCursor('timeline', savedCursor);
         const known = new Set(this.timeline.map((t) => t && t.id));
-        const fresh = page.filter((t) => t && t.id && !known.has(t.id));
+        let fresh = page.filter((t) => t && t.id && !known.has(t.id));
+        if (this._merger) {
+          // In merged mode "unseen" no longer implies "new": Mastodon rows
+          // displace older Warpnet tweets off the merged first page, and the
+          // poll would dump those stale tweets on top of the feed. Prepend
+          // only what is newer than the newest Warpnet row already shown —
+          // the scroll path emits the rest in order.
+          const newest = Math.max(0, ...this.timeline
+            .filter((t) => t && !isMastodonTweet(t))
+            .map((t) => new Date(t.created_at).getTime() || 0));
+          fresh = fresh.filter((t) => (new Date(t.created_at).getTime() || 0) > newest);
+        }
         if (fresh.length > 0) {
           this.timeline = [...fresh, ...this.timeline];
         }
@@ -654,6 +684,86 @@ export default {
         console.error('Failed to refresh timeline:', err);
       } finally {
         this._timelineRefreshing = false;
+      }
+    },
+    // (Re)build the feed. With no bridged followees this is exactly the old
+    // single-source path; otherwise a merger interleaves the local timeline
+    // with one source per followed Mastodon handle.
+    async loadInitial() {
+      if (this._mastodonTimer) {
+        clearInterval(this._mastodonTimer);
+        this._mastodonTimer = null;
+      }
+      this._merger = null;
+      const [firstPage, handles] = await Promise.all([
+        warpnetService.getMyTimeline(true),
+        this.loadBridgedHandles(),
+      ]);
+      if (handles.length === 0) {
+        this.timeline = firstPage;
+        return;
+      }
+      // The warpnet adapter delegates cursor state to the global 'timeline'
+      // key (getMyTimeline owns it), so refreshTimeline's save/restore and
+      // its keyword-filter refetch loop keep working unchanged. The page
+      // fetched above seeds the first call instead of being refetched.
+      let seeded = firstPage;
+      this._merger = createTimelineMerger({
+        sources: [
+          {
+            id: 'warpnet',
+            prefiltered: true,
+            skipRefresh: true,
+            fetchPage: async () => {
+              const tweets = seeded ?? await warpnetService.getMyTimeline(false);
+              seeded = null;
+              return {tweets, cursor: warpnetService.getCursor('timeline') || 'end'};
+            },
+          },
+          ...handles.map((handle) => ({
+            id: handle,
+            fetchPage: (cursor) => warpnetService.getUserTweetsPage({userId: handle, cursor}),
+          })),
+        ],
+        applyFilters: (tweets) => warpnetService.applyHomeFilters(tweets),
+      });
+      this.timeline = (await this._merger.nextPage()).tweets;
+      this._mastodonTimer = setInterval(() => this.refreshMastodon(), mastodonRefreshMs);
+    },
+    // The owner's followed fediverse handles, minus blocked/muted ones. Any
+    // failure degrades to a plain Warpnet-only home feed.
+    async loadBridgedHandles() {
+      try {
+        const owner = warpnetService.getOwnerProfile();
+        if (!owner || !owner.user_id) return [];
+        const ids = await warpnetService.listFollowingIds(owner.user_id);
+        const handles = ids.filter((id) => isMastodonUser({id}));
+        const visible = [];
+        for (const handle of handles) {
+          if (await warpnetService.isUserBlocked(handle)) continue;
+          if (await warpnetService.isUserMuted(handle)) continue;
+          visible.push(handle);
+        }
+        return visible;
+      } catch (err) {
+        console.warn('bridged followees unavailable:', err);
+        return [];
+      }
+    },
+    async refreshMastodon() {
+      if (!this._merger || this._mastodonRefreshing || this.loading) return;
+      this._mastodonRefreshing = true;
+      try {
+        const fresh = await this._merger.refreshNewest();
+        const known = new Set(this.timeline.map((t) => t && t.id));
+        const add = fresh.filter((t) => t && t.id && !known.has(t.id));
+        if (add.length > 0) {
+          this.timeline = [...add, ...this.timeline];
+        }
+      } catch (err) {
+        console.warn('mastodon refresh failed:', err);
+      } finally {
+        this._mastodonRefreshing = false;
       }
     },
     async toggleInfo(event) {
@@ -706,7 +816,7 @@ export default {
       console.error("Failed to load profile assets:", error);
     }
 
-    this.timeline = await warpnetService.getMyTimeline(true);
+    await this.loadInitial();
     this.loading = false;
 
     this._timelineTimer = setInterval(() => this.refreshTimeline(), 10000);
@@ -728,6 +838,10 @@ export default {
     if (this._timelineTimer) {
       clearInterval(this._timelineTimer);
       this._timelineTimer = null;
+    }
+    if (this._mastodonTimer) {
+      clearInterval(this._mastodonTimer);
+      this._mastodonTimer = null;
     }
     if (this._deepLinkFocusHandler) {
       window.removeEventListener("focus", this._deepLinkFocusHandler);
