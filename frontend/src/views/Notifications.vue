@@ -253,6 +253,7 @@ export default {
       overlayNotificationId: '',
       settingsOpen: false,
       actorAvatars: {},
+      pendingAvatars: new Set(),
     };
   },
   computed: {
@@ -322,10 +323,13 @@ export default {
       return (n && n.actor_id && this.actorAvatars[n.actor_id]) || '/default_profile.png';
     },
     async hydrateAvatars(list) {
+      // In-flight ids are skipped so the 2s notification poll can't pile
+      // duplicate requests onto a hanging peer.
       const ids = [...new Set((list || [])
         .map(n => n && n.actor_id)
-        .filter(id => id && !this.actorAvatars[id]))];
+        .filter(id => id && !this.actorAvatars[id] && !this.pendingAvatars.has(id)))];
       await Promise.all(ids.map(async (id) => {
+        this.pendingAvatars.add(id);
         try {
           const p = await warpnetService.getProfile(id);
           if (p && p.avatar_key) {
@@ -333,27 +337,31 @@ export default {
             if (img) this.actorAvatars[id] = img;
           }
         } catch (e) {}
+        finally {
+          this.pendingAvatars.delete(id);
+        }
       }));
     },
-    async hydrateRequests(ids) {
-      return Promise.all(
-        (ids || []).map(async (id) => {
+    // Each request row fills in on its own; a hanging profile leaves its
+    // placeholder in place without holding back the rest of the list.
+    hydrateRequest(id) {
+      warpnetService.getProfile(id).then(async (p) => {
+        if (!p || !p.id) return;
+        if (p.avatar_key) {
           try {
-            const p = await warpnetService.getProfile(id);
-            if (!p) return { id };
-            if (p.avatar_key) {
-              p.avatar = await warpnetService.getImage({ userId: id, key: p.avatar_key });
-            }
-            return p;
-          } catch (e) { return { id }; }
-        })
-      );
+            p.avatar = await warpnetService.getImage({ userId: id, key: p.avatar_key });
+          } catch (e) {}
+        }
+        const i = this.followRequests.findIndex(r => r.id === id);
+        if (i !== -1) this.followRequests.splice(i, 1, p);
+      }).catch(() => {});
     },
     async loadFollowRequests() {
       try {
         const resp = await warpnetService.getFollowRequests();
         const ids = resp?.follower_ids || resp?.ids || [];
-        this.followRequests = await this.hydrateRequests(ids);
+        this.followRequests = ids.map((id) => ({ id }));
+        ids.forEach((id) => this.hydrateRequest(id));
       } catch (err) {
         console.error('Failed to load follow requests:', err);
       }
@@ -383,22 +391,20 @@ export default {
       this.loading = true;
       this.ownerProfile = warpnetService.getOwnerProfile();
       // The owner stub in stateMap doesn't carry the `locked` flag, so fetch
-      // the full profile to decide whether to show the Requests tab.
-      try {
-        const me = await warpnetService.getProfile(this.ownerProfile.user_id);
-        this.locked = Boolean(me && me.locked);
-      } catch (err) {
-        console.warn('Failed to read own locked state:', err);
-      }
+      // the full profile to decide whether to show the Requests tab. It and
+      // the requests it gates fill in without holding the notification list.
+      warpnetService.getProfile(this.ownerProfile.user_id)
+        .then((me) => {
+          this.locked = Boolean(me && me.locked);
+          if (this.locked) this.loadFollowRequests();
+        })
+        .catch((err) => console.warn('Failed to read own locked state:', err));
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
         this.notifications = resp.notifications.filter((n) => n && n.type !== 'message');
         this.hydrateAvatars(this.notifications);
       }
       warpnetService.markAllNotificationsRead().catch(() => {});
-      if (this.locked) {
-        await this.loadFollowRequests();
-      }
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {
