@@ -372,6 +372,7 @@ export default {
       videoPoster: '',
       videoUploading: false,
       usersMap: new Map(),
+      pendingUsers: new Set(),
       otherUser: undefined,
       refreshTimer: null,
       refreshInFlight: false,
@@ -637,8 +638,8 @@ export default {
         if (!chat || !chat.id) {
           throw new Error('createChat returned no id');
         }
-        await this.loadChatUser(chat.owner_id);
-        await this.loadChatUser(chat.other_user_id);
+        this.loadChatUser(chat.owner_id);
+        this.loadChatUser(chat.other_user_id);
 
         this.active = { ...this.active, ...chat };
 
@@ -749,12 +750,16 @@ export default {
       this.messages = []; // reset messages
       this.active = chat;
 
-      this.messages = await warpnetService.getDirectMessages(
+      const messages = await warpnetService.getDirectMessages(
           {chatId: chat.id, cursorReset: true},
       );
-      await this.hydrateMedia(this.messages);
-      this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      // The user may have switched chats while the fetch was in flight.
+      if (this.active?.id !== chat.id) return;
+      messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      this.messages = messages;
       this.scrollToEnd();
+      // Attachments fill in per message; text must not wait for blobs.
+      this.hydrateMedia(this.messages);
     },
     askDeleteChat() {
       if (!this.active || !this.active.id) return;
@@ -799,14 +804,63 @@ export default {
       return this.usersMap.get(userId);
     },
     async loadChatUser(userId) {
-      const u = await warpnetService.getProfile(userId)
-      u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
-      // Leaving a bridged user out of the map hides the whole chat row:
-      // the list only renders chats whose other user resolved.
-      if (isMastodonUser(u)) {
+      if (!userId || userId.length === 0) {
         return
       }
-      this.usersMap.set(u.id, u)
+      const known = this.usersMap.get(userId)
+      if (known && known.username) {
+        return
+      }
+      if (this.pendingUsers.has(userId)) {
+        return
+      }
+      this.pendingUsers.add(userId)
+      try {
+        let u
+        try {
+          u = await warpnetService.getProfile(userId)
+        } catch (err) {
+          console.error('messages: failed to load chat user', userId, err)
+        }
+        if (!u || !u.id) {
+          console.warn('messages: unresolved chat user, showing placeholder', userId)
+          if (!isMastodonUser({id: userId})) {
+            this.usersMap.set(userId, {id: userId})
+          }
+          return
+        }
+        // Leaving a bridged user out of the map hides the whole chat row:
+        // the list only renders chats whose other user resolved.
+        if (isMastodonUser(u)) {
+          this.usersMap.delete(userId)
+          return
+        }
+        this.usersMap.set(userId, u)
+        try {
+          const avatar = await warpnetService.getImage({userId: userId, key: u.avatar_key})
+          if (avatar) {
+            this.usersMap.set(userId, {...u, avatar})
+          }
+        } catch (err) {
+          console.warn('messages: failed to load avatar for', userId, err)
+        }
+      } finally {
+        this.pendingUsers.delete(userId)
+      }
+    },
+    // Swap each chat so other_user_id is the peer, seed a placeholder row
+    // for peers not yet resolved, and hydrate each one independently.
+    normalizeChats(chats) {
+      for (const chat of chats) {
+        if (chat.owner_id !== this.ownerProfile.user_id) {
+          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+        }
+        const uid = chat.other_user_id;
+        if (uid && !this.usersMap.has(uid) && !isMastodonUser({id: uid})) {
+          this.usersMap.set(uid, {id: uid});
+        }
+      }
+      return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
     },
     async loadMore() {
       if (!this.active) return;
@@ -815,9 +869,12 @@ export default {
       )
       const known = new Set(this.messages.map((m) => m && m.id));
       const fresh = olderMessages.filter((m) => m && m.id && !known.has(m.id));
-      await this.hydrateMedia(fresh);
-      this.messages = [...fresh, ...this.messages];
-      this.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      if (fresh.length === 0) return;
+      const freshIds = new Set(fresh.map((m) => m.id));
+      this.messages = [...fresh, ...this.messages]
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      // Hydrate through the reactive array so the fill-in triggers a render.
+      this.hydrateMedia(this.messages.filter((m) => freshIds.has(m.id)));
     },
     isNearBottom() {
       const el = this.$refs.messagesScroll;
@@ -838,13 +895,7 @@ export default {
         const savedChatsCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedChatsCursor);
-        for (const chat of chats) {
-          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
-          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
-          if (chat.owner_id !== this.ownerProfile.user_id) {
-            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-          }
-        }
+        this.normalizeChats(chats);
         if (chats.length > 0) {
           const freshIds = new Set(chats.map((c) => c.id));
           this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
@@ -862,11 +913,12 @@ export default {
         const known = new Set(this.messages.map((m) => m && m.id));
         const fresh = page.filter((m) => m && m.id && !known.has(m.id));
         if (fresh.length === 0) return;
-        await this.hydrateMedia(fresh);
-        if (this.active?.id !== activeId) return;
+        const freshIds = new Set(fresh.map((m) => m.id));
         const wasNearBottom = this.isNearBottom();
         this.messages = [...this.messages, ...fresh]
             .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        // Hydrate through the reactive array so the fill-in triggers a render.
+        this.hydrateMedia(this.messages.filter((m) => freshIds.has(m.id)));
         if (wasNearBottom) {
           this.scrollToEnd();
         }
@@ -886,33 +938,29 @@ export default {
     // Started before the initial load (refreshData no-ops while loading)
     // so a user with no chats yet still picks up an incoming chat live.
     this.refreshTimer = setInterval(() => this.refreshData(), 3000);
-    await this.loadChatUser(this.ownerProfile.user_id)
+    this.loadChatUser(this.ownerProfile.user_id)
 
-    const chats = await warpnetService.getChats(true)
-    if (chats.length === 0) {
-      console.warn("messages: chats not found")
+    try {
+      const chats = await warpnetService.getChats(true)
+      if (chats.length === 0) {
+        console.warn("messages: chats not found")
+        return;
+      }
+
+      const activeChat = chats.find((chat) => chat.id === this.$route.params.chatId) || null;
+      const hydration = this.normalizeChats(chats);
+      this.chats = chats;
+      // The fast happy path looks the same as before; a hanging peer
+      // profile or attachment holds the loader for at most a second.
+      await Promise.race([
+        Promise.all([hydration, this.selectChat(activeChat)]),
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
+    } catch (err) {
+      console.error('messages: failed to load chats:', err);
+    } finally {
       this.loading = false;
-      return;
     }
-
-    let activeChat = null
-    for (const chat of chats) {
-      await this.loadChatUser(chat.owner_id)
-      await this.loadChatUser(chat.other_user_id)
-
-      if (chat.id === this.$route.params.chatId) {
-        console.log('ACTIVE CHAT', JSON.stringify(chat))
-        console.log('ACTIVE CHAT owner', chat.owner_id, "other", chat.other_user_id)
-        activeChat = chat
-      }
-      if (chat.owner_id !== this.ownerProfile.user_id) {
-        [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-      }
-    }
-
-    this.chats = chats;
-    await this.selectChat(activeChat);
-    this.loading = false;
     this.scrollToEnd();
   },
   beforeUnmount() {
