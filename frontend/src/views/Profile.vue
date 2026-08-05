@@ -452,7 +452,9 @@ export default {
       return pinned.concat(rest);
     },
     reactedTweets() {
-      return this.reactions.map(r => r.tweet);
+      // Entries hydrate one by one; those still waiting for their tweet
+      // are skipped instead of rendering an empty row.
+      return this.reactions.filter(r => r.tweet && r.tweet.id).map(r => r.tweet);
     },
     // Tweets and the profile owner's replies in one chronological feed.
     tweetsAndReplies() {
@@ -686,8 +688,10 @@ export default {
       if (this.activeTab === 'reactions') {
         if (this.reactionsLoading) return;
         const resp = await warpnetService.getReactions(false);
-        const items = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
+        const items = resp?.items || [];
+        if (items.length === 0) return;
         this.reactions = this.reactions.concat(items);
+        this.hydrateReactions(this.reactions.slice(-items.length));
         return;
       }
       await this.loadMoreTweets();
@@ -711,12 +715,31 @@ export default {
       if (tab === 'replies') return this.loadReplies();
       if (tab === 'media') return this.fillMediaTab();
     },
+    // Each reaction entry hydrates into its tweet independently; a hanging
+    // author node leaves that entry pending without blocking the tab.
+    async hydrateReactions(items) {
+      await Promise.all(items.map(async (l) => {
+        try {
+          const tweet = await warpnetService.getTweet({
+            userId: l.owner_user_id || this.ownerProfile.user_id,
+            tweetId: l.tweet_id,
+          });
+          if (tweet && tweet.id) l.tweet = tweet;
+        } catch (e) {
+          console.warn('reaction hydrate failed:', l, e);
+        }
+      }));
+    },
     async loadReactions() {
       if (this.reactionsLoaded || this.reactionsLoading) return;
       this.reactionsLoading = true;
       try {
         const resp = await warpnetService.getReactions(true);
-        this.reactions = (resp?.items || []).filter(r => r.tweet && r.tweet.id);
+        this.reactions = resp?.items || [];
+        await Promise.race([
+          this.hydrateReactions(this.reactions),
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ]);
         this.reactionsLoaded = true;
       } catch (err) {
         console.error('Failed to load reactions:', err);

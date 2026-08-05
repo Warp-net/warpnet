@@ -62,12 +62,26 @@ export default {
       if (window.history.length > 1) this.$router.back();
       else this.$router.push({ name: "Home" });
     },
+    async hydrateReactions(items) {
+      await Promise.all(items.map(async (l) => {
+        try {
+          const tweet = await warpnetService.getTweet({
+            userId: l.owner_user_id || this.ownerProfile.user_id,
+            tweetId: l.tweet_id,
+          });
+          if (tweet && tweet.id) l.tweet = tweet;
+        } catch (e) {
+          console.warn('reaction hydrate failed:', l, e);
+        }
+      }));
+    },
     async loadMore() {
       if (this.done || this.loading) return;
       const resp = await warpnetService.getReactions(false);
       const items = resp?.items || [];
       if (items.length === 0) { this.done = true; return; }
       this.reactions = this.reactions.concat(items);
+      this.hydrateReactions(this.reactions.slice(-items.length));
     },
   },
   async created() {
@@ -77,6 +91,10 @@ export default {
       const resp = await warpnetService.getReactions(true);
       this.reactions = resp?.items || [];
       if (this.reactions.length === 0 && (resp?.cursor === 'end')) this.done = true;
+      await Promise.race([
+        this.hydrateReactions(this.reactions),
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
     } catch (err) {
       console.error('Failed to load reactions:', err);
     } finally {
