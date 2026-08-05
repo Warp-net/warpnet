@@ -149,15 +149,9 @@ export default {
       try {
         const resp = await warpnetService.searchUsers(this.query, reset ? '' : this.cursor);
         const users = resp?.users || [];
-        const hydrated = await Promise.all(users.map(async (u) => {
-          try {
-            if (u.avatar_key && !u.avatar) {
-              u.avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key});
-            }
-          } catch (e) {}
-          return u;
-        }));
-        this.results = reset ? hydrated : this.results.concat(hydrated);
+        // Results render immediately; each row's avatar is loaded by the
+        // User component itself, so one hanging blob can't hold the list.
+        this.results = reset ? users : this.results.concat(users);
         this.cursor = resp?.cursor || 'end';
       } catch (err) {
         console.error('Search failed:', err);
