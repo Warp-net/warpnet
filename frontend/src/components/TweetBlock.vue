@@ -32,7 +32,7 @@ resulting from the use or misuse of this software.
       <div class="w-12 mr-4 flex justify-end">
         <i class="text-sm pt-1 fas fa-retweet text-dark"></i>
       </div>
-      <p class="text-sm text-dark">{{ label }}</p>
+      <p class="text-sm text-dark min-w-0 break-words">{{ label }}</p>
     </div>
   </div>
   <div
@@ -50,25 +50,28 @@ resulting from the use or misuse of this software.
         />
       </button>
     </div>
-    <div class="w-full">
-      <div class="flex items-center w-full">
-        <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn">
+    <!-- min-w-0 throughout: fediverse handles are long unbreakable strings
+         (user@ec.social-network.europa.eu); without it the flex children
+         refuse to shrink and the whole row bleeds out of the column. -->
+    <div class="w-full min-w-0">
+      <div class="flex items-center w-full min-w-0">
+        <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn truncate min-w-0 text-left">
           {{ tweet.username || 'Anonymous' }}
         </button>
-        <p class="hidden md:block text-sm text-dark ml-2">
+        <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
           @{{ tweet.user_id }}
         </p>
-        <p class="text-sm text-dark ml-2">·</p>
-        <p class="text-sm text-dark ml-2">{{ $filters.timeago(tweet.created_at) }}</p>
+        <p class="text-sm text-dark ml-2 flex-none">·</p>
+        <p class="text-sm text-dark ml-2 flex-none whitespace-nowrap">{{ $filters.timeago(tweet.created_at) }}</p>
         <span
           v-if="isBridged"
-          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-mastodon-accent text-white whitespace-nowrap"
+          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-mastodon-accent text-white whitespace-nowrap flex-none"
           :title="`Bridged from ${instanceLabel}`"
         >{{ instanceLabel }}</span>
-        <span v-if="tweet.pinned" class="ml-2 text-xs text-blue" title="Pinned tweet">
+        <span v-if="tweet.pinned" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" title="Pinned tweet">
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
-        <div class="relative ml-auto">
+        <div class="relative ml-auto flex-none">
           <button type="button" @click.stop="toggleDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
@@ -103,7 +106,7 @@ resulting from the use or misuse of this software.
           @cancel="showDeleteConfirm = false"
         />
       </div>
-      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2" v-linkify>
+      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2 break-words" v-linkify>
         {{ displayText }}
       </p>
       <p v-else class="pb-2 bg-red-300">
@@ -121,11 +124,11 @@ resulting from the use or misuse of this software.
           <p class="text-xs text-dark mt-1">The original tweet was edited after this quote was posted.</p>
         </template>
         <template v-else>
-          <p class="font-bold">
+          <p class="font-bold break-words">
             {{ quotedSourceUsername || 'Quoted tweet' }}
             <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
           </p>
-          <p v-if="quotedSourceText" class="mt-1 line-clamp-4">{{ quotedSourceText }}</p>
+          <p v-if="quotedSourceText" class="mt-1 line-clamp-4 break-words">{{ quotedSourceText }}</p>
           <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
         </template>
       </div>
