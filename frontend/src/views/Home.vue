@@ -625,6 +625,8 @@ export default {
       this.loadingMore = true;
       try {
         if (this._merger) {
+          // Never interleave with the merged first page still in flight.
+          if (this._mergerFirstPage) await this._mergerFirstPage;
           const {tweets, done} = await this._merger.nextPage();
           const known = new Set(this.timeline.map((t) => t && t.id));
           const fresh = tweets.filter((t) => t && t.id && !known.has(t.id));
@@ -700,6 +702,7 @@ export default {
         this._mastodonTimer = null;
       }
       this._merger = null;
+      this._mergerFirstPage = null;
       const [firstPage, handles] = await Promise.all([
         warpnetService.getMyTimeline(true),
         this.loadBridgedHandles(),
@@ -738,7 +741,18 @@ export default {
         ],
         applyFilters: (tweets) => warpnetService.applyHomeFilters(tweets),
       });
-      this.timeline = (await this._merger.nextPage()).tweets;
+      // Paint the local page immediately; the merged first page (which fans
+      // out to possibly slow bridged instances) replaces it when it lands,
+      // and holds the loader for at most a second of that wait.
+      this.timeline = firstPage;
+      this._mergerFirstPage = this._merger.nextPage()
+          .then(({tweets}) => { this.timeline = tweets; })
+          .catch((err) => console.warn('merged first page failed:', err))
+          .finally(() => { this._mergerFirstPage = null; });
+      await Promise.race([
+        this._mergerFirstPage,
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
       this._mastodonTimer = setInterval(() => this.refreshMastodon(), mastodonRefreshMs);
     },
     // The owner's followed fediverse handles, minus blocked/muted ones. Any
@@ -796,6 +810,23 @@ export default {
     async getInfo() {
       return await warpnetService.getNodeInfo();
     },
+    // Composer avatar / background for the right bar: they fill in whenever
+    // they arrive and must not delay the timeline's first paint.
+    async loadProfileAssets() {
+      try {
+        const fullProfile = await warpnetService.getProfile(this.profile.user_id);
+        if (fullProfile && !fullProfile.code) {
+          this.profile.background_image = fullProfile.background_image_key
+              ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.background_image_key})
+              : null;
+          this.profile.avatar = fullProfile.avatar_key
+              ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.avatar_key})
+              : null;
+        }
+      } catch (error) {
+        console.error("Failed to load profile assets:", error);
+      }
+    },
     onTweetsImported(result) {
       const n = (result && result.imported_tweets) || 0;
       toast.success(`Imported ${n} tweet${n === 1 ? '' : 's'}. View them on your profile.`);
@@ -812,23 +843,15 @@ export default {
     console.log("loading component:", this.$options.name);
 
     this.profile = warpnetService.getOwnerProfile();
+    this.loadProfileAssets();
 
     try {
-      const fullProfile = await warpnetService.getProfile(this.profile.user_id);
-      if (fullProfile && !fullProfile.code) {
-        this.profile.background_image = fullProfile.background_image_key
-            ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.background_image_key})
-            : null;
-        this.profile.avatar = fullProfile.avatar_key
-            ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.avatar_key})
-            : null;
-      }
-    } catch (error) {
-      console.error("Failed to load profile assets:", error);
+      await this.loadInitial();
+    } catch (err) {
+      console.error('Failed to load timeline:', err);
+    } finally {
+      this.loading = false;
     }
-
-    await this.loadInitial();
-    this.loading = false;
 
     this._timelineTimer = setInterval(() => this.refreshTimeline(), 10000);
 

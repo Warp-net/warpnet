@@ -164,6 +164,9 @@ describe('Home unified timeline', () => {
 
       renderHome();
       await waitFor(() => expect(screen.getByText('mastodon m1')).toBeInTheDocument());
+      // The local page now paints before created() finishes; let it settle
+      // (register the poll timer) before advancing the fake clock.
+      await new Promise((r) => setTimeout(r, 0));
 
       vi.advanceTimersByTime(10000);
       await waitFor(() => expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(2));
@@ -200,6 +203,9 @@ describe('Home unified timeline', () => {
 
       renderHome();
       await waitFor(() => expect(screen.getByText('mastodon m0')).toBeInTheDocument());
+      // The local page now paints before created() finishes; let the merged
+      // replacement and the poll-timer registration settle.
+      await new Promise((r) => setTimeout(r, 0));
       expect(screen.queryByText('warpnet w1')).not.toBeInTheDocument();
 
       vi.advanceTimersByTime(10000);
@@ -255,6 +261,29 @@ describe('Home unified timeline', () => {
     const handles = warpnetService.getUserTweetsPage.mock.calls.map((c) => c[0].userId);
     expect(handles).toContain('bob@mastodon.social');
     expect(handles).not.toContain('spammer@bad.social');
+  });
+});
+
+describe('Home first paint under hanging elements', () => {
+  it('renders the local timeline without waiting for the owner profile assets', async () => {
+    warpnetService.getProfile.mockImplementation(() => new Promise(() => {}));
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-02T10:00:00Z')]);
+
+    renderHome();
+
+    expect(await screen.findByText('warpnet w1')).toBeInTheDocument();
+  });
+
+  it('paints the local page while a bridged source hangs', async () => {
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-02T10:00:00Z')]);
+    warpnetService.listFollowingIds.mockResolvedValue(['bob@mastodon.social']);
+    warpnetService.getUserTweetsPage.mockImplementation(() => new Promise(() => {}));
+
+    renderHome();
+
+    expect(
+      await screen.findByText('warpnet w1', undefined, { timeout: 3000 }),
+    ).toBeInTheDocument();
   });
 });
 
