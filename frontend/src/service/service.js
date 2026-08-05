@@ -27,6 +27,7 @@ import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
 import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
 import {DEFAULT_REACTION} from "@/lib/emoji";
+import {isOwnTweetEcho} from "@/lib/network";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -613,7 +614,12 @@ export const warpnetService = {
                 return []
             }
 
-            const visible = await this.applyHomeFilters(timelineResp.tweets);
+            // Own tweets that federated out and came back as fediverse
+            // boosts are an echo, not news — keep them out of the feed.
+            const withoutEchoes = timelineResp.tweets.filter(
+                t => !isOwnTweetEcho(t, owner.user_id),
+            );
+            const visible = await this.applyHomeFilters(withoutEchoes);
             if (visible.length > 0 || cursor === endCursor) {
                 return visible;
             }
@@ -1481,6 +1487,27 @@ export const warpnetService = {
         return tweetsResp.tweets;
     },
 
+    // Explicit-cursor page fetch for one user's tweets. Unlike getTweets it
+    // never touches the global 'tweets' cursor, so many per-user paginations
+    // (the unified timeline fans out per followed Mastodon handle) can run
+    // side by side without clobbering the Profile view.
+    async getUserTweetsPage({userId, cursor = '', limit = defaultLimit}) {
+        if (cursor === endCursor) {
+            return {tweets: [], cursor: endCursor};
+        }
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEETS,
+            body: {limit, cursor, user_id: userId},
+        });
+        // sendToNode maps an error body to {} — distinguish that from a
+        // legitimate empty page so a flaky gateway reads as "failed"
+        // (retryable), not "exhausted".
+        if (!resp || (resp.tweets === undefined && resp.cursor === undefined)) {
+            throw new Error(`no tweets response for ${userId}`);
+        }
+        return {tweets: resp.tweets || [], cursor: resp.cursor || endCursor};
+    },
+
     async createTweet({text, imageKeys, videoKey, poll}) {
         const owner = this.getOwnerProfile()
 
@@ -1666,6 +1693,27 @@ export const warpnetService = {
         followingsResp.followings = followingsResp.followings.filter(following => following !== userId);
 
         return followingsResp.followings;
+    },
+
+    // Full followings scan with a local cursor (bounded at 50 pages ≈ 1000
+    // ids). The global 'followings' cursor stays untouched — it belongs to
+    // the Following view's own pagination.
+    async listFollowingIds(userId) {
+        const ids = [];
+        let cursor = '';
+        for (let page = 0; page < 50; page++) {
+            const resp = await this.sendToNode({
+                path: PUBLIC_GET_FOLLOWINGS,
+                body: {user_id: userId, cursor, limit: defaultLimit},
+            });
+            const batch = (resp?.followings || []).filter(f => f !== userId);
+            ids.push(...batch);
+            cursor = resp?.cursor || endCursor;
+            if (cursor === endCursor || batch.length === 0) {
+                break;
+            }
+        }
+        return ids;
     },
 
     async getTweetStats(tweetId, userId) {

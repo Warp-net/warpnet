@@ -60,6 +60,11 @@ resulting from the use or misuse of this software.
         </p>
         <p class="text-sm text-dark ml-2">·</p>
         <p class="text-sm text-dark ml-2">{{ $filters.timeago(tweet.created_at) }}</p>
+        <span
+          v-if="isBridged"
+          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-mastodon-accent text-white whitespace-nowrap"
+          :title="`Bridged from ${instanceLabel}`"
+        >{{ instanceLabel }}</span>
         <span v-if="tweet.pinned" class="ml-2 text-xs text-blue" title="Pinned tweet">
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
@@ -99,7 +104,7 @@ resulting from the use or misuse of this software.
         />
       </div>
       <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2" v-linkify>
-        {{ tweet.text }}
+        {{ displayText }}
       </p>
       <p v-else class="pb-2 bg-red-300">
         Moderated: {{ tweet.moderation.reason }}.
@@ -363,6 +368,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {extractYoutubeId} from "@/lib/youtube";
 import {DEFAULT_REACTION} from "@/lib/emoji";
+import {decodeHtmlEntities, isMastodonTweet, mastodonInstance} from "@/lib/network";
 
 export default {
   name: "Tweet",
@@ -419,6 +425,16 @@ export default {
     };
   },
   computed: {
+    isBridged() {
+      return isMastodonTweet(this.tweet);
+    },
+    instanceLabel() {
+      return mastodonInstance(this.tweet && this.tweet.user_id) || 'Mastodon';
+    },
+    displayText() {
+      const text = (this.tweet && this.tweet.text) || '';
+      return this.isBridged ? decodeHtmlEntities(text) : text;
+    },
     youtubeId() {
       if (this.hasVideo) return null;
       return extractYoutubeId(this.tweet && this.tweet.text);
@@ -615,7 +631,9 @@ export default {
           this.quotedUnavailable = true;
           return;
         }
-        this.quotedSourceText = src.text || '';
+        this.quotedSourceText = isMastodonTweet(src)
+          ? decodeHtmlEntities(src.text || '')
+          : (src.text || '');
         this.quotedSourceUsername = src.username || '';
       } catch (err) {
         console.warn('failed to load quoted source:', err);
