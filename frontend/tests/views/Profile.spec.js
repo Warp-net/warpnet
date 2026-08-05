@@ -130,6 +130,17 @@ describe('Profile.vue first paint under hanging elements', () => {
 });
 
 describe('Profile.vue tabs', () => {
+  it('shows the reactions empty state instead of crashing on the Reactions tab', async () => {
+    renderProfile();
+    await waitFor(() => expect(screen.getByText('plain tweet')).toBeInTheDocument());
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reactions' }));
+
+    expect(
+      await screen.findByText(/Nothing reacted yet/i)
+    ).toBeInTheDocument();
+  });
+
   it('keeps only tweets carrying a photo or a video in the media tab', async () => {
     renderProfile();
     await waitFor(() => expect(screen.getByText('plain tweet')).toBeInTheDocument());

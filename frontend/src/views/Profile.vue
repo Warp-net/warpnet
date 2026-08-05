@@ -350,7 +350,7 @@ resulting from the use or misuse of this software.
         <template v-else-if="activeTab === 'reactions'">
           <Loader :loading="reactionsLoading" />
           <div
-            v-if="!reactionsLoading && likes.length === 0"
+            v-if="!reactionsLoading && reactions.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10 px-5"
           >
             <p class="font-bold text-lg">Nothing reacted yet</p>
