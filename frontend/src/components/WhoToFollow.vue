@@ -140,14 +140,19 @@ export default {
         this.pending.delete(profileId);
       }
     },
-    async loadAvatars(profiles) {
-      await Promise.all(
-        profiles.map(async (p) => {
-          p.avatar = await warpnetService.getImage({userId: p.id, key: p.avatar_key});
-        })
-      );
-      this.warpnetProfiles = [...this.warpnetProfiles];
-      this.mastodonProfiles = [...this.mastodonProfiles];
+    // Avatars fill in per row; a hanging or failed blob only leaves its own
+    // default in place instead of holding (or crashing) the whole block.
+    loadAvatars(profiles) {
+      for (const p of profiles) {
+        warpnetService.getImage({userId: p.id, key: p.avatar_key})
+            .then((avatar) => {
+              if (!avatar) return;
+              const group = isMastodonUser(p) ? this.mastodonProfiles : this.warpnetProfiles;
+              const i = group.findIndex((x) => x && x.id === p.id);
+              if (i !== -1) group.splice(i, 1, {...group[i], avatar});
+            })
+            .catch((err) => console.warn(`failed to load avatar for [${p.id}]:`, err));
+      }
     },
     showMore() {
       this.$router.push({ name: "WhoToFollow" });
@@ -176,11 +181,11 @@ export default {
       }
     }
     const profiles = [...this.warpnetProfiles, ...this.mastodonProfiles];
+    this.loadAvatars(profiles);
     for (const p of profiles) {
       const status = await warpnetService.isFollowing(p.id);
       this.followingStatus.set(p.id, status);
     }
-    await this.loadAvatars(profiles);
   },
 };
 </script>

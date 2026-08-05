@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
+vi.mock('@/service/service', () => ({
+  warpnetService: {
+    searchUsers: vi.fn(),
+    getImage: vi.fn(),
+  },
+}));
+
 import Search from '@/views/Search.vue';
+import { warpnetService } from '@/service/service';
 
 const scrollDirective = {
   mounted() {},
@@ -19,7 +27,16 @@ const renderSearch = ({ query = {} } = {}) =>
         $route: { query },
       },
       directives: { scroll: scrollDirective },
-      stubs: { SideNav: true, Results: true, Loader: true },
+      stubs: {
+        SideNav: true,
+        Results: true,
+        Loader: true,
+        Users: {
+          props: ['users', 'loading'],
+          template:
+            '<ul data-testid="user-list"><li v-for="u in users" :key="u.id">{{ u.username }}</li></ul>',
+        },
+      },
     },
   });
 
@@ -34,6 +51,8 @@ afterAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   routerPush.mockClear();
+  warpnetService.searchUsers.mockResolvedValue({ users: [], cursor: 'end' });
+  warpnetService.getImage.mockResolvedValue(null);
 });
 
 describe('Search.vue', () => {
@@ -83,6 +102,24 @@ describe('Search.vue', () => {
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });
+  });
+
+  it('renders search results without waiting for hanging avatar blobs', async () => {
+    warpnetService.searchUsers.mockResolvedValue({
+      users: [
+        { id: 'bob', username: 'Bobby', avatar_key: 'k1' },
+        { id: 'carol', username: 'Caroline', avatar_key: 'k2' },
+      ],
+      cursor: 'end',
+    });
+    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+
+    renderSearch({ query: { q: 'bo' } });
+
+    expect(
+      await screen.findByText('Bobby', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Caroline')).toBeInTheDocument();
   });
 
   it('renders with an empty input when no route query is provided (edge case)', () => {

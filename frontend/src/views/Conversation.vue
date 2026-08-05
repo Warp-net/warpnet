@@ -169,6 +169,28 @@ export default {
       }
     },
 
+    // The peer's name and avatar fill in whenever they arrive; the
+    // messages must not wait behind their node.
+    async loadOtherUser() {
+      if (!this.chat) return;
+      try {
+        const otherId = this.chat.owner_id !== this.currentUserId
+            ? this.chat.owner_id
+            : this.chat.other_user_id;
+        const u = await warpnetService.getProfile(otherId);
+        if (!u || !u.id) return;
+        this.otherUser = u;
+        try {
+          const avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key});
+          if (avatar) this.otherUser = {...u, avatar};
+        } catch (err) {
+          console.warn('failed to load chat avatar:', err);
+        }
+      } catch (err) {
+        console.error('failed to load chat user:', err);
+      }
+    },
+
     async sendMessage() {
       if (!this.newMessage.trim()) return;
 
@@ -229,15 +251,10 @@ export default {
       this.loadChat(),
       this.loadMessages()
     ]);
-
-    if (this.chat.owner_id !== this.currentUserId) {
-      this.otherUser = await warpnetService.getProfile(this.chat.owner_id)
-    } else {
-      this.otherUser = await warpnetService.getProfile(this.chat.other_user_id)
-    }
-    this.otherUser.avatar = await warpnetService.getImage({userId:this.otherUser.id, key:this.otherUser.avatar_key})
     this.loading = false;
     this.scrollToBottom();
+
+    this.loadOtherUser();
 
     this.refreshTimer = setInterval(() => this.refreshMessages(), 3000);
   },

@@ -96,7 +96,51 @@ beforeEach(() => {
   );
 });
 
+describe('Profile.vue first paint under hanging elements', () => {
+  it('renders the tweets even when avatar and background blobs hang', async () => {
+    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+
+    renderProfile();
+
+    expect(
+      await screen.findByText('plain tweet', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+  });
+
+  it('renders the tweets while the followers list hangs', async () => {
+    warpnetService.getFollowers.mockImplementation(() => new Promise(() => {}));
+    warpnetService.getFollowings.mockImplementation(() => new Promise(() => {}));
+
+    renderProfile();
+
+    expect(
+      await screen.findByText('plain tweet', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+  });
+
+  it('shows the profile header even when the tweets request hangs', async () => {
+    warpnetService.getTweets.mockImplementation(() => new Promise(() => {}));
+
+    renderProfile();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Alice' })
+    ).toBeInTheDocument();
+  });
+});
+
 describe('Profile.vue tabs', () => {
+  it('shows the reactions empty state instead of crashing on the Reactions tab', async () => {
+    renderProfile();
+    await waitFor(() => expect(screen.getByText('plain tweet')).toBeInTheDocument());
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reactions' }));
+
+    expect(
+      await screen.findByText(/Nothing reacted yet/i)
+    ).toBeInTheDocument();
+  });
+
   it('keeps only tweets carrying a photo or a video in the media tab', async () => {
     renderProfile();
     await waitFor(() => expect(screen.getByText('plain tweet')).toBeInTheDocument());

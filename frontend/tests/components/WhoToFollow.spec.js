@@ -88,6 +88,44 @@ describe('WhoToFollow.vue (sidebar)', () => {
     expect(screen.queryByLabelText('Mastodon')).not.toBeInTheDocument();
   });
 
+  it('renders the rows without waiting for hanging avatar blobs', async () => {
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce([warpnetUser(1), warpnetUser(2)])
+      .mockResolvedValueOnce([]);
+    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+
+    renderComponent();
+
+    expect(
+      await screen.findByText('warp1', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+    expect(screen.getByText('warp2')).toBeInTheDocument();
+  });
+
+  it('fills each avatar independently of a failing sibling', async () => {
+    warpnetService.getWhoToFollow
+      .mockResolvedValueOnce([
+        { ...warpnetUser(1), avatar_key: 'k1' },
+        { ...warpnetUser(2), avatar_key: 'k2' },
+      ])
+      .mockResolvedValueOnce([]);
+    warpnetService.getImage.mockImplementation(({ key }) =>
+      key === 'k1'
+        ? Promise.resolve('data:image/png;base64,one')
+        : Promise.reject(new Error('blob unavailable'))
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    renderComponent();
+
+    await waitFor(() => {
+      const img = screen.getByAltText('warp1');
+      expect(img).toHaveAttribute('src', 'data:image/png;base64,one');
+    });
+    expect(screen.getByAltText('warp2')).toHaveAttribute('src', '/default_profile.png');
+    warnSpy.mockRestore();
+  });
+
   it('stops paging after a bounded number of rounds', async () => {
     let n = 0;
     // Endless warpnet-only feed: mastodon never fills.

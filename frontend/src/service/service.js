@@ -1361,23 +1361,11 @@ export const warpnetService = {
         this.setCursor('reactions', resp.cursor || 'end')
 
         // Same reference-only wire shape as bookmarks: the backend returns
-        // the reacted index entries (tweet_id + owner_user_id), each hydrated
-        // into the full Tweet so the view renders it like a timeline tweet.
-        const rawItems = resp.items || [];
-        const hydrated = await Promise.all(rawItems.map(async (b) => {
-            if (!b || !b.tweet_id) return null;
-            try {
-                const tweet = await this.getTweet({
-                    userId: b.owner_user_id || owner.user_id,
-                    tweetId: b.tweet_id,
-                });
-                return tweet ? { ...b, tweet } : null;
-            } catch (e) {
-                console.warn('reaction hydrate failed:', b, e);
-                return null;
-            }
-        }));
-        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+        // the reacted index entries (tweet_id + owner_user_id); the view
+        // hydrates each into a full Tweet independently, so one offline
+        // author can't hold the whole page behind its sendTimeout.
+        const items = (resp.items || []).filter((b) => b && b.tweet_id);
+        return { items, cursor: resp.cursor || 'end' };
     },
 
     async getNotification(notificationId) {

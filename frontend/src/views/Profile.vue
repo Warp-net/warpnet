@@ -350,7 +350,7 @@ resulting from the use or misuse of this software.
         <template v-else-if="activeTab === 'reactions'">
           <Loader :loading="reactionsLoading" />
           <div
-            v-if="!reactionsLoading && likes.length === 0"
+            v-if="!reactionsLoading && reactions.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10 px-5"
           >
             <p class="font-bold text-lg">Nothing reacted yet</p>
@@ -452,7 +452,9 @@ export default {
       return pinned.concat(rest);
     },
     reactedTweets() {
-      return this.reactions.map(r => r.tweet);
+      // Entries hydrate one by one; those still waiting for their tweet
+      // are skipped instead of rendering an empty row.
+      return this.reactions.filter(r => r.tweet && r.tweet.id).map(r => r.tweet);
     },
     // Tweets and the profile owner's replies in one chronological feed.
     tweetsAndReplies() {
@@ -686,8 +688,10 @@ export default {
       if (this.activeTab === 'reactions') {
         if (this.reactionsLoading) return;
         const resp = await warpnetService.getReactions(false);
-        const items = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
+        const items = resp?.items || [];
+        if (items.length === 0) return;
         this.reactions = this.reactions.concat(items);
+        this.hydrateReactions(this.reactions.slice(-items.length));
         return;
       }
       await this.loadMoreTweets();
@@ -711,12 +715,31 @@ export default {
       if (tab === 'replies') return this.loadReplies();
       if (tab === 'media') return this.fillMediaTab();
     },
+    // Each reaction entry hydrates into its tweet independently; a hanging
+    // author node leaves that entry pending without blocking the tab.
+    async hydrateReactions(items) {
+      await Promise.all(items.map(async (l) => {
+        try {
+          const tweet = await warpnetService.getTweet({
+            userId: l.owner_user_id || this.ownerProfile.user_id,
+            tweetId: l.tweet_id,
+          });
+          if (tweet && tweet.id) l.tweet = tweet;
+        } catch (e) {
+          console.warn('reaction hydrate failed:', l, e);
+        }
+      }));
+    },
     async loadReactions() {
       if (this.reactionsLoaded || this.reactionsLoading) return;
       this.reactionsLoading = true;
       try {
         const resp = await warpnetService.getReactions(true);
-        this.reactions = (resp?.items || []).filter(r => r.tweet && r.tweet.id);
+        this.reactions = resp?.items || [];
+        await Promise.race([
+          this.hydrateReactions(this.reactions),
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ]);
         this.reactionsLoaded = true;
       } catch (err) {
         console.error('Failed to load reactions:', err);
@@ -830,76 +853,82 @@ export default {
   },
   async created() {
     console.log("loading component:", this.$options.name);
+    const profileId = this.$route.params.id;
+    if (!profileId) {
+      this.noUser = true;
+      this.loading = false;
+      return;
+    }
+
+    this.ownerProfile = warpnetService.getOwnerProfile();
+
     try {
       this.loading = true;
-      const profileId = this.$route.params.id;
-      if (!profileId) {
-        this.noUser = true;
-        this.loading = false;
-        return;
-      }
-
-      this.ownerProfile = warpnetService.getOwnerProfile();
-
       this.profile = await warpnetService.getProfile(profileId);
       if (!this.profile) {
         this.noUser = true;
-        this.loading = false;
         return;
       }
-      if (this.profile.network && this.profile.network === "mastodon") {
-        this.enableMastodonMode()
-      } else {
-        this.disableMastodonMode();
-      }
-      this.loading = false;
-
-      this.profile.background_image = await warpnetService.getImage(
-          {userId:profileId, key:this.profile.background_image_key},
-      );
-      this.profile.avatar = await warpnetService.getImage(
-          {userId:profileId, key:this.profile.avatar_key},
-      )
-
-      this.isSelf = this.isMySelf(profileId);
-
-      if (!this.isSelf) {
-        await this.loadProfileBlockState();
-      }
-
-      [this.users, this.tweets, this.followers, this.followings] = await Promise.all([
-        warpnetService.getUsers({profileId:profileId, cursorReset:true}),
-        warpnetService.getTweets({userId:profileId, cursorReset:true}),
-        warpnetService.getFollowers({userId:profileId, cursorReset: true}),
-        warpnetService.getFollowings({userId:profileId, cursorReset: true})
-      ]);
     } catch (err) {
       console.error('Failed to load profile:', err);
       this.noUser = true;
-      this.loading = false
-      return
-    }
-    for (const p of this.users) {
-      const followingStatus = await warpnetService.isFollowing(p.id);
-      this.followingStatus.set(p.id, followingStatus);
-
-      const followerStatus = await warpnetService.isFollower(p.id);
-      this.followerStatus.set(p.id, followerStatus);
+      return;
+    } finally {
+      this.loading = false;
     }
 
-    // The viewed profile is not necessarily part of this.users (that list
-    // holds related/suggested users), so resolve its own follow state
-    // explicitly — otherwise the header button always renders "Follow"
-    // even when the owner already follows this user. Self profiles show
-    // "Edit profile" instead of the follow button, so skip them.
-    if (!this.isSelf && this.profile?.id) {
-      const [selfFollowing, selfFollower] = await Promise.all([
-        warpnetService.isFollowing(this.profile.id),
-        warpnetService.isFollower(this.profile.id),
-      ]);
-      this.followingStatus.set(this.profile.id, selfFollowing);
-      this.followerStatus.set(this.profile.id, selfFollower);
+    if (this.profile.network && this.profile.network === "mastodon") {
+      this.enableMastodonMode()
+    } else {
+      this.disableMastodonMode();
     }
+
+    this.isSelf = this.isMySelf(profileId);
+
+    // Everything below is an independent per-element fetch that fills in
+    // whenever it arrives — one hanging or failing call must not delay the
+    // tweets, the counters or its sibling elements.
+    warpnetService.getImage({userId: profileId, key: this.profile.background_image_key})
+        .then((img) => { this.profile.background_image = img; })
+        .catch((err) => console.warn(`failed to load background [${profileId}]:`, err));
+    warpnetService.getImage({userId: profileId, key: this.profile.avatar_key})
+        .then((img) => { this.profile.avatar = img; })
+        .catch((err) => console.warn(`failed to load avatar [${profileId}]:`, err));
+
+    if (!this.isSelf) {
+      this.loadProfileBlockState();
+      // The viewed profile is not necessarily part of this.users (that list
+      // holds related/suggested users), so resolve its own follow state
+      // explicitly — otherwise the header button always renders "Follow"
+      // even when the owner already follows this user. Self profiles show
+      // "Edit profile" instead of the follow button, so skip them.
+      Promise.all([
+        warpnetService.isFollowing(profileId),
+        warpnetService.isFollower(profileId),
+      ]).then(([selfFollowing, selfFollower]) => {
+        this.followingStatus.set(profileId, selfFollowing);
+        this.followerStatus.set(profileId, selfFollower);
+      }).catch((err) => console.warn(`failed to resolve follow state [${profileId}]:`, err));
+    }
+
+    warpnetService.getTweets({userId: profileId, cursorReset: true})
+        .then((tweets) => { this.tweets = tweets; })
+        .catch((err) => console.error('Failed to load tweets:', err));
+    warpnetService.getFollowers({userId: profileId, cursorReset: true})
+        .then((followers) => { this.followers = followers; })
+        .catch((err) => console.error('Failed to load followers:', err));
+    warpnetService.getFollowings({userId: profileId, cursorReset: true})
+        .then((followings) => { this.followings = followings; })
+        .catch((err) => console.error('Failed to load followings:', err));
+    warpnetService.getUsers({profileId: profileId, cursorReset: true})
+        .then(async (users) => {
+          this.users = users;
+          for (const p of users) {
+            this.followingStatus.set(p.id, await warpnetService.isFollowing(p.id));
+            this.followerStatus.set(p.id, await warpnetService.isFollower(p.id));
+          }
+        })
+        .catch((err) => console.error('Failed to load related users:', err));
   },
 };
 </script>

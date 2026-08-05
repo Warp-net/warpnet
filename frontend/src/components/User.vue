@@ -199,7 +199,11 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     this.profile = warpnetService.getOwnerProfile();
-    this.user.avatar = await warpnetService.getImage({userId:this.user.id, key:this.user.avatar_key})
+    // The avatar is one element of the row: a hanging or failed blob must
+    // not block the follow/block/mute state below.
+    warpnetService.getImage({userId:this.user.id, key:this.user.avatar_key})
+        .then((img) => { if (img) this.user.avatar = img; })
+        .catch((err) => console.warn(`failed to load avatar for [${this.user.id}]:`, err));
 
     const status = await warpnetService.isFollowing(this.user.id);
     this.followingStatus.set(this.user.id, status);

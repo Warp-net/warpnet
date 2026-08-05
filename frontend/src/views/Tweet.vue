@@ -150,15 +150,24 @@ export default {
       }
       this.tweet = fetched;
 
-      const root = this.tweet.root_id || this.tweet.id;
-      const repliesPage = await warpnetService.getReplies({
-        rootId: root,
-        parentId: this.tweet.id,
-        // user_id is the root author only when this tweet is the root itself.
-        rootUserId: root === this.tweet.id ? this.tweet.user_id : undefined,
-        cursorReset: true,
-      });
-      this.replies = Array.isArray(repliesPage) ? repliesPage : (repliesPage?.replies || []);
+      // The reply tree fills in below the root independently — a slow
+      // thread page must not hold back the tweet itself.
+      this.loadReplies();
+    },
+    async loadReplies() {
+      try {
+        const root = this.tweet.root_id || this.tweet.id;
+        const repliesPage = await warpnetService.getReplies({
+          rootId: root,
+          parentId: this.tweet.id,
+          // user_id is the root author only when this tweet is the root itself.
+          rootUserId: root === this.tweet.id ? this.tweet.user_id : undefined,
+          cursorReset: true,
+        });
+        this.replies = Array.isArray(repliesPage) ? repliesPage : (repliesPage?.replies || []);
+      } catch (err) {
+        console.error('Failed to load replies:', err);
+      }
     },
     async postReply() {
       const text = this.replyText.trim();

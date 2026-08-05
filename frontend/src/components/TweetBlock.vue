@@ -455,7 +455,9 @@ export default {
       return this.hasVideo ? (this.tweetImages[0] || '') : '';
     },
     galleryImages() {
-      return this.hasVideo ? [] : this.tweetImages;
+      // Slots fill in one by one as each blob arrives; empty ones are
+      // placeholders for fetches still in flight.
+      return this.hasVideo ? [] : this.tweetImages.filter(Boolean);
     },
     // Chips are ordered by popularity, with the emoji itself breaking ties
     // so the row doesn't reshuffle between refreshes.
@@ -467,6 +469,34 @@ export default {
     },
   },
   methods: {
+    async loadAuthor() {
+      try {
+        this.profile = await warpnetService.getProfile(this.tweet.user_id);
+        const avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key});
+        if (avatar) this.profile.avatar = avatar;
+      } catch (err) {
+        console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
+      }
+    },
+    async loadRetweeterLabel() {
+      if (!this.tweet.retweeted_by || this.tweet.retweeted_by === this.tweet.user_id) return;
+      try {
+        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by);
+        if (retweeter && retweeter.username) this.label = `${retweeter.username} Retweeted`;
+      } catch (err) {
+        console.warn(`failed to load retweeter profile [${this.tweet.retweeted_by}]`, err);
+      }
+    },
+    loadImages() {
+      const imageKeys = this.tweet.image_keys || [];
+      if (imageKeys.length === 0) return;
+      this.tweetImages = imageKeys.map(() => '');
+      imageKeys.forEach((key, i) => {
+        warpnetService.getImage({userId: this.tweet.user_id, key})
+            .then((img) => { if (img) this.tweetImages[i] = img; })
+            .catch((err) => console.warn(`failed to load tweet image [${this.tweet.id}]`, err));
+      });
+    },
     async refreshInteractionState() {
       const owner = warpnetService.getOwnerProfile();
       if (!owner) {
@@ -1027,47 +1057,25 @@ export default {
       // those and logs spurious errors.
       return;
     }
-    // Profile/avatar/image loads may transiently fail (author node
-    // unreachable); never let that abort the stats/interaction loads
-    // below, or the row renders with zeroed counters until a reload.
-    try {
-      this.profile = await warpnetService.getProfile(this.tweet.user_id);
-
-      if (this.tweet.retweeted_by && this.tweet.retweeted_by !== this.profile.id) {
-        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by)
-        this.label = `${retweeter.username} Retweeted`;
-      }
-
-      const imageKeys = (this.tweet.image_keys && this.tweet.image_keys.length > 0)
-          ? this.tweet.image_keys
-          : [];
-      const loadedImages = await Promise.all(
-          imageKeys.map(key => warpnetService.getImage({userId: this.tweet.user_id, key}))
-      );
-      this.tweetImages = loadedImages.filter(img => img);
-      this.profile.avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key})
-
-      if (this.tweet.video_key && this.autoloadVideo) {
-        this.loadVideo();
-      }
-    } catch (err) {
-      console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
-    }
-
-    console.log("final tweet:", JSON.stringify(this.tweet));
-
     const owner = warpnetService.getOwnerProfile();
     this.isOwner = owner && owner.user_id === this.tweet.user_id;
 
-    try {
-      await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
-      await this.refreshInteractionState();
-    } catch (err) {
-      console.error(`failed to load tweet stats [${this.tweet.id}]`, err);
+    // Every asset is an independent per-element fetch: the text and the
+    // counters must never wait behind a hanging author node or blob, and
+    // one failed element must not take its siblings down with it.
+    this.loadAuthor();
+    this.loadRetweeterLabel();
+    this.loadImages();
+    if (this.tweet.video_key && this.autoloadVideo) {
+      this.loadVideo();
     }
 
+    this.loadTweetStats(this.tweet.id, this.tweet.user_id)
+        .then(() => this.refreshInteractionState())
+        .catch(err => console.error(`failed to load tweet stats [${this.tweet.id}]`, err));
+
     if (this.tweet.quoted_tweet_id) {
-      await this.loadQuotedSource();
+      this.loadQuotedSource();
     }
   },
   mounted() {
