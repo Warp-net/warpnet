@@ -51,7 +51,7 @@ resulting from the use or misuse of this software.
           <div v-for="message in messages" :key="message.id" 
                class="mb-4 flex"
                :class="{'justify-end': message.sender_id === currentUserId}">
-            <div class="max-w-3/4 rounded-lg px-4 py-2"
+            <div class="max-w-[75%] break-words rounded-lg px-4 py-2"
                  :class="message.sender_id === currentUserId ?
                         'bg-blue text-white' : 'bg-lighter'">
               <p v-linkify>{{ message.text }}</p>
@@ -234,6 +234,7 @@ export default {
           this.messages = [...this.messages, ...fresh]
               .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
           this.scrollToBottom();
+          warpnetService.markChatRead(this.chatId);
         }
       } catch (err) {
         console.error('Failed to refresh messages:', err);
@@ -253,6 +254,7 @@ export default {
     ]);
     this.loading = false;
     this.scrollToBottom();
+    warpnetService.markChatRead(this.chatId);
 
     this.loadOtherUser();
 
@@ -263,6 +265,9 @@ export default {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
+    // Everything on screen was seen, including own just-sent messages
+    // that bumped the chat's updated_at.
+    warpnetService.markChatRead(this.chatId);
   },
 };
 </script>

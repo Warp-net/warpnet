@@ -13,6 +13,8 @@ vi.mock('@/service/service', () => ({
     createChat: vi.fn(),
     sendDirectMessage: vi.fn(),
     markMessageNotificationsRead: vi.fn(),
+    markChatRead: vi.fn(),
+    getChatReadAt: vi.fn(() => 0),
   },
 }));
 

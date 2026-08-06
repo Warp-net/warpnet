@@ -2097,6 +2097,18 @@ export const warpnetService = {
         return chatsResp.chats;
     },
 
+    // Chat read marks live only in localStorage: the node keeps no per-chat
+    // read state, so "unread" is chat.updated_at newer than this local mark.
+    markChatRead(chatId) {
+        if (!chatId) return;
+        localStorage.setItem(`chat_read::${chatId}`, String(Date.now()));
+    },
+
+    getChatReadAt(chatId) {
+        const readAt = Number(localStorage.getItem(`chat_read::${chatId}`));
+        return Number.isFinite(readAt) ? readAt : 0;
+    },
+
     async deleteChat(chatId) {
         const request = {
             path: PRIVATE_DELETE_CHAT,

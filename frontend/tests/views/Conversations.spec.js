@@ -10,6 +10,8 @@ vi.mock('@/service/service', () => ({
     markMessageNotificationsRead: vi.fn(),
     getCursor: vi.fn(),
     setCursor: vi.fn(),
+    markChatRead: vi.fn(),
+    getChatReadAt: vi.fn(() => 0),
   },
 }));
 
@@ -61,6 +63,7 @@ afterAll(() => {
 const ALICE = '01KY0357FD1DS8X2E6HHHVXJBG';
 const BOB = '01KTRA1Q83VBTES33BRQV79JN6';
 const CAROL = '01KSGHBHKG0N77T6A3RZV8WSH5';
+const DAVE = '01KV5Y0M4E8Q1W9Z7X3C2B6NRD';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -103,6 +106,46 @@ describe('Conversations.vue', () => {
     expect(await screen.findByText(BOB)).toBeInTheDocument();
     expect(screen.getByText('see you tomorrow')).toBeInTheDocument();
     expect(screen.queryByText(/No messages yet/i)).not.toBeInTheDocument();
+  });
+
+  it('floats unread chats to the top and sorts the rest by recency', async () => {
+    const readAt = new Date('2026-01-02T00:00:00Z').getTime();
+    warpnetService.getChatReadAt.mockImplementation((chatId) =>
+      chatId === 'chat-unread' ? 0 : readAt,
+    );
+    warpnetService.getChats.mockResolvedValue([
+      {
+        id: 'chat-read-old',
+        owner_id: ALICE,
+        other_user_id: BOB,
+        last_message: 'old news',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: 'chat-unread',
+        owner_id: ALICE,
+        other_user_id: CAROL,
+        last_message: 'unseen',
+        updated_at: '2026-01-01T06:00:00Z',
+      },
+      {
+        id: 'chat-read-new',
+        owner_id: ALICE,
+        other_user_id: DAVE,
+        last_message: 'fresh',
+        updated_at: '2026-01-01T12:00:00Z',
+      },
+    ]);
+
+    renderConversations();
+
+    await screen.findByText('unseen');
+    const previews = screen
+      .getAllByText(/^(old news|unseen|fresh)$/)
+      .map((el) => el.textContent);
+    expect(previews).toEqual(['unseen', 'fresh', 'old news']);
+    // Only the unread chat carries the dot.
+    expect(screen.getByLabelText('Unread messages')).toBeInTheDocument();
   });
 
   it('navigates to Messages when a chat row is clicked', async () => {
