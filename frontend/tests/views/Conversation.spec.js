@@ -8,6 +8,7 @@ vi.mock('@/service/service', () => ({
     getProfile: vi.fn(),
     getImage: vi.fn(),
     sendDirectMessage: vi.fn(),
+    markChatRead: vi.fn(),
   },
 }));
 

@@ -482,7 +482,11 @@ function generateResponse(arg) {
                 created_at: new Date().toISOString(),
             };
             const targetChat = mockMap.get("chat:"+arg.body.chat_id);
-            if (targetChat) targetChat.messages.push(message);
+            if (targetChat) {
+                targetChat.messages.push(message);
+                targetChat.last_message = message.text;
+                targetChat.updated_at = message.created_at;
+            }
             mockMap.set("message:"+msgId, message);
             return message;
 

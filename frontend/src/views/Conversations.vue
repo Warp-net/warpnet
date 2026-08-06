@@ -65,11 +65,15 @@ resulting from the use or misuse of this software.
                   <div class="w-full truncate">
                     <div class="flex items-center w-full">
                       <p class="font-semibold truncate min-w-0">{{ getUser(chat.other_user_id).username || 'Anonymous' }}</p>
-                      <p class="text-sm text-dark ml-auto whitespace-nowrap flex-none pl-2">
+                      <span v-if="chat.unread" class="flex-none w-3 h-3 rounded-full bg-blue ml-2" aria-label="Unread messages"></span>
+                      <p class="text-sm ml-auto whitespace-nowrap flex-none pl-2" :class="chat.unread ? 'text-blue font-semibold' : 'text-dark'">
                         {{ $filters.timeago(chat.updated_at) }}
                       </p>
                     </div>
-                    <p class="pb-2 truncate" v-linkify>{{ chat.last_message || "" }}</p>
+                    <!-- v-linkify rewrites innerHTML on mount only, which detaches
+                         the text vnode — key by the text so a new preview remounts
+                         the element instead of patching a dead node. -->
+                    <p :key="chat.last_message" class="pb-2 truncate" :class="{ 'font-semibold text-blue': chat.unread }" v-linkify>{{ chat.last_message || "" }}</p>
                   </div>
                 </div>
               </div>
@@ -127,8 +131,15 @@ export default {
   computed: {
     // Only chats whose other user resolved are listed. Bridged Mastodon
     // accounts never land in the map, so their legacy chats stay hidden.
+    // Unread chats float to the top; within each group the freshest
+    // message comes first.
     visibleChats() {
-      return this.chats.filter((c) => this.usersMap.has(c.other_user_id));
+      return this.chats
+        .filter((chat) => this.usersMap.has(chat.other_user_id))
+        .map((chat) => ({ ...chat, unread: this.isUnread(chat) }))
+        .sort((a, b) =>
+          (b.unread - a.unread) ||
+          (new Date(b.updated_at) - new Date(a.updated_at)));
     },
   },
   methods: {
@@ -179,6 +190,12 @@ export default {
     },
     getUser(userId) {
       return this.usersMap.get(userId);
+    },
+    // An empty last_message means the chat predates preview support (or has
+    // no messages yet) — there is nothing to mark unread then.
+    isUnread(chat) {
+      if (!chat.last_message) return false;
+      return new Date(chat.updated_at).getTime() > warpnetService.getChatReadAt(chat.id);
     },
     async loadChatUser(userId) {
       if (!userId || userId.length === 0) {

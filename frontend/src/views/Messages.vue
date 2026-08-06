@@ -60,14 +60,18 @@ resulting from the use or misuse of this software.
             <div class="w-full truncate">
               <div class="flex items-center">
                 <p class="font-semibold truncate">{{ getUser(chat.other_user_id)?.username || 'Anonymous' }}</p>
+                <span v-if="chat.unread" class="flex-none w-3 h-3 rounded-full bg-blue ml-2" aria-label="Unread messages"></span>
                 <p class="text-sm text-dark ml-2 truncate hidden md:block">
                   @{{ chat.other_user_id }}
                 </p>
-                <p class="text-sm text-dark ml-auto">
+                <p class="text-sm ml-auto" :class="chat.unread ? 'text-blue font-semibold' : 'text-dark'">
                   {{ $filters.timeago(chat.updated_at) }}
                 </p>
               </div>
-              <p class="text-sm truncate" v-linkify>{{ chat.last_message || '' }}</p>
+              <!-- v-linkify rewrites innerHTML on mount only, which detaches
+                   the text vnode — key by the text so a new preview remounts
+                   the element instead of patching a dead node. -->
+              <p :key="chat.last_message" class="text-sm truncate" :class="{ 'font-semibold text-blue': chat.unread }" v-linkify>{{ chat.last_message || '' }}</p>
             </div>
           </div>
         </div>
@@ -138,7 +142,7 @@ resulting from the use or misuse of this software.
               >
                 <i class="fas fa-trash text-sm text-red-500" aria-hidden="true"></i>
               </button>
-              <div class="text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl" :class="message.pending ? 'bg-blue opacity-70' : 'bg-blue'">
+              <div class="max-w-[70%] break-words text-white py-2 px-4 rounded-tl-3xl rounded-bl-3xl rounded-tr-xl" :class="message.pending ? 'bg-blue opacity-70' : 'bg-blue'">
                 <p v-if="message.text">{{ message.text }}</p>
                 <ChatVideo
                     v-if="message.video_key"
@@ -165,7 +169,7 @@ resulting from the use or misuse of this software.
                   />
                 </div>
               </div>
-              <p class="text-xs text-dark ml-2">
+              <p class="text-xs text-dark ml-2 flex-none whitespace-nowrap">
                 <span v-if="message.pending"><i class="fas fa-clock" aria-hidden="true"></i> Sending…</span>
                 <span v-else>{{ $filters.time(message.created_at) }}</span>
               </p>
@@ -177,7 +181,7 @@ resulting from the use or misuse of this software.
                   class="h-8 w-8 rounded-full mr-2 object-cover bg-transparent cursor-pointer"
                   @click="gotoProfile(active.other_user_id)"
               />
-              <div class="bg-lighter text-black py-2 px-4 rounded-tr-3xl rounded-tl-xl rounded-br-3xl">
+              <div class="max-w-[70%] break-words bg-lighter text-black py-2 px-4 rounded-tr-3xl rounded-tl-xl rounded-br-3xl">
                 <p v-if="message.text">{{ message.text }}</p>
                 <ChatVideo
                     v-if="message.video_key"
@@ -204,7 +208,7 @@ resulting from the use or misuse of this software.
                   />
                 </div>
               </div>
-              <p class="text-xs text-dark ml-2">{{ $filters.time(message.created_at) }}</p>
+              <p class="text-xs text-dark ml-2 flex-none whitespace-nowrap">{{ $filters.time(message.created_at) }}</p>
             </div>
           </div>
           <div ref="scrollToMe"></div>
@@ -391,8 +395,15 @@ export default {
     // Only chats whose other user resolved are listed. Bridged Mastodon
     // accounts never land in the map, so their legacy chats stay hidden
     // instead of rendering as a clickable "Anonymous" row.
+    // Unread chats float to the top; within each group the freshest
+    // message comes first.
     visibleChats() {
-      return this.chats.filter((c) => this.usersMap.has(c.other_user_id));
+      return this.chats
+        .filter((chat) => this.usersMap.has(chat.other_user_id))
+        .map((chat) => ({ ...chat, unread: this.isUnread(chat) }))
+        .sort((a, b) =>
+          (b.unread - a.unread) ||
+          (new Date(b.updated_at) - new Date(a.updated_at)));
     },
     acceptedVideoTypes() {
       return acceptedVideoAccept;
@@ -684,6 +695,9 @@ export default {
             last_message: preview,
             updated_at: new Date().toISOString(),
           });
+          // The local updated_at bump above is newer than the mark selectChat
+          // just set — refresh it so the own-sent message reads as seen.
+          warpnetService.markChatRead(this.active.id);
         }
       } catch (err) {
         console.warn('post-send refresh failed (message was sent):', err);
@@ -749,6 +763,7 @@ export default {
       }
       this.messages = []; // reset messages
       this.active = chat;
+      warpnetService.markChatRead(chat.id);
 
       const messages = await warpnetService.getDirectMessages(
           {chatId: chat.id, cursorReset: true},
@@ -802,6 +817,14 @@ export default {
     },
     getUser(userId) {
       return this.usersMap.get(userId);
+    },
+    // The open chat is never unread — its messages are on screen. An empty
+    // last_message means the chat predates preview support (or has no
+    // messages yet), so there is nothing to mark unread either.
+    isUnread(chat) {
+      if (!chat.last_message) return false;
+      if (chat.id && chat.id === this.active?.id) return false;
+      return new Date(chat.updated_at).getTime() > warpnetService.getChatReadAt(chat.id);
     },
     async loadChatUser(userId) {
       if (!userId || userId.length === 0) {
@@ -917,6 +940,7 @@ export default {
         const wasNearBottom = this.isNearBottom();
         this.messages = [...this.messages, ...fresh]
             .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        warpnetService.markChatRead(activeId);
         // Hydrate through the reactive array so the fill-in triggers a render.
         this.hydrateMedia(this.messages.filter((m) => freshIds.has(m.id)));
         if (wasNearBottom) {
@@ -967,6 +991,9 @@ export default {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
+    }
+    if (this.active?.id) {
+      warpnetService.markChatRead(this.active.id);
     }
   },
 };

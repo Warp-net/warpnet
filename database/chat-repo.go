@@ -305,7 +305,56 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 	if err != nil {
 		return msg, err
 	}
+	if err = repo.bumpChatPreview(txn, msg); err != nil {
+		return msg, err
+	}
 	return msg, txn.Commit()
+}
+
+const lastMessagePreviewLimit = 128
+
+// bumpChatPreview stores the latest message text and time on the chat record
+// so the chat list can render previews and sort by recency.
+func (repo *ChatRepo) bumpChatPreview(txn local_store.WarpTransactioner, msg domain.ChatMessage) error {
+	fixedChatKey := local_store.NewPrefixBuilder(ChatNamespace).
+		AddRootID(msg.ChatId).
+		AddRange(local_store.FixedRangeKey).
+		Build()
+
+	sortableKey, err := txn.Get(fixedChatKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if len(sortableKey) == 0 { // message stored before its chat record exists
+		return nil
+	}
+	bt, err := txn.Get(local_store.DatabaseKey(sortableKey))
+	if err != nil {
+		if local_store.IsNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	var chat domain.Chat
+	if err := json.Unmarshal(bt, &chat); err != nil {
+		return err
+	}
+
+	preview := msg.Text
+	if preview == "" && (len(msg.ImageKeys) > 0 || msg.VideoKey != nil) {
+		preview = "Attachment"
+	}
+	if runes := []rune(preview); len(runes) > lastMessagePreviewLimit {
+		preview = string(runes[:lastMessagePreviewLimit])
+	}
+	chat.LastMessage = preview
+	chat.UpdatedAt = msg.CreatedAt
+
+	data, err := json.Marshal(chat)
+	if err != nil {
+		return err
+	}
+	return txn.Set(local_store.DatabaseKey(sortableKey), data)
 }
 
 func (repo *ChatRepo) ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error) {
