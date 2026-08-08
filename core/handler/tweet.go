@@ -36,7 +36,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -264,18 +263,12 @@ func handleNewReply(
 	}
 	parentUserId := *ev.ParentUserId
 
-	parentNodeId := ""
 	parentUser, err := userRepo.Get(parentUserId)
-	switch {
-	case errors.Is(err, database.ErrUserNotFound):
-		if !mastodon.IsBridgedID(parentId) {
-			return reply, nil
-		}
-		parentNodeId = mastodon.GatewayNodeID()
-	case err != nil:
+	if errors.Is(err, database.ErrUserNotFound) {
+		return reply, nil
+	}
+	if err != nil {
 		return nil, err
-	default:
-		parentNodeId = parentUser.NodeId
 	}
 
 	isOwnTweetReply := parentUserId == ownNodeInfo.OwnerId
@@ -293,14 +286,14 @@ func handleNewReply(
 		}
 		return reply, nil
 	}
-	if ownNodeInfo.ID.String() == parentNodeId {
+	if ownNodeInfo.ID.String() == parentUser.NodeId {
 		return reply, nil
 	}
 
 	// Forward the normalized/stored reply (prefix-stripped ids) so peers
 	// build identical thread keys.
 	replyDataResp, err := streamer.GenericStream(
-		parentNodeId,
+		parentUser.NodeId,
 		event.PRIVATE_POST_TWEET,
 		domain.Tweet{
 			CreatedAt:    reply.CreatedAt,
@@ -363,16 +356,7 @@ func StreamGetTweetHandler(
 
 		otherUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			t, lerr := localTweet(repo, ev)
-			if lerr == nil {
-				return t, nil
-			}
-			if mastodon.IsBridgedID(ev.TweetId) {
-				if bridged, ok := gatewayTweet(streamer, ev); ok {
-					return bridged, nil
-				}
-			}
-			return nil, lerr
+			return localTweet(repo, ev)
 		}
 		if err != nil {
 			return nil, err
@@ -403,22 +387,6 @@ func StreamGetTweetHandler(
 
 		return tweet, nil
 	}
-}
-
-func gatewayTweet(streamer TweetStreamer, ev event.GetTweetEvent) (domain.Tweet, bool) {
-	resp, err := streamer.GenericStream(mastodon.GatewayNodeID(), event.PUBLIC_GET_TWEET, ev)
-	if err != nil {
-		return domain.Tweet{}, false
-	}
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
-		return domain.Tweet{}, false
-	}
-	var tweet domain.Tweet
-	if err := json.Unmarshal(resp, &tweet); err != nil || tweet.Id == "" {
-		return domain.Tweet{}, false
-	}
-	return tweet, true
 }
 
 // replyParent returns the partition a reply is stored under: its ParentId,
@@ -591,11 +559,6 @@ func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
 		if _, dup := seen[t.Id]; dup {
 			continue
 		}
-		if id, ok := mastodon.BridgedStatusID(t.Id); ok {
-			if _, dup := seen[id]; dup {
-				continue
-			}
-		}
 		seen[t.Id] = struct{}{}
 		merged = append(merged, t)
 	}
@@ -608,22 +571,16 @@ func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
 // forwardThreadReplies asks the root tweet author's home node for the thread's
 // replies when that node is not this one. ok=false means handle locally.
 func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev event.GetAllTweetsEvent) (event.TweetsResponse, bool) {
-	nodeId := ""
-	if ev.RootUserId != "" {
-		author, err := userRepo.Get(ev.RootUserId)
-		if err == nil && author.NodeId != "" && author.NodeId != streamer.NodeInfo().ID.String() {
-			nodeId = author.NodeId
-		}
-	}
-	if nodeId == "" && mastodon.IsBridgedID(replyParent(ev.ParentId, ev.RootId)) {
-		nodeId = mastodon.GatewayNodeID()
-	}
-	if nodeId == "" {
+	if ev.RootUserId == "" {
 		return event.TweetsResponse{}, false
 	}
-	data, err := streamer.GenericStream(nodeId, event.PUBLIC_GET_TWEETS, ev)
+	author, err := userRepo.Get(ev.RootUserId)
+	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
+		return event.TweetsResponse{}, false
+	}
+	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_TWEETS, ev)
 	if err != nil {
-		log.Errorf("get replies: forward to %s: %v", nodeId, err)
+		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
 		return event.TweetsResponse{}, false
 	}
 	var resp event.TweetsResponse

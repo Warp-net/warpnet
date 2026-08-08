@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -100,30 +99,6 @@ func TestStreamNewReplyHandler(t *testing.T) {
 		}
 		if resp.(domain.Tweet).Id == "" {
 			t.Fatal("expected reply in response")
-		}
-	})
-
-	t.Run("unknown parent author on a bridged thread forwards to the gateway", func(t *testing.T) {
-		forwarded := ""
-		h := build(stubTweetRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{}, database.ErrUserNotFound
-		}}, stubModerationNotifier{}, stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				forwarded = nodeId
-				return []byte("{}"), nil
-			},
-		})
-		ev := makeEvent()
-		bridgedParent := "https://mastodon.social/users/bob/statuses/1"
-		ev.ParentId = &bridgedParent
-		pu := "bob@mastodon.social"
-		ev.ParentUserId = &pu
-		if _, err := h(marshal(t, ev), nil); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if forwarded != mastodon.GatewayNodeID() {
-			t.Fatalf("expected forward to the gateway, got %q", forwarded)
 		}
 	})
 
@@ -343,7 +318,6 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		local := []domain.Tweet{{Id: "01LOCAL", CreatedAt: time.Unix(30, 0)}}
 		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{
 			{Id: "01LOCAL", CreatedAt: time.Unix(30, 0)},
-			{Id: "https://gw.example/users/u1/statuses/01LOCAL?parent=x", CreatedAt: time.Unix(30, 0)},
 			{Id: "https://mastodon.social/users/bob/statuses/1", CreatedAt: time.Unix(10, 0)},
 		}}
 		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
@@ -368,25 +342,4 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("bridged thread without a known root author asks the gateway", func(t *testing.T) {
-		parent := "https://mastodon.social/users/alice/statuses/100"
-		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{{Id: "m1"}}}
-		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
-			if nodeId != mastodon.GatewayNodeID() {
-				t.Fatalf("expected forward to the gateway, got %q", nodeId)
-			}
-			return marshal(t, forwarded), nil
-		}}
-		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{getFn: func(string) (domain.User, error) {
-			return domain.User{}, database.ErrUserNotFound
-		}}, streamer)
-		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: parent}), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		r := resp.(event.TweetsResponse)
-		if len(r.Tweets) != 1 || r.Tweets[0].Id != "m1" {
-			t.Fatalf("expected the gateway's replies, got %+v", r.Tweets)
-		}
-	})
 }
