@@ -553,6 +553,11 @@ type ModerationEvent struct {
 // constant so they cannot drift.
 const ReportsTopic = "/warpnet/reports/1.0.0"
 
+// ModerationVotesTopic carries one ModerationVoteEvent per moderator per
+// report round. Voter authenticity rides on the envelope (event.Message)
+// signature, so the vote payload itself is unsigned.
+const ModerationVotesTopic = "/warpnet/moderation/votes/1.0.0"
+
 // ReportEvent is published by a member node on the reports pubsub topic
 // when a user clicks Report in the UI. It carries enough for a moderator
 // to fetch the actual offending content (TargetNodeID is a routing hint
@@ -599,11 +604,6 @@ func (e ReportEvent) ReportID() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// ModerationVotesTopic carries one ModerationVoteEvent per moderator per
-// report round. Voter authenticity rides on the envelope (event.Message)
-// signature, so the vote payload itself is unsigned.
-const ModerationVotesTopic = "/warpnet/moderation/votes/1.0.0"
-
 // ModerationVoteEvent is a single moderator's verdict on one report round.
 // Every moderator that assessed the report publishes one; the round's chair
 // aggregates them into the final ModerationResultEvent.
@@ -617,6 +617,10 @@ type ModerationVoteEvent struct {
 	// ModeratorID is overwritten by the subscriber from the verified
 	// envelope NodeId; the payload value is never trusted.
 	ModeratorID domain.ID `json:"moderator_id,omitempty"`
+	// Final marks the chair's (or a backup's) announcement that the round
+	// was finalized. It cancels the deterministic takeover chain on every
+	// other voter and is never counted as a vote.
+	Final bool `json:"final,omitempty"`
 }
 
 const ModerationReasonUnavailable = "content unavailable for review"

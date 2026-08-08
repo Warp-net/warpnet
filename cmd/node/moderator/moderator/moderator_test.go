@@ -112,10 +112,10 @@ func newTestModerator(t *testing.T, node ModeratorNode, pub Publisher, privKey e
 	if err != nil {
 		t.Fatalf("NewModerator: %v", err)
 	}
-	prevWindow, prevStep := voteWindow, voteDelayStep
-	voteWindow, voteDelayStep = time.Hour, time.Hour
+	prevWindow, prevStep, prevFailover := voteWindow, voteDelayStep, failoverDelay
+	voteWindow, voteDelayStep, failoverDelay = time.Hour, time.Hour, time.Hour
 	t.Cleanup(func() {
-		voteWindow, voteDelayStep = prevWindow, prevStep
+		voteWindow, voteDelayStep, failoverDelay = prevWindow, prevStep, prevFailover
 	})
 	return m, votes
 }
@@ -1019,6 +1019,247 @@ func TestRound_ChairSignsResult(t *testing.T) {
 	pubKey := privKey.Public().(ed25519.PublicKey)
 	if err := security.VerifySignature(pubKey, gotResult.SigningBytes(), gotResult.Signature); err != nil {
 		t.Fatalf("signature must verify over SigningBytes: %v", err)
+	}
+}
+
+// The chair follows its finalization with a Final announcement on the votes
+// topic so backup voters cancel their takeover timers.
+func TestRound_ChairAnnouncesFinal(t *testing.T) {
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
+
+	node := stubModeratorNode{
+		id: "mod-self",
+		streamFn: func(_ string, path stream.WarpRoute, _ any) ([]byte, error) {
+			if path == event.PUBLIC_GET_TWEET {
+				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
+			}
+			return []byte(event.Accepted), nil
+		},
+	}
+	m, votes := newTestModerator(t, node, &recordingPublisher{}, nil)
+
+	rep := tweetReport("tweet-1")
+	if err := m.handleReport(rep); err != nil {
+		t.Fatalf("handleReport: %v", err)
+	}
+	vote := waitVote(t, votes)
+	if vote.Final {
+		t.Fatal("the first published message must be the vote itself")
+	}
+	m.closeRound(rep.ReportID())
+
+	final := waitVote(t, votes)
+	if !final.Final {
+		t.Fatalf("the chair must announce the finalization, got %+v", final)
+	}
+	if final.ReportID != rep.ReportID() || final.Result != domain.FAIL {
+		t.Fatalf("the announcement must carry the aggregate outcome, got %+v", final)
+	}
+}
+
+// A backup voter parks the tallied outcome at closeRound and finalizes it
+// itself once its takeover slot fires with the chair still silent.
+func TestRound_BackupTakesOverSilentChair(t *testing.T) {
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
+
+	rep := tweetReport("tweet-1")
+	rep.ReporterID = "reporter-1"
+	rep.ReporterNodeID = "reporter-node-1"
+	reportID := rep.ReportID()
+	below := pickPeers(t, reportID, selfVoterID("mod-self"), false, 1) // the silent chair
+	above := pickPeers(t, reportID, selfVoterID("mod-self"), true, 1)  // keeps the count odd
+
+	var (
+		delivered int
+		gotResult event.ModerationResultEvent
+	)
+	node := stubModeratorNode{
+		id: "mod-self", // rank 1: first backup
+		streamFn: func(_ string, path stream.WarpRoute, data any) ([]byte, error) {
+			if path == event.PUBLIC_GET_TWEET {
+				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
+			}
+			if path == event.PUBLIC_POST_MODERATION_RESULT {
+				delivered++
+				if r, ok := data.(event.ModerationResultEvent); ok {
+					gotResult = r
+				}
+			}
+			return []byte(event.Accepted), nil
+		},
+	}
+	pub := &recordingPublisher{}
+	m, votes := newTestModerator(t, node, pub, nil)
+
+	if err := m.handleReport(rep); err != nil {
+		t.Fatalf("handleReport: %v", err)
+	}
+	waitVote(t, votes)
+	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
+	_ = m.handleVote(otherVote(reportID, above[0], domain.FAIL, "Hate"))
+
+	m.closeRound(reportID)
+	if delivered != 0 || pub.calls != 0 {
+		t.Fatal("a backup must not finalize while the chair's slot is still open")
+	}
+	m.mx.Lock()
+	r := m.rounds[reportID]
+	if r == nil || r.pending == nil || r.finalTimer == nil {
+		m.mx.Unlock()
+		t.Fatalf("the backup must park the outcome and schedule a takeover, got %+v", r)
+	}
+	m.mx.Unlock()
+
+	m.tryFinalize(reportID) // the takeover slot fires, chair still silent
+
+	if delivered != 1 {
+		t.Fatalf("the backup must notify the reporter, got %d deliveries", delivered)
+	}
+	if gotResult.Result != domain.FAIL || gotResult.ModeratorID != selfVoterID("mod-self") {
+		t.Fatalf("the backup finalizes under its own identity, got %+v", gotResult)
+	}
+	if pub.calls != 1 {
+		t.Fatalf("the backup must isolate exactly once, got %d", pub.calls)
+	}
+	final := waitVote(t, votes)
+	if !final.Final {
+		t.Fatalf("the backup must announce the finalization, got %+v", final)
+	}
+}
+
+// A voter dropped by the odd-count trim is still part of the takeover
+// chain: on a two-voter round it guards the chair's tally.
+func TestRound_TrimmedVoterStillGuards(t *testing.T) {
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
+
+	rep := tweetReport("tweet-1")
+	rep.ReporterID = "reporter-1"
+	rep.ReporterNodeID = "reporter-node-1"
+	reportID := rep.ReportID()
+	below := pickPeers(t, reportID, selfVoterID("mod-self"), false, 1) // the silent chair
+
+	var delivered int
+	node := stubModeratorNode{
+		id: "mod-self", // trimmed by the even count, rank 1 in the chain
+		streamFn: func(_ string, path stream.WarpRoute, data any) ([]byte, error) {
+			if path == event.PUBLIC_GET_TWEET {
+				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
+			}
+			if path == event.PUBLIC_POST_MODERATION_RESULT {
+				delivered++
+				if r, ok := data.(event.ModerationResultEvent); ok {
+					if len(r.Voters) != 1 || r.Voters[0] != below[0] {
+						t.Fatalf("the tally must stay on the kept set, got voters %v", r.Voters)
+					}
+				}
+			}
+			return []byte(event.Accepted), nil
+		},
+	}
+	pub := &recordingPublisher{}
+	m, votes := newTestModerator(t, node, pub, nil)
+
+	if err := m.handleReport(rep); err != nil {
+		t.Fatalf("handleReport: %v", err)
+	}
+	waitVote(t, votes)
+	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
+
+	m.closeRound(reportID)
+	m.mx.Lock()
+	r := m.rounds[reportID]
+	if r == nil || r.pending == nil {
+		m.mx.Unlock()
+		t.Fatal("the trimmed voter must still park the outcome")
+	}
+	m.mx.Unlock()
+
+	m.tryFinalize(reportID)
+	if delivered != 1 || pub.calls != 1 {
+		t.Fatalf("the trimmed voter must finalize the kept tally, got %d deliveries %d isolations", delivered, pub.calls)
+	}
+}
+
+// The chair's Final announcement cancels the backup's parked takeover.
+func TestRound_FinalAnnouncementCancelsTakeover(t *testing.T) {
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
+
+	rep := tweetReport("tweet-1")
+	rep.ReporterID = "reporter-1"
+	rep.ReporterNodeID = "reporter-node-1"
+	reportID := rep.ReportID()
+	below := pickPeers(t, reportID, selfVoterID("mod-self"), false, 1)
+	above := pickPeers(t, reportID, selfVoterID("mod-self"), true, 1)
+
+	node := stubModeratorNode{
+		id: "mod-self",
+		streamFn: func(_ string, path stream.WarpRoute, _ any) ([]byte, error) {
+			if path == event.PUBLIC_GET_TWEET {
+				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
+			}
+			if path == event.PUBLIC_POST_MODERATION_RESULT {
+				t.Fatal("the takeover was cancelled, nothing may be delivered")
+			}
+			return []byte(event.Accepted), nil
+		},
+	}
+	pub := &recordingPublisher{}
+	m, votes := newTestModerator(t, node, pub, nil)
+
+	if err := m.handleReport(rep); err != nil {
+		t.Fatalf("handleReport: %v", err)
+	}
+	waitVote(t, votes)
+	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
+	_ = m.handleVote(otherVote(reportID, above[0], domain.FAIL, "Hate"))
+	m.closeRound(reportID)
+
+	// The chair's announcement arrives before the takeover slot.
+	chairFinal := otherVote(reportID, below[0], domain.FAIL, "Hate")
+	chairFinal.Final = true
+	_ = m.handleVote(chairFinal)
+
+	m.mx.Lock()
+	if len(m.rounds) != 0 {
+		m.mx.Unlock()
+		t.Fatal("the Final announcement must clear the parked round")
+	}
+	m.mx.Unlock()
+
+	m.tryFinalize(reportID) // the slot fires anyway; must be a no-op
+	if pub.calls != 0 {
+		t.Fatalf("a cancelled takeover must not isolate, got %d", pub.calls)
+	}
+}
+
+// A Final announcement is control traffic: it must never count as a vote and
+// it spends the round for late votes.
+func TestHandleVote_FinalIsNotCountedAsVote(t *testing.T) {
+	m, _ := newTestModerator(t, stubModeratorNode{id: "mod-self"}, stubPublisher{}, nil)
+
+	rep := tweetReport("tweet-1")
+	reportID := rep.ReportID()
+	final := otherVote(reportID, "mod-a", domain.FAIL, "Hate")
+	final.Final = true
+	_ = m.handleVote(final)
+
+	m.mx.Lock()
+	if len(m.rounds) != 0 {
+		m.mx.Unlock()
+		t.Fatal("an announcement must not open a round")
+	}
+	if _, done := m.finalized[reportID]; !done {
+		m.mx.Unlock()
+		t.Fatal("an announcement must mark the round finalized")
+	}
+	m.mx.Unlock()
+
+	// A late vote after the announcement is ignored.
+	_ = m.handleVote(otherVote(reportID, "mod-b", domain.FAIL, "Hate"))
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	if len(m.rounds) != 0 {
+		t.Fatal("late votes must not reopen a finalized round")
 	}
 }
 

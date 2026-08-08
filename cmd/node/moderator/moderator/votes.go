@@ -54,6 +54,11 @@ var (
 	// below the quorum target; one step must fit a fetch + inference +
 	// gossip propagation so a suppressed rank never starts work.
 	voteDelayStep = 8 * time.Second
+	// failoverDelay spaces the takeover chain of the round's voters: the
+	// voter at kept-rank k finalizes at k*failoverDelay unless a Final
+	// announcement arrives first. One step must comfortably fit gossip
+	// propagation of that announcement.
+	failoverDelay = 10 * time.Second
 )
 
 const (
@@ -70,6 +75,29 @@ type voteRound struct {
 	votes      map[string]event.ModerationVoteEvent
 	voteTimer  *time.Timer
 	tallyTimer *time.Timer
+	// pending holds the tallied outcome on a backup voter that is waiting
+	// for the chair's Final announcement before taking over.
+	pending    *pendingFinalize
+	finalTimer *time.Timer
+}
+
+// pendingFinalize is a tallied round outcome parked on a backup voter.
+type pendingFinalize struct {
+	report event.ReportEvent
+	agg    verdict
+	voters []domain.ID
+}
+
+func (r *voteRound) stopTimersLocked() {
+	if r.voteTimer != nil {
+		r.voteTimer.Stop()
+	}
+	if r.tallyTimer != nil {
+		r.tallyTimer.Stop()
+	}
+	if r.finalTimer != nil {
+		r.finalTimer.Stop()
+	}
 }
 
 // pairHash orders (round, moderator) pairs: it drives the volunteer delay,
@@ -198,8 +226,29 @@ func (m *Moderator) handleVote(ev event.ModerationVoteEvent) error {
 	if ev.ReportID == "" || ev.ModeratorID == "" {
 		return nil
 	}
+	if ev.Final {
+		m.handleRoundFinal(ev)
+		return nil
+	}
 	m.recordVote(ev)
 	return nil
+}
+
+// handleRoundFinal cancels this voter's takeover chain: someone ahead of it
+// (the chair or an earlier backup) already finalized the round.
+func (m *Moderator) handleRoundFinal(ev event.ModerationVoteEvent) {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	m.seenMods[ev.ModeratorID] = time.Now()
+	if m.isFinalizedLocked(ev.ReportID) {
+		return
+	}
+	m.finalized[ev.ReportID] = time.Now()
+	if r, ok := m.rounds[ev.ReportID]; ok {
+		r.stopTimersLocked()
+		delete(m.rounds, ev.ReportID)
+	}
+	log.Infof("moderator: round %s finalized by %s", ev.ReportID, ev.ModeratorID)
 }
 
 func (m *Moderator) recordVote(vote event.ModerationVoteEvent) {
@@ -217,7 +266,10 @@ func (m *Moderator) recordVote(vote event.ModerationVoteEvent) {
 }
 
 // closeRound tallies the collected votes when the window elapses. Every
-// moderator that saw the round runs the same tally; only the chair acts.
+// moderator that saw the round runs the same tally: the chair (kept-rank 0)
+// finalizes at once, every other voter parks the outcome and takes over at
+// rank*failoverDelay unless a Final announcement lands first, non-voters
+// just remember the round as spent.
 func (m *Moderator) closeRound(id string) {
 	if m.isClosed.Load() {
 		return
@@ -228,7 +280,6 @@ func (m *Moderator) closeRound(id string) {
 		m.mx.Unlock()
 		return
 	}
-	delete(m.rounds, id)
 	if r.voteTimer != nil {
 		r.voteTimer.Stop()
 	}
@@ -237,46 +288,123 @@ func (m *Moderator) closeRound(id string) {
 			delete(m.finalized, k)
 		}
 	}
-	m.finalized[id] = time.Now()
 	rep := r.report
-	kept := keptVotes(id, r.votes)
-	m.mx.Unlock()
+	ordered := sortedVotes(id, r.votes)
+	kept := trimEven(ordered)
 
-	if len(kept) == 0 {
+	// The takeover chain ranks over the full voter order, pre-trim: a
+	// voter dropped by the odd-count trim still holds everything needed
+	// to finalize the kept tally if the chair dies.
+	self := m.node.ID().String()
+	myRank := -1
+	for i, v := range ordered {
+		if v.ModeratorID == self {
+			myRank = i
+			break
+		}
+	}
+
+	// A voter always holds the report (voting requires it); a self-named
+	// vote without one means someone forged votes for a round this node
+	// never saw. Both drop out of the takeover chain like a non-voter.
+	if len(kept) == 0 || myRank < 0 || rep == nil {
+		if myRank >= 0 && rep == nil {
+			log.Warnf("moderator: round %s: voter without report, skipping finalize", id)
+		}
+		delete(m.rounds, id)
+		m.finalized[id] = time.Now()
+		m.mx.Unlock()
 		return
 	}
+
 	agg, voters := aggregate(kept)
 	chair := kept[0].ModeratorID
-	log.Infof("moderator: round %s closed votes=%d result=%t chair=%s", id, len(kept), bool(agg.result), chair)
 
-	if chair != m.node.ID().String() {
+	if myRank > 0 {
+		r.pending = &pendingFinalize{report: *rep, agg: agg, voters: voters}
+		r.finalTimer = time.AfterFunc(time.Duration(myRank)*failoverDelay, func() { m.tryFinalize(id) })
+		m.mx.Unlock()
+		log.Infof("moderator: round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
+			id, len(kept), bool(agg.result), chair, myRank)
 		return
 	}
-	if rep == nil {
-		// The chair is always a voter and voting requires the report,
-		// so a chair without one means votes were recorded under this
-		// node's id for a report it never saw.
-		log.Warnf("moderator: round %s: chair without report, skipping finalize", id)
-		return
-	}
+
+	delete(m.rounds, id)
+	m.finalized[id] = time.Now()
+	m.mx.Unlock()
+
+	log.Infof("moderator: round %s closed votes=%d result=%t chair=%s", id, len(kept), bool(agg.result), chair)
 	m.finalizeRound(*rep, agg, voters)
+	m.publishFinal(id, *rep, agg)
 }
 
-// keptVotes orders a round's votes by their deterministic pair hash and,
-// on an even count, drops the highest-ranked vote so a strict majority
-// always exists. Every moderator derives the identical kept set.
-func keptVotes(id string, votes map[string]event.ModerationVoteEvent) []event.ModerationVoteEvent {
-	kept := make([]event.ModerationVoteEvent, 0, len(votes))
+// tryFinalize fires on a backup voter when its takeover slot elapses with no
+// Final announcement: the chair and every earlier backup stayed silent, so
+// this voter finalizes the round itself.
+func (m *Moderator) tryFinalize(id string) {
+	if m.isClosed.Load() {
+		return
+	}
+	m.mx.Lock()
+	r, ok := m.rounds[id]
+	if !ok || r.pending == nil || m.isFinalizedLocked(id) {
+		m.mx.Unlock()
+		return
+	}
+	p := r.pending
+	r.stopTimersLocked()
+	delete(m.rounds, id)
+	m.finalized[id] = time.Now()
+	m.mx.Unlock()
+
+	log.Warnf("moderator: round %s: chair stayed silent, taking over finalization", id)
+	m.finalizeRound(p.report, p.agg, p.voters)
+	m.publishFinal(id, p.report, p.agg)
+}
+
+// publishFinal announces on the votes topic that the round was finalized,
+// cancelling the takeover chain on the other voters.
+func (m *Moderator) publishFinal(id string, rep event.ReportEvent, agg verdict) {
+	final := event.ModerationVoteEvent{
+		ReportID:    id,
+		Type:        rep.Type,
+		Result:      agg.result,
+		Reason:      agg.reason,
+		UserID:      agg.userID,
+		ObjectID:    agg.objectID,
+		ModeratorID: m.node.ID().String(),
+		Final:       true,
+	}
+	if err := m.votes.PublishVote(final); err != nil {
+		log.Errorf("moderator: publish final %s: %v", id, err)
+	}
+}
+
+// sortedVotes orders a round's votes by their deterministic pair hash, so
+// every moderator derives the identical ranking with no coordination.
+func sortedVotes(id string, votes map[string]event.ModerationVoteEvent) []event.ModerationVoteEvent {
+	ordered := make([]event.ModerationVoteEvent, 0, len(votes))
 	for _, v := range votes {
-		kept = append(kept, v)
+		ordered = append(ordered, v)
 	}
-	sort.Slice(kept, func(i, j int) bool {
-		return pairHash(id, kept[i].ModeratorID) < pairHash(id, kept[j].ModeratorID)
+	sort.Slice(ordered, func(i, j int) bool {
+		return pairHash(id, ordered[i].ModeratorID) < pairHash(id, ordered[j].ModeratorID)
 	})
-	if len(kept) > 0 && len(kept)%2 == 0 {
-		kept = kept[:len(kept)-1]
+	return ordered
+}
+
+// trimEven drops the highest-ranked vote of an even count so a strict
+// majority always exists in the tally.
+func trimEven(ordered []event.ModerationVoteEvent) []event.ModerationVoteEvent {
+	if len(ordered) > 0 && len(ordered)%2 == 0 {
+		return ordered[:len(ordered)-1]
 	}
-	return kept
+	return ordered
+}
+
+// keptVotes is the tally set: hash-ordered votes trimmed to an odd count.
+func keptVotes(id string, votes map[string]event.ModerationVoteEvent) []event.ModerationVoteEvent {
+	return trimEven(sortedVotes(id, votes))
 }
 
 // aggregate reduces the kept votes to the round verdict: FAIL on strict

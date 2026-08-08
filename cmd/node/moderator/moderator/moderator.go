@@ -160,12 +160,7 @@ func (m *Moderator) Close() {
 
 	m.mx.Lock()
 	for id, r := range m.rounds {
-		if r.voteTimer != nil {
-			r.voteTimer.Stop()
-		}
-		if r.tallyTimer != nil {
-			r.tallyTimer.Stop()
-		}
+		r.stopTimersLocked()
 		delete(m.rounds, id)
 	}
 	m.mx.Unlock()
