@@ -249,16 +249,12 @@ func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpn
 	}
 }
 
-const messageLimit = 5000
-
-// Media keys are hex SHA-256 digests handed out by the media store. Anything
-// longer is a peer stuffing the chat database instead of naming an attachment.
-const mediaKeyLimit = 128
-
-// Same ceiling as a tweet: the upload route carries four images at most.
-const maxMessageImages = 4
-
-const statusUndelivered = "undelivered"
+const (
+	messageLimit      = 5000
+	mediaKeyLimit     = 128
+	maxMessageImages  = 4
+	statusUndelivered = "undelivered"
+)
 
 // mediaKey normalizes an attachment key: an absent one and an empty one mean
 // the same thing, and an oversized one is rejected outright.

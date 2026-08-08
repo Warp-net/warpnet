@@ -59,10 +59,6 @@ resulting from the use or misuse of this software.
           <p class="text-2xl md:text-3xl mb-3">
             Dive deep into the Warp and see what happens...
           </p>
-          <p class="text-sm font-normal text-dark mb-6">
-            A decentralized, peer-to-peer network. Your account lives locally on
-            this device — no central server, no password recovery.
-          </p>
           <p>Join Warpnet today.</p>
           <button v-if="isFirstRun === true"
             @click.prevent="setSignUpStep('step1')"
