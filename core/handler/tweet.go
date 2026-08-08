@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -532,40 +531,22 @@ func getThreadReplies(
 	// as ParentId, or as RootId when the parent is the thread root itself.
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 
+	// The parent author's node holds the whole thread (every reply is
+	// forwarded there on creation); the local index only has this node's own
+	// replies, so it serves as the fallback when that node is unreachable.
+	if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
+		return resp, nil
+	}
+
 	replies, cursor, err := repo.GetReplies(parentId, ev.Limit, ev.Cursor)
 	if err != nil {
 		return nil, err
-	}
-	if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
-		replies = mergeReplies(replies, resp.Tweets)
-		if cursor == "" {
-			cursor = resp.Cursor
-		}
 	}
 	return event.TweetsResponse{
 		Cursor: cursor,
 		Tweets: replies,
 		UserId: parentId,
 	}, nil
-}
-
-func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
-	seen := make(map[string]struct{}, len(local))
-	for _, t := range local {
-		seen[t.Id] = struct{}{}
-	}
-	merged := local
-	for _, t := range remote {
-		if _, dup := seen[t.Id]; dup {
-			continue
-		}
-		seen[t.Id] = struct{}{}
-		merged = append(merged, t)
-	}
-	sort.SliceStable(merged, func(i, j int) bool {
-		return merged[i].CreatedAt.After(merged[j].CreatedAt)
-	})
-	return merged
 }
 
 // forwardThreadReplies asks the root tweet author's home node for the thread's

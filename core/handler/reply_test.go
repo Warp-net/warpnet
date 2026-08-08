@@ -314,12 +314,11 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("merges local replies with the thread's home node view", func(t *testing.T) {
-		local := []domain.Tweet{{Id: "01LOCAL", CreatedAt: time.Unix(30, 0)}}
-		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{
-			{Id: "01LOCAL", CreatedAt: time.Unix(30, 0)},
-			{Id: "https://mastodon.social/users/bob/statuses/1", CreatedAt: time.Unix(10, 0)},
-		}}
+	t.Run("root author's node view wins over the local index", func(t *testing.T) {
+		// The parent author's node holds the whole thread; one local reply of
+		// the owner must not shadow it.
+		local := []domain.Tweet{{Id: "01LOCAL"}}
+		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{{Id: "01LOCAL"}, {Id: "r2"}, {Id: "r3"}}}
 		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: "remote-node"}, nil
 		}}
@@ -334,12 +333,29 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		r := resp.(event.TweetsResponse)
-		if len(r.Tweets) != 2 {
-			t.Fatalf("expected local + one foreign reply, got %+v", r.Tweets)
-		}
-		if r.Tweets[0].Id != "01LOCAL" || r.Tweets[1].Id != "https://mastodon.social/users/bob/statuses/1" {
-			t.Fatalf("unexpected merge (newest first, deduped): %+v", r.Tweets)
+		if len(r.Tweets) != 3 {
+			t.Fatalf("expected the home node's thread, got %+v", r.Tweets)
 		}
 	})
 
+	t.Run("falls back to the local index when the home node is unreachable", func(t *testing.T) {
+		local := []domain.Tweet{{Id: "01LOCAL"}}
+		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		}}
+		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			return nil, warpnet.ErrNodeIsOffline
+		}}
+		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
+			return local, "", nil
+		}}, userRepo, streamer)
+		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.TweetsResponse)
+		if len(r.Tweets) != 1 || r.Tweets[0].Id != "01LOCAL" {
+			t.Fatalf("expected the local fallback, got %+v", r.Tweets)
+		}
+	})
 }
