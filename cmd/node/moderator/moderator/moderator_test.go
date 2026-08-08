@@ -68,8 +68,6 @@ func withEngine(t *testing.T, e Engine) {
 	withFastRetry(t)
 }
 
-// withFastRetry zeroes the fetch retry delay so failure-path tests don't
-// sleep through real backoff.
 func withFastRetry(t *testing.T) {
 	t.Helper()
 	prev := fetchRetryDelay
@@ -154,8 +152,6 @@ func TestHandleTweetReport_EmptyTextSkipsEngine(t *testing.T) {
 	}
 }
 
-// A tweet report without an object id has nothing to fetch: no dial, no
-// engine run, no reporter delivery.
 func TestHandleTweetReport_MissingObjectIDIsNoop(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -178,8 +174,6 @@ func TestHandleTweetReport_MissingObjectIDIsNoop(t *testing.T) {
 	}
 }
 
-// A transport-level dial error counts as a miss exactly like an error
-// envelope: retried, then reported back as unreviewable.
 func TestHandleTweetReport_TransportErrorNotifiesReporter(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -227,8 +221,6 @@ func TestHandleTweetReport_TransportErrorNotifiesReporter(t *testing.T) {
 	}
 }
 
-// A syntactically valid but zero-value tweet ({}) is not an error envelope
-// and not content either — the reporter must still hear "unavailable".
 func TestHandleTweetReport_ZeroValueTweetNotifiesReporter(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -276,11 +268,9 @@ func TestHandleTweetReport_ZeroValueTweetNotifiesReporter(t *testing.T) {
 	}
 }
 
-// Cancelling the moderator context aborts the retry loop instead of
-// sleeping through the remaining attempts.
 func TestFetchObject_ContextCancelledStopsRetries(t *testing.T) {
 	withFastRetry(t)
-	fetchRetryDelay = time.Hour // force the retry wait to block on ctx
+	fetchRetryDelay = time.Hour
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -303,9 +293,6 @@ func TestFetchObject_ContextCancelledStopsRetries(t *testing.T) {
 	}
 }
 
-// A fetch that fails on every attempt must still answer the reporter —
-// silence reads as a lost report. The verdict is OK (no state touched
-// anywhere) with the sentinel "unavailable" reason.
 func TestHandleTweetReport_FetchFailureNotifiesReporter(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -356,7 +343,6 @@ func TestHandleTweetReport_FetchFailureNotifiesReporter(t *testing.T) {
 	}
 }
 
-// A transient miss must be retried: fail twice, succeed on the third try.
 func TestHandleTweetReport_FetchRetriesTransientFailure(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -387,8 +373,6 @@ func TestHandleTweetReport_FetchRetriesTransientFailure(t *testing.T) {
 	}
 }
 
-// A tweet that already carries a verdict was moderated on an earlier report:
-// reuse it — no model run, no repeated followers broadcast, reporter notified.
 func TestHandleTweetReport_AlreadyModeratedReusesVerdict(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -594,8 +578,6 @@ func userReport() event.ReportEvent {
 	}
 }
 
-// A real profile reaches the engine as the concatenated profile text; an OK
-// verdict goes to the reporter and never to the followers broadcast.
 func TestHandleUserReport_ValidProfileReachesEngine(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -645,8 +627,6 @@ func TestHandleUserReport_ValidProfileReachesEngine(t *testing.T) {
 	}
 }
 
-// A FAIL verdict on a profile isolates the user via the followers broadcast
-// and tells the reporter.
 func TestHandleUserReport_FailVerdictIsolatesAndNotifies(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
@@ -689,8 +669,6 @@ func TestHandleUserReport_FailVerdictIsolatesAndNotifies(t *testing.T) {
 	}
 }
 
-// A profile fetch that fails on every attempt must answer the reporter with
-// the unavailable sentinel instead of silence.
 func TestHandleUserReport_FetchFailureNotifiesReporter(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -737,7 +715,6 @@ func TestHandleUserReport_FetchFailureNotifiesReporter(t *testing.T) {
 	}
 }
 
-// A zero-value user ({}) is not content; the reporter hears "unavailable".
 func TestHandleUserReport_ZeroValueUserNotifiesReporter(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -776,8 +753,6 @@ func TestHandleUserReport_ZeroValueUserNotifiesReporter(t *testing.T) {
 	}
 }
 
-// A profile with no text to judge (no username, bio, website, metadata)
-// cannot be reviewed — the reporter must hear that, not silence.
 func TestHandleUserReport_EmptyProfileTextNotifiesReporter(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
@@ -816,7 +791,6 @@ func TestHandleUserReport_EmptyProfileTextNotifiesReporter(t *testing.T) {
 	}
 }
 
-// handleReport is the dispatch point: a closed moderator ignores reports.
 func TestHandleReport_ClosedModeratorIsNoop(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)

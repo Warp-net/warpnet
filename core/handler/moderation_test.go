@@ -290,10 +290,6 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 	})
 
-	// The home timeline is keyed by the LOCAL owner's id. On a reporter's or
-	// follower's node the offender's id addresses a timeline that doesn't
-	// exist, so the delete silently no-ops and the moderated tweet stays
-	// visible in the list while the tweet card already renders as moderated.
 	t.Run("tweet moderation FAIL - deletes from the local owner's timeline", func(t *testing.T) {
 		var gotUserID, gotTweetID string
 		h := mkHandler(
@@ -322,8 +318,6 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 	})
 
-	// A fetch-failure verdict (OK + sentinel reason) must tell the reporter
-	// the content could not be reviewed — not claim a clean review.
 	t.Run("unreviewable report - notifies reporter honestly", func(t *testing.T) {
 		var got domain.Notification
 		notified := false

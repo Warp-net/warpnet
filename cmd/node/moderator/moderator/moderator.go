@@ -196,14 +196,12 @@ func (m *Moderator) notifyReporter(
 
 const fetchAttempts = 3
 
-// fetchRetryDelay is a var so tests can zero it out.
-var fetchRetryDelay = 3 * time.Second
+var (
+	fetchRetryDelay = 3 * time.Second
 
-// fetchObject dials the target node with a few short retries: the origin
-// node may be restarting or re-connecting right when the report arrives, and
-// a report is fire-and-forget — there is no second chance once this returns.
-// A failed fetch (not found, offline-forward) arrives as an
-// event.ResponseError envelope, not a transport error; both count as misses.
+	ErrFetchFailed = errors.New("moderator: fetch failed")
+)
+
 func (m *Moderator) fetchObject(nodeID string, route stream.WarpRoute, payload any) ([]byte, error) {
 	var done <-chan struct{}
 	if m.ctx != nil {
@@ -211,7 +209,7 @@ func (m *Moderator) fetchObject(nodeID string, route stream.WarpRoute, payload a
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < fetchAttempts; attempt++ {
+	for attempt := range fetchAttempts {
 		if attempt > 0 {
 			select {
 			case <-done:
@@ -227,7 +225,7 @@ func (m *Moderator) fetchObject(nodeID string, route stream.WarpRoute, payload a
 		}
 		var respErr event.ResponseError
 		if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
-			lastErr = errors.New(respErr.Message)
+			lastErr = fmt.Errorf("%w: %s", ErrFetchFailed, respErr.Message)
 			continue
 		}
 		return data, nil
@@ -235,10 +233,6 @@ func (m *Moderator) fetchObject(nodeID string, route stream.WarpRoute, payload a
 	return nil, lastErr
 }
 
-// notifyUnreviewable tells the reporter their report cannot be reviewed —
-// without it a lost fetch reads as a lost report. The OK result keeps every
-// receiver from touching local state; the sentinel reason lets member nodes
-// word the notification honestly.
 func (m *Moderator) notifyUnreviewable(rep event.ReportEvent, objectID *domain.ID, targetUserID domain.ID) {
 	reason := event.ModerationReasonUnavailable
 	m.notifyReporter(rep, domain.OK, &reason, objectID, targetUserID)
@@ -276,9 +270,6 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 		return nil
 	}
 
-	// A tweet that already carries a verdict was moderated on an earlier
-	// report — reuse it instead of burning another model run. The followers
-	// broadcast for a FAIL went out back then; only the reporter is new here.
 	if tweet.Moderation != nil {
 		log.Infof("moderator: tweet %s already moderated ok=%t, reusing verdict",
 			tweet.Id, bool(tweet.Moderation.IsOk))
