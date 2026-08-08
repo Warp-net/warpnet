@@ -277,6 +277,24 @@ func TestAuthLogin_ReturningOwnerIsNotRecreated(t *testing.T) {
 	assert.Equal(t, "existing-id", updated[0].Id)
 }
 
+func TestAuthLogin_ReloginKeepsRenamedProfileUsername(t *testing.T) {
+	repo := newFakeAuthRepo()
+	repo.owner = domain.Owner{UserId: "existing-id", Username: "alice", CreatedAt: time.Now().Add(-time.Hour)}
+	users := &fakeUserRepo{}
+
+	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
+
+	_, err := as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
+	require.NoError(t, err)
+
+	_, updated := users.snapshot()
+	require.Len(t, updated, 1)
+	// The login refresh must not carry the owner's login name: the user
+	// repo's merge-style Update keeps the profile's (possibly renamed)
+	// username, which a non-empty value here would clobber.
+	assert.Empty(t, updated[0].Username)
+}
+
 func TestAuthLogin_OwnerCreationFailureAborts(t *testing.T) {
 	repo := newFakeAuthRepo()
 	repo.setErr = errors.New("disk full")

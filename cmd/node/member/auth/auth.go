@@ -176,8 +176,10 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 			panic("auth: node id is missing")
 		}
 
+		// user.Username is deliberately left empty: the repo's merge-style
+		// Update keeps the profile's (possibly renamed) username, while
+		// owner.Username stays the immutable login name.
 		user.Id = owner.UserId
-		user.Username = owner.Username
 		user.CreatedAt = owner.CreatedAt
 		user.RoundTripTime = math.MaxInt64 // put your user at the end of a who-to-follow list
 		user.NodeId = authInfo.ID
@@ -187,7 +189,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		log.Infof(
 			"auth: user authenticated: id: %s, name: '%s', node_id: %s, created_at: %s, latency: %d",
 			user.Id,
-			user.Username,
+			owner.Username,
 			user.NodeId,
 			user.CreatedAt,
 			user.RoundTripTime,
