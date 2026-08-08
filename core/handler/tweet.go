@@ -605,7 +605,7 @@ func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
 		if _, dup := seen[t.Id]; dup {
 			continue
 		}
-		if id, ok := bridgedStatusId(t.Id); ok {
+		if id, ok := mastodon.BridgedStatusID(t.Id); ok {
 			if _, dup := seen[id]; dup {
 				continue
 			}
@@ -617,20 +617,6 @@ func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
 		return merged[i].CreatedAt.After(merged[j].CreatedAt)
 	})
 	return merged
-}
-
-// bridgedStatusId extracts the trailing status id from a bridged status URL
-// (".../statuses/<id>[?...]"); ok is false for native (non-URL) ids.
-func bridgedStatusId(id string) (string, bool) {
-	if !mastodon.IsBridgedID(id) {
-		return "", false
-	}
-	id, _, _ = strings.Cut(id, "?")
-	_, tail, found := strings.Cut(id, "/statuses/")
-	if !found || tail == "" || strings.ContainsRune(tail, '/') {
-		return "", false
-	}
-	return tail, true
 }
 
 // forwardThreadReplies asks the thread's home node for its replies when that
