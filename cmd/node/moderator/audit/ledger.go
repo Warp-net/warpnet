@@ -1,0 +1,177 @@
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package audit
+
+import "sync"
+
+// Outcome is the auditor's classification of one challenge exchange.
+type Outcome int
+
+const (
+	// OutcomeCorrect: answered with the expected verdict class.
+	OutcomeCorrect Outcome = iota
+	// OutcomeWrong: answered, cryptographically valid, but with the wrong
+	// class on a flagrant probe. One of these is model noise; a pattern is
+	// a fake — the thresholds below draw that line.
+	OutcomeWrong
+	// OutcomeUnreachable: no usable answer (transport error, timeout, or
+	// an error reply). Could be the network's fault, so it degrades
+	// standing only in bulk and never to Banned.
+	OutcomeUnreachable
+	// OutcomeInvalid: an answer that is wrong cryptographically or
+	// protocol-wise — bad signature, foreign responder id, mismatched
+	// challenge binding. Never accidental; two of these ban the peer.
+	OutcomeInvalid
+)
+
+// Standing is the local trust state derived from a peer's audit history.
+type Standing int
+
+const (
+	// StandingProbation: not enough evidence yet (the "trainee" period —
+	// fresh identities must earn weight before their votes should count).
+	StandingProbation Standing = iota
+	StandingTrusted
+	StandingSuspect
+	StandingBanned
+)
+
+func (s Standing) String() string {
+	switch s {
+	case StandingProbation:
+		return "probation"
+	case StandingTrusted:
+		return "trusted"
+	case StandingSuspect:
+		return "suspect"
+	case StandingBanned:
+		return "banned"
+	default:
+		return "unknown"
+	}
+}
+
+// Tolerance thresholds. Moderators legitimately run different models, so
+// agreement is judged statistically on flagrant probes only. On the
+// balanced corpus an honest moderator — even an exotic model disagreeing
+// on one probe in ten — sits near 0.9, while anything without a working
+// model (constant answers, coin flips) converges to ~0.5. The ban line is
+// drawn between those two populations, not at "one mistake".
+const (
+	// minSample is how many ANSWERED probes it takes to leave probation.
+	minSample = 20
+	// banAgreeBelow: no better than guessing on flagrant content, i.e. no
+	// usable moderation model behind the votes.
+	banAgreeBelow = 0.65
+	// suspectAgreeBelow: more disagreement than model diversity explains.
+	suspectAgreeBelow = 0.8
+	// refusalSuspectAbove: mostly silent peers are suspect, never banned —
+	// the network may be at fault, and liveness alone must not execute.
+	refusalSuspectAbove = 0.5
+	// maxInvalid tolerated before banning; invalid responses are deliberate.
+	maxInvalid = 1
+)
+
+type peerStats struct {
+	correct     int
+	wrong       int
+	unreachable int
+	invalid     int
+}
+
+func (s *peerStats) standing() Standing {
+	if s.invalid > maxInvalid {
+		return StandingBanned
+	}
+	answered := s.correct + s.wrong
+	asked := answered + s.unreachable + s.invalid
+	if asked >= minSample && float64(s.unreachable) > refusalSuspectAbove*float64(asked) {
+		return StandingSuspect
+	}
+	if answered < minSample {
+		return StandingProbation
+	}
+	rate := float64(s.correct) / float64(answered)
+	switch {
+	case rate < banAgreeBelow:
+		return StandingBanned
+	case rate < suspectAgreeBelow:
+		return StandingSuspect
+	default:
+		return StandingTrusted
+	}
+}
+
+// PeerReport is a read-only snapshot row, the shape a future reputation
+// gossip or admin surface would consume.
+type PeerReport struct {
+	Correct     int
+	Wrong       int
+	Unreachable int
+	Invalid     int
+	Standing    Standing
+}
+
+// Ledger accumulates audit outcomes per moderator peer. In-memory and
+// local-first by design: every node judges from its own evidence; sharing
+// signed transcripts across nodes is a later layer.
+type Ledger struct {
+	mu    sync.Mutex
+	peers map[string]*peerStats
+}
+
+func NewLedger() *Ledger {
+	return &Ledger{peers: make(map[string]*peerStats)}
+}
+
+func (l *Ledger) Record(peerID string, o Outcome) {
+	if peerID == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	s, ok := l.peers[peerID]
+	if !ok {
+		s = &peerStats{}
+		l.peers[peerID] = s
+	}
+	switch o {
+	case OutcomeCorrect:
+		s.correct++
+	case OutcomeWrong:
+		s.wrong++
+	case OutcomeUnreachable:
+		s.unreachable++
+	case OutcomeInvalid:
+		s.invalid++
+	}
+}
+
+// StandingOf reports the local trust state; peers never audited are on
+// probation, not trusted.
+func (l *Ledger) StandingOf(peerID string) Standing {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	s, ok := l.peers[peerID]
+	if !ok {
+		return StandingProbation
+	}
+	return s.standing()
+}
+
+func (l *Ledger) Snapshot() map[string]PeerReport {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make(map[string]PeerReport, len(l.peers))
+	for id, s := range l.peers {
+		out[id] = PeerReport{
+			Correct:     s.correct,
+			Wrong:       s.wrong,
+			Unreachable: s.unreachable,
+			Invalid:     s.invalid,
+			Standing:    s.standing(),
+		}
+	}
+	return out
+}

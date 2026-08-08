@@ -623,6 +623,62 @@ type ModerationVoteEvent struct {
 	Final bool `json:"final,omitempty"`
 }
 
+// ModerationChallengeEvent is a spot-check one moderator sends to another:
+// "moderate exactly this text". ContentHash is hex(sha256) over the raw
+// UTF-8 bytes of Text, so the response binds to the same content on any
+// platform — no float math, no runtime assumptions.
+//
+// NOT WIRED YET: no handler is registered for the challenge route; this is
+// the wire shape for the future moderator-audit protocol.
+type ModerationChallengeEvent struct {
+	ChallengeID string    `json:"challenge_id"`
+	Text        string    `json:"text"`
+	ContentHash string    `json:"content_hash"`
+	TimeAt      time.Time `json:"time_at,omitempty"`
+}
+
+// ModerationChallengeResponseEvent is the challenged moderator's signed
+// verdict on the probe text. Moderators are free to run different models
+// (Model reports which one answered), so auditors must compare verdict
+// classes statistically, never byte-for-byte.
+type ModerationChallengeResponseEvent struct {
+	ChallengeID string                  `json:"challenge_id"`
+	ContentHash string                  `json:"content_hash"`
+	Result      domain.ModerationResult `json:"result"`
+	Reason      *string                 `json:"reason,omitempty"`
+	Model       domain.ModelType        `json:"model"`
+	ModeratorID domain.ID               `json:"moderator_id"`
+	TimeAt      time.Time               `json:"time_at,omitempty"`
+	// Signature is base64(ed25519) over SigningBytes with the responder's
+	// node key; it makes the answer non-repudiable audit evidence.
+	Signature string `json:"signature,omitempty"`
+}
+
+// SigningBytes returns the canonical bytes the response signature covers,
+// length-prefixed like ModerationResultEvent.SigningBytes.
+func (e ModerationChallengeResponseEvent) SigningBytes() []byte {
+	reason := ""
+	if e.Reason != nil {
+		reason = *e.Reason
+	}
+	parts := []string{
+		e.ChallengeID,
+		e.ContentHash,
+		strconv.FormatBool(bool(e.Result)),
+		reason,
+		string(e.Model),
+		string(e.ModeratorID),
+		strconv.FormatInt(e.TimeAt.UnixNano(), 10),
+	}
+	buf := make([]byte, 0, 192)
+	for _, p := range parts {
+		buf = append(buf, strconv.Itoa(len(p))...)
+		buf = append(buf, ':')
+		buf = append(buf, p...)
+	}
+	return buf
+}
+
 const ModerationReasonUnavailable = "content unavailable for review"
 
 type ModerationResultEvent struct {
