@@ -35,6 +35,30 @@ func TestMessage_SigningBytes_JSONRoundTrip(t *testing.T) {
 	}
 }
 
+// A body-less message (e.g. discovery's GET_INFO) marshals its nil Body as
+// JSON null and the receiver unmarshals it back as the literal bytes "null";
+// SigningBytes must produce identical bytes on both sides regardless.
+func TestMessage_SigningBytes_NilBodyJSONRoundTrip(t *testing.T) {
+	msg := event.Message{
+		Body:      nil,
+		Timestamp: time.Now().UTC(),
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got event.Message
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if string(got.SigningBytes()) != string(msg.SigningBytes()) {
+		t.Fatalf("signing bytes changed across JSON round-trip:\n before = %q\n after  = %q", msg.SigningBytes(), got.SigningBytes())
+	}
+}
+
 // Tampering with the timestamp must invalidate the signature.
 func TestMessage_SignatureBindsTimestamp(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)

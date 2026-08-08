@@ -137,8 +137,16 @@ func StreamModerationResultHandler(
 			if err := tweetRepo.Update(tweet); err != nil {
 				log.Errorf("moderation: failed to update tweet: %v", err)
 			}
-			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserID, *ev.ObjectID); err != nil {
-				log.Errorf("moderation: failed to delete timeline: %v", err)
+			// The home timeline is keyed by the LOCAL owner's id — on a
+			// reporter's or follower's node the offender's id addresses a
+			// timeline that doesn't exist and the delete silently no-ops,
+			// leaving the moderated tweet visible.
+			if authRepo != nil {
+				if ownerId := authRepo.GetOwner().UserId; ownerId != "" {
+					if err := timelineRepo.DeleteTweetFromTimeline(ownerId, *ev.ObjectID); err != nil {
+						log.Errorf("moderation: failed to delete timeline: %v", err)
+					}
+				}
 			}
 
 		case domain.ModerationUserType:
@@ -208,6 +216,12 @@ func reportResultText(ev event.ModerationResultEvent) string {
 		subject = "profile"
 	}
 	if bool(ev.Result) {
+		// Not a real review: the moderator could not fetch the content
+		// (origin node offline or the object is gone). Saying "no violation
+		// found" here would misreport a fetch failure as a clean verdict.
+		if ev.Reason != nil && *ev.Reason == event.ModerationReasonUnavailable {
+			return fmt.Sprintf("The %s you reported could not be reviewed: the content is unavailable", subject)
+		}
 		return fmt.Sprintf("The %s you reported was reviewed: no violation found", subject)
 	}
 	if ev.Reason != nil && *ev.Reason != "" {

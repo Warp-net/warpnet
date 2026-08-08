@@ -571,6 +571,12 @@ type ReportEvent struct {
 	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
 
+// ModerationReasonUnavailable is the sentinel reason on a reporter-bound
+// verdict that carries no real review: the moderator could not fetch the
+// reported content. It rides an OK result so receivers touch no local state;
+// member nodes key on it to word the reporter's notification honestly.
+const ModerationReasonUnavailable = "content unavailable for review"
+
 type ModerationResultEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Result   domain.ModerationResult     `json:"result"`
