@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -586,6 +587,40 @@ func TestStreamGetTweetHandler(t *testing.T) {
 		}
 		if resp.(domain.Tweet).Text != "cached" {
 			t.Fatalf("expected cached tweet fallback: %v", resp)
+		}
+	})
+
+	t.Run("unknown author of a bridged status resolves via the gateway", func(t *testing.T) {
+		// A bridged reply can be authored by any Fediverse user — usually not
+		// a known (followed) one, and never cached locally. The status URL in
+		// the tweet id must route the lookup to the gateway.
+		bridgedId := "https://mastodon.social/users/bob/statuses/1"
+		h := StreamGetTweetHandler(
+			stubTweetRepo{
+				getFn: func(userID, tweetID string) (domain.Tweet, error) {
+					return domain.Tweet{}, database.ErrTweetNotFound
+				},
+				getReplyFn: func(rootID, replyID string) (domain.Tweet, error) {
+					return domain.Tweet{}, database.ErrTweetNotFound
+				},
+			},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+				return domain.User{}, database.ErrUserNotFound
+			}},
+			stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+				if nodeId != mastodon.GatewayNodeID() {
+					t.Fatalf("expected the gateway, got %q", nodeId)
+				}
+				return marshal(t, domain.Tweet{Id: bridgedId, Text: "bridged"}), nil
+			}},
+		)
+		resp, err := h(marshal(t, event.GetTweetEvent{UserId: "bob@mastodon.social", TweetId: bridgedId}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(domain.Tweet).Text != "bridged" {
+			t.Fatalf("expected the gateway's tweet: %v", resp)
 		}
 	})
 

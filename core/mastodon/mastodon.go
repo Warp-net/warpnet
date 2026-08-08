@@ -33,6 +33,8 @@ package mastodon
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/Warp-net/warpnet/domain"
 )
 
@@ -52,6 +54,12 @@ const (
 )
 
 var ErrNotSupported = errors.New("not supported functionality")
+
+// IsBridgedID reports whether an id names a bridged Fediverse entity: native
+// Warpnet ids are ULIDs, bridged tweets travel under their status URL.
+func IsBridgedID(id string) bool {
+	return strings.HasPrefix(id, "https://") || strings.HasPrefix(id, "http://")
+}
 
 // gatewayNodeID is the effective gateway peer id. It defaults to
 // DefaultGatewayNodeID and is overridden once at node startup from the owner's

@@ -31,10 +31,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -262,12 +264,20 @@ func handleNewReply(
 	}
 	parentUserId := *ev.ParentUserId
 
+	parentNodeId := ""
 	parentUser, err := userRepo.Get(parentUserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return reply, nil
-	}
-	if err != nil {
+	switch {
+	case errors.Is(err, database.ErrUserNotFound):
+		// A bridged thread accepts replies to any Fediverse author, followed
+		// or not; their home node is always the gateway.
+		if !mastodon.IsBridgedID(parentId) {
+			return reply, nil
+		}
+		parentNodeId = mastodon.GatewayNodeID()
+	case err != nil:
 		return nil, err
+	default:
+		parentNodeId = parentUser.NodeId
 	}
 
 	isOwnTweetReply := parentUserId == ownNodeInfo.OwnerId
@@ -285,14 +295,14 @@ func handleNewReply(
 		}
 		return reply, nil
 	}
-	if ownNodeInfo.ID.String() == parentUser.NodeId {
+	if ownNodeInfo.ID.String() == parentNodeId {
 		return reply, nil
 	}
 
 	// Forward the normalized/stored reply (prefix-stripped ids) so peers
 	// build identical thread keys.
 	replyDataResp, err := streamer.GenericStream(
-		parentUser.NodeId,
+		parentNodeId,
 		event.PRIVATE_POST_TWEET,
 		domain.Tweet{
 			CreatedAt:    reply.CreatedAt,
@@ -355,7 +365,19 @@ func StreamGetTweetHandler(
 
 		otherUser, err := userRepo.Get(ev.UserId)
 		if errors.Is(err, database.ErrUserNotFound) {
-			return localTweet(repo, ev)
+			t, lerr := localTweet(repo, ev)
+			if lerr == nil {
+				return t, nil
+			}
+			// A bridged thread accepts replies from any Fediverse author,
+			// followed or not; their home node is always the gateway, which
+			// resolves the status by its URL.
+			if mastodon.IsBridgedID(ev.TweetId) {
+				if bridged, ok := gatewayTweet(streamer, ev); ok {
+					return bridged, nil
+				}
+			}
+			return nil, lerr
 		}
 		if err != nil {
 			return nil, err
@@ -386,6 +408,24 @@ func StreamGetTweetHandler(
 
 		return tweet, nil
 	}
+}
+
+// gatewayTweet resolves a bridged status from the Fediverse gateway. ok=false
+// on any transport or decode failure so the caller keeps its local error.
+func gatewayTweet(streamer TweetStreamer, ev event.GetTweetEvent) (domain.Tweet, bool) {
+	resp, err := streamer.GenericStream(mastodon.GatewayNodeID(), event.PUBLIC_GET_TWEET, ev)
+	if err != nil {
+		return domain.Tweet{}, false
+	}
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+		return domain.Tweet{}, false
+	}
+	var tweet domain.Tweet
+	if err := json.Unmarshal(resp, &tweet); err != nil || tweet.Id == "" {
+		return domain.Tweet{}, false
+	}
+	return tweet, true
 }
 
 // replyParent returns the partition a reply is stored under: its ParentId,
@@ -520,9 +560,10 @@ func tweetsRefreshBackground(
 
 // getThreadReplies serves the direct replies to a tweet — a flat list of
 // tweets whose ParentId is that tweet. It is one level of the tree; clients
-// walk deeper by re-querying with each reply as the parent. With no local
-// replies it forwards to the root author's home node so threads on remote/
-// bridged tweets still resolve.
+// walk deeper by re-querying with each reply as the parent. The local thread
+// index alone holds only this node's own view (typically just the owner's
+// replies), so the root author's home node is asked too and both sets are
+// merged — otherwise one local reply would shadow everyone else's.
 func getThreadReplies(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
@@ -537,9 +578,10 @@ func getThreadReplies(
 	if err != nil {
 		return nil, err
 	}
-	if len(replies) == 0 {
-		if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
-			return resp, nil
+	if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
+		replies = mergeReplies(replies, resp.Tweets)
+		if cursor == "" {
+			cursor = resp.Cursor
 		}
 	}
 	return event.TweetsResponse{
@@ -549,19 +591,70 @@ func getThreadReplies(
 	}, nil
 }
 
-// forwardThreadReplies asks the root tweet author's home node for the thread's
-// replies when that node is not this one. ok=false means handle locally.
+// mergeReplies appends remote thread rows this node does not hold locally,
+// newest first. A local row wins over its federated copy: a bridged reply id
+// may carry the same tweet as <gateway>/users/<u>/statuses/<id>, so the
+// trailing path segment is matched too.
+func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
+	seen := make(map[string]struct{}, len(local))
+	for _, t := range local {
+		seen[t.Id] = struct{}{}
+	}
+	merged := local
+	for _, t := range remote {
+		if _, dup := seen[t.Id]; dup {
+			continue
+		}
+		if id, ok := bridgedStatusId(t.Id); ok {
+			if _, dup := seen[id]; dup {
+				continue
+			}
+		}
+		seen[t.Id] = struct{}{}
+		merged = append(merged, t)
+	}
+	sort.SliceStable(merged, func(i, j int) bool {
+		return merged[i].CreatedAt.After(merged[j].CreatedAt)
+	})
+	return merged
+}
+
+// bridgedStatusId extracts the trailing status id from a bridged status URL
+// (".../statuses/<id>[?...]"); ok is false for native (non-URL) ids.
+func bridgedStatusId(id string) (string, bool) {
+	if !mastodon.IsBridgedID(id) {
+		return "", false
+	}
+	id, _, _ = strings.Cut(id, "?")
+	_, tail, found := strings.Cut(id, "/statuses/")
+	if !found || tail == "" || strings.ContainsRune(tail, '/') {
+		return "", false
+	}
+	return tail, true
+}
+
+// forwardThreadReplies asks the thread's home node for its replies when that
+// node is not this one: the root author's node when the client named the
+// author, or the Fediverse gateway when the thread key is a bridged status
+// URL (any Fediverse author can own it, followed or not). ok=false means the
+// local index is all there is.
 func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev event.GetAllTweetsEvent) (event.TweetsResponse, bool) {
-	if ev.RootUserId == "" {
+	nodeId := ""
+	if ev.RootUserId != "" {
+		author, err := userRepo.Get(ev.RootUserId)
+		if err == nil && author.NodeId != "" && author.NodeId != streamer.NodeInfo().ID.String() {
+			nodeId = author.NodeId
+		}
+	}
+	if nodeId == "" && mastodon.IsBridgedID(replyParent(ev.ParentId, ev.RootId)) {
+		nodeId = mastodon.GatewayNodeID()
+	}
+	if nodeId == "" {
 		return event.TweetsResponse{}, false
 	}
-	author, err := userRepo.Get(ev.RootUserId)
-	if err != nil || author.NodeId == "" || author.NodeId == streamer.NodeInfo().ID.String() {
-		return event.TweetsResponse{}, false
-	}
-	data, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_TWEETS, ev)
+	data, err := streamer.GenericStream(nodeId, event.PUBLIC_GET_TWEETS, ev)
 	if err != nil {
-		log.Errorf("get replies: forward to %s: %v", author.NodeId, err)
+		log.Errorf("get replies: forward to %s: %v", nodeId, err)
 		return event.TweetsResponse{}, false
 	}
 	var resp event.TweetsResponse
