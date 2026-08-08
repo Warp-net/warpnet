@@ -520,9 +520,7 @@ func tweetsRefreshBackground(
 
 // getThreadReplies serves the direct replies to a tweet — a flat list of
 // tweets whose ParentId is that tweet. It is one level of the tree; clients
-// walk deeper by re-querying with each reply as the parent. With no local
-// replies it forwards to the root author's home node so threads on remote/
-// bridged tweets still resolve.
+// walk deeper by re-querying with each reply as the parent.
 func getThreadReplies(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
@@ -533,14 +531,16 @@ func getThreadReplies(
 	// as ParentId, or as RootId when the parent is the thread root itself.
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 
+	// The parent author's node holds the whole thread (every reply is
+	// forwarded there on creation); the local index only has this node's own
+	// replies, so it serves as the fallback when that node is unreachable.
+	if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
+		return resp, nil
+	}
+
 	replies, cursor, err := repo.GetReplies(parentId, ev.Limit, ev.Cursor)
 	if err != nil {
 		return nil, err
-	}
-	if len(replies) == 0 {
-		if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
-			return resp, nil
-		}
 	}
 	return event.TweetsResponse{
 		Cursor: cursor,

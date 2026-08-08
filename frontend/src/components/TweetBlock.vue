@@ -524,7 +524,18 @@ export default {
         },
       });
     },
-    openTweetPage() {
+    async openTweetPage() {
+      // A bridged author (e.g. a Fediverse user who joined the thread) may be
+      // unknown to the node; resolving them through the gateway first gives
+      // the tweet page a routable user record.
+      if (isMastodonTweet(this.tweet)) {
+        try {
+          const gw = await warpnetService.getGatewaySettings();
+          await warpnetService.getProfile(this.tweet.user_id, gw.node_id);
+        } catch (err) {
+          console.warn('Failed to resolve bridged author:', err);
+        }
+      }
       this.$router.push({
         name: 'Tweet',
         params: { id: this.tweet.id },
