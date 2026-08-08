@@ -37,12 +37,15 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	ErrNoObjectID warpnet.WarpError = "no object id found"
-	ErrNoUserID   warpnet.WarpError = "no user id found"
+	ErrNoObjectID            warpnet.WarpError = "no object id found"
+	ErrNoUserID              warpnet.WarpError = "no user id found"
+	ErrNoModeratorID         warpnet.WarpError = "moderation result without valid moderator id"
+	ErrBadModeratorSignature warpnet.WarpError = "moderation result signature invalid"
 )
 
 type ModerationNotifier interface {
@@ -92,9 +95,26 @@ func StreamModerationResultHandler(
 			return nil, err
 		}
 
-		// Verdicts now travel via pubsub → SelfStream, so the stream
+		// Verdicts travel via pubsub → SelfStream, so the stream
 		// connection's RemotePeer is the local node, not the moderator.
-		// Attribution must come from the payload itself.
+		// Attribution and authenticity must come from the payload: the
+		// signature has to verify against the pubkey embedded in the
+		// ModeratorID peer id itself, otherwise anyone on the followers
+		// topic could shadow-ban arbitrary users with a forged verdict.
+		moderatorPeer := warpnet.FromStringToPeerID(ev.ModeratorID)
+		if moderatorPeer == "" {
+			log.Warnf("moderation: dropping verdict with malformed moderator id %q", ev.ModeratorID)
+			return nil, ErrNoModeratorID
+		}
+		pubKey := warpnet.FromIDToPubKey(moderatorPeer)
+		if len(pubKey) == 0 {
+			log.Warnf("moderation: dropping verdict: cannot derive pubkey from moderator id %q", ev.ModeratorID)
+			return nil, ErrNoModeratorID
+		}
+		if err := security.VerifySignature(pubKey, ev.SigningBytes(), ev.Signature); err != nil {
+			log.Warnf("moderation: dropping verdict from %s: signature invalid: %v", ev.ModeratorID, err)
+			return nil, ErrBadModeratorSignature
+		}
 		moderatorId := ev.ModeratorID
 
 		log.Infof("moderation: result type=%s user=%s result=%t reporter=%s",

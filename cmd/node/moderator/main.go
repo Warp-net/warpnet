@@ -111,7 +111,7 @@ func main() {
 		_ = publisher.Close()
 	}()
 
-	moder, err := moderator.NewModerator(ctx, n, publisher, publisher)
+	moder, err := moderator.NewModerator(ctx, n, publisher, publisher, publisher, privKey)
 	if err != nil {
 		log.Errorf("failed to init moderator: %v", err)
 		return

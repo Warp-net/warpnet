@@ -37,20 +37,25 @@ type Publisher interface {
 	PublishUpdateToFollowers(ownerId, dest string, body any) (err error)
 }
 
+// Signer stamps and signs a verdict with the moderator's node key; kept as
+// an injected func so this package never touches key material itself.
+type Signer func(*event.ModerationResultEvent)
+
 // IsolationProtocol implements shadow-ban semantics. The offender's own
 // node never receives the verdict — it is published only on the
 // followers/observers pubsub topic. The offender therefore cannot detect
 // or resist isolation; their local view stays unchanged while everyone
 // else hides the offending object.
 type IsolationProtocol struct {
-	pub Publisher
+	pub  Publisher
+	sign Signer
 }
 
-func NewIsolationProtocol(pub Publisher) *IsolationProtocol {
-	return &IsolationProtocol{pub: pub}
+func NewIsolationProtocol(pub Publisher, sign Signer) *IsolationProtocol {
+	return &IsolationProtocol{pub: pub, sign: sign}
 }
 
-func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModeration) {
+func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModeration, voters []domain.ID) {
 	if t == nil || m == nil {
 		return
 	}
@@ -63,6 +68,10 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 		Model:       m.Model,
 		Result:      m.IsOk,
 		ModeratorID: m.ModeratorID,
+		Voters:      voters,
+	}
+	if ip.sign != nil {
+		ip.sign(&result)
 	}
 
 	if err := ip.pub.PublishUpdateToFollowers(
@@ -74,7 +83,7 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 	}
 }
 
-func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, m *domain.UserModeration) {
+func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, m *domain.UserModeration, voters []domain.ID) {
 	if u == nil || m == nil {
 		return
 	}
@@ -85,6 +94,10 @@ func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, 
 		Model:       m.Model,
 		Result:      domain.ModerationResult(m.IsOk),
 		ModeratorID: moderatorID,
+		Voters:      voters,
+	}
+	if ip.sign != nil {
+		ip.sign(&result)
 	}
 
 	if err := ip.pub.PublishUpdateToFollowers(

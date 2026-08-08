@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strconv"
 	"time"
 
@@ -571,6 +573,52 @@ type ReportEvent struct {
 	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
 
+// ReportID derives a stable identifier of this report from its content, so
+// independent moderators correlate their votes on the same round without any
+// new wire field. Identical re-reports collapse into one round by construction.
+func (e ReportEvent) ReportID() string {
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	h := sha256.New()
+	for _, p := range []string{
+		e.Type.String(),
+		string(e.TargetUserID),
+		string(e.TargetNodeID),
+		objectID,
+		e.Reason,
+		string(e.ReporterID),
+		string(e.ReporterNodeID),
+	} {
+		// Length prefix keeps adjacent fields from ever aliasing each other.
+		h.Write([]byte(strconv.Itoa(len(p))))
+		h.Write([]byte{':'})
+		h.Write([]byte(p))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// ModerationVotesTopic carries one ModerationVoteEvent per moderator per
+// report round. Voter authenticity rides on the envelope (event.Message)
+// signature, so the vote payload itself is unsigned.
+const ModerationVotesTopic = "/warpnet/moderation/votes/1.0.0"
+
+// ModerationVoteEvent is a single moderator's verdict on one report round.
+// Every moderator that assessed the report publishes one; the round's chair
+// aggregates them into the final ModerationResultEvent.
+type ModerationVoteEvent struct {
+	ReportID string                      `json:"report_id"`
+	Type     domain.ModerationObjectType `json:"type"`
+	Result   domain.ModerationResult     `json:"result"`
+	Reason   *string                     `json:"reason,omitempty"`
+	UserID   domain.ID                   `json:"user_id"`
+	ObjectID *domain.ID                  `json:"object_id,omitempty"`
+	// ModeratorID is overwritten by the subscriber from the verified
+	// envelope NodeId; the payload value is never trusted.
+	ModeratorID domain.ID `json:"moderator_id,omitempty"`
+}
+
 const ModerationReasonUnavailable = "content unavailable for review"
 
 type ModerationResultEvent struct {
@@ -589,6 +637,50 @@ type ModerationResultEvent struct {
 	// ReporterID is set only on the reporter-bound delivery; empty on the
 	// isolation broadcast. The handler keys on it to notify only the reporter.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
+	// Voters lists every moderator whose vote entered the round's tally.
+	// Informational for now: receivers verify the chair's signature only.
+	Voters []domain.ID `json:"voters,omitempty"`
+	TimeAt time.Time   `json:"time_at,omitempty"`
+	// Signature is base64(ed25519) over SigningBytes, produced with the
+	// chair moderator's node key. The verifying pubkey is recovered from
+	// ModeratorID, so a verdict is only valid for the peer that claims it.
+	Signature string `json:"signature,omitempty"`
+}
+
+// SigningBytes returns the canonical bytes the verdict signature covers.
+// Explicit length-prefixed concatenation (rather than re-marshalled JSON) so
+// signer and verifier agree byte-for-byte even across versions that add
+// unrelated fields.
+func (e ModerationResultEvent) SigningBytes() []byte {
+	reason := ""
+	if e.Reason != nil {
+		reason = *e.Reason
+	}
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	parts := []string{
+		e.Type.String(),
+		strconv.FormatBool(bool(e.Result)),
+		reason,
+		string(e.Model),
+		string(e.UserID),
+		objectID,
+		string(e.ModeratorID),
+		string(e.ReporterID),
+		strconv.FormatInt(e.TimeAt.UnixNano(), 10),
+	}
+	for _, v := range e.Voters {
+		parts = append(parts, string(v))
+	}
+	buf := make([]byte, 0, 256)
+	for _, p := range parts {
+		buf = append(buf, strconv.Itoa(len(p))...)
+		buf = append(buf, ':')
+		buf = append(buf, p...)
+	}
+	return buf
 }
 
 type GetNotificationsEvent struct {
