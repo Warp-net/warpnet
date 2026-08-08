@@ -22,9 +22,6 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-   <!-- overflow-y-auto keeps a tall who-to-follow list scrolling inside the
-        bar: without it the column pushes past the viewport, the body grows a
-        scrollbar and a white band under the app traps wheel scrolling. -->
    <div class="hidden md:block w-1/3 h-full overflow-y-scroll no-scrollbar border-l border-lighter px-6 py-2 relative min-w-max">
       <SearchBar />
       <WhoToFollow

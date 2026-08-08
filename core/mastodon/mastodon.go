@@ -55,17 +55,12 @@ const (
 
 var ErrNotSupported = errors.New("not supported functionality")
 
-// IsBridgedID reports whether an id names a bridged Fediverse entity: native
-// Warpnet ids are ULIDs, bridged tweets travel under their status URL.
+// IsBridgedID reports whether an id names a bridged Fediverse entity.
 func IsBridgedID(id string) bool {
 	return strings.HasPrefix(id, "https://") || strings.HasPrefix(id, "http://")
 }
 
-// BridgedStatusID extracts the trailing status id from a bridged status URL
-// (".../statuses/<id>[?...]") — the shape the gateway publishes a federated
-// Warpnet tweet under. It lets a node line such a copy up with the bare id in
-// its own store; ok is false for native (non-URL) ids and for URLs without a
-// status path.
+// BridgedStatusID extracts the trailing status id from a bridged status URL.
 func BridgedStatusID(id string) (string, bool) {
 	if !IsBridgedID(id) {
 		return "", false

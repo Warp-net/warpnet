@@ -591,9 +591,6 @@ func TestStreamGetTweetHandler(t *testing.T) {
 	})
 
 	t.Run("unknown author of a bridged status resolves via the gateway", func(t *testing.T) {
-		// A bridged reply can be authored by any Fediverse user — usually not
-		// a known (followed) one, and never cached locally. The status URL in
-		// the tweet id must route the lookup to the gateway.
 		bridgedId := "https://mastodon.social/users/bob/statuses/1"
 		h := StreamGetTweetHandler(
 			stubTweetRepo{

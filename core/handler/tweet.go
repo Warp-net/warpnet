@@ -268,8 +268,6 @@ func handleNewReply(
 	parentUser, err := userRepo.Get(parentUserId)
 	switch {
 	case errors.Is(err, database.ErrUserNotFound):
-		// A bridged thread accepts replies to any Fediverse author, followed
-		// or not; their home node is always the gateway.
 		if !mastodon.IsBridgedID(parentId) {
 			return reply, nil
 		}
@@ -369,9 +367,6 @@ func StreamGetTweetHandler(
 			if lerr == nil {
 				return t, nil
 			}
-			// A bridged thread accepts replies from any Fediverse author,
-			// followed or not; their home node is always the gateway, which
-			// resolves the status by its URL.
 			if mastodon.IsBridgedID(ev.TweetId) {
 				if bridged, ok := gatewayTweet(streamer, ev); ok {
 					return bridged, nil
@@ -410,8 +405,6 @@ func StreamGetTweetHandler(
 	}
 }
 
-// gatewayTweet resolves a bridged status from the Fediverse gateway. ok=false
-// on any transport or decode failure so the caller keeps its local error.
 func gatewayTweet(streamer TweetStreamer, ev event.GetTweetEvent) (domain.Tweet, bool) {
 	resp, err := streamer.GenericStream(mastodon.GatewayNodeID(), event.PUBLIC_GET_TWEET, ev)
 	if err != nil {
@@ -560,10 +553,7 @@ func tweetsRefreshBackground(
 
 // getThreadReplies serves the direct replies to a tweet — a flat list of
 // tweets whose ParentId is that tweet. It is one level of the tree; clients
-// walk deeper by re-querying with each reply as the parent. The local thread
-// index alone holds only this node's own view (typically just the owner's
-// replies), so the root author's home node is asked too and both sets are
-// merged — otherwise one local reply would shadow everyone else's.
+// walk deeper by re-querying with each reply as the parent.
 func getThreadReplies(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
@@ -591,10 +581,6 @@ func getThreadReplies(
 	}, nil
 }
 
-// mergeReplies appends remote thread rows this node does not hold locally,
-// newest first. A local row wins over its federated copy: a bridged reply id
-// may carry the same tweet as <gateway>/users/<u>/statuses/<id>, so the
-// trailing path segment is matched too.
 func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
 	seen := make(map[string]struct{}, len(local))
 	for _, t := range local {
@@ -619,11 +605,8 @@ func mergeReplies(local, remote []domain.Tweet) []domain.Tweet {
 	return merged
 }
 
-// forwardThreadReplies asks the thread's home node for its replies when that
-// node is not this one: the root author's node when the client named the
-// author, or the Fediverse gateway when the thread key is a bridged status
-// URL (any Fediverse author can own it, followed or not). ok=false means the
-// local index is all there is.
+// forwardThreadReplies asks the root tweet author's home node for the thread's
+// replies when that node is not this one. ok=false means handle locally.
 func forwardThreadReplies(userRepo TweetUserFetcher, streamer TweetStreamer, ev event.GetAllTweetsEvent) (event.TweetsResponse, bool) {
 	nodeId := ""
 	if ev.RootUserId != "" {

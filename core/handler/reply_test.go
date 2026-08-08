@@ -104,9 +104,6 @@ func TestStreamNewReplyHandler(t *testing.T) {
 	})
 
 	t.Run("unknown parent author on a bridged thread forwards to the gateway", func(t *testing.T) {
-		// A nested bridged reply's author is usually not a followed (known)
-		// user; the bridged parent id must still route the reply to the
-		// gateway so it federates instead of staying a local-only row.
 		forwarded := ""
 		h := build(stubTweetRepo{}, stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
@@ -343,9 +340,6 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	})
 
 	t.Run("merges local replies with the thread's home node view", func(t *testing.T) {
-		// One local reply (the owner's own) must not shadow the rest of the
-		// thread living on the root author's node; the federated copy of that
-		// same local reply — under its plain or gateway-status id — is deduped.
 		local := []domain.Tweet{{Id: "01LOCAL", CreatedAt: time.Unix(30, 0)}}
 		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{
 			{Id: "01LOCAL", CreatedAt: time.Unix(30, 0)},
@@ -375,9 +369,6 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	})
 
 	t.Run("bridged thread without a known root author asks the gateway", func(t *testing.T) {
-		// Walking into a bridged reply loses the root author hint (any
-		// Fediverse user can own it); the status URL alone must route the
-		// fetch to the gateway.
 		parent := "https://mastodon.social/users/alice/statuses/100"
 		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{{Id: "m1"}}}
 		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {

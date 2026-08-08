@@ -25,10 +25,9 @@ func TestBridgedStatusID(t *testing.T) {
 		want string
 		ok   bool
 	}{
-		// a federated Warpnet reply carries its parent in the query
 		{"https://gw.example/users/01KUSER/statuses/01KTWEET?parent=https%3A%2F%2Fm%2F1", "01KTWEET", true},
 		{"https://mastodon.social/users/Gargron/statuses/117043346514398510", "117043346514398510", true},
-		{"01KZH4YY0SXVYMT4RWZS6RXZYT", "", false}, // native id
+		{"01KZH4YY0SXVYMT4RWZS6RXZYT", "", false},
 		{"https://mastodon.social/users/Gargron", "", false},
 		{"https://gw.example/users/u/statuses/", "", false},
 		{"https://gw.example/users/u/statuses/1/activity", "", false},
