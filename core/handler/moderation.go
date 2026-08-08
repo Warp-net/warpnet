@@ -137,8 +137,12 @@ func StreamModerationResultHandler(
 			if err := tweetRepo.Update(tweet); err != nil {
 				log.Errorf("moderation: failed to update tweet: %v", err)
 			}
-			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserID, *ev.ObjectID); err != nil {
-				log.Errorf("moderation: failed to delete timeline: %v", err)
+			if authRepo != nil {
+				if ownerId := authRepo.GetOwner().UserId; ownerId != "" {
+					if err := timelineRepo.DeleteTweetFromTimeline(ownerId, *ev.ObjectID); err != nil {
+						log.Errorf("moderation: failed to delete timeline: %v", err)
+					}
+				}
 			}
 
 		case domain.ModerationUserType:
@@ -208,6 +212,9 @@ func reportResultText(ev event.ModerationResultEvent) string {
 		subject = "profile"
 	}
 	if bool(ev.Result) {
+		if ev.Reason != nil && *ev.Reason == event.ModerationReasonUnavailable {
+			return fmt.Sprintf("The %s you reported could not be reviewed: the content is unavailable", subject)
+		}
 		return fmt.Sprintf("The %s you reported was reviewed: no violation found", subject)
 	}
 	if ev.Reason != nil && *ev.Reason != "" {

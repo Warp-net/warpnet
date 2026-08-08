@@ -571,6 +571,8 @@ type ReportEvent struct {
 	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
 
+const ModerationReasonUnavailable = "content unavailable for review"
+
 type ModerationResultEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Result   domain.ModerationResult     `json:"result"`

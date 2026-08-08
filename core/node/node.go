@@ -112,7 +112,9 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	ya := yamux.DefaultTransport
+	// Copy the transport config: DefaultTransport is a shared package-level
+	// pointer that live yamux sessions of other nodes read concurrently.
+	ya := *yamux.DefaultTransport
 	ya.KeepAliveInterval = 15 * time.Second
 	ya.ConnectionWriteTimeout = 30 * time.Second
 
@@ -120,7 +122,7 @@ func NewWarpNode(
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
 		libp2p.DisableMetrics(), // TODO move to settings
-		libp2p.Muxer(yamux.ID, ya),
+		libp2p.Muxer(yamux.ID, &ya),
 	}
 
 	opts = append(opts, managersOpts...)

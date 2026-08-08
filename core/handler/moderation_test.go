@@ -290,6 +290,73 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("tweet moderation FAIL - deletes from the local owner's timeline", func(t *testing.T) {
+		var gotUserID, gotTweetID string
+		h := mkHandler(
+			stubModerationNotifier{},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{deleteFn: func(userID, tweetID string) error {
+				gotUserID, gotTweetID = userID, tweetID
+				return nil
+			}},
+		)
+		_, err := h(marshal(t, event.ModerationResultEvent{
+			Type:     domain.ModerationTweetType,
+			ObjectID: &tweetId,
+			UserID:   "offender",
+			Result:   domain.FAIL,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if gotUserID != owner {
+			t.Fatalf("timeline delete must use the local owner's id, got %q", gotUserID)
+		}
+		if gotTweetID != tweetId {
+			t.Fatalf("expected tweet %q deleted, got %q", tweetId, gotTweetID)
+		}
+	})
+
+	t.Run("unreviewable report - notifies reporter honestly", func(t *testing.T) {
+		var got domain.Notification
+		notified := false
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				got = not
+				return nil
+			}},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{},
+		)
+		reason := event.ModerationReasonUnavailable
+		resp, err := h(marshal(t, event.ModerationResultEvent{
+			Type:       domain.ModerationTweetType,
+			ObjectID:   &tweetId,
+			UserID:     "offender",
+			Result:     domain.OK,
+			Reason:     &reason,
+			ReporterID: owner,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if !notified {
+			t.Fatal("the reporter must be notified")
+		}
+		if !strings.Contains(got.Text, "could not be reviewed") {
+			t.Fatalf("expected 'could not be reviewed' wording, got: %q", got.Text)
+		}
+		if strings.Contains(got.Text, "no violation") {
+			t.Fatalf("a fetch failure must not read as a clean verdict: %q", got.Text)
+		}
+	})
+
 	// An OK verdict arrives only on the reporter-bound delivery. It must
 	// notify the reporter with the "no violation" wording and leave the
 	// local tweet and timeline untouched.

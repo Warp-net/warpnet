@@ -29,6 +29,7 @@ package moderator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -193,27 +194,64 @@ func (m *Moderator) notifyReporter(
 	}
 }
 
+const fetchAttempts = 3
+
+var (
+	fetchRetryDelay = 3 * time.Second
+
+	ErrFetchFailed = errors.New("moderator: fetch failed")
+)
+
+func (m *Moderator) fetchObject(nodeID string, route stream.WarpRoute, payload any) ([]byte, error) {
+	var done <-chan struct{}
+	if m.ctx != nil {
+		done = m.ctx.Done()
+	}
+
+	var lastErr error
+	for attempt := range fetchAttempts {
+		if attempt > 0 {
+			select {
+			case <-done:
+				return nil, m.ctx.Err()
+			case <-time.After(fetchRetryDelay):
+			}
+		}
+
+		data, err := m.node.GenericStream(nodeID, route, payload)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var respErr event.ResponseError
+		if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
+			lastErr = fmt.Errorf("%w: %s", ErrFetchFailed, respErr.Message)
+			continue
+		}
+		return data, nil
+	}
+	return nil, lastErr
+}
+
+func (m *Moderator) notifyUnreviewable(rep event.ReportEvent, objectID *domain.ID, targetUserID domain.ID) {
+	reason := event.ModerationReasonUnavailable
+	m.notifyReporter(rep, domain.OK, &reason, objectID, targetUserID)
+}
+
 func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	if ev.ObjectID == nil || *ev.ObjectID == "" {
 		log.Warn("moderator: tweet report missing object_id")
 		return nil
 	}
 
-	data, err := m.node.GenericStream(
+	data, err := m.fetchObject(
 		ev.TargetNodeID,
 		event.PUBLIC_GET_TWEET,
 		event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
 	)
 	if err != nil {
-		return fmt.Errorf("moderator: fetch tweet %s: %w", *ev.ObjectID, err)
-	}
-
-	// The target node serialises a failed fetch (tweet not found, moderated,
-	// offline-forward) as an event.ResponseError envelope, not a transport
-	// error. Detect it so it isn't silently parsed into a zero-value tweet.
-	var respErr event.ResponseError
-	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
-		log.Warnf("moderator: fetch tweet %s from node %s failed: %s", *ev.ObjectID, ev.TargetNodeID, respErr.Message)
+		log.Warnf("moderator: fetch tweet %s from node %s failed: %v", *ev.ObjectID, ev.TargetNodeID, err)
+		m.notifyUnreviewable(ev, ev.ObjectID, ev.TargetUserID)
 		return nil
 	}
 
@@ -223,10 +261,19 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 	}
 	if tweet.Id == "" {
 		log.Warnf("moderator: tweet %s not found on node %s", *ev.ObjectID, ev.TargetNodeID)
+		m.notifyUnreviewable(ev, ev.ObjectID, ev.TargetUserID)
 		return nil
 	}
 	if tweet.Text == "" {
 		log.Infof("moderator: tweet %s has no text to moderate", tweet.Id)
+		m.notifyUnreviewable(ev, &tweet.Id, tweet.UserId)
+		return nil
+	}
+
+	if tweet.Moderation != nil {
+		log.Infof("moderator: tweet %s already moderated ok=%t, reusing verdict",
+			tweet.Id, bool(tweet.Moderation.IsOk))
+		m.notifyReporter(ev, tweet.Moderation.IsOk, tweet.Moderation.Reason, &tweet.Id, tweet.UserId)
 		return nil
 	}
 
@@ -254,18 +301,14 @@ func (m *Moderator) handleTweetReport(ev event.ReportEvent) error {
 }
 
 func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
-	data, err := m.node.GenericStream(
+	data, err := m.fetchObject(
 		ev.TargetNodeID,
 		event.PUBLIC_GET_USER,
 		event.GetUserEvent{UserId: ev.TargetUserID},
 	)
 	if err != nil {
-		return fmt.Errorf("fetch user %s: %w", ev.TargetUserID, err)
-	}
-
-	var respErr event.ResponseError
-	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
-		log.Warnf("moderator: fetch user %s from node %s failed: %s", ev.TargetUserID, ev.TargetNodeID, respErr.Message)
+		log.Warnf("moderator: fetch user %s from node %s failed: %v", ev.TargetUserID, ev.TargetNodeID, err)
+		m.notifyUnreviewable(ev, nil, ev.TargetUserID)
 		return nil
 	}
 
@@ -275,12 +318,14 @@ func (m *Moderator) handleUserReport(ev event.ReportEvent) error {
 	}
 	if user.Id == "" {
 		log.Warnf("moderator: user %s not found on node %s", ev.TargetUserID, ev.TargetNodeID)
+		m.notifyUnreviewable(ev, nil, ev.TargetUserID)
 		return nil
 	}
 
 	text := buildProfileText(user)
 	if text == "" {
 		log.Warn("moderator: empty profile text")
+		m.notifyUnreviewable(ev, nil, user.Id)
 		return nil
 	}
 
