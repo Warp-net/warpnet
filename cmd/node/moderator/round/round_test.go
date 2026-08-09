@@ -558,3 +558,73 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 		t.Fatalf("a single FAIL ballot must stand, got %+v %v", outcome, voters)
 	}
 }
+
+// planTally is the whole rule of a round in one pure function, so it is
+// testable without a registry, a timer or a participant.
+func TestPlanTally_Roles(t *testing.T) {
+	id := "round-x"
+	ballots := func(ids ...string) map[string]vote.Event {
+		out := map[string]vote.Event{}
+		for _, peer := range ids {
+			out[peer] = ballotFrom(id, peer, domain.FAIL)
+		}
+		return out
+	}
+	byRank := func(ids ...string) []string {
+		out := append([]string(nil), ids...)
+		sort.Slice(out, func(i, j int) bool { return pairHash(id, out[i]) < pairHash(id, out[j]) })
+		return out
+	}
+
+	order := byRank("peer-a", "peer-b", "peer-c")
+
+	p := planTally(id, order[0], ballots(order...), true)
+	if p.role != roleChair || p.rank != 0 || p.chair != order[0] {
+		t.Fatalf("the lowest-ranked voter chairs, got %+v", p)
+	}
+	if p.counted != 3 || len(p.voters) != 3 {
+		t.Fatalf("all three ballots must count, got %+v", p)
+	}
+
+	p = planTally(id, order[1], ballots(order...), true)
+	if p.role != roleBackup || p.rank != 1 {
+		t.Fatalf("the next voter stands by at rank 1, got %+v", p)
+	}
+
+	p = planTally(id, "never-voted", ballots(order...), true)
+	if p.role != roleBystander {
+		t.Fatalf("a non-voter has nothing to do, got %+v", p)
+	}
+
+	p = planTally(id, order[0], map[string]vote.Event{}, true)
+	if p.role != roleBystander {
+		t.Fatalf("an empty round decides nothing, got %+v", p)
+	}
+
+	// Ballots naming this participant on a subject it never saw: forged.
+	p = planTally(id, order[0], ballots(order...), false)
+	if p.role != roleBystander || !p.orphaned {
+		t.Fatalf("a voter without the subject must stand down as orphaned, got %+v", p)
+	}
+}
+
+// The trimmed-away voter keeps its place in the takeover chain, so a
+// two-ballot round still has a backup behind the chair.
+func TestPlanTally_TrimmedVoterStaysInTheChain(t *testing.T) {
+	id := "round-y"
+	order := []string{"peer-a", "peer-b"}
+	sort.Slice(order, func(i, j int) bool { return pairHash(id, order[i]) < pairHash(id, order[j]) })
+
+	ballots := map[string]vote.Event{
+		order[0]: ballotFrom(id, order[0], domain.FAIL),
+		order[1]: ballotFrom(id, order[1], domain.FAIL),
+	}
+
+	p := planTally(id, order[1], ballots, true)
+	if p.role != roleBackup || p.rank != 1 {
+		t.Fatalf("the trimmed voter must still guard the round, got %+v", p)
+	}
+	if p.counted != 1 {
+		t.Fatalf("the tally itself keeps an odd count, got %d", p.counted)
+	}
+}

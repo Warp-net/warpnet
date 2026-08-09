@@ -57,7 +57,7 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 		return
 	}
 
-	verdictEvent := event.ModerationVerdictEvent{
+	verdictEvent := (event.ModerationVerdictEvent{
 		Type:        domain.ModerationTweetType,
 		UserID:      t.UserId,
 		ObjectID:    &t.Id,
@@ -66,9 +66,7 @@ func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModera
 		Verdict:     m.IsOk,
 		ModeratorID: m.ModeratorID,
 		Voters:      voters,
-	}
-
-	verdictEvent.Sign(ip.privKey)
+	}).Signed(ip.privKey)
 
 	if err := ip.pub.PublishUpdateToFollowers(
 		t.UserId,
@@ -83,7 +81,7 @@ func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, 
 	if u == nil || m == nil {
 		return
 	}
-	verdictEvent := event.ModerationVerdictEvent{
+	verdictEvent := (event.ModerationVerdictEvent{
 		Type:        domain.ModerationUserType,
 		UserID:      u.Id,
 		Reason:      m.Reason,
@@ -91,8 +89,7 @@ func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, 
 		Verdict:     domain.ModerationResult(m.IsOk),
 		ModeratorID: moderatorID,
 		Voters:      voters,
-	}
-	verdictEvent.Sign(ip.privKey)
+	}).Signed(ip.privKey)
 
 	if err := ip.pub.PublishUpdateToFollowers(
 		u.Id,

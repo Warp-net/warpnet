@@ -36,8 +36,7 @@ func signedResult(t *testing.T, ev event.ModerationVerdictEvent) []byte {
 	t.Helper()
 	priv, id := moderatorTestKey(t, "moderation-handler-test")
 	ev.ModeratorID = id
-	ev.Sign(priv)
-	return marshal(t, ev)
+	return marshal(t, ev.Signed(priv))
 }
 
 type stubModerationNotifier struct {
@@ -180,7 +179,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			ModeratorID: id,
 			TimeAt:      time.Now().UTC(),
 		}
-		ev.Sign(priv)
+		ev = ev.Signed(priv)
 		ev.Verdict = domain.FAIL // flip after signing
 		_, err := h(marshal(t, ev), nil)
 		if !errors.Is(err, ErrBadModeratorSignature) {
@@ -200,7 +199,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			ModeratorID: claimedID, // claims someone else's identity
 			TimeAt:      time.Now().UTC(),
 		}
-		ev.Sign(impostor)
+		ev = ev.Signed(impostor)
 		_, err := h(marshal(t, ev), nil)
 		if !errors.Is(err, ErrBadModeratorSignature) {
 			t.Fatalf("expected ErrBadModeratorSignature, got: %v", err)

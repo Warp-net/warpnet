@@ -267,7 +267,7 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 	if rep.ReporterNodeID == "" || rep.ReporterID == "" {
 		return
 	}
-	verdictEvent := event.ModerationVerdictEvent{
+	verdictEvent := (event.ModerationVerdictEvent{
 		Type:        rep.Type,
 		Verdict:     outcome.Result,
 		Reason:      outcome.Reason,
@@ -277,9 +277,7 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 		ModeratorID: m.selfID(),
 		ReporterID:  rep.ReporterID,
 		Voters:      voters,
-	}
-	verdictEvent.Sign(m.privKey)
-
+	}).Signed(m.privKey)
 	if _, err := m.node.GenericStream(
 		rep.ReporterNodeID,
 		event.PUBLIC_POST_MODERATION_RESULT,

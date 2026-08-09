@@ -204,9 +204,8 @@ func (r *round) castVote() {
 	}
 }
 
-// tally closes the voting window and decides this node's part: chair
-// (finalize now), backup (stand by and take over if the chair goes silent)
-// or bystander (nothing to do).
+// tally closes the voting window: planTally decides what this participant
+// is to the round, and this method only carries that decision out.
 func (r *round) tally() {
 	r.mx.Lock()
 	if r.closed {
@@ -217,47 +216,33 @@ func (r *round) tally() {
 		r.voteTimer.Stop()
 	}
 
-	rep := r.report
-	ordered := sortedVotes(r.id, r.votes)
-	kept := trimEven(ordered)
+	subject := r.report
+	p := planTally(r.id, r.self, r.votes, subject != nil)
 
-	// The takeover chain ranks over the full voter order, pre-trim: a
-	// voter dropped by the odd-count trim still holds everything needed
-	// to finalize the kept tally if the chair dies.
-	myRank := rankOf(ordered, r.self)
-
-	// A voter always holds the report (voting requires it); a self-named
-	// vote without one means someone forged votes for a round this node
-	// never saw. Both drop out of the takeover chain like a bystander.
-	if len(kept) == 0 || myRank < 0 || rep == nil {
-		if myRank >= 0 && rep == nil {
-			log.Warnf("round %s: voter without subject, skipping decision", r.id)
+	switch p.role {
+	case roleBystander:
+		r.closeLocked()
+		r.mx.Unlock()
+		if p.orphaned {
+			log.Warnf("round %s: voted on a subject never seen, skipping decision", r.id)
 		}
+		r.onDone(r.id)
+
+	case roleBackup:
+		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, voters: p.voters}
+		r.finalTimer = time.AfterFunc(time.Duration(p.rank)*r.schedule.Failover, r.takeOver)
+		r.mx.Unlock()
+		log.Infof("round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
+			r.id, p.counted, bool(p.outcome.Result), p.chair, p.rank)
+
+	case roleChair:
 		r.closeLocked()
 		r.mx.Unlock()
 		r.onDone(r.id)
-		return
+		log.Infof("round %s closed votes=%d result=%t chair=%s",
+			r.id, p.counted, bool(p.outcome.Result), p.chair)
+		r.decide(*subject, p.outcome, p.voters)
 	}
-
-	outcome, voters := aggregate(kept)
-	chair := kept[0].ModeratorID
-
-	if myRank > 0 {
-		r.pending = &pendingOutcome{subject: *rep, outcome: outcome, voters: voters}
-		r.finalTimer = time.AfterFunc(time.Duration(myRank)*r.schedule.Failover, r.takeOver)
-		r.mx.Unlock()
-		log.Infof("round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
-			r.id, len(kept), bool(outcome.Result), chair, myRank)
-		return
-	}
-
-	r.closeLocked()
-	r.mx.Unlock()
-	r.onDone(r.id)
-
-	log.Infof("round %s closed votes=%d result=%t chair=%s",
-		r.id, len(kept), bool(outcome.Result), chair)
-	r.decide(*rep, outcome, voters)
 }
 
 // takeOver fires on a backup voter when its slot elapses with no Final

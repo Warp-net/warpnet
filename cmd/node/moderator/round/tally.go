@@ -84,6 +84,68 @@ func rankOf(ordered []vote.Event, moderatorID string) int {
 	return -1
 }
 
+// role is what the tally makes of this participant for one round.
+type role int
+
+const (
+	// roleBystander: nothing to do — no ballots, or this participant did
+	// not vote, or it never saw the subject.
+	roleBystander role = iota
+	// roleChair: carry the decision now.
+	roleChair
+	// roleBackup: stand by and take over if everyone ahead stays silent.
+	roleBackup
+)
+
+// plan is the whole decision a round makes when its window closes: who
+// this participant is, what the ballots add up to, and how long to wait
+// before stepping in. A pure function of the ballots — no state touched,
+// no side effects — so the rule can be read and tested on its own.
+type plan struct {
+	role    role
+	rank    int
+	chair   string
+	outcome vote.Event
+	voters  []domain.ID
+	// counted is how many ballots entered the tally, for the log line.
+	counted int
+	// orphaned marks a participant that voted on a subject it never saw,
+	// which only happens if someone forged ballots naming it.
+	orphaned bool
+}
+
+// planTally decides a round from its ballots alone.
+func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool) plan {
+	ordered := sortedVotes(id, ballots)
+	kept := trimEven(ordered)
+
+	// The takeover chain ranks over the full voter order, pre-trim: a
+	// voter dropped by the odd-count trim still holds everything needed
+	// to carry the kept tally if the chair dies.
+	rank := rankOf(ordered, self)
+	if len(kept) == 0 || rank < 0 {
+		return plan{role: roleBystander}
+	}
+	if !haveSubject {
+		return plan{role: roleBystander, orphaned: true}
+	}
+
+	outcome, voters := aggregate(kept)
+	p := plan{
+		rank:    rank,
+		chair:   kept[0].ModeratorID,
+		outcome: outcome,
+		voters:  voters,
+		counted: len(kept),
+	}
+	if rank == 0 {
+		p.role = roleChair
+	} else {
+		p.role = roleBackup
+	}
+	return p
+}
+
 // aggregate reduces the kept ballots to the round outcome: FAIL on strict
 // majority, returning the lowest-ranked ballot of the winning side so every
 // participant aggregates identically.

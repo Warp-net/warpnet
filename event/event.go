@@ -636,7 +636,7 @@ type ModerationVerdictEvent struct {
 // Explicit length-prefixed concatenation (rather than re-marshalled JSON) so
 // signer and verifier agree byte-for-byte even across versions that add
 // unrelated fields.
-func (e *ModerationVerdictEvent) signingBytes() []byte {
+func (e ModerationVerdictEvent) signingBytes() []byte {
 	reason := ""
 	if e.Reason != nil {
 		reason = *e.Reason
@@ -669,20 +669,21 @@ func (e *ModerationVerdictEvent) signingBytes() []byte {
 	return buf
 }
 
-// Sign stamps the verdict and signs it in place. Pointer receiver: on a
-// value receiver both the timestamp and the signature would land in a copy
-// and every verdict would go out unsigned.
-func (e *ModerationVerdictEvent) Sign(privKey ed25519.PrivateKey) {
+// Signed returns a stamped and signed copy of the verdict. It returns the
+// verdict rather than mutating one in place so a caller cannot end up
+// shipping an unsigned event by dropping the result on the floor.
+func (e ModerationVerdictEvent) Signed(privKey ed25519.PrivateKey) ModerationVerdictEvent {
 	e.TimeAt = time.Now().UTC()
 	if len(privKey) == 0 {
-		return
+		return e
 	}
 	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.signingBytes()))
+	return e
 }
 
 // Verify checks the verdict signature against pubKey. It is the mirror of
 // Sign, so the canonical signing bytes stay private to this package.
-func (e *ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
+func (e ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
 	sig, err := base64.StdEncoding.DecodeString(e.Signature)
 	if err != nil {
 		return err
