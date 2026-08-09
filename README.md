@@ -252,6 +252,6 @@ Warpnet is free software, licensed under the **GNU Affero General Public License
 
 **Built with Go, libp2p, Noise, and the conviction that a social network shouldn't have an owner.**
 
-If you believe that too — [grab a good first issue](https://github.com/Warp-net/warpnet/issues) and join in.
+If you believe that too — [grab a good first issue](https://github.com/Warp-net/warpnet/issues) and join in. The Emperor Protects!
 
 </div>

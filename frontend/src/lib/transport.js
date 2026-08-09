@@ -284,6 +284,21 @@ export async function IsFirstRun() {
   return Boolean(resp && resp.body);
 }
 
+// First-launch network choice; the app relaunches itself on it (Wails only —
+// a remote node's network is pinned by its flags).
+export async function SelectNetwork(network) {
+  if (hasWails()) {
+    return Wails.SelectNetwork(network);
+  }
+}
+
+export async function Network() {
+  if (hasWails()) {
+    return Wails.Network();
+  }
+  return "warpnet";
+}
+
 // ConsumePendingDeepLink only has meaning under Wails (OS deep-link handoff);
 // the browser dashboard has no pending link, so it resolves to "".
 export async function ConsumePendingDeepLink() {

@@ -76,6 +76,8 @@ if (process.env.NODE_ENV === 'development') {
                     return Promise.resolve({body:body});
                 },
                 IsFirstRun: () => Promise.resolve(true),
+                SelectNetwork: () => Promise.resolve(),
+                Network: () => Promise.resolve("warpnet"),
                 ConsumePendingDeepLink: () => Promise.resolve(""),
             }
         }

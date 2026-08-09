@@ -6,6 +6,9 @@ vi.mock('@/service/service', () => ({
     signInUser: vi.fn(),
     isFirstRun: vi.fn(),
     consumePendingDeepLink: vi.fn(),
+    isDesktopNode: vi.fn(),
+    selectNetwork: vi.fn(),
+    network: vi.fn(),
   },
 }));
 
@@ -13,6 +16,10 @@ import Root from '@/views/Root.vue';
 import { warpnetService } from '@/service/service';
 
 const routerPush = vi.fn();
+
+// Must satisfy isPasswordStrong (lib/password.js), or the wizard never
+// advances past step 3.
+const STRONG_PASSWORD = 'Str0ng!Pass';
 
 const renderRoot = ({ firstRun = true } = {}) => {
   warpnetService.isFirstRun.mockResolvedValue(firstRun);
@@ -48,6 +55,9 @@ beforeEach(() => {
   warpnetService.signInUser.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
+  warpnetService.isDesktopNode.mockReturnValue(true);
+  warpnetService.selectNetwork.mockResolvedValue(undefined);
+  warpnetService.network.mockResolvedValue('warpnet');
   sessionStorage.clear();
 });
 
@@ -128,8 +138,8 @@ describe('Root.vue', () => {
     // Step 3: password + confirm
     const passwordField = await screen.findByLabelText('Password');
     const passwordConfirmField = await screen.findByLabelText('Confirm password');
-    await fireEvent.update(passwordField, 's3cret');
-    await fireEvent.update(passwordConfirmField, 's3cret');
+    await fireEvent.update(passwordField, STRONG_PASSWORD);
+    await fireEvent.update(passwordConfirmField, STRONG_PASSWORD);
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Step 4: final Sign up (two "Sign up" buttons exist now — the landing one
@@ -141,10 +151,33 @@ describe('Root.vue', () => {
     await waitFor(() => {
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: 'alice',
-        password: 's3cret',
+        password: STRONG_PASSWORD,
       });
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });
+  });
+
+  it('relaunches on the network picked on the landing page', async () => {
+    renderRoot({ firstRun: true });
+
+    await fireEvent.update(await screen.findByLabelText(/Network/i), 'testnet');
+
+    await waitFor(() => {
+      expect(warpnetService.selectNetwork).toHaveBeenCalledWith('testnet');
+    });
+
+    // Re-picking the active network is a no-op, not a relaunch.
+    warpnetService.selectNetwork.mockClear();
+    await fireEvent.update(screen.getByLabelText(/Network/i), 'warpnet');
+    expect(warpnetService.selectNetwork).not.toHaveBeenCalled();
+  });
+
+  it('hides the network selector on the browser dashboard (remote node)', async () => {
+    warpnetService.isDesktopNode.mockReturnValue(false);
+    renderRoot({ firstRun: true });
+
+    await screen.findByRole('button', { name: /^Sign up$/ });
+    expect(screen.queryByLabelText(/Network/i)).not.toBeInTheDocument();
   });
 
   it('shows a sign-up error when signInUser rejects (error state)', async () => {
@@ -167,11 +200,11 @@ describe('Root.vue', () => {
     // Step 3
     await fireEvent.update(
       await screen.findByLabelText('Password'),
-      's3cret'
+      STRONG_PASSWORD
     );
     await fireEvent.update(
       await screen.findByLabelText('Confirm password'),
-      's3cret'
+      STRONG_PASSWORD
     );
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -200,14 +233,14 @@ describe('Root.vue', () => {
 
     const passwordField = await screen.findByLabelText('Password');
     const passwordConfirmField = await screen.findByLabelText('Confirm password');
-    await fireEvent.update(passwordField, 's3cret');
+    await fireEvent.update(passwordField, STRONG_PASSWORD);
     await fireEvent.update(passwordConfirmField, 'mismatch');
 
     const nextBtn = await screen.findByRole('button', { name: 'Next' });
     expect(nextBtn).toBeDisabled();
     expect(await screen.findByRole('alert')).toHaveTextContent(/do not match/i);
 
-    await fireEvent.update(passwordConfirmField, 's3cret');
+    await fireEvent.update(passwordConfirmField, STRONG_PASSWORD);
     expect(nextBtn).not.toBeDisabled();
   });
 
@@ -217,7 +250,7 @@ describe('Root.vue', () => {
   // writing a sessionStorage key after a successful first-run signup.
   // Drive the modal sign-up to the final step so we exercise the
   // real signMeUp() handler.
-  const completeSignUp = async ({ username = 'alice', password = 's3cret' } = {}) => {
+  const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD } = {}) => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
@@ -304,14 +337,24 @@ describe('Root.vue', () => {
     }
   });
 
-  it('falls back to the log-in component when isFirstRun rejects', async () => {
+  it('offers a retry instead of login/sign-up when the first-run probe fails', async () => {
     warpnetService.isFirstRun.mockRejectedValueOnce(new Error('boom'));
     renderRoot({ firstRun: true });
 
-    expect(await screen.findByTestId('login-stub')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Couldn't reach your Warpnet node/i
+    );
+    expect(screen.queryByTestId('login-stub')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /^Sign up$/ })
     ).not.toBeInTheDocument();
+
+    // The retry re-probes: the next isFirstRun call resolves (beforeEach
+    // default), so the sign-up path appears.
+    await fireEvent.click(screen.getByRole('button', { name: /Try again/i }));
+    expect(
+      await screen.findByRole('button', { name: /^Sign up$/ })
+    ).toBeInTheDocument();
   });
 
   it('toggles the password reveal button between password and text input', async () => {
