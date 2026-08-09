@@ -76,8 +76,9 @@ import (
 */
 
 const (
-	discardRatio     = 0.5
-	firstRunLockFile = "run.lock"
+	discardRatio = 0.5
+	// FirstRunLockFile marks a database that survived at least one successful login.
+	FirstRunLockFile = "run.lock"
 	version0         = "v0" // protect database state in case of schema changes
 	sequenceKey      = "/SEQUENCE"
 
@@ -215,7 +216,7 @@ func New(
 }
 
 func findFirstRunFlag(dbPath string) (found bool) {
-	_, err := os.Stat(filepath.Join(dbPath, firstRunLockFile))
+	_, err := os.Stat(filepath.Join(dbPath, FirstRunLockFile))
 	if err != nil && errors.Is(err, os.ErrNotExist) {
 		return false
 	}
@@ -233,7 +234,7 @@ func (db *DB) writeFirstRunFlag() {
 	if db.badgerOpts.InMemory {
 		return
 	}
-	path := filepath.Join(db.dbPath, firstRunLockFile)
+	path := filepath.Join(db.dbPath, FirstRunLockFile)
 	log.Infof("database: lock file created: %s", path)
 	f, _ := os.Create(path) //#nosec
 	if f != nil {

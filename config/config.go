@@ -84,24 +84,11 @@ func init() {
 
 	_ = viper.BindPFlags(pflag.CommandLine)
 
-	bootstrapAddrList := make([]string, 0, len(warpnetBootstrapNodes))
-	bootstrapAddrs := viper.GetString("node.bootstrap")
-
-	split := strings.Split(bootstrapAddrs, ",")
-	if bootstrapAddrs != "" {
-		bootstrapAddrList = split
-	}
-
 	network := strings.TrimSpace(viper.GetString("node.network"))
 	if network == "mainnet" {
 		network = warpnetNetwork
 	}
-	if network == warpnetNetwork {
-		bootstrapAddrList = append(bootstrapAddrList, warpnetBootstrapNodes...)
-	}
-	if network == testNetNetwork {
-		bootstrapAddrList = append(bootstrapAddrList, testnetBootstrapNodes...)
-	}
+	bootstrapAddrList := bootstrapListFor(network)
 
 	version := root.GetVersion()
 	fmt.Printf(noticeTemplate, strings.ToUpper(warpnet.WarpnetName), version, "2025", "Vadim Filin")
@@ -149,6 +136,65 @@ func init() {
 
 func Config() config {
 	return configSingleton
+}
+
+// bootstrapListFor combines the operator-supplied bootstrap list with the
+// built-in peers of the given network.
+func bootstrapListFor(network string) []string {
+	list := make([]string, 0, len(warpnetBootstrapNodes))
+	if addrs := viper.GetString("node.bootstrap"); addrs != "" {
+		list = strings.Split(addrs, ",")
+	}
+	if network == warpnetNetwork {
+		list = append(list, warpnetBootstrapNodes...)
+	}
+	if network == testNetNetwork {
+		list = append(list, testnetBootstrapNodes...)
+	}
+	return list
+}
+
+// KnownNetworks lists the networks selectable at first launch, default first.
+func KnownNetworks() []string {
+	return []string{warpnetNetwork, testNetNetwork}
+}
+
+// IsNetworkExplicit reports whether the operator pinned the network via the
+// --node.network flag or the NODE_NETWORK environment variable.
+func IsNetworkExplicit() bool {
+	return pflag.CommandLine.Changed("node.network") || os.Getenv("NODE_NETWORK") != ""
+}
+
+// StoragePath returns the database directory the given network would use.
+func StoragePath(network string) string {
+	return filepath.Join(
+		getAppPath(),
+		strings.TrimSpace(network),
+		strings.TrimSpace(viper.GetString("database.dir")),
+	)
+}
+
+// SetNetwork re-points the config at another known network, recomputing the
+// derived fields (bootstrap list, database path, default seed). Only
+// meaningful before the node is constructed.
+func SetNetwork(network string) error {
+	network = strings.TrimSpace(network)
+	if network == "mainnet" {
+		network = warpnetNetwork
+	}
+	if network != warpnetNetwork && network != testNetNetwork {
+		return fmt.Errorf("config: unknown network: %s", network)
+	}
+	configSingleton.Node.Network = network
+	configSingleton.Node.Bootstrap = bootstrapListFor(network)
+	configSingleton.Database.Path = StoragePath(network)
+	if strings.TrimSpace(viper.GetString("node.seed")) == "" {
+		configSingleton.Node.Seed = "seed" + network +
+			viper.GetString("database.dir") +
+			viper.GetString("node.host.v4") +
+			viper.GetString("node.port")
+	}
+	return nil
 }
 
 type config struct {

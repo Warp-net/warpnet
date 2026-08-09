@@ -6,6 +6,8 @@ vi.mock('@/service/service', () => ({
     signInUser: vi.fn(),
     isFirstRun: vi.fn(),
     consumePendingDeepLink: vi.fn(),
+    isDesktopNode: vi.fn(),
+    selectNetwork: vi.fn(),
   },
 }));
 
@@ -48,6 +50,8 @@ beforeEach(() => {
   warpnetService.signInUser.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
+  warpnetService.isDesktopNode.mockReturnValue(true);
+  warpnetService.selectNetwork.mockResolvedValue(undefined);
   sessionStorage.clear();
 });
 
@@ -139,12 +143,51 @@ describe('Root.vue', () => {
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
 
     await waitFor(() => {
+      expect(warpnetService.selectNetwork).toHaveBeenCalledWith('warpnet');
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: 'alice',
         password: 's3cret',
       });
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });
+  });
+
+  it('passes the network picked on the landing page to selectNetwork', async () => {
+    renderRoot({ firstRun: true });
+
+    await fireEvent.update(await screen.findByLabelText(/Network/i), 'testnet');
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: /^Sign up$/ })
+    );
+    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const checkboxes = await screen.findAllByRole('checkbox');
+    for (const cb of checkboxes) await fireEvent.click(cb);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    // Must satisfy isPasswordStrong, or step 3 never advances.
+    await fireEvent.update(await screen.findByLabelText('Password'), 'Str0ng!Pass');
+    await fireEvent.update(
+      await screen.findByLabelText('Confirm password'),
+      'Str0ng!Pass'
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByText(/Step 4 of 4/i);
+    const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
+    await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(warpnetService.selectNetwork).toHaveBeenCalledWith('testnet');
+      expect(warpnetService.signInUser).toHaveBeenCalled();
+    });
+  });
+
+  it('hides the network selector on the browser dashboard (remote node)', async () => {
+    warpnetService.isDesktopNode.mockReturnValue(false);
+    renderRoot({ firstRun: true });
+
+    await screen.findByRole('button', { name: /^Sign up$/ });
+    expect(screen.queryByLabelText(/Network/i)).not.toBeInTheDocument();
   });
 
   it('shows a sign-up error when signInUser rejects (error state)', async () => {

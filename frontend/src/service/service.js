@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
+import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, SelectNetwork} from "@/lib/transport";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {isOwnTweetEcho} from "@/lib/network";
 
@@ -271,6 +271,11 @@ export const warpnetService = {
 
     async isFirstRun() {
         return Boolean(await IsFirstRun());
+    },
+
+    // Permanent first-launch network choice (desktop only, before sign-up).
+    async selectNetwork(network) {
+        return SelectNetwork(network);
     },
 
     // Returns the pending warpnet:// URL and clears it on the Go side.

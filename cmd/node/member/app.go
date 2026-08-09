@@ -4,14 +4,18 @@ import (
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
-	"github.com/Warp-net/warpnet/metrics"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/Warp-net/warpnet/metrics"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
@@ -72,6 +76,10 @@ type App struct {
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
 	deepLink string
+
+	// networkPending: very first launch, nothing on disk — the database, PSK
+	// and node stay uninitialized until the frontend calls SelectNetwork.
+	networkPending bool
 }
 
 // NewApp creates a new App application struct
@@ -85,10 +93,52 @@ func (a *App) IsFirstRun() bool {
 	}
 	a.mx.RLock()
 	defer a.mx.RUnlock()
+	if a.networkPending {
+		return true
+	}
 	if a.db == nil {
 		return false
 	}
 	return a.db.IsFirstRun()
+}
+
+// SelectNetwork fixes the node's network on the very first launch. The choice
+// is permanent: each network keeps its own database and node identity.
+func (a *App) SelectNetwork(network string) error {
+	if a == nil || a.mx == nil {
+		return errors.New("app not initialized")
+	}
+	a.mx.Lock()
+	if !a.networkPending {
+		current := config.Config().Node.Network
+		a.mx.Unlock()
+		if strings.TrimSpace(network) == current {
+			return nil
+		}
+		return fmt.Errorf("network is already set to %s", current)
+	}
+	if err := config.SetNetwork(network); err != nil {
+		a.mx.Unlock()
+		return err
+	}
+	a.networkPending = false
+	a.mx.Unlock()
+
+	a.initNetwork(config.Config().Node.Network)
+	return nil
+}
+
+// detectPersistedNetwork reports which network already has an initialized
+// database on disk (run.lock appears after the first successful login).
+// Warpnet wins when both exist, matching the flag default.
+func detectPersistedNetwork() (string, bool) {
+	for _, network := range config.KnownNetworks() {
+		lock := filepath.Join(config.StoragePath(network), local_store.FirstRunLockFile)
+		if _, err := os.Stat(lock); err == nil {
+			return network, true
+		}
+	}
+	return "", false
 }
 
 // SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).
@@ -145,8 +195,37 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
-	version := config.Config().Version
+
 	network := config.Config().Node.Network
+	if !config.IsNetworkExplicit() {
+		detected, found := detectPersistedNetwork()
+		if !found {
+			// True first launch: the network choice decides the database
+			// path and the PSK, so nothing opens until the frontend calls
+			// SelectNetwork.
+			a.mx.Lock()
+			a.networkPending = true
+			a.mx.Unlock()
+			log.Infoln("app: first launch, waiting for network selection")
+			return
+		}
+		if detected != network {
+			if err := config.SetNetwork(detected); err != nil {
+				log.Errorf("failed to set detected network %s: %v", detected, err)
+				return
+			}
+			network = detected
+		}
+	}
+
+	a.initNetwork(network)
+}
+
+// initNetwork opens everything that depends on the network choice: the
+// database, auth service and PSK. The libp2p node itself starts later, after
+// the first login (runNode blocks on readyChan).
+func (a *App) initNetwork(network string) {
+	version := config.Config().Version
 
 	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
 	if err != nil {
@@ -158,7 +237,7 @@ func (a *App) startup(ctx context.Context) {
 	userRepo := database.NewUserRepo(db)
 	a.db = db
 	a.readyChan = make(chan domain.AuthNodeInfo, 1)
-	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
+	a.auth = auth.NewAuthService(a.ctx, authRepo, userRepo, a.readyChan)
 
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
@@ -376,6 +455,10 @@ func (a *App) close(_ context.Context) {
 	}()
 
 	log.Infoln("app: closing...")
+
+	if a.readyChan == nil { // quit before a network was ever selected
+		return
+	}
 
 	a.node.Stop() // close node first
 

@@ -66,6 +66,23 @@ resulting from the use or misuse of this software.
           >
             Sign up
           </button>
+          <!-- One-time, permanent network choice: each network keeps its own
+               database and node identity. Desktop only — a remote node's
+               network is pinned by its launch flags. -->
+          <div
+            v-if="isFirstRun === true && isDesktop"
+            class="mt-3 text-sm font-normal text-dark flex items-center"
+          >
+            <label for="network-select" class="mr-2">Network</label>
+            <select
+              id="network-select"
+              v-model="network"
+              class="bg-lightblue border-b-2 border-dark rounded p-1"
+            >
+              <option value="warpnet">Warpnet (main)</option>
+              <option value="testnet">Testnet</option>
+            </select>
+          </div>
           <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
           <!-- first-run probe failed (node unreachable): offer a retry rather
                than silently showing login with no sign-up path -->
@@ -349,6 +366,8 @@ export default {
       isFirstRun: null,
       isLoading: false,
       showModal: "",
+      network: "warpnet",
+      isDesktop: false,
 
       userResponsibility: false,
       futureAds: false,
@@ -376,6 +395,7 @@ export default {
     },
   },
   async mounted() {
+    this.isDesktop = warpnetService.isDesktopNode();
     await this.resolveFirstRun();
   },
   methods: {
@@ -399,6 +419,11 @@ export default {
         // Capture firstRun BEFORE signInUser: by the time the node has
         // a session, IsFirstRun() flips to false on the next call.
         const wasFirstRun = this.isFirstRun === true;
+        if (wasFirstRun && this.isDesktop) {
+          // Permanent choice: the network decides the database path, the
+          // PSK and the bootstrap peers of this node.
+          await warpnetService.selectNetwork(this.network);
+        }
         await warpnetService.signInUser({
           username: this.username,
           password: this.password,

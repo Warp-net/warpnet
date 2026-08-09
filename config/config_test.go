@@ -415,6 +415,32 @@ func TestIsTestnet(t *testing.T) {
 	assert.False(t, node{}.IsTestnet())
 }
 
+func TestSetNetworkRecomputesDerivedFields(t *testing.T) {
+	orig := Config().Node.Network
+	defer func() { _ = SetNetwork(orig) }()
+
+	require.NoError(t, SetNetwork(testNetNetwork))
+	c := Config()
+	assert.Equal(t, testNetNetwork, c.Node.Network)
+	assert.True(t, c.Node.IsTestnet())
+	assert.Subset(t, c.Node.Bootstrap, testnetBootstrapNodes)
+	assert.NotSubset(t, c.Node.Bootstrap, warpnetBootstrapNodes)
+	assert.Contains(t, c.Database.Path, filepath.Join(testNetNetwork, "storage"))
+	assert.Contains(t, c.Node.Seed, testNetNetwork)
+	assert.Equal(t, c.Database.Path, StoragePath(testNetNetwork))
+
+	require.NoError(t, SetNetwork("mainnet")) // alias of the main network
+	assert.Equal(t, warpnetNetwork, Config().Node.Network)
+
+	assert.Error(t, SetNetwork("somethingelse"))
+	assert.Equal(t, warpnetNetwork, Config().Node.Network,
+		"a rejected network must not change the config")
+}
+
+func TestKnownNetworksDefaultFirst(t *testing.T) {
+	assert.Equal(t, []string{warpnetNetwork, testNetNetwork}, KnownNetworks())
+}
+
 func TestAddrInfos(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
 		infos, err := node{}.AddrInfos()

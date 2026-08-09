@@ -284,6 +284,15 @@ export async function IsFirstRun() {
   return Boolean(resp && resp.body);
 }
 
+// SelectNetwork fixes the node's network on the very first launch (desktop
+// only — the remote node's network is pinned by its launch flags, so the
+// browser dashboard no-ops).
+export async function SelectNetwork(network) {
+  if (hasWails()) {
+    return Wails.SelectNetwork(network);
+  }
+}
+
 // ConsumePendingDeepLink only has meaning under Wails (OS deep-link handoff);
 // the browser dashboard has no pending link, so it resolves to "".
 export async function ConsumePendingDeepLink() {
