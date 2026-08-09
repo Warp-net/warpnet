@@ -69,7 +69,6 @@ func init() {
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.metrics.gateway", "207.154.221.44:4091", "Prometheus push metrics server")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
-	pflag.String("node.moderator.modelpath", "/root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf", "File name of 'AI' model")
 
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
@@ -133,9 +132,6 @@ func init() {
 			Metrics: metrics{
 				Gateway: viper.GetString("node.metrics.gateway"),
 			},
-			Moderator: moderator{
-				Path: strings.TrimSpace(viper.GetString("node.moderator.modelpath")),
-			},
 			Server: server{
 				Port:     strings.TrimSpace(viper.GetString("node.server.port")),
 				Password: viper.GetString("node.server.password"),
@@ -170,13 +166,10 @@ type node struct {
 	Network      string
 	IsPskPrinted bool
 	Metrics      metrics
-	Moderator    moderator
 	Server       server
 	Seed         string
 }
-type moderator struct {
-	Path string
-}
+
 type server struct {
 	Port     string
 	Password string

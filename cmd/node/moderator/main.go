@@ -33,6 +33,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/audit"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
@@ -42,11 +43,6 @@ import (
 )
 
 func main() {
-	if config.Config().Node.Moderator.Path == "" {
-		log.Errorln("moderator not configured: model path is empty")
-		return
-	}
-
 	version := config.Config().Version
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)
@@ -111,7 +107,7 @@ func main() {
 		_ = publisher.Close()
 	}()
 
-	moder, err := moderator.NewModerator(ctx, n, publisher, publisher)
+	moder, err := moderator.NewModerator(ctx, n, publisher, publisher, publisher, privKey)
 	if err != nil {
 		log.Errorf("failed to init moderator: %v", err)
 		return
@@ -121,6 +117,13 @@ func main() {
 		return
 	}
 	defer moder.Close()
+
+	// Registered after the moderator starts: answering an audit needs the
+	// engine, which only exists by then.
+	n.SetStreamHandlers(warpnet.WarpStreamHandler{ //nolint:govet
+		audit.ChallengeRoute,
+		moder.ChallengeHandler(),
+	})
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

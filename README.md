@@ -75,7 +75,7 @@ Warpnet's bet: the only way to be genuinely censorship-resistant is to remove th
 - **Local-first storage** — your posts, follows, and timeline live in an embedded datastore on *your* machine.
 - **Censorship-resistant** — public content propagates peer-to-peer through the DHT; there's no single point that can be blocked.
 - **Two first-class clients, one protocol** — a desktop app (Wails + Vue) and an Android app (a [Tusky](https://github.com/tuskyapp/Tusky) fork) both speak the same node protocol.
-- **Opt-in decentralized moderation** — dedicated moderator nodes use LLM, so moderation happens without any human intervention.
+- **Opt-in decentralized moderation** — dedicated moderator nodes use LLM, so moderation happens without any human intervention. A handful of them judge each report independently and vote, and every verdict is signed so it cannot be forged — see [how moderation works](docs/MODERATION.md).
 - **Cross-platform** — install via Snap, or build for your platform from source.
 - **Fully open source** — AGPLv3, forever.
 

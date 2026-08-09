@@ -28,9 +28,14 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"strconv"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	json "github.com/json-iterator/go"
 )
@@ -571,11 +576,39 @@ type ReportEvent struct {
 	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
 
+// ReportID derives a stable identifier of this report from its content, so
+// independent moderators correlate their votes on the same round without any
+// new wire field. Identical re-reports collapse into one round by construction.
+func (e ReportEvent) ReportID() string {
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	h := sha256.New()
+	for _, p := range []string{
+		e.Type.String(),
+		string(e.TargetUserID),
+		string(e.TargetNodeID),
+		objectID,
+		e.Reason,
+		string(e.ReporterID),
+		string(e.ReporterNodeID),
+	} {
+		// Length prefix keeps adjacent fields from ever aliasing each other.
+		h.Write([]byte(strconv.Itoa(len(p))))
+		h.Write([]byte{':'})
+		h.Write([]byte(p))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 const ModerationReasonUnavailable = "content unavailable for review"
 
-type ModerationResultEvent struct {
+const ErrVerdictSignatureInvalid warpnet.WarpError = "moderation verdict signature invalid"
+
+type ModerationVerdictEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
-	Result   domain.ModerationResult     `json:"result"`
+	Verdict  domain.ModerationResult     `json:"verdict"`
 	Reason   *string                     `json:"reason,omitempty"`
 	Model    domain.ModelType            `json:"model"`
 	UserID   domain.ID                   `json:"user_id"`
@@ -589,6 +622,76 @@ type ModerationResultEvent struct {
 	// ReporterID is set only on the reporter-bound delivery; empty on the
 	// isolation broadcast. The handler keys on it to notify only the reporter.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
+	// Voters lists every moderator whose vote entered the round's tally.
+	// Informational for now: receivers verify the chair's signature only.
+	Voters []domain.ID `json:"voters,omitempty"`
+	TimeAt time.Time   `json:"time_at,omitzero"`
+	// Signature is base64(ed25519) over SigningBytes, produced with the
+	// chair moderator's node key. The verifying pubkey is recovered from
+	// ModeratorID, so a verdict is only valid for the peer that claims it.
+	Signature string `json:"signature,omitempty"`
+}
+
+// signingBytes returns the canonical bytes the verdict signature covers.
+// Explicit length-prefixed concatenation (rather than re-marshalled JSON) so
+// signer and verifier agree byte-for-byte even across versions that add
+// unrelated fields.
+func (e ModerationVerdictEvent) signingBytes() []byte {
+	reason := ""
+	if e.Reason != nil {
+		reason = *e.Reason
+	}
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	parts := make([]string, 0, 9+len(e.Voters))
+	parts = append(parts,
+		e.Type.String(),
+		strconv.FormatBool(bool(e.Verdict)),
+		reason,
+		string(e.Model),
+		string(e.UserID),
+		objectID,
+		string(e.ModeratorID),
+		string(e.ReporterID),
+		strconv.FormatInt(e.TimeAt.UnixNano(), 10),
+	)
+	for _, v := range e.Voters {
+		parts = append(parts, string(v))
+	}
+	buf := make([]byte, 0, 256)
+	for _, p := range parts {
+		buf = append(buf, strconv.Itoa(len(p))...)
+		buf = append(buf, ':')
+		buf = append(buf, p...)
+	}
+	return buf
+}
+
+// Signed returns a stamped and signed copy of the verdict. It returns the
+// verdict rather than mutating one in place so a caller cannot end up
+// shipping an unsigned event by dropping the result on the floor.
+func (e ModerationVerdictEvent) Signed(privKey ed25519.PrivateKey) ModerationVerdictEvent {
+	e.TimeAt = time.Now().UTC()
+	if len(privKey) == 0 {
+		return e
+	}
+	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.signingBytes()))
+	return e
+}
+
+// Verify checks the verdict signature against pubKey. It is the mirror of
+// Sign, so the canonical signing bytes stay private to this package.
+func (e ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
+	sig, err := base64.StdEncoding.DecodeString(e.Signature)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(pubKey, e.signingBytes(), sig) {
+		return ErrVerdictSignatureInvalid
+	}
+	return nil
 }
 
 type GetNotificationsEvent struct {

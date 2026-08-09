@@ -364,7 +364,7 @@ func TestStreamGetPollHandler(t *testing.T) {
 			t.Fatalf("marshal: %v", err)
 		}
 		streamer := stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: reader},
+			nodeInfo:        warpnet.NodeInfo{OwnerId: reader},
 			genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) { return remote, nil },
 		}
 		repo := stubPollRepo{

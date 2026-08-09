@@ -41,8 +41,10 @@ import (
 )
 
 const (
-	ErrNoObjectID warpnet.WarpError = "no object id found"
-	ErrNoUserID   warpnet.WarpError = "no user id found"
+	ErrNoObjectID            warpnet.WarpError = "no object id found"
+	ErrNoUserID              warpnet.WarpError = "no user id found"
+	ErrNoModeratorID         warpnet.WarpError = "moderation result without valid moderator id"
+	ErrBadModeratorSignature warpnet.WarpError = "moderation result signature invalid"
 )
 
 type ModerationNotifier interface {
@@ -87,18 +89,35 @@ func StreamModerationResultHandler(
 	authRepo ModerationAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		var ev event.ModerationResultEvent
+		var ev event.ModerationVerdictEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
 
-		// Verdicts now travel via pubsub → SelfStream, so the stream
+		// Verdicts travel via pubsub → SelfStream, so the stream
 		// connection's RemotePeer is the local node, not the moderator.
-		// Attribution must come from the payload itself.
+		// Attribution and authenticity must come from the payload: the
+		// signature has to verify against the pubkey embedded in the
+		// ModeratorID peer id itself, otherwise anyone on the followers
+		// topic could shadow-ban arbitrary users with a forged verdict.
+		moderatorPeer := warpnet.FromStringToPeerID(ev.ModeratorID)
+		if moderatorPeer == "" {
+			log.Warnf("moderation: dropping verdict with malformed moderator id %q", ev.ModeratorID)
+			return nil, ErrNoModeratorID
+		}
+		pubKey := warpnet.FromIDToPubKey(moderatorPeer)
+		if len(pubKey) == 0 {
+			log.Warnf("moderation: dropping verdict: cannot derive pubkey from moderator id %q", ev.ModeratorID)
+			return nil, ErrNoModeratorID
+		}
+		if err := ev.Verify(pubKey); err != nil {
+			log.Warnf("moderation: dropping verdict from %s: signature invalid: %v", ev.ModeratorID, err)
+			return nil, ErrBadModeratorSignature
+		}
 		moderatorId := ev.ModeratorID
 
 		log.Infof("moderation: result type=%s user=%s result=%t reporter=%s",
-			ev.Type.String(), ev.UserID, bool(ev.Result), ev.ReporterID)
+			ev.Type.String(), ev.UserID, bool(ev.Verdict), ev.ReporterID)
 
 		// Before the switch, which early-returns for users not cached locally.
 		notifyReporter(notifier, authRepo, ev)
@@ -109,7 +128,7 @@ func StreamModerationResultHandler(
 		// own copy of the reported tweet would get a moderation sidecar
 		// and fall out of their timeline even though the moderator
 		// cleared it.
-		if bool(ev.Result) {
+		if bool(ev.Verdict) {
 			return event.Accepted, nil
 		}
 
@@ -128,7 +147,7 @@ func StreamModerationResultHandler(
 				Moderation: &domain.TweetModeration{
 					ModeratorID: moderatorId,
 					Model:       ev.Model,
-					IsOk:        ev.Result,
+					IsOk:        ev.Verdict,
 					Reason:      ev.Reason,
 					TimeAt:      time.Now(),
 				},
@@ -167,7 +186,7 @@ func StreamModerationResultHandler(
 			user.Moderation = &domain.UserModeration{
 				IsModerated: true,
 				Model:       ev.Model,
-				IsOk:        bool(ev.Result),
+				IsOk:        bool(ev.Verdict),
 				Reason:      ev.Reason,
 				TimeAt:      time.Now(),
 			}
@@ -186,7 +205,7 @@ func StreamModerationResultHandler(
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the
 // moderator sets only on the reporter-bound delivery.
-func notifyReporter(notifier ModerationNotifier, authRepo ModerationAuthStorer, ev event.ModerationResultEvent) {
+func notifyReporter(notifier ModerationNotifier, authRepo ModerationAuthStorer, ev event.ModerationVerdictEvent) {
 	if notifier == nil || authRepo == nil || ev.ReporterID == "" {
 		return
 	}
@@ -203,7 +222,7 @@ func notifyReporter(notifier ModerationNotifier, authRepo ModerationAuthStorer, 
 	}
 }
 
-func reportResultText(ev event.ModerationResultEvent) string {
+func reportResultText(ev event.ModerationVerdictEvent) string {
 	subject := "content"
 	switch ev.Type {
 	case domain.ModerationTweetType:
@@ -211,7 +230,7 @@ func reportResultText(ev event.ModerationResultEvent) string {
 	case domain.ModerationUserType:
 		subject = "profile"
 	}
-	if bool(ev.Result) {
+	if bool(ev.Verdict) {
 		if ev.Reason != nil && *ev.Reason == event.ModerationReasonUnavailable {
 			return fmt.Sprintf("The %s you reported could not be reviewed: the content is unavailable", subject)
 		}
