@@ -50,11 +50,9 @@ const (
 	ErrModeratorInitFailed warpnet.WarpError = "moderator: failed to init engine"
 	ErrFetchFailed         warpnet.WarpError = "moderator: fetch failed"
 
-	fetchAttempts = 3
+	fetchAttempts   = 3
+	fetchRetryDelay = 3 * time.Second
 )
-
-// fetchRetryDelay is a var so tests can drop the wait.
-var fetchRetryDelay = 3 * time.Second
 
 var supportedModel = struct {
 	Model domain.ModelType
@@ -114,7 +112,7 @@ type Moderator struct {
 	privKey   ed25519.PrivateKey
 
 	retrier retrier.Retrier
-	rounds  *rounds
+	rounds  *roundRegistry
 
 	isClosed *atomic.Bool
 }
@@ -137,7 +135,7 @@ func NewModerator(
 		isClosed: new(atomic.Bool),
 	}
 	m.isolation = isolation.NewIsolationProtocol(pub, privKey)
-	m.rounds = newRounds(m)
+	m.rounds = newRoundRegistry(m, defaultSchedule())
 	return m, nil
 }
 
@@ -224,18 +222,18 @@ func (m *Moderator) handleVote(ev event.ModerationVoteEvent) error {
 	return nil
 }
 
-// SelfID implements roundHost.
-func (m *Moderator) SelfID() string { return m.node.ID().String() }
+// selfID implements roundHost.
+func (m *Moderator) selfID() string { return m.node.ID().String() }
 
-// PublishVote implements roundHost.
-func (m *Moderator) PublishVote(vote event.ModerationVoteEvent) error {
+// publishVote implements roundHost.
+func (m *Moderator) publishVote(vote event.ModerationVoteEvent) error {
 	return m.votes.PublishVote(vote)
 }
 
 // AssessReport implements roundHost: it produces this moderator's own vote
 // on a report. The bool is false when the report is unusable and no vote
 // should be cast at all.
-func (m *Moderator) AssessReport(ev event.ReportEvent) (verdict, bool, error) {
+func (m *Moderator) assessReport(ev event.ReportEvent) (verdict, bool, error) {
 	switch ev.Type {
 	case domain.ModerationTweetType:
 		return m.assessTweetReport(ev)
@@ -253,7 +251,7 @@ func (m *Moderator) AssessReport(ev event.ReportEvent) (verdict, bool, error) {
 // was lost". Best-effort: a delivery failure must not abort moderation.
 func (m *Moderator) notifyReporter(
 	rep event.ReportEvent,
-	verdict domain.ModerationResult,
+	result domain.ModerationResult,
 	reason *string,
 	objectID *domain.ID,
 	targetUserID domain.ID,
@@ -264,7 +262,7 @@ func (m *Moderator) notifyReporter(
 	}
 	verdictEvent := event.ModerationVerdictEvent{
 		Type:        rep.Type,
-		Verdict:     verdict,
+		Verdict:     result,
 		Reason:      reason,
 		Model:       supportedModel.Model,
 		UserID:      targetUserID,
@@ -408,11 +406,11 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (verdict, bool, error
 	return verdict{result: domain.ModerationResult(ok), reason: &reason, userID: user.Id}, true, nil
 }
 
-// FinalizeRound implements roundHost: it delivers the agreed verdict to the
+// finalizeRound implements roundHost: it delivers the agreed verdict to the
 // reporter and, on FAIL, runs the isolation broadcast. Shadow-ban: only bad
 // verdicts go on the followers broadcast. Called by the round that decided
 // this node finalizes it — as chair, or as the backup that took over.
-func (m *Moderator) FinalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID) {
+func (m *Moderator) finalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID) {
 	m.notifyReporter(rep, agg.result, agg.reason, agg.objectID, agg.userID, voters)
 
 	if bool(agg.result) {

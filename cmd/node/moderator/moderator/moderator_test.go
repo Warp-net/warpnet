@@ -93,18 +93,11 @@ func withEngine(t *testing.T, e Engine) {
 	prev := engine
 	engine = e
 	t.Cleanup(func() { engine = prev })
-	withFastRetry(t)
 }
 
-func withFastRetry(t *testing.T) {
-	t.Helper()
-	prev := fetchRetryDelay
-	// Not zero: the retrier's jitter draws from minInterval/2 and panics
-	// on an empty range.
-	fetchRetryDelay = time.Millisecond
-	t.Cleanup(func() { fetchRetryDelay = prev })
-}
-
+// fastRetrier keeps the retry semantics of the real one without the wait.
+// Not zero: the retrier's jitter draws from minInterval/2 and panics on an
+// empty range.
 func fastRetrier() retrier.Retrier {
 	return retrier.New(time.Millisecond, fetchAttempts, retrier.FixedBackoff)
 }
@@ -120,11 +113,9 @@ func newTestModerator(t *testing.T, node ModeratorNode, pub Publisher, privKey e
 	if err != nil {
 		t.Fatalf("NewModerator: %v", err)
 	}
-	prevWindow, prevStep, prevFailover := voteWindow, voteDelayStep, failoverDelay
-	voteWindow, voteDelayStep, failoverDelay = time.Hour, time.Hour, time.Hour
-	t.Cleanup(func() {
-		voteWindow, voteDelayStep, failoverDelay = prevWindow, prevStep, prevFailover
-	})
+	// Stretch this moderator's own schedule so the tests drive the round
+	// phases by hand instead of racing real timers.
+	m.rounds.schedule = roundSchedule{window: time.Hour, failover: time.Hour, step: time.Hour}
 	return m, votes
 }
 

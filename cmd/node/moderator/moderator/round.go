@@ -36,7 +36,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
+const (
 	// voteWindow is how long a round collects votes before the tally.
 	voteWindow = 30 * time.Second
 	// failoverDelay spaces the takeover chain of the round's voters: the
@@ -44,29 +44,44 @@ var (
 	// announcement arrives first. One step must comfortably fit gossip
 	// propagation of that announcement.
 	failoverDelay = 10 * time.Second
+	// voteDelayStep spaces the volunteer timers of moderators ranked
+	// below the quorum target; one step must fit a fetch + inference +
+	// gossip propagation so a suppressed rank never starts work.
+	voteDelayStep = 8 * time.Second
+	// quorumTarget is how many votes make a round served: once that many
+	// are in, a moderator whose volunteer timer fires later stays silent
+	// instead of spending an inference nobody needs.
+	quorumTarget = 3
 )
 
-// quorumTarget is how many votes make a round served: once that many are
-// in, a moderator whose volunteer timer fires later stays silent instead of
-// spending an inference nobody needs.
-const quorumTarget = 3
+// roundSchedule carries a round's clock settings as state, so tests can
+// stretch them without turning the constants above into mutable globals.
+type roundSchedule struct {
+	window   time.Duration
+	failover time.Duration
+	step     time.Duration
+}
+
+func defaultSchedule() roundSchedule {
+	return roundSchedule{window: voteWindow, failover: failoverDelay, step: voteDelayStep}
+}
 
 // roundHost is everything a round needs from the moderator running it.
 // The round owns the protocol (who votes, when, who finalizes); the host
 // owns the side effects (running the engine, gossip, isolation).
 type roundHost interface {
-	// SelfID is the host moderator's peer id, the round's own identity
+	// selfID is the host moderator's peer id, the round's own identity
 	// among the voters.
-	SelfID() string
-	// AssessReport runs the moderation engine over the reported object.
+	selfID() string
+	// assessReport runs the moderation engine over the reported object.
 	// The bool is false when the report is unusable and no vote is due.
-	AssessReport(rep event.ReportEvent) (verdict, bool, error)
-	// PublishVote broadcasts a vote (or a Final announcement) to the
+	assessReport(rep event.ReportEvent) (verdict, bool, error)
+	// publishVote broadcasts a vote (or a Final announcement) to the
 	// other moderators.
-	PublishVote(vote event.ModerationVoteEvent) error
-	// FinalizeRound delivers the agreed verdict: reporter notification
+	publishVote(vote event.ModerationVoteEvent) error
+	// finalizeRound delivers the agreed verdict: reporter notification
 	// plus, on FAIL, the isolation broadcast.
-	FinalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID)
+	finalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID)
 }
 
 // round is one report's vote round, self-contained: it collects votes,
@@ -76,9 +91,10 @@ type roundHost interface {
 // the other rounds — it reaches the outside world only through roundHost
 // and reports its own end through onDone.
 type round struct {
-	id     string
-	host   roundHost
-	onDone func(id string)
+	id       string
+	host     roundHost
+	schedule roundSchedule
+	onDone   func(id string)
 
 	mx         sync.Mutex
 	report     *event.ReportEvent
@@ -88,12 +104,12 @@ type round struct {
 	finalTimer *time.Timer
 	// pending holds the tallied outcome while this node stands by as a
 	// backup finalizer.
-	pending *pendingFinalize
+	pending *pendingOutcome
 	closed  bool
 }
 
-// pendingFinalize is a tallied round outcome parked on a backup voter.
-type pendingFinalize struct {
+// pendingOutcome is a tallied round outcome parked on a backup voter.
+type pendingOutcome struct {
 	report event.ReportEvent
 	agg    verdict
 	voters []domain.ID
@@ -101,14 +117,15 @@ type pendingFinalize struct {
 
 // newRound starts a round: the tally timer runs from creation, because a
 // round may be opened by an incoming vote before this node sees the report.
-func newRound(id string, host roundHost, onDone func(id string)) *round {
+func newRound(id string, host roundHost, schedule roundSchedule, onDone func(id string)) *round {
 	r := &round{
-		id:     id,
-		host:   host,
-		onDone: onDone,
-		votes:  make(map[string]event.ModerationVoteEvent),
+		id:       id,
+		host:     host,
+		schedule: schedule,
+		onDone:   onDone,
+		votes:    make(map[string]event.ModerationVoteEvent),
 	}
-	r.tallyTimer = time.AfterFunc(voteWindow, r.tally)
+	r.tallyTimer = time.AfterFunc(schedule.window, r.tally)
 	return r
 }
 
@@ -166,7 +183,7 @@ func (r *round) castVote() {
 	rep := *r.report
 	r.mx.Unlock()
 
-	v, ok, err := r.host.AssessReport(rep)
+	v, ok, err := r.host.assessReport(rep)
 	if err != nil {
 		log.Errorf("moderator: round %s: assess report: %v", r.id, err)
 		return
@@ -182,13 +199,13 @@ func (r *round) castVote() {
 		Reason:      v.reason,
 		UserID:      v.userID,
 		ObjectID:    v.objectID,
-		ModeratorID: r.host.SelfID(),
+		ModeratorID: r.host.selfID(),
 	}
 	// Count the own vote before publishing: gossip loopback delivery is
 	// not guaranteed (addVote dedups if it does loop back), and the vote
 	// must count even when the publish fails.
 	r.addVote(vote)
-	if err := r.host.PublishVote(vote); err != nil {
+	if err := r.host.publishVote(vote); err != nil {
 		log.Errorf("moderator: round %s: publish vote: %v", r.id, err)
 	}
 }
@@ -213,7 +230,7 @@ func (r *round) tally() {
 	// The takeover chain ranks over the full voter order, pre-trim: a
 	// voter dropped by the odd-count trim still holds everything needed
 	// to finalize the kept tally if the chair dies.
-	myRank := rankOf(ordered, r.host.SelfID())
+	myRank := rankOf(ordered, r.host.selfID())
 
 	// A voter always holds the report (voting requires it); a self-named
 	// vote without one means someone forged votes for a round this node
@@ -232,8 +249,8 @@ func (r *round) tally() {
 	chair := kept[0].ModeratorID
 
 	if myRank > 0 {
-		r.pending = &pendingFinalize{report: *rep, agg: agg, voters: voters}
-		r.finalTimer = time.AfterFunc(time.Duration(myRank)*failoverDelay, r.takeOver)
+		r.pending = &pendingOutcome{report: *rep, agg: agg, voters: voters}
+		r.finalTimer = time.AfterFunc(time.Duration(myRank)*r.schedule.failover, r.takeOver)
 		r.mx.Unlock()
 		log.Infof("moderator: round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
 			r.id, len(kept), bool(agg.result), chair, myRank)
@@ -270,7 +287,7 @@ func (r *round) takeOver() {
 // finalize delivers the verdict and then announces the round finished, so
 // the other voters cancel their takeover timers.
 func (r *round) finalize(rep event.ReportEvent, agg verdict, voters []domain.ID) {
-	r.host.FinalizeRound(rep, agg, voters)
+	r.host.finalizeRound(rep, agg, voters)
 
 	final := event.ModerationVoteEvent{
 		ReportID:    r.id,
@@ -279,10 +296,10 @@ func (r *round) finalize(rep event.ReportEvent, agg verdict, voters []domain.ID)
 		Reason:      agg.reason,
 		UserID:      agg.userID,
 		ObjectID:    agg.objectID,
-		ModeratorID: r.host.SelfID(),
+		ModeratorID: r.host.selfID(),
 		Final:       true,
 	}
-	if err := r.host.PublishVote(final); err != nil {
+	if err := r.host.publishVote(final); err != nil {
 		log.Errorf("moderator: round %s: publish final: %v", r.id, err)
 	}
 }

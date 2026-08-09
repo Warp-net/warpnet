@@ -89,12 +89,6 @@ func hostPrivKey(t *testing.T, h warpnet.P2PNode) ed25519.PrivateKey {
 func TestTrioIntegration_RealGossip(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
-	prevWindow, prevStep, prevFailover := voteWindow, voteDelayStep, failoverDelay
-	voteWindow, voteDelayStep, failoverDelay = 5*time.Second, time.Hour, time.Hour
-	t.Cleanup(func() {
-		voteWindow, voteDelayStep, failoverDelay = prevWindow, prevStep, prevFailover
-	})
-
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -111,6 +105,9 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 
 		m, err := NewModerator(ctx, conn, ps, ps, ps, hostPrivKey(t, h))
 		require.NoError(t, err)
+		// Short window so the round closes inside the test; no volunteer
+		// suppression or takeover is exercised here.
+		m.rounds.schedule = roundSchedule{window: 5 * time.Second, failover: time.Hour, step: time.Hour}
 		require.NoError(t, m.Start())
 		t.Cleanup(m.Close)
 

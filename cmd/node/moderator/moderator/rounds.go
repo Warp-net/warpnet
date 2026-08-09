@@ -35,13 +35,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	// voteDelayStep spaces the volunteer timers of moderators ranked
-	// below the quorum target; one step must fit a fetch + inference +
-	// gossip propagation so a suppressed rank never starts work.
-	voteDelayStep = 8 * time.Second
-)
-
 const (
 	// finalizedTTL guards against gossip re-deliveries reopening a
 	// finished round.
@@ -59,8 +52,9 @@ const (
 // Locking: rounds.mx may be held while calling into a round, never the
 // other way around. A round calls back (onDone) without holding its own
 // lock, so the two never deadlock.
-type rounds struct {
-	host roundHost
+type roundRegistry struct {
+	host     roundHost
+	schedule roundSchedule
 
 	mx        sync.Mutex
 	active    map[string]*round
@@ -68,9 +62,10 @@ type rounds struct {
 	seenMods  map[string]time.Time
 }
 
-func newRounds(host roundHost) *rounds {
-	return &rounds{
+func newRoundRegistry(host roundHost, schedule roundSchedule) *roundRegistry {
+	return &roundRegistry{
 		host:      host,
+		schedule:  schedule,
 		active:    make(map[string]*round),
 		finalized: make(map[string]time.Time),
 		seenMods:  make(map[string]time.Time),
@@ -79,7 +74,7 @@ func newRounds(host roundHost) *rounds {
 
 // open starts (or joins) the round for a report and schedules this node's
 // vote at its deterministic turn.
-func (rs *rounds) open(rep event.ReportEvent) {
+func (rs *roundRegistry) open(rep event.ReportEvent) {
 	id := rep.ReportID()
 
 	rs.mx.Lock()
@@ -96,7 +91,7 @@ func (rs *rounds) open(rep event.ReportEvent) {
 
 // addVote routes an incoming vote to its round, opening one if the vote
 // arrived before the report did.
-func (rs *rounds) addVote(vote event.ModerationVoteEvent) {
+func (rs *roundRegistry) addVote(vote event.ModerationVoteEvent) {
 	rs.mx.Lock()
 	rs.seenMods[vote.ModeratorID] = time.Now()
 	if rs.isFinalizedLocked(vote.ReportID) {
@@ -111,7 +106,7 @@ func (rs *rounds) addVote(vote event.ModerationVoteEvent) {
 
 // markFinalized records that some moderator finalized the round and drops
 // this node's copy, cancelling its takeover timer.
-func (rs *rounds) markFinalized(id, by string) {
+func (rs *roundRegistry) markFinalized(id, by string) {
 	rs.mx.Lock()
 	rs.seenMods[by] = time.Now()
 	if rs.isFinalizedLocked(id) {
@@ -131,7 +126,7 @@ func (rs *rounds) markFinalized(id, by string) {
 
 // forget is the round's own completion callback: it is done with itself,
 // so drop it and remember the id as spent.
-func (rs *rounds) forget(id string) {
+func (rs *roundRegistry) forget(id string) {
 	rs.mx.Lock()
 	defer rs.mx.Unlock()
 	delete(rs.active, id)
@@ -143,7 +138,7 @@ func (rs *rounds) forget(id string) {
 	rs.finalized[id] = time.Now()
 }
 
-func (rs *rounds) stopAll() {
+func (rs *roundRegistry) stopAll() {
 	rs.mx.Lock()
 	stopping := make([]*round, 0, len(rs.active))
 	for id, r := range rs.active {
@@ -157,16 +152,16 @@ func (rs *rounds) stopAll() {
 	}
 }
 
-func (rs *rounds) ensureLocked(id string) *round {
+func (rs *roundRegistry) ensureLocked(id string) *round {
 	r, ok := rs.active[id]
 	if !ok {
-		r = newRound(id, rs.host, rs.forget)
+		r = newRound(id, rs.host, rs.schedule, rs.forget)
 		rs.active[id] = r
 	}
 	return r
 }
 
-func (rs *rounds) isFinalizedLocked(id string) bool {
+func (rs *roundRegistry) isFinalizedLocked(id string) bool {
 	ts, ok := rs.finalized[id]
 	if !ok {
 		return false
@@ -182,14 +177,14 @@ func (rs *rounds) isFinalizedLocked(id string) bool {
 // onto a start delay: the estimated top-quorumTarget ranks start at once,
 // everyone below waits in voteDelayStep increments and will usually find
 // the round already served when their turn comes.
-func (rs *rounds) voteDelayLocked(id string) time.Duration {
+func (rs *roundRegistry) voteDelayLocked(id string) time.Duration {
 	now := time.Now()
 	for k, ts := range rs.seenMods {
 		if now.Sub(ts) > seenModTTL {
 			delete(rs.seenMods, k)
 		}
 	}
-	self := rs.host.SelfID()
+	self := rs.host.selfID()
 	population := len(rs.seenMods)
 	if _, ok := rs.seenMods[self]; !ok {
 		population++
@@ -199,5 +194,5 @@ func (rs *rounds) voteDelayLocked(id string) time.Duration {
 	if rank < quorumTarget {
 		return 0
 	}
-	return time.Duration(rank-quorumTarget+1) * voteDelayStep
+	return time.Duration(rank-quorumTarget+1) * rs.schedule.step
 }

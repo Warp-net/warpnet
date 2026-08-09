@@ -35,6 +35,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	json "github.com/json-iterator/go"
 )
@@ -683,11 +684,7 @@ func (e ModerationChallengeResponseEvent) SigningBytes() []byte {
 
 const ModerationReasonUnavailable = "content unavailable for review"
 
-const ErrVerdictSignatureInvalid verdictError = "moderation verdict signature invalid"
-
-type verdictError string
-
-func (e verdictError) Error() string { return string(e) }
+const ErrVerdictSignatureInvalid warpnet.WarpError = "moderation verdict signature invalid"
 
 type ModerationVerdictEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
