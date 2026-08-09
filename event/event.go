@@ -28,7 +28,9 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"strconv"
 	"time"
@@ -681,9 +683,9 @@ func (e ModerationChallengeResponseEvent) SigningBytes() []byte {
 
 const ModerationReasonUnavailable = "content unavailable for review"
 
-type ModerationResultEvent struct {
+type ModerationVerdictEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
-	Result   domain.ModerationResult     `json:"result"`
+	Verdict  domain.ModerationResult     `json:"verdict"`
 	Reason   *string                     `json:"reason,omitempty"`
 	Model    domain.ModelType            `json:"model"`
 	UserID   domain.ID                   `json:"user_id"`
@@ -707,11 +709,11 @@ type ModerationResultEvent struct {
 	Signature string `json:"signature,omitempty"`
 }
 
-// SigningBytes returns the canonical bytes the verdict signature covers.
+// signingBytes returns the canonical bytes the verdict signature covers.
 // Explicit length-prefixed concatenation (rather than re-marshalled JSON) so
 // signer and verifier agree byte-for-byte even across versions that add
 // unrelated fields.
-func (e ModerationResultEvent) SigningBytes() []byte {
+func (e ModerationVerdictEvent) signingBytes() []byte {
 	reason := ""
 	if e.Reason != nil {
 		reason = *e.Reason
@@ -722,7 +724,7 @@ func (e ModerationResultEvent) SigningBytes() []byte {
 	}
 	parts := []string{
 		e.Type.String(),
-		strconv.FormatBool(bool(e.Result)),
+		strconv.FormatBool(bool(e.Verdict)),
 		reason,
 		string(e.Model),
 		string(e.UserID),
@@ -741,6 +743,14 @@ func (e ModerationResultEvent) SigningBytes() []byte {
 		buf = append(buf, p...)
 	}
 	return buf
+}
+
+func (e ModerationVerdictEvent) Sign(privKey ed25519.PrivateKey) {
+	e.TimeAt = time.Now().UTC()
+	if len(privKey) == 0 {
+		return
+	}
+	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.signingBytes()))
 }
 
 type GetNotificationsEvent struct {

@@ -30,13 +30,12 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/moderation"
 	log "github.com/sirupsen/logrus"
 )
 
 func init() {
-	log.Infof("moderator node: initializing, path: %s", config.Config().Node.Moderator.Path)
+	log.Infoln("moderator node: initializing...")
 	go func() {
 		defer close(engineReadyChan)
 		select {
@@ -47,7 +46,7 @@ func init() {
 		}
 
 		var err error
-		engine, err = moderation.NewLlamaEngine(config.Config().Node.Moderator.Path, runtime.NumCPU())
+		engine, err = moderation.NewLlamaEngine(supportedModel.Path, runtime.NumCPU())
 		if err != nil {
 			log.Fatalf("moderator node: initializing: %v", err)
 		}

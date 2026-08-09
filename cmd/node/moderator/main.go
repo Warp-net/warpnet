@@ -42,11 +42,6 @@ import (
 )
 
 func main() {
-	if config.Config().Node.Moderator.Path == "" {
-		log.Errorln("moderator not configured: model path is empty")
-		return
-	}
-
 	version := config.Config().Version
 	network := config.Config().Node.Network
 	psk, err := security.GeneratePSK(network, version)

@@ -30,9 +30,8 @@ package moderator
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
-	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/retrier"
 	"sort"
 	"strings"
 	"sync"
@@ -49,8 +48,19 @@ import (
 )
 
 const (
-	ErrModeratorInitFailed warpnet.WarpError = "failed to init moderator engine"
+	ErrModeratorInitFailed warpnet.WarpError = "moderator: failed to init engine"
+
+	fetchAttempts   = 3
+	fetchRetryDelay = 3 * time.Second
 )
+
+var supportedModel = struct {
+	Model domain.ModelType
+	Path  string
+}{
+	domain.LLAMAGuard3,
+	"Llama-Guard-3-1B-Q4_K_M.gguf",
+}
 
 type Engine interface {
 	Moderate(content string) (bool, string, error)
@@ -99,6 +109,8 @@ type Moderator struct {
 	isolation *isolation.IsolationProtocol
 	privKey   ed25519.PrivateKey
 
+	retrier retrier.Retrier
+
 	mx        sync.Mutex
 	rounds    map[string]*voteRound
 	finalized map[string]time.Time
@@ -121,12 +133,13 @@ func NewModerator(
 		sub:       sub,
 		votes:     votes,
 		privKey:   privKey,
+		retrier:   retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
 		rounds:    make(map[string]*voteRound),
 		finalized: make(map[string]time.Time),
 		seenMods:  make(map[string]time.Time),
 		isClosed:  new(atomic.Bool),
 	}
-	m.isolation = isolation.NewIsolationProtocol(pub, m.signResult)
+	m.isolation = isolation.NewIsolationProtocol(pub, privKey)
 	return m, nil
 }
 
@@ -142,6 +155,7 @@ func (m *Moderator) Start() error {
 	if engine == nil {
 		return ErrModeratorInitFailed
 	}
+
 	log.Infoln("moderator: engine is running")
 
 	if err := m.sub.SubscribeReports(m.handleReport); err != nil {
@@ -151,7 +165,7 @@ func (m *Moderator) Start() error {
 		return fmt.Errorf("moderator: subscribe votes: %w", err)
 	}
 
-	log.Infoln("moderator: started (report-driven)")
+	log.Infoln("moderator: started")
 	return nil
 }
 
@@ -201,16 +215,6 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 	return nil
 }
 
-// signResult stamps and signs a verdict with this node's key so member
-// nodes can verify it really came from the moderator named in ModeratorID.
-func (m *Moderator) signResult(ev *event.ModerationResultEvent) {
-	ev.TimeAt = time.Now().UTC()
-	if len(m.privKey) == 0 {
-		return
-	}
-	ev.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(m.privKey, ev.SigningBytes()))
-}
-
 // notifyReporter re-sends the verdict to the reporter's node on the same
 // route as the broadcast, but with ReporterID set so it notifies them.
 // Unlike the followers broadcast (FAIL-only, shadow-ban), the reporter is
@@ -227,64 +231,26 @@ func (m *Moderator) notifyReporter(
 	if rep.ReporterNodeID == "" || rep.ReporterID == "" {
 		return
 	}
-	result := event.ModerationResultEvent{
+	verdictEvent := event.ModerationVerdictEvent{
 		Type:        rep.Type,
-		Result:      verdict,
+		Verdict:     verdict,
 		Reason:      reason,
-		Model:       domain.LLAMAGuard3,
+		Model:       supportedModel.Model,
 		UserID:      targetUserID,
 		ObjectID:    objectID,
 		ModeratorID: m.node.ID().String(),
 		ReporterID:  rep.ReporterID,
 		Voters:      voters,
 	}
-	m.signResult(&result)
+	verdictEvent.Sign(m.privKey)
+
 	if _, err := m.node.GenericStream(
 		rep.ReporterNodeID,
 		event.PUBLIC_POST_MODERATION_RESULT,
-		result,
+		verdictEvent,
 	); err != nil {
 		log.Warnf("moderator: notify reporter %s: %v", rep.ReporterNodeID, err)
 	}
-}
-
-const fetchAttempts = 3
-
-var (
-	fetchRetryDelay = 3 * time.Second
-
-	ErrFetchFailed = errors.New("moderator: fetch failed")
-)
-
-func (m *Moderator) fetchObject(nodeID string, route stream.WarpRoute, payload any) ([]byte, error) {
-	var done <-chan struct{}
-	if m.ctx != nil {
-		done = m.ctx.Done()
-	}
-
-	var lastErr error
-	for attempt := range fetchAttempts {
-		if attempt > 0 {
-			select {
-			case <-done:
-				return nil, m.ctx.Err()
-			case <-time.After(fetchRetryDelay):
-			}
-		}
-
-		data, err := m.node.GenericStream(nodeID, route, payload)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		var respErr event.ResponseError
-		if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
-			lastErr = fmt.Errorf("%w: %s", ErrFetchFailed, respErr.Message)
-			continue
-		}
-		return data, nil
-	}
-	return nil, lastErr
 }
 
 // verdict is one moderator's assessment of a report, before the round tally.
@@ -302,7 +268,7 @@ func unavailableVerdict(objectID *domain.ID, userID domain.ID) verdict {
 	return verdict{result: domain.OK, reason: &reason, objectID: objectID, userID: userID}
 }
 
-// assessReport produces this moderator's own vote on a report. The bool is
+// produces this moderator's own vote on a report. The bool is
 // false when the report is malformed and no vote should be cast at all.
 func (m *Moderator) assessReport(ev event.ReportEvent) (verdict, bool, error) {
 	switch ev.Type {
@@ -321,11 +287,18 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, erro
 		return verdict{}, false, nil
 	}
 
-	data, err := m.fetchObject(
-		ev.TargetNodeID,
-		event.PUBLIC_GET_TWEET,
-		event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
+	var (
+		data []byte
+		err  error
 	)
+	err = m.retrier.Try(m.ctx, func() error {
+		data, err = m.node.GenericStream(
+			ev.TargetNodeID,
+			event.PUBLIC_GET_TWEET,
+			event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
+		)
+		return err
+	})
 	if err != nil {
 		log.Warnf("moderator: fetch tweet %s from node %s failed: %v", *ev.ObjectID, ev.TargetNodeID, err)
 		return unavailableVerdict(ev.ObjectID, ev.TargetUserID), true, nil
@@ -369,11 +342,18 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, erro
 }
 
 func (m *Moderator) assessUserReport(ev event.ReportEvent) (verdict, bool, error) {
-	data, err := m.fetchObject(
-		ev.TargetNodeID,
-		event.PUBLIC_GET_USER,
-		event.GetUserEvent{UserId: ev.TargetUserID},
+	var (
+		data []byte
+		err  error
 	)
+	err = m.retrier.Try(m.ctx, func() error {
+		data, err = m.node.GenericStream(
+			ev.TargetNodeID,
+			event.PUBLIC_GET_USER,
+			event.GetUserEvent{UserId: ev.TargetUserID},
+		)
+		return err
+	})
 	if err != nil {
 		log.Warnf("moderator: fetch user %s from node %s failed: %v", ev.TargetUserID, ev.TargetNodeID, err)
 		return unavailableVerdict(nil, ev.TargetUserID), true, nil
@@ -421,7 +401,7 @@ func (m *Moderator) finalizeRound(rep event.ReportEvent, agg verdict, voters []d
 			&domain.Tweet{Id: *agg.objectID, UserId: agg.userID},
 			&domain.TweetModeration{
 				ModeratorID: m.node.ID().String(),
-				Model:       domain.LLAMAGuard3,
+				Model:       supportedModel.Model,
 				IsOk:        domain.FAIL,
 				Reason:      agg.reason,
 				TimeAt:      time.Now(),
@@ -434,7 +414,7 @@ func (m *Moderator) finalizeRound(rep event.ReportEvent, agg verdict, voters []d
 			&domain.User{Id: agg.userID},
 			&domain.UserModeration{
 				IsModerated: true,
-				Model:       domain.LLAMAGuard3,
+				Model:       supportedModel.Model,
 				IsOk:        false,
 				Reason:      agg.reason,
 				TimeAt:      time.Now(),

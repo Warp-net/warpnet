@@ -45,7 +45,6 @@ import (
 // stays silent and spends nothing. The chair (lowest pair hash among actual
 // voters) is the only node that publishes the aggregate verdict, so the
 // reporter hears exactly one answer.
-const quorumTarget = 3
 
 var (
 	// voteWindow is how long a round collects votes before the tally.
@@ -62,6 +61,7 @@ var (
 )
 
 const (
+	quorumTarget = 3
 	// finalizedTTL guards against gossip re-deliveries reopening a
 	// finished round.
 	finalizedTTL = time.Hour
