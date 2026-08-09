@@ -73,6 +73,16 @@ module.exports = {
           input: "#4a026e",
           card: "#4a026e",
         },
+        grimdark: {
+          background: "#14110e",
+          foreground: "#2b2219",
+          text: "#d6c7a1",
+          secondary: "#f0e6d2",
+          accent: "#9b1313",
+          gold: "#a58a4a",
+          input: "#1d1813",
+          card: "#1d1813",
+        },
       },
     },
     screens: {

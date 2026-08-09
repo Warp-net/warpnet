@@ -32,6 +32,16 @@ import directives from "./directives";
 import filters from "./filters";
 import { warpnetService } from "./service/service";
 
+// Apply the saved theme before the first view mounts. SideNav only restores
+// "dark", and it isn't mounted on the logged-out screens, so a saved theme
+// would otherwise flash light until the user reaches the dashboard.
+// "mastodon" is deliberately excluded: Profile.vue turns it on only while a
+// Mastodon profile is open, so restoring it here would tint unrelated views.
+const savedTheme = localStorage.getItem("theme");
+if (savedTheme === "grimdark" || savedTheme === "dark") {
+    document.documentElement.classList.add(savedTheme);
+}
+
 const app = createApp(App);
 
 app.config.errorHandler = function (err, vm, info) {

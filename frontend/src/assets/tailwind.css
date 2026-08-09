@@ -22,6 +22,10 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
+/* Grimdark theme display font. Prototype: pulled from Google Fonts CDN;
+   vendor the woff2 into src/assets/fonts (OFL license) before release. */
+@import url("https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -79,6 +83,14 @@ a:focus-visible,
 .mastodon a:focus-visible,
 .mastodon [role="button"]:focus-visible {
   outline-color: #c156f5;
+}
+
+.grimdark button:focus-visible,
+.grimdark input:focus-visible,
+.grimdark textarea:focus-visible,
+.grimdark a:focus-visible,
+.grimdark [role="button"]:focus-visible {
+  outline-color: #b89a5a;
 }
 
 .modal-main {
@@ -169,6 +181,11 @@ button.border-blue:hover {
     border-color: rgba(54, 1, 36, 0.6);
     box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   }
+
+  .grimdark img.rounded-full {
+    border-color: rgba(165, 138, 74, 0.65);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
 }
 
 /* Icon action buttons (reply, like, retweet) get larger hit area + hover circle */
@@ -234,6 +251,11 @@ i.fa-retweet.text-green-500 {
 .mastodon .nav-active {
   background-color: theme("colors.mastodon.foreground");
   color: theme("colors.mastodon.text");
+}
+.grimdark .nav-active {
+  background-color: theme("colors.grimdark.foreground");
+  color: theme("colors.grimdark.secondary");
+  box-shadow: inset 0 0 0 1px theme("colors.grimdark.gold");
 }
 
 /* Toast notification container */
@@ -413,5 +435,197 @@ i.fa-retweet.text-green-500 {
   .mastodon .text-gray-900 {
     color: theme("colors.mastodon.text") !important;
   }
+
+}
+
+/* === Grimdark theme: same surface/text mapping as .dark/.mastodon.
+   Deliberately OUTSIDE @layer base: Tailwind tree-shakes custom layered
+   styles whose selector classes never appear in the content files, and
+   "grimdark" has no template occurrence yet (dark/mastodon survive only
+   because those strings exist in component JS). Unlayered CSS is always
+   emitted, and coming after the base layer it wins the cascade. === */
+.grimdark body {
+  @apply bg-grimdark-background text-grimdark-text;
+}
+.grimdark input, .grimdark textarea {
+  @apply bg-grimdark-input text-grimdark-text;
+  border-color: rgba(165, 138, 74, 0.4);
+}
+.grimdark .card {
+  @apply bg-grimdark-card text-grimdark-text;
+}
+.grimdark .bg-lightest,
+.grimdark .bg-white,
+.grimdark .focus\:bg-white:focus,
+.grimdark .bg-gray-100 {
+  background-color: theme("colors.grimdark.card") !important;
+}
+.grimdark .bg-lighter,
+.grimdark .hover\:bg-lighter:hover,
+.grimdark .hover\:bg-lightest:hover,
+.grimdark .hover\:bg-gray-100:hover {
+  background-color: theme("colors.grimdark.foreground") !important;
+}
+.grimdark .border-lighter {
+  border-color: rgba(165, 138, 74, 0.25) !important;
+}
+/* The signup wizard wraps its inputs in bg-lightblue tint blocks and uses the
+   same tint for the progress track and hover states. Left unmapped they stay
+   pale pink and swallow both the field and its label. */
+.grimdark .bg-lightblue,
+.grimdark .hover\:bg-lightblue:hover {
+  background-color: theme("colors.grimdark.input") !important;
+}
+.grimdark .border-dark {
+  border-color: theme("colors.grimdark.gold") !important;
+}
+.grimdark .text-dark {
+  color: theme("colors.grimdark.secondary") !important;
+}
+.grimdark .text-black,
+.grimdark .text-gray-500,
+.grimdark .text-gray-600,
+.grimdark .text-gray-700,
+.grimdark .text-gray-800,
+.grimdark .text-gray-900 {
+  color: theme("colors.grimdark.text") !important;
+}
+.grimdark .text-blue,
+.grimdark .text-darkblue,
+.grimdark .hover\:text-blue:hover {
+  color: theme("colors.grimdark.gold") !important;
+}
+/* bg-blue is both the brand button fill and a full-height hero panel. Blood
+   red works on a button and overwhelms a panel, so the surface mapping is
+   dark iron; buttons paint their gradient over it (rule further down). */
+.grimdark .bg-blue,
+.grimdark .bg-darkblue {
+  background-color: theme("colors.grimdark.foreground") !important;
+}
+.grimdark button.bg-blue,
+.grimdark button.bg-darkblue {
+  background-color: theme("colors.grimdark.accent") !important;
+}
+.grimdark .border-blue {
+  border-color: theme("colors.grimdark.gold") !important;
+}
+
+/* === Grimdark ornamental layer: what makes it a style, not just a palette.
+   All artwork is original (frame.svg, data-URI glyphs) or procedural
+   (feTurbulence grain); the display font is OFL. No third-party IP. === */
+
+/* Iron-grain page background: procedural SVG noise tile over the base color. */
+.grimdark body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Gothic display type for headings; body copy stays sans. The views mark
+   headings up with size utilities rather than h1-h3, so both are targeted.
+   Font Awesome glyphs carry the same size utilities, and overriding their
+   family renders every icon as tofu — hence :not(i). */
+.grimdark h1,
+.grimdark h2,
+.grimdark h3,
+.grimdark .text-3xl:not(i),
+.grimdark .text-2xl:not(i),
+.grimdark .md\:text-3xl:not(i) {
+  font-family: "Grenze Gotisch", ui-serif, serif;
+  letter-spacing: 0.02em;
+}
+
+/* Ornamental brass frame on panels and modals: 9-slice border-image. The
+   dashboard's side panels are plain rounded bg-lightest blocks rather than
+   .card, so they are matched explicitly — otherwise the ornament only ever
+   shows up in dialogs. */
+.grimdark .card,
+.grimdark .modal-main,
+.grimdark .rounded-lg.bg-lightest {
+  border: 12px solid transparent;
+  border-image: url("./grimdark/frame.svg") 32 / 12px round;
+  border-radius: 0;
+}
+
+/* The brand logo is a magenta raster; tint it to brass so it belongs here. */
+.grimdark img[alt="Warpnet"],
+.grimdark img[src*="logo"] {
+  filter: grayscale(1) sepia(1) saturate(1.7) hue-rotate(2deg) brightness(0.95);
+}
+
+/* Primary buttons: blood-red gradient, chamfered corners, gothic type. */
+.grimdark button.bg-blue,
+.grimdark button.bg-darkblue {
+  background-image: linear-gradient(180deg, #a31414, #6d0b0b);
+  color: #f0e6d2;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  box-shadow: none;
+  font-family: "Grenze Gotisch", ui-serif, serif;
+  letter-spacing: 0.05em;
+}
+.grimdark button.bg-blue:hover,
+.grimdark button.bg-darkblue:hover {
+  background-image: linear-gradient(180deg, #bf1a1a, #7d0e0e);
+  box-shadow: none;
+  transform: none;
+}
+.grimdark button.border-blue {
+  color: theme("colors.grimdark.text");
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  box-shadow: none;
+}
+
+/* Checkboxes and radios: brass-bound plates with a chamfer, blood check. */
+.grimdark input[type="checkbox"],
+.grimdark input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  flex-shrink: 0;
+  border: 1px solid theme("colors.grimdark.gold");
+  background-color: theme("colors.grimdark.input");
+  cursor: pointer;
+  vertical-align: -0.15em;
+}
+.grimdark input[type="checkbox"] {
+  clip-path: polygon(25% 0, 100% 0, 100% 75%, 75% 100%, 0 100%, 0 25%);
+}
+.grimdark input[type="checkbox"]:checked {
+  background-color: theme("colors.grimdark.accent");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4' fill='none' stroke='%23f0e6d2' stroke-width='2.6'/%3E%3C/svg%3E");
+  background-size: 85%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.grimdark input[type="radio"] {
+  border-radius: 50%;
+}
+.grimdark input[type="radio"]:checked {
+  background-image: radial-gradient(circle, theme("colors.grimdark.accent") 0 38%, transparent 44%);
+}
+.grimdark select {
+  accent-color: theme("colors.grimdark.accent");
+}
+
+/* Links and toasts on the grimdark surfaces. */
+.grimdark a:link,
+.grimdark a {
+  color: #b89a5a;
+}
+.grimdark .toast-error {
+  background: #2b0707;
+  color: #e0a3a3;
+  border-color: #6d0b0b;
+}
+.grimdark .toast-success {
+  background: #101d10;
+  color: #a3c9a3;
+  border-color: #2f4f2f;
+}
+.grimdark .toast-info {
+  background: #1d1813;
+  color: #d6c7a1;
+  border-color: #a58a4a;
 }
 
