@@ -33,7 +33,7 @@ import site.warpnet.warpdroid.ui.tweetcomponents.TweetCard
 import site.warpnet.warpdroid.util.reply
 import site.warpnet.warpdroid.util.startActivityWithSlideInAnimation
 import site.warpnet.warpdroid.util.viewMedia
-import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmLike
+import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmReaction
 import site.warpnet.warpdroid.view.ConfirmationBottomSheet.Companion.confirmRetweet
 import site.warpnet.warpdroid.viewdata.AttachmentViewData
 import site.warpnet.warpdroid.viewdata.TweetViewData
@@ -103,18 +103,19 @@ class SearchStatusesFragment :
         }
     }
 
-    override fun onLike(
+    override fun onReact(
         viewData: TweetViewData.Concrete,
         like: Boolean,
-        state: SparkButtonState?
+        state: SparkButtonState?,
+        emoji: String
     ) {
         if (like) {
-            confirmLike(preferences) {
-                viewModel.like(viewData.id, viewData.accountId, true)
+            confirmReaction(preferences) {
+                viewModel.react(viewData.id, viewData.accountId, true, emoji)
                 state?.animate()
             }
         } else {
-            viewModel.like(viewData.id, viewData.accountId, false)
+            viewModel.react(viewData.id, viewData.accountId, false)
         }
     }
 

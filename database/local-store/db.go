@@ -93,6 +93,8 @@ const (
 
 var DefaultIteratorOptions = badger.DefaultIteratorOptions
 
+var ErrConflict = badger.ErrConflict
+
 type (
 	Item       = badger.Item
 	Entry      = badger.Entry
@@ -317,6 +319,9 @@ func (db *DB) runEventualGC() {
 }
 
 func (db *DB) Stats() map[string]string {
+	if db == nil || !db.isRunning.Load() {
+		return map[string]string{}
+	}
 	lsm, vlog := db.badger.Size()
 	size := lsm + vlog
 
@@ -886,8 +891,7 @@ func (db *DB) GC() {
 		return
 	}
 	for {
-		err := db.badger.RunValueLogGC(discardRatio)
-		if errors.Is(err, badger.ErrNoRewrite) {
+		if err := db.badger.RunValueLogGC(discardRatio); err != nil {
 			return
 		}
 	}
@@ -973,7 +977,6 @@ func IsNotFoundError(err error) bool {
 		return false
 	}
 }
-
 func ToDatastoreErrNotFound(err error) error {
 	switch {
 	case err == nil:

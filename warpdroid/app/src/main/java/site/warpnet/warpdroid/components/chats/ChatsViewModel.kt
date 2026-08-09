@@ -82,7 +82,9 @@ class ChatsViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             delay(300) // debounce keystrokes before hitting the fat node
             val users = try {
-                repo.searchAccounts(query).first.distinctBy { it.id }
+                // Bridged accounts (Mastodon) have no direct messages, so they
+                // are not offered as chat partners.
+                repo.searchAccounts(query).first.distinctBy { it.id }.filterNot { it.isBridged }
             } catch (e: CancellationException) {
                 throw e // a superseded search must stay cancelled, not fall through
             } catch (e: Throwable) {
@@ -95,6 +97,7 @@ class ChatsViewModel @Inject constructor(
     }
 
     fun startChat(other: TimelineUser, onOpen: (chatId: String, otherUserId: String, name: String) -> Unit) {
+        if (other.isBridged) return
         val userId = accountManager.activeAccount?.accountId ?: return
         viewModelScope.launch {
             val chat = runCatching { repo.createChat(ownerId = userId, otherUserId = other.id) }.getOrNull()
@@ -127,7 +130,7 @@ class ChatsViewModel @Inject constructor(
                         null
                     }
                     ChatRow(chat = chat, otherUserId = otherUserId, other = other)
-                }
+                }.filterNot { it.other?.isBridged == true }
                 _state.update { it.copy(chats = rows, loading = false) }
             } catch (e: Throwable) {
                 _state.update { it.copy(loading = false, error = e) }

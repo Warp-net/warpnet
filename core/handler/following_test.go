@@ -11,6 +11,9 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubFollowRepo struct {
@@ -20,6 +23,10 @@ type stubFollowRepo struct {
 	getFollowingsFn func(userId string, limit *uint64, cursor *string) ([]string, string, error)
 	isFollowingFn   func(ownerId, otherUserId string) bool
 	isFollowerFn    func(ownerId, otherUserId string) bool
+
+	addFollowRequestFn    func(targetUserId, followerId string) error
+	removeFollowRequestFn func(targetUserId, followerId string) error
+	listFollowRequestsFn  func(targetUserId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func (s stubFollowRepo) Follow(from, to string) error {
@@ -53,14 +60,23 @@ func (s stubFollowRepo) IsFollowing(ownerId, otherUserId string) bool {
 	return false
 }
 func (s stubFollowRepo) AddFollowRequest(targetUserId, followerId string) error {
+	if s.addFollowRequestFn != nil {
+		return s.addFollowRequestFn(targetUserId, followerId)
+	}
 	return nil
 }
 
 func (s stubFollowRepo) RemoveFollowRequest(targetUserId, followerId string) error {
+	if s.removeFollowRequestFn != nil {
+		return s.removeFollowRequestFn(targetUserId, followerId)
+	}
 	return nil
 }
 
 func (s stubFollowRepo) ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error) {
+	if s.listFollowRequestsFn != nil {
+		return s.listFollowRequestsFn(targetUserId, limit, cursor)
+	}
 	return nil, "end", nil
 }
 
@@ -176,8 +192,8 @@ func TestStreamFollowHandler(t *testing.T) {
 			if not.Type != domain.NotificationFollowType {
 				t.Fatalf("expected follow type, got: %v", not.Type)
 			}
-			if not.UserId != owner {
-				t.Fatalf("expected notification for followed user, got: %v", not.UserId)
+			if not.RecepientId != owner {
+				t.Fatalf("expected notification for followed user, got: %v", not.RecepientId)
 			}
 			return nil
 		}}, stubFollowStreamer{})
@@ -324,6 +340,113 @@ func TestStreamFollowHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
 		if err == nil {
 			t.Fatal("expected error from remote error response")
+		}
+	})
+}
+
+// TestStreamFollowHandlerFetchesUnknownFollower covers the rule that a follower
+// we don't know yet is resolved from the node that delivered the follow before
+// the follow is stored — on any network. Without it the follower stays an id, so
+// the notification reads as that raw id and the followers list has an empty row.
+func TestStreamFollowHandlerFetchesUnknownFollower(t *testing.T) {
+	owner := "owner-1"
+	unknown := "ap:aHR0cHM6Ly9tYXN0b2Rvbi5zb2NpYWwvdXNlcnMvd2FycG5ldA"
+	senderPeer, _ := peer.Decode("QmcEPrat8ShnCph8WjkREzt5CPXF2RwhYxYBALDcLC1iV6")
+	senderStream := stubPairStream{conn: stubPairConn{remotePeerID: senderPeer}}
+
+	userRepo := func(created *domain.User) stubFollowUserRepo {
+		return stubFollowUserRepo{
+			getFn: func(userId string) (domain.User, error) {
+				if userId == unknown {
+					return domain.User{}, database.ErrUserNotFound
+				}
+				return domain.User{Id: userId}, nil
+			},
+			createFn: func(u domain.User) (domain.User, error) { *created = u; return u, nil },
+		}
+	}
+
+	t.Run("resolves from the sender, then stores the follow", func(t *testing.T) {
+		var created domain.User
+		var askedNode, notified string
+		streamer := stubFollowStreamer{
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
+				askedNode = nodeId
+				if path != event.PUBLIC_GET_USER {
+					t.Fatalf("path = %q, want %q", path, event.PUBLIC_GET_USER)
+				}
+				return json.Marshal(domain.User{Id: unknown, Username: "Warpnet"})
+			},
+		}
+		followed := false
+		h := StreamFollowHandler(
+			stubFollowBroadcaster{},
+			stubFollowRepo{followFn: func(string, string) error { followed = true; return nil }},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			userRepo(&created),
+			stubModerationNotifier{addFn: func(not domain.Notification) error { notified = not.Text; return nil }},
+			streamer,
+		)
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: unknown, FollowingId: owner}), senderStream); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if askedNode != senderPeer.String() {
+			t.Fatalf("asked %q, want the delivering node %q", askedNode, senderPeer)
+		}
+		if created.Username != "Warpnet" {
+			t.Fatalf("follower not stored: %+v", created)
+		}
+		if !followed {
+			t.Fatal("follow was not stored")
+		}
+		if notified != "Warpnet started following you" {
+			t.Fatalf("notification = %q", notified)
+		}
+	})
+
+	t.Run("a follower already in the db is not requested", func(t *testing.T) {
+		followed := false
+		h := StreamFollowHandler(
+			stubFollowBroadcaster{},
+			stubFollowRepo{followFn: func(string, string) error { followed = true; return nil }},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, Username: "Vadim"}, nil
+			}},
+			stubModerationNotifier{},
+			stubFollowStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+				t.Fatal("a known follower must not be requested from the network")
+				return nil, nil
+			}},
+		)
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: "known-1", FollowingId: owner}), senderStream); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !followed {
+			t.Fatal("follow was not stored")
+		}
+	})
+
+	t.Run("unresolvable follower is not followed", func(t *testing.T) {
+		var created domain.User
+		streamer := stubFollowStreamer{
+			genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+				return nil, errors.New("node unreachable")
+			},
+		}
+		h := StreamFollowHandler(
+			stubFollowBroadcaster{},
+			stubFollowRepo{followFn: func(string, string) error {
+				t.Fatal("follow must not be stored for an unresolved follower")
+				return nil
+			}},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			userRepo(&created),
+			stubModerationNotifier{},
+			streamer,
+		)
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: unknown, FollowingId: owner}), senderStream); err == nil {
+			t.Fatal("expected error")
 		}
 	})
 }
@@ -699,5 +822,165 @@ func TestStreamGetFollowingsHandler(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		_ = resp.(event.FollowingsResponse)
+	})
+}
+
+func TestStreamGetFollowRequestsHandler(t *testing.T) {
+	t.Run("malformed payload", func(t *testing.T) {
+		_, err := StreamGetFollowRequestsHandler(stubFollowRepo{})([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("empty user id", func(t *testing.T) {
+		_, err := StreamGetFollowRequestsHandler(stubFollowRepo{})(
+			mustJSON(t, event.GetFollowRequestsEvent{}), nil)
+		assert.Error(t, err, "pending requests are private to the account owner")
+	})
+
+	t.Run("storage failure surfaces", func(t *testing.T) {
+		repo := stubFollowRepo{listFollowRequestsFn: func(string, *uint64, *string) ([]string, string, error) {
+			return nil, "", errors.New("db down")
+		}}
+		_, err := StreamGetFollowRequestsHandler(repo)(
+			mustJSON(t, event.GetFollowRequestsEvent{UserId: "u1"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("requests and cursor pass through", func(t *testing.T) {
+		repo := stubFollowRepo{listFollowRequestsFn: func(string, *uint64, *string) ([]string, string, error) {
+			return []string{"pending-1", "pending-2"}, "cur", nil
+		}}
+		out, err := StreamGetFollowRequestsHandler(repo)(
+			mustJSON(t, event.GetFollowRequestsEvent{UserId: "u1"}), nil)
+		require.NoError(t, err)
+
+		resp := out.(event.GetFollowRequestsResponse)
+		assert.Equal(t, []domain.ID{"pending-1", "pending-2"}, resp.FollowerIds)
+		assert.Equal(t, "cur", resp.Cursor)
+	})
+
+	t.Run("no pending requests yields an empty slice", func(t *testing.T) {
+		out, err := StreamGetFollowRequestsHandler(stubFollowRepo{})(
+			mustJSON(t, event.GetFollowRequestsEvent{UserId: "u1"}), nil)
+		require.NoError(t, err)
+		assert.NotNil(t, out.(event.GetFollowRequestsResponse).FollowerIds)
+	})
+}
+
+func TestStreamAuthorizeFollowRequestHandler(t *testing.T) {
+	t.Run("malformed payload", func(t *testing.T) {
+		_, err := StreamAuthorizeFollowRequestHandler(stubFollowRepo{})([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("missing identifiers are rejected", func(t *testing.T) {
+		_, err := StreamAuthorizeFollowRequestHandler(stubFollowRepo{})(
+			mustJSON(t, event.FollowRequestActionEvent{FollowerId: "f"}), nil)
+		assert.Error(t, err)
+
+		_, err = StreamAuthorizeFollowRequestHandler(stubFollowRepo{})(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "u"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("approval creates the follow in the right direction", func(t *testing.T) {
+		var followFrom, followTo string
+		var removedTarget, removedFollower string
+
+		repo := stubFollowRepo{
+			followFn: func(from, to string) error {
+				followFrom, followTo = from, to
+				return nil
+			},
+			removeFollowRequestFn: func(target, follower string) error {
+				removedTarget, removedFollower = target, follower
+				return nil
+			},
+		}
+
+		out, err := StreamAuthorizeFollowRequestHandler(repo)(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "owner", FollowerId: "applicant"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.Accepted, out)
+
+		assert.Equal(t, "applicant", followFrom, "the applicant follows the owner")
+		assert.Equal(t, "owner", followTo)
+		assert.Equal(t, "owner", removedTarget, "the pending row is keyed by the owner")
+		assert.Equal(t, "applicant", removedFollower)
+	})
+
+	t.Run("failed follow leaves the request pending", func(t *testing.T) {
+		removeCalled := false
+		repo := stubFollowRepo{
+			followFn: func(string, string) error { return errors.New("storage full") },
+			removeFollowRequestFn: func(string, string) error {
+				removeCalled = true
+				return nil
+			},
+		}
+
+		_, err := StreamAuthorizeFollowRequestHandler(repo)(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "owner", FollowerId: "applicant"}), nil)
+		assert.Error(t, err)
+		assert.False(t, removeCalled, "the pending request must survive a failed approval")
+	})
+
+	t.Run("failed cleanup surfaces", func(t *testing.T) {
+		repo := stubFollowRepo{
+			removeFollowRequestFn: func(string, string) error { return errors.New("db down") },
+		}
+		_, err := StreamAuthorizeFollowRequestHandler(repo)(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "owner", FollowerId: "applicant"}), nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestStreamRejectFollowRequestHandler(t *testing.T) {
+	t.Run("malformed payload", func(t *testing.T) {
+		_, err := StreamRejectFollowRequestHandler(stubFollowRepo{})([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("missing identifiers are rejected", func(t *testing.T) {
+		_, err := StreamRejectFollowRequestHandler(stubFollowRepo{})(
+			mustJSON(t, event.FollowRequestActionEvent{FollowerId: "f"}), nil)
+		assert.Error(t, err)
+
+		_, err = StreamRejectFollowRequestHandler(stubFollowRepo{})(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "u"}), nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("rejection removes the request and follows nobody", func(t *testing.T) {
+		followCalled := false
+		var removedTarget, removedFollower string
+
+		repo := stubFollowRepo{
+			followFn: func(string, string) error {
+				followCalled = true
+				return nil
+			},
+			removeFollowRequestFn: func(target, follower string) error {
+				removedTarget, removedFollower = target, follower
+				return nil
+			},
+		}
+
+		out, err := StreamRejectFollowRequestHandler(repo)(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "owner", FollowerId: "applicant"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.Accepted, out)
+		assert.False(t, followCalled, "a rejected applicant must not end up following the owner")
+		assert.Equal(t, "owner", removedTarget)
+		assert.Equal(t, "applicant", removedFollower)
+	})
+
+	t.Run("storage failure surfaces", func(t *testing.T) {
+		repo := stubFollowRepo{
+			removeFollowRequestFn: func(string, string) error { return errors.New("db down") },
+		}
+		_, err := StreamRejectFollowRequestHandler(repo)(
+			mustJSON(t, event.FollowRequestActionEvent{UserId: "owner", FollowerId: "applicant"}), nil)
+		assert.Error(t, err)
 	})
 }

@@ -68,6 +68,7 @@ object WarpnetMapper {
         avatar = warpnetImageUrl(id, avatarKey),
         staticAvatar = warpnetImageUrl(id, avatarKey),
         note = bio,
+        network = network,
     )
 
     /**
@@ -94,11 +95,11 @@ object WarpnetMapper {
             editedAt = updatedAt?.let(::parseDate),
             emojis = emptyList(),
             retweetsCount = 0,
-            likesCount = 0,
+            reactionsCount = 0,
             repliesCount = 0,
             viewsCount = 0,
             retweeted = false,
-            liked = false,
+            reacted = false,
             bookmarked = false,
             sensitive = false,
             spoilerText = "",
@@ -127,7 +128,7 @@ object WarpnetMapper {
         )
 
     // The wire shape (domain.Notification) embeds the actor in [text]
-    // ("Alice liked your tweet") and exposes only the recipient's user_id,
+    // ("Alice reacted your tweet") and exposes only the recipient's user_id,
     // so the UI gets a stub account; the visible content is text + type.
     fun WarpnetNotification.toNotification(): Notification = Notification(
         id = id,

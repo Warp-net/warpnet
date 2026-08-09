@@ -84,7 +84,7 @@ private val LightWarpdroidColorScheme = WarpdroidColorScheme(
     disabledTextColor = warpdroidGrey70,
     backgroundAccent = warpdroidGrey70,
     windowBackground = warpdroidGrey80,
-    likeButtonActiveColor = warpdroidOrange,
+    reactionButtonActiveColor = warpdroidOrange,
     bookmarkButtonActiveColor = warpdroidGreenDark,
     placeholderColor = warpdroidGrey90
 )
@@ -115,7 +115,7 @@ private val DarkWarpdroidColorScheme = WarpdroidColorScheme(
     disabledTextColor = warpdroidGrey40,
     backgroundAccent = warpdroidGrey40,
     windowBackground = warpdroidGrey10,
-    likeButtonActiveColor = warpdroidOrangeLight,
+    reactionButtonActiveColor = warpdroidOrangeLight,
     bookmarkButtonActiveColor = warpdroidGreen,
     placeholderColor = warpdroidGrey40
 )

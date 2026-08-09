@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package isolation
 
 import (
+	"crypto/ed25519"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
@@ -43,54 +44,57 @@ type Publisher interface {
 // or resist isolation; their local view stays unchanged while everyone
 // else hides the offending object.
 type IsolationProtocol struct {
-	pub Publisher
+	pub     Publisher
+	privKey ed25519.PrivateKey
 }
 
-func NewIsolationProtocol(pub Publisher) *IsolationProtocol {
-	return &IsolationProtocol{pub: pub}
+func NewIsolationProtocol(pub Publisher, privKey ed25519.PrivateKey) *IsolationProtocol {
+	return &IsolationProtocol{pub: pub, privKey: privKey}
 }
 
-func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModeration) {
+func (ip *IsolationProtocol) IsolateTweet(t *domain.Tweet, m *domain.TweetModeration, voters []domain.ID) {
 	if t == nil || m == nil {
 		return
 	}
 
-	result := event.ModerationResultEvent{
+	verdictEvent := (event.ModerationVerdictEvent{
 		Type:        domain.ModerationTweetType,
 		UserID:      t.UserId,
 		ObjectID:    &t.Id,
 		Reason:      m.Reason,
 		Model:       m.Model,
-		Result:      m.IsOk,
+		Verdict:     m.IsOk,
 		ModeratorID: m.ModeratorID,
-	}
+		Voters:      voters,
+	}).Signed(ip.privKey)
 
 	if err := ip.pub.PublishUpdateToFollowers(
 		t.UserId,
 		event.PUBLIC_POST_MODERATION_RESULT,
-		result,
+		verdictEvent,
 	); err != nil {
 		log.Errorf("isolation: publish tweet verdict: %v", err)
 	}
 }
 
-func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, m *domain.UserModeration) {
+func (ip *IsolationProtocol) IsolateUser(moderatorID domain.ID, u *domain.User, m *domain.UserModeration, voters []domain.ID) {
 	if u == nil || m == nil {
 		return
 	}
-	result := event.ModerationResultEvent{
+	verdictEvent := (event.ModerationVerdictEvent{
 		Type:        domain.ModerationUserType,
 		UserID:      u.Id,
 		Reason:      m.Reason,
 		Model:       m.Model,
-		Result:      domain.ModerationResult(m.IsOk),
+		Verdict:     domain.ModerationResult(m.IsOk),
 		ModeratorID: moderatorID,
-	}
+		Voters:      voters,
+	}).Signed(ip.privKey)
 
 	if err := ip.pub.PublishUpdateToFollowers(
 		u.Id,
 		event.PUBLIC_POST_MODERATION_RESULT,
-		result,
+		verdictEvent,
 	); err != nil {
 		log.Errorf("isolation: publish user verdict: %v", err)
 	}

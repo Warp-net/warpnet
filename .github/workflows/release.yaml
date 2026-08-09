@@ -3,18 +3,145 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Specify a Git tag to process (e.g., v1.0.0)"
+      bump:
+        description: "Version part to bump"
         required: true
-        type: string
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 env:
   GO_VERSION: "1.26.0"
-  RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: "1"
 
 jobs:
+  # Single source of versioning (moved out of the git hooks). Bumps the version,
+  # syncs the derived files, commits the bump to main, tags v<version> and pushes
+  # the tag to GitHub + the Codeberg mirror. The build jobs below check out this
+  # tag, so the version //go:embed-ed into the binary matches the release.
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          # A PAT (RELEASE_PAT) is used when set so the bump commit can land on a
+          # protected main; otherwise the default token is used.
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Bump version and sync derived files
+        id: bump
+        env:
+          BUMP: ${{ github.event.inputs.bump }}
+        run: |
+          set -euo pipefail
+
+          FILE="version"
+          SNAPCRAFT="snap/snapcraft.yaml"
+          [ -f "$FILE" ] || { echo "Version file not found!"; exit 1; }
+          [ -f "$SNAPCRAFT" ] || { echo "Snapcraft file not found: $SNAPCRAFT"; exit 1; }
+
+          CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          case "${BUMP:-patch}" in
+            major) MAJOR=$((10#$MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((10#$MINOR + 1)); PATCH=0 ;;
+            patch|"") PATCH=$((10#$PATCH + 1)) ;;
+            *) echo "Unknown bump: $BUMP"; exit 1 ;;
+          esac
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "CURRENT_VERSION=$CURRENT_VERSION -> NEW_VERSION=$NEW_VERSION"
+
+          # version file (//go:embed-ed into the binary) and the snapcraft version field.
+          sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$FILE"
+          sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"
+
+          # CODE FREEZE: warpdroid is under F-Droid inclusion review — keep
+          # warpdroid/fdroid/versionCode and the fastlane changelogs frozen so
+          # checkupdates never sees a new warpdroid version at new tags.
+          # # F-Droid versionCode: base = (major*1000000 + minor*10000 + patch) * 10
+          # # (single APK, no ABI offset).
+          # NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
+          #
+          # # Keep the fastlane changelog named <versionCode>.txt: carry the most
+          # # recent note forward to the new name and drop any others.
+          # CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
+          # if [ -d "$CHANGELOGS" ]; then
+          #   NEW="$CHANGELOGS/$NEW_BASE.txt"
+          #   LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1)
+          #   if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
+          #     mv -f "$LATEST" "$NEW"
+          #     echo "Changelog: $(basename "$LATEST") -> $(basename "$NEW")"
+          #   fi
+          #   find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$NEW_BASE.txt" -exec rm -f {} +
+          # fi
+          #
+          # # Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags
+          # # can read warpdroid/fdroid/versionCode at the tag.
+          # FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
+          # if [ -f "$FDROID_VERSIONCODE" ]; then
+          #   echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
+          # fi
+
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit bump, tag and push to origin
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."; exit 1
+          fi
+
+          # CODE FREEZE (F-Droid review): warpdroid versionCode/changelogs are not bumped.
+          # git add version snap/snapcraft.yaml warpdroid/fdroid/versionCode
+          # git add -A fastlane/metadata/android/en-US/changelogs
+          git add version snap/snapcraft.yaml
+
+          # [skip ci] keeps the push-to-main workflows from re-running on the bump.
+          git commit -m "chore(release): $TAG [skip ci]"
+          git tag -a "$TAG" -m "Release version $VERSION"
+          git push origin HEAD:main
+          git push origin "$TAG"
+
+      - name: Mirror tag to Codeberg (best-effort)
+        env:
+          CODEBERG_SSH_KEY: ${{ secrets.CODEBERG_SSH_KEY }}
+          TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CODEBERG_SSH_KEY:-}" ]; then
+            echo "CODEBERG_SSH_KEY secret not set; skipping Codeberg mirror."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$CODEBERG_SSH_KEY" > ~/.ssh/codeberg
+          chmod 600 ~/.ssh/codeberg
+          ssh-keyscan -t rsa,ecdsa,ed25519 codeberg.org >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Bounded like the old pre-push hook so a slow Codeberg can never hang the run.
+          GIT_SSH_COMMAND="ssh -i $HOME/.ssh/codeberg -o IdentitiesOnly=yes" \
+            timeout --kill-after=5 30 git push ssh://git@codeberg.org/Warpnet/warpnet.git "$TAG" \
+            || echo "warn: pushing $TAG to Codeberg failed or timed out (continuing)"
+
   release:
+    needs: version
     strategy:
       matrix:
         include:
@@ -36,7 +163,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0, fetch-tags: true }
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-go@v5
         with:
@@ -112,8 +242,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
-          name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             relay_linux_amd64.tar.gz
@@ -127,146 +257,139 @@ jobs:
             warpnet_windows_amd64.zip
             warpnet_windows_amd64_checksums.txt
 
-  # APK release runs in parallel with the desktop matrix. Same tag
-  # input — both jobs attach their artifacts to the same GitHub
-  # Release.
-  release-warpdroid:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0, fetch-tags: true }
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          build-root-directory: warpdroid
-
-      # services.gradle.org redirects to github.com/gradle/gradle-distributions,
-      # which intermittently returns 504. Same workaround as build-warpdroid.yml.
-      - name: Pre-fetch Gradle distribution
-        run: |
-          set -euo pipefail
-          cache_dir="$HOME/.gradle/wrapper/dists/gradle-9.0.0-bin/d6wjpkvcgsg3oed0qlfss3wgl"
-          mkdir -p "$cache_dir"
-          if [ -s "$cache_dir/gradle-9.0.0-bin.zip" ]; then
-            echo "Gradle distribution already cached at $cache_dir."
-            exit 0
-          fi
-          curl --fail --location --show-error \
-            --retry 8 --retry-all-errors --retry-delay 15 \
-            --connect-timeout 30 --max-time 300 \
-            -o "$cache_dir/gradle-9.0.0-bin.zip" \
-            https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
-
-      # The gomobile native library (warpnet.aar) is not committed; build it
-      # from warpdroid/node before Gradle runs.
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      # Pin the exact NDK the F-Droid recipe uses (metadata ndk: r27c ->
-      # 27.2.12479018). libgojni.so is CGO, compiled by the NDK's clang, so the
-      # gomobile build must use the SAME NDK as F-Droid or the reproducible-build
-      # byte-comparison fails. Do NOT use ANDROID_NDK_LATEST_HOME (drifts).
-      - name: Install NDK r27c (match F-Droid recipe)
-        run: |
-          set -euo pipefail
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          NDK_DIR="$ANDROID_SDK_ROOT/ndk/27.2.12479018"
-          # `yes | sdkmanager` breaks under pipefail (SIGPIPE when sdkmanager
-          # closes stdin). Accept licenses in a guarded step, then install without
-          # a pipe. Licenses are usually pre-accepted on the runner anyway.
-          "$SDKMANAGER" --licenses >/dev/null 2>&1 <<< "$(printf 'y\n%.0s' {1..50})" || true
-          "$SDKMANAGER" "ndk;27.2.12479018"
-          test -d "$NDK_DIR"
-          echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
-
-      # Build the gomobile native library at the SAME absolute path F-Droid's
-      # buildserver uses (/home/vagrant/build/<appid>). gomobile ignores -trimpath
-      # for the main module, so libgojni.so's .go.buildinfo embeds the checkout
-      # path; matching the path is F-Droid's documented fix for embedded build
-      # paths (https://f-droid.org/docs/Reproducible_Builds/). The built .aar is
-      # then copied back into the workspace for the Gradle step.
-      - name: Build Warpnet native library (gomobile) at F-Droid's build path
-        run: |
-          set -euo pipefail
-          FDROID_DIR=/home/vagrant/build/site.warpnet.warpdroid
-          sudo mkdir -p /home/vagrant/build
-          sudo cp -a "$GITHUB_WORKSPACE" "$FDROID_DIR"
-          sudo chown -R "$(id -un):$(id -gn)" /home/vagrant/build
-          (cd "$FDROID_DIR" && go mod download)
-          (cd "$FDROID_DIR/warpdroid/node" && bash build-native.sh)
-          libs="$GITHUB_WORKSPACE/warpdroid/warpnet-transport/libs"
-          mkdir -p "$libs"
-          cp "$FDROID_DIR/warpdroid/warpnet-transport/libs/warpnet.aar" "$libs/warpnet.aar"
-          cp "$FDROID_DIR/warpdroid/warpnet-transport/libs/warpnet-sources.jar" "$libs/warpnet-sources.jar"
-
-      - name: Decode release keystore (if configured)
-        id: keystore
-        env:
-          WARPDROID_KEYSTORE_BASE64: ${{ secrets.WARPDROID_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
-          echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
-
-      - name: Assemble release APK
-        working-directory: warpdroid
-        env:
-          WARPDROID_KEYSTORE: ${{ steps.keystore.outputs.path }}
-          WARPDROID_KEYSTORE_PASSWORD: ${{ secrets.WARPDROID_KEYSTORE_PASSWORD }}
-          WARPDROID_KEY_ALIAS: ${{ secrets.WARPDROID_KEY_ALIAS }}
-          WARPDROID_KEY_PASSWORD: ${{ secrets.WARPDROID_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --stacktrace
-
-      - name: Locate APK + checksum
-        working-directory: warpdroid
-        run: |
-          set -euo pipefail
-          # Single arm64-v8a APK (no ABI split); ship it as the release artifact.
-          src=$(find app/build/outputs/apk/release -name 'Warpdroid_*_release.apk' -type f | head -1)
-          if [ -z "$src" ]; then
-            echo "FATAL: no release APK produced" >&2
-            ls -la app/build/outputs/apk/release/ >&2 || true
-            exit 1
-          fi
-          dst=warpdroid.apk
-          cp "$src" "$dst"
-          shasum -a 256 "$dst" > "warpdroid_checksums.txt"
-
-      - name: Verify APK signature
-        working-directory: warpdroid
-        env:
-          EXPECTED_SHA256: "eabdd61e5bcbd6615a3f54977c06646c0f5422d845d37c818286b7d34285dfec"
-        run: |
-          set -euo pipefail
-          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --min-sdk-version 24 warpdroid.apk
-          GOT=$("$APKSIGNER" verify --print-certs warpdroid.apk \
-            | grep -m1 'SHA-256 digest' | awk '{print $NF}')
-          if [ "$GOT" != "$EXPECTED_SHA256" ]; then
-            echo "::error::APK signed by wrong key. got=$GOT want=$EXPECTED_SHA256" >&2
-            exit 1
-          fi
-          echo "OK: signed by expected key."
-
-      - name: Publish APK to GitHub Release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.RELEASE_TAG || 'no_tag' }}
-          name: ${{ env.RELEASE_TAG }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: |
-            warpdroid/warpdroid.apk
-            warpdroid/warpdroid_checksums.txt
+  # CODE FREEZE: warpdroid is under F-Droid inclusion review — no warpdroid
+  # releases and no version/tag-visible warpdroid changes until it completes.
+#  # APK release runs in parallel with the desktop matrix. Same tag
+#  # input — both jobs attach their artifacts to the same GitHub
+#  # Release.
+#  release-warpdroid:
+#    needs: version
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: write
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          ref: ${{ needs.version.outputs.tag }}
+#          fetch-depth: 0
+#          fetch-tags: true
+#
+#      - name: Set up JDK 17
+#        uses: actions/setup-java@v4
+#        with:
+#          distribution: temurin
+#          java-version: 17
+#
+#      - name: Set up Gradle
+#        uses: gradle/actions/setup-gradle@v4
+#        with:
+#          build-root-directory: warpdroid
+#
+#      # services.gradle.org redirects to github.com/gradle/gradle-distributions,
+#      # which intermittently returns 504. Same workaround as build-warpdroid.yml.
+#      - name: Pre-fetch Gradle distribution
+#        run: |
+#          set -euo pipefail
+#          cache_dir="$HOME/.gradle/wrapper/dists/gradle-9.0.0-bin/d6wjpkvcgsg3oed0qlfss3wgl"
+#          mkdir -p "$cache_dir"
+#          if [ -s "$cache_dir/gradle-9.0.0-bin.zip" ]; then
+#            echo "Gradle distribution already cached at $cache_dir."
+#            exit 0
+#          fi
+#          curl --fail --location --show-error \
+#            --retry 8 --retry-all-errors --retry-delay 15 \
+#            --connect-timeout 30 --max-time 300 \
+#            -o "$cache_dir/gradle-9.0.0-bin.zip" \
+#            https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
+#
+#      # The gomobile native library (warpnet.aar) is not committed; build it
+#      # from warpdroid/node before Gradle runs.
+#      - name: Set up Go
+#        uses: actions/setup-go@v5
+#        with:
+#          go-version-file: go.mod
+#
+#      # Pin the exact NDK the F-Droid recipe uses (metadata ndk: r27c ->
+#      # 27.2.12479018). libgojni.so is CGO, compiled by the NDK's clang, so the
+#      # gomobile build must use the SAME NDK as F-Droid or the reproducible-build
+#      # byte-comparison fails. Do NOT use ANDROID_NDK_LATEST_HOME (drifts).
+#      - name: Install NDK r27c (match F-Droid recipe)
+#        run: |
+#          set -euo pipefail
+#          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+#          NDK_DIR="$ANDROID_SDK_ROOT/ndk/27.2.12479018"
+#          # `yes | sdkmanager` breaks under pipefail (SIGPIPE when sdkmanager
+#          # closes stdin). Accept licenses in a guarded step, then install without
+#          # a pipe. Licenses are usually pre-accepted on the runner anyway.
+#          "$SDKMANAGER" --licenses >/dev/null 2>&1 <<< "$(printf 'y\n%.0s' {1..50})" || true
+#          "$SDKMANAGER" "ndk;27.2.12479018"
+#          test -d "$NDK_DIR"
+#          echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+#
+#      - name: Build Warpnet native library (gomobile)
+#        working-directory: warpdroid/node
+#        run: |
+#          set -euo pipefail
+#          (cd "$GITHUB_WORKSPACE" && go mod download)
+#          bash build-native.sh
+#
+#      - name: Decode release keystore (if configured)
+#        id: keystore
+#        env:
+#          WARPDROID_KEYSTORE_BASE64: ${{ secrets.WARPDROID_KEYSTORE_BASE64 }}
+#        run: |
+#          set -euo pipefail
+#          echo "$WARPDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/warpdroid.keystore"
+#          echo "path=$RUNNER_TEMP/warpdroid.keystore" >> "$GITHUB_OUTPUT"
+#
+#      - name: Assemble release APK
+#        working-directory: warpdroid
+#        env:
+#          WARPDROID_KEYSTORE: ${{ steps.keystore.outputs.path }}
+#          WARPDROID_KEYSTORE_PASSWORD: ${{ secrets.WARPDROID_KEYSTORE_PASSWORD }}
+#          WARPDROID_KEY_ALIAS: ${{ secrets.WARPDROID_KEY_ALIAS }}
+#          WARPDROID_KEY_PASSWORD: ${{ secrets.WARPDROID_KEY_PASSWORD }}
+#        run: ./gradlew :app:assembleRelease --stacktrace
+#
+#      - name: Locate APK + checksum
+#        working-directory: warpdroid
+#        run: |
+#          set -euo pipefail
+#          # Single arm64-v8a APK (no ABI split); ship it as the release artifact.
+#          src=$(find app/build/outputs/apk/release -name 'Warpdroid_*_release.apk' -type f | head -1)
+#          if [ -z "$src" ]; then
+#            echo "FATAL: no release APK produced" >&2
+#            ls -la app/build/outputs/apk/release/ >&2 || true
+#            exit 1
+#          fi
+#          dst=warpdroid.apk
+#          cp "$src" "$dst"
+#          shasum -a 256 "$dst" > "warpdroid_checksums.txt"
+#
+#      - name: Verify APK signature
+#        working-directory: warpdroid
+#        env:
+#          EXPECTED_SHA256: "eabdd61e5bcbd6615a3f54977c06646c0f5422d845d37c818286b7d34285dfec"
+#        run: |
+#          set -euo pipefail
+#          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner | sort -V | tail -1)
+#          "$APKSIGNER" verify --min-sdk-version 24 warpdroid.apk
+#          GOT=$("$APKSIGNER" verify --print-certs warpdroid.apk \
+#            | grep -m1 'SHA-256 digest' | awk '{print $NF}')
+#          if [ "$GOT" != "$EXPECTED_SHA256" ]; then
+#            echo "::error::APK signed by wrong key. got=$GOT want=$EXPECTED_SHA256" >&2
+#            exit 1
+#          fi
+#          echo "OK: signed by expected key."
+#
+#      - name: Publish APK to GitHub Release
+#        uses: softprops/action-gh-release@v2
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          tag_name: ${{ needs.version.outputs.tag }}
+#          name: ${{ needs.version.outputs.tag }}
+#          token: ${{ secrets.GITHUB_TOKEN }}
+#          files: |
+#            warpdroid/warpdroid.apk
+#            warpdroid/warpdroid_checksums.txt

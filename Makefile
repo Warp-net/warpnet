@@ -27,7 +27,8 @@ prune-testnet:
 	rm -rf $(HOME)/.warpdata/testnet/*
 
 check-heap:
-	go build -gcflags="-m" main.go
+	@go build -gcflags="-m" ./... 2> /tmp/warpnet-escape.log || true
+	@LC_ALL=C awk -f .github/scripts/heap-escape-report.awk /tmp/warpnet-escape.log
 
 update-deps:
 	go get -v -u all && go mod vendor
@@ -37,9 +38,6 @@ setup-hooks:
 
 ssh-do:
 	ssh root@207.154.221.44
-
-ssh-lightnode:
-	ssh root@130.94.88.38
 
 snapcraft:
 	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/ *.snap

@@ -36,7 +36,7 @@ import dagger.hilt.android.AndroidEntryPoint
  *
  * Warpdroid supports a smaller set of kinds than upstream Tusky because
  * Warpnet has no hashtag / trending / list timelines (those would require
- * §5 Tier B backend work). Today only LIKES / BOOKMARKS / QUOTES flow
+ * §5 Tier B backend work). Today only REACTIONS / BOOKMARKS / QUOTES flow
  * through here.
  */
 @AndroidEntryPoint
@@ -56,7 +56,7 @@ class TweetListActivity : BottomSheetActivity() {
         statusId = intent.getStringExtra(EXTRA_STATUS_ID)
 
         val title = when (kind) {
-            Kind.LIKES -> getString(R.string.title_likes)
+            Kind.REACTIONS -> getString(R.string.title_reactions)
             Kind.BOOKMARKS -> getString(R.string.title_bookmarks)
             Kind.QUOTES -> getString(R.string.title_quotes)
             else -> null
@@ -93,7 +93,7 @@ class TweetListActivity : BottomSheetActivity() {
         private const val EXTRA_STATUS_ID = "statusId"
 
         fun newLikesIntent(context: Context): Intent =
-            Intent(context, TweetListActivity::class.java).putExtra(EXTRA_KIND, Kind.LIKES.name)
+            Intent(context, TweetListActivity::class.java).putExtra(EXTRA_KIND, Kind.REACTIONS.name)
 
         fun newBookmarksIntent(context: Context): Intent =
             Intent(context, TweetListActivity::class.java).putExtra(EXTRA_KIND, Kind.BOOKMARKS.name)

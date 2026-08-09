@@ -27,7 +27,7 @@ resulting from the use or misuse of this software.
     <div class="flex container h-screen w-full">
       <SideNav />
 
-      <div class="w-full h-full overflow-y-scroll no-scrollbar">
+      <div class="w-full h-full overflow-y-scroll no-scrollbar" v-scroll:bottom="loadMore">
         <!-- Top navigation -->
         <div class="px-5 pt-3 flex items-center">
           <button
@@ -59,7 +59,14 @@ resulting from the use or misuse of this software.
         </div>
 
         <Loader :loading="loading" />
-        <Users :users="profiles" :loading="loading" />
+        <div
+          v-if="!loading && profiles.length === 0"
+          class="flex flex-col items-center justify-center w-full pt-10 px-6 text-center"
+        >
+          <p class="font-bold text-lg">Not following anyone yet</p>
+          <p class="text-sm text-dark">When {{ profile?.username || 'this user' }} follows someone, they'll show up here.</p>
+        </div>
+        <Users v-if="profiles.length" :users="profiles" :loading="loading" />
       </div>
 
       <div
@@ -91,6 +98,7 @@ export default {
       loading: true,
       profile: undefined,
       profiles: [],
+      pendingProfiles: new Set(),
     };
   },
   methods: {
@@ -110,12 +118,51 @@ export default {
         },
       });
     },
+    // Each row hydrates independently: the profile replaces its placeholder
+    // when it arrives, the avatar updates the entry separately, and a
+    // hanging peer only leaves its own placeholder in place.
+    async hydrateProfile(id) {
+      if (!id || this.pendingProfiles.has(id)) return;
+      this.pendingProfiles.add(id);
+      try {
+        let u;
+        try {
+          u = await warpnetService.getProfile(id, this.profile?.node_id);
+        } catch (err) {
+          console.error('failed to load followed profile:', id, err);
+        }
+        const i = this.profiles.findIndex((p) => p && p.id === id);
+        if (i === -1) return;
+        if (!u || !u.id) {
+          this.profiles.splice(i, 1);
+          return;
+        }
+        this.profiles.splice(i, 1, u);
+        try {
+          const avatar = await warpnetService.getImage({userId: id, key: u.avatar_key});
+          if (avatar) {
+            const j = this.profiles.findIndex((p) => p && p.id === id);
+            if (j !== -1) this.profiles.splice(j, 1, {...u, avatar});
+          }
+        } catch (err) {
+          console.warn('failed to load followed avatar:', id, err);
+        }
+      } finally {
+        this.pendingProfiles.delete(id);
+      }
+    },
+    seedProfiles(ids) {
+      const fresh = [];
+      for (const id of ids || []) {
+        if (!id || this.profiles.some((p) => p && p.id === id)) continue;
+        this.profiles.push({ id });
+        fresh.push(id);
+      }
+      return Promise.all(fresh.map((id) => this.hydrateProfile(id)));
+    },
     async loadMore() {
       const followings = await warpnetService.getFollowings({userId:this.profile.id, cursorReset: false})
-      for (const id of followings) {
-        const u = await warpnetService.getProfile(id, this.profile?.node_id)
-        this.profiles.push(u)
-      }
+      this.seedProfiles(followings);
     },
   },
   async created() {
@@ -126,14 +173,10 @@ export default {
       this.profile = await warpnetService.getProfile(profileId);
 
       const followings = await warpnetService.getFollowings({userId:profileId, cursorReset: true})
-      for (const id of followings) {
-        const u = await warpnetService.getProfile(id, this.profile?.node_id)
-        if (!u) {
-          continue
-        }
-        this.profiles.push(u)
-        this.loading = false;
-      }
+      await Promise.race([
+        this.seedProfiles(followings),
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
     } catch (err) {
       console.error("loading component:", this.$options.name, err)
     } finally {

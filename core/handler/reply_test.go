@@ -112,8 +112,8 @@ func TestStreamNewReplyHandler(t *testing.T) {
 			if not.Type != domain.NotificationReplyType {
 				t.Fatalf("expected reply type, got: %v", not.Type)
 			}
-			if not.UserId != parentUser {
-				t.Fatalf("expected notification for parent user, got: %v", not.UserId)
+			if not.RecepientId != parentUser {
+				t.Fatalf("expected notification for parent user, got: %v", not.RecepientId)
 			}
 			return nil
 		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: parentUser, ID: nodeID}})
@@ -311,6 +311,51 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		r := resp.(event.TweetsResponse)
 		if len(r.Tweets) != 1 || r.Tweets[0].Id != "m1" {
 			t.Fatalf("expected forwarded reply m1, got %+v", r.Tweets)
+		}
+	})
+
+	t.Run("root author's node view wins over the local index", func(t *testing.T) {
+		// The parent author's node holds the whole thread; one local reply of
+		// the owner must not shadow it.
+		local := []domain.Tweet{{Id: "01LOCAL"}}
+		forwarded := event.TweetsResponse{Tweets: []domain.Tweet{{Id: "01LOCAL"}, {Id: "r2"}, {Id: "r3"}}}
+		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		}}
+		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			return marshal(t, forwarded), nil
+		}}
+		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
+			return local, "", nil
+		}}, userRepo, streamer)
+		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.TweetsResponse)
+		if len(r.Tweets) != 3 {
+			t.Fatalf("expected the home node's thread, got %+v", r.Tweets)
+		}
+	})
+
+	t.Run("falls back to the local index when the home node is unreachable", func(t *testing.T) {
+		local := []domain.Tweet{{Id: "01LOCAL"}}
+		userRepo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		}}
+		streamer := stubStreamer{genericStreamFn: func(nodeId string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			return nil, warpnet.ErrNodeIsOffline
+		}}
+		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
+			return local, "", nil
+		}}, userRepo, streamer)
+		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.TweetsResponse)
+		if len(r.Tweets) != 1 || r.Tweets[0].Id != "01LOCAL" {
+			t.Fatalf("expected the local fallback, got %+v", r.Tweets)
 		}
 	})
 }

@@ -61,11 +61,13 @@ resulting from the use or misuse of this software.
             id="compose-tweet"
             ref="composeTweet"
             v-model="tweet.text"
-            maxlength="280"
             placeholder="What's happening?"
             class="w-full focus:outline-none mt-3 pb-3"
           ></textarea>
-          <div class="text-right text-xs text-dark">{{ tweet.text.length }} / 280</div>
+          <div
+            class="text-right text-xs"
+            :class="tweetLength >= 280 ? 'text-red-600 font-semibold' : (tweetLength >= 260 ? 'text-yellow-600' : 'text-dark')"
+          >{{ tweetLength }} / 280</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
@@ -92,16 +94,76 @@ resulting from the use or misuse of this software.
               </button>
             </div>
           </div>
+          <div v-if="videoAttachment" class="relative inline-block mt-2 mb-2">
+            <video
+                :src="videoAttachment.url"
+                controls
+                preload="metadata"
+                class="max-h-[16rem] rounded border border-lighter"
+            ></video>
+            <button
+                @click="removeVideoAttachment"
+                type="button"
+                class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500"
+                title="Remove video"
+            >
+              <i class="fas fa-times text-red-600 hover:text-white"></i>
+            </button>
+            <div v-if="!videoKey" class="text-xs text-dark mt-1">Uploading video…</div>
+          </div>
+          <div v-if="poll" class="mt-2 mb-2 border border-lighter rounded p-3">
+            <div v-for="(option, index) in poll.options" :key="index" class="flex items-center mb-2">
+              <label :for="`poll-option-${index}`" class="sr-only">Choice {{ index + 1 }}</label>
+              <input
+                  :id="`poll-option-${index}`"
+                  v-model="poll.options[index]"
+                  type="text"
+                  :placeholder="`Choice ${index + 1}`"
+                  :maxlength="pollOptionCharLimit"
+                  class="w-full px-3 py-2 border border-lighter rounded focus:outline-none"
+              />
+              <button
+                  v-if="poll.options.length > pollMinOptions"
+                  @click="removePollOption(index)"
+                  type="button"
+                  class="ml-2 rounded-full w-9 h-9 flex-none flex items-center justify-center hover:bg-lighter"
+                  :aria-label="`Remove choice ${index + 1}`"
+                  title="Remove choice"
+              >
+                <i class="fas fa-times text-dark" aria-hidden="true"></i>
+              </button>
+            </div>
+            <div class="flex items-center justify-between">
+              <button
+                  v-if="poll.options.length < pollMaxOptions"
+                  @click="addPollOption"
+                  type="button"
+                  class="text-sm text-blue hover:underline"
+              >
+                <i class="fas fa-plus mr-1" aria-hidden="true"></i>Add a choice
+              </button>
+              <span v-else></span>
+              <div class="flex items-center text-sm">
+                <label for="poll-length" class="text-dark mr-2">Poll length</label>
+                <!-- bg-white, not the UA default: the global CSS themes input
+                     and textarea but not select, so without a mapped surface
+                     the themed text lands on light grey in dark mode. -->
+                <select id="poll-length" v-model="poll.durationHours" class="bg-white border border-lighter rounded px-2 py-1">
+                  <option v-for="d in pollDurations" :key="d.hours" :value="d.hours">{{ d.label }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
           <div class="flex items-center justify-between border-t border-lighter pt-2">
             <div class="flex items-center">
               <button
                   @click="openFileInput('imageUrlFileInput')"
                   class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
-                  :class="{'opacity-50 cursor-not-allowed': imageAttachments.length >= 4}"
+                  :class="{'opacity-50 cursor-not-allowed': imageAttachDisabled}"
                   type="button"
-                  :disabled="imageAttachments.length >= 4"
+                  :disabled="imageAttachDisabled"
                   aria-label="Attach image"
-                  :title="imageAttachments.length >= 4 ? 'Maximum 4 images' : 'Attach image'"
+                  :title="imageAttachTitle"
               >
                 <i class="far fa-image" aria-hidden="true"></i>
               </button>
@@ -113,24 +175,63 @@ resulting from the use or misuse of this software.
                   multiple
                   class="hidden"
               />
-              <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Attach video (coming soon)" title="Coming soon">
+              <button
+                  @click="openFileInput('videoFileInput')"
+                  class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                  :class="{'opacity-50 cursor-not-allowed': videoAttachDisabled}"
+                  type="button"
+                  :disabled="videoAttachDisabled"
+                  aria-label="Attach video"
+                  :title="videoAttachTitle"
+              >
                 <i class="fas fa-film" aria-hidden="true"></i>
               </button>
-              <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Add poll (coming soon)" title="Coming soon">
+              <input
+                  @change="videoFileChange"
+                  ref="videoFileInput"
+                  :accept="acceptedVideoTypes"
+                  type="file"
+                  class="hidden"
+              />
+              <button
+                  @click="togglePoll"
+                  class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                  :class="poll ? 'text-white bg-blue' : 'text-blue'"
+                  type="button"
+                  aria-label="Add poll"
+                  :aria-pressed="!!poll"
+                  :title="poll ? 'Remove poll' : 'Add poll'"
+              >
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
-              <button type="button" disabled class="text-lg text-blue mr-3 rounded-full w-9 h-9 flex items-center justify-center opacity-50 cursor-not-allowed" aria-label="Add emoji (coming soon)" title="Coming soon">
-                <i class="far fa-smile" aria-hidden="true"></i>
-              </button>
+              <div class="relative mr-3" data-emoji-anchor>
+                <button
+                    type="button"
+                    @click="showEmojiPicker = !showEmojiPicker"
+                    class="text-lg text-blue rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                    aria-label="Add emoji"
+                    title="Add emoji"
+                    :aria-expanded="showEmojiPicker"
+                >
+                  <i class="far fa-smile" aria-hidden="true"></i>
+                </button>
+                <EmojiPicker
+                    v-if="showEmojiPicker"
+                    @select="insertEmoji"
+                    @close="showEmojiPicker = false"
+                />
+              </div>
             </div>
             <button
               @click="addNewTweet"
               type="button"
               class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
-              :class="(tweet.text.trim() && pendingReads === 0) ? '' : 'opacity-50 cursor-not-allowed'"
-              :disabled="!tweet.text.trim() || pendingReads > 0"
+              :class="(tweet.text.trim() && pendingReads === 0 && !posting && !videoUploading && pollReady) ? '' : 'opacity-50 cursor-not-allowed'"
+              :disabled="!tweet.text.trim() || pendingReads > 0 || posting || videoUploading || !pollReady"
+              :title="videoUploading ? 'Uploading video…' : (pendingReads > 0 ? 'Uploading image…' : (!pollReady ? 'Fill in every poll choice' : ''))"
             >
-              Tweet
+              <span v-if="!posting">Tweet</span>
+              <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Posting…</span>
             </button>
           </div>
         </div>
@@ -156,19 +257,18 @@ resulting from the use or misuse of this software.
         </button>
       </div>
       <Tweets :tweets="timeline" />
+      <div v-if="loadingMore" class="py-4 flex justify-center text-dark" role="status" aria-label="Loading more">
+        <i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i>
+      </div>
+      <div v-else-if="endOfFeed && timeline.length > 0" class="py-4 text-center text-sm text-dark">
+        You're all caught up.
+      </div>
     </div>
     <InfoOverlay
         :visible="showInfo"
         :content="infoContent"
         :position="infoPosition"
     />
-    <!-- Toast notifications -->
-    <div v-if="toastMessage" class="toast-container">
-      <div :class="['toast', toastType === 'error' ? 'toast-error' : 'toast-success']" role="alert">
-        <i :class="toastType === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'" aria-hidden="true"></i>
-        {{ toastMessage }}
-      </div>
-    </div>
     <!-- default right bar -->
     <DefaultRightBar
         :profile="profile"
@@ -194,6 +294,28 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
+import {toast} from "@/lib/toast";
+import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
+import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+import {createTimelineMerger} from "@/lib/unified-timeline";
+import {isMastodonTweet, isMastodonUser, isOwnTweetEcho} from "@/lib/network";
+
+const tweetCharLimit = 280;
+// Mastodon sources are polled much slower than the 10s local-timeline poll:
+// every page is a per-handle fan-out through the gateway.
+const mastodonRefreshMs = 75000;
+// Mirrors domain.PollMinOptions / PollMaxOptions / PollOptionRuneLimit — the
+// node rejects a poll outside these bounds.
+const pollMinOptions = 2;
+const pollMaxOptions = 4;
+const pollOptionCharLimit = 25;
+const pollDurations = [
+  {hours: 1, label: '1 hour'},
+  {hours: 6, label: '6 hours'},
+  {hours: 24, label: '1 day'},
+  {hours: 72, label: '3 days'},
+  {hours: 168, label: '7 days'},
+];
 
 export default {
   name: "Home",
@@ -205,6 +327,7 @@ export default {
     InfoOverlay: defineAsyncComponent(() => import('@/components/InfoOverlay.vue')),
     AltTextModal: defineAsyncComponent(() => import('@/components/AltTextModal.vue')),
     ImportTweetsModal: defineAsyncComponent(() => import('@/components/ImportTweetsModal.vue')),
+    EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
   data() {
     return {
@@ -217,19 +340,91 @@ export default {
       showImportModal: false,
       timeline: [],
       showInfo: false,
-      infoContent: '',
+      infoContent: {},
       infoPosition: { top: '0px', left: '0px' },
       imageAttachments: [],
       imageKeys: [],
       pendingReads: 0,
       altModalIndex: -1,
-      videoAttachment: undefined,
-      toastMessage: '',
-      toastType: 'error',
-      toastTimeoutId: null,
+      videoAttachment: null,
+      videoKey: '',
+      videoPosterKey: '',
+      videoUploading: false,
+      posting: false,
+      loadingMore: false,
+      endOfFeed: false,
+      showEmojiPicker: false,
+      poll: null,
     };
   },
+  watch: {
+    // The node caps a tweet at 280 runes, so the composer has to cap on runes
+    // too. A plain maxlength would count UTF-16 units and stop people halfway
+    // through their allowance as soon as they use emoji.
+    "tweet.text"(value) {
+      const clamped = clampRunes(value, tweetCharLimit);
+      if (clamped !== value) this.tweet.text = clamped;
+    },
+    '$route.query.compose'(val) {
+      if (val) {
+        this.focusCompose();
+      }
+    },
+  },
+  computed: {
+    tweetLength() {
+      return runeLength(this.tweet.text);
+    },
+    acceptedVideoTypes() {
+      return acceptedVideoAccept;
+    },
+    imageAttachDisabled() {
+      return this.imageAttachments.length >= 4 || !!this.videoAttachment;
+    },
+    imageAttachTitle() {
+      if (this.videoAttachment) return 'Remove the video to attach images';
+      return this.imageAttachments.length >= 4 ? 'Maximum 4 images' : 'Attach image';
+    },
+    videoAttachDisabled() {
+      return !!this.videoAttachment || this.imageAttachments.length > 0;
+    },
+    videoAttachTitle() {
+      if (this.videoAttachment) return 'Only one video per post';
+      if (this.imageAttachments.length > 0) return 'Remove images to attach a video';
+      return 'Attach video (MP4 or MOV)';
+    },
+    pollMinOptions() {
+      return pollMinOptions;
+    },
+    pollMaxOptions() {
+      return pollMaxOptions;
+    },
+    pollOptionCharLimit() {
+      return pollOptionCharLimit;
+    },
+    pollDurations() {
+      return pollDurations;
+    },
+    // A half-filled poll would be rejected by the node, so hold the post
+    // button until every choice has text.
+    pollReady() {
+      if (!this.poll) return true;
+      return this.poll.options.every(o => o.trim());
+    },
+  },
   methods: {
+    insertEmoji(emoji) {
+      const field = this.$refs.composeTweet;
+      const next = insertEmoji({
+        text: this.tweet.text,
+        emoji,
+        field,
+        limit: tweetCharLimit,
+      });
+      if (!next) return;
+      this.tweet.text = next.text;
+      this.$nextTick(() => focusCaret(field, next.caret));
+    },
     focusCompose() {
       this.$nextTick(() => {
         const el = this.$refs.composeTweet;
@@ -249,8 +444,13 @@ export default {
       }
     },
     onImageDrop(event) {
-      const files = Array.from(event.dataTransfer?.files || [])
-          .filter(f => f.type && f.type.startsWith('image/'));
+      const dropped = Array.from(event.dataTransfer?.files || []);
+      const videos = dropped.filter(f => f.type && f.type.startsWith('video/'));
+      if (videos.length > 0 && !this.videoAttachDisabled) {
+        this.addVideoFile(videos[0]);
+        return;
+      }
+      const files = dropped.filter(f => f.type && f.type.startsWith('image/'));
       if (files.length === 0) return;
       this.addImageFiles(files);
     },
@@ -271,14 +471,14 @@ export default {
               if (key) this.imageKeys[slot] = key;
             } catch (err) {
               console.error('Failed to upload image:', err);
-              this.showToast('Failed to upload image. Please try again.', 'error');
+              toast.error('Failed to upload image. Please try again.');
             }
           }
           this.pendingReads--;
         };
         reader.onerror = (error) => {
           console.error("Error reading file", error);
-          this.showToast('Error reading file. Please try again.', 'error');
+          toast.error('Error reading file. Please try again.');
           this.pendingReads--;
         };
       }
@@ -287,13 +487,104 @@ export default {
       this.imageAttachments.splice(index, 1);
       this.imageKeys.splice(index, 1);
     },
+    async videoFileChange() {
+      const input = this.$refs.videoFileInput;
+      const file = input && input.files && input.files[0];
+      if (input) {
+        input.value = '';
+      }
+      if (!file) return;
+      await this.addVideoFile(file);
+    },
+    async addVideoFile(file) {
+      const problem = validateVideoFile(file);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+
+      this.videoAttachment = {url: URL.createObjectURL(file), name: file.name};
+      this.videoKey = '';
+      this.videoPosterKey = '';
+      this.videoUploading = true;
+
+      const posterKey = await this.uploadVideoPoster(file);
+      if (this.videoAttachment) {
+        this.videoPosterKey = posterKey;
+      }
+
+      try {
+        const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
+        const key = await warpnetService.uploadVideo(dataUrl);
+        if (!key) {
+          throw new Error('node returned an empty video key');
+        }
+        this.videoKey = key;
+      } catch (err) {
+        console.error('Failed to upload video:', err);
+        toast.error(err?.message || 'Failed to upload video. Please try again.');
+        this.removeVideoAttachment();
+      } finally {
+        this.videoUploading = false;
+      }
+    },
+    // Best effort: a still beats an empty placeholder in the feed, but a clip
+    // the browser cannot decode must still post without one.
+    async uploadVideoPoster(file) {
+      try {
+        const poster = await captureVideoPoster(file);
+        if (!poster) return '';
+        return await warpnetService.uploadImage(poster) || '';
+      } catch (err) {
+        console.error('Failed to upload video poster:', err);
+        return '';
+      }
+    },
+    readFileAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('file read failed'));
+        reader.readAsDataURL(file);
+      });
+    },
+    removeVideoAttachment() {
+      if (this.videoAttachment && this.videoAttachment.url) {
+        URL.revokeObjectURL(this.videoAttachment.url);
+      }
+      this.videoAttachment = null;
+      this.videoKey = '';
+      this.videoPosterKey = '';
+    },
     openAltModal(index) {
       this.altModalIndex = index;
     },
+    togglePoll() {
+      this.poll = this.poll ? null : {options: ['', ''], durationHours: 24};
+    },
+    addPollOption() {
+      if (this.poll.options.length >= pollMaxOptions) return;
+      this.poll.options.push('');
+    },
+    removePollOption(index) {
+      if (this.poll.options.length <= pollMinOptions) return;
+      this.poll.options.splice(index, 1);
+    },
+    // The wire carries an absolute deadline, not a duration, so every node
+    // reading the tweet closes the poll at the same moment.
+    pollPayload() {
+      if (!this.poll) return null;
+      const expiresAt = new Date(Date.now() + this.poll.durationHours * 3600000);
+      return {
+        options: this.poll.options.map(o => o.trim()),
+        expiresAt: expiresAt.toISOString(),
+      };
+    },
     async addNewTweet() {
-      if (!this.tweet.text.trim()) return;
+      if (this.posting || !this.tweet.text.trim() || !this.pollReady) return;
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
+      this.posting = true;
       try {
         // Use pre-uploaded keys when available (fresh attachments). Fall
         // back to a bulk upload for any slots that haven't been uploaded
@@ -304,24 +595,65 @@ export default {
           const extra = await warpnetService.uploadImages(missing);
           imageKeys = imageKeys.concat(extra);
         }
-        await warpnetService.createTweet({text: draftText, imageKeys});
+        if (this.videoKey && this.videoPosterKey) {
+          // The captured frame rides along as the first image so readers can
+          // see a still without fetching the clip. The composer never mixes
+          // images and video, so it stays unambiguous on the other side.
+          imageKeys = [this.videoPosterKey, ...imageKeys];
+        }
+        await warpnetService.createTweet({
+          text: draftText, imageKeys, videoKey: this.videoKey, poll: this.pollPayload(),
+        });
 
         this.tweet.text = "";
         this.imageAttachments = [];
         this.imageKeys = [];
+        this.poll = null;
+        this.removeVideoAttachment();
+        this.endOfFeed = false;
 
-        this.timeline = await warpnetService.getMyTimeline(true);
+        await this.loadInitial();
       } catch (err) {
         console.error('Failed to post tweet:', err);
-        this.showToast('Failed to post tweet. Please try again.', 'error');
+        toast.error('Failed to post tweet. Please try again.');
+      } finally {
+        this.posting = false;
       }
     },
     async loadMore() {
-      const timeline = await warpnetService.getMyTimeline(false);
-      const known = new Set(this.timeline.map((t) => t && t.id));
-      this.timeline = this.timeline.concat(
-        timeline.filter((t) => t && t.id && !known.has(t.id))
-      );
+      if (this.loadingMore || this.endOfFeed) return;
+      this.loadingMore = true;
+      try {
+        if (this._merger) {
+          // Never interleave with the merged first page still in flight.
+          if (this._mergerFirstPage) await this._mergerFirstPage;
+          const {tweets, done} = await this._merger.nextPage();
+          const known = new Set(this.timeline.map((t) => t && t.id));
+          const fresh = tweets.filter((t) => t && t.id && !known.has(t.id));
+          if (fresh.length > 0) {
+            this.timeline = this.timeline.concat(fresh);
+          }
+          // An empty page alone must not end the feed: a source that missed
+          // this page's budget (or failed once) retries on the next scroll.
+          if (done) {
+            this.endOfFeed = true;
+          }
+        } else {
+          const timeline = await warpnetService.getMyTimeline(false);
+          const known = new Set(this.timeline.map((t) => t && t.id));
+          const fresh = timeline.filter((t) => t && t.id && !known.has(t.id));
+          if (fresh.length === 0) {
+            this.endOfFeed = true;
+          } else {
+            this.timeline = this.timeline.concat(fresh);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load more tweets:', err);
+        toast.error(err?.message || "Couldn't load more tweets.");
+      } finally {
+        this.loadingMore = false;
+      }
     },
     // Poll-driven live updates (no server push on the bridge): re-fetch
     // the first timeline page and prepend unseen tweets so new posts
@@ -335,7 +667,23 @@ export default {
         const page = await warpnetService.getMyTimeline(true);
         warpnetService.setCursor('timeline', savedCursor);
         const known = new Set(this.timeline.map((t) => t && t.id));
-        const fresh = page.filter((t) => t && t.id && !known.has(t.id));
+        let fresh = page.filter((t) => t && t.id && !known.has(t.id));
+        if (this._merger) {
+          // In merged mode "unseen" no longer implies "new": Mastodon rows
+          // displace older Warpnet tweets off the merged first page, and the
+          // poll would dump those stale tweets on top of the feed. Prepend
+          // only what is newer than the newest Warpnet tweet the merger has
+          // ever fetched (the visible feed may hold no Warpnet rows at all
+          // when followed Mastodon accounts out-post it) — the scroll path
+          // emits the rest in order.
+          const newest = Math.max(
+            this._merger.sourceNewestTs('warpnet'),
+            ...this.timeline
+              .filter((t) => t && !isMastodonTweet(t))
+              .map((t) => new Date(t.created_at).getTime() || 0),
+          );
+          fresh = fresh.filter((t) => (new Date(t.created_at).getTime() || 0) > newest);
+        }
         if (fresh.length > 0) {
           this.timeline = [...fresh, ...this.timeline];
         }
@@ -343,6 +691,104 @@ export default {
         console.error('Failed to refresh timeline:', err);
       } finally {
         this._timelineRefreshing = false;
+      }
+    },
+    // (Re)build the feed. With no bridged followees this is exactly the old
+    // single-source path; otherwise a merger interleaves the local timeline
+    // with one source per followed Mastodon handle.
+    async loadInitial() {
+      if (this._mastodonTimer) {
+        clearInterval(this._mastodonTimer);
+        this._mastodonTimer = null;
+      }
+      this._merger = null;
+      this._mergerFirstPage = null;
+      const [firstPage, handles] = await Promise.all([
+        warpnetService.getMyTimeline(true),
+        this.loadBridgedHandles(),
+      ]);
+      if (handles.length === 0) {
+        this.timeline = firstPage;
+        return;
+      }
+      // The warpnet adapter delegates cursor state to the global 'timeline'
+      // key (getMyTimeline owns it), so refreshTimeline's save/restore and
+      // its keyword-filter refetch loop keep working unchanged. The page
+      // fetched above seeds the first call instead of being refetched.
+      let seeded = firstPage;
+      const ownerId = warpnetService.getOwnerProfile()?.user_id;
+      this._merger = createTimelineMerger({
+        sources: [
+          {
+            id: 'warpnet',
+            prefiltered: true,
+            skipRefresh: true,
+            fetchPage: async () => {
+              const tweets = seeded ?? await warpnetService.getMyTimeline(false);
+              seeded = null;
+              return {tweets, cursor: warpnetService.getCursor('timeline') || 'end'};
+            },
+          },
+          ...handles.map((handle) => ({
+            id: handle,
+            fetchPage: async (cursor) => {
+              const page = await warpnetService.getUserTweetsPage({userId: handle, cursor});
+              // A followee boosting the owner's own federated tweet echoes
+              // it back — drop it, same as getMyTimeline does locally.
+              return {...page, tweets: page.tweets.filter((t) => !isOwnTweetEcho(t, ownerId))};
+            },
+          })),
+        ],
+        applyFilters: (tweets) => warpnetService.applyHomeFilters(tweets),
+      });
+      // Paint the local page immediately; the merged first page (which fans
+      // out to possibly slow bridged instances) replaces it when it lands,
+      // and holds the loader for at most a second of that wait.
+      this.timeline = firstPage;
+      this._mergerFirstPage = this._merger.nextPage()
+          .then(({tweets}) => { this.timeline = tweets; })
+          .catch((err) => console.warn('merged first page failed:', err))
+          .finally(() => { this._mergerFirstPage = null; });
+      await Promise.race([
+        this._mergerFirstPage,
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
+      this._mastodonTimer = setInterval(() => this.refreshMastodon(), mastodonRefreshMs);
+    },
+    // The owner's followed fediverse handles, minus blocked/muted ones. Any
+    // failure degrades to a plain Warpnet-only home feed.
+    async loadBridgedHandles() {
+      try {
+        const owner = warpnetService.getOwnerProfile();
+        if (!owner || !owner.user_id) return [];
+        const ids = await warpnetService.listFollowingIds(owner.user_id);
+        const handles = ids.filter((id) => isMastodonUser({id}));
+        const visible = [];
+        for (const handle of handles) {
+          if (await warpnetService.isUserBlocked(handle)) continue;
+          if (await warpnetService.isUserMuted(handle)) continue;
+          visible.push(handle);
+        }
+        return visible;
+      } catch (err) {
+        console.warn('bridged followees unavailable:', err);
+        return [];
+      }
+    },
+    async refreshMastodon() {
+      if (!this._merger || this._mastodonRefreshing || this.loading) return;
+      this._mastodonRefreshing = true;
+      try {
+        const fresh = await this._merger.refreshNewest();
+        const known = new Set(this.timeline.map((t) => t && t.id));
+        const add = fresh.filter((t) => t && t.id && !known.has(t.id));
+        if (add.length > 0) {
+          this.timeline = [...add, ...this.timeline];
+        }
+      } catch (err) {
+        console.warn('mastodon refresh failed:', err);
+      } finally {
+        this._mastodonRefreshing = false;
       }
     },
     async toggleInfo(event) {
@@ -364,18 +810,26 @@ export default {
     async getInfo() {
       return await warpnetService.getNodeInfo();
     },
-    showToast(message, type = 'error') {
-      if (this.toastTimeoutId) clearTimeout(this.toastTimeoutId);
-      this.toastMessage = message;
-      this.toastType = type;
-      this.toastTimeoutId = setTimeout(() => {
-        this.toastMessage = '';
-        this.toastTimeoutId = null;
-      }, 4000);
+    // Composer avatar / background for the right bar: they fill in whenever
+    // they arrive and must not delay the timeline's first paint.
+    async loadProfileAssets() {
+      try {
+        const fullProfile = await warpnetService.getProfile(this.profile.user_id);
+        if (fullProfile && !fullProfile.code) {
+          this.profile.background_image = fullProfile.background_image_key
+              ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.background_image_key})
+              : null;
+          this.profile.avatar = fullProfile.avatar_key
+              ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.avatar_key})
+              : null;
+        }
+      } catch (error) {
+        console.error("Failed to load profile assets:", error);
+      }
     },
     onTweetsImported(result) {
       const n = (result && result.imported_tweets) || 0;
-      this.showToast(`Imported ${n} tweet${n === 1 ? '' : 's'}. View them on your profile.`, 'success');
+      toast.success(`Imported ${n} tweet${n === 1 ? '' : 's'}. View them on your profile.`);
     },
     async consumeDeepLink() {
       // No URL router for profiles — route through Search.
@@ -389,23 +843,15 @@ export default {
     console.log("loading component:", this.$options.name);
 
     this.profile = warpnetService.getOwnerProfile();
+    this.loadProfileAssets();
 
     try {
-      const fullProfile = await warpnetService.getProfile(this.profile.user_id);
-      if (fullProfile && !fullProfile.code) {
-        this.profile.background_image = fullProfile.background_image_key
-            ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.background_image_key})
-            : null;
-        this.profile.avatar = fullProfile.avatar_key
-            ? await warpnetService.getImage({userId:this.profile.user_id, key:fullProfile.avatar_key})
-            : null;
-      }
-    } catch (error) {
-      console.error("Failed to load profile assets:", error);
+      await this.loadInitial();
+    } catch (err) {
+      console.error('Failed to load timeline:', err);
+    } finally {
+      this.loading = false;
     }
-
-    this.timeline = await warpnetService.getMyTimeline(true);
-    this.loading = false;
 
     this._timelineTimer = setInterval(() => this.refreshTimeline(), 10000);
 
@@ -422,25 +868,21 @@ export default {
       this.focusCompose();
     }
   },
-  watch: {
-    '$route.query.compose'(val) {
-      if (val) {
-        this.focusCompose();
-      }
-    },
-  },
   beforeUnmount() {
     if (this._timelineTimer) {
       clearInterval(this._timelineTimer);
       this._timelineTimer = null;
     }
-    if (this.toastTimeoutId) {
-      clearTimeout(this.toastTimeoutId);
-      this.toastTimeoutId = null;
+    if (this._mastodonTimer) {
+      clearInterval(this._mastodonTimer);
+      this._mastodonTimer = null;
     }
     if (this._deepLinkFocusHandler) {
       window.removeEventListener("focus", this._deepLinkFocusHandler);
       this._deepLinkFocusHandler = null;
+    }
+    if (this.videoAttachment && this.videoAttachment.url) {
+      URL.revokeObjectURL(this.videoAttachment.url);
     }
   },
 };

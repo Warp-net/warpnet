@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/docker/go-units"
 )
@@ -45,25 +47,26 @@ const (
 	ErrUnknownClientPeer middlewareError = `["middleware: auth: unknown client peer"]`
 	ErrStreamReadError   middlewareError = `["middleware: stream: reading failed"]`
 	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
+	ErrStaleMessage      middlewareError = `["middleware: auth: stale or replayed message"]`
 )
 
+// messageFreshnessWindow caps how far a signed timestamp may drift from now.
+const messageFreshnessWindow = 5 * time.Minute
+
 const (
-	MaxLimit = units.MiB * 5 // TODO size limit???
-	// ImportTweetMaxLimit is the inbound cap for the per-tweet streaming import
-	// route: one tweet plus up to four base64 photos. The browser parses and
-	// filters the archive client-side and streams kept tweets one by one, so
-	// the node never buffers the whole archive.
-	ImportTweetMaxLimit   = units.MiB * 32
+	MaxLimit              = units.MiB * 50
 	InternalNodeErrorCode = 5000
 )
 
 type WarpMiddleware struct {
-	idempotency *idempotencyCache
+	idempotency     *idempotencyCache
+	freshnessWindow time.Duration
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	wm := &WarpMiddleware{
-		idempotency: newIdempotencyCache(idempotencyTTL),
+		idempotency:     newIdempotencyCache(idempotencyTTL),
+		freshnessWindow: messageFreshnessWindow,
 	}
 	return wm
 }

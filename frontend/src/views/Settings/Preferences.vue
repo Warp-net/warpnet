@@ -30,6 +30,17 @@
           <input type="checkbox" v-model="prefs.sensitive" class="mr-2" />
           <span class="font-bold">Mark media as sensitive by default</span>
         </label>
+        <label class="flex items-start">
+          <input type="checkbox" v-model="prefs.dataSaver" class="mr-2 mt-1" />
+          <span>
+            <span class="font-bold">Data saver</span>
+            <span class="block text-sm text-dark">
+              Never download a video until you press play. Videos in the
+              timeline already wait for a tap; this extends that to opened
+              posts too.
+            </span>
+          </span>
+        </label>
         <label class="block">
           <span class="font-bold">Default language</span>
           <input
@@ -49,7 +60,10 @@
         >
           {{ saving ? 'Saving…' : 'Save' }}
         </button>
-        <p v-if="savedMessage" class="text-sm text-dark">{{ savedMessage }}</p>
+        <p v-if="savedMessage" class="text-sm font-medium" :class="saveError ? 'text-red-600' : 'text-green-700'">
+          <i :class="saveError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'" aria-hidden="true"></i>
+          {{ savedMessage }}
+        </p>
       </form>
     </div>
     <DefaultRightBar :profile="ownerProfile" />
@@ -59,6 +73,7 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "SettingsPreferences",
@@ -72,38 +87,45 @@ export default {
       loading: true,
       saving: false,
       savedMessage: '',
+      saveError: false,
       ownerProfile: {},
-      prefs: { privacy: 'public', sensitive: false, language: 'en' },
+      prefs: { privacy: 'public', sensitive: false, language: 'en', dataSaver: false },
     };
   },
   methods: {
     async save() {
       this.saving = true;
       this.savedMessage = '';
+      this.saveError = false;
       try {
-        if (typeof warpnetService.updateAccountSource === 'function') {
-          await warpnetService.updateAccountSource(this.prefs);
-        } else {
-          // Backend endpoint not wired yet — preserve UI flow without a service stub
-          await new Promise(r => setTimeout(r, 200));
-        }
+        await warpnetService.updateAccountSource(this.prefs);
         this.savedMessage = 'Saved';
       } catch (err) {
         console.error('Failed to save preferences:', err);
         this.savedMessage = 'Failed to save';
+        this.saveError = true;
+        toast.error(err?.message || 'Failed to save preferences. Please try again.');
       } finally {
         this.saving = false;
+        if (this._savedTimer) clearTimeout(this._savedTimer);
+        this._savedTimer = setTimeout(() => { this.savedMessage = ''; }, 3000);
       }
     },
+  },
+  beforeUnmount() {
+    if (this._savedTimer) clearTimeout(this._savedTimer);
   },
   async created() {
     this.ownerProfile = warpnetService.getOwnerProfile();
     try {
       const profile = await warpnetService.getProfile(this.ownerProfile?.user_id);
-      if (profile?.source) {
-        this.prefs.privacy = profile.source.privacy || 'public';
-        this.prefs.sensitive = !!profile.source.sensitive;
-        this.prefs.language = profile.source.language || 'en';
+      const meta = profile?.metadata;
+      if (meta) {
+        this.prefs.privacy = meta.privacy || 'public';
+        this.prefs.sensitive = meta.sensitive === 'true';
+        this.prefs.language = meta.language || 'en';
+        this.prefs.dataSaver = meta.data_saver === 'true';
+        warpnetService.cacheDataSaver(this.prefs.dataSaver);
       }
     } catch (err) {
       console.error('Failed to load preferences:', err);

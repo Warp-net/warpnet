@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     getProfile: vi.fn(),
+    getImage: vi.fn(),
     getFollowings: vi.fn(),
   },
 }));
@@ -50,6 +51,7 @@ beforeEach(() => {
     id,
     username: id,
   }));
+  warpnetService.getImage.mockResolvedValue(null);
   warpnetService.getFollowings.mockResolvedValue([]);
 });
 
@@ -105,6 +107,35 @@ describe('Following.vue', () => {
         params: { id: 'bob' },
       });
     });
+  });
+
+  it('renders resolved followings without waiting for a hanging sibling profile', async () => {
+    warpnetService.getFollowings.mockResolvedValueOnce(['carol', 'slowpoke']);
+    warpnetService.getProfile.mockImplementation((id) =>
+      id === 'slowpoke' ? new Promise(() => {}) : Promise.resolve({ id, username: id })
+    );
+
+    renderFollowing();
+
+    expect(
+      await screen.findByText('carol', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+  });
+
+  it('renders following rows without waiting for a slow avatar', async () => {
+    warpnetService.getFollowings.mockResolvedValueOnce(['carol']);
+    warpnetService.getProfile.mockImplementation(async (id) => ({
+      id,
+      username: id,
+      avatar_key: 'some-key',
+    }));
+    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+
+    renderFollowing();
+
+    expect(
+      await screen.findByText('carol', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
   });
 
   it('skips followings whose profile cannot be resolved (edge case)', async () => {

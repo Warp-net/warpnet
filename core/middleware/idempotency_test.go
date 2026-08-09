@@ -77,7 +77,7 @@ func TestIdempotencyCache_DistinctKeysIsolated(t *testing.T) {
 	if v, _ := c.get(idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-2")); !bytes.Equal(v, []byte("b")) {
 		t.Fatalf("unexpected value for msg-2: %s", v)
 	}
-	if _, ok := c.get(idempotencyKey("/public/post/like/0.0.0", "peer-1", "msg-1")); ok {
+	if _, ok := c.get(idempotencyKey("/public/post/react/0.0.0", "peer-1", "msg-1")); ok {
 		t.Fatal("expected miss for different protocol")
 	}
 	if _, ok := c.get(idempotencyKey("/private/post/tweet/0.0.0", "peer-2", "msg-1")); ok {
@@ -112,7 +112,7 @@ func TestIdempotencyCache_EmptyResponseNotStored(t *testing.T) {
 func TestIsIdempotencyApplicable(t *testing.T) {
 	cases := map[string]bool{
 		"/private/post/tweet/0.0.0":   true,
-		"/public/post/like/0.0.0":     true,
+		"/public/post/react/0.0.0":    true,
 		"/public/get/tweet/0.0.0":     false,
 		"/private/delete/tweet/0.0.0": false,
 	}

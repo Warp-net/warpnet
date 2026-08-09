@@ -297,7 +297,7 @@ private fun DetailedStatistics(
                 }
         )
         Text(
-            text = getMetaDataText(R.plurals.favs, statusViewData.status.likesCount),
+            text = getMetaDataText(R.plurals.reactions_plural, statusViewData.status.reactionsCount),
             style = LocalPreferences.current.statusTextStyles.medium,
             color = warpdroidColors.tertiaryTextColor,
             modifier = Modifier

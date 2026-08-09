@@ -22,17 +22,34 @@
       </div>
 
       <div v-if="!loading && tweet && !notFound">
-        <TweetBlock ref="rootTweet" :tweet="tweet" />
+        <TweetBlock ref="rootTweet" :tweet="tweet" :autoloadVideo="autoloadVideo" />
 
         <div class="border-t border-lighter p-3 flex flex-col gap-2">
           <textarea
+            ref="replyBox"
             v-model="replyText"
             rows="2"
-            maxlength="280"
             placeholder="Tweet your reply"
             class="w-full rounded border border-lighter bg-white p-2 focus:outline-none focus:ring-2 focus:ring-blue text-sm"
           ></textarea>
-          <div class="flex justify-end">
+          <div class="flex items-center justify-between">
+            <div class="relative" data-emoji-anchor>
+              <button
+                type="button"
+                @click="showEmojiPicker = !showEmojiPicker"
+                class="text-lg text-blue rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                aria-label="Add emoji"
+                title="Add emoji"
+                :aria-expanded="showEmojiPicker"
+              >
+                <i class="far fa-smile" aria-hidden="true"></i>
+              </button>
+              <EmojiPicker
+                v-if="showEmojiPicker"
+                @select="insertEmoji"
+                @close="showEmojiPicker = false"
+              />
+            </div>
             <button
               @click="postReply"
               :disabled="posting || !replyText.trim()"
@@ -54,6 +71,9 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+
+const tweetCharLimit = 280;
 
 export default {
   name: "Tweet",
@@ -62,6 +82,7 @@ export default {
     DefaultRightBar: defineAsyncComponent(() => import('@/components/DefaultRightBar.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     TweetBlock: defineAsyncComponent(() => import('@/components/TweetBlock.vue')),
+    EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
   data() {
     return {
@@ -72,9 +93,34 @@ export default {
       ownerProfile: {},
       replyText: '',
       posting: false,
+      showEmojiPicker: false,
     };
   },
+  watch: {
+    // Runes, not UTF-16 units: matches the 280 the node enforces.
+    replyText(value) {
+      const clamped = clampRunes(value, tweetCharLimit);
+      if (clamped !== value) this.replyText = clamped;
+    },
+  },
+  computed: {
+    autoloadVideo() {
+      return !warpnetService.isDataSaverEnabled();
+    },
+  },
   methods: {
+    insertEmoji(emoji) {
+      const field = this.$refs.replyBox;
+      const next = insertEmoji({
+        text: this.replyText,
+        emoji,
+        field,
+        limit: tweetCharLimit,
+      });
+      if (!next) return;
+      this.replyText = next.text;
+      this.$nextTick(() => focusCaret(field, next.caret));
+    },
     async loadTweet() {
       const tweetId = this.$route.params.id;
       const userIdHint = this.$route.query.u || this.ownerProfile?.user_id;
@@ -104,15 +150,24 @@ export default {
       }
       this.tweet = fetched;
 
-      const root = this.tweet.root_id || this.tweet.id;
-      const repliesPage = await warpnetService.getReplies({
-        rootId: root,
-        parentId: this.tweet.id,
-        // user_id is the root author only when this tweet is the root itself.
-        rootUserId: root === this.tweet.id ? this.tweet.user_id : undefined,
-        cursorReset: true,
-      });
-      this.replies = Array.isArray(repliesPage) ? repliesPage : (repliesPage?.replies || []);
+      // The reply tree fills in below the root independently — a slow
+      // thread page must not hold back the tweet itself.
+      this.loadReplies();
+    },
+    async loadReplies() {
+      try {
+        const root = this.tweet.root_id || this.tweet.id;
+        const repliesPage = await warpnetService.getReplies({
+          rootId: root,
+          parentId: this.tweet.id,
+          // user_id is the root author only when this tweet is the root itself.
+          rootUserId: root === this.tweet.id ? this.tweet.user_id : undefined,
+          cursorReset: true,
+        });
+        this.replies = Array.isArray(repliesPage) ? repliesPage : (repliesPage?.replies || []);
+      } catch (err) {
+        console.error('Failed to load replies:', err);
+      }
     },
     async postReply() {
       const text = this.replyText.trim();

@@ -49,13 +49,13 @@ export default function time(_date) {
     .startOf("day");
 
   if (date <= yesterday) {
-    // Jan 31, 6:30 PM
-    return date.format("MMM D, h:mm A");
+    // Jan 31, 18:30
+    return date.format("MMM D, HH:mm");
   } else if (date <= today) {
-    // Yesterday, 6:30 PM
-    return `Yesterday, ${date.format("h:mm A")}`;
+    // Yesterday, 18:30
+    return `Yesterday, ${date.format("HH:mm")}`;
   } else {
-    // 6:30 PM
-    return date.format("h:mm A");
+    // 18:30
+    return date.format("HH:mm");
   }
 }

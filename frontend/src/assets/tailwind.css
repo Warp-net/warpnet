@@ -31,6 +31,24 @@ body {
   height: 100%;
 }
 
+/* App.vue's fixed top banners (network / node connection) would otherwise sit
+   on top of every view's header. They publish their measured height here, and
+   the padding reserves it — box-sizing is border-box, so body still ends at the
+   bottom of the viewport. Views size themselves with h-screen (100vh), which
+   ignores that padding, so the utility is patched once here instead of in the
+   22 view files that use it. */
+:root {
+  --top-banner-h: 0px;
+}
+
+body {
+  padding-top: var(--top-banner-h);
+}
+
+.h-screen {
+  height: calc(100vh - var(--top-banner-h));
+}
+
 /* Preserve clean look for mouse users, but show focus ring for keyboard nav */
 button:focus:not(:focus-visible),
 input:focus:not(:focus-visible) {
@@ -164,6 +182,60 @@ button.rounded-full > i.fa {
   min-height: 2rem;
 }
 
+/* Brand-colored form controls: checkboxes, radios and selects render in the
+   magenta accent instead of the default OS blue, so the sign-up
+   acknowledgements and Settings toggles stay on-palette in every theme. */
+input[type="checkbox"],
+input[type="radio"],
+select {
+  accent-color: #C5007F;
+}
+
+/* Micro-interactions on the tweet action icons: a quick squash on press gives
+   tactile feedback, and liking / retweeting pops the icon as it changes color.
+   Applying the animation via the color class means it re-fires each time the
+   action is toggled on. */
+button.rounded-full > i.fas,
+button.rounded-full > i.far {
+  transition: transform 0.12s ease;
+}
+button.rounded-full:active > i.fas,
+button.rounded-full:active > i.far {
+  transform: scale(0.86);
+}
+@keyframes icon-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.45); }
+  55%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+i.fa-heart.text-red-600,
+i.fa-retweet.text-green-500 {
+  animation: icon-pop 0.32s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  button.rounded-full:active > i.fas,
+  button.rounded-full:active > i.far { transform: none; }
+  i.fa-heart.text-red-600,
+  i.fa-retweet.text-green-500 { animation: none; }
+}
+
+/* Active side-nav item: a persistent brand pill for the current route so the
+   selected destination reads at a glance (distinct from the hover tint).
+   Plain theme-scoped selectors keep it correct across all three themes. */
+.nav-active {
+  background-color: theme("colors.lightblue");
+  color: theme("colors.blue");
+}
+.dark .nav-active {
+  background-color: theme("colors.darktheme.foreground");
+  color: theme("colors.darktheme.text");
+}
+.mastodon .nav-active {
+  background-color: theme("colors.mastodon.foreground");
+  color: theme("colors.mastodon.text");
+}
+
 /* Toast notification container */
 .toast-container {
   position: fixed;
@@ -207,6 +279,16 @@ button.rounded-full > i.fa {
   background: #052e16;
   color: #86efac;
   border-color: #166534;
+}
+.toast-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+.dark .toast-info {
+  background: #0b1f3a;
+  color: #93c5fd;
+  border-color: #1e40af;
 }
 
 @keyframes toast-in {

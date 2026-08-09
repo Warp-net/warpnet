@@ -1,42 +1,34 @@
 #!/bin/bash
 
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
+# Mirrors pushed code to the Codeberg mirror (codeberg.org/Warpnet/warpnet).
+# Tags are not mirrored here: the Release workflow owns tagging.
+
+# Re-entry guard: the mirror push below invokes `git push` again, which would
+# otherwise re-trigger this hook (this recursion previously spawned runaway
+# hook/`git push codeberg` processes that hung for hours).
+if [ -n "${WARPNET_PREPUSH:-}" ]; then
     exit 0
 fi
+export WARPNET_PREPUSH=1
 
-echo "Pre-push hook started..."
+# Never mirror a push that is already aimed at the mirror.
+case "${2:-}" in
+    *codeberg.org*) exit 0 ;;
+esac
 
-FILE="version"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-if [ ! -f "$FILE" ]; then
-    echo "Version file not found!"
-    exit 1
-fi
+# Only the long-lived branches exist on the mirror; feature branches stay local.
+case "$BRANCH" in
+    main|develop) ;;
+    *) exit 0 ;;
+esac
 
-# CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.-]+)?' "$FILE")
-CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE")
+echo "Pre-push hook: mirroring $BRANCH to codeberg..."
 
-git tag -a "v$CURRENT_VERSION" -m "Release version $CURRENT_VERSION"
+# Best-effort: bounded by a timeout so an unreachable or slow mirror can never
+# block the push, and --no-verify keeps the inner push out of this hook.
+timeout --kill-after=5 20 git push --no-verify codeberg "$BRANCH" \
+    || echo "warn: mirroring $BRANCH to codeberg failed or timed out (continuing)"
 
-echo "Version updated to $CURRENT_VERSION and tagged as v$CURRENT_VERSION."
-
-while read local_ref local_sha remote_ref remote_sha; do
-    if [[ "$remote_ref" == "refs/tags/"* ]]; then
-        TAG_NAME=$(basename "$remote_ref")
-
-        if [[ "$TAG_NAME" == "v$CURRENT_VERSION" ]]; then
-            echo "Pushing existing tag v$CURRENT_VERSION..."
-            exit 0
-        fi
-    fi
-done
-
-if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
-    echo "Pushing tag v$CURRENT_VERSION ..."
-    git push origin "v$CURRENT_VERSION"
-    git push codeberg "v$CURRENT_VERSION" || true
-    exit 0
-else
-    echo "Tag v$CURRENT_VERSION does not exist locally. Skipping."
-    exit 1
-fi
+exit 0

@@ -22,12 +22,12 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="w-full px-4 py-2 border-b hover:bg-lightest flex flex-row">
+  <div class="w-full px-4 py-2 border-b hover:bg-lightest transition-colors duration-150 flex flex-row">
     <div class="flex-none">
       <a @click="pushToProfilePage(user.id)">
         <img
           :src="`${user.avatar || '/default_profile.png'}`"
-          class="h-12 w-12 rounded-full"
+          class="h-12 w-12 rounded-full cursor-pointer transition-opacity duration-150 hover:opacity-80"
          />
       </a>
     </div>
@@ -70,7 +70,7 @@ resulting from the use or misuse of this software.
             <i class="fas fa-ellipsis-h text-dark text-sm" aria-hidden="true"></i>
           </button>
           <div v-if="showMenu" class="absolute right-0 top-10 mt-1 w-44 bg-white rounded-md shadow-lg py-1 z-10">
-            <button type="button" @click="mute" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ user.id }}</button>
+            <button type="button" @click="toggleMute" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">{{ isMuted ? `Unmute @${user.id}` : `Mute @${user.id}` }}</button>
             <button
               type="button"
               @click="askBlockToggle"
@@ -129,6 +129,7 @@ export default {
       followingStatus: new Map(),
       showMenu: false,
       isBlocked: false,
+      isMuted: false,
       showBlockConfirm: false,
     };
   },
@@ -154,12 +155,18 @@ export default {
       }
       this.followingStatus.set(this.user.id, false);
     },
-    async mute() {
+    async toggleMute() {
       this.showMenu = false;
       try {
-        await warpnetService.muteUser(this.user.id);
+        if (this.isMuted) {
+          await warpnetService.unmuteUser(this.user.id);
+          this.isMuted = false;
+        } else {
+          await warpnetService.muteUser(this.user.id);
+          this.isMuted = true;
+        }
       } catch (err) {
-        console.error(`failed to mute [${this.user.id}]`, err);
+        console.error(`failed to toggle mute on [${this.user.id}]`, err);
       }
     },
     askBlockToggle() {
@@ -192,7 +199,11 @@ export default {
   async created() {
     console.log("loading component:", this.$options.name);
     this.profile = warpnetService.getOwnerProfile();
-    this.user.avatar = await warpnetService.getImage({userId:this.user.id, key:this.user.avatar_key})
+    // The avatar is one element of the row: a hanging or failed blob must
+    // not block the follow/block/mute state below.
+    warpnetService.getImage({userId:this.user.id, key:this.user.avatar_key})
+        .then((img) => { if (img) this.user.avatar = img; })
+        .catch((err) => console.warn(`failed to load avatar for [${this.user.id}]:`, err));
 
     const status = await warpnetService.isFollowing(this.user.id);
     this.followingStatus.set(this.user.id, status);
@@ -201,6 +212,12 @@ export default {
       this.isBlocked = await warpnetService.isUserBlocked(this.user.id);
     } catch (err) {
       console.warn(`failed to read block state for [${this.user.id}]:`, err);
+    }
+
+    try {
+      this.isMuted = await warpnetService.isUserMuted(this.user.id);
+    } catch (err) {
+      console.warn(`failed to read mute state for [${this.user.id}]:`, err);
     }
   },
 };

@@ -94,7 +94,6 @@ type relayStatus string
 const (
 	RelayNode     = "relay"
 	ModeratorNode = "moderator"
-	BusinessNode  = "business"
 	MemberNode    = "member"
 
 	WarpnetName = "warpnet"
@@ -246,9 +245,6 @@ func (ni NodeInfo) IsRelay() bool {
 }
 func (ni NodeInfo) IsModerator() bool {
 	return ni.Type == ModeratorNode
-}
-func (ni NodeInfo) IsBusiness() bool {
-	return ni.Type == BusinessNode
 }
 
 type NodeMetrics struct {

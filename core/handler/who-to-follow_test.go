@@ -56,7 +56,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("orders ulid ids first", func(t *testing.T) {
+	t.Run("keeps repo order", func(t *testing.T) {
 		ulidID := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		h := StreamGetWhoToFollowHandler(
 			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-owner", Username: "test"}},
@@ -78,8 +78,8 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		r := resp.(event.UsersResponse)
-		if len(r.Users) != 2 || r.Users[0].Id != ulidID {
-			t.Fatalf("expected ulid id first, got: %v", r.Users)
+		if len(r.Users) != 2 || r.Users[0].Id != "plain-id" || r.Users[1].Id != ulidID {
+			t.Fatalf("expected repo order preserved, got: %v", r.Users)
 		}
 	})
 

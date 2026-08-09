@@ -39,6 +39,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/notifications"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -69,6 +70,7 @@ type MemberNode struct {
 	userRepo         UserProvider
 	deviceRepo       DeviceProvider
 	followRepo       FollowStorer
+	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
@@ -95,12 +97,24 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
-	userRepo := database.NewUserRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	deviceRepo := database.NewDevicesRepo(db)
 	owner := authRepo.GetOwner()
 
-	mastodon.SeedEntryUser(userRepo)
+	// Apply the owner's configured ActivityPub gateway id (empty falls back to
+	// the built-in default) before seeding the entry user and starting discovery.
+	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(owner.UserId); err == nil {
+		mastodon.SetGatewayNodeID(gw.NodeID)
+	}
+
+	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
+	mastodon.SeedEntryUser(database.NewUserRepo(db))
+
+	notifier := notifications.New(
+		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
+		notifications.NewEmailChannel(database.NewSettingsRepo(db), notifications.NewSMTPMailer()),
+	)
+	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
@@ -154,6 +168,7 @@ func NewMemberNode(
 		followRepo:    followRepo,
 		deviceRepo:    deviceRepo,
 		authRepo:      authRepo,
+		notifier:      notifier,
 		db:            db,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
@@ -170,6 +185,8 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start node: %w", err)
 	}
+
+	m.node.SetOutbox(database.NewOutboxRepo(m.db))
 
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {
@@ -315,11 +332,15 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 		log.Warningf("member: stream: failed to get user: %v", err)
 		return
 	}
+	if u.IsOffline {
+		return
+	}
 	u.IsOffline = true
 	_, err = m.userRepo.Update(u.Id, u)
-	if err != nil {
+	// The flag is monotonic: a commit conflict means a concurrent
+	// stream failure already stored the same thing — not an error.
+	if err != nil && !errors.Is(err, database.ErrConflict) {
 		log.Warningf("member: stream: failed to set user offline: %v", err)
-		return
 	}
 }
 
@@ -328,17 +349,19 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 // handler-list builders below so the registration func itself stays
 // small (golangci-lint maintidx).
 type memberRepos struct {
-	timelineRepo     *database.TimelineRepo
-	tweetRepo        *database.TweetRepo
-	likeRepo         *database.LikeRepo
-	chatRepo         *database.ChatRepo
-	mediaRepo        *database.MediaRepo
-	notificationRepo *database.NotificationsRepo
-	bookmarkRepo     *database.BookmarkRepo
-	blocksRepo       *database.BlocksRepo
-	mutesRepo        *database.MutesRepo
-	subsRepo         *database.SubscriptionsRepo
-	filterRepo       *database.FilterRepo
+	timelineRepo     TimelineProvider
+	tweetRepo        TweetsProvider
+	reactionRepo     ReactionsProvider
+	pollRepo         PollProvider
+	chatRepo         ChatProvider
+	mediaRepo        MediaProvider
+	notificationRepo NotificationProvider
+	settingsRepo     SettingsProvider
+	bookmarkRepo     BookmarkProvider
+	blocksRepo       BlocksProvider
+	mutesRepo        MutesProvider
+	subsRepo         SubscriptionProvider
+	filterRepo       FilterProvider
 }
 
 func (m *MemberNode) setupHandlers(
@@ -355,10 +378,12 @@ func (m *MemberNode) setupHandlers(
 	r := &memberRepos{
 		timelineRepo:     database.NewTimelineRepo(db),
 		tweetRepo:        database.NewTweetRepo(db, statsDB),
-		likeRepo:         database.NewLikeRepo(db, statsDB),
+		reactionRepo:     database.NewReactionRepo(db, statsDB),
+		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
+		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
 		blocksRepo:       database.NewBlocksRepo(db),
 		mutesRepo:        database.NewMutesRepo(db),
@@ -370,13 +395,14 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.adminHandlers(authRepo, db, r)...)
 	hs = append(hs, m.tweetHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.engagementHandlers(userRepo, r)...)
-	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo, r)...)
+	hs = append(hs, m.followHandlers(authRepo, userRepo, followRepo)...)
 	hs = append(hs, m.followRequestHandlers(followRepo)...)
 	hs = append(hs, m.filterHandlers(r)...)
 	hs = append(hs, m.userHandlers(authRepo, userRepo, followRepo, r)...)
 	hs = append(hs, m.chatHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.mediaHandlers(userRepo, r)...)
 	hs = append(hs, m.notificationHandlers(authRepo, r)...)
+	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
 
@@ -404,7 +430,7 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(r.notificationRepo, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
+			handler.StreamModerationResultHandler(m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
 		},
 		{
 			event.PUBLIC_POST_REPORT,
@@ -426,7 +452,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET,
-			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, r.notificationRepo, m),
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
@@ -434,7 +460,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.likeRepo, userRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
@@ -446,7 +472,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
-			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.likeRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.reactionRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
@@ -462,7 +488,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_RETWEET,
-			handler.StreamNewReTweetHandler(userRepo, r.tweetRepo, r.timelineRepo, r.notificationRepo, m),
+			handler.StreamNewReTweetHandler(userRepo, r.tweetRepo, r.timelineRepo, m.notifier, m),
 		},
 		{
 			event.PUBLIC_POST_UNRETWEET,
@@ -478,28 +504,36 @@ func (m *MemberNode) engagementHandlers(
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PUBLIC_POST_LIKE,
-			handler.StreamLikeHandler(r.likeRepo, userRepo, r.notificationRepo, m),
+			event.PUBLIC_POST_REACT,
+			handler.StreamReactionHandler(r.reactionRepo, userRepo, m.notifier, m),
 		},
 		{
-			event.PUBLIC_POST_UNLIKE,
-			handler.StreamUnlikeHandler(r.likeRepo, userRepo, m),
+			event.PUBLIC_POST_UNREACT,
+			handler.StreamUnreactionHandler(r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_POST_VIEW,
 			handler.StreamViewHandler(r.tweetRepo, userRepo, m),
 		},
 		{
-			event.PUBLIC_GET_TWEET_LIKERS,
-			handler.StreamGetTweetLikersHandler(r.likeRepo, userRepo, m),
+			event.PUBLIC_GET_TWEET_REACTORS,
+			handler.StreamGetTweetReactorsHandler(r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEET_RETWEETERS,
 			handler.StreamGetTweetRetweetersHandler(r.tweetRepo, userRepo, m),
 		},
 		{
-			event.PRIVATE_GET_LIKES,
-			handler.StreamGetLikesHandler(r.likeRepo),
+			event.PRIVATE_GET_REACTIONS,
+			handler.StreamGetReactionsHandler(r.reactionRepo),
+		},
+		{
+			event.PUBLIC_POST_POLL_VOTE,
+			handler.StreamPollVoteHandler(r.pollRepo, r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_GET_POLL,
+			handler.StreamGetPollHandler(r.pollRepo, r.tweetRepo, userRepo, m),
 		},
 	}
 }
@@ -509,12 +543,11 @@ func (m *MemberNode) followHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
 	followRepo FollowStorer,
-	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PUBLIC_POST_FOLLOW,
-			handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, r.notificationRepo, m),
+			handler.StreamFollowHandler(m.pubsubService, followRepo, authRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PUBLIC_POST_IS_FOLLOWING,
@@ -598,6 +631,28 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 }
 
 //nolint:govet
+func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_NOTIFICATION_SETTINGS,
+			handler.StreamGetNotificationSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
+			handler.StreamUpdateNotificationSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_GATEWAY_SETTINGS,
+			handler.StreamGetGatewaySettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_GATEWAY_SETTINGS,
+			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
+		},
+	}
+}
+
+//nolint:govet
 func (m *MemberNode) userHandlers(
 	authRepo AuthProvider,
 	userRepo UserProvider,
@@ -657,7 +712,7 @@ func (m *MemberNode) chatHandlers(
 		},
 		{
 			event.PUBLIC_POST_MESSAGE,
-			handler.StreamNewMessageHandler(r.chatRepo, userRepo, r.notificationRepo, m),
+			handler.StreamNewMessageHandler(r.chatRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PRIVATE_DELETE_MESSAGE,
@@ -691,6 +746,14 @@ func (m *MemberNode) mediaHandlers(
 		{
 			event.PUBLIC_GET_IMAGE,
 			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo),
+		},
+		{
+			event.PRIVATE_POST_UPLOAD_VIDEO,
+			handler.StreamUploadVideoHandler(m, r.mediaRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_VIDEO,
+			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
 		},
 		{
 			event.PRIVATE_POST_MEDIA_META,

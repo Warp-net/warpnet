@@ -26,6 +26,7 @@ resulting from the use or misuse of this software.
     <QRCodeModal
       :show="qrModalOpen"
       :qrData="qrCode"
+      :qrPayload="qrPayload"
       @close="closeQR"
     />
   </div>
@@ -63,14 +64,12 @@ resulting from the use or misuse of this software.
         class="h-12 w-12 hover:bg-lightblue text-blue rounded-full flex items-center justify-center"
         aria-label="Warpnet home"
       >
-        <svg viewBox="0 0 100 100" class="w-7 h-7" fill="none" stroke="currentColor"
-             stroke-width="12" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M25 36 L36.5 64 L50 50 L63.5 64 L75 36" />
-        </svg>
+        <img src="@/assets/logo-transparent.png" alt="" class="w-8 h-8 object-contain" aria-hidden="true" />
       </button>
       <div>
         <button
           @click="open('Home')"
+          :class="{ 'nav-active': $route.name === 'Home' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Home"
         >
@@ -86,14 +85,9 @@ resulting from the use or misuse of this software.
             Home
           </p>
         </button>
-<!--        <button-->
-<!--          class="focus:outline-none hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"-->
-<!--        >-->
-<!--          <i class="fas fa-hashtag" aria-hidden="true"></i>-->
-<!--          <p class="text-lg ml-4 text-left hidden xl:block">Explore</p>-->
-<!--        </button>-->
         <button
           @click="open('Notifications')"
+          :class="{ 'nav-active': $route.name === 'Notifications' }"
           class="relative hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Notifications"
         >
@@ -120,6 +114,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="open('Chats')"
+          :class="{ 'nav-active': $route.name === 'Chats' || $route.name === 'Messages' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Messages"
         >
@@ -144,6 +139,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="$router.push({ name: 'Bookmarks' })"
+          :class="{ 'nav-active': $route.name === 'Bookmarks' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Bookmarks"
         >
@@ -161,6 +157,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="open('Profile')"
+          :class="{ 'nav-active': $route.name === 'Profile' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Profile"
         >
@@ -178,6 +175,7 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="$router.push({ name: 'Settings' })"
+          :class="{ 'nav-active': $route.name && $route.name.startsWith('Settings') }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Settings"
         >
@@ -225,7 +223,7 @@ resulting from the use or misuse of this software.
       </button>
       <div
         v-if="dropdown"
-        class="absolute bottom-0 left-0 w-80 rounded-lg shadow-md border-lightest bg-white mb-16"
+        class="absolute bottom-0 left-0 w-80 rounded-lg shadow-md border-lightest bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card mb-16"
       >
         <button
           @click="dropdown = false"
@@ -285,8 +283,18 @@ export default {
       newNotifications: 0,
       qrModalOpen: false,
       qrCode: "",
+      qrPayload: "",
       unsubscribeNotifications: null,
+      unsubscribeOwner: null,
     };
+  },
+  watch: {
+    $route(to) {
+      if (to && (to.name === 'Chats' || to.name === 'Messages')) {
+        this.newMessages = 0;
+        warpnetService.markMessageNotificationsRead().catch(() => {});
+      }
+    },
   },
   mounted() {
     const theme = localStorage.getItem("theme");
@@ -344,8 +352,10 @@ export default {
     },
     signInByQR() {
         // warpnetService.getQR() is a synchronous in-memory lookup,
-        // no await needed.
+        // no await needed. getQRPayload() returns the raw Base45 string the
+        // QR encodes, for the modal's "copy connection data" button.
         this.qrCode = warpnetService.getQR();
+        this.qrPayload = warpnetService.getQRPayload();
         this.qrModalOpen = true;
     },
     async closeQR() {
@@ -363,7 +373,26 @@ export default {
   },
   async created() {
     console.log("loading component:", this.$options.name);
-    this.profile = warpnetService.getOwnerProfile();
+    // Copy the owner object: the raw one lives in the service's non-reactive
+    // stateMap and is shared; rendering it directly means profile edits that
+    // touch that object bypass this component's reactivity.
+    this.profile = { ...warpnetService.getOwnerProfile() };
+
+    // Re-render on profile edits (username/avatar). setOwnerProfile notifies
+    // subscribers; without this the sidebar keeps the pre-edit name/avatar
+    // until the next route change.
+    this.unsubscribeOwner = warpnetService.subscribeOwner(async (owner) => {
+      if (!owner) return;
+      const prevAvatarKey = this.profile?.avatar_key;
+      this.profile = { ...this.profile, ...owner };
+      if (owner.avatar_key && owner.avatar_key !== prevAvatarKey) {
+        try {
+          this.profile.avatar = await warpnetService.getImage({userId: this.profile.user_id, key: owner.avatar_key});
+        } catch (e) {
+          console.warn("sidenav: failed to refresh avatar:", e);
+        }
+      }
+    });
 
     try {
       if (typeof sessionStorage !== "undefined" &&
@@ -388,18 +417,23 @@ export default {
     }
 
     this.unsubscribeNotifications = warpnetService.subscribeNotifications((resp) => {
-      this.newNotifications = resp.unread_count || 0;
+      const items = (resp && resp.notifications) || [];
+      const unreadMessages = items.filter((n) => n && n.type === 'message' && !n.is_read).length;
+      const onMessages = this.$route && (this.$route.name === 'Chats' || this.$route.name === 'Messages');
+      this.newMessages = onMessages ? 0 : unreadMessages;
+      this.newNotifications = Math.max(0, (resp.unread_count || 0) - unreadMessages);
     });
 
-    const resp = await warpnetService.getNotifications(true)
-    if (resp) {
-      this.newNotifications = resp.unread_count;
-    }
+    await warpnetService.getNotifications(true)
   },
   beforeUnmount() {
     if (this.unsubscribeNotifications) {
       this.unsubscribeNotifications();
       this.unsubscribeNotifications = null;
+    }
+    if (this.unsubscribeOwner) {
+      this.unsubscribeOwner();
+      this.unsubscribeOwner = null;
     }
     if (this._onDocClick) {
       document.removeEventListener("click", this._onDocClick);

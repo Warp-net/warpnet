@@ -82,7 +82,7 @@ resulting from the use or misuse of this software.
           </div>
           <div
             v-if="!profile.background_image"
-            class="bg-gray-400 h-full max-h-full"
+            class="bg-gradient-to-br from-blue to-darkblue h-full max-h-full"
           ></div>
         </div>
 
@@ -121,15 +121,15 @@ resulting from the use or misuse of this software.
 
             <div v-if="!noUser && !isSelf && !loading" class="relative">
               <button
-                @click="profileMenuOpen = !profileMenuOpen"
+                @click.stop="profileMenuOpen = !profileMenuOpen"
                 class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 text-blue font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue"
                 :aria-expanded="profileMenuOpen"
                 aria-label="More options"
               >
                 <i class="fas fa-ellipsis-h"></i>
               </button>
-              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-                <button type="button" @click="muteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Mute @{{ profile.id }}</button>
+              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10">
+                <button type="button" @click="toggleMuteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">{{ isMuted ? `Unmute @${profile.id}` : `Mute @${profile.id}` }}</button>
                 <button
                   type="button"
                   @click="askBlockToggle"
@@ -149,21 +149,12 @@ resulting from the use or misuse of this software.
                 @cancel="showReportDialog = false"
               />
               <button
-                v-if="isFollower()"
+                v-if="isFollower() && !isBridgedProfile"
                 @click="sendMessage()"
                 class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 text-blue font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border border-blue mb-2 hover:bg-lightblue"
                 aria-label="Send message"
               >
                 <i class="fas fa-envelope" aria-hidden="true"></i>
-              </button>
-              <button
-                @click="toggleSubscribe()"
-                class="text-xs md:text-base md:ml-auto mr-1 md:mr-3 font-bold px-3 py-1 md:px-3 md:py-2 rounded-full border mb-2"
-                :class="subscribed ? 'text-white bg-blue border-blue hover:bg-darkblue' : 'text-blue border-blue hover:bg-lightblue'"
-                :aria-label="subscribed ? 'Unsubscribe from notifications' : 'Subscribe to notifications'"
-                :title="subscribed ? 'Unsubscribe from new-tweet alerts' : 'Subscribe to new-tweet alerts'"
-              >
-                <i class="fas" :class="subscribed ? 'fa-bell-slash' : 'fa-bell'" aria-hidden="true"></i>
               </button>
               <button
                 v-if="!isFollowing()"
@@ -190,11 +181,7 @@ resulting from the use or misuse of this software.
               <span
                   v-if="profile.isOffline"
                   class="text-sm font-medium bg-red-900 py-1 px-1 mx-2 rounded text-white align-middle"
-              >Offline</span>
-              <span
-                  v-if="isBusiness"
-                  class="text-sm font-medium bg-blue py-1 px-1 mx-2 rounded text-white align-middle"
-              >Business</span>
+              >{{ lastSeenText ? `Last seen ${lastSeenText}` : 'Offline' }}</span>
               <span
                 v-if="isFollower() && !isSelf"
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
@@ -214,11 +201,11 @@ resulting from the use or misuse of this software.
                   {{ profile.website.replace(/^https?:\/\//, '') }}
                 </a>
               </div>
-              <div v-if="joinedDate()" class="flex flex-row mr-4">
+              <div v-if="joinedDate(profile.created_at)" class="flex flex-row mr-4">
                 <i
                   class="far fa-calendar-alt text-dark align-text-bottom pt-1 mr-2"
                 ></i>
-                <p class="text-dark">Joined {{ joinedDate() }}</p>
+                <p class="text-dark">Joined {{ joinedDate(profile.created_at) }}</p>
               </div>
             </div>
             <div v-if="!noUser && !loading" class="flex flex-row mt-1">
@@ -257,40 +244,38 @@ resulting from the use or misuse of this software.
             </button>
             <button
               type="button"
-              disabled
-              title="Coming soon"
-              aria-label="Tweets & replies (coming soon)"
-              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
+              @click="selectTab('replies')"
+              class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              :class="activeTab === 'replies' ? 'border-blue' : ''"
             >
-              Tweets & replies
+              Tweets and threads
             </button>
             <button
               type="button"
-              disabled
-              title="Coming soon"
-              aria-label="Media (coming soon)"
-              class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
+              @click="selectTab('media')"
+              class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
+              :class="activeTab === 'media' ? 'border-blue' : ''"
             >
               Media
             </button>
             <button
               v-if="isSelf"
               type="button"
-              @click="selectTab('likes')"
+              @click="selectTab('reactions')"
               class="flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4 hover:bg-lightblue"
-              :class="activeTab === 'likes' ? 'border-blue' : ''"
+              :class="activeTab === 'reactions' ? 'border-blue' : ''"
             >
-              Likes
+              Reactions
             </button>
             <button
               v-else
               type="button"
               disabled
-              title="Only your own likes are visible"
-              aria-label="Likes (own profile only)"
+              title="Only your own reactions are visible"
+              aria-label="Reactions (own profile only)"
               class="cursor-not-allowed opacity-50 flex-grow text-dark font-bold border-b-2 p-1 md:px-2 md:py-4"
             >
-              Likes
+              Reactions
             </button>
           </div>
         </div>
@@ -303,7 +288,7 @@ resulting from the use or misuse of this software.
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <p class="font-bold text-lg">
-              <span>{{ isSelf ? "You" : `${profile.username || "User"}` }}</span> haven't
+              <span>{{ isSelf ? "You haven't" : `${profile.username || "User"} hasn't` }}</span>
               tweeted yet
             </p>
             <p class="text-sm text-dark">
@@ -313,6 +298,7 @@ resulting from the use or misuse of this software.
             </p>
             <button
               v-if="isSelf"
+              @click="tweetNow()"
               class="text-white bg-blue rounded-full font-semibold mt-4 px-4 py-2 hover:bg-darkblue"
             >
               <p class="hidden lg:block">Tweet now</p>
@@ -329,19 +315,50 @@ resulting from the use or misuse of this software.
           <Tweets v-if="!noUser && !isBlocked" :tweets="sortedTweets" />
         </template>
 
-        <!-- likes -->
-        <template v-else-if="activeTab === 'likes'">
-          <Loader :loading="likesLoading" />
+        <!-- tweets and threads -->
+        <template v-else-if="activeTab === 'replies'">
+          <Loader :loading="repliesLoading" />
           <div
-            v-if="!likesLoading && likes.length === 0"
+            v-if="!repliesLoading && tweetsAndReplies.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10 px-5"
           >
-            <p class="font-bold text-lg">Nothing liked yet</p>
+            <p class="font-bold text-lg">Nothing here yet</p>
             <p class="text-sm text-dark text-center">
-              Tweets you like will show up here so you can always find your way back to them.
+              Tweets and the replies continuing their threads will show up here.
             </p>
           </div>
-          <Tweets :tweets="likedTweets" />
+          <Tweets v-if="!noUser && !isBlocked" :tweets="tweetsAndReplies" />
+        </template>
+
+        <!-- media -->
+        <template v-else-if="activeTab === 'media'">
+          <Loader :loading="mediaLoading" />
+          <div
+            v-if="!mediaLoading && mediaTweets.length === 0"
+            class="flex flex-col items-center justify-center w-full pt-10 px-5"
+          >
+            <p class="font-bold text-lg">No photos or videos yet</p>
+            <p class="text-sm text-dark text-center">
+              <span>{{ isSelf ? "Tweets you post" : `Tweets ${profile.username || "this user"} posts` }}</span>
+              with a photo or a video will show up here.
+            </p>
+          </div>
+          <Tweets v-if="!noUser && !isBlocked" :tweets="mediaTweets" />
+        </template>
+
+        <!-- reactions -->
+        <template v-else-if="activeTab === 'reactions'">
+          <Loader :loading="reactionsLoading" />
+          <div
+            v-if="!reactionsLoading && reactions.length === 0"
+            class="flex flex-col items-center justify-center w-full pt-10 px-5"
+          >
+            <p class="font-bold text-lg">Nothing reacted yet</p>
+            <p class="text-sm text-dark text-center">
+              Tweets you react to will show up here so you can always find your way back to them.
+            </p>
+          </div>
+          <Tweets :tweets="reactedTweets" />
         </template>
       </div>
       <DefaultRightBar
@@ -378,6 +395,8 @@ resulting from the use or misuse of this software.
 import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "Profile",
@@ -398,6 +417,7 @@ export default {
       showEditProfileModal: false,
       isSelf: false,
       followingLabel: "Following",
+      followPending: false,
       loading: true,
       noUser: false,
       ownerProfile: {},
@@ -408,16 +428,20 @@ export default {
       followings: [],
       followingStatus: new Map(),
       followerStatus: new Map(),
-      subscribed: false,
       profileMenuOpen: false,
       isBlocked: false,
+      isMuted: false,
       showBlockConfirm: false,
       showReportDialog: false,
       showNetworkWarning: true,
       activeTab: 'tweets',
-      likes: [],
-      likesLoading: false,
-      likesLoaded: false,
+      reactions: [],
+      reactionsLoading: false,
+      reactionsLoaded: false,
+      replies: [],
+      repliesLoading: false,
+      repliesScanned: 0,
+      mediaLoading: false,
     };
   },
   computed: {
@@ -427,14 +451,31 @@ export default {
       const rest = this.tweets.filter(t => !(t && t.pinned));
       return pinned.concat(rest);
     },
-    // isBusiness drives the "Business" badge — the role rides on the user
-    // record (domain.User.Role), stamped from the node's NodeInfo, same as any
-    // other profile field.
-    isBusiness() {
-      return this.profile && this.profile.role === "business";
+    reactedTweets() {
+      // Entries hydrate one by one; those still waiting for their tweet
+      // are skipped instead of rendering an empty row.
+      return this.reactions.filter(r => r.tweet && r.tweet.id).map(r => r.tweet);
     },
-    likedTweets() {
-      return this.likes.map(l => l.tweet);
+    // Tweets and the profile owner's replies in one chronological feed.
+    tweetsAndReplies() {
+      return this.tweets.concat(this.replies).sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      );
+    },
+    mediaTweets() {
+      return this.tweets.filter(
+        t => t && ((t.image_keys && t.image_keys.length > 0) || t.video_key)
+      );
+    },
+    lastSeenText() {
+      if (this.isSelf || !this.profile || !this.profile.last_seen) return "";
+      const m = moment(this.profile.last_seen);
+      return m.isValid() ? m.fromNow() : "";
+    },
+    // Bridged networks (Mastodon) have no direct messages, so the profile
+    // hides its Send message button instead of offering a dead action.
+    isBridgedProfile() {
+      return isMastodonUser(this.profile);
     },
   },
   methods: {
@@ -442,20 +483,44 @@ export default {
       return profileId === this.ownerProfile.user_id;
     },
     joinedDate(createdAt) {
-      return moment(createdAt).format("MMMM YYYY");
+      // Guard against a missing/invalid timestamp — moment(undefined) would
+      // otherwise return "now" and every profile would read "Joined <today>".
+      if (!createdAt) return "";
+      const m = moment(createdAt);
+      return m.isValid() ? m.format("MMMM YYYY") : "";
+    },
+    tweetNow() {
+      this.$router.push({ name: "Home", query: { compose: 1 } });
     },
     gotoHome() {
       this.$router.push({
         name: "Home",
       });
     },
-    sendMessage() {
-      this.$router.push({
-        name: "Messages",
-        params: {
-          id: this.profile.id,
-        },
-      });
+    async sendMessage() {
+      const owner = warpnetService.getOwnerProfile();
+      if (!owner?.user_id || !this.profile?.id) return;
+      if (this.isBridgedProfile) return;
+      try {
+        // Open (creating if needed) the DM with this user, then route to it.
+        // The Messages route is namespaced under the owner's id and requires
+        // the chat id — pushing without it throws "Missing required param".
+        const chat = await warpnetService.createChat(this.profile.id);
+        if (!chat || !chat.id) {
+          console.error(`sendMessage: could not open chat with ${this.profile.id}`);
+          return;
+        }
+        this.$router.push({
+          name: "Messages",
+          params: {
+            id: owner.user_id,
+            chatId: chat.id,
+          },
+        });
+      } catch (err) {
+        console.error(`sendMessage failed for ${this.profile.id}:`, err);
+        toast.error(err?.message || "Couldn't open a chat with this user.");
+      }
     },
     isFollower() {
       return this.followerStatus.get(this.profile.id) || false
@@ -504,42 +569,48 @@ export default {
       }
     },
     async follow() {
+      if (this.followPending) return;
+      this.followPending = true;
+      this.followingStatus.set(this.profile.id, true); // optimistic
       try {
         await warpnetService.followUser(this.profile.id);
       } catch (err) {
         console.error(`failed to follow [${this.profile.id}]`, err);
-        return
+        this.followingStatus.set(this.profile.id, false); // rollback
+        toast.error(err?.message || "Couldn't follow this user. Please try again.");
+      } finally {
+        this.followPending = false;
       }
-      this.followingStatus.set(this.profile.id, true)
     },
     async unfollow() {
+      if (this.followPending) return;
+      this.followPending = true;
+      this.followingStatus.set(this.profile.id, false); // optimistic
       try {
         await warpnetService.unfollowUser(this.profile.id);
       } catch (err) {
         console.error(`failed to unfollow [${this.profile.id}]`, err);
-        return
+        this.followingStatus.set(this.profile.id, true); // rollback
+        toast.error(err?.message || "Couldn't unfollow this user. Please try again.");
+      } finally {
+        this.followPending = false;
       }
-      this.followingStatus.set(this.profile.id, false)
     },
-    async toggleSubscribe() {
+    async toggleMuteFromProfile() {
+      this.profileMenuOpen = false;
+      const target = this.profile?.id;
+      if (!target) return;
       try {
-        if (this.subscribed) {
-          await warpnetService.unsubscribeUser(this.profile.id);
-          this.subscribed = false;
+        if (this.isMuted) {
+          await warpnetService.unmuteUser(target);
+          this.isMuted = false;
         } else {
-          await warpnetService.subscribeUser(this.profile.id);
-          this.subscribed = true;
+          await warpnetService.muteUser(target);
+          this.isMuted = true;
         }
       } catch (err) {
-        console.error(`failed to toggle subscribe [${this.profile.id}]`, err);
-      }
-    },
-    async muteFromProfile() {
-      this.profileMenuOpen = false;
-      try {
-        await warpnetService.muteUser(this.profile.id);
-      } catch (err) {
-        console.error(`failed to mute [${this.profile.id}]`, err);
+        console.error(`failed to toggle mute on [${target}]`, err);
+        toast.error(err?.message || "Couldn't update mute. Please try again.");
       }
     },
     openReport() {
@@ -559,8 +630,10 @@ export default {
           targetNodeId: this.profile.node_id || '',
           reason,
         });
+        toast.success("Report sent to moderators.");
       } catch (err) {
         console.error(`failed to report [${this.profile.id}]`, err);
+        toast.error(err?.message || "Couldn't send the report. Please try again.");
       } finally {
         this.showReportDialog = false;
       }
@@ -592,6 +665,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle block on [${target}]`, err);
+        toast.error(err?.message || "Couldn't update block. Please try again.");
       }
     },
     async loadProfileBlockState() {
@@ -603,31 +677,147 @@ export default {
         console.warn(`failed to read block state for [${target}]:`, err);
         this.isBlocked = false;
       }
+      try {
+        this.isMuted = await warpnetService.isUserMuted(target);
+      } catch (err) {
+        console.warn(`failed to read mute state for [${target}]:`, err);
+        this.isMuted = false;
+      }
     },
     async loadMore() {
-      if (this.activeTab === 'likes') {
-        if (this.likesLoading) return;
-        const resp = await warpnetService.getLikes(false);
-        const items = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
-        this.likes = this.likes.concat(items);
+      if (this.activeTab === 'reactions') {
+        if (this.reactionsLoading) return;
+        const resp = await warpnetService.getReactions(false);
+        const items = resp?.items || [];
+        if (items.length === 0) return;
+        this.reactions = this.reactions.concat(items);
+        this.hydrateReactions(this.reactions.slice(-items.length));
         return;
       }
+      await this.loadMoreTweets();
+      if (this.activeTab === 'replies') {
+        await this.loadReplies();
+      }
+    },
+    // Returns only the tweets this page actually added: the media and replies
+    // tabs page through the profile until they find something, and a repeated
+    // page would both duplicate keys and loop forever.
+    async loadMoreTweets() {
       const tweets = await warpnetService.getTweets({userId:this.profile.id, cursorReset:false});
-      this.tweets = this.tweets.concat(tweets);
+      const known = new Set(this.tweets.map(t => t && t.id));
+      const fresh = tweets.filter(t => t && t.id && !known.has(t.id));
+      this.tweets = this.tweets.concat(fresh);
+      return fresh;
     },
     async selectTab(tab) {
       this.activeTab = tab;
-      if (tab !== 'likes' || this.likesLoaded) return;
-      this.likesLoading = true;
+      if (tab === 'reactions') return this.loadReactions();
+      if (tab === 'replies') return this.loadReplies();
+      if (tab === 'media') return this.fillMediaTab();
+    },
+    // Each reaction entry hydrates into its tweet independently; a hanging
+    // author node leaves that entry pending without blocking the tab.
+    async hydrateReactions(items) {
+      await Promise.all(items.map(async (l) => {
+        try {
+          const tweet = await warpnetService.getTweet({
+            userId: l.owner_user_id || this.ownerProfile.user_id,
+            tweetId: l.tweet_id,
+          });
+          if (tweet && tweet.id) l.tweet = tweet;
+        } catch (e) {
+          console.warn('reaction hydrate failed:', l, e);
+        }
+      }));
+    },
+    async loadReactions() {
+      if (this.reactionsLoaded || this.reactionsLoading) return;
+      this.reactionsLoading = true;
       try {
-        const resp = await warpnetService.getLikes(true);
-        this.likes = (resp?.items || []).filter(l => l.tweet && l.tweet.id);
-        this.likesLoaded = true;
+        const resp = await warpnetService.getReactions(true);
+        this.reactions = resp?.items || [];
+        await Promise.race([
+          this.hydrateReactions(this.reactions),
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ]);
+        this.reactionsLoaded = true;
       } catch (err) {
-        console.error('Failed to load likes:', err);
+        console.error('Failed to load reactions:', err);
       } finally {
-        this.likesLoading = false;
+        this.reactionsLoading = false;
       }
+    },
+    // A reply is stored under the tweet it answers, not under its author, so
+    // the replies a profile can reach are the ones its owner left in their
+    // own threads: walk the loaded tweets and keep those.
+    async loadReplies() {
+      if (this.repliesLoading) return;
+      // Tweets loaded while another tab was open still need a scan.
+      const pending = this.tweets.slice(this.repliesScanned);
+      if (pending.length === 0) return;
+      this.repliesLoading = true;
+      this.repliesScanned = this.tweets.length;
+      try {
+        await this.collectReplies(pending);
+      } catch (err) {
+        console.error('Failed to load replies:', err);
+      } finally {
+        this.repliesLoading = false;
+      }
+    },
+    async collectReplies(tweets) {
+      const known = new Set(this.replies.map(r => r.id));
+      const batchSize = 4; // one request per tweet, but not all at once
+      for (let i = 0; i < tweets.length; i += batchSize) {
+        const pages = await Promise.all(
+          tweets.slice(i, i + batchSize).map(t => this.threadReplies(t))
+        );
+        const own = [];
+        for (const reply of pages.flat()) {
+          if (!reply || !reply.id || reply.user_id !== this.profile.id) continue;
+          if (known.has(reply.id)) continue;
+          known.add(reply.id);
+          own.push(reply);
+        }
+        if (own.length !== 0) this.replies = this.replies.concat(own);
+      }
+    },
+    async threadReplies(tweet) {
+      if (!tweet || !tweet.id) return [];
+      const root = tweet.root_id || tweet.id;
+      try {
+        const page = await warpnetService.getReplies({
+          rootId: root,
+          parentId: tweet.id,
+          // user_id is the root author only when this tweet is the root itself.
+          rootUserId: root === tweet.id ? tweet.user_id : undefined,
+          cursorReset: true,
+        });
+        return Array.isArray(page) ? page : [];
+      } catch (err) {
+        console.warn(`failed to load replies of ${tweet.id}:`, err);
+        return [];
+      }
+    },
+    // The media tab filters the tweets already loaded, so a page carrying no
+    // photo or video leaves it empty with nothing to scroll: pull further
+    // pages until something shows up or the profile runs out of tweets.
+    async fillMediaTab() {
+      if (this.mediaLoading) return;
+      this.mediaLoading = true;
+      try {
+        for (let i = 0; i < 5 && this.mediaTweets.length === 0; i++) {
+          const tweets = await this.loadMoreTweets();
+          if (tweets.length === 0) break;
+        }
+      } catch (err) {
+        console.error('Failed to load media:', err);
+      } finally {
+        this.mediaLoading = false;
+      }
+    },
+    closeProfileMenu() {
+      this.profileMenuOpen = false;
     },
     enableMastodonMode() {
       const html = document.documentElement;
@@ -642,64 +832,103 @@ export default {
       }
     }
   },
+  watch: {
+    profileMenuOpen(open) {
+      if (open) {
+        this._menuOutsideHandler = () => this.closeProfileMenu();
+        setTimeout(() => {
+          if (this._menuOutsideHandler) document.addEventListener("click", this._menuOutsideHandler);
+        }, 0);
+      } else if (this._menuOutsideHandler) {
+        document.removeEventListener("click", this._menuOutsideHandler);
+        this._menuOutsideHandler = null;
+      }
+    },
+  },
+  beforeUnmount() {
+    if (this._menuOutsideHandler) {
+      document.removeEventListener("click", this._menuOutsideHandler);
+      this._menuOutsideHandler = null;
+    }
+  },
   async created() {
     console.log("loading component:", this.$options.name);
+    const profileId = this.$route.params.id;
+    if (!profileId) {
+      this.noUser = true;
+      this.loading = false;
+      return;
+    }
+
+    this.ownerProfile = warpnetService.getOwnerProfile();
+
     try {
       this.loading = true;
-      const profileId = this.$route.params.id;
-      if (!profileId) {
-        this.noUser = true;
-        this.loading = false;
-        return;
-      }
-
-      this.ownerProfile = warpnetService.getOwnerProfile();
-
       this.profile = await warpnetService.getProfile(profileId);
       if (!this.profile) {
         this.noUser = true;
-        this.loading = false;
         return;
       }
-      if (this.profile.network && this.profile.network === "mastodon") {
-        this.enableMastodonMode()
-      } else {
-        this.disableMastodonMode();
-      }
-      this.loading = false;
-
-      this.profile.background_image = await warpnetService.getImage(
-          {userId:profileId, key:this.profile.background_image_key},
-      );
-      this.profile.avatar = await warpnetService.getImage(
-          {userId:profileId, key:this.profile.avatar_key},
-      )
-
-      this.isSelf = this.isMySelf(profileId);
-
-      if (!this.isSelf) {
-        await this.loadProfileBlockState();
-      }
-
-      [this.users, this.tweets, this.followers, this.followings] = await Promise.all([
-        warpnetService.getUsers({profileId:profileId, cursorReset:true}),
-        warpnetService.getTweets({userId:profileId, cursorReset:true}),
-        warpnetService.getFollowers({userId:profileId, cursorReset: true}),
-        warpnetService.getFollowings({userId:profileId, cursorReset: true})
-      ]);
     } catch (err) {
       console.error('Failed to load profile:', err);
       this.noUser = true;
-      this.loading = false
-      return
+      return;
+    } finally {
+      this.loading = false;
     }
-    for (const p of this.users) {
-      const followingStatus = await warpnetService.isFollowing(p.id);
-      this.followingStatus.set(p.id, followingStatus);
 
-      const followerStatus = await warpnetService.isFollower(p.id);
-      this.followerStatus.set(p.id, followerStatus);
+    if (this.profile.network && this.profile.network === "mastodon") {
+      this.enableMastodonMode()
+    } else {
+      this.disableMastodonMode();
     }
+
+    this.isSelf = this.isMySelf(profileId);
+
+    // Everything below is an independent per-element fetch that fills in
+    // whenever it arrives — one hanging or failing call must not delay the
+    // tweets, the counters or its sibling elements.
+    warpnetService.getImage({userId: profileId, key: this.profile.background_image_key})
+        .then((img) => { this.profile.background_image = img; })
+        .catch((err) => console.warn(`failed to load background [${profileId}]:`, err));
+    warpnetService.getImage({userId: profileId, key: this.profile.avatar_key})
+        .then((img) => { this.profile.avatar = img; })
+        .catch((err) => console.warn(`failed to load avatar [${profileId}]:`, err));
+
+    if (!this.isSelf) {
+      this.loadProfileBlockState();
+      // The viewed profile is not necessarily part of this.users (that list
+      // holds related/suggested users), so resolve its own follow state
+      // explicitly — otherwise the header button always renders "Follow"
+      // even when the owner already follows this user. Self profiles show
+      // "Edit profile" instead of the follow button, so skip them.
+      Promise.all([
+        warpnetService.isFollowing(profileId),
+        warpnetService.isFollower(profileId),
+      ]).then(([selfFollowing, selfFollower]) => {
+        this.followingStatus.set(profileId, selfFollowing);
+        this.followerStatus.set(profileId, selfFollower);
+      }).catch((err) => console.warn(`failed to resolve follow state [${profileId}]:`, err));
+    }
+
+    warpnetService.getTweets({userId: profileId, cursorReset: true})
+        .then((tweets) => { this.tweets = tweets; })
+        .catch((err) => console.error('Failed to load tweets:', err));
+    warpnetService.getFollowers({userId: profileId, cursorReset: true})
+        .then((followers) => { this.followers = followers; })
+        .catch((err) => console.error('Failed to load followers:', err));
+    warpnetService.getFollowings({userId: profileId, cursorReset: true})
+        .then((followings) => { this.followings = followings; })
+        .catch((err) => console.error('Failed to load followings:', err));
+    warpnetService.getUsers({profileId: profileId, cursorReset: true})
+        .then(async (users) => {
+          this.users = users;
+          for (const p of users) {
+            this.followingStatus.set(p.id, await warpnetService.isFollowing(p.id));
+            this.followerStatus.set(p.id, await warpnetService.isFollower(p.id));
+          }
+        })
+        .catch((err) => console.error('Failed to load related users:', err));
   },
 };
 </script>

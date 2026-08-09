@@ -28,7 +28,7 @@ func TestNotificationType_String(t *testing.T) {
 	assert.Equal(t, "moderation", NotificationModerationType.String())
 	assert.Equal(t, "retweet", NotificationRetweetType.String())
 	assert.Equal(t, "follow", NotificationFollowType.String())
-	assert.Equal(t, "like", NotificationLikeType.String())
+	assert.Equal(t, "reaction", NotificationReactionType.String())
 	assert.Equal(t, "mention", NotificationMentionType.String())
 	assert.Equal(t, "reply", NotificationReplyType.String())
 }
@@ -44,4 +44,21 @@ func TestModerationObjectType_String(t *testing.T) {
 	assert.Equal(t, "reply text", ModerationReplyType.String())
 	assert.Equal(t, "image content", ModerationImageType.String())
 	assert.Equal(t, "unknown", ModerationObjectType(99).String())
+}
+
+func TestNormalizeReaction(t *testing.T) {
+	// No emoji named: every client that predates reactions.
+	emoji, err := NormalizeReaction("")
+	assert.NoError(t, err)
+	assert.Equal(t, DefaultReaction, emoji)
+
+	emoji, err = NormalizeReaction("🔥")
+	assert.NoError(t, err)
+	assert.Equal(t, "🔥", emoji)
+
+	// Reactions become key segments, so these must not get through.
+	for _, bad := range []string{"🔥/💧", "a b", "\x00", "way too many emoji 🔥🔥🔥"} {
+		_, err = NormalizeReaction(bad)
+		assert.Error(t, err, "expected %q to be rejected", bad)
+	}
 }

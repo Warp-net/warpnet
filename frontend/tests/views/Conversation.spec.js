@@ -8,6 +8,7 @@ vi.mock('@/service/service', () => ({
     getProfile: vi.fn(),
     getImage: vi.fn(),
     sendDirectMessage: vi.fn(),
+    markChatRead: vi.fn(),
   },
 }));
 
@@ -114,6 +115,48 @@ describe('Conversation.vue', () => {
       text: 'hello bob',
     });
     expect(input).toHaveValue('');
+  });
+
+  it('renders the messages even when the peer profile hangs', async () => {
+    warpnetService.getProfile.mockImplementation(() => new Promise(() => {}));
+    warpnetService.getDirectMessages.mockResolvedValue([
+      {
+        id: 'm1',
+        text: 'hi there',
+        sender_id: 'alice',
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    renderConversation();
+
+    expect(
+      await screen.findByText('hi there', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+  });
+
+  it('renders the header and messages while the avatar blob hangs', async () => {
+    warpnetService.getProfile.mockResolvedValue({
+      id: 'bob',
+      username: 'bob',
+      avatar_key: 'some-key',
+    });
+    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+    warpnetService.getDirectMessages.mockResolvedValue([
+      {
+        id: 'm1',
+        text: 'hi there',
+        sender_id: 'alice',
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    renderConversation();
+
+    expect(
+      await screen.findByText('bob', undefined, { timeout: 3000 })
+    ).toBeInTheDocument();
+    expect(screen.getByText('hi there')).toBeInTheDocument();
   });
 
   it('does not call the backend when submitting whitespace-only input (edge case)', async () => {

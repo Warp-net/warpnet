@@ -32,9 +32,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -100,24 +102,9 @@ func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) e
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
 	return g.pubsub.SubscribeRaw(event.ReportsTopic, func(data []byte) error {
-		var msg event.Message
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return fmt.Errorf("pubsub: reports: envelope unmarshal: %w", err)
-		}
-
-		peerID := warpnet.FromStringToPeerID(msg.NodeId)
-		if peerID == "" {
-			log.Warnf("pubsub: reports: dropping message with malformed NodeId=%q", msg.NodeId)
-			return nil
-		}
-		pubKey := warpnet.FromIDToPubKey(peerID)
-		if len(pubKey) == 0 {
-			log.Warnf("pubsub: reports: dropping message: cannot derive pubkey from %s", msg.NodeId)
-			return nil
-		}
-		if err := security.VerifySignature(pubKey, msg.Body, msg.Signature); err != nil {
-			log.Warnf("pubsub: reports: dropping message from %s: signature invalid: %v", msg.NodeId, err)
-			return nil
+		msg, err := verifiedEnvelope("reports", data)
+		if err != nil || msg == nil {
+			return err
 		}
 
 		var ev event.ReportEvent
@@ -126,6 +113,74 @@ func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) e
 		}
 		return h(ev)
 	})
+}
+
+// PublishVote publishes this moderator's verdict on one report round. The
+// envelope is signed by Gossip.Publish with the node key, which is what
+// SubscribeVotes authenticates the voter by.
+func (g *moderatorPubSub) PublishVote(ev vote.Event) error {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	bodyBytes, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	msg := event.Message{
+		Body:      bodyBytes,
+		NodeId:    g.pubsub.NodeInfo().ID.String(),
+		Timestamp: time.Now(),
+		MessageId: uuid.New().String(),
+		Version:   "0.0.0",
+	}
+	return g.pubsub.Publish(msg, vote.Topic)
+}
+
+func (g *moderatorPubSub) SubscribeVotes(h func(ev vote.Event) error) error {
+	if g == nil || !g.pubsub.IsGossipRunning() {
+		return warpnet.WarpError("pubsub: service not initialized")
+	}
+	return g.pubsub.SubscribeRaw(vote.Topic, func(data []byte) error {
+		msg, err := verifiedEnvelope("votes", data)
+		if err != nil || msg == nil {
+			return err
+		}
+
+		var ev vote.Event
+		if err := json.Unmarshal(msg.Body, &ev); err != nil {
+			return fmt.Errorf("pubsub: votes: payload unmarshal: %w", err)
+		}
+		// The voter identity is the signature-verified envelope sender;
+		// whatever the payload claimed is discarded.
+		ev.ModeratorID = domain.ID(msg.NodeId)
+		return h(ev)
+	})
+}
+
+// verifiedEnvelope unmarshals a gossip envelope and checks its signature
+// against the pubkey recovered from the sender's peer id. A nil, nil return
+// means "drop silently" (malformed or forged message).
+func verifiedEnvelope(topic string, data []byte) (*event.Message, error) {
+	var msg event.Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		return nil, fmt.Errorf("pubsub: %s: envelope unmarshal: %w", topic, err)
+	}
+
+	peerID := warpnet.FromStringToPeerID(msg.NodeId)
+	if peerID == "" {
+		log.Warnf("pubsub: %s: dropping message with malformed NodeId=%q", topic, msg.NodeId)
+		return nil, nil
+	}
+	pubKey := warpnet.FromIDToPubKey(peerID)
+	if len(pubKey) == 0 {
+		log.Warnf("pubsub: %s: dropping message: cannot derive pubkey from %s", topic, msg.NodeId)
+		return nil, nil
+	}
+	if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
+		log.Warnf("pubsub: %s: dropping message from %s: signature invalid: %v", topic, msg.NodeId, err)
+		return nil, nil
+	}
+	return &msg, nil
 }
 
 func (g *moderatorPubSub) Close() (err error) {

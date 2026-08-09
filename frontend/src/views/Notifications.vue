@@ -46,7 +46,7 @@ resulting from the use or misuse of this software.
             </button>
             <div
               v-if="settingsOpen"
-              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10"
+              class="absolute right-0 mt-2 w-48 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10"
             >
               <button
                 type="button"
@@ -85,9 +85,10 @@ resulting from the use or misuse of this software.
         </div>
 
         <!-- notifications -->
+        <Loader :loading="loading" />
         <div v-if="mode === 'All'">
           <div
-            v-if="notifications.length === 0"
+            v-if="!loading && notifications.length === 0"
             class="flex flex-col items-center justify-center w-full pt-10"
           >
             <div class="w-1/2 flex flex-col items-center justify-center">
@@ -100,16 +101,17 @@ resulting from the use or misuse of this software.
             <button
               type="button"
               class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
+              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
               @click="openNotification(notification)"
             >
-              <div class="w-full">
-                <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
+              <div class="w-full flex items-center">
+                <div class="flex flex-row items-center mr-3 md:mr-4 text-2xl flex-none">
                   <i
                     v-if="notification.type === 'reply'"
                     class="pt-1 fas fa-comment text-blue"
                   ></i>
                   <i
-                    v-if="notification.type === 'like'"
+                    v-if="notification.type === 'reaction'"
                     class="pt-1 fas fa-heart text-red-600"
                   ></i>
                   <i
@@ -130,12 +132,12 @@ resulting from the use or misuse of this software.
                   ></i>
 
                   <img
-                    :src="'/default_profile.png'"
+                    :src="avatarFor(notification)"
                     class="h-8 w-8 ml-2 rounded-full flex-none"
                   />
                 </div>
                 <div class="flex items-center w-full">
-                  <p class="font-sm">{{ notification.text }}</p>
+                  <p class="text-sm">{{ notification.text }}</p>
                   <p class="text-sm text-dark ml-auto">
                     {{ $filters.timeago(notification.created_at) }}
                   </p>
@@ -155,26 +157,27 @@ resulting from the use or misuse of this software.
             </div>
           </div>
           <div v-for="notification in mentions" :key="notification.id">
-            <div
-              class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
+            <button
+              type="button"
+              class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
+              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
+              @click="openNotification(notification)"
             >
-              <div class="w-full">
-                <div class="flex flex-row mr-2 md:mr-4 pt-1 text-2xl">
-                  <a :href="`#/${notification.user_id}`">
-                    <img
-                      :src="'/default_profile.png'"
-                      class="h-8 w-8 ml-2 rounded-full flex-none"
-                    />
-                  </a>
+              <div class="w-full flex items-center">
+                <div class="flex flex-row items-center mr-3 md:mr-4 text-2xl flex-none">
+                  <img
+                    :src="avatarFor(notification)"
+                    class="h-8 w-8 ml-2 rounded-full flex-none"
+                  />
                 </div>
                 <div class="flex items-center w-full">
-                  <p class="font-sm">{{ notification.text }}</p>
+                  <p class="text-sm">{{ notification.text }}</p>
                   <p class="text-sm text-dark ml-auto">
                     {{ $filters.timeago(notification.created_at) }}
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
         <div v-if="mode === 'Requests' && locked">
@@ -228,12 +231,14 @@ import {defineAsyncComponent} from "vue";
 import SideNav from "../components/SideNav.vue";
 import DefaultRightBar from "../components/DefaultRightBar.vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
 
 export default {
   name: "Notifications",
   components: {
     SideNav,
     DefaultRightBar,
+    Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     NotificationOverlay: defineAsyncComponent(() => import('@/components/NotificationOverlay.vue')),
   },
   data() {
@@ -247,6 +252,8 @@ export default {
       overlayOpen: false,
       overlayNotificationId: '',
       settingsOpen: false,
+      actorAvatars: {},
+      pendingAvatars: new Set(),
     };
   },
   computed: {
@@ -258,9 +265,11 @@ export default {
   },
   methods: {
     gotoHome() {
-      this.$router.push({
-        name: "Home",
-      });
+      if (window.history.length > 1) {
+        this.$router.back();
+      } else {
+        this.$router.push({ name: "Home" });
+      }
     },
     submit(m = this.mode) {
       this.mode = m;
@@ -310,29 +319,49 @@ export default {
       this.settingsOpen = false;
       await this.markAllRead();
     },
-    async onMarkAllRead() {
-      this.settingsOpen = false;
-      await this.markAllRead();
+    avatarFor(n) {
+      return (n && n.actor_id && this.actorAvatars[n.actor_id]) || '/default_profile.png';
     },
-    async hydrateRequests(ids) {
-      return Promise.all(
-        (ids || []).map(async (id) => {
+    async hydrateAvatars(list) {
+      // In-flight ids are skipped so the 2s notification poll can't pile
+      // duplicate requests onto a hanging peer.
+      const ids = [...new Set((list || [])
+        .map(n => n && n.actor_id)
+        .filter(id => id && !this.actorAvatars[id] && !this.pendingAvatars.has(id)))];
+      await Promise.all(ids.map(async (id) => {
+        this.pendingAvatars.add(id);
+        try {
+          const p = await warpnetService.getProfile(id);
+          if (p && p.avatar_key) {
+            const img = await warpnetService.getImage({ userId: id, key: p.avatar_key });
+            if (img) this.actorAvatars[id] = img;
+          }
+        } catch (e) {}
+        finally {
+          this.pendingAvatars.delete(id);
+        }
+      }));
+    },
+    // Each request row fills in on its own; a hanging profile leaves its
+    // placeholder in place without holding back the rest of the list.
+    hydrateRequest(id) {
+      warpnetService.getProfile(id).then(async (p) => {
+        if (!p || !p.id) return;
+        if (p.avatar_key) {
           try {
-            const p = await warpnetService.getProfile(id);
-            if (!p) return { id };
-            if (p.avatar_key) {
-              p.avatar = await warpnetService.getImage({ userId: id, key: p.avatar_key });
-            }
-            return p;
-          } catch (e) { return { id }; }
-        })
-      );
+            p.avatar = await warpnetService.getImage({ userId: id, key: p.avatar_key });
+          } catch (e) {}
+        }
+        const i = this.followRequests.findIndex(r => r.id === id);
+        if (i !== -1) this.followRequests.splice(i, 1, p);
+      }).catch(() => {});
     },
     async loadFollowRequests() {
       try {
         const resp = await warpnetService.getFollowRequests();
         const ids = resp?.follower_ids || resp?.ids || [];
-        this.followRequests = await this.hydrateRequests(ids);
+        this.followRequests = ids.map((id) => ({ id }));
+        ids.forEach((id) => this.hydrateRequest(id));
       } catch (err) {
         console.error('Failed to load follow requests:', err);
       }
@@ -341,13 +370,19 @@ export default {
       try {
         await warpnetService.authorizeFollowRequest(id);
         this.followRequests = this.followRequests.filter(r => r.id !== id);
-      } catch (err) { console.error('Failed to authorize', err); }
+      } catch (err) {
+        console.error('Failed to authorize', err);
+        toast.error(err?.message || "Couldn't authorize the request. Please try again.");
+      }
     },
     async rejectRequest(id) {
       try {
         await warpnetService.rejectFollowRequest(id);
         this.followRequests = this.followRequests.filter(r => r.id !== id);
-      } catch (err) { console.error('Failed to reject', err); }
+      } catch (err) {
+        console.error('Failed to reject', err);
+        toast.error(err?.message || "Couldn't reject the request. Please try again.");
+      }
     },
   },
   async created() {
@@ -356,23 +391,20 @@ export default {
       this.loading = true;
       this.ownerProfile = warpnetService.getOwnerProfile();
       // The owner stub in stateMap doesn't carry the `locked` flag, so fetch
-      // the full profile to decide whether to show the Requests tab.
-      try {
-        const me = await warpnetService.getProfile(this.ownerProfile.user_id);
-        this.locked = Boolean(me && me.locked);
-      } catch (err) {
-        console.warn('Failed to read own locked state:', err);
-      }
+      // the full profile to decide whether to show the Requests tab. It and
+      // the requests it gates fill in without holding the notification list.
+      warpnetService.getProfile(this.ownerProfile.user_id)
+        .then((me) => {
+          this.locked = Boolean(me && me.locked);
+          if (this.locked) this.loadFollowRequests();
+        })
+        .catch((err) => console.warn('Failed to read own locked state:', err));
       const resp = await warpnetService.getNotifications(true);
       if (resp && resp.notifications) {
-        this.notifications = resp.notifications;
+        this.notifications = resp.notifications.filter((n) => n && n.type !== 'message');
+        this.hydrateAvatars(this.notifications);
       }
-      // Visiting the Notifications view counts as "the user saw them".
-      // Mark every unread item read so the SideNav badge clears.
-      await this.markAllRead();
-      if (this.locked) {
-        await this.loadFollowRequests();
-      }
+      warpnetService.markAllNotificationsRead().catch(() => {});
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {
@@ -385,7 +417,7 @@ export default {
     // before the mark-read request settles on the node.
     this._unsubscribeLive = warpnetService.subscribeNotifications((resp) => {
       if (this.loading) return;
-      const incoming = (resp && resp.notifications) || [];
+      const incoming = ((resp && resp.notifications) || []).filter((n) => n && n.type !== 'message');
       if (incoming.length === 0) return;
       const readIds = new Set(
         this.notifications.filter((n) => n && n.is_read).map((n) => n.id)
@@ -393,6 +425,7 @@ export default {
       this.notifications = incoming.map((n) =>
         n && readIds.has(n.id) ? { ...n, is_read: true } : n
       );
+      this.hydrateAvatars(this.notifications);
     });
   },
   mounted() {

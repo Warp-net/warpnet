@@ -39,8 +39,8 @@ object ProtocolIds {
     const val PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 
     // public writes
-    const val PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
-    const val PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
+    const val PUBLIC_POST_REACT = "/public/post/react/0.0.0"
+    const val PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
     const val PUBLIC_POST_VIEW = "/public/post/view/0.0.0"
     const val PUBLIC_POST_RETWEET = "/public/post/retweet/0.0.0"
     const val PUBLIC_POST_UNRETWEET = "/public/post/unretweet/0.0.0"
@@ -63,7 +63,7 @@ object ProtocolIds {
     const val PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
     const val PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
     const val PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
-    const val PRIVATE_GET_LIKES = "/private/get/likes/0.0.0"
+    const val PRIVATE_GET_REACTIONS = "/private/get/reactions/0.0.0"
     const val PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
     const val PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
     const val PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
@@ -72,7 +72,7 @@ object ProtocolIds {
     const val PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
     const val PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
     const val PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
-    const val PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
+    const val PUBLIC_GET_TWEET_REACTORS = "/public/get/tweet/reactors/0.0.0"
     const val PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
     const val PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
     const val PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"

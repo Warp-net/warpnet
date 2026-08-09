@@ -75,7 +75,7 @@ Warpnet's bet: the only way to be genuinely censorship-resistant is to remove th
 - **Local-first storage** — your posts, follows, and timeline live in an embedded datastore on *your* machine.
 - **Censorship-resistant** — public content propagates peer-to-peer through the DHT; there's no single point that can be blocked.
 - **Two first-class clients, one protocol** — a desktop app (Wails + Vue) and an Android app (a [Tusky](https://github.com/tuskyapp/Tusky) fork) both speak the same node protocol.
-- **Opt-in decentralized moderation** — dedicated moderator nodes use LLM, so moderation happens without any human intervention.
+- **Opt-in decentralized moderation** — dedicated moderator nodes use LLM, so moderation happens without any human intervention. A handful of them judge each report independently and vote, and every verdict is signed so it cannot be forged — see [how moderation works](docs/MODERATION.md).
 - **Cross-platform** — install via Snap, or build for your platform from source.
 - **Fully open source** — AGPLv3, forever.
 
@@ -129,7 +129,7 @@ warpnet --node.network mainnet   # the live network
 ```
 
 
-> **Heads up:** the `version` file and `snap/snapcraft.yaml` are bumped automatically by the pre-commit hook on non-`main` branches. Run `make setup-hooks` once and let it do its job — don't edit the version by hand.
+> **Heads up:** the `version` file and `snap/snapcraft.yaml` are bumped automatically by the **Release** GitHub Actions workflow (`.github/workflows/release.yaml`) when a release is cut — don't edit the version by hand.
 
 ## How it works
 
@@ -187,7 +187,7 @@ If you want to trace a feature end to end, read **`event/paths.go`** (the route)
 
 **This is the part that matters most, and the part where help is most wanted.** Warpnet is real, working, and ambitious. If decentralized systems, libp2p, or Go are your thing, there's a lot of room here to own a meaningful piece.
 
-👉 **New here? Read the [Contributor Onboarding Guide](docs/ONBOARDING.md) first.** It's the complete, end-to-end walkthrough: the philosophy, the architecture, how to build and run every node role, the desktop/Android/business clients, and how to ship your first feature.
+👉 **New here? Read the [Contributor Onboarding Guide](docs/ONBOARDING.md) first.** It's the complete, end-to-end walkthrough: the philosophy, the architecture, how to build and run every node role, the desktop/Android/remote clients, and how to ship your first feature.
 
 ### Good places to start
 

@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package camouflage
 
 import (
+	"bytes"
 	"crypto/rand"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"io"
@@ -38,10 +39,9 @@ import (
 
 const defaultFragmentSize = 2
 
-// SpoofConn wraps a manet.Conn and transparently splits Write calls into
-// small TCP segments while the connection is in the handshake phase (the
-// first handshakeLen bytes). After the handshake, writes pass through
-// without modification.
+// SpoofConn wraps a manet.Conn and splits Write calls during the handshake
+// phase (the first handshakeLen bytes). After the handshake, writes pass
+// through without modification.
 type SpoofConn struct {
 	manet.Conn
 
@@ -50,9 +50,12 @@ type SpoofConn struct {
 	fragmentSize int
 	handshakeLen int
 	maxDelay     time.Duration
+	sni          []byte
 }
 
-func NewSpoofConn(conn manet.Conn, fragmentSize, handshakeLen int, maxDelay time.Duration) *SpoofConn {
+// NewSpoofConn wraps conn. A non-empty sni switches to a single split
+// inside the name instead of chunking the handshake prefix.
+func NewSpoofConn(conn manet.Conn, fragmentSize, handshakeLen int, maxDelay time.Duration, sni string) *SpoofConn {
 	return &SpoofConn{
 		Conn:         conn,
 		mu:           sync.Mutex{},
@@ -60,6 +63,7 @@ func NewSpoofConn(conn manet.Conn, fragmentSize, handshakeLen int, maxDelay time
 		fragmentSize: fragmentSize,
 		handshakeLen: handshakeLen,
 		maxDelay:     maxDelay,
+		sni:          []byte(sni),
 	}
 }
 
@@ -73,8 +77,52 @@ func (c *SpoofConn) Write(b []byte) (int, error) {
 	if pastHandshake {
 		return c.Conn.Write(b)
 	}
+	if len(c.sni) > 0 {
+		return c.sniSplitWrite(b)
+	}
 
 	return c.fragmentedWrite(b)
+}
+
+func (c *SpoofConn) sniSplitWrite(b []byte) (int, error) {
+	i := bytes.Index(b, c.sni)
+	if i < 0 {
+		return c.trackedWrite(b)
+	}
+
+	cut := i + len(c.sni)/2
+	if cut <= 0 || cut >= len(b) {
+		return c.trackedWrite(b)
+	}
+
+	n, err := c.trackedWrite(b[:cut])
+	if err != nil {
+		return n, err
+	}
+	if delay := randDuration(c.maxDelay); delay > 0 {
+		time.Sleep(delay)
+	}
+	m, err := c.trackedWrite(b[cut:])
+	return n + m, err
+}
+
+func (c *SpoofConn) trackedWrite(b []byte) (int, error) {
+	total := 0
+	for len(b) > 0 {
+		n, err := c.Conn.Write(b)
+		c.mu.Lock()
+		c.bytesWritten += n
+		c.mu.Unlock()
+		total += n
+		if n == 0 && err == nil {
+			return total, io.ErrShortWrite
+		}
+		if err != nil {
+			return total, err
+		}
+		b = b[n:]
+	}
+	return total, nil
 }
 
 func (c *SpoofConn) fragmentedWrite(b []byte) (int, error) {

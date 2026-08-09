@@ -72,12 +72,53 @@ type FollowingStorer interface {
 	ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
+// fetchFollower returns the follower's profile, resolving it from the node that
+// delivered the follow when it is unknown locally, and storing it. A follow is
+// stored only after this succeeds: a follower we hold as an id alone renders as
+// that raw id in the notification and as an empty row in the followers list.
+// The delivering node is the right source on any network — it is either the
+// follower's own node or the home node the follower is bridged from.
+func fetchFollower(
+	userRepo FollowingUserStorer, streamer FollowNodeStreamer, s warpnet.WarpStream, followerId string,
+) (domain.User, error) {
+	follower, err := userRepo.Get(followerId)
+	if err == nil {
+		return follower, nil
+	}
+	if !errors.Is(err, database.ErrUserNotFound) {
+		return domain.User{}, err
+	}
+
+	senderNodeId := s.Conn().RemotePeer().String()
+	resp, err := streamer.GenericStream(senderNodeId, event.PUBLIC_GET_USER, event.GetUserEvent{
+		UserId: domain.ID(followerId),
+		NodeId: senderNodeId,
+	})
+	if err != nil {
+		return domain.User{}, err
+	}
+	if err := json.Unmarshal(resp, &follower); err != nil {
+		return domain.User{}, err
+	}
+	if follower.Id == "" {
+		return domain.User{}, database.ErrUserNotFound
+	}
+	if _, err := userRepo.Create(follower); err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
+		return domain.User{}, err
+	}
+	return follower, nil
+}
+
+type FollowNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamFollowHandler(
 	broadcaster FollowingBroadcaster,
 	followRepo FollowingStorer,
 	authRepo FollowingAuthStorer,
 	userRepo FollowingUserStorer,
-	notifyRepo ModerationNotifier,
+	notifyRepo FollowNotifier,
 	streamer FollowNodeStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -106,23 +147,20 @@ func StreamFollowHandler(
 
 		isMeFollowed := ownerUserId == ev.FollowingId
 		if isMeFollowed { //nolint:nestif
-			err := followRepo.Follow(ev.FollowerId, ownerUserId)
+			followerUser, err := fetchFollower(userRepo, streamer, s, ev.FollowerId)
+			if err != nil {
+				return nil, err
+			}
+			err = followRepo.Follow(ev.FollowerId, ownerUserId)
 			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
 				return nil, err
 			}
 			if err == nil {
-				notifyUsername := ev.FollowerId
-				followerUser, followerErr := userRepo.Get(ev.FollowerId)
-				if followerErr != nil && !errors.Is(followerErr, database.ErrUserNotFound) {
-					return nil, followerErr
-				}
-				if followerErr == nil {
-					notifyUsername = followerUser.Username
-				}
 				if notifyErr := notifyRepo.Add(domain.Notification{
-					Type:   domain.NotificationFollowType,
-					Text:   notifyUsername + " started following you",
-					UserId: ownerUserId,
+					Type:        domain.NotificationFollowType,
+					Text:        followerUser.Username + " started following you",
+					RecepientId: ownerUserId,
+					ActorId:     ev.FollowerId,
 				}); notifyErr != nil {
 					log.Errorf("follow handler: adding notification: %v", notifyErr)
 				}

@@ -28,8 +28,14 @@ resulting from the use or misuse of this software.
 package event
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"strconv"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	json "github.com/json-iterator/go"
 )
@@ -110,7 +116,7 @@ type ImportTwitterArchiveResponse struct {
 
 // ImportTweetEvent defines model for ImportTweetEvent.
 //
-// One pre-parsed original tweet streamed from the business browser dashboard.
+// One pre-parsed original tweet streamed from the remote browser dashboard.
 // The browser unzips and filters the X archive client-side (dropping retweets,
 // replies, GIFs and videos) and streams only the kept tweets, so the node
 // never buffers the whole archive. Images are raw base64 of the still photos
@@ -198,11 +204,11 @@ type GetIsFollowingEvent struct {
 
 type GetIsFollowerEvent = GetIsFollowingEvent
 
-// GetLikersResponse defines model for GetLikersResponse.
-type GetLikersResponse = UsersResponse
+// GetReactorsResponse defines model for GetReactorsResponse.
+type GetReactorsResponse = UsersResponse
 
-// GetLikesCountEvent defines model for GetLikesCountEvent.
-type GetLikesCountEvent struct {
+// GetReactionsCountEvent defines model for GetReactionsCountEvent.
+type GetReactionsCountEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 }
 
@@ -218,7 +224,7 @@ type GetTweetStatsEvent struct {
 }
 
 // GetReTweetsCountEvent defines model for GetReTweetsCountEvent.
-type GetReTweetsCountEvent = GetLikesCountEvent
+type GetReTweetsCountEvent = GetReactionsCountEvent
 
 // GetRetweetersResponse defines model for GetRetweetersResponse.
 type GetRetweetersResponse = UsersResponse
@@ -247,16 +253,24 @@ type GetUserEvent struct {
 	NodeId string `json:"node_id,omitempty"`
 }
 
-// LikeEvent defines model for LikeEvent.
-type LikeEvent struct {
+// ReactionEvent defines model for ReactionEvent.
+//
+// Emoji names the reaction. Clients that predate reactions omit it and
+// the node reads them as domain.DefaultReaction.
+type ReactionEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 	UserId  domain.ID `json:"user_id"`
 	OwnerId domain.ID `json:"owner_id"`
+	Emoji   string    `json:"emoji,omitempty"`
 }
 
-// LikesCountResponse defines model for LikesCountResponse.
-type LikesCountResponse struct {
-	Count uint64 `json:"count"`
+// ReactionsCountResponse defines model for ReactionsCountResponse.
+//
+// Count is the total across every reaction; Reactions breaks it down per
+// emoji so a client can repaint the chips without a second round-trip.
+type ReactionsCountResponse struct {
+	Count     uint64            `json:"count"`
+	Reactions map[string]uint64 `json:"reactions,omitempty"`
 }
 
 // LoginEvent defines model for LoginEvent.
@@ -282,6 +296,16 @@ type Message struct {
 	Timestamp   time.Time       `json:"timestamp"`
 	Version     string          `json:"version"`
 	Signature   string          `json:"signature"`
+}
+
+// SigningBytes returns the bytes an ed25519 signature covers: the raw body plus
+// the timestamp as decimal Unix nanoseconds. Senders must set Timestamp first.
+func (m Message) SigningBytes() []byte {
+	ts := strconv.FormatInt(m.Timestamp.UnixNano(), 10)
+	buf := make([]byte, 0, len(m.Body)+len(ts))
+	buf = append(buf, m.Body...)
+	buf = append(buf, ts...)
+	return buf
 }
 
 // MessageBody defines model for Message.Body.
@@ -321,8 +345,50 @@ type NewUserEvent = domain.User
 // Owner defines model for Owner.
 type Owner = domain.Owner
 
+// PollVoteEvent defines model for PollVoteEvent.
+//
+// Same actor/target convention as ReactionEvent: UserId is the tweet author
+// (the routing key), OwnerId is the voter. Option is the zero-based index
+// into the tweet's poll options.
+type PollVoteEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	OwnerId domain.ID `json:"owner_id"`
+	Option  int       `json:"option"`
+
+	// OptionsNum is how many options the voter's copy of the tweet shows.
+	// The counters are stored per option index, so it sizes the results the
+	// vote replies with on a node that doesn't hold the tweet itself.
+	OptionsNum int `json:"options_num"`
+}
+
+// GetPollEvent defines model for GetPollEvent.
+type GetPollEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	OwnerId domain.ID `json:"owner_id"`
+
+	// OptionsNum is how many options the caller's copy of the tweet shows.
+	// The vote counters are stored per option index, so the reader needs it
+	// to know how many to fetch.
+	OptionsNum int `json:"options_num"`
+}
+
+// PollResultsResponse defines model for PollResultsResponse.
+type PollResultsResponse struct {
+	TweetId domain.ID `json:"tweet_id"`
+
+	// Votes holds the vote count per option, in option order.
+	Votes      []uint64 `json:"votes"`
+	TotalVotes uint64   `json:"total_votes"`
+
+	// VotedOption is the option the requesting user picked, nil if they
+	// haven't voted.
+	VotedOption *int `json:"voted_option,omitempty"`
+}
+
 // ReTweetsCountResponse defines model for ReTweetsCountResponse.
-type ReTweetsCountResponse = LikesCountResponse
+type ReTweetsCountResponse = ReactionsCountResponse
 
 // TweetsResponse defines model for TweetsResponse.
 type TweetsResponse struct {
@@ -331,12 +397,23 @@ type TweetsResponse struct {
 	UserId domain.ID      `json:"user_id"`
 }
 
+// TweetStatsResponse defines model for TweetStatsResponse.
+//
+// Reactions is the per-emoji breakdown of ReactionsCount. MyReaction is the
+// emoji the node's own owner put on the tweet ("" when they haven't
+// reacted) — it is always answered from the local store, so it stays
+// correct even when the counts come from the author's node.
 type TweetStatsResponse struct {
-	TweetId       domain.ID `json:"tweet_id"`
-	RetweetsCount uint64    `json:"retweets_count"`
-	LikeCount     uint64    `json:"likes_count"`
-	RepliesCount  uint64    `json:"replies_count"`
-	ViewsCount    uint64    `json:"views_count"`
+	TweetId        domain.ID         `json:"tweet_id"`
+	RetweetsCount  uint64            `json:"retweets_count"`
+	ReactionsCount uint64            `json:"reactions_count"`
+	RepliesCount   uint64            `json:"replies_count"`
+	ViewsCount     uint64            `json:"views_count"`
+	Reactions      map[string]uint64 `json:"reactions,omitempty"`
+	// Always emitted, empty string included: an absent key is how a client
+	// tells an old node (which knows nothing of reactions) from this node
+	// saying "you haven't reacted".
+	MyReaction string `json:"my_reaction"`
 }
 
 type IDsResponse struct {
@@ -344,8 +421,8 @@ type IDsResponse struct {
 	Users  []domain.ID `json:"users"`
 }
 
-// UnlikeEvent defines model for UnlikeEvent.
-type UnlikeEvent = LikeEvent
+// UnreactionEvent defines model for UnreactionEvent.
+type UnreactionEvent = ReactionEvent
 
 // ViewEvent defines model for ViewEvent.
 // UserId is the tweet author's id; ViewerId is the viewer's id.
@@ -356,7 +433,7 @@ type ViewEvent struct {
 }
 
 // ViewsCountResponse defines model for ViewsCountResponse.
-type ViewsCountResponse = LikesCountResponse
+type ViewsCountResponse = ReactionsCountResponse
 
 // UnretweetEvent defines model for UnretweetEvent.
 type UnretweetEvent struct {
@@ -394,6 +471,30 @@ type GetImageEvent struct {
 type GetImageResponse struct {
 	// Image mime type + "," + base64
 	File string `json:"file"`
+}
+
+// UploadVideoEvent defines model for UploadVideoEvent.
+type UploadVideoEvent struct {
+	Video string `json:"video"`
+}
+
+// UploadVideoResponse defines model for UploadVideoResponse.
+type UploadVideoResponse struct {
+	Key string `json:"key"`
+}
+
+// GetVideoEvent defines model for GetVideoEvent.
+type GetVideoEvent struct {
+	UserId   string `json:"user_id"`
+	Key      string `json:"key"`
+	Deferred bool   `json:"deferred,omitempty"`
+}
+
+// GetVideoResponse defines model for GetVideoResponse.
+type GetVideoResponse struct {
+	File     string `json:"file"`
+	Size     int64  `json:"size,omitempty"`
+	Deferred bool   `json:"deferred,omitempty"`
 }
 
 type ChallengeEvent struct {
@@ -475,9 +576,39 @@ type ReportEvent struct {
 	ReporterNodeID domain.ID `json:"reporter_node_id,omitempty"`
 }
 
-type ModerationResultEvent struct {
+// ReportID derives a stable identifier of this report from its content, so
+// independent moderators correlate their votes on the same round without any
+// new wire field. Identical re-reports collapse into one round by construction.
+func (e ReportEvent) ReportID() string {
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	h := sha256.New()
+	for _, p := range []string{
+		e.Type.String(),
+		string(e.TargetUserID),
+		string(e.TargetNodeID),
+		objectID,
+		e.Reason,
+		string(e.ReporterID),
+		string(e.ReporterNodeID),
+	} {
+		// Length prefix keeps adjacent fields from ever aliasing each other.
+		h.Write([]byte(strconv.Itoa(len(p))))
+		h.Write([]byte{':'})
+		h.Write([]byte(p))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+const ModerationReasonUnavailable = "content unavailable for review"
+
+const ErrVerdictSignatureInvalid warpnet.WarpError = "moderation verdict signature invalid"
+
+type ModerationVerdictEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
-	Result   domain.ModerationResult     `json:"result"`
+	Verdict  domain.ModerationResult     `json:"verdict"`
 	Reason   *string                     `json:"reason,omitempty"`
 	Model    domain.ModelType            `json:"model"`
 	UserID   domain.ID                   `json:"user_id"`
@@ -491,6 +622,76 @@ type ModerationResultEvent struct {
 	// ReporterID is set only on the reporter-bound delivery; empty on the
 	// isolation broadcast. The handler keys on it to notify only the reporter.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
+	// Voters lists every moderator whose vote entered the round's tally.
+	// Informational for now: receivers verify the chair's signature only.
+	Voters []domain.ID `json:"voters,omitempty"`
+	TimeAt time.Time   `json:"time_at,omitzero"`
+	// Signature is base64(ed25519) over SigningBytes, produced with the
+	// chair moderator's node key. The verifying pubkey is recovered from
+	// ModeratorID, so a verdict is only valid for the peer that claims it.
+	Signature string `json:"signature,omitempty"`
+}
+
+// signingBytes returns the canonical bytes the verdict signature covers.
+// Explicit length-prefixed concatenation (rather than re-marshalled JSON) so
+// signer and verifier agree byte-for-byte even across versions that add
+// unrelated fields.
+func (e ModerationVerdictEvent) signingBytes() []byte {
+	reason := ""
+	if e.Reason != nil {
+		reason = *e.Reason
+	}
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	parts := make([]string, 0, 9+len(e.Voters))
+	parts = append(parts,
+		e.Type.String(),
+		strconv.FormatBool(bool(e.Verdict)),
+		reason,
+		string(e.Model),
+		string(e.UserID),
+		objectID,
+		string(e.ModeratorID),
+		string(e.ReporterID),
+		strconv.FormatInt(e.TimeAt.UnixNano(), 10),
+	)
+	for _, v := range e.Voters {
+		parts = append(parts, string(v))
+	}
+	buf := make([]byte, 0, 256)
+	for _, p := range parts {
+		buf = append(buf, strconv.Itoa(len(p))...)
+		buf = append(buf, ':')
+		buf = append(buf, p...)
+	}
+	return buf
+}
+
+// Signed returns a stamped and signed copy of the verdict. It returns the
+// verdict rather than mutating one in place so a caller cannot end up
+// shipping an unsigned event by dropping the result on the floor.
+func (e ModerationVerdictEvent) Signed(privKey ed25519.PrivateKey) ModerationVerdictEvent {
+	e.TimeAt = time.Now().UTC()
+	if len(privKey) == 0 {
+		return e
+	}
+	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.signingBytes()))
+	return e
+}
+
+// Verify checks the verdict signature against pubKey. It is the mirror of
+// Sign, so the canonical signing bytes stay private to this package.
+func (e ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
+	sig, err := base64.StdEncoding.DecodeString(e.Signature)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(pubKey, e.signingBytes(), sig) {
+		return ErrVerdictSignatureInvalid
+	}
+	return nil
 }
 
 type GetNotificationsEvent struct {
@@ -510,6 +711,26 @@ type GetNotificationResponse = domain.Notification
 type MarkNotificationReadEvent struct {
 	NotificationId domain.ID `json:"notification_id"`
 }
+
+// GetNotificationSettingsEvent defines model for GetNotificationSettingsEvent.
+// The owner is resolved server-side, so the request carries no fields.
+type GetNotificationSettingsEvent struct{}
+
+// GetNotificationSettingsResponse defines model for GetNotificationSettingsResponse.
+type GetNotificationSettingsResponse = domain.NotificationSettings
+
+// UpdateNotificationSettingsEvent defines model for UpdateNotificationSettingsEvent.
+type UpdateNotificationSettingsEvent = domain.NotificationSettings
+
+// GetGatewaySettingsEvent defines model for GetGatewaySettingsEvent.
+// The owner is resolved server-side, so the request carries no fields.
+type GetGatewaySettingsEvent struct{}
+
+// GetGatewaySettingsResponse defines model for GetGatewaySettingsResponse.
+type GetGatewaySettingsResponse = domain.GatewaySettings
+
+// UpdateGatewaySettingsEvent defines model for UpdateGatewaySettingsEvent.
+type UpdateGatewaySettingsEvent = domain.GatewaySettings
 
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
@@ -545,11 +766,11 @@ type GetBookmarksResponse struct {
 	Cursor string         `json:"cursor"`
 }
 
-// GetLikesEvent defines model for GetLikesEvent.
-type GetLikesEvent = GetBookmarksEvent
+// GetReactionsEvent defines model for GetReactionsEvent.
+type GetReactionsEvent = GetBookmarksEvent
 
-// GetLikesResponse defines model for GetLikesResponse.
-type GetLikesResponse = GetBookmarksResponse
+// GetReactionsResponse defines model for GetReactionsResponse.
+type GetReactionsResponse = GetBookmarksResponse
 
 // PinTweetEvent defines model for PinTweetEvent.
 type PinTweetEvent struct {
@@ -597,8 +818,8 @@ type GetMutesEvent = GetBlocksEvent
 // GetMutesResponse defines model for GetMutesResponse.
 type GetMutesResponse = GetBlocksResponse
 
-// GetTweetLikersEvent defines model for GetTweetLikersEvent.
-type GetTweetLikersEvent struct {
+// GetTweetReactorsEvent defines model for GetTweetReactorsEvent.
+type GetTweetReactorsEvent struct {
 	TweetId     domain.ID `json:"tweet_id"`
 	OwnerUserId domain.ID `json:"owner_user_id"`
 	Cursor      *string   `json:"cursor,omitempty"`
@@ -606,7 +827,7 @@ type GetTweetLikersEvent struct {
 }
 
 // GetTweetRetweetersEvent defines model for GetTweetRetweetersEvent.
-type GetTweetRetweetersEvent = GetTweetLikersEvent
+type GetTweetRetweetersEvent = GetTweetReactorsEvent
 
 // SubscribeUserEvent defines model for SubscribeUserEvent.
 type SubscribeUserEvent struct {

@@ -49,8 +49,8 @@ data class Notification(
         /** Someone retweeted one of your statuses */
         object Retweet : Type("retweet")
 
-        /** Someone liked one of your statuses */
-        object Like : Type("like")
+        /** Someone reacted to one of your statuses */
+        object Reaction : Type("reaction")
 
         /** Someone followed you */
         object Follow : Type("follow")
@@ -111,7 +111,7 @@ val visibleNotificationTypes = listOf(
     Type.Reply,
     Type.Message,
     Type.Retweet,
-    Type.Like,
+    Type.Reaction,
     Type.PleromaEmojiReaction,
     Type.Follow,
     Type.FollowRequest,

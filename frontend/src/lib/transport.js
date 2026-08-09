@@ -24,7 +24,7 @@ resulting from the use or misuse of this software.
 
 // transport bridges the frontend to its node, keeping the exact signatures the
 // service layer already calls. Under Wails (desktop/member) it delegates to the
-// bound Go App. Otherwise — the business node's browser dashboard — it speaks a
+// bound Go App. Otherwise — the remote node's browser dashboard — it speaks a
 // single WebSocket: login, logout, is-first-run and every node call ride one
 // connection. The connection carries its own auth (a successful login
 // authenticates the socket), and every frame after login is AES-256-GCM sealed
@@ -35,6 +35,16 @@ import * as WailsRuntime from "../../wailsjs/runtime/runtime";
 import {generateUUID} from "@/lib/uuid";
 import { gcm } from "@noble/ciphers/aes";
 import { sha256 } from "@noble/hashes/sha256";
+import { setConnectionStatus } from "@/lib/connection";
+
+// nodeError builds an Error whose message is safe to show a user verbatim
+// (every component surfaces error.message) while carrying a machine-readable
+// .code for callers that need to branch.
+function nodeError(code, message) {
+  const e = new Error(message);
+  e.code = code;
+  return e;
+}
 
 const LOGIN_PATH = "/private/post/login/0.0.0";
 const LOGOUT_PATH = "/private/post/logout/0.0.0";
@@ -130,25 +140,35 @@ function connect() {
   if (connecting) {
     return connecting;
   }
+  setConnectionStatus("connecting");
   connecting = new Promise((resolve, reject) => {
     const sock = new WebSocket(wsURL());
     sock.onopen = () => {
       socket = sock;
       connecting = null;
+      setConnectionStatus("online");
       resolve();
     };
     sock.onerror = () => {
       connecting = null;
-      reject(new Error("ws connect failed"));
+      setConnectionStatus("offline");
+      reject(nodeError(
+        "ERR_NODE_UNREACHABLE",
+        "Can't reach your Warpnet node. Make sure it's running, then try again."
+      ));
     };
     sock.onclose = () => {
       socket = null;
       connecting = null;
+      setConnectionStatus("offline");
       // Re-arm the channel key from localStorage so an automatic
       // reconnect resumes the encrypted session; after a logout the
       // stored key is already cleared and this stays null.
       aesKey = restoreChannelKey();
-      failPending(new Error("ws closed"));
+      failPending(nodeError(
+        "ERR_NODE_UNREACHABLE",
+        "Connection to your Warpnet node was lost."
+      ));
     };
     sock.onmessage = (ev) => { onMessage(ev.data); };
   });
@@ -201,7 +221,11 @@ async function send(request) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error(`request ${id} timed out`));
+      console.debug("request timed out:", id);
+      reject(nodeError(
+        "ERR_TIMEOUT",
+        "The request took too long. Your node may be busy or unreachable."
+      ));
     }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
     try {
@@ -253,13 +277,11 @@ export async function IsFirstRun() {
   if (hasWails()) {
     return Wails.IsFirstRun();
   }
-  try {
-    const resp = await send({ path: IS_FIRST_RUN_PATH, body: {} });
-    return Boolean(resp && resp.body);
-  } catch (e) {
-    console.error("is-first-run failed:", e);
-    return false;
-  }
+  // Propagate the failure (node unreachable) so the caller can offer a retry
+  // instead of silently defaulting to the login screen — a brand-new user
+  // would otherwise have no path to sign up.
+  const resp = await send({ path: IS_FIRST_RUN_PATH, body: {} });
+  return Boolean(resp && resp.body);
 }
 
 // ConsumePendingDeepLink only has meaning under Wails (OS deep-link handoff);
@@ -272,7 +294,7 @@ export async function ConsumePendingDeepLink() {
 }
 
 // IsDesktop reports whether the Wails desktop runtime is present (member
-// node). The browser dashboard (business node) returns false and must upload
+// node). The browser dashboard (remote node) returns false and must upload
 // the archive via an <input type=file> instead of the native dialog.
 export function IsDesktop() {
   return hasWails();

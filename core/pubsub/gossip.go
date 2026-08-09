@@ -253,6 +253,9 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 	if topicName == "" {
 		return ErrPubsubEmptyTopic
 	}
+	if g.pubsub == nil {
+		return ErrPubsubNotInit
+	}
 
 	topic, ok := g.topics[topicName]
 	if !ok {
@@ -261,6 +264,11 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 			return err
 		}
 		g.topics[topicName] = topic
+	}
+
+	if _, subscribed := g.relayCancelFuncs[topicName]; subscribed {
+		g.handlersMap[topicName] = h
+		return nil
 	}
 
 	relayCancel, err := topic.Relay()
@@ -303,15 +311,15 @@ func (g *Gossip) Unsubscribe(topics ...string) (err error) {
 			}
 		}
 
-		if err = topic.Close(); err != nil {
-			return err
-		}
-		delete(g.topics, topicName)
-
 		if _, ok := g.relayCancelFuncs[topicName]; ok {
 			g.relayCancelFuncs[topicName]()
 		}
 		delete(g.relayCancelFuncs, topicName)
+
+		if err = topic.Close(); err != nil {
+			return err
+		}
+		delete(g.topics, topicName)
 		delete(g.handlersMap, topicName)
 	}
 
@@ -369,6 +377,10 @@ func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
+	if g.pubsub == nil {
+		return ErrPubsubNotInit
+	}
+
 	for _, topicName := range topics {
 		topic, ok := g.topics[topicName]
 		if !ok {
@@ -391,7 +403,8 @@ func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 		if msg.Timestamp.IsZero() {
 			msg.Timestamp = time.Now()
 		}
-		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, msg.Body))
+		msg.Timestamp = msg.Timestamp.UTC()
+		msg.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(g.privKey, msg.SigningBytes()))
 
 		data, err := json.Marshal(msg)
 		if err != nil {
@@ -417,6 +430,10 @@ func (g *Gossip) PublishRaw(topicName string, data []byte) (err error) {
 
 	g.mx.Lock()
 	defer g.mx.Unlock()
+
+	if g.pubsub == nil {
+		return ErrPubsubNotInit
+	}
 
 	topic, ok := g.topics[topicName]
 	if !ok {
@@ -455,7 +472,16 @@ func (g *Gossip) SelfPublish(data []byte) error {
 		return nil
 	}
 
-	_, err := g.node.SelfStream(route, data)
+	simulatedStreamMessage.Signature = base64.StdEncoding.EncodeToString(
+		ed25519.Sign(g.privKey, simulatedStreamMessage.SigningBytes()),
+	)
+	data, err := json.Marshal(simulatedStreamMessage)
+	if err != nil {
+		log.Errorf("gossip: failed to re-sign user update message: %v", err)
+		return err
+	}
+
+	_, err = g.node.SelfStream(route, data)
 	return err
 }
 

@@ -1,4 +1,4 @@
-//go:build echo
+//go:build echo && !remote
 
 /*
 
@@ -41,6 +41,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
@@ -69,7 +70,7 @@ const (
 	seenTTL           = 999 * time.Minute
 	pruneInterval     = 999 * time.Minute
 	maxSeenKeys       = 10_000
-	ownTweetInterval  = 5 * time.Minute
+	ownTweetInterval  = 24 * time.Hour
 	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
 	ownTweetCharLimit = 4096
 )
@@ -386,18 +387,21 @@ func (e *echoBot) messageSeenKey(m event.NewMessageEvent) string {
 
 func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	prefix := echoChatReply + ": "
-	available := messageLimit - len(prefix)
-	if len(incomingText) > available {
-		return prefix + incomingText[:available]
+	// Runes, not bytes: the chat handler counts runes, and cutting the text at
+	// a byte offset would split an emoji and echo back U+FFFD.
+	available := messageLimit - utf8.RuneCountInString(prefix)
+	runes := []rune(incomingText)
+	if len(runes) > available {
+		return prefix + string(runes[:available])
 	}
 	return prefix + incomingText
 }
 
-func (e *echoBot) likeTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+func (e *echoBot) reactToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	_, err := e.node.GenericStream(
 		requesterNodeID,
-		event.PUBLIC_POST_LIKE,
-		event.LikeEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
+		event.PUBLIC_POST_REACT,
+		event.ReactionEvent{TweetId: tw.Id, UserId: tw.UserId, OwnerId: e.ownerID()},
 	)
 	return err
 }

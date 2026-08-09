@@ -29,6 +29,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -55,8 +56,8 @@ type OwnerReTweetStorer interface {
 
 type ReTweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
-	NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error)
-	UnRetweet(retweetedByUserID, tweetId string) error
+	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
+	UnRetweet(retweetedByUserID, tweetId string, isTransitive bool) error
 	RetweetsCount(tweetId string) (uint64, error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 }
@@ -65,11 +66,15 @@ type RetweetTimelineUpdater interface {
 	AddTweetToTimeline(userId string, tweet domain.Tweet) error
 }
 
+type RetweetNotifier interface {
+	Add(not domain.Notification) error
+}
+
 func StreamNewReTweetHandler(
 	userRepo RetweetedUserFetcher,
 	tweetRepo ReTweetsStorer,
 	timelineRepo RetweetTimelineUpdater,
-	notifyRepo ModerationNotifier,
+	notifyRepo RetweetNotifier,
 	streamer RetweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -85,7 +90,14 @@ func StreamNewReTweetHandler(
 			return nil, warpnet.WarpError("empty retweet id")
 		}
 
-		retweet, err := tweetRepo.NewRetweet(retweetEvent)
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
+		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
+
+		// The network-wide (CRDT) retweet counter is bumped only on the
+		// retweeter's own node, so a retweet stored on both the retweeter's and
+		// the source author's node is counted once.
+		retweet, err := tweetRepo.NewRetweet(retweetEvent, isOwnerRetweeter)
 		if err != nil {
 			log.Errorf("retweet handler failed: %v", err)
 			return nil, err
@@ -102,10 +114,11 @@ func StreamNewReTweetHandler(
 		if isQuote && retweetEvent.QuotedUserId != nil && *retweetEvent.QuotedUserId != "" {
 			sourceAuthorId = *retweetEvent.QuotedUserId
 		}
+		sourceTweetId := strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix)
+		if isQuote {
+			sourceTweetId = *retweetEvent.QuotedTweetId
+		}
 
-		ownNodeInfo := streamer.NodeInfo()
-		ownerId := ownNodeInfo.OwnerId
-		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
 		if isOwnerRetweeter {
 			// owner retweeted it
 			if err = timelineRepo.AddTweetToTimeline(ownerId, retweet); err != nil {
@@ -126,9 +139,11 @@ func StreamNewReTweetHandler(
 					notifyText = notifyUsername + " quoted your tweet"
 				}
 				if err := notifyRepo.Add(domain.Notification{
-					Type:   domain.NotificationRetweetType,
-					Text:   notifyText,
-					UserId: ownerId,
+					Type:        domain.NotificationRetweetType,
+					Text:        notifyText,
+					RecepientId: ownerId,
+					ActorId:     *retweetEvent.RetweetedBy,
+					TweetId:     sourceTweetId,
 				}); err != nil {
 					log.Errorf("retweet handler: adding notification: %v", err)
 				}
@@ -194,14 +209,16 @@ func StreamUnretweetHandler(
 		if err != nil {
 			return nil, err
 		}
-		err = tweetRepo.UnRetweet(retweetedBy, ev.TweetId)
+		ownNodeInfo := streamer.NodeInfo()
+		ownerId := ownNodeInfo.OwnerId
+		// Mirror the retweet path: only the retweeter's own node adjusts the
+		// network-wide (CRDT) counter.
+		err = tweetRepo.UnRetweet(retweetedBy, ev.TweetId, retweetedBy == ownerId)
 		if err != nil {
 			log.Errorf("unretweet handler failed: %v", err)
 			return nil, err
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
-		ownerId := ownNodeInfo.OwnerId
 		isOwnTweetUnretweet := tweet.UserId == ownerId
 		if isOwnTweetUnretweet {
 			// tweet belongs to owner, unretweet themself

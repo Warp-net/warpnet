@@ -53,14 +53,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    // Hashtag links (#tag) resolve into the working Search screen, carrying
+    // the query. The standalone Hashtag view was a never-completing shell
+    // (empty submit/loadMore, loading stuck true), so unify rather than ship
+    // a dead-end screen.
     path: "/hashtag",
     name: "Hashtag",
-    // route level code-splitting
-    // this generates a separate chunk (about.[hash].js) for this route
-    // which is lazy-loaded when the route is visited.
-    component: () =>
-      import(/* webpackChunkName: "hashtag" */ "../views/Hashtag.vue"),
-    meta: { protected: true },
+    redirect: (to) => ({ name: "Search", query: { q: to.query.q } }),
   },
   {
     path: "/notifications",
@@ -137,10 +136,10 @@ const routes = [
     meta: { protected: true },
   },
   {
-    path: "/likes",
-    name: "Likes",
+    path: "/reactions",
+    name: "Reactions",
     component: () =>
-      import(/* webpackChunkName: "likes" */ "../views/Likes.vue"),
+      import(/* webpackChunkName: "reactions" */ "../views/Reactions.vue"),
     meta: { protected: true },
   },
   {
@@ -176,6 +175,20 @@ const routes = [
     name: "SettingsFilters",
     component: () =>
       import(/* webpackChunkName: "settings-filters" */ "../views/Settings/Filters.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/notifications",
+    name: "SettingsNotifications",
+    component: () =>
+      import(/* webpackChunkName: "settings-notifications" */ "../views/Settings/Notifications.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/gateway",
+    name: "SettingsGateway",
+    component: () =>
+      import(/* webpackChunkName: "settings-gateway" */ "../views/Settings/Gateway.vue"),
     meta: { protected: true },
   },
   {

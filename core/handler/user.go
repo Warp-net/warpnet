@@ -176,6 +176,9 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 	if err = json.Unmarshal(otherUserData, &user); err != nil {
 		log.Errorf("stream: get other user: response unmarshal: %v %s", err, otherUserData)
 	}
+	now := time.Now().UTC()
+	user.LastSeen = &now
+	user.IsOffline = false
 	return user
 }
 
@@ -192,6 +195,7 @@ func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
 		if err != nil {
 			return nil, err
 		}
+
 		return event.SearchUsersResponse{Cursor: cur, Users: users}, nil
 	}
 }

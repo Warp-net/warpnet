@@ -66,11 +66,11 @@ fun NotificationInfo(
                 }
             )
         }
-        Notification.Type.Like -> {
+        Notification.Type.Reaction -> {
             NotificationInfo(
                 icon = R.drawable.ic_star_24dp_filled,
-                iconColor = warpdroidColors.likeButtonActiveColor,
-                text = R.string.notification_like_format,
+                iconColor = warpdroidColors.reactionButtonActiveColor,
+                text = R.string.notification_reaction_format,
                 account = notificationViewData.account,
                 onViewAccount = {
                     listener.onViewAccount(notificationViewData.account.id)
@@ -100,7 +100,7 @@ fun NotificationInfo(
                 // reaction with no emoji info, fall back to star
                 else -> NotificationInfo(
                     icon = R.drawable.ic_star_24dp_filled,
-                    iconColor = warpdroidColors.likeButtonActiveColor,
+                    iconColor = warpdroidColors.reactionButtonActiveColor,
                     text = R.string.notification_pleroma_reaction_format,
                     account = notificationViewData.account,
                     onViewAccount = {

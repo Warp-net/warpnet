@@ -32,42 +32,50 @@ resulting from the use or misuse of this software.
       <div class="w-12 mr-4 flex justify-end">
         <i class="text-sm pt-1 fas fa-retweet text-dark"></i>
       </div>
-      <p class="text-sm text-dark">{{ label }}</p>
+      <p class="text-sm text-dark min-w-0 break-words">{{ label }}</p>
     </div>
   </div>
   <div
       v-if="!deleted"
       ref="tweetRoot"
-      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex cursor-pointer"
+      class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest transition-colors duration-150 flex cursor-pointer"
       @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
       <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
-          class="h-12 w-12 rounded-full flex-none object-cover bg-transparent"
+          class="h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
           :alt="`${tweet.username || 'User'} avatar`"
         />
       </button>
     </div>
-    <div class="w-full">
-      <div class="flex items-center w-full">
-        <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn">
+    <!-- min-w-0 throughout: fediverse handles are long unbreakable strings
+         (user@ec.social-network.europa.eu); without it the flex children
+         refuse to shrink and the whole row bleeds out of the column. -->
+    <div class="w-full min-w-0">
+      <div class="flex items-center w-full min-w-0">
+        <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn truncate min-w-0 text-left">
           {{ tweet.username || 'Anonymous' }}
         </button>
-        <p class="hidden md:block text-sm text-dark ml-2">
+        <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
           @{{ tweet.user_id }}
         </p>
-        <p class="text-sm text-dark ml-2">·</p>
-        <p class="text-sm text-dark ml-2">{{ $filters.timeago(tweet.created_at) }}</p>
-        <span v-if="tweet.pinned" class="ml-2 text-xs text-blue" title="Pinned tweet">
+        <p class="text-sm text-dark ml-2 flex-none">·</p>
+        <p class="text-sm text-dark ml-2 flex-none whitespace-nowrap">{{ $filters.timeago(tweet.created_at) }}</p>
+        <span
+          v-if="isBridged"
+          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-mastodon-accent text-white whitespace-nowrap flex-none"
+          :title="`Bridged from ${instanceLabel}`"
+        >{{ instanceLabel }}</span>
+        <span v-if="tweet.pinned" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" title="Pinned tweet">
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
-        <div class="relative ml-auto">
-          <button type="button" @click.stop="showDropdown = !showDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
+        <div class="relative ml-auto flex-none">
+          <button type="button" @click.stop="toggleDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
-          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white rounded-md shadow-lg py-1 z-10">
+          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10">
             <button type="button" @click.stop="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
               {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
             </button>
@@ -87,13 +95,24 @@ resulting from the use or misuse of this software.
           @submit="submitReport"
           @cancel="showReportDialog = false"
         />
+        <ConfirmDialog
+          :show="showDeleteConfirm"
+          title="Delete tweet?"
+          message="This tweet will be permanently deleted. This can't be undone."
+          confirm-label="Delete"
+          cancel-label="Cancel"
+          :destructive="true"
+          @confirm="doDelete"
+          @cancel="showDeleteConfirm = false"
+        />
       </div>
-      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2" v-linkify>
-        {{ tweet.text }}
+      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2 break-words" v-linkify>
+        {{ displayText }}
       </p>
       <p v-else class="pb-2 bg-red-300">
         Moderated: {{ tweet.moderation.reason }}.
       </p>
+      <PollWidget v-if="hasPoll" :tweet="tweet" />
       <div
         v-if="tweet.quoted_tweet_id"
         class="mb-2 border border-lighter rounded p-3 bg-lightest text-sm"
@@ -105,32 +124,96 @@ resulting from the use or misuse of this software.
           <p class="text-xs text-dark mt-1">The original tweet was edited after this quote was posted.</p>
         </template>
         <template v-else>
-          <p class="font-bold">
+          <p class="font-bold break-words">
             {{ quotedSourceUsername || 'Quoted tweet' }}
             <span class="text-dark font-normal ml-1">@{{ tweet.quoted_user_id }}</span>
           </p>
-          <p v-if="quotedSourceText" class="mt-1 line-clamp-4">{{ quotedSourceText }}</p>
+          <p v-if="quotedSourceText" class="mt-1 line-clamp-4 break-words">{{ quotedSourceText }}</p>
           <p v-else class="mt-1 text-dark italic">View quoted tweet</p>
         </template>
       </div>
-      <div v-if="tweetImages.length === 1" class="mt-2">
+      <div v-if="galleryImages.length === 1" class="mt-2">
         <img
-            :src="tweetImages[0]"
+            :src="galleryImages[0]"
             alt="Tweet image"
             class="rounded-lg max-w-full border border-lighter cursor-zoom-in"
-            @click.stop="openImageView(tweetImages[0])"
+            @click.stop="openImageView(galleryImages[0])"
         />
       </div>
-      <div v-else-if="tweetImages.length === 2" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
-        <img v-for="(img, i) in tweetImages" :key="i" :src="img" alt="Tweet image" class="w-full h-48 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
+      <div v-else-if="galleryImages.length === 2" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
+        <img v-for="(img, i) in galleryImages" :key="i" :src="img" alt="Tweet image" class="w-full h-48 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
       </div>
-      <div v-else-if="tweetImages.length === 3" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter" style="height:300px">
-        <img :src="tweetImages[0]" alt="Tweet image" class="row-span-2 w-full h-full object-cover cursor-zoom-in" style="grid-row: span 2" @click.stop="openImageView(tweetImages[0])" />
-        <img :src="tweetImages[1]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(tweetImages[1])" />
-        <img :src="tweetImages[2]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(tweetImages[2])" />
+      <div v-else-if="galleryImages.length === 3" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter" style="height:300px">
+        <img :src="galleryImages[0]" alt="Tweet image" class="row-span-2 w-full h-full object-cover cursor-zoom-in" style="grid-row: span 2" @click.stop="openImageView(galleryImages[0])" />
+        <img :src="galleryImages[1]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(galleryImages[1])" />
+        <img :src="galleryImages[2]" alt="Tweet image" class="w-full h-full object-cover cursor-zoom-in" @click.stop="openImageView(galleryImages[2])" />
       </div>
-      <div v-else-if="tweetImages.length >= 4" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
-        <img v-for="(img, i) in tweetImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
+      <div v-else-if="galleryImages.length >= 4" class="mt-2 grid grid-cols-2 gap-1 rounded-lg overflow-hidden border border-lighter">
+        <img v-for="(img, i) in galleryImages.slice(0, 4)" :key="i" :src="img" alt="Tweet image" class="w-full h-36 object-cover cursor-zoom-in" @click.stop="openImageView(img)" />
+      </div>
+      <YoutubeEmbed v-if="youtubeId" :videoId="youtubeId" />
+      <div v-if="hasVideo" class="mt-2">
+        <video
+            v-if="videoSrc"
+            :src="videoSrc"
+            :poster="videoPoster || undefined"
+            controls
+            autoplay
+            playsinline
+            preload="metadata"
+            class="rounded-lg max-w-full border border-lighter bg-black"
+            @error="onVideoError"
+            @click.stop
+        ></video>
+        <div
+            v-else-if="videoError"
+            class="rounded-lg border border-lighter p-4 text-sm text-dark"
+            role="alert"
+        >
+          <i class="fas fa-exclamation-triangle mr-1" aria-hidden="true"></i>
+          {{ videoError }}
+          <button
+              @click.stop="loadVideo"
+              type="button"
+              class="ml-2 underline hover:text-blue"
+          >Try again</button>
+        </div>
+        <button
+            v-else
+            @click.stop="loadVideo"
+            type="button"
+            :disabled="videoLoading"
+            class="relative w-full overflow-hidden rounded-lg border border-lighter transition-colors flex flex-col items-center justify-center"
+            :class="videoPoster ? 'bg-black' : 'bg-lighter hover:bg-lightblue py-8 text-dark'"
+            :aria-label="videoLoading ? 'Loading video' : 'Play video'"
+        >
+          <img
+              v-if="videoPoster"
+              :src="videoPoster"
+              alt=""
+              aria-hidden="true"
+              class="w-full max-h-96 object-contain"
+          />
+          <span
+              class="flex flex-col items-center justify-center"
+              :class="videoPoster ? 'absolute inset-0' : ''"
+          >
+            <!-- Over a still the label needs its own dark backing: a frame can
+                 be any brightness, so a light one would swallow white text. -->
+            <span
+                class="flex flex-col items-center"
+                :class="videoPoster ? 'rounded-lg bg-black bg-opacity-80 px-4 py-3 text-white' : ''"
+            >
+              <i
+                  :class="videoLoading ? 'fas fa-circle-notch fa-spin' : 'fas fa-play-circle'"
+                  class="text-3xl mb-2"
+                  aria-hidden="true"
+              ></i>
+              <span class="text-sm font-semibold">{{ videoLoading ? 'Loading video…' : 'Play video' }}</span>
+              <span v-if="!videoLoading" class="text-xs mt-1">Loads only when you play it</span>
+            </span>
+          </span>
+        </button>
       </div>
       <div
         v-if="viewedImage"
@@ -142,15 +225,34 @@ resulting from the use or misuse of this software.
       >
         <img :src="viewedImage" alt="Tweet image (full size)" class="max-w-full max-h-full object-contain rounded" />
       </div>
+      <div v-if="reactionChips.length" class="flex flex-wrap gap-1 mt-2">
+        <button
+          v-for="chip in reactionChips"
+          :key="chip.emoji"
+          type="button"
+          class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition-colors flat-btn"
+          :class="chip.emoji === myReaction
+            ? 'border-blue bg-lightblue text-blue font-semibold'
+            : 'border-lighter hover:bg-lightblue'"
+          :aria-pressed="chip.emoji === myReaction"
+          :aria-label="`${chip.count} reacted with ${chip.emoji}`"
+          @click.stop="react(chip.emoji)"
+        >
+          <span class="leading-none">{{ chip.emoji }}</span>
+          <span class="text-xs">{{ chip.count }}</span>
+        </button>
+      </div>
       <div class="flex w-full mt-1">
         <div class="flex items-center text-sm text-dark w-1/4">
-          <span
-            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center"
-            aria-label="Replies"
-            title="Replies"
+          <button
+            @click.stop="replyToTweet()"
+            type="button"
+            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-100 transition-colors flat-btn"
+            aria-label="Reply"
+            title="Reply"
           >
             <i class="far fa-comment" aria-hidden="true"></i>
-          </span>
+          </button>
           <p v-if="getRepliesCount(tweet.id) > 0">{{ getRepliesCount(tweet.id) || '?' }}</p>
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
@@ -170,7 +272,7 @@ resulting from the use or misuse of this software.
             </button>
             <div
               v-if="showRetweetMenu"
-              class="absolute left-0 mt-2 w-40 bg-white rounded-md shadow-lg py-1 z-10"
+              class="absolute left-0 mt-2 w-40 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10"
             >
               <button
                 type="button"
@@ -191,22 +293,36 @@ resulting from the use or misuse of this software.
             @click.stop="showRetweetersOverlay = true"
           >{{ getRetweetsCount(tweet.id) || '?'}}</button>
         </div>
-        <div class="flex items-center text-sm text-dark w-1/4">
+        <div class="flex items-center text-sm text-dark w-1/4 relative"
+             @mouseenter="scheduleReactionBar"
+             @mouseleave="closeReactionBarOnLeave">
           <button
-            @click.stop="like()"
+            @click.stop="toggleOwnReaction()"
+            @pointerdown="startLongPress"
+            @pointerup="cancelLongPress"
+            @pointercancel="cancelLongPress"
+            @contextmenu.prevent="showReactionBar = true"
             type="button"
             class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-red-100 transition-colors"
-            :aria-label="liked ? 'Unlike' : 'Like'"
-            :title="liked ? 'Unlike' : 'Like'"
+            :aria-label="myReaction ? 'Remove reaction' : 'React'"
+            :title="myReaction ? 'Remove reaction' : 'React (hold for more)'"
+            :aria-expanded="showReactionBar"
           >
-            <i class="fas fa-heart" :class="liked ? 'text-red-600' : ''" aria-hidden="true"></i>
+            <span v-if="myReaction" class="text-lg leading-none">{{ myReaction }}</span>
+            <i v-else class="fas fa-heart" aria-hidden="true"></i>
           </button>
           <button
-            v-if="getLikesCount(tweet.id) > 0"
+            v-if="getReactionsCount(tweet.id) > 0"
             type="button"
             class="hover:underline flat-btn"
-            @click.stop="showLikersOverlay = true"
-          >{{ getLikesCount(tweet.id) }}</button>
+            @click.stop="showReactorsOverlay = true"
+          >{{ getReactionsCount(tweet.id) }}</button>
+          <ReactionBar
+            v-if="showReactionBar"
+            :selected="myReaction"
+            @select="react"
+            @close="showReactionBar = false"
+          />
         </div>
         <div class="flex items-center text-sm text-dark w-1/4">
           <span
@@ -216,22 +332,15 @@ resulting from the use or misuse of this software.
           >
             <i class="far fa-eye" aria-hidden="true"></i>
           </span>
-          <p>{{ getViewsCount(tweet.id) }}</p>
+          <p v-if="getViewsCount(tweet.id) > 0">{{ getViewsCount(tweet.id) }}</p>
         </div>
       </div>
     </div>
-    <ReplyOverlay
-        v-if="showReplyOverlay"
-        :tweet="tweet" :profile="profile"
-        :showReplyOverlay="showReplyOverlay"
-        @close="showReplyOverlay = false"
-        @replied="loadTweetStats(tweet.id, tweet.user_id)"
-    />
-    <LikersOverlay
-        :show="showLikersOverlay"
+    <ReactorsOverlay
+        :show="showReactorsOverlay"
         :tweetId="tweet.id"
         :ownerUserId="tweet.user_id"
-        @close="showLikersOverlay = false"
+        @close="showReactorsOverlay = false"
     />
     <RetweetersOverlay
         :show="showRetweetersOverlay"
@@ -259,28 +368,38 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
+import {extractYoutubeId} from "@/lib/youtube";
+import {DEFAULT_REACTION} from "@/lib/emoji";
+import {decodeHtmlEntities, isMastodonTweet, mastodonInstance} from "@/lib/network";
 
 export default {
   name: "Tweet",
-  props: ["tweet"],
+  props: {
+    tweet: {type: Object, required: true},
+    autoloadVideo: {type: Boolean, default: false},
+  },
   components: {
-    ReplyOverlay: defineAsyncComponent(() => import('./ReplyOverlay.vue')),
-    LikersOverlay: defineAsyncComponent(() => import('./LikersOverlay.vue')),
+    ReactorsOverlay: defineAsyncComponent(() => import('./ReactorsOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
     QuoteOverlay: defineAsyncComponent(() => import('./QuoteOverlay.vue')),
     ReportDialog: defineAsyncComponent(() => import('./ReportDialog.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
+    YoutubeEmbed: defineAsyncComponent(() => import('./YoutubeEmbed.vue')),
+    PollWidget: defineAsyncComponent(() => import('./PollWidget.vue')),
+    ReactionBar: defineAsyncComponent(() => import('./ReactionBar.vue')),
   },
   data() {
     return {
       profile: {},
-      showReplyOverlay: false,
-      showLikersOverlay: false,
+      showReactorsOverlay: false,
       showRetweetersOverlay: false,
       showEditOverlay: false,
       showQuoteOverlay: false,
       showDropdown: false,
       showReportDialog: false,
+      showDeleteConfirm: false,
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -289,13 +408,18 @@ export default {
       isOwner: false,
       bookmarked: false,
       label: "You Retweeted",
-      liked: false,
+      myReaction: "",
+      reactions: {},
+      showReactionBar: false,
       retweeted: false,
-      likesCount: new Map(),
+      reactionsCount: new Map(),
       retweetsCount: new Map(),
       repliesCount: new Map(),
       viewsCount: new Map(),
       tweetImages: [],
+      videoSrc: '',
+      videoLoading: false,
+      videoError: '',
       viewedImage: null,
       viewObserver: null,
       viewRecorded: false,
@@ -303,18 +427,94 @@ export default {
       statsRetried: false,
     };
   },
+  computed: {
+    isBridged() {
+      return isMastodonTweet(this.tweet);
+    },
+    instanceLabel() {
+      return mastodonInstance(this.tweet && this.tweet.user_id) || 'Mastodon';
+    },
+    displayText() {
+      const text = (this.tweet && this.tweet.text) || '';
+      return this.isBridged ? decodeHtmlEntities(text) : text;
+    },
+    youtubeId() {
+      if (this.hasVideo) return null;
+      return extractYoutubeId(this.tweet && this.tweet.text);
+    },
+    hasVideo() {
+      return !!(this.tweet && this.tweet.video_key);
+    },
+    hasPoll() {
+      return !!(this.tweet && this.tweet.poll && this.tweet.poll.options && this.tweet.poll.options.length > 0);
+    },
+    // A video post carries its first frame as the first image key (see the
+    // composer in Home.vue), so it stands in as the poster rather than being
+    // shown as a separate attachment.
+    videoPoster() {
+      return this.hasVideo ? (this.tweetImages[0] || '') : '';
+    },
+    galleryImages() {
+      // Slots fill in one by one as each blob arrives; empty ones are
+      // placeholders for fetches still in flight.
+      return this.hasVideo ? [] : this.tweetImages.filter(Boolean);
+    },
+    // Chips are ordered by popularity, with the emoji itself breaking ties
+    // so the row doesn't reshuffle between refreshes.
+    reactionChips() {
+      return Object.entries(this.reactions)
+        .filter(([, count]) => count > 0)
+        .map(([emoji, count]) => ({emoji, count}))
+        .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji));
+    },
+  },
   methods: {
+    async loadAuthor() {
+      try {
+        this.profile = await warpnetService.getProfile(this.tweet.user_id);
+        const avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key});
+        if (avatar) this.profile.avatar = avatar;
+      } catch (err) {
+        console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
+      }
+    },
+    async loadRetweeterLabel() {
+      if (!this.tweet.retweeted_by || this.tweet.retweeted_by === this.tweet.user_id) return;
+      try {
+        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by);
+        if (retweeter && retweeter.username) this.label = `${retweeter.username} Retweeted`;
+      } catch (err) {
+        console.warn(`failed to load retweeter profile [${this.tweet.retweeted_by}]`, err);
+      }
+    },
+    loadImages() {
+      const imageKeys = this.tweet.image_keys || [];
+      if (imageKeys.length === 0) return;
+      this.tweetImages = imageKeys.map(() => '');
+      imageKeys.forEach((key, i) => {
+        warpnetService.getImage({userId: this.tweet.user_id, key})
+            .then((img) => { if (img) this.tweetImages[i] = img; })
+            .catch((err) => console.warn(`failed to load tweet image [${this.tweet.id}]`, err));
+      });
+    },
     async refreshInteractionState() {
       const owner = warpnetService.getOwnerProfile();
       if (!owner) {
-        this.liked = false;
+        this.myReaction = "";
         this.retweeted = false;
+        this.bookmarked = false;
         return;
       }
 
-      this.liked = await warpnetService.hasLiker(this.tweet.id, owner.user_id);
+      // The local cache only paints the button until the node answers; it
+      // must never clobber that answer, which can land first.
+      const cached = await warpnetService.getReactorEmoji(this.tweet.id, owner.user_id);
+      if (!this._reactionAnswered) {
+        this.myReaction = cached;
+      }
       this.retweeted = this.tweet.retweeted_by === owner.user_id
         || await warpnetService.hasRetweeter(this.tweet.id, owner.user_id);
+      this.bookmarked = await warpnetService.hasBookmark(this.tweet.id);
     },
     gotoProfile(tweetUserId) {
       this.$router.push({
@@ -324,7 +524,18 @@ export default {
         },
       });
     },
-    openTweetPage() {
+    async openTweetPage() {
+      // A bridged author (e.g. a Fediverse user who joined the thread) may be
+      // unknown to the node; resolving them through the gateway first gives
+      // the tweet page a routable user record.
+      if (isMastodonTweet(this.tweet)) {
+        try {
+          const gw = await warpnetService.getGatewaySettings();
+          await warpnetService.getProfile(this.tweet.user_id, gw.node_id);
+        } catch (err) {
+          console.warn('Failed to resolve bridged author:', err);
+        }
+      }
       this.$router.push({
         name: 'Tweet',
         params: { id: this.tweet.id },
@@ -340,11 +551,40 @@ export default {
     },
     onBodyClick() {
       if (this.showDropdown || this.showRetweetMenu) {
-        this.showDropdown = false;
-        this.showRetweetMenu = false;
+        this.closeMenus();
         return;
       }
       this.openTweetPage();
+    },
+    toggleDropdown() {
+      this.showDropdown = !this.showDropdown;
+      this.showRetweetMenu = false;
+      this.syncOutsideClose();
+    },
+    closeMenus() {
+      this.showDropdown = false;
+      this.showRetweetMenu = false;
+      this.teardownOutsideClose();
+    },
+    // Close any open dropdown when the user clicks anywhere else on the page,
+    // matching standard menu behaviour. Deferred registration keeps the
+    // opening click from immediately closing the menu.
+    syncOutsideClose() {
+      const anyOpen = this.showDropdown || this.showRetweetMenu;
+      if (anyOpen && !this._docClickHandler) {
+        this._docClickHandler = () => this.closeMenus();
+        setTimeout(() => {
+          if (this._docClickHandler) document.addEventListener("click", this._docClickHandler);
+        }, 0);
+      } else if (!anyOpen) {
+        this.teardownOutsideClose();
+      }
+    },
+    teardownOutsideClose() {
+      if (this._docClickHandler) {
+        document.removeEventListener("click", this._docClickHandler);
+        this._docClickHandler = null;
+      }
     },
     // Retweet button drives a small popover that offers a plain
     // retweet vs. a quote retweet. When the user already retweeted
@@ -357,6 +597,7 @@ export default {
         return;
       }
       this.showRetweetMenu = !this.showRetweetMenu;
+      this.syncOutsideClose();
     },
     async plainRetweet() {
       this.showRetweetMenu = false;
@@ -376,6 +617,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle bookmark on [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update bookmark. Please try again.");
       }
     },
     async togglePin() {
@@ -390,6 +632,7 @@ export default {
         }
       } catch (err) {
         console.error(`failed to toggle pin on [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update pin. Please try again.");
       }
     },
     openEdit() {
@@ -432,7 +675,9 @@ export default {
           this.quotedUnavailable = true;
           return;
         }
-        this.quotedSourceText = src.text || '';
+        this.quotedSourceText = isMastodonTweet(src)
+          ? decodeHtmlEntities(src.text || '')
+          : (src.text || '');
         this.quotedSourceUsername = src.username || '';
       } catch (err) {
         console.warn('failed to load quoted source:', err);
@@ -450,6 +695,34 @@ export default {
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
+    },
+    async loadVideo() {
+      if (this.videoLoading || this.videoSrc) return;
+      const key = this.tweet && this.tweet.video_key;
+      if (!key) return;
+
+      this.videoError = '';
+      this.videoLoading = true;
+      try {
+        const video = await warpnetService.getVideo({
+          userId: this.tweet.user_id,
+          key,
+        });
+        if (!video || !video.file) {
+          this.videoError = "This video isn't available right now. The author's node may be offline.";
+          return;
+        }
+        this.videoSrc = video.file;
+      } catch (err) {
+        console.error(`failed to load tweet video [${this.tweet.id}]`, err);
+        this.videoError = 'Failed to load the video.';
+      } finally {
+        this.videoLoading = false;
+      }
+    },
+    onVideoError() {
+      this.videoSrc = '';
+      this.videoError = 'This video cannot be played. Your system may be missing the required video codec.';
     },
     openImageView(img) {
       this.viewedImage = img;
@@ -470,25 +743,6 @@ export default {
         this.tweet.text = updated.text;
       }
     },
-    async get() {
-      let t = undefined
-      if (!this.tweet.parent_id || this.tweet.parent_id === this.tweet.root_id) {
-        const getObject = {
-          userId: this.tweet.user_id,
-          tweetId: this.tweet.id,
-        }
-        t =  await warpnetService.getTweet(getObject);
-      } else {
-        const getObject = {
-          parentId: this.tweet.parent_id,
-          rootId: this.tweet.root_id,
-          replyId: this.tweet.id,
-          userId: this.tweet.user_id,
-        }
-        t =  await warpnetService.getReply(getObject);
-      }
-      this.showReplyOverlay = true;
-    },
     openReport() {
       this.showDropdown = false;
       this.showReportDialog = true;
@@ -507,14 +761,22 @@ export default {
           targetNodeId: profile?.node_id || '',
           reason,
         });
+        toast.success("Report sent to moderators.");
       } catch (err) {
         console.error('Failed to send report:', err);
+        toast.error(err?.message || "Couldn't send the report. Please try again.");
       } finally {
         this.showReportDialog = false;
       }
     },
-    async deleteTweet() {
+    // deleteTweet opens the confirmation; doDelete performs the irreversible
+    // delete only after the user confirms.
+    deleteTweet() {
       this.showDropdown = false;
+      this.showDeleteConfirm = true;
+    },
+    async doDelete() {
+      this.showDeleteConfirm = false;
       try {
         if (!this.tweet.parent_id || this.tweet.parent_id === '') {
           await warpnetService.deleteTweet({
@@ -530,12 +792,14 @@ export default {
           });
         }
         this.deleted = true;
+        toast.success("Tweet deleted.");
       } catch (err) {
         console.error('Failed to delete tweet:', err);
+        toast.error(err?.message || "Couldn't delete the tweet. Please try again.");
       }
     },
     replyToTweet() {
-      this.showReplyOverlay = true;
+      this.openTweetPage();
     },
     async retweet() {
       const owner = warpnetService.getOwnerProfile();
@@ -561,6 +825,10 @@ export default {
         }
       } catch (err) {
         console.error(`failed to retweet/unretweet tweet [${this.tweet.id}]`, err);
+        // Roll optimistic state back to what it was before this attempt.
+        this.retweeted = alreadyRetweeted;
+        this.tweet.retweeted_by = alreadyRetweeted ? owner.user_id : null;
+        toast.error(err?.message || "Couldn't update retweet. Please try again.");
       }
       try {
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
@@ -568,37 +836,99 @@ export default {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
     },
-    async like() {
-      if (this.tweet.network && this.tweet.network !== "warpnet") {
-        return
+    // Holding the button (or hovering it on a mouse) opens the emoji row;
+    // a plain click reacts with the default heart, or takes back whatever
+    // reaction is already there.
+    startLongPress() {
+      this.cancelLongPress();
+      // Cleared here rather than on release: a hold that ends off the
+      // button never produces the click this flag guards against, and a
+      // stale flag would swallow the next real one.
+      this._barOpenedByHold = false;
+      this._longPressTimer = setTimeout(() => {
+        this._longPressTimer = null;
+        this._barOpenedByHold = true;
+        this.showReactionBar = true;
+      }, 450);
+    },
+    cancelLongPress() {
+      if (this._longPressTimer) {
+        clearTimeout(this._longPressTimer);
+        this._longPressTimer = null;
       }
+    },
+    scheduleReactionBar() {
+      // Touch devices report no hover; there the long press opens the row.
+      if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+      this.cancelReactionBar();
+      this._hoverTimer = setTimeout(() => {
+        this._hoverTimer = null;
+        this.showReactionBar = true;
+      }, 600);
+    },
+    cancelReactionBar() {
+      if (this._hoverTimer) {
+        clearTimeout(this._hoverTimer);
+        this._hoverTimer = null;
+      }
+    },
+    // The bar is a child of the hovered area, so moving onto it doesn't
+    // count as leaving; anything else does and takes the bar with it.
+    closeReactionBarOnLeave() {
+      this.cancelReactionBar();
+      this.showReactionBar = false;
+    },
+    toggleOwnReaction() {
+      this.cancelLongPress();
+      if (this._barOpenedByHold) { // the click that ended the hold
+        this._barOpenedByHold = false;
+        return;
+      }
+      this.react(this.myReaction || DEFAULT_REACTION);
+    },
+    // react sets the given emoji as the viewer's reaction, or removes it
+    // when they already hold that one — a user has at most one reaction
+    // per tweet, so switching is a single react call.
+    async react(emoji) {
       const owner = warpnetService.getOwnerProfile();
       if (!owner) return;
-      let likesNum = 0
-      const alreadyLiked = this.liked
+      this.showReactionBar = false;
+
+      const removing = this.myReaction === emoji;
+      let resp;
       try {
-        if (!alreadyLiked) {
-          likesNum = await warpnetService.likeTweet(this.tweet.id, this.tweet.user_id)
+        if (removing) {
+          resp = await warpnetService.unreactTweet(this.tweet.id, this.tweet.user_id)
         } else {
-          likesNum = await warpnetService.unlikeTweet(this.tweet.id, this.tweet.user_id)
+          resp = await warpnetService.reactToTweet(this.tweet.id, this.tweet.user_id, emoji)
         }
       } catch (err) {
-        console.error(`failed to like/unlike tweet [${this.tweet.id}]`, err);
+        console.error(`failed to react to tweet [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't update reaction. Please try again.");
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
         return;
       }
-      if (!alreadyLiked) {
-        await warpnetService.setLiker(this.tweet.id, owner.user_id, owner)
-        this.liked = true;
+      if (removing) {
+        await warpnetService.deleteReactor(this.tweet.id, owner.user_id)
+        this.myReaction = "";
       } else {
-        await warpnetService.deleteLiker(this.tweet.id, owner.user_id)
-        this.liked = false;
+        await warpnetService.setReactor(this.tweet.id, owner.user_id, owner, emoji)
+        this.myReaction = emoji;
       }
 
-      this.likesCount.set(this.tweet.id, likesNum);
+      this.reactions = resp.reactions;
+      this.reactionsCount.set(this.tweet.id, resp.count);
+      // A bridged tweet's real reaction count lives on the remote instance, not
+      // in this node's CRDT counter (which only knows our own), so refresh
+      // from the author's node the way retweet() does.
+      try {
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+      } catch (err) {
+        console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
+      }
     },
-    getLikesCount(tweetId) {
-      return this.likesCount.get(tweetId);
+    getReactionsCount(tweetId) {
+      return this.reactionsCount.get(tweetId);
     },
     getRetweetsCount(tweetId) {
       return this.retweetsCount.get(tweetId);
@@ -625,7 +955,16 @@ export default {
         return;
       }
 
-      this.likesCount.set(stats.tweet_id, stats.likes_count);
+      this.reactionsCount.set(stats.tweet_id, stats.reactions_count);
+      this.reactions = stats.reactions || {};
+      // my_reaction is answered from our own node, so it outranks the
+      // local cache — it survives a browser reset and other devices. An
+      // absent key means an older node that knows nothing of reactions;
+      // there the cache stays in charge.
+      if (stats.my_reaction !== undefined) {
+        this._reactionAnswered = true;
+        this.myReaction = stats.my_reaction || "";
+      }
       this.retweetsCount.set(stats.tweet_id, stats.retweets_count);
       this.repliesCount.set(stats.tweet_id, stats.replies_count);
       // Views are monotonically non-decreasing: a stale read raced with
@@ -729,43 +1068,25 @@ export default {
       // those and logs spurious errors.
       return;
     }
-    // Profile/avatar/image loads may transiently fail (author node
-    // unreachable); never let that abort the stats/interaction loads
-    // below, or the row renders with zeroed counters until a reload.
-    try {
-      this.profile = await warpnetService.getProfile(this.tweet.user_id);
-
-      if (this.tweet.retweeted_by && this.tweet.retweeted_by !== this.profile.id) {
-        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by)
-        this.label = `${retweeter.username} Retweeted`;
-      }
-
-      const imageKeys = (this.tweet.image_keys && this.tweet.image_keys.length > 0)
-          ? this.tweet.image_keys
-          : [];
-      const loadedImages = await Promise.all(
-          imageKeys.map(key => warpnetService.getImage({userId: this.tweet.user_id, key}))
-      );
-      this.tweetImages = loadedImages.filter(img => img);
-      this.profile.avatar = await warpnetService.getImage({userId: this.profile.id, key: this.profile.avatar_key})
-    } catch (err) {
-      console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
-    }
-
-    console.log("final tweet:", JSON.stringify(this.tweet));
-
     const owner = warpnetService.getOwnerProfile();
     this.isOwner = owner && owner.user_id === this.tweet.user_id;
 
-    try {
-      await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
-      await this.refreshInteractionState();
-    } catch (err) {
-      console.error(`failed to load tweet stats [${this.tweet.id}]`, err);
+    // Every asset is an independent per-element fetch: the text and the
+    // counters must never wait behind a hanging author node or blob, and
+    // one failed element must not take its siblings down with it.
+    this.loadAuthor();
+    this.loadRetweeterLabel();
+    this.loadImages();
+    if (this.tweet.video_key && this.autoloadVideo) {
+      this.loadVideo();
     }
 
+    this.loadTweetStats(this.tweet.id, this.tweet.user_id)
+        .then(() => this.refreshInteractionState())
+        .catch(err => console.error(`failed to load tweet stats [${this.tweet.id}]`, err));
+
     if (this.tweet.quoted_tweet_id) {
-      await this.loadQuotedSource();
+      this.loadQuotedSource();
     }
   },
   mounted() {
@@ -784,6 +1105,9 @@ export default {
       clearTimeout(this._statsRetryTimer);
       this._statsRetryTimer = null;
     }
+    this.cancelLongPress();
+    this.cancelReactionBar();
+    this.teardownOutsideClose();
   },
 };
 </script>

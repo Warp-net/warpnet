@@ -1,21 +1,32 @@
 package handler
 
 import (
-	"sort"
-
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
+	"strings"
 )
 
+type WhoToFollowAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
+type WhoToFollowUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
+}
+
+type WhoToFollowFollowsLister interface {
+	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
+}
+
 func StreamGetWhoToFollowHandler(
-	authRepo UserAuthStorer,
-	userRepo UserFetcher,
-	followRepo UserFollowsCounter,
+	authRepo WhoToFollowAuthStorer,
+	userRepo WhoToFollowUserFetcher,
+	followRepo WhoToFollowFollowsLister,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
@@ -63,7 +74,8 @@ func StreamGetWhoToFollowHandler(
 			if user.IsOffline { // exclude offline
 				continue
 			}
-			if user.Id == owner.UserId || user.NodeId == owner.NodeId { // exclude me
+
+			if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
 				continue
 			}
 			// if profile from Warpnet - don't show other network recommendations
@@ -88,19 +100,9 @@ func StreamGetWhoToFollowHandler(
 			whotofollow = append(whotofollow, user)
 		}
 
-		// show users with a ULID id first
-		sort.SliceStable(whotofollow, func(i, j int) bool {
-			return isULID(whotofollow[i].Id) && !isULID(whotofollow[j].Id)
-		})
-
 		return event.UsersResponse{
 			Cursor: cursor,
 			Users:  whotofollow,
 		}, nil
 	}
-}
-
-func isULID(id string) bool {
-	_, err := ulid.ParseStrict(id)
-	return err == nil
 }

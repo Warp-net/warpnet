@@ -457,7 +457,7 @@ Before `git commit`, verify each of these. Missing any one is a real bug, not a 
 - [ ] Run `go test -short -p 8 -v ./core/handler/... ./database/...` locally (this is what `make tests` does for the whole repo).
 - [ ] `go vet ./...` clean. `golangci-lint run` clean (CI runs it; config in `.golangci.yaml`).
 - [ ] `vendor/` not modified. If `go mod` accidentally touched it, `git checkout vendor/`.
-- [ ] `version` file: **do not bump manually** — the `pre-commit` githook auto-bumps the patch on non-`main` branches and updates `snap/snapcraft.yaml`. Make sure `make setup-hooks` has been run (`git config core.hooksPath .githooks`).
+- [ ] `version` file: **do not bump manually** — the **Release** GitHub Actions workflow (`.github/workflows/release.yaml`) bumps it and `snap/snapcraft.yaml` when a release is cut.
 
 **If the route is callable from the Vue desktop UI:**
 
@@ -490,7 +490,7 @@ Before `git commit`, verify each of these. Missing any one is a real bug, not a 
 - **Putting `domain.ID` fields where `string` belongs or vice versa.** IDs in events are `domain.ID`. In handler logic they're often used as `string` — `domain.ID` is a typed string alias, the conversion is implicit.
 - **Calling `streamer.GenericStream` for a `private` route.** Private routes never propagate. Only `public` routes call out to other nodes. If you wrote a private handler that needs to call a peer, you've split the wrong way — that should be a public route.
 - **Treating `ErrNodeIsOffline` as a real error.** It isn't. The local write succeeded; the propagation failed; return the local result and move on. See `like.go` for the exact branch.
-- **Bumping the `version` file by hand.** The pre-commit hook does it. Doing it manually creates a conflict with the hook.
+- **Bumping the `version` file by hand.** The Release workflow does it at release time. Doing it manually creates a conflict with that bump.
 - **Modifying `vendor/`** directly or via `go get` without intent. `vendor/` changes need to be a deliberate `make update-deps` commit, separate from feature work.
 - **Adding a `put` or `patch` verb.** Not used in the project. Use `post` for create-or-update, `delete` for delete.
 

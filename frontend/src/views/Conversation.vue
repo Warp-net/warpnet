@@ -51,7 +51,7 @@ resulting from the use or misuse of this software.
           <div v-for="message in messages" :key="message.id" 
                class="mb-4 flex"
                :class="{'justify-end': message.sender_id === currentUserId}">
-            <div class="max-w-3/4 rounded-lg px-4 py-2"
+            <div class="max-w-[75%] break-words rounded-lg px-4 py-2"
                  :class="message.sender_id === currentUserId ?
                         'bg-blue text-white' : 'bg-lighter'">
               <p v-linkify>{{ message.text }}</p>
@@ -65,8 +65,27 @@ resulting from the use or misuse of this software.
 
       <!-- Message Input -->
       <div class="border-t border-lighter px-4 py-3">
-        <form @submit.prevent="sendMessage" class="flex">
-          <input v-model="newMessage" 
+        <form @submit.prevent="sendMessage" class="flex items-center">
+          <div class="relative mr-2" data-emoji-anchor>
+            <button
+                type="button"
+                @click="showEmojiPicker = !showEmojiPicker"
+                class="rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                aria-label="Add emoji"
+                title="Add emoji"
+                :aria-expanded="showEmojiPicker"
+            >
+              <i class="far fa-smile text-blue text-lg" aria-hidden="true"></i>
+            </button>
+            <EmojiPicker
+                v-if="showEmojiPicker"
+                drop-up
+                @select="insertEmoji"
+                @close="showEmojiPicker = false"
+            />
+          </div>
+          <input ref="messageInput"
+                 v-model="newMessage"
                  type="text"
                  placeholder="Type a message..."
                  class="flex-1 rounded-full border border-lighter px-4 py-2 mr-2" />
@@ -83,12 +102,18 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {toast} from "@/lib/toast";
+import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+
+// Mirrors messageLimit in core/handler/chat.go.
+const messageCharLimit = 5000;
 
 export default {
   name: 'Chat',
   components: {
     SideNav: defineAsyncComponent(() => import('../components/SideNav.vue')),
     Loader: defineAsyncComponent(() => import('../components/Loader.vue')),
+    EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
   data() {
     return {
@@ -101,9 +126,29 @@ export default {
       otherUser: undefined,
       refreshTimer: null,
       refreshInFlight: false,
+      showEmojiPicker: false,
     };
   },
+  watch: {
+    // Runes, not UTF-16 units: matches the limit the node enforces.
+    newMessage(value) {
+      const clamped = clampRunes(value, messageCharLimit);
+      if (clamped !== value) this.newMessage = clamped;
+    },
+  },
   methods: {
+    insertEmoji(emoji) {
+      const field = this.$refs.messageInput;
+      const next = insertEmoji({
+        text: this.newMessage,
+        emoji,
+        field,
+        limit: messageCharLimit,
+      });
+      if (!next) return;
+      this.newMessage = next.text;
+      this.$nextTick(() => focusCaret(field, next.caret));
+    },
     async loadChat() {
       try {
         this.chat = await warpnetService.getChat(this.chatId);
@@ -124,20 +169,45 @@ export default {
       }
     },
 
+    // The peer's name and avatar fill in whenever they arrive; the
+    // messages must not wait behind their node.
+    async loadOtherUser() {
+      if (!this.chat) return;
+      try {
+        const otherId = this.chat.owner_id !== this.currentUserId
+            ? this.chat.owner_id
+            : this.chat.other_user_id;
+        const u = await warpnetService.getProfile(otherId);
+        if (!u || !u.id) return;
+        this.otherUser = u;
+        try {
+          const avatar = await warpnetService.getImage({userId: u.id, key: u.avatar_key});
+          if (avatar) this.otherUser = {...u, avatar};
+        } catch (err) {
+          console.warn('failed to load chat avatar:', err);
+        }
+      } catch (err) {
+        console.error('failed to load chat user:', err);
+      }
+    },
+
     async sendMessage() {
       if (!this.newMessage.trim()) return;
 
+      const text = this.newMessage;
       try {
-        const message = await warpnetService.sendDirectMessage( {
+        await warpnetService.sendDirectMessage({
           chatId: this.chatId,
           receiverId: this.otherUser.id,
-          text: this.newMessage,
+          text,
         });
-        this.messages.push(message);
+        // Don't push the raw send result (it can be empty and render a blank
+        // bubble); clear the input and let the poll surface the stored message.
         this.newMessage = '';
         this.scrollToBottom();
       } catch (error) {
         console.error('Error sending message:', error);
+        toast.error(error?.message || "Couldn't send the message. Please try again.");
       }
     },
 
@@ -164,6 +234,7 @@ export default {
           this.messages = [...this.messages, ...fresh]
               .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
           this.scrollToBottom();
+          warpnetService.markChatRead(this.chatId);
         }
       } catch (err) {
         console.error('Failed to refresh messages:', err);
@@ -181,15 +252,11 @@ export default {
       this.loadChat(),
       this.loadMessages()
     ]);
-
-    if (this.chat.owner_id !== this.currentUserId) {
-      this.otherUser = await warpnetService.getProfile(this.chat.owner_id)
-    } else {
-      this.otherUser = await warpnetService.getProfile(this.chat.other_user_id)
-    }
-    this.otherUser.avatar = await warpnetService.getImage({userId:this.otherUser.id, key:this.otherUser.avatar_key})
     this.loading = false;
     this.scrollToBottom();
+    warpnetService.markChatRead(this.chatId);
+
+    this.loadOtherUser();
 
     this.refreshTimer = setInterval(() => this.refreshMessages(), 3000);
   },
@@ -198,6 +265,9 @@ export default {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
+    // Everything on screen was seen, including own just-sent messages
+    // that bumped the chat's updated_at.
+    warpnetService.markChatRead(this.chatId);
   },
 };
 </script>

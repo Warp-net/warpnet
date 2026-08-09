@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 type stubTweetRepo struct {
@@ -82,7 +83,7 @@ func (s stubTweetRepo) Delete(userID, tweetID string) error {
 	}
 	return nil
 }
-func (s stubTweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
+func (s stubTweetRepo) UnRetweet(retweetedByUserID, tweetId string, _ bool) error {
 	if s.unRetweetFn != nil {
 		return s.unRetweetFn(retweetedByUserID, tweetId)
 	}
@@ -107,7 +108,7 @@ func (s stubTweetRepo) Unpin(userId, tweetId string) (domain.Tweet, error) {
 func (s stubTweetRepo) AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error) {
 	return edit, nil
 }
-func (s stubTweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
+func (s stubTweetRepo) AddReply(reply domain.Tweet, _ bool) (domain.Tweet, error) {
 	if s.addReplyFn != nil {
 		return s.addReplyFn(reply)
 	}
@@ -122,7 +123,7 @@ func (s stubTweetRepo) GetReply(rootID, replyID string) (domain.Tweet, error) {
 	}
 	return domain.Tweet{Id: replyID, RootId: rootID}, nil
 }
-func (s stubTweetRepo) DeleteReply(rootID, replyID string) (domain.Tweet, error) {
+func (s stubTweetRepo) DeleteReply(rootID, replyID string, _ bool) (domain.Tweet, error) {
 	if s.deleteReplyFn != nil {
 		return s.deleteReplyFn(rootID, replyID)
 	}
@@ -165,34 +166,48 @@ func (s stubTweetUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: userId, NodeId: "node-2"}, nil
 }
 
-type stubTweetLikeRepo struct {
-	likeFn       func(tweetId, userId string) (uint64, error)
-	unlikeFn     func(tweetId, userId string) (uint64, error)
-	likesCountFn func(tweetId string) (uint64, error)
-	likersFn     func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+type stubTweetReactionRepo struct {
+	reactFn          func(tweetId, userId string) (uint64, error)
+	unreactFn        func(tweetId, userId string) (uint64, error)
+	reactionsCountFn func(tweetId string) (uint64, error)
+	reactorsFn       func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
+	reactionsFn      func(tweetId string) (map[string]uint64, error)
+	reactionFn       func(tweetId, userId string) (string, error)
 }
 
-func (s stubTweetLikeRepo) Like(tweetId, userId string) (uint64, error) {
-	if s.likeFn != nil {
-		return s.likeFn(tweetId, userId)
+func (s stubTweetReactionRepo) React(tweetId, userId, _ string, _ bool) (uint64, error) {
+	if s.reactFn != nil {
+		return s.reactFn(tweetId, userId)
 	}
 	return 0, nil
 }
-func (s stubTweetLikeRepo) Unlike(tweetId, userId string) (uint64, error) {
-	if s.unlikeFn != nil {
-		return s.unlikeFn(tweetId, userId)
+func (s stubTweetReactionRepo) Reactions(tweetId string) (map[string]uint64, error) {
+	if s.reactionsFn != nil {
+		return s.reactionsFn(tweetId)
+	}
+	return nil, nil
+}
+func (s stubTweetReactionRepo) Reaction(tweetId, userId string) (string, error) {
+	if s.reactionFn != nil {
+		return s.reactionFn(tweetId, userId)
+	}
+	return "", nil
+}
+func (s stubTweetReactionRepo) Unreact(tweetId, userId string, _ bool) (uint64, error) {
+	if s.unreactFn != nil {
+		return s.unreactFn(tweetId, userId)
 	}
 	return 0, nil
 }
-func (s stubTweetLikeRepo) LikesCount(tweetId string) (uint64, error) {
-	if s.likesCountFn != nil {
-		return s.likesCountFn(tweetId)
+func (s stubTweetReactionRepo) ReactionsCount(tweetId string) (uint64, error) {
+	if s.reactionsCountFn != nil {
+		return s.reactionsCountFn(tweetId)
 	}
 	return 0, nil
 }
-func (s stubTweetLikeRepo) Likers(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
-	if s.likersFn != nil {
-		return s.likersFn(tweetId, limit, cursor)
+func (s stubTweetReactionRepo) Reactors(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
+	if s.reactorsFn != nil {
+		return s.reactorsFn(tweetId, limit, cursor)
 	}
 	return nil, "", nil
 }
@@ -211,13 +226,13 @@ func (s stubTweetRetweetRepo) Get(userID, tweetID string) (domain.Tweet, error) 
 	}
 	return domain.Tweet{Id: tweetID, UserId: userID}, nil
 }
-func (s stubTweetRetweetRepo) NewRetweet(tweet domain.Tweet) (domain.Tweet, error) {
+func (s stubTweetRetweetRepo) NewRetweet(tweet domain.Tweet, _ bool) (domain.Tweet, error) {
 	if s.newRetweetFn != nil {
 		return s.newRetweetFn(tweet)
 	}
 	return tweet, nil
 }
-func (s stubTweetRetweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
+func (s stubTweetRetweetRepo) UnRetweet(retweetedByUserID, tweetId string, _ bool) error {
 	if s.unRetweetFn != nil {
 		return s.unRetweetFn(retweetedByUserID, tweetId)
 	}
@@ -283,6 +298,55 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: string(longText)}), nil)
 		if err == nil || err.Error() != "tweet text is too long" {
 			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("poll validation", func(t *testing.T) {
+		expires := time.Now().Add(time.Hour)
+		longOption := strings.Repeat("a", domain.PollOptionRuneLimit+1)
+		for _, tt := range []struct {
+			name string
+			poll *domain.Poll
+			want string
+		}{
+			{"too few options", &domain.Poll{Options: []string{"only"}, ExpiresAt: expires}, "poll: too few options"},
+			{"too many options", &domain.Poll{Options: []string{"a", "b", "c", "d", "e"}, ExpiresAt: expires}, "poll: too many options"},
+			{"no expiration", &domain.Poll{Options: []string{"a", "b"}}, "poll: empty expiration time"},
+			{"blank option", &domain.Poll{Options: []string{"a", "  "}, ExpiresAt: expires}, "poll: empty option"},
+			{"option too long", &domain.Poll{Options: []string{"a", longOption}, ExpiresAt: expires}, "poll: option is too long"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+				_, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "vote", Poll: tt.poll}), nil)
+				if err == nil || err.Error() != tt.want {
+					t.Fatalf("unexpected err: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("poll is broadcast to followers", func(t *testing.T) {
+		poll := &domain.Poll{Options: []string{"yes", "no"}, ExpiresAt: time.Now().Add(time.Hour)}
+		var published []byte
+		broadcaster := stubTweetBroadcaster{publishFn: func(_, _ string, bt []byte) error {
+			published = bt
+			return nil
+		}}
+		repo := stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+			tweet.Id = "tweet-1"
+			return tweet, nil
+		}}
+		h := StreamNewTweetHandler(broadcaster, stubAuth{owner: domain.Owner{UserId: owner}}, repo, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+
+		if _, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "vote", Poll: poll}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		var broadcast domain.Tweet
+		if err := json.Unmarshal(published, &broadcast); err != nil {
+			t.Fatalf("unmarshal broadcast: %v", err)
+		}
+		if broadcast.Poll == nil || len(broadcast.Poll.Options) != 2 {
+			t.Fatalf("followers must receive the poll, got: %+v", broadcast.Poll)
 		}
 	})
 
@@ -628,7 +692,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -636,7 +700,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -644,7 +708,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -655,7 +719,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{deleteFn: func(userID, tweetID string) error {
 			return repoErr
-		}}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -667,7 +731,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -685,7 +749,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetLikeRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: "other-1", TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -704,7 +768,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -712,7 +776,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetTweetStatsEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -720,7 +784,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -730,7 +794,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	t.Run("own tweet stats - concurrent gathering", func(t *testing.T) {
 		h := StreamGetTweetStatsHandler(
 			stubTweetRepo{tweetsCountFn: func(userId string) (uint64, error) { return 10, nil }, getViewsCountFn: func(tweetId string) (uint64, error) { return 100, nil }},
-			stubTweetLikeRepo{likesCountFn: func(tweetId string) (uint64, error) { return 5, nil }},
+			stubTweetReactionRepo{reactionsCountFn: func(tweetId string) (uint64, error) { return 5, nil }},
 			stubTweetRetweetRepo{retweetsCountFn: func(tweetId string) (uint64, error) { return 3, nil }},
 			stubRepliesCounter{repliesCountFn: func(tweetId string) (uint64, error) { return 2, nil }},
 			stubTweetUserRepo{},
@@ -741,13 +805,13 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		stats := resp.(event.TweetStatsResponse)
-		if stats.ViewsCount != 100 || stats.LikeCount != 5 || stats.RetweetsCount != 3 || stats.RepliesCount != 2 {
+		if stats.ViewsCount != 100 || stats.ReactionsCount != 5 || stats.RetweetsCount != 3 || stats.RepliesCount != 2 {
 			t.Fatalf("unexpected stats: %+v", stats)
 		}
 	})
 
 	t.Run("other user tweet stats - user not found", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
 		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetId, UserId: "other-1"}), nil)
@@ -761,7 +825,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("other user tweet stats - node offline", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
@@ -779,12 +843,12 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 
 	t.Run("other user tweet stats - remote success", func(t *testing.T) {
 		remoteStats, _ := json.Marshal(event.TweetStatsResponse{
-			TweetId:      tweetId,
-			LikeCount:    42,
-			ViewsCount:   1000,
-			RepliesCount: 7,
+			TweetId:        tweetId,
+			ReactionsCount: 42,
+			ViewsCount:     1000,
+			RepliesCount:   7,
 		})
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return remoteStats, nil
@@ -795,14 +859,14 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		stats := resp.(event.TweetStatsResponse)
-		if stats.LikeCount != 42 {
+		if stats.ReactionsCount != 42 {
 			t.Fatalf("expected remote stats: %+v", stats)
 		}
 	})
 
 	t.Run("other user tweet stats - stream error", func(t *testing.T) {
 		streamErr := errors.New("broken")
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetLikeRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
@@ -818,7 +882,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 		var capturedTweetId string
 		h := StreamGetTweetStatsHandler(
 			stubTweetRepo{},
-			stubTweetLikeRepo{likesCountFn: func(tweetId string) (uint64, error) {
+			stubTweetReactionRepo{reactionsCountFn: func(tweetId string) (uint64, error) {
 				capturedTweetId = tweetId
 				return 0, nil
 			}},
@@ -837,496 +901,580 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 }
 
-
 // ====================================== GROK TESTS =====================================================
 
 var (
-    errNotFound      = database.ErrTweetNotFound
-    errUserNotFound  = database.ErrUserNotFound
-    errLikesNotFound = database.ErrLikesNotFound
+	errNotFound          = database.ErrTweetNotFound
+	errUserNotFound      = database.ErrUserNotFound
+	errReactionsNotFound = database.ErrReactionsNotFound
 )
 
 // ==================== УЛУЧШЕННЫЕ МОКИ ====================
 
 type mockTweetsStorer struct {
-    CreateFunc             func(string, domain.Tweet) (domain.Tweet, error)
-    GetFunc                func(string, string) (domain.Tweet, error)
-    ListFunc               func(string, *uint64, *string) ([]domain.Tweet, string, error)
-    DeleteFunc             func(string, string) error
-    AddReplyFunc           func(domain.Tweet) (domain.Tweet, error)
-    GetReplyFunc           func(string, string) (domain.Tweet, error)
-    DeleteReplyFunc        func(string, string) (domain.Tweet, error)
-    GetRepliesFunc         func(string, *uint64, *string) ([]domain.Tweet, string, error)
-    UpdateFunc             func(domain.Tweet) error
-    AppendEditFunc         func(domain.TweetEdit) (domain.TweetEdit, error)
-    PinFunc                func(string, string) (domain.Tweet, error)
-    UnpinFunc              func(string, string) (domain.Tweet, error)
-    RetweetersFunc         func(string, *uint64, *string) ([]string, string, error)
-    UnRetweetFunc          func(string, string) error
-    GetViewsCountFunc      func(string) (uint64, error)
-    IsBlocklistedFunc      func(string) bool
-    BlocklistFunc          func(string) error
-    CreateWithTTLFunc      func(string, domain.Tweet, time.Duration) (domain.Tweet, error)
-    TweetsCountFunc        func(string) (uint64, error)
+	CreateFunc        func(string, domain.Tweet) (domain.Tweet, error)
+	GetFunc           func(string, string) (domain.Tweet, error)
+	ListFunc          func(string, *uint64, *string) ([]domain.Tweet, string, error)
+	DeleteFunc        func(string, string) error
+	AddReplyFunc      func(domain.Tweet) (domain.Tweet, error)
+	GetReplyFunc      func(string, string) (domain.Tweet, error)
+	DeleteReplyFunc   func(string, string) (domain.Tweet, error)
+	GetRepliesFunc    func(string, *uint64, *string) ([]domain.Tweet, string, error)
+	UpdateFunc        func(domain.Tweet) error
+	AppendEditFunc    func(domain.TweetEdit) (domain.TweetEdit, error)
+	PinFunc           func(string, string) (domain.Tweet, error)
+	UnpinFunc         func(string, string) (domain.Tweet, error)
+	RetweetersFunc    func(string, *uint64, *string) ([]string, string, error)
+	UnRetweetFunc     func(string, string) error
+	GetViewsCountFunc func(string) (uint64, error)
+	IsBlocklistedFunc func(string) bool
+	BlocklistFunc     func(string) error
+	CreateWithTTLFunc func(string, domain.Tweet, time.Duration) (domain.Tweet, error)
+	TweetsCountFunc   func(string) (uint64, error)
 }
 
 func (m *mockTweetsStorer) Create(u string, t domain.Tweet) (domain.Tweet, error) {
-    if m.CreateFunc != nil { return m.CreateFunc(u, t) }
-    return domain.Tweet{Id: "generated-id"}, nil
+	if m.CreateFunc != nil {
+		return m.CreateFunc(u, t)
+	}
+	return domain.Tweet{Id: "generated-id"}, nil
 }
 
 func (m *mockTweetsStorer) Get(u, id string) (domain.Tweet, error) {
-    if m.GetFunc != nil { return m.GetFunc(u, id) }
-    return domain.Tweet{}, errNotFound
+	if m.GetFunc != nil {
+		return m.GetFunc(u, id)
+	}
+	return domain.Tweet{}, errNotFound
 }
 
 func (m *mockTweetsStorer) List(u string, l *uint64, c *string) ([]domain.Tweet, string, error) {
-    if m.ListFunc != nil { return m.ListFunc(u, l, c) }
-    return nil, "", nil
+	if m.ListFunc != nil {
+		return m.ListFunc(u, l, c)
+	}
+	return nil, "", nil
 }
 
 func (m *mockTweetsStorer) Delete(u, id string) error {
-    if m.DeleteFunc != nil { return m.DeleteFunc(u, id) }
-    return nil
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(u, id)
+	}
+	return nil
 }
 
-func (m *mockTweetsStorer) AddReply(t domain.Tweet) (domain.Tweet, error) {
-    if m.AddReplyFunc != nil { return m.AddReplyFunc(t) }
-    return t, nil
+func (m *mockTweetsStorer) AddReply(t domain.Tweet, _ bool) (domain.Tweet, error) {
+	if m.AddReplyFunc != nil {
+		return m.AddReplyFunc(t)
+	}
+	return t, nil
 }
 
 func (m *mockTweetsStorer) GetReply(p, id string) (domain.Tweet, error) {
-    if m.GetReplyFunc != nil { return m.GetReplyFunc(p, id) }
-    return domain.Tweet{}, errNotFound
+	if m.GetReplyFunc != nil {
+		return m.GetReplyFunc(p, id)
+	}
+	return domain.Tweet{}, errNotFound
 }
 
-func (m *mockTweetsStorer) DeleteReply(p, id string) (domain.Tweet, error) {
-    if m.DeleteReplyFunc != nil { return m.DeleteReplyFunc(p, id) }
-    return domain.Tweet{ParentId: &p}, nil
+func (m *mockTweetsStorer) DeleteReply(p, id string, _ bool) (domain.Tweet, error) {
+	if m.DeleteReplyFunc != nil {
+		return m.DeleteReplyFunc(p, id)
+	}
+	return domain.Tweet{ParentId: &p}, nil
 }
 
 func (m *mockTweetsStorer) GetReplies(p string, l *uint64, c *string) ([]domain.Tweet, string, error) {
-    if m.GetRepliesFunc != nil { return m.GetRepliesFunc(p, l, c) }
-    return nil, "", nil
+	if m.GetRepliesFunc != nil {
+		return m.GetRepliesFunc(p, l, c)
+	}
+	return nil, "", nil
 }
 
 func (m *mockTweetsStorer) Update(t domain.Tweet) error {
-    if m.UpdateFunc != nil { return m.UpdateFunc(t) }
-    return nil
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(t)
+	}
+	return nil
 }
 
 func (m *mockTweetsStorer) AppendEdit(e domain.TweetEdit) (domain.TweetEdit, error) {
-    if m.AppendEditFunc != nil { return m.AppendEditFunc(e) }
-    return e, nil
+	if m.AppendEditFunc != nil {
+		return m.AppendEditFunc(e)
+	}
+	return e, nil
 }
 
 func (m *mockTweetsStorer) Pin(u, id string) (domain.Tweet, error) {
-    if m.PinFunc != nil { return m.PinFunc(u, id) }
-    return domain.Tweet{Id: id, Pinned: true}, nil
+	if m.PinFunc != nil {
+		return m.PinFunc(u, id)
+	}
+	return domain.Tweet{Id: id, Pinned: true}, nil
 }
 
 func (m *mockTweetsStorer) Unpin(u, id string) (domain.Tweet, error) {
-    if m.UnpinFunc != nil { return m.UnpinFunc(u, id) }
-    return domain.Tweet{Id: id}, nil
+	if m.UnpinFunc != nil {
+		return m.UnpinFunc(u, id)
+	}
+	return domain.Tweet{Id: id}, nil
 }
 
 func (m *mockTweetsStorer) Retweeters(id string, l *uint64, c *string) ([]string, string, error) {
-    if m.RetweetersFunc != nil { return m.RetweetersFunc(id, l, c) }
-    return nil, "", nil
+	if m.RetweetersFunc != nil {
+		return m.RetweetersFunc(id, l, c)
+	}
+	return nil, "", nil
 }
 
-func (m *mockTweetsStorer) UnRetweet(u, id string) error {
-    if m.UnRetweetFunc != nil { return m.UnRetweetFunc(u, id) }
-    return nil
+func (m *mockTweetsStorer) UnRetweet(u, id string, _ bool) error {
+	if m.UnRetweetFunc != nil {
+		return m.UnRetweetFunc(u, id)
+	}
+	return nil
 }
 
 func (m *mockTweetsStorer) GetViewsCount(id string) (uint64, error) {
-    if m.GetViewsCountFunc != nil { return m.GetViewsCountFunc(id) }
-    return 0, nil
+	if m.GetViewsCountFunc != nil {
+		return m.GetViewsCountFunc(id)
+	}
+	return 0, nil
 }
 
 func (m *mockTweetsStorer) IsBlocklisted(id string) bool {
-    if m.IsBlocklistedFunc != nil { return m.IsBlocklistedFunc(id) }
-    return false
+	if m.IsBlocklistedFunc != nil {
+		return m.IsBlocklistedFunc(id)
+	}
+	return false
 }
 
 func (m *mockTweetsStorer) Blocklist(id string) error {
-    if m.BlocklistFunc != nil { return m.BlocklistFunc(id) }
-    return nil
+	if m.BlocklistFunc != nil {
+		return m.BlocklistFunc(id)
+	}
+	return nil
 }
 
 func (m *mockTweetsStorer) CreateWithTTL(u string, t domain.Tweet, d time.Duration) (domain.Tweet, error) {
-    if m.CreateWithTTLFunc != nil { return m.CreateWithTTLFunc(u, t, d) }
-    return t, nil
+	if m.CreateWithTTLFunc != nil {
+		return m.CreateWithTTLFunc(u, t, d)
+	}
+	return t, nil
 }
 
 func (m *mockTweetsStorer) TweetsCount(u string) (uint64, error) {
-    if m.TweetsCountFunc != nil { return m.TweetsCountFunc(u) }
-    return 0, nil
+	if m.TweetsCountFunc != nil {
+		return m.TweetsCountFunc(u)
+	}
+	return 0, nil
 }
 
 // ==================== ОСТАЛЬНЫЕ МОКИ ====================
 
 type mockOwner struct{ owner domain.Owner }
+
 func (m *mockOwner) GetOwner() domain.Owner { return m.owner }
 
 type mockTimeline struct {
-    AddFunc    func(string, domain.Tweet) error
-    DeleteFunc func(string, string) error
+	AddFunc    func(string, domain.Tweet) error
+	DeleteFunc func(string, string) error
 }
+
 func (m *mockTimeline) AddTweetToTimeline(u string, t domain.Tweet) error {
-    if m.AddFunc != nil { return m.AddFunc(u, t) }
-    return nil
+	if m.AddFunc != nil {
+		return m.AddFunc(u, t)
+	}
+	return nil
 }
 func (m *mockTimeline) DeleteTweetFromTimeline(u, id string) error {
-    if m.DeleteFunc != nil { return m.DeleteFunc(u, id) }
-    return nil
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(u, id)
+	}
+	return nil
 }
 
 type mockFollowChecker struct{ IsFollowingFunc func(string, string) bool }
+
 func (m *mockFollowChecker) IsFollowing(o, a string) bool {
-    if m.IsFollowingFunc != nil { return m.IsFollowingFunc(o, a) }
-    return false
+	if m.IsFollowingFunc != nil {
+		return m.IsFollowingFunc(o, a)
+	}
+	return false
 }
 
-type mockUserFetcher struct{ GetFunc func(string) (domain.User, error) }
+type mockUserFetcher struct {
+	GetFunc func(string) (domain.User, error)
+}
+
 func (m *mockUserFetcher) Get(id string) (domain.User, error) {
-    if m.GetFunc != nil { return m.GetFunc(id) }
-    return domain.User{}, errUserNotFound
+	if m.GetFunc != nil {
+		return m.GetFunc(id)
+	}
+	return domain.User{}, errUserNotFound
 }
 
-type mockBroadcaster struct{ PublishFunc func(string, string, []byte) error }
+type mockBroadcaster struct {
+	PublishFunc func(string, string, []byte) error
+}
+
 func (m *mockBroadcaster) PublishUpdateToFollowers(o, d string, b []byte) error {
-    if m.PublishFunc != nil { return m.PublishFunc(o, d, b) }
-    return nil
+	if m.PublishFunc != nil {
+		return m.PublishFunc(o, d, b)
+	}
+	return nil
 }
 
 type mockStreamer struct {
-    GenericStreamFunc func(string, stream.WarpRoute, any) ([]byte, error)
-    NodeInfoFunc      func() warpnet.NodeInfo
-}
-func (m *mockStreamer) GenericStream(n string, p stream.WarpRoute, d any) ([]byte, error) {
-    if m.GenericStreamFunc != nil { return m.GenericStreamFunc(n, p, d) }
-    return nil, nil
-}
-func (m *mockStreamer) NodeInfo() warpnet.NodeInfo {
-    if m.NodeInfoFunc != nil { return m.NodeInfoFunc() }
-    return warpnet.NodeInfo{OwnerId: "owner123", ID: "node-owner"}
+	GenericStreamFunc func(string, stream.WarpRoute, any) ([]byte, error)
+	NodeInfoFunc      func() warpnet.NodeInfo
 }
 
-type mockLikeStorer struct {
-    LikeFunc       func(string, string) (uint64, error)
-    UnlikeFunc     func(string, string) (uint64, error)
-    LikesCountFunc func(string) (uint64, error)
-    LikersFunc     func(string, *uint64, *string) ([]string, string, error)
+func (m *mockStreamer) GenericStream(n string, p stream.WarpRoute, d any) ([]byte, error) {
+	if m.GenericStreamFunc != nil {
+		return m.GenericStreamFunc(n, p, d)
+	}
+	return nil, nil
 }
-func (m *mockLikeStorer) Like(tweetId, userId string) (uint64, error) {
-    if m.LikeFunc != nil { return m.LikeFunc(tweetId, userId) }
-    return 0, nil
+func (m *mockStreamer) NodeInfo() warpnet.NodeInfo {
+	if m.NodeInfoFunc != nil {
+		return m.NodeInfoFunc()
+	}
+	return warpnet.NodeInfo{OwnerId: "owner123", ID: "node-owner"}
 }
-func (m *mockLikeStorer) Unlike(tweetId, userId string) (uint64, error) {
-    if m.UnlikeFunc != nil { return m.UnlikeFunc(tweetId, userId) }
-    return 0, nil
+
+type mockReactionStorer struct {
+	ReactFunc          func(string, string) (uint64, error)
+	UnreactFunc        func(string, string) (uint64, error)
+	ReactionsCountFunc func(string) (uint64, error)
+	ReactorsFunc       func(string, *uint64, *string) ([]string, string, error)
+	ReactionsFunc      func(string) (map[string]uint64, error)
+	ReactionFunc       func(string, string) (string, error)
 }
-func (m *mockLikeStorer) LikesCount(tweetId string) (uint64, error) {
-    if m.LikesCountFunc != nil { return m.LikesCountFunc(tweetId) }
-    return 0, nil
+
+func (m *mockReactionStorer) React(tweetId, userId, _ string, _ bool) (uint64, error) {
+	if m.ReactFunc != nil {
+		return m.ReactFunc(tweetId, userId)
+	}
+	return 0, nil
 }
-func (m *mockLikeStorer) Likers(tweetId string, l *uint64, c *string) ([]string, string, error) {
-    if m.LikersFunc != nil { return m.LikersFunc(tweetId, l, c) }
-    return nil, "", nil
+func (m *mockReactionStorer) Reactions(tweetId string) (map[string]uint64, error) {
+	if m.ReactionsFunc != nil {
+		return m.ReactionsFunc(tweetId)
+	}
+	return nil, nil
+}
+func (m *mockReactionStorer) Reaction(tweetId, userId string) (string, error) {
+	if m.ReactionFunc != nil {
+		return m.ReactionFunc(tweetId, userId)
+	}
+	return "", nil
+}
+func (m *mockReactionStorer) Unreact(tweetId, userId string, _ bool) (uint64, error) {
+	if m.UnreactFunc != nil {
+		return m.UnreactFunc(tweetId, userId)
+	}
+	return 0, nil
+}
+func (m *mockReactionStorer) ReactionsCount(tweetId string) (uint64, error) {
+	if m.ReactionsCountFunc != nil {
+		return m.ReactionsCountFunc(tweetId)
+	}
+	return 0, nil
+}
+func (m *mockReactionStorer) Reactors(tweetId string, l *uint64, c *string) ([]string, string, error) {
+	if m.ReactorsFunc != nil {
+		return m.ReactorsFunc(tweetId, l, c)
+	}
+	return nil, "", nil
 }
 
 // ==================== ТЕСТЫ ====================
 
 func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    owner := domain.Owner{UserId: "owner123"}
+	owner := domain.Owner{UserId: "owner123"}
 
-    tests := []struct {
-        name      string
-        event     event.NewTweetEvent
-        setup     func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster)
-        wantErr   bool
-        errMsg    string
-    }{
-        {
-            name: "moderation blocked -> blocklisted, no error",
-            event: event.NewTweetEvent{Id: "t1", UserId: "owner123", Text: "bad", Moderation: &domain.TweetModeration{IsOk: false}},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
-                o.owner = owner
-                ts.BlocklistFunc = func(id string) error { return nil }
-            },
-            // A moderated-out tweet is blocklisted and the handler returns
-            // Blocklist's (nil) error — it does not surface a handler error.
-            wantErr: false,
-        },
-        {
-            name:    "empty user id",
-            event:   event.NewTweetEvent{Text: "hello"},
-            setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
-            wantErr: true,
-        },
-        {
-            name:    "empty text",
-            event:   event.NewTweetEvent{UserId: "owner123", Text: ""},
-            setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
-            wantErr: true,
-        },
-        {
-            name:    "text too long",
-            event:   event.NewTweetEvent{UserId: "owner123", Text: string(make([]byte, 281))},
-            setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
-            wantErr: true,
-        },
-        {
-            name: "not my tweet and not following -> Accepted without create",
-            event: event.NewTweetEvent{UserId: "other123", Text: "hello"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
-                o.owner = owner
-                fc.IsFollowingFunc = func(_, _ string) bool { return false }
-            },
-        },
-        {
-            name: "followed user tweet -> create + timeline",
-            event: event.NewTweetEvent{UserId: "other123", Text: "hello", Id: "t2"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
-                o.owner = owner
-                fc.IsFollowingFunc = func(_, _ string) bool { return true }
-                ts.CreateFunc = func(u string, t domain.Tweet) (domain.Tweet, error) {
-                    return domain.Tweet{Id: "t2", UserId: u}, nil
-                }
-                tl.AddFunc = func(string, domain.Tweet) error { return nil }
-            },
-        },
-        {
-            name: "create returns empty id -> error",
-            event: event.NewTweetEvent{UserId: "owner123", Text: "hi"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
-                o.owner = owner
-                ts.CreateFunc = func(string, domain.Tweet) (domain.Tweet, error) {
-                    return domain.Tweet{}, nil // empty ID
-                }
-            },
-            wantErr: true,
-        },
-        {
-            name: "timeline add fails (should not return error)",
-            event: event.NewTweetEvent{UserId: "owner123", Text: "hi", Id: "t3"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
-                o.owner = owner
-                ts.CreateFunc = func(u string, t domain.Tweet) (domain.Tweet, error) {
-                    return domain.Tweet{Id: "t3", UserId: u}, nil
-                }
-                tl.AddFunc = func(string, domain.Tweet) error { return errors.New("timeline error") }
-            },
-        },
-    }
+	tests := []struct {
+		name    string
+		event   event.NewTweetEvent
+		setup   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster)
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:  "moderation blocked -> blocklisted, no error",
+			event: event.NewTweetEvent{Id: "t1", UserId: "owner123", Text: "bad", Moderation: &domain.TweetModeration{IsOk: false}},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
+				o.owner = owner
+				ts.BlocklistFunc = func(id string) error { return nil }
+			},
+			// A moderated-out tweet is blocklisted and the handler returns
+			// Blocklist's (nil) error — it does not surface a handler error.
+			wantErr: false,
+		},
+		{
+			name:    "empty user id",
+			event:   event.NewTweetEvent{Text: "hello"},
+			setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
+			wantErr: true,
+		},
+		{
+			name:    "empty text",
+			event:   event.NewTweetEvent{UserId: "owner123", Text: ""},
+			setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
+			wantErr: true,
+		},
+		{
+			name:    "text too long",
+			event:   event.NewTweetEvent{UserId: "owner123", Text: string(make([]byte, 281))},
+			setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
+			wantErr: true,
+		},
+		{
+			name:  "not my tweet and not following -> Accepted without create",
+			event: event.NewTweetEvent{UserId: "other123", Text: "hello"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
+				o.owner = owner
+				fc.IsFollowingFunc = func(_, _ string) bool { return false }
+			},
+		},
+		{
+			name:  "followed user tweet -> create + timeline",
+			event: event.NewTweetEvent{UserId: "other123", Text: "hello", Id: "t2"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
+				o.owner = owner
+				fc.IsFollowingFunc = func(_, _ string) bool { return true }
+				ts.CreateFunc = func(u string, t domain.Tweet) (domain.Tweet, error) {
+					return domain.Tweet{Id: "t2", UserId: u}, nil
+				}
+				tl.AddFunc = func(string, domain.Tweet) error { return nil }
+			},
+		},
+		{
+			name:  "create returns empty id -> error",
+			event: event.NewTweetEvent{UserId: "owner123", Text: "hi"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
+				o.owner = owner
+				ts.CreateFunc = func(string, domain.Tweet) (domain.Tweet, error) {
+					return domain.Tweet{}, nil // empty ID
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name:  "timeline add fails (should not return error)",
+			event: event.NewTweetEvent{UserId: "owner123", Text: "hi", Id: "t3"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
+				o.owner = owner
+				ts.CreateFunc = func(u string, t domain.Tweet) (domain.Tweet, error) {
+					return domain.Tweet{Id: "t3", UserId: u}, nil
+				}
+				tl.AddFunc = func(string, domain.Tweet) error { return errors.New("timeline error") }
+			},
+		},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            t.Parallel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-            tweetRepo := &mockTweetsStorer{}
-            timeline := &mockTimeline{}
-            follow := &mockFollowChecker{}
-            ownerRepo := &mockOwner{}
-            broadcaster := &mockBroadcaster{}
-            userRepo := &mockUserFetcher{}
-            streamer := &mockStreamer{}
+			tweetRepo := &mockTweetsStorer{}
+			timeline := &mockTimeline{}
+			follow := &mockFollowChecker{}
+			ownerRepo := &mockOwner{}
+			broadcaster := &mockBroadcaster{}
+			userRepo := &mockUserFetcher{}
+			streamer := &mockStreamer{}
 
-            tt.setup(tweetRepo, timeline, follow, ownerRepo, broadcaster)
+			tt.setup(tweetRepo, timeline, follow, ownerRepo, broadcaster)
 
-            handler := StreamNewTweetHandler(broadcaster, ownerRepo, tweetRepo, timeline, follow, userRepo, nil, streamer)
+			handler := StreamNewTweetHandler(broadcaster, ownerRepo, tweetRepo, timeline, follow, userRepo, nil, streamer)
 
-            _, err := handler(marshal(t, tt.event), nil)
+			_, err := handler(marshal(t, tt.event), nil)
 
-            if tt.wantErr {
-                require.Error(t, err)
-                if tt.errMsg != "" {
-                    assert.Contains(t, err.Error(), tt.errMsg)
-                }
-            } else {
-                assert.NoError(t, err)
-            }
-        })
-    }
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestStreamEditTweetHandler_CornerCases(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    tests := []struct {
-        name    string
-        ev      event.EditTweetEvent
-        setup   func(*mockTweetsStorer, *mockTimeline)
-        wantErr bool
-    }{
-        {
-            name: "no-op edit (same text)",
-            ev:   event.EditTweetEvent{UserId: "u1", TweetId: "t1", Text: "same text"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline) {
-                ts.GetFunc = func(_, _ string) (domain.Tweet, error) {
-                    return domain.Tweet{Id: "t1", UserId: "u1", Text: "same text"}, nil
-                }
-            },
-        },
-        {
-            name: "not the author",
-            ev:   event.EditTweetEvent{UserId: "u1", TweetId: "t1", Text: "new"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline) {
-                ts.GetFunc = func(_, _ string) (domain.Tweet, error) {
-                    return domain.Tweet{UserId: "other"}, nil
-                }
-            },
-            wantErr: true,
-        },
-        {
-            name: "append edit + update + cancel retweets",
-            ev:   event.EditTweetEvent{UserId: "u1", TweetId: "t1", Text: "updated"},
-            setup: func(ts *mockTweetsStorer, tl *mockTimeline) {
-                ts.GetFunc = func(u, id string) (domain.Tweet, error) {
-                    return domain.Tweet{Id: id, UserId: u, Text: "old"}, nil
-                }
-                ts.AppendEditFunc = func(e domain.TweetEdit) (domain.TweetEdit, error) { return e, nil }
-                ts.UpdateFunc = func(domain.Tweet) error { return nil }
-                ts.RetweetersFunc = func(string, *uint64, *string) ([]string, string, error) {
-                    return []string{"retweeter1"}, "", nil
-                }
-                ts.UnRetweetFunc = func(string, string) error { return nil }
-            },
-        },
-    }
+	tests := []struct {
+		name    string
+		ev      event.EditTweetEvent
+		setup   func(*mockTweetsStorer, *mockTimeline)
+		wantErr bool
+	}{
+		{
+			name: "no-op edit (same text)",
+			ev:   event.EditTweetEvent{UserId: "u1", TweetId: "t1", Text: "same text"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline) {
+				ts.GetFunc = func(_, _ string) (domain.Tweet, error) {
+					return domain.Tweet{Id: "t1", UserId: "u1", Text: "same text"}, nil
+				}
+			},
+		},
+		{
+			name: "not the author",
+			ev:   event.EditTweetEvent{UserId: "u1", TweetId: "t1", Text: "new"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline) {
+				ts.GetFunc = func(_, _ string) (domain.Tweet, error) {
+					return domain.Tweet{UserId: "other"}, nil
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name: "append edit + update + cancel retweets",
+			ev:   event.EditTweetEvent{UserId: "u1", TweetId: "t1", Text: "updated"},
+			setup: func(ts *mockTweetsStorer, tl *mockTimeline) {
+				ts.GetFunc = func(u, id string) (domain.Tweet, error) {
+					return domain.Tweet{Id: id, UserId: u, Text: "old"}, nil
+				}
+				ts.AppendEditFunc = func(e domain.TweetEdit) (domain.TweetEdit, error) { return e, nil }
+				ts.UpdateFunc = func(domain.Tweet) error { return nil }
+				ts.RetweetersFunc = func(string, *uint64, *string) ([]string, string, error) {
+					return []string{"retweeter1"}, "", nil
+				}
+				ts.UnRetweetFunc = func(string, string) error { return nil }
+			},
+		},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            t.Parallel()
-            repo := &mockTweetsStorer{}
-            tl := &mockTimeline{}
-            tt.setup(repo, tl)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &mockTweetsStorer{}
+			tl := &mockTimeline{}
+			tt.setup(repo, tl)
 
-            handler := StreamEditTweetHandler(repo, tl)
-            _, err := handler(marshal(t, tt.ev), nil)
+			handler := StreamEditTweetHandler(repo, tl)
+			_, err := handler(marshal(t, tt.ev), nil)
 
-            if tt.wantErr {
-                assert.Error(t, err)
-            } else {
-                assert.NoError(t, err)
-            }
-        })
-    }
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestStreamGetTweetHandler_CornerCases(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    tests := []struct {
-        name    string
-        ev      event.GetTweetEvent
-        setup   func(*mockTweetsStorer, *mockUserFetcher, *mockStreamer, *mockOwner)
-        wantErr bool
-    }{
-        {
-            name: "blocklisted tweet",
-            ev:   event.GetTweetEvent{UserId: "u1", TweetId: "blocked"},
-            setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer, o *mockOwner) {
-                ts.IsBlocklistedFunc = func(string) bool { return true }
-            },
-            wantErr: true,
-        },
-        {
-            name: "reply -> uses GetReply",
-            ev:   event.GetTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
-            setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer, o *mockOwner) {
-                ts.GetReplyFunc = func(p, id string) (domain.Tweet, error) {
-                    return domain.Tweet{Id: id, ParentId: &p}, nil
-                }
-            },
-        },
-        {
-            name: "remote user offline -> fallback to local",
-            ev:   event.GetTweetEvent{UserId: "remote", TweetId: "t1"},
-            setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer, o *mockOwner) {
-                uf.GetFunc = func(string) (domain.User, error) {
-                    return domain.User{NodeId: "remote-node"}, nil
-                }
-                s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
-                    return nil, warpnet.ErrNodeIsOffline
-                }
-                ts.GetFunc = func(u, id string) (domain.Tweet, error) {
-                    return domain.Tweet{Id: id}, nil
-                }
-            },
-        },
-    }
+	tests := []struct {
+		name    string
+		ev      event.GetTweetEvent
+		setup   func(*mockTweetsStorer, *mockUserFetcher, *mockStreamer, *mockOwner)
+		wantErr bool
+	}{
+		{
+			name: "blocklisted tweet",
+			ev:   event.GetTweetEvent{UserId: "u1", TweetId: "blocked"},
+			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer, o *mockOwner) {
+				ts.IsBlocklistedFunc = func(string) bool { return true }
+			},
+			wantErr: true,
+		},
+		{
+			name: "reply -> uses GetReply",
+			ev:   event.GetTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
+			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer, o *mockOwner) {
+				ts.GetReplyFunc = func(p, id string) (domain.Tweet, error) {
+					return domain.Tweet{Id: id, ParentId: &p}, nil
+				}
+			},
+		},
+		{
+			name: "remote user offline -> fallback to local",
+			ev:   event.GetTweetEvent{UserId: "remote", TweetId: "t1"},
+			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer, o *mockOwner) {
+				uf.GetFunc = func(string) (domain.User, error) {
+					return domain.User{NodeId: "remote-node"}, nil
+				}
+				s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
+					return nil, warpnet.ErrNodeIsOffline
+				}
+				ts.GetFunc = func(u, id string) (domain.Tweet, error) {
+					return domain.Tweet{Id: id}, nil
+				}
+			},
+		},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            t.Parallel()
-            ts := &mockTweetsStorer{}
-            uf := &mockUserFetcher{}
-            s := &mockStreamer{}
-            o := &mockOwner{}
-            tt.setup(ts, uf, s, o)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ts := &mockTweetsStorer{}
+			uf := &mockUserFetcher{}
+			s := &mockStreamer{}
+			o := &mockOwner{}
+			tt.setup(ts, uf, s, o)
 
-            handler := StreamGetTweetHandler(ts, o, uf, s)
-            _, err := handler(marshal(t, tt.ev), nil)
+			handler := StreamGetTweetHandler(ts, o, uf, s)
+			_, err := handler(marshal(t, tt.ev), nil)
 
-            if tt.wantErr {
-                assert.Error(t, err)
-            } else {
-                assert.NoError(t, err)
-            }
-        })
-    }
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    tests := []struct {
-        name    string
-        ev      event.DeleteTweetEvent
-        setup   func(*mockTweetsStorer, *mockUserFetcher, *mockStreamer)
-        wantErr bool
-    }{
-        {
-            name: "delete reply and forward to parent author",
-            ev:   event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
-            setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer) {
-                ts.DeleteReplyFunc = func(p, id string) (domain.Tweet, error) {
-                    parent := "parentUser"
-                    return domain.Tweet{ParentUserId: &parent}, nil
-                }
-                uf.GetFunc = func(string) (domain.User, error) {
-                    return domain.User{NodeId: "other-node"}, nil
-                }
-                s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
-                    return nil, nil
-                }
-            },
-        },
-    }
+	tests := []struct {
+		name    string
+		ev      event.DeleteTweetEvent
+		setup   func(*mockTweetsStorer, *mockUserFetcher, *mockStreamer)
+		wantErr bool
+	}{
+		{
+			name: "delete reply and forward to parent author",
+			ev:   event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
+			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer) {
+				ts.DeleteReplyFunc = func(p, id string) (domain.Tweet, error) {
+					parent := "parentUser"
+					return domain.Tweet{ParentUserId: &parent}, nil
+				}
+				uf.GetFunc = func(string) (domain.User, error) {
+					return domain.User{NodeId: "other-node"}, nil
+				}
+				s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
+					return nil, nil
+				}
+			},
+		},
+	}
 
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            t.Parallel()
-            ts := &mockTweetsStorer{}
-            uf := &mockUserFetcher{}
-            s := &mockStreamer{}
-            tt.setup(ts, uf, s)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ts := &mockTweetsStorer{}
+			uf := &mockUserFetcher{}
+			s := &mockStreamer{}
+			tt.setup(ts, uf, s)
 
-            handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockLikeStorer{}, uf, s)
-            _, err := handler(marshal(t, tt.ev), nil)
+			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, uf, s)
+			_, err := handler(marshal(t, tt.ev), nil)
 
-            if tt.wantErr {
-                assert.Error(t, err)
-            } else {
-                assert.NoError(t, err)
-            }
-        })
-    }
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 // Дополнительно можно добавить тесты на:
@@ -1335,19 +1483,19 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 // - cancelRetweetsForEditedTweet
 
 func TestSetPinnedFromEvent(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    repo := &mockTweetsStorer{}
-    repo.GetFunc = func(u, id string) (domain.Tweet, error) {
-        return domain.Tweet{UserId: u}, nil
-    }
+	repo := &mockTweetsStorer{}
+	repo.GetFunc = func(u, id string) (domain.Tweet, error) {
+		return domain.Tweet{UserId: u}, nil
+	}
 
-    t.Run("only author can pin", func(t *testing.T) {
-        repo.GetFunc = func(_, _ string) (domain.Tweet, error) {
-            return domain.Tweet{UserId: "other"}, nil
-        }
-        _, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, true)
-        assert.Error(t, err)
-        assert.Contains(t, err.Error(), "only the author can pin")
-    })
+	t.Run("only author can pin", func(t *testing.T) {
+		repo.GetFunc = func(_, _ string) (domain.Tweet, error) {
+			return domain.Tweet{UserId: "other"}, nil
+		}
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, true)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "only the author can pin")
+	})
 }

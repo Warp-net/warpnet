@@ -2,14 +2,42 @@
 package handler
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/security"
 )
+
+// moderatorTestKey returns a deterministic moderator identity whose peer id
+// embeds the pubkey, the way real node ids do.
+func moderatorTestKey(t *testing.T, seed string) (ed25519.PrivateKey, string) {
+	t.Helper()
+	priv, err := security.GenerateKeyFromSeed([]byte(seed))
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	id, err := warpnet.IDFromPublicKey(priv.Public().(ed25519.PublicKey))
+	if err != nil {
+		t.Fatalf("derive peer id: %v", err)
+	}
+	return priv, id.String()
+}
+
+// signedResult stamps a verdict with a valid moderator identity and
+// signature, exactly the way a moderator ships one.
+func signedResult(t *testing.T, ev event.ModerationVerdictEvent) []byte {
+	t.Helper()
+	priv, id := moderatorTestKey(t, "moderation-handler-test")
+	ev.ModeratorID = id
+	return marshal(t, ev.Signed(priv))
+}
 
 type stubModerationNotifier struct {
 	addFn func(not domain.Notification) error
@@ -86,9 +114,101 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 	})
 
+	// mustNotTouchState wires stubs that fail the test on any write or
+	// notification: a rejected verdict must leave the node untouched.
+	mustNotTouchState := func(t *testing.T) func([]byte, interface{}) (any, error) {
+		t.Helper()
+		return mkHandler(
+			stubModerationNotifier{addFn: func(domain.Notification) error {
+				t.Fatal("rejected verdict must not notify anyone")
+				return nil
+			}},
+			stubModerationTweetUpdater{updateFn: func(domain.Tweet) error {
+				t.Fatal("rejected verdict must not update tweets")
+				return nil
+			}},
+			stubModerationUserUpdater{updateFn: func(_ string, u domain.User) (domain.User, error) {
+				t.Fatal("rejected verdict must not update users")
+				return u, nil
+			}},
+			stubModerationTimelineDeleter{deleteFn: func(_, _ string) error {
+				t.Fatal("rejected verdict must not touch the timeline")
+				return nil
+			}},
+		)
+	}
+
+	t.Run("unsigned verdict is dropped", func(t *testing.T) {
+		h := mustNotTouchState(t)
+		_, id := moderatorTestKey(t, "moderation-handler-test")
+		_, err := h(marshal(t, event.ModerationVerdictEvent{
+			Type:        domain.ModerationTweetType,
+			ObjectID:    &tweetId,
+			UserID:      "offender",
+			Verdict:     domain.FAIL,
+			ModeratorID: id,
+			ReporterID:  owner,
+		}), nil)
+		if !errors.Is(err, ErrBadModeratorSignature) {
+			t.Fatalf("expected ErrBadModeratorSignature, got: %v", err)
+		}
+	})
+
+	t.Run("verdict with malformed moderator id is dropped", func(t *testing.T) {
+		h := mustNotTouchState(t)
+		_, err := h(marshal(t, event.ModerationVerdictEvent{
+			Type:        domain.ModerationTweetType,
+			ObjectID:    &tweetId,
+			UserID:      "offender",
+			Verdict:     domain.FAIL,
+			ModeratorID: "not-a-peer-id",
+		}), nil)
+		if !errors.Is(err, ErrNoModeratorID) {
+			t.Fatalf("expected ErrNoModeratorID, got: %v", err)
+		}
+	})
+
+	t.Run("tampered verdict is dropped", func(t *testing.T) {
+		h := mustNotTouchState(t)
+		priv, id := moderatorTestKey(t, "moderation-handler-test")
+		ev := event.ModerationVerdictEvent{
+			Type:        domain.ModerationTweetType,
+			ObjectID:    &tweetId,
+			UserID:      "offender",
+			Verdict:     domain.OK,
+			ModeratorID: id,
+			TimeAt:      time.Now().UTC(),
+		}
+		ev = ev.Signed(priv)
+		ev.Verdict = domain.FAIL // flip after signing
+		_, err := h(marshal(t, ev), nil)
+		if !errors.Is(err, ErrBadModeratorSignature) {
+			t.Fatalf("expected ErrBadModeratorSignature, got: %v", err)
+		}
+	})
+
+	t.Run("verdict signed by an impostor key is dropped", func(t *testing.T) {
+		h := mustNotTouchState(t)
+		impostor, _ := moderatorTestKey(t, "impostor")
+		_, claimedID := moderatorTestKey(t, "moderation-handler-test")
+		ev := event.ModerationVerdictEvent{
+			Type:        domain.ModerationTweetType,
+			ObjectID:    &tweetId,
+			UserID:      "offender",
+			Verdict:     domain.FAIL,
+			ModeratorID: claimedID, // claims someone else's identity
+			TimeAt:      time.Now().UTC(),
+		}
+		ev = ev.Signed(impostor)
+		_, err := h(marshal(t, ev), nil)
+		if !errors.Is(err, ErrBadModeratorSignature) {
+			t.Fatalf("expected ErrBadModeratorSignature, got: %v", err)
+		}
+	})
+
 	t.Run("tweet moderation - missing object id", func(t *testing.T) {
 		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
-		_, err := h(marshal(t, event.ModerationResultEvent{Type: domain.ModerationTweetType, UserID: owner}), nil)
+		_, err := h(signedResult(t, event.ModerationVerdictEvent{Type: domain.ModerationTweetType, UserID: owner}), nil)
 		if !errors.Is(err, ErrNoObjectID) {
 			t.Fatalf("expected ErrNoObjectID, got: %v", err)
 		}
@@ -96,7 +216,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 
 	t.Run("tweet moderation - missing user id", func(t *testing.T) {
 		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
-		_, err := h(marshal(t, event.ModerationResultEvent{Type: domain.ModerationTweetType, ObjectID: &tweetId}), nil)
+		_, err := h(signedResult(t, event.ModerationVerdictEvent{Type: domain.ModerationTweetType, ObjectID: &tweetId}), nil)
 		if !errors.Is(err, ErrNoUserID) {
 			t.Fatalf("expected ErrNoUserID, got: %v", err)
 		}
@@ -120,11 +240,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			stubModerationTimelineDeleter{},
 		)
 		reason := "inappropriate content"
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   owner,
-			Result:   domain.FAIL,
+			Verdict:  domain.FAIL,
 			Reason:   &reason,
 		}), nil)
 		if err != nil {
@@ -153,11 +273,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			stubModerationTimelineDeleter{},
 		)
 		reason := "Hate"
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:       domain.ModerationTweetType,
 			ObjectID:   &tweetId,
 			UserID:     "offender",
-			Result:     domain.FAIL,
+			Verdict:    domain.FAIL,
 			Reason:     &reason,
 			ReporterID: owner, // delivered straight to the reporter
 		}), nil)
@@ -170,8 +290,8 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		if !notified {
 			t.Fatal("the reporter must be notified")
 		}
-		if got.UserId != owner {
-			t.Fatalf("notification must target the reporter, got %q", got.UserId)
+		if got.RecepientId != owner {
+			t.Fatalf("notification must target the reporter, got %q", got.RecepientId)
 		}
 		if got.Type != domain.NotificationModerationType {
 			t.Fatalf("expected moderation notification, got %q", got.Type)
@@ -192,11 +312,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			stubModerationUserUpdater{},
 			stubModerationTimelineDeleter{},
 		)
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:       domain.ModerationTweetType,
 			ObjectID:   &tweetId,
 			UserID:     "offender",
-			Result:     domain.FAIL,
+			Verdict:    domain.FAIL,
 			ReporterID: "someone-else",
 		}), nil)
 		if err != nil {
@@ -221,11 +341,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			stubModerationUserUpdater{},
 			stubModerationTimelineDeleter{},
 		)
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   "other-user",
-			Result:   domain.FAIL,
+			Verdict:  domain.FAIL,
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -240,7 +360,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 
 	t.Run("unknown moderation type - returns accepted", func(t *testing.T) {
 		h := mkHandler(stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{}, stubModerationTimelineDeleter{})
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:   domain.ModerationObjectType(99),
 			UserID: owner,
 		}), nil)
@@ -270,11 +390,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 				return nil
 			}},
 		)
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:     domain.ModerationTweetType,
 			ObjectID: &tweetId,
 			UserID:   owner,
-			Result:   domain.FAIL,
+			Verdict:  domain.FAIL,
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -287,6 +407,73 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 		if !timelineDeleted {
 			t.Fatal("expected timeline entry to be deleted")
+		}
+	})
+
+	t.Run("tweet moderation FAIL - deletes from the local owner's timeline", func(t *testing.T) {
+		var gotUserID, gotTweetID string
+		h := mkHandler(
+			stubModerationNotifier{},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{deleteFn: func(userID, tweetID string) error {
+				gotUserID, gotTweetID = userID, tweetID
+				return nil
+			}},
+		)
+		_, err := h(signedResult(t, event.ModerationVerdictEvent{
+			Type:     domain.ModerationTweetType,
+			ObjectID: &tweetId,
+			UserID:   "offender",
+			Verdict:  domain.FAIL,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if gotUserID != owner {
+			t.Fatalf("timeline delete must use the local owner's id, got %q", gotUserID)
+		}
+		if gotTweetID != tweetId {
+			t.Fatalf("expected tweet %q deleted, got %q", tweetId, gotTweetID)
+		}
+	})
+
+	t.Run("unreviewable report - notifies reporter honestly", func(t *testing.T) {
+		var got domain.Notification
+		notified := false
+		h := mkHandler(
+			stubModerationNotifier{addFn: func(not domain.Notification) error {
+				notified = true
+				got = not
+				return nil
+			}},
+			stubModerationTweetUpdater{},
+			stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{},
+		)
+		reason := event.ModerationReasonUnavailable
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
+			Type:       domain.ModerationTweetType,
+			ObjectID:   &tweetId,
+			UserID:     "offender",
+			Verdict:    domain.OK,
+			Reason:     &reason,
+			ReporterID: owner,
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if !notified {
+			t.Fatal("the reporter must be notified")
+		}
+		if !strings.Contains(got.Text, "could not be reviewed") {
+			t.Fatalf("expected 'could not be reviewed' wording, got: %q", got.Text)
+		}
+		if strings.Contains(got.Text, "no violation") {
+			t.Fatalf("a fetch failure must not read as a clean verdict: %q", got.Text)
 		}
 	})
 
@@ -314,11 +501,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 				return nil
 			}},
 		)
-		resp, err := h(marshal(t, event.ModerationResultEvent{
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
 			Type:       domain.ModerationTweetType,
 			ObjectID:   &tweetId,
 			UserID:     "offender",
-			Result:     domain.OK,
+			Verdict:    domain.OK,
 			ReporterID: owner,
 		}), nil)
 		if err != nil {
@@ -360,11 +547,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			stubModerationTimelineDeleter{},
 		)
 		reason := "abuse"
-		resp, err := h(marshal(t, event.ModerationResultEvent{
-			Type:   domain.ModerationUserType,
-			UserID: target,
-			Result: domain.FAIL,
-			Reason: &reason,
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
+			Type:    domain.ModerationUserType,
+			UserID:  target,
+			Verdict: domain.FAIL,
+			Reason:  &reason,
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -396,10 +583,10 @@ func TestStreamModerationResultHandler(t *testing.T) {
 			},
 			stubModerationTimelineDeleter{},
 		)
-		resp, err := h(marshal(t, event.ModerationResultEvent{
-			Type:   domain.ModerationUserType,
-			UserID: target,
-			Result: domain.FAIL,
+		resp, err := h(signedResult(t, event.ModerationVerdictEvent{
+			Type:    domain.ModerationUserType,
+			UserID:  target,
+			Verdict: domain.FAIL,
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)

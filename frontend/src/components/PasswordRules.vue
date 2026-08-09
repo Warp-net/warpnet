@@ -22,8 +22,7 @@
 </template>
 
 <script>
-const MIN = 8;
-const MAX = 32;
+import { passwordRules } from "@/lib/password";
 
 export default {
   name: "PasswordRules",
@@ -32,17 +31,7 @@ export default {
   },
   computed: {
     rules() {
-      const p = this.password || "";
-      return [
-        {
-          label: `${MIN}–${MAX} characters`,
-          ok: p.length >= MIN && p.length <= MAX,
-        },
-        { label: "one uppercase letter (A–Z)", ok: /[A-Z]/.test(p) },
-        { label: "one lowercase letter (a–z)", ok: /[a-z]/.test(p) },
-        { label: "one digit (0–9)", ok: /[0-9]/.test(p) },
-        { label: "one special character", ok: /[\W_]/.test(p) },
-      ];
+      return passwordRules(this.password);
     },
   },
 };

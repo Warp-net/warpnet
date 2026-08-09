@@ -26,6 +26,8 @@ import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
 import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop} from "@/lib/transport";
+import {DEFAULT_REACTION} from "@/lib/emoji";
+import {isOwnTweetEcho} from "@/lib/network";
 
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
@@ -35,10 +37,14 @@ export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
 export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
+export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
+export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
+export const PRIVATE_GET_GATEWAY_SETTINGS = "/private/get/gateway/settings/0.0.0"
+export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
-export const PRIVATE_GET_LIKES = "/private/get/likes/0.0.0"
+export const PRIVATE_GET_REACTIONS = "/private/get/reactions/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
 export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
@@ -47,7 +53,7 @@ export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
 export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
 export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
 export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
-export const PUBLIC_GET_TWEET_LIKERS = "/public/get/tweet/likers/0.0.0"
+export const PUBLIC_GET_TWEET_REACTORS = "/public/get/tweet/reactors/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
 export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
@@ -66,7 +72,7 @@ export const PRIVATE_DELETE_FILTER = "/private/delete/filter/0.0.0"
 export const PRIVATE_POST_FILTER_KEYWORD = "/private/post/filter/keyword/0.0.0"
 export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
 export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
-export const PUBLIC_POST_UNLIKE = "/public/post/unlike/0.0.0"
+export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
@@ -79,7 +85,7 @@ export const PUBLIC_GET_USERS = "/public/get/users/0.0.0"
 export const PUBLIC_GET_WHOTOFOLLOW = "/public/get/whotofollow/0.0.0"
 export const PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
 export const PUBLIC_POST_FOLLOW = "/public/post/follow/0.0.0"
-export const PUBLIC_POST_LIKE = "/public/post/like/0.0.0"
+export const PUBLIC_POST_REACT = "/public/post/react/0.0.0"
 export const PUBLIC_POST_RETWEET = "/public/post/retweet/0.0.0"
 export const PUBLIC_POST_UNRETWEET = "/public/post/unretweet/0.0.0"
 export const PUBLIC_POST_CHAT = "/public/post/chat/0.0.0"
@@ -92,26 +98,52 @@ export const PRIVATE_GET_MESSAGE = "/private/get/message/0.0.0"
 export const PRIVATE_DELETE_MESSAGE = "/private/delete/message/0.0.0"
 export const PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
+export const PRIVATE_POST_UPLOAD_VIDEO = "/private/post/video/0.0.0"
+export const PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
 export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
 export const PUBLIC_POST_REPORT        = "/public/post/report/0.0.0"
+export const PUBLIC_POST_POLL_VOTE     = "/public/post/poll/vote/0.0.0"
+export const PUBLIC_GET_POLL           = "/public/get/poll/0.0.0"
 
 const stateMap = new Map();
 // localStorage key for the owner profile; persisted on login so reopening the
 // tab or reloading the page restores the session instead of bouncing to the
 // sign-up screen.
 const OWNER_STORAGE = "warpnet.owner";
+const DATA_SAVER_STORAGE_KEY = "warpnet.datasaver";
+// sessionStorage key for the pairing QR; ephemeral (per-tab) so it survives a
+// reload without persisting the pairing secret to disk. Cleared on logout.
+const QR_STORAGE = "warpnet.qr";
+// sessionStorage key for the pairing connection data: the plain AuthNodeInfo
+// JSON the QR encodes, kept uncompressed so the modal's "copy connection data"
+// button yields readable data. Same ephemeral terms as QR_STORAGE.
+const QR_PAYLOAD_STORAGE = "warpnet.qr.payload";
 const notificationSubscribers = new Set();
 let latestNotifications = { unread_count: 0, notifications: [] };
+// Subscribers to owner-profile changes (username/avatar edits). The owner
+// object lives in the non-reactive stateMap, so components that render it
+// (SideNav) must be notified explicitly — mutating the raw object bypasses
+// Vue's proxies and nothing re-renders.
+const ownerSubscribers = new Set();
 
 // In-memory mirror of the local block list, populated lazily so
 // the UI can call isUserBlocked() synchronously across tweet
 // renders without hitting the node per row.
 const blockedIdsCache = new Set();
 let blockedCachePrimed = false;
+// Same lazy in-memory mirror for the mute list, so isUserMuted() can
+// answer synchronously and the profile / who-to-follow menus can reflect
+// the muted state without a per-row roundtrip.
+const mutedIdsCache = new Set();
+let mutedCachePrimed = false;
+const lastSeenCache = new Map();
+const bookmarkedIdsCache = new Set();
+let bookmarkedCachePrimed = false;
+let bookmarksPrimePromise = null;
 const defaultLimit = 20
 const endCursor = "end"
 
@@ -128,6 +160,7 @@ const inflightPostRequests = new Map();
 // by the UI (disabled buttons during upload).
 const dedupSkipPaths = new Set([
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_UPLOAD_VIDEO,
     PRIVATE_POST_IMPORT_TWITTER_TWEET,
 ]);
 
@@ -148,11 +181,41 @@ export const warpnetService = {
     setQR(qrData) {
         const key = `QR`;
         stateMap.set(key, qrData)
+        // The QR is only built once, during signInUser(). A full page reload
+        // restores the session from localStorage without re-running login, so
+        // the in-memory copy is lost and "Pair your phone" shows no code.
+        // Mirror it into sessionStorage (per-tab, cleared on tab close) so it
+        // survives reloads without persisting the pairing secret to disk.
+        try { sessionStorage.setItem(QR_STORAGE, qrData) } catch (e) {}
     },
 
     getQR() {
         const key = `QR`;
-        return stateMap.get(key) || ""
+        let qr = stateMap.get(key)
+        if (!qr) {
+            try { qr = sessionStorage.getItem(QR_STORAGE) || "" } catch (e) { qr = "" }
+            if (qr) stateMap.set(key, qr)
+        }
+        return qr || ""
+    },
+
+    // The pairing connection data is the plain AuthNodeInfo JSON that the QR
+    // image encodes in compressed form (see getQR). Stored uncompressed so
+    // copying it yields readable data without reversing the rendered PNG.
+    setQRPayload(payload) {
+        const key = `QR_PAYLOAD`;
+        stateMap.set(key, payload)
+        try { sessionStorage.setItem(QR_PAYLOAD_STORAGE, payload) } catch (e) {}
+    },
+
+    getQRPayload() {
+        const key = `QR_PAYLOAD`;
+        let payload = stateMap.get(key)
+        if (!payload) {
+            try { payload = sessionStorage.getItem(QR_PAYLOAD_STORAGE) || "" } catch (e) { payload = "" }
+            if (payload) stateMap.set(key, payload)
+        }
+        return payload || ""
     },
 
     setCursor(key, cursor) {
@@ -169,6 +232,20 @@ export const warpnetService = {
         const key = `owner`;
         stateMap.set(key, owner)
         try { localStorage.setItem(OWNER_STORAGE, JSON.stringify(owner)) } catch (e) {}
+        for (const cb of ownerSubscribers) {
+            cb(owner);
+        }
+    },
+
+    // subscribeOwner mirrors subscribeNotifications: the callback fires with
+    // the current owner immediately and again on every setOwnerProfile.
+    // Returns an unsubscribe function.
+    subscribeOwner(callback) {
+        ownerSubscribers.add(callback);
+        callback(this.getOwnerProfile());
+        return () => {
+            ownerSubscribers.delete(callback);
+        };
     },
 
     getOwnerProfile() {
@@ -225,9 +302,12 @@ export const warpnetService = {
         // Seed the owner profile from the flat AuthNodeInfo first so any
         // sendToNode call below has node_id/user_id available; getProfile
         // is fetched on a best-effort basis to back-fill the username.
+        // network is the node's own private network ("warpnet" for production,
+        // "testnet" for testing); App.vue banners any non-production one.
         warpnetService.setOwnerProfile({
             user_id: resp.user_id,
             node_id: resp.node_id,
+            network: resp.network,
         })
         try {
             const profile = await this.getProfile(resp.user_id)
@@ -235,6 +315,7 @@ export const warpnetService = {
                 warpnetService.setOwnerProfile({
                     user_id: resp.user_id,
                     node_id: resp.node_id,
+                    network: resp.network,
                     username: profile.username,
                 })
             }
@@ -257,6 +338,11 @@ export const warpnetService = {
 
         const qrCode = await buildQRCode(qrData)
         warpnetService.setQR(qrCode)
+        // Store the plain AuthNodeInfo JSON (not the gzip+Base45 QR form) so the
+        // modal's "copy connection data" button yields readable, uncompressed
+        // data. fullPayload still carries the token captured above, before it
+        // was nulled on resp.
+        warpnetService.setQRPayload(fullPayload)
 
         startRefreshNotifications()
     },
@@ -272,7 +358,15 @@ export const warpnetService = {
         }
         stopRefreshNotifications()
         stateMap.clear()
+        // The owner is dropped here rather than through setOwnerProfile, so
+        // subscribers have to be told explicitly or they keep rendering the
+        // signed-out owner.
+        for (const cb of ownerSubscribers) {
+            cb(undefined);
+        }
         try { localStorage.removeItem(OWNER_STORAGE) } catch (e) {}
+        try { sessionStorage.removeItem(QR_STORAGE) } catch (e) {}
+        try { sessionStorage.removeItem(QR_PAYLOAD_STORAGE) } catch (e) {}
         try {
             localStorage.removeItem(`first_run_seen`)
         } catch (e) {}
@@ -287,7 +381,24 @@ export const warpnetService = {
             },
         }
 
-        return await this.sendToNode(request);
+        const user = await this.sendToNode(request);
+        return this.trackLastSeen(user);
+    },
+
+    trackLastSeen(user) {
+        if (!user || !user.id) return user;
+        const owner = this.getOwnerProfile();
+        if (owner && user.id === owner.user_id) return user;
+        if (!user.isOffline) {
+            lastSeenCache.set(user.id, Date.now());
+        }
+        const mem = lastSeenCache.get(user.id) || 0;
+        const be = user.last_seen ? Date.parse(user.last_seen) : 0;
+        const freshest = Math.max(mem, be || 0);
+        if (freshest > 0) {
+            user.last_seen = new Date(freshest).toISOString();
+        }
+        return user;
     },
 
     async getUsers({profileId, cursorReset}) {
@@ -318,6 +429,7 @@ export const warpnetService = {
         }
 
         usersResp.users = usersResp.users.filter(user => user.id !== profileId);
+        usersResp.users.forEach(u => this.trackLastSeen(u));
 
         return usersResp.users;
     },
@@ -420,6 +532,51 @@ export const warpnetService = {
         return result.file;
     },
 
+    async uploadVideo(videoFile) {
+        if (!videoFile) {
+            return ''
+        }
+
+        const request = {
+            path: PRIVATE_POST_UPLOAD_VIDEO,
+            timestamp: new Date().toISOString(),
+            body: {
+                video: videoFile,
+            },
+        }
+
+        const result = await this.sendToNode(request);
+        if (result && !result.key && result.message) {
+            throw new Error(result.message);
+        }
+        return result && result.key ? result.key : '';
+    },
+
+    async getVideo({userId, key, deferred = false}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const request = {
+            path: PUBLIC_GET_VIDEO,
+            body: {
+                user_id: userId,
+                key: key,
+                deferred: deferred,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result) {
+            return null
+        }
+        return {
+            file: result.file || '',
+            size: result.size || 0,
+            deferred: !!result.deferred,
+        };
+    },
+
     async getMyTimeline(cursorReset) {
         let cursor = this.getCursor('timeline')
         if (cursorReset) {
@@ -457,7 +614,12 @@ export const warpnetService = {
                 return []
             }
 
-            const visible = await this.applyHomeFilters(timelineResp.tweets);
+            // Own tweets that federated out and came back as fediverse
+            // boosts are an echo, not news — keep them out of the feed.
+            const withoutEchoes = timelineResp.tweets.filter(
+                t => !isOwnTweetEcho(t, owner.user_id),
+            );
+            const visible = await this.applyHomeFilters(withoutEchoes);
             if (visible.length > 0 || cursor === endCursor) {
                 return visible;
             }
@@ -660,25 +822,66 @@ export const warpnetService = {
     async muteUser(targetUserId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_MUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
             },
         });
+        // Mirror the write so isUserMuted() reports the new state at once.
+        mutedIdsCache.add(targetUserId);
+        return resp;
     },
 
     async unmuteUser(targetUserId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
-        return await this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_UNMUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
             },
         });
+        mutedIdsCache.delete(targetUserId);
+        return resp;
+    },
+
+    // isUserMuted answers from the local cache, priming it once from the
+    // node on first call (mirrors isUserBlocked).
+    async isUserMuted(targetUserId) {
+        if (!targetUserId) return false;
+        await this.ensureMutedCache();
+        return mutedIdsCache.has(targetUserId);
+    },
+
+    async ensureMutedCache() {
+        if (mutedCachePrimed) return;
+        const owner = this.getOwnerProfile()
+        if (!owner) { mutedCachePrimed = true; return; }
+        let cursor = '';
+        const seen = new Set();
+        try {
+            while (true) {
+                const resp = await this.sendToNode({
+                    path: PRIVATE_GET_MUTES,
+                    body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+                });
+                const ids = resp?.ids || [];
+                for (const id of ids) seen.add(id);
+                const next = resp?.cursor || '';
+                if (!next || next === endCursor || ids.length === 0) break;
+                if (next === cursor) break;
+                cursor = next;
+            }
+        } catch (err) {
+            console.warn('failed to prime muted-users cache:', err);
+        }
+        for (const id of mutedIdsCache) seen.add(id);
+        mutedIdsCache.clear();
+        for (const id of seen) mutedIdsCache.add(id);
+        mutedCachePrimed = true;
     },
 
     async getMutes(cursorReset) {
@@ -697,6 +900,9 @@ export const warpnetService = {
         });
         if (!resp) return { ids: [], cursor: endCursor };
         this.setCursor('mutes', resp.cursor || 'end')
+        // Reflect this page into the local cache.
+        for (const id of (resp.ids || [])) mutedIdsCache.add(id);
+        if ((resp.cursor || endCursor) === endCursor) mutedCachePrimed = true;
         return resp;
     },
 
@@ -769,6 +975,64 @@ export const warpnetService = {
                 filter_id: filterId,
             },
         });
+    },
+
+    async getNotificationSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_NOTIFICATION_SETTINGS,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    notificationSettingsBody(settings) {
+        return {
+            email_enabled: !!settings.email_enabled,
+            recipient: settings.recipient || '',
+            smtp_host: settings.smtp_host || '',
+            smtp_port: Number(settings.smtp_port) || 0,
+            smtp_username: settings.smtp_username || '',
+            smtp_password: settings.smtp_password || '',
+            smtp_use_tls: !!settings.smtp_use_tls,
+            types: settings.types || {},
+        };
+    },
+
+    // updateNotificationSettings persists the settings and confirms the node
+    // stored them: it throws on an error response or if the node did not echo
+    // the saved settings back, so the caller can report real success/failure.
+    async updateNotificationSettings(settings) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_NOTIFICATION_SETTINGS,
+            body: this.notificationSettingsBody(settings),
+        });
+        if (!resp || resp.code || !('email_enabled' in resp)) {
+            throw new Error(resp?.message || 'Failed to save notification settings');
+        }
+        return resp;
+    },
+
+    // getGatewaySettings returns the node's ActivityPub gateway settings; the
+    // node fills node_id with the built-in default when nothing is stored yet.
+    async getGatewaySettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_GATEWAY_SETTINGS,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    // updateGatewaySettings persists the gateway node id and confirms the node
+    // echoed it back. An empty id makes the node fall back to its default.
+    async updateGatewaySettings(nodeId) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_GATEWAY_SETTINGS,
+            body: { node_id: (nodeId || '').trim() },
+        });
+        if (!resp || resp.code || !('node_id' in resp)) {
+            throw new Error(resp?.message || 'Failed to save gateway settings');
+        }
+        return resp;
     },
 
     async addFilterKeyword(filterId, keyword, wholeWord) {
@@ -926,9 +1190,9 @@ export const warpnetService = {
         });
     },
 
-    async getTweetLikers(tweetId, ownerUserId, cursor) {
+    async getTweetReactors(tweetId, ownerUserId, cursor) {
         const resp = await this.sendToNode({
-            path: PUBLIC_GET_TWEET_LIKERS,
+            path: PUBLIC_GET_TWEET_REACTORS,
             body: {
                 tweet_id: tweetId,
                 owner_user_id: ownerUserId,
@@ -951,7 +1215,6 @@ export const warpnetService = {
         });
         return resp || { users: [], cursor: 'end' };
     },
-
 
     async pinTweet(tweetId) {
         const owner = this.getOwnerProfile()
@@ -990,7 +1253,9 @@ export const warpnetService = {
                 owner_user_id: ownerUserId,
             },
         }
-        return await this.sendToNode(request);
+        const resp = await this.sendToNode(request);
+        bookmarkedIdsCache.add(tweetId);
+        return resp;
     },
 
     async unbookmarkTweet(tweetId) {
@@ -1003,7 +1268,9 @@ export const warpnetService = {
                 tweet_id: tweetId,
             },
         }
-        return await this.sendToNode(request);
+        const resp = await this.sendToNode(request);
+        bookmarkedIdsCache.delete(tweetId);
+        return resp;
     },
 
     async getBookmarks(cursorReset) {
@@ -1029,27 +1296,50 @@ export const warpnetService = {
         this.setCursor('bookmarks', resp.cursor || 'end')
 
         // Backend returns the bookmark index entries (tweet_id +
-        // owner_user_id). Hydrate each into the full Tweet so the view
-        // can render it inline like a timeline tweet.
-        const rawItems = resp.items || [];
-        const hydrated = await Promise.all(rawItems.map(async (b) => {
-            if (!b || !b.tweet_id) return null;
-            try {
-                const tweet = await this.getTweet({
-                    userId: b.owner_user_id || owner.user_id,
-                    tweetId: b.tweet_id,
-                });
-                return tweet ? { ...b, tweet } : null;
-            } catch (e) {
-                console.warn('bookmark hydrate failed:', b, e);
-                return null;
-            }
-        }));
-        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+        // owner_user_id); the view hydrates each into a full Tweet.
+        const items = (resp.items || []).filter((b) => b && b.tweet_id);
+        return { items, cursor: resp.cursor || 'end' };
     },
 
-    async getLikes(cursorReset) {
-        let cursor = this.getCursor('likes')
+    async primeBookmarks() {
+        if (bookmarkedCachePrimed) return;
+        if (bookmarksPrimePromise) return bookmarksPrimePromise;
+        const owner = this.getOwnerProfile();
+        if (!owner) return;
+        bookmarksPrimePromise = (async () => {
+            let cursor = '';
+            for (;;) {
+                const resp = await this.sendToNode({
+                    path: PRIVATE_GET_BOOKMARKS,
+                    body: { user_id: owner.user_id, limit: defaultLimit, cursor },
+                });
+                const items = (resp && resp.items) || [];
+                for (const b of items) {
+                    if (b && b.tweet_id) bookmarkedIdsCache.add(b.tweet_id);
+                }
+                const next = (resp && resp.cursor) || 'end';
+                if (!items.length || next === 'end' || next === cursor) break;
+                cursor = next;
+            }
+            bookmarkedCachePrimed = true;
+        })();
+        try {
+            await bookmarksPrimePromise;
+        } catch (e) {
+            console.warn('failed to prime bookmarks:', e);
+        } finally {
+            bookmarksPrimePromise = null;
+        }
+    },
+
+    async hasBookmark(tweetId) {
+        if (!tweetId) return false;
+        if (!bookmarkedCachePrimed) await this.primeBookmarks();
+        return bookmarkedIdsCache.has(tweetId);
+    },
+
+    async getReactions(cursorReset) {
+        let cursor = this.getCursor('reactions')
         if (cursorReset) {
             cursor = ''
         }
@@ -1059,7 +1349,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { items: [], cursor: endCursor };
         const request = {
-            path: PRIVATE_GET_LIKES,
+            path: PRIVATE_GET_REACTIONS,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -1068,26 +1358,14 @@ export const warpnetService = {
         }
         const resp = await this.sendToNode(request);
         if (!resp) return { items: [], cursor: endCursor };
-        this.setCursor('likes', resp.cursor || 'end')
+        this.setCursor('reactions', resp.cursor || 'end')
 
         // Same reference-only wire shape as bookmarks: the backend returns
-        // the liked index entries (tweet_id + owner_user_id), each hydrated
-        // into the full Tweet so the view renders it like a timeline tweet.
-        const rawItems = resp.items || [];
-        const hydrated = await Promise.all(rawItems.map(async (b) => {
-            if (!b || !b.tweet_id) return null;
-            try {
-                const tweet = await this.getTweet({
-                    userId: b.owner_user_id || owner.user_id,
-                    tweetId: b.tweet_id,
-                });
-                return tweet ? { ...b, tweet } : null;
-            } catch (e) {
-                console.warn('like hydrate failed:', b, e);
-                return null;
-            }
-        }));
-        return { items: hydrated.filter(Boolean), cursor: resp.cursor || 'end' };
+        // the reacted index entries (tweet_id + owner_user_id); the view
+        // hydrates each into a full Tweet independently, so one offline
+        // author can't hold the whole page behind its sendTimeout.
+        const items = (resp.items || []).filter((b) => b && b.tweet_id);
+        return { items, cursor: resp.cursor || 'end' };
     },
 
     async getNotification(notificationId) {
@@ -1153,6 +1431,12 @@ export const warpnetService = {
         return resp;
     },
 
+    async markMessageNotificationsRead() {
+        const items = (latestNotifications.notifications || [])
+            .filter(n => n && n.type === 'message' && !n.is_read);
+        await Promise.all(items.map(n => this.markNotificationRead(n.id).catch(() => {})));
+    },
+
     subscribeNotifications(callback) {
         notificationSubscribers.add(callback);
         callback(latestNotifications);
@@ -1191,7 +1475,28 @@ export const warpnetService = {
         return tweetsResp.tweets;
     },
 
-    async createTweet({text, imageKeys}) {
+    // Explicit-cursor page fetch for one user's tweets. Unlike getTweets it
+    // never touches the global 'tweets' cursor, so many per-user paginations
+    // (the unified timeline fans out per followed Mastodon handle) can run
+    // side by side without clobbering the Profile view.
+    async getUserTweetsPage({userId, cursor = '', limit = defaultLimit}) {
+        if (cursor === endCursor) {
+            return {tweets: [], cursor: endCursor};
+        }
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_TWEETS,
+            body: {limit, cursor, user_id: userId},
+        });
+        // sendToNode maps an error body to {} — distinguish that from a
+        // legitimate empty page so a flaky gateway reads as "failed"
+        // (retryable), not "exhausted".
+        if (!resp || (resp.tweets === undefined && resp.cursor === undefined)) {
+            throw new Error(`no tweets response for ${userId}`);
+        }
+        return {tweets: resp.tweets || [], cursor: resp.cursor || endCursor};
+    },
+
+    async createTweet({text, imageKeys, videoKey, poll}) {
         const owner = this.getOwnerProfile()
 
         const request ={
@@ -1204,18 +1509,27 @@ export const warpnetService = {
                 created_at: new Date().toISOString(),
             },
         }
+        if (videoKey) {
+            request.body.video_key = videoKey;
+        }
+        if (poll) {
+            request.body.poll = {
+                options: poll.options,
+                expires_at: poll.expiresAt,
+            };
+        }
 
         return await this.sendToNode(request);
     },
 
     isDesktopNode() {
         // Desktop member node (Wails) → native dialog + node reads the .zip
-        // off local disk. Browser dashboard (business node) → file upload.
+        // off local disk. Browser dashboard (remote node) → file upload.
         return IsDesktop();
     },
 
     // importTweet streams one pre-parsed original tweet (text + up to four
-    // base64 photos) to the node, which stores it on arrival. The business
+    // base64 photos) to the node, which stores it on arrival. The remote
     // browser dashboard parses and filters the X archive client-side and calls
     // this once per kept tweet, so the node never buffers the whole archive.
     async importTweet({id, text = "", createdAt = "", images = []}) {
@@ -1369,6 +1683,27 @@ export const warpnetService = {
         return followingsResp.followings;
     },
 
+    // Full followings scan with a local cursor (bounded at 50 pages ≈ 1000
+    // ids). The global 'followings' cursor stays untouched — it belongs to
+    // the Following view's own pagination.
+    async listFollowingIds(userId) {
+        const ids = [];
+        let cursor = '';
+        for (let page = 0; page < 50; page++) {
+            const resp = await this.sendToNode({
+                path: PUBLIC_GET_FOLLOWINGS,
+                body: {user_id: userId, cursor, limit: defaultLimit},
+            });
+            const batch = (resp?.followings || []).filter(f => f !== userId);
+            ids.push(...batch);
+            cursor = resp?.cursor || endCursor;
+            if (cursor === endCursor || batch.length === 0) {
+                break;
+            }
+        }
+        return ids;
+    },
+
     async getTweetStats(tweetId, userId) {
         const request = {
             path: PUBLIC_GET_TWEET_STATS,
@@ -1465,27 +1800,31 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async likeTweet(tweetId, userId) {
+    // reactToTweet reacts to a tweet with `emoji` (the node defaults to a heart
+    // when none is named) and returns {count, reactions} — the total across
+    // every reaction plus its per-emoji breakdown.
+    async reactToTweet(tweetId, userId, emoji) {
         const owner = this.getOwnerProfile()
 
         const request = {
-            path: PUBLIC_POST_LIKE,
+            path: PUBLIC_POST_REACT,
             body: {
                 user_id: userId,
                 tweet_id: tweetId,
                 owner_id: owner.user_id,
+                emoji: emoji || '',
             },
         }
 
-        const likeResp = await this.sendToNode(request);
-        return likeResp.count;
+        const reactResp = await this.sendToNode(request);
+        return {count: reactResp.count || 0, reactions: reactResp.reactions || {}};
     },
 
-    async unlikeTweet(tweetId, userId) {
+    async unreactTweet(tweetId, userId) {
         const owner = this.getOwnerProfile()
 
         const request = {
-            path: PUBLIC_POST_UNLIKE,
+            path: PUBLIC_POST_UNREACT,
             body: {
                 user_id: userId,
                 tweet_id: tweetId,
@@ -1493,8 +1832,46 @@ export const warpnetService = {
             },
         }
 
-        const unlikeResp = await this.sendToNode(request);
-        return unlikeResp.count;
+        const unreactResp = await this.sendToNode(request);
+        return {count: unreactResp.count || 0, reactions: unreactResp.reactions || {}};
+    },
+
+    // voteInPoll casts a final vote on a tweet's poll and returns the tally
+    // the node knows about, in the same shape as getPollResults.
+    async voteInPoll(tweetId, userId, option, optionsNum) {
+        const owner = this.getOwnerProfile()
+
+        const request = {
+            path: PUBLIC_POST_POLL_VOTE,
+            body: {
+                user_id: userId,
+                tweet_id: tweetId,
+                owner_id: owner.user_id,
+                option: option,
+                options_num: optionsNum,
+            },
+        }
+
+        return await this.sendToNode(request);
+    },
+
+    // getPollResults returns {votes, total_votes, voted_option}. votes is the
+    // per-option tally in option order; voted_option is null until this user
+    // has voted.
+    async getPollResults(tweetId, userId, optionsNum) {
+        const owner = this.getOwnerProfile()
+
+        const request = {
+            path: PUBLIC_GET_POLL,
+            body: {
+                user_id: userId,
+                tweet_id: tweetId,
+                owner_id: owner.user_id,
+                options_num: optionsNum,
+            },
+        }
+
+        return await this.sendToNode(request);
     },
 
     // viewTweet returns the new view count on success, or `null` if
@@ -1549,27 +1926,37 @@ export const warpnetService = {
         return await this.sendToNode(request)
     },
 
-    async setLiker(tweetId, profileId, profileObj) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
+    // The cached value is the reaction emoji. Likes cached before reactions
+    // existed stored "1", which reads back as the default heart.
+    async setReactor(tweetId, profileId, profileObj, emoji) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
         stateMap.set(cacheKey, profileObj)
-        localStorage.setItem(cacheKey, "1")
+        localStorage.setItem(cacheKey, emoji || DEFAULT_REACTION)
     },
 
-    async hasLiker(tweetId, profileId) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
-        if (stateMap.has(cacheKey)) {
-            return true
+    async hasReactor(tweetId, profileId) {
+        return !!(await this.getReactorEmoji(tweetId, profileId))
+    },
+
+    // Only localStorage answers this: stateMap holds the reactor's profile
+    // object, not their emoji, so its presence says nothing about which
+    // reaction was left.
+    async getReactorEmoji(tweetId, profileId) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
+        const cached = localStorage.getItem(cacheKey)
+        if (!cached) {
+            return ""
         }
-        return localStorage.getItem(cacheKey) === "1"
+        return cached === "1" ? DEFAULT_REACTION : cached
     },
 
-    async getLiker(tweetId, profileId) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
+    async getReactor(tweetId, profileId) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
         return stateMap.get(cacheKey)
     },
 
-    async deleteLiker(tweetId, profileId) {
-        const cacheKey = `liker::${tweetId}::${profileId}`; // order matters
+    async deleteReactor(tweetId, profileId) {
+        const cacheKey = `reactor::${tweetId}::${profileId}`; // order matters
         stateMap.delete(cacheKey)
         localStorage.removeItem(cacheKey)
     },
@@ -1710,6 +2097,18 @@ export const warpnetService = {
         return chatsResp.chats;
     },
 
+    // Chat read marks live only in localStorage: the node keeps no per-chat
+    // read state, so "unread" is chat.updated_at newer than this local mark.
+    markChatRead(chatId) {
+        if (!chatId) return;
+        localStorage.setItem(`chat_read::${chatId}`, String(Date.now()));
+    },
+
+    getChatReadAt(chatId) {
+        const readAt = Number(localStorage.getItem(`chat_read::${chatId}`));
+        return Number.isFinite(readAt) ? readAt : 0;
+    },
+
     async deleteChat(chatId) {
         const request = {
             path: PRIVATE_DELETE_CHAT,
@@ -1733,7 +2132,7 @@ export const warpnetService = {
         return await this.sendToNode(request);
     },
 
-    async sendDirectMessage({chatId, receiverId, text, imageKey}) {
+    async sendDirectMessage({chatId, receiverId, text, imageKeys, videoKey}) {
         const owner = this.getOwnerProfile();
         const request = {
             path: PUBLIC_POST_MESSAGE,
@@ -1743,6 +2142,12 @@ export const warpnetService = {
                 chat_id: chatId,
                 text: text,
             },
+        }
+        if (imageKeys && imageKeys.length > 0) {
+            request.body.image_keys = imageKeys;
+        }
+        if (videoKey) {
+            request.body.video_key = videoKey;
         }
 
         return await this.sendToNode(request);
@@ -1795,6 +2200,43 @@ export const warpnetService = {
         }
 
         return await this.sendToNode(request);
+    },
+
+    // updateAccountSource persists the account preferences (default post
+    // visibility, sensitive-media default, default language) into the owner's
+    // user metadata via the profile-update route. The node merges the metadata
+    // map key-by-key, so this doesn't clobber the rest of the profile.
+    async updateAccountSource(prefs) {
+        const owner = this.getOwnerProfile()
+        if (!owner) return null;
+        this.cacheDataSaver(!!prefs.dataSaver);
+        return await this.sendToNode({
+            path: PRIVATE_POST_USER,
+            body: {
+                metadata: {
+                    privacy: prefs.privacy || 'public',
+                    sensitive: prefs.sensitive ? 'true' : 'false',
+                    language: prefs.language || 'en',
+                    data_saver: prefs.dataSaver ? 'true' : 'false',
+                },
+            },
+        });
+    },
+
+    cacheDataSaver(enabled) {
+        try {
+            localStorage.setItem(DATA_SAVER_STORAGE_KEY, enabled ? 'true' : 'false');
+        } catch (e) {
+            console.warn('failed to cache data saver preference', e);
+        }
+    },
+
+    isDataSaverEnabled() {
+        try {
+            return localStorage.getItem(DATA_SAVER_STORAGE_KEY) === 'true';
+        } catch (e) {
+            return false;
+        }
     },
 
     async getNodeInfo(){

@@ -28,8 +28,11 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
 
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
@@ -92,7 +95,22 @@ type ChatMessage struct {
 	ReceiverId string    `json:"receiver_id"`
 	SenderId   string    `json:"sender_id"`
 	Text       string    `json:"text"`
-	Status     string    `json:"status,omitempty"`
+
+	// ImageKeys holds the video's still frame as its only entry when VideoKey
+	// is set, the same convention tweets use with the first of their image keys.
+	ImageKeys []string `json:"image_keys,omitempty"`
+	VideoKey  *string  `json:"video_key,omitempty"`
+
+	Status string `json:"status,omitempty"`
+}
+
+// IsEmpty reports whether the message carries nothing at all. Spelled out
+// field by field because ImageKeys makes ChatMessage uncomparable, so the
+// zero-value check this replaces no longer compiles.
+func (m ChatMessage) IsEmpty() bool {
+	return m.ChatId == "" && m.Id == "" && m.SenderId == "" && m.ReceiverId == "" &&
+		m.Text == "" && len(m.ImageKeys) == 0 && m.VideoKey == nil &&
+		m.Status == "" && m.CreatedAt.IsZero()
 }
 
 // Error defines model for Error.
@@ -122,17 +140,50 @@ type Bookmark struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// Like defines model for Like.
-type Like struct {
+// Reaction defines model for Reaction.
+type Reaction struct {
 	TweetId string `json:"tweet_id"`
 	UserId  string `json:"user_id"`
+	Emoji   string `json:"emoji,omitempty"`
 }
 
-// LikedTweet defines model for LikedTweet — one entry of a user's
-// "tweets I liked" index. OwnerUserId is the tweet author's id, stored
+// DefaultReaction is the emoji a reaction carries when the client named
+// none: every reaction made before emoji existed, and every one from a
+// client that still speaks the old wire shape.
+const DefaultReaction = "❤️"
+
+// maxReactionRunes caps a reaction so an emoji can never blow up a
+// database key. The longest sensible sequence (flag + skin tone + ZWJ
+// family) stays well under it.
+const maxReactionRunes = 8
+
+// NormalizeReaction validates a reaction emoji arriving off the wire and
+// substitutes DefaultReaction when the caller named none. Reactions become
+// database key segments, so anything with a delimiter, whitespace or a
+// control character is rejected rather than silently coerced.
+func NormalizeReaction(emoji string) (string, error) {
+	if emoji == "" {
+		return DefaultReaction, nil
+	}
+	if !utf8.ValidString(emoji) {
+		return "", warpnet.WarpError("reaction: not a valid utf-8 string")
+	}
+	if utf8.RuneCountInString(emoji) > maxReactionRunes {
+		return "", warpnet.WarpError("reaction: too long")
+	}
+	for _, r := range emoji {
+		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return "", warpnet.WarpError("reaction: forbidden character")
+		}
+	}
+	return emoji, nil
+}
+
+// ReactedTweet defines model for ReactedTweet — one entry of a user's
+// "tweets I reacted to" index. OwnerUserId is the tweet author's id, stored
 // alongside so clients can fetch the tweet without an extra resolution
 // round-trip.
-type LikedTweet struct {
+type ReactedTweet struct {
 	UserId      string    `json:"user_id"`
 	TweetId     string    `json:"tweet_id"`
 	OwnerUserId string    `json:"owner_user_id"`
@@ -181,11 +232,13 @@ type Tweet struct {
 	UserId        string           `json:"user_id"`
 	Username      string           `json:"username"`
 	ImageKeys     []string         `json:"image_keys,omitempty"`
+	VideoKey      *string          `json:"video_key,omitempty"`
 	Network       string           `json:"network"`
 	Moderation    *TweetModeration `json:"moderation,omitempty"`
 	Pinned        bool             `json:"pinned,omitempty"`
 	QuotedTweetId *string          `json:"quoted_tweet_id,omitempty"`
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
+	Poll          *Poll            `json:"poll,omitempty"`
 }
 
 // IsReply reports whether the tweet is a reply, i.e. it hangs off a parent
@@ -196,6 +249,27 @@ func (t *Tweet) IsReply() bool {
 
 func (t *Tweet) IsModerated() bool {
 	return t.Moderation != nil
+}
+
+const (
+	PollMinOptions      = 2
+	PollMaxOptions      = 4
+	PollOptionRuneLimit = 25
+)
+
+// Poll is an optional single-choice poll carried by a tweet. Only the
+// immutable definition lives here, so it travels with the tweet through
+// every existing distribution path (storage, gossip, timeline snapshots).
+// The votes themselves are held per node by the poll repo, keyed by tweet
+// id, and aggregated across the network the same way reactions are.
+type Poll struct {
+	Options   []string  `json:"options"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// IsClosed reports whether the poll has stopped accepting votes.
+func (p *Poll) IsClosed() bool {
+	return p != nil && !p.ExpiresAt.IsZero() && time.Now().After(p.ExpiresAt)
 }
 
 type ModelType string
@@ -280,11 +354,12 @@ type User struct {
 	FollowersCount     int64      `json:"followers_count"`
 	Id                 string     `json:"id"`
 	IsOffline          bool       `json:"isOffline"`
+	LastSeen           *time.Time `json:"last_seen,omitempty"`
 	NodeId             string     `json:"node_id"`
 	Network            string     `json:"network"`
-	// Role mirrors NodeInfo.Role: "" for a regular user, "business" for a
-	// business account. Stamped from the node's NodeInfo when the user is
-	// cached (discovery) so clients can badge business accounts.
+	// Role mirrors NodeInfo.Type. Only a remote node stamps it, and it reports
+	// "member" like every other member node; the desktop node leaves it empty.
+	// Nothing reads it since the "business" badge was dropped.
 	Role          string            `json:"role,omitempty"`
 	RoundTripTime int64             `json:"rtt"`
 	TweetsCount   int64             `json:"tweets_count"`
@@ -317,19 +392,46 @@ const (
 	NotificationModerationType NotificationType = "moderation"
 	NotificationRetweetType    NotificationType = "retweet"
 	NotificationFollowType     NotificationType = "follow"
-	NotificationLikeType       NotificationType = "like"
+	NotificationReactionType   NotificationType = "reaction"
 	NotificationMentionType    NotificationType = "mention"
 	NotificationReplyType      NotificationType = "reply"
 	NotificationMessageType    NotificationType = "message"
+	NotificationNewUserType    NotificationType = "new_user"
 )
 
 type Notification struct {
-	Type      NotificationType `json:"type"`
-	Id        string           `json:"id"`
-	Text      string           `json:"text"`
-	UserId    string           `json:"user_id"`
-	IsRead    bool             `json:"is_read"`
-	CreatedAt time.Time        `json:"created_at"`
+	Type        NotificationType `json:"type"`
+	Id          string           `json:"id"`
+	Text        string           `json:"text"`
+	RecepientId string           `json:"user_id"`
+	ActorId     string           `json:"actor_id,omitempty"`
+	TweetId     string           `json:"tweet_id,omitempty"`
+	IsRead      bool             `json:"is_read"`
+	CreatedAt   time.Time        `json:"created_at"`
+}
+
+// NotificationSettings holds a user's per-node notification preferences,
+// including the email channel. SMTP credentials are the user's own
+// (bring-your-own): the node connects to them to relay email. The whole
+// local store is encrypted at rest, so the SMTP password lives here in
+// plaintext form only inside the encrypted DB.
+type NotificationSettings struct {
+	EmailEnabled bool   `json:"email_enabled"`
+	Recipient    string `json:"recipient"`
+	SMTPHost     string `json:"smtp_host"`
+	SMTPPort     int    `json:"smtp_port"`
+	SMTPUsername string `json:"smtp_username"`
+	SMTPPassword string `json:"smtp_password"`
+	SMTPUseTLS   bool   `json:"smtp_use_tls"`
+	// Types is the per-notification-type email toggle. A type absent from
+	// the map (or false) means "do not email for this type".
+	Types map[NotificationType]bool `json:"types"`
+}
+
+// GatewaySettings holds the ActivityPub gateway peer id this node bridges
+// through. An empty NodeID means "use the built-in default".
+type GatewaySettings struct {
+	NodeID string `json:"node_id"`
 }
 
 type ModerationResult bool

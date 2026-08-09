@@ -22,11 +22,19 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div>
-    <i class="fas fa-search absolute mt-2 ml-5 text-sm text-light"></i>
+  <div class="relative">
+    <button
+      type="button"
+      @click="submit()"
+      class="absolute mt-2 ml-4 text-sm text-light hover:text-blue flat-btn"
+      aria-label="Search"
+    >
+      <i class="fas fa-search" aria-hidden="true"></i>
+    </button>
     <input
-      class="pl-12 rounded-full w-full p-2 bg-lighter text-sm mb-4"
+      class="pl-12 rounded-full w-full p-2 bg-lighter text-sm mb-4 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue"
       placeholder="Search Warpnet"
+      type="search"
       v-model="query"
       v-on:keyup.enter="submit()"
     />

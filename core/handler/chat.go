@@ -30,8 +30,10 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -84,26 +86,41 @@ func StreamCreateChatHandler(
 			return nil, warpnet.WarpError("owner ID or other user ID is empty")
 		}
 
+		ownNodeInfo := streamer.NodeInfo()
+		isSelfChat := ev.OwnerId == ev.OtherUserId
+		isOtherUserChat := ev.OwnerId != ownNodeInfo.OwnerId
+
+		// The lookup the streaming below needs anyway, hoisted above the
+		// write: Mastodon has no direct messages, so a bridged recipient is
+		// refused before the chat is stored.
+		var otherUser domain.User
+		var otherUserErr error
+		if !isSelfChat && !isOtherUserChat {
+			otherUser, otherUserErr = userRepo.Get(ev.OtherUserId)
+			if otherUser.Network == mastodon.Network {
+				return nil, mastodon.ErrNotSupported
+			}
+		}
+
 		ownerChat, err := repo.CreateChat(ev.ChatId, ev.OwnerId, ev.OtherUserId)
 		if err != nil {
 			return nil, err
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
-		if ev.OwnerId == ev.OtherUserId { // self chat
+		if isSelfChat {
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
-		if ev.OwnerId != ownNodeInfo.OwnerId { // other user created chat
+
+		if isOtherUserChat {
 			log.Infoln("new chat!")
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
-		otherUser, err := userRepo.Get(ev.OtherUserId)
-		if errors.Is(err, database.ErrUserNotFound) {
+		if errors.Is(otherUserErr, database.ErrUserNotFound) {
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
-		if err != nil {
-			return nil, err
+		if otherUserErr != nil {
+			return nil, otherUserErr
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {
@@ -131,8 +148,10 @@ func StreamCreateChatHandler(
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
+		// A non-zero Code marks a real error; the "Accepted" ack and normal
+		// responses carry Code 0 and must not be treated as failures.
 		var possibleError event.ResponseError
-		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Code != 0 {
 			log.Errorf("create chat: unmarshal other reply response: %s", possibleError.Message)
 		}
 
@@ -230,25 +249,75 @@ func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpn
 	}
 }
 
-const messageLimit = 5000
+const (
+	messageLimit      = 5000
+	mediaKeyLimit     = 128
+	maxMessageImages  = 4
+	statusUndelivered = "undelivered"
+)
 
-const statusUndelivered = "undelivered"
+// mediaKey normalizes an attachment key: an absent one and an empty one mean
+// the same thing, and an oversized one is rejected outright.
+func mediaKey(key *string) (*string, bool) {
+	if key == nil || *key == "" {
+		return nil, true
+	}
+	if len(*key) > mediaKeyLimit {
+		return nil, false
+	}
+	return key, true
+}
+
+// mediaKeys drops the empty entries a client may pad the list with and refuses
+// a list that is oversized in either dimension.
+func mediaKeys(keys []string) ([]string, bool) {
+	if len(keys) > maxMessageImages {
+		return nil, false
+	}
+	var kept []string
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if len(key) > mediaKeyLimit {
+			return nil, false
+		}
+		kept = append(kept, key)
+	}
+	return kept, true
+}
+
+type ChatNotifier interface {
+	Add(not domain.Notification) error
+}
 
 // StreamNewMessageHandler is for sending a new message
-func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ModerationNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
+func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRepo ChatNotifier, streamer ChatStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewMessageEvent
 		err := json.Unmarshal(buf, &ev)
 		if err != nil {
 			return nil, err
 		}
-		if ev.ChatId == "" || !strings.Contains(ev.ChatId, ":") || ev.Text == "" {
+		if ev.ChatId == "" || !strings.Contains(ev.ChatId, ":") {
+			return nil, warpnet.WarpError("message parameters are invalid")
+		}
+		imageKeys, areImageKeysValid := mediaKeys(ev.ImageKeys)
+		videoKey, isVideoKeyValid := mediaKey(ev.VideoKey)
+		if !areImageKeysValid || !isVideoKeyValid {
+			return nil, warpnet.WarpError("message attachment key is invalid")
+		}
+		// An attachment is a message in itself, so text is only required
+		// when nothing is attached.
+		if ev.Text == "" && len(imageKeys) == 0 && videoKey == nil {
 			return nil, warpnet.WarpError("message parameters are invalid")
 		}
 		if ev.SenderId == "" || ev.ReceiverId == "" {
 			return nil, warpnet.WarpError("sender and receiver parameters are invalid")
 		}
-		if len(ev.Text) > messageLimit {
+		// Runes, not bytes: a message of emoji costs four bytes per character,
+		// so a byte limit would reject it at a quarter of the advertised length.
+		if utf8.RuneCountInString(ev.Text) > messageLimit {
 			return nil, warpnet.WarpError("message is too long")
 		}
 
@@ -278,12 +347,28 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, warpnet.WarpError("not authorized for this chat")
 		}
 
+		// The lookup the delivery below needs anyway, hoisted above the write:
+		// Mastodon has no direct messages, so a bridged recipient is refused
+		// before the message is stored.
+		isSelfChat := ev.SenderId == ev.ReceiverId
+		var otherUser domain.User
+		var otherUserErr error
+		if !isSelfChat && !isOwnerReceiver {
+			otherUser, otherUserErr = userRepo.Get(ev.ReceiverId)
+			if otherUser.Network == mastodon.Network {
+				return nil, mastodon.ErrNotSupported
+			}
+		}
+
 		now := time.Now()
 		msg := domain.ChatMessage{
+			Id:         ev.Id,
 			ChatId:     ev.ChatId,
 			SenderId:   ev.SenderId,
 			ReceiverId: ev.ReceiverId,
 			Text:       ev.Text,
+			ImageKeys:  imageKeys,
+			VideoKey:   videoKey,
 			CreatedAt:  now,
 		}
 
@@ -292,7 +377,6 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, err
 		}
 
-		isSelfChat := ev.SenderId == ev.ReceiverId
 		if isSelfChat {
 			return event.NewMessageResponse(msg), nil
 		}
@@ -304,21 +388,21 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 				notifyUsername = sender.Username
 			}
 			if err := notifyRepo.Add(domain.Notification{
-				Type:   domain.NotificationMessageType,
-				Text:   notifyUsername + " sent you a message",
-				UserId: ownerId,
+				Type:        domain.NotificationMessageType,
+				Text:        notifyUsername + " sent you a message",
+				RecepientId: ownerId,
+				ActorId:     ev.SenderId,
 			}); err != nil {
 				log.Errorf("chat message: adding notification: %v", err)
 			}
 			return event.NewMessageResponse(msg), nil
 		}
 
-		otherUser, err := userRepo.Get(ev.ReceiverId)
-		if errors.Is(err, database.ErrUserNotFound) {
+		if errors.Is(otherUserErr, database.ErrUserNotFound) {
 			return event.NewMessageResponse(msg), nil
 		}
-		if err != nil {
-			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, err)
+		if otherUserErr != nil {
+			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, otherUserErr)
 			msg.Status = statusUndelivered
 			return event.NewMessageResponse(msg), nil
 		}
@@ -330,10 +414,13 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			otherUser.NodeId,
 			event.PUBLIC_POST_MESSAGE,
 			event.NewMessageEvent(domain.ChatMessage{
+				Id:         msg.Id,
 				ChatId:     ev.ChatId,
 				SenderId:   ownerId,
 				ReceiverId: ev.ReceiverId,
 				Text:       ev.Text,
+				ImageKeys:  imageKeys,
+				VideoKey:   videoKey,
 				CreatedAt:  now,
 			}),
 		)
@@ -343,8 +430,10 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return event.NewMessageResponse(msg), nil
 		}
 
+		// A non-zero Code marks a real error; the "Accepted" ack and the
+		// echoed message response carry Code 0 and mean delivered.
 		var possibleError event.ResponseError
-		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Message != "" {
+		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Code != 0 {
 			log.Errorf("unmarshal other message error response: %s", possibleError.Message)
 			msg.Status = statusUndelivered
 		}
@@ -380,7 +469,7 @@ func StreamDeleteMessageHandler(repo ChatStorer, authRepo OwnerChatsStorer) warp
 }
 
 // Handler for getting messages in a chat
-func StreamGetMessagesHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpnet.WarpHandlerFunc {
+func StreamGetMessagesHandler(repo ChatStorer, _ OwnerChatsStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllMessagesEvent
 		err := json.Unmarshal(buf, &ev)

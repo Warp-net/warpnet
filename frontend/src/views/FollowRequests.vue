@@ -65,17 +65,19 @@ export default {
     };
   },
   methods: {
-    async hydrate(ids) {
-      return Promise.all(
-        (ids || []).map(async (id) => {
+    // Each request row fills in on its own; a hanging profile leaves its
+    // placeholder in place without holding back the rest of the list.
+    hydrate(id) {
+      warpnetService.getProfile(id).then(async (p) => {
+        if (!p || !p.id) return;
+        if (p.avatar_key) {
           try {
-            const p = await warpnetService.getProfile(id);
-            if (!p) return { id };
-            if (p.avatar_key) p.avatar = await warpnetService.getImage({userId: id, key: p.avatar_key});
-            return p;
-          } catch (e) { return { id }; }
-        })
-      );
+            p.avatar = await warpnetService.getImage({userId: id, key: p.avatar_key});
+          } catch (e) {}
+        }
+        const i = this.requests.findIndex(r => r.id === id);
+        if (i !== -1) this.requests.splice(i, 1, p);
+      }).catch(() => {});
     },
     async authorize(id) {
       try {
@@ -95,7 +97,8 @@ export default {
     try {
       const resp = await warpnetService.getFollowRequests();
       const ids = resp?.follower_ids || resp?.ids || [];
-      this.requests = await this.hydrate(ids);
+      this.requests = ids.map((id) => ({ id }));
+      ids.forEach((id) => this.hydrate(id));
     } catch (err) {
       console.error('Failed to load follow requests:', err);
     } finally {

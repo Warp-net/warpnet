@@ -39,7 +39,7 @@ data class Tweet(
     @Json(name = "edited_at") val editedAt: Date? = null,
     val emojis: List<Emoji>,
     @Json(name = "retweets_count") val retweetsCount: Int,
-    @Json(name = "likes_count") val likesCount: Int,
+    @Json(name = "reactions_count") val reactionsCount: Int,
     @Json(name = "replies_count") val repliesCount: Int,
     @Json(name = "quotes_count") val quotesCount: Int = 0,
     /** Warpnet view counter, populated by the `tweet_stats` lookup.
@@ -47,7 +47,13 @@ data class Tweet(
      *  decodes cleanly via Moshi. */
     @Json(name = "views_count") val viewsCount: Int = 0,
     val retweeted: Boolean = false,
-    val liked: Boolean = false,
+    val reacted: Boolean = false,
+    /** Per-emoji breakdown of [reactionsCount]; empty on a node that predates
+     *  reactions, where the count is hearts only. */
+    val reactions: Map<String, Long> = emptyMap(),
+    /** The reaction this user holds on the tweet, "" when none. A user has
+     *  at most one, so reacting again replaces it. */
+    @Json(name = "my_reaction") val myReaction: String = "",
     val bookmarked: Boolean = false,
     val sensitive: Boolean,
     @Json(name = "spoiler_text") val spoilerText: String,

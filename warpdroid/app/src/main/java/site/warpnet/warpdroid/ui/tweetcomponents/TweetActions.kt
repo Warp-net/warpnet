@@ -73,13 +73,13 @@ fun statusActions(
     }
 
     addAction(
-        label = if (status.liked) {
-            stringResource(R.string.action_unlike)
+        label = if (status.reacted) {
+            stringResource(R.string.action_unreact)
         } else {
-            stringResource(R.string.action_like)
+            stringResource(R.string.action_react)
         },
         action = {
-            listener.onLike(statusViewData, !status.liked, null)
+            listener.onReact(statusViewData, !status.reacted, null, status.myReaction)
         }
     )
 
@@ -141,9 +141,9 @@ fun statusActions(
         )
     }
 
-    if (status.likesCount > 0) {
+    if (status.reactionsCount > 0) {
         addAction(
-            label = stringResource(R.string.action_open_faved_by),
+            label = stringResource(R.string.action_open_reacted_by),
             action = {
                 context.showFavs(statusViewData)
             }

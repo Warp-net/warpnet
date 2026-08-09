@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package config
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,12 +50,9 @@ var warpnetBootstrapNodes = []string{
 	"/ip4/207.154.221.44/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
-	// RU
-	"/ip4/130.94.88.38/tcp/4011/p2p/12D3KooWNW7nbLpbsEVJ86JN6c1zXRDKGCbqmLfhitFCPccRv2YW",
 }
 
 var testnetBootstrapNodes = []string{
-	// EU
 	"/ip4/207.154.221.44/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4022/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4033/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
@@ -71,9 +67,8 @@ func init() {
 	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
-	pflag.String("node.metrics.gateway", "130.94.88.38:4091", "Prometheus push metrics server")
+	pflag.String("node.metrics.gateway", "207.154.221.44:4091", "Prometheus push metrics server")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
-	pflag.String("node.moderator.modelpath", "/root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf", "File name of 'AI' model")
 
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
@@ -82,10 +77,9 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 
 	_ = viper.BindPFlags(pflag.CommandLine)
@@ -138,9 +132,6 @@ func init() {
 			Metrics: metrics{
 				Gateway: viper.GetString("node.metrics.gateway"),
 			},
-			Moderator: moderator{
-				Path: strings.TrimSpace(viper.GetString("node.moderator.modelpath")),
-			},
 			Server: server{
 				Port:     strings.TrimSpace(viper.GetString("node.server.port")),
 				Password: viper.GetString("node.server.password"),
@@ -175,13 +166,10 @@ type node struct {
 	Network      string
 	IsPskPrinted bool
 	Metrics      metrics
-	Moderator    moderator
 	Server       server
 	Seed         string
 }
-type moderator struct {
-	Path string
-}
+
 type server struct {
 	Port     string
 	Password string

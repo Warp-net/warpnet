@@ -23,7 +23,43 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div id="app" class="w-full h-full">
+    <!-- Both global banners overlay the top of every view, so they share one
+         stack instead of covering each other when shown together. The stack's
+         height is published as --top-banner-h (see tailwind.css) so the views
+         below start under it rather than behind it. -->
+    <div ref="banners" class="fixed top-0 inset-x-0 z-[100]">
+      <!-- Global node-connection banner: for a P2P app the local node can drop,
+           so the user must always be able to see it and recover. -->
+      <div
+        v-if="connection.status !== 'online'"
+        class="flex items-center justify-center gap-3 px-4 py-2 text-sm font-medium text-white"
+        :class="connection.status === 'connecting' ? 'bg-dark' : 'bg-red-600'"
+        role="status"
+        aria-live="polite"
+      >
+        <span v-if="connection.status === 'connecting'">
+          <i class="fas fa-circle-notch fa-spin mr-2" aria-hidden="true"></i>Connecting to your Warpnet node…
+        </span>
+        <template v-else>
+          <span><i class="fas fa-plug mr-2" aria-hidden="true"></i>Your Warpnet node is unreachable.</span>
+          <button type="button" class="underline font-semibold flat-btn" @click="reconnect">Reconnect</button>
+        </template>
+      </div>
+
+      <!-- Experimental-network banner: the node reports its own network on
+           login, and everything except production is throwaway. -->
+      <div
+        v-if="showNetworkBanner"
+        class="flex items-center justify-center gap-2 px-4 py-1.5 text-sm font-medium text-white bg-blue"
+        role="status"
+      >
+        <i class="fas fa-flask" aria-hidden="true"></i>
+        <span>{{ networkLabel }} — data here is experimental and may be reset</span>
+      </div>
+    </div>
+
     <router-view :key="$route.fullPath" />
+    <ToastHost />
   </div>
 </template>
 
@@ -31,13 +67,70 @@ resulting from the use or misuse of this software.
 import {EventsOff, EventsOn} from "@/lib/transport";
 import {parseDeepLink} from "@/lib/deeplink";
 import {warpnetService} from "@/service/service";
+import {connection} from "@/lib/connection";
+import {isExperimentalNetwork} from "@/lib/network";
+import ToastHost from "@/components/ToastHost.vue";
 
 const DEEP_LINK_EVENT = "deeplink:open";
 const LOG = "[warpnet-deeplink]";
 
 export default {
   name: "App",
+  components: { ToastHost },
+  data() {
+    return {
+      connection,
+      owner: warpnetService.getOwnerProfile(),
+      unsubscribeOwner: null,
+      bannerObserver: null,
+    };
+  },
+  computed: {
+    // Held back until the owner is known: before login the node has not
+    // reported its network yet, and the login screen is not the place for it.
+    // A session restored from a login that predates the cached network carries
+    // no value at all - that is a client-side gap rather than a signal from
+    // the node, so it stays quiet until the next login fills it in.
+    showNetworkBanner() {
+      if (!this.owner?.user_id || typeof this.owner.network !== "string") {
+        return false;
+      }
+      return isExperimentalNetwork(this.owner.network);
+    },
+    networkLabel() {
+      const network = (this.owner?.network || "").trim();
+      if (!network) {
+        return "Test network";
+      }
+      return network.charAt(0).toUpperCase() + network.slice(1);
+    },
+  },
+  methods: {
+    // A dropped WebSocket may leave the transport singleton (socket, aesKey,
+    // pending map) wedged; a full reload is the reliable, documented reset.
+    reconnect() {
+      window.location.reload();
+    },
+    // Measured rather than hardcoded: the stack is one bar or two, and either
+    // wraps to a second line on a narrow window.
+    syncBannerHeight() {
+      const height = this.$refs.banners?.offsetHeight || 0;
+      document.documentElement.style.setProperty("--top-banner-h", `${height}px`);
+    },
+  },
   mounted() {
+    // The network arrives with the login response, so the banner has to react
+    // to the owner profile rather than read it once at mount.
+    this.unsubscribeOwner = warpnetService.subscribeOwner((owner) => {
+      this.owner = owner;
+    });
+
+    if (this.$refs.banners) {
+      this.bannerObserver = new ResizeObserver(() => this.syncBannerHeight());
+      this.bannerObserver.observe(this.$refs.banners);
+    }
+    this.syncBannerHeight();
+
     // Hot-path: Go side fires "deeplink:open" when a second
     // process or macOS OnUrlOpen hands a warpnet:// URL to the
     // already-running app. Cold-start is still handled by Root /
@@ -71,6 +164,9 @@ export default {
   },
   beforeUnmount() {
     EventsOff(DEEP_LINK_EVENT);
+    this.unsubscribeOwner?.();
+    this.bannerObserver?.disconnect();
+    document.documentElement.style.removeProperty("--top-banner-h");
   },
 };
 </script>

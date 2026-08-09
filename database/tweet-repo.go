@@ -338,6 +338,12 @@ func storeTweet(
 
 // Get retrieves a tweet by its ID
 func (repo *TweetRepo) Get(userID, tweetID string) (tweet domain.Tweet, err error) {
+	if userID == "" {
+		return tweet, local.DBError("get tweet: no user id")
+	}
+	if tweetID == "" {
+		return tweet, local.DBError("get tweet: no tweet id")
+	}
 	t, _, err := get(repo.db, userID, tweetID)
 	return t, err
 }
@@ -485,7 +491,12 @@ func (repo *TweetRepo) List(userId string, limit *uint64, cursor *string) ([]dom
 
 // ====================== REPLIES (thread) ====================
 
-func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
+// isTransitive tells whether this reply should propagate to the network-wide
+// (CRDT) reply counter, which is replicated ("transits") across nodes. The
+// handler sets it true only on the replier's own node, so a reply stored on
+// both the replier's and the parent author's node is counted once. The local
+// per-node counter is always updated (it backs the read-time fallback).
+func (repo *TweetRepo) AddReply(reply domain.Tweet, isTransitive bool) (domain.Tweet, error) {
 	if reply.UserId == "" && reply.Text == "" {
 		return reply, local.DBError("empty reply")
 	}
@@ -516,7 +527,7 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet) (domain.Tweet, error) {
 	if err := txn.Commit(); err != nil {
 		return reply, err
 	}
-	if repo.statsDb != nil {
+	if repo.statsDb != nil && isTransitive {
 		if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db increment: %v", err)
 		}
@@ -545,7 +556,7 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	return repo.TweetsCount(tweetId)
 }
 
-func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, error) {
+func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) (domain.Tweet, error) {
 	var reply domain.Tweet
 	if parentID == "" || replyID == "" {
 		return reply, local.DBError("parentID or replyID cannot be empty")
@@ -571,7 +582,7 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string) (domain.Tweet, erro
 	if err := txn.Commit(); err != nil {
 		return reply, err
 	}
-	if repo.statsDb != nil {
+	if repo.statsDb != nil && isTransitive {
 		if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db decrement: %v", err)
 		}
@@ -600,7 +611,7 @@ func tweetsCountKey(partitionID string) local.DatabaseKey {
 
 // ====================== RETWEET ====================
 
-func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error) {
+func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error) {
 	if tweet.RetweetedBy == nil {
 		return tweet, local.DBError("retweet: by unknown")
 	}
@@ -662,7 +673,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	if err := txn.Commit(); err != nil {
 		return newTweet, err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || !isTransitive {
 		return newTweet, nil
 	}
 	if err := repo.statsDb.Increment(retweetCountKey.DatastoreKey()); err != nil {
@@ -671,7 +682,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet) (_ domain.Tweet, err error
 	return newTweet, nil
 }
 
-func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
+func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive bool) error {
 	if tweetId == "" || retweetedByUserID == "" {
 		return local.DBError("unretweet: empty tweet ID or user ID")
 	}
@@ -716,7 +727,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string) error {
 	if err := txn.Commit(); err != nil {
 		return err
 	}
-	if repo.statsDb == nil {
+	if repo.statsDb == nil || !isTransitive {
 		return nil
 	}
 	if err := repo.statsDb.Decrement(retweetCountKey.DatastoreKey()); err != nil {

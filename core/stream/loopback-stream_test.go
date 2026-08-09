@@ -200,3 +200,25 @@ func TestLoopbackConn_Scope(t *testing.T) {
 	conn := r.Conn()
 	assert.Nil(t, conn.Scope())
 }
+
+func TestLoopbackStreamResetUnblocksBlockedWriter(t *testing.T) {
+	client, server := NewLoopbackStream("peer1", "/test/proto")
+
+	writeReturned := make(chan struct{})
+	go func() {
+		defer close(writeReturned)
+		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
+		_, _ = client.Write(make([]byte, 8<<20))
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if err := server.Reset(); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+
+	select {
+	case <-writeReturned:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Reset did not unblock the blocked writer")
+	}
+}

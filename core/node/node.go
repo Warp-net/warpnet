@@ -55,6 +55,14 @@ const (
 
 type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+	SetStreamable(id warpnet.WarpPeerID)
+	SetUnstreamable(id warpnet.WarpPeerID)
+}
+
+type OfflineOutbox interface {
+	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte)
+	NotifyOnline(nodeIdStr string)
+	Close()
 }
 
 type BackoffEnabler interface {
@@ -73,6 +81,7 @@ type WarpNode struct {
 	node     warpnet.P2PNode
 	relay    warpnet.WarpRelayCloser
 	streamer Streamer
+	outbox   OfflineOutbox
 	backoff  BackoffEnabler
 
 	isClosed *atomic.Bool
@@ -103,7 +112,9 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	ya := yamux.DefaultTransport
+	// Copy the transport config: DefaultTransport is a shared package-level
+	// pointer that live yamux sessions of other nodes read concurrently.
+	ya := *yamux.DefaultTransport
 	ya.KeepAliveInterval = 15 * time.Second
 	ya.ConnectionWriteTimeout = 30 * time.Second
 
@@ -111,7 +122,7 @@ func NewWarpNode(
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
 		libp2p.DisableMetrics(), // TODO move to settings
-		libp2p.Muxer(yamux.ID, ya),
+		libp2p.Muxer(yamux.ID, &ya),
 	}
 
 	opts = append(opts, managersOpts...)
@@ -120,6 +131,8 @@ func NewWarpNode(
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to init node: %w", err)
 	}
+
+	node.Network().Notify(connTracer{})
 
 	pool, err := stream.NewStreamPool(ctx, node)
 	if err != nil {
@@ -181,6 +194,15 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
+func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
+	if n == nil || store == nil {
+		return
+	}
+	outbox := stream.NewOutbox(n.ctx, store)
+	outbox.Run(n.streamer)
+	n.outbox = outbox
+}
+
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	logMw := n.mw.LoggingMiddleware
 	authMw := n.mw.AuthMiddleware
@@ -234,6 +256,14 @@ func (n *WarpNode) trackIncomingEvents() {
 					pid[len(pid)-6:],
 					typedEvent.Connectedness.String(),
 				)
+				isOnline := typedEvent.Connectedness == warpnet.Connected ||
+					typedEvent.Connectedness == warpnet.Limited
+				if isOnline {
+					n.streamer.SetStreamable(typedEvent.Peer)
+					if n.outbox != nil {
+						n.outbox.NotifyOnline(pid)
+					}
+				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
 				addrs := n.node.Peerstore().Addrs(pid)
@@ -346,8 +376,6 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		_ = streamClient.Close()
 	}()
 
-	// Most self-streams finish near-instantly; a streamed import tweet stores
-	// up to four photos through the image pipeline and needs a longer window.
 	deadline := time.Minute
 	if string(path) == warpevent.PRIVATE_POST_IMPORT_TWITTER_TWEET {
 		deadline = importStreamDeadline
@@ -411,7 +439,11 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		}
 	}
 
-	return n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
+	resp, err := n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
+	if n.outbox != nil && errors.Is(err, warpnet.ErrNodeIsOffline) {
+		n.outbox.Enqueue(nodeId.String(), path, bt)
+	}
+	return resp, err
 }
 
 func (n *WarpNode) StopNode() {
@@ -423,6 +455,10 @@ func (n *WarpNode) StopNode() {
 	}()
 	if n == nil || n.node == nil {
 		return
+	}
+
+	if n.outbox != nil {
+		n.outbox.Close()
 	}
 
 	if n.eventsSub != nil {

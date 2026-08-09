@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-    <div class="w-full bg-lightblue border-b-2 border-dark mt-20 mb-10 p-2 input_field">
+    <div class="w-full bg-lightblue border-b-2 border-dark mt-10 mb-6 p-2 input_field">
       <label for="login-username" class="text-dark text-center block">Username</label>
       <input
           id="login-username"
@@ -34,7 +34,7 @@ resulting from the use or misuse of this software.
           @keydown.enter="$refs.password.focus()"
       />
     </div>
-    <div class="w-full bg-lightblue border-b-2 border-dark mt-10 mb-2 p-2 input_field">
+    <div class="w-full bg-lightblue border-b-2 border-dark mt-6 mb-2 p-2 input_field">
       <label for="login-password" class="text-dark text-center block">Password</label>
       <input
           id="login-password"

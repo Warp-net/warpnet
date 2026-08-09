@@ -41,16 +41,18 @@ resulting from the use or misuse of this software.
         <!-- chats -->
         <Loader :loading="loading" />
         <div v-if="!loading">
-          <div v-if="chats.length === 0" class="flex flex-col items-center justify-center w-full pt-10">
-            <div class="w-1/2 flex flex-col items-center justify-center">
-              <p class="font-bold text-lg">No chats yet</p>
-              <p class="text-sm text-dark">
-                Wait until someone starts a chat here.
-              </p>
+          <div v-if="visibleChats.length === 0" class="flex flex-col items-center justify-center w-full pt-10">
+            <div class="w-3/4 flex flex-col items-center justify-center text-center">
+              <p class="font-bold text-lg">No messages yet</p>
+              <p class="text-sm text-dark">Start a conversation with someone you follow.</p>
+              <button
+                @click="newMessage()"
+                class="mt-4 h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
+              >New Message</button>
             </div>
           </div>
-          <div v-for="chat in chats" :key="chat.id">
-            <div v-if="(getUser(chat.other_user_id))">
+          <div v-for="chat in visibleChats" :key="chat.id">
+            <div>
               <div class="cursor-pointer">
                 <div class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
                   @click="selectChat(chat)">
@@ -62,15 +64,16 @@ resulting from the use or misuse of this software.
                   </div>
                   <div class="w-full truncate">
                     <div class="flex items-center w-full">
-                      <p class="font-semibold">{{ getUser(chat.other_user_id).username || 'Anonymous' }}</p>
-                      <p class="hidden md:block text-sm text-dark ml-2 truncate">
-                        @{{ chat.other_user_id }}
-                      </p>
-                      <p class="text-sm text-dark ml-auto">
-                        {{ $filters.timeago(chat.lastModified) }}
+                      <p class="font-semibold truncate min-w-0">{{ getUser(chat.other_user_id).username || 'Anonymous' }}</p>
+                      <span v-if="chat.unread" class="flex-none w-3 h-3 rounded-full bg-blue ml-2" aria-label="Unread messages"></span>
+                      <p class="text-sm ml-auto whitespace-nowrap flex-none pl-2" :class="chat.unread ? 'text-blue font-semibold' : 'text-dark'">
+                        {{ $filters.timeago(chat.updated_at) }}
                       </p>
                     </div>
-                    <p class="pb-2 truncate" v-linkify>{{ chat.last_message || "" }}</p>
+                    <!-- v-linkify rewrites innerHTML on mount only, which detaches
+                         the text vnode — key by the text so a new preview remounts
+                         the element instead of patching a dead node. -->
+                    <p :key="chat.last_message" class="pb-2 truncate" :class="{ 'font-semibold text-blue': chat.unread }" v-linkify>{{ chat.last_message || "" }}</p>
                   </div>
                 </div>
               </div>
@@ -80,9 +83,13 @@ resulting from the use or misuse of this software.
       </div>
 
       <div class="w-full border-l border-r border-lighter h-screen flex items-center justify-center">
-        <div class="text-center">
-          <h2 class="text-2xl font-bold mb-4">Select a chat</h2>
-          <p class="text-gray-600">Choose a chat from the list to start chatting</p>
+        <div class="text-center px-6">
+          <h2 class="text-2xl font-bold mb-2">Your messages</h2>
+          <p class="text-dark mb-4">Choose a chat from the list, or start a new conversation.</p>
+          <button
+            @click="newMessage()"
+            class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
+          >New Message</button>
         </div>
       </div>
 
@@ -99,6 +106,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {isMastodonUser} from "@/lib/network";
 
 export default {
   name: "Chats",
@@ -114,10 +122,25 @@ export default {
       chats: [],
       profileId: "",
       usersMap: new Map(),
+      pendingUsers: new Set(),
       otherUser: undefined,
       refreshTimer: null,
       refreshInFlight: false,
     };
+  },
+  computed: {
+    // Only chats whose other user resolved are listed. Bridged Mastodon
+    // accounts never land in the map, so their legacy chats stay hidden.
+    // Unread chats float to the top; within each group the freshest
+    // message comes first.
+    visibleChats() {
+      return this.chats
+        .filter((chat) => this.usersMap.has(chat.other_user_id))
+        .map((chat) => ({ ...chat, unread: this.isUnread(chat) }))
+        .sort((a, b) =>
+          (b.unread - a.unread) ||
+          (new Date(b.updated_at) - new Date(a.updated_at)));
+    },
   },
   methods: {
     newMessage() {
@@ -144,6 +167,9 @@ export default {
         console.error("conversations: cannot select absent user", JSON.stringify(user))
         return;
       }
+      if (isMastodonUser(user)) {
+        return;
+      }
       this.showNewMessageModal = false;
 
       // Check if chat already exists
@@ -165,23 +191,78 @@ export default {
     getUser(userId) {
       return this.usersMap.get(userId);
     },
+    // An empty last_message means the chat predates preview support (or has
+    // no messages yet) — there is nothing to mark unread then.
+    isUnread(chat) {
+      if (!chat.last_message) return false;
+      return new Date(chat.updated_at).getTime() > warpnetService.getChatReadAt(chat.id);
+    },
     async loadChatUser(userId) {
       if (!userId || userId.length === 0) {
         return
       }
-
-      const u = await warpnetService.getProfile(userId)
-      u.avatar = await warpnetService.getImage({userId:u.id, key:u.avatar_key})
-      this.usersMap.set(u.id, u)
+      const known = this.usersMap.get(userId)
+      if (known && known.username) {
+        return
+      }
+      if (this.pendingUsers.has(userId)) {
+        return
+      }
+      this.pendingUsers.add(userId)
+      try {
+        let u
+        try {
+          u = await warpnetService.getProfile(userId)
+        } catch (err) {
+          console.error('conversations: failed to load chat user', userId, err)
+        }
+        if (!u || !u.id) {
+          console.warn('conversations: unresolved chat user, showing placeholder', userId)
+          if (!isMastodonUser({id: userId})) {
+            this.usersMap.set(userId, {id: userId})
+          }
+          return
+        }
+        // Leaving a bridged user out of the map hides the whole chat row:
+        // the list only renders chats whose other user resolved.
+        if (isMastodonUser(u)) {
+          this.usersMap.delete(userId)
+          return
+        }
+        this.usersMap.set(userId, u)
+        try {
+          const avatar = await warpnetService.getImage({userId: userId, key: u.avatar_key})
+          if (avatar) {
+            this.usersMap.set(userId, {...u, avatar})
+          }
+        } catch (err) {
+          console.warn('conversations: failed to load avatar for', userId, err)
+        }
+      } finally {
+        this.pendingUsers.delete(userId)
+      }
+    },
+    normalizeChats(chats) {
+      for (const chat of chats) {
+        if (chat.owner_id !== this.profileId) {
+          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
+        }
+        const uid = chat.other_user_id;
+        if (uid && !this.usersMap.has(uid) && !isMastodonUser({id: uid})) {
+          this.usersMap.set(uid, {id: uid});
+        }
+      }
+      return Promise.all(chats.map((chat) => this.loadChatUser(chat.other_user_id)));
     },
     async loadMore() {
-      const chats = await warpnetService.getChats(false);
-      for (const chat of chats) {
-        await this.loadChatUser(chat.other_user_id)
-        await this.loadChatUser(chat.owner_id)
+      try {
+        const chats = await warpnetService.getChats(false);
+        this.normalizeChats(chats);
+        const known = new Set(this.chats.map((c) => c.id));
+        this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
+      } catch (err) {
+        console.error('Failed to load more chats:', err);
       }
-      const known = new Set(this.chats.map((c) => c.id));
-      this.chats = [...this.chats, ...chats.filter((c) => !known.has(c.id))];
     },
     // Poll-driven live updates (no server push on the bridge): re-fetch
     // page 1 of the chat list and merge by id so new incoming chats and
@@ -191,16 +272,11 @@ export default {
       if (this.refreshInFlight || this.loading) return;
       this.refreshInFlight = true;
       try {
+        warpnetService.markMessageNotificationsRead().catch(() => {});
         const savedCursor = warpnetService.getCursor('chats');
         const chats = await warpnetService.getChats(true);
         warpnetService.setCursor('chats', savedCursor);
-        for (const chat of chats) {
-          if (!this.usersMap.has(chat.owner_id)) await this.loadChatUser(chat.owner_id);
-          if (!this.usersMap.has(chat.other_user_id)) await this.loadChatUser(chat.other_user_id);
-          if (chat.owner_id !== this.profileId) {
-            [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-          }
-        }
+        this.normalizeChats(chats);
         if (chats.length > 0) {
           const freshIds = new Set(chats.map((c) => c.id));
           this.chats = [...chats, ...this.chats.filter((c) => !freshIds.has(c.id))];
@@ -216,20 +292,22 @@ export default {
   async created() {
       console.log("loading component:", this.$options.name);
       this.profileId = this.$route.params.id
-      await this.loadChatUser(this.profileId)
+      try {
+        warpnetService.markMessageNotificationsRead().catch(() => {});
+        this.loadChatUser(this.profileId)
 
-      const chats = await warpnetService.getChats(true);
-
-      for (const chat of chats) {
-        await this.loadChatUser(chat.owner_id)
-        await this.loadChatUser(chat.other_user_id)
-
-        if (chat.owner_id !== this.profileId) {
-          [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
-        }
+        const chats = await warpnetService.getChats(true);
+        const hydration = this.normalizeChats(chats);
+        this.chats = chats;
+        await Promise.race([
+          hydration,
+          new Promise((resolve) => setTimeout(resolve, 1000)),
+        ]);
+      } catch (err) {
+        console.error('Failed to load chats:', err);
+      } finally {
+        this.loading = false;
       }
-      this.chats = chats;
-      this.loading = false;
 
       this.refreshTimer = setInterval(() => this.refreshChats(), 3000);
     },

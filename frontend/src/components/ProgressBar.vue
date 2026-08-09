@@ -22,49 +22,27 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="flex flex-col items-center justify-center w-full">
-    <div class="w-64 h-4 bg-gray-200 rounded-full overflow-hidden mb-2">
-      <div
-          class="h-full bg-blue transition-all duration-100 ease-linear"
-          :style="{ width: progress + '%' }"
-      ></div>
+  <!-- Indeterminate bar: the login/sign-up call has no real percentage, so an
+       honest looping animation beats a fake timer-driven counter. -->
+  <div class="flex flex-col items-center justify-center w-full" role="status" aria-label="Loading">
+    <div class="w-64 h-2 bg-lighter dark:bg-darktheme-input mastodon:bg-mastodon-input rounded-full overflow-hidden">
+      <div class="h-full bg-blue rounded-full progress-indeterminate"></div>
     </div>
-    <p class="text-sm text-gray-600">{{ progress }}%</p>
+    <span class="sr-only">Loading…</span>
   </div>
 </template>
 <script>
   export default {
     name: "ProgressBarComponent",
-    emits: ["completed"],
-    data() {
-      return {
-        isLoading: false,
-        progress: 0,
-        intervalId: null,
-      };
-    },
-    mounted() {
-      this.startProgress();
-    },
-    unmounted() {
-      this.isLoading = false;
-      clearInterval(this.intervalId);
-    },
-    methods: {
-      startProgress() {
-        const totalTime = 15000; // TODO sync with backend
-        const stepTime = 500;
-        const steps = totalTime / stepTime;
-        const increment = 100 / steps;
-
-        this.intervalId = setInterval(() => {
-          if (this.progress >= 100) {
-            clearInterval(this.intervalId);
-            return;
-          }
-          this.progress = Math.min(100, Math.round(this.progress + increment));
-        }, stepTime);
-      },
-    },
   };
 </script>
+<style scoped>
+.progress-indeterminate {
+  width: 40%;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0%   { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+</style>

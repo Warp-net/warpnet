@@ -12,7 +12,7 @@ services:
       - NODE_NETWORK=warpnet
       - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
 
   warpnet2:
@@ -28,7 +28,7 @@ services:
       - NODE_NETWORK=warpnet
       - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
 
   warpnet3:
@@ -44,11 +44,10 @@ services:
       - NODE_NETWORK=warpnet
       - LOGGING_FORMAT=json
       - LOGGING_LEVEL=info
-      - NODE_METRICS_GATEWAY=130.94.88.38:4091
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
 
 
-# TODO: I NEED AN EXPENSIVE AND POWERFUL MACHINE FOR THAT!
 #  warpnet-moderator:
 #    container_name: moderator1
 #    image: ghcr.io/warp-net/warpnet-moderator:latest

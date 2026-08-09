@@ -135,6 +135,48 @@ func (s *ChatRepoSuite) TestCreateAndGetMessage() {
 	s.Equal(msg.Text, got.Text)
 }
 
+func (s *ChatRepoSuite) TestCreateMessageBumpsChatPreview() {
+	ownerID := testUserID
+	otherID := ulid.Make().String()
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	s.Empty(chat.LastMessage)
+	defer s.repo.DeleteChat(chat.Id)
+
+	created, err := s.repo.CreateMessage(domain.ChatMessage{ChatId: chat.Id, Text: "latest words"})
+	s.NoError(err)
+
+	bumped, err := s.repo.GetChat(chat.Id)
+	s.NoError(err)
+	s.Equal("latest words", bumped.LastMessage)
+	s.Equal(created.CreatedAt.Unix(), bumped.UpdatedAt.Unix())
+}
+
+func (s *ChatRepoSuite) TestCreateMessageIdempotent() {
+	ownerID := testUserID
+	otherID := ulid.Make().String()
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	defer s.repo.DeleteChat(chat.Id)
+
+	id := ulid.Make().String()
+	first, err := s.repo.CreateMessage(domain.ChatMessage{Id: id, ChatId: chat.Id, Text: "hi"})
+	s.NoError(err)
+	s.Equal(id, first.Id)
+
+	second, err := s.repo.CreateMessage(domain.ChatMessage{Id: id, ChatId: chat.Id, Text: "changed"})
+	s.NoError(err)
+	s.Equal(id, second.Id)
+	s.Equal("hi", second.Text)
+
+	limit := uint64(100)
+	msgs, _, err := s.repo.ListMessages(chat.Id, &limit, nil)
+	s.NoError(err)
+	s.Len(msgs, 1)
+}
+
 func (s *ChatRepoSuite) TestListMessages() {
 	ownerID := testUserID
 	otherID := ulid.Make().String()

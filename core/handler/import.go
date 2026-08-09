@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -52,16 +53,30 @@ type ImportTweetStorer interface {
 }
 
 // StreamImportTweetHandler stores one pre-parsed original tweet streamed from
-// the client (business browser dashboard or desktop member node). The client
+// the client (remote browser dashboard or desktop member node). The client
 // unzips and filters the X archive itself — dropping retweets, replies, GIFs
 // and videos — and streams only the kept tweets one by one, so the node never
 // buffers the whole archive. Photos arrive as raw base64 and go through the
 // same EXIF/ownership pipeline as a fresh upload.
+type ImportNodeInformer interface {
+	NodeInfo() warpnet.NodeInfo
+}
+
+type ImportMediaStorer interface {
+	GetImage(userId, key string) (database.Base64Image, error)
+	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
+	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
+}
+
+type ImportUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
 func StreamImportTweetHandler(
-	info MediaNodeInformer,
+	info ImportNodeInformer,
 	tweetRepo ImportTweetStorer,
-	mediaRepo MediaStorer,
-	userRepo MediaUserFetcher,
+	mediaRepo ImportMediaStorer,
+	userRepo ImportUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ImportTweetEvent
@@ -72,7 +87,7 @@ func StreamImportTweetHandler(
 			return nil, warpnet.WarpError("import: empty tweet id")
 		}
 
-		encryptedMeta, ownerUser, err := buildEncryptedImageMeta(info, userRepo)
+		encryptedMeta, ownerUser, err := buildEncryptedMediaMeta(info, userRepo)
 		if err != nil {
 			return nil, fmt.Errorf("import: %w", err)
 		}

@@ -35,11 +35,13 @@ import {
     PRIVATE_POST_LOGIN,
     PRIVATE_POST_TWEET,
     PRIVATE_POST_UPLOAD_IMAGE,
+    PRIVATE_POST_UPLOAD_VIDEO,
     PRIVATE_POST_USER,
     PRIVATE_DELETE_MESSAGE,
     PUBLIC_GET_FOLLOWINGS,
     PUBLIC_GET_FOLLOWERS,
     PUBLIC_GET_IMAGE,
+    PUBLIC_GET_VIDEO,
     PUBLIC_GET_TWEET,
     PUBLIC_GET_TWEET_STATS,
     PUBLIC_GET_TWEETS,
@@ -48,15 +50,18 @@ import {
     PUBLIC_GET_WHOTOFOLLOW,
     PUBLIC_POST_CHAT,
     PUBLIC_POST_FOLLOW,
-    PUBLIC_POST_LIKE,
+    PUBLIC_POST_REACT,
     PUBLIC_POST_MESSAGE,
     PUBLIC_POST_RETWEET,
     PUBLIC_POST_UNFOLLOW,
-    PUBLIC_POST_UNLIKE,
+    PUBLIC_POST_UNREACT,
     PUBLIC_POST_UNRETWEET,
-    PUBLIC_POST_VIEW
+    PUBLIC_POST_VIEW,
+    PUBLIC_POST_POLL_VOTE,
+    PUBLIC_GET_POLL
 } from "@/service/service";
 import {generateUUID} from "@/lib/uuid";
+import {DEFAULT_REACTION} from "@/lib/emoji";
 
 const mockMap = new Map();
 
@@ -76,7 +81,6 @@ if (process.env.NODE_ENV === 'development') {
         }
     };
 }
-
 
 function generateResponse(arg) {
     switch (arg.path) {
@@ -128,6 +132,8 @@ function generateResponse(arg) {
                 text : arg.body.text || "",
                 image_key : arg.body.image_key || "",
                 image_keys : arg.body.image_keys || [],
+                video_key : arg.body.video_key || undefined,
+                poll : arg.body.poll || undefined,
                 created_at : arg.body.created_at || Date.now().toString(),
                 parent_id: null,
                 retweeted_by: null,
@@ -206,7 +212,6 @@ function generateResponse(arg) {
                 mockMap.set("user:"+nu.id, nu)
             }
 
-
             for (const [key, value] of mockMap) {
                 if (key.startsWith("user:")) {
                     usersList.push(value)
@@ -233,6 +238,20 @@ function generateResponse(arg) {
             if (!gotImg) return {code:404, message:"Image not found"};
             return {file: gotImg};
 
+        case PRIVATE_POST_UPLOAD_VIDEO:
+            if (!arg.body.video) return {code:500, message:"a video must be provided"};
+            const videoKey = "vid_"+generateUUID();
+            mockMap.set("video:"+videoKey, arg.body.video);
+            return {key: videoKey};
+
+        case PUBLIC_GET_VIDEO:
+            const gotVideo = mockMap.get("video:"+arg.body.key);
+            if (!gotVideo) return {code:404, message:"Video not found"};
+            if (arg.body.deferred) {
+                return {file: "", size: gotVideo.length, deferred: true};
+            }
+            return {file: gotVideo, size: gotVideo.length};
+
         case PUBLIC_GET_WHOTOFOLLOW:
             const allUsers = [];
             for (const [key, value] of mockMap) {
@@ -250,7 +269,6 @@ function generateResponse(arg) {
                 }
             }
             return {users: allUsers.slice(0, 3)};
-
 
         case PUBLIC_POST_FOLLOW:
             const followKey = "follow:"+arg.body.followerId+":"+arg.body.followingId;
@@ -309,17 +327,55 @@ function generateResponse(arg) {
             }
             return {cursor: "end", followings: followingsList, follower_id: arg.body.user_id};
 
-        case PUBLIC_POST_LIKE:
-            let likeStats = mockMap.get("stats:"+arg.body.tweet_id)
-            likeStats.likes_count++
-            mockMap.set("stats:"+arg.body.tweet_id, likeStats)
-            return {count: likeStats.likes_count};
+        case PUBLIC_POST_REACT: {
+            // A user holds one reaction per tweet: switching emoji moves the
+            // per-emoji tallies and leaves the total alone, like the node does.
+            const reactStats = mockMap.get("stats:"+arg.body.tweet_id)
+            const emoji = arg.body.emoji || DEFAULT_REACTION
+            const previous = reactStats.my_reaction
+            if (previous !== emoji) {
+                if (previous) {
+                    reactStats.reactions[previous]--
+                    if (reactStats.reactions[previous] <= 0) delete reactStats.reactions[previous]
+                } else {
+                    reactStats.reactions_count++
+                }
+                reactStats.reactions[emoji] = (reactStats.reactions[emoji] || 0) + 1
+                reactStats.my_reaction = emoji
+            }
+            mockMap.set("stats:"+arg.body.tweet_id, reactStats)
+            return {count: reactStats.reactions_count, reactions: {...reactStats.reactions}};
+        }
 
-        case PUBLIC_POST_UNLIKE:
-            let unlikeStats = mockMap.get("stats:"+arg.body.tweet_id)
-            unlikeStats.likes_count--
-            mockMap.set("stats:"+arg.body.tweet_id, unlikeStats)
-            return {count: unlikeStats.likes_count};
+        case PUBLIC_POST_UNREACT: {
+            const unreactStats = mockMap.get("stats:"+arg.body.tweet_id)
+            const held = unreactStats.my_reaction
+            if (held) {
+                unreactStats.reactions_count--
+                unreactStats.reactions[held]--
+                if (unreactStats.reactions[held] <= 0) delete unreactStats.reactions[held]
+                unreactStats.my_reaction = ""
+            }
+            mockMap.set("stats:"+arg.body.tweet_id, unreactStats)
+            return {count: unreactStats.reactions_count, reactions: {...unreactStats.reactions}};
+        }
+
+        case PUBLIC_POST_POLL_VOTE: {
+            const pollKey = "poll:"+arg.body.tweet_id
+            const tally = mockMap.get(pollKey) || {votes: new Array(arg.body.options_num || 0).fill(0), voters: {}}
+            if (!(arg.body.owner_id in tally.voters)) {
+                tally.voters[arg.body.owner_id] = arg.body.option
+                tally.votes[arg.body.option] = (tally.votes[arg.body.option] || 0) + 1
+                mockMap.set(pollKey, tally)
+            }
+            return pollResults(tally, arg.body.owner_id);
+        }
+
+        case PUBLIC_GET_POLL: {
+            const tally = mockMap.get("poll:"+arg.body.tweet_id)
+            if (!tally) return {tweet_id: arg.body.tweet_id, votes: new Array(arg.body.options_num || 0).fill(0), total_votes: 0};
+            return pollResults(tally, arg.body.owner_id);
+        }
 
         case PUBLIC_POST_VIEW: {
             // NOTE: this mock uses an "infinite" dedup window — once a viewer
@@ -421,11 +477,16 @@ function generateResponse(arg) {
                 sender_id: arg.body.sender_id,
                 receiver_id: arg.body.receiver_id,
                 text: arg.body.text,
-                image_key: arg.body.image_key || "",
+                image_keys: arg.body.image_keys || [],
+                video_key: arg.body.video_key || "",
                 created_at: new Date().toISOString(),
             };
             const targetChat = mockMap.get("chat:"+arg.body.chat_id);
-            if (targetChat) targetChat.messages.push(message);
+            if (targetChat) {
+                targetChat.messages.push(message);
+                targetChat.last_message = message.text;
+                targetChat.updated_at = message.created_at;
+            }
             mockMap.set("message:"+msgId, message);
             return message;
 
@@ -434,7 +495,7 @@ function generateResponse(arg) {
             if (!gotMsg) return {code:404, message:"Message not found"};
             return gotMsg;
 
-        case PUBLIC_DELETE_MESSAGE:
+        case PRIVATE_DELETE_MESSAGE:
             mockMap.delete("message:"+arg.body.message_id);
             return {code:0,message:"Accepted"};
 
@@ -473,12 +534,23 @@ function newUser() {
     }
 }
 
+function pollResults(tally, ownerId) {
+    const voted = tally.voters[ownerId];
+    return {
+        votes: tally.votes,
+        total_votes: tally.votes.reduce((sum, n) => sum + n, 0),
+        voted_option: voted === undefined ? undefined : voted,
+    }
+}
+
 function newStats(id) {
     return {
         tweet_id: id,
         retweets_count: 0,
-        likes_count: 0,
+        reactions_count: 0,
         replies_count: 0,
         views_count: 0,
+        reactions: {},
+        my_reaction: "",
     }
 }
