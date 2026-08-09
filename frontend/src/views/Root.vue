@@ -66,9 +66,7 @@ resulting from the use or misuse of this software.
           >
             Sign up
           </button>
-          <!-- One-time, permanent network choice: each network keeps its own
-               database and node identity. Desktop only — a remote node's
-               network is pinned by its launch flags. -->
+          <!-- Permanent first-launch network choice; desktop only. -->
           <div
             v-if="isFirstRun === true && isDesktop"
             class="mt-3 text-sm font-normal text-dark flex items-center"
@@ -420,8 +418,6 @@ export default {
         // a session, IsFirstRun() flips to false on the next call.
         const wasFirstRun = this.isFirstRun === true;
         if (wasFirstRun && this.isDesktop) {
-          // Permanent choice: the network decides the database path, the
-          // PSK and the bootstrap peers of this node.
           await warpnetService.selectNetwork(this.network);
         }
         await warpnetService.signInUser({

@@ -273,7 +273,6 @@ export const warpnetService = {
         return Boolean(await IsFirstRun());
     },
 
-    // Permanent first-launch network choice (desktop only, before sign-up).
     async selectNetwork(network) {
         return SelectNetwork(network);
     },

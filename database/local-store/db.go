@@ -76,8 +76,7 @@ import (
 */
 
 const (
-	discardRatio = 0.5
-	// FirstRunLockFile marks a database that survived at least one successful login.
+	discardRatio     = 0.5
 	FirstRunLockFile = "run.lock"
 	version0         = "v0" // protect database state in case of schema changes
 	sequenceKey      = "/SEQUENCE"

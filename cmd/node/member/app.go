@@ -5,17 +5,14 @@ import (
 	"crypto/ed25519"
 	stdjson "encoding/json"
 	"errors"
-	"fmt"
+	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/Warp-net/warpnet/metrics"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
@@ -77,8 +74,7 @@ type App struct {
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
 	deepLink string
 
-	// networkPending: very first launch, nothing on disk — the database, PSK
-	// and node stay uninitialized until the frontend calls SelectNetwork.
+	// networkPending: first launch — init deferred until the frontend calls SelectNetwork.
 	networkPending bool
 }
 
@@ -102,43 +98,32 @@ func (a *App) IsFirstRun() bool {
 	return a.db.IsFirstRun()
 }
 
-// SelectNetwork fixes the node's network on the very first launch. The choice
-// is permanent: each network keeps its own database and node identity.
+// SelectNetwork is the permanent first-launch network choice; it boots the deferred node.
 func (a *App) SelectNetwork(network string) error {
-	if a == nil || a.mx == nil {
-		return errors.New("app not initialized")
-	}
 	a.mx.Lock()
+	defer a.mx.Unlock()
 	if !a.networkPending {
-		current := config.Config().Node.Network
-		a.mx.Unlock()
-		if strings.TrimSpace(network) == current {
-			return nil
-		}
-		return fmt.Errorf("network is already set to %s", current)
+		return errors.New("network is already set")
 	}
-	if err := config.SetNetwork(network); err != nil {
-		a.mx.Unlock()
-		return err
+	if network != "warpnet" && network != "testnet" {
+		return errors.New("unknown network: " + network)
 	}
+	config.SetNetwork(network)
 	a.networkPending = false
-	a.mx.Unlock()
-
-	a.initNetwork(config.Config().Node.Network)
+	a.initNetwork()
 	return nil
 }
 
-// detectPersistedNetwork reports which network already has an initialized
-// database on disk (run.lock appears after the first successful login).
-// Warpnet wins when both exist, matching the flag default.
-func detectPersistedNetwork() (string, bool) {
-	for _, network := range config.KnownNetworks() {
-		lock := filepath.Join(config.StoragePath(network), local_store.FirstRunLockFile)
-		if _, err := os.Stat(lock); err == nil {
-			return network, true
+// detectPersistedNetwork finds the network whose database already has a run.lock
+// (written on first successful login); warpnet wins when both do.
+func detectPersistedNetwork(dbPath string) string {
+	appPath, dbDir := filepath.Dir(filepath.Dir(dbPath)), filepath.Base(dbPath)
+	for _, network := range []string{"warpnet", "testnet"} {
+		if _, err := os.Stat(filepath.Join(appPath, network, dbDir, local_store.FirstRunLockFile)); err == nil {
+			return network
 		}
 	}
-	return "", false
+	return ""
 }
 
 // SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).
@@ -196,36 +181,24 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
 
-	network := config.Config().Node.Network
 	if !config.IsNetworkExplicit() {
-		detected, found := detectPersistedNetwork()
-		if !found {
-			// True first launch: the network choice decides the database
-			// path and the PSK, so nothing opens until the frontend calls
-			// SelectNetwork.
-			a.mx.Lock()
+		network := detectPersistedNetwork(config.Config().Database.Path)
+		if network == "" { // true first launch: wait for the frontend's SelectNetwork
 			a.networkPending = true
-			a.mx.Unlock()
 			log.Infoln("app: first launch, waiting for network selection")
 			return
 		}
-		if detected != network {
-			if err := config.SetNetwork(detected); err != nil {
-				log.Errorf("failed to set detected network %s: %v", detected, err)
-				return
-			}
-			network = detected
-		}
+		config.SetNetwork(network)
 	}
 
-	a.initNetwork(network)
+	a.initNetwork()
 }
 
-// initNetwork opens everything that depends on the network choice: the
-// database, auth service and PSK. The libp2p node itself starts later, after
-// the first login (runNode blocks on readyChan).
-func (a *App) initNetwork(network string) {
+// initNetwork opens the network-dependent parts: database, auth service, PSK.
+// The libp2p node starts later, after the first login (runNode blocks on readyChan).
+func (a *App) initNetwork() {
 	version := config.Config().Version
+	network := config.Config().Node.Network
 
 	db, err := local_store.New(config.Config().Database.Path, local_store.DefaultOptions())
 	if err != nil {

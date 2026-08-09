@@ -284,9 +284,7 @@ export async function IsFirstRun() {
   return Boolean(resp && resp.body);
 }
 
-// SelectNetwork fixes the node's network on the very first launch (desktop
-// only — the remote node's network is pinned by its launch flags, so the
-// browser dashboard no-ops).
+// First-launch network choice (Wails only; a remote node's network is pinned by its flags).
 export async function SelectNetwork(network) {
   if (hasWails()) {
     return Wails.SelectNetwork(network);
