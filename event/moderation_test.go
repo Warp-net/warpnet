@@ -30,7 +30,8 @@ func baseResultEvent() ModerationVerdictEvent {
 // signing (result flipped, reporter redirected, voters trimmed) must not
 // verify against the original signature.
 func TestModerationResultSigningBytes_CoversEveryField(t *testing.T) {
-	base := baseResultEvent().signingBytes()
+	baseEvent := baseResultEvent()
+	base := baseEvent.signingBytes()
 
 	mutations := map[string]func(*ModerationVerdictEvent){
 		"type":     func(e *ModerationVerdictEvent) { e.Type = domain.ModerationUserType },

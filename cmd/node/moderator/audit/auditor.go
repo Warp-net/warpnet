@@ -57,12 +57,13 @@ func NewAuditor(selfID string, node Streamer, ledger *Ledger, rng *rand.Rand) *A
 }
 
 // ChallengeRandomPeer picks one eligible peer at random and runs a single
-// spot-check against it. A nil Result with nil error means nobody was
-// eligible (empty set, all on cooldown, or only self).
-func (a *Auditor) ChallengeRandomPeer(peers []string) (*Result, error) {
+// spot-check against it. A nil Result means nobody was eligible (empty set,
+// all on cooldown, or only self). An audit never fails: a peer that cannot
+// answer, or answers garbage, has simply earned that outcome.
+func (a *Auditor) ChallengeRandomPeer(peers []string) *Result {
 	target := a.pickTarget(peers)
 	if target == "" {
-		return nil, nil
+		return nil
 	}
 	return a.challenge(target)
 }
@@ -89,7 +90,7 @@ func (a *Auditor) pickTarget(peers []string) string {
 	return target
 }
 
-func (a *Auditor) challenge(peer string) (*Result, error) {
+func (a *Auditor) challenge(peer string) *Result {
 	ch, expectUnsafe := BuildChallenge(a.rng)
 	res := &Result{Peer: peer, Expected: expectUnsafe}
 
@@ -98,21 +99,21 @@ func (a *Auditor) challenge(peer string) (*Result, error) {
 		log.Infof("audit: peer %s unreachable: %v", peer, err)
 		res.Outcome = OutcomeUnreachable
 		a.ledger.Record(peer, res.Outcome)
-		return res, nil
+		return res
 	}
 	var respErr event.ResponseError
 	if json.Unmarshal(data, &respErr) == nil && respErr.Message != "" {
 		log.Infof("audit: peer %s refused challenge: %s", peer, respErr.Message)
 		res.Outcome = OutcomeUnreachable
 		a.ledger.Record(peer, res.Outcome)
-		return res, nil
+		return res
 	}
 
 	var resp ChallengeResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
+	if json.Unmarshal(data, &resp) != nil {
 		res.Outcome = OutcomeInvalid
 		a.ledger.Record(peer, res.Outcome)
-		return res, nil
+		return res
 	}
 	res.Response = resp
 
@@ -121,7 +122,7 @@ func (a *Auditor) challenge(peer string) (*Result, error) {
 		log.Warnf("audit: peer %s outcome=%d on challenge %s", peer, res.Outcome, ch.ChallengeID)
 	}
 	a.ledger.Record(peer, res.Outcome)
-	return res, nil
+	return res
 }
 
 // judge validates the response binding and signature, then compares verdict

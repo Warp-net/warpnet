@@ -51,7 +51,7 @@ type Challenge struct {
 	ChallengeID string    `json:"challenge_id"`
 	Text        string    `json:"text"`
 	ContentHash string    `json:"content_hash"`
-	TimeAt      time.Time `json:"time_at,omitempty"`
+	TimeAt      time.Time `json:"time_at,omitzero"`
 }
 
 // ChallengeResponse is the challenged moderator's signed
@@ -65,7 +65,7 @@ type ChallengeResponse struct {
 	Reason      *string                 `json:"reason,omitempty"`
 	Model       domain.ModelType        `json:"model"`
 	ModeratorID domain.ID               `json:"moderator_id"`
-	TimeAt      time.Time               `json:"time_at,omitempty"`
+	TimeAt      time.Time               `json:"time_at,omitzero"`
 	// Signature is base64(ed25519) over SigningBytes with the responder's
 	// node key; it makes the answer non-repudiable audit evidence.
 	Signature string `json:"signature,omitempty"`

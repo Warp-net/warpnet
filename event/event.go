@@ -625,7 +625,7 @@ type ModerationVerdictEvent struct {
 	// Voters lists every moderator whose vote entered the round's tally.
 	// Informational for now: receivers verify the chair's signature only.
 	Voters []domain.ID `json:"voters,omitempty"`
-	TimeAt time.Time   `json:"time_at,omitempty"`
+	TimeAt time.Time   `json:"time_at,omitzero"`
 	// Signature is base64(ed25519) over SigningBytes, produced with the
 	// chair moderator's node key. The verifying pubkey is recovered from
 	// ModeratorID, so a verdict is only valid for the peer that claims it.
@@ -636,7 +636,7 @@ type ModerationVerdictEvent struct {
 // Explicit length-prefixed concatenation (rather than re-marshalled JSON) so
 // signer and verifier agree byte-for-byte even across versions that add
 // unrelated fields.
-func (e ModerationVerdictEvent) signingBytes() []byte {
+func (e *ModerationVerdictEvent) signingBytes() []byte {
 	reason := ""
 	if e.Reason != nil {
 		reason = *e.Reason
@@ -645,7 +645,8 @@ func (e ModerationVerdictEvent) signingBytes() []byte {
 	if e.ObjectID != nil {
 		objectID = string(*e.ObjectID)
 	}
-	parts := []string{
+	parts := make([]string, 0, 9+len(e.Voters))
+	parts = append(parts,
 		e.Type.String(),
 		strconv.FormatBool(bool(e.Verdict)),
 		reason,
@@ -655,7 +656,7 @@ func (e ModerationVerdictEvent) signingBytes() []byte {
 		string(e.ModeratorID),
 		string(e.ReporterID),
 		strconv.FormatInt(e.TimeAt.UnixNano(), 10),
-	}
+	)
 	for _, v := range e.Voters {
 		parts = append(parts, string(v))
 	}
@@ -681,7 +682,7 @@ func (e *ModerationVerdictEvent) Sign(privKey ed25519.PrivateKey) {
 
 // Verify checks the verdict signature against pubKey. It is the mirror of
 // Sign, so the canonical signing bytes stay private to this package.
-func (e ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
+func (e *ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
 	sig, err := base64.StdEncoding.DecodeString(e.Signature)
 	if err != nil {
 		return err

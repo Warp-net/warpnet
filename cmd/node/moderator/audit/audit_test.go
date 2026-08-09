@@ -100,9 +100,7 @@ func runAudit(t *testing.T, peerID string, node Streamer, n int) (*Ledger, Stand
 	t.Cleanup(func() { peerCooldown = prev })
 
 	for i := 0; i < n; i++ {
-		if _, err := a.ChallengeRandomPeer([]string{peerID}); err != nil {
-			t.Fatalf("challenge: %v", err)
-		}
+		a.ChallengeRandomPeer([]string{peerID})
 	}
 	return ledger, ledger.StandingOf(peerID)
 }
@@ -312,18 +310,18 @@ func TestAuditor_SkipsSelfAndCooldownPeers(t *testing.T) {
 	node := peerNode{handler: StreamChallengeHandler(honestEngine(testRNG(), 0), nil)}
 	a := NewAuditor("auditor-self", node, ledger, testRNG())
 
-	if res, err := a.ChallengeRandomPeer([]string{"auditor-self"}); err != nil || res != nil {
-		t.Fatalf("must never audit itself, got %+v %v", res, err)
+	if res := a.ChallengeRandomPeer([]string{"auditor-self"}); res != nil {
+		t.Fatalf("must never audit itself, got %+v", res)
 	}
-	if res, err := a.ChallengeRandomPeer(nil); err != nil || res != nil {
-		t.Fatalf("empty peer set must be a no-op, got %+v %v", res, err)
+	if res := a.ChallengeRandomPeer(nil); res != nil {
+		t.Fatalf("empty peer set must be a no-op, got %+v", res)
 	}
 
 	_, peerID := identity(t, "cooldown-peer")
-	if res, _ := a.ChallengeRandomPeer([]string{peerID}); res == nil {
+	if res := a.ChallengeRandomPeer([]string{peerID}); res == nil {
 		t.Fatal("the first challenge must go out")
 	}
-	if res, _ := a.ChallengeRandomPeer([]string{peerID}); res != nil {
+	if res := a.ChallengeRandomPeer([]string{peerID}); res != nil {
 		t.Fatal("a peer on cooldown must not be challenged again")
 	}
 }
