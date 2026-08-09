@@ -47,16 +47,55 @@ services:
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
 
+  warpnet-moderator-1:
+    container_name: moderator
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4004
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=warpnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - NODE_SEED=warpnet-moderator-1
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      # The model path is hardcoded relative to the container CWD (/warpnet).
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
 
-#  warpnet-moderator:
-#    container_name: moderator1
-#    image: ghcr.io/warp-net/warpnet-moderator:latest
-#    network_mode: host
-#    restart: always
-#    environment:
-#      - NODE_PORT=4004
-#      - NODE_HOST_V4=207.154.221.44
-#      - NODE_NETWORK=warpnet
-#      - LOGGING_LEVEL=info
-#      - NODE_SEED=warpnet-moderator1
+  warpnet-moderator-2:
+    container_name: moderator-2
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4005
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=warpnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - NODE_SEED=warpnet-moderator-2
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+
+  warpnet-moderator-3:
+    container_name: moderator-3
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: always
+    environment:
+      - NODE_PORT=4006
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=warpnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - NODE_SEED=warpnet-moderator-3
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
 

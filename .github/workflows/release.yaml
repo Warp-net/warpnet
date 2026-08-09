@@ -1,147 +1,23 @@
 name: Release
 
+# The pipeline never bumps versions, never commits and never pushes tags.
+# The maintainer bumps the `version` file, creates the tag and pushes it;
+# this workflow only builds that tag and attaches artifacts to the Release.
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: "Version part to bump"
+      tag:
+        description: "Existing Git tag to release (e.g., v1.0.0)"
         required: true
-        default: patch
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+        type: string
 
 env:
   GO_VERSION: "1.26.0"
+  RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: "1"
 
 jobs:
-  # Single source of versioning (moved out of the git hooks). Bumps the version,
-  # syncs the derived files, commits the bump to main, tags v<version> and pushes
-  # the tag to GitHub + the Codeberg mirror. The build jobs below check out this
-  # tag, so the version //go:embed-ed into the binary matches the release.
-  version:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      tag: ${{ steps.bump.outputs.tag }}
-      version: ${{ steps.bump.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          fetch-tags: true
-          # A PAT (RELEASE_PAT) is used when set so the bump commit can land on a
-          # protected main; otherwise the default token is used.
-          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
-
-      - name: Bump version and sync derived files
-        id: bump
-        env:
-          BUMP: ${{ github.event.inputs.bump }}
-        run: |
-          set -euo pipefail
-
-          FILE="version"
-          SNAPCRAFT="snap/snapcraft.yaml"
-          [ -f "$FILE" ] || { echo "Version file not found!"; exit 1; }
-          [ -f "$SNAPCRAFT" ] || { echo "Snapcraft file not found: $SNAPCRAFT"; exit 1; }
-
-          CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-
-          case "${BUMP:-patch}" in
-            major) MAJOR=$((10#$MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((10#$MINOR + 1)); PATCH=0 ;;
-            patch|"") PATCH=$((10#$PATCH + 1)) ;;
-            *) echo "Unknown bump: $BUMP"; exit 1 ;;
-          esac
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "CURRENT_VERSION=$CURRENT_VERSION -> NEW_VERSION=$NEW_VERSION"
-
-          # version file (//go:embed-ed into the binary) and the snapcraft version field.
-          sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$FILE"
-          sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"
-
-          # CODE FREEZE: warpdroid is under F-Droid inclusion review — keep
-          # warpdroid/fdroid/versionCode and the fastlane changelogs frozen so
-          # checkupdates never sees a new warpdroid version at new tags.
-          # # F-Droid versionCode: base = (major*1000000 + minor*10000 + patch) * 10
-          # # (single APK, no ABI offset).
-          # NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
-          #
-          # # Keep the fastlane changelog named <versionCode>.txt: carry the most
-          # # recent note forward to the new name and drop any others.
-          # CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
-          # if [ -d "$CHANGELOGS" ]; then
-          #   NEW="$CHANGELOGS/$NEW_BASE.txt"
-          #   LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1)
-          #   if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
-          #     mv -f "$LATEST" "$NEW"
-          #     echo "Changelog: $(basename "$LATEST") -> $(basename "$NEW")"
-          #   fi
-          #   find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$NEW_BASE.txt" -exec rm -f {} +
-          # fi
-          #
-          # # Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags
-          # # can read warpdroid/fdroid/versionCode at the tag.
-          # FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
-          # if [ -f "$FDROID_VERSIONCODE" ]; then
-          #   echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
-          # fi
-
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
-
-      # - name: Commit bump, tag and push to origin
-      #   env:
-      #     TAG: ${{ steps.bump.outputs.tag }}
-      #     VERSION: ${{ steps.bump.outputs.version }}
-      #   run: |
-      #     set -euo pipefail
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      #     if git rev-parse "$TAG" >/dev/null 2>&1; then
-      #       echo "Tag $TAG already exists."; exit 1
-      #     fi
-
-      #     # CODE FREEZE (F-Droid review): warpdroid versionCode/changelogs are not bumped.
-      #     # git add version snap/snapcraft.yaml warpdroid/fdroid/versionCode
-      #     # git add -A fastlane/metadata/android/en-US/changelogs
-      #     git add version snap/snapcraft.yaml
-
-      #     # [skip ci] keeps the push-to-main workflows from re-running on the bump.
-      #     git commit -m "chore(release): $TAG [skip ci]"
-      #     git tag -a "$TAG" -m "Release version $VERSION"
-      #     git push origin HEAD:main
-      #     git push origin "$TAG"
-
-      - name: Mirror tag to Codeberg (best-effort)
-        env:
-          CODEBERG_SSH_KEY: ${{ secrets.CODEBERG_SSH_KEY }}
-          TAG: ${{ steps.bump.outputs.tag }}
-        run: |
-          set -uo pipefail
-          if [ -z "${CODEBERG_SSH_KEY:-}" ]; then
-            echo "CODEBERG_SSH_KEY secret not set; skipping Codeberg mirror."
-            exit 0
-          fi
-          mkdir -p ~/.ssh
-          printf '%s\n' "$CODEBERG_SSH_KEY" > ~/.ssh/codeberg
-          chmod 600 ~/.ssh/codeberg
-          ssh-keyscan -t rsa,ecdsa,ed25519 codeberg.org >> ~/.ssh/known_hosts 2>/dev/null || true
-          # Bounded like the old pre-push hook so a slow Codeberg can never hang the run.
-          GIT_SSH_COMMAND="ssh -i $HOME/.ssh/codeberg -o IdentitiesOnly=yes" \
-            timeout --kill-after=5 30 git push ssh://git@codeberg.org/Warpnet/warpnet.git "$TAG" \
-            || echo "warn: pushing $TAG to Codeberg failed or timed out (continuing)"
-
   release:
-    needs: version
     strategy:
       matrix:
         include:
@@ -164,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -242,8 +118,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ needs.version.outputs.tag }}
-          name: ${{ needs.version.outputs.tag }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             relay_linux_amd64.tar.gz
@@ -263,14 +139,13 @@ jobs:
 #  # input — both jobs attach their artifacts to the same GitHub
 #  # Release.
 #  release-warpdroid:
-#    needs: version
 #    runs-on: ubuntu-latest
 #    permissions:
 #      contents: write
 #    steps:
 #      - uses: actions/checkout@v4
 #        with:
-#          ref: ${{ needs.version.outputs.tag }}
+#          ref: ${{ env.RELEASE_TAG }}
 #          fetch-depth: 0
 #          fetch-tags: true
 #
@@ -387,8 +262,8 @@ jobs:
 #        env:
 #          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 #        with:
-#          tag_name: ${{ needs.version.outputs.tag }}
-#          name: ${{ needs.version.outputs.tag }}
+#          tag_name: ${{ env.RELEASE_TAG }}
+#          name: ${{ env.RELEASE_TAG }}
 #          token: ${{ secrets.GITHUB_TOKEN }}
 #          files: |
 #            warpdroid/warpdroid.apk
