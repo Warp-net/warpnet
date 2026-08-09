@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	stdjson "encoding/json"
 	"errors"
+	"fmt"
 	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
@@ -98,15 +99,23 @@ func (a *App) Network() string {
 	return config.Config().Node.Network
 }
 
+const (
+	mainNetwork = "warpnet"
+	testNetwork = "testnet"
+)
+
+var errUnknownNetwork = errors.New("unknown network")
+
 // SelectNetwork relaunches the app on the chosen network. After the first
 // login the choice sticks by itself: config picks the network that already
 // has a database.
 func (a *App) SelectNetwork(network string) error {
-	if network != "warpnet" && network != "testnet" {
-		return errors.New("unknown network: " + network)
+	if network != mainNetwork && network != testNetwork {
+		return fmt.Errorf("%w: %s", errUnknownNetwork, network)
 	}
+	// context.Background: the child must outlive this process.
 	//#nosec
-	cmd := exec.Command(os.Args[0], os.Args[1:]...)
+	cmd := exec.CommandContext(context.Background(), os.Args[0], os.Args[1:]...)
 	cmd.Env = append(os.Environ(), "NODE_NETWORK="+network)
 	if err := cmd.Start(); err != nil {
 		return err
