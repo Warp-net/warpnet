@@ -9,12 +9,12 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 )
 
-func baseResultEvent() ModerationResultEvent {
+func baseResultEvent() ModerationVerdictEvent {
 	reason := "Hate"
 	objectID := domain.ID("tweet-1")
-	return ModerationResultEvent{
+	return ModerationVerdictEvent{
 		Type:        domain.ModerationTweetType,
-		Result:      domain.FAIL,
+		Verdict:     domain.FAIL,
 		Reason:      &reason,
 		Model:       domain.LLAMAGuard3,
 		UserID:      "offender",
@@ -30,24 +30,24 @@ func baseResultEvent() ModerationResultEvent {
 // signing (result flipped, reporter redirected, voters trimmed) must not
 // verify against the original signature.
 func TestModerationResultSigningBytes_CoversEveryField(t *testing.T) {
-	base := baseResultEvent().SigningBytes()
+	base := baseResultEvent().signingBytes()
 
-	mutations := map[string]func(*ModerationResultEvent){
-		"type":     func(e *ModerationResultEvent) { e.Type = domain.ModerationUserType },
-		"result":   func(e *ModerationResultEvent) { e.Result = domain.OK },
-		"reason":   func(e *ModerationResultEvent) { r := "Spam"; e.Reason = &r },
-		"model":    func(e *ModerationResultEvent) { e.Model = domain.ModelType("other") },
-		"user":     func(e *ModerationResultEvent) { e.UserID = "someone-else" },
-		"object":   func(e *ModerationResultEvent) { o := domain.ID("tweet-2"); e.ObjectID = &o },
-		"moder":    func(e *ModerationResultEvent) { e.ModeratorID = "moderator-x" },
-		"reporter": func(e *ModerationResultEvent) { e.ReporterID = "reporter-x" },
-		"voters":   func(e *ModerationResultEvent) { e.Voters = e.Voters[:2] },
-		"time":     func(e *ModerationResultEvent) { e.TimeAt = e.TimeAt.Add(time.Nanosecond) },
+	mutations := map[string]func(*ModerationVerdictEvent){
+		"type":     func(e *ModerationVerdictEvent) { e.Type = domain.ModerationUserType },
+		"result":   func(e *ModerationVerdictEvent) { e.Verdict = domain.OK },
+		"reason":   func(e *ModerationVerdictEvent) { r := "Spam"; e.Reason = &r },
+		"model":    func(e *ModerationVerdictEvent) { e.Model = domain.ModelType("other") },
+		"user":     func(e *ModerationVerdictEvent) { e.UserID = "someone-else" },
+		"object":   func(e *ModerationVerdictEvent) { o := domain.ID("tweet-2"); e.ObjectID = &o },
+		"moder":    func(e *ModerationVerdictEvent) { e.ModeratorID = "moderator-x" },
+		"reporter": func(e *ModerationVerdictEvent) { e.ReporterID = "reporter-x" },
+		"voters":   func(e *ModerationVerdictEvent) { e.Voters = e.Voters[:2] },
+		"time":     func(e *ModerationVerdictEvent) { e.TimeAt = e.TimeAt.Add(time.Nanosecond) },
 	}
 	for name, mutate := range mutations {
 		ev := baseResultEvent()
 		mutate(&ev)
-		if bytes.Equal(base, ev.SigningBytes()) {
+		if bytes.Equal(base, ev.signingBytes()) {
 			t.Fatalf("mutating %s must change the signing bytes", name)
 		}
 	}
@@ -57,14 +57,14 @@ func TestModerationResultSigningBytes_CoversEveryField(t *testing.T) {
 // pointers must be handled.
 func TestModerationResultSigningBytes_StableAndNilSafe(t *testing.T) {
 	ev := baseResultEvent()
-	before := ev.SigningBytes()
+	before := ev.signingBytes()
 	ev.Signature = "c2lnbmF0dXJl"
-	if !bytes.Equal(before, ev.SigningBytes()) {
+	if !bytes.Equal(before, ev.signingBytes()) {
 		t.Fatal("the signature field must not change the signing bytes")
 	}
 
-	minimal := ModerationResultEvent{Type: domain.ModerationUserType, UserID: "u"}
-	if len(minimal.SigningBytes()) == 0 {
+	minimal := ModerationVerdictEvent{Type: domain.ModerationUserType, UserID: "u"}
+	if len(minimal.signingBytes()) == 0 {
 		t.Fatal("nil reason/object/voters must still produce signing bytes")
 	}
 }

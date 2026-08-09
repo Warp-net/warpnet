@@ -683,6 +683,12 @@ func (e ModerationChallengeResponseEvent) SigningBytes() []byte {
 
 const ModerationReasonUnavailable = "content unavailable for review"
 
+const ErrVerdictSignatureInvalid verdictError = "moderation verdict signature invalid"
+
+type verdictError string
+
+func (e verdictError) Error() string { return string(e) }
+
 type ModerationVerdictEvent struct {
 	Type     domain.ModerationObjectType `json:"type"`
 	Verdict  domain.ModerationResult     `json:"verdict"`
@@ -745,12 +751,28 @@ func (e ModerationVerdictEvent) signingBytes() []byte {
 	return buf
 }
 
-func (e ModerationVerdictEvent) Sign(privKey ed25519.PrivateKey) {
+// Sign stamps the verdict and signs it in place. Pointer receiver: on a
+// value receiver both the timestamp and the signature would land in a copy
+// and every verdict would go out unsigned.
+func (e *ModerationVerdictEvent) Sign(privKey ed25519.PrivateKey) {
 	e.TimeAt = time.Now().UTC()
 	if len(privKey) == 0 {
 		return
 	}
 	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.signingBytes()))
+}
+
+// Verify checks the verdict signature against pubKey. It is the mirror of
+// Sign, so the canonical signing bytes stay private to this package.
+func (e ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
+	sig, err := base64.StdEncoding.DecodeString(e.Signature)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(pubKey, e.signingBytes(), sig) {
+		return ErrVerdictSignatureInvalid
+	}
+	return nil
 }
 
 type GetNotificationsEvent struct {

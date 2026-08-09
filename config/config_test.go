@@ -59,7 +59,6 @@ type snapshot struct {
 	Bootstrap      []string `json:"bootstrap"`
 	MetricsGateway string   `json:"metrics_gateway"`
 	IsPskPrinted   bool     `json:"is_psk_printed"`
-	ModeratorPath  string   `json:"moderator_path"`
 	ServerPort     string   `json:"server_port"`
 	ServerPassword string   `json:"server_password"`
 	DatabasePath   string   `json:"database_path"`
@@ -84,7 +83,6 @@ func TestMain(m *testing.M) {
 			Bootstrap:      c.Node.Bootstrap,
 			MetricsGateway: c.Node.Metrics.Gateway,
 			IsPskPrinted:   c.Node.IsPskPrinted,
-			ModeratorPath:  c.Node.Moderator.Path,
 			ServerPort:     c.Node.Server.Port,
 			ServerPassword: c.Node.Server.Password,
 			DatabasePath:   c.Database.Path,
@@ -144,7 +142,7 @@ func childEnv(mode string, extra map[string]string) []string {
 	managed := []string{
 		"NODE_HOST_V4", "NODE_HOST_V6", "NODE_PORT", "NODE_SEED", "NODE_NETWORK",
 		"NODE_BOOTSTRAP", "NODE_METRICS_GATEWAY", "NODE_PRINT_PSK",
-		"NODE_MODERATOR_MODELPATH", "NODE_SERVER_PORT", "NODE_SERVER_PASSWORD",
+		"NODE_SERVER_PORT", "NODE_SERVER_PASSWORD",
 		"LOGGING_LEVEL", "LOGGING_FORMAT", "DATABASE_DIR",
 	}
 
@@ -202,7 +200,6 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, warpnetNetwork, c.Network)
 	assert.Equal(t, "207.154.221.44:4091", c.MetricsGateway)
 	assert.False(t, c.IsPskPrinted)
-	assert.Equal(t, "/root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf", c.ModeratorPath)
 	assert.Equal(t, "4999", c.ServerPort)
 	assert.Empty(t, c.ServerPassword, "the dashboard must not ship with a baked-in secret")
 	assert.Equal(t, "info", c.LoggingLevel)
@@ -234,7 +231,6 @@ func TestFlagsAreApplied(t *testing.T) {
 		"--node.network", testNetNetwork,
 		"--node.metrics.gateway", "10.0.0.1:9091",
 		"--node.print-psk",
-		"--node.moderator.modelpath", "/models/guard.gguf",
 		"--node.server.port", "5099",
 		"--node.server.password", "s3cret",
 		"--logging.level", "debug",
@@ -249,7 +245,6 @@ func TestFlagsAreApplied(t *testing.T) {
 	assert.Equal(t, testNetNetwork, c.Network)
 	assert.Equal(t, "10.0.0.1:9091", c.MetricsGateway)
 	assert.True(t, c.IsPskPrinted)
-	assert.Equal(t, "/models/guard.gguf", c.ModeratorPath)
 	assert.Equal(t, "5099", c.ServerPort)
 	assert.Equal(t, "s3cret", c.ServerPassword)
 	assert.Equal(t, "debug", c.LoggingLevel)
@@ -267,19 +262,18 @@ func TestFlagsAcceptEqualsForm(t *testing.T) {
 
 func TestEnvVarsAreApplied(t *testing.T) {
 	c := withEnv(t, map[string]string{
-		"NODE_HOST_V4":             "192.168.0.10",
-		"NODE_HOST_V6":             "fe80::1",
-		"NODE_PORT":                "4003",
-		"NODE_SEED":                "env-seed",
-		"NODE_NETWORK":             testNetNetwork,
-		"NODE_METRICS_GATEWAY":     "10.0.0.2:9091",
-		"NODE_PRINT_PSK":           "true",
-		"NODE_MODERATOR_MODELPATH": "/env/guard.gguf",
-		"NODE_SERVER_PORT":         "6000",
-		"NODE_SERVER_PASSWORD":     "env-secret",
-		"LOGGING_LEVEL":            "warn",
-		"LOGGING_FORMAT":           "json",
-		"DATABASE_DIR":             "envdb",
+		"NODE_HOST_V4":         "192.168.0.10",
+		"NODE_HOST_V6":         "fe80::1",
+		"NODE_PORT":            "4003",
+		"NODE_SEED":            "env-seed",
+		"NODE_NETWORK":         testNetNetwork,
+		"NODE_METRICS_GATEWAY": "10.0.0.2:9091",
+		"NODE_PRINT_PSK":       "true",
+		"NODE_SERVER_PORT":     "6000",
+		"NODE_SERVER_PASSWORD": "env-secret",
+		"LOGGING_LEVEL":        "warn",
+		"LOGGING_FORMAT":       "json",
+		"DATABASE_DIR":         "envdb",
 	})
 
 	assert.Equal(t, "192.168.0.10", c.HostV4)
@@ -289,7 +283,6 @@ func TestEnvVarsAreApplied(t *testing.T) {
 	assert.Equal(t, testNetNetwork, c.Network)
 	assert.Equal(t, "10.0.0.2:9091", c.MetricsGateway)
 	assert.True(t, c.IsPskPrinted)
-	assert.Equal(t, "/env/guard.gguf", c.ModeratorPath)
 	assert.Equal(t, "6000", c.ServerPort)
 	assert.Equal(t, "env-secret", c.ServerPassword)
 	assert.Equal(t, "warn", c.LoggingLevel)

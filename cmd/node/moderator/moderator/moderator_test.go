@@ -16,6 +16,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
 )
 
@@ -98,13 +99,20 @@ func withEngine(t *testing.T, e Engine) {
 func withFastRetry(t *testing.T) {
 	t.Helper()
 	prev := fetchRetryDelay
-	fetchRetryDelay = 0
+	// Not zero: the retrier's jitter draws from minInterval/2 and panics
+	// on an empty range.
+	fetchRetryDelay = time.Millisecond
 	t.Cleanup(func() { fetchRetryDelay = prev })
 }
 
+func fastRetrier() retrier.Retrier {
+	return retrier.New(time.Millisecond, fetchAttempts, retrier.FixedBackoff)
+}
+
 // newTestModerator builds a full moderator whose round timers are pushed out
-// to an hour, so tests drive castVote/closeRound deterministically. The
-// volunteer timer still fires immediately (single-moderator rank is 0).
+// to an hour, so tests drive the round phases (vote, tally, takeover)
+// deterministically. The volunteer timer still fires immediately, since a
+// single-moderator population ranks 0.
 func newTestModerator(t *testing.T, node ModeratorNode, pub Publisher, privKey ed25519.PrivateKey) (*Moderator, *stubVotes) {
 	t.Helper()
 	votes := &stubVotes{published: make(chan event.ModerationVoteEvent, 8)}
@@ -118,6 +126,52 @@ func newTestModerator(t *testing.T, node ModeratorNode, pub Publisher, privKey e
 		voteWindow, voteDelayStep, failoverDelay = prevWindow, prevStep, prevFailover
 	})
 	return m, votes
+}
+
+// roundOf returns the live round, or nil when the moderator no longer holds
+// one for that report.
+func roundOf(m *Moderator, id string) *round {
+	m.rounds.mx.Lock()
+	defer m.rounds.mx.Unlock()
+	return m.rounds.active[id]
+}
+
+// isSpent reports whether the moderator remembers the round as finished.
+func isSpent(m *Moderator, id string) bool {
+	m.rounds.mx.Lock()
+	defer m.rounds.mx.Unlock()
+	_, ok := m.rounds.finalized[id]
+	return ok
+}
+
+func activeRounds(m *Moderator) int {
+	m.rounds.mx.Lock()
+	defer m.rounds.mx.Unlock()
+	return len(m.rounds.active)
+}
+
+// closeWindow runs the tally as if the vote window had elapsed.
+func closeWindow(t *testing.T, m *Moderator, id string) {
+	t.Helper()
+	r := roundOf(m, id)
+	if r == nil {
+		t.Fatalf("no live round for %s", id)
+	}
+	r.tally()
+}
+
+func votesOf(m *Moderator, id string) map[string]event.ModerationVoteEvent {
+	r := roundOf(m, id)
+	if r == nil {
+		return nil
+	}
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	out := make(map[string]event.ModerationVoteEvent, len(r.votes))
+	for k, v := range r.votes {
+		out[k] = v
+	}
+	return out
 }
 
 func waitVote(t *testing.T, votes *stubVotes) event.ModerationVoteEvent {
@@ -181,6 +235,8 @@ func TestAssessTweetReport_ErrorResponseSkipsEngine(t *testing.T) {
 
 	m := &Moderator{
 		node:     stubModeratorNode{resp: marshal(t, event.ResponseError{Code: 500, Message: "tweet not found"})},
+		ctx:      context.Background(),
+		retrier:  fastRetrier(),
 		isClosed: new(atomic.Bool),
 	}
 
@@ -203,6 +259,8 @@ func TestAssessTweetReport_ValidTweetReachesEngine(t *testing.T) {
 
 	m := &Moderator{
 		node:     stubModeratorNode{resp: marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"})},
+		ctx:      context.Background(),
+		retrier:  fastRetrier(),
 		isClosed: new(atomic.Bool),
 	}
 
@@ -233,6 +291,8 @@ func TestAssessTweetReport_EmptyTextSkipsEngine(t *testing.T) {
 
 	m := &Moderator{
 		node:     stubModeratorNode{resp: marshal(t, domain.Tweet{Id: "tweet-1", Text: ""})},
+		ctx:      context.Background(),
+		retrier:  fastRetrier(),
 		isClosed: new(atomic.Bool),
 	}
 
@@ -259,7 +319,7 @@ func TestAssessTweetReport_MissingObjectIDIsNoVote(t *testing.T) {
 			return nil, nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	rep := tweetReport("")
 	rep.ObjectID = nil
@@ -289,7 +349,7 @@ func TestAssessTweetReport_TransportErrorYieldsUnavailable(t *testing.T) {
 			return []byte(event.Accepted), nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessTweetReport(tweetReport("tweet-1"))
 	if err != nil {
@@ -321,7 +381,7 @@ func TestAssessTweetReport_ZeroValueTweetYieldsUnavailable(t *testing.T) {
 			return []byte(event.Accepted), nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessTweetReport(tweetReport("tweet-1"))
 	if err != nil {
@@ -339,10 +399,7 @@ func TestAssessTweetReport_ZeroValueTweetYieldsUnavailable(t *testing.T) {
 	assertUnavailable(t, v)
 }
 
-func TestFetchObject_ContextCancelledStopsRetries(t *testing.T) {
-	withFastRetry(t)
-	fetchRetryDelay = time.Hour
-
+func TestFetch_CancelledContextStopsRetries(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -353,14 +410,48 @@ func TestFetchObject_ContextCancelledStopsRetries(t *testing.T) {
 			return marshal(t, event.ResponseError{Code: 500, Message: "tweet not found"}), nil
 		},
 	}
-	m := &Moderator{ctx: ctx, node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{
+		ctx:      ctx,
+		node:     node,
+		retrier:  fastRetrier(),
+		isClosed: new(atomic.Bool),
+	}
 
-	_, err := m.fetchObject("node-1", event.PUBLIC_GET_TWEET, nil)
+	_, err := m.fetch("node-1", event.PUBLIC_GET_TWEET, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
-	if fetches != 1 {
-		t.Fatalf("expected the retry wait to abort after 1 fetch, got %d", fetches)
+	if fetches != 0 {
+		t.Fatalf("a cancelled context must abort before dialing, got %d fetches", fetches)
+	}
+}
+
+// An application error envelope is a retryable failure, not an object: the
+// caller must never parse {"code":500,...} into a zero-value tweet.
+func TestFetch_ErrorEnvelopeIsRetriedThenFails(t *testing.T) {
+	fetches := 0
+	node := stubModeratorNode{
+		streamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			fetches++
+			return marshal(t, event.ResponseError{Code: 500, Message: "tweet not found"}), nil
+		},
+	}
+	m := &Moderator{
+		ctx:      context.Background(),
+		node:     node,
+		retrier:  fastRetrier(),
+		isClosed: new(atomic.Bool),
+	}
+
+	data, err := m.fetch("node-1", event.PUBLIC_GET_TWEET, nil)
+	if err == nil {
+		t.Fatal("an error envelope must surface as a fetch failure")
+	}
+	if data != nil {
+		t.Fatalf("no payload may be returned on failure, got %s", data)
+	}
+	if fetches != fetchAttempts {
+		t.Fatalf("expected %d attempts, got %d", fetchAttempts, fetches)
 	}
 }
 
@@ -381,7 +472,7 @@ func TestAssessTweetReport_FetchRetriesTransientFailure(t *testing.T) {
 			return []byte(event.Accepted), nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	if _, _, err := m.assessTweetReport(tweetReport("tweet-1")); err != nil {
 		t.Fatalf("assessTweetReport: %v", err)
@@ -410,7 +501,7 @@ func TestAssessTweetReport_AlreadyModeratedReusesVerdict(t *testing.T) {
 			},
 		}),
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessTweetReport(tweetReport("tweet-1"))
 	if err != nil {
@@ -435,7 +526,7 @@ func TestAssessUserReport_ValidProfileReachesEngine(t *testing.T) {
 	withEngine(t, rec)
 
 	node := stubModeratorNode{resp: marshal(t, domain.User{Id: "user-1", Username: "troll", Bio: "some bio"})}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessUserReport(userReport())
 	if err != nil {
@@ -469,7 +560,7 @@ func TestAssessUserReport_FetchFailureYieldsUnavailable(t *testing.T) {
 			return []byte(event.Accepted), nil
 		},
 	}
-	m := &Moderator{node: node, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: node, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessUserReport(userReport())
 	if err != nil {
@@ -491,7 +582,7 @@ func TestAssessUserReport_ZeroValueUserYieldsUnavailable(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
 
-	m := &Moderator{node: stubModeratorNode{resp: []byte(`{}`)}, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: stubModeratorNode{resp: []byte(`{}`)}, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessUserReport(userReport())
 	if err != nil {
@@ -510,7 +601,7 @@ func TestAssessUserReport_EmptyProfileTextYieldsUnavailable(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
 
-	m := &Moderator{node: stubModeratorNode{resp: marshal(t, domain.User{Id: "user-1"})}, isClosed: new(atomic.Bool)}
+	m := &Moderator{ctx: context.Background(), node: stubModeratorNode{resp: marshal(t, domain.User{Id: "user-1"})}, retrier: fastRetrier(), isClosed: new(atomic.Bool)}
 
 	v, ok, err := m.assessUserReport(userReport())
 	if err != nil {
@@ -541,9 +632,7 @@ func TestHandleReport_ClosedModeratorIsNoop(t *testing.T) {
 	if err := m.handleReport(tweetReport("tweet-1")); err != nil {
 		t.Fatalf("handleReport: %v", err)
 	}
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if len(m.rounds) != 0 {
+	if activeRounds(m) != 0 {
 		t.Fatal("a closed moderator must not open rounds")
 	}
 	if rec.called {
@@ -559,9 +648,7 @@ func TestHandleReport_MissingObjectIDOpensNoRound(t *testing.T) {
 	if err := m.handleReport(rep); err != nil {
 		t.Fatalf("handleReport: %v", err)
 	}
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if len(m.rounds) != 0 {
+	if activeRounds(m) != 0 {
 		t.Fatal("a malformed report must not open a round")
 	}
 }
@@ -621,7 +708,7 @@ func TestRound_SingleModeratorFailFinalizes(t *testing.T) {
 	var (
 		delivered int
 		gotNode   string
-		gotResult event.ModerationResultEvent
+		gotResult event.ModerationVerdictEvent
 	)
 	node := stubModeratorNode{
 		id: "mod-self",
@@ -632,7 +719,7 @@ func TestRound_SingleModeratorFailFinalizes(t *testing.T) {
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
 				delivered++
 				gotNode = nodeId
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					gotResult = r
 				}
 			}
@@ -654,7 +741,7 @@ func TestRound_SingleModeratorFailFinalizes(t *testing.T) {
 		t.Fatalf("unexpected vote %+v", vote)
 	}
 
-	m.closeRound(rep.ReportID())
+	closeWindow(t, m, rep.ReportID())
 
 	if delivered != 1 {
 		t.Fatalf("expected exactly one reporter delivery, got %d", delivered)
@@ -665,7 +752,7 @@ func TestRound_SingleModeratorFailFinalizes(t *testing.T) {
 	if gotResult.ReporterID != "reporter-1" {
 		t.Fatalf("expected reporter id propagated, got %q", gotResult.ReporterID)
 	}
-	if gotResult.Result != domain.FAIL {
+	if gotResult.Verdict != domain.FAIL {
 		t.Fatal("expected the FAIL verdict to be propagated to the reporter")
 	}
 	if len(gotResult.Voters) != 1 || gotResult.Voters[0] != selfVoterID("mod-self") {
@@ -681,7 +768,7 @@ func TestRound_SingleModeratorOkVerdictSkipsIsolation(t *testing.T) {
 
 	var (
 		delivered int
-		gotResult event.ModerationResultEvent
+		gotResult event.ModerationVerdictEvent
 	)
 	node := stubModeratorNode{
 		id: "mod-self",
@@ -691,7 +778,7 @@ func TestRound_SingleModeratorOkVerdictSkipsIsolation(t *testing.T) {
 			}
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
 				delivered++
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					gotResult = r
 				}
 			}
@@ -709,12 +796,12 @@ func TestRound_SingleModeratorOkVerdictSkipsIsolation(t *testing.T) {
 		t.Fatalf("handleReport: %v", err)
 	}
 	waitVote(t, votes)
-	m.closeRound(rep.ReportID())
+	closeWindow(t, m, rep.ReportID())
 
 	if delivered != 1 {
 		t.Fatalf("expected exactly one reporter delivery, got %d", delivered)
 	}
-	if gotResult.Result != domain.OK {
+	if gotResult.Verdict != domain.OK {
 		t.Fatal("expected the OK verdict to be propagated to the reporter")
 	}
 	if pub.calls != 0 {
@@ -743,7 +830,7 @@ func TestRound_NoReporterNoDelivery(t *testing.T) {
 		t.Fatalf("handleReport: %v", err)
 	}
 	waitVote(t, votes)
-	m.closeRound(rep.ReportID())
+	closeWindow(t, m, rep.ReportID())
 
 	if pub.calls != 1 {
 		t.Fatalf("the isolation broadcast must still fire, got %d publishes", pub.calls)
@@ -764,7 +851,7 @@ func TestRound_MajorityFailWins(t *testing.T) {
 
 	var (
 		delivered int
-		gotResult event.ModerationResultEvent
+		gotResult event.ModerationVerdictEvent
 	)
 	node := stubModeratorNode{
 		id: "mod-self",
@@ -774,7 +861,7 @@ func TestRound_MajorityFailWins(t *testing.T) {
 			}
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
 				delivered++
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					gotResult = r
 				}
 			}
@@ -795,12 +882,12 @@ func TestRound_MajorityFailWins(t *testing.T) {
 		t.Fatalf("handleVote: %v", err)
 	}
 
-	m.closeRound(reportID)
+	closeWindow(t, m, reportID)
 
 	if delivered != 1 {
 		t.Fatalf("expected exactly one reporter delivery, got %d", delivered)
 	}
-	if gotResult.Result != domain.FAIL {
+	if gotResult.Verdict != domain.FAIL {
 		t.Fatal("2 of 3 FAIL votes must produce a FAIL verdict")
 	}
 	if len(gotResult.Voters) != 3 {
@@ -822,7 +909,7 @@ func TestRound_MajorityOkOverrulesOwnFail(t *testing.T) {
 	reportID := rep.ReportID()
 	others := pickPeers(t, reportID, selfVoterID("mod-self"), true, 2)
 
-	var gotResult event.ModerationResultEvent
+	var gotResult event.ModerationVerdictEvent
 	node := stubModeratorNode{
 		id: "mod-self",
 		streamFn: func(_ string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -830,7 +917,7 @@ func TestRound_MajorityOkOverrulesOwnFail(t *testing.T) {
 				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
 			}
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					gotResult = r
 				}
 			}
@@ -847,9 +934,9 @@ func TestRound_MajorityOkOverrulesOwnFail(t *testing.T) {
 	_ = m.handleVote(otherVote(reportID, others[0], domain.OK, ""))
 	_ = m.handleVote(otherVote(reportID, others[1], domain.OK, ""))
 
-	m.closeRound(reportID)
+	closeWindow(t, m, reportID)
 
-	if gotResult.Result != domain.OK {
+	if gotResult.Verdict != domain.OK {
 		t.Fatal("2 of 3 OK votes must clear the content")
 	}
 	if pub.calls != 0 {
@@ -891,7 +978,7 @@ func TestRound_NonChairDoesNotFinalize(t *testing.T) {
 	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
 	_ = m.handleVote(otherVote(reportID, above[0], domain.FAIL, "Hate"))
 
-	m.closeRound(reportID)
+	closeWindow(t, m, reportID)
 
 	if pub.calls != 0 {
 		t.Fatalf("a non-chair moderator must not isolate, got %d publishes", pub.calls)
@@ -919,11 +1006,10 @@ func TestCastVote_SuppressedWhenQuorumReached(t *testing.T) {
 	_ = m.handleVote(otherVote(reportID, "mod-b", domain.OK, ""))
 	_ = m.handleVote(otherVote(reportID, "mod-c", domain.OK, ""))
 
-	m.mx.Lock()
-	m.rounds[reportID].report = &rep
-	m.mx.Unlock()
-
-	m.castVote(reportID)
+	// Hand the round its report without arming the volunteer timer, then
+	// fire the vote step by hand.
+	roundOf(m, reportID).setReport(rep, time.Hour)
+	roundOf(m, reportID).castVote()
 
 	select {
 	case v := <-votes.published:
@@ -943,13 +1029,11 @@ func TestHandleVote_DedupsByModerator(t *testing.T) {
 	_ = m.handleVote(otherVote(reportID, "mod-a", domain.FAIL, "Hate"))
 	_ = m.handleVote(otherVote(reportID, "mod-a", domain.OK, "")) // second vote, same moderator
 
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	r := m.rounds[reportID]
-	if r == nil || len(r.votes) != 1 {
-		t.Fatalf("expected exactly one counted vote, got %+v", r)
+	counted := votesOf(m, reportID)
+	if len(counted) != 1 {
+		t.Fatalf("expected exactly one counted vote, got %+v", counted)
 	}
-	if bool(r.votes["mod-a"].Result) {
+	if bool(counted["mod-a"].Result) {
 		t.Fatal("the first vote must win, not be overwritten")
 	}
 }
@@ -960,15 +1044,13 @@ func TestClosedRound_IsNotReopened(t *testing.T) {
 	rep := tweetReport("tweet-1")
 	reportID := rep.ReportID()
 	_ = m.handleVote(otherVote(reportID, "mod-a", domain.FAIL, "Hate"))
-	m.closeRound(reportID)
+	closeWindow(t, m, reportID)
 
 	// Gossip re-delivery after the round is finalized.
 	_ = m.handleVote(otherVote(reportID, "mod-b", domain.FAIL, "Hate"))
-	m.openRound(rep)
+	m.rounds.open(rep)
 
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if len(m.rounds) != 0 {
+	if activeRounds(m) != 0 {
 		t.Fatal("a finalized round must not be reopened by late gossip")
 	}
 }
@@ -983,7 +1065,7 @@ func TestRound_ChairSignsResult(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 
-	var gotResult event.ModerationResultEvent
+	var gotResult event.ModerationVerdictEvent
 	node := stubModeratorNode{
 		id: "mod-self",
 		streamFn: func(_ string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -991,7 +1073,7 @@ func TestRound_ChairSignsResult(t *testing.T) {
 				return marshal(t, domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"}), nil
 			}
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					gotResult = r
 				}
 			}
@@ -1008,7 +1090,7 @@ func TestRound_ChairSignsResult(t *testing.T) {
 		t.Fatalf("handleReport: %v", err)
 	}
 	waitVote(t, votes)
-	m.closeRound(rep.ReportID())
+	closeWindow(t, m, rep.ReportID())
 
 	if gotResult.Signature == "" {
 		t.Fatal("the chair must sign the verdict")
@@ -1017,8 +1099,8 @@ func TestRound_ChairSignsResult(t *testing.T) {
 		t.Fatal("the signature must cover a real timestamp")
 	}
 	pubKey := privKey.Public().(ed25519.PublicKey)
-	if err := security.VerifySignature(pubKey, gotResult.SigningBytes(), gotResult.Signature); err != nil {
-		t.Fatalf("signature must verify over SigningBytes: %v", err)
+	if err := gotResult.Verify(pubKey); err != nil {
+		t.Fatalf("the verdict must verify against the chair's key: %v", err)
 	}
 }
 
@@ -1046,7 +1128,7 @@ func TestRound_ChairAnnouncesFinal(t *testing.T) {
 	if vote.Final {
 		t.Fatal("the first published message must be the vote itself")
 	}
-	m.closeRound(rep.ReportID())
+	closeWindow(t, m, rep.ReportID())
 
 	final := waitVote(t, votes)
 	if !final.Final {
@@ -1071,7 +1153,7 @@ func TestRound_BackupTakesOverSilentChair(t *testing.T) {
 
 	var (
 		delivered int
-		gotResult event.ModerationResultEvent
+		gotResult event.ModerationVerdictEvent
 	)
 	node := stubModeratorNode{
 		id: "mod-self", // rank 1: first backup
@@ -1081,7 +1163,7 @@ func TestRound_BackupTakesOverSilentChair(t *testing.T) {
 			}
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
 				delivered++
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					gotResult = r
 				}
 			}
@@ -1098,24 +1180,20 @@ func TestRound_BackupTakesOverSilentChair(t *testing.T) {
 	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
 	_ = m.handleVote(otherVote(reportID, above[0], domain.FAIL, "Hate"))
 
-	m.closeRound(reportID)
+	closeWindow(t, m, reportID)
 	if delivered != 0 || pub.calls != 0 {
 		t.Fatal("a backup must not finalize while the chair's slot is still open")
 	}
-	m.mx.Lock()
-	r := m.rounds[reportID]
-	if r == nil || r.pending == nil || r.finalTimer == nil {
-		m.mx.Unlock()
+	if r := roundOf(m, reportID); r == nil || r.pending == nil || r.finalTimer == nil {
 		t.Fatalf("the backup must park the outcome and schedule a takeover, got %+v", r)
 	}
-	m.mx.Unlock()
 
-	m.tryFinalize(reportID) // the takeover slot fires, chair still silent
+	roundOf(m, reportID).takeOver() // the slot fires, chair still silent
 
 	if delivered != 1 {
 		t.Fatalf("the backup must notify the reporter, got %d deliveries", delivered)
 	}
-	if gotResult.Result != domain.FAIL || gotResult.ModeratorID != selfVoterID("mod-self") {
+	if gotResult.Verdict != domain.FAIL || gotResult.ModeratorID != selfVoterID("mod-self") {
 		t.Fatalf("the backup finalizes under its own identity, got %+v", gotResult)
 	}
 	if pub.calls != 1 {
@@ -1147,7 +1225,7 @@ func TestRound_TrimmedVoterStillGuards(t *testing.T) {
 			}
 			if path == event.PUBLIC_POST_MODERATION_RESULT {
 				delivered++
-				if r, ok := data.(event.ModerationResultEvent); ok {
+				if r, ok := data.(event.ModerationVerdictEvent); ok {
 					if len(r.Voters) != 1 || r.Voters[0] != below[0] {
 						t.Fatalf("the tally must stay on the kept set, got voters %v", r.Voters)
 					}
@@ -1165,16 +1243,13 @@ func TestRound_TrimmedVoterStillGuards(t *testing.T) {
 	waitVote(t, votes)
 	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
 
-	m.closeRound(reportID)
-	m.mx.Lock()
-	r := m.rounds[reportID]
+	closeWindow(t, m, reportID)
+	r := roundOf(m, reportID)
 	if r == nil || r.pending == nil {
-		m.mx.Unlock()
 		t.Fatal("the trimmed voter must still park the outcome")
 	}
-	m.mx.Unlock()
 
-	m.tryFinalize(reportID)
+	r.takeOver()
 	if delivered != 1 || pub.calls != 1 {
 		t.Fatalf("the trimmed voter must finalize the kept tally, got %d deliveries %d isolations", delivered, pub.calls)
 	}
@@ -1212,21 +1287,22 @@ func TestRound_FinalAnnouncementCancelsTakeover(t *testing.T) {
 	waitVote(t, votes)
 	_ = m.handleVote(otherVote(reportID, below[0], domain.FAIL, "Hate"))
 	_ = m.handleVote(otherVote(reportID, above[0], domain.FAIL, "Hate"))
-	m.closeRound(reportID)
+	closeWindow(t, m, reportID)
+	parked := roundOf(m, reportID)
+	if parked == nil {
+		t.Fatal("the backup must be standing by before the announcement")
+	}
 
 	// The chair's announcement arrives before the takeover slot.
 	chairFinal := otherVote(reportID, below[0], domain.FAIL, "Hate")
 	chairFinal.Final = true
 	_ = m.handleVote(chairFinal)
 
-	m.mx.Lock()
-	if len(m.rounds) != 0 {
-		m.mx.Unlock()
+	if activeRounds(m) != 0 {
 		t.Fatal("the Final announcement must clear the parked round")
 	}
-	m.mx.Unlock()
 
-	m.tryFinalize(reportID) // the slot fires anyway; must be a no-op
+	parked.takeOver() // the slot fires anyway; must be a no-op
 	if pub.calls != 0 {
 		t.Fatalf("a cancelled takeover must not isolate, got %d", pub.calls)
 	}
@@ -1243,22 +1319,16 @@ func TestHandleVote_FinalIsNotCountedAsVote(t *testing.T) {
 	final.Final = true
 	_ = m.handleVote(final)
 
-	m.mx.Lock()
-	if len(m.rounds) != 0 {
-		m.mx.Unlock()
+	if activeRounds(m) != 0 {
 		t.Fatal("an announcement must not open a round")
 	}
-	if _, done := m.finalized[reportID]; !done {
-		m.mx.Unlock()
+	if !isSpent(m, reportID) {
 		t.Fatal("an announcement must mark the round finalized")
 	}
-	m.mx.Unlock()
 
 	// A late vote after the announcement is ignored.
 	_ = m.handleVote(otherVote(reportID, "mod-b", domain.FAIL, "Hate"))
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if len(m.rounds) != 0 {
+	if activeRounds(m) != 0 {
 		t.Fatal("late votes must not reopen a finalized round")
 	}
 }
@@ -1267,17 +1337,18 @@ func TestVoteDelay_TinyPopulationStartsAtOnce(t *testing.T) {
 	m, _ := newTestModerator(t, stubModeratorNode{id: "mod-self"}, stubPublisher{}, nil)
 
 	// With population <= quorumTarget every rank lands below the target.
-	m.mx.Lock()
-	defer m.mx.Unlock()
+	rs := m.rounds
+	rs.mx.Lock()
+	defer rs.mx.Unlock()
 	for _, id := range []string{"round-1", "round-2", "round-3", "round-4"} {
-		if d := m.voteDelayLocked(id); d != 0 {
+		if d := rs.voteDelayLocked(id); d != 0 {
 			t.Fatalf("single moderator must start at once, got %v for %s", d, id)
 		}
 	}
-	m.seenMods["mod-a"] = time.Now()
-	m.seenMods["mod-b"] = time.Now()
+	rs.seenMods["mod-a"] = time.Now()
+	rs.seenMods["mod-b"] = time.Now()
 	for _, id := range []string{"round-1", "round-2", "round-3", "round-4"} {
-		if d := m.voteDelayLocked(id); d != 0 {
+		if d := rs.voteDelayLocked(id); d != 0 {
 			t.Fatalf("population of 3 must start at once, got %v for %s", d, id)
 		}
 	}
@@ -1286,14 +1357,15 @@ func TestVoteDelay_TinyPopulationStartsAtOnce(t *testing.T) {
 func TestVoteDelay_LargePopulationDefersMostRounds(t *testing.T) {
 	m, _ := newTestModerator(t, stubModeratorNode{id: "mod-self"}, stubPublisher{}, nil)
 
-	m.mx.Lock()
-	defer m.mx.Unlock()
+	rs := m.rounds
+	rs.mx.Lock()
+	defer rs.mx.Unlock()
 	for i := 0; i < 200; i++ {
-		m.seenMods["mod-"+string(rune('a'+i%26))+string(rune('0'+i/26))] = time.Now()
+		rs.seenMods["mod-"+string(rune('a'+i%26))+string(rune('0'+i/26))] = time.Now()
 	}
 	deferred := 0
 	for i := 0; i < 20; i++ {
-		d := m.voteDelayLocked("round-" + string(rune('a'+i)))
+		d := rs.voteDelayLocked("round-" + string(rune('a'+i)))
 		if d < 0 {
 			t.Fatalf("negative delay %v", d)
 		}

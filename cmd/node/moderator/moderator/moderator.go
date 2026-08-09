@@ -34,7 +34,6 @@ import (
 	"github.com/Warp-net/warpnet/retrier"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,10 +48,13 @@ import (
 
 const (
 	ErrModeratorInitFailed warpnet.WarpError = "moderator: failed to init engine"
+	ErrFetchFailed         warpnet.WarpError = "moderator: fetch failed"
 
-	fetchAttempts   = 3
-	fetchRetryDelay = 3 * time.Second
+	fetchAttempts = 3
 )
+
+// fetchRetryDelay is a var so tests can drop the wait.
+var fetchRetryDelay = 3 * time.Second
 
 var supportedModel = struct {
 	Model domain.ModelType
@@ -98,9 +100,11 @@ type VoteExchange interface {
 
 // Moderator runs entirely report-driven: there is no peer-scanning loop.
 // Every report opens a vote round shared by all moderators listening on
-// ReportsTopic; the round machinery in votes.go decides who assesses the
-// content, tallies the votes and lets the round's chair publish the
-// aggregate verdict.
+// ReportsTopic. The Moderator owns the side effects — running the engine,
+// gossip, reporter notification, isolation — and hands the protocol itself
+// (who votes, when, who finalizes) to the rounds it opens; it implements
+// roundHost so a round can reach back for exactly those effects and
+// nothing else.
 type Moderator struct {
 	ctx       context.Context
 	node      ModeratorNode
@@ -110,11 +114,7 @@ type Moderator struct {
 	privKey   ed25519.PrivateKey
 
 	retrier retrier.Retrier
-
-	mx        sync.Mutex
-	rounds    map[string]*voteRound
-	finalized map[string]time.Time
-	seenMods  map[string]time.Time
+	rounds  *rounds
 
 	isClosed *atomic.Bool
 }
@@ -128,18 +128,16 @@ func NewModerator(
 	privKey ed25519.PrivateKey,
 ) (*Moderator, error) {
 	m := &Moderator{
-		ctx:       ctx,
-		node:      node,
-		sub:       sub,
-		votes:     votes,
-		privKey:   privKey,
-		retrier:   retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
-		rounds:    make(map[string]*voteRound),
-		finalized: make(map[string]time.Time),
-		seenMods:  make(map[string]time.Time),
-		isClosed:  new(atomic.Bool),
+		ctx:      ctx,
+		node:     node,
+		sub:      sub,
+		votes:    votes,
+		privKey:  privKey,
+		retrier:  retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
+		isClosed: new(atomic.Bool),
 	}
 	m.isolation = isolation.NewIsolationProtocol(pub, privKey)
+	m.rounds = newRounds(m)
 	return m, nil
 }
 
@@ -171,13 +169,7 @@ func (m *Moderator) Start() error {
 
 func (m *Moderator) Close() {
 	m.isClosed.Store(true)
-
-	m.mx.Lock()
-	for id, r := range m.rounds {
-		r.stopTimersLocked()
-		delete(m.rounds, id)
-	}
-	m.mx.Unlock()
+	m.rounds.stopAll()
 
 	if engine != nil {
 		engine.Close()
@@ -211,8 +203,47 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 		return nil
 	}
 
-	m.openRound(ev)
+	m.rounds.open(ev)
 	return nil
+}
+
+// handleVote feeds gossip traffic into the round it belongs to: a vote is
+// counted, a Final announcement ends the round here.
+func (m *Moderator) handleVote(ev event.ModerationVoteEvent) error {
+	if m.isClosed.Load() {
+		return nil
+	}
+	if ev.ReportID == "" || ev.ModeratorID == "" {
+		return nil
+	}
+	if ev.Final {
+		m.rounds.markFinalized(ev.ReportID, ev.ModeratorID)
+		return nil
+	}
+	m.rounds.addVote(ev)
+	return nil
+}
+
+// SelfID implements roundHost.
+func (m *Moderator) SelfID() string { return m.node.ID().String() }
+
+// PublishVote implements roundHost.
+func (m *Moderator) PublishVote(vote event.ModerationVoteEvent) error {
+	return m.votes.PublishVote(vote)
+}
+
+// AssessReport implements roundHost: it produces this moderator's own vote
+// on a report. The bool is false when the report is unusable and no vote
+// should be cast at all.
+func (m *Moderator) AssessReport(ev event.ReportEvent) (verdict, bool, error) {
+	switch ev.Type {
+	case domain.ModerationTweetType:
+		return m.assessTweetReport(ev)
+	case domain.ModerationUserType:
+		return m.assessUserReport(ev)
+	default:
+		return verdict{}, false, nil
+	}
 }
 
 // notifyReporter re-sends the verdict to the reporter's node on the same
@@ -268,17 +299,26 @@ func unavailableVerdict(objectID *domain.ID, userID domain.ID) verdict {
 	return verdict{result: domain.OK, reason: &reason, objectID: objectID, userID: userID}
 }
 
-// produces this moderator's own vote on a report. The bool is
-// false when the report is malformed and no vote should be cast at all.
-func (m *Moderator) assessReport(ev event.ReportEvent) (verdict, bool, error) {
-	switch ev.Type {
-	case domain.ModerationTweetType:
-		return m.assessTweetReport(ev)
-	case domain.ModerationUserType:
-		return m.assessUserReport(ev)
-	default:
-		return verdict{}, false, nil
-	}
+// fetch pulls an object off the target node through the retrier. An
+// application error envelope counts as a retryable failure: a node that
+// answers "not found" while it is still syncing deserves the remaining
+// attempts, and the envelope must never reach the caller's json.Unmarshal
+// as if it were the object itself.
+func (m *Moderator) fetch(nodeID string, route stream.WarpRoute, payload any) ([]byte, error) {
+	var data []byte
+	err := m.retrier.Try(m.ctx, func() error {
+		resp, err := m.node.GenericStream(nodeID, route, payload)
+		if err != nil {
+			return err
+		}
+		var respErr event.ResponseError
+		if json.Unmarshal(resp, &respErr) == nil && respErr.Message != "" {
+			return fmt.Errorf("%w: %s", ErrFetchFailed, respErr.Message)
+		}
+		data = resp
+		return nil
+	})
+	return data, err
 }
 
 func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, error) {
@@ -287,18 +327,11 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, erro
 		return verdict{}, false, nil
 	}
 
-	var (
-		data []byte
-		err  error
+	data, err := m.fetch(
+		ev.TargetNodeID,
+		event.PUBLIC_GET_TWEET,
+		event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
 	)
-	err = m.retrier.Try(m.ctx, func() error {
-		data, err = m.node.GenericStream(
-			ev.TargetNodeID,
-			event.PUBLIC_GET_TWEET,
-			event.GetTweetEvent{TweetId: *ev.ObjectID, UserId: ev.TargetUserID},
-		)
-		return err
-	})
 	if err != nil {
 		log.Warnf("moderator: fetch tweet %s from node %s failed: %v", *ev.ObjectID, ev.TargetNodeID, err)
 		return unavailableVerdict(ev.ObjectID, ev.TargetUserID), true, nil
@@ -342,18 +375,11 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, erro
 }
 
 func (m *Moderator) assessUserReport(ev event.ReportEvent) (verdict, bool, error) {
-	var (
-		data []byte
-		err  error
+	data, err := m.fetch(
+		ev.TargetNodeID,
+		event.PUBLIC_GET_USER,
+		event.GetUserEvent{UserId: ev.TargetUserID},
 	)
-	err = m.retrier.Try(m.ctx, func() error {
-		data, err = m.node.GenericStream(
-			ev.TargetNodeID,
-			event.PUBLIC_GET_USER,
-			event.GetUserEvent{UserId: ev.TargetUserID},
-		)
-		return err
-	})
 	if err != nil {
 		log.Warnf("moderator: fetch user %s from node %s failed: %v", ev.TargetUserID, ev.TargetNodeID, err)
 		return unavailableVerdict(nil, ev.TargetUserID), true, nil
@@ -382,10 +408,11 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (verdict, bool, error
 	return verdict{result: domain.ModerationResult(ok), reason: &reason, userID: user.Id}, true, nil
 }
 
-// finalizeRound is executed by the round's chair only: it delivers the
-// aggregate verdict to the reporter and, on FAIL, runs the isolation
-// broadcast. Shadow-ban: only bad verdicts go on the followers broadcast.
-func (m *Moderator) finalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID) {
+// FinalizeRound implements roundHost: it delivers the agreed verdict to the
+// reporter and, on FAIL, runs the isolation broadcast. Shadow-ban: only bad
+// verdicts go on the followers broadcast. Called by the round that decided
+// this node finalizes it — as chair, or as the backup that took over.
+func (m *Moderator) FinalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID) {
 	m.notifyReporter(rep, agg.result, agg.reason, agg.objectID, agg.userID, voters)
 
 	if bool(agg.result) {

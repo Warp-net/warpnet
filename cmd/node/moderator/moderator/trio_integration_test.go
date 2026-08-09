@@ -15,7 +15,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
@@ -29,7 +28,7 @@ type trioConnector struct {
 	ownerId string
 
 	mu          sync.Mutex
-	deliveries  []event.ModerationResultEvent
+	deliveries  []event.ModerationVerdictEvent
 	deliveredTo []string
 }
 
@@ -46,7 +45,7 @@ func (c *trioConnector) GenericStream(nodeIdStr string, path stream.WarpRoute, d
 	case event.PUBLIC_GET_TWEET:
 		return json.Marshal(domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"})
 	case event.PUBLIC_POST_MODERATION_RESULT:
-		if r, ok := data.(event.ModerationResultEvent); ok {
+		if r, ok := data.(event.ModerationVerdictEvent); ok {
 			c.mu.Lock()
 			c.deliveries = append(c.deliveries, r)
 			c.deliveredTo = append(c.deliveredTo, nodeIdStr)
@@ -57,10 +56,10 @@ func (c *trioConnector) GenericStream(nodeIdStr string, path stream.WarpRoute, d
 	return []byte(event.Accepted), nil
 }
 
-func (c *trioConnector) takeDeliveries() ([]event.ModerationResultEvent, []string) {
+func (c *trioConnector) takeDeliveries() ([]event.ModerationVerdictEvent, []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return append([]event.ModerationResultEvent(nil), c.deliveries...),
+	return append([]event.ModerationVerdictEvent(nil), c.deliveries...),
 		append([]string(nil), c.deliveredTo...)
 }
 
@@ -161,9 +160,9 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 	}))
 
 	// Exactly one moderator (the deterministic chair) delivers the verdict.
-	countDeliveries := func() (int, event.ModerationResultEvent, string) {
+	countDeliveries := func() (int, event.ModerationVerdictEvent, string) {
 		total := 0
-		var got event.ModerationResultEvent
+		var got event.ModerationVerdictEvent
 		var to string
 		for _, c := range connectors {
 			ds, tos := c.takeDeliveries()
@@ -185,7 +184,7 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 	require.Equal(t, 1, total, "exactly one moderator must deliver the verdict")
 
 	require.Equal(t, memberHost.ID().String(), deliveredTo, "the verdict must go to the reporter's node")
-	require.Equal(t, domain.FAIL, got.Result)
+	require.Equal(t, domain.FAIL, got.Verdict)
 	require.Equal(t, memberPS.OwnerID(), got.ReporterID, "the reporter identity must be the one the member node stamped")
 	require.Len(t, got.Voters, 3, "all three moderators must have voted")
 
@@ -195,15 +194,15 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 	require.NotEmpty(t, chairPeer)
 	pubKey := warpnet.FromIDToPubKey(chairPeer)
 	require.NotEmpty(t, pubKey)
-	require.NoError(t, security.VerifySignature(pubKey, got.SigningBytes(), got.Signature))
+	require.NoError(t, got.Verify(pubKey))
 
 	// The Final announcement clears the round everywhere: no parked
 	// takeovers may remain.
 	require.Eventually(t, func() bool {
 		for _, m := range moderators {
-			m.mx.Lock()
-			pending := len(m.rounds)
-			m.mx.Unlock()
+			m.rounds.mx.Lock()
+			pending := len(m.rounds.active)
+			m.rounds.mx.Unlock()
 			if pending != 0 {
 				return false
 			}
