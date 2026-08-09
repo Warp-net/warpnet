@@ -415,25 +415,19 @@ func TestIsTestnet(t *testing.T) {
 	assert.False(t, node{}.IsTestnet())
 }
 
-func TestExistingTestnetDatabaseIsWeakestNetworkDefault(t *testing.T) {
-	home := t.TempDir()
-	lock := filepath.Join(home, ".warpdata", testNetNetwork, "storage", "run.lock")
-	require.NoError(t, os.MkdirAll(filepath.Dir(lock), 0o750))
-	require.NoError(t, os.WriteFile(lock, nil, 0o600))
+func TestSetNetworkRepointsDerivedFields(t *testing.T) {
+	orig := Config()
+	defer SetNetwork(orig.Node.Network)
 
-	c := run(t, helperModeConfig, nil, map[string]string{"HOME": home})
-	assert.Equal(t, testNetNetwork, c.Network)
-	assert.True(t, c.IsTestnet)
-	assert.Contains(t, c.DatabasePath, filepath.Join(testNetNetwork, "storage"))
-	assert.Contains(t, c.Bootstrap, testnetBootstrapNodes[0])
+	SetNetwork(testNetNetwork)
+	c := Config()
+	assert.Equal(t, testNetNetwork, c.Node.Network)
+	assert.True(t, c.Node.IsTestnet())
+	assert.Equal(t, testnetBootstrapNodes, c.Node.Bootstrap)
+	assert.Contains(t, c.Database.Path, filepath.Join(testNetNetwork, filepath.Base(orig.Database.Path)))
 
-	c = run(t, helperModeConfig,
-		[]string{"--node.network", warpnetNetwork}, map[string]string{"HOME": home})
-	assert.Equal(t, warpnetNetwork, c.Network, "an explicit flag must beat the detected database")
-
-	c = run(t, helperModeConfig,
-		nil, map[string]string{"HOME": home, "NODE_NETWORK": warpnetNetwork})
-	assert.Equal(t, warpnetNetwork, c.Network, "a real env var must beat the detected database")
+	SetNetwork(orig.Node.Network)
+	assert.Equal(t, orig.Database.Path, Config().Database.Path)
 }
 
 func TestAddrInfos(t *testing.T) {

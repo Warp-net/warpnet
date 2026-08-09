@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Warp-net/warpnet"
@@ -37,6 +38,7 @@ func main() {
 	}
 	log.SetOutput(os.Stdout)
 
+	preferExistingTestnet(config.Config().Database.Path)
 	log.Infof("network: %s", config.Config().Node.Network)
 
 	app := NewApp()
@@ -125,5 +127,18 @@ func main() {
 	if err != nil {
 		log.Errorf("failed to start application: %s", err)
 		return
+	}
+}
+
+// preferExistingTestnet re-points the default network at a testnet database
+// that already exists (run.lock appears after the first successful login);
+// an explicit --node.network flag or NODE_NETWORK env var wins.
+func preferExistingTestnet(dbPath string) {
+	if config.IsNetworkPinned() {
+		return
+	}
+	lock := filepath.Join(filepath.Dir(filepath.Dir(dbPath)), "testnet", filepath.Base(dbPath), "run.lock")
+	if _, err := os.Stat(lock); err == nil {
+		config.SetNetwork("testnet")
 	}
 }
