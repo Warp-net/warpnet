@@ -175,6 +175,58 @@ Worth reading, because these are real:
   design, and it is being worked on.
 - **Coverage is only what is reported.** Nothing scans the network proactively.
   Content nobody reports is never reviewed.
+- **No moderators online means no moderation.** Moderators are volunteers. If
+  none are running, your report is accepted and then simply goes nowhere — you
+  will not even get a notification. This was verified, and it is the honest
+  failure mode of a network with no company behind it.
+
+---
+
+## Has any of this actually been tried?
+
+Yes. Everything above was run on a private test network of real nodes — one
+ordinary member node and three moderators, each with its own copy of the AI
+model, talking to each other exactly as they would on the real network. Here is
+what happened, including the awkward parts.
+
+**The everyday cases**
+
+| What was tried | What happened |
+|---|---|
+| Reported a post containing a direct threat | All three moderators judged it independently, all three voted against it, one announced the result. The post was hidden and the reporter was told it had been moderated — about 30 seconds end to end. |
+| Reported an ordinary, harmless post | Judged clean by the majority. No hiding, nothing changed, and the reporter was told: *no violation found.* |
+| Reported a post that no longer existed | The moderators tried to fetch it, retried, then reported honestly: *could not be reviewed.* Nothing was decided and nobody was penalised. |
+| Reported the same post a second time | Nothing happened at all — the second report was recognised as the same case and did not trigger a new review or a second notification. |
+| Reported a profile rather than a post | Reviewed the same way, with the profile hidden by the apps and the reporter notified. |
+
+**The awkward cases**
+
+| What was tried | What happened |
+|---|---|
+| Faked a verdict, claiming to be a real moderator | Rejected instantly: *signature invalid.* Nothing was hidden, nothing was stored. |
+| Faked a verdict with a made-up moderator identity | Rejected just as fast: *no valid moderator id.* |
+| Killed the announcing moderator mid-review | The next moderator in line noticed the silence, waited its ten seconds and delivered the verdict itself. The reporter still got exactly one answer, about ten seconds later than usual. |
+| Left only two moderators running (an even number) | The tie-avoidance rule set one vote aside, the remaining verdict stood, and the moderator whose vote was set aside stayed on standby in case the announcer failed. |
+| Left only one moderator running | It reviewed and decided alone. A lone moderator is weaker — nobody double-checks it — but reports do not pile up unanswered. |
+| Took every moderator offline, then reported | The report was accepted by the app and then nothing happened: no review, no verdict, **and no notification**. If nobody is running a moderator, reports go nowhere. |
+
+**The mutual spot-checks**
+
+The moderators began checking each other automatically, without being asked.
+Notably, they stayed quiet until the network had actually decided some cases —
+with no settled examples to ask about, there is nothing to check anyone
+against, and they correctly waited rather than inventing questions. Once
+underway, every answer was correct and every moderator remained in the neutral
+"still gathering evidence" state, which is the intended behaviour: judgement
+needs a track record, not a single exchange.
+
+**One result worth being honest about**
+
+In one test the AI flagged a profile that contained nothing objectionable at
+all. Nobody was harmed — this was a test network with test accounts — but it is
+a concrete example of the caveat above: the model makes mistakes, in both
+directions. The majority requirement is there to make a mistake need several
+machines to agree on it, not to make mistakes impossible.
 
 ---
 
