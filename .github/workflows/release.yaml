@@ -97,29 +97,29 @@ jobs:
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Commit bump, tag and push to origin
-        env:
-          TAG: ${{ steps.bump.outputs.tag }}
-          VERSION: ${{ steps.bump.outputs.version }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      # - name: Commit bump, tag and push to origin
+      #   env:
+      #     TAG: ${{ steps.bump.outputs.tag }}
+      #     VERSION: ${{ steps.bump.outputs.version }}
+      #   run: |
+      #     set -euo pipefail
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists."; exit 1
-          fi
+      #     if git rev-parse "$TAG" >/dev/null 2>&1; then
+      #       echo "Tag $TAG already exists."; exit 1
+      #     fi
 
-          # CODE FREEZE (F-Droid review): warpdroid versionCode/changelogs are not bumped.
-          # git add version snap/snapcraft.yaml warpdroid/fdroid/versionCode
-          # git add -A fastlane/metadata/android/en-US/changelogs
-          git add version snap/snapcraft.yaml
+      #     # CODE FREEZE (F-Droid review): warpdroid versionCode/changelogs are not bumped.
+      #     # git add version snap/snapcraft.yaml warpdroid/fdroid/versionCode
+      #     # git add -A fastlane/metadata/android/en-US/changelogs
+      #     git add version snap/snapcraft.yaml
 
-          # [skip ci] keeps the push-to-main workflows from re-running on the bump.
-          git commit -m "chore(release): $TAG [skip ci]"
-          git tag -a "$TAG" -m "Release version $VERSION"
-          git push origin HEAD:main
-          git push origin "$TAG"
+      #     # [skip ci] keeps the push-to-main workflows from re-running on the bump.
+      #     git commit -m "chore(release): $TAG [skip ci]"
+      #     git tag -a "$TAG" -m "Release version $VERSION"
+      #     git push origin HEAD:main
+      #     git push origin "$TAG"
 
       - name: Mirror tag to Codeberg (best-effort)
         env:
