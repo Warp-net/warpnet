@@ -28,11 +28,17 @@ resulting from the use or misuse of this software.
 package audit
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"strconv"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/security"
 )
+
+const ErrResponseSignature warpnet.WarpError = "audit: challenge response signature invalid"
 
 // ChallengeRoute is the moderator-to-moderator audit spot-check route.
 // Reserved for the audit protocol; no handler is registered for it yet.
@@ -73,7 +79,7 @@ type ChallengeResponse struct {
 
 // SigningBytes returns the canonical bytes the response signature covers,
 // length-prefixed like ModerationResultEvent.SigningBytes.
-func (e ChallengeResponse) SigningBytes() []byte {
+func (e ChallengeResponse) signingBytes() []byte {
 	reason := ""
 	if e.Reason != nil {
 		reason = *e.Reason
@@ -94,4 +100,38 @@ func (e ChallengeResponse) SigningBytes() []byte {
 		buf = append(buf, p...)
 	}
 	return buf
+}
+
+// Signed returns a stamped and signed copy of the response, answering as
+// moderator with the model that actually judged the text.
+func (e ChallengeResponse) Signed(privKey ed25519.PrivateKey, moderator domain.ID, model domain.ModelType) ChallengeResponse {
+	e.ModeratorID = moderator
+	e.Model = model
+	e.TimeAt = time.Now().UTC()
+	if len(privKey) == 0 {
+		return e
+	}
+	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.signingBytes()))
+	return e
+}
+
+// VerifiedFrom checks that the response really came from peer: the
+// signature must verify against the public key carried by that peer id, so
+// a valid answer signed by anyone else counts for nothing.
+func (e ChallengeResponse) VerifiedFrom(peer string) error {
+	if e.ModeratorID != peer {
+		return ErrResponseSignature
+	}
+	peerID := warpnet.FromStringToPeerID(peer)
+	if peerID == "" {
+		return ErrResponseSignature
+	}
+	pubKey := warpnet.FromIDToPubKey(peerID)
+	if len(pubKey) == 0 {
+		return ErrResponseSignature
+	}
+	if err := security.VerifySignature(pubKey, e.signingBytes(), e.Signature); err != nil {
+		return ErrResponseSignature
+	}
+	return nil
 }

@@ -39,26 +39,34 @@ resulting from the use or misuse of this software.
 // accumulated per peer in a Ledger; a peer whose answers are systematically
 // wrong, absent or cryptographically invalid loses standing down to Banned.
 //
-// Two constraints shape everything here:
+// Three constraints shape everything here:
+//
+//   - Challenges must not be predictable. An earlier draft shipped a list
+//     of invented probe texts, which is worthless: the source is public, so
+//     anyone can tabulate "this text means unsafe" and answer correctly
+//     with no model at all. Challenges are therefore drawn from Corpus —
+//     real texts a vote round already ruled on, with the quorum's verdict
+//     as ground truth. That pool is unique to each node, changes as traffic
+//     does, and costs nothing to build, since the round already fetched the
+//     text and already agreed on the answer.
 //
 //   - Moderators run DIFFERENT models — nothing is pinned. Byte-exact
-//     recomputation therefore proves nothing; the probes are deliberately
-//     flagrant (any competent moderation model agrees on their class), only
-//     verdict CLASSES are compared, and only statistically: a single
-//     disagreement is model noise, a systematic pattern is a fake. The
-//     thresholds in ledger.go encode that tolerance.
+//     recomputation therefore proves nothing; only verdict CLASSES are
+//     compared, and only statistically: a single disagreement is model
+//     noise, a systematic pattern is a fake. The thresholds in ledger.go
+//     encode that tolerance.
 //
 //   - Cross-platform: no float comparisons, no runtime assumptions. The
 //     challenge binds to hex(sha256) over the raw UTF-8 bytes of the text,
 //     which is identical on every architecture, and the response is a signed
 //     JSON event like every other Warpnet wire message.
 //
-// What a challenge still proves despite unpinned models: possession of a
-// working moderation model (an unseen probe text cannot be classified
-// without running inference) and honesty on unambiguous content. Probe
-// templates are parameterized to raise the cost of memorizing answers;
-// long-term the corpus is expected to rotate with releases and to be mixed
-// with live samples the auditor's own model is confident about.
+// What a challenge proves: possession of a working moderation model (an
+// unseen text cannot be classified without running inference) and agreement
+// with the network on content it has already judged. What it cannot prove:
+// that a peer disagreeing with this node is dishonest rather than running a
+// different model — which is why a ban needs a pattern, and eventually the
+// agreement of several independent auditors.
 //
 // Wiring plan (out of scope here): register StreamChallengeHandler under
 // ChallengeRoute on the moderator node, run an

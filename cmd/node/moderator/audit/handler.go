@@ -5,8 +5,6 @@ package audit
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
-	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -26,20 +24,14 @@ type Engine interface {
 
 // ResponseSigner stamps identity, model and signature onto an outgoing
 // challenge response.
-type ResponseSigner func(*ChallengeResponse)
+type ResponseSigner func(ChallengeResponse) ChallengeResponse
 
 // NewResponseSigner builds the production signer: the responder's node key
 // and the model it actually runs (self-reported — audits judge classes, not
 // model claims).
-func NewResponseSigner(privKey ed25519.PrivateKey, selfID string, model domain.ModelType) ResponseSigner {
-	return func(ev *ChallengeResponse) {
-		ev.ModeratorID = selfID
-		ev.Model = model
-		ev.TimeAt = time.Now().UTC()
-		if len(privKey) == 0 {
-			return
-		}
-		ev.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, ev.SigningBytes()))
+func NewResponseSigner(privKey ed25519.PrivateKey, selfID domain.ID, model domain.ModelType) ResponseSigner {
+	return func(resp ChallengeResponse) ChallengeResponse {
+		return resp.Signed(privKey, selfID, model)
 	}
 }
 
@@ -74,7 +66,7 @@ func StreamChallengeHandler(engine Engine, sign ResponseSigner) warpnet.WarpHand
 			Reason:      &reason,
 		}
 		if sign != nil {
-			sign(&resp)
+			resp = sign(resp)
 		}
 		return resp, nil
 	}

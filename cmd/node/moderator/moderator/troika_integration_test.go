@@ -22,10 +22,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// trioConnector backs both the Moderator and its pubsub with one real
+// troikaConnector backs both the Moderator and its pubsub with one real
 // libp2p host. Streams stay canned: PUBLIC_GET_TWEET serves the offending
 // tweet, PUBLIC_POST_MODERATION_RESULT records the reporter delivery.
-type trioConnector struct {
+type troikaConnector struct {
 	host    warpnet.P2PNode
 	ownerId string
 
@@ -34,15 +34,15 @@ type trioConnector struct {
 	deliveredTo []string
 }
 
-func (c *trioConnector) Node() warpnet.P2PNode  { return c.host }
-func (c *trioConnector) ID() warpnet.WarpPeerID { return c.host.ID() }
-func (c *trioConnector) NodeInfo() warpnet.NodeInfo {
+func (c *troikaConnector) Node() warpnet.P2PNode  { return c.host }
+func (c *troikaConnector) ID() warpnet.WarpPeerID { return c.host.ID() }
+func (c *troikaConnector) NodeInfo() warpnet.NodeInfo {
 	return warpnet.NodeInfo{ID: c.host.ID(), OwnerId: c.ownerId}
 }
-func (c *trioConnector) SelfStream(stream.WarpRoute, any) ([]byte, error) {
+func (c *troikaConnector) SelfStream(stream.WarpRoute, any) ([]byte, error) {
 	return nil, nil
 }
-func (c *trioConnector) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) ([]byte, error) {
+func (c *troikaConnector) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) ([]byte, error) {
 	switch path {
 	case event.PUBLIC_GET_TWEET:
 		return json.Marshal(domain.Tweet{Id: "tweet-1", Text: "hello world", UserId: "offender"})
@@ -58,14 +58,14 @@ func (c *trioConnector) GenericStream(nodeIdStr string, path stream.WarpRoute, d
 	return []byte(event.Accepted), nil
 }
 
-func (c *trioConnector) takeDeliveries() ([]event.ModerationVerdictEvent, []string) {
+func (c *troikaConnector) takeDeliveries() ([]event.ModerationVerdictEvent, []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return append([]event.ModerationVerdictEvent(nil), c.deliveries...),
 		append([]string(nil), c.deliveredTo...)
 }
 
-func newTrioHost(t *testing.T) warpnet.P2PNode {
+func newTroikaHost(t *testing.T) warpnet.P2PNode {
 	t.Helper()
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
@@ -83,12 +83,12 @@ func hostPrivKey(t *testing.T, h warpnet.P2PNode) ed25519.PrivateKey {
 	return ed25519.PrivateKey(raw)
 }
 
-// TestTrioIntegration_RealGossip runs the full protocol over an actual
+// TestTroikaIntegration_RealGossip runs the full protocol over an actual
 // gossipsub network: a member publishes a report, three moderators vote on
 // the real votes topic, the deterministic chair aggregates and delivers a
 // signed verdict to the reporter exactly once, and the Final announcement
 // clears the round on every moderator.
-func TestTrioIntegration_RealGossip(t *testing.T) {
+func TestTroikaIntegration_RealGossip(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,11 +96,11 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 
 	// Three moderators on real hosts.
 	moderators := make([]*Moderator, 0, 3)
-	connectors := make([]*trioConnector, 0, 3)
+	connectors := make([]*troikaConnector, 0, 3)
 	hosts := make([]warpnet.P2PNode, 0, 4)
 	for i := 0; i < 3; i++ {
-		h := newTrioHost(t)
-		conn := &trioConnector{host: h}
+		h := newTroikaHost(t)
+		conn := &troikaConnector{host: h}
 		ps := modpubsub.NewPubSub(ctx)
 		require.NoError(t, ps.Run(conn))
 		t.Cleanup(func() { _ = ps.Close() })
@@ -122,9 +122,9 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 
 	// The reporting member node, also observing the offender's followers
 	// topic so the isolation broadcast can be asserted.
-	memberHost := newTrioHost(t)
+	memberHost := newTroikaHost(t)
 	hosts = append(hosts, memberHost)
-	memberConn := &trioConnector{host: memberHost, ownerId: "reporter-owner"}
+	memberConn := &troikaConnector{host: memberHost, ownerId: "reporter-owner"}
 	memberPS := memberpubsub.NewPubSub(ctx)
 	memberPS.Run(memberConn)
 	t.Cleanup(func() { _ = memberPS.Close() })

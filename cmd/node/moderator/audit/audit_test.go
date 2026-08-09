@@ -3,19 +3,33 @@ package audit
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"math/rand"
-	"strings"
+	"strconv"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 )
+
+// referenceCorpus fills a corpus with neutral placeholder texts. Nothing
+// here needs to read like real content: the audit only ever compares the
+// verdict a round already reached against the answer a peer gives.
+func referenceCorpus(t *testing.T, n int) (*Corpus, map[string]bool) {
+	t.Helper()
+	c := NewCorpus()
+	truth := make(map[string]bool, 2*n)
+	for i := 0; i < n; i++ {
+		clean := "reference-clean-" + strconv.Itoa(i)
+		flagged := "reference-flagged-" + strconv.Itoa(i)
+		c.Remember(clean, domain.OK)
+		c.Remember(flagged, domain.FAIL)
+		truth[clean], truth[flagged] = false, true
+	}
+	return c, truth
+}
 
 func testRNG() *rand.Rand { return rand.New(rand.NewSource(1)) }
 
@@ -38,66 +52,59 @@ type engineFunc func(string) (bool, string, error)
 
 func (f engineFunc) Moderate(c string) (bool, string, error) { return f(c) }
 
-// honestEngine answers by the probe's flagrant ground truth, with an
-// optional per-call error rate standing in for model diversity.
-func honestEngine(rng *rand.Rand, noise float64) Engine {
+// honestEngine stands in for a peer whose model agrees with the network,
+// with an optional per-call error rate standing in for model diversity.
+// It is handed the ground truth because a test cannot run an LLM; a real
+// peer has to reach the same answer by actually classifying the text.
+func honestEngine(truth map[string]bool, rng *rand.Rand, noise float64) Engine {
 	return engineFunc(func(text string) (bool, string, error) {
-		unsafe := isUnsafeProbeText(text)
+		unsafe := truth[text]
 		if noise > 0 && rng.Float64() < noise {
 			unsafe = !unsafe
 		}
 		if unsafe {
-			return false, "Violent Crimes", nil
+			return false, "flagged", nil
 		}
 		return true, "", nil
 	})
 }
 
-// isUnsafeProbeText recovers a probe's ground truth from its instantiated
-// text by matching the corpus template prefixes.
-func isUnsafeProbeText(text string) bool {
-	for _, p := range probes {
-		head := p.template
-		if i := strings.IndexByte(head, '{'); i > 0 {
-			head = head[:i]
-		}
-		if strings.HasPrefix(text, head) {
-			return p.unsafe
-		}
-	}
-	return false
-}
+// answerFunc is a Challenger that produces the peer's answer directly, so
+// audit logic can be tested without any transport at all.
+type answerFunc func(peer string, ch Challenge) (ChallengeResponse, error)
 
-// peerNode routes challenges to a local handler, simulating the remote
-// moderator answering over the wire.
-type peerNode struct {
-	handler warpnet.WarpHandlerFunc
-	fail    error
-}
+func (f answerFunc) Ask(peer string, ch Challenge) (ChallengeResponse, error) { return f(peer, ch) }
 
-func (n peerNode) GenericStream(_ string, _ stream.WarpRoute, data any) ([]byte, error) {
-	if n.fail != nil {
-		return nil, n.fail
-	}
-	buf, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := n.handler(buf, nil)
-	if err != nil {
-		return json.Marshal(event.ResponseError{Code: 500, Message: err.Error()})
-	}
-	return json.Marshal(resp)
+// enginePeer answers challenges the way a real moderator would: run the
+// engine over the challenged text, then sign under the given identity.
+func enginePeer(engine Engine, sign ResponseSigner) Challenger {
+	return answerFunc(func(_ string, ch Challenge) (ChallengeResponse, error) {
+		if ContentHash(ch.Text) != ch.ContentHash {
+			return ChallengeResponse{}, ErrChallengeHashMismatch
+		}
+		ok, reason, err := engine.Moderate(ch.Text)
+		if err != nil {
+			return ChallengeResponse{}, err
+		}
+		resp := ChallengeResponse{
+			ChallengeID: ch.ChallengeID,
+			ContentHash: ch.ContentHash,
+			Result:      domain.ModerationResult(ok),
+			Reason:      &reason,
+		}
+		if sign != nil {
+			resp = sign(resp)
+		}
+		return resp, nil
+	})
 }
 
 // runAudit drives n spot-checks of one peer and returns its final standing.
-func runAudit(t *testing.T, peerID string, node Streamer, n int) (*Ledger, Standing) {
+func runAudit(t *testing.T, peerID string, corpus *Corpus, challenger Challenger, n int) (*Ledger, Standing) {
 	t.Helper()
 	ledger := NewLedger()
-	a := NewAuditor("auditor-self", node, ledger, testRNG())
-	prev := peerCooldown
-	peerCooldown = 0 // audit the same peer repeatedly in one test
-	t.Cleanup(func() { peerCooldown = prev })
+	a := NewAuditor("auditor-self", challenger, ledger, corpus, testRNG())
+	a.cooldown = 0 // audit the same peer repeatedly in one test
 
 	for i := 0; i < n; i++ {
 		a.ChallengeRandomPeer([]string{peerID})
@@ -117,44 +124,97 @@ func TestContentHash_StableAndBinding(t *testing.T) {
 	}
 }
 
-// The corpus must stay balanced and parameterized: with a binary verdict
-// the two constant-answer rates sum to 1, so only a balanced corpus keeps
-// BOTH constant bots under the ban threshold.
-func TestProbeCorpus_BalancedAndParameterized(t *testing.T) {
+// A constant-answer bot must land under the ban threshold whichever class
+// it picks, which only holds while the corpus draws both classes evenly.
+func TestCorpus_DrawsBothClassesEvenly(t *testing.T) {
+	corpus, _ := referenceCorpus(t, 8)
+	rng := testRNG()
+
 	unsafe := 0
-	for _, p := range probes {
-		if p.unsafe {
+	const draws = 400
+	for i := 0; i < draws; i++ {
+		_, wantUnsafe, ok := corpus.Sample(rng)
+		if !ok {
+			t.Fatal("a filled corpus must yield samples")
+		}
+		if wantUnsafe {
 			unsafe++
 		}
-		if !strings.Contains(p.template, "{NAME}") && !strings.Contains(p.template, "{PLACE}") {
-			t.Fatalf("probe must be parameterized to resist memorization: %q", p.template)
-		}
 	}
-	safe := len(probes) - unsafe
-	if unsafe != safe {
-		t.Fatalf("corpus must be class-balanced (got %d unsafe / %d safe)", unsafe, safe)
+	share := float64(unsafe) / draws
+	if share < 0.4 || share > 0.6 {
+		t.Fatalf("classes must be drawn evenly, got %.2f unsafe", share)
 	}
-	if float64(safe)/float64(len(probes)) >= banAgreeBelow {
-		t.Fatal("a constant-FAIL bot would escape the ban threshold")
-	}
-	if float64(unsafe)/float64(len(probes)) >= banAgreeBelow {
-		t.Fatal("a constant-OK bot would escape the ban threshold")
+	if share >= banAgreeBelow || 1-share >= banAgreeBelow {
+		t.Fatal("a constant-answer bot would escape the ban threshold")
 	}
 }
 
-func TestBuildChallenge_FillsPlaceholdersAndBinds(t *testing.T) {
+// Until a node has seen both a clean and a moderated text it has nothing to
+// audit anyone against, and must not guess.
+func TestCorpus_ThinCorpusYieldsNothing(t *testing.T) {
+	c := NewCorpus()
+	if _, _, ok := c.Sample(testRNG()); ok {
+		t.Fatal("an empty corpus must not yield a sample")
+	}
+	c.Remember("only-clean", domain.OK)
+	if _, _, ok := c.Sample(testRNG()); ok {
+		t.Fatal("one class alone must not yield a sample")
+	}
+	c.Remember("now-flagged", domain.FAIL)
+	if _, _, ok := c.Sample(testRNG()); !ok {
+		t.Fatal("both classes present must yield a sample")
+	}
+}
+
+// A report storm over one tweet must not flood the references with copies.
+func TestCorpus_RemembersEachTextOnce(t *testing.T) {
+	c := NewCorpus()
+	for i := 0; i < 10; i++ {
+		c.Remember("same-text", domain.FAIL)
+	}
+	if _, unsafe := c.Len(); unsafe != 1 {
+		t.Fatalf("expected one reference, got %d", unsafe)
+	}
+}
+
+// The ring keeps the corpus bounded without ever emptying a class.
+func TestCorpus_RingIsBounded(t *testing.T) {
+	c := NewCorpus()
+	for i := 0; i < corpusPerClass*3; i++ {
+		c.Remember("clean-"+strconv.Itoa(i), domain.OK)
+		c.Remember("flagged-"+strconv.Itoa(i), domain.FAIL)
+	}
+	safe, unsafe := c.Len()
+	if safe != corpusPerClass || unsafe != corpusPerClass {
+		t.Fatalf("each class must cap at %d, got %d/%d", corpusPerClass, safe, unsafe)
+	}
+}
+
+func TestBuildChallenge_BindsTheDrawnReference(t *testing.T) {
+	corpus, truth := referenceCorpus(t, 4)
 	rng := testRNG()
+
 	for i := 0; i < 50; i++ {
-		ch, _ := BuildChallenge(rng)
-		if strings.Contains(ch.Text, "{") {
-			t.Fatalf("placeholder left unfilled: %q", ch.Text)
+		ch, wantUnsafe, ok := BuildChallenge(rng, corpus)
+		if !ok {
+			t.Fatal("a filled corpus must produce a challenge")
 		}
 		if ch.ContentHash != ContentHash(ch.Text) {
-			t.Fatal("challenge must bind its own text")
+			t.Fatal("a challenge must bind its own text")
 		}
 		if ch.ChallengeID == "" || ch.TimeAt.IsZero() {
 			t.Fatalf("challenge must be identified and stamped: %+v", ch)
 		}
+		if truth[ch.Text] != wantUnsafe {
+			t.Fatalf("the expected class must come from the reference, got %t for %q", wantUnsafe, ch.Text)
+		}
+	}
+}
+
+func TestBuildChallenge_ThinCorpusProducesNothing(t *testing.T) {
+	if _, _, ok := BuildChallenge(testRNG(), NewCorpus()); ok {
+		t.Fatal("an empty corpus must not produce a challenge")
 	}
 }
 
@@ -162,12 +222,13 @@ func TestBuildChallenge_FillsPlaceholdersAndBinds(t *testing.T) {
 // trusted: audits judge statistically, not byte-for-byte.
 func TestAudit_HonestModeratorWithDifferentModelStaysTrusted(t *testing.T) {
 	priv, peerID := identity(t, "honest-peer")
-	node := peerNode{handler: StreamChallengeHandler(
-		honestEngine(testRNG(), 0.10),
+	corpus, truth := referenceCorpus(t, 8)
+	peer := enginePeer(
+		honestEngine(truth, testRNG(), 0.10),
 		NewResponseSigner(priv, peerID, domain.ModelType("SomeOtherGuard")),
-	)}
+	)
 
-	ledger, standing := runAudit(t, peerID, node, 60)
+	ledger, standing := runAudit(t, peerID, corpus, peer, 60)
 	if standing != StandingTrusted {
 		t.Fatalf("expected trusted, got %s (%+v)", standing, ledger.Snapshot()[peerID])
 	}
@@ -177,12 +238,13 @@ func TestAudit_HonestModeratorWithDifferentModelStaysTrusted(t *testing.T) {
 // The audit must ban it.
 func TestAudit_AlwaysOkBotIsBanned(t *testing.T) {
 	priv, peerID := identity(t, "always-ok-bot")
-	node := peerNode{handler: StreamChallengeHandler(
+	corpus, _ := referenceCorpus(t, 8)
+	peer := enginePeer(
 		engineFunc(func(string) (bool, string, error) { return true, "looks fine to me", nil }),
 		NewResponseSigner(priv, peerID, domain.LLAMAGuard3),
-	)}
+	)
 
-	ledger, standing := runAudit(t, peerID, node, 60)
+	ledger, standing := runAudit(t, peerID, corpus, peer, 60)
 	if standing != StandingBanned {
 		t.Fatalf("expected banned, got %s (%+v)", standing, ledger.Snapshot()[peerID])
 	}
@@ -191,12 +253,13 @@ func TestAudit_AlwaysOkBotIsBanned(t *testing.T) {
 // The mirror-image bot: always FAIL, censoring everything.
 func TestAudit_AlwaysFailBotIsBanned(t *testing.T) {
 	priv, peerID := identity(t, "always-fail-bot")
-	node := peerNode{handler: StreamChallengeHandler(
-		engineFunc(func(string) (bool, string, error) { return false, "Violent Crimes", nil }),
+	corpus, _ := referenceCorpus(t, 8)
+	peer := enginePeer(
+		engineFunc(func(string) (bool, string, error) { return false, "flagged", nil }),
 		NewResponseSigner(priv, peerID, domain.LLAMAGuard3),
-	)}
+	)
 
-	_, standing := runAudit(t, peerID, node, 60)
+	_, standing := runAudit(t, peerID, corpus, peer, 60)
 	if standing != StandingBanned {
 		t.Fatalf("expected banned, got %s", standing)
 	}
@@ -205,13 +268,14 @@ func TestAudit_AlwaysFailBotIsBanned(t *testing.T) {
 // A coin-flipper (no real model, just guessing) must not pass as trusted.
 func TestAudit_CoinFlipperIsNotTrusted(t *testing.T) {
 	priv, peerID := identity(t, "coin-flipper")
+	corpus, _ := referenceCorpus(t, 8)
 	rng := rand.New(rand.NewSource(7))
-	node := peerNode{handler: StreamChallengeHandler(
+	peer := enginePeer(
 		engineFunc(func(string) (bool, string, error) { return rng.Intn(2) == 0, "", nil }),
 		NewResponseSigner(priv, peerID, domain.LLAMAGuard3),
-	)}
+	)
 
-	_, standing := runAudit(t, peerID, node, 80)
+	_, standing := runAudit(t, peerID, corpus, peer, 80)
 	if standing == StandingTrusted {
 		t.Fatal("a guessing peer must not reach trusted standing")
 	}
@@ -220,12 +284,13 @@ func TestAudit_CoinFlipperIsNotTrusted(t *testing.T) {
 // Too few answers is probation, not trust: fresh identities carry no weight.
 func TestAudit_SmallSampleStaysProbation(t *testing.T) {
 	priv, peerID := identity(t, "fresh-peer")
-	node := peerNode{handler: StreamChallengeHandler(
-		honestEngine(testRNG(), 0),
+	corpus, truth := referenceCorpus(t, 8)
+	peer := enginePeer(
+		honestEngine(truth, testRNG(), 0),
 		NewResponseSigner(priv, peerID, domain.LLAMAGuard3),
-	)}
+	)
 
-	_, standing := runAudit(t, peerID, node, minSample-1)
+	_, standing := runAudit(t, peerID, corpus, peer, minSample-1)
 	if standing != StandingProbation {
 		t.Fatalf("expected probation below the minimum sample, got %s", standing)
 	}
@@ -235,35 +300,35 @@ func TestAudit_SmallSampleStaysProbation(t *testing.T) {
 // challenge id are all invalid — and two invalids ban.
 func TestAudit_InvalidResponsesBan(t *testing.T) {
 	cases := map[string]ResponseSigner{
-		"unsigned": func(ev *ChallengeResponse) {
+		"unsigned": func(resp ChallengeResponse) ChallengeResponse {
 			_, id := identity(t, "victim-peer")
-			ev.ModeratorID = id // claims the identity, never signs
+			resp.ModeratorID = id // claims the identity, never signs
+			return resp
 		},
-		"foreign key": func(ev *ChallengeResponse) {
+		"foreign key": func(resp ChallengeResponse) ChallengeResponse {
 			impostor, _ := identity(t, "impostor")
 			_, id := identity(t, "victim-peer")
-			ev.ModeratorID = id
-			signWith(impostor, ev)
+			return resp.Signed(impostor, id, domain.LLAMAGuard3)
 		},
-		"rebound challenge": func(ev *ChallengeResponse) {
+		"rebound challenge": func(resp ChallengeResponse) ChallengeResponse {
 			priv, id := identity(t, "victim-peer")
-			ev.ModeratorID = id
-			ev.ChallengeID = "some-other-challenge"
-			signWith(priv, ev)
+			resp.ChallengeID = "some-other-challenge"
+			return resp.Signed(priv, id, domain.LLAMAGuard3)
 		},
-		"foreign responder id": func(ev *ChallengeResponse) {
+		"foreign responder id": func(resp ChallengeResponse) ChallengeResponse {
 			other, otherID := identity(t, "somebody-else")
-			ev.ModeratorID = otherID // valid signature, wrong peer
-			signWith(other, ev)
+			// valid signature, wrong peer
+			return resp.Signed(other, otherID, domain.LLAMAGuard3)
 		},
 	}
 
 	for name, signer := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, peerID := identity(t, "victim-peer")
-			node := peerNode{handler: StreamChallengeHandler(honestEngine(testRNG(), 0), signer)}
+			corpus, truth := referenceCorpus(t, 8)
+			peer := enginePeer(honestEngine(truth, testRNG(), 0), signer)
 
-			ledger, standing := runAudit(t, peerID, node, maxInvalid+1)
+			ledger, standing := runAudit(t, peerID, corpus, peer, maxInvalid+1)
 			if standing != StandingBanned {
 				t.Fatalf("expected banned, got %s (%+v)", standing, ledger.Snapshot()[peerID])
 			}
@@ -271,16 +336,15 @@ func TestAudit_InvalidResponsesBan(t *testing.T) {
 	}
 }
 
-func signWith(priv ed25519.PrivateKey, ev *ChallengeResponse) {
-	ev.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, ev.SigningBytes()))
-}
-
 // An unreachable peer is suspect, never banned: the network may be at fault.
 func TestAudit_UnreachablePeerIsSuspectNotBanned(t *testing.T) {
 	_, peerID := identity(t, "offline-peer")
-	node := peerNode{fail: errors.New("dial failed")}
+	corpus, _ := referenceCorpus(t, 8)
+	peer := answerFunc(func(string, Challenge) (ChallengeResponse, error) {
+		return ChallengeResponse{}, errors.New("dial failed")
+	})
 
-	ledger, standing := runAudit(t, peerID, node, minSample+5)
+	ledger, standing := runAudit(t, peerID, corpus, peer, minSample+5)
 	if standing != StandingSuspect {
 		t.Fatalf("expected suspect, got %s (%+v)", standing, ledger.Snapshot()[peerID])
 	}
@@ -290,12 +354,13 @@ func TestAudit_UnreachablePeerIsSuspectNotBanned(t *testing.T) {
 // engine's error must not be mistaken for a verdict.
 func TestAudit_EngineErrorCountsAsUnreachable(t *testing.T) {
 	priv, peerID := identity(t, "broken-engine-peer")
-	node := peerNode{handler: StreamChallengeHandler(
+	corpus, _ := referenceCorpus(t, 8)
+	peer := enginePeer(
 		engineFunc(func(string) (bool, string, error) { return false, "", errors.New("model not loaded") }),
 		NewResponseSigner(priv, peerID, domain.LLAMAGuard3),
-	)}
+	)
 
-	ledger, standing := runAudit(t, peerID, node, minSample+5)
+	ledger, standing := runAudit(t, peerID, corpus, peer, minSample+5)
 	rep := ledger.Snapshot()[peerID]
 	if rep.Correct != 0 || rep.Wrong != 0 {
 		t.Fatalf("an engine failure is not a verdict: %+v", rep)
@@ -307,8 +372,9 @@ func TestAudit_EngineErrorCountsAsUnreachable(t *testing.T) {
 
 func TestAuditor_SkipsSelfAndCooldownPeers(t *testing.T) {
 	ledger := NewLedger()
-	node := peerNode{handler: StreamChallengeHandler(honestEngine(testRNG(), 0), nil)}
-	a := NewAuditor("auditor-self", node, ledger, testRNG())
+	corpus, truth := referenceCorpus(t, 8)
+	peer := enginePeer(honestEngine(truth, testRNG(), 0), nil)
+	a := NewAuditor("auditor-self", peer, ledger, corpus, testRNG())
 
 	if res := a.ChallengeRandomPeer([]string{"auditor-self"}); res != nil {
 		t.Fatalf("must never audit itself, got %+v", res)
@@ -330,16 +396,17 @@ func TestAuditor_SkipsSelfAndCooldownPeers(t *testing.T) {
 // match its text is rejected rather than answered.
 func TestChallengeHandler_RejectsTamperedBinding(t *testing.T) {
 	priv, peerID := identity(t, "responder")
-	h := StreamChallengeHandler(honestEngine(testRNG(), 0), NewResponseSigner(priv, peerID, domain.LLAMAGuard3))
+	corpus, truth := referenceCorpus(t, 8)
+	h := StreamChallengeHandler(honestEngine(truth, testRNG(), 0), NewResponseSigner(priv, peerID, domain.LLAMAGuard3))
 
-	ch, _ := BuildChallenge(testRNG())
+	ch, _, _ := BuildChallenge(testRNG(), corpus)
 	ch.Text = "totally different text"
 	buf, _ := json.Marshal(ch)
 	if _, err := h(buf, nil); !errors.Is(err, ErrChallengeHashMismatch) {
 		t.Fatalf("expected ErrChallengeHashMismatch, got %v", err)
 	}
 
-	ch2, _ := BuildChallenge(testRNG())
+	ch2, _, _ := BuildChallenge(testRNG(), corpus)
 	ch2.Text = ""
 	ch2.ContentHash = ContentHash("")
 	buf2, _ := json.Marshal(ch2)
@@ -369,11 +436,11 @@ func TestChallengeResponse_SigningBytesCoverFields(t *testing.T) {
 		"moderator": func(e *ChallengeResponse) { e.ModeratorID = "peer-2" },
 		"time":      func(e *ChallengeResponse) { e.TimeAt = e.TimeAt.Add(1) },
 	}
-	baseBytes := string(base.SigningBytes())
+	baseBytes := string(base.signingBytes())
 	for name, mutate := range mutations {
 		ev := base
 		mutate(&ev)
-		if string(ev.SigningBytes()) == baseBytes {
+		if string(ev.signingBytes()) == baseBytes {
 			t.Fatalf("mutating %s must change the signing bytes", name)
 		}
 	}
