@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package moderator
+package round
 
 import (
 	"sync"
@@ -40,22 +40,23 @@ const (
 	// finalizedTTL guards against gossip re-deliveries reopening a
 	// finished round.
 	finalizedTTL = time.Hour
-	// seenModTTL bounds the passive moderator-population estimate used
+	// seenModTTL bounds the passive participant-population estimate used
 	// only to scale volunteer delays; no trust decision reads it.
 	seenModTTL = 24 * time.Hour
 )
 
-// rounds is the moderator's collection of live vote rounds. It owns what
+// Registry is a participant's collection of live vote rounds. It owns what
 // spans rounds — which ones are still open, which are already spent, and
-// how many moderators are out there — and hands each round the one number
-// it cannot derive alone: when this node's turn to vote comes up.
+// how many participants are out there — and hands each round the one number
+// it cannot derive alone: when this participant's turn to vote comes up.
 //
-// Locking: rounds.mx may be held while calling into a round, never the
+// Locking: Registry.mx may be held while calling into a round, never the
 // other way around. A round calls back (onDone) without holding its own
 // lock, so the two never deadlock.
-type roundRegistry struct {
-	host     roundHost
-	schedule roundSchedule
+type Registry struct {
+	self     string
+	member   Participant
+	schedule Schedule
 
 	mx        sync.Mutex
 	active    map[string]*round
@@ -63,9 +64,10 @@ type roundRegistry struct {
 	seenMods  map[string]time.Time
 }
 
-func newRoundRegistry(host roundHost, schedule roundSchedule) *roundRegistry {
-	return &roundRegistry{
-		host:      host,
+func NewRegistry(self string, member Participant, schedule Schedule) *Registry {
+	return &Registry{
+		self:      self,
+		member:    member,
 		schedule:  schedule,
 		active:    make(map[string]*round),
 		finalized: make(map[string]time.Time),
@@ -73,9 +75,9 @@ func newRoundRegistry(host roundHost, schedule roundSchedule) *roundRegistry {
 	}
 }
 
-// open starts (or joins) the round for a report and schedules this node's
-// vote at its deterministic turn.
-func (rs *roundRegistry) open(rep event.ReportEvent) {
+// Open starts (or joins) the round for a subject and schedules this
+// participant's vote at its deterministic turn.
+func (rs *Registry) Open(rep event.ReportEvent) {
 	id := rep.ReportID()
 
 	rs.mx.Lock()
@@ -90,9 +92,9 @@ func (rs *roundRegistry) open(rep event.ReportEvent) {
 	r.setReport(rep, delay)
 }
 
-// addVote routes an incoming vote to its round, opening one if the vote
-// arrived before the report did.
-func (rs *roundRegistry) addVote(v vote.Event) {
+// AddVote routes an incoming ballot to its round, opening one if the ballot
+// arrived before the subject did.
+func (rs *Registry) AddVote(v vote.Event) {
 	rs.mx.Lock()
 	rs.seenMods[v.ModeratorID] = time.Now()
 	if rs.isFinalizedLocked(v.ReportID) {
@@ -105,9 +107,9 @@ func (rs *roundRegistry) addVote(v vote.Event) {
 	r.addVote(v)
 }
 
-// markFinalized records that some moderator finalized the round and drops
-// this node's copy, cancelling its takeover timer.
-func (rs *roundRegistry) markFinalized(id, by string) {
+// MarkFinalized records that some participant carried the round's decision
+// and drops this copy, cancelling its takeover timer.
+func (rs *Registry) MarkFinalized(id, by string) {
 	rs.mx.Lock()
 	rs.seenMods[by] = time.Now()
 	if rs.isFinalizedLocked(id) {
@@ -122,12 +124,12 @@ func (rs *roundRegistry) markFinalized(id, by string) {
 	if ok {
 		r.stop()
 	}
-	log.Infof("moderator: round %s finalized by %s", id, by)
+	log.Infof("round %s decided by %s", id, by)
 }
 
 // forget is the round's own completion callback: it is done with itself,
 // so drop it and remember the id as spent.
-func (rs *roundRegistry) forget(id string) {
+func (rs *Registry) forget(id string) {
 	rs.mx.Lock()
 	defer rs.mx.Unlock()
 	delete(rs.active, id)
@@ -139,7 +141,14 @@ func (rs *roundRegistry) forget(id string) {
 	rs.finalized[id] = time.Now()
 }
 
-func (rs *roundRegistry) stopAll() {
+// Len reports how many rounds are still live.
+func (rs *Registry) Len() int {
+	rs.mx.Lock()
+	defer rs.mx.Unlock()
+	return len(rs.active)
+}
+
+func (rs *Registry) StopAll() {
 	rs.mx.Lock()
 	stopping := make([]*round, 0, len(rs.active))
 	for id, r := range rs.active {
@@ -153,16 +162,16 @@ func (rs *roundRegistry) stopAll() {
 	}
 }
 
-func (rs *roundRegistry) ensureLocked(id string) *round {
+func (rs *Registry) ensureLocked(id string) *round {
 	r, ok := rs.active[id]
 	if !ok {
-		r = newRound(id, rs.host, rs.schedule, rs.forget)
+		r = newRound(id, rs.self, rs.member, rs.schedule, rs.forget)
 		rs.active[id] = r
 	}
 	return r
 }
 
-func (rs *roundRegistry) isFinalizedLocked(id string) bool {
+func (rs *Registry) isFinalizedLocked(id string) bool {
 	ts, ok := rs.finalized[id]
 	if !ok {
 		return false
@@ -174,18 +183,18 @@ func (rs *roundRegistry) isFinalizedLocked(id string) bool {
 	return true
 }
 
-// voteDelayLocked maps this moderator's deterministic rank for the round
+// voteDelayLocked maps this participant's deterministic rank for the round
 // onto a start delay: the estimated top-quorumTarget ranks start at once,
 // everyone below waits in voteDelayStep increments and will usually find
 // the round already served when their turn comes.
-func (rs *roundRegistry) voteDelayLocked(id string) time.Duration {
+func (rs *Registry) voteDelayLocked(id string) time.Duration {
 	now := time.Now()
 	for k, ts := range rs.seenMods {
 		if now.Sub(ts) > seenModTTL {
 			delete(rs.seenMods, k)
 		}
 	}
-	self := rs.host.selfID()
+	self := rs.self
 	population := len(rs.seenMods)
 	if _, ok := rs.seenMods[self]; !ok {
 		population++
@@ -195,5 +204,5 @@ func (rs *roundRegistry) voteDelayLocked(id string) time.Duration {
 	if rank < quorumTarget {
 		return 0
 	}
-	return time.Duration(rank-quorumTarget+1) * rs.schedule.step
+	return time.Duration(rank-quorumTarget+1) * rs.schedule.Step
 }

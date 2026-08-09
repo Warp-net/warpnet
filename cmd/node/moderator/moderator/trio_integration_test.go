@@ -10,6 +10,7 @@ import (
 
 	memberpubsub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	modpubsub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -108,7 +109,9 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 		require.NoError(t, err)
 		// Short window so the round closes inside the test; no volunteer
 		// suppression or takeover is exercised here.
-		m.rounds.schedule = roundSchedule{window: 5 * time.Second, failover: time.Hour, step: time.Hour}
+		m.rounds = round.NewRegistry(m.selfID(), m, round.Schedule{
+			Window: 5 * time.Second, Failover: time.Hour, Step: time.Hour,
+		})
 		require.NoError(t, m.Start())
 		t.Cleanup(m.Close)
 
@@ -198,10 +201,7 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 	// takeovers may remain.
 	require.Eventually(t, func() bool {
 		for _, m := range moderators {
-			m.rounds.mx.Lock()
-			pending := len(m.rounds.active)
-			m.rounds.mx.Unlock()
-			if pending != 0 {
+			if m.rounds.Len() != 0 {
 				return false
 			}
 		}

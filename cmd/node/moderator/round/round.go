@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package moderator
+package round
 
 import (
 	"sync"
@@ -55,46 +55,47 @@ const (
 	quorumTarget = 3
 )
 
-// roundSchedule carries a round's clock settings as state, so tests can
-// stretch them without turning the constants above into mutable globals.
-type roundSchedule struct {
-	window   time.Duration
-	failover time.Duration
-	step     time.Duration
+// Schedule carries a round's clock settings as state, so callers (and
+// tests) can stretch them without turning the constants above into mutable
+// globals.
+type Schedule struct {
+	Window   time.Duration
+	Failover time.Duration
+	Step     time.Duration
 }
 
-func defaultSchedule() roundSchedule {
-	return roundSchedule{window: voteWindow, failover: failoverDelay, step: voteDelayStep}
+func DefaultSchedule() Schedule {
+	return Schedule{Window: voteWindow, Failover: failoverDelay, Step: voteDelayStep}
 }
 
-// roundHost is everything a round needs from the moderator running it.
-// The round owns the protocol (who votes, when, who finalizes); the host
-// owns the side effects (running the engine, gossip, isolation).
-type roundHost interface {
-	// selfID is the host moderator's peer id, the round's own identity
-	// among the voters.
-	selfID() string
-	// assessReport runs the moderation engine over the reported object.
-	// The bool is false when the report is unusable and no vote is due.
-	assessReport(rep event.ReportEvent) (verdict, bool, error)
-	// publishVote broadcasts a vote (or a Final announcement) to the
-	// other moderators.
-	publishVote(v vote.Event) error
-	// finalizeRound delivers the agreed verdict: reporter notification
-	// plus, on FAIL, the isolation broadcast.
-	finalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID)
+// Participant is the local voter a round acts for. This package owns the
+// voting protocol — who votes, when, who carries the decision — and knows
+// nothing of what a ballot means or what happens once a round decides:
+// everything domain-specific sits behind this interface, implemented by
+// the caller.
+type Participant interface {
+	// Ballot returns this participant's vote on the subject. The bool is
+	// false to abstain, which happens when the subject cannot be judged.
+	Ballot(reportID string, subject event.ReportEvent) (vote.Event, bool, error)
+	// Broadcast publishes a ballot (or a Final announcement) to the other
+	// participants.
+	Broadcast(v vote.Event) error
+	// Decided is invoked exactly once per round, on the single
+	// participant that carries the decision.
+	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
 }
 
-// round is one report's vote round, self-contained: it collects votes,
-// decides whether this node should vote at all, tallies at the window
-// close, and either finalizes (as chair) or stands by to take over. It
-// knows nothing about the moderator's internals, the network population or
-// the other rounds — it reaches the outside world only through roundHost
-// and reports its own end through onDone.
+// round is one subject's vote round, self-contained: it collects ballots,
+// decides whether this participant should vote at all, tallies at the
+// window close, and either carries the decision (as chair) or stands by to
+// take over. It knows nothing about the participant's internals, the
+// population or the other rounds — it reaches the outside world only
+// through Participant and reports its own end through onDone.
 type round struct {
 	id       string
-	host     roundHost
-	schedule roundSchedule
+	self     string
+	member   Participant
+	schedule Schedule
 	onDone   func(id string)
 
 	mx         sync.Mutex
@@ -111,22 +112,23 @@ type round struct {
 
 // pendingOutcome is a tallied round outcome parked on a backup voter.
 type pendingOutcome struct {
-	report event.ReportEvent
-	agg    verdict
-	voters []domain.ID
+	subject event.ReportEvent
+	outcome vote.Event
+	voters  []domain.ID
 }
 
 // newRound starts a round: the tally timer runs from creation, because a
 // round may be opened by an incoming vote before this node sees the report.
-func newRound(id string, host roundHost, schedule roundSchedule, onDone func(id string)) *round {
+func newRound(id, self string, member Participant, schedule Schedule, onDone func(id string)) *round {
 	r := &round{
 		id:       id,
-		host:     host,
+		self:     self,
+		member:   member,
 		schedule: schedule,
 		onDone:   onDone,
 		votes:    make(map[string]vote.Event),
 	}
-	r.tallyTimer = time.AfterFunc(schedule.window, r.tally)
+	r.tallyTimer = time.AfterFunc(schedule.Window, r.tally)
 	return r
 }
 
@@ -184,30 +186,21 @@ func (r *round) castVote() {
 	rep := *r.report
 	r.mx.Unlock()
 
-	assessed, ok, err := r.host.assessReport(rep)
+	v, ok, err := r.member.Ballot(r.id, rep)
 	if err != nil {
-		log.Errorf("moderator: round %s: assess report: %v", r.id, err)
+		log.Errorf("round %s: ballot: %v", r.id, err)
 		return
 	}
 	if !ok {
 		return
 	}
 
-	v := vote.Event{
-		ReportID:    r.id,
-		Type:        rep.Type,
-		Result:      assessed.result,
-		Reason:      assessed.reason,
-		UserID:      assessed.userID,
-		ObjectID:    assessed.objectID,
-		ModeratorID: r.host.selfID(),
-	}
-	// Count the own vote before publishing: gossip loopback delivery is
-	// not guaranteed (addVote dedups if it does loop back), and the vote
-	// must count even when the publish fails.
+	// Count the own ballot before broadcasting: loopback delivery is not
+	// guaranteed (addVote dedups if it does loop back), and the ballot
+	// must count even when the broadcast fails.
 	r.addVote(v)
-	if err := r.host.publishVote(v); err != nil {
-		log.Errorf("moderator: round %s: publish vote: %v", r.id, err)
+	if err := r.member.Broadcast(v); err != nil {
+		log.Errorf("round %s: broadcast ballot: %v", r.id, err)
 	}
 }
 
@@ -231,14 +224,14 @@ func (r *round) tally() {
 	// The takeover chain ranks over the full voter order, pre-trim: a
 	// voter dropped by the odd-count trim still holds everything needed
 	// to finalize the kept tally if the chair dies.
-	myRank := rankOf(ordered, r.host.selfID())
+	myRank := rankOf(ordered, r.self)
 
 	// A voter always holds the report (voting requires it); a self-named
 	// vote without one means someone forged votes for a round this node
 	// never saw. Both drop out of the takeover chain like a bystander.
 	if len(kept) == 0 || myRank < 0 || rep == nil {
 		if myRank >= 0 && rep == nil {
-			log.Warnf("moderator: round %s: voter without report, skipping finalize", r.id)
+			log.Warnf("round %s: voter without subject, skipping decision", r.id)
 		}
 		r.closeLocked()
 		r.mx.Unlock()
@@ -246,15 +239,15 @@ func (r *round) tally() {
 		return
 	}
 
-	agg, voters := aggregate(kept)
+	outcome, voters := aggregate(kept)
 	chair := kept[0].ModeratorID
 
 	if myRank > 0 {
-		r.pending = &pendingOutcome{report: *rep, agg: agg, voters: voters}
-		r.finalTimer = time.AfterFunc(time.Duration(myRank)*r.schedule.failover, r.takeOver)
+		r.pending = &pendingOutcome{subject: *rep, outcome: outcome, voters: voters}
+		r.finalTimer = time.AfterFunc(time.Duration(myRank)*r.schedule.Failover, r.takeOver)
 		r.mx.Unlock()
-		log.Infof("moderator: round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
-			r.id, len(kept), bool(agg.result), chair, myRank)
+		log.Infof("round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
+			r.id, len(kept), bool(outcome.Result), chair, myRank)
 		return
 	}
 
@@ -262,9 +255,9 @@ func (r *round) tally() {
 	r.mx.Unlock()
 	r.onDone(r.id)
 
-	log.Infof("moderator: round %s closed votes=%d result=%t chair=%s",
-		r.id, len(kept), bool(agg.result), chair)
-	r.finalize(*rep, agg, voters)
+	log.Infof("round %s closed votes=%d result=%t chair=%s",
+		r.id, len(kept), bool(outcome.Result), chair)
+	r.decide(*rep, outcome, voters)
 }
 
 // takeOver fires on a backup voter when its slot elapses with no Final
@@ -281,26 +274,21 @@ func (r *round) takeOver() {
 	r.mx.Unlock()
 	r.onDone(r.id)
 
-	log.Warnf("moderator: round %s: chair stayed silent, taking over finalization", r.id)
-	r.finalize(p.report, p.agg, p.voters)
+	log.Warnf("round %s: chair stayed silent, taking over the decision", r.id)
+	r.decide(p.subject, p.outcome, p.voters)
 }
 
-// finalize delivers the verdict and then announces the round finished, so
-// the other voters cancel their takeover timers.
-func (r *round) finalize(rep event.ReportEvent, agg verdict, voters []domain.ID) {
-	r.host.finalizeRound(rep, agg, voters)
+// decide hands the outcome to the participant and then announces the round
+// finished, so the other voters cancel their takeover timers.
+func (r *round) decide(subject event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+	r.member.Decided(subject, outcome, voters)
 
-	final := vote.Event{
-		ReportID:    r.id,
-		Type:        rep.Type,
-		Result:      agg.result,
-		Reason:      agg.reason,
-		UserID:      agg.userID,
-		ObjectID:    agg.objectID,
-		ModeratorID: r.host.selfID(),
-		Final:       true,
-	}
-	if err := r.host.publishVote(final); err != nil {
-		log.Errorf("moderator: round %s: publish final: %v", r.id, err)
+	final := outcome
+	final.ReportID = r.id
+	final.Type = subject.Type
+	final.ModeratorID = r.self
+	final.Final = true
+	if err := r.member.Broadcast(final); err != nil {
+		log.Errorf("round %s: broadcast final: %v", r.id, err)
 	}
 }

@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package moderator
+package round
 
 import (
 	"crypto/sha256"
@@ -36,12 +36,12 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 )
 
-// Pure tally math: no state, no I/O. Every moderator runs these over the
-// same votes and must reach the same answer, which is what lets the round
+// Pure tally math: no state, no I/O. Every participant runs these over the
+// same ballots and must reach the same answer, which is what lets a round
 // pick a chair and a takeover order without exchanging a single message.
 
-// pairHash orders (round, moderator) pairs. It drives the volunteer delay,
-// the chair choice and the odd-count trim.
+// pairHash orders (round, participant) pairs. It drives the volunteer
+// delay, the chair choice and the odd-count trim.
 func pairHash(reportID, moderatorID string) uint64 {
 	h := sha256.Sum256([]byte(reportID + "|" + moderatorID))
 	return binary.BigEndian.Uint64(h[:8])
@@ -73,8 +73,8 @@ func keptVotes(id string, votes map[string]vote.Event) []vote.Event {
 	return trimEven(sortedVotes(id, votes))
 }
 
-// rankOf reports a moderator's position in the ordered votes, or -1 when it
-// did not vote.
+// rankOf reports a participant's position in the ordered ballots, or -1
+// when it did not vote.
 func rankOf(ordered []vote.Event, moderatorID string) int {
 	for i, v := range ordered {
 		if v.ModeratorID == moderatorID {
@@ -84,10 +84,10 @@ func rankOf(ordered []vote.Event, moderatorID string) int {
 	return -1
 }
 
-// aggregate reduces the kept votes to the round verdict: FAIL on strict
-// majority, with the details (reason, ids) taken from the lowest-ranked
-// vote of the winning side so every moderator aggregates identically.
-func aggregate(kept []vote.Event) (verdict, []domain.ID) {
+// aggregate reduces the kept ballots to the round outcome: FAIL on strict
+// majority, returning the lowest-ranked ballot of the winning side so every
+// participant aggregates identically.
+func aggregate(kept []vote.Event) (vote.Event, []domain.ID) {
 	failCount := 0
 	for _, v := range kept {
 		if !bool(v.Result) {
@@ -106,8 +106,8 @@ func aggregate(kept []vote.Event) (verdict, []domain.ID) {
 
 	for _, v := range kept {
 		if v.Result == majority {
-			return verdict{result: majority, reason: v.Reason, objectID: v.ObjectID, userID: v.UserID}, voters
+			return v, voters
 		}
 	}
-	return verdict{result: majority}, voters
+	return vote.Event{Result: majority}, voters
 }

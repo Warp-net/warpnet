@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/isolation"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -113,7 +114,7 @@ type Moderator struct {
 	privKey   ed25519.PrivateKey
 
 	retrier retrier.Retrier
-	rounds  *roundRegistry
+	rounds  *round.Registry
 
 	isClosed *atomic.Bool
 }
@@ -136,7 +137,7 @@ func NewModerator(
 		isClosed: new(atomic.Bool),
 	}
 	m.isolation = isolation.NewIsolationProtocol(pub, privKey)
-	m.rounds = newRoundRegistry(m, defaultSchedule())
+	m.rounds = round.NewRegistry(m.selfID(), m, round.DefaultSchedule())
 	return m, nil
 }
 
@@ -168,7 +169,7 @@ func (m *Moderator) Start() error {
 
 func (m *Moderator) Close() {
 	m.isClosed.Store(true)
-	m.rounds.stopAll()
+	m.rounds.StopAll()
 
 	if engine != nil {
 		engine.Close()
@@ -202,7 +203,7 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 		return nil
 	}
 
-	m.rounds.open(ev)
+	m.rounds.Open(ev)
 	return nil
 }
 
@@ -216,33 +217,45 @@ func (m *Moderator) handleVote(ev vote.Event) error {
 		return nil
 	}
 	if ev.Final {
-		m.rounds.markFinalized(ev.ReportID, ev.ModeratorID)
+		m.rounds.MarkFinalized(ev.ReportID, ev.ModeratorID)
 		return nil
 	}
-	m.rounds.addVote(ev)
+	m.rounds.AddVote(ev)
 	return nil
 }
 
-// selfID implements roundHost.
 func (m *Moderator) selfID() string { return m.node.ID().String() }
 
-// publishVote implements roundHost.
-func (m *Moderator) publishVote(vote vote.Event) error {
-	return m.votes.PublishVote(vote)
+// Broadcast implements round.Participant.
+func (m *Moderator) Broadcast(v vote.Event) error {
+	return m.votes.PublishVote(v)
 }
 
-// AssessReport implements roundHost: it produces this moderator's own vote
-// on a report. The bool is false when the report is unusable and no vote
-// should be cast at all.
-func (m *Moderator) assessReport(ev event.ReportEvent) (verdict, bool, error) {
-	switch ev.Type {
+// Ballot implements round.Participant: it runs the engine over the reported
+// object and returns this moderator's finished ballot. The bool is false
+// when the report is unusable and no vote should be cast at all.
+func (m *Moderator) Ballot(reportID string, rep event.ReportEvent) (vote.Event, bool, error) {
+	var (
+		ballot vote.Event
+		ok     bool
+		err    error
+	)
+	switch rep.Type {
 	case domain.ModerationTweetType:
-		return m.assessTweetReport(ev)
+		ballot, ok, err = m.assessTweetReport(rep)
 	case domain.ModerationUserType:
-		return m.assessUserReport(ev)
+		ballot, ok, err = m.assessUserReport(rep)
 	default:
-		return verdict{}, false, nil
+		return vote.Event{}, false, nil
 	}
+	if err != nil || !ok {
+		return vote.Event{}, false, err
+	}
+
+	ballot.ReportID = reportID
+	ballot.Type = rep.Type
+	ballot.ModeratorID = m.selfID()
+	return ballot, true, nil
 }
 
 // notifyReporter re-sends the verdict to the reporter's node on the same
@@ -250,25 +263,18 @@ func (m *Moderator) assessReport(ev event.ReportEvent) (verdict, bool, error) {
 // Unlike the followers broadcast (FAIL-only, shadow-ban), the reporter is
 // told about both outcomes — silence on an OK verdict reads as "the report
 // was lost". Best-effort: a delivery failure must not abort moderation.
-func (m *Moderator) notifyReporter(
-	rep event.ReportEvent,
-	result domain.ModerationResult,
-	reason *string,
-	objectID *domain.ID,
-	targetUserID domain.ID,
-	voters []domain.ID,
-) {
+func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, voters []domain.ID) {
 	if rep.ReporterNodeID == "" || rep.ReporterID == "" {
 		return
 	}
 	verdictEvent := event.ModerationVerdictEvent{
 		Type:        rep.Type,
-		Verdict:     result,
-		Reason:      reason,
+		Verdict:     outcome.Result,
+		Reason:      outcome.Reason,
 		Model:       supportedModel.Model,
-		UserID:      targetUserID,
-		ObjectID:    objectID,
-		ModeratorID: m.node.ID().String(),
+		UserID:      outcome.UserID,
+		ObjectID:    outcome.ObjectID,
+		ModeratorID: m.selfID(),
 		ReporterID:  rep.ReporterID,
 		Voters:      voters,
 	}
@@ -283,19 +289,11 @@ func (m *Moderator) notifyReporter(
 	}
 }
 
-// verdict is one moderator's assessment of a report, before the round tally.
-type verdict struct {
-	result   domain.ModerationResult
-	reason   *string
-	objectID *domain.ID
-	userID   domain.ID
-}
-
-// unavailableVerdict is the vote for content that could not be reviewed:
-// an OK (no-op) result with a sentinel reason the reporter recognises.
-func unavailableVerdict(objectID *domain.ID, userID domain.ID) verdict {
+// unavailableVote is the ballot for content that could not be reviewed: an
+// OK (no-op) result with a sentinel reason the reporter recognises.
+func unavailableVote(objectID *domain.ID, userID domain.ID) vote.Event {
 	reason := event.ModerationReasonUnavailable
-	return verdict{result: domain.OK, reason: &reason, objectID: objectID, userID: userID}
+	return vote.Event{Result: domain.OK, Reason: &reason, ObjectID: objectID, UserID: userID}
 }
 
 // fetch pulls an object off the target node through the retrier. An
@@ -320,10 +318,10 @@ func (m *Moderator) fetch(nodeID string, route stream.WarpRoute, payload any) ([
 	return data, err
 }
 
-func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, error) {
+func (m *Moderator) assessTweetReport(ev event.ReportEvent) (vote.Event, bool, error) {
 	if ev.ObjectID == nil || *ev.ObjectID == "" {
 		log.Warn("moderator: tweet report missing object_id")
-		return verdict{}, false, nil
+		return vote.Event{}, false, nil
 	}
 
 	data, err := m.fetch(
@@ -333,47 +331,47 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (verdict, bool, erro
 	)
 	if err != nil {
 		log.Warnf("moderator: fetch tweet %s from node %s failed: %v", *ev.ObjectID, ev.TargetNodeID, err)
-		return unavailableVerdict(ev.ObjectID, ev.TargetUserID), true, nil
+		return unavailableVote(ev.ObjectID, ev.TargetUserID), true, nil
 	}
 
 	var tweet domain.Tweet
 	if err := json.Unmarshal(data, &tweet); err != nil {
-		return verdict{}, false, fmt.Errorf("moderator: unmarshal tweet: %w", err)
+		return vote.Event{}, false, fmt.Errorf("moderator: unmarshal tweet: %w", err)
 	}
 	if tweet.Id == "" {
 		log.Warnf("moderator: tweet %s not found on node %s", *ev.ObjectID, ev.TargetNodeID)
-		return unavailableVerdict(ev.ObjectID, ev.TargetUserID), true, nil
+		return unavailableVote(ev.ObjectID, ev.TargetUserID), true, nil
 	}
 	if tweet.Text == "" {
 		log.Infof("moderator: tweet %s has no text to moderate", tweet.Id)
-		return unavailableVerdict(&tweet.Id, tweet.UserId), true, nil
+		return unavailableVote(&tweet.Id, tweet.UserId), true, nil
 	}
 
 	if tweet.Moderation != nil {
 		log.Infof("moderator: tweet %s already moderated ok=%t, reusing verdict",
 			tweet.Id, bool(tweet.Moderation.IsOk))
-		return verdict{
-			result:   tweet.Moderation.IsOk,
-			reason:   tweet.Moderation.Reason,
-			objectID: &tweet.Id,
-			userID:   tweet.UserId,
+		return vote.Event{
+			Result:   tweet.Moderation.IsOk,
+			Reason:   tweet.Moderation.Reason,
+			ObjectID: &tweet.Id,
+			UserID:   tweet.UserId,
 		}, true, nil
 	}
 
 	ok, reason, err := engine.Moderate(tweet.Text)
 	if err != nil {
-		return verdict{}, false, fmt.Errorf("moderator: process tweet: %w", err)
+		return vote.Event{}, false, fmt.Errorf("moderator: process tweet: %w", err)
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
-	return verdict{
-		result:   domain.ModerationResult(ok),
-		reason:   &reason,
-		objectID: &tweet.Id,
-		userID:   tweet.UserId,
+	return vote.Event{
+		Result:   domain.ModerationResult(ok),
+		Reason:   &reason,
+		ObjectID: &tweet.Id,
+		UserID:   tweet.UserId,
 	}, true, nil
 }
 
-func (m *Moderator) assessUserReport(ev event.ReportEvent) (verdict, bool, error) {
+func (m *Moderator) assessUserReport(ev event.ReportEvent) (vote.Event, bool, error) {
 	data, err := m.fetch(
 		ev.TargetNodeID,
 		event.PUBLIC_GET_USER,
@@ -381,68 +379,69 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (verdict, bool, error
 	)
 	if err != nil {
 		log.Warnf("moderator: fetch user %s from node %s failed: %v", ev.TargetUserID, ev.TargetNodeID, err)
-		return unavailableVerdict(nil, ev.TargetUserID), true, nil
+		return unavailableVote(nil, ev.TargetUserID), true, nil
 	}
 
 	var user domain.User
 	if err := json.Unmarshal(data, &user); err != nil {
-		return verdict{}, false, fmt.Errorf("moderator: unmarshal user: %w", err)
+		return vote.Event{}, false, fmt.Errorf("moderator: unmarshal user: %w", err)
 	}
 	if user.Id == "" {
 		log.Warnf("moderator: user %s not found on node %s", ev.TargetUserID, ev.TargetNodeID)
-		return unavailableVerdict(nil, ev.TargetUserID), true, nil
+		return unavailableVote(nil, ev.TargetUserID), true, nil
 	}
 
 	text := buildProfileText(user)
 	if text == "" {
 		log.Warn("moderator: empty profile text")
-		return unavailableVerdict(nil, user.Id), true, nil
+		return unavailableVote(nil, user.Id), true, nil
 	}
 
 	ok, reason, err := engine.Moderate(text)
 	if err != nil {
-		return verdict{}, false, fmt.Errorf("moderator: process user: %w", err)
+		return vote.Event{}, false, fmt.Errorf("moderator: process user: %w", err)
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
-	return verdict{result: domain.ModerationResult(ok), reason: &reason, userID: user.Id}, true, nil
+	return vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id}, true, nil
 }
 
-// finalizeRound implements roundHost: it delivers the agreed verdict to the
-// reporter and, on FAIL, runs the isolation broadcast. Shadow-ban: only bad
-// verdicts go on the followers broadcast. Called by the round that decided
-// this node finalizes it — as chair, or as the backup that took over.
-func (m *Moderator) finalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID) {
-	m.notifyReporter(rep, agg.result, agg.reason, agg.objectID, agg.userID, voters)
+// Decided implements round.Participant: it delivers the agreed verdict to
+// the reporter and, on FAIL, runs the isolation broadcast. Shadow-ban: only
+// bad verdicts go on the followers broadcast. Called by the round that
+// picked this node to carry the decision — as chair, or as the backup that
+// took over.
+func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+	m.notifyReporter(rep, outcome, voters)
 
-	if bool(agg.result) {
+	if bool(outcome.Result) {
 		return
 	}
 
 	switch rep.Type {
 	case domain.ModerationTweetType:
-		if agg.objectID == nil {
+		if outcome.ObjectID == nil {
 			return
 		}
 		m.isolation.IsolateTweet(
-			&domain.Tweet{Id: *agg.objectID, UserId: agg.userID},
+			&domain.Tweet{Id: *outcome.ObjectID, UserId: outcome.UserID},
 			&domain.TweetModeration{
-				ModeratorID: m.node.ID().String(),
+				ModeratorID: m.selfID(),
 				Model:       supportedModel.Model,
 				IsOk:        domain.FAIL,
-				Reason:      agg.reason,
+				Reason:      outcome.Reason,
 				TimeAt:      time.Now(),
 			},
 			voters,
 		)
 	case domain.ModerationUserType:
 		m.isolation.IsolateUser(
-			m.node.ID().String(),
-			&domain.User{Id: agg.userID},
+			m.selfID(),
+			&domain.User{Id: outcome.UserID},
 			&domain.UserModeration{
 				IsModerated: true,
 				Model:       supportedModel.Model,
 				IsOk:        false,
-				Reason:      agg.reason,
+				Reason:      outcome.Reason,
 				TimeAt:      time.Now(),
 			},
 			voters,
