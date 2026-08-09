@@ -8,6 +8,7 @@ vi.mock('@/service/service', () => ({
     consumePendingDeepLink: vi.fn(),
     isDesktopNode: vi.fn(),
     selectNetwork: vi.fn(),
+    network: vi.fn(),
   },
 }));
 
@@ -56,6 +57,7 @@ beforeEach(() => {
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
   warpnetService.isDesktopNode.mockReturnValue(true);
   warpnetService.selectNetwork.mockResolvedValue(undefined);
+  warpnetService.network.mockResolvedValue('warpnet');
   sessionStorage.clear();
 });
 
@@ -147,7 +149,6 @@ describe('Root.vue', () => {
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
 
     await waitFor(() => {
-      expect(warpnetService.selectNetwork).toHaveBeenCalledWith('warpnet');
       expect(warpnetService.signInUser).toHaveBeenCalledWith({
         username: 'alice',
         password: STRONG_PASSWORD,
@@ -156,33 +157,21 @@ describe('Root.vue', () => {
     });
   });
 
-  it('passes the network picked on the landing page to selectNetwork', async () => {
+  it('persists the picked network and blocks sign-up until a restart', async () => {
     renderRoot({ firstRun: true });
 
     await fireEvent.update(await screen.findByLabelText(/Network/i), 'testnet');
 
-    await fireEvent.click(
-      screen.getByRole('button', { name: /^Sign up$/ })
-    );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
-    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    const checkboxes = await screen.findAllByRole('checkbox');
-    for (const cb of checkboxes) await fireEvent.click(cb);
-    await fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-    await fireEvent.update(await screen.findByLabelText('Password'), STRONG_PASSWORD);
-    await fireEvent.update(
-      await screen.findByLabelText('Confirm password'),
-      STRONG_PASSWORD
-    );
-    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    await screen.findByText(/Step 4 of 4/i);
-    const signUpButtons = screen.getAllByRole('button', { name: /^Sign up$/ });
-    await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
-
     await waitFor(() => {
       expect(warpnetService.selectNetwork).toHaveBeenCalledWith('testnet');
-      expect(warpnetService.signInUser).toHaveBeenCalled();
     });
+    expect(screen.getByRole('alert')).toHaveTextContent(/Restart Warpnet/i);
+    expect(screen.getByRole('button', { name: /^Sign up$/ })).toBeDisabled();
+
+    // Switching back to the active network needs no restart.
+    await fireEvent.update(screen.getByLabelText(/Network/i), 'warpnet');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Sign up$/ })).not.toBeDisabled();
   });
 
   it('hides the network selector on the browser dashboard (remote node)', async () => {

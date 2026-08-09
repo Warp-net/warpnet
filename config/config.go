@@ -84,6 +84,14 @@ func init() {
 
 	_ = viper.BindPFlags(pflag.CommandLine)
 
+	// The dashboard's first-launch network choice, weakest priority: an explicit
+	// flag or a real NODE_NETWORK env var still wins.
+	if os.Getenv("NODE_NETWORK") == "" {
+		if bt, err := os.ReadFile(filepath.Join(getAppPath(), "network")); err == nil {
+			_ = os.Setenv("NODE_NETWORK", strings.TrimSpace(string(bt)))
+		}
+	}
+
 	bootstrapAddrList := make([]string, 0, len(warpnetBootstrapNodes))
 	bootstrapAddrs := viper.GetString("node.bootstrap")
 
@@ -149,26 +157,6 @@ func init() {
 
 func Config() config {
 	return configSingleton
-}
-
-// IsNetworkExplicit reports whether --node.network or NODE_NETWORK was set by the operator.
-func IsNetworkExplicit() bool {
-	return pflag.CommandLine.Changed("node.network") || os.Getenv("NODE_NETWORK") != ""
-}
-
-// SetNetwork re-points the config at another network. Only meaningful before the node starts.
-func SetNetwork(network string) {
-	configSingleton.Node.Network = network
-	configSingleton.Node.Bootstrap = nil
-	if network == warpnetNetwork {
-		configSingleton.Node.Bootstrap = warpnetBootstrapNodes
-	}
-	if network == testNetNetwork {
-		configSingleton.Node.Bootstrap = testnetBootstrapNodes
-	}
-	dbPath := configSingleton.Database.Path // <app>/<network>/<dir>
-	configSingleton.Database.Path = filepath.Join(
-		filepath.Dir(filepath.Dir(dbPath)), network, filepath.Base(dbPath))
 }
 
 type config struct {
