@@ -10,6 +10,7 @@ import (
 
 	memberpubsub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	modpubsub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -129,7 +130,7 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 	// Join the reports and votes topics locally so Subscribers() can
 	// observe the moderators' mesh membership below.
 	require.NoError(t, memberPS.Gossip().SubscribeRaw(event.ReportsTopic, func([]byte) error { return nil }))
-	require.NoError(t, memberPS.Gossip().SubscribeRaw(event.ModerationVotesTopic, func([]byte) error { return nil }))
+	require.NoError(t, memberPS.Gossip().SubscribeRaw(vote.Topic, func([]byte) error { return nil }))
 
 	// Full mesh between all four hosts.
 	for i, a := range hosts {
@@ -144,7 +145,7 @@ func TestTrioIntegration_RealGossip(t *testing.T) {
 	// announcements land before the actual mesh links do.
 	require.Eventually(t, func() bool {
 		return len(memberPS.Gossip().Subscribers(event.ReportsTopic)) >= 3 &&
-			len(memberPS.Gossip().Subscribers(event.ModerationVotesTopic)) >= 3
+			len(memberPS.Gossip().Subscribers(vote.Topic)) >= 3
 	}, 20*time.Second, 200*time.Millisecond, "moderators never joined the moderation topics")
 	time.Sleep(2 * time.Second)
 

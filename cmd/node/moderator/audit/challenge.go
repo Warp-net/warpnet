@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Warp-net/warpnet/event"
 	"github.com/google/uuid"
 )
 
@@ -62,11 +61,11 @@ func ContentHash(text string) string {
 // BuildChallenge instantiates a random probe and reports the class any
 // honest moderator is expected to answer: expectUnsafe means the verdict
 // must be FAIL.
-func BuildChallenge(rng *rand.Rand) (ch event.ModerationChallengeEvent, expectUnsafe bool) {
+func BuildChallenge(rng *rand.Rand) (ch Challenge, expectUnsafe bool) {
 	p := probes[rng.Intn(len(probes))]
 	text := strings.ReplaceAll(p.template, "{NAME}", probeNames[rng.Intn(len(probeNames))])
 	text = strings.ReplaceAll(text, "{PLACE}", probePlaces[rng.Intn(len(probePlaces))])
-	return event.ModerationChallengeEvent{
+	return Challenge{
 		ChallengeID: uuid.New().String(),
 		Text:        text,
 		ContentHash: ContentHash(text),

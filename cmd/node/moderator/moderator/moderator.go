@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/isolation"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -92,8 +93,8 @@ type ReportSubscriber interface {
 
 // VoteExchange carries the per-round moderator votes over gossip.
 type VoteExchange interface {
-	PublishVote(ev event.ModerationVoteEvent) error
-	SubscribeVotes(h func(ev event.ModerationVoteEvent) error) error
+	PublishVote(ev vote.Event) error
+	SubscribeVotes(h func(ev vote.Event) error) error
 }
 
 // Moderator runs entirely report-driven: there is no peer-scanning loop.
@@ -207,7 +208,7 @@ func (m *Moderator) handleReport(ev event.ReportEvent) error {
 
 // handleVote feeds gossip traffic into the round it belongs to: a vote is
 // counted, a Final announcement ends the round here.
-func (m *Moderator) handleVote(ev event.ModerationVoteEvent) error {
+func (m *Moderator) handleVote(ev vote.Event) error {
 	if m.isClosed.Load() {
 		return nil
 	}
@@ -226,7 +227,7 @@ func (m *Moderator) handleVote(ev event.ModerationVoteEvent) error {
 func (m *Moderator) selfID() string { return m.node.ID().String() }
 
 // publishVote implements roundHost.
-func (m *Moderator) publishVote(vote event.ModerationVoteEvent) error {
+func (m *Moderator) publishVote(vote vote.Event) error {
 	return m.votes.PublishVote(vote)
 }
 

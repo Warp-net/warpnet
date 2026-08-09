@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
@@ -78,7 +79,7 @@ type roundHost interface {
 	assessReport(rep event.ReportEvent) (verdict, bool, error)
 	// publishVote broadcasts a vote (or a Final announcement) to the
 	// other moderators.
-	publishVote(vote event.ModerationVoteEvent) error
+	publishVote(v vote.Event) error
 	// finalizeRound delivers the agreed verdict: reporter notification
 	// plus, on FAIL, the isolation broadcast.
 	finalizeRound(rep event.ReportEvent, agg verdict, voters []domain.ID)
@@ -98,7 +99,7 @@ type round struct {
 
 	mx         sync.Mutex
 	report     *event.ReportEvent
-	votes      map[string]event.ModerationVoteEvent
+	votes      map[string]vote.Event
 	voteTimer  *time.Timer
 	tallyTimer *time.Timer
 	finalTimer *time.Timer
@@ -123,7 +124,7 @@ func newRound(id string, host roundHost, schedule roundSchedule, onDone func(id 
 		host:     host,
 		schedule: schedule,
 		onDone:   onDone,
-		votes:    make(map[string]event.ModerationVoteEvent),
+		votes:    make(map[string]vote.Event),
 	}
 	r.tallyTimer = time.AfterFunc(schedule.window, r.tally)
 	return r
@@ -142,16 +143,16 @@ func (r *round) setReport(rep event.ReportEvent, voteDelay time.Duration) {
 	r.voteTimer = time.AfterFunc(voteDelay, r.castVote)
 }
 
-func (r *round) addVote(vote event.ModerationVoteEvent) {
+func (r *round) addVote(v vote.Event) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 	if r.closed {
 		return
 	}
-	if _, dup := r.votes[vote.ModeratorID]; dup {
+	if _, dup := r.votes[v.ModeratorID]; dup {
 		return
 	}
-	r.votes[vote.ModeratorID] = vote
+	r.votes[v.ModeratorID] = v
 }
 
 // stop ends the round without finalizing: the owner is shutting down, or
@@ -183,7 +184,7 @@ func (r *round) castVote() {
 	rep := *r.report
 	r.mx.Unlock()
 
-	v, ok, err := r.host.assessReport(rep)
+	assessed, ok, err := r.host.assessReport(rep)
 	if err != nil {
 		log.Errorf("moderator: round %s: assess report: %v", r.id, err)
 		return
@@ -192,20 +193,20 @@ func (r *round) castVote() {
 		return
 	}
 
-	vote := event.ModerationVoteEvent{
+	v := vote.Event{
 		ReportID:    r.id,
 		Type:        rep.Type,
-		Result:      v.result,
-		Reason:      v.reason,
-		UserID:      v.userID,
-		ObjectID:    v.objectID,
+		Result:      assessed.result,
+		Reason:      assessed.reason,
+		UserID:      assessed.userID,
+		ObjectID:    assessed.objectID,
 		ModeratorID: r.host.selfID(),
 	}
 	// Count the own vote before publishing: gossip loopback delivery is
 	// not guaranteed (addVote dedups if it does loop back), and the vote
 	// must count even when the publish fails.
-	r.addVote(vote)
-	if err := r.host.publishVote(vote); err != nil {
+	r.addVote(v)
+	if err := r.host.publishVote(v); err != nil {
 		log.Errorf("moderator: round %s: publish vote: %v", r.id, err)
 	}
 }
@@ -289,7 +290,7 @@ func (r *round) takeOver() {
 func (r *round) finalize(rep event.ReportEvent, agg verdict, voters []domain.ID) {
 	r.host.finalizeRound(rep, agg, voters)
 
-	final := event.ModerationVoteEvent{
+	final := vote.Event{
 		ReportID:    r.id,
 		Type:        rep.Type,
 		Result:      agg.result,

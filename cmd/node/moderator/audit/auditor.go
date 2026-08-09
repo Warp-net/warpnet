@@ -31,7 +31,7 @@ type Result struct {
 	Peer     string
 	Outcome  Outcome
 	Expected bool // expectUnsafe: true means the honest class is FAIL
-	Response event.ModerationChallengeResponseEvent
+	Response ChallengeResponse
 }
 
 // Auditor drives moderator-to-moderator spot-checks: pick a random peer,
@@ -93,7 +93,7 @@ func (a *Auditor) challenge(peer string) (*Result, error) {
 	ch, expectUnsafe := BuildChallenge(a.rng)
 	res := &Result{Peer: peer, Expected: expectUnsafe}
 
-	data, err := a.node.GenericStream(peer, event.PUBLIC_GET_MODERATION_CHALLENGE, ch)
+	data, err := a.node.GenericStream(peer, ChallengeRoute, ch)
 	if err != nil {
 		log.Infof("audit: peer %s unreachable: %v", peer, err)
 		res.Outcome = OutcomeUnreachable
@@ -108,7 +108,7 @@ func (a *Auditor) challenge(peer string) (*Result, error) {
 		return res, nil
 	}
 
-	var resp event.ModerationChallengeResponseEvent
+	var resp ChallengeResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		res.Outcome = OutcomeInvalid
 		a.ledger.Record(peer, res.Outcome)
@@ -127,7 +127,7 @@ func (a *Auditor) challenge(peer string) (*Result, error) {
 // judge validates the response binding and signature, then compares verdict
 // classes. Class comparison only: moderators run different models, and the
 // probe corpus is flagrant enough that any honest model lands the class.
-func judge(ch event.ModerationChallengeEvent, expectUnsafe bool, peer string, resp event.ModerationChallengeResponseEvent) Outcome {
+func judge(ch Challenge, expectUnsafe bool, peer string, resp ChallengeResponse) Outcome {
 	if resp.ChallengeID != ch.ChallengeID || resp.ContentHash != ch.ContentHash {
 		return OutcomeInvalid
 	}

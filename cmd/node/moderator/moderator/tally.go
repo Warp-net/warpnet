@@ -32,8 +32,8 @@ import (
 	"encoding/binary"
 	"sort"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 )
 
 // Pure tally math: no state, no I/O. Every moderator runs these over the
@@ -48,8 +48,8 @@ func pairHash(reportID, moderatorID string) uint64 {
 }
 
 // sortedVotes orders a round's votes by their deterministic pair hash.
-func sortedVotes(id string, votes map[string]event.ModerationVoteEvent) []event.ModerationVoteEvent {
-	ordered := make([]event.ModerationVoteEvent, 0, len(votes))
+func sortedVotes(id string, votes map[string]vote.Event) []vote.Event {
+	ordered := make([]vote.Event, 0, len(votes))
 	for _, v := range votes {
 		ordered = append(ordered, v)
 	}
@@ -61,7 +61,7 @@ func sortedVotes(id string, votes map[string]event.ModerationVoteEvent) []event.
 
 // trimEven drops the highest-ranked vote of an even count so a strict
 // majority always exists in the tally.
-func trimEven(ordered []event.ModerationVoteEvent) []event.ModerationVoteEvent {
+func trimEven(ordered []vote.Event) []vote.Event {
 	if len(ordered) > 0 && len(ordered)%2 == 0 {
 		return ordered[:len(ordered)-1]
 	}
@@ -69,13 +69,13 @@ func trimEven(ordered []event.ModerationVoteEvent) []event.ModerationVoteEvent {
 }
 
 // keptVotes is the tally set: hash-ordered votes trimmed to an odd count.
-func keptVotes(id string, votes map[string]event.ModerationVoteEvent) []event.ModerationVoteEvent {
+func keptVotes(id string, votes map[string]vote.Event) []vote.Event {
 	return trimEven(sortedVotes(id, votes))
 }
 
 // rankOf reports a moderator's position in the ordered votes, or -1 when it
 // did not vote.
-func rankOf(ordered []event.ModerationVoteEvent, moderatorID string) int {
+func rankOf(ordered []vote.Event, moderatorID string) int {
 	for i, v := range ordered {
 		if v.ModeratorID == moderatorID {
 			return i
@@ -87,7 +87,7 @@ func rankOf(ordered []event.ModerationVoteEvent, moderatorID string) int {
 // aggregate reduces the kept votes to the round verdict: FAIL on strict
 // majority, with the details (reason, ids) taken from the lowest-ranked
 // vote of the winning side so every moderator aggregates identically.
-func aggregate(kept []event.ModerationVoteEvent) (verdict, []domain.ID) {
+func aggregate(kept []vote.Event) (verdict, []domain.ID) {
 	failCount := 0
 	for _, v := range kept {
 		if !bool(v.Result) {

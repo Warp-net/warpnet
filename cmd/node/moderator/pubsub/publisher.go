@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -117,7 +118,7 @@ func (g *moderatorPubSub) SubscribeReports(h func(ev event.ReportEvent) error) e
 // PublishVote publishes this moderator's verdict on one report round. The
 // envelope is signed by Gossip.Publish with the node key, which is what
 // SubscribeVotes authenticates the voter by.
-func (g *moderatorPubSub) PublishVote(ev event.ModerationVoteEvent) error {
+func (g *moderatorPubSub) PublishVote(ev vote.Event) error {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
@@ -132,20 +133,20 @@ func (g *moderatorPubSub) PublishVote(ev event.ModerationVoteEvent) error {
 		MessageId: uuid.New().String(),
 		Version:   "0.0.0",
 	}
-	return g.pubsub.Publish(msg, event.ModerationVotesTopic)
+	return g.pubsub.Publish(msg, vote.Topic)
 }
 
-func (g *moderatorPubSub) SubscribeVotes(h func(ev event.ModerationVoteEvent) error) error {
+func (g *moderatorPubSub) SubscribeVotes(h func(ev vote.Event) error) error {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")
 	}
-	return g.pubsub.SubscribeRaw(event.ModerationVotesTopic, func(data []byte) error {
+	return g.pubsub.SubscribeRaw(vote.Topic, func(data []byte) error {
 		msg, err := verifiedEnvelope("votes", data)
 		if err != nil || msg == nil {
 			return err
 		}
 
-		var ev event.ModerationVoteEvent
+		var ev vote.Event
 		if err := json.Unmarshal(msg.Body, &ev); err != nil {
 			return fmt.Errorf("pubsub: votes: payload unmarshal: %w", err)
 		}

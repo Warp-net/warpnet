@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -76,17 +77,17 @@ func (p *recordingPublisher) PublishUpdateToFollowers(_, _ string, _ any) error 
 // the test can wait on, which also gives happens-before for the closure
 // counters written inside the volunteer-timer goroutine.
 type stubVotes struct {
-	published chan event.ModerationVoteEvent
+	published chan vote.Event
 }
 
-func (s *stubVotes) PublishVote(ev event.ModerationVoteEvent) error {
+func (s *stubVotes) PublishVote(ev vote.Event) error {
 	if s.published != nil {
 		s.published <- ev
 	}
 	return nil
 }
 
-func (s *stubVotes) SubscribeVotes(func(ev event.ModerationVoteEvent) error) error { return nil }
+func (s *stubVotes) SubscribeVotes(func(ev vote.Event) error) error { return nil }
 
 func withEngine(t *testing.T, e Engine) {
 	t.Helper()
@@ -108,7 +109,7 @@ func fastRetrier() retrier.Retrier {
 // single-moderator population ranks 0.
 func newTestModerator(t *testing.T, node ModeratorNode, pub Publisher, privKey ed25519.PrivateKey) (*Moderator, *stubVotes) {
 	t.Helper()
-	votes := &stubVotes{published: make(chan event.ModerationVoteEvent, 8)}
+	votes := &stubVotes{published: make(chan vote.Event, 8)}
 	m, err := NewModerator(context.Background(), node, pub, nil, votes, privKey)
 	if err != nil {
 		t.Fatalf("NewModerator: %v", err)
@@ -151,28 +152,28 @@ func closeWindow(t *testing.T, m *Moderator, id string) {
 	r.tally()
 }
 
-func votesOf(m *Moderator, id string) map[string]event.ModerationVoteEvent {
+func votesOf(m *Moderator, id string) map[string]vote.Event {
 	r := roundOf(m, id)
 	if r == nil {
 		return nil
 	}
 	r.mx.Lock()
 	defer r.mx.Unlock()
-	out := make(map[string]event.ModerationVoteEvent, len(r.votes))
+	out := make(map[string]vote.Event, len(r.votes))
 	for k, v := range r.votes {
 		out[k] = v
 	}
 	return out
 }
 
-func waitVote(t *testing.T, votes *stubVotes) event.ModerationVoteEvent {
+func waitVote(t *testing.T, votes *stubVotes) vote.Event {
 	t.Helper()
 	select {
 	case v := <-votes.published:
 		return v
 	case <-time.After(5 * time.Second):
 		t.Fatal("vote was never published")
-		return event.ModerationVoteEvent{}
+		return vote.Event{}
 	}
 }
 
@@ -677,9 +678,9 @@ func pickPeers(t *testing.T, reportID, pivot string, above bool, n int) []string
 	return out
 }
 
-func otherVote(reportID string, moderatorID string, result domain.ModerationResult, reason string) event.ModerationVoteEvent {
+func otherVote(reportID string, moderatorID string, result domain.ModerationResult, reason string) vote.Event {
 	objectID := domain.ID("tweet-1")
-	return event.ModerationVoteEvent{
+	return vote.Event{
 		ReportID:    reportID,
 		Type:        domain.ModerationTweetType,
 		Result:      result,
@@ -1376,9 +1377,9 @@ func TestVoteDelay_LargePopulationDefersMostRounds(t *testing.T) {
 
 func TestKeptVotes_EvenCountTrimmedDeterministically(t *testing.T) {
 	reportID := "round-x"
-	votes := map[string]event.ModerationVoteEvent{}
+	votes := map[string]vote.Event{}
 	for _, id := range []string{"mod-a", "mod-b", "mod-c", "mod-d"} {
-		votes[id] = event.ModerationVoteEvent{ReportID: reportID, ModeratorID: id}
+		votes[id] = vote.Event{ReportID: reportID, ModeratorID: id}
 	}
 
 	kept := keptVotes(reportID, votes)
@@ -1401,16 +1402,16 @@ func TestKeptVotes_EvenCountTrimmedDeterministically(t *testing.T) {
 
 func TestAggregate_MajorityAndTieRules(t *testing.T) {
 	reason := "Hate"
-	mkVote := func(id string, res domain.ModerationResult) event.ModerationVoteEvent {
+	mkVote := func(id string, res domain.ModerationResult) vote.Event {
 		objectID := domain.ID("tweet-1")
-		return event.ModerationVoteEvent{
+		return vote.Event{
 			ReportID: "round-x", ModeratorID: id, Result: res,
 			Reason: &reason, UserID: "offender", ObjectID: &objectID,
 		}
 	}
 
 	// 2 FAIL / 1 OK -> FAIL
-	agg, voters := aggregate([]event.ModerationVoteEvent{
+	agg, voters := aggregate([]vote.Event{
 		mkVote("mod-a", domain.FAIL), mkVote("mod-b", domain.OK), mkVote("mod-c", domain.FAIL),
 	})
 	if agg.result != domain.FAIL {
@@ -1424,7 +1425,7 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 	}
 
 	// 1 FAIL / 2 OK -> OK
-	agg, _ = aggregate([]event.ModerationVoteEvent{
+	agg, _ = aggregate([]vote.Event{
 		mkVote("mod-a", domain.FAIL), mkVote("mod-b", domain.OK), mkVote("mod-c", domain.OK),
 	})
 	if agg.result != domain.OK {
@@ -1432,7 +1433,7 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 	}
 
 	// 1-1 tie (defensive; keptVotes prevents it) -> OK, presumption of innocence
-	agg, _ = aggregate([]event.ModerationVoteEvent{
+	agg, _ = aggregate([]vote.Event{
 		mkVote("mod-a", domain.FAIL), mkVote("mod-b", domain.OK),
 	})
 	if agg.result != domain.OK {
@@ -1440,7 +1441,7 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 	}
 
 	// single vote -> that vote
-	agg, voters = aggregate([]event.ModerationVoteEvent{mkVote("mod-a", domain.FAIL)})
+	agg, voters = aggregate([]vote.Event{mkVote("mod-a", domain.FAIL)})
 	if agg.result != domain.FAIL || len(voters) != 1 {
 		t.Fatalf("a single FAIL vote must stand, got %+v %v", agg, voters)
 	}

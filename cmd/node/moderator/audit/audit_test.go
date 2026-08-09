@@ -237,23 +237,23 @@ func TestAudit_SmallSampleStaysProbation(t *testing.T) {
 // challenge id are all invalid — and two invalids ban.
 func TestAudit_InvalidResponsesBan(t *testing.T) {
 	cases := map[string]ResponseSigner{
-		"unsigned": func(ev *event.ModerationChallengeResponseEvent) {
+		"unsigned": func(ev *ChallengeResponse) {
 			_, id := identity(t, "victim-peer")
 			ev.ModeratorID = id // claims the identity, never signs
 		},
-		"foreign key": func(ev *event.ModerationChallengeResponseEvent) {
+		"foreign key": func(ev *ChallengeResponse) {
 			impostor, _ := identity(t, "impostor")
 			_, id := identity(t, "victim-peer")
 			ev.ModeratorID = id
 			signWith(impostor, ev)
 		},
-		"rebound challenge": func(ev *event.ModerationChallengeResponseEvent) {
+		"rebound challenge": func(ev *ChallengeResponse) {
 			priv, id := identity(t, "victim-peer")
 			ev.ModeratorID = id
 			ev.ChallengeID = "some-other-challenge"
 			signWith(priv, ev)
 		},
-		"foreign responder id": func(ev *event.ModerationChallengeResponseEvent) {
+		"foreign responder id": func(ev *ChallengeResponse) {
 			other, otherID := identity(t, "somebody-else")
 			ev.ModeratorID = otherID // valid signature, wrong peer
 			signWith(other, ev)
@@ -273,7 +273,7 @@ func TestAudit_InvalidResponsesBan(t *testing.T) {
 	}
 }
 
-func signWith(priv ed25519.PrivateKey, ev *event.ModerationChallengeResponseEvent) {
+func signWith(priv ed25519.PrivateKey, ev *ChallengeResponse) {
 	ev.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, ev.SigningBytes()))
 }
 
@@ -354,7 +354,7 @@ func TestChallengeHandler_RejectsTamperedBinding(t *testing.T) {
 // edited after the fact and still verify.
 func TestChallengeResponse_SigningBytesCoverFields(t *testing.T) {
 	reason := "Violent Crimes"
-	base := event.ModerationChallengeResponseEvent{
+	base := ChallengeResponse{
 		ChallengeID: "ch-1",
 		ContentHash: ContentHash("some text"),
 		Result:      domain.FAIL,
@@ -362,14 +362,14 @@ func TestChallengeResponse_SigningBytesCoverFields(t *testing.T) {
 		Model:       domain.LLAMAGuard3,
 		ModeratorID: "peer-1",
 	}
-	mutations := map[string]func(*event.ModerationChallengeResponseEvent){
-		"challenge": func(e *event.ModerationChallengeResponseEvent) { e.ChallengeID = "ch-2" },
-		"hash":      func(e *event.ModerationChallengeResponseEvent) { e.ContentHash = ContentHash("other") },
-		"result":    func(e *event.ModerationChallengeResponseEvent) { e.Result = domain.OK },
-		"reason":    func(e *event.ModerationChallengeResponseEvent) { r := "Spam"; e.Reason = &r },
-		"model":     func(e *event.ModerationChallengeResponseEvent) { e.Model = domain.ModelType("x") },
-		"moderator": func(e *event.ModerationChallengeResponseEvent) { e.ModeratorID = "peer-2" },
-		"time":      func(e *event.ModerationChallengeResponseEvent) { e.TimeAt = e.TimeAt.Add(1) },
+	mutations := map[string]func(*ChallengeResponse){
+		"challenge": func(e *ChallengeResponse) { e.ChallengeID = "ch-2" },
+		"hash":      func(e *ChallengeResponse) { e.ContentHash = ContentHash("other") },
+		"result":    func(e *ChallengeResponse) { e.Result = domain.OK },
+		"reason":    func(e *ChallengeResponse) { r := "Spam"; e.Reason = &r },
+		"model":     func(e *ChallengeResponse) { e.Model = domain.ModelType("x") },
+		"moderator": func(e *ChallengeResponse) { e.ModeratorID = "peer-2" },
+		"time":      func(e *ChallengeResponse) { e.TimeAt = e.TimeAt.Add(1) },
 	}
 	baseBytes := string(base.SigningBytes())
 	for name, mutate := range mutations {

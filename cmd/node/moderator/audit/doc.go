@@ -61,7 +61,7 @@ resulting from the use or misuse of this software.
 // with live samples the auditor's own model is confident about.
 //
 // Wiring plan (out of scope here): register StreamChallengeHandler under
-// event.PUBLIC_GET_MODERATION_CHALLENGE on the moderator node, run an
+// ChallengeRoute on the moderator node, run an
 // Auditor on a timer over the moderator's seen-peers set, and let the vote
 // round consult Ledger.StandingOf when tallying (Banned voters excluded).
 // The signed challenge/response transcripts are the evidence a future

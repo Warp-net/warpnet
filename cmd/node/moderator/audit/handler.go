@@ -10,7 +10,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 )
 
@@ -27,13 +26,13 @@ type Engine interface {
 
 // ResponseSigner stamps identity, model and signature onto an outgoing
 // challenge response.
-type ResponseSigner func(*event.ModerationChallengeResponseEvent)
+type ResponseSigner func(*ChallengeResponse)
 
 // NewResponseSigner builds the production signer: the responder's node key
 // and the model it actually runs (self-reported — audits judge classes, not
 // model claims).
 func NewResponseSigner(privKey ed25519.PrivateKey, selfID string, model domain.ModelType) ResponseSigner {
-	return func(ev *event.ModerationChallengeResponseEvent) {
+	return func(ev *ChallengeResponse) {
 		ev.ModeratorID = selfID
 		ev.Model = model
 		ev.TimeAt = time.Now().UTC()
@@ -46,11 +45,11 @@ func NewResponseSigner(privKey ed25519.PrivateKey, selfID string, model domain.M
 
 // StreamChallengeHandler answers audit spot-checks: run the local engine on
 // exactly the challenged text and return a signed verdict. NOT REGISTERED
-// anywhere yet — wiring it under event.PUBLIC_GET_MODERATION_CHALLENGE on
+// anywhere yet — wiring it under ChallengeRoute on
 // the moderator node is the integration step.
 func StreamChallengeHandler(engine Engine, sign ResponseSigner) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		var ch event.ModerationChallengeEvent
+		var ch Challenge
 		if err := json.Unmarshal(buf, &ch); err != nil {
 			return nil, err
 		}
@@ -68,7 +67,7 @@ func StreamChallengeHandler(engine Engine, sign ResponseSigner) warpnet.WarpHand
 			return nil, err
 		}
 
-		resp := event.ModerationChallengeResponseEvent{
+		resp := ChallengeResponse{
 			ChallengeID: ch.ChallengeID,
 			ContentHash: ch.ContentHash,
 			Result:      domain.ModerationResult(ok),

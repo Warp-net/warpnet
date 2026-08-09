@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
@@ -91,17 +92,17 @@ func (rs *roundRegistry) open(rep event.ReportEvent) {
 
 // addVote routes an incoming vote to its round, opening one if the vote
 // arrived before the report did.
-func (rs *roundRegistry) addVote(vote event.ModerationVoteEvent) {
+func (rs *roundRegistry) addVote(v vote.Event) {
 	rs.mx.Lock()
-	rs.seenMods[vote.ModeratorID] = time.Now()
-	if rs.isFinalizedLocked(vote.ReportID) {
+	rs.seenMods[v.ModeratorID] = time.Now()
+	if rs.isFinalizedLocked(v.ReportID) {
 		rs.mx.Unlock()
 		return
 	}
-	r := rs.ensureLocked(vote.ReportID)
+	r := rs.ensureLocked(v.ReportID)
 	rs.mx.Unlock()
 
-	r.addVote(vote)
+	r.addVote(v)
 }
 
 // markFinalized records that some moderator finalized the round and drops
