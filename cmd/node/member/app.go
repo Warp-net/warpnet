@@ -8,6 +8,7 @@ import (
 	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -97,17 +98,21 @@ func (a *App) Network() string {
 	return config.Config().Node.Network
 }
 
-// SelectNetwork persists the network choice; it applies on the next launch.
+// SelectNetwork relaunches the app on the chosen network. After the first
+// login the choice sticks by itself: config picks the network that already
+// has a database.
 func (a *App) SelectNetwork(network string) error {
 	if network != "warpnet" && network != "testnet" {
 		return errors.New("unknown network: " + network)
 	}
-	return os.WriteFile(networkChoicePath(), []byte(network), 0o600)
-}
-
-// networkChoicePath: <app>/network, next to the per-network database dirs.
-func networkChoicePath() string {
-	return filepath.Join(filepath.Dir(filepath.Dir(config.Config().Database.Path)), "network")
+	//#nosec
+	cmd := exec.Command(os.Args[0], os.Args[1:]...)
+	cmd.Env = append(os.Environ(), "NODE_NETWORK="+network)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	os.Exit(0) // release the single-instance lock before the child claims it
+	return nil
 }
 
 // SetPendingDeepLink stashes a warpnet:// payload for the frontend. Pre-startup safe (a.mx may be nil).

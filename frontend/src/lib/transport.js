@@ -284,8 +284,8 @@ export async function IsFirstRun() {
   return Boolean(resp && resp.body);
 }
 
-// First-launch network choice, applied on restart (Wails only; a remote
-// node's network is pinned by its flags).
+// First-launch network choice; the app relaunches itself on it (Wails only —
+// a remote node's network is pinned by its flags).
 export async function SelectNetwork(network) {
   if (hasWails()) {
     return Wails.SelectNetwork(network);

@@ -84,11 +84,12 @@ func init() {
 
 	_ = viper.BindPFlags(pflag.CommandLine)
 
-	// The dashboard's first-launch network choice, weakest priority: an explicit
-	// flag or a real NODE_NETWORK env var still wins.
+	// An existing testnet database (run.lock appears after the first login) wins
+	// over the default network; an explicit flag or env var still wins over it.
 	if os.Getenv("NODE_NETWORK") == "" {
-		if bt, err := os.ReadFile(filepath.Join(getAppPath(), "network")); err == nil {
-			_ = os.Setenv("NODE_NETWORK", strings.TrimSpace(string(bt)))
+		lock := filepath.Join(getAppPath(), testNetNetwork, viper.GetString("database.dir"), "run.lock")
+		if _, err := os.Stat(lock); err == nil {
+			_ = os.Setenv("NODE_NETWORK", testNetNetwork)
 		}
 	}
 

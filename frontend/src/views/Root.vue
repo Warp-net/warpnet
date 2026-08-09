@@ -62,13 +62,11 @@ resulting from the use or misuse of this software.
           <p>Join Warpnet today.</p>
           <button v-if="isFirstRun === true"
             @click.prevent="setSignUpStep('step1')"
-            :disabled="needsRestart"
-            :class="needsRestart ? 'opacity-50 cursor-not-allowed' : ''"
             class="rounded-full bg-blue font-bold text-lg text-white mt-4 p-3 hover:bg-darkblue"
           >
             Sign up
           </button>
-          <!-- First-launch network choice; desktop only, applies after a restart. -->
+          <!-- First-launch network choice; picking one relaunches the app on it. -->
           <div
             v-if="isFirstRun === true && isDesktop"
             class="mt-3 text-sm font-normal text-dark"
@@ -77,15 +75,12 @@ resulting from the use or misuse of this software.
             <select
               id="network-select"
               v-model="network"
-              @change="saveNetworkChoice"
+              @change="switchNetwork"
               class="bg-lightblue border-b-2 border-dark rounded p-1"
             >
               <option value="warpnet">Warpnet (main)</option>
               <option value="testnet">Testnet</option>
             </select>
-            <p v-if="needsRestart" class="mt-2 text-red-600" role="alert">
-              Restart Warpnet to switch networks.
-            </p>
           </div>
           <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
           <!-- first-run probe failed (node unreachable): offer a retry rather
@@ -398,10 +393,6 @@ export default {
     signupStep() {
       return { step1: 1, step2: 2, step3: 3, step4: 4 }[this.showModal] || 1;
     },
-    // The choice file only applies on the next launch.
-    needsRestart() {
-      return this.network !== this.activeNetwork;
-    },
   },
   async mounted() {
     this.isDesktop = warpnetService.isDesktopNode();
@@ -429,11 +420,13 @@ export default {
       }
       console.log("Is first run:", this.isFirstRun);
     },
-    async saveNetworkChoice() {
+    // On success the app relaunches itself on the chosen network.
+    async switchNetwork() {
+      if (this.network === this.activeNetwork) return;
       try {
         await warpnetService.selectNetwork(this.network);
       } catch (e) {
-        console.error("failed to save network choice:", e);
+        console.error("failed to switch network:", e);
         this.network = this.activeNetwork;
       }
     },

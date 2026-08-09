@@ -415,11 +415,11 @@ func TestIsTestnet(t *testing.T) {
 	assert.False(t, node{}.IsTestnet())
 }
 
-func TestNetworkChoiceFileIsWeakestPriority(t *testing.T) {
+func TestExistingTestnetDatabaseIsWeakestNetworkDefault(t *testing.T) {
 	home := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".warpdata"), 0o750))
-	require.NoError(t, os.WriteFile(
-		filepath.Join(home, ".warpdata", "network"), []byte(testNetNetwork+"\n"), 0o600))
+	lock := filepath.Join(home, ".warpdata", testNetNetwork, "storage", "run.lock")
+	require.NoError(t, os.MkdirAll(filepath.Dir(lock), 0o750))
+	require.NoError(t, os.WriteFile(lock, nil, 0o600))
 
 	c := run(t, helperModeConfig, nil, map[string]string{"HOME": home})
 	assert.Equal(t, testNetNetwork, c.Network)
@@ -429,11 +429,11 @@ func TestNetworkChoiceFileIsWeakestPriority(t *testing.T) {
 
 	c = run(t, helperModeConfig,
 		[]string{"--node.network", warpnetNetwork}, map[string]string{"HOME": home})
-	assert.Equal(t, warpnetNetwork, c.Network, "an explicit flag must beat the choice file")
+	assert.Equal(t, warpnetNetwork, c.Network, "an explicit flag must beat the detected database")
 
 	c = run(t, helperModeConfig,
 		nil, map[string]string{"HOME": home, "NODE_NETWORK": warpnetNetwork})
-	assert.Equal(t, warpnetNetwork, c.Network, "a real env var must beat the choice file")
+	assert.Equal(t, warpnetNetwork, c.Network, "a real env var must beat the detected database")
 }
 
 func TestAddrInfos(t *testing.T) {

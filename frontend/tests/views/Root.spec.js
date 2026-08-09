@@ -157,7 +157,7 @@ describe('Root.vue', () => {
     });
   });
 
-  it('persists the picked network and blocks sign-up until a restart', async () => {
+  it('relaunches on the network picked on the landing page', async () => {
     renderRoot({ firstRun: true });
 
     await fireEvent.update(await screen.findByLabelText(/Network/i), 'testnet');
@@ -165,13 +165,11 @@ describe('Root.vue', () => {
     await waitFor(() => {
       expect(warpnetService.selectNetwork).toHaveBeenCalledWith('testnet');
     });
-    expect(screen.getByRole('alert')).toHaveTextContent(/Restart Warpnet/i);
-    expect(screen.getByRole('button', { name: /^Sign up$/ })).toBeDisabled();
 
-    // Switching back to the active network needs no restart.
+    // Re-picking the active network is a no-op, not a relaunch.
+    warpnetService.selectNetwork.mockClear();
     await fireEvent.update(screen.getByLabelText(/Network/i), 'warpnet');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Sign up$/ })).not.toBeDisabled();
+    expect(warpnetService.selectNetwork).not.toHaveBeenCalled();
   });
 
   it('hides the network selector on the browser dashboard (remote node)', async () => {
