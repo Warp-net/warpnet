@@ -33,6 +33,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/audit"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/moderator"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/node"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
@@ -116,6 +117,13 @@ func main() {
 		return
 	}
 	defer moder.Close()
+
+	// Registered after the moderator starts: answering an audit needs the
+	// engine, which only exists by then.
+	n.SetStreamHandlers(warpnet.WarpStreamHandler{ //nolint:govet
+		audit.ChallengeRoute,
+		moder.ChallengeHandler(),
+	})
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

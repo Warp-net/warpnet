@@ -31,12 +31,14 @@ import (
 	"context"
 	"crypto/ed25519"
 	"fmt"
-	"github.com/Warp-net/warpnet/retrier"
+	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/moderator/audit"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/isolation"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
@@ -45,6 +47,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/retrier"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -116,6 +119,16 @@ type Moderator struct {
 	retrier retrier.Retrier
 	rounds  *round.Registry
 
+	// Audit: this node spot-checks its peers, and answers theirs. The
+	// corpus is filled from decided rounds, so it holds only content the
+	// network has already ruled on.
+	auditor *audit.Auditor
+	ledger  *audit.Ledger
+	corpus  *audit.Corpus
+
+	judgedMx sync.Mutex
+	judged   map[string]string
+
 	isClosed *atomic.Bool
 }
 
@@ -134,10 +147,20 @@ func NewModerator(
 		votes:    votes,
 		privKey:  privKey,
 		retrier:  retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
+		ledger:   audit.NewLedger(),
+		corpus:   audit.NewCorpus(),
+		judged:   make(map[string]string, judgedCapacity),
 		isClosed: new(atomic.Bool),
 	}
 	m.isolation = isolation.NewIsolationProtocol(pub, privKey)
 	m.rounds = round.NewRegistry(m.selfID(), m, round.DefaultSchedule())
+	m.auditor = audit.NewAuditor(
+		m.selfID(),
+		audit.NewStreamChallenger(node),
+		m.ledger,
+		m.corpus,
+		rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec // audit sampling, not crypto
+	)
 	return m, nil
 }
 
@@ -162,6 +185,8 @@ func (m *Moderator) Start() error {
 	if err := m.votes.SubscribeVotes(m.handleVote); err != nil {
 		return fmt.Errorf("moderator: subscribe votes: %w", err)
 	}
+
+	go m.runAudits()
 
 	log.Infoln("moderator: started")
 	return nil
@@ -218,6 +243,7 @@ func (m *Moderator) handleVote(ev vote.Event) error {
 	}
 	if ev.Final {
 		m.rounds.MarkFinalized(ev.ReportID, ev.ModeratorID)
+		m.fileReference(ev.ReportID, ev.Result)
 		return nil
 	}
 	m.rounds.AddVote(ev)
@@ -236,22 +262,26 @@ func (m *Moderator) Broadcast(v vote.Event) error {
 // when the report is unusable and no vote should be cast at all.
 func (m *Moderator) Ballot(reportID string, rep event.ReportEvent) (vote.Event, bool, error) {
 	var (
-		ballot vote.Event
-		ok     bool
-		err    error
+		a   assessment
+		ok  bool
+		err error
 	)
 	switch rep.Type {
 	case domain.ModerationTweetType:
-		ballot, ok, err = m.assessTweetReport(rep)
+		a, ok, err = m.assessTweetReport(rep)
 	case domain.ModerationUserType:
-		ballot, ok, err = m.assessUserReport(rep)
+		a, ok, err = m.assessUserReport(rep)
 	default:
 		return vote.Event{}, false, nil
 	}
 	if err != nil || !ok {
 		return vote.Event{}, false, err
 	}
+	// Hold the judged text until the round decides: whatever the quorum
+	// concludes turns it into an audit reference.
+	m.holdJudged(reportID, a.text)
 
+	ballot := a.ballot
 	ballot.ReportID = reportID
 	ballot.Type = rep.Type
 	ballot.ModeratorID = m.selfID()
@@ -287,11 +317,22 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 	}
 }
 
+// assessment is what this moderator made of a reported object: the ballot
+// it will cast, plus the text the engine actually judged. The text is kept
+// so a decided round can file it as an audit reference.
+type assessment struct {
+	ballot vote.Event
+	text   string
+}
+
 // unavailableVote is the ballot for content that could not be reviewed: an
-// OK (no-op) result with a sentinel reason the reporter recognises.
-func unavailableVote(objectID *domain.ID, userID domain.ID) vote.Event {
+// OK (no-op) result with a sentinel reason the reporter recognises. It
+// carries no text: nothing was judged, so there is nothing to reference.
+func unavailableVote(objectID *domain.ID, userID domain.ID) assessment {
 	reason := event.ModerationReasonUnavailable
-	return vote.Event{Result: domain.OK, Reason: &reason, ObjectID: objectID, UserID: userID}
+	return assessment{ballot: vote.Event{
+		Result: domain.OK, Reason: &reason, ObjectID: objectID, UserID: userID,
+	}}
 }
 
 // fetch pulls an object off the target node through the retrier. An
@@ -316,10 +357,10 @@ func (m *Moderator) fetch(nodeID string, route stream.WarpRoute, payload any) ([
 	return data, err
 }
 
-func (m *Moderator) assessTweetReport(ev event.ReportEvent) (vote.Event, bool, error) {
+func (m *Moderator) assessTweetReport(ev event.ReportEvent) (assessment, bool, error) {
 	if ev.ObjectID == nil || *ev.ObjectID == "" {
 		log.Warn("moderator: tweet report missing object_id")
-		return vote.Event{}, false, nil
+		return assessment{}, false, nil
 	}
 
 	data, err := m.fetch(
@@ -334,7 +375,7 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (vote.Event, bool, e
 
 	var tweet domain.Tweet
 	if err := json.Unmarshal(data, &tweet); err != nil {
-		return vote.Event{}, false, fmt.Errorf("moderator: unmarshal tweet: %w", err)
+		return assessment{}, false, fmt.Errorf("moderator: unmarshal tweet: %w", err)
 	}
 	if tweet.Id == "" {
 		log.Warnf("moderator: tweet %s not found on node %s", *ev.ObjectID, ev.TargetNodeID)
@@ -348,28 +389,34 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (vote.Event, bool, e
 	if tweet.Moderation != nil {
 		log.Infof("moderator: tweet %s already moderated ok=%t, reusing verdict",
 			tweet.Id, bool(tweet.Moderation.IsOk))
-		return vote.Event{
-			Result:   tweet.Moderation.IsOk,
-			Reason:   tweet.Moderation.Reason,
-			ObjectID: &tweet.Id,
-			UserID:   tweet.UserId,
+		return assessment{
+			ballot: vote.Event{
+				Result:   tweet.Moderation.IsOk,
+				Reason:   tweet.Moderation.Reason,
+				ObjectID: &tweet.Id,
+				UserID:   tweet.UserId,
+			},
+			text: tweet.Text,
 		}, true, nil
 	}
 
 	ok, reason, err := engine.Moderate(tweet.Text)
 	if err != nil {
-		return vote.Event{}, false, fmt.Errorf("moderator: process tweet: %w", err)
+		return assessment{}, false, fmt.Errorf("moderator: process tweet: %w", err)
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
-	return vote.Event{
-		Result:   domain.ModerationResult(ok),
-		Reason:   &reason,
-		ObjectID: &tweet.Id,
-		UserID:   tweet.UserId,
+	return assessment{
+		ballot: vote.Event{
+			Result:   domain.ModerationResult(ok),
+			Reason:   &reason,
+			ObjectID: &tweet.Id,
+			UserID:   tweet.UserId,
+		},
+		text: tweet.Text,
 	}, true, nil
 }
 
-func (m *Moderator) assessUserReport(ev event.ReportEvent) (vote.Event, bool, error) {
+func (m *Moderator) assessUserReport(ev event.ReportEvent) (assessment, bool, error) {
 	data, err := m.fetch(
 		ev.TargetNodeID,
 		event.PUBLIC_GET_USER,
@@ -382,7 +429,7 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (vote.Event, bool, er
 
 	var user domain.User
 	if err := json.Unmarshal(data, &user); err != nil {
-		return vote.Event{}, false, fmt.Errorf("moderator: unmarshal user: %w", err)
+		return assessment{}, false, fmt.Errorf("moderator: unmarshal user: %w", err)
 	}
 	if user.Id == "" {
 		log.Warnf("moderator: user %s not found on node %s", ev.TargetUserID, ev.TargetNodeID)
@@ -397,10 +444,13 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (vote.Event, bool, er
 
 	ok, reason, err := engine.Moderate(text)
 	if err != nil {
-		return vote.Event{}, false, fmt.Errorf("moderator: process user: %w", err)
+		return assessment{}, false, fmt.Errorf("moderator: process user: %w", err)
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
-	return vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id}, true, nil
+	return assessment{
+		ballot: vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id},
+		text:   text,
+	}, true, nil
 }
 
 // Decided implements round.Participant: it delivers the agreed verdict to
@@ -409,6 +459,7 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (vote.Event, bool, er
 // picked this node to carry the decision — as chair, or as the backup that
 // took over.
 func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+	m.fileReference(rep.ReportID(), outcome.Result)
 	m.notifyReporter(rep, outcome, voters)
 
 	if bool(outcome.Result) {

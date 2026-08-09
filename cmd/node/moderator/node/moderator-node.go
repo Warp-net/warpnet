@@ -155,6 +155,13 @@ func (mn *ModeratorNode) Start() (err error) {
 	return nil
 }
 
+// SetStreamHandlers registers additional routes after the node is up. The
+// moderator uses it for routes whose handler needs the engine, which only
+// exists once the moderator itself is running.
+func (mn *ModeratorNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
+	mn.node.SetStreamHandlers(handlers...)
+}
+
 func (mn *ModeratorNode) ID() warpnet.WarpPeerID {
 	return mn.node.Node().ID()
 }

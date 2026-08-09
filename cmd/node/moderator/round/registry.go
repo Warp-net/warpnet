@@ -141,6 +141,24 @@ func (rs *Registry) forget(id string) {
 	rs.finalized[id] = time.Now()
 }
 
+// Peers lists the participants seen voting recently. It is a passive
+// observation used to scale volunteer delays and to give an auditor
+// somebody to ask; no trust decision reads it.
+func (rs *Registry) Peers() []string {
+	rs.mx.Lock()
+	defer rs.mx.Unlock()
+	now := time.Now()
+	peers := make([]string, 0, len(rs.seenMods))
+	for id, ts := range rs.seenMods {
+		if now.Sub(ts) > seenModTTL {
+			delete(rs.seenMods, id)
+			continue
+		}
+		peers = append(peers, id)
+	}
+	return peers
+}
+
 // Len reports how many rounds are still live.
 func (rs *Registry) Len() int {
 	rs.mx.Lock()

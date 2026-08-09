@@ -160,8 +160,12 @@ func userReport() event.ReportEvent {
 	}
 }
 
-func assertUnavailable(t *testing.T, v vote.Event) {
+func assertUnavailable(t *testing.T, a assessment) {
 	t.Helper()
+	if a.text != "" {
+		t.Fatalf("nothing was judged, so no reference may be kept: %q", a.text)
+	}
+	v := a.ballot
 	if v.Result != domain.OK {
 		t.Fatal("an unreviewable report must carry an OK (no-op) result")
 	}
@@ -221,10 +225,10 @@ func TestAssessTweetReport_ValidTweetReachesEngine(t *testing.T) {
 	if rec.text != "hello world" {
 		t.Fatalf("engine got %q, want %q", rec.text, "hello world")
 	}
-	if v.Result != domain.OK {
+	if v.ballot.Result != domain.OK {
 		t.Fatal("recordingEngine clears content, expected an OK verdict")
 	}
-	if v.ObjectID == nil || *v.ObjectID != "tweet-1" || v.UserID != "offender" {
+	if v.ballot.ObjectID == nil || *v.ballot.ObjectID != "tweet-1" || v.ballot.UserID != "offender" {
 		t.Fatalf("verdict must carry the tweet identifiers, got %+v", v)
 	}
 }
@@ -457,11 +461,11 @@ func TestAssessTweetReport_AlreadyModeratedReusesVerdict(t *testing.T) {
 	if rec.called {
 		t.Fatal("engine must not re-run on an already moderated tweet")
 	}
-	if v.Result != domain.FAIL {
+	if v.ballot.Result != domain.FAIL {
 		t.Fatal("the stored FAIL verdict must be reused")
 	}
-	if v.Reason == nil || *v.Reason != reason {
-		t.Fatalf("the stored reason must be reused, got %v", v.Reason)
+	if v.ballot.Reason == nil || *v.ballot.Reason != reason {
+		t.Fatalf("the stored reason must be reused, got %v", v.ballot.Reason)
 	}
 }
 
@@ -485,7 +489,7 @@ func TestAssessUserReport_ValidProfileReachesEngine(t *testing.T) {
 	if rec.text != "troll\nsome bio" {
 		t.Fatalf("engine got %q, want the concatenated profile text", rec.text)
 	}
-	if v.Result != domain.OK || v.UserID != "user-1" {
+	if v.ballot.Result != domain.OK || v.ballot.UserID != "user-1" {
 		t.Fatalf("unexpected verdict %+v", v)
 	}
 }
@@ -714,5 +718,91 @@ func TestDecided_UserVerdictIsolatesProfile(t *testing.T) {
 	}
 	if pub.calls != 1 {
 		t.Fatalf("a FAIL profile verdict must be broadcast, got %d", pub.calls)
+	}
+}
+
+// --- audit references ---
+
+// A decided round files what this node judged, labelled with the verdict
+// the quorum reached — that is where audit references come from.
+func TestDecided_FilesTheJudgedTextAsReference(t *testing.T) {
+	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
+
+	node := stubModeratorNode{
+		id:   "mod-self",
+		resp: marshal(t, domain.Tweet{Id: "tweet-1", Text: "the judged text", UserId: "offender"}),
+	}
+	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
+
+	rep := tweetReport("tweet-1")
+	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
+		t.Fatalf("Ballot: %v ok=%t", err, ok)
+	}
+
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []domain.ID{"mod-a"})
+
+	_, unsafe := m.corpus.Len()
+	if unsafe != 1 {
+		t.Fatalf("the decided round must leave one flagged reference, got %d", unsafe)
+	}
+}
+
+// A round this node never voted on leaves no reference: it never fetched
+// the text, so it has nothing to vouch for.
+func TestFileReference_WithoutOwnBallotIsNoop(t *testing.T) {
+	m, _ := newTestModerator(t, stubModeratorNode{id: "mod-self"}, stubPublisher{}, nil)
+
+	m.fileReference("some-round-nobody-here-voted-on", domain.FAIL)
+
+	if safe, unsafe := m.corpus.Len(); safe != 0 || unsafe != 0 {
+		t.Fatalf("expected an empty corpus, got %d/%d", safe, unsafe)
+	}
+}
+
+// Hearing the Final announcement is enough: every voter files the reference,
+// not just the node that carried the decision.
+func TestHandleVote_FinalFilesTheReference(t *testing.T) {
+	withEngine(t, fixedEngine{ok: true})
+
+	node := stubModeratorNode{
+		id:   "mod-self",
+		resp: marshal(t, domain.Tweet{Id: "tweet-1", Text: "a clean text", UserId: "author"}),
+	}
+	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
+
+	rep := tweetReport("tweet-1")
+	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
+		t.Fatalf("Ballot: %v ok=%t", err, ok)
+	}
+
+	final := vote.Event{
+		ReportID: rep.ReportID(), Type: domain.ModerationTweetType,
+		Result: domain.OK, ModeratorID: "some-chair", Final: true,
+	}
+	if err := m.handleVote(final); err != nil {
+		t.Fatalf("handleVote: %v", err)
+	}
+
+	if safe, _ := m.corpus.Len(); safe != 1 {
+		t.Fatalf("the announcement must leave one clean reference, got %d", safe)
+	}
+}
+
+// Unreviewable content judged nothing, so it must never become a reference.
+func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
+	rec := &recordingEngine{}
+	withEngine(t, rec)
+
+	node := stubModeratorNode{id: "mod-self", resp: []byte(`{}`)}
+	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
+
+	rep := tweetReport("tweet-1")
+	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
+		t.Fatalf("Ballot: %v ok=%t", err, ok)
+	}
+	m.Decided(rep, decidedBallot(domain.OK, ""), []domain.ID{"mod-a"})
+
+	if safe, unsafe := m.corpus.Len(); safe != 0 || unsafe != 0 {
+		t.Fatalf("nothing was judged, so nothing may be referenced: %d/%d", safe, unsafe)
 	}
 }
