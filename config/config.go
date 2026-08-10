@@ -151,6 +151,26 @@ func Config() config {
 	return configSingleton
 }
 
+// IsNetworkPinned reports whether the operator set the network explicitly (flag or env).
+func IsNetworkPinned() bool {
+	return pflag.CommandLine.Changed("node.network") || os.Getenv("NODE_NETWORK") != ""
+}
+
+// SetNetwork re-points the config at another known network. Call before the node starts.
+func SetNetwork(network string) {
+	configSingleton.Node.Network = network
+	configSingleton.Node.Bootstrap = nil
+	if network == warpnetNetwork {
+		configSingleton.Node.Bootstrap = warpnetBootstrapNodes
+	}
+	if network == testNetNetwork {
+		configSingleton.Node.Bootstrap = testnetBootstrapNodes
+	}
+	dbPath := configSingleton.Database.Path // <app>/<network>/<dir>
+	configSingleton.Database.Path = filepath.Join(
+		filepath.Dir(filepath.Dir(dbPath)), network, filepath.Base(dbPath))
+}
+
 type config struct {
 	Version  *semver.Version
 	Node     node

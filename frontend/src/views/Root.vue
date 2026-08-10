@@ -66,6 +66,22 @@ resulting from the use or misuse of this software.
           >
             Sign up
           </button>
+          <!-- First-launch network choice; picking one relaunches the app on it. -->
+          <div
+            v-if="isFirstRun === true && isDesktop"
+            class="mt-3 text-sm font-normal text-dark"
+          >
+            <label for="network-select" class="mr-2">Network</label>
+            <select
+              id="network-select"
+              v-model="network"
+              @change="switchNetwork"
+              class="bg-lightblue border-b-2 border-dark rounded p-1"
+            >
+              <option value="warpnet">Warpnet (main)</option>
+              <option value="testnet">Testnet</option>
+            </select>
+          </div>
           <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
           <!-- first-run probe failed (node unreachable): offer a retry rather
                than silently showing login with no sign-up path -->
@@ -349,6 +365,9 @@ export default {
       isFirstRun: null,
       isLoading: false,
       showModal: "",
+      network: "warpnet",
+      activeNetwork: "warpnet",
+      isDesktop: false,
 
       userResponsibility: false,
       futureAds: false,
@@ -376,6 +395,15 @@ export default {
     },
   },
   async mounted() {
+    this.isDesktop = warpnetService.isDesktopNode();
+    if (this.isDesktop) {
+      try {
+        this.activeNetwork = await warpnetService.network();
+        this.network = this.activeNetwork;
+      } catch (e) {
+        console.warn("failed to get active network:", e);
+      }
+    }
     await this.resolveFirstRun();
   },
   methods: {
@@ -391,6 +419,16 @@ export default {
         this.firstRunError = true;
       }
       console.log("Is first run:", this.isFirstRun);
+    },
+    // On success the app relaunches itself on the chosen network.
+    async switchNetwork() {
+      if (this.network === this.activeNetwork) return;
+      try {
+        await warpnetService.selectNetwork(this.network);
+      } catch (e) {
+        console.error("failed to switch network:", e);
+        this.network = this.activeNetwork;
+      }
     },
     async signMeUp() {
       try {

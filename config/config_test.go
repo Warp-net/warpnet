@@ -415,6 +415,21 @@ func TestIsTestnet(t *testing.T) {
 	assert.False(t, node{}.IsTestnet())
 }
 
+func TestSetNetworkRepointsDerivedFields(t *testing.T) {
+	orig := Config()
+	defer SetNetwork(orig.Node.Network)
+
+	SetNetwork(testNetNetwork)
+	c := Config()
+	assert.Equal(t, testNetNetwork, c.Node.Network)
+	assert.True(t, c.Node.IsTestnet())
+	assert.Equal(t, testnetBootstrapNodes, c.Node.Bootstrap)
+	assert.Contains(t, c.Database.Path, filepath.Join(testNetNetwork, filepath.Base(orig.Database.Path)))
+
+	SetNetwork(orig.Node.Network)
+	assert.Equal(t, orig.Database.Path, Config().Database.Path)
+}
+
 func TestAddrInfos(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
 		infos, err := node{}.AddrInfos()
