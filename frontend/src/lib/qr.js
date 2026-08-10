@@ -35,9 +35,12 @@ const qrOptions = {
     // upscaling blur. 768px gives a clean 2x for the displayed w-96 box.
     width: 768,
     margin: 2,
+    // Sepia ink on parchment: the magenta this used to draw is the pre-grimdark
+    // brand color, and a saturated mid-tone is the worst case for a camera
+    // binarising the modules. 12:1 keeps it scannable and on-palette.
     color: {
-        dark: "#c5007f",
-        light: "#ffffff",
+        dark: "#2a2118",
+        light: "#efe7d3",
     },
 };
 

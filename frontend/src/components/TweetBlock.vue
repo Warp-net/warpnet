@@ -232,7 +232,7 @@ resulting from the use or misuse of this software.
           type="button"
           class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition-colors flat-btn"
           :class="chip.emoji === myReaction
-            ? 'border-blue bg-lightblue text-blue font-semibold'
+            ? 'border-dark bg-lightblue text-blue font-semibold'
             : 'border-lighter hover:bg-lightblue'"
           :aria-pressed="chip.emoji === myReaction"
           :aria-label="`${chip.count} reacted with ${chip.emoji}`"

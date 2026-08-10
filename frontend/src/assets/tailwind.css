@@ -424,9 +424,13 @@ i.fa-retweet.text-green-500 {
 /* bg-blue is both the brand button fill and Root's full-height hero panel.
    Blood red works on a button and overwhelms a panel, so surfaces get leather
    in the light theme (iron in the dark one, below) and buttons keep the blood. */
+/* Spelled out as channels rather than theme("colors.dark") so the
+   --tw-bg-opacity channel survives: a flat hex here silently drops
+   bg-opacity-*, which turned the poll's 25% tint into a solid leather bar
+   with its percentage label the exact same color. */
 .bg-blue,
 .bg-darkblue {
-  background-color: theme("colors.dark");
+  background-color: rgb(92 74 48 / var(--tw-bg-opacity, 1));
 }
 button.bg-blue,
 button.bg-darkblue {
@@ -453,7 +457,7 @@ button.bg-darkblue {
    dark iron; buttons paint their gradient over it (rule further down). */
 .dark .bg-blue,
 .dark .bg-darkblue {
-  background-color: theme("colors.darktheme.foreground") !important;
+  background-color: rgb(43 34 25 / var(--tw-bg-opacity, 1)) !important;
 }
 .dark button.bg-blue,
 .dark button.bg-darkblue {
