@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- Default avatar for Warpnet's grimdark themes: a bone skull on an iron
+       plate with a brass rim. Reads at 48px in the timeline and at 128px on a
+       profile, on both the parchment and the iron ground. -->
+  <circle cx="200" cy="200" r="200" fill="#1d1813"/>
+  <circle cx="200" cy="200" r="188" fill="none" stroke="#a58a4a" stroke-width="8" opacity="0.9"/>
+
+  <!-- Cranium and a tapering jaw overlap into one silhouette. -->
+  <g fill="#d6c7a1">
+    <ellipse cx="200" cy="184" rx="104" ry="100"/>
+    <path d="M150 236 h100 c7 0 12 6 11 13 l-8 62 c-2 14 -14 25 -28 25 h-50 c-14 0 -26 -11 -28 -25 l-8 -62 c-1 -7 4 -13 11 -13 z"/>
+  </g>
+
+  <g fill="#1d1813">
+    <!-- eye sockets, tilted inward for a scowl -->
+    <ellipse cx="160" cy="178" rx="36" ry="39" transform="rotate(-10 160 178)"/>
+    <ellipse cx="240" cy="178" rx="36" ry="39" transform="rotate(10 240 178)"/>
+    <!-- nasal aperture -->
+    <path d="M200 212 l20 36 c2 4 -1 8 -5 8 h-30 c-4 0 -7 -4 -5 -8 z"/>
+    <!-- occlusion line and the tooth gaps cut into the bone -->
+    <rect x="158" y="286" width="84" height="6" rx="3"/>
+    <rect x="171" y="268" width="8" height="18" rx="2"/>
+    <rect x="196" y="268" width="8" height="18" rx="2"/>
+    <rect x="221" y="268" width="8" height="18" rx="2"/>
+    <rect x="177" y="292" width="8" height="20" rx="2"/>
+    <rect x="215" y="292" width="8" height="20" rx="2"/>
+    <rect x="196" y="292" width="8" height="20" rx="2"/>
+  </g>
+</svg>
