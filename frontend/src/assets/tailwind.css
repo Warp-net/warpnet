@@ -136,9 +136,12 @@ input[type="search"]:focus::-webkit-search-cancel-button {
   pointer-events: all;
 }
 
+/* Bronze, dark enough to clear 4.5:1 on every light surface the app puts links
+   on — including bg-lighter (#e2d7bb) and the bg-lightblue tint (#ded0ae),
+   where the lighter shade only reached 4.2. */
 a:link,
 a {
-  color: #7a5f28;
+  color: #6b5320;
 }
 
 a:hover {
@@ -465,6 +468,19 @@ button.bg-darkblue {
 .dark a:link,
 .dark a {
   color: #b89a5a;
+}
+/* Pale alert surfaces are readable in the light theme, but the dark theme's
+   bone text lands on them at ~1.1:1 — the moderation notice on a hidden tweet
+   was effectively invisible. Darken the fill and keep the text warm. */
+.dark .bg-red-300 {
+  background-color: #4a1010 !important;
+  color: #f0c3c3 !important;
+}
+.dark .bg-yellow-100 {
+  background-color: #3a2e10 !important;
+}
+.dark .text-yellow-800 {
+  color: #e8cf8a !important;
 }
 /* The generic dark toast tints are fine here, but the info variant's navy
    fights the brass; bring it onto the palette. */
