@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
   <!-- Indeterminate bar: the login/sign-up call has no real percentage, so an
        honest looping animation beats a fake timer-driven counter. -->
   <div class="flex flex-col items-center justify-center w-full" role="status" aria-label="Loading">
-    <div class="w-64 h-2 bg-lighter dark:bg-darktheme-input mastodon:bg-mastodon-input rounded-full overflow-hidden">
+    <div class="w-64 h-2 bg-lighter dark:bg-darktheme-input rounded-full overflow-hidden">
       <div class="h-full bg-blue rounded-full progress-indeterminate"></div>
     </div>
     <span class="sr-only">Loading…</span>

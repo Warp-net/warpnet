@@ -69,17 +69,6 @@ module.exports = {
           input: "#1d1813",
           card: "#1d1813",
         },
-        mastodon: {
-          background: "#2d0136",
-          foreground: "#6c029e",
-          text: "#c156f5",
-          secondary: "#ffffff",
-          accent: "#5d1a98",
-          // Same fix as darktheme: surfaces darker than text, not
-          // paler. Sits between background and foreground.
-          input: "#4a026e",
-          card: "#4a026e",
-        },
       },
     },
     screens: {
@@ -99,11 +88,15 @@ module.exports = {
       // => @media (min-width: 1536px) { ... }
     },
   },
+  // NOTE: `variants` is Tailwind v2 config and is ignored by the v3 in use
+  // here, so it never registered a "mastodon:" variant — those utilities in
+  // the templates compiled to nothing. Themes are applied by the hand-written
+  // .dark selectors in tailwind.css instead.
   variants: {
     extend: {
-      backgroundColor: ["dark", "mastodon"],
-      textColor: ["dark", "mastodon"],
-      borderColor: ["dark", "mastodon"],
+      backgroundColor: ["dark"],
+      textColor: ["dark"],
+      borderColor: ["dark"],
     },
   },
   plugins: [

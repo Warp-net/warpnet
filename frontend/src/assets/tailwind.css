@@ -98,14 +98,6 @@ a:focus-visible,
   outline-color: #b89a5a;
 }
 
-.mastodon button:focus-visible,
-.mastodon input:focus-visible,
-.mastodon textarea:focus-visible,
-.mastodon a:focus-visible,
-.mastodon [role="button"]:focus-visible {
-  outline-color: #c156f5;
-}
-
 .modal-main {
   height: 40rem;
 }
@@ -207,13 +199,13 @@ button.rounded-full > i.fa {
   min-height: 2rem;
 }
 
-/* Brand-colored form controls: checkboxes, radios and selects render in the
-   magenta accent instead of the default OS blue, so the sign-up
-   acknowledgements and Settings toggles stay on-palette in every theme. */
+/* Brand-colored form controls: any control not restyled below still renders in
+   the blood accent rather than the default OS blue, so the sign-up
+   acknowledgements and Settings toggles stay on-palette in both themes. */
 input[type="checkbox"],
 input[type="radio"],
 select {
-  accent-color: #C5007F;
+  accent-color: #9b1313;
 }
 
 /* Micro-interactions on the tweet action icons: a quick squash on press gives
@@ -247,7 +239,7 @@ i.fa-retweet.text-green-500 {
 
 /* Active side-nav item: a persistent brand pill for the current route so the
    selected destination reads at a glance (distinct from the hover tint).
-   Plain theme-scoped selectors keep it correct across all three themes. */
+   Plain theme-scoped selectors keep it correct in both themes. */
 .nav-active {
   background-color: theme("colors.lightblue");
   color: theme("colors.blue");
@@ -256,10 +248,6 @@ i.fa-retweet.text-green-500 {
 .dark .nav-active {
   background-color: theme("colors.darktheme.foreground");
   color: theme("colors.darktheme.secondary");
-}
-.mastodon .nav-active {
-  background-color: theme("colors.mastodon.foreground");
-  color: theme("colors.mastodon.text");
 }
 
 /* Toast notification container */
@@ -329,9 +317,6 @@ i.fa-retweet.text-green-500 {
   .dark body {
     @apply bg-darktheme-background text-darktheme-text;
   }
-  .mastodon body {
-    @apply bg-mastodon-background text-mastodon-text;
-  }
 
   input, textarea {
     @apply bg-paper text-black;
@@ -339,9 +324,6 @@ i.fa-retweet.text-green-500 {
   }
   .dark input, .dark textarea {
     @apply bg-darktheme-input text-darktheme-text border-gray-600;
-  }
-  .mastodon input, .mastodon textarea {
-    @apply bg-mastodon-input text-mastodon-text border-gray-600;
   }
 
   .card {
@@ -358,14 +340,8 @@ i.fa-retweet.text-green-500 {
   .dark .card {
     @apply bg-darktheme-card text-darktheme-text;
   }
-  .mastodon .card {
-    @apply bg-mastodon-card text-mastodon-text;
-  }
   .dark .bg-lightest {
     background-color: theme("colors.darktheme.card") !important;
-  }
-  .mastodon .bg-lightest {
-    background-color: theme("colors.mastodon.card") !important;
   }
 
   /* Light surfaces used inline (panels, modals, chat header / footer,
@@ -377,11 +353,6 @@ i.fa-retweet.text-green-500 {
   .dark .bg-gray-100 {
     background-color: theme("colors.darktheme.card") !important;
   }
-  .mastodon .bg-white,
-  .mastodon .focus\:bg-white:focus,
-  .mastodon .bg-gray-100 {
-    background-color: theme("colors.mastodon.card") !important;
-  }
 
   /* bg-lighter is used both as a static surface (incoming chat bubble,
      pill-shaped input idle state) and as hover state. The hover form
@@ -390,15 +361,9 @@ i.fa-retweet.text-green-500 {
   .dark .bg-lighter {
     background-color: theme("colors.darktheme.foreground") !important;
   }
-  .mastodon .bg-lighter {
-    background-color: theme("colors.mastodon.foreground") !important;
-  }
 
   .dark .hover\:bg-lighter:hover {
     background-color: theme("colors.darktheme.foreground") !important;
-  }
-  .mastodon .hover\:bg-lighter:hover {
-    background-color: theme("colors.mastodon.foreground") !important;
   }
 
   /* Some templates use hover:bg-lightest / hover:bg-gray-100 instead
@@ -408,23 +373,13 @@ i.fa-retweet.text-green-500 {
   .dark .hover\:bg-gray-100:hover {
     background-color: theme("colors.darktheme.foreground") !important;
   }
-  .mastodon .hover\:bg-lightest:hover,
-  .mastodon .hover\:bg-gray-100:hover {
-    background-color: theme("colors.mastodon.foreground") !important;
-  }
 
   .dark .border-lighter {
-    border-color: theme("colors.gray.700") !important;
-  }
-  .mastodon .border-lighter {
     border-color: theme("colors.gray.700") !important;
   }
 
   .dark .text-dark {
     color: theme("colors.darktheme.secondary") !important;
-  }
-  .mastodon .text-dark {
-    color: theme("colors.mastodon.secondary") !important;
   }
 
   /* Text classes meant for light backgrounds: black + neutral grays.
@@ -440,27 +395,19 @@ i.fa-retweet.text-green-500 {
   .dark .text-gray-900 {
     color: theme("colors.darktheme.text") !important;
   }
-  .mastodon .text-black,
-  .mastodon .text-gray-500,
-  .mastodon .text-gray-600,
-  .mastodon .text-gray-700,
-  .mastodon .text-gray-800,
-  .mastodon .text-gray-900 {
-    color: theme("colors.mastodon.text") !important;
-  }
 
   /* Light theme: the neutral grays read cold and bluish on parchment, so they
-     become sepia. Scoped away from the themes that already remap them — their
-     rules carry !important and win anyway, but the intent is clearer this way. */
-  html:not(.dark):not(.mastodon) body,
-  html:not(.dark):not(.mastodon) .text-black {
+     become sepia. Scoped away from the dark theme, which already remaps them —
+     its rules carry !important and win anyway, but the intent is clearer. */
+  html:not(.dark) body,
+  html:not(.dark) .text-black {
     color: #2a2118;
   }
-  html:not(.dark):not(.mastodon) .text-gray-500,
-  html:not(.dark):not(.mastodon) .text-gray-600,
-  html:not(.dark):not(.mastodon) .text-gray-700,
-  html:not(.dark):not(.mastodon) .text-gray-800,
-  html:not(.dark):not(.mastodon) .text-gray-900 {
+  html:not(.dark) .text-gray-500,
+  html:not(.dark) .text-gray-600,
+  html:not(.dark) .text-gray-700,
+  html:not(.dark) .text-gray-800,
+  html:not(.dark) .text-gray-900 {
     color: #6b5a3e;
   }
 }

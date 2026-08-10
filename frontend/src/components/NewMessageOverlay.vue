@@ -31,7 +31,7 @@ resulting from the use or misuse of this software.
     ></div>
 
     <div
-      class="modal-main bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card mx-auto rounded-lg z-50 overflow-y-auto w-full sm:w-3/5 md:w-2/5 max-h-full"
+      class="modal-main bg-white dark:bg-darktheme-card mx-auto rounded-lg z-50 overflow-y-auto w-full sm:w-3/5 md:w-2/5 max-h-full"
     >
       <div class="pl-1 pr-4 py-1 h-16 border-b-2 border-lightblue">
         <div class="flex flex-row mt-1 ml-4 items-center">

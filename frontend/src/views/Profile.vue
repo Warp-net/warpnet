@@ -128,7 +128,7 @@ resulting from the use or misuse of this software.
               >
                 <i class="fas fa-ellipsis-h"></i>
               </button>
-              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10">
+              <div v-if="profileMenuOpen" class="absolute right-0 top-10 mt-1 w-48 bg-white dark:bg-darktheme-card rounded-md shadow-lg py-1 z-10">
                 <button type="button" @click="toggleMuteFromProfile" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">{{ isMuted ? `Unmute @${profile.id}` : `Mute @${profile.id}` }}</button>
                 <button
                   type="button"
@@ -818,18 +818,6 @@ export default {
     },
     closeProfileMenu() {
       this.profileMenuOpen = false;
-    },
-    enableMastodonMode() {
-      const html = document.documentElement;
-      html.classList.add("mastodon");
-      localStorage.setItem("theme", "mastodon");
-    },
-    disableMastodonMode() {
-      const html = document.documentElement;
-      if (html.classList.contains("mastodon")) {
-        html.classList.remove("mastodon");
-        localStorage.setItem("theme", "light");
-      }
     }
   },
   watch: {
@@ -875,12 +863,6 @@ export default {
       return;
     } finally {
       this.loading = false;
-    }
-
-    if (this.profile.network && this.profile.network === "mastodon") {
-      this.enableMastodonMode()
-    } else {
-      this.disableMastodonMode();
     }
 
     this.isSelf = this.isMySelf(profileId);
