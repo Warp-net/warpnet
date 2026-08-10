@@ -11,7 +11,7 @@
       >
         {{ option }}
       </button>
-      <div v-else class="relative rounded border border-lighter overflow-hidden">
+      <div v-else class="relative rounded border border-[color:var(--gd-trim)] overflow-hidden">
         <!-- A translucent brand tint, not a solid light fill: the themed
              surface shows through, so the label keeps its contrast in the
              dark theme as well as the light one. -->
