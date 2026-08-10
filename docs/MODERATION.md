@@ -257,3 +257,5 @@ with a key your app verifies before it applies anything. Moderated content is
 hidden from other people's feeds, not deleted, and the author is never
 notified. No human reads your report, no single machine can decide alone, and
 nobody can forge a verdict.
+
+---
