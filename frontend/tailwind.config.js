@@ -47,20 +47,20 @@ module.exports = {
         light: "#AAB8C2",
         lighter: "#E1E8ED",
         lightest: "#F5F8FA",
+        // The dark theme is the grimdark one: blackened iron, bone text,
+        // brass trim and dried blood as the accent. Key name kept because
+        // components reference dark:bg-darktheme-card and friends.
+        // Elevated surfaces (cards, inputs) stay darker than the text
+        // colors, not lighter, so bone and white both keep contrast.
         darktheme: {
-          background: "#360124",
-          foreground: "#660142",
-          text: "#f6bcdc",
-          secondary: "#ffffff",
-          accent: "#C5007F",
-          // Elevated surfaces (cards, inputs) must be darker than the
-          // text colors, not lighter — the previous #ea86ac put pale
-          // pink under text-darktheme-text (light pink) and white,
-          // both became invisible. #4d0133 sits between background
-          // and foreground so it reads as a subtle elevation without
-          // washing out either text variant.
-          input: "#4d0133",
-          card: "#4d0133",
+          background: "#14110e",
+          foreground: "#2b2219",
+          text: "#d6c7a1",
+          secondary: "#f0e6d2",
+          accent: "#9b1313",
+          gold: "#a58a4a",
+          input: "#1d1813",
+          card: "#1d1813",
         },
         mastodon: {
           background: "#2d0136",
@@ -72,16 +72,6 @@ module.exports = {
           // paler. Sits between background and foreground.
           input: "#4a026e",
           card: "#4a026e",
-        },
-        grimdark: {
-          background: "#14110e",
-          foreground: "#2b2219",
-          text: "#d6c7a1",
-          secondary: "#f0e6d2",
-          accent: "#9b1313",
-          gold: "#a58a4a",
-          input: "#1d1813",
-          card: "#1d1813",
         },
       },
     },

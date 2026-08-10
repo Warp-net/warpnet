@@ -1,21 +1,25 @@
-# Grimdark theme (WIP)
+# Grimdark — the dark theme
 
-Fourth theme alongside light / dark / mastodon, in the same mechanism: a
-`grimdark` class on `<html>`, a palette in `tailwind.config.js`, and a block of
-scoped overrides at the end of `src/assets/tailwind.css`.
+This *is* the app's dark theme: blackened iron, bone text, brass trim, dried
+blood as the accent. There is no separate class or switch — the existing
+light/dark toggle in `SideNav.vue` turns it on, and `darktheme` in
+`tailwind.config.js` now holds this palette (the key name stayed so the
+`dark:bg-darktheme-card` utilities in the views keep working).
 
-Enable it by hand until a UI switch exists:
+The mastodon theme and the light theme are untouched.
 
-    localStorage.setItem('theme', 'grimdark')   // then reload
+## Where it lives
 
-## Files
-
+- `tailwind.config.js` — the `darktheme` palette, plus a `gold` key for trim.
+- `src/assets/tailwind.css` — the existing `.dark` mappings carry most of the
+  theme once the palette changes; below the base layer sit the classes that had
+  no dark mapping at all (`bg-lightblue`, `border-dark`, the brand blue) and the
+  ornamental layer.
 - `frame.svg` — 9-slice ornamental frame (`border-image`, slice 32 of 96),
   applied to `.card`, `.modal-main` and the dashboard's `.rounded-lg.bg-lightest`
   panels.
-- `preview-source.html` — component gallery markup, uses the app's own classes.
-- `preview.html` — the same gallery with the compiled CSS inlined, openable
-  standalone. Regenerate after theme edits:
+- `preview-source.html` / `preview.html` — a component gallery; the second has
+  the compiled CSS inlined and opens standalone. Regenerate after theme edits:
 
       npx tailwindcss -c tailwind.config.js -i src/assets/tailwind.css \
         -o /tmp/demo.css --content src/assets/grimdark/preview-source.html
@@ -23,13 +27,12 @@ Enable it by hand until a UI switch exists:
   then inline `/tmp/demo.css` into the page and replace the
   `url("./grimdark/frame.svg")` reference with a data URI of `frame.svg`.
 
-## Gotchas hit while building this
+## Gotchas
 
-- Theme rules must stay **outside** `@layer`. Tailwind drops custom layered
-  styles whose selector classes never appear in the content files, and
-  `grimdark` appears in no template yet — inside `@layer base` the whole theme
-  vanished from the build. `dark` / `mastodon` survive only because those
-  strings exist in component JS.
+- Rules for a class that appears in no template are dropped from the build when
+  written inside `@layer`. `.dark` is safe (it occurs in `SideNav.vue`), but
+  anything genuinely new must stay unlayered — that is why the ornamental block
+  sits outside the layer.
 - The display font is applied via size utilities (`.text-2xl` etc.) because the
   views mark headings up with classes rather than `h1`-`h3`. Font Awesome icons
   carry the same utilities, so the selectors need `:not(i)` or every icon
@@ -38,8 +41,7 @@ Enable it by hand until a UI switch exists:
 ## Left to do
 
 - Vendor Grenze Gotisch (OFL) into `src/assets/fonts` and drop the Google Fonts
-  `@import` from `tailwind.css` — no external request from the app.
-- Add a theme switch in `SideNav.vue` next to the existing light/dark toggle.
+  `@import` from `tailwind.css` — as shipped, every load hits a Google CDN.
 - Rebuild `frontend/dist` (separate commit) or the theme never reaches users.
 - Remove `preview*.html` before the real PR if they are not wanted in-tree.
 
