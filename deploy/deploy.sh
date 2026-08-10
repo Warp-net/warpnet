@@ -31,6 +31,16 @@ fi
 [ -L /etc/resolv.conf ] || printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf
 # ────────────────────────────────────────────────────────────────────────────
 
+SWAPFILE=/swapfile
+if ! swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$SWAPFILE"; then
+  [ -f "$SWAPFILE" ] || fallocate -l 4G "$SWAPFILE" || dd if=/dev/zero of="$SWAPFILE" bs=1M count=4096 || true
+  chmod 600 "$SWAPFILE" 2>/dev/null || true
+  swapon "$SWAPFILE" 2>/dev/null \
+    || { mkswap "$SWAPFILE" >/dev/null 2>&1 && swapon "$SWAPFILE"; } \
+    || echo "WARNING: swap unavailable, 2 GiB RAM only"
+  grep -qs "^$SWAPFILE " /etc/fstab || echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+fi
+
 echo "Run deploy script"
 
 if [ -z "$GITHUB_TOKEN" ]; then
