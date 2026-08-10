@@ -223,7 +223,7 @@ resulting from the use or misuse of this software.
       </button>
       <div
         v-if="dropdown"
-        class="absolute bottom-0 left-0 w-80 rounded-lg shadow-md border-lightest bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card mb-16"
+        class="absolute bottom-0 left-0 w-80 rounded-lg shadow-md border-lightest bg-white dark:bg-darktheme-card mb-16"
       >
         <button
           @click="dropdown = false"

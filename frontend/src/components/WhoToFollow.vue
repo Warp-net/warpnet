@@ -27,7 +27,7 @@ resulting from the use or misuse of this software.
       <div class="p-3 flex items-center">
         <p class="text-lg font-bold">Who to follow</p>
         <img v-if="section.key === 'warpnet'" src="@/assets/logo-transparent.png" alt="Warpnet" class="w-5 h-5 ml-2 object-contain" />
-        <i v-else class="fab fa-mastodon text-lg ml-2 text-[#6364FF]" role="img" aria-label="Mastodon"></i>
+        <i v-else class="fab fa-mastodon text-lg ml-2 text-[color:var(--gd-trim)]" role="img" aria-label="Mastodon"></i>
       </div>
       <!-- No v-if here: on one element Vue 3 evaluates v-if BEFORE v-for, so
            "profile" resolved to the component prop, not the loop item — the

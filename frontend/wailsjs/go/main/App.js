@@ -14,8 +14,16 @@ export function IsFirstRun() {
   return window['go']['main']['App']['IsFirstRun']();
 }
 
+export function Network() {
+  return window['go']['main']['App']['Network']();
+}
+
 export function NotifyDeepLink(arg1) {
   return window['go']['main']['App']['NotifyDeepLink'](arg1);
+}
+
+export function SelectNetwork(arg1) {
+  return window['go']['main']['App']['SelectNetwork'](arg1);
 }
 
 export function SetPendingDeepLink(arg1) {

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Warpnet — grimdark theme</title>
+<style>
+  body { margin: 0; padding: 24px; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .theme-pane { padding: 20px; background: #efe7d3; }
+  .theme-pane.dark { background: #14110e; }
+  .pane-label { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-bottom: 14px; }
+  .screens { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  .screen { width: 470px; }
+  .screen-label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; opacity: .55; margin-bottom: 8px; }
+  .ico { width: 20px; height: 20px; display: inline-block; vertical-align: -4px; fill: currentColor; }
+</style>
+</head>
+<body>
+<div class="theme-pane">
+<div class="pane-label">Светлая — пергамент, бронза, чернила</div>
+<div class="screens">
+
+  <!-- ============ SCREEN 1: dashboard ============ -->
+  <div class="screen">
+    <div class="screen-label">1 — Лента</div>
+    <div class="flex" style="border:1px solid rgba(165,138,74,.2)">
+
+      <!-- nav rail -->
+      <div class="flex flex-col items-center p-2" style="width:62px">
+        <div class="p-2 mb-2">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M2 5l4 14 6-9 6 9 4-14-5 4-5-4-5 4z"/></svg>
+        </div>
+        <div class="nav-active rounded-full p-2 mb-1">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M12 3L2 12h3v9h6v-6h2v6h6v-9h3z"/></svg>
+        </div>
+        <div class="rounded-full p-2 mb-1 hover:bg-lighter">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M12 22a2 2 0 002-2h-4a2 2 0 002 2zm7-6V11a7 7 0 10-14 0v5l-2 2v1h18v-1z"/></svg>
+        </div>
+        <div class="rounded-full p-2 mb-1 hover:bg-lighter">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v.5l7 4.5 7-4.5V7z"/></svg>
+        </div>
+        <div class="rounded-full p-2 mb-1 hover:bg-lighter">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        </div>
+        <button class="bg-blue text-white font-bold mt-2" style="padding:10px 12px">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+        </button>
+      </div>
+
+      <!-- timeline -->
+      <div class="flex-1" style="border-left:1px solid rgba(165,138,74,.2)">
+        <div class="p-3 flex items-center justify-between border-lighter" style="border-bottom:1px solid">
+          <h1 class="text-xl font-bold">Home</h1>
+        </div>
+
+        <!-- composer -->
+        <div class="p-3 border-lighter" style="border-bottom:1px solid">
+          <div class="flex">
+            <div class="rounded-full bg-lighter" style="width:44px;height:44px;flex:none"></div>
+            <div class="ml-3 flex-1">
+              <textarea class="w-full p-2" rows="2" placeholder="What's happening?"></textarea>
+              <div class="flex items-center justify-between mt-2">
+                <span class="text-gray-500 text-sm">0 / 280</span>
+                <button class="bg-blue text-white font-bold" style="padding:8px 20px">Tweet</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- a post -->
+        <div class="p-3 border-lighter hover:bg-lighter" style="border-bottom:1px solid">
+          <div class="flex">
+            <div class="rounded-full bg-lighter" style="width:44px;height:44px;flex:none"></div>
+            <div class="ml-3">
+              <p><span class="font-bold">Inquisitor</span> <span class="text-gray-500">@claude · 2h</span></p>
+              <p class="mt-1">Узел поднят, ключи в сохранности. Тема наконец не режет глаза в темноте.</p>
+              <div class="flex mt-2 text-gray-500" style="gap:28px">
+                <span><svg class="ico" viewBox="0 0 24 24"><path d="M21 6H3v12h4v4l5-4h9z"/></svg> 3</span>
+                <span><svg class="ico" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg> 1</span>
+                <span><svg class="ico" viewBox="0 0 24 24"><path d="M12 21S3 14 3 8.5A4.5 4.5 0 0112 6a4.5 4.5 0 019 2.5C21 14 12 21 12 21z"/></svg> 12</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 2: controls ============ -->
+  <div class="screen">
+    <div class="screen-label">2 — Панель и элементы управления</div>
+
+    <!-- framed panel -->
+    <div class="rounded-lg bg-lightest">
+      <div class="p-3">
+        <p class="text-lg font-bold">Who to follow</p>
+      </div>
+      <div class="flex items-center p-3 border-t border-lighter">
+        <div class="rounded-full bg-lighter" style="width:44px;height:44px"></div>
+        <div class="ml-3 flex-1">
+          <p class="font-bold">Ordo Hereticus</p>
+          <p class="text-gray-500 text-sm">@ordo</p>
+        </div>
+        <button class="border-blue" style="border:1px solid;padding:6px 16px">Follow</button>
+      </div>
+    </div>
+
+    <!-- settings card -->
+    <div class="card mt-6">
+      <h2 class="text-2xl mb-3">Settings</h2>
+
+      <p class="text-gray-500 text-sm mb-1">Display name</p>
+      <input class="w-full p-2 mb-4" type="text" value="Inquisitor">
+
+      <p class="text-gray-500 text-sm mb-2">Notifications</p>
+      <label class="block mb-2"><input type="checkbox" checked> <span class="ml-2">Replies and mentions</span></label>
+      <label class="block mb-2"><input type="checkbox" checked> <span class="ml-2">New followers</span></label>
+      <label class="block mb-4"><input type="checkbox"> <span class="ml-2">Sponsored content</span></label>
+
+      <p class="text-gray-500 text-sm mb-2">Timeline</p>
+      <label class="block mb-2"><input type="radio" name="tl" checked> <span class="ml-2">Chronological</span></label>
+      <label class="block mb-4"><input type="radio" name="tl"> <span class="ml-2">Ranked</span></label>
+
+      <div class="flex mt-2" style="gap:12px">
+        <button class="bg-blue text-white font-bold" style="padding:8px 20px">Save</button>
+        <button class="border-blue" style="border:1px solid;padding:8px 20px">Cancel</button>
+      </div>
+    </div>
+
+    <!-- burger menu -->
+    <div class="mt-6">
+      <div class="flex items-center p-2 rounded-lg bg-lighter" style="width:44px;height:44px;justify-content:center">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      </div>
+      <div class="card mt-2" style="width:230px;padding:6px 0">
+        <div class="p-3 hover:bg-lighter">Profile</div>
+        <div class="p-3 hover:bg-lighter">Bookmarks</div>
+        <div class="p-3 hover:bg-lighter border-t border-lighter">Log out</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="theme-pane dark">
+<div class="pane-label">Тёмная — железо, латунь, кровь</div>
+<div class="screens">
+
+  <!-- ============ SCREEN 1: dashboard ============ -->
+  <div class="screen">
+    <div class="screen-label">1 — Лента</div>
+    <div class="flex" style="border:1px solid rgba(165,138,74,.2)">
+
+      <!-- nav rail -->
+      <div class="flex flex-col items-center p-2" style="width:62px">
+        <div class="p-2 mb-2">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M2 5l4 14 6-9 6 9 4-14-5 4-5-4-5 4z"/></svg>
+        </div>
+        <div class="nav-active rounded-full p-2 mb-1">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M12 3L2 12h3v9h6v-6h2v6h6v-9h3z"/></svg>
+        </div>
+        <div class="rounded-full p-2 mb-1 hover:bg-lighter">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M12 22a2 2 0 002-2h-4a2 2 0 002 2zm7-6V11a7 7 0 10-14 0v5l-2 2v1h18v-1z"/></svg>
+        </div>
+        <div class="rounded-full p-2 mb-1 hover:bg-lighter">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v.5l7 4.5 7-4.5V7z"/></svg>
+        </div>
+        <div class="rounded-full p-2 mb-1 hover:bg-lighter">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        </div>
+        <button class="bg-blue text-white font-bold mt-2" style="padding:10px 12px">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+        </button>
+      </div>
+
+      <!-- timeline -->
+      <div class="flex-1" style="border-left:1px solid rgba(165,138,74,.2)">
+        <div class="p-3 flex items-center justify-between border-lighter" style="border-bottom:1px solid">
+          <h1 class="text-xl font-bold">Home</h1>
+        </div>
+
+        <!-- composer -->
+        <div class="p-3 border-lighter" style="border-bottom:1px solid">
+          <div class="flex">
+            <div class="rounded-full bg-lighter" style="width:44px;height:44px;flex:none"></div>
+            <div class="ml-3 flex-1">
+              <textarea class="w-full p-2" rows="2" placeholder="What's happening?"></textarea>
+              <div class="flex items-center justify-between mt-2">
+                <span class="text-gray-500 text-sm">0 / 280</span>
+                <button class="bg-blue text-white font-bold" style="padding:8px 20px">Tweet</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- a post -->
+        <div class="p-3 border-lighter hover:bg-lighter" style="border-bottom:1px solid">
+          <div class="flex">
+            <div class="rounded-full bg-lighter" style="width:44px;height:44px;flex:none"></div>
+            <div class="ml-3">
+              <p><span class="font-bold">Inquisitor</span> <span class="text-gray-500">@claude · 2h</span></p>
+              <p class="mt-1">Узел поднят, ключи в сохранности. Тема наконец не режет глаза в темноте.</p>
+              <div class="flex mt-2 text-gray-500" style="gap:28px">
+                <span><svg class="ico" viewBox="0 0 24 24"><path d="M21 6H3v12h4v4l5-4h9z"/></svg> 3</span>
+                <span><svg class="ico" viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z"/></svg> 1</span>
+                <span><svg class="ico" viewBox="0 0 24 24"><path d="M12 21S3 14 3 8.5A4.5 4.5 0 0112 6a4.5 4.5 0 019 2.5C21 14 12 21 12 21z"/></svg> 12</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 2: controls ============ -->
+  <div class="screen">
+    <div class="screen-label">2 — Панель и элементы управления</div>
+
+    <!-- framed panel -->
+    <div class="rounded-lg bg-lightest">
+      <div class="p-3">
+        <p class="text-lg font-bold">Who to follow</p>
+      </div>
+      <div class="flex items-center p-3 border-t border-lighter">
+        <div class="rounded-full bg-lighter" style="width:44px;height:44px"></div>
+        <div class="ml-3 flex-1">
+          <p class="font-bold">Ordo Hereticus</p>
+          <p class="text-gray-500 text-sm">@ordo</p>
+        </div>
+        <button class="border-blue" style="border:1px solid;padding:6px 16px">Follow</button>
+      </div>
+    </div>
+
+    <!-- settings card -->
+    <div class="card mt-6">
+      <h2 class="text-2xl mb-3">Settings</h2>
+
+      <p class="text-gray-500 text-sm mb-1">Display name</p>
+      <input class="w-full p-2 mb-4" type="text" value="Inquisitor">
+
+      <p class="text-gray-500 text-sm mb-2">Notifications</p>
+      <label class="block mb-2"><input type="checkbox" checked> <span class="ml-2">Replies and mentions</span></label>
+      <label class="block mb-2"><input type="checkbox" checked> <span class="ml-2">New followers</span></label>
+      <label class="block mb-4"><input type="checkbox"> <span class="ml-2">Sponsored content</span></label>
+
+      <p class="text-gray-500 text-sm mb-2">Timeline</p>
+      <label class="block mb-2"><input type="radio" name="tl" checked> <span class="ml-2">Chronological</span></label>
+      <label class="block mb-4"><input type="radio" name="tl"> <span class="ml-2">Ranked</span></label>
+
+      <div class="flex mt-2" style="gap:12px">
+        <button class="bg-blue text-white font-bold" style="padding:8px 20px">Save</button>
+        <button class="border-blue" style="border:1px solid;padding:8px 20px">Cancel</button>
+      </div>
+    </div>
+
+    <!-- burger menu -->
+    <div class="mt-6">
+      <div class="flex items-center p-2 rounded-lg bg-lighter" style="width:44px;height:44px;justify-content:center">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      </div>
+      <div class="card mt-2" style="width:230px;padding:6px 0">
+        <div class="p-3 hover:bg-lighter">Profile</div>
+        <div class="p-3 hover:bg-lighter">Bookmarks</div>
+        <div class="p-3 hover:bg-lighter border-t border-lighter">Log out</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</body>
+</html>

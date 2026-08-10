@@ -49,7 +49,7 @@ resulting from the use or misuse of this software.
         </div>
         <div v-if="mastodonProfiles.length > 0">
           <h2 class="px-5 pt-3 text-left text-lg font-bold">
-            <i class="fab fa-mastodon text-[#6364FF]" role="img" aria-label="Mastodon"></i>
+            <i class="fab fa-mastodon text-[color:var(--gd-trim)]" role="img" aria-label="Mastodon"></i>
           </h2>
           <Users :users="mastodonProfiles" :loading="loading" />
         </div>

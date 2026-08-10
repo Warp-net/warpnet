@@ -3,7 +3,10 @@ services:
     container_name: warpnet-mainnet-1
     image: ghcr.io/warp-net/warpnet-relay:latest
     network_mode: host
-    restart: always
+    restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
+    oom_score_adj: -500
     environment:
 #      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
       - NODE_PORT=4001
@@ -14,12 +17,16 @@ services:
       - LOGGING_LEVEL=info
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
+      - GOMEMLIMIT=192MiB
 
   warpnet2:
     container_name: warpnet-mainnet-2
     image: ghcr.io/warp-net/warpnet-relay:latest
     network_mode: host
-    restart: always
+    restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
+    oom_score_adj: -500
     environment:
 #      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
       - NODE_PORT=4002
@@ -30,12 +37,16 @@ services:
       - LOGGING_LEVEL=info
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
+      - GOMEMLIMIT=192MiB
 
   warpnet3:
     container_name: warpnet-mainnet-3
     image: ghcr.io/warp-net/warpnet-relay:latest
     network_mode: host
-    restart: always
+    restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
+    oom_score_adj: -500
     environment:
       - NODE_PORT=4003
 #      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
@@ -46,56 +57,68 @@ services:
       - LOGGING_LEVEL=info
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - SOCKS5_ENABLED=false
+      - GOMEMLIMIT=192MiB
 
-  warpnet-moderator-1:
-    container_name: moderator
-    image: ghcr.io/warp-net/warpnet-moderator:latest
-    network_mode: host
-    restart: always
-    environment:
-      - NODE_PORT=4004
-      - NODE_HOST_V4=207.154.221.44
-      - NODE_NETWORK=warpnet
-      - LOGGING_LEVEL=info
-      - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet-moderator-1
-      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-    volumes:
-      - /root/.warpdata:/root/.warpdata:rw
-      # The model path is hardcoded relative to the container CWD (/warpnet).
-      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+#  warpnet-moderator-1:
+#    container_name: moderator
+#    image: ghcr.io/warp-net/warpnet-moderator:latest
+#    network_mode: host
+#    restart: unless-stopped
+#    mem_limit: 1700m
+#    mem_reservation: 160m
+#    oom_score_adj: -200
+#    environment:
+#      - NODE_PORT=4004
+#      - NODE_HOST_V4=207.154.221.44
+#      - NODE_NETWORK=warpnet
+#      - LOGGING_LEVEL=info
+#      - LOGGING_FORMAT=json
+#      - NODE_SEED=warpnet-moderator-1
+#      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+#      - GOMEMLIMIT=512MiB
+#    volumes:
+#      - /root/.warpdata:/root/.warpdata:rw
+#      # The model path is hardcoded relative to the container CWD (/warpnet).
+#      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
 
-  warpnet-moderator-2:
-    container_name: moderator-2
-    image: ghcr.io/warp-net/warpnet-moderator:latest
-    network_mode: host
-    restart: always
-    environment:
-      - NODE_PORT=4005
-      - NODE_HOST_V4=207.154.221.44
-      - NODE_NETWORK=warpnet
-      - LOGGING_LEVEL=info
-      - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet-moderator-2
-      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-    volumes:
-      - /root/.warpdata:/root/.warpdata:rw
-      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+#  warpnet-moderator-2:
+#    container_name: moderator-2
+#    image: ghcr.io/warp-net/warpnet-moderator:latest
+#    network_mode: host
+#    restart: unless-stopped
+#    mem_limit: 1700m
+#    mem_reservation: 160m
+#    oom_score_adj: -200
+#    environment:
+#      - NODE_PORT=4005
+#      - NODE_HOST_V4=207.154.221.44
+#      - NODE_NETWORK=warpnet
+#      - LOGGING_LEVEL=info
+#      - LOGGING_FORMAT=json
+#      - NODE_SEED=warpnet-moderator-2
+#      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+#      - GOMEMLIMIT=512MiB
+#    volumes:
+#      - /root/.warpdata:/root/.warpdata:rw
+#      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
 
-  warpnet-moderator-3:
-    container_name: moderator-3
-    image: ghcr.io/warp-net/warpnet-moderator:latest
-    network_mode: host
-    restart: always
-    environment:
-      - NODE_PORT=4006
-      - NODE_HOST_V4=207.154.221.44
-      - NODE_NETWORK=warpnet
-      - LOGGING_LEVEL=info
-      - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet-moderator-3
-      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-    volumes:
-      - /root/.warpdata:/root/.warpdata:rw
-      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
-
+#  warpnet-moderator-3:
+#    container_name: moderator-3
+#    image: ghcr.io/warp-net/warpnet-moderator:latest
+#    network_mode: host
+#    restart: unless-stopped
+#    mem_limit: 1700m
+#    mem_reservation: 160m
+#    oom_score_adj: -200
+#    environment:
+#      - NODE_PORT=4006
+#      - NODE_HOST_V4=207.154.221.44
+#      - NODE_NETWORK=warpnet
+#      - LOGGING_LEVEL=info
+#      - LOGGING_FORMAT=json
+#      - NODE_SEED=warpnet-moderator-3
+#      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+#      - GOMEMLIMIT=512MiB
+#    volumes:
+#      - /root/.warpdata:/root/.warpdata:rw
+#      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro

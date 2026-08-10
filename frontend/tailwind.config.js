@@ -40,38 +40,34 @@ module.exports = {
         sans: [...defaultTheme.fontFamily.sans],
       },
       colors: {
-        blue: "#C5007F",
-        darkblue: "#630241",
-        lightblue: "#f4d5e1",
-        dark: "#657786",
-        light: "#AAB8C2",
-        lighter: "#E1E8ED",
-        lightest: "#F5F8FA",
+        // Light theme: aged parchment and sepia ink, with the same dried
+        // blood accent and a darker bronze trim (brass has no contrast on
+        // a pale ground). The names are the app's existing brand slots —
+        // "blue" has been the primary accent since the Twitter-clone days.
+        blue: "#8f1414",
+        darkblue: "#6d0b0b",
+        lightblue: "#ded0ae",
+        dark: "#5c4a30",
+        light: "#a9977a",
+        lighter: "#e2d7bb",
+        lightest: "#efe7d3",
+        // Elevated light surfaces (inputs, modals, dropdowns): a shade above
+        // the page so they read as raised without going stark white.
+        paper: "#f7f2e4",
+        // The dark theme is the grimdark one: blackened iron, bone text,
+        // brass trim and dried blood as the accent. Key name kept because
+        // components reference dark:bg-darktheme-card and friends.
+        // Elevated surfaces (cards, inputs) stay darker than the text
+        // colors, not lighter, so bone and white both keep contrast.
         darktheme: {
-          background: "#360124",
-          foreground: "#660142",
-          text: "#f6bcdc",
-          secondary: "#ffffff",
-          accent: "#C5007F",
-          // Elevated surfaces (cards, inputs) must be darker than the
-          // text colors, not lighter — the previous #ea86ac put pale
-          // pink under text-darktheme-text (light pink) and white,
-          // both became invisible. #4d0133 sits between background
-          // and foreground so it reads as a subtle elevation without
-          // washing out either text variant.
-          input: "#4d0133",
-          card: "#4d0133",
-        },
-        mastodon: {
-          background: "#2d0136",
-          foreground: "#6c029e",
-          text: "#c156f5",
-          secondary: "#ffffff",
-          accent: "#5d1a98",
-          // Same fix as darktheme: surfaces darker than text, not
-          // paler. Sits between background and foreground.
-          input: "#4a026e",
-          card: "#4a026e",
+          background: "#14110e",
+          foreground: "#2b2219",
+          text: "#d6c7a1",
+          secondary: "#f0e6d2",
+          accent: "#9b1313",
+          gold: "#a58a4a",
+          input: "#1d1813",
+          card: "#1d1813",
         },
       },
     },
@@ -92,11 +88,15 @@ module.exports = {
       // => @media (min-width: 1536px) { ... }
     },
   },
+  // NOTE: `variants` is Tailwind v2 config and is ignored by the v3 in use
+  // here, so it never registered a "mastodon:" variant — those utilities in
+  // the templates compiled to nothing. Themes are applied by the hand-written
+  // .dark selectors in tailwind.css instead.
   variants: {
     extend: {
-      backgroundColor: ["dark", "mastodon"],
-      textColor: ["dark", "mastodon"],
-      borderColor: ["dark", "mastodon"],
+      backgroundColor: ["dark"],
+      textColor: ["dark"],
+      borderColor: ["dark"],
     },
   },
   plugins: [

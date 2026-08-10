@@ -16,8 +16,8 @@ Warpnet is a fully decentralized, peer-to-peer social network built in Go. Every
 
 [**Install**](#-quick-start-users) · [**Build from source**](#-build-from-source-developers) · [**How it works**](#-how-it-works) · [**Contributing**](#-contributing) · [**Roadmap**](#-roadmap)
 
-<a href="https://assets.zyrosite.com/cdn-cgi/image/format=auto,w=1920,fit=crop/jf7Nx56ebRHXV9M1/image-margin1-9wpak3B3YBzEnLdI.jpg">
-  <img src="https://assets.zyrosite.com/cdn-cgi/image/format=auto,w=1920,fit=crop/jf7Nx56ebRHXV9M1/image-margin1-9wpak3B3YBzEnLdI.jpg" alt="Warpnet screenshot" width="720">
+<a href="docs/img/screenshot.jpg">
+  <img src="docs/img/screenshot.jpg" alt="Warpnet screenshot" width="720">
 </a>
 </div>
 
@@ -252,6 +252,6 @@ Warpnet is free software, licensed under the **GNU Affero General Public License
 
 **Built with Go, libp2p, Noise, and the conviction that a social network shouldn't have an owner.**
 
-If you believe that too — [grab a good first issue](https://github.com/Warp-net/warpnet/issues) and join in.
+If you believe that too — [grab a good first issue](https://github.com/Warp-net/warpnet/issues) and join in. The Emperor Protects!
 
 </div>

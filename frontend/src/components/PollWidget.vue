@@ -11,10 +11,10 @@
       >
         {{ option }}
       </button>
-      <div v-else class="relative rounded border border-lighter overflow-hidden">
+      <div v-else class="relative rounded border border-[color:var(--gd-trim)] overflow-hidden">
         <!-- A translucent brand tint, not a solid light fill: the themed
              surface shows through, so the label keeps its contrast in the
-             dark and mastodon themes as well as the light one. -->
+             dark theme as well as the light one. -->
         <div class="absolute inset-y-0 left-0 bg-blue bg-opacity-25" :style="{width: percent(index) + '%'}"></div>
         <div class="relative flex items-center justify-between px-3 py-2 text-sm">
           <span :class="votedOption === index ? 'font-semibold' : ''">

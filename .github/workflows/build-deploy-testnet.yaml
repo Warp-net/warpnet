@@ -146,7 +146,12 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           eval "$(ssh-agent -s)"
           ssh-add ~/.ssh/id_rsa
-          ssh-keyscan -H 207.154.221.44 >> ~/.ssh/known_hosts
+          for i in 1 2 3 4 5; do
+            ssh-keyscan -t ed25519 -T 15 -H 207.154.221.44 > ~/.ssh/known_hosts && break
+            echo "ssh-keyscan attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          test -s ~/.ssh/known_hosts
 
       - name: Deploy to Testnet DO Droplet
         run: |

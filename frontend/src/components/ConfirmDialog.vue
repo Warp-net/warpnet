@@ -6,7 +6,7 @@
     @click.self.stop="$emit('cancel')"
     @click.stop
   >
-    <div class="bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-lg w-full max-w-sm flex flex-col shadow-lg" @click.stop>
+    <div class="bg-white dark:bg-darktheme-card rounded-lg w-full max-w-sm flex flex-col shadow-lg" @click.stop>
       <div class="px-5 py-4">
         <h2 v-if="title" class="font-bold text-lg mb-2">{{ title }}</h2>
         <p class="text-sm text-dark whitespace-pre-line">{{ message }}</p>

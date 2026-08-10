@@ -22,6 +22,31 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
+/* Grimdark display font, self-hosted so the app makes no third-party request.
+   Variable font: one file per subset covers every weight. OFL text sits beside
+   the woff2 in src/assets/fonts. Cyrillic isn't in the family, so Russian
+   headings fall back to the serif stack. */
+@font-face {
+  font-family: "Grenze Gotisch";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/grenze-gotisch-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Grenze Gotisch";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/grenze-gotisch-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+    U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -60,7 +85,7 @@ input:focus-visible,
 textarea:focus-visible,
 a:focus-visible,
 [role="button"]:focus-visible {
-  outline: 2px solid #C5007F;
+  outline: 2px solid #8f1414;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -70,15 +95,7 @@ a:focus-visible,
 .dark textarea:focus-visible,
 .dark a:focus-visible,
 .dark [role="button"]:focus-visible {
-  outline-color: #f4d5e1;
-}
-
-.mastodon button:focus-visible,
-.mastodon input:focus-visible,
-.mastodon textarea:focus-visible,
-.mastodon a:focus-visible,
-.mastodon [role="button"]:focus-visible {
-  outline-color: #c156f5;
+  outline-color: #b89a5a;
 }
 
 .modal-main {
@@ -119,9 +136,12 @@ input[type="search"]:focus::-webkit-search-cancel-button {
   pointer-events: all;
 }
 
+/* Bronze, dark enough to clear 4.5:1 on every light surface the app puts links
+   on — including bg-lighter (#e2d7bb) and the bg-lightblue tint (#ded0ae),
+   where the lighter shade only reached 4.2. */
 a:link,
 a {
-  color: #1b95e0;
+  color: #6b5320;
 }
 
 a:hover {
@@ -136,16 +156,16 @@ button:not(.flat-btn) {
 /* Primary filled buttons (bg-blue) get a subtle shadow and press effect */
 button.bg-blue,
 button.bg-darkblue {
-  box-shadow: 0 2px 6px rgba(197, 0, 127, 0.3), 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 6px rgba(109, 11, 11, 0.3), 0 1px 2px rgba(0,0,0,0.1);
 }
 button.bg-blue:hover,
 button.bg-darkblue:hover {
-  box-shadow: 0 4px 12px rgba(197, 0, 127, 0.4), 0 2px 4px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 12px rgba(109, 11, 11, 0.4), 0 2px 4px rgba(0,0,0,0.12);
   transform: translateY(-1px);
 }
 button.bg-blue:active,
 button.bg-darkblue:active {
-  box-shadow: 0 1px 3px rgba(197, 0, 127, 0.25);
+  box-shadow: 0 1px 3px rgba(109, 11, 11, 0.25);
   transform: translateY(0);
 }
 
@@ -154,7 +174,7 @@ button.border-blue {
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 button.border-blue:hover {
-  box-shadow: 0 3px 8px rgba(197, 0, 127, 0.15);
+  box-shadow: 0 3px 8px rgba(109, 11, 11, 0.15);
   transform: translateY(-1px);
 }
 
@@ -162,12 +182,12 @@ button.border-blue:hover {
 @layer components {
   img.rounded-full {
     box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-    border: 2px solid rgba(255,255,255,0.8);
+    border: 2px solid rgba(138, 111, 56, 0.45);
   }
 
   .dark img.rounded-full {
-    border-color: rgba(54, 1, 36, 0.6);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    border-color: rgba(165, 138, 74, 0.65);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
   }
 }
 
@@ -182,13 +202,13 @@ button.rounded-full > i.fa {
   min-height: 2rem;
 }
 
-/* Brand-colored form controls: checkboxes, radios and selects render in the
-   magenta accent instead of the default OS blue, so the sign-up
-   acknowledgements and Settings toggles stay on-palette in every theme. */
+/* Brand-colored form controls: any control not restyled below still renders in
+   the blood accent rather than the default OS blue, so the sign-up
+   acknowledgements and Settings toggles stay on-palette in both themes. */
 input[type="checkbox"],
 input[type="radio"],
 select {
-  accent-color: #C5007F;
+  accent-color: #9b1313;
 }
 
 /* Micro-interactions on the tweet action icons: a quick squash on press gives
@@ -222,18 +242,15 @@ i.fa-retweet.text-green-500 {
 
 /* Active side-nav item: a persistent brand pill for the current route so the
    selected destination reads at a glance (distinct from the hover tint).
-   Plain theme-scoped selectors keep it correct across all three themes. */
+   Plain theme-scoped selectors keep it correct in both themes. */
 .nav-active {
   background-color: theme("colors.lightblue");
   color: theme("colors.blue");
+  box-shadow: inset 0 0 0 1px var(--gd-trim);
 }
 .dark .nav-active {
   background-color: theme("colors.darktheme.foreground");
-  color: theme("colors.darktheme.text");
-}
-.mastodon .nav-active {
-  background-color: theme("colors.mastodon.foreground");
-  color: theme("colors.mastodon.text");
+  color: theme("colors.darktheme.secondary");
 }
 
 /* Toast notification container */
@@ -303,34 +320,31 @@ i.fa-retweet.text-green-500 {
   .dark body {
     @apply bg-darktheme-background text-darktheme-text;
   }
-  .mastodon body {
-    @apply bg-mastodon-background text-mastodon-text;
-  }
 
   input, textarea {
-    @apply bg-white text-black border border-gray-300;
+    @apply bg-paper text-black;
+    border: 1px solid rgba(138, 111, 56, 0.4);
   }
   .dark input, .dark textarea {
     @apply bg-darktheme-input text-darktheme-text border-gray-600;
-  }
-  .mastodon input, .mastodon textarea {
-    @apply bg-mastodon-input text-mastodon-text border-gray-600;
   }
 
   .card {
     @apply bg-lighter p-4 rounded-lg shadow;
   }
+  /* Inline light surfaces (modals, dropdowns, chat header) are bg-white; on
+     parchment that reads as a hole, so map them onto paper. The other themes
+     override this with their own card color and !important. */
+  .bg-white,
+  .focus\:bg-white:focus,
+  .bg-gray-100 {
+    background-color: theme("colors.paper");
+  }
   .dark .card {
     @apply bg-darktheme-card text-darktheme-text;
   }
-  .mastodon .card {
-    @apply bg-mastodon-card text-mastodon-text;
-  }
   .dark .bg-lightest {
     background-color: theme("colors.darktheme.card") !important;
-  }
-  .mastodon .bg-lightest {
-    background-color: theme("colors.mastodon.card") !important;
   }
 
   /* Light surfaces used inline (panels, modals, chat header / footer,
@@ -342,11 +356,6 @@ i.fa-retweet.text-green-500 {
   .dark .bg-gray-100 {
     background-color: theme("colors.darktheme.card") !important;
   }
-  .mastodon .bg-white,
-  .mastodon .focus\:bg-white:focus,
-  .mastodon .bg-gray-100 {
-    background-color: theme("colors.mastodon.card") !important;
-  }
 
   /* bg-lighter is used both as a static surface (incoming chat bubble,
      pill-shaped input idle state) and as hover state. The hover form
@@ -355,15 +364,9 @@ i.fa-retweet.text-green-500 {
   .dark .bg-lighter {
     background-color: theme("colors.darktheme.foreground") !important;
   }
-  .mastodon .bg-lighter {
-    background-color: theme("colors.mastodon.foreground") !important;
-  }
 
   .dark .hover\:bg-lighter:hover {
     background-color: theme("colors.darktheme.foreground") !important;
-  }
-  .mastodon .hover\:bg-lighter:hover {
-    background-color: theme("colors.mastodon.foreground") !important;
   }
 
   /* Some templates use hover:bg-lightest / hover:bg-gray-100 instead
@@ -373,23 +376,13 @@ i.fa-retweet.text-green-500 {
   .dark .hover\:bg-gray-100:hover {
     background-color: theme("colors.darktheme.foreground") !important;
   }
-  .mastodon .hover\:bg-lightest:hover,
-  .mastodon .hover\:bg-gray-100:hover {
-    background-color: theme("colors.mastodon.foreground") !important;
-  }
 
   .dark .border-lighter {
-    border-color: theme("colors.gray.700") !important;
-  }
-  .mastodon .border-lighter {
     border-color: theme("colors.gray.700") !important;
   }
 
   .dark .text-dark {
     color: theme("colors.darktheme.secondary") !important;
-  }
-  .mastodon .text-dark {
-    color: theme("colors.mastodon.secondary") !important;
   }
 
   /* Text classes meant for light backgrounds: black + neutral grays.
@@ -405,13 +398,212 @@ i.fa-retweet.text-green-500 {
   .dark .text-gray-900 {
     color: theme("colors.darktheme.text") !important;
   }
-  .mastodon .text-black,
-  .mastodon .text-gray-500,
-  .mastodon .text-gray-600,
-  .mastodon .text-gray-700,
-  .mastodon .text-gray-800,
-  .mastodon .text-gray-900 {
-    color: theme("colors.mastodon.text") !important;
+
+  /* Light theme: the neutral grays read cold and bluish on parchment, so they
+     become sepia. Scoped away from the dark theme, which already remaps them —
+     its rules carry !important and win anyway, but the intent is clearer. */
+  html:not(.dark) body,
+  html:not(.dark) .text-black {
+    color: #2a2118;
+  }
+  html:not(.dark) .text-gray-500,
+  html:not(.dark) .text-gray-600,
+  html:not(.dark) .text-gray-700,
+  html:not(.dark) .text-gray-800,
+  html:not(.dark) .text-gray-900 {
+    color: #6b5a3e;
   }
 }
 
+/* === Grimdark surfaces the base layer above doesn't already cover. The
+   palette swap in tailwind.config.js carries most of the dark theme over
+   on its own; these are the classes that had no dark mapping at all and
+   stayed light-themed, plus the brand blue, which becomes brass trim and
+   blood-red buttons. === */
+
+/* bg-blue is both the brand button fill and Root's full-height hero panel.
+   Blood red works on a button and overwhelms a panel, so surfaces get leather
+   in the light theme (iron in the dark one, below) and buttons keep the blood. */
+/* Spelled out as channels rather than theme("colors.dark") so the
+   --tw-bg-opacity channel survives: a flat hex here silently drops
+   bg-opacity-*, which turned the poll's 25% tint into a solid leather bar
+   with its percentage label the exact same color. */
+.bg-blue,
+.bg-darkblue {
+  background-color: rgb(92 74 48 / var(--tw-bg-opacity, 1));
+}
+button.bg-blue,
+button.bg-darkblue {
+  background-color: theme("colors.blue");
+}
+
+/* The signup wizard wraps its inputs in bg-lightblue tint blocks and uses the
+   same tint for the progress track and hover states. Left unmapped they stay
+   pale pink and swallow both the field and its label. */
+.dark .bg-lightblue,
+.dark .hover\:bg-lightblue:hover {
+  background-color: theme("colors.darktheme.input") !important;
+}
+.dark .border-dark {
+  border-color: theme("colors.darktheme.gold") !important;
+}
+.dark .text-blue,
+.dark .text-darkblue,
+.dark .hover\:text-blue:hover {
+  color: theme("colors.darktheme.gold") !important;
+}
+/* bg-blue is both the brand button fill and a full-height hero panel. Blood
+   red works on a button and overwhelms a panel, so the surface mapping is
+   dark iron; buttons paint their gradient over it (rule further down). */
+.dark .bg-blue,
+.dark .bg-darkblue {
+  background-color: rgb(43 34 25 / var(--tw-bg-opacity, 1)) !important;
+}
+.dark button.bg-blue,
+.dark button.bg-darkblue {
+  background-color: theme("colors.darktheme.accent") !important;
+}
+.dark .border-blue {
+  border-color: theme("colors.darktheme.gold") !important;
+}
+.dark input, .dark textarea {
+  border-color: rgba(165, 138, 74, 0.4);
+}
+.dark a:link,
+.dark a {
+  color: #b89a5a;
+}
+/* Pale alert surfaces are readable in the light theme, but the dark theme's
+   bone text lands on them at ~1.1:1 — the moderation notice on a hidden tweet
+   was effectively invisible. Darken the fill and keep the text warm. */
+.dark .bg-red-300 {
+  background-color: #4a1010 !important;
+  color: #f0c3c3 !important;
+}
+.dark .bg-yellow-100 {
+  background-color: #3a2e10 !important;
+}
+.dark .text-yellow-800 {
+  color: #e8cf8a !important;
+}
+/* The generic dark toast tints are fine here, but the info variant's navy
+   fights the brass; bring it onto the palette. */
+.dark .toast-info {
+  background: #1d1813;
+  color: #d6c7a1;
+  border-color: #a58a4a;
+}
+
+/* === Grimdark ornamental layer: what makes it a style, not just a palette.
+   Shared by both themes — the two differ only in trim, plate and frame, which
+   come from the custom properties below. All artwork is original (frame SVGs,
+   data-URI glyphs) or procedural (feTurbulence grain); the display font is
+   OFL. No third-party IP. === */
+:root {
+  --gd-frame: url("./grimdark/frame-light.svg");
+  --gd-trim: #8a6f38;
+  --gd-plate: #efe7d3;
+  --gd-outline-text: #3b2f1d;
+  --gd-logo: grayscale(1) sepia(1) saturate(2.2) hue-rotate(354deg) brightness(0.55);
+}
+.dark {
+  --gd-frame: url("./grimdark/frame.svg");
+  --gd-trim: #a58a4a;
+  --gd-plate: #1d1813;
+  --gd-outline-text: #d6c7a1;
+  --gd-logo: grayscale(1) sepia(1) saturate(1.7) hue-rotate(2deg) brightness(0.95);
+}
+
+/* Grain: iron on the dark ground, paper fibre on the light one. */
+body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Gothic display type for headings; body copy stays sans. The views mark
+   headings up with size utilities rather than h1-h3, so both are targeted.
+   Font Awesome glyphs carry the same size utilities, and overriding their
+   family renders every icon as tofu — hence :not(i). */
+h1,
+h2,
+h3,
+.text-3xl:not(i),
+.text-2xl:not(i),
+.md\:text-3xl:not(i) {
+  font-family: "Grenze Gotisch", ui-serif, serif;
+  letter-spacing: 0.02em;
+}
+
+/* Ornamental frame on panels and modals: 9-slice border-image. The dashboard's
+   side panels are plain rounded bg-lightest blocks rather than .card, so they
+   are matched explicitly — otherwise the ornament only ever shows up in
+   dialogs. */
+.card,
+.modal-main,
+.rounded-lg.bg-lightest {
+  border: 12px solid transparent;
+  border-image: var(--gd-frame) 32 / 12px round;
+  border-radius: 0;
+}
+
+/* The brand logo is a magenta raster; tint it to the theme's metal. */
+img[alt="Warpnet"],
+img[src*="logo"] {
+  filter: var(--gd-logo);
+}
+
+/* Primary buttons: blood-red gradient, chamfered corners, gothic type. */
+button.bg-blue,
+button.bg-darkblue {
+  background-image: linear-gradient(180deg, #a31414, #6d0b0b);
+  color: #f0e6d2;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  box-shadow: none;
+  font-family: "Grenze Gotisch", ui-serif, serif;
+  letter-spacing: 0.05em;
+}
+button.bg-blue:hover,
+button.bg-darkblue:hover {
+  background-image: linear-gradient(180deg, #bf1a1a, #7d0e0e);
+  box-shadow: none;
+  transform: none;
+}
+button.border-blue {
+  color: var(--gd-outline-text);
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  box-shadow: none;
+}
+
+/* Checkboxes and radios: metal-bound plates with a chamfer, blood check. */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  flex-shrink: 0;
+  border: 1px solid var(--gd-trim);
+  background-color: var(--gd-plate);
+  cursor: pointer;
+  vertical-align: -0.15em;
+}
+input[type="checkbox"] {
+  clip-path: polygon(25% 0, 100% 0, 100% 75%, 75% 100%, 0 100%, 0 25%);
+}
+input[type="checkbox"]:checked {
+  background-color: #9b1313;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4' fill='none' stroke='%23f0e6d2' stroke-width='2.6'/%3E%3C/svg%3E");
+  background-size: 85%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+input[type="radio"] {
+  border-radius: 50%;
+}
+input[type="radio"]:checked {
+  background-image: radial-gradient(circle, #9b1313 0 38%, transparent 44%);
+}
+select {
+  accent-color: #9b1313;
+}

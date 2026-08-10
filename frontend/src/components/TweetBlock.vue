@@ -65,7 +65,7 @@ resulting from the use or misuse of this software.
         <p class="text-sm text-dark ml-2 flex-none whitespace-nowrap">{{ $filters.timeago(tweet.created_at) }}</p>
         <span
           v-if="isBridged"
-          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-mastodon-accent text-white whitespace-nowrap flex-none"
+          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-[#5d1a98] text-white whitespace-nowrap flex-none"
           :title="`Bridged from ${instanceLabel}`"
         >{{ instanceLabel }}</span>
         <span v-if="tweet.pinned" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" title="Pinned tweet">
@@ -75,7 +75,7 @@ resulting from the use or misuse of this software.
           <button type="button" @click.stop="toggleDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
           </button>
-          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10">
+          <div v-if="showDropdown" class="absolute right-0 mt-2 w-52 bg-white dark:bg-darktheme-card rounded-md shadow-lg py-1 z-10">
             <button type="button" @click.stop="toggleBookmark" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">
               {{ bookmarked ? 'Remove bookmark' : 'Bookmark' }}
             </button>
@@ -232,7 +232,7 @@ resulting from the use or misuse of this software.
           type="button"
           class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition-colors flat-btn"
           :class="chip.emoji === myReaction
-            ? 'border-blue bg-lightblue text-blue font-semibold'
+            ? 'border-dark bg-lightblue text-blue font-semibold'
             : 'border-lighter hover:bg-lightblue'"
           :aria-pressed="chip.emoji === myReaction"
           :aria-label="`${chip.count} reacted with ${chip.emoji}`"
@@ -272,7 +272,7 @@ resulting from the use or misuse of this software.
             </button>
             <div
               v-if="showRetweetMenu"
-              class="absolute left-0 mt-2 w-40 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10"
+              class="absolute left-0 mt-2 w-40 bg-white dark:bg-darktheme-card rounded-md shadow-lg py-1 z-10"
             >
               <button
                 type="button"

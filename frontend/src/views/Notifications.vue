@@ -46,7 +46,7 @@ resulting from the use or misuse of this software.
             </button>
             <div
               v-if="settingsOpen"
-              class="absolute right-0 mt-2 w-48 bg-white dark:bg-darktheme-card mastodon:bg-mastodon-card rounded-md shadow-lg py-1 z-10"
+              class="absolute right-0 mt-2 w-48 bg-white dark:bg-darktheme-card rounded-md shadow-lg py-1 z-10"
             >
               <button
                 type="button"
@@ -101,7 +101,7 @@ resulting from the use or misuse of this software.
             <button
               type="button"
               class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
-              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
+              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground'"
               @click="openNotification(notification)"
             >
               <div class="w-full flex items-center">
@@ -160,7 +160,7 @@ resulting from the use or misuse of this software.
             <button
               type="button"
               class="w-full text-left p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex flat-btn"
-              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground mastodon:bg-mastodon-foreground'"
+              :class="notification.is_read ? '' : 'bg-lightblue dark:bg-darktheme-foreground'"
               @click="openNotification(notification)"
             >
               <div class="w-full flex items-center">
