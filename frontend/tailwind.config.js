@@ -40,13 +40,20 @@ module.exports = {
         sans: [...defaultTheme.fontFamily.sans],
       },
       colors: {
-        blue: "#C5007F",
-        darkblue: "#630241",
-        lightblue: "#f4d5e1",
-        dark: "#657786",
-        light: "#AAB8C2",
-        lighter: "#E1E8ED",
-        lightest: "#F5F8FA",
+        // Light theme: aged parchment and sepia ink, with the same dried
+        // blood accent and a darker bronze trim (brass has no contrast on
+        // a pale ground). The names are the app's existing brand slots —
+        // "blue" has been the primary accent since the Twitter-clone days.
+        blue: "#8f1414",
+        darkblue: "#6d0b0b",
+        lightblue: "#ded0ae",
+        dark: "#5c4a30",
+        light: "#a9977a",
+        lighter: "#e2d7bb",
+        lightest: "#efe7d3",
+        // Elevated light surfaces (inputs, modals, dropdowns): a shade above
+        // the page so they read as raised without going stark white.
+        paper: "#f7f2e4",
         // The dark theme is the grimdark one: blackened iron, bone text,
         // brass trim and dried blood as the accent. Key name kept because
         // components reference dark:bg-darktheme-card and friends.
