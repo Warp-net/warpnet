@@ -32,6 +32,13 @@ import directives from "./directives";
 import filters from "./filters";
 import { warpnetService } from "./service/service";
 
+// Apply the saved dark theme before the first view mounts: SideNav restores it
+// too, but it isn't mounted on the logged-out screens, so login and signup
+// would otherwise stay light for a user who picked dark.
+if (localStorage.getItem("theme") === "dark") {
+    document.documentElement.classList.add("dark");
+}
+
 const app = createApp(App);
 
 app.config.errorHandler = function (err, vm, info) {
