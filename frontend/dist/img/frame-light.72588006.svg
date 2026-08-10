@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <!-- Light-theme twin of frame.svg: same geometry, bronze on parchment so it
+       keeps contrast on a pale ground. 9-slice: slice at 32 of 96. -->
+  <defs>
+    <g id="c" fill="none" stroke="#8a6f38">
+      <path d="M32 5 H15 L5 15 V32" stroke-width="3"/>
+      <path d="M32 10.5 H17 L10.5 17 V32" stroke-width="1.5" opacity="0.55"/>
+      <path d="M10 2.5 L17.5 10 L10 17.5 L2.5 10 Z" fill="#8a6f38" stroke="none"/>
+      <path d="M10 5.8 L14.2 10 L10 14.2 L5.8 10 Z" fill="#efe7d3" stroke="none"/>
+    </g>
+    <g id="e" fill="none" stroke="#8a6f38">
+      <path d="M32 5 H64" stroke-width="3"/>
+      <path d="M32 10.5 H64" stroke-width="1.5" opacity="0.55"/>
+      <circle cx="48" cy="7.5" r="2.6" fill="#8a6f38" stroke="none"/>
+      <circle cx="48" cy="7.5" r="1.2" fill="#efe7d3" stroke="none"/>
+    </g>
+  </defs>
+  <use href="#c"/>
+  <use href="#c" transform="matrix(-1 0 0 1 96 0)"/>
+  <use href="#c" transform="matrix(1 0 0 -1 0 96)"/>
+  <use href="#c" transform="matrix(-1 0 0 -1 96 96)"/>
+  <use href="#e"/>
+  <use href="#e" transform="rotate(90 48 48)"/>
+  <use href="#e" transform="rotate(180 48 48)"/>
+  <use href="#e" transform="rotate(270 48 48)"/>
+</svg>
