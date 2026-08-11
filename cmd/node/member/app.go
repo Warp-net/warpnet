@@ -233,8 +233,7 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
 	}
 
-	a.mx.Lock()
-	a.node, err = member.NewMemberNode(
+	node, err := member.NewMemberNode(
 		a.ctx,
 		a.auth.PrivateKey(),
 		psk,
@@ -245,27 +244,24 @@ func (a *App) runNode(network string, psk security.PSK) {
 		m,
 	)
 	if err != nil {
-		a.mx.Unlock()
-		log.Errorf("failed to init node: %v \n", err)
-		return
-	}
-	a.mx.Unlock()
-
-	if err != nil {
 		log.Errorf("failed to init node: %v \n", err)
 		return
 	}
 
-	err = a.node.Start()
-	if err != nil {
+	if err = node.Start(); err != nil {
 		log.Errorf("failed to start member node: %v \n", err)
 		return
 	}
 
+	// attach only a node that really started: a dead one panics in Call
+	a.mx.Lock()
+	a.node = node
+	a.mx.Unlock()
+
 	// report to auth handler - Node set up and running
 	serverNodeAuthInfo.ID = ownNodeId.String()
 	serverNodeAuthInfo.Network = network
-	serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
+	serverNodeAuthInfo.Addresses = node.NodeInfo().Addresses
 	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
 	a.readyChan <- serverNodeAuthInfo
 }
@@ -335,7 +331,9 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.node.Stop() // close node first
+		if a.node != nil {
+			a.node.Stop() // close node first
+		}
 		a.auth.AuthLogout()
 		response.Body = []byte(`["logged_out"]`)
 		return response
@@ -410,7 +408,9 @@ func (a *App) close(_ context.Context) {
 
 	log.Infoln("app: closing...")
 
-	a.node.Stop() // close node first
+	if a.node != nil {
+		a.node.Stop() // close node first
+	}
 
 	a.auth.AuthLogout()
 
