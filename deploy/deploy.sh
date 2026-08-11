@@ -55,8 +55,6 @@ docker pull ghcr.io/warp-net/warpnet-vadim:latest
 
 export HOSTNAME=''
 
-# No --remove-orphans: the relay containers are no longer declared here and must
-# outlive the deploy, they keep themselves up to date on their own.
 if [ "$MAINNET" = "true" ]; then
     echo "Mainnet is enabled"
     mkdir -p /root/mainnet

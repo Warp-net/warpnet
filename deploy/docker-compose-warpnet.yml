@@ -1,13 +1,9 @@
 services:
-  # Placeholder: compose rejects a file without services, and every real service
-  # of the mainnet stack is disabled. Prints a line and exits, costs no memory.
   placeholder:
     container_name: warpnet-mainnet-placeholder
     image: hello-world:latest
     restart: "no"
 
-# Relay nodes replace their own binary from the latest GitHub release, so the
-# deploy no longer recreates them: the running containers stay untouched.
 #  warpnet1:
 #    container_name: warpnet-mainnet-1
 #    image: ghcr.io/warp-net/warpnet-relay:latest
