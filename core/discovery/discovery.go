@@ -408,6 +408,8 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
+const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")
+
 func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpnet.NodeInfo, err error) {
 	infoResp, err := s.node.GenericStream(pi.ID.String(), event.PUBLIC_GET_INFO, nil)
 	if err != nil {
@@ -421,14 +423,14 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpne
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(infoResp, &possibleError); possibleError.Message != "" {
-		return info, fmt.Errorf("peer %s rejected info request: %s", pi.ID.String(), possibleError.Message)
+		return info, fmt.Errorf("%w: %s: %s", errPeerRejectedInfo, pi.ID.String(), possibleError.Message)
 	}
 	// back compat: older nodes replied to middleware failures with a bare
 	// JSON array of messages instead of event.ResponseError.
 	var legacyError []string
 	if _ = json.Unmarshal(infoResp, &legacyError); len(legacyError) != 0 {
 		return info, fmt.Errorf(
-			"peer %s rejected info request: %s", pi.ID.String(), strings.Join(legacyError, "; "),
+			"%w: %s: %s", errPeerRejectedInfo, pi.ID.String(), strings.Join(legacyError, "; "),
 		)
 	}
 
