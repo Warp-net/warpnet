@@ -8,7 +8,7 @@ Warpnet is a fully decentralized, peer-to-peer social network built in Go. Every
 
 [![Go Version](https://img.shields.io/badge/Go-1.26+-brightgreen)](https://golang.org/dl/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://github.com/Warp-net/warpnet/blob/main/LICENSE.md)
-[![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
+[![Tests](https://github.com/Warp-net/warpnet/actions/workflows/tests-static-check.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/tests-static-check.yaml)
 [![codecov](https://codecov.io/github/Warp-net/warpnet/graph/badge.svg)](https://codecov.io/github/Warp-net/warpnet)
 [![Snap](https://snapcraft.io/warpnet/badge.svg)](https://snapcraft.io/warpnet)
 [![Telegram](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)

@@ -49,24 +49,25 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 echo $GITHUB_TOKEN | docker login ghcr.io -u filinvadim --password-stdin
-docker pull ghcr.io/warp-net/warpnet-relay:latest
 docker pull ghcr.io/warp-net/warpnet-moderator:latest
 docker pull ghcr.io/warp-net/warpnet-echo:latest
 docker pull ghcr.io/warp-net/warpnet-vadim:latest
 
 export HOSTNAME=''
 
+# No --remove-orphans: the relay containers are no longer declared here and must
+# outlive the deploy, they keep themselves up to date on their own.
 if [ "$MAINNET" = "true" ]; then
     echo "Mainnet is enabled"
     mkdir -p /root/mainnet
     mv docker-compose-mainnet.yml mainnet/docker-compose-mainnet.yml
-    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml down --remove-orphans
+    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml down
     docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --build
 else
     echo "Mainnet is disabled"
     mkdir -p /root/testnet
     mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
-    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down --remove-orphans
+    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down
     docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
 fi
 docker image prune --force
