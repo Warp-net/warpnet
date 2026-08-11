@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
@@ -106,6 +107,12 @@ func main() {
 
 	if config.Config().Node.IsPskPrinted {
 		log.Infof("CURRENT PSK: %s", psk.String())
+	}
+
+	if config.Config().Node.IsSelfUpdate {
+		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.RelayArtifact())
+		defer updater.Close()
+		updater.Run(n.Stop)
 	}
 
 	<-interruptChan
