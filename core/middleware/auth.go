@@ -97,7 +97,8 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 
 		pubKey := warpnet.FromIDToPubKey(remotePeer)
 		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
-			log.Errorf("middleware: auth: signature invalid: %v: route %s, peer %s", err, route, remotePeer)
+			// Remote-side fault (foreign or outdated peer), not ours: warn, don't error.
+			log.Warnf("middleware: auth: signature invalid: %v: route %s, peer %s", err, route, remotePeer)
 			_, _ = s.Write(ErrInternalNodeError.Bytes())
 			return
 		}

@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
 )
 
@@ -39,15 +41,26 @@ type middlewareError string
 func (e middlewareError) Error() string {
 	return string(e)
 }
+
+// Bytes renders the error as event.ResponseError, the shape callers already
+// parse. A bare JSON array would reach them as an unmarshal failure instead
+// of the actual reason.
 func (e middlewareError) Bytes() []byte {
-	return []byte(e)
+	bt, err := json.Marshal(event.ResponseError{
+		Code:    InternalNodeErrorCode,
+		Message: string(e),
+	})
+	if err != nil {
+		return []byte(e)
+	}
+	return bt
 }
 
 const (
-	ErrUnknownClientPeer middlewareError = `["middleware: auth: unknown client peer"]`
-	ErrStreamReadError   middlewareError = `["middleware: stream: reading failed"]`
-	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
-	ErrStaleMessage      middlewareError = `["middleware: auth: stale or replayed message"]`
+	ErrUnknownClientPeer middlewareError = "middleware: auth: unknown client peer"
+	ErrStreamReadError   middlewareError = "middleware: stream: reading failed"
+	ErrInternalNodeError middlewareError = "middleware: internal node error"
+	ErrStaleMessage      middlewareError = "middleware: auth: stale or replayed message"
 )
 
 // messageFreshnessWindow caps how far a signed timestamp may drift from now.
