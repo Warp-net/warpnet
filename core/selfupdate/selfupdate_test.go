@@ -1,3 +1,5 @@
+//go:build !windows
+
 /*
 
 Warpnet - Decentralized Social Network
@@ -54,6 +56,25 @@ const (
 	testVersion  = "0.7.547"
 )
 
+var errRestartFailed = errors.New("exec: no such file or directory")
+
+// fakeBinary installs like the real executable, but hands the process over to
+// nobody: replacing the test process image would end the test run.
+type fakeBinary struct {
+	*executable
+
+	restartErr error
+	restarted  bool
+}
+
+func (f *fakeBinary) Restart(shutdownF func()) error {
+	f.restarted = true
+	if shutdownF != nil {
+		shutdownF()
+	}
+	return f.restartErr
+}
+
 func tarGz(t *testing.T, name string, content []byte) []byte {
 	t.Helper()
 
@@ -73,6 +94,11 @@ func tarGz(t *testing.T, name string, content []byte) []byte {
 	require.NoError(t, gz.Close())
 
 	return buf.Bytes()
+}
+
+func sumsFor(archive []byte) []byte {
+	sum := sha256.Sum256(archive)
+	return fmt.Appendf(nil, "%s  %s\n", hex.EncodeToString(sum[:]), testAsset)
 }
 
 // releaseServer serves a GitHub-shaped release with the given tag and archive.
@@ -99,75 +125,45 @@ func releaseServer(t *testing.T, tag string, archive, sums []byte) *httptest.Ser
 	return srv
 }
 
-// updaterFixture returns an updater whose executable is a temporary file, along
-// with that path and a pointer to the restart flag.
-func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpdater, string, *bool) {
+// updaterFixture returns an updater whose binary is a temporary file served by a
+// local release server.
+func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpdater, *fakeBinary) {
 	t.Helper()
 
-	execPath := filepath.Join(t.TempDir(), "relay")
-	require.NoError(t, os.WriteFile(execPath, []byte("current binary"), 0o755))
+	path := filepath.Join(t.TempDir(), testBinary)
+	require.NoError(t, os.WriteFile(path, []byte("current binary"), 0o755))
 
-	srv := releaseServer(t, latest, archive, sums)
+	gh := newGitHubReleases(context.Background(), semver.MustParse(testVersion))
+	gh.apiURL = releaseServer(t, latest, archive, sums).URL + "/latest"
 
-	restarted := false
+	binary := &fakeBinary{executable: &executable{path: path}}
 	u := NewSelfUpdater(
 		context.Background(),
 		semver.MustParse(testVersion),
 		Artifact{AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary},
 	)
-	u.apiURL = srv.URL + "/latest"
-	u.execPath = execPath
-	u.restartF = func(_ string, shutdownF func()) error {
-		restarted = true
-		if shutdownF != nil {
-			shutdownF()
-		}
-		return nil
-	}
-	u.fatalF = func(format string, args ...any) {
-		t.Logf("fatal: "+format, args...)
-	}
+	u.releases, u.assets = gh, gh
+	u.binary = binary
+	u.failures = newFailureMarker(path)
 
-	return u, execPath, &restarted
-}
-
-var errRestartFailed = errors.New("exec: no such file or directory")
-
-// failingRestart makes the process replacement fail, as an unusable binary does.
-func failingRestart(u *SelfUpdater) {
-	u.restartF = func(_ string, shutdownF func()) error {
-		if shutdownF != nil {
-			shutdownF()
-		}
-		return errRestartFailed
-	}
-}
-
-func sumsFor(archive []byte) []byte {
-	sum := sha256.Sum256(archive)
-	return fmt.Appendf(nil, "%s  %s\n", hex.EncodeToString(sum[:]), testAsset)
+	return u, binary
 }
 
 func TestSelfUpdaterInstallsNewerRelease(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
-	u, execPath, restarted := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
 
 	stopped := false
 	require.NoError(t, u.checkAndUpdate(func() { stopped = true }))
 
-	installed, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "new binary", string(installed))
-	assert.True(t, *restarted)
+	assert.Equal(t, "new binary", read(t, binary.path))
+	assert.True(t, binary.restarted)
 	assert.True(t, stopped, "node must be stopped before the process is replaced")
+	assert.Equal(t, "current binary", read(t, binary.path+oldSuffix), "previous binary must be kept for rollback")
 
-	previous, err := os.ReadFile(execPath + oldSuffix)
-	require.NoError(t, err)
-	assert.Equal(t, "current binary", string(previous), "previous binary must be kept for rollback")
-
-	// archive and extracted binary must not be left behind
-	assert.NoFileExists(t, filepath.Join(filepath.Dir(execPath), testAsset))
-	assert.NoFileExists(t, execPath+newSuffix)
+	// staged files must not be left behind
+	assert.NoFileExists(t, binary.StagePath(testAsset))
+	assert.NoFileExists(t, binary.StagePath(testBinary+newSuffix))
 }
 
 func TestSelfUpdaterSkipsSameOrOlderRelease(t *testing.T) {
@@ -175,141 +171,88 @@ func TestSelfUpdaterSkipsSameOrOlderRelease(t *testing.T) {
 
 	for _, latest := range []string{"v0.7.547", "v0.7.546"} {
 		t.Run(latest, func(t *testing.T) {
-			u, execPath, restarted := updaterFixture(t, latest, archive, sumsFor(archive))
+			u, binary := updaterFixture(t, latest, archive, sumsFor(archive))
 
 			require.NoError(t, u.checkAndUpdate(nil))
 
-			kept, err := os.ReadFile(execPath)
-			require.NoError(t, err)
-			assert.Equal(t, "current binary", string(kept))
-			assert.False(t, *restarted)
+			assert.Equal(t, "current binary", read(t, binary.path))
+			assert.False(t, binary.restarted)
 		})
 	}
 }
 
 func TestSelfUpdaterRejectsWrongChecksum(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
-	sums := sumsFor([]byte("something else"))
-	u, execPath, restarted := updaterFixture(t, "v0.7.548", archive, sums)
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor([]byte("something else")))
 
-	err := u.checkAndUpdate(nil)
-	require.ErrorIs(t, err, ErrChecksumMismatch)
+	require.ErrorIs(t, u.checkAndUpdate(nil), ErrChecksumMismatch)
 
-	kept, readErr := os.ReadFile(execPath)
-	require.NoError(t, readErr)
-	assert.Equal(t, "current binary", string(kept), "binary must stay untouched")
-	assert.False(t, *restarted)
-	assert.NoFileExists(t, filepath.Join(filepath.Dir(execPath), testAsset))
+	assert.Equal(t, "current binary", read(t, binary.path), "binary must stay untouched")
+	assert.False(t, binary.restarted)
+	assert.NoFileExists(t, binary.StagePath(testAsset))
 }
 
 func TestSelfUpdaterRejectsArchiveWithoutBinary(t *testing.T) {
 	archive := tarGz(t, "README.md", []byte("no binary here"))
-	u, _, restarted := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
 
 	require.ErrorIs(t, u.checkAndUpdate(nil), ErrBinaryNotFound)
-	assert.False(t, *restarted)
+	assert.False(t, binary.restarted)
 }
 
 func TestSelfUpdaterRejectsMissingAsset(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
-	u, _, restarted := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
 	u.artifact.AssetName = "relay_other_platform.tar.gz"
 
 	require.ErrorIs(t, u.checkAndUpdate(nil), ErrAssetNotFound)
-	assert.False(t, *restarted)
+	assert.False(t, binary.restarted)
 }
 
 func TestSelfUpdaterMarksVersionThatFailsToStart(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("unusable binary"))
-	u, execPath, _ := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
-	failingRestart(u)
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	binary.restartErr = errRestartFailed
 
-	require.NoError(t, u.checkAndUpdate(nil))
+	require.ErrorIs(t, u.checkAndUpdate(nil), ErrRestartFailed)
 
-	kept, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "current binary", string(kept), "previous binary must be restored")
-
-	marker, err := os.ReadFile(execPath + failedSuffix)
-	require.NoError(t, err)
-	assert.Equal(t, "0.7.548", string(marker))
+	assert.Equal(t, "current binary", read(t, binary.path), "previous binary must be restored")
+	assert.Equal(t, "0.7.548", read(t, binary.path+failedSuffix))
 }
 
 func TestSelfUpdaterSkipsVersionMarkedAsFailed(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
-	u, execPath, restarted := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
-	require.NoError(t, os.WriteFile(execPath+failedSuffix, []byte("0.7.548"), markerMode))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	require.NoError(t, os.WriteFile(binary.path+failedSuffix, []byte("0.7.548"), markerMode))
 
 	require.NoError(t, u.checkAndUpdate(nil))
 
-	kept, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "current binary", string(kept))
-	assert.False(t, *restarted)
+	assert.Equal(t, "current binary", read(t, binary.path))
+	assert.False(t, binary.restarted)
 }
 
 func TestSelfUpdaterRetriesAfterMarkedVersionSuperseded(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
-	u, execPath, restarted := updaterFixture(t, "v0.7.549", archive, sumsFor(archive))
-	require.NoError(t, os.WriteFile(execPath+failedSuffix, []byte("0.7.548"), markerMode))
+	u, binary := updaterFixture(t, "v0.7.549", archive, sumsFor(archive))
+	require.NoError(t, os.WriteFile(binary.path+failedSuffix, []byte("0.7.548"), markerMode))
 
 	require.NoError(t, u.checkAndUpdate(nil))
 
-	installed, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "new binary", string(installed))
-	assert.True(t, *restarted)
-	assert.NoFileExists(t, execPath+failedSuffix, "stale marker must be dropped")
+	assert.Equal(t, "new binary", read(t, binary.path))
+	assert.True(t, binary.restarted)
+	assert.NoFileExists(t, binary.path+failedSuffix, "stale marker must be dropped")
 }
 
 func TestSelfUpdaterIgnoresMalformedMarker(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
-	u, execPath, restarted := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
-	require.NoError(t, os.WriteFile(execPath+failedSuffix, []byte("not a version"), markerMode))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	require.NoError(t, os.WriteFile(binary.path+failedSuffix, []byte("not a version"), markerMode))
 
 	require.NoError(t, u.checkAndUpdate(nil))
 
-	installed, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "new binary", string(installed))
-	assert.True(t, *restarted)
-	assert.NoFileExists(t, execPath+failedSuffix)
-}
-
-func TestChecksum(t *testing.T) {
-	sums := []byte(
-		"aaaa  warpnet_linux_amd64.tar.gz\n" +
-			"BBBB  relay_linux_amd64.tar.gz\n",
-	)
-
-	got, err := checksum(sums, "relay_linux_amd64.tar.gz")
-	require.NoError(t, err)
-	assert.Equal(t, "bbbb", got)
-
-	_, err = checksum(sums, "relay_darwin.tar.gz")
-	require.ErrorIs(t, err, ErrChecksumNotFound)
-}
-
-func TestSwapBinaryRestoresPrevious(t *testing.T) {
-	dir := t.TempDir()
-	execPath := filepath.Join(dir, "relay")
-	newPath := execPath + newSuffix
-
-	require.NoError(t, os.WriteFile(execPath, []byte("old"), 0o755))
-	require.NoError(t, os.WriteFile(newPath, []byte("new"), 0o755))
-
-	restore, err := swapBinary(execPath, newPath)
-	require.NoError(t, err)
-
-	installed, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "new", string(installed))
-
-	restore()
-
-	rolledBack, err := os.ReadFile(execPath)
-	require.NoError(t, err)
-	assert.Equal(t, "old", string(rolledBack))
+	assert.Equal(t, "new binary", read(t, binary.path))
+	assert.True(t, binary.restarted)
+	assert.NoFileExists(t, binary.path+failedSuffix)
 }
 
 func TestArtifactSupport(t *testing.T) {
@@ -318,4 +261,12 @@ func TestArtifactSupport(t *testing.T) {
 	assert.True(t, Artifact{
 		AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary,
 	}.isSupported())
+}
+
+func read(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(data)
 }

@@ -1,3 +1,5 @@
+//go:build !windows
+
 /*
 
  Warpnet - Decentralized Social Network
