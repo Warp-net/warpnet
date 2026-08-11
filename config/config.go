@@ -69,6 +69,7 @@ func init() {
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.metrics.gateway", "207.154.221.44:4091", "Prometheus push metrics server")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
+	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release automatically")
 
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
@@ -129,6 +130,7 @@ func init() {
 			Port:         port,
 			Network:      network,
 			IsPskPrinted: viper.GetBool("node.print-psk"),
+			IsSelfUpdate: viper.GetBool("node.self-update"),
 			Metrics: metrics{
 				Gateway: viper.GetString("node.metrics.gateway"),
 			},
@@ -185,6 +187,7 @@ type node struct {
 	Port         string
 	Network      string
 	IsPskPrinted bool
+	IsSelfUpdate bool
 	Metrics      metrics
 	Server       server
 	Seed         string

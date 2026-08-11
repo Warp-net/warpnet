@@ -65,6 +65,10 @@ jobs:
       - name: Build Relay (Linux with compression)
         working-directory: cmd/node/relay
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
+        # Static, like Dockerfile.relay: the released relay is what self-update
+        # installs, and a dynamically linked binary cannot run in distroless.
+        env:
+          CGO_ENABLED: "0"
         run: go build -ldflags "-s -w" -gcflags=all=-l -mod=vendor -o relay
 
       - name: Build (Wails)
