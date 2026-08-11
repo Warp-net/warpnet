@@ -267,7 +267,9 @@ func (n *WarpNode) trackIncomingEvents() {
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
 				addrs := n.node.Peerstore().Addrs(pid)
-				log.Errorf(
+				// The remote refused identify or went away mid-handshake:
+				// transient and out of our control, so warn instead of error.
+				log.Warnf(
 					"node: event: peer %s %v identification failed, reason: %s",
 					pid.String(), addrs, typedEvent.Reason,
 				)

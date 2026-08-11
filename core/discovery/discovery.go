@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
@@ -288,7 +289,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf(
+		log.Warnf(
 			"discovery: source '%s': request node %s info: %s",
 			peer.Source, pi.ID.String(), err.Error(),
 		)
@@ -393,7 +394,7 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		log.Warnf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
 	}
 	s.node.SetNodePriority(pi.ID, info.Reachability)
@@ -416,6 +417,19 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpne
 	if len(infoResp) == 0 {
 		err := warpnet.WarpError("no info response from new peer")
 		return info, fmt.Errorf("%w: %s", err, pi.ID.String())
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(infoResp, &possibleError); possibleError.Message != "" {
+		return info, fmt.Errorf("peer %s rejected info request: %s", pi.ID.String(), possibleError.Message)
+	}
+	// back compat: older nodes replied to middleware failures with a bare
+	// JSON array of messages instead of event.ResponseError.
+	var legacyError []string
+	if _ = json.Unmarshal(infoResp, &legacyError); len(legacyError) != 0 {
+		return info, fmt.Errorf(
+			"peer %s rejected info request: %s", pi.ID.String(), strings.Join(legacyError, "; "),
+		)
 	}
 
 	err = json.Unmarshal(infoResp, &info)
