@@ -895,37 +895,68 @@ export default {
       this.showReactionBar = false;
 
       const removing = this.myReaction === emoji;
-      let resp;
+      // Painted up front: on a bridged tweet this call waits on the gateway
+      // handing the reaction to the author's instance, and a button that does
+      // nothing for those seconds reads as broken.
+      const previous = {
+        emoji: this.myReaction,
+        reactions: this.reactions,
+        count: this.reactionsCount.get(this.tweet.id),
+      };
+      this.paintOwnReaction(removing ? "" : emoji);
+
       try {
         if (removing) {
-          resp = await warpnetService.unreactTweet(this.tweet.id, this.tweet.user_id)
+          await warpnetService.unreactTweet(this.tweet.id, this.tweet.user_id)
         } else {
-          resp = await warpnetService.reactToTweet(this.tweet.id, this.tweet.user_id, emoji)
+          await warpnetService.reactToTweet(this.tweet.id, this.tweet.user_id, emoji)
         }
       } catch (err) {
         console.error(`failed to react to tweet [${this.tweet.id}]`, err);
         toast.error(err?.message || "Couldn't update reaction. Please try again.");
+        this.myReaction = previous.emoji;
+        this.reactions = previous.reactions;
+        this.reactionsCount.set(this.tweet.id, previous.count);
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
         return;
       }
       if (removing) {
         await warpnetService.deleteReactor(this.tweet.id, owner.user_id)
-        this.myReaction = "";
       } else {
         await warpnetService.setReactor(this.tweet.id, owner.user_id, owner, emoji)
-        this.myReaction = emoji;
       }
 
-      this.reactions = resp.reactions;
-      this.reactionsCount.set(this.tweet.id, resp.count);
-      // A bridged tweet's real reaction count lives on the remote instance, not
-      // in this node's CRDT counter (which only knows our own), so refresh
-      // from the author's node the way retweet() does.
+      // The response carries this node's own tally, which on a bridged tweet
+      // counts only our reaction; the real breakdown comes from the author's
+      // node, the way retweet() refreshes.
       try {
         await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
+    },
+    // paintOwnReaction moves the viewer's own reaction to `emoji` ("" takes it
+    // back) in the tally on screen, so the chips and the counter follow the
+    // click instead of waiting for the network.
+    paintOwnReaction(emoji) {
+      const reactions = {...this.reactions};
+      let count = this.reactionsCount.get(this.tweet.id) || 0;
+      if (this.myReaction) {
+        const left = (reactions[this.myReaction] || 1) - 1;
+        if (left > 0) {
+          reactions[this.myReaction] = left;
+        } else {
+          delete reactions[this.myReaction];
+        }
+        count = Math.max(0, count - 1);
+      }
+      if (emoji) {
+        reactions[emoji] = (reactions[emoji] || 0) + 1;
+        count += 1;
+      }
+      this.myReaction = emoji;
+      this.reactions = reactions;
+      this.reactionsCount.set(this.tweet.id, count);
     },
     getReactionsCount(tweetId) {
       return this.reactionsCount.get(tweetId);
@@ -955,8 +986,6 @@ export default {
         return;
       }
 
-      this.reactionsCount.set(stats.tweet_id, stats.reactions_count);
-      this.reactions = stats.reactions || {};
       // my_reaction is answered from our own node, so it outranks the
       // local cache — it survives a browser reset and other devices. An
       // absent key means an older node that knows nothing of reactions;
@@ -965,6 +994,17 @@ export default {
         this._reactionAnswered = true;
         this.myReaction = stats.my_reaction || "";
       }
+      // A bridged tweet's breakdown comes from the author's instance, which
+      // hears of our reaction only once the gateway has delivered it. Keep
+      // showing it until then instead of letting the answer take it away.
+      const reactions = {...(stats.reactions || {})};
+      let reactionsCount = stats.reactions_count || 0;
+      if (this.myReaction && !reactions[this.myReaction]) {
+        reactions[this.myReaction] = 1;
+        reactionsCount += 1;
+      }
+      this.reactions = reactions;
+      this.reactionsCount.set(stats.tweet_id, reactionsCount);
       this.retweetsCount.set(stats.tweet_id, stats.retweets_count);
       this.repliesCount.set(stats.tweet_id, stats.replies_count);
       // Views are monotonically non-decreasing: a stale read raced with
