@@ -88,6 +88,13 @@ const renderTweet = () =>
 const chipFor = (emoji) =>
   [...document.querySelectorAll('button[aria-pressed]')].find((b) => b.textContent.includes(emoji));
 
+// The counter beside the react button; the retweet counter is the only other
+// button with this exact class, and it is absent whenever retweets_count is 0.
+const totalCounter = () =>
+  document.querySelector('button[class="hover:underline flat-btn"]');
+
+const chipText = (emoji) => chipFor(emoji).textContent.replace(/\s/g, '');
+
 describe('TweetBlock reactions', () => {
   it('renders one chip per emoji and marks the viewer’s own reaction', async () => {
     renderTweet();
@@ -135,14 +142,19 @@ describe('TweetBlock reactions', () => {
   });
 
   it('reacts with a heart when the button is clicked with no reaction held', async () => {
-    warpnetService.getTweetStats.mockResolvedValue({
+    const stats = {
       tweet_id: 't1',
       retweets_count: 0,
       reactions_count: 0,
       replies_count: 0,
       views_count: 0,
       my_reaction: '',
-    });
+    };
+    // The reaction is stored on our own node before it is federated, so the
+    // refresh that follows the click already reports it back as ours.
+    warpnetService.getTweetStats
+      .mockResolvedValueOnce(stats)
+      .mockResolvedValue({...stats, reactions_count: 1, reactions: {'❤️': 1}, my_reaction: '❤️'});
     warpnetService.reactToTweet.mockResolvedValue({count: 1, reactions: {'❤️': 1}});
     renderTweet();
 
@@ -155,5 +167,66 @@ describe('TweetBlock reactions', () => {
 
     await waitFor(() => expect(warpnetService.reactToTweet).toHaveBeenCalledWith('t1', 'author1', '❤️'));
     await waitFor(() => expect(chipFor('❤️')).toBeTruthy());
+  });
+
+  it('shows the reaction before the node has answered', async () => {
+    // A bridged tweet's react call waits on the gateway; nothing resolves here.
+    warpnetService.reactToTweet.mockReturnValue(new Promise(() => {}));
+    renderTweet();
+
+    await waitFor(() => expect(chipFor('❤️')).toBeTruthy());
+    await fireEvent.click(chipFor('❤️'));
+
+    expect(chipFor('❤️').getAttribute('aria-pressed')).toBe('true');
+    expect(chipText('❤️')).toBe('❤️2');
+    expect(chipText('🔥')).toBe('🔥1');
+    expect(chipFor('🔥').getAttribute('aria-pressed')).toBe('false');
+    // Moving the reaction leaves the total where it was.
+    expect(totalCounter().textContent.trim()).toBe('3');
+  });
+
+  it('drops the reaction from the tally up front when taking it back', async () => {
+    warpnetService.unreactTweet.mockReturnValue(new Promise(() => {}));
+    renderTweet();
+
+    await waitFor(() => expect(chipFor('🔥')).toBeTruthy());
+    await fireEvent.click(chipFor('🔥'));
+
+    expect(chipText('🔥')).toBe('🔥1');
+    expect(chipFor('🔥').getAttribute('aria-pressed')).toBe('false');
+    expect(totalCounter().textContent.trim()).toBe('2');
+  });
+
+  it('puts the reaction back when the node refuses it', async () => {
+    warpnetService.reactToTweet.mockRejectedValue(new Error('node is offline'));
+    renderTweet();
+
+    await waitFor(() => expect(chipFor('❤️')).toBeTruthy());
+    await fireEvent.click(chipFor('❤️'));
+
+    await waitFor(() => expect(chipFor('🔥').getAttribute('aria-pressed')).toBe('true'));
+    expect(chipText('🔥')).toBe('🔥2');
+    expect(chipText('❤️')).toBe('❤️1');
+    expect(totalCounter().textContent.trim()).toBe('3');
+  });
+
+  it('keeps the viewer’s reaction while the author’s instance is unaware of it', async () => {
+    // Our own node reports the reaction as ours, but the bridged breakdown
+    // comes from the remote instance, which the gateway hasn't reached yet.
+    warpnetService.getTweetStats.mockResolvedValue({
+      tweet_id: 't1',
+      retweets_count: 0,
+      reactions_count: 5,
+      replies_count: 0,
+      views_count: 0,
+      reactions: {'🔥': 5},
+      my_reaction: '❤️',
+    });
+    renderTweet();
+
+    await waitFor(() => expect(chipFor('❤️')).toBeTruthy());
+    expect(chipText('❤️')).toBe('❤️1');
+    expect(chipFor('❤️').getAttribute('aria-pressed')).toBe('true');
+    expect(totalCounter().textContent.trim()).toBe('6');
   });
 });
