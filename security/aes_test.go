@@ -59,12 +59,15 @@ func TestAESEncryptDecrypt_WrongPassword(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// The nil-password branch is the one media uploads actually use
+// The weak password is the one media uploads actually use
 // (core/handler/image.go). It was previously untested.
-func TestAESEncrypt_WeakPasswordBranch(t *testing.T) {
+func TestAESEncrypt_WeakPassword(t *testing.T) {
 	in := []byte(`{"MAC":"3c:52:82:1a:9b:04"}`)
 
-	sealed, err := EncryptAES(in, nil)
+	password, err := NewWeakPassword()
+	assert.NoError(t, err)
+
+	sealed, err := EncryptAES(in, password)
 	assert.NoError(t, err)
 
 	// Salt and nonce are public and embedded, per the scheme's design.
@@ -84,10 +87,14 @@ func TestAESEncrypt_WeakPasswordBranch(t *testing.T) {
 func TestAESEncrypt_WeakPasswordIsNotDerivedFromClock(t *testing.T) {
 	in := []byte("same plaintext, same second")
 
-	first, err := EncryptAES(in, nil)
+	firstPassword, err := NewWeakPassword()
+	assert.NoError(t, err)
+	first, err := EncryptAES(in, firstPassword)
 	assert.NoError(t, err)
 
-	second, err := EncryptAES(in, nil)
+	secondPassword, err := NewWeakPassword()
+	assert.NoError(t, err)
+	second, err := EncryptAES(in, secondPassword)
 	assert.NoError(t, err)
 
 	assert.NotEqual(t, first[:saltSize], second[:saltSize], "salt must be per-call random")
@@ -268,4 +275,25 @@ func TestAESGCM_ShortCiphertextIsReported(t *testing.T) {
 
 	_, err := aesGCMDecrypt(key, []byte("QUJD"))
 	assert.ErrorIs(t, err, ErrCiphertextTooShort)
+}
+
+func TestAESEncrypt_RefusesEmptyPassword(t *testing.T) {
+	_, err := EncryptAES([]byte("data"), nil)
+	assert.ErrorIs(t, err, ErrEmptyPassword)
+
+	_, err = EncryptAES([]byte("data"), []byte{})
+	assert.ErrorIs(t, err, ErrEmptyPassword)
+}
+
+func TestNewWeakPassword_IsBoundedAndRandom(t *testing.T) {
+	first, err := NewWeakPassword()
+	assert.NoError(t, err)
+	assert.Len(t, first, weakPasswordSize)
+
+	second, err := NewWeakPassword()
+	assert.NoError(t, err)
+	assert.NotEqual(t, first, second, "each upload draws its own password")
+
+	Wipe(first)
+	assert.Equal(t, make([]byte, weakPasswordSize), first)
 }

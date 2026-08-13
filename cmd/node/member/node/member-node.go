@@ -171,6 +171,7 @@ func NewMemberNode(
 		authRepo:      authRepo,
 		notifier:      notifier,
 		db:            db,
+		privKey:       privKey,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -465,7 +466,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
-			handler.StreamImportTweetHandler(m, r.tweetRepo, r.mediaRepo, userRepo),
+			handler.StreamImportTweetHandler(m, m.privKey, r.tweetRepo, r.mediaRepo, userRepo),
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
@@ -750,7 +751,7 @@ func (m *MemberNode) mediaHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_UPLOAD_IMAGE,
-			handler.StreamUploadImageHandler(m, r.mediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
@@ -758,7 +759,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
-			handler.StreamUploadVideoHandler(m, r.mediaRepo, userRepo),
+			handler.StreamUploadVideoHandler(m, m.privKey, r.mediaRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_VIDEO,

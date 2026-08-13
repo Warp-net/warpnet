@@ -24,20 +24,20 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"bytes"
+	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/media_meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 )
@@ -50,16 +50,6 @@ const (
 	ErrNoVideoProvided  warpnet.WarpError = "a video must be provided"
 	ErrUnsupportedVideo warpnet.WarpError = "unsupported video format: only MP4 and MOV (QuickTime) files are accepted"
 )
-
-const (
-	boxHeaderSize = 8
-	boxUUIDSize   = 16
-)
-
-var warpnetMetaUUID = [16]byte{
-	0x77, 0x61, 0x72, 0x70, 0x6e, 0x65, 0x74, 0x00, // "warpnet\0"
-	0x6d, 0x65, 0x74, 0x61, 0x00, 0x00, 0x00, 0x01, // "meta\0\0\0\1"
-}
 
 var acceptedVideoPrefixes = map[string]string{
 	"video/mp4":       "data:video/mp4;base64,",
@@ -88,6 +78,7 @@ type VideoStreamer interface {
 
 func StreamUploadVideoHandler(
 	info VideoNodeInformer,
+	privKey ed25519.PrivateKey,
 	mediaRepo VideoStorer,
 	userRepo VideoUserFetcher,
 ) warpnet.WarpHandlerFunc {
@@ -100,62 +91,25 @@ func StreamUploadVideoHandler(
 			return nil, ErrNoVideoProvided
 		}
 
-		encryptedMeta, ownerUser, err := buildEncryptedMediaMeta(info, userRepo)
+		nodeInfo := info.NodeInfo()
+
+		owner, err := userRepo.Get(nodeInfo.OwnerId)
+		if err != nil {
+			return nil, fmt.Errorf("upload: video: fetching owner: %w", err)
+		}
+
+		watermark, err := buildWatermark(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, err
 		}
 
-		key, err := processAndStoreVideo(ev.Video, encryptedMeta, ownerUser.Id, mediaRepo)
+		key, err := processAndStoreVideo(ev.Video, watermark, mediaRepo)
 		if err != nil {
 			return nil, fmt.Errorf("upload: video: %w", err)
 		}
 
 		return event.UploadVideoResponse{Key: key}, nil
 	}
-}
-
-func processAndStoreVideo(
-	file string,
-	encryptedMeta []byte,
-	userId string,
-	mediaRepo VideoStorer,
-) (string, error) {
-	parts := strings.SplitN(file, ",", 2) //nolint:mnd
-	if len(parts) != 2 {                  //nolint:mnd
-		return "", ErrInvalidBase64Signature
-	}
-
-	prefix, ok := videoDataPrefix(parts[0])
-	if !ok {
-		return "", ErrUnsupportedVideo
-	}
-
-	videoBytes, err := base64.StdEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("base64 decoding: %w", err)
-	}
-
-	if len(videoBytes) > maxVideoSize {
-		return "", ErrTooLargeVideo
-	}
-
-	if !isISOBaseMediaFile(videoBytes) {
-		return "", ErrUnsupportedVideo
-	}
-
-	amendedVideo, err := amendVideoMetadata(videoBytes, encryptedMeta)
-	if err != nil {
-		return "", fmt.Errorf("meta data amending: %w", err)
-	}
-
-	encoded := base64.StdEncoding.EncodeToString(amendedVideo)
-
-	key, err := mediaRepo.SetVideo(userId, domain.Base64Video(prefix+encoded))
-	if err != nil {
-		return "", fmt.Errorf("storing media: %w", err)
-	}
-
-	return string(key), nil
 }
 
 func StreamGetVideoHandler(
@@ -227,6 +181,11 @@ func StreamGetVideoHandler(
 			return nil, fmt.Errorf("get video: unmarshalling response: %w", err)
 		}
 
+		if err := acceptForeignVideo(u, ev.Key, videoResp.File); err != nil {
+			log.Warnf("get video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
+			return event.GetVideoResponse{File: ""}, nil
+		}
+
 		if videoResp.File != "" {
 			if err := mediaRepo.SetForeignVideoWithTTL(
 				u.Id, ev.Key, domain.Base64Video(videoResp.File),
@@ -260,43 +219,71 @@ func videoDataPrefix(header string) (string, bool) {
 	return prefix, ok
 }
 
-func isISOBaseMediaFile(b []byte) bool {
-	for offset := 0; offset+boxHeaderSize <= len(b); {
-		size := int(binary.BigEndian.Uint32(b[offset : offset+4]))
-		boxType := string(b[offset+4 : offset+boxHeaderSize])
-
-		if boxType == "ftyp" {
-			return true
-		}
-		if boxType != "wide" && boxType != "free" && boxType != "skip" {
-			return false
-		}
-		if size < boxHeaderSize {
-			return false
-		}
-		offset += size
-	}
-	return false
+func acceptForeignVideo(u domain.User, key, file string) error {
+	return acceptForeignMedia(u, key, file, media_meta.VerifyVideo)
 }
 
-func amendVideoMetadata(videoBytes, metadata []byte) ([]byte, error) {
-	encodedMetadata := base64.StdEncoding.EncodeToString(metadata)
-
-	boxSize := boxHeaderSize + boxUUIDSize + len(encodedMetadata)
-	if boxSize > math.MaxUint32 {
-		return nil, warpnet.WarpError("amend video meta: metadata box too large")
+func watermarkVideo(videoBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
+	raw, _, err := media_meta.SplitVideo(videoBytes)
+	if err != nil {
+		return nil, fmt.Errorf("meta data stripping: %w", err)
 	}
 
-	buf := bytes.NewBuffer(make([]byte, 0, len(videoBytes)+boxSize))
-	buf.Write(videoBytes)
+	raw, err = media_meta.CloseOpenEndedBox(raw)
+	if err != nil {
+		return nil, fmt.Errorf("meta data stripping: %w", err)
+	}
 
-	header := make([]byte, boxHeaderSize)
-	binary.BigEndian.PutUint32(header, uint32(boxSize)) //nolint:gosec
-	copy(header[4:], "uuid")
+	watermarkBytes, err := watermark.Sign(security.ConvertToSHA256(raw))
+	if err != nil {
+		return nil, fmt.Errorf("meta data signing: %w", err)
+	}
 
-	buf.Write(header)
-	buf.Write(warpnetMetaUUID[:])
-	buf.WriteString(encodedMetadata)
+	watermarked, err := media_meta.EmbedInVideo(raw, watermarkBytes)
+	if err != nil {
+		return nil, fmt.Errorf("meta data amending: %w", err)
+	}
 
-	return buf.Bytes(), nil
+	if err := media_meta.VerifyVideo(watermarked, watermark.NodeId, watermark.OwnerId); err != nil {
+		return nil, fmt.Errorf("meta data self check: %w", err)
+	}
+	return watermarked, nil
+}
+
+func processAndStoreVideo(
+	file string,
+	watermark media_meta.Watermark,
+	mediaRepo VideoStorer,
+) (string, error) {
+	header, videoBytes, err := splitDataURI(file)
+	if err != nil {
+		return "", err
+	}
+
+	prefix, ok := videoDataPrefix(header)
+	if !ok {
+		return "", ErrUnsupportedVideo
+	}
+
+	if len(videoBytes) > maxVideoSize {
+		return "", ErrTooLargeVideo
+	}
+
+	if !media_meta.IsISOBaseMediaFile(videoBytes) {
+		return "", ErrUnsupportedVideo
+	}
+
+	watermarked, err := watermarkVideo(videoBytes, watermark)
+	if err != nil {
+		return "", err
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(watermarked)
+
+	key, err := mediaRepo.SetVideo(watermark.OwnerId, domain.Base64Video(prefix+encoded))
+	if err != nil {
+		return "", fmt.Errorf("storing media: %w", err)
+	}
+
+	return string(key), nil
 }

@@ -20,7 +20,7 @@ import (
 type stubImportInformer struct{ ownerId string }
 
 func (s stubImportInformer) NodeInfo() warpnet.NodeInfo {
-	return warpnet.NodeInfo{OwnerId: s.ownerId, Type: warpnet.MemberNode}
+	return warpnet.NodeInfo{OwnerId: s.ownerId, ID: testSignerID, Type: warpnet.MemberNode}
 }
 
 type stubImportUserRepo struct{ user domain.User }
@@ -90,7 +90,7 @@ func newImportTweetHandler(t *testing.T) (warpnet.WarpHandlerFunc, *stubImportTw
 	mediaRepo := &stubImportMediaRepo{}
 	informer := stubImportInformer{ownerId: "owner-1"}
 	userRepo := stubImportUserRepo{user: domain.User{Id: "owner-1", Username: "alice"}}
-	return StreamImportTweetHandler(informer, tweetRepo, mediaRepo, userRepo), tweetRepo, mediaRepo
+	return StreamImportTweetHandler(informer, testSignerKey, tweetRepo, mediaRepo, userRepo), tweetRepo, mediaRepo
 }
 
 func TestStreamImportTweetHandler(t *testing.T) {
