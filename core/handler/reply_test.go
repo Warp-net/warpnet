@@ -512,44 +512,6 @@ func TestHandleNewReply_ForwardRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back for a peer that does not serve it", func(t *testing.T) {
-		var used []stream.WarpRoute
-		h := build(stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				used = append(used, path)
-				if path == event.PUBLIC_POST_REPLY {
-					return nil, stream.ErrProtocolNotSupported
-				}
-				return []byte("{}"), nil
-			},
-		})
-		if _, err := h(marshal(t, ev), nil); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		want := []stream.WarpRoute{event.PUBLIC_POST_REPLY, event.PRIVATE_POST_TWEET}
-		if len(used) != 2 || used[0] != want[0] || used[1] != want[1] {
-			t.Fatalf("expected %v, got %v", want, used)
-		}
-	})
-
-	t.Run("does not fall back on an unrelated error", func(t *testing.T) {
-		streamErr := errors.New("broken")
-		var used []stream.WarpRoute
-		h := build(stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				used = append(used, path)
-				return nil, streamErr
-			},
-		})
-		if _, err := h(marshal(t, ev), nil); !errors.Is(err, streamErr) {
-			t.Fatalf("expected the stream error, got %v", err)
-		}
-		if len(used) != 1 {
-			t.Fatalf("expected no fallback, got %v", used)
-		}
-	})
 }
 
 func TestStreamDeleteReplyHandler_Public(t *testing.T) {
@@ -670,24 +632,4 @@ func TestDeleteReply_ForwardRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back for a peer that does not serve it", func(t *testing.T) {
-		var used []stream.WarpRoute
-		h := build(stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				used = append(used, path)
-				if path == event.PUBLIC_DELETE_REPLY {
-					return nil, stream.ErrProtocolNotSupported
-				}
-				return []byte("{}"), nil
-			},
-		})
-		if _, err := h(marshal(t, ev), nil); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		want := []stream.WarpRoute{event.PUBLIC_DELETE_REPLY, event.PRIVATE_DELETE_TWEET}
-		if len(used) != 2 || used[0] != want[0] || used[1] != want[1] {
-			t.Fatalf("expected %v, got %v", want, used)
-		}
-	})
 }

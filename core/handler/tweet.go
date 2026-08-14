@@ -324,16 +324,6 @@ func requireLocalParent(
 	return nil
 }
 
-func forwardToThreadHome(
-	streamer TweetStreamer, nodeId string, public, legacy stream.WarpRoute, payload any,
-) ([]byte, error) {
-	resp, err := streamer.GenericStream(nodeId, public, payload)
-	if errors.Is(err, stream.ErrProtocolNotSupported) {
-		return streamer.GenericStream(nodeId, legacy, payload)
-	}
-	return resp, err
-}
-
 // handleNewReply stores a reply in its thread, notifies the parent tweet's
 // author when it lives here, and forwards the reply to the parent author's
 // node otherwise so the thread stays consistent across peers.
@@ -404,11 +394,9 @@ func handleNewReply(
 
 	// Forward the normalized/stored reply (prefix-stripped ids) so peers
 	// build identical thread keys.
-	replyDataResp, err := forwardToThreadHome(
-		streamer,
+	replyDataResp, err := streamer.GenericStream(
 		parentUser.NodeId,
 		event.PUBLIC_POST_REPLY,
-		event.PRIVATE_POST_TWEET,
 		domain.Tweet{
 			CreatedAt:    reply.CreatedAt,
 			Id:           reply.Id,
@@ -796,11 +784,9 @@ func deleteReply(
 	}
 
 	// Forward normalized ids so the remote node deletes under the same key.
-	resp, err := forwardToThreadHome(
-		streamer,
+	resp, err := streamer.GenericStream(
 		parentUser.NodeId,
 		event.PUBLIC_DELETE_REPLY,
-		event.PRIVATE_DELETE_TWEET,
 		event.DeleteTweetEvent{TweetId: id, ParentId: parentId, UserId: ev.UserId},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
