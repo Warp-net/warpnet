@@ -122,8 +122,7 @@ func (p *WarpMiddleware) runHandler(
 	switch {
 	case s.Protocol() == event.PRIVATE_POST_PAIR:
 		response, err = handler(data, s)
-		if err == nil && s.Conn() != nil {
-			p.setPaired(s.Conn().RemotePeer())
+		if err == nil {
 			log.Debugf("middleware: paired alias: %s", s.Conn().RemotePeer())
 		}
 	default:

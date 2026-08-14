@@ -203,6 +203,13 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
+func (n *WarpNode) SetPairedDevices(store middleware.PairedDevicesStore) {
+	if n == nil || n.mw == nil || store == nil {
+		return
+	}
+	n.mw.SetPairedDevices(store)
+}
+
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	logMw := n.mw.LoggingMiddleware
 	authMw := n.mw.AuthMiddleware

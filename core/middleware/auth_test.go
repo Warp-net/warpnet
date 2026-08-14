@@ -7,12 +7,14 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"io"
 	"testing"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -222,7 +224,14 @@ func TestAuthMiddleware_PrivateRouteDeniedForForeignPeer(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_PrivateRouteAllowedAfterPairing(t *testing.T) {
+type stubDevices struct {
+	devices []domain.Device
+	err     error
+}
+
+func (s stubDevices) GetDevices(string) ([]domain.Device, error) { return s.devices, s.err }
+
+func TestAuthMiddleware_PrivateRouteAllowedForPairedDevice(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, deviceKey := newRemotePeer(t)
 
@@ -234,54 +243,39 @@ func TestAuthMiddleware_PrivateRouteAllowedAfterPairing(t *testing.T) {
 		t.Fatal("an unpaired device must not reach private routes")
 	}
 
-	pairHandler := mw.AuthMiddleware(mw.UnwrapStreamMiddleware(
-		func(_ []byte, _ warpnet.WarpStream) (any, error) { return []string{}, nil },
-	))
-	callPeer(t, pairHandler, ownNodeId, device, deviceKey, event.PRIVATE_POST_PAIR)
+	mw.SetPairedDevices(stubDevices{devices: []domain.Device{{NodeId: device}}})
 
 	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, device, deviceKey, route); !reached {
 		t.Error("a paired device must reach private routes")
 	}
 }
 
-func TestAuthMiddleware_RejectedPairingGrantsNothing(t *testing.T) {
+func TestAuthMiddleware_UnknownDeviceStaysLockedOut(t *testing.T) {
+	ownNodeId, _ := newRemotePeer(t)
+	paired, _ := newRemotePeer(t)
+	other, otherKey := newRemotePeer(t)
+
+	mw := NewWarpMiddleware(ownNodeId)
+	defer mw.Close()
+	mw.SetPairedDevices(stubDevices{devices: []domain.Device{{NodeId: paired}}})
+
+	reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, "/private/get/notifications/0.0.0")
+	if reached {
+		t.Error("a peer missing from the device store must stay locked out")
+	}
+}
+
+func TestAuthMiddleware_DeviceLookupFailureDenies(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, deviceKey := newRemotePeer(t)
 
 	mw := NewWarpMiddleware(ownNodeId)
 	defer mw.Close()
-
-	pairHandler := mw.AuthMiddleware(mw.UnwrapStreamMiddleware(
-		func(_ []byte, _ warpnet.WarpStream) (any, error) {
-			return nil, warpnet.WarpError("token mismatch")
-		},
-	))
-	callPeer(t, pairHandler, ownNodeId, device, deviceKey, event.PRIVATE_POST_PAIR)
+	mw.SetPairedDevices(stubDevices{err: errors.New("db is closed")})
 
 	reached, _ := callAsRemotePeer(t, mw, ownNodeId, device, deviceKey, "/private/get/notifications/0.0.0")
 	if reached {
-		t.Error("a device whose pairing was rejected must stay locked out")
-	}
-}
-
-func TestIsPaired_ExpiresAfterTTL(t *testing.T) {
-	ownNodeId, _ := newRemotePeer(t)
-	device, _ := newRemotePeer(t)
-
-	mw := NewWarpMiddleware(ownNodeId)
-	defer mw.Close()
-
-	mw.setPaired(device)
-	if !mw.isPaired(device) {
-		t.Fatal("a fresh pairing must count")
-	}
-
-	mw.pairedMx.Lock()
-	mw.paired[device] = time.Now().Add(-pairingTTL - time.Minute)
-	mw.pairedMx.Unlock()
-
-	if mw.isPaired(device) {
-		t.Error("a pairing older than pairingTTL must stop counting")
+		t.Error("a failed device lookup must not open the gate")
 	}
 }
 

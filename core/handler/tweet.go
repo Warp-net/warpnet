@@ -254,32 +254,20 @@ func StreamNewReplyHandler(
 		if ev.ParentUserId == nil || *ev.ParentUserId == "" {
 			return nil, ErrForeignThread
 		}
-		isHome, err := isHomeNodeOf(*ev.ParentUserId, userRepo, streamer)
-		if err != nil {
-			return nil, err
-		}
-		if !isHome {
-			return nil, ErrForeignThread
+
+		ownNodeInfo := streamer.NodeInfo()
+		if *ev.ParentUserId != ownNodeInfo.OwnerId {
+			parentUser, err := userRepo.Get(*ev.ParentUserId)
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+				return nil, err
+			}
+			if parentUser.NodeId == "" || parentUser.NodeId != ownNodeInfo.ID.String() {
+				return nil, ErrForeignThread
+			}
 		}
 
 		return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)
 	}
-}
-
-func isHomeNodeOf(userId string, userRepo TweetUserFetcher, streamer TweetStreamer) (bool, error) {
-	ownNodeInfo := streamer.NodeInfo()
-	if userId == ownNodeInfo.OwnerId {
-		return true, nil
-	}
-
-	user, err := userRepo.Get(userId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return user.NodeId == ownNodeInfo.ID.String(), nil
 }
 
 // handleNewReply stores a reply in its thread, notifies the parent tweet's

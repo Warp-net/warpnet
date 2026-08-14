@@ -187,6 +187,7 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.node.SetOutbox(database.NewOutboxRepo(m.db))
+	m.node.SetPairedDevices(m.deviceRepo)
 
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {

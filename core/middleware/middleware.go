@@ -28,13 +28,14 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
+	log "github.com/sirupsen/logrus"
 )
 
 type middlewareError string
@@ -72,15 +73,15 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
-const pairingTTL = 72 * time.Hour
+type PairedDevicesStore interface {
+	GetDevices(ownerNodeId string) ([]domain.Device, error)
+}
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
 	ownNodeId       warpnet.WarpPeerID
-
-	pairedMx sync.RWMutex
-	paired   map[warpnet.WarpPeerID]time.Time
+	devices         PairedDevicesStore
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
@@ -88,27 +89,33 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
-		paired:          make(map[warpnet.WarpPeerID]time.Time),
 	}
 	return wm
 }
 
-func (p *WarpMiddleware) setPaired(id warpnet.WarpPeerID) {
-	p.pairedMx.Lock()
-	defer p.pairedMx.Unlock()
-
-	if p.paired == nil {
-		p.paired = make(map[warpnet.WarpPeerID]time.Time, 1)
+func (p *WarpMiddleware) SetPairedDevices(store PairedDevicesStore) {
+	if p == nil {
+		return
 	}
-	p.paired[id] = time.Now()
+	p.devices = store
 }
 
 func (p *WarpMiddleware) isPaired(id warpnet.WarpPeerID) bool {
-	p.pairedMx.RLock()
-	defer p.pairedMx.RUnlock()
+	if p.devices == nil {
+		return false
+	}
 
-	pairedAt, ok := p.paired[id]
-	return ok && time.Since(pairedAt) <= pairingTTL
+	devices, err := p.devices.GetDevices(p.ownNodeId.String())
+	if err != nil {
+		log.Errorf("middleware: auth: paired devices lookup: %v", err)
+		return false
+	}
+	for _, device := range devices {
+		if device.NodeId == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Close releases background resources owned by the middleware (currently
