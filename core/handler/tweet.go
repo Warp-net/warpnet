@@ -251,40 +251,35 @@ func StreamNewReplyHandler(
 		if !ev.IsReply() {
 			return nil, ErrNotAReply
 		}
-		if ev.ParentUserId == nil {
+		if ev.ParentUserId == nil || *ev.ParentUserId == "" {
 			return nil, ErrForeignThread
 		}
-		if err := requireLocalParent(*ev.ParentUserId, userRepo, streamer); err != nil {
+		isHome, err := isHomeNodeOf(*ev.ParentUserId, userRepo, streamer)
+		if err != nil {
 			return nil, err
+		}
+		if !isHome {
+			return nil, ErrForeignThread
 		}
 
 		return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)
 	}
 }
 
-func requireLocalParent(
-	parentUserId string, userRepo TweetUserFetcher, streamer TweetStreamer,
-) error {
-	if parentUserId == "" {
-		return ErrForeignThread
-	}
-
+func isHomeNodeOf(userId string, userRepo TweetUserFetcher, streamer TweetStreamer) (bool, error) {
 	ownNodeInfo := streamer.NodeInfo()
-	if parentUserId == ownNodeInfo.OwnerId {
-		return nil
+	if userId == ownNodeInfo.OwnerId {
+		return true, nil
 	}
 
-	parentUser, err := userRepo.Get(parentUserId)
+	user, err := userRepo.Get(userId)
 	if errors.Is(err, database.ErrUserNotFound) {
-		return ErrForeignThread
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
-	if parentUser.NodeId != ownNodeInfo.ID.String() {
-		return ErrForeignThread
-	}
-	return nil
+	return user.NodeId == ownNodeInfo.ID.String(), nil
 }
 
 // handleNewReply stores a reply in its thread, notifies the parent tweet's
@@ -710,7 +705,6 @@ func StreamDeleteTweetHandler(
 	}
 }
 
-// deleteReply removes a reply from its thread.
 func deleteReply(
 	ev event.DeleteTweetEvent,
 	repo TweetsStorer,
