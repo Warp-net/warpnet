@@ -129,28 +129,30 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 	}
 }
 
-// peerToPeerPrivateRoutes lists the /private/ routes that are part of the
-// node-to-node protocol and so stay reachable by any peer: pairing is how a
-// device that is not paired yet gets known, and reply create/delete are
-// forwarded to the node of the parent tweet's author.
-var peerToPeerPrivateRoutes = map[warpnet.WarpProtocolID]struct{}{
-	event.PRIVATE_POST_PAIR:    {},
-	event.PRIVATE_POST_TWEET:   {},
-	event.PRIVATE_DELETE_TWEET: {},
-}
-
 // isPrivateRouteAllowed reports whether remotePeer may use a /private/ route:
 // the node itself (loopback self-streams), a device paired with it, or one of
-// the peer-to-peer routes above.
+// the routes below, which are private in name only.
 func (p *WarpMiddleware) isPrivateRouteAllowed(
 	route stream.WarpRoute, remotePeer, localPeer warpnet.WarpPeerID,
 ) bool {
 	if remotePeer == localPeer || remotePeer == p.ownNodeId {
 		return true
 	}
-	if _, ok := peerToPeerPrivateRoutes[route.ProtocolID()]; ok {
+
+	switch route.ProtocolID() {
+	// Pairing carries its own authentication - the handler rejects anyone
+	// who cannot present the owner's session token - and it is what puts a
+	// device in the paired set, so gating it would leave that set empty.
+	case event.PRIVATE_POST_PAIR:
+		return true
+	// Reply create/delete are forwarded to the node of the parent tweet's
+	// author (handler.handleNewReply, handler.deleteReply), so they arrive
+	// from a peer that owns nothing here. They are node-to-node writes that
+	// happen to sit under /private/; moving them out needs a wire change.
+	case event.PRIVATE_POST_TWEET, event.PRIVATE_DELETE_TWEET:
 		return true
 	}
+
 	return p.isPaired(remotePeer)
 }
 
