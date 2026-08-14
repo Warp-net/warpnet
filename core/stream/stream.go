@@ -36,7 +36,6 @@ import (
 	"hash/fnv"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -64,12 +63,6 @@ const (
 )
 
 const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
-
-const ErrProtocolNotSupported = warpnet.WarpError("stream: route not supported by peer")
-
-func isProtocolNotSupported(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "protocols not supported")
-}
 
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
@@ -127,7 +120,8 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	switch {
 	case errors.Is(err, warpnet.ErrNodeIsOffline):
 		p.SetUnstreamable(peerAddr.ID)
-	case err == nil, errors.Is(err, ErrResponseRead), errors.Is(err, ErrProtocolNotSupported):
+	case err == nil, errors.Is(err, ErrResponseRead):
+		// ErrResponseRead means the request reached the peer, so it is streamable.
 		p.SetStreamable(peerAddr.ID)
 	}
 	if err != nil {
@@ -167,7 +161,7 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 	msgID := ulid.Make().String()
 
 	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
-	if err == nil || isTerminalSendErr(err) {
+	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
 		return bt, err
 	}
 
@@ -175,18 +169,12 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 	defer cancel()
 	_ = p.retrier.Try(ctx, func() error {
 		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
-		if isTerminalSendErr(err) {
+		if errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
 			return fmt.Errorf("%w: %w", err, retrier.ErrStopTrying)
 		}
 		return err
 	})
 	return bt, err
-}
-
-func isTerminalSendErr(err error) bool {
-	return errors.Is(err, warpnet.ErrNodeIsOffline) ||
-		errors.Is(err, ErrResponseRead) ||
-		errors.Is(err, ErrProtocolNotSupported)
 }
 
 func hashBody(data []byte) string {
@@ -226,9 +214,6 @@ func (p *streamPool) send(
 	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
 		errors.Is(err, context.DeadlineExceeded) {
 		return nil, warpnet.ErrNodeIsOffline
-	}
-	if isProtocolNotSupported(err) {
-		return nil, fmt.Errorf("%w: %w", ErrProtocolNotSupported, err)
 	}
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)

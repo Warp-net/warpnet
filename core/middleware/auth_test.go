@@ -298,19 +298,7 @@ func TestAuthMiddleware_PublicRouteAllowedForForeignPeer(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_PairingStaysOpen(t *testing.T) {
-	ownNodeId, _ := newRemotePeer(t)
-	other, otherKey := newRemotePeer(t)
-
-	mw := NewWarpMiddleware(ownNodeId)
-	defer mw.Close()
-
-	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, event.PRIVATE_POST_PAIR); !reached {
-		t.Errorf("%s: must stay reachable by any peer", event.PRIVATE_POST_PAIR)
-	}
-}
-
-func TestAuthMiddleware_LegacyReplyRoutesDenied(t *testing.T) {
+func TestAuthMiddleware_ExemptRoutesStayOpen(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	other, otherKey := newRemotePeer(t)
 
@@ -318,12 +306,24 @@ func TestAuthMiddleware_LegacyReplyRoutesDenied(t *testing.T) {
 	defer mw.Close()
 
 	for _, route := range []string{
-		event.PRIVATE_POST_TWEET,
+		event.PRIVATE_POST_PAIR,
 		event.PRIVATE_DELETE_TWEET,
 	} {
-		if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, route); reached {
-			t.Errorf("%s: replies belong on the public routes now", route)
+		if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, route); !reached {
+			t.Errorf("%s: must stay reachable by any peer", route)
 		}
+	}
+}
+
+func TestAuthMiddleware_LegacyReplyCreateDenied(t *testing.T) {
+	ownNodeId, _ := newRemotePeer(t)
+	other, otherKey := newRemotePeer(t)
+
+	mw := NewWarpMiddleware(ownNodeId)
+	defer mw.Close()
+
+	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, event.PRIVATE_POST_TWEET); reached {
+		t.Errorf("%s: replies are created on the public route now", event.PRIVATE_POST_TWEET)
 	}
 }
 

@@ -262,43 +262,6 @@ func StreamNewReplyHandler(
 	}
 }
 
-func StreamDeleteReplyHandler(
-	tweetRepo TweetsStorer,
-	userRepo TweetUserFetcher,
-	streamer TweetStreamer,
-) warpnet.WarpHandlerFunc {
-	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		var ev event.DeleteTweetEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
-		}
-		if ev.TweetId == "" {
-			return nil, warpnet.WarpError("empty tweet id")
-		}
-
-		parent := replyParent(ev.ParentId, ev.RootId)
-		if parent == "" || parent == ev.TweetId {
-			return nil, ErrNotAReply
-		}
-
-		reply, err := tweetRepo.GetReply(
-			strings.TrimPrefix(parent, domain.RetweetPrefix),
-			strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix),
-		)
-		if err != nil || reply.ParentUserId == nil {
-			return nil, ErrForeignThread
-		}
-		if err := requireLocalParent(*reply.ParentUserId, userRepo, streamer); err != nil {
-			return nil, err
-		}
-
-		return deleteReply(ev, tweetRepo, userRepo, streamer)
-	}
-}
-
 func requireLocalParent(
 	parentUserId string, userRepo TweetUserFetcher, streamer TweetStreamer,
 ) error {
@@ -786,7 +749,7 @@ func deleteReply(
 	// Forward normalized ids so the remote node deletes under the same key.
 	resp, err := streamer.GenericStream(
 		parentUser.NodeId,
-		event.PUBLIC_DELETE_REPLY,
+		event.PRIVATE_DELETE_TWEET,
 		event.DeleteTweetEvent{TweetId: id, ParentId: parentId, UserId: ev.UserId},
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {

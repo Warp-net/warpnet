@@ -133,7 +133,8 @@ func (p *WarpMiddleware) isPrivateRouteAllowed(
 	if remotePeer == localPeer || remotePeer == p.ownNodeId {
 		return true
 	}
-	if route.ProtocolID() == event.PRIVATE_POST_PAIR {
+	switch route.ProtocolID() {
+	case event.PRIVATE_POST_PAIR, event.PRIVATE_DELETE_TWEET:
 		return true
 	}
 	return p.isPaired(remotePeer)
