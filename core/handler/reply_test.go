@@ -361,8 +361,6 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	})
 }
 
-// PUBLIC_POST_REPLY is how another user's node delivers a reply into a thread
-// that lives here. It must accept only that, and nothing else.
 func TestStreamNewReplyHandler_Public(t *testing.T) {
 	const (
 		owner      = "owner-1"
@@ -468,9 +466,6 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 	})
 }
 
-// The forward goes out on the public route, and falls back to the old private
-// one only for peers that do not serve it yet - an un-upgraded node, or the
-// ActivityPub gateway that hosts every bridged Mastodon user.
 func TestHandleNewReply_ForwardRoute(t *testing.T) {
 	owner := "owner-1"
 	pu := "parent-user"
@@ -553,6 +548,146 @@ func TestHandleNewReply_ForwardRoute(t *testing.T) {
 		}
 		if len(used) != 1 {
 			t.Fatalf("expected no fallback, got %v", used)
+		}
+	})
+}
+
+func TestStreamDeleteReplyHandler_Public(t *testing.T) {
+	const (
+		owner      = "owner-1"
+		nodeID     = warpnet.WarpPeerID("my-node")
+		parentUser = "parent-user"
+		parentId   = "parent-1"
+	)
+
+	makeEvent := func() event.DeleteTweetEvent {
+		pid := parentId
+		return event.DeleteTweetEvent{
+			TweetId:  "reply-1",
+			ParentId: pid,
+			RootId:   parentId,
+			UserId:   "stranger",
+		}
+	}
+
+	storedReply := func(parentUserId string) stubTweetRepo {
+		return stubTweetRepo{getReplyFn: func(rootID, replyID string) (domain.Tweet, error) {
+			pu := parentUserId
+			return domain.Tweet{Id: replyID, ParentUserId: &pu}, nil
+		}}
+	}
+
+	build := func(repo stubTweetRepo, userRepo stubReplyUserRepo) warpnet.WarpHandlerFunc {
+		return StreamDeleteReplyHandler(
+			repo,
+			userRepo,
+			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
+		)
+	}
+
+	localParent := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: nodeID.String()}, nil
+	}}
+
+	t.Run("deletes a reply whose thread lives here", func(t *testing.T) {
+		h := build(storedReply(parentUser), localParent)
+		if _, err := h(marshal(t, makeEvent()), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("rejects a delete that is not a reply", func(t *testing.T) {
+		h := build(storedReply(parentUser), localParent)
+		ev := makeEvent()
+		ev.ParentId = ""
+		ev.RootId = ""
+		if _, err := h(marshal(t, ev), nil); !errors.Is(err, ErrNotAReply) {
+			t.Fatalf("expected ErrNotAReply, got %v", err)
+		}
+	})
+
+	t.Run("rejects a reply that is not stored here", func(t *testing.T) {
+		h := build(stubTweetRepo{getReplyFn: func(rootID, replyID string) (domain.Tweet, error) {
+			return domain.Tweet{}, errors.New("not found")
+		}}, localParent)
+		if _, err := h(marshal(t, makeEvent()), nil); !errors.Is(err, ErrForeignThread) {
+			t.Fatalf("expected ErrForeignThread, got %v", err)
+		}
+	})
+
+	t.Run("rejects a thread that lives on another node", func(t *testing.T) {
+		h := build(storedReply(parentUser), stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "someone-else"}, nil
+		}})
+		if _, err := h(marshal(t, makeEvent()), nil); !errors.Is(err, ErrForeignThread) {
+			t.Fatalf("expected ErrForeignThread, got %v", err)
+		}
+	})
+}
+
+func TestDeleteReply_ForwardRoute(t *testing.T) {
+	owner := "owner-1"
+	pu := "parent-user"
+
+	ev := event.DeleteTweetEvent{
+		TweetId:  "reply-1",
+		ParentId: "parent-1",
+		RootId:   "parent-1",
+		UserId:   owner,
+	}
+
+	repo := stubTweetRepo{deleteReplyFn: func(rootID, replyID string) (domain.Tweet, error) {
+		p := pu
+		return domain.Tweet{Id: replyID, ParentUserId: &p}, nil
+	}}
+
+	build := func(streamer stubStreamer) warpnet.WarpHandlerFunc {
+		return StreamDeleteTweetHandler(
+			stubTweetBroadcaster{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			repo,
+			stubTimelineRepo{},
+			stubTweetReactionRepo{},
+			stubReplyUserRepo{},
+			streamer,
+		)
+	}
+
+	t.Run("uses the public reply route", func(t *testing.T) {
+		var used []stream.WarpRoute
+		h := build(stubStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				used = append(used, path)
+				return []byte("{}"), nil
+			},
+		})
+		if _, err := h(marshal(t, ev), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(used) != 1 || used[0] != event.PUBLIC_DELETE_REPLY {
+			t.Fatalf("expected a single %s call, got %v", event.PUBLIC_DELETE_REPLY, used)
+		}
+	})
+
+	t.Run("falls back for a peer that does not serve it", func(t *testing.T) {
+		var used []stream.WarpRoute
+		h := build(stubStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				used = append(used, path)
+				if path == event.PUBLIC_DELETE_REPLY {
+					return nil, stream.ErrProtocolNotSupported
+				}
+				return []byte("{}"), nil
+			},
+		})
+		if _, err := h(marshal(t, ev), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		want := []stream.WarpRoute{event.PUBLIC_DELETE_REPLY, event.PRIVATE_DELETE_TWEET}
+		if len(used) != 2 || used[0] != want[0] || used[1] != want[1] {
+			t.Fatalf("expected %v, got %v", want, used)
 		}
 	})
 }

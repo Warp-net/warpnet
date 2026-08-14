@@ -111,8 +111,6 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		// Owner gate: /private/ routes read and write the owner's own data, so
-		// only this node and the devices paired with it may reach them.
 		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
 			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
@@ -129,31 +127,15 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 	}
 }
 
-// isPrivateRouteAllowed reports whether remotePeer may use a /private/ route:
-// the node itself (loopback self-streams), a device paired with it, or one of
-// the routes below, which are private in name only.
 func (p *WarpMiddleware) isPrivateRouteAllowed(
 	route stream.WarpRoute, remotePeer, localPeer warpnet.WarpPeerID,
 ) bool {
 	if remotePeer == localPeer || remotePeer == p.ownNodeId {
 		return true
 	}
-
-	switch route.ProtocolID() {
-	// Pairing carries its own authentication - the handler rejects anyone
-	// who cannot present the owner's session token - and it is what puts a
-	// device in the paired set, so gating it would leave that set empty.
-	case event.PRIVATE_POST_PAIR:
-		return true
-	// Reply create/delete are forwarded to the node of the parent tweet's
-	// author, so they arrive from a peer that owns nothing here. Creates have
-	// moved to PUBLIC_POST_REPLY, where they belong; this stays open only for
-	// peers deployed before that route, and can be dropped once the network
-	// has turned over. Deletes still have no public route.
-	case event.PRIVATE_POST_TWEET, event.PRIVATE_DELETE_TWEET:
+	if route.ProtocolID() == event.PRIVATE_POST_PAIR {
 		return true
 	}
-
 	return p.isPaired(remotePeer)
 }
 

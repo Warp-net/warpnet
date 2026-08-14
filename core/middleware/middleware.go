@@ -72,8 +72,6 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
-// pairingTTL mirrors the TTL DevicesRepo.SetDevice gives a device record, so
-// a device that stops re-pairing eventually loses its private route access.
 const pairingTTL = 72 * time.Hour
 
 type WarpMiddleware struct {
@@ -95,9 +93,6 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	return wm
 }
 
-// setPaired records a device that just completed pairing, so its later
-// requests pass the private route gate. Only peers that presented the
-// owner's session token get here, so the map stays device-sized.
 func (p *WarpMiddleware) setPaired(id warpnet.WarpPeerID) {
 	p.pairedMx.Lock()
 	defer p.pairedMx.Unlock()
@@ -108,7 +103,6 @@ func (p *WarpMiddleware) setPaired(id warpnet.WarpPeerID) {
 	p.paired[id] = time.Now()
 }
 
-// isPaired reports whether id paired recently enough to still be trusted.
 func (p *WarpMiddleware) isPaired(id warpnet.WarpPeerID) bool {
 	p.pairedMx.RLock()
 	defer p.pairedMx.RUnlock()

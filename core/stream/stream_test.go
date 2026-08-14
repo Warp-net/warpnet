@@ -356,10 +356,6 @@ func TestHashBody_IsStableAndDiscriminating(t *testing.T) {
 	assert.Equal(t, hashBody(nil), hashBody([]byte{}))
 }
 
-// A peer that answers the dial but does not serve the route - one deployed
-// before the route existed - must fail fast instead of burning the retry
-// budget on a call that can never succeed, and must stay streamable: it is
-// reachable, just older.
 func TestStreamPool_UnsupportedRouteFailsFastAndStaysStreamable(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)

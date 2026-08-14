@@ -56,12 +56,8 @@ const (
 	PRIVATE_POST_LOGIN                 = "/private/post/login/0.0.0"
 	PRIVATE_POST_LOGOUT                = "/private/post/logout/0.0.0"
 	PRIVATE_POST_TWEET                 = "/private/post/tweet/0.0.0"
-	// PUBLIC_POST_REPLY carries a reply to the node of the parent tweet's
-	// author, which is where the thread lives and where readers fetch it
-	// from. The caller is another user's node, like every other /public/
-	// write, not the owner - PRIVATE_POST_TWEET used to serve this and is
-	// kept only for peers that predate this route.
-	PUBLIC_POST_REPLY = "/public/post/reply/0.0.0"
+	PUBLIC_POST_REPLY                  = "/public/post/reply/0.0.0"
+	PUBLIC_DELETE_REPLY                = "/public/delete/reply/0.0.0"
 	PRIVATE_POST_IMPORT_TWITTER_TWEET  = "/private/post/import/twitter/tweet/0.0.0"
 	PRIVATE_POST_USER                  = "/private/post/user/0.0.0"
 	PUBLIC_GET_FOLLOWINGS              = "/public/get/followings/0.0.0"

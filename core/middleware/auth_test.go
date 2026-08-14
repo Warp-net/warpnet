@@ -120,8 +120,6 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	}
 }
 
-// remoteConn presents a loopback stream as a connection from another peer, so
-// the owner gate sees a remote caller instead of a self-stream.
 type remoteConn struct {
 	network.Conn
 
@@ -152,8 +150,6 @@ func newRemotePeer(t *testing.T) (warpnet.WarpPeerID, ed25519.PrivateKey) {
 	return id, priv
 }
 
-// callPeer drives handler with a request signed by peer and arriving over a
-// connection whose local side is ownNodeId, and returns the raw response.
 func callPeer(
 	t *testing.T, handler warpnet.StreamHandler, ownNodeId, peer warpnet.WarpPeerID,
 	privKey ed25519.PrivateKey, route string,
@@ -188,8 +184,6 @@ func callPeer(
 	return resp
 }
 
-// callAsRemotePeer runs the auth middleware for such a request and reports
-// whether the wrapped handler was reached.
 func callAsRemotePeer(
 	t *testing.T, mw *WarpMiddleware, ownNodeId, peer warpnet.WarpPeerID,
 	privKey ed25519.PrivateKey, route string,
@@ -228,8 +222,6 @@ func TestAuthMiddleware_PrivateRouteDeniedForForeignPeer(t *testing.T) {
 	}
 }
 
-// A device earns its private routes by pairing, and the pairing is recorded
-// by the unwrap middleware running the real PRIVATE_POST_PAIR handler.
 func TestAuthMiddleware_PrivateRouteAllowedAfterPairing(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, deviceKey := newRemotePeer(t)
@@ -252,7 +244,6 @@ func TestAuthMiddleware_PrivateRouteAllowedAfterPairing(t *testing.T) {
 	}
 }
 
-// A pairing that the handler rejects must not grant anything.
 func TestAuthMiddleware_RejectedPairingGrantsNothing(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, deviceKey := newRemotePeer(t)
@@ -273,7 +264,6 @@ func TestAuthMiddleware_RejectedPairingGrantsNothing(t *testing.T) {
 	}
 }
 
-// A stale pairing stops counting once pairingTTL has passed.
 func TestIsPaired_ExpiresAfterTTL(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, _ := newRemotePeer(t)
@@ -308,9 +298,19 @@ func TestAuthMiddleware_PublicRouteAllowedForForeignPeer(t *testing.T) {
 	}
 }
 
-// Reply forwarding and pairing are node-to-node protocol steps and must keep
-// working for peers that own no data on this node.
-func TestAuthMiddleware_PeerToPeerPrivateRoutesStayOpen(t *testing.T) {
+func TestAuthMiddleware_PairingStaysOpen(t *testing.T) {
+	ownNodeId, _ := newRemotePeer(t)
+	other, otherKey := newRemotePeer(t)
+
+	mw := NewWarpMiddleware(ownNodeId)
+	defer mw.Close()
+
+	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, event.PRIVATE_POST_PAIR); !reached {
+		t.Errorf("%s: must stay reachable by any peer", event.PRIVATE_POST_PAIR)
+	}
+}
+
+func TestAuthMiddleware_LegacyReplyRoutesDenied(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	other, otherKey := newRemotePeer(t)
 
@@ -318,12 +318,11 @@ func TestAuthMiddleware_PeerToPeerPrivateRoutesStayOpen(t *testing.T) {
 	defer mw.Close()
 
 	for _, route := range []string{
-		event.PRIVATE_POST_PAIR,
 		event.PRIVATE_POST_TWEET,
 		event.PRIVATE_DELETE_TWEET,
 	} {
-		if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, route); !reached {
-			t.Errorf("%s: must stay reachable by any peer", route)
+		if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, route); reached {
+			t.Errorf("%s: replies belong on the public routes now", route)
 		}
 	}
 }
