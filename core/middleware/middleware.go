@@ -83,16 +83,15 @@ type WarpMiddleware struct {
 	devices         PairedDevices
 }
 
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, devices PairedDevices) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
+		devices:         devices,
 	}
 	return wm
 }
-
-func (p *WarpMiddleware) SetPairedDevices(devices PairedDevices) { p.devices = devices }
 
 // Close releases background resources owned by the middleware (currently
 // the idempotency cache's expirable-LRU janitor goroutine). Safe to call

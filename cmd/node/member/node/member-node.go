@@ -180,6 +180,7 @@ func NewMemberNode(
 func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
+		database.NewDevicesRepo(m.db),
 		m.opts...,
 	)
 	if err != nil {
@@ -187,7 +188,6 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.node.SetOutbox(database.NewOutboxRepo(m.db))
-	m.node.SetPairedDevices(database.NewDevicesRepo(m.db))
 
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {

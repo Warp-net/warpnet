@@ -72,7 +72,7 @@ func roundTrip(t *testing.T, mw *WarpMiddleware, handler warpnet.WarpHandlerFunc
 
 func newMW(t *testing.T) *WarpMiddleware {
 	t.Helper()
-	mw := NewWarpMiddleware("peer1")
+	mw := NewWarpMiddleware("peer1", nil)
 	t.Cleanup(mw.Close)
 	return mw
 }

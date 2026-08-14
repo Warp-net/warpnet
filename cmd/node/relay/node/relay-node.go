@@ -166,6 +166,7 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
+		nil,
 		rn.opts...,
 	)
 	if err != nil {

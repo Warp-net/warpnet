@@ -131,7 +131,7 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, nil, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}

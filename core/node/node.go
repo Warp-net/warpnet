@@ -98,6 +98,7 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
+	devices middleware.PairedDevices,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -160,7 +161,7 @@ func NewWarpNode(
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
-		mw:               middleware.NewWarpMiddleware(node.ID()),
+		mw:               middleware.NewWarpMiddleware(node.ID(), devices),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
@@ -201,10 +202,6 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	outbox := stream.NewOutbox(n.ctx, store)
 	outbox.Run(n.streamer)
 	n.outbox = outbox
-}
-
-func (n *WarpNode) SetPairedDevices(devices middleware.PairedDevices) {
-	n.mw.SetPairedDevices(devices)
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
