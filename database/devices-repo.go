@@ -69,7 +69,6 @@ func (repo *DevicesRepo) GetDevices(ownerNodeId string) (devices []domain.Device
 	if err != nil {
 		return devices, err
 	}
-	defer tx.Rollback()
 
 	limit := uint64(10)
 	items, _, err := tx.List(devicesPrefix, &limit, nil)

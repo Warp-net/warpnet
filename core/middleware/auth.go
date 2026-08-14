@@ -151,7 +151,7 @@ func (p *WarpMiddleware) isPrivateRouteAllowed(
 	if _, ok := peerToPeerPrivateRoutes[route.ProtocolID()]; ok {
 		return true
 	}
-	return p.isPairedDevice != nil && p.isPairedDevice(remotePeer)
+	return p.isPaired(remotePeer)
 }
 
 // isFresh reports whether ts is within the freshness window of now, either way.

@@ -203,15 +203,6 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-// SetPairedDeviceChecker wires the paired device lookup the private route
-// owner gate relies on. Call it before registering stream handlers.
-func (n *WarpNode) SetPairedDeviceChecker(fn middleware.PairedDeviceChecker) {
-	if n == nil || n.mw == nil {
-		return
-	}
-	n.mw.SetPairedDeviceChecker(fn)
-}
-
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	logMw := n.mw.LoggingMiddleware
 	authMw := n.mw.AuthMiddleware

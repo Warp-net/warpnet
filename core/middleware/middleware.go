@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -71,15 +72,17 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
-// PairedDeviceChecker reports whether a remote peer is a thin client paired
-// with this node, and therefore acts on behalf of its owner.
-type PairedDeviceChecker func(peerId warpnet.WarpPeerID) bool
+// pairingTTL mirrors the TTL DevicesRepo.SetDevice gives a device record, so
+// a device that stops re-pairing eventually loses its private route access.
+const pairingTTL = 72 * time.Hour
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
 	ownNodeId       warpnet.WarpPeerID
-	isPairedDevice  PairedDeviceChecker
+
+	pairedMx sync.RWMutex
+	paired   map[warpnet.WarpPeerID]time.Time
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
@@ -87,18 +90,31 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
+		paired:          make(map[warpnet.WarpPeerID]time.Time),
 	}
 	return wm
 }
 
-// SetPairedDeviceChecker wires the paired device lookup used by the private
-// route owner gate. Until it is set, only the node itself passes the gate.
-// Must be called before any stream handler is registered.
-func (p *WarpMiddleware) SetPairedDeviceChecker(fn PairedDeviceChecker) {
-	if p == nil {
-		return
+// setPaired records a device that just completed pairing, so its later
+// requests pass the private route gate. Only peers that presented the
+// owner's session token get here, so the map stays device-sized.
+func (p *WarpMiddleware) setPaired(id warpnet.WarpPeerID) {
+	p.pairedMx.Lock()
+	defer p.pairedMx.Unlock()
+
+	if p.paired == nil {
+		p.paired = make(map[warpnet.WarpPeerID]time.Time, 1)
 	}
-	p.isPairedDevice = fn
+	p.paired[id] = time.Now()
+}
+
+// isPaired reports whether id paired recently enough to still be trusted.
+func (p *WarpMiddleware) isPaired(id warpnet.WarpPeerID) bool {
+	p.pairedMx.RLock()
+	defer p.pairedMx.RUnlock()
+
+	pairedAt, ok := p.paired[id]
+	return ok && time.Since(pairedAt) <= pairingTTL
 }
 
 // Close releases background resources owned by the middleware (currently

@@ -152,13 +152,12 @@ func newRemotePeer(t *testing.T) (warpnet.WarpPeerID, ed25519.PrivateKey) {
 	return id, priv
 }
 
-// callAsRemotePeer runs the auth middleware for a request signed by peer and
-// arriving over a connection whose local side is ownNodeId, and reports
-// whether the wrapped handler was reached.
-func callAsRemotePeer(
-	t *testing.T, mw *WarpMiddleware, ownNodeId, peer warpnet.WarpPeerID,
+// callPeer drives handler with a request signed by peer and arriving over a
+// connection whose local side is ownNodeId, and returns the raw response.
+func callPeer(
+	t *testing.T, handler warpnet.StreamHandler, ownNodeId, peer warpnet.WarpPeerID,
 	privKey ed25519.PrivateKey, route string,
-) (reached bool, resp []byte) {
+) []byte {
 	t.Helper()
 
 	msg := event.Message{
@@ -175,11 +174,6 @@ func callAsRemotePeer(
 	}
 
 	client, server := stream.NewLoopbackStream(ownNodeId, warpnet.WarpProtocolID(route))
-	handler := mw.AuthMiddleware(func(s warpnet.WarpStream) {
-		reached = true
-		_, _ = s.Write([]byte(`["ok"]`))
-		_ = s.Close()
-	})
 	go handler(remoteStream{
 		WarpStream: server,
 		conn:       remoteConn{local: ownNodeId, remote: peer},
@@ -190,7 +184,24 @@ func callAsRemotePeer(
 		t.Fatalf("write request: %v", err)
 	}
 	_ = client.CloseWrite()
-	resp, _ = io.ReadAll(client)
+	resp, _ := io.ReadAll(client)
+	return resp
+}
+
+// callAsRemotePeer runs the auth middleware for such a request and reports
+// whether the wrapped handler was reached.
+func callAsRemotePeer(
+	t *testing.T, mw *WarpMiddleware, ownNodeId, peer warpnet.WarpPeerID,
+	privKey ed25519.PrivateKey, route string,
+) (reached bool, resp []byte) {
+	t.Helper()
+
+	handler := mw.AuthMiddleware(func(s warpnet.WarpStream) {
+		reached = true
+		_, _ = s.Write([]byte(`["ok"]`))
+		_ = s.Close()
+	})
+	resp = callPeer(t, handler, ownNodeId, peer, privKey, route)
 	return reached, resp
 }
 
@@ -217,17 +228,70 @@ func TestAuthMiddleware_PrivateRouteDeniedForForeignPeer(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_PrivateRouteAllowedForPairedDevice(t *testing.T) {
+// A device earns its private routes by pairing, and the pairing is recorded
+// by the unwrap middleware running the real PRIVATE_POST_PAIR handler.
+func TestAuthMiddleware_PrivateRouteAllowedAfterPairing(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, deviceKey := newRemotePeer(t)
 
 	mw := NewWarpMiddleware(ownNodeId)
 	defer mw.Close()
-	mw.SetPairedDeviceChecker(func(id warpnet.WarpPeerID) bool { return id == device })
+
+	route := "/private/get/notifications/0.0.0"
+	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, device, deviceKey, route); reached {
+		t.Fatal("an unpaired device must not reach private routes")
+	}
+
+	pairHandler := mw.AuthMiddleware(mw.UnwrapStreamMiddleware(
+		func(_ []byte, _ warpnet.WarpStream) (any, error) { return []string{}, nil },
+	))
+	callPeer(t, pairHandler, ownNodeId, device, deviceKey, event.PRIVATE_POST_PAIR)
+
+	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, device, deviceKey, route); !reached {
+		t.Error("a paired device must reach private routes")
+	}
+}
+
+// A pairing that the handler rejects must not grant anything.
+func TestAuthMiddleware_RejectedPairingGrantsNothing(t *testing.T) {
+	ownNodeId, _ := newRemotePeer(t)
+	device, deviceKey := newRemotePeer(t)
+
+	mw := NewWarpMiddleware(ownNodeId)
+	defer mw.Close()
+
+	pairHandler := mw.AuthMiddleware(mw.UnwrapStreamMiddleware(
+		func(_ []byte, _ warpnet.WarpStream) (any, error) {
+			return nil, warpnet.WarpError("token mismatch")
+		},
+	))
+	callPeer(t, pairHandler, ownNodeId, device, deviceKey, event.PRIVATE_POST_PAIR)
 
 	reached, _ := callAsRemotePeer(t, mw, ownNodeId, device, deviceKey, "/private/get/notifications/0.0.0")
-	if !reached {
-		t.Error("a paired device must reach private routes")
+	if reached {
+		t.Error("a device whose pairing was rejected must stay locked out")
+	}
+}
+
+// A stale pairing stops counting once pairingTTL has passed.
+func TestIsPaired_ExpiresAfterTTL(t *testing.T) {
+	ownNodeId, _ := newRemotePeer(t)
+	device, _ := newRemotePeer(t)
+
+	mw := NewWarpMiddleware(ownNodeId)
+	defer mw.Close()
+
+	mw.setPaired(device)
+	if !mw.isPaired(device) {
+		t.Fatal("a fresh pairing must count")
+	}
+
+	mw.pairedMx.Lock()
+	mw.paired[device] = time.Now().Add(-pairingTTL - time.Minute)
+	mw.pairedMx.Unlock()
+
+	if mw.isPaired(device) {
+		t.Error("a pairing older than pairingTTL must stop counting")
 	}
 }
 

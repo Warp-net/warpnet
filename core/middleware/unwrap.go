@@ -122,7 +122,10 @@ func (p *WarpMiddleware) runHandler(
 	switch {
 	case s.Protocol() == event.PRIVATE_POST_PAIR:
 		response, err = handler(data, s)
-		if err == nil {
+		// The handler only returns nil here once the alias proved it holds the
+		// owner's session token, which is what earns it the private routes.
+		if err == nil && s.Conn() != nil {
+			p.setPaired(s.Conn().RemotePeer())
 			log.Debugf("middleware: paired alias: %s", s.Conn().RemotePeer())
 		}
 	default:
