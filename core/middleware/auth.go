@@ -30,10 +30,12 @@ package middleware
 import (
 	"errors"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -136,7 +138,16 @@ func (p *WarpMiddleware) isPrivateRouteAllowed(
 	if route.ProtocolID() == event.PRIVATE_POST_PAIR {
 		return true
 	}
-	return p.isPaired(remotePeer)
+	if p.devices == nil {
+		return false
+	}
+
+	devices, err := p.devices.GetDevices(p.ownNodeId.String())
+	if err != nil {
+		log.Errorf("middleware: auth: paired devices: %v", err)
+		return false
+	}
+	return slices.ContainsFunc(devices, func(d domain.Device) bool { return d.NodeId == remotePeer })
 }
 
 // isFresh reports whether ts is within the freshness window of now, either way.

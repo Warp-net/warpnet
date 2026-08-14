@@ -203,11 +203,8 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-func (n *WarpNode) SetPairedDevices(store middleware.PairedDevicesStore) {
-	if n == nil || n.mw == nil || store == nil {
-		return
-	}
-	n.mw.SetPairedDevices(store)
+func (n *WarpNode) SetPairedDevices(devices middleware.PairedDevices) {
+	n.mw.SetPairedDevices(devices)
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {

@@ -35,7 +35,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
-	log "github.com/sirupsen/logrus"
 )
 
 type middlewareError string
@@ -73,7 +72,7 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
-type PairedDevicesStore interface {
+type PairedDevices interface {
 	GetDevices(ownerNodeId string) ([]domain.Device, error)
 }
 
@@ -81,7 +80,7 @@ type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
 	ownNodeId       warpnet.WarpPeerID
-	devices         PairedDevicesStore
+	devices         PairedDevices
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
@@ -93,30 +92,7 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	return wm
 }
 
-func (p *WarpMiddleware) SetPairedDevices(store PairedDevicesStore) {
-	if p == nil {
-		return
-	}
-	p.devices = store
-}
-
-func (p *WarpMiddleware) isPaired(id warpnet.WarpPeerID) bool {
-	if p.devices == nil {
-		return false
-	}
-
-	devices, err := p.devices.GetDevices(p.ownNodeId.String())
-	if err != nil {
-		log.Errorf("middleware: auth: paired devices lookup: %v", err)
-		return false
-	}
-	for _, device := range devices {
-		if device.NodeId == id {
-			return true
-		}
-	}
-	return false
-}
+func (p *WarpMiddleware) SetPairedDevices(devices PairedDevices) { p.devices = devices }
 
 // Close releases background resources owned by the middleware (currently
 // the idempotency cache's expirable-LRU janitor goroutine). Safe to call
