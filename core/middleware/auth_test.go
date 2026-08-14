@@ -124,6 +124,7 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 // the owner gate sees a remote caller instead of a self-stream.
 type remoteConn struct {
 	network.Conn
+
 	local, remote warpnet.WarpPeerID
 }
 
@@ -132,6 +133,7 @@ func (c remoteConn) RemotePeer() warpnet.WarpPeerID { return c.remote }
 
 type remoteStream struct {
 	warpnet.WarpStream
+
 	conn network.Conn
 }
 
