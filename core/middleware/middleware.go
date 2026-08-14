@@ -71,17 +71,34 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
+// PairedDeviceChecker reports whether a remote peer is a thin client paired
+// with this node, and therefore acts on behalf of its owner.
+type PairedDeviceChecker func(peerId warpnet.WarpPeerID) bool
+
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
+	ownNodeId       warpnet.WarpPeerID
+	isPairedDevice  PairedDeviceChecker
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
+		ownNodeId:       ownNodeId,
 	}
 	return wm
+}
+
+// SetPairedDeviceChecker wires the paired device lookup used by the private
+// route owner gate. Until it is set, only the node itself passes the gate.
+// Must be called before any stream handler is registered.
+func (p *WarpMiddleware) SetPairedDeviceChecker(fn PairedDeviceChecker) {
+	if p == nil {
+		return
+	}
+	p.isPairedDevice = fn
 }
 
 // Close releases background resources owned by the middleware (currently

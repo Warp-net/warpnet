@@ -187,6 +187,7 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.node.SetOutbox(database.NewOutboxRepo(m.db))
+	m.node.SetPairedDeviceChecker(m.isPairedDevice)
 
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {
@@ -257,6 +258,27 @@ func (m *MemberNode) Connect(p warpnet.WarpAddrInfo) error {
 	}
 
 	return m.node.Connect(p)
+}
+
+// isPairedDevice reports whether peer is a thin client paired with this node,
+// which lets it through the private route owner gate. Devices are persisted
+// under the fat node's own libp2p peer ID by the pair handler, so look them
+// up with the same key.
+func (m *MemberNode) isPairedDevice(peer warpnet.WarpPeerID) bool {
+	if m == nil || m.deviceRepo == nil || m.node == nil || m.node.Node() == nil {
+		return false
+	}
+	devices, err := m.deviceRepo.GetDevices(m.node.Node().ID().String())
+	if err != nil {
+		log.Errorf("member: paired devices lookup: %s", err)
+		return false
+	}
+	for _, device := range devices {
+		if device.NodeId == peer {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *MemberNode) NodeInfo() warpnet.NodeInfo {

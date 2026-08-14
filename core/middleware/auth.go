@@ -111,6 +111,14 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
+		// Owner gate: /private/ routes read and write the owner's own data, so
+		// only this node and the devices paired with it may reach them.
+		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
+			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
+			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
+			return
+		}
+
 		isAuthSuccess = true
 
 		next(&warpnet.WarpStreamBody{
@@ -119,6 +127,31 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			MessageId:  string(msg.MessageId),
 		})
 	}
+}
+
+// peerToPeerPrivateRoutes lists the /private/ routes that are part of the
+// node-to-node protocol and so stay reachable by any peer: pairing is how a
+// device that is not paired yet gets known, and reply create/delete are
+// forwarded to the node of the parent tweet's author.
+var peerToPeerPrivateRoutes = map[warpnet.WarpProtocolID]struct{}{
+	event.PRIVATE_POST_PAIR:    {},
+	event.PRIVATE_POST_TWEET:   {},
+	event.PRIVATE_DELETE_TWEET: {},
+}
+
+// isPrivateRouteAllowed reports whether remotePeer may use a /private/ route:
+// the node itself (loopback self-streams), a device paired with it, or one of
+// the peer-to-peer routes above.
+func (p *WarpMiddleware) isPrivateRouteAllowed(
+	route stream.WarpRoute, remotePeer, localPeer warpnet.WarpPeerID,
+) bool {
+	if remotePeer == localPeer || remotePeer == p.ownNodeId {
+		return true
+	}
+	if _, ok := peerToPeerPrivateRoutes[route.ProtocolID()]; ok {
+		return true
+	}
+	return p.isPairedDevice != nil && p.isPairedDevice(remotePeer)
 }
 
 // isFresh reports whether ts is within the freshness window of now, either way.
