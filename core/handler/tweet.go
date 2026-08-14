@@ -652,7 +652,6 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	reactionRepo ReactionTweetStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -672,7 +671,7 @@ func StreamDeleteTweetHandler(
 		// delete it from the thread index under its parent and forward the
 		// deletion to the parent author's node.
 		if parent := replyParent(ev.ParentId, ev.RootId); parent != "" && parent != ev.TweetId {
-			return deleteReply(ev, repo, userRepo, streamer)
+			return deleteReply(ev, repo, streamer)
 		}
 
 		// Deleting an own tweet only cleans up local state here; the shared
@@ -711,12 +710,10 @@ func StreamDeleteTweetHandler(
 	}
 }
 
-// deleteReply removes a reply from its thread and propagates the deletion to
-// the parent author's node so the thread stays consistent across peers.
+// deleteReply removes a reply from its thread.
 func deleteReply(
 	ev event.DeleteTweetEvent,
 	repo TweetsStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) (any, error) {
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
@@ -724,44 +721,9 @@ func deleteReply(
 
 	// Mirror handleNewReply: only the replier's own node adjusts the
 	// network-wide (CRDT) counter.
-	reply, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId)
-	if err != nil {
+	if _, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId); err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
-	}
-
-	if reply.ParentUserId == nil || *reply.ParentUserId == "" {
-		return event.Accepted, nil
-	}
-
-	ownNodeInfo := streamer.NodeInfo()
-	parentUser, err := userRepo.Get(*reply.ParentUserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return event.Accepted, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if ownNodeInfo.ID.String() == parentUser.NodeId {
-		return event.Accepted, nil
-	}
-
-	// Forward normalized ids so the remote node deletes under the same key.
-	resp, err := streamer.GenericStream(
-		parentUser.NodeId,
-		event.PRIVATE_DELETE_TWEET,
-		event.DeleteTweetEvent{TweetId: id, ParentId: parentId, UserId: ev.UserId},
-	)
-	if errors.Is(err, warpnet.ErrNodeIsOffline) {
-		return event.Accepted, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
-		log.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
 	}
 
 	return event.Accepted, nil
