@@ -355,3 +355,28 @@ func TestHashBody_IsStableAndDiscriminating(t *testing.T) {
 	assert.NotEmpty(t, hashBody(nil))
 	assert.Equal(t, hashBody(nil), hashBody([]byte{}))
 }
+
+// A peer that answers the dial but does not serve the route - one deployed
+// before the route existed - must fail fast instead of burning the retry
+// budget on a call that can never succeed, and must stay streamable: it is
+// reachable, just older.
+func TestStreamPool_UnsupportedRouteFailsFastAndStaysStreamable(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+
+	unserved := WarpRoute("/public/post/route-the-peer-does-not-have/0.0.0")
+
+	start := time.Now()
+	_, err := pool.Send(addrOf(server), unserved, []byte(`{"hi":true}`))
+	elapsed := time.Since(start)
+
+	assert.ErrorIs(t, err, ErrProtocolNotSupported)
+	assert.Less(t, elapsed, retryBudget, "an unserved route must not be retried")
+	assert.False(
+		t, pool.isUnstreamable(addrOf(server).ID),
+		"the peer answered, so it must not be marked offline",
+	)
+}

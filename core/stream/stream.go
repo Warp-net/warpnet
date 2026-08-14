@@ -36,6 +36,7 @@ import (
 	"hash/fnv"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -63,6 +64,19 @@ const (
 )
 
 const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
+
+// ErrProtocolNotSupported marks a peer that answered the dial but does not
+// serve the requested route, typically one added after it was deployed. That
+// is permanent for the route, so Send returns it without retrying, and the
+// peer stays streamable - it is reachable, just older.
+const ErrProtocolNotSupported = warpnet.WarpError("stream: route not supported by peer")
+
+// isProtocolNotSupported matches go-multistream's ErrNotSupported. The type
+// is generic and lives in an indirect dependency, so it is matched by message
+// the way the repo already does it (cmd/node/member/echo-member.go).
+func isProtocolNotSupported(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "protocols not supported")
+}
 
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
@@ -120,8 +134,9 @@ func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byt
 	switch {
 	case errors.Is(err, warpnet.ErrNodeIsOffline):
 		p.SetUnstreamable(peerAddr.ID)
-	case err == nil, errors.Is(err, ErrResponseRead):
-		// ErrResponseRead means the request reached the peer, so it is streamable.
+	case err == nil, errors.Is(err, ErrResponseRead), errors.Is(err, ErrProtocolNotSupported):
+		// Both mean the peer answered, so it is streamable: the request was
+		// delivered, or the route was refused by a peer that is simply older.
 		p.SetStreamable(peerAddr.ID)
 	}
 	if err != nil {
@@ -161,7 +176,7 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 	msgID := ulid.Make().String()
 
 	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
-	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+	if err == nil || isTerminalSendErr(err) {
 		return bt, err
 	}
 
@@ -169,12 +184,21 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 	defer cancel()
 	_ = p.retrier.Try(ctx, func() error {
 		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+		if isTerminalSendErr(err) {
 			return fmt.Errorf("%w: %w", err, retrier.ErrStopTrying)
 		}
 		return err
 	})
 	return bt, err
+}
+
+// isTerminalSendErr reports whether retrying the send cannot change the
+// outcome: the peer is offline, the request was already delivered, or the
+// peer does not serve the route at all.
+func isTerminalSendErr(err error) bool {
+	return errors.Is(err, warpnet.ErrNodeIsOffline) ||
+		errors.Is(err, ErrResponseRead) ||
+		errors.Is(err, ErrProtocolNotSupported)
 }
 
 func hashBody(data []byte) string {
@@ -214,6 +238,11 @@ func (p *streamPool) send(
 	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
 		errors.Is(err, context.DeadlineExceeded) {
 		return nil, warpnet.ErrNodeIsOffline
+	}
+	// Wrap rather than replace: callers that still match the multistream
+	// message keep working.
+	if isProtocolNotSupported(err) {
+		return nil, fmt.Errorf("%w: %w", ErrProtocolNotSupported, err)
 	}
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)

@@ -124,18 +124,7 @@ func StreamNewTweetHandler(
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
 
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
-		}
-		if ev.Text == "" {
-			return nil, warpnet.WarpError("empty tweet text")
-		}
-		// Runes, not bytes: 280 means 280 user-visible characters
-		// regardless of script (the UI counters count characters too).
-		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
-			return nil, warpnet.WarpError("tweet text is too long")
-		}
-		if err := validatePoll(ev.Poll); err != nil {
+		if err := validateTweetEvent(ev); err != nil {
 			return nil, err
 		}
 
@@ -192,6 +181,24 @@ func StreamNewTweetHandler(
 	}
 }
 
+// validateTweetEvent checks what every inbound tweet must satisfy, whoever
+// sent it. PUBLIC_POST_REPLY is reachable by any peer, so it runs the same
+// limits as the owner's own compose route.
+func validateTweetEvent(ev event.NewTweetEvent) error {
+	if ev.UserId == "" {
+		return warpnet.WarpError("empty user id")
+	}
+	if ev.Text == "" {
+		return warpnet.WarpError("empty tweet text")
+	}
+	// Runes, not bytes: 280 means 280 user-visible characters
+	// regardless of script (the UI counters count characters too).
+	if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
+		return warpnet.WarpError("tweet text is too long")
+	}
+	return validatePoll(ev.Poll)
+}
+
 // validatePoll checks the poll definition a tweet carries. The definition is
 // immutable once the tweet exists, so this is the only chance to reject a
 // malformed one. Whether the poll has already closed is deliberately not
@@ -219,6 +226,96 @@ func validatePoll(p *domain.Poll) error {
 		}
 	}
 	return nil
+}
+
+const (
+	// ErrNotAReply rejects a top-level tweet pushed to the reply route: the
+	// route stores into a thread, and a tweet without a parent has none.
+	ErrNotAReply = warpnet.WarpError("reply: tweet has no parent")
+	// ErrForeignThread rejects a reply whose parent does not live here, so
+	// the route cannot be used to relay or to seed threads on a node that
+	// has nothing to do with them.
+	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
+)
+
+// StreamNewReplyHandler accepts a reply forwarded by the replier's node. The
+// thread lives on the parent tweet author's node - forwardThreadReplies reads
+// it from there - so without this push a reply would be invisible to everyone
+// but its author.
+//
+// The caller is another user's node, like every other /public/ write, which is
+// why this replaces the PRIVATE_POST_TWEET forward. It accepts only replies
+// whose parent lives here, and runs the same limits as the compose route.
+func StreamNewReplyHandler(
+	tweetRepo TweetsStorer,
+	userRepo TweetUserFetcher,
+	notifyRepo TweetNotifier,
+	streamer TweetStreamer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.NewTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+
+		if ev.Moderation != nil && !ev.Moderation.IsOk {
+			return nil, tweetRepo.Blocklist(ev.Id)
+		}
+		if err := validateTweetEvent(ev); err != nil {
+			return nil, err
+		}
+		if !ev.IsReply() {
+			return nil, ErrNotAReply
+		}
+		if err := requireLocalThread(ev, userRepo, streamer); err != nil {
+			return nil, err
+		}
+
+		// handleNewReply stores the reply and notifies the parent author; it
+		// stops short of forwarding again because the thread is local here.
+		return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)
+	}
+}
+
+// requireLocalThread checks that the parent tweet of ev belongs to this node -
+// to the owner, or to a user whose home node this is.
+func requireLocalThread(
+	ev event.NewTweetEvent, userRepo TweetUserFetcher, streamer TweetStreamer,
+) error {
+	if ev.ParentUserId == nil || *ev.ParentUserId == "" {
+		return ErrForeignThread
+	}
+	parentUserId := *ev.ParentUserId
+
+	ownNodeInfo := streamer.NodeInfo()
+	if parentUserId == ownNodeInfo.OwnerId {
+		return nil
+	}
+
+	parentUser, err := userRepo.Get(parentUserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return ErrForeignThread
+	}
+	if err != nil {
+		return err
+	}
+	if parentUser.NodeId != ownNodeInfo.ID.String() {
+		return ErrForeignThread
+	}
+	return nil
+}
+
+// forwardReply delivers a reply to the node of the parent tweet's author.
+// Peers deployed before PUBLIC_POST_REPLY - including an ActivityPub gateway
+// that has not been updated, the home node of every bridged Mastodon user -
+// refuse the route, so they keep getting it on PRIVATE_POST_TWEET.
+func forwardReply(streamer TweetStreamer, nodeId string, reply domain.Tweet) ([]byte, error) {
+	resp, err := streamer.GenericStream(nodeId, event.PUBLIC_POST_REPLY, reply)
+	if errors.Is(err, stream.ErrProtocolNotSupported) {
+		log.Debugf("reply: %s predates %s, falling back", nodeId, event.PUBLIC_POST_REPLY)
+		return streamer.GenericStream(nodeId, event.PRIVATE_POST_TWEET, reply)
+	}
+	return resp, err
 }
 
 // handleNewReply stores a reply in its thread, notifies the parent tweet's
@@ -291,9 +388,9 @@ func handleNewReply(
 
 	// Forward the normalized/stored reply (prefix-stripped ids) so peers
 	// build identical thread keys.
-	replyDataResp, err := streamer.GenericStream(
+	replyDataResp, err := forwardReply(
+		streamer,
 		parentUser.NodeId,
-		event.PRIVATE_POST_TWEET,
 		domain.Tweet{
 			CreatedAt:    reply.CreatedAt,
 			Id:           reply.Id,

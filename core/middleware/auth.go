@@ -146,9 +146,10 @@ func (p *WarpMiddleware) isPrivateRouteAllowed(
 	case event.PRIVATE_POST_PAIR:
 		return true
 	// Reply create/delete are forwarded to the node of the parent tweet's
-	// author (handler.handleNewReply, handler.deleteReply), so they arrive
-	// from a peer that owns nothing here. They are node-to-node writes that
-	// happen to sit under /private/; moving them out needs a wire change.
+	// author, so they arrive from a peer that owns nothing here. Creates have
+	// moved to PUBLIC_POST_REPLY, where they belong; this stays open only for
+	// peers deployed before that route, and can be dropped once the network
+	// has turned over. Deletes still have no public route.
 	case event.PRIVATE_POST_TWEET, event.PRIVATE_DELETE_TWEET:
 		return true
 	}
