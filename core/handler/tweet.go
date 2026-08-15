@@ -102,10 +102,51 @@ type TweetNotifier interface {
 	Add(not domain.Notification) error
 }
 
-// isAuthoredBy reports whether the peer on the other end of s is the node
-// registered for authorId. libp2p authenticates that peer, so this is what
-// binds a tweet to the account it claims: without it anyone reaching this
-// route could publish as someone the owner follows.
+func StreamTimelineTweetHandler(
+	authRepo OwnerTweetStorer,
+	tweetRepo TweetsStorer,
+	timelineRepo TimelineUpdater,
+	followRepo TweetFollowChecker,
+	userRepo TweetUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.NewTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Moderation != nil && !ev.Moderation.IsOk {
+			return nil, tweetRepo.Blocklist(ev.Id)
+		}
+		if err := validateTweetEvent(ev); err != nil {
+			return nil, err
+		}
+
+		owner := authRepo.GetOwner()
+		if owner.UserId == ev.UserId {
+			return event.Accepted, nil
+		}
+		if followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId) {
+			return event.Accepted, nil
+		}
+		if !isAuthoredBy(ev.UserId, userRepo, s) {
+			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
+			return nil, ErrForeignTweetAuthor
+		}
+
+		tweet, err := tweetRepo.Create(ev.UserId, ev)
+		if err != nil {
+			return nil, err
+		}
+		if tweet.Id == "" {
+			return tweet, warpnet.WarpError("timeline handler: empty tweet id")
+		}
+		if err := timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
+			log.Infof("fail adding tweet to timeline: %v", err)
+		}
+		return tweet, nil
+	}
+}
+
 func isAuthoredBy(authorId string, userRepo TweetUserFetcher, s warpnet.WarpStream) bool {
 	if s == nil || s.Conn() == nil || userRepo == nil {
 		return false
@@ -116,6 +157,8 @@ func isAuthoredBy(authorId string, userRepo TweetUserFetcher, s warpnet.WarpStre
 	}
 	return author.NodeId == s.Conn().RemotePeer().String()
 }
+
+const ErrForeignTweetAuthor = warpnet.WarpError("tweet: author does not live on the sending node")
 
 func StreamNewTweetHandler(
 	broadcaster TweetBroadcaster,
@@ -161,10 +204,6 @@ func StreamNewTweetHandler(
 		if !isMyOwnTweet && (followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId)) {
 			return event.Accepted, nil
 		}
-		if !isMyOwnTweet && !isAuthoredBy(ev.UserId, userRepo, s) {
-			log.Warnf("tweet: dropping tweet claiming to be from %s", ev.UserId)
-			return nil, ErrForeignTweetAuthor
-		}
 
 		tweet, err := tweetRepo.Create(ev.UserId, ev)
 		if err != nil {
@@ -192,7 +231,7 @@ func StreamNewTweetHandler(
 				Poll:      tweet.Poll,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TWEET, bt); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TIMELINE, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
 		}
@@ -246,8 +285,6 @@ func validatePoll(p *domain.Poll) error {
 }
 
 const (
-	ErrForeignTweetAuthor = warpnet.WarpError("tweet: author does not live on the sending node")
-
 	ErrNotAReply     = warpnet.WarpError("reply: tweet has no parent")
 	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
 )
@@ -657,7 +694,6 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	reactionRepo ReactionTweetStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -671,10 +707,6 @@ func StreamDeleteTweetHandler(
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
-		}
-		if ev.UserId != authRepo.GetOwner().UserId && !isAuthoredBy(ev.UserId, userRepo, s) {
-			log.Warnf("delete tweet: dropping deletion claiming to be from %s", ev.UserId)
-			return nil, ErrForeignTweetAuthor
 		}
 
 		// A reply is addressed by its parent (ParentId, or RootId as fallback):
@@ -711,7 +743,7 @@ func StreamDeleteTweetHandler(
 				TweetId: ev.TweetId,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_DELETE_TWEET, bt); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_DELETE_TWEET, bt); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
 		}

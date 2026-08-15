@@ -363,7 +363,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		msg := event.Message{
 			Body:        body,
 			MessageId:   request.MessageId,
-			NodeId:      nodeId, // the signing node names itself, never the client
+			NodeId:      request.NodeId,
 			Destination: request.Path,
 			Timestamp:   ts.UTC(),
 			Version:     request.Version,

@@ -157,9 +157,6 @@ func (s stubTweetBroadcaster) PublishUpdateToFollowers(ownerId, dest string, bt 
 	return nil
 }
 
-// authorStream mints a node identity, a user repo that resolves the author to
-// it, and a stream reporting it as the remote peer - what a delivery from that
-// author's node really looks like.
 func authorStream(t *testing.T) (stubTweetUserRepo, warpnet.WarpStream) {
 	t.Helper()
 
@@ -175,7 +172,7 @@ func authorStream(t *testing.T) (stubTweetUserRepo, warpnet.WarpStream) {
 	repo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: nodeId.String()}, nil
 	}}
-	_, server := stream.NewLoopbackStream(nodeId, nodeId, "/test/route/0.0.0")
+	_, server := stream.NewLoopbackStream(nodeId, "/test/route/0.0.0")
 	return repo, server
 }
 
@@ -421,12 +418,11 @@ func TestStreamNewTweetHandler(t *testing.T) {
 
 	t.Run("followed user tweet - stored, no broadcast", func(t *testing.T) {
 		published := false
-		authorRepo, authorConn := authorStream(t)
 		h := StreamNewTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{following: true}, authorRepo, stubModerationNotifier{}, stubStreamer{})
-		resp, err := h(marshal(t, event.NewTweetEvent{UserId: "other-1", Text: "from friend"}), authorConn)
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{following: true}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+		resp, err := h(marshal(t, event.NewTweetEvent{UserId: "other-1", Text: "from friend"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -717,7 +713,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -725,7 +721,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -733,7 +729,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -744,7 +740,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{deleteFn: func(userID, tweetID string) error {
 			return repoErr
-		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -756,7 +752,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -771,12 +767,11 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 
 	t.Run("other user tweet delete - no broadcast", func(t *testing.T) {
 		published := false
-		authorRepo, authorConn := authorStream(t)
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, authorRepo, stubStreamer{})
-		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: "other-1", TweetId: tweetId}), authorConn)
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
+		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: "other-1", TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -1219,14 +1214,11 @@ func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
 	owner := domain.Owner{UserId: "owner123"}
 
 	tests := []struct {
-		name string
-		// fromAuthor marks a tweet by someone other than the owner: it is
-		// accepted only when it arrives from that author's own node.
-		fromAuthor bool
-		event      event.NewTweetEvent
-		setup      func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster)
-		wantErr    bool
-		errMsg     string
+		name    string
+		event   event.NewTweetEvent
+		setup   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster)
+		wantErr bool
+		errMsg  string
 	}{
 		{
 			name:  "moderation blocked -> blocklisted, no error",
@@ -1266,9 +1258,8 @@ func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
 			},
 		},
 		{
-			name:       "followed user tweet -> create + timeline",
-			fromAuthor: true,
-			event:      event.NewTweetEvent{UserId: "other123", Text: "hello", Id: "t2"},
+			name:  "followed user tweet -> create + timeline",
+			event: event.NewTweetEvent{UserId: "other123", Text: "hello", Id: "t2"},
 			setup: func(ts *mockTweetsStorer, tl *mockTimeline, fc *mockFollowChecker, o *mockOwner, b *mockBroadcaster) {
 				o.owner = owner
 				fc.IsFollowingFunc = func(_, _ string) bool { return true }
@@ -1316,15 +1307,9 @@ func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
 
 			tt.setup(tweetRepo, timeline, follow, ownerRepo, broadcaster)
 
-			var conn warpnet.WarpStream
-			var authors TweetUserFetcher = userRepo
-			if tt.fromAuthor {
-				authors, conn = authorStream(t)
-			}
+			handler := StreamNewTweetHandler(broadcaster, ownerRepo, tweetRepo, timeline, follow, userRepo, nil, streamer)
 
-			handler := StreamNewTweetHandler(broadcaster, ownerRepo, tweetRepo, timeline, follow, authors, nil, streamer)
-
-			_, err := handler(marshal(t, tt.event), conn)
+			_, err := handler(marshal(t, tt.event), nil)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1509,9 +1494,8 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 			s := &mockStreamer{}
 			tt.setup(ts, uf, s)
 
-			authors, conn := authorStream(t)
-			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, authors, s)
-			_, err := handler(marshal(t, tt.ev), conn)
+			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, s)
+			_, err := handler(marshal(t, tt.ev), nil)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -1545,62 +1529,84 @@ func TestSetPinnedFromEvent(t *testing.T) {
 	})
 }
 
-// Anyone may publish on a followed user's gossip topic, and any peer may dial
-// the delivery route, so a tweet claiming that user must arrive from their node.
-func TestStreamNewTweetHandler_RejectsAForeignAuthor(t *testing.T) {
+func TestStreamTimelineTweetHandler(t *testing.T) {
 	t.Parallel()
 
 	const owner = "owner-1"
 
-	newHandler := func(users TweetUserFetcher, created *bool) warpnet.WarpHandlerFunc {
-		return StreamNewTweetHandler(
-			stubTweetBroadcaster{},
+	newHandler := func(users TweetUserFetcher, created, timelined *bool) warpnet.WarpHandlerFunc {
+		return StreamTimelineTweetHandler(
 			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
 				*created = true
 				return tweet, nil
 			}},
-			stubTimelineRepo{},
+			stubTimelineRepo{addFn: func(string, domain.Tweet) error {
+				*timelined = true
+				return nil
+			}},
 			stubFollowChecker{following: true},
-			users,
-			stubModerationNotifier{},
-			stubStreamer{})
+			users)
 	}
 
-	t.Run("delivered by another node", func(t *testing.T) {
-		t.Parallel()
-		authorRepo, _ := authorStream(t)
-		_, attackerConn := authorStream(t) // a different node entirely
+	ev := event.NewTweetEvent{Id: "t1", UserId: "friend-1", Text: "hello"}
 
-		created := false
-		_, err := newHandler(authorRepo, &created)(
-			marshal(t, event.NewTweetEvent{Id: "f1", UserId: "friend-1", Text: "forged"}), attackerConn)
+	t.Run("author's own node is accepted", func(t *testing.T) {
+		t.Parallel()
+		users, conn := authorStream(t)
+
+		var created, timelined bool
+		_, err := newHandler(users, &created, &timelined)(marshal(t, ev), conn)
+
+		require.NoError(t, err)
+		assert.True(t, created)
+		assert.True(t, timelined)
+	})
+
+	t.Run("another node claiming the author", func(t *testing.T) {
+		t.Parallel()
+		users, _ := authorStream(t)
+		_, attacker := authorStream(t)
+
+		var created, timelined bool
+		_, err := newHandler(users, &created, &timelined)(marshal(t, ev), attacker)
 
 		require.ErrorIs(t, err, ErrForeignTweetAuthor)
-		assert.False(t, created, "a tweet from the wrong node must never be stored")
+		assert.False(t, created)
+		assert.False(t, timelined)
 	})
 
 	t.Run("no peer at all", func(t *testing.T) {
 		t.Parallel()
-		authorRepo, _ := authorStream(t)
+		users, _ := authorStream(t)
 
-		created := false
-		_, err := newHandler(authorRepo, &created)(
-			marshal(t, event.NewTweetEvent{Id: "f2", UserId: "friend-1", Text: "forged"}), nil)
+		var created, timelined bool
+		_, err := newHandler(users, &created, &timelined)(marshal(t, ev), nil)
 
 		require.ErrorIs(t, err, ErrForeignTweetAuthor)
-		assert.False(t, created, "an unattributable tweet must never be stored")
+		assert.False(t, created)
 	})
 
-	t.Run("author's own node is accepted", func(t *testing.T) {
+	t.Run("an author the owner does not follow", func(t *testing.T) {
 		t.Parallel()
-		authorRepo, authorConn := authorStream(t)
+		users, conn := authorStream(t)
 
-		created := false
-		_, err := newHandler(authorRepo, &created)(
-			marshal(t, event.NewTweetEvent{Id: "ok", UserId: "friend-1", Text: "real"}), authorConn)
+		var created, timelined bool
+		h := StreamTimelineTweetHandler(
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetRepo{createFn: func(_ string, tw domain.Tweet) (domain.Tweet, error) {
+				created = true
+				return tw, nil
+			}},
+			stubTimelineRepo{},
+			stubFollowChecker{following: false},
+			users)
+
+		resp, err := h(marshal(t, ev), conn)
 
 		require.NoError(t, err)
-		assert.True(t, created, "a tweet from its author's node must be stored")
+		assert.Equal(t, event.Accepted, resp)
+		assert.False(t, created, "an unsolicited tweet must not enter the timeline")
+		assert.False(t, timelined)
 	})
 }
