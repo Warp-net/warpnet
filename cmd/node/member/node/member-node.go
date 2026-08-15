@@ -68,7 +68,7 @@ type MemberNode struct {
 	statsRepo        StatsProvider
 	authRepo         AuthProvider
 	userRepo         UserProvider
-	deviceRepo       DeviceProvider
+	aliasesRepo      AliasesProvider
 	followRepo       FollowStorer
 	notifier         notifications.Notifier
 	db               Storer
@@ -98,7 +98,7 @@ func NewMemberNode(
 
 	statsRepo := database.NewStatsRepo(db)
 	followRepo := database.NewFollowRepo(db)
-	deviceRepo := database.NewDevicesRepo(db)
+	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
 
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
@@ -166,7 +166,7 @@ func NewMemberNode(
 		statsRepo:     statsRepo,
 		userRepo:      userRepo,
 		followRepo:    followRepo,
-		deviceRepo:    deviceRepo,
+		aliasesRepo:   aliasesRepo,
 		authRepo:      authRepo,
 		notifier:      notifier,
 		db:            db,
@@ -180,7 +180,6 @@ func NewMemberNode(
 func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
-		database.NewDevicesRepo(m.db),
 		m.opts...,
 	)
 	if err != nil {
@@ -208,6 +207,8 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
+
+	// TODO setup middleware here
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -270,12 +271,12 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	// pair handler (s.Conn().LocalPeer()), not under the owner's user ID,
 	// so look them up with the same key here.
 	ownerPeerId := bi.ID.String()
-	devices, err := m.deviceRepo.GetDevices(ownerPeerId)
+	aliases, err := m.aliasesRepo.GetAliases()
 	if err != nil {
 		log.Infof("member: failed to get devices for owner %s: %s", ownerPeerId, err)
 	}
-	for _, device := range devices {
-		bi.Aliases = append(bi.Aliases, device.NodeId)
+	for _, alias := range aliases {
+		bi.Aliases = append(bi.Aliases, warpnet.WarpPeerID(alias.NodeId))
 	}
 	return bi
 }
@@ -419,7 +420,7 @@ func (m *MemberNode) adminHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_PAIR,
-			handler.StreamNodesPairingHandler(authRepo, m.deviceRepo, m),
+			handler.StreamNodesPairingHandler(authRepo, m.aliasesRepo, m),
 		},
 		{
 			event.PUBLIC_GET_INFO,
@@ -759,14 +760,6 @@ func (m *MemberNode) mediaHandlers(
 		{
 			event.PUBLIC_GET_VIDEO,
 			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
-		},
-		{
-			event.PRIVATE_POST_MEDIA_META,
-			handler.StreamUpdateMediaMetaHandler(r.mediaRepo),
-		},
-		{
-			event.PRIVATE_GET_MEDIA,
-			handler.StreamGetMediaHandler(r.mediaRepo),
 		},
 	}
 }

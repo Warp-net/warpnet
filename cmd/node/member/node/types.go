@@ -26,6 +26,7 @@ package node
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/domain"
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
@@ -33,10 +34,8 @@ import (
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/ipfs/go-cid"
 	ds "github.com/ipfs/go-datastore"
@@ -104,9 +103,10 @@ type UserProvider interface {
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 }
 
-type DeviceProvider interface {
-	SetDevice(ownerNodeId string, device domain.Device) error
-	GetDevices(ownerNodeId string) (devices []domain.Device, err error)
+type AliasesProvider interface {
+	GetAliases() (aliases []domain.Alias, err error)
+	SetAlias(alias domain.Alias) error
+	GetNodeIDs() (ids []string, err error)
 }
 
 type ClientNodeStreamer interface {
@@ -152,8 +152,6 @@ type StatsStorer interface {
 	Close() error
 }
 
-// Collaborator interfaces for the repos memberRepos bundles: the node wires
-// concrete repos in, handlers and tests can wire anything that fits.
 type BlocksProvider interface {
 	Block(blockerId string, blockeeId string) error
 	List(blockerId string, limit *uint64, cursor *string) ([]string, string, error)
@@ -201,14 +199,12 @@ type ReactionsProvider interface {
 }
 
 type MediaProvider interface {
-	GetImage(userId string, key string) (database.Base64Image, error)
-	GetImageMeta(userId string, key string) (database.MediaMeta, error)
-	GetVideo(userId string, key string) (database.Base64Video, error)
-	SetForeignImageWithTTL(userId string, key string, img database.Base64Image) error
-	SetForeignVideoWithTTL(userId string, key string, video database.Base64Video) error
-	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
-	SetImageMeta(userId string, key string, meta database.MediaMeta) error
-	SetVideo(userId string, video database.Base64Video) (_ database.VideoKey, err error)
+	GetImage(userId string, key string) (domain.Base64Image, error)
+	GetVideo(userId string, key string) (domain.Base64Video, error)
+	SetForeignImageWithTTL(userId string, key string, img domain.Base64Image) error
+	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
+	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
+	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 }
 
 type MutesProvider interface {

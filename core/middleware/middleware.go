@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
@@ -72,30 +71,27 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
-type PairedDevices interface {
-	GetDevices(ownerNodeId string) ([]domain.Device, error)
+type AliasPairer interface {
+	GetNodeIDs() (ids []string, err error)
 }
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
 	ownNodeId       warpnet.WarpPeerID
-	devices         PairedDevices
+	aliases         AliasPairer
 }
 
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, devices PairedDevices) *WarpMiddleware {
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
-		devices:         devices,
+		aliases:         aliases,
 	}
 	return wm
 }
 
-// Close releases background resources owned by the middleware (currently
-// the idempotency cache's expirable-LRU janitor goroutine). Safe to call
-// multiple times.
 func (p *WarpMiddleware) Close() {
 	if p.idempotency != nil {
 		p.idempotency.Close()

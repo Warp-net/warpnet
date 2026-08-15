@@ -39,15 +39,15 @@ type NodeAddresser interface {
 	PublicAddrs() []warpnet.WarpAddress
 }
 
-type DeviceStorer interface {
-	SetDevice(ownerNodeId string, device domain.Device) error
+type AliasStorer interface {
+	SetAlias(a domain.Alias) error
 }
 
 type PairAuthStorer interface {
 	SessionToken() string
 }
 
-func StreamNodesPairingHandler(authRepo PairAuthStorer, deviceRepo DeviceStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
+func StreamNodesPairingHandler(authRepo PairAuthStorer, aliasesRepo AliasStorer, n NodeAddresser) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var clientInfo domain.AuthNodeInfo
 		if err := json.Unmarshal(buf, &clientInfo); err != nil {
@@ -63,8 +63,8 @@ func StreamNodesPairingHandler(authRepo PairAuthStorer, deviceRepo DeviceStorer,
 			return nil, warpnet.WarpError("token mismatch")
 		}
 
-		if err := deviceRepo.SetDevice(s.Conn().LocalPeer().String(), domain.Device{
-			NodeId: s.Conn().RemotePeer(),
+		if err := aliasesRepo.SetAlias(domain.Alias{
+			NodeId: s.Conn().RemotePeer().String(),
 			Token:  clientInfo.Token,
 		}); err != nil {
 			return nil, err

@@ -37,80 +37,91 @@ import (
 )
 
 const (
-	DevicesRepoName = "/DEVICES"
+	AliasesRepoName = "/ALIASES"
 )
 
-var ErrNilDevicesRepo = local_store.DBError("devices repo is nil")
+var ErrNilAliasesRepo = local_store.DBError("aliases repo is nil")
 
-type DevicesStorer interface {
+type AliasesStorer interface {
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
-type DevicesRepo struct {
-	db DevicesStorer
+type AliasesRepo struct {
+	db AliasesStorer
 }
 
-func NewDevicesRepo(db DevicesStorer) *DevicesRepo {
-	return &DevicesRepo{db: db}
+func NewAliasesRepo(db AliasesStorer) *AliasesRepo {
+	return &AliasesRepo{db: db}
 }
 
-func (repo *DevicesRepo) GetDevices(ownerNodeId string) (devices []domain.Device, err error) {
+func (repo *AliasesRepo) GetAliases() (aliases []domain.Alias, err error) {
 	if repo.db == nil {
-		return nil, ErrNilDevicesRepo
+		return nil, ErrNilAliasesRepo
 	}
 
-	devicesPrefix := local_store.NewPrefixBuilder(DevicesRepoName).
-		AddRootID(ownerNodeId).
+	aliassPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
 		AddRange(local_store.NoneRangeKey).
 		Build()
 
 	tx, err := repo.db.NewTxn()
 	if err != nil {
-		return devices, err
+		return aliases, err
 	}
 	defer tx.Rollback()
 
 	limit := uint64(10)
-	items, _, err := tx.List(devicesPrefix, &limit, nil)
+	items, _, err := tx.List(aliassPrefix, &limit, nil)
 	if err != nil {
-		return devices, err
+		return aliases, err
 	}
 	if len(items) == 0 {
-		return devices, nil
+		return aliases, nil
 	}
 
 	for _, item := range items {
-		var d domain.Device
-		err = json.Unmarshal(item.Value, &d)
+		var a domain.Alias
+		err = json.Unmarshal(item.Value, &a)
 		if err != nil {
-			return devices, err
+			return aliases, err
 		}
-		devices = append(devices, d)
+		aliases = append(aliases, a)
 	}
-	return devices, nil
+	return aliases, nil
 }
 
-func (repo *DevicesRepo) SetDevice(ownerNodeId string, device domain.Device) error {
+func (repo *AliasesRepo) GetNodeIDs() (ids []string, err error) {
+	aliases, err := repo.GetAliases()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range aliases {
+		ids = append(ids, a.NodeId)
+	}
+	return ids, nil
+}
+
+func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	if repo.db == nil {
-		return ErrNilDevicesRepo
+		return ErrNilAliasesRepo
 	}
-	if device.ID == "" {
-		device.ID = ulid.Make().String()
+	if alias.ID == "" {
+		alias.ID = ulid.Make().String()
 	}
-	if device.CreatedAt.IsZero() {
-		device.CreatedAt = time.Now()
+	if alias.CreatedAt.IsZero() {
+		alias.CreatedAt = time.Now()
 	}
-	deviceKey := local_store.NewPrefixBuilder(DevicesRepoName).
-		AddRootID(ownerNodeId).
+	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
 		AddRange(local_store.NoneRangeKey).
-		AddParentId(device.ID).
+		AddParentId(alias.ID).
 		Build()
 
-	data, err := json.Marshal(device)
+	data, err := json.Marshal(alias)
 	if err != nil {
 		return err
 	}
 
-	return repo.db.SetWithTTL(deviceKey, data, time.Hour*72)
+	return repo.db.SetWithTTL(aliasKey, data, time.Hour*72)
 }

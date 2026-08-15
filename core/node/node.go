@@ -98,7 +98,6 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
-	devices middleware.PairedDevices,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -113,8 +112,6 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	// Copy the transport config: DefaultTransport is a shared package-level
-	// pointer that live yamux sessions of other nodes read concurrently.
 	ya := *yamux.DefaultTransport
 	ya.KeepAliveInterval = 15 * time.Second
 	ya.ConnectionWriteTimeout = 30 * time.Second
@@ -161,7 +158,7 @@ func NewWarpNode(
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
-		mw:               middleware.NewWarpMiddleware(node.ID(), devices),
+		mw:               middleware.NewWarpMiddleware(node.ID(), aliases),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
@@ -202,6 +199,9 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	outbox := stream.NewOutbox(n.ctx, store)
 	outbox.Run(n.streamer)
 	n.outbox = outbox
+}
+
+func (n *WarpNode) SetStreamMiddleware(mws ...middleware.WarpMiddleware) {
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {

@@ -196,19 +196,20 @@ func validateTweetEvent(ev event.NewTweetEvent) error {
 	return validatePoll(ev.Poll)
 }
 
-// validatePoll checks the poll definition a tweet carries. The definition is
-// immutable once the tweet exists, so this is the only chance to reject a
-// malformed one. Whether the poll has already closed is deliberately not
-// checked here: a tweet can legitimately reach a peer after its poll ended,
-// and the vote handler is what refuses a late vote.
+const (
+	pollMinOptions      = 2
+	pollMaxOptions      = 4
+	pollOptionRuneLimit = 25
+)
+
 func validatePoll(p *domain.Poll) error {
 	if p == nil {
 		return nil
 	}
-	if len(p.Options) < domain.PollMinOptions {
+	if len(p.Options) < pollMinOptions {
 		return warpnet.WarpError("poll: too few options")
 	}
-	if len(p.Options) > domain.PollMaxOptions {
+	if len(p.Options) > pollMaxOptions {
 		return warpnet.WarpError("poll: too many options")
 	}
 	if p.ExpiresAt.IsZero() {
@@ -218,7 +219,7 @@ func validatePoll(p *domain.Poll) error {
 		if strings.TrimSpace(opt) == "" {
 			return warpnet.WarpError("poll: empty option")
 		}
-		if utf8.RuneCountInString(opt) > domain.PollOptionRuneLimit {
+		if utf8.RuneCountInString(opt) > pollOptionRuneLimit {
 			return warpnet.WarpError("poll: option is too long")
 		}
 	}

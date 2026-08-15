@@ -75,6 +75,15 @@ const (
 	macMetaKey  = "MAC"
 
 	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 media data"
+
+	imageDescriptionTag = "ImageDescription"
+
+	imagePrefix = "data:image/jpeg;base64,"
+
+	ErrTooLargeImage    warpnet.WarpError = "image is too large"
+	ErrEmptyImageKey    warpnet.WarpError = "empty image key"
+	ErrNoImagesProvided warpnet.WarpError = "at least one image must be provided"
+	ErrInvalidEXIF      warpnet.WarpError = "invalid exif type: not a segment list"
 )
 
 type MediaNodeInformer interface {
@@ -90,105 +99,15 @@ type MediaStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-// MediaMetaStorer is the slice of MediaRepo the alt-text / focal-point
-// handlers need.
 type MediaMetaStorer interface {
-	SetImageMeta(userId, key string, meta database.MediaMeta) error
-	GetImageMeta(userId, key string) (database.MediaMeta, error)
+	SetImageMeta(userId, key string, meta domain.MediaMeta) error
+	GetImageMeta(userId, key string) (domain.MediaMeta, error)
 }
-
-func StreamUpdateMediaMetaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.UpdateMediaMetaEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("media meta: empty user id")
-		}
-		if ev.Key == "" {
-			return nil, warpnet.WarpError("media meta: empty media key")
-		}
-		meta := database.MediaMeta{
-			Description: ev.Description,
-			FocusX:      ev.FocusX,
-			FocusY:      ev.FocusY,
-		}
-		if err := repo.SetImageMeta(ev.UserId, ev.Key, meta); err != nil {
-			return nil, err
-		}
-		return event.Accepted, nil
-	}
-}
-
-func StreamGetMediaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetMediaEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("get media: empty user id")
-		}
-		if ev.Key == "" {
-			return nil, warpnet.WarpError("get media: empty media key")
-		}
-		meta, err := repo.GetImageMeta(ev.UserId, ev.Key)
-		if err != nil {
-			return nil, err
-		}
-		return event.GetMediaResponse{
-			Key:         ev.Key,
-			Description: meta.Description,
-			FocusX:      meta.FocusX,
-			FocusY:      meta.FocusY,
-		}, nil
-	}
-}
-
-func buildEncryptedMediaMeta(
-	info MediaNodeInformer,
-	userRepo MediaUserFetcher,
-) (encryptedMeta []byte, ownerUser domain.User, err error) {
-	nodeInfo := info.NodeInfo()
-	ownerUser, err = userRepo.Get(nodeInfo.OwnerId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return nil, ownerUser, err
-	}
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: fetching user: %w", err)
-	}
-
-	metaData := map[string]any{
-		nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
-	}
-	metaBytes, err := json.Marshal(metaData)
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: marshalling meta data: %w", err)
-	}
-
-	encryptedMeta, err = security.EncryptAES(metaBytes, nil) // unknown password
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: AES encrypting: %w", err)
-	}
-	return encryptedMeta, ownerUser, nil
-}
-
-const (
-	imageDescriptionTag = "ImageDescription"
-
-	imagePrefix = "data:image/jpeg;base64,"
-
-	ErrTooLargeImage    warpnet.WarpError = "image is too large"
-	ErrEmptyImageKey    warpnet.WarpError = "empty image key"
-	ErrNoImagesProvided warpnet.WarpError = "at least one image must be provided"
-	ErrInvalidEXIF      warpnet.WarpError = "invalid exif type: not a segment list"
-)
 
 type MediaStorer interface {
-	GetImage(userId, key string) (database.Base64Image, error)
-	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
-	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
+	GetImage(userId, key string) (domain.Base64Image, error)
+	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
+	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
 }
 
 func StreamUploadImageHandler(
@@ -285,7 +204,7 @@ func processAndStoreImage(
 
 	encoded := base64.StdEncoding.EncodeToString(amendedImg)
 
-	key, err := mediaRepo.SetImage(userId, database.Base64Image(imagePrefix+encoded))
+	key, err := mediaRepo.SetImage(userId, domain.Base64Image(imagePrefix+encoded))
 	if err != nil {
 		return "", fmt.Errorf("storing media: %w", err)
 	}
@@ -344,7 +263,7 @@ func StreamGetImageHandler(
 		// Serve the persisted copy first so a foreign avatar (e.g. Mastodon,
 		// keyed by URL) survives node restarts and doesn't need a gateway
 		// round-trip on every view.
-		if cached, cErr := mediaRepo.GetImage(ev.UserId, ev.Key); cErr == nil && cached != "" {
+		if cached, err := mediaRepo.GetImage(ev.UserId, ev.Key); err == nil && cached != "" {
 			return event.GetImageResponse{File: string(cached)}, nil
 		}
 
@@ -361,7 +280,7 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: unmarshalling response: %w", err)
 		}
 
-		if err := mediaRepo.SetForeignImageWithTTL(u.Id, ev.Key, database.Base64Image(imgResp.File)); err != nil {
+		if err := mediaRepo.SetForeignImageWithTTL(u.Id, ev.Key, domain.Base64Image(imgResp.File)); err != nil {
 			log.Errorf("get image: storing foreign image: %v", err)
 		}
 
@@ -423,4 +342,32 @@ func amendExifMetadata(imageBytes, metadata []byte) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func buildEncryptedMediaMeta(
+	info MediaNodeInformer,
+	userRepo MediaUserFetcher,
+) (encryptedMeta []byte, ownerUser domain.User, err error) {
+	nodeInfo := info.NodeInfo()
+	ownerUser, err = userRepo.Get(nodeInfo.OwnerId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return nil, ownerUser, err
+	}
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: fetching user: %w", err)
+	}
+
+	metaData := map[string]any{
+		nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
+	}
+	metaBytes, err := json.Marshal(metaData)
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: marshalling meta data: %w", err)
+	}
+
+	encryptedMeta, err = security.EncryptAES(metaBytes, nil) // unknown password
+	if err != nil {
+		return nil, ownerUser, fmt.Errorf("image meta: AES encrypting: %w", err)
+	}
+	return encryptedMeta, ownerUser, nil
 }

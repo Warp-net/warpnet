@@ -97,6 +97,10 @@ func EmptyOption() func() libp2p.Option {
 	}
 }
 
+type AliasResolver interface {
+	GetNodeIDs() (ids []string, err error)
+}
+
 const ErrMultipleIdentities warpnet.WarpError = "cannot specify multiple identities"
 
 func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {

@@ -106,9 +106,6 @@ const (
 	PRIVATE_POST_SUBSCRIBE_USER   = "/private/post/subscribe/user/0.0.0"
 	PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
 
-	PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
-	PRIVATE_GET_MEDIA       = "/private/get/media/0.0.0"
-
 	PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 
 	PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
