@@ -41,7 +41,7 @@ import (
 
 	"github.com/Warp-net/warpnet/security"
 
-	"github.com/Warp-net/warpnet/core/media_meta"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"

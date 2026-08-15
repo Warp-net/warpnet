@@ -36,9 +36,9 @@ import (
 )
 
 const (
-	metaVersion = 1
+	metaVersion = 0
 
-	signDomain = "warpnet/media-meta/v1"
+	signDomain = "warpnet/media-meta/v0"
 
 	ErrNoMetadata        warpnet.WarpError = "media carries no warpnet metadata"
 	ErrForgedMetadata    warpnet.WarpError = "media metadata does not match the file or its signer"

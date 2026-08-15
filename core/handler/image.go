@@ -42,7 +42,7 @@ import (
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/mastodon"
-	"github.com/Warp-net/warpnet/core/media_meta"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -221,8 +221,8 @@ func StreamGetImageHandler(
 		// Serve the persisted copy first so a foreign avatar (e.g. Mastodon,
 		// keyed by URL) survives node restarts and doesn't need a gateway
 		// round-trip on every view.
-		if cached, err := mediaRepo.GetImage(ev.UserId, ev.Key); err == nil && cached != "" {
-			return event.GetImageResponse{File: string(cached)}, nil
+		if stored, cErr := mediaRepo.GetImage(ev.UserId, ev.Key); cErr == nil && stored != "" {
+			return event.GetImageResponse{File: string(stored)}, nil
 		}
 
 		resp, err := streamer.GenericStream(u.NodeId, event.PUBLIC_GET_IMAGE, ev)
@@ -238,7 +238,7 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
+		if err := acceptForeignImage(u, ev.Key, imgResp.File); err != nil {
 			log.Warnf("get image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
@@ -255,8 +255,27 @@ func StreamGetImageHandler(
 	}
 }
 
-func verifyForeignImage(u domain.User, key, file string) error {
-	return verifyForeignMedia(u, key, file, media_meta.VerifyImage)
+func acceptForeignImage(u domain.User, key, file string) error {
+	return acceptForeignMedia(u, key, file, media_meta.VerifyImage)
+}
+
+func acceptForeignMedia(
+	u domain.User,
+	key, file string,
+	verify func(raw []byte, nodeId, ownerId string) error,
+) error {
+	if file == "" || isForeignOriginMedia(u) {
+		return nil
+	}
+	if err := verifyContentKey(key, file); err != nil {
+		return err
+	}
+
+	_, raw, err := splitDataURI(file)
+	if err != nil {
+		return err
+	}
+	return verify(raw, u.NodeId, u.Id)
 }
 
 func isForeignOriginMedia(u domain.User) bool {
@@ -279,25 +298,6 @@ func verifyContentKey(key, file string) error {
 		return ErrMediaKeyMismatch
 	}
 	return nil
-}
-
-func verifyForeignMedia(
-	u domain.User,
-	key, file string,
-	verifyWatermark func(raw []byte, nodeId, ownerId string) error,
-) error {
-	if file == "" || isForeignOriginMedia(u) {
-		return nil
-	}
-	if err := verifyContentKey(key, file); err != nil {
-		return err
-	}
-
-	_, raw, err := splitDataURI(file)
-	if err != nil {
-		return err
-	}
-	return verifyWatermark(raw, u.NodeId, u.Id)
 }
 
 func splitDataURI(file string) (header string, data []byte, err error) {

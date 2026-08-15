@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Warp-net/warpnet/core/media_meta"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -165,8 +165,8 @@ func StreamGetVideoHandler(
 			return event.GetVideoResponse{File: ""}, nil
 		}
 
-		if cached, cErr := mediaRepo.GetVideo(ev.UserId, ev.Key); cErr == nil && cached != "" {
-			return newVideoResponse(cached, ev.Deferred), nil
+		if stored, cErr := mediaRepo.GetVideo(ev.UserId, ev.Key); cErr == nil && stored != "" {
+			return newVideoResponse(stored, ev.Deferred), nil
 		}
 
 		if ev.Deferred {
@@ -186,7 +186,7 @@ func StreamGetVideoHandler(
 			return nil, fmt.Errorf("get video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := acceptForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -224,11 +224,39 @@ func videoDataPrefix(header string) (string, bool) {
 	return prefix, ok
 }
 
-func verifyForeignVideo(u domain.User, key, file string) error {
-	return verifyForeignMedia(u, key, file, media_meta.VerifyVideo)
+func acceptForeignVideo(u domain.User, key, file string) error {
+	return acceptForeignMedia(u, key, file, media_meta.VerifyVideo)
 }
 
-func watermarkMP4(videoBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
+func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
+	header, videoBytes, err := splitDataURI(file)
+	if err != nil {
+		return "", err
+	}
+
+	prefix, ok := videoDataPrefix(header)
+	if !ok {
+		return "", ErrUnsupportedVideo
+	}
+
+	if len(videoBytes) > maxVideoSize {
+		return "", ErrTooLargeVideo
+	}
+
+	if !media_meta.IsISOBaseMediaFile(videoBytes) {
+		return "", ErrUnsupportedVideo
+	}
+
+	watermarked, err := watermarkRaw(videoBytes, watermark)
+	if err != nil {
+		return "", err
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(watermarked)
+	return domain.Base64Video(prefix + encoded), nil
+}
+
+func watermarkRaw(videoBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
 	raw, _, err := media_meta.SplitVideo(videoBytes)
 	if err != nil {
 		return nil, fmt.Errorf("meta data stripping: %w", err)
@@ -253,32 +281,4 @@ func watermarkMP4(videoBytes []byte, watermark media_meta.Watermark) ([]byte, er
 		return nil, fmt.Errorf("meta data self check: %w", err)
 	}
 	return watermarked, nil
-}
-
-func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
-	header, videoBytes, err := splitDataURI(file)
-	if err != nil {
-		return "", err
-	}
-
-	prefix, ok := videoDataPrefix(header)
-	if !ok {
-		return "", ErrUnsupportedVideo
-	}
-
-	if len(videoBytes) > maxVideoSize {
-		return "", ErrTooLargeVideo
-	}
-
-	if !media_meta.IsISOBaseMediaFile(videoBytes) {
-		return "", ErrUnsupportedVideo
-	}
-
-	watermarked, err := watermarkMP4(videoBytes, watermark)
-	if err != nil {
-		return "", err
-	}
-
-	encoded := base64.StdEncoding.EncodeToString(watermarked)
-	return domain.Base64Video(prefix + encoded), nil
 }
