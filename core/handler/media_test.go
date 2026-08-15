@@ -134,40 +134,40 @@ func TestVerifyContentKey(t *testing.T) {
 	assert.NoError(t, verifyContentKey("https://mastodon.social/avatar.png", file))
 }
 
-func TestAcceptForeignMedia(t *testing.T) {
+func TestVerifyForeignMedia(t *testing.T) {
 	file, key := watermarkedImage(t, "alice")
 	owner := domain.User{Id: "alice", NodeId: testSignerID.String()}
 
 	t.Run("watermarked media of the user who serves it", func(t *testing.T) {
-		assert.NoError(t, acceptForeignImage(owner, key, file))
+		assert.NoError(t, verifyForeignImage(owner, key, file))
 	})
 
 	t.Run("empty answer is nothing to check", func(t *testing.T) {
-		assert.NoError(t, acceptForeignImage(owner, key, ""))
+		assert.NoError(t, verifyForeignImage(owner, key, ""))
 	})
 
 	t.Run("content that is not what the key names", func(t *testing.T) {
 		other, _ := watermarkedImage(t, "alice")
-		assert.ErrorIs(t, acceptForeignImage(owner, key, other+"x"), ErrMediaKeyMismatch)
+		assert.ErrorIs(t, verifyForeignImage(owner, key, other+"x"), ErrMediaKeyMismatch)
 	})
 
 	t.Run("media with no watermark", func(t *testing.T) {
 		plain := imagePrefix + base64.StdEncoding.EncodeToString([]byte("no metadata here"))
-		assert.ErrorIs(t, acceptForeignImage(owner, "avatar", plain), media_meta.ErrNoMetadata)
+		assert.ErrorIs(t, verifyForeignImage(owner, "avatar", plain), media_meta.ErrNoMetadata)
 	})
 
 	t.Run("media of another user on the same node", func(t *testing.T) {
 		assert.ErrorIs(t,
-			acceptForeignImage(domain.User{Id: "mallory", NodeId: testSignerID.String()}, "avatar", file),
+			verifyForeignImage(domain.User{Id: "mallory", NodeId: testSignerID.String()}, "avatar", file),
 			media_meta.ErrForgedMetadata)
 	})
 
 	t.Run("bridged fediverse media is out of scope", func(t *testing.T) {
 		bridged := domain.User{Id: "warpnet@mastodon.social", Network: mastodon.Network}
-		assert.NoError(t, acceptForeignImage(bridged, "https://mastodon.social/a.png", "data:image/png;base64,AAAA"))
+		assert.NoError(t, verifyForeignImage(bridged, "https://mastodon.social/a.png", "data:image/png;base64,AAAA"))
 
 		viaGateway := domain.User{Id: "someone@mastodon.social", NodeId: mastodon.GatewayNodeID()}
-		assert.NoError(t, acceptForeignImage(viaGateway, "https://mastodon.social/b.png", "data:image/png;base64,AAAA"))
+		assert.NoError(t, verifyForeignImage(viaGateway, "https://mastodon.social/b.png", "data:image/png;base64,AAAA"))
 	})
 }
 
