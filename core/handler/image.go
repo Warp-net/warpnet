@@ -238,7 +238,7 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: unmarshalling response: %w", err)
 		}
 
-		if err := acceptForeignImage(u, ev.Key, imgResp.File); err != nil {
+		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
 			log.Warnf("get image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
@@ -255,14 +255,14 @@ func StreamGetImageHandler(
 	}
 }
 
-func acceptForeignImage(u domain.User, key, file string) error {
-	return acceptForeignMedia(u, key, file, media_meta.VerifyImage)
+func verifyForeignImage(u domain.User, key, file string) error {
+	return verifyForeignMedia(u, key, file, media_meta.VerifyImage)
 }
 
-func acceptForeignMedia(
+func verifyForeignMedia(
 	u domain.User,
 	key, file string,
-	verify func(raw []byte, nodeId, ownerId string) error,
+	verifyWatermark func(raw []byte, nodeId, ownerId string) error,
 ) error {
 	if file == "" || isForeignOriginMedia(u) {
 		return nil
@@ -275,7 +275,7 @@ func acceptForeignMedia(
 	if err != nil {
 		return err
 	}
-	return verify(raw, u.NodeId, u.Id)
+	return verifyWatermark(raw, u.NodeId, u.Id)
 }
 
 func isForeignOriginMedia(u domain.User) bool {

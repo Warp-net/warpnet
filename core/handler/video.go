@@ -186,7 +186,7 @@ func StreamGetVideoHandler(
 			return nil, fmt.Errorf("get video: unmarshalling response: %w", err)
 		}
 
-		if err := acceptForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -224,8 +224,8 @@ func videoDataPrefix(header string) (string, bool) {
 	return prefix, ok
 }
 
-func acceptForeignVideo(u domain.User, key, file string) error {
-	return acceptForeignMedia(u, key, file, media_meta.VerifyVideo)
+func verifyForeignVideo(u domain.User, key, file string) error {
+	return verifyForeignMedia(u, key, file, media_meta.VerifyVideo)
 }
 
 func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
