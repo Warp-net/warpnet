@@ -25,13 +25,12 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"bytes"
 	"encoding/base64"
-	"encoding/binary"
 	"errors"
 	"strings"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -77,7 +76,7 @@ func (v *videoRepoStub) SetForeignVideoWithTTL(userId, key string, video domain.
 
 func TestUploadVideo_Success(t *testing.T) {
 	repo := &videoRepoStub{}
-	h := StreamUploadVideoHandler(n{}, repo, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, repo, u{})
 
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: mp4DataURL(minimalMP4())})
 	assert.NoError(t, err)
@@ -100,20 +99,23 @@ func extractVideoMetaBox(t *testing.T, stored domain.Base64Video) []byte {
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	assert.NoError(t, err)
 
-	idx := bytes.Index(raw, warpnetMetaUUID[:])
-	assert.GreaterOrEqual(t, idx, 0, "warpnet meta uuid box not found")
+	_, meta, err := media_meta.SplitVideo(raw)
+	require.NoError(t, err)
+	require.NotNil(t, meta, "stored video must carry a signed meta block")
 
-	sealed, err := base64.StdEncoding.DecodeString(string(raw[idx+len(warpnetMetaUUID):]))
-	assert.NoError(t, err)
+	var block struct {
+		EncryptedMeta []byte `json:"encrypted_meta"`
+	}
+	require.NoError(t, json.Unmarshal(meta, &block))
 
-	return sealed
+	return block.EncryptedMeta
 }
 
 // Video carries the same sealed metadata as images, but through a uuid box
 // rather than EXIF. Without this the video path could regress unnoticed.
 func TestUploadVideo_EmbedsSealedMetaBox(t *testing.T) {
 	repo := &videoRepoStub{}
-	h := StreamUploadVideoHandler(n{}, repo, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, repo, u{})
 
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: mp4DataURL(minimalMP4())})
 	assert.NoError(t, err)
@@ -132,7 +134,7 @@ func TestUploadVideo_EmbedsSealedMetaBox(t *testing.T) {
 }
 
 func TestUploadVideo_NoVideo(t *testing.T) {
-	h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, &videoRepoStub{}, u{})
 
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: ""})
 	assert.NoError(t, err)
@@ -142,14 +144,14 @@ func TestUploadVideo_NoVideo(t *testing.T) {
 }
 
 func TestUploadVideo_InvalidPayload(t *testing.T) {
-	h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, &videoRepoStub{}, u{})
 
 	_, err := h([]byte("not json"), s{})
 	assert.Error(t, err)
 }
 
 func TestUploadVideo_MissingBase64Signature(t *testing.T) {
-	h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, &videoRepoStub{}, u{})
 
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: "no-comma-here"})
 	assert.NoError(t, err)
@@ -168,7 +170,7 @@ func TestUploadVideo_UnsupportedFormatRejected(t *testing.T) {
 
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
-			h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
+			h := StreamUploadVideoHandler(n{}, testSignerKey, &videoRepoStub{}, u{})
 
 			bt, err := json.Marshal(event.UploadVideoEvent{Video: mp4DataURL(raw)})
 			assert.NoError(t, err)
@@ -187,47 +189,13 @@ func TestUploadVideo_TooLarge(t *testing.T) {
 	oversized := make([]byte, maxVideoSize+1)
 	copy(oversized, minimalMP4())
 
-	h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, &videoRepoStub{}, u{})
 
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: mp4DataURL(oversized)})
 	assert.NoError(t, err)
 
 	_, err = h(bt, s{})
 	assert.ErrorIs(t, err, ErrTooLargeVideo)
-}
-
-func TestIsISOBaseMediaFile(t *testing.T) {
-	leadingFree := append([]byte{
-		0x00, 0x00, 0x00, 0x08, 'f', 'r', 'e', 'e',
-	}, minimalMP4()...)
-
-	assert.True(t, isISOBaseMediaFile(minimalMP4()))
-	assert.True(t, isISOBaseMediaFile(leadingFree))
-	assert.False(t, isISOBaseMediaFile([]byte{0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0}))
-	assert.False(t, isISOBaseMediaFile([]byte("short")))
-	assert.False(t, isISOBaseMediaFile(nil))
-	assert.False(t, isISOBaseMediaFile([]byte{0x00, 0x00, 0x00, 0x00, 'f', 'r', 'e', 'e'}))
-}
-
-func TestAmendVideoMetadata_AppendsUUIDBox(t *testing.T) {
-	original := minimalMP4()
-	meta := []byte("encrypted-owner-blob")
-
-	out, err := amendVideoMetadata(original, meta)
-	assert.NoError(t, err)
-
-	assert.True(t, bytes.HasPrefix(out, original), "original stream must be preserved verbatim")
-	assert.True(t, isISOBaseMediaFile(out), "stamped file must still be a valid container")
-
-	box := out[len(original):]
-	size := binary.BigEndian.Uint32(box[0:4])
-	assert.Equal(t, len(box), int(size), "box size field must match actual box length")
-	assert.Equal(t, "uuid", string(box[4:8]))
-	assert.Equal(t, warpnetMetaUUID[:], box[8:24])
-
-	decoded, err := base64.StdEncoding.DecodeString(string(box[24:]))
-	assert.NoError(t, err)
-	assert.Equal(t, meta, decoded)
 }
 
 func TestGetVideo_EmptyKey(t *testing.T) {
@@ -329,7 +297,7 @@ func TestVideoDataPrefix(t *testing.T) {
 
 func TestUploadVideo_PreservesDeclaredContainer(t *testing.T) {
 	repo := &videoRepoStub{}
-	h := StreamUploadVideoHandler(n{}, repo, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, repo, u{})
 
 	payload := "data:video/quicktime;base64," + base64.StdEncoding.EncodeToString(minimalMP4())
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: payload})
@@ -341,7 +309,7 @@ func TestUploadVideo_PreservesDeclaredContainer(t *testing.T) {
 }
 
 func TestUploadVideo_RejectsNonVideoDataURL(t *testing.T) {
-	h := StreamUploadVideoHandler(n{}, &videoRepoStub{}, u{})
+	h := StreamUploadVideoHandler(n{}, testSignerKey, &videoRepoStub{}, u{})
 
 	payload := "data:text/html;base64," + base64.StdEncoding.EncodeToString(minimalMP4())
 	bt, err := json.Marshal(event.UploadVideoEvent{Video: payload})
@@ -477,6 +445,24 @@ func TestStreamGetVideoHandler(t *testing.T) {
 	})
 
 	t.Run("fetched foreign video is cached", func(t *testing.T) {
+		file, key := watermarkedVideo(t, "remote")
+		signerUsers := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: testSignerID.String()},
+		}}
+		repo := newVideoRepoDouble()
+		streamer := &mediaStreamerDouble{
+			response: mustJSON(t, event.GetVideoResponse{File: file}),
+		}
+
+		h := StreamGetVideoHandler(streamer, repo, signerUsers)
+		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: key}), nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, file, out.(event.GetVideoResponse).File)
+		assert.Equal(t, domain.Base64Video(file), repo.foreignStored["remote/"+key])
+	})
+
+	t.Run("unattributable foreign video is refused", func(t *testing.T) {
 		repo := newVideoRepoDouble()
 		streamer := &mediaStreamerDouble{
 			response: mustJSON(t, event.GetVideoResponse{File: "data:video/mp4;base64,REMOTE"}),
@@ -486,9 +472,8 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, "data:video/mp4;base64,REMOTE", out.(event.GetVideoResponse).File)
-		assert.Equal(t, domain.Base64Video("data:video/mp4;base64,REMOTE"),
-			repo.foreignStored["remote/clip"])
+		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
+		assert.Empty(t, repo.foreignStored)
 	})
 
 	t.Run("empty remote answer is not cached", func(t *testing.T) {

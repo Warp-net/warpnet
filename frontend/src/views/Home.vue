@@ -76,15 +76,6 @@ resulting from the use or misuse of this software.
                   class="w-32 h-32 object-cover rounded border border-lighter"
               />
               <button
-                  v-if="imageKeys[index]"
-                  @click="openAltModal(index)"
-                  type="button"
-                  class="absolute bottom-1 left-1 bg-white bg-opacity-90 rounded px-2 py-0.5 text-xs font-semibold text-dark hover:bg-blue hover:text-white"
-                  title="Edit alt text"
-              >
-                ALT
-              </button>
-              <button
                   @click="removeImageAttachment(index)"
                   type="button"
                   class="absolute top-0 right-0 mt-1 mr-1 bg-white bg-opacity-75 rounded-full p-1 hover:bg-red-500"
@@ -274,14 +265,6 @@ resulting from the use or misuse of this software.
         :profile="profile"
     />
 
-    <AltTextModal
-        v-if="altModalIndex >= 0 && imageKeys[altModalIndex]"
-        :show="altModalIndex >= 0"
-        :imageKey="imageKeys[altModalIndex]"
-        :previewUrl="imageAttachments[altModalIndex] || ''"
-        @close="altModalIndex = -1"
-    />
-
     <ImportTweetsModal
         :show="showImportModal"
         @close="showImportModal = false"
@@ -325,7 +308,6 @@ export default {
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     InfoOverlay: defineAsyncComponent(() => import('@/components/InfoOverlay.vue')),
-    AltTextModal: defineAsyncComponent(() => import('@/components/AltTextModal.vue')),
     ImportTweetsModal: defineAsyncComponent(() => import('@/components/ImportTweetsModal.vue')),
     EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
   },
@@ -345,7 +327,6 @@ export default {
       imageAttachments: [],
       imageKeys: [],
       pendingReads: 0,
-      altModalIndex: -1,
       videoAttachment: null,
       videoKey: '',
       videoPosterKey: '',
@@ -555,9 +536,6 @@ export default {
       this.videoAttachment = null;
       this.videoKey = '';
       this.videoPosterKey = '';
-    },
-    openAltModal(index) {
-      this.altModalIndex = index;
     },
     togglePoll() {
       this.poll = this.poll ? null : {options: ['', ''], durationHours: 24};

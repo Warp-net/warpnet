@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"html"
 	"time"
@@ -73,6 +74,7 @@ type ImportUserFetcher interface {
 
 func StreamImportTweetHandler(
 	info ImportNodeInformer,
+	privKey ed25519.PrivateKey,
 	tweetRepo ImportTweetStorer,
 	mediaRepo ImportMediaStorer,
 	userRepo ImportUserFetcher,
@@ -86,7 +88,14 @@ func StreamImportTweetHandler(
 			return nil, warpnet.WarpError("import: empty tweet id")
 		}
 
-		encryptedMeta, ownerUser, err := buildEncryptedMediaMeta(info, userRepo)
+		nodeInfo := info.NodeInfo()
+
+		owner, err := userRepo.Get(nodeInfo.OwnerId)
+		if err != nil {
+			return nil, fmt.Errorf("import: fetching owner: %w", err)
+		}
+
+		watermark, err := buildWatermark(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, fmt.Errorf("import: %w", err)
 		}
@@ -97,12 +106,18 @@ func StreamImportTweetHandler(
 			if i >= maxTweetImages {
 				break
 			}
-			key, err := processAndStoreImage(imagePrefix+img, encryptedMeta, ownerUser.Id, mediaRepo)
+			photo, err := watermarkUploadedImage(imagePrefix+img, watermark)
+			if err != nil {
+				log.Warnf("import: processing photo for tweet %s: %v", ev.Id, err)
+				continue
+			}
+
+			key, err := mediaRepo.SetImage(watermark.OwnerId, photo)
 			if err != nil {
 				log.Warnf("import: storing photo for tweet %s: %v", ev.Id, err)
 				continue
 			}
-			imageKeys = append(imageKeys, key)
+			imageKeys = append(imageKeys, string(key))
 			resp.ImportedImages++
 		}
 
@@ -112,11 +127,11 @@ func StreamImportTweetHandler(
 			return resp, nil
 		}
 
-		if _, err := tweetRepo.Create(ownerUser.Id, domain.Tweet{
+		if _, err := tweetRepo.Create(owner.Id, domain.Tweet{
 			Id:        ev.Id,
 			Text:      text,
-			UserId:    ownerUser.Id,
-			Username:  ownerUser.Username,
+			UserId:    owner.Id,
+			Username:  owner.Username,
 			CreatedAt: parseArchiveTime(ev.CreatedAt),
 			ImageKeys: imageKeys,
 		}); err != nil {

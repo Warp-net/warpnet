@@ -57,8 +57,6 @@ export const PUBLIC_GET_TWEET_REACTORS = "/public/get/tweet/reactors/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
 export const PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
-export const PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
-export const PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
 export const PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
 export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
@@ -1147,32 +1145,7 @@ export const warpnetService = {
         return resp || { users: [], cursor: 'end' };
     },
 
-    async updateMediaMeta(key, description, focusX, focusY) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_POST_MEDIA_META,
-            body: {
-                user_id: owner.user_id,
-                key: key,
-                description: description || '',
-                focus_x: focusX || 0,
-                focus_y: focusY || 0,
-            },
-        });
-    },
 
-    async getMediaMeta(key) {
-        const owner = this.getOwnerProfile()
-        if (!owner) return null;
-        return await this.sendToNode({
-            path: PRIVATE_GET_MEDIA,
-            body: {
-                user_id: owner.user_id,
-                key: key,
-            },
-        });
-    },
 
     async subscribeUser(targetId) {
         const owner = this.getOwnerProfile()

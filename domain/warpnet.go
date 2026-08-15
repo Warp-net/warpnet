@@ -352,12 +352,6 @@ func (t ModerationObjectType) String() string {
 	}
 }
 
-type MediaMeta struct {
-	Description string  `json:"description"`
-	FocusX      float32 `json:"focus_x"`
-	FocusY      float32 `json:"focus_y"`
-}
-
 type (
 	Base64Image string
 	ImageKey    string
