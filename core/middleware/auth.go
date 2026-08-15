@@ -137,6 +137,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			WarpStream: s,
 			Body:       msg.Body,
 			MessageId:  msg.MessageId,
+			SenderId:   sender,
 		})
 	}
 }

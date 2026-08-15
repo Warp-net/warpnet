@@ -55,7 +55,6 @@ func TestNotificationsDeliveredToRecipient_Reply(t *testing.T) {
 	h := StreamNewTweetHandler(
 		stubTweetBroadcaster{},
 		stubAuth{owner: domain.Owner{UserId: tweetOwner}},
-		nil,
 		stubTweetRepo{},
 		stubTimelineRepo{},
 		stubFollowChecker{},
@@ -212,7 +211,6 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 		h := StreamNewTweetHandler(
 			stubTweetBroadcaster{},
 			stubAuth{owner: domain.Owner{UserId: owner}},
-			nil,
 			stubTweetRepo{},
 			stubTimelineRepo{},
 			stubFollowChecker{},

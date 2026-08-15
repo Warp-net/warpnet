@@ -458,7 +458,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET,
-			handler.StreamNewTweetHandler(m.pubsubService, authRepo, m.privKey, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
 		},
 		{
 			event.PUBLIC_POST_REPLY,

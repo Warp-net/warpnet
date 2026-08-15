@@ -192,6 +192,7 @@ type WarpStreamBody struct {
 
 	Body      []byte
 	MessageId string
+	SenderId  WarpPeerID
 }
 
 type WarpHandlerFunc func(msg []byte, s WarpStream) (any, error)

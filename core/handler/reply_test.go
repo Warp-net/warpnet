@@ -52,7 +52,6 @@ func TestStreamNewReplyHandler(t *testing.T) {
 		return StreamNewTweetHandler(
 			stubTweetBroadcaster{},
 			stubAuth{owner: domain.Owner{UserId: owner}},
-			nil,
 			repo,
 			stubTimelineRepo{},
 			stubFollowChecker{},
@@ -486,7 +485,6 @@ func TestHandleNewReply_ForwardRoute(t *testing.T) {
 		return StreamNewTweetHandler(
 			stubTweetBroadcaster{},
 			stubAuth{owner: domain.Owner{UserId: owner}},
-			nil,
 			stubTweetRepo{},
 			stubTimelineRepo{},
 			stubFollowChecker{},

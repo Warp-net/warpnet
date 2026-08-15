@@ -28,10 +28,6 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
-	"crypto/ed25519"
-	"encoding/base64"
-	"errors"
-	"strconv"
 	"time"
 
 	"github.com/Warp-net/warpnet/json"
@@ -39,8 +35,6 @@ import (
 )
 
 type ID = string
-
-var ErrTweetSignatureInvalid = errors.New("tweet signature invalid")
 
 const QRByteModeCapacity = 2953
 
@@ -170,76 +164,6 @@ type Tweet struct {
 	QuotedTweetId *string          `json:"quoted_tweet_id,omitempty"`
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
 	Poll          *Poll            `json:"poll,omitempty"`
-	// Signature is base64(ed25519) over signingBytes, produced with the
-	// author's node key. A tweet reaches a follower through gossip, whose
-	// loopback stream reports the local node as the peer, so authorship can
-	// only be established from the payload itself.
-	Signature string `json:"signature,omitempty"`
-}
-
-// signingBytes returns the canonical bytes the tweet signature covers, in the
-// same length-prefixed form as ModerationVerdictEvent so signer and verifier
-// agree byte-for-byte even across versions that add unrelated fields.
-func (t Tweet) signingBytes() []byte {
-	deref := func(s *string) string {
-		if s == nil {
-			return ""
-		}
-		return *s
-	}
-
-	parts := []string{
-		t.Id,
-		t.UserId,
-		t.Username,
-		t.Text,
-		t.RootId,
-		deref(t.ParentId),
-		deref(t.ParentUserId),
-		deref(t.QuotedTweetId),
-		deref(t.QuotedUserId),
-		deref(t.VideoKey),
-		strconv.FormatInt(t.CreatedAt.UnixNano(), 10),
-	}
-	parts = append(parts, t.ImageKeys...)
-	if t.Poll != nil {
-		parts = append(parts, strconv.FormatInt(t.Poll.ExpiresAt.UnixNano(), 10))
-		parts = append(parts, t.Poll.Options...)
-	}
-
-	buf := make([]byte, 0, 256)
-	for _, p := range parts {
-		buf = append(buf, strconv.Itoa(len(p))...)
-		buf = append(buf, ':')
-		buf = append(buf, p...)
-	}
-	return buf
-}
-
-// Signed returns a signed copy of the tweet. It returns the tweet rather than
-// mutating one in place so a caller cannot ship an unsigned tweet by dropping
-// the result on the floor.
-func (t Tweet) Signed(privKey ed25519.PrivateKey) Tweet {
-	if len(privKey) == 0 {
-		return t
-	}
-	t.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, t.signingBytes()))
-	return t
-}
-
-// Verify checks the tweet signature against pubKey, the mirror of Signed.
-func (t Tweet) Verify(pubKey ed25519.PublicKey) error {
-	if len(pubKey) != ed25519.PublicKeySize {
-		return ErrTweetSignatureInvalid
-	}
-	sig, err := base64.StdEncoding.DecodeString(t.Signature)
-	if err != nil {
-		return err
-	}
-	if !ed25519.Verify(pubKey, t.signingBytes(), sig) {
-		return ErrTweetSignatureInvalid
-	}
-	return nil
 }
 
 func (t *Tweet) IsReply() bool {
