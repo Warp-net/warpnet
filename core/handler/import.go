@@ -106,12 +106,18 @@ func StreamImportTweetHandler(
 			if i >= maxTweetImages {
 				break
 			}
-			key, err := processAndStoreImage(imagePrefix+img, watermark, mediaRepo)
+			photo, err := processImage(imagePrefix+img, watermark)
+			if err != nil {
+				log.Warnf("import: processing photo for tweet %s: %v", ev.Id, err)
+				continue
+			}
+
+			key, err := mediaRepo.SetImage(watermark.OwnerId, photo)
 			if err != nil {
 				log.Warnf("import: storing photo for tweet %s: %v", ev.Id, err)
 				continue
 			}
-			imageKeys = append(imageKeys, key)
+			imageKeys = append(imageKeys, string(key))
 			resp.ImportedImages++
 		}
 

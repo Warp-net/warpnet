@@ -51,49 +51,16 @@ func (s signingUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: s.ownerId, NodeId: testSignerID.String()}, nil
 }
 
-type captureImageRepo struct{ stored domain.Base64Image }
-
-func (r *captureImageRepo) GetImage(userId, key string) (domain.Base64Image, error) {
-	return r.stored, nil
-}
-
-func (r *captureImageRepo) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
-	r.stored = img
-	return domain.ImageKey(hex.EncodeToString(security.ConvertToSHA256([]byte(img)))), nil
-}
-
-func (r *captureImageRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
-	r.stored = img
-	return nil
-}
-
-type captureVideoRepo struct{ stored domain.Base64Video }
-
-func (r *captureVideoRepo) GetVideo(userId, key string) (domain.Base64Video, error) {
-	return r.stored, nil
-}
-
-func (r *captureVideoRepo) SetVideo(userId string, v domain.Base64Video) (domain.VideoKey, error) {
-	r.stored = v
-	return domain.VideoKey(hex.EncodeToString(security.ConvertToSHA256([]byte(v)))), nil
-}
-
-func (r *captureVideoRepo) SetForeignVideoWithTTL(userId, key string, v domain.Base64Video) error {
-	r.stored = v
-	return nil
-}
-
 func watermarkedImage(t *testing.T, ownerId string) (file, key string) {
 	t.Helper()
 
 	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	repo := &captureImageRepo{}
-	key, err = processAndStoreImage(testImagePNG, watermark, repo)
+	img, err := processImage(testImagePNG, watermark)
 	require.NoError(t, err)
 
-	return string(repo.stored), key
+	return string(img), contentKeyOf(string(img))
 }
 
 func watermarkedVideo(t *testing.T, ownerId string) (file, key string) {
@@ -102,11 +69,10 @@ func watermarkedVideo(t *testing.T, ownerId string) (file, key string) {
 	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	repo := &captureVideoRepo{}
-	key, err = processAndStoreVideo(mp4DataURL(minimalMP4()), watermark, repo)
+	video, err := processVideo(mp4DataURL(minimalMP4()), watermark)
 	require.NoError(t, err)
 
-	return string(repo.stored), key
+	return string(video), contentKeyOf(string(video))
 }
 
 func rawOf(t *testing.T, dataURL string) []byte {
@@ -127,11 +93,10 @@ func TestUploadVideo_ReplacesAnInheritedMetaBox(t *testing.T) {
 	watermark, err := buildWatermark(signingInformer{"mallory"}.NodeInfo(), testSignerKey, ownerOf("mallory"))
 	require.NoError(t, err)
 
-	repo := &captureVideoRepo{}
-	_, err = processAndStoreVideo(inherited, watermark, repo)
+	video, err := processVideo(inherited, watermark)
 	require.NoError(t, err)
 
-	raw := rawOf(t, string(repo.stored))
+	raw := rawOf(t, string(video))
 	assert.NoError(t, media_meta.VerifyVideo(raw, testSignerID.String(), "mallory"),
 		"the re-upload is attributed to whoever uploaded it")
 	assert.ErrorIs(t, media_meta.VerifyVideo(raw, testSignerID.String(), "alice"),
@@ -153,12 +118,11 @@ func TestUploadVideo_HandlesOpenEndedTrailingBox(t *testing.T) {
 	watermark, err := buildWatermark(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
 	require.NoError(t, err)
 
-	repo := &captureVideoRepo{}
-	_, err = processAndStoreVideo(mp4DataURL(openEnded), watermark, repo)
+	video, err := processVideo(mp4DataURL(openEnded), watermark)
 	require.NoError(t, err)
 
 	assert.NoError(t, media_meta.VerifyVideo(
-		rawOf(t, string(repo.stored)), testSignerID.String(), "alice"))
+		rawOf(t, string(video)), testSignerID.String(), "alice"))
 }
 
 func TestVerifyContentKey(t *testing.T) {
@@ -209,4 +173,8 @@ func TestAcceptForeignMedia(t *testing.T) {
 
 func ownerOf(ownerId string) domain.User {
 	return domain.User{Id: ownerId, NodeId: testSignerID.String()}
+}
+
+func contentKeyOf(file string) string {
+	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
 }

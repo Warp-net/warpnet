@@ -149,11 +149,16 @@ func StreamUploadImageHandler(
 				continue
 			}
 
-			key, err := processAndStoreImage(file, watermark, mediaRepo)
+			img, err := processImage(file, watermark)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
 			}
-			keys[i] = key
+
+			key, err := mediaRepo.SetImage(watermark.OwnerId, img)
+			if err != nil {
+				return nil, fmt.Errorf("upload: image%d: storing media: %w", i+1, err)
+			}
+			keys[i] = string(key)
 		}
 
 		return event.UploadImageResponse{
@@ -340,11 +345,7 @@ func buildWatermark(
 	}, nil
 }
 
-func processAndStoreImage(
-	file string,
-	watermark media_meta.Watermark,
-	mediaRepo MediaStorer,
-) (string, error) {
+func processImage(file string, watermark media_meta.Watermark) (domain.Base64Image, error) {
 	_, imgBytes, err := splitDataURI(file)
 	if err != nil {
 		return "", err
@@ -361,13 +362,7 @@ func processAndStoreImage(
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(watermarked)
-
-	key, err := mediaRepo.SetImage(watermark.OwnerId, domain.Base64Image(imagePrefix+encoded))
-	if err != nil {
-		return "", fmt.Errorf("storing media: %w", err)
-	}
-
-	return string(key), nil
+	return domain.Base64Image(imagePrefix + encoded), nil
 }
 
 func transcodeToJPEG(imgBytes []byte) ([]byte, error) {

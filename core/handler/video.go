@@ -103,12 +103,17 @@ func StreamUploadVideoHandler(
 			return nil, err
 		}
 
-		key, err := processAndStoreVideo(ev.Video, watermark, mediaRepo)
+		video, err := processVideo(ev.Video, watermark)
 		if err != nil {
 			return nil, fmt.Errorf("upload: video: %w", err)
 		}
 
-		return event.UploadVideoResponse{Key: key}, nil
+		key, err := mediaRepo.SetVideo(watermark.OwnerId, video)
+		if err != nil {
+			return nil, fmt.Errorf("upload: video: storing media: %w", err)
+		}
+
+		return event.UploadVideoResponse{Key: string(key)}, nil
 	}
 }
 
@@ -250,11 +255,7 @@ func watermarkVideo(videoBytes []byte, watermark media_meta.Watermark) ([]byte, 
 	return watermarked, nil
 }
 
-func processAndStoreVideo(
-	file string,
-	watermark media_meta.Watermark,
-	mediaRepo VideoStorer,
-) (string, error) {
+func processVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
 	header, videoBytes, err := splitDataURI(file)
 	if err != nil {
 		return "", err
@@ -279,11 +280,5 @@ func processAndStoreVideo(
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(watermarked)
-
-	key, err := mediaRepo.SetVideo(watermark.OwnerId, domain.Base64Video(prefix+encoded))
-	if err != nil {
-		return "", fmt.Errorf("storing media: %w", err)
-	}
-
-	return string(key), nil
+	return domain.Base64Video(prefix + encoded), nil
 }
