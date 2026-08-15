@@ -96,11 +96,56 @@ type TimelineUpdater interface {
 // tweet is only accepted when the owner authored it or follows its author.
 type TweetFollowChecker interface {
 	IsFollowing(ownerId, authorId string) bool
+	GetFollowers(userId string, limit *uint64, cursor *string) ([]domain.ID, string, error)
 }
 
 type TweetNotifier interface {
 	Add(not domain.Notification) error
 }
+
+func deliverToFollowers(
+	ev event.NewTweetEvent,
+	followRepo TweetFollowChecker,
+	userRepo TweetUserFetcher,
+	streamer TweetStreamer,
+) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("timeline: delivery panic: %v", r)
+		}
+	}()
+	if followRepo == nil || userRepo == nil || streamer == nil {
+		return
+	}
+
+	var (
+		cursor string
+		limit  = uint64(deliveryPageSize)
+	)
+	for {
+		followers, next, err := followRepo.GetFollowers(ev.UserId, &limit, &cursor)
+		if err != nil {
+			log.Errorf("timeline: listing followers: %v", err)
+			return
+		}
+		for _, followerId := range followers {
+			follower, err := userRepo.Get(followerId)
+			if err != nil || follower.NodeId == "" {
+				continue
+			}
+			if _, err := streamer.GenericStream(follower.NodeId, event.PUBLIC_POST_TIMELINE, ev); err != nil &&
+				!errors.Is(err, warpnet.ErrNodeIsOffline) {
+				log.Errorf("timeline: delivering to %s: %v", followerId, err)
+			}
+		}
+		if next == "" || next == cursor || len(followers) == 0 {
+			return
+		}
+		cursor = next
+	}
+}
+
+const deliveryPageSize = 20
 
 func StreamTimelineTweetHandler(
 	authRepo OwnerTweetStorer,
@@ -230,10 +275,7 @@ func StreamNewTweetHandler(
 				VideoKey:  tweet.VideoKey,
 				Poll:      tweet.Poll,
 			}
-			bt, _ := json.Marshal(respTweetEvent)
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TIMELINE, bt); err != nil {
-				log.Errorf("broadcaster publish owner tweet update: %v", err)
-			}
+			go deliverToFollowers(respTweetEvent, followRepo, userRepo, streamer)
 		}
 		return tweet, nil
 	}

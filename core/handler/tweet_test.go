@@ -140,10 +140,15 @@ func (s stubTweetRepo) GetReplies(parentID string, limit *uint64, cursor *string
 
 type stubFollowChecker struct {
 	following bool
+	followers []domain.ID
 }
 
 func (s stubFollowChecker) IsFollowing(_, _ string) bool {
 	return s.following
+}
+
+func (s stubFollowChecker) GetFollowers(_ string, _ *uint64, _ *string) ([]domain.ID, string, error) {
+	return s.followers, "", nil
 }
 
 type stubTweetBroadcaster struct {
@@ -348,23 +353,26 @@ func TestStreamNewTweetHandler(t *testing.T) {
 
 	t.Run("poll is broadcast to followers", func(t *testing.T) {
 		poll := &domain.Poll{Options: []string{"yes", "no"}, ExpiresAt: time.Now().Add(time.Hour)}
-		var published []byte
-		broadcaster := stubTweetBroadcaster{publishFn: func(_, _ string, bt []byte) error {
-			published = bt
-			return nil
+		delivered := make(chan domain.Tweet, 1)
+		streamer := stubStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, data any) ([]byte, error) {
+			tw, _ := data.(event.NewTweetEvent)
+			delivered <- tw
+			return nil, nil
 		}}
 		repo := stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
 			tweet.Id = "tweet-1"
 			return tweet, nil
 		}}
-		h := StreamNewTweetHandler(broadcaster, stubAuth{owner: domain.Owner{UserId: owner}}, repo, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, repo, stubTimelineRepo{}, stubFollowChecker{followers: []domain.ID{"follower-1"}}, stubTweetUserRepo{}, stubModerationNotifier{}, streamer)
 
 		if _, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "vote", Poll: poll}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		var broadcast domain.Tweet
-		if err := json.Unmarshal(published, &broadcast); err != nil {
-			t.Fatalf("unmarshal broadcast: %v", err)
+		select {
+		case broadcast = <-delivered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("tweet was never delivered to a follower")
 		}
 		if broadcast.Poll == nil || len(broadcast.Poll.Options) != 2 {
 			t.Fatalf("followers must receive the poll, got: %+v", broadcast.Poll)
@@ -398,12 +406,15 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("own tweet - success with broadcast", func(t *testing.T) {
-		published := false
-		h := StreamNewTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
-			published = true
-			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+	t.Run("own tweet - delivered to followers", func(t *testing.T) {
+		delivered := make(chan string, 1)
+		streamer := stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
+			if path == event.PUBLIC_POST_TIMELINE {
+				delivered <- nodeId
+			}
+			return nil, nil
+		}}
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{followers: []domain.ID{"follower-1"}}, stubTweetUserRepo{}, stubModerationNotifier{}, streamer)
 		resp, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "hello"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -411,8 +422,13 @@ func TestStreamNewTweetHandler(t *testing.T) {
 		if resp.(domain.Tweet).Text != "hello" {
 			t.Fatalf("unexpected response: %v", resp)
 		}
-		if !published {
-			t.Fatal("expected broadcast to be called")
+		select {
+		case nodeId := <-delivered:
+			if nodeId != "node-2" {
+				t.Fatalf("delivered to unexpected node: %s", nodeId)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("own tweet was never delivered to a follower")
 		}
 	})
 
@@ -1111,7 +1127,14 @@ func (m *mockTimeline) DeleteTweetFromTimeline(u, id string) error {
 	return nil
 }
 
-type mockFollowChecker struct{ IsFollowingFunc func(string, string) bool }
+type mockFollowChecker struct {
+	IsFollowingFunc func(string, string) bool
+	followers       []domain.ID
+}
+
+func (m *mockFollowChecker) GetFollowers(_ string, _ *uint64, _ *string) ([]domain.ID, string, error) {
+	return m.followers, "", nil
+}
 
 func (m *mockFollowChecker) IsFollowing(o, a string) bool {
 	if m.IsFollowingFunc != nil {
