@@ -52,14 +52,14 @@ func (s *stubImportTweetRepo) Create(_ string, tweet domain.Tweet) (domain.Tweet
 
 type stubImportMediaRepo struct{ saved int }
 
-func (s *stubImportMediaRepo) GetImage(userId, key string) (database.Base64Image, error) {
+func (s *stubImportMediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
 	return "", nil
 }
-func (s *stubImportMediaRepo) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+func (s *stubImportMediaRepo) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
 	s.saved++
-	return database.ImageKey("imgkey"), nil
+	return domain.ImageKey("imgkey"), nil
 }
-func (s *stubImportMediaRepo) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (s *stubImportMediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
 }
 

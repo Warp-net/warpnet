@@ -30,6 +30,7 @@ package middleware
 import (
 	"errors"
 	"io"
+	"slices"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -111,14 +112,41 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
+		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
+			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
+			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
+			return
+		}
+
 		isAuthSuccess = true
 
 		next(&warpnet.WarpStreamBody{
 			WarpStream: s,
 			Body:       msg.Body,
-			MessageId:  string(msg.MessageId),
+			MessageId:  msg.MessageId,
 		})
 	}
+}
+
+func (p *WarpMiddleware) isPrivateRouteAllowed(
+	route stream.WarpRoute, remotePeer, localPeer warpnet.WarpPeerID,
+) bool {
+	if remotePeer == localPeer || remotePeer == p.ownNodeId {
+		return true
+	}
+	if route.ProtocolID() == event.PRIVATE_POST_PAIR {
+		return true
+	}
+	if p.aliases == nil {
+		return false
+	}
+
+	ids, err := p.aliases.GetNodeIDs()
+	if err != nil {
+		log.Errorf("middleware: auth: paired devices: %v", err)
+		return false
+	}
+	return slices.ContainsFunc(ids, func(id string) bool { return id == remotePeer.String() })
 }
 
 // isFresh reports whether ts is within the freshness window of now, either way.

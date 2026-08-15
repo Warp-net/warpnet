@@ -37,7 +37,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -92,7 +91,7 @@ type WarpNode struct {
 
 	startTime        time.Time
 	eventsSub        event.Subscription
-	mw               *middleware.WarpMiddleware
+	mw               StreamMiddleware
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
@@ -112,8 +111,6 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	// Copy the transport config: DefaultTransport is a shared package-level
-	// pointer that live yamux sessions of other nodes read concurrently.
 	ya := *yamux.DefaultTransport
 	ya.KeepAliveInterval = 15 * time.Second
 	ya.ConnectionWriteTimeout = 30 * time.Second
@@ -160,7 +157,6 @@ func NewWarpNode(
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
-		mw:               middleware.NewWarpMiddleware(node.ID()),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
@@ -203,7 +199,25 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
+type StreamMiddleware interface {
+	LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
+	AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
+	UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
+	Close()
+}
+
+func (n *WarpNode) SetStreamMiddleware(mw StreamMiddleware) {
+	if n == nil || mw == nil {
+		return
+	}
+	n.mw = mw
+}
+
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
+	if n.mw == nil {
+		panic("node: stream middleware is not set")
+	}
+
 	logMw := n.mw.LoggingMiddleware
 	authMw := n.mw.AuthMiddleware
 	unwrapMw := n.mw.UnwrapStreamMiddleware

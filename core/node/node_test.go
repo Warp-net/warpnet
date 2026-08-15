@@ -30,6 +30,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	warpevent "github.com/Warp-net/warpnet/event"
@@ -79,6 +80,7 @@ func newTestNode(t *testing.T) *WarpNode {
 
 	n, err := NewWarpNode(ctx, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
+	n.SetStreamMiddleware(middleware.NewWarpMiddleware(n.Node().ID(), nil))
 	t.Cleanup(func() {
 		defer func() { _ = recover() }()
 		n.StopNode()

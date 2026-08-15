@@ -228,7 +228,7 @@ func TestAuthLogin_WrongCredentialsAreRejected(t *testing.T) {
 func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 	repo := newFakeAuthRepo()
 	users := &fakeUserRepo{}
-	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID, Role: "member"})
+	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
 
 	resp, err := as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{1, 2, 3})
 	require.NoError(t, err)
@@ -242,7 +242,6 @@ func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 
 	require.Len(t, updated, 1)
 	assert.Equal(t, testNodeID, updated[0].NodeId, "the account must be bound to this node")
-	assert.Equal(t, "member", updated[0].Role)
 	assert.Equal(t, created[0].Id, updated[0].Id, "the same identity must be carried through")
 }
 

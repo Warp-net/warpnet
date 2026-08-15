@@ -56,6 +56,7 @@ const (
 	PRIVATE_POST_LOGIN                 = "/private/post/login/0.0.0"
 	PRIVATE_POST_LOGOUT                = "/private/post/logout/0.0.0"
 	PRIVATE_POST_TWEET                 = "/private/post/tweet/0.0.0"
+	PUBLIC_POST_REPLY                  = "/public/post/reply/0.0.0"
 	PRIVATE_POST_IMPORT_TWITTER_TWEET  = "/private/post/import/twitter/tweet/0.0.0"
 	PRIVATE_POST_USER                  = "/private/post/user/0.0.0"
 	PUBLIC_GET_FOLLOWINGS              = "/public/get/followings/0.0.0"
@@ -104,9 +105,6 @@ const (
 
 	PRIVATE_POST_SUBSCRIBE_USER   = "/private/post/subscribe/user/0.0.0"
 	PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
-
-	PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
-	PRIVATE_GET_MEDIA       = "/private/get/media/0.0.0"
 
 	PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
 

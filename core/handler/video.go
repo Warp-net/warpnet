@@ -68,9 +68,9 @@ var acceptedVideoPrefixes = map[string]string{
 }
 
 type VideoStorer interface {
-	GetVideo(userId, key string) (database.Base64Video, error)
-	SetVideo(userId string, video database.Base64Video) (_ database.VideoKey, err error)
-	SetForeignVideoWithTTL(userId, key string, video database.Base64Video) error
+	GetVideo(userId, key string) (domain.Base64Video, error)
+	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
+	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
 
 type VideoNodeInformer interface {
@@ -150,7 +150,7 @@ func processAndStoreVideo(
 
 	encoded := base64.StdEncoding.EncodeToString(amendedVideo)
 
-	key, err := mediaRepo.SetVideo(userId, database.Base64Video(prefix+encoded))
+	key, err := mediaRepo.SetVideo(userId, domain.Base64Video(prefix+encoded))
 	if err != nil {
 		return "", fmt.Errorf("storing media: %w", err)
 	}
@@ -229,7 +229,7 @@ func StreamGetVideoHandler(
 
 		if videoResp.File != "" {
 			if err := mediaRepo.SetForeignVideoWithTTL(
-				u.Id, ev.Key, database.Base64Video(videoResp.File),
+				u.Id, ev.Key, domain.Base64Video(videoResp.File),
 			); err != nil {
 				log.Errorf("get video: storing foreign video: %v", err)
 			}
@@ -239,7 +239,7 @@ func StreamGetVideoHandler(
 	}
 }
 
-func newVideoResponse(video database.Base64Video, deferred bool) event.GetVideoResponse {
+func newVideoResponse(video domain.Base64Video, deferred bool) event.GetVideoResponse {
 	if deferred {
 		return event.GetVideoResponse{
 			File:     "",

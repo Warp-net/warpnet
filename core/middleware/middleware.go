@@ -71,22 +71,27 @@ const (
 	InternalNodeErrorCode = 5000
 )
 
+type AliasPairer interface {
+	GetNodeIDs() (ids []string, err error)
+}
+
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
+	ownNodeId       warpnet.WarpPeerID
+	aliases         AliasPairer
 }
 
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
+		ownNodeId:       ownNodeId,
+		aliases:         aliases,
 	}
 	return wm
 }
 
-// Close releases background resources owned by the middleware (currently
-// the idempotency cache's expirable-LRU janitor goroutine). Safe to call
-// multiple times.
 func (p *WarpMiddleware) Close() {
 	if p.idempotency != nil {
 		p.idempotency.Close()

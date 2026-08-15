@@ -62,15 +62,15 @@ func (u u) GetOtherNetworkUser(network, userId string) (user domain.User, err er
 	return domain.User{}, err
 }
 
-func (m m) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (m m) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
 }
 
-func (m m) GetImage(userId, key string) (database.Base64Image, error) {
+func (m m) GetImage(userId, key string) (domain.Base64Image, error) {
 	return "", nil
 }
 
-func (m m) SetImage(userId string, img database.Base64Image) (key database.ImageKey, err error) {
+func (m m) SetImage(userId string, img domain.Base64Image) (key domain.ImageKey, err error) {
 	return "", nil
 }
 
@@ -147,18 +147,18 @@ func (u u) Get(userId string) (user domain.User, err error) {
 }
 
 type cachedMediaRepo struct {
-	cached database.Base64Image
+	cached domain.Base64Image
 }
 
-func (c cachedMediaRepo) GetImage(userId, key string) (database.Base64Image, error) {
+func (c cachedMediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
 	return c.cached, nil
 }
 
-func (c cachedMediaRepo) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+func (c cachedMediaRepo) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
 	return "", nil
 }
 
-func (c cachedMediaRepo) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (c cachedMediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
 }
 
@@ -372,7 +372,7 @@ func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
 	var streamed bool
 	h := StreamGetImageHandler(
 		recordingStreamer{streamed: &streamed},
-		cachedMediaRepo{cached: database.Base64Image("data:image/png;base64,CACHED")},
+		cachedMediaRepo{cached: domain.Base64Image("data:image/png;base64,CACHED")},
 		foreignUserRepo{},
 	)
 
@@ -422,22 +422,22 @@ func (m *mediaStreamerDouble) GenericStream(nodeId string, path stream.WarpRoute
 }
 
 type imageRepoDouble struct {
-	images     map[string]database.Base64Image
+	images     map[string]domain.Base64Image
 	getErr     error
-	getPartial database.Base64Image
+	getPartial domain.Base64Image
 
-	foreignStored map[string]database.Base64Image
+	foreignStored map[string]domain.Base64Image
 	foreignErr    error
 }
 
 func newImageRepoDouble() *imageRepoDouble {
 	return &imageRepoDouble{
-		images:        map[string]database.Base64Image{},
-		foreignStored: map[string]database.Base64Image{},
+		images:        map[string]domain.Base64Image{},
+		foreignStored: map[string]domain.Base64Image{},
 	}
 }
 
-func (r *imageRepoDouble) GetImage(userId, key string) (database.Base64Image, error) {
+func (r *imageRepoDouble) GetImage(userId, key string) (domain.Base64Image, error) {
 	if r.getErr != nil {
 		return r.getPartial, r.getErr
 	}
@@ -448,12 +448,12 @@ func (r *imageRepoDouble) GetImage(userId, key string) (database.Base64Image, er
 	return img, nil
 }
 
-func (r *imageRepoDouble) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+func (r *imageRepoDouble) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
 	r.images[userId+"/key"] = img
 	return "key", nil
 }
 
-func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	if r.foreignErr != nil {
 		return r.foreignErr
 	}
@@ -462,21 +462,21 @@ func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img databas
 }
 
 type videoRepoDouble struct {
-	videos     map[string]database.Base64Video
+	videos     map[string]domain.Base64Video
 	getErr     error
-	getPartial database.Base64Video
+	getPartial domain.Base64Video
 
-	foreignStored map[string]database.Base64Video
+	foreignStored map[string]domain.Base64Video
 }
 
 func newVideoRepoDouble() *videoRepoDouble {
 	return &videoRepoDouble{
-		videos:        map[string]database.Base64Video{},
-		foreignStored: map[string]database.Base64Video{},
+		videos:        map[string]domain.Base64Video{},
+		foreignStored: map[string]domain.Base64Video{},
 	}
 }
 
-func (r *videoRepoDouble) GetVideo(userId, key string) (database.Base64Video, error) {
+func (r *videoRepoDouble) GetVideo(userId, key string) (domain.Base64Video, error) {
 	if r.getErr != nil {
 		return r.getPartial, r.getErr
 	}
@@ -487,12 +487,12 @@ func (r *videoRepoDouble) GetVideo(userId, key string) (database.Base64Video, er
 	return v, nil
 }
 
-func (r *videoRepoDouble) SetVideo(userId string, video database.Base64Video) (database.VideoKey, error) {
+func (r *videoRepoDouble) SetVideo(userId string, video domain.Base64Video) (domain.VideoKey, error) {
 	r.videos[userId+"/key"] = video
 	return "key", nil
 }
 
-func (r *videoRepoDouble) SetForeignVideoWithTTL(userId, key string, video database.Base64Video) error {
+func (r *videoRepoDouble) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
 	r.foreignStored[userId+"/"+key] = video
 	return nil
 }
@@ -671,7 +671,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{remoteNodeID}, streamer.streamedTo)
-		assert.Equal(t, database.Base64Image("data:image/jpeg;base64,REMOTE"),
+		assert.Equal(t, domain.Base64Image("data:image/jpeg;base64,REMOTE"),
 			repo.foreignStored["remote/avatar"])
 	})
 

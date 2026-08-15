@@ -124,18 +124,7 @@ func StreamNewTweetHandler(
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
 
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
-		}
-		if ev.Text == "" {
-			return nil, warpnet.WarpError("empty tweet text")
-		}
-		// Runes, not bytes: 280 means 280 user-visible characters
-		// regardless of script (the UI counters count characters too).
-		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
-			return nil, warpnet.WarpError("tweet text is too long")
-		}
-		if err := validatePoll(ev.Poll); err != nil {
+		if err := validateTweetEvent(ev); err != nil {
 			return nil, err
 		}
 
@@ -192,19 +181,35 @@ func StreamNewTweetHandler(
 	}
 }
 
-// validatePoll checks the poll definition a tweet carries. The definition is
-// immutable once the tweet exists, so this is the only chance to reject a
-// malformed one. Whether the poll has already closed is deliberately not
-// checked here: a tweet can legitimately reach a peer after its poll ended,
-// and the vote handler is what refuses a late vote.
+func validateTweetEvent(ev event.NewTweetEvent) error {
+	if ev.UserId == "" {
+		return warpnet.WarpError("empty user id")
+	}
+	if ev.Text == "" {
+		return warpnet.WarpError("empty tweet text")
+	}
+	// Runes, not bytes: 280 means 280 user-visible characters
+	// regardless of script (the UI counters count characters too).
+	if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
+		return warpnet.WarpError("tweet text is too long")
+	}
+	return validatePoll(ev.Poll)
+}
+
+const (
+	pollMinOptions      = 2
+	pollMaxOptions      = 4
+	pollOptionRuneLimit = 25
+)
+
 func validatePoll(p *domain.Poll) error {
 	if p == nil {
 		return nil
 	}
-	if len(p.Options) < domain.PollMinOptions {
+	if len(p.Options) < pollMinOptions {
 		return warpnet.WarpError("poll: too few options")
 	}
-	if len(p.Options) > domain.PollMaxOptions {
+	if len(p.Options) > pollMaxOptions {
 		return warpnet.WarpError("poll: too many options")
 	}
 	if p.ExpiresAt.IsZero() {
@@ -214,11 +219,56 @@ func validatePoll(p *domain.Poll) error {
 		if strings.TrimSpace(opt) == "" {
 			return warpnet.WarpError("poll: empty option")
 		}
-		if utf8.RuneCountInString(opt) > domain.PollOptionRuneLimit {
+		if utf8.RuneCountInString(opt) > pollOptionRuneLimit {
 			return warpnet.WarpError("poll: option is too long")
 		}
 	}
 	return nil
+}
+
+const (
+	ErrNotAReply     = warpnet.WarpError("reply: tweet has no parent")
+	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
+)
+
+func StreamNewReplyHandler(
+	tweetRepo TweetsStorer,
+	userRepo TweetUserFetcher,
+	notifyRepo TweetNotifier,
+	streamer TweetStreamer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.NewTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+
+		if ev.Moderation != nil && !ev.Moderation.IsOk {
+			return nil, tweetRepo.Blocklist(ev.Id)
+		}
+		if err := validateTweetEvent(ev); err != nil {
+			return nil, err
+		}
+		if !ev.IsReply() {
+			return nil, ErrNotAReply
+		}
+		if ev.ParentUserId == nil || *ev.ParentUserId == "" {
+			return nil, ErrForeignThread
+		}
+
+		ownNodeInfo := streamer.NodeInfo()
+		if *ev.ParentUserId != ownNodeInfo.OwnerId {
+			parentUser, err := userRepo.Get(*ev.ParentUserId)
+			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+				return nil, err
+			}
+			if parentUser.NodeId == "" || parentUser.NodeId != ownNodeInfo.ID.String() {
+				return nil, ErrForeignThread
+			}
+		}
+
+		return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)
+	}
 }
 
 // handleNewReply stores a reply in its thread, notifies the parent tweet's
@@ -293,7 +343,7 @@ func handleNewReply(
 	// build identical thread keys.
 	replyDataResp, err := streamer.GenericStream(
 		parentUser.NodeId,
-		event.PRIVATE_POST_TWEET,
+		event.PUBLIC_POST_REPLY,
 		domain.Tweet{
 			CreatedAt:    reply.CreatedAt,
 			Id:           reply.Id,
@@ -586,7 +636,6 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	reactionRepo ReactionTweetStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -606,7 +655,7 @@ func StreamDeleteTweetHandler(
 		// delete it from the thread index under its parent and forward the
 		// deletion to the parent author's node.
 		if parent := replyParent(ev.ParentId, ev.RootId); parent != "" && parent != ev.TweetId {
-			return deleteReply(ev, repo, userRepo, streamer)
+			return deleteReply(ev, repo, streamer)
 		}
 
 		// Deleting an own tweet only cleans up local state here; the shared
@@ -645,12 +694,9 @@ func StreamDeleteTweetHandler(
 	}
 }
 
-// deleteReply removes a reply from its thread and propagates the deletion to
-// the parent author's node so the thread stays consistent across peers.
 func deleteReply(
 	ev event.DeleteTweetEvent,
 	repo TweetsStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) (any, error) {
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
@@ -658,44 +704,9 @@ func deleteReply(
 
 	// Mirror handleNewReply: only the replier's own node adjusts the
 	// network-wide (CRDT) counter.
-	reply, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId)
-	if err != nil {
+	if _, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId); err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
-	}
-
-	if reply.ParentUserId == nil || *reply.ParentUserId == "" {
-		return event.Accepted, nil
-	}
-
-	ownNodeInfo := streamer.NodeInfo()
-	parentUser, err := userRepo.Get(*reply.ParentUserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return event.Accepted, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if ownNodeInfo.ID.String() == parentUser.NodeId {
-		return event.Accepted, nil
-	}
-
-	// Forward normalized ids so the remote node deletes under the same key.
-	resp, err := streamer.GenericStream(
-		parentUser.NodeId,
-		event.PRIVATE_DELETE_TWEET,
-		event.DeleteTweetEvent{TweetId: id, ParentId: parentId, UserId: ev.UserId},
-	)
-	if errors.Is(err, warpnet.ErrNodeIsOffline) {
-		return event.Accepted, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
-		log.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
 	}
 
 	return event.Accepted, nil

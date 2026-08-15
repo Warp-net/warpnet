@@ -185,7 +185,6 @@ func main() {
 		info.ID = ni.ID.String()
 		info.Network = network
 		info.Addresses = ni.Addresses
-		info.Role = ni.Type
 		info.BootstrapPeers = config.Config().Node.Bootstrap
 		readyChan <- info
 	}

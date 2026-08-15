@@ -30,6 +30,8 @@ package handler
 import (
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -95,21 +97,22 @@ func StreamReactionHandler(
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		ownNodeInfo := streamer.NodeInfo()
-		// The network-wide (CRDT) reaction counter is bumped only on the reactor's
-		// own node, so a reaction observed on both the reactor's and the author's
-		// node is counted once.
-		num, err := repo.React(tweetId, ev.OwnerId, ev.Emoji, ev.OwnerId == ownNodeInfo.OwnerId) // store my reaction
+
+		emoji, err := normalizeReaction(ev.Emoji)
+		if err != nil {
+			return nil, err
+		}
+
+		num, err := repo.React(tweetId, ev.OwnerId, emoji, ev.OwnerId == ownNodeInfo.OwnerId) // store my reaction
 		if err != nil {
 			log.Errorf("reaction handler failed: %v", err)
 			return nil, err
 		}
-		// Best-effort "tweets I reacted to" index; the reaction itself already
-		// succeeded, so an index failure must not fail the request.
+
 		if err := repo.SetReacted(ev.OwnerId, tweetId, ev.UserId); err != nil {
 			log.Warnf("reaction handler: reacted index: %v", err)
 		}
-		// Every exit below answers the same shape, and nothing they do
-		// changes the local tally, so build it once.
+
 		resp := event.ReactionsCountResponse{Count: num, Reactions: getReactionsWithDefault(repo, tweetId)}
 
 		isOwnTweetReaction := ev.OwnerId == ev.UserId
@@ -172,6 +175,29 @@ func StreamReactionHandler(
 
 		return resp, nil
 	}
+}
+
+const (
+	defaultReaction  = "❤️"
+	maxReactionRunes = 8
+)
+
+func normalizeReaction(emoji string) (string, error) {
+	if emoji == "" {
+		return defaultReaction, nil
+	}
+	if !utf8.ValidString(emoji) {
+		return "", warpnet.WarpError("reaction: not a valid utf-8 string")
+	}
+	if utf8.RuneCountInString(emoji) > maxReactionRunes {
+		return "", warpnet.WarpError("reaction: too long")
+	}
+	for _, r := range emoji {
+		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return "", warpnet.WarpError("reaction: forbidden character")
+		}
+	}
+	return emoji, nil
 }
 
 func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, streamer ReactionStreamer) warpnet.WarpHandlerFunc {
