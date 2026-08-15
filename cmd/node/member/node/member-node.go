@@ -38,6 +38,7 @@ import (
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -208,7 +209,9 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	// TODO setup middleware here
+	m.node.SetStreamMiddleware(
+		middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo),
+	)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 

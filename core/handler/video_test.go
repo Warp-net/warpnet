@@ -34,7 +34,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -58,20 +57,20 @@ func mp4DataURL(raw []byte) string {
 }
 
 type videoRepoStub struct {
-	stored database.Base64Video
+	stored domain.Base64Video
 	getErr error
 }
 
-func (v *videoRepoStub) GetVideo(userId, key string) (database.Base64Video, error) {
+func (v *videoRepoStub) GetVideo(userId, key string) (domain.Base64Video, error) {
 	return v.stored, v.getErr
 }
 
-func (v *videoRepoStub) SetVideo(userId string, video database.Base64Video) (database.VideoKey, error) {
+func (v *videoRepoStub) SetVideo(userId string, video domain.Base64Video) (domain.VideoKey, error) {
 	v.stored = video
 	return "video-key", nil
 }
 
-func (v *videoRepoStub) SetForeignVideoWithTTL(userId, key string, video database.Base64Video) error {
+func (v *videoRepoStub) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
 	v.stored = video
 	return nil
 }
@@ -92,7 +91,7 @@ func TestUploadVideo_Success(t *testing.T) {
 	assert.True(t, strings.HasPrefix(string(repo.stored), "data:video/mp4;base64,"))
 }
 
-func extractVideoMetaBox(t *testing.T, stored database.Base64Video) []byte {
+func extractVideoMetaBox(t *testing.T, stored domain.Base64Video) []byte {
 	t.Helper()
 
 	_, encoded, ok := strings.Cut(string(stored), ",")
@@ -256,7 +255,7 @@ func (v videoStreamerStub) NodeInfo() warpnet.NodeInfo {
 }
 
 func TestGetVideo_ServesOwnVideo(t *testing.T) {
-	stored := database.Base64Video("data:video/mp4;base64,STORED")
+	stored := domain.Base64Video("data:video/mp4;base64,STORED")
 	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{})
 
 	bt, err := json.Marshal(event.GetVideoEvent{UserId: "owner-id", Key: "abc"})
@@ -273,7 +272,7 @@ func TestGetVideo_ServesOwnVideo(t *testing.T) {
 }
 
 func TestGetVideo_DeferredWithholdsBytes(t *testing.T) {
-	stored := database.Base64Video("data:video/mp4;base64,STORED")
+	stored := domain.Base64Video("data:video/mp4;base64,STORED")
 	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{})
 
 	bt, err := json.Marshal(event.GetVideoEvent{UserId: "owner-id", Key: "abc", Deferred: true})
@@ -488,7 +487,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "data:video/mp4;base64,REMOTE", out.(event.GetVideoResponse).File)
-		assert.Equal(t, database.Base64Video("data:video/mp4;base64,REMOTE"),
+		assert.Equal(t, domain.Base64Video("data:video/mp4;base64,REMOTE"),
 			repo.foreignStored["remote/clip"])
 	})
 
@@ -504,7 +503,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 }
 
 func TestNewVideoResponse(t *testing.T) {
-	video := database.Base64Video("data:video/mp4;base64,ABC")
+	video := domain.Base64Video("data:video/mp4;base64,ABC")
 
 	full := newVideoResponse(video, false)
 	assert.Equal(t, string(video), full.File)

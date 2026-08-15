@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -131,10 +132,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, nil, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
+
+	mn.node.SetStreamMiddleware(middleware.NewWarpMiddleware(mn.node.Node().ID(), nil))
 
 	//nolint:govet
 	mn.node.SetStreamHandlers(

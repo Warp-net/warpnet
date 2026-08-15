@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -166,7 +167,6 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
-		nil,
 		rn.opts...,
 	)
 	if err != nil {
@@ -193,6 +193,8 @@ func (rn *RelayNode) setupHandlers() {
 	if rn.node == nil {
 		panic("relay: nil relay node")
 	}
+
+	rn.node.SetStreamMiddleware(middleware.NewWarpMiddleware(rn.node.Node().ID(), nil))
 
 	//nolint:govet
 	rn.node.SetStreamHandlers(

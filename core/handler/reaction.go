@@ -29,7 +29,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -188,14 +187,14 @@ func normalizeReaction(emoji string) (string, error) {
 		return defaultReaction, nil
 	}
 	if !utf8.ValidString(emoji) {
-		return "", fmt.Errorf("reaction: not a valid utf-8 string")
+		return "", warpnet.WarpError("reaction: not a valid utf-8 string")
 	}
 	if utf8.RuneCountInString(emoji) > maxReactionRunes {
-		return "", fmt.Errorf("reaction: too long")
+		return "", warpnet.WarpError("reaction: too long")
 	}
 	for _, r := range emoji {
 		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
-			return "", fmt.Errorf("reaction: forbidden character")
+			return "", warpnet.WarpError("reaction: forbidden character")
 		}
 	}
 	return emoji, nil

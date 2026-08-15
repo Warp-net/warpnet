@@ -158,7 +158,6 @@ func NewWarpNode(
 		startTime:        time.Now(),
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
-		mw:               middleware.NewWarpMiddleware(node.ID(), aliases),
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
@@ -201,10 +200,18 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-func (n *WarpNode) SetStreamMiddleware(mws ...middleware.WarpMiddleware) {
+func (n *WarpNode) SetStreamMiddleware(mw *middleware.WarpMiddleware) {
+	if n == nil || mw == nil {
+		return
+	}
+	n.mw = mw
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
+	if n.mw == nil {
+		panic("node: stream middleware is not set")
+	}
+
 	logMw := n.mw.LoggingMiddleware
 	authMw := n.mw.AuthMiddleware
 	unwrapMw := n.mw.UnwrapStreamMiddleware

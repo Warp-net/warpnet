@@ -303,7 +303,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 
 	t.Run("poll validation", func(t *testing.T) {
 		expires := time.Now().Add(time.Hour)
-		longOption := strings.Repeat("a", domain.PollOptionRuneLimit+1)
+		longOption := strings.Repeat("a", pollOptionRuneLimit+1)
 		for _, tt := range []struct {
 			name string
 			poll *domain.Poll

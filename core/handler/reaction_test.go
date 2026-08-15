@@ -497,3 +497,21 @@ func TestStreamGetReactionsHandler(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeReaction(t *testing.T) {
+	emoji, err := normalizeReaction("")
+	if err != nil || emoji != defaultReaction {
+		t.Fatalf("expected %q, got %q (%v)", defaultReaction, emoji, err)
+	}
+
+	emoji, err = normalizeReaction("🔥")
+	if err != nil || emoji != "🔥" {
+		t.Fatalf("expected the emoji back, got %q (%v)", emoji, err)
+	}
+
+	for _, bad := range []string{"🔥/💧", "a b", "\x00", "way too many emoji 🔥🔥🔥"} {
+		if _, err := normalizeReaction(bad); err == nil {
+			t.Errorf("expected %q to be rejected", bad)
+		}
+	}
+}

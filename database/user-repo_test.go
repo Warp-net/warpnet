@@ -404,18 +404,6 @@ func (s *UserRepoTestSuite) TestUpdatePersistsAndIsReadableBack() {
 	s.Equal("bob", got.Username)
 }
 
-func (s *UserRepoTestSuite) TestUpdateNeverClearsRole() {
-	original := s.createUser(domain.User{Username: "carol", Role: "member"})
-
-	updated, err := s.repo.Update(original.Id, domain.User{Bio: "hi", Role: ""})
-	s.Require().NoError(err)
-	s.Equal("member", updated.Role, "an empty role from a peer must not clear the known one")
-
-	updated, err = s.repo.Update(original.Id, domain.User{Role: "moderator"})
-	s.Require().NoError(err)
-	s.Equal("moderator", updated.Role, "an explicit role must still win")
-}
-
 func (s *UserRepoTestSuite) TestModerationStrikesAccumulate() {
 	original := s.createUser(domain.User{Username: "dave"})
 

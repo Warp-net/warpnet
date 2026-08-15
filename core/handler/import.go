@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -63,9 +62,9 @@ type ImportNodeInformer interface {
 }
 
 type ImportMediaStorer interface {
-	GetImage(userId, key string) (database.Base64Image, error)
-	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
-	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
+	GetImage(userId, key string) (domain.Base64Image, error)
+	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
+	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
 }
 
 type ImportUserFetcher interface {

@@ -67,13 +67,12 @@ func (s *ReactionRepoTestSuite) TestReactAndUnreact() {
 	userId := ulid.Make().String()
 	tweetId := ulid.Make().String()
 
-	// React with the default
-	likes, err := s.repo.React(tweetId, userId, "", true)
+	likes, err := s.repo.React(tweetId, userId, "❤️", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
 	// React again (must not increment)
-	likes, err = s.repo.React(tweetId, userId, "", true)
+	likes, err = s.repo.React(tweetId, userId, "❤️", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), likes)
 
@@ -223,9 +222,9 @@ func (s *ReactionRepoTestSuite) TestReactors_Multiple() {
 	user1 := ulid.Make().String()
 	user2 := ulid.Make().String()
 
-	_, err := s.repo.React(tweetId, user1, "", true)
+	_, err := s.repo.React(tweetId, user1, "❤️", true)
 	s.Require().NoError(err)
-	_, err = s.repo.React(tweetId, user2, "", true)
+	_, err = s.repo.React(tweetId, user2, "❤️", true)
 	s.Require().NoError(err)
 
 	limit := uint64(10)
@@ -242,7 +241,7 @@ func (s *ReactionRepoTestSuite) TestReactions_SwitchKeepsTotal() {
 
 	_, err := s.repo.React(tweetId, user1, "🔥", true)
 	s.Require().NoError(err)
-	total, err := s.repo.React(tweetId, user2, "", true) // no emoji named -> heart
+	total, err := s.repo.React(tweetId, user2, "❤️", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(2), total)
 
@@ -308,21 +307,6 @@ func (s *ReactionRepoTestSuite) TestReactions_LegacyReactionIsAHeart() {
 	reactors, _, err := s.repo.Reactors(tweetId, &limit, nil)
 	s.Require().NoError(err)
 	s.ElementsMatch([]string{legacyUser, newUser}, reactors)
-}
-
-func (s *ReactionRepoTestSuite) TestReact_RejectsMalformedEmoji() {
-	tweetId := ulid.Make().String()
-	userId := ulid.Make().String()
-
-	_, err := s.repo.React(tweetId, userId, "🔥/💧", true) // key delimiter
-	s.Error(err)
-
-	_, err = s.repo.React(tweetId, userId, "not an emoji at all", true)
-	s.Error(err)
-
-	reactors, _, err := s.repo.Reactors(tweetId, nil, nil)
-	s.Require().NoError(err)
-	s.Empty(reactors) // nothing was stored
 }
 
 func (s *ReactionRepoTestSuite) TestReactions_InvalidParams() {
