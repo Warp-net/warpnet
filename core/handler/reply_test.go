@@ -52,13 +52,13 @@ func TestStreamNewReplyHandler(t *testing.T) {
 		return StreamNewTweetHandler(
 			stubTweetBroadcaster{},
 			stubAuth{owner: domain.Owner{UserId: owner}},
+			nil,
 			repo,
 			stubTimelineRepo{},
 			stubFollowChecker{},
 			userRepo,
 			notifier,
-			streamer,
-		)
+			streamer)
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -486,13 +486,13 @@ func TestHandleNewReply_ForwardRoute(t *testing.T) {
 		return StreamNewTweetHandler(
 			stubTweetBroadcaster{},
 			stubAuth{owner: domain.Owner{UserId: owner}},
+			nil,
 			stubTweetRepo{},
 			stubTimelineRepo{},
 			stubFollowChecker{},
 			stubReplyUserRepo{},
 			stubModerationNotifier{},
-			streamer,
-		)
+			streamer)
 	}
 
 	t.Run("uses the public reply route", func(t *testing.T) {

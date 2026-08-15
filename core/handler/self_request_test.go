@@ -283,7 +283,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			UserId:       "stranger",
 			Username:     "stranger",
 		}
-		h := StreamNewTweetHandler(stubTweetBroadcaster{}, auth, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
+		h := StreamNewTweetHandler(stubTweetBroadcaster{}, auth, nil, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
 		if _, err := h(marshal(t, ev), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -404,7 +404,7 @@ func TestStreamNewReplyHandler_OwnTweet_NodeIdFormatDrift(t *testing.T) {
 		Username:     "stranger",
 	}
 
-	h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
+	h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, nil, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
 	if _, err := h(marshal(t, ev), nil); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

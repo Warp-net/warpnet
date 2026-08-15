@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"io"
 	"slices"
@@ -96,7 +97,19 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		pubKey := warpnet.FromIDToPubKey(remotePeer)
+		sender := remotePeer
+		if remotePeer == s.Conn().LocalPeer() && msg.NodeId != "" {
+			if named := warpnet.FromStringToPeerID(msg.NodeId); named != "" {
+				sender = named
+			}
+		}
+
+		pubKey := warpnet.FromIDToPubKey(sender)
+		if len(pubKey) != ed25519.PublicKeySize {
+			log.Warnf("middleware: auth: no usable key for %s: route %s", sender, route)
+			_, _ = s.Write(ErrInternalNodeError.Bytes())
+			return
+		}
 		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
 			// Remote-side fault (foreign or outdated peer), not ours: warn, don't error.
 			log.Warnf("middleware: auth: signature invalid: %v: route %s, peer %s", err, route, remotePeer)
@@ -112,7 +125,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.Stre
 			return
 		}
 
-		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
+		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, sender, s.Conn().LocalPeer()) {
 			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
 			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
 			return
