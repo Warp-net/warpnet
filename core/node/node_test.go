@@ -511,3 +511,79 @@ func TestConnTracer_ClassifiesRealConnections(t *testing.T) {
 		tr.Disconnected(client.Node().Network(), conns[0])
 	})
 }
+
+// signedBy builds an envelope naming author as its sender and signed with
+// their key, which is what gossip relays into a self-stream.
+func signedBy(t *testing.T, author ed25519.PrivateKey, path stream.WarpRoute, body []byte) []byte {
+	t.Helper()
+
+	id, err := warpnet.IDFromPublicKey(author.Public().(ed25519.PublicKey))
+	require.NoError(t, err)
+
+	msg := warpevent.Message{
+		Body:        body,
+		MessageId:   "relayed",
+		NodeId:      id.String(),
+		Destination: string(path),
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	msg.Signature = security.Sign(author, msg.SigningBytes())
+
+	bt, err := json.Marshal(msg)
+	require.NoError(t, err)
+	return bt
+}
+
+// A self-stream carrying a foreign node's envelope must be treated as coming
+// from that node: its signature decides, and it gets no private-route waiver.
+func TestSelfStream_ForeignEnvelopeIsNotPrivileged(t *testing.T) {
+	n := newTestNode(t)
+
+	var reached []string
+	register := func(route stream.WarpRoute) {
+		n.SetStreamHandlers(warpnet.WarpStreamHandler{
+			Path: warpnet.WarpProtocolID(route),
+			Handler: func([]byte, warpnet.WarpStream) (any, error) {
+				reached = append(reached, string(route))
+				return []byte(`{"ok":true}`), nil
+			},
+		})
+	}
+	const publicRoute = stream.WarpRoute(warpevent.PUBLIC_POST_TWEET)
+	const privateRoute = stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK)
+	register(publicRoute)
+	register(privateRoute)
+
+	_, author, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	_, err = n.SelfStream(privateRoute, signedBy(t, author, privateRoute, []byte(`{}`)))
+	require.NoError(t, err)
+	assert.NotContains(t, reached, string(privateRoute),
+		"a relayed foreign payload must never reach a privileged handler")
+
+	_, err = n.SelfStream(publicRoute, signedBy(t, author, publicRoute, []byte(`{}`)))
+	require.NoError(t, err)
+	assert.Contains(t, reached, string(publicRoute),
+		"a followed author's update must reach the delivery handler")
+}
+
+// The owner's own calls still go through as the owner.
+func TestSelfStream_OwnEnvelopeKeepsPrivateAccess(t *testing.T) {
+	n := newTestNode(t)
+
+	var reached bool
+	route := stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK)
+	n.SetStreamHandlers(warpnet.WarpStreamHandler{
+		Path: warpnet.WarpProtocolID(route),
+		Handler: func([]byte, warpnet.WarpStream) (any, error) {
+			reached = true
+			return []byte(`{"ok":true}`), nil
+		},
+	})
+
+	_, err := n.SelfStream(route, signedEnvelope(t, n, route, []byte(`{}`)))
+	require.NoError(t, err)
+	assert.True(t, reached, "the owner's own private call must still be served")
+}

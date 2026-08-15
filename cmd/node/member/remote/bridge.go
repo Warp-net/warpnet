@@ -27,6 +27,7 @@ package remote
 import (
 	"crypto/ed25519"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
 	"net/url"
@@ -244,7 +245,14 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 		req.Timestamp = time.Now()
 	}
 	req.Timestamp = req.Timestamp.UTC()
-	req.Signature = security.Sign(b.auth.PrivateKey(), req.SigningBytes())
+	// The signing node names itself, never the client.
+	privKey := b.auth.PrivateKey()
+	ownNodeId, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	req.NodeId = ownNodeId.String()
+	req.Signature = security.Sign(privKey, req.SigningBytes())
 	respData, err := n.SelfStream(stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())

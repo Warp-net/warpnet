@@ -537,14 +537,14 @@ func TestGossip_MessageReachesAnotherNodeHandler(t *testing.T) {
 	}
 }
 
-func TestGossip_SelfPublishResignsAndForwards(t *testing.T) {
+func TestGossip_SelfPublishForwardsTheSendersOwnSignature(t *testing.T) {
 	g, node := runningGossip(t)
 
 	original := event.Message{
-		Body:        json.RawMessage(`{"text":"replayed"}`),
+		Body:        json.RawMessage(`{"text":"relayed"}`),
 		Destination: string(event.PUBLIC_POST_RETWEET),
 		Timestamp:   time.Now().UTC(),
-		Signature:   "not-a-real-signature",
+		Signature:   "senders-own-signature",
 	}
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
@@ -557,14 +557,8 @@ func TestGossip_SelfPublishResignsAndForwards(t *testing.T) {
 
 	var forwarded event.Message
 	require.NoError(t, json.Unmarshal(calls[0].data, &forwarded))
-	assert.NotEqual(t, "not-a-real-signature", forwarded.Signature,
-		"a relayed message must be re-signed by this node, not carry the sender's claim")
-
-	sig, err := base64.StdEncoding.DecodeString(forwarded.Signature)
-	require.NoError(t, err)
-	pub, err := node.host.Peerstore().PubKey(node.host.ID()).Raw()
-	require.NoError(t, err)
-	assert.True(t, ed25519.Verify(ed25519.PublicKey(pub), forwarded.SigningBytes(), sig))
+	assert.Equal(t, "senders-own-signature", forwarded.Signature,
+		"a relayed message keeps its sender's signature: the self-stream reports that sender, so it is the key the middleware checks")
 }
 
 func TestGossip_SelfPublishGetRouteIsStoreOnly(t *testing.T) {

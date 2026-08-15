@@ -470,7 +470,15 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_POST_TWEET,
+			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
+		},
+		{
+			event.PUBLIC_DELETE_TWEET,
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
