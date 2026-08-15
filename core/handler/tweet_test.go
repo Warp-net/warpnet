@@ -1467,7 +1467,7 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 					return domain.Tweet{ParentUserId: &parent}, nil
 				}
 				uf.GetFunc = func(string) (domain.User, error) {
-					return domain.User{NodeId: (&mockStreamer{}).NodeInfo().ID.String()}, nil
+					return domain.User{NodeId: s.NodeInfo().ID.String()}, nil
 				}
 				s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
 					t.Error("a delete must not leave the node that already holds the thread")
