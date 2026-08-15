@@ -227,31 +227,9 @@ func validatePoll(p *domain.Poll) error {
 }
 
 const (
-	ErrNotAReply      = warpnet.WarpError("reply: tweet has no parent")
-	ErrForeignThread  = warpnet.WarpError("reply: parent tweet does not live on this node")
-	ErrNotReplyAuthor = warpnet.WarpError("reply: delete does not come from the reply author")
+	ErrNotAReply     = warpnet.WarpError("reply: tweet has no parent")
+	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
 )
-
-// threadHomeNode returns the node hosting the thread a reply belongs to, named
-// by the parent tweet's author. It is this node when the parent is the owner's
-// or its author lives here, and empty when the parent author is unknown here.
-func threadHomeNode(parentUserId string, userRepo TweetUserFetcher, streamer TweetStreamer) (string, error) {
-	if parentUserId == "" {
-		return "", nil
-	}
-	ownNodeInfo := streamer.NodeInfo()
-	if parentUserId == ownNodeInfo.OwnerId {
-		return ownNodeInfo.ID.String(), nil
-	}
-	parentUser, err := userRepo.Get(parentUserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return parentUser.NodeId, nil
-}
 
 func StreamNewReplyHandler(
 	tweetRepo TweetsStorer,
@@ -290,57 +268,6 @@ func StreamNewReplyHandler(
 		}
 
 		return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)
-	}
-}
-
-// StreamDeleteReplyHandler accepts a reply deletion forwarded by the replier's
-// node, mirroring StreamNewReplyHandler. The thread also lives on the parent
-// author's node, so without this push a deleted reply lingers there - and on
-// an ActivityPub gateway it stays visible in the bridged Mastodon thread.
-func StreamDeleteReplyHandler(
-	tweetRepo TweetsStorer,
-	userRepo TweetUserFetcher,
-	streamer TweetStreamer,
-) warpnet.WarpHandlerFunc {
-	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		var ev event.DeleteTweetEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("empty user id")
-		}
-		if ev.TweetId == "" {
-			return nil, warpnet.WarpError("empty tweet id")
-		}
-
-		parent := replyParent(ev.ParentId, ev.RootId)
-		if parent == "" || parent == ev.TweetId {
-			return nil, ErrNotAReply
-		}
-
-		// The route is public, so authorize against the stored reply rather
-		// than against what the caller claims: it must be one this node holds,
-		// the delete must name its author, and its thread must be ours.
-		reply, err := tweetRepo.GetReply(
-			strings.TrimPrefix(parent, domain.RetweetPrefix),
-			strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix),
-		)
-		if err != nil || reply.ParentUserId == nil {
-			return nil, ErrForeignThread
-		}
-		if reply.UserId != ev.UserId {
-			return nil, ErrNotReplyAuthor
-		}
-		homeNodeId, err := threadHomeNode(*reply.ParentUserId, userRepo, streamer)
-		if err != nil {
-			return nil, err
-		}
-		if homeNodeId != streamer.NodeInfo().ID.String() {
-			return nil, ErrForeignThread
-		}
-
-		return deleteReply(ev, tweetRepo, userRepo, streamer)
 	}
 }
 
@@ -709,7 +636,6 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	reactionRepo ReactionTweetStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -729,7 +655,7 @@ func StreamDeleteTweetHandler(
 		// delete it from the thread index under its parent and forward the
 		// deletion to the parent author's node.
 		if parent := replyParent(ev.ParentId, ev.RootId); parent != "" && parent != ev.TweetId {
-			return deleteReply(ev, repo, userRepo, streamer)
+			return deleteReply(ev, repo, streamer)
 		}
 
 		// Deleting an own tweet only cleans up local state here; the shared
@@ -771,7 +697,6 @@ func StreamDeleteTweetHandler(
 func deleteReply(
 	ev event.DeleteTweetEvent,
 	repo TweetsStorer,
-	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 ) (any, error) {
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
@@ -779,43 +704,9 @@ func deleteReply(
 
 	// Mirror handleNewReply: only the replier's own node adjusts the
 	// network-wide (CRDT) counter.
-	reply, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId)
-	if err != nil {
+	if _, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId); err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
-	}
-
-	if reply.ParentUserId == nil {
-		return event.Accepted, nil
-	}
-
-	// Mirror handleNewReply's forward: the thread lives on the parent author's
-	// node too, so the deletion has to reach it. Nothing to forward when that
-	// node is this one, or when the parent author is unknown here.
-	homeNodeId, err := threadHomeNode(*reply.ParentUserId, userRepo, streamer)
-	if err != nil {
-		return nil, err
-	}
-	if homeNodeId == "" || homeNodeId == streamer.NodeInfo().ID.String() {
-		return event.Accepted, nil
-	}
-
-	// Forward normalized ids so the remote node deletes under the same key.
-	resp, err := streamer.GenericStream(
-		homeNodeId,
-		event.PUBLIC_DELETE_REPLY,
-		event.DeleteTweetEvent{TweetId: id, ParentId: parentId, UserId: ev.UserId},
-	)
-	if errors.Is(err, warpnet.ErrNodeIsOffline) {
-		return event.Accepted, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
-		log.Errorf("unmarshal other delete reply error response: %s", possibleError.Message)
 	}
 
 	return event.Accepted, nil
