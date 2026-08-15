@@ -37,7 +37,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
-	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -92,7 +91,7 @@ type WarpNode struct {
 
 	startTime        time.Time
 	eventsSub        event.Subscription
-	mw               *middleware.WarpMiddleware
+	mw               StreamMiddleware
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
@@ -200,7 +199,14 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-func (n *WarpNode) SetStreamMiddleware(mw *middleware.WarpMiddleware) {
+type StreamMiddleware interface {
+	LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
+	AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
+	UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
+	Close()
+}
+
+func (n *WarpNode) SetStreamMiddleware(mw StreamMiddleware) {
 	if n == nil || mw == nil {
 		return
 	}
