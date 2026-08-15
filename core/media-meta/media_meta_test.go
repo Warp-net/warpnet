@@ -349,3 +349,85 @@ func TestEmbedInVideo_RoundTripsThroughBase64(t *testing.T) {
 	var signed signedWatermark
 	assert.NoError(t, json.Unmarshal(decoded, &signed))
 }
+
+func TestVerifyImage_StrippedWatermarkIsRefused(t *testing.T) {
+	watermarked := watermarkedJPEG(t, "alice", 0x40)
+	require.NoError(t, VerifyImage(watermarked, signerID.String(), "alice"))
+
+	stripped, err := stripJPEGExif(watermarked)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, VerifyImage(stripped, signerID.String(), "alice"), ErrNoMetadata)
+}
+
+func TestVerifyVideo_StrippedWatermarkIsRefused(t *testing.T) {
+	watermarked := watermarkedMP4(t, "alice")
+	require.NoError(t, VerifyVideo(watermarked, signerID.String(), "alice"))
+
+	raw, _, err := SplitVideo(watermarked)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, VerifyVideo(raw, signerID.String(), "alice"), ErrNoMetadata)
+}
+
+func TestVerify_TamperedSignatureIsRefused(t *testing.T) {
+	rawJPEG := testJPEG(t, 0x40)
+	hash := security.ConvertToSHA256(rawJPEG)
+
+	watermarkBytes, err := watermark("alice").Sign(hash)
+	require.NoError(t, err)
+
+	var signed signedWatermark
+	require.NoError(t, json.Unmarshal(watermarkBytes, &signed))
+
+	flipped := []byte(signed.Signature)
+	flipped[0] ^= 'A' ^ 'B'
+	signed.Signature = string(flipped)
+
+	tampered, err := json.Marshal(signed)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, verify(tampered, hash, signerID.String(), "alice"), ErrForgedMetadata)
+}
+
+func TestVerify_UnknownVersionIsRefused(t *testing.T) {
+	rawJPEG := testJPEG(t, 0x40)
+	hash := security.ConvertToSHA256(rawJPEG)
+
+	watermarkBytes, err := watermark("alice").Sign(hash)
+	require.NoError(t, err)
+
+	var signed signedWatermark
+	require.NoError(t, json.Unmarshal(watermarkBytes, &signed))
+	signed.Version = metaVersion + 1
+
+	future, err := json.Marshal(signed)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, verify(future, hash, signerID.String(), "alice"), ErrNoMetadata)
+}
+
+func TestVerify_SignatureWithoutEncryptedMetaIsRefused(t *testing.T) {
+	rawJPEG := testJPEG(t, 0x40)
+	hash := security.ConvertToSHA256(rawJPEG)
+
+	empty := Watermark{PrivKey: signerKey, NodeId: signerID.String(), OwnerId: "alice"}
+	watermarkBytes, err := empty.Sign(hash)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, verify(watermarkBytes, hash, signerID.String(), "alice"), ErrNoMetadata)
+}
+
+func TestVerifyImage_GarbageInDescriptionTagIsRefused(t *testing.T) {
+	for name, payload := range map[string][]byte{
+		"not JSON":   []byte("just some text a camera wrote"),
+		"empty JSON": []byte("{}"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			file, err := EmbedInJPEG(testJPEG(t, 0x40), payload)
+			require.NoError(t, err)
+
+			assert.ErrorIs(t, VerifyImage(file, signerID.String(), "alice"), ErrNoMetadata)
+		})
+	}
+}

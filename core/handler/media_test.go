@@ -34,6 +34,8 @@ import (
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -162,6 +164,26 @@ func TestVerifyForeignMedia(t *testing.T) {
 			media_meta.ErrForgedMetadata)
 	})
 
+	t.Run("watermark of another node", func(t *testing.T) {
+		otherNode := domain.User{Id: "alice", NodeId: remoteNodeID}
+		assert.ErrorIs(t, verifyForeignImage(otherNode, key, file), media_meta.ErrForgedMetadata)
+	})
+
+	t.Run("watermark re-encoded away", func(t *testing.T) {
+		stripped, err := transcodeToJPEG(rawOf(t, file))
+		require.NoError(t, err)
+
+		naked := imagePrefix + base64.StdEncoding.EncodeToString(stripped)
+		assert.ErrorIs(t, verifyForeignImage(owner, "avatar", naked), media_meta.ErrNoMetadata)
+	})
+
+	t.Run("video with no watermark", func(t *testing.T) {
+		plain := "data:video/mp4;base64," + base64.StdEncoding.EncodeToString(minimalMP4())
+		assert.ErrorIs(t, verifyForeignVideo(
+			domain.User{Id: "alice", NodeId: testSignerID.String()}, "clip", plain),
+			media_meta.ErrNoMetadata)
+	})
+
 	t.Run("bridged fediverse media is out of scope", func(t *testing.T) {
 		bridged := domain.User{Id: "warpnet@mastodon.social", Network: mastodon.Network}
 		assert.NoError(t, verifyForeignImage(bridged, "https://mastodon.social/a.png", "data:image/png;base64,AAAA"))
@@ -177,4 +199,28 @@ func ownerOf(ownerId string) domain.User {
 
 func contentKeyOf(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
+}
+
+func TestUpload_StoresNothingWhenTheNodeCannotWatermark(t *testing.T) {
+	t.Run("image", func(t *testing.T) {
+		repo := newImageRepoDouble()
+
+		payload, err := json.Marshal(event.UploadImageEvent{Image1: testImagePNG})
+		require.NoError(t, err)
+
+		_, err = StreamUploadImageHandler(n{}, nil, repo, u{})(payload, s{})
+		assert.ErrorIs(t, err, media_meta.ErrNoSigningKey)
+		assert.Empty(t, repo.images)
+	})
+
+	t.Run("video", func(t *testing.T) {
+		repo := newVideoRepoDouble()
+
+		payload, err := json.Marshal(event.UploadVideoEvent{Video: mp4DataURL(minimalMP4())})
+		require.NoError(t, err)
+
+		_, err = StreamUploadVideoHandler(n{}, nil, repo, u{})(payload, s{})
+		assert.ErrorIs(t, err, media_meta.ErrNoSigningKey)
+		assert.Empty(t, repo.videos)
+	})
 }
