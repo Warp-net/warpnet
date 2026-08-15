@@ -103,7 +103,7 @@ func StreamUploadVideoHandler(
 			return nil, err
 		}
 
-		video, err := processVideo(ev.Video, watermark)
+		video, err := watermarkUploadedVideo(ev.Video, watermark)
 		if err != nil {
 			return nil, fmt.Errorf("upload: video: %w", err)
 		}
@@ -228,7 +228,7 @@ func acceptForeignVideo(u domain.User, key, file string) error {
 	return acceptForeignMedia(u, key, file, media_meta.VerifyVideo)
 }
 
-func watermarkVideo(videoBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
+func watermarkMP4(videoBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
 	raw, _, err := media_meta.SplitVideo(videoBytes)
 	if err != nil {
 		return nil, fmt.Errorf("meta data stripping: %w", err)
@@ -255,7 +255,7 @@ func watermarkVideo(videoBytes []byte, watermark media_meta.Watermark) ([]byte, 
 	return watermarked, nil
 }
 
-func processVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
+func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
 	header, videoBytes, err := splitDataURI(file)
 	if err != nil {
 		return "", err
@@ -274,7 +274,7 @@ func processVideo(file string, watermark media_meta.Watermark) (domain.Base64Vid
 		return "", ErrUnsupportedVideo
 	}
 
-	watermarked, err := watermarkVideo(videoBytes, watermark)
+	watermarked, err := watermarkMP4(videoBytes, watermark)
 	if err != nil {
 		return "", err
 	}

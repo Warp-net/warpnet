@@ -106,7 +106,7 @@ func StreamImportTweetHandler(
 			if i >= maxTweetImages {
 				break
 			}
-			photo, err := processImage(imagePrefix+img, watermark)
+			photo, err := watermarkUploadedImage(imagePrefix+img, watermark)
 			if err != nil {
 				log.Warnf("import: processing photo for tweet %s: %v", ev.Id, err)
 				continue

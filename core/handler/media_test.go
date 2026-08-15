@@ -57,7 +57,7 @@ func watermarkedImage(t *testing.T, ownerId string) (file, key string) {
 	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	img, err := processImage(testImagePNG, watermark)
+	img, err := watermarkUploadedImage(testImagePNG, watermark)
 	require.NoError(t, err)
 
 	return string(img), contentKeyOf(string(img))
@@ -69,7 +69,7 @@ func watermarkedVideo(t *testing.T, ownerId string) (file, key string) {
 	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	video, err := processVideo(mp4DataURL(minimalMP4()), watermark)
+	video, err := watermarkUploadedVideo(mp4DataURL(minimalMP4()), watermark)
 	require.NoError(t, err)
 
 	return string(video), contentKeyOf(string(video))
@@ -93,7 +93,7 @@ func TestUploadVideo_ReplacesAnInheritedMetaBox(t *testing.T) {
 	watermark, err := buildWatermark(signingInformer{"mallory"}.NodeInfo(), testSignerKey, ownerOf("mallory"))
 	require.NoError(t, err)
 
-	video, err := processVideo(inherited, watermark)
+	video, err := watermarkUploadedVideo(inherited, watermark)
 	require.NoError(t, err)
 
 	raw := rawOf(t, string(video))
@@ -118,7 +118,7 @@ func TestUploadVideo_HandlesOpenEndedTrailingBox(t *testing.T) {
 	watermark, err := buildWatermark(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
 	require.NoError(t, err)
 
-	video, err := processVideo(mp4DataURL(openEnded), watermark)
+	video, err := watermarkUploadedVideo(mp4DataURL(openEnded), watermark)
 	require.NoError(t, err)
 
 	assert.NoError(t, media_meta.VerifyVideo(

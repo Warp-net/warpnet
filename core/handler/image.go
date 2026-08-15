@@ -149,7 +149,7 @@ func StreamUploadImageHandler(
 				continue
 			}
 
-			img, err := processImage(file, watermark)
+			img, err := watermarkUploadedImage(file, watermark)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
 			}
@@ -345,7 +345,7 @@ func buildWatermark(
 	}, nil
 }
 
-func processImage(file string, watermark media_meta.Watermark) (domain.Base64Image, error) {
+func watermarkUploadedImage(file string, watermark media_meta.Watermark) (domain.Base64Image, error) {
 	_, imgBytes, err := splitDataURI(file)
 	if err != nil {
 		return "", err
@@ -356,7 +356,7 @@ func processImage(file string, watermark media_meta.Watermark) (domain.Base64Ima
 		return "", err
 	}
 
-	watermarked, err := watermarkImage(jpegBytes, watermark)
+	watermarked, err := watermarkJPEG(jpegBytes, watermark)
 	if err != nil {
 		return "", err
 	}
@@ -387,7 +387,7 @@ func transcodeToJPEG(imgBytes []byte) ([]byte, error) {
 	return imageBuf.Bytes(), nil
 }
 
-func watermarkImage(jpegBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
+func watermarkJPEG(jpegBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
 	watermarkBytes, err := watermark.Sign(security.ConvertToSHA256(jpegBytes))
 	if err != nil {
 		return nil, fmt.Errorf("meta data signing: %w", err)
