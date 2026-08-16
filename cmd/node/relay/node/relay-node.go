@@ -70,6 +70,7 @@ type RelayNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
 	opts              []warpnet.WarpOption
+	mw                *middleware.WarpMiddleware
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
@@ -194,7 +195,12 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.node.SetStreamMiddleware(middleware.NewWarpMiddleware(rn.node.Node().ID(), nil))
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
+	rn.node.SetStreamMiddlewares(
+		rn.mw.LoggingMiddleware,
+		rn.mw.AuthMiddleware,
+		rn.mw.IdempotencyMiddleware,
+	)
 
 	//nolint:govet
 	rn.node.SetStreamHandlers(
@@ -286,6 +292,9 @@ func (rn *RelayNode) Stop() {
 		if err := rn.memoryStoreCloseF(); err != nil {
 			log.Errorf("relay: failed to close memory store: %v", err)
 		}
+	}
+	if rn.mw != nil {
+		rn.mw.Close()
 	}
 
 	rn.node.StopNode()

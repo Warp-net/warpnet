@@ -69,6 +69,9 @@ const messageFreshnessWindow = 5 * time.Minute
 const (
 	MaxLimit              = units.MiB * 50
 	InternalNodeErrorCode = 5000
+	// EmptyResponseMessage is the fallback envelope message written when a
+	// handler returns no payload; such replies are never cached as idempotent.
+	EmptyResponseMessage = "empty response"
 )
 
 type AliasPairer interface {

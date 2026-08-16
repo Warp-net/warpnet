@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
+	"bytes"
 	"reflect"
 	"runtime"
 	"strings"
@@ -36,6 +36,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
@@ -46,44 +49,83 @@ const (
 	idempotencyMaxPayloadBytes = 64 * 1024 // 64 KiB
 )
 
-func (p *WarpMiddleware) IdempotencyStreamMiddleware(handler warpnet.StreamHandler) warpnet.StreamHandler {
+// IdempotencyMiddleware deduplicates POST requests retried with the same
+// message id (double-clicks, network retries): the first request runs
+// downstream and its reply is cached, replays are answered from the cache
+// without re-executing the side effect, and concurrent same-key requests
+// share a single downstream invocation.
+func (p *WarpMiddleware) IdempotencyMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
+		typedStream, ok := s.(*warpnet.WarpStreamBody)
+		if !ok || p.idempotency == nil || typedStream.MessageId == "" ||
+			!isIdempotencyApplicable(string(s.Protocol())) {
+			next(s)
+			return
+		}
+
+		// Downstream only writes to the recorder, so the reply to this
+		// stream (and its closing) is owned here.
 		defer func() {
 			_ = s.Close()
 		}()
 
-		var (
-			data      []byte
-			messageID string
-		)
+		// Scope the key by authenticated remote peer so two peers
+		// can't collide on the same message id within the TTL window.
+		var peerID string
+		if conn := s.Conn(); conn != nil {
+			peerID = conn.RemotePeer().String()
+		}
+		cacheKey := idempotencyKey(string(s.Protocol()), peerID, typedStream.MessageId)
 
-		typedStream, ok := s.(*warpnet.WarpStreamBody)
-		if !ok {
+		payload, err := p.idempotency.do(cacheKey, func() ([]byte, bool, error) {
+			recorder := &responseRecorder{WarpStream: typedStream.WarpStream}
+			next(&warpnet.WarpStreamBody{
+				WarpStream: recorder,
+				Body:       typedStream.Body,
+				MessageId:  typedStream.MessageId,
+			})
+			response := recorder.buf.Bytes()
+			return response, isCacheableResponse(response), nil
+		})
+		if err != nil {
+			log.Errorf("middleware: idempotency: %v", err)
+		}
+		if len(payload) == 0 {
 			return
 		}
-		data = typedStream.Body
-		messageID = typedStream.MessageId
-
-		protocol := string(s.Protocol())
-		idempotent := p.idempotency != nil && messageID != "" && isIdempotencyApplicable(protocol)
-		var cacheKey string
-		if idempotent {
-			var peerID string
-			if conn := s.Conn(); conn != nil {
-				peerID = conn.RemotePeer().String()
-			}
-			cacheKey = idempotencyKey(protocol, peerID, messageID)
+		if _, werr := s.Write(payload); werr != nil {
+			log.Errorf("middleware: idempotency: writing response to stream: %v", werr)
 		}
-
-		if idempotent {
-			payload, err = p.idempotency.do(cacheKey, func() ([]byte, bool, error) {
-				return p.runHandler(handler, data, s)
-			})
-		} else {
-			payload, _, err = runHandler(handler, data, s)
-		}
-
 	}
+}
+
+// responseRecorder captures downstream writes instead of forwarding them, so
+// the recorded payload can be both cached and written back by the middleware.
+// Close is swallowed too: the wrapped stream must stay writable after the
+// downstream handler finishes.
+type responseRecorder struct {
+	warpnet.WarpStream
+
+	buf bytes.Buffer
+}
+
+func (r *responseRecorder) Write(p []byte) (int, error) { return r.buf.Write(p) }
+func (r *responseRecorder) Close() error                { return nil }
+func (r *responseRecorder) CloseWrite() error           { return nil }
+
+// isCacheableResponse reports whether payload is a successful reply. Error
+// envelopes (non-zero code, or the empty-response fallback) must not be
+// pinned in the cache: a transient failure would otherwise replay for the
+// whole TTL.
+func isCacheableResponse(payload []byte) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	var respErr event.ResponseError
+	if err := json.Unmarshal(payload, &respErr); err != nil {
+		return true // not an error envelope — a raw or custom payload
+	}
+	return respErr.Code == 0 && respErr.Message != EmptyResponseMessage
 }
 
 type idempotencyCache struct {

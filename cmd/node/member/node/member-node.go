@@ -60,6 +60,7 @@ type MemberNode struct {
 
 	node *node.WarpNode
 	opts []warpnet.WarpOption
+	mw   *middleware.WarpMiddleware
 
 	discService      DiscoveryHandler
 	mdnsService      MDNSStarterCloser
@@ -210,8 +211,11 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.node.SetStreamMiddleware(
-		middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo),
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
+	m.node.SetStreamMiddlewares(
+		m.mw.LoggingMiddleware,
+		m.mw.AuthMiddleware,
+		m.mw.IdempotencyMiddleware,
 	)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
@@ -923,6 +927,9 @@ func (m *MemberNode) Stop() {
 		if err := m.nodeRepo.Close(); err != nil {
 			log.Errorf("member: failed to close node repo: %v", err)
 		}
+	}
+	if m.mw != nil {
+		m.mw.Close()
 	}
 	m.node.StopNode()
 }

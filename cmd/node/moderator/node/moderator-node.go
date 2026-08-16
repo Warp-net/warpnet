@@ -56,6 +56,7 @@ type ModeratorNode struct {
 
 	node    *node.WarpNode
 	options []libp2p.Option
+	mw      *middleware.WarpMiddleware
 
 	dHashTable DistributedHashTableDiscoverer
 
@@ -137,7 +138,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.node.SetStreamMiddleware(middleware.NewWarpMiddleware(mn.node.Node().ID(), nil))
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
+	mn.node.SetStreamMiddlewares(
+		mn.mw.LoggingMiddleware,
+		mn.mw.AuthMiddleware,
+		mn.mw.IdempotencyMiddleware,
+	)
 
 	//nolint:govet
 	mn.node.SetStreamHandlers(
@@ -211,6 +217,9 @@ func (mn *ModeratorNode) Stop() {
 		if err := mn.memoryStoreCloseF(); err != nil {
 			log.Errorf("moderator: failed to close memory store: %v", err)
 		}
+	}
+	if mn.mw != nil {
+		mn.mw.Close()
 	}
 
 	mn.node.StopNode()

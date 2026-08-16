@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -91,7 +92,7 @@ type WarpNode struct {
 
 	startTime        time.Time
 	eventsSub        event.Subscription
-	mw               StreamMiddleware
+	middlewares      []StreamMiddleware
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
@@ -199,35 +200,33 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-type StreamMiddleware interface {
-	LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
-	AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
-	UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
-	Close()
-}
+// StreamMiddleware decorates a raw stream handler.
+type StreamMiddleware func(next warpnet.StreamHandler) warpnet.StreamHandler
 
-func (n *WarpNode) SetStreamMiddleware(mw StreamMiddleware) {
-	if n == nil || mw == nil {
+// SetStreamMiddlewares registers the middleware chain applied to every
+// handler. Order matters: the first middleware is the outermost.
+func (n *WarpNode) SetStreamMiddlewares(mws ...StreamMiddleware) {
+	if n == nil || len(mws) == 0 {
 		return
 	}
-	n.mw = mw
+	n.middlewares = mws
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
-	if n.mw == nil {
-		panic("node: stream middleware is not set")
+	if len(n.middlewares) == 0 {
+		panic("node: stream middlewares are not set")
 	}
 
-	logMw := n.mw.LoggingMiddleware
-	authMw := n.mw.AuthMiddleware
-	unwrapMw := n.mw.UnwrapStreamMiddleware
-
 	for _, h := range handlers {
-		streamHandler := logMw(authMw(unwrapMw(h.Handler)))
-
 		if !h.IsValid() {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
+
+		streamHandler := n.unwrap(h.Handler)
+		for _, mw := range slices.Backward(n.middlewares) {
+			streamHandler = mw(streamHandler)
+		}
+
 		n.node.SetStreamHandler(h.Path, streamHandler)
 		n.internalHandlers[h.Path] = streamHandler
 	}
@@ -493,10 +492,6 @@ func (n *WarpNode) StopNode() {
 		log.Errorf("node: failed to close: %v", err)
 	}
 	log.Infoln("node: stopped")
-
-	if n.mw != nil {
-		n.mw.Close()
-	}
 
 	n.isClosed.Store(true)
 	n.node = nil
