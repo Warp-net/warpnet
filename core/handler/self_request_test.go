@@ -181,8 +181,9 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			return domain.Chat{Id: id, OwnerId: owner, OtherUserId: owner}, nil
 		}}
 		h := StreamNewMessageHandler(repo, ownerChatUserRepo, stubModerationNotifier{}, streamer)
+		_, ownConn := stream.NewLoopbackStream(ownerPeerID, ownerPeerID, "/test/route/0.0.0")
 		// chatId must contain ":" to satisfy the parameter validation.
-		if _, err := h(marshal(t, event.NewMessageEvent{ChatId: owner + ":" + owner, SenderId: owner, ReceiverId: owner, Text: "hi"}), nil); err != nil {
+		if _, err := h(marshal(t, event.NewMessageEvent{ChatId: owner + ":" + owner, SenderId: owner, ReceiverId: owner, Text: "hi"}), ownConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})

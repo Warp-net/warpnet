@@ -31,8 +31,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
 )
 
@@ -40,20 +38,6 @@ type middlewareError string
 
 func (e middlewareError) Error() string {
 	return string(e)
-}
-
-// Bytes renders the error as event.ResponseError, the shape callers already
-// parse. A bare JSON array would reach them as an unmarshal failure instead
-// of the actual reason.
-func (e middlewareError) Bytes() []byte {
-	bt, err := json.Marshal(event.ResponseError{
-		Code:    InternalNodeErrorCode,
-		Message: string(e),
-	})
-	if err != nil {
-		return []byte(e)
-	}
-	return bt
 }
 
 const (

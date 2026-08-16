@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
+	"runtime/debug"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -37,6 +39,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -91,7 +94,7 @@ type WarpNode struct {
 
 	startTime        time.Time
 	eventsSub        event.Subscription
-	mw               StreamMiddleware
+	middlewares      []StreamMiddleware
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
@@ -199,37 +202,97 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-type StreamMiddleware interface {
-	LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
-	AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler
-	UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
-	Close()
-}
+type StreamMiddleware func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc
 
-func (n *WarpNode) SetStreamMiddleware(mw StreamMiddleware) {
-	if n == nil || mw == nil {
+func (n *WarpNode) SetStreamMiddlewares(mws ...StreamMiddleware) {
+	if n == nil || len(mws) == 0 {
 		return
 	}
-	n.mw = mw
+	n.middlewares = mws
 }
 
 func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
-	if n.mw == nil {
-		panic("node: stream middleware is not set")
-	}
-
-	logMw := n.mw.LoggingMiddleware
-	authMw := n.mw.AuthMiddleware
-	unwrapMw := n.mw.UnwrapStreamMiddleware
-
 	for _, h := range handlers {
-		streamHandler := logMw(authMw(unwrapMw(h.Handler)))
-
 		if !h.IsValid() {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
+
+		handler := h.Handler
+		for _, mw := range slices.Backward(n.middlewares) {
+			handler = mw(handler)
+		}
+
+		streamHandler := n.unwrap(handler)
 		n.node.SetStreamHandler(h.Path, streamHandler)
 		n.internalHandlers[h.Path] = streamHandler
+	}
+}
+
+func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
+	return func(s warpnet.WarpStream) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("node: unwrap: panic: %v %s", r, debug.Stack())
+			}
+			_ = s.Close()
+		}()
+
+		limit := int64(middleware.MaxLimit)
+		reader := io.LimitReader(s, limit+1)
+		data, err := io.ReadAll(reader)
+		if err != nil && !errors.Is(err, io.EOF) {
+			log.Errorf("node: unwrap: reading from stream: %v", err)
+			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
+			return
+		}
+		if int64(len(data)) > limit {
+			log.Errorf("node: unwrap: %s: payload exceeds the %d byte limit", s.Protocol(), limit)
+			_ = s.Reset()
+			return
+		}
+
+		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+
+		response, err := handler(data, s)
+		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
+			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
+		}
+		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			clip := data
+			if len(clip) > 500 { //nolint:mnd
+				clip = clip[:500]
+			}
+			log.Errorf("node: unwrap: handling of %s %s message: %s failed: %v\n",
+				s.Protocol(), s.Conn().RemotePeer(), string(clip), err)
+			response = warpevent.ResponseError{Code: middleware.InternalNodeErrorCode, Message: err.Error()}
+		}
+
+		payload, err := marshalResponse(response)
+		if err != nil {
+			log.Errorf("node: unwrap: encoding response: %v %v", response, err)
+			return
+		}
+
+		log.Debugf("<<< STREAM RESPONSE: %s %s\n", string(s.Protocol()), string(payload))
+		if len(payload) == 0 {
+			return
+		}
+		if _, werr := s.Write(payload); werr != nil {
+			log.Errorf("node: unwrap: writing response to stream: %v", werr)
+		}
+	}
+}
+
+func marshalResponse(response any) ([]byte, error) {
+	switch typed := response.(type) {
+	case nil:
+		return json.Marshal(warpevent.ResponseError{Message: "empty response"})
+	case []byte:
+		return typed, nil
+	case string:
+		return []byte(typed), nil
+	default:
+		return json.Marshal(response)
 	}
 }
 
@@ -493,10 +556,6 @@ func (n *WarpNode) StopNode() {
 		log.Errorf("node: failed to close: %v", err)
 	}
 	log.Infoln("node: stopped")
-
-	if n.mw != nil {
-		n.mw.Close()
-	}
 
 	n.isClosed.Store(true)
 	n.node = nil

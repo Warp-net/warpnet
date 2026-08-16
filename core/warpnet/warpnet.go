@@ -190,7 +190,6 @@ type (
 type WarpStreamBody struct {
 	WarpStream
 
-	Body      []byte
 	MessageId string
 }
 

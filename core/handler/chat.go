@@ -317,12 +317,12 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 
 		sender, err := userRepo.Get(ev.SenderId)
 		if err != nil || sender.NodeId == "" {
-			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.SenderId)
+			log.Warnf("chat: dropping message claiming to be from %s", ev.SenderId)
 			return nil, ErrForeignTweetAuthor
 		}
 
-		if sender.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.SenderId)
+		if s == nil || s.Conn() == nil || sender.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("chat: dropping message claiming to be from %s", ev.SenderId)
 			return nil, ErrForeignTweetAuthor
 		}
 

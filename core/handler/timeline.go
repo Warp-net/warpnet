@@ -87,7 +87,7 @@ func StreamTimelineNewTweetHandler(
 			return nil, ErrForeignTweetAuthor
 		}
 
-		if author.NodeId != s.Conn().RemotePeer().String() {
+		if s == nil || s.Conn() == nil || author.NodeId != s.Conn().RemotePeer().String() {
 			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
 			return nil, ErrForeignTweetAuthor
 		}

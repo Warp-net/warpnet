@@ -4,11 +4,9 @@
 package middleware
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
-	"io"
 	"testing"
 	"time"
 
@@ -54,73 +52,6 @@ func TestIsFresh_DefaultsWindow(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
-	mw := NewWarpMiddleware("peer1", nil)
-	defer mw.Close()
-
-	var handlerCalled bool
-	handler := mw.AuthMiddleware(func(s warpnet.WarpStream) {
-		handlerCalled = true
-		_, _ = s.Write([]byte(`{"ok":true}`))
-	})
-
-	client, server := stream.NewLoopbackStream("peer1", "peer1", "/private/post/video/0.0.0")
-	go handler(server)
-
-	limit := int64(MaxLimit)
-	payload := bytes.Repeat([]byte("A"), int(limit)+4096)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
-		_, _ = client.Write(payload)
-		_ = client.CloseWrite()
-		_, _ = io.ReadAll(client)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(20 * time.Second):
-		t.Fatal("oversized payload deadlocked the caller")
-	}
-
-	if handlerCalled {
-		t.Error("an over-limit payload must never reach the wrapped handler")
-	}
-}
-
-func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
-	mw := NewWarpMiddleware("peer1", nil)
-	defer mw.Close()
-
-	limit := int64(MaxLimit)
-	client, server := stream.NewLoopbackStream("peer1", "peer1", "/private/post/video/0.0.0")
-	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
-
-	payload := bytes.Repeat([]byte("A"), int(limit))
-
-	done := make(chan struct{})
-	var resp []byte
-	go func() {
-		defer close(done)
-		_ = client.SetDeadline(time.Now().Add(30 * time.Second))
-		_, _ = client.Write(payload)
-		_ = client.CloseWrite()
-		resp, _ = io.ReadAll(client)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(20 * time.Second):
-		t.Fatal("payload at the limit deadlocked")
-	}
-
-	if len(resp) == 0 {
-		t.Error("a payload at the ceiling must still get a response")
-	}
-}
-
 type remoteConn struct {
 	network.Conn
 
@@ -151,10 +82,10 @@ func newRemotePeer(t *testing.T) (warpnet.WarpPeerID, ed25519.PrivateKey) {
 	return id, priv
 }
 
-func callPeer(
-	t *testing.T, handler warpnet.StreamHandler, ownNodeId, peer warpnet.WarpPeerID,
+func callAsRemotePeer(
+	t *testing.T, mw *WarpMiddleware, ownNodeId, peer warpnet.WarpPeerID,
 	privKey ed25519.PrivateKey, route string,
-) []byte {
+) (reached bool, err error) {
 	t.Helper()
 
 	msg := event.Message{
@@ -165,39 +96,26 @@ func callPeer(
 		Timestamp:   time.Now().UTC(),
 	}
 	msg.Signature = security.Sign(privKey, msg.SigningBytes())
-	payload, err := json.Marshal(msg)
-	if err != nil {
-		t.Fatalf("marshal message: %v", err)
+	payload, merr := json.Marshal(msg)
+	if merr != nil {
+		t.Fatalf("marshal message: %v", merr)
 	}
 
 	client, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, warpnet.WarpProtocolID(route))
-	go handler(remoteStream{
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+
+	handler := mw.AuthMiddleware(func(data []byte, s warpnet.WarpStream) (any, error) {
+		reached = true
+		return []byte(`["ok"]`), nil
+	})
+	_, err = handler(payload, remoteStream{
 		WarpStream: server,
 		conn:       remoteConn{local: ownNodeId, remote: peer},
 	})
-
-	_ = client.SetDeadline(time.Now().Add(10 * time.Second))
-	if _, err := client.Write(payload); err != nil {
-		t.Fatalf("write request: %v", err)
-	}
-	_ = client.CloseWrite()
-	resp, _ := io.ReadAll(client)
-	return resp
-}
-
-func callAsRemotePeer(
-	t *testing.T, mw *WarpMiddleware, ownNodeId, peer warpnet.WarpPeerID,
-	privKey ed25519.PrivateKey, route string,
-) (reached bool, resp []byte) {
-	t.Helper()
-
-	handler := mw.AuthMiddleware(func(s warpnet.WarpStream) {
-		reached = true
-		_, _ = s.Write([]byte(`["ok"]`))
-		_ = s.Close()
-	})
-	resp = callPeer(t, handler, ownNodeId, peer, privKey, route)
-	return reached, resp
+	return reached, err
 }
 
 func TestAuthMiddleware_PrivateRouteDeniedForForeignPeer(t *testing.T) {
@@ -213,12 +131,12 @@ func TestAuthMiddleware_PrivateRouteDeniedForForeignPeer(t *testing.T) {
 		"/private/post/user/0.0.0",
 		"/private/post/notification/settings/0.0.0",
 	} {
-		reached, resp := callAsRemotePeer(t, mw, ownNodeId, attacker, attackerKey, route)
+		reached, err := callAsRemotePeer(t, mw, ownNodeId, attacker, attackerKey, route)
 		if reached {
 			t.Errorf("%s: a foreign peer must not reach the handler", route)
 		}
-		if !bytes.Contains(resp, []byte(ErrUnknownClientPeer.Error())) {
-			t.Errorf("%s: expected an unknown client peer response, got %s", route, resp)
+		if !errors.Is(err, ErrUnknownClientPeer) {
+			t.Errorf("%s: expected an unknown client peer error, got %v", route, err)
 		}
 	}
 }
@@ -315,6 +233,45 @@ func TestAuthMiddleware_LegacyReplyRoutesDenied(t *testing.T) {
 		if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, route); reached {
 			t.Errorf("%s: must not be reachable by a foreign peer", route)
 		}
+	}
+}
+
+func TestAuthMiddleware_TamperedBodyIsRejected(t *testing.T) {
+	ownNodeId, _ := newRemotePeer(t)
+	peer, key := newRemotePeer(t)
+
+	mw := NewWarpMiddleware(ownNodeId, nil)
+	defer mw.Close()
+
+	route := "/public/get/tweets/0.0.0"
+	msg := event.Message{
+		Body:        json.RawMessage(`{"original":true}`),
+		MessageId:   "01J0000000000000000000000",
+		NodeId:      peer.String(),
+		Destination: route,
+		Timestamp:   time.Now().UTC(),
+	}
+	msg.Signature = security.Sign(key, msg.SigningBytes())
+	msg.Body = json.RawMessage(`{"tampered":true}`)
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
+
+	_, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, warpnet.WarpProtocolID(route))
+	t.Cleanup(func() { _ = server.Close() })
+
+	var reached bool
+	_, aerr := mw.AuthMiddleware(func([]byte, warpnet.WarpStream) (any, error) {
+		reached = true
+		return nil, nil
+	})(payload, remoteStream{WarpStream: server, conn: remoteConn{local: ownNodeId, remote: peer}})
+
+	if reached {
+		t.Error("a tampered body must not reach the handler")
+	}
+	if !errors.Is(aerr, ErrInternalNodeError) {
+		t.Errorf("expected internal node error, got %v", aerr)
 	}
 }
 

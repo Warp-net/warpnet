@@ -20,7 +20,7 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 	ev := event.NewTweetEvent{Id: "t1", UserId: "friend-1", Text: "hello"}
 
 	newHandler := func(users TweetUserFetcher, following bool, created, timelined *bool) warpnet.WarpHandlerFunc {
-		return StreamTimelineTweetHandler(
+		return StreamTimelineNewTweetHandler(
 			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
 				*created = true

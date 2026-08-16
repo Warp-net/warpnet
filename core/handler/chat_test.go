@@ -102,7 +102,15 @@ func (s stubUserRepo) Get(userId string) (domain.User, error) {
 	if s.getFn != nil {
 		return s.getFn(userId)
 	}
-	return domain.User{Id: userId, NodeId: "node-2"}, nil
+	return domain.User{Id: userId, NodeId: senderNodeId}, nil
+}
+
+var senderNodeId = warpnet.WarpPeerID("node-2").String()
+
+func senderConn(t *testing.T) warpnet.WarpStream {
+	t.Helper()
+	_, server := stream.NewLoopbackStream("node-2", "node-2", "/test/route/0.0.0")
+	return server
 }
 
 type stubStreamer struct {
@@ -343,6 +351,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	owner := "owner-1"
 	receiver := "receiver-1"
 	chatID := "owner-1:receiver-1"
+	conn := senderConn(t)
 
 	makeHandler := func(repo stubChatRepo, users stubUserRepo, streamer stubStreamer) warpnet.WarpHandlerFunc {
 		streamer.nodeInfo.OwnerId = owner
@@ -351,30 +360,30 @@ func TestStreamNewMessageHandler(t *testing.T) {
 
 	bad := []event.NewMessageEvent{{}, {ChatId: "abc", Text: "x", SenderId: owner, ReceiverId: receiver}, {ChatId: chatID, SenderId: owner, ReceiverId: receiver}}
 	for _, ev := range bad {
-		_, err := makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, ev), nil)
+		_, err := makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, ev), conn)
 		if err == nil {
 			t.Fatalf("expected invalid message params for %#v", ev)
 		}
 	}
 
-	_, err := makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: "", ReceiverId: receiver}), nil)
+	_, err := makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: "", ReceiverId: receiver}), conn)
 	if err == nil || err.Error() != "sender and receiver parameters are invalid" {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
-	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("a", messageLimit+1), SenderId: owner, ReceiverId: receiver}), nil)
+	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("a", messageLimit+1), SenderId: owner, ReceiverId: receiver}), conn)
 	if err == nil || err.Error() != "message is too long" {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
 	// The limit counts runes: a message of emoji is four bytes per character,
 	// so a byte-counted limit would reject this one at a quarter of its length.
-	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("😀", messageLimit), SenderId: owner, ReceiverId: receiver}), nil)
+	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("😀", messageLimit), SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil && err.Error() == "message is too long" {
 		t.Fatalf("emoji message within the rune limit was rejected: %v", err)
 	}
 
-	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("😀", messageLimit+1), SenderId: owner, ReceiverId: receiver}), nil)
+	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: strings.Repeat("😀", messageLimit+1), SenderId: owner, ReceiverId: receiver}), conn)
 	if err == nil || err.Error() != "message is too long" {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -387,19 +396,19 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		if userId == receiver {
 			return domain.User{Id: userId, Network: mastodon.Network}, nil
 		}
-		return domain.User{Id: userId, NodeId: "node-2"}, nil
-	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+		return domain.User{Id: userId, NodeId: senderNodeId}, nil
+	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if !errors.Is(err, mastodon.ErrNotSupported) {
 		t.Fatalf("expected ErrNotSupported, got: %v", err)
 	}
 
-	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: "u1", ReceiverId: "u2"}), nil)
+	_, err = makeHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: "u1", ReceiverId: "u2"}), conn)
 	if err == nil || err.Error() != "not authorized to send message to this chat" {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
 	repoErr := errors.New("repo")
-	_, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) { return domain.Chat{}, repoErr }}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	_, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) { return domain.Chat{}, repoErr }}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if !errors.Is(err, repoErr) {
 		t.Fatalf("expected repo error: %v", err)
 	}
@@ -408,28 +417,28 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.Chat{}, database.ErrChatNotFound
 	}, createChatFn: func(chatId *string, ownerId, otherUserId string) (domain.Chat, error) {
 		return domain.Chat{}, repoErr
-	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: receiver, ReceiverId: owner}), nil)
+	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: receiver, ReceiverId: owner}), conn)
 	if !errors.Is(err, repoErr) {
 		t.Fatalf("expected create chat error: %v", err)
 	}
 
 	_, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: "u3", OtherUserId: "u4"}, nil
-	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err == nil || err.Error() != "not authorized for this chat" {
 		t.Fatalf("unexpected err: %v", err)
 	}
 
 	_, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
-	}, createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) { return domain.ChatMessage{}, repoErr }}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}, createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) { return domain.ChatMessage{}, repoErr }}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if !errors.Is(err, repoErr) {
 		t.Fatalf("expected create msg error: %v", err)
 	}
 
 	resp, err := makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: owner}, nil
-	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "self", SenderId: owner, ReceiverId: owner}), nil)
+	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "self", SenderId: owner, ReceiverId: owner}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "" {
 		t.Fatalf("unexpected self chat result: %#v err=%v", resp, err)
 	}
@@ -438,7 +447,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.Chat{}, database.ErrChatNotFound
 	}, createChatFn: func(chatId *string, ownerId, otherUserId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: receiver, OtherUserId: owner}, nil
-	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "incoming", SenderId: receiver, ReceiverId: owner}), nil)
+	}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "incoming", SenderId: receiver, ReceiverId: owner}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Text != "incoming" {
 		t.Fatalf("unexpected incoming result: %#v err=%v", resp, err)
 	}
@@ -454,7 +463,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 			return domain.Chat{Id: chatID, OwnerId: receiver, OtherUserId: owner}, nil
 		}},
 		stubUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, Username: "sender-name"}, nil
+			return domain.User{Id: userId, Username: "sender-name", NodeId: senderNodeId}, nil
 		}},
 		stubModerationNotifier{addFn: func(not domain.Notification) error {
 			notified = not
@@ -462,7 +471,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		}},
 		streamer,
 	)
-	if _, err := incomingHandler(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "hi", SenderId: receiver, ReceiverId: owner}), nil); err != nil {
+	if _, err := incomingHandler(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "hi", SenderId: receiver, ReceiverId: owner}), conn); err != nil {
 		t.Fatalf("unexpected incoming notification err: %v", err)
 	}
 	if notified.Type != domain.NotificationMessageType || notified.RecepientId != owner || notified.Text != "sender-name sent you a message" {
@@ -472,15 +481,23 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) {
+		if userId == owner {
+			return domain.User{Id: userId, NodeId: senderNodeId}, nil
+		}
 		return domain.User{}, database.ErrUserNotFound
-	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "" {
 		t.Fatalf("unexpected user not found branch: %#v err=%v", resp, err)
 	}
 
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
-	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) { return domain.User{}, repoErr }}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) {
+		if userId == owner {
+			return domain.User{Id: userId, NodeId: senderNodeId}, nil
+		}
+		return domain.User{}, repoErr
+	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
 		t.Fatalf("expected undelivered on receiver resolve error: %#v err=%v", resp, err)
 	}
@@ -489,7 +506,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 		return nil, warpnet.ErrNodeIsOffline
-	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
 		t.Fatalf("expected undelivered offline: %#v err=%v", resp, err)
 	}
@@ -498,7 +515,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 		return nil, repoErr
-	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
 		t.Fatalf("expected undelivered on stream error: %#v err=%v", resp, err)
 	}
@@ -508,7 +525,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 		return remoteErr, nil
-	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
 		t.Fatalf("expected undelivered due to remote payload err: %#v err=%v", resp, err)
 	}
@@ -517,7 +534,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
 	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 		return []byte("{}"), nil
-	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), nil)
+	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "" {
 		t.Fatalf("expected delivered result: %#v err=%v", resp, err)
 	}
@@ -527,6 +544,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	owner := "owner-1"
 	receiver := "receiver-1"
 	chatID := "owner-1:receiver-1"
+	conn := senderConn(t)
 
 	makeHandler := func(repo stubChatRepo, streamer stubStreamer) warpnet.WarpHandlerFunc {
 		streamer.nodeInfo.OwnerId = owner
@@ -558,7 +576,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	resp, err := makeHandler(repo, streamer)(marshal(t, event.NewMessageEvent{
 		ChatId: chatID, SenderId: owner, ReceiverId: receiver,
 		ImageKeys: []string{posterKey}, VideoKey: &videoKey,
-	}), nil)
+	}), conn)
 	if err != nil {
 		t.Fatalf("video-only message rejected: %v", err)
 	}
@@ -579,7 +597,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	repo, streamer = capture(&stored, &forwarded)
 	_, err = makeHandler(repo, streamer)(marshal(t, event.NewMessageEvent{
 		ChatId: chatID, SenderId: owner, ReceiverId: receiver, ImageKeys: gallery,
-	}), nil)
+	}), conn)
 	if err != nil {
 		t.Fatalf("image-only message rejected: %v", err)
 	}
@@ -595,7 +613,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	_, err = makeHandler(stubChatRepo{getChatFn: ownChat}, stubStreamer{})(marshal(t, event.NewMessageEvent{
 		ChatId: chatID, SenderId: owner, ReceiverId: receiver, VideoKey: &empty,
 		ImageKeys: []string{"", ""},
-	}), nil)
+	}), conn)
 	if err == nil || err.Error() != "message parameters are invalid" {
 		t.Fatalf("unexpected err for empty attachment keys: %v", err)
 	}
@@ -608,7 +626,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	}}
 	_, err = makeHandler(rejects, stubStreamer{})(marshal(t, event.NewMessageEvent{
 		ChatId: chatID, SenderId: owner, ReceiverId: receiver, Text: "ok", VideoKey: &oversized,
-	}), nil)
+	}), conn)
 	if err == nil || err.Error() != "message attachment key is invalid" {
 		t.Fatalf("unexpected err for oversized video key: %v", err)
 	}
@@ -616,7 +634,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	_, err = makeHandler(rejects, stubStreamer{})(marshal(t, event.NewMessageEvent{
 		ChatId: chatID, SenderId: owner, ReceiverId: receiver, Text: "ok",
 		ImageKeys: []string{"k1", oversized},
-	}), nil)
+	}), conn)
 	if err == nil || err.Error() != "message attachment key is invalid" {
 		t.Fatalf("unexpected err for oversized image key: %v", err)
 	}
@@ -625,7 +643,7 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	_, err = makeHandler(rejects, stubStreamer{})(marshal(t, event.NewMessageEvent{
 		ChatId: chatID, SenderId: owner, ReceiverId: receiver, Text: "ok",
 		ImageKeys: []string{"k1", "k2", "k3", "k4", "k5"},
-	}), nil)
+	}), conn)
 	if err == nil || err.Error() != "message attachment key is invalid" {
 		t.Fatalf("unexpected err for too many image keys: %v", err)
 	}
