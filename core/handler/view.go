@@ -71,6 +71,11 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 			return nil, warpnet.WarpError("view: empty viewer id")
 		}
 
+		viewer, _ := userRepo.Get(ev.ViewerId)
+		if err := warpnet.VerifyAuthorship(s, viewer.NodeId); err != nil {
+			return nil, err
+		}
+
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
 		// Author's node is the sole authority for incrementing the view

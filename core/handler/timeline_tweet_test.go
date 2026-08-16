@@ -54,7 +54,7 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 		var created, timelined bool
 		_, err := newHandler(users, true, &created, &timelined)(marshal(t, ev), attacker)
 
-		require.ErrorIs(t, err, ErrForeignTweetAuthor)
+		require.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 		assert.False(t, created)
 		assert.False(t, timelined)
 	})
@@ -66,7 +66,7 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 		var created, timelined bool
 		_, err := newHandler(users, true, &created, &timelined)(marshal(t, ev), nil)
 
-		require.ErrorIs(t, err, ErrForeignTweetAuthor)
+		require.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 		assert.False(t, created)
 	})
 

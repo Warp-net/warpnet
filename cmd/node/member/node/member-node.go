@@ -500,11 +500,11 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_PIN,
-			handler.StreamPinTweetHandler(r.tweetRepo),
+			handler.StreamPinTweetHandler(r.tweetRepo, userRepo),
 		},
 		{
 			event.PUBLIC_POST_UNPIN,
-			handler.StreamUnpinTweetHandler(r.tweetRepo),
+			handler.StreamUnpinTweetHandler(r.tweetRepo, userRepo),
 		},
 		{
 			event.PUBLIC_POST_RETWEET,

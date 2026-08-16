@@ -95,6 +95,11 @@ func StreamReactionHandler(
 			return nil, warpnet.WarpError("react: empty tweet id")
 		}
 
+		reactor, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
+			return nil, err
+		}
+
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		ownNodeInfo := streamer.NodeInfo()
 
@@ -122,11 +127,7 @@ func StreamReactionHandler(
 
 		isSomeoneReactedToMe := ev.OwnerId != ownNodeInfo.OwnerId
 		if isSomeoneReactedToMe { // reactions exchange finished
-			notifyUsername := ev.OwnerId
-			reactor, reactorErr := userRepo.Get(ev.OwnerId)
-			if reactorErr == nil {
-				notifyUsername = reactor.Username
-			}
+			notifyUsername := reactor.Username
 			if err := notifyRepo.Add(domain.Notification{
 				Type:        domain.NotificationReactionType,
 				Text:        notifyUsername + " reacted your tweet",
@@ -213,6 +214,11 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
+		}
+
+		reactor, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
+			return nil, err
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)

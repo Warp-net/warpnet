@@ -2,6 +2,8 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"testing"
 
@@ -141,9 +143,31 @@ func (s stubFollowStreamer) GenericStream(nodeId string, path stream.WarpRoute, 
 	return nil, nil
 }
 
+func actorNodeStream(t *testing.T) (warpnet.WarpPeerID, warpnet.WarpStream) {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate actor key: %v", err)
+	}
+	nodeId, err := warpnet.IDFromPublicKey(pub)
+	if err != nil {
+		t.Fatalf("derive actor node id: %v", err)
+	}
+	_, server := stream.NewLoopbackStream(nodeId, nodeId, "/test/route/0.0.0")
+	return nodeId, server
+}
+
 func TestStreamFollowHandler(t *testing.T) {
 	owner := "owner-1"
 	following := "following-1"
+
+	nodeId, senderStream := actorNodeStream(t)
+	senderNode := nodeId.String()
+	senderUsers := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: senderNode}, nil
+	}}
+	ownerAuth := stubAuth{owner: domain.Owner{UserId: owner, NodeId: senderNode}}
 
 	t.Run("invalid payload", func(t *testing.T) {
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{})
@@ -187,7 +211,7 @@ func TestStreamFollowHandler(t *testing.T) {
 			capturedFrom = from
 			capturedTo = to
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, senderUsers, stubModerationNotifier{addFn: func(not domain.Notification) error {
 			notified = true
 			if not.Type != domain.NotificationFollowType {
 				t.Fatalf("expected follow type, got: %v", not.Type)
@@ -197,7 +221,7 @@ func TestStreamFollowHandler(t *testing.T) {
 			}
 			return nil
 		}}, stubFollowStreamer{})
-		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), nil)
+		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -215,8 +239,8 @@ func TestStreamFollowHandler(t *testing.T) {
 	t.Run("someone follows me - already followed", func(t *testing.T) {
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{followFn: func(from, to string) error {
 			return database.ErrAlreadyFollowed
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{})
-		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), nil)
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, senderUsers, stubModerationNotifier{}, stubFollowStreamer{})
+		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -229,8 +253,8 @@ func TestStreamFollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{followFn: func(from, to string) error {
 			return repoErr
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{})
-		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), nil)
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, senderUsers, stubModerationNotifier{}, stubFollowStreamer{})
+		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: following, FollowingId: owner}), senderStream)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
@@ -261,10 +285,10 @@ func TestStreamFollowHandler(t *testing.T) {
 	})
 
 	t.Run("I follow someone - node offline", func(t *testing.T) {
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, warpnet.ErrNodeIsOffline
 		}})
-		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if !errors.Is(err, warpnet.ErrUserIsOffline) {
 			t.Fatalf("expected user offline error: %v", err)
 		}
@@ -272,10 +296,10 @@ func TestStreamFollowHandler(t *testing.T) {
 
 	t.Run("I follow someone - stream error", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, streamErr
 		}})
-		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
 		}
@@ -285,10 +309,10 @@ func TestStreamFollowHandler(t *testing.T) {
 		acceptedResp, _ := json.Marshal(event.Accepted)
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{followFn: func(from, to string) error {
 			return database.ErrAlreadyFollowed
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		}}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
 		}})
-		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -303,10 +327,10 @@ func TestStreamFollowHandler(t *testing.T) {
 		h := StreamFollowHandler(stubFollowBroadcaster{subscribeFn: func(userId string) error {
 			subscribed = true
 			return nil
-		}}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		}}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
 		}})
-		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -323,10 +347,10 @@ func TestStreamFollowHandler(t *testing.T) {
 		acceptedResp, _ := json.Marshal(event.Accepted)
 		h := StreamFollowHandler(stubFollowBroadcaster{subscribeFn: func(userId string) error {
 			return subErr
-		}}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		}}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
 		}})
-		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if !errors.Is(err, subErr) {
 			t.Fatalf("expected subscribe error: %v", err)
 		}
@@ -334,10 +358,10 @@ func TestStreamFollowHandler(t *testing.T) {
 
 	t.Run("I follow someone - remote error response", func(t *testing.T) {
 		errResp, _ := json.Marshal(event.ResponseError{Code: 500, Message: "remote error"})
-		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return errResp, nil
 		}})
-		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if err == nil {
 			t.Fatal("expected error from remote error response")
 		}
@@ -375,7 +399,7 @@ func TestStreamFollowHandlerFetchesUnknownFollower(t *testing.T) {
 				if path != event.PUBLIC_GET_USER {
 					t.Fatalf("path = %q, want %q", path, event.PUBLIC_GET_USER)
 				}
-				return json.Marshal(domain.User{Id: unknown, Username: "Warpnet"})
+				return json.Marshal(domain.User{Id: unknown, Username: "Warpnet", NodeId: senderPeer.String()})
 			},
 		}
 		followed := false
@@ -411,7 +435,7 @@ func TestStreamFollowHandlerFetchesUnknownFollower(t *testing.T) {
 			stubFollowRepo{followFn: func(string, string) error { followed = true; return nil }},
 			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
-				return domain.User{Id: userId, Username: "Vadim"}, nil
+				return domain.User{Id: userId, Username: "Vadim", NodeId: senderPeer.String()}, nil
 			}},
 			stubModerationNotifier{},
 			stubFollowStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
@@ -455,6 +479,13 @@ func TestStreamUnfollowHandler(t *testing.T) {
 	owner := "owner-1"
 	following := "following-1"
 
+	nodeId, senderStream := actorNodeStream(t)
+	senderNode := nodeId.String()
+	senderUsers := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: senderNode}, nil
+	}}
+	ownerAuth := stubAuth{owner: domain.Owner{UserId: owner, NodeId: senderNode}}
+
 	t.Run("invalid payload", func(t *testing.T) {
 		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
 		_, err := h([]byte("{"), nil)
@@ -488,8 +519,8 @@ func TestStreamUnfollowHandler(t *testing.T) {
 			capturedFrom = from
 			capturedTo = to
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
-		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: following, FollowingId: owner}), nil)
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, senderUsers, stubFollowStreamer{})
+		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: following, FollowingId: owner}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -506,18 +537,18 @@ func TestStreamUnfollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{unfollowFn: func(from, to string) error {
 			return repoErr
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{})
-		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: following, FollowingId: owner}), nil)
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, senderUsers, stubFollowStreamer{})
+		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: following, FollowingId: owner}), senderStream)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
 
 	t.Run("I unfollow someone - user not found", func(t *testing.T) {
-		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
 		}}, stubFollowStreamer{})
-		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -527,10 +558,10 @@ func TestStreamUnfollowHandler(t *testing.T) {
 	})
 
 	t.Run("I unfollow someone - node offline", func(t *testing.T) {
-		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, warpnet.ErrNodeIsOffline
 		}})
-		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if !errors.Is(err, warpnet.ErrUserIsOffline) {
 			t.Fatalf("expected user offline error: %v", err)
 		}
@@ -538,10 +569,10 @@ func TestStreamUnfollowHandler(t *testing.T) {
 
 	t.Run("I unfollow someone - stream error", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
-		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, streamErr
 		}})
-		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
 		}
@@ -553,10 +584,10 @@ func TestStreamUnfollowHandler(t *testing.T) {
 		h := StreamUnfollowHandler(stubFollowBroadcaster{unsubscribeFn: func(userId string) error {
 			unsubscribed = true
 			return nil
-		}}, stubFollowRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		}}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return acceptedResp, nil
 		}})
-		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), nil)
+		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

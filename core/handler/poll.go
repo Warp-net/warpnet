@@ -86,6 +86,11 @@ func StreamPollVoteHandler(
 			return nil, warpnet.WarpError("poll: negative option")
 		}
 
+		voter, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, voter.NodeId); err != nil {
+			return nil, err
+		}
+
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		optionsNum := ev.OptionsNum
 

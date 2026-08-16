@@ -152,6 +152,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 	other := "other-1"
 	chatID := "chat-1"
 	chat := domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: other, CreatedAt: time.Now()}
+	conn := senderConn(t)
 
 	t.Run("invalid payload", func(t *testing.T) {
 		_, err := StreamCreateChatHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{})([]byte("{"), nil)
@@ -190,14 +191,14 @@ func TestStreamCreateChatHandler(t *testing.T) {
 		repoErr := errors.New("db failed")
 		_, err := StreamCreateChatHandler(stubChatRepo{createChatFn: func(chatId *string, ownerId, otherUserId string) (domain.Chat, error) {
 			return domain.Chat{}, repoErr
-		}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil)
+		}}, stubUserRepo{}, stubStreamer{})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), conn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got: %v", err)
 		}
 	})
 
 	t.Run("self chat", func(t *testing.T) {
-		resp, err := StreamCreateChatHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: owner, ChatId: &chatID}), nil)
+		resp, err := StreamCreateChatHandler(stubChatRepo{}, stubUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: owner, ChatId: &chatID}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -209,7 +210,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 	t.Run("chat created by other user", func(t *testing.T) {
 		resp, err := StreamCreateChatHandler(stubChatRepo{createChatFn: func(chatId *string, ownerId, otherUserId string) (domain.Chat, error) {
 			return chat, nil
-		}}, stubUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: "another-owner"}})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil)
+		}}, stubUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: "another-owner"}})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -218,10 +219,13 @@ func TestStreamCreateChatHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("local owner user not found", func(t *testing.T) {
+	t.Run("local other user not found", func(t *testing.T) {
 		resp, err := StreamCreateChatHandler(stubChatRepo{}, stubUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == owner {
+				return domain.User{Id: userId, NodeId: senderNodeId}, nil
+			}
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil)
+		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), conn)
 		if err != nil || resp == nil {
 			t.Fatalf("unexpected: resp=%v err=%v", resp, err)
 		}
@@ -235,7 +239,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 				genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 					return nil, streamErr
 				},
-			})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil)
+			})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), conn)
 			if err != nil || resp == nil {
 				t.Fatalf("streamErr=%v resp=%v err=%v", streamErr, resp, err)
 			}
@@ -249,7 +253,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return respErr, nil
 			},
-		})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil)
+		})(marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), conn)
 		if err != nil || resp == nil {
 			t.Fatalf("unexpected: resp=%v err=%v", resp, err)
 		}

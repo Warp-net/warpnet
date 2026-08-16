@@ -237,9 +237,14 @@ func StreamNewReplyHandler(
 	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
-	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+
+		author, _ := userRepo.Get(ev.UserId)
+		if err := warpnet.VerifyAuthorship(s, author.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -867,15 +872,15 @@ func StreamGetTweetStatsHandler(
 	}
 }
 
-func StreamPinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+func StreamPinTweetHandler(repo TweetsStorer, userRepo TweetUserFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		return setPinnedFromEvent(buf, repo, true)
+		return setPinnedFromEvent(buf, repo, userRepo, s, true)
 	}
 }
 
-func StreamUnpinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+func StreamUnpinTweetHandler(repo TweetsStorer, userRepo TweetUserFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		return setPinnedFromEvent(buf, repo, false)
+		return setPinnedFromEvent(buf, repo, userRepo, s, false)
 	}
 }
 
@@ -984,7 +989,7 @@ func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
 
 // setPinnedFromEvent decodes the pin/unpin payload, enforces author-only
 // pinning, and delegates the write.
-func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
+func setPinnedFromEvent(buf []byte, repo TweetsStorer, userRepo TweetUserFetcher, s warpnet.WarpStream, pin bool) (any, error) {
 	op := "unpin"
 	if pin {
 		op = "pin"
@@ -998,6 +1003,10 @@ func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
 	}
 	if ev.TweetId == "" {
 		return nil, warpnet.WarpError(op + ": empty tweet id")
+	}
+	author, _ := userRepo.Get(ev.UserId)
+	if err := warpnet.VerifyAuthorship(s, author.NodeId); err != nil {
+		return nil, err
 	}
 	tw, err := repo.Get(ev.UserId, ev.TweetId)
 	if err != nil {

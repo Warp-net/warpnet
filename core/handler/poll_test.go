@@ -135,32 +135,36 @@ func TestStreamPollVoteHandler(t *testing.T) {
 	})
 
 	t.Run("option out of range", func(t *testing.T) {
-		h := StreamPollVoteHandler(stubPollRepo{}, pollTweet(tweetId, author, future), stubReactionUserRepo{}, stubStreamer{})
-		_, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 2, OptionsNum: 3}), nil)
+		users, conn := actorStream(t, voter, nil)
+		h := StreamPollVoteHandler(stubPollRepo{}, pollTweet(tweetId, author, future), users, stubStreamer{})
+		_, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 2, OptionsNum: 3}), conn)
 		if err == nil || err.Error() != "poll: option out of range" {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
 	t.Run("closed poll", func(t *testing.T) {
-		h := StreamPollVoteHandler(stubPollRepo{}, pollTweet(tweetId, author, time.Now().Add(-time.Hour)), stubReactionUserRepo{}, stubStreamer{})
-		_, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 1, OptionsNum: 2}), nil)
+		users, conn := actorStream(t, voter, nil)
+		h := StreamPollVoteHandler(stubPollRepo{}, pollTweet(tweetId, author, time.Now().Add(-time.Hour)), users, stubStreamer{})
+		_, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 1, OptionsNum: 2}), conn)
 		if err == nil || err.Error() != "poll: poll is closed" {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
 	t.Run("vote repo error", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		repoErr := errors.New("db error")
 		repo := stubPollRepo{voteFn: func(_, _ string, _ int, _ bool) error { return repoErr }}
-		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), stubReactionUserRepo{}, stubStreamer{})
-		_, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 1, OptionsNum: 2}), nil)
+		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), users, stubStreamer{})
+		_, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 1, OptionsNum: 2}), conn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got: %v", err)
 		}
 	})
 
 	t.Run("happy path bumps the crdt counter on the voter's own node", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		var gotTransitive bool
 		repo := stubPollRepo{
 			voteFn: func(_, gotUser string, gotOption int, isTransitive bool) error {
@@ -179,9 +183,9 @@ func TestStreamPollVoteHandler(t *testing.T) {
 			votedFn: func(_, _ string) (int, bool, error) { return 1, true, nil },
 		}
 		streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: voter}}
-		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), stubReactionUserRepo{}, streamer)
+		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), users, streamer)
 
-		resp, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 1, OptionsNum: 2}), nil)
+		resp, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 1, OptionsNum: 2}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -198,15 +202,16 @@ func TestStreamPollVoteHandler(t *testing.T) {
 	})
 
 	t.Run("vote received on the author's node is not transitive", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		var gotTransitive = true
 		repo := stubPollRepo{voteFn: func(_, _ string, _ int, isTransitive bool) error {
 			gotTransitive = isTransitive
 			return nil
 		}}
 		streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}}
-		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), stubReactionUserRepo{}, streamer)
+		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), users, streamer)
 
-		if _, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), nil); err != nil {
+		if _, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), conn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if gotTransitive {
@@ -215,6 +220,7 @@ func TestStreamPollVoteHandler(t *testing.T) {
 	})
 
 	t.Run("propagates to the author's node", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		var gotPath stream.WarpRoute
 		var gotNode string
 		streamer := stubStreamer{
@@ -224,9 +230,9 @@ func TestStreamPollVoteHandler(t *testing.T) {
 				return nil, nil
 			},
 		}
-		h := StreamPollVoteHandler(stubPollRepo{}, pollTweet(tweetId, author, future), stubReactionUserRepo{}, streamer)
+		h := StreamPollVoteHandler(stubPollRepo{}, pollTweet(tweetId, author, future), users, streamer)
 
-		if _, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), nil); err != nil {
+		if _, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), conn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if gotNode != "node-2" || gotPath != event.PUBLIC_POST_POLL_VOTE {
@@ -235,6 +241,7 @@ func TestStreamPollVoteHandler(t *testing.T) {
 	})
 
 	t.Run("offline author still returns local results", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		streamer := stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: voter},
 			genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
@@ -242,9 +249,9 @@ func TestStreamPollVoteHandler(t *testing.T) {
 			},
 		}
 		repo := stubPollRepo{resultsFn: func(string, int) ([]uint64, error) { return []uint64{1, 0}, nil }}
-		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), stubReactionUserRepo{}, streamer)
+		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), users, streamer)
 
-		resp, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), nil)
+		resp, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -254,6 +261,7 @@ func TestStreamPollVoteHandler(t *testing.T) {
 	})
 
 	t.Run("a replayed vote is not an error", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		streamed := false
 		streamer := stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: voter},
@@ -266,9 +274,9 @@ func TestStreamPollVoteHandler(t *testing.T) {
 			voteFn:    func(string, string, int, bool) error { return database.ErrPollAlreadyVoted },
 			resultsFn: func(string, int) ([]uint64, error) { return []uint64{2, 5}, nil },
 		}
-		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), stubReactionUserRepo{}, streamer)
+		h := StreamPollVoteHandler(repo, pollTweet(tweetId, author, future), users, streamer)
 
-		resp, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), nil)
+		resp, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 0, OptionsNum: 2}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -281,15 +289,16 @@ func TestStreamPollVoteHandler(t *testing.T) {
 	})
 
 	t.Run("unknown tweet trusts the payload's option count", func(t *testing.T) {
+		users, conn := actorStream(t, voter, nil)
 		var gotOptionsNum int
 		repo := stubPollRepo{resultsFn: func(_ string, optionsNum int) ([]uint64, error) {
 			gotOptionsNum = optionsNum
 			return make([]uint64, optionsNum), nil
 		}}
 		streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: voter}}
-		h := StreamPollVoteHandler(repo, stubPollTweetRepo{}, stubReactionUserRepo{}, streamer)
+		h := StreamPollVoteHandler(repo, stubPollTweetRepo{}, users, streamer)
 
-		if _, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 2, OptionsNum: 4}), nil); err != nil {
+		if _, err := h(marshal(t, event.PollVoteEvent{TweetId: tweetId, OwnerId: voter, UserId: author, Option: 2, OptionsNum: 4}), conn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if gotOptionsNum != 4 {

@@ -90,6 +90,11 @@ func StreamNewReTweetHandler(
 			return nil, warpnet.WarpError("empty retweet id")
 		}
 
+		retweeter, _ := userRepo.Get(*retweetEvent.RetweetedBy)
+		if err := warpnet.VerifyAuthorship(s, retweeter.NodeId); err != nil {
+			return nil, err
+		}
+
 		ownNodeInfo := streamer.NodeInfo()
 		ownerId := ownNodeInfo.OwnerId
 		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
@@ -129,11 +134,7 @@ func StreamNewReTweetHandler(
 		isOwnTweetRetweet := ownerId == sourceAuthorId // my own tweet retweet
 		if isOwnTweetRetweet {                         //nolint:nestif
 			if !isOwnerRetweeter {
-				notifyUsername := *retweetEvent.RetweetedBy
-				retweeter, retweeterErr := userRepo.Get(*retweetEvent.RetweetedBy)
-				if retweeterErr == nil {
-					notifyUsername = retweeter.Username
-				}
+				notifyUsername := retweeter.Username
 				notifyText := notifyUsername + " retweeted your tweet"
 				if isQuote {
 					notifyText = notifyUsername + " quoted your tweet"
@@ -201,6 +202,11 @@ func StreamUnretweetHandler(
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
+		}
+
+		retweeter, _ := userRepo.Get(ev.RetweeterId)
+		if err := warpnet.VerifyAuthorship(s, retweeter.NodeId); err != nil {
+			return nil, err
 		}
 
 		retweetedBy := ev.RetweeterId

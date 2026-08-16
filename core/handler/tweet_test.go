@@ -1521,8 +1521,16 @@ func TestSetPinnedFromEvent(t *testing.T) {
 		repo.GetFunc = func(_, _ string) (domain.Tweet, error) {
 			return domain.Tweet{UserId: "other"}, nil
 		}
-		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, true)
+		users, conn := authorStream(t)
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, conn, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "only the author can pin")
+	})
+
+	t.Run("sent by another node", func(t *testing.T) {
+		users, _ := authorStream(t)
+		_, attacker := authorStream(t)
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, attacker, true)
+		assert.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 	})
 }
