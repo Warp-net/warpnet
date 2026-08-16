@@ -39,10 +39,6 @@ func (c *troikaConnector) ID() warpnet.WarpPeerID { return c.host.ID() }
 func (c *troikaConnector) NodeInfo() warpnet.NodeInfo {
 	return warpnet.NodeInfo{ID: c.host.ID(), OwnerId: c.ownerId}
 }
-func (c *troikaConnector) RelayStream(warpnet.WarpPeerID, stream.WarpRoute, any) ([]byte, error) {
-	return nil, nil
-}
-
 func (c *troikaConnector) SelfStream(stream.WarpRoute, any) ([]byte, error) {
 	return nil, nil
 }

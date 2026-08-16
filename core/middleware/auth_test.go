@@ -64,7 +64,7 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 		_, _ = s.Write([]byte(`{"ok":true}`))
 	})
 
-	client, server := stream.NewLoopbackStream("peer1", "peer1", "/private/post/video/0.0.0")
+	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go handler(server)
 
 	limit := int64(MaxLimit)
@@ -95,7 +95,7 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	defer mw.Close()
 
 	limit := int64(MaxLimit)
-	client, server := stream.NewLoopbackStream("peer1", "peer1", "/private/post/video/0.0.0")
+	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
 	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
 
 	payload := bytes.Repeat([]byte("A"), int(limit))
@@ -170,7 +170,7 @@ func callPeer(
 		t.Fatalf("marshal message: %v", err)
 	}
 
-	client, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, warpnet.WarpProtocolID(route))
+	client, server := stream.NewLoopbackStream(ownNodeId, warpnet.WarpProtocolID(route))
 	go handler(remoteStream{
 		WarpStream: server,
 		conn:       remoteConn{local: ownNodeId, remote: peer},
@@ -326,5 +326,87 @@ func TestIsPrivateRouteAllowed_SelfStream(t *testing.T) {
 	route := stream.WarpRoute("/private/get/messages/0.0.0")
 	if !mw.isPrivateRouteAllowed(route, ownNodeId, ownNodeId) {
 		t.Error("the node itself must always pass the private route gate")
+	}
+}
+
+// A peer that captured a message this node gossiped must not be able to
+// repoint it at a privileged route, and a relayed envelope must not inherit
+// the owner's private-route access.
+func TestAuthMiddleware_GossipedEnvelopeIsNotPrivileged(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	self, err := warpnet.IDFromPublicKey(pub)
+	if err != nil {
+		t.Fatalf("derive peer id: %v", err)
+	}
+
+	send := func(t *testing.T, msg event.Message) bool {
+		t.Helper()
+
+		mw := NewWarpMiddleware(self, nil)
+		defer mw.Close()
+
+		var reached bool
+		client, server := stream.NewLoopbackStream(self, warpnet.WarpProtocolID(msg.Destination))
+		go mw.AuthMiddleware(func(s warpnet.WarpStream) {
+			reached = true
+			_, _ = s.Write([]byte(`{"ok":true}`))
+			_ = s.Close()
+		})(server)
+
+		bt, err := json.Marshal(msg)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		_ = client.SetDeadline(time.Now().Add(5 * time.Second))
+		_, _ = client.Write(bt)
+		_ = client.CloseWrite()
+		_, _ = io.ReadAll(client)
+		_ = client.Close()
+		return reached
+	}
+
+	base := event.Message{
+		Body:        []byte(`{"text":"our own gossiped tweet"}`),
+		MessageId:   "captured",
+		NodeId:      self.String(),
+		Destination: event.PUBLIC_POST_TIMELINE,
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	base.Signature = security.Sign(priv, base.SigningBytes())
+
+	rewritten := base
+	rewritten.Destination = event.PRIVATE_POST_BLOCK
+	if send(t, rewritten) {
+		t.Error("a rewritten destination reached a privileged handler")
+	}
+
+	_, foreignPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	foreignPub := foreignPriv.Public().(ed25519.PublicKey)
+	foreignId, err := warpnet.IDFromPublicKey(foreignPub)
+	if err != nil {
+		t.Fatalf("derive peer id: %v", err)
+	}
+	foreign := event.Message{
+		Body:        []byte(`{}`),
+		MessageId:   "foreign",
+		NodeId:      foreignId.String(),
+		Destination: event.PRIVATE_POST_BLOCK,
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	foreign.Signature = security.Sign(foreignPriv, foreign.SigningBytes())
+	if send(t, foreign) {
+		t.Error("a relayed foreign envelope reached a privileged handler")
+	}
+
+	if !send(t, base) {
+		t.Error("a followed author's update must reach its handler")
 	}
 }

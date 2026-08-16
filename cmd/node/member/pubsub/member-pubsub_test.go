@@ -53,10 +53,6 @@ func (c *liveConnector) NodeInfo() warpnet.NodeInfo {
 	return warpnet.NodeInfo{ID: c.host.ID(), OwnerId: c.ownerId}
 }
 
-func (c *liveConnector) RelayStream(_ warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error) {
-	return c.SelfStream(path, data)
-}
-
 func (c *liveConnector) SelfStream(path stream.WarpRoute, data any) ([]byte, error) {
 	return nil, nil
 }

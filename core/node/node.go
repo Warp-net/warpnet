@@ -376,13 +376,6 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 const importStreamDeadline = 10 * time.Minute
 
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
-	return n.RelayStream(n.node.ID(), path, data)
-}
-
-// RelayStream serves data on this node as if sender had streamed it here.
-func (n *WarpNode) RelayStream(
-	sender warpnet.WarpPeerID, path stream.WarpRoute, data any,
-) (_ []byte, err error) {
 	if data == nil {
 		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
 	}
@@ -394,18 +387,7 @@ func (n *WarpNode) RelayStream(
 		)
 	}
 
-	bt, ok := data.([]byte)
-	if !ok {
-		bt, err = json.Marshal(data)
-		if err != nil {
-			return nil, fmt.Errorf("node: selfstream: marshal data %w %s", err, data)
-		}
-	}
-
-	if sender == "" {
-		sender = n.node.ID()
-	}
-	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), sender, warpnet.WarpProtocolID(path))
+	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
 	defer func() {
 		_ = streamClient.Close()
 	}()
@@ -417,6 +399,14 @@ func (n *WarpNode) RelayStream(
 
 	_ = streamServer.SetDeadline(time.Now().Add(deadline))
 	go handler(streamServer) // handler closes server stream by itself
+
+	bt, ok := data.([]byte)
+	if !ok {
+		bt, err = json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("node: selfstream: marshal data %w %s", err, data)
+		}
+	}
 
 	_ = streamClient.SetDeadline(time.Now().Add(deadline))
 	if _, err := streamClient.Write(bt); err != nil {

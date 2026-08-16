@@ -112,14 +112,15 @@ func StreamTimelineTweetHandler(
 }
 
 func isSentByAuthor(authorId string, userRepo TweetUserFetcher, s warpnet.WarpStream) bool {
-	if s == nil || s.Conn() == nil || userRepo == nil {
+	body, ok := s.(*warpnet.WarpStreamBody)
+	if !ok || userRepo == nil {
 		return false
 	}
 	author, err := userRepo.Get(authorId)
 	if err != nil || author.NodeId == "" {
 		return false
 	}
-	return author.NodeId == s.Conn().RemotePeer().String()
+	return author.NodeId == body.SenderId.String()
 }
 
 const ErrForeignTweetAuthor = warpnet.WarpError("timeline: tweet did not come from its author's node")

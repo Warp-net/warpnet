@@ -59,7 +59,7 @@ func (c *LoopbackConn) LocalPeer() peer.ID {
 }
 
 func (c *LoopbackConn) RemotePeer() peer.ID {
-	return c.stream.remotePeerID
+	return c.stream.localPeerID
 }
 
 func (c *LoopbackConn) RemotePublicKey() p2pCrypto.PubKey {
@@ -129,7 +129,7 @@ type LoopbackStream struct {
 	writeConn                   net.Conn
 	readConn                    net.Conn
 	proto                       warpnet.WarpProtocolID
-	localPeerID, remotePeerID   warpnet.WarpPeerID
+	localPeerID                 warpnet.WarpPeerID
 	isReadClosed, isWriteClosed *atomic.Bool
 	writeMx, readMx             *sync.Mutex
 }
@@ -215,19 +215,19 @@ func (s *LoopbackStream) Conn() network.Conn {
 }
 
 func NewLoopbackStream(
-	nodeId, senderId warpnet.WarpPeerID, proto warpnet.WarpProtocolID,
+	nodeId warpnet.WarpPeerID, proto warpnet.WarpProtocolID,
 ) (r warpnet.WarpStream, w warpnet.WarpStream) {
 	reader1, writer2 := net.Pipe()
 	reader2, writer1 := net.Pipe()
 
 	reader := &LoopbackStream{
-		readConn: reader1, writeConn: writer1, localPeerID: nodeId, remotePeerID: senderId,
+		readConn: reader1, writeConn: writer1, localPeerID: nodeId,
 		proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
 		writeMx: new(sync.Mutex), readMx: new(sync.Mutex),
 	}
 
 	writer := &LoopbackStream{
-		readConn: reader2, writeConn: writer2, localPeerID: nodeId, remotePeerID: senderId,
+		readConn: reader2, writeConn: writer2, localPeerID: nodeId,
 		proto: proto, isReadClosed: new(atomic.Bool), isWriteClosed: new(atomic.Bool),
 		writeMx: new(sync.Mutex), readMx: new(sync.Mutex),
 	}
