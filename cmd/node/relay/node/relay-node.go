@@ -205,6 +205,15 @@ func (rn *RelayNode) setupHandlers() {
 	)
 }
 
+func (rn *RelayNode) RelayStream(
+	sender warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (_ []byte, err error) {
+	if rn == nil || rn.node == nil {
+		return nil, nil
+	}
+	return rn.node.RelayStream(sender, path, data)
+}
+
 func (rn *RelayNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if rn == nil || rn.node == nil {
 		return nil, nil
