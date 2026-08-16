@@ -98,7 +98,8 @@ func StreamCreateChatHandler(
 			return nil, mastodon.ErrNotSupported
 		}
 
-		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId); err != nil {
+		initiator, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, initiator.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -310,8 +311,8 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, warpnet.WarpError("not authorized to send message to this chat")
 		}
 
-		sender, err := warpnet.VerifyAuthorship(userRepo, s, ev.SenderId)
-		if err != nil {
+		sender, _ := userRepo.Get(ev.SenderId)
+		if err := warpnet.VerifyAuthorship(s, ev.SenderId, sender.NodeId); err != nil {
 			return nil, err
 		}
 

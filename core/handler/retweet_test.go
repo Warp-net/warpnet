@@ -92,8 +92,6 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	retweeter := owner
 	tweetId := "tweet-1"
 
-	// The handler only stores a retweet delivered by the retweeter's own
-	// node: userRepo.Get(actor).NodeId must match the stream's remote peer.
 	_, actorConn := authorStream(t)
 	actorNode := actorConn.Conn().RemotePeer().String()
 	actorUsers := func(actorId string, otherFn func(userId string) (domain.User, error)) stubRetweetUserRepo {
@@ -276,7 +274,6 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	tweetOwner := "tweet-owner"
 	tweetId := "tweet-1"
 
-	// The unretweet must arrive over a stream from the retweeter's own node.
 	_, actorConn := authorStream(t)
 	actorNode := actorConn.Conn().RemotePeer().String()
 	actorUsers := func(otherFn func(userId string) (domain.User, error)) stubRetweetUserRepo {

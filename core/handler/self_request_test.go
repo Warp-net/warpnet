@@ -47,9 +47,6 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	ownerNodeID := ownerPeerID.String()
 	ownerInfo := warpnet.NodeInfo{OwnerId: owner, ID: ownerPeerID}
 	auth := stubAuth{owner: domain.Owner{UserId: owner, NodeId: ownerNodeID}}
-	// Authorship checks require each event to arrive over a stream opened by
-	// the actor's node. Every stubbed record points at the owner's node, so a
-	// stream whose remote peer is the owner's own peer satisfies them.
 	_, ownerConn := stream.NewLoopbackStream(ownerPeerID, ownerPeerID, "/test/route/0.0.0")
 
 	// Each of the user repos below returns a record whose NodeId points at

@@ -143,9 +143,6 @@ func (s stubFollowStreamer) GenericStream(nodeId string, path stream.WarpRoute, 
 	return nil, nil
 }
 
-// actorNodeStream returns a fresh node id plus a stream arriving from that
-// node: POST handlers accept an event only when the claimed actor's user
-// record carries the delivering peer's id.
 func actorNodeStream(t *testing.T) (warpnet.WarpPeerID, warpnet.WarpStream) {
 	t.Helper()
 
@@ -167,11 +164,9 @@ func TestStreamFollowHandler(t *testing.T) {
 
 	nodeId, senderStream := actorNodeStream(t)
 	senderNode := nodeId.String()
-	// Follower profiles pinned to the delivering node.
 	senderUsers := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: senderNode}, nil
 	}}
-	// Owner-initiated follows must arrive from the owner's own node.
 	ownerAuth := stubAuth{owner: domain.Owner{UserId: owner, NodeId: senderNode}}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -486,11 +481,9 @@ func TestStreamUnfollowHandler(t *testing.T) {
 
 	nodeId, senderStream := actorNodeStream(t)
 	senderNode := nodeId.String()
-	// Unfollower profiles pinned to the delivering node.
 	senderUsers := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: senderNode}, nil
 	}}
-	// Owner-initiated unfollows must arrive from the owner's own node.
 	ownerAuth := stubAuth{owner: domain.Owner{UserId: owner, NodeId: senderNode}}
 
 	t.Run("invalid payload", func(t *testing.T) {

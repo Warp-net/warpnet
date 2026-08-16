@@ -93,10 +93,6 @@ func (s stubReactionUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: userId, NodeId: "node-2"}, nil
 }
 
-// actorStream builds a user repo and an inbound stream whose remote peer
-// matches the NodeId the repo reports for actorId, so the authorship check
-// passes for events claiming to come from actorId. Lookups of other user ids
-// go to fallback, or to the stub default (NodeId "node-2") when fallback is nil.
 func actorStream(t *testing.T, actorId string, fallback func(userId string) (domain.User, error)) (stubReactionUserRepo, warpnet.WarpStream) {
 	t.Helper()
 

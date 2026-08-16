@@ -86,7 +86,8 @@ func StreamPollVoteHandler(
 			return nil, warpnet.WarpError("poll: negative option")
 		}
 
-		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId); err != nil {
+		voter, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, voter.NodeId); err != nil {
 			return nil, err
 		}
 

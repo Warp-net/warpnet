@@ -90,8 +90,8 @@ func StreamNewReTweetHandler(
 			return nil, warpnet.WarpError("empty retweet id")
 		}
 
-		retweeter, err := warpnet.VerifyAuthorship(userRepo, s, *retweetEvent.RetweetedBy)
-		if err != nil {
+		retweeter, _ := userRepo.Get(*retweetEvent.RetweetedBy)
+		if err := warpnet.VerifyAuthorship(s, *retweetEvent.RetweetedBy, retweeter.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -204,7 +204,8 @@ func StreamUnretweetHandler(
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.RetweeterId); err != nil {
+		retweeter, _ := userRepo.Get(ev.RetweeterId)
+		if err := warpnet.VerifyAuthorship(s, ev.RetweeterId, retweeter.NodeId); err != nil {
 			return nil, err
 		}
 

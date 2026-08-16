@@ -396,8 +396,6 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 		return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 	}}
 
-	// The reply must arrive over a stream from its author's node; the stub
-	// reports every user on nodeID, so a loopback stream from nodeID passes.
 	_, conn := stream.NewLoopbackStream(nodeID, nodeID, "/test/route/0.0.0")
 
 	t.Run("stores a reply whose parent lives here", func(t *testing.T) {

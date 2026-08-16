@@ -152,9 +152,6 @@ func TestStreamCreateChatHandler(t *testing.T) {
 	other := "other-1"
 	chatID := "chat-1"
 	chat := domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: other, CreatedAt: time.Now()}
-	// The authorship check requires the event to arrive over a stream opened
-	// by the initiator's node: conn's remote peer matches the NodeId the
-	// default stubUserRepo returns for ev.OwnerId.
 	conn := senderConn(t)
 
 	t.Run("invalid payload", func(t *testing.T) {

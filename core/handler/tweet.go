@@ -243,7 +243,8 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.UserId); err != nil {
+		author, _ := userRepo.Get(ev.UserId)
+		if err := warpnet.VerifyAuthorship(s, ev.UserId, author.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -1003,7 +1004,8 @@ func setPinnedFromEvent(buf []byte, repo TweetsStorer, userRepo TweetUserFetcher
 	if ev.TweetId == "" {
 		return nil, warpnet.WarpError(op + ": empty tweet id")
 	}
-	if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.UserId); err != nil {
+	author, _ := userRepo.Get(ev.UserId)
+	if err := warpnet.VerifyAuthorship(s, ev.UserId, author.NodeId); err != nil {
 		return nil, err
 	}
 	tw, err := repo.Get(ev.UserId, ev.TweetId)

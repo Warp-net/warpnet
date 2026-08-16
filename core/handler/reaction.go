@@ -95,8 +95,8 @@ func StreamReactionHandler(
 			return nil, warpnet.WarpError("react: empty tweet id")
 		}
 
-		reactor, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId)
-		if err != nil {
+		reactor, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, reactor.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -216,7 +216,8 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId); err != nil {
+		reactor, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, reactor.NodeId); err != nil {
 			return nil, err
 		}
 

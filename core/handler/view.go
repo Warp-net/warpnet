@@ -71,7 +71,8 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 			return nil, warpnet.WarpError("view: empty viewer id")
 		}
 
-		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.ViewerId); err != nil {
+		viewer, _ := userRepo.Get(ev.ViewerId)
+		if err := warpnet.VerifyAuthorship(s, ev.ViewerId, viewer.NodeId); err != nil {
 			return nil, err
 		}
 
