@@ -96,7 +96,7 @@ func StreamReactionHandler(
 		}
 
 		reactor, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, reactor.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -217,7 +217,7 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 		}
 
 		reactor, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, reactor.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
 			return nil, err
 		}
 

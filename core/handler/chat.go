@@ -99,7 +99,7 @@ func StreamCreateChatHandler(
 		}
 
 		initiator, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, initiator.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, initiator.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -312,7 +312,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		}
 
 		sender, _ := userRepo.Get(ev.SenderId)
-		if err := warpnet.VerifyAuthorship(s, ev.SenderId, sender.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, sender.NodeId); err != nil {
 			return nil, err
 		}
 

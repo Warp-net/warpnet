@@ -72,7 +72,7 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 		}
 
 		viewer, _ := userRepo.Get(ev.ViewerId)
-		if err := warpnet.VerifyAuthorship(s, ev.ViewerId, viewer.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, viewer.NodeId); err != nil {
 			return nil, err
 		}
 

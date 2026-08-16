@@ -87,7 +87,7 @@ func StreamPollVoteHandler(
 		}
 
 		voter, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, ev.OwnerId, voter.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, voter.NodeId); err != nil {
 			return nil, err
 		}
 

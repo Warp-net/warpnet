@@ -224,11 +224,10 @@ func (wh *WarpStreamHandler) String() string {
 
 const ErrForeignAuthor = WarpError("event did not come from its author's node")
 
-func VerifyAuthorship(s WarpStream, actorId, actorNodeId string) error {
+func VerifyAuthorship(s WarpStream, actorNodeId string) error {
 	if actorNodeId != "" && s != nil && s.Conn() != nil && actorNodeId == s.Conn().RemotePeer().String() {
 		return nil
 	}
-	log.Warnf("authorship: dropping event claiming to be from %s", actorId)
 	return ErrForeignAuthor
 }
 

@@ -80,7 +80,7 @@ func StreamTimelineNewTweetHandler(
 		}
 
 		author, _ := userRepo.Get(ev.UserId)
-		if err := warpnet.VerifyAuthorship(s, ev.UserId, author.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, author.NodeId); err != nil {
 			return nil, err
 		}
 

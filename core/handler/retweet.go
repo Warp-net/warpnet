@@ -91,7 +91,7 @@ func StreamNewReTweetHandler(
 		}
 
 		retweeter, _ := userRepo.Get(*retweetEvent.RetweetedBy)
-		if err := warpnet.VerifyAuthorship(s, *retweetEvent.RetweetedBy, retweeter.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, retweeter.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -205,7 +205,7 @@ func StreamUnretweetHandler(
 		}
 
 		retweeter, _ := userRepo.Get(ev.RetweeterId)
-		if err := warpnet.VerifyAuthorship(s, ev.RetweeterId, retweeter.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, retweeter.NodeId); err != nil {
 			return nil, err
 		}
 
