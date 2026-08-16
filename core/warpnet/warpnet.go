@@ -41,6 +41,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/docker/go-units"
 	"github.com/ipfs/boxo/bitswap"
 	bitswapNetwork "github.com/ipfs/boxo/bitswap/network"
@@ -220,6 +221,35 @@ func (wh *WarpStreamHandler) IsValid() bool {
 
 func (wh *WarpStreamHandler) String() string {
 	return fmt.Sprintf("%s %T", wh.Path, wh.Handler)
+}
+
+const ErrForeignAuthor = WarpError("event did not come from its author's node")
+
+// AuthorUserFetcher is the read the authorship check needs from a user repo.
+type AuthorUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
+// IsFromNode reports whether the stream was opened by the node nodeId.
+func IsFromNode(s WarpStream, nodeId string) bool {
+	return nodeId != "" && s != nil && s.Conn() != nil && nodeId == s.Conn().RemotePeer().String()
+}
+
+// VerifyAuthorship resolves a POST event's claimed actor and confirms the
+// event was delivered by the actor's own node. The resolved profile is
+// returned for reuse; an actor this node cannot attribute is rejected rather
+// than trusted.
+func VerifyAuthorship(userRepo AuthorUserFetcher, s WarpStream, actorId string) (domain.User, error) {
+	actor, err := userRepo.Get(actorId)
+	if err != nil || !IsFromNode(s, actor.NodeId) {
+		route := "no stream"
+		if s != nil {
+			route = string(s.Protocol())
+		}
+		log.Warnf("%s: dropping event claiming to be from %s", route, actorId)
+		return domain.User{}, ErrForeignAuthor
+	}
+	return actor, nil
 }
 
 type NodeInfo struct {

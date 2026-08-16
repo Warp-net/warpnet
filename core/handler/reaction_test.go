@@ -176,7 +176,7 @@ func TestStreamReactionHandler(t *testing.T) {
 		_, attacker := actorStream(t, owner, nil)
 		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{})
 		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), attacker)
-		if !errors.Is(err, ErrForeignReactionAuthor) {
+		if !errors.Is(err, warpnet.ErrForeignAuthor) {
 			t.Fatalf("expected foreign reaction author error, got: %v", err)
 		}
 	})

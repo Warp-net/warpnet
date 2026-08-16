@@ -40,8 +40,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ErrForeignRetweetAuthor = warpnet.WarpError("retweet: retweet did not come from the retweeter's node")
-
 type RetweetStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
@@ -92,14 +90,9 @@ func StreamNewReTweetHandler(
 			return nil, warpnet.WarpError("empty retweet id")
 		}
 
-		retweeter, err := userRepo.Get(*retweetEvent.RetweetedBy)
-		if err != nil || retweeter.NodeId == "" {
-			log.Warnf("retweet: dropping retweet claiming to be from %s", *retweetEvent.RetweetedBy)
-			return nil, ErrForeignRetweetAuthor
-		}
-		if s == nil || s.Conn() == nil || retweeter.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("retweet: dropping retweet claiming to be from %s", *retweetEvent.RetweetedBy)
-			return nil, ErrForeignRetweetAuthor
+		retweeter, err := warpnet.VerifyAuthorship(userRepo, s, *retweetEvent.RetweetedBy)
+		if err != nil {
+			return nil, err
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -211,14 +204,8 @@ func StreamUnretweetHandler(
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		retweeter, err := userRepo.Get(ev.RetweeterId)
-		if err != nil || retweeter.NodeId == "" {
-			log.Warnf("unretweet: dropping unretweet claiming to be from %s", ev.RetweeterId)
-			return nil, ErrForeignRetweetAuthor
-		}
-		if s == nil || s.Conn() == nil || retweeter.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("unretweet: dropping unretweet claiming to be from %s", ev.RetweeterId)
-			return nil, ErrForeignRetweetAuthor
+		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.RetweeterId); err != nil {
+			return nil, err
 		}
 
 		retweetedBy := ev.RetweeterId

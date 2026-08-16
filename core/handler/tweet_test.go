@@ -1531,6 +1531,6 @@ func TestSetPinnedFromEvent(t *testing.T) {
 		users, _ := authorStream(t)
 		_, attacker := authorStream(t)
 		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, attacker, true)
-		assert.ErrorIs(t, err, ErrForeignPinAuthor)
+		assert.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 	})
 }

@@ -42,8 +42,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ErrForeignReactionAuthor = warpnet.WarpError("react: reaction did not come from the reactor's node")
-
 type ReactionTweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
@@ -97,14 +95,9 @@ func StreamReactionHandler(
 			return nil, warpnet.WarpError("react: empty tweet id")
 		}
 
-		reactor, err := userRepo.Get(ev.OwnerId)
-		if err != nil || reactor.NodeId == "" {
-			log.Warnf("react: dropping reaction claiming to be from %s", ev.OwnerId)
-			return nil, ErrForeignReactionAuthor
-		}
-		if s == nil || s.Conn() == nil || reactor.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("react: dropping reaction claiming to be from %s", ev.OwnerId)
-			return nil, ErrForeignReactionAuthor
+		reactor, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId)
+		if err != nil {
+			return nil, err
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
@@ -223,14 +216,8 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		reactor, err := userRepo.Get(ev.OwnerId)
-		if err != nil || reactor.NodeId == "" {
-			log.Warnf("unreact: dropping unreaction claiming to be from %s", ev.OwnerId)
-			return nil, ErrForeignReactionAuthor
-		}
-		if s == nil || s.Conn() == nil || reactor.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("unreact: dropping unreaction claiming to be from %s", ev.OwnerId)
-			return nil, ErrForeignReactionAuthor
+		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId); err != nil {
+			return nil, err
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)

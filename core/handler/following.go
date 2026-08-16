@@ -41,8 +41,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ErrForeignFollower = warpnet.WarpError("follow: follow did not come from the follower's node")
-
 type FollowNodeStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
@@ -151,15 +149,15 @@ func StreamFollowHandler(
 		if isMeFollowed { //nolint:nestif
 			if s == nil || s.Conn() == nil {
 				log.Warnf("follow: dropping follow claiming to be from %s", ev.FollowerId)
-				return nil, ErrForeignFollower
+				return nil, warpnet.ErrForeignAuthor
 			}
 			followerUser, err := fetchFollower(userRepo, streamer, s, ev.FollowerId)
 			if err != nil {
 				return nil, err
 			}
-			if followerUser.NodeId != s.Conn().RemotePeer().String() {
+			if !warpnet.IsFromNode(s, followerUser.NodeId) {
 				log.Warnf("follow: dropping follow claiming to be from %s", ev.FollowerId)
-				return nil, ErrForeignFollower
+				return nil, warpnet.ErrForeignAuthor
 			}
 			err = followRepo.Follow(ev.FollowerId, ownerUserId)
 			if err != nil && !errors.Is(err, database.ErrAlreadyFollowed) {
@@ -180,13 +178,9 @@ func StreamFollowHandler(
 
 		// Owner-initiated follow: only this node's owner may act as the
 		// follower, and only from this very node.
-		if ev.FollowerId != ownerUserId {
+		if ev.FollowerId != ownerUserId || !warpnet.IsFromNode(s, owner.NodeId) {
 			log.Warnf("follow: dropping follow claiming to be from %s", ev.FollowerId)
-			return nil, ErrForeignFollower
-		}
-		if s == nil || s.Conn() == nil || owner.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("follow: dropping follow claiming to be from %s", ev.FollowerId)
-			return nil, ErrForeignFollower
+			return nil, warpnet.ErrForeignAuthor
 		}
 
 		followDataResp := []byte(event.Accepted)
@@ -293,14 +287,8 @@ func StreamUnfollowHandler(
 		isMeUnfollowed := ownerUserId == ev.FollowingId
 
 		if isMeUnfollowed {
-			follower, err := userRepo.Get(ev.FollowerId)
-			if err != nil || follower.NodeId == "" {
-				log.Warnf("unfollow: dropping unfollow claiming to be from %s", ev.FollowerId)
-				return nil, ErrForeignFollower
-			}
-			if s == nil || s.Conn() == nil || follower.NodeId != s.Conn().RemotePeer().String() {
-				log.Warnf("unfollow: dropping unfollow claiming to be from %s", ev.FollowerId)
-				return nil, ErrForeignFollower
+			if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.FollowerId); err != nil {
+				return nil, err
 			}
 			err = followRepo.Unfollow(ev.FollowerId, ev.FollowingId)
 			if err != nil {
@@ -311,13 +299,9 @@ func StreamUnfollowHandler(
 
 		// Owner-initiated unfollow: only this node's owner may act as the
 		// follower, and only from this very node.
-		if ev.FollowerId != ownerUserId {
+		if ev.FollowerId != ownerUserId || !warpnet.IsFromNode(s, owner.NodeId) {
 			log.Warnf("unfollow: dropping unfollow claiming to be from %s", ev.FollowerId)
-			return nil, ErrForeignFollower
-		}
-		if s == nil || s.Conn() == nil || owner.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("unfollow: dropping unfollow claiming to be from %s", ev.FollowerId)
-			return nil, ErrForeignFollower
+			return nil, warpnet.ErrForeignAuthor
 		}
 
 		followingUser, err := userRepo.Get(ev.FollowingId)

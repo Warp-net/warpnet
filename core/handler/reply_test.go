@@ -468,8 +468,8 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 	t.Run("rejects a reply delivered by a foreign node", func(t *testing.T) {
 		_, attacker := stream.NewLoopbackStream("attacker-node", "attacker-node", "/test/route/0.0.0")
 		h := build(localParent, stubModerationNotifier{})
-		if _, err := h(marshal(t, makeReply()), attacker); !errors.Is(err, ErrForeignReplyAuthor) {
-			t.Fatalf("expected ErrForeignReplyAuthor, got %v", err)
+		if _, err := h(marshal(t, makeReply()), attacker); !errors.Is(err, warpnet.ErrForeignAuthor) {
+			t.Fatalf("expected ErrForeignAuthor, got %v", err)
 		}
 	})
 

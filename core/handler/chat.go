@@ -46,12 +46,10 @@ import (
 )
 
 const (
-	ErrForeignMessageAuthor = warpnet.WarpError("messages: message did not come from its author's node")
-	ErrForeignChatAuthor    = warpnet.WarpError("chats: chat did not come from its author's node")
-	messageLimit            = 5000
-	mediaKeyLimit           = 128
-	maxMessageImages        = 4
-	statusUndelivered       = "undelivered"
+	messageLimit      = 5000
+	mediaKeyLimit     = 128
+	maxMessageImages  = 4
+	statusUndelivered = "undelivered"
 )
 
 type ChatAuthStorer interface {
@@ -100,14 +98,8 @@ func StreamCreateChatHandler(
 			return nil, mastodon.ErrNotSupported
 		}
 
-		initiator, err := userRepo.Get(ev.OwnerId)
-		if err != nil || initiator.NodeId == "" {
-			log.Warnf("chat: dropping chat claiming to be from %s", ev.OwnerId)
-			return nil, ErrForeignChatAuthor
-		}
-		if s == nil || s.Conn() == nil || initiator.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("chat: dropping chat claiming to be from %s", ev.OwnerId)
-			return nil, ErrForeignChatAuthor
+		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.OwnerId); err != nil {
+			return nil, err
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -318,18 +310,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, warpnet.WarpError("not authorized to send message to this chat")
 		}
 
-		sender, err := userRepo.Get(ev.SenderId)
+		sender, err := warpnet.VerifyAuthorship(userRepo, s, ev.SenderId)
 		if err != nil {
 			return nil, err
-		}
-		if sender.NodeId == "" {
-			log.Warnf("chat: dropping message claiming to be from %s", ev.SenderId)
-			return nil, ErrForeignMessageAuthor
-		}
-
-		if s == nil || s.Conn() == nil || sender.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("chat: dropping message claiming to be from %s", ev.SenderId)
-			return nil, ErrForeignMessageAuthor
 		}
 
 		imageKeys, areImageKeysValid := mediaKeys(ev.ImageKeys)

@@ -35,8 +35,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ErrForeignTweetAuthor = warpnet.WarpError("timeline: tweet did not come from its author's node")
-
 type TimelineFetcher interface {
 	GetTimeline(string, *uint64, *string) ([]domain.Tweet, string, error)
 }
@@ -81,15 +79,8 @@ func StreamTimelineNewTweetHandler(
 			return nil, err
 		}
 
-		author, err := userRepo.Get(ev.UserId)
-		if err != nil || author.NodeId == "" {
-			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
-			return nil, ErrForeignTweetAuthor
-		}
-
-		if s == nil || s.Conn() == nil || author.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
-			return nil, ErrForeignTweetAuthor
+		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.UserId); err != nil {
+			return nil, err
 		}
 
 		if ev.Moderation != nil && !ev.Moderation.IsOk {

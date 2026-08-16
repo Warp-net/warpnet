@@ -40,8 +40,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ErrForeignViewer = warpnet.WarpError("view: view did not come from the viewer's node")
-
 type ViewsStorer interface {
 	RecordView(tweetId, viewerId string) (uint64, error)
 	GetViewsCount(tweetId string) (uint64, error)
@@ -73,14 +71,8 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 			return nil, warpnet.WarpError("view: empty viewer id")
 		}
 
-		viewer, err := userRepo.Get(ev.ViewerId)
-		if err != nil || viewer.NodeId == "" {
-			log.Warnf("view: dropping view claiming to be from %s", ev.ViewerId)
-			return nil, ErrForeignViewer
-		}
-		if s == nil || s.Conn() == nil || viewer.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("view: dropping view claiming to be from %s", ev.ViewerId)
-			return nil, ErrForeignViewer
+		if _, err := warpnet.VerifyAuthorship(userRepo, s, ev.ViewerId); err != nil {
+			return nil, err
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
