@@ -172,7 +172,8 @@ func authorStream(t *testing.T) (stubTweetUserRepo, warpnet.WarpStream) {
 	repo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 		return domain.User{Id: userId, NodeId: nodeId.String()}, nil
 	}}
-	return repo, &warpnet.WarpStreamBody{SenderId: nodeId}
+	_, server := stream.NewLoopbackStream(nodeId, nodeId, "/test/route/0.0.0")
+	return repo, server
 }
 
 type stubTweetUserRepo struct {

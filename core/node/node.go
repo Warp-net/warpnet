@@ -375,6 +375,17 @@ func (n *WarpNode) Prioritizer() Prioritizer {
 // far longer than the default one-minute self-stream budget.
 const importStreamDeadline = 10 * time.Minute
 
+func senderPeer(envelope []byte, self warpnet.WarpPeerID) warpnet.WarpPeerID {
+	var msg warpevent.Message
+	if err := json.Unmarshal(envelope, &msg); err != nil || msg.NodeId == "" {
+		return self
+	}
+	if sender := warpnet.FromStringToPeerID(msg.NodeId); sender != "" {
+		return sender
+	}
+	return self
+}
+
 func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
 	if data == nil {
 		return nil, fmt.Errorf("node: selfstream: empty data") //nolint:err113
@@ -387,7 +398,17 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 		)
 	}
 
-	streamClient, streamServer := stream.NewLoopbackStream(n.node.ID(), warpnet.WarpProtocolID(path))
+	bt, ok := data.([]byte)
+	if !ok {
+		bt, err = json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("node: selfstream: marshal data %w %s", err, data)
+		}
+	}
+
+	streamClient, streamServer := stream.NewLoopbackStream(
+		n.node.ID(), senderPeer(bt, n.node.ID()), warpnet.WarpProtocolID(path),
+	)
 	defer func() {
 		_ = streamClient.Close()
 	}()
@@ -399,14 +420,6 @@ func (n *WarpNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err er
 
 	_ = streamServer.SetDeadline(time.Now().Add(deadline))
 	go handler(streamServer) // handler closes server stream by itself
-
-	bt, ok := data.([]byte)
-	if !ok {
-		bt, err = json.Marshal(data)
-		if err != nil {
-			return nil, fmt.Errorf("node: selfstream: marshal data %w %s", err, data)
-		}
-	}
 
 	_ = streamClient.SetDeadline(time.Now().Add(deadline))
 	if _, err := streamClient.Write(bt); err != nil {
