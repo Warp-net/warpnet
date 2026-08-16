@@ -56,6 +56,7 @@ const (
 	PRIVATE_POST_LOGIN                 = "/private/post/login/0.0.0"
 	PRIVATE_POST_LOGOUT                = "/private/post/logout/0.0.0"
 	PRIVATE_POST_TWEET                 = "/private/post/tweet/0.0.0"
+	PUBLIC_POST_TIMELINE               = "/public/post/timeline/0.0.0"
 	PUBLIC_POST_REPLY                  = "/public/post/reply/0.0.0"
 	PRIVATE_POST_IMPORT_TWITTER_TWEET  = "/private/post/import/twitter/tweet/0.0.0"
 	PRIVATE_POST_USER                  = "/private/post/user/0.0.0"

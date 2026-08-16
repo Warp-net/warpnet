@@ -27,6 +27,7 @@ package remote
 import (
 	"crypto/ed25519"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
 	"net/url"
@@ -73,7 +74,7 @@ type Codec interface {
 }
 
 type Node interface {
-	SelfStream(path stream.WarpRoute, data any) ([]byte, error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error)
 }
 
 // Authenticator is the slice of the auth service the dispatcher uses: log the
@@ -244,8 +245,13 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 		req.Timestamp = time.Now()
 	}
 	req.Timestamp = req.Timestamp.UTC()
-	req.Signature = security.Sign(b.auth.PrivateKey(), req.SigningBytes())
-	respData, err := n.SelfStream(stream.WarpRoute(req.Destination), req)
+	privKey := b.auth.PrivateKey()
+	ownNodeId, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	req.Signature = security.Sign(privKey, req.SigningBytes())
+	respData, err := n.SelfStream(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())
 	}

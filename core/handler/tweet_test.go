@@ -2,6 +2,8 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"strings"
 	"testing"
@@ -153,6 +155,25 @@ func (s stubTweetBroadcaster) PublishUpdateToFollowers(ownerId, dest string, bt 
 		return s.publishFn(ownerId, dest, bt)
 	}
 	return nil
+}
+
+func authorStream(t *testing.T) (stubTweetUserRepo, warpnet.WarpStream) {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate author key: %v", err)
+	}
+	nodeId, err := warpnet.IDFromPublicKey(pub)
+	if err != nil {
+		t.Fatalf("derive author node id: %v", err)
+	}
+
+	repo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: nodeId.String()}, nil
+	}}
+	_, server := stream.NewLoopbackStream(nodeId, nodeId, "/test/route/0.0.0")
+	return repo, server
 }
 
 type stubTweetUserRepo struct {
@@ -430,8 +451,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 			stubFollowChecker{following: false},
 			stubTweetUserRepo{},
 			stubModerationNotifier{},
-			stubStreamer{},
-		)
+			stubStreamer{})
 		resp, err := h(marshal(t, event.NewTweetEvent{Id: "x1", UserId: "stranger-1", Text: "unsolicited"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -483,8 +503,7 @@ func TestStreamNewTweetHandler_TweetThenReply(t *testing.T) {
 		stubFollowChecker{},
 		stubTweetUserRepo{},
 		stubModerationNotifier{},
-		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}},
-	)
+		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 
 	// 1) a top-level tweet: stored and added to the timeline.
 	resp, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "hello"}), nil)

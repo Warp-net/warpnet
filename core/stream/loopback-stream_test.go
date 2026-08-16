@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewLoopbackStream(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	assert.NotNil(t, r)
 	assert.NotNil(t, w)
 	defer r.Close()
@@ -19,7 +19,7 @@ func TestNewLoopbackStream(t *testing.T) {
 }
 
 func TestLoopbackStream_ReadWrite(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -36,7 +36,7 @@ func TestLoopbackStream_ReadWrite(t *testing.T) {
 }
 
 func TestLoopbackStream_Protocol(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -44,7 +44,7 @@ func TestLoopbackStream_Protocol(t *testing.T) {
 }
 
 func TestLoopbackStream_SetProtocol(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -54,7 +54,7 @@ func TestLoopbackStream_SetProtocol(t *testing.T) {
 }
 
 func TestLoopbackStream_ID(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -62,7 +62,7 @@ func TestLoopbackStream_ID(t *testing.T) {
 }
 
 func TestLoopbackStream_Stat(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -71,14 +71,14 @@ func TestLoopbackStream_Stat(t *testing.T) {
 }
 
 func TestLoopbackStream_Close(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	_ = w.Close()
 	err := r.Close()
 	assert.NoError(t, err)
 }
 
 func TestLoopbackStream_CloseIdempotent(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	_ = w.Close()
 	_ = r.Close()
 	err := r.Close()
@@ -86,7 +86,7 @@ func TestLoopbackStream_CloseIdempotent(t *testing.T) {
 }
 
 func TestLoopbackStream_Reset(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -95,7 +95,7 @@ func TestLoopbackStream_Reset(t *testing.T) {
 }
 
 func TestLoopbackStream_Scope(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -103,7 +103,7 @@ func TestLoopbackStream_Scope(t *testing.T) {
 }
 
 func TestLoopbackStream_SetDeadline(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -112,7 +112,7 @@ func TestLoopbackStream_SetDeadline(t *testing.T) {
 }
 
 func TestLoopbackConn_LocalPeer(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -122,7 +122,7 @@ func TestLoopbackConn_LocalPeer(t *testing.T) {
 }
 
 func TestLoopbackConn_ConnState(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -134,7 +134,7 @@ func TestLoopbackConn_ConnState(t *testing.T) {
 }
 
 func TestLoopbackConn_Multiaddrs(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -144,7 +144,7 @@ func TestLoopbackConn_Multiaddrs(t *testing.T) {
 }
 
 func TestLoopbackConn_ID(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -153,7 +153,7 @@ func TestLoopbackConn_ID(t *testing.T) {
 }
 
 func TestLoopbackConn_Stat(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -163,7 +163,7 @@ func TestLoopbackConn_Stat(t *testing.T) {
 }
 
 func TestLoopbackConn_NewStream(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -174,7 +174,7 @@ func TestLoopbackConn_NewStream(t *testing.T) {
 }
 
 func TestLoopbackConn_GetStreams(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -184,7 +184,7 @@ func TestLoopbackConn_GetStreams(t *testing.T) {
 }
 
 func TestLoopbackConn_RemotePublicKey(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -193,7 +193,7 @@ func TestLoopbackConn_RemotePublicKey(t *testing.T) {
 }
 
 func TestLoopbackConn_Scope(t *testing.T) {
-	r, w := NewLoopbackStream("peer1", "/test/proto")
+	r, w := NewLoopbackStream("peer1", "peer1", "/test/proto")
 	defer r.Close()
 	defer w.Close()
 
@@ -202,7 +202,7 @@ func TestLoopbackConn_Scope(t *testing.T) {
 }
 
 func TestLoopbackStreamResetUnblocksBlockedWriter(t *testing.T) {
-	client, server := NewLoopbackStream("peer1", "/test/proto")
+	client, server := NewLoopbackStream("peer1", "peer1", "/test/proto")
 
 	writeReturned := make(chan struct{})
 	go func() {

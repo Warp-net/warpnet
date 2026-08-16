@@ -57,8 +57,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 			stubFollowChecker{},
 			userRepo,
 			notifier,
-			streamer,
-		)
+			streamer)
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -491,8 +490,7 @@ func TestHandleNewReply_ForwardRoute(t *testing.T) {
 			stubFollowChecker{},
 			stubReplyUserRepo{},
 			stubModerationNotifier{},
-			streamer,
-		)
+			streamer)
 	}
 
 	t.Run("uses the public reply route", func(t *testing.T) {

@@ -150,7 +150,11 @@ class WarpnetClient(
                 nodeId = signer.peerId,
                 path = ProtocolIds.PRIVATE_POST_PAIR,
                 timestamp = timestamp,
-            ).copy(signature = signer.sign(rawAuthNodeInfoJson + epochNanos))
+            ).copy(
+                signature = signer.sign(
+                    rawAuthNodeInfoJson + epochNanos + ProtocolIds.PRIVATE_POST_PAIR,
+                ),
+            )
 
             val requestJson = buildEnvelopeJson(envelope)
             val raw = binding.stream(ProtocolIds.PRIVATE_POST_PAIR, requestJson)
@@ -221,7 +225,7 @@ class WarpnetClient(
                 nodeId = signer.peerId,
                 path = protocolId,
                 timestamp = timestamp,
-            ).copy(signature = signer.sign(bodyJson + epochNanos))
+            ).copy(signature = signer.sign(bodyJson + epochNanos + protocolId))
 
             val requestJson = buildEnvelopeJson(envelope)
             val raw = binding.stream(protocolId, requestJson)

@@ -64,7 +64,7 @@ const (
 type GossipNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
-	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
 type topicHandler func(data []byte) error
@@ -478,7 +478,9 @@ func (g *Gossip) SelfPublish(data []byte) error {
 		return err
 	}
 
-	_, err = g.node.SelfStream(route, data)
+	_, err = g.node.SelfStream(
+		warpnet.FromStringToPeerID(simulatedStreamMessage.NodeId), g.node.NodeInfo().ID, route, data,
+	)
 	return err
 }
 

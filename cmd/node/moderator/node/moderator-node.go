@@ -192,7 +192,7 @@ func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	return mn.node.Stream(nodeId, path, data)
 }
 
-func (mn *ModeratorNode) SelfStream(_ stream.WarpRoute, _ any) (_ []byte, err error) {
+func (mn *ModeratorNode) SelfStream(_, _ warpnet.WarpPeerID, _ stream.WarpRoute, _ any) (_ []byte, err error) {
 	return nil, warpnet.ErrNotImplemented
 }
 

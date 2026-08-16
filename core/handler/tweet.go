@@ -173,7 +173,7 @@ func StreamNewTweetHandler(
 				Poll:      tweet.Poll,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_POST_TWEET, bt); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TIMELINE, bt); err != nil {
 				log.Errorf("broadcaster publish owner tweet update: %v", err)
 			}
 		}

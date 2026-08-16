@@ -32,6 +32,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 type TimelineFetcher interface {
@@ -64,3 +65,61 @@ func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 		}, nil
 	}
 }
+
+func StreamTimelineTweetHandler(
+	authRepo OwnerTweetStorer,
+	tweetRepo TweetsStorer,
+	timelineRepo TimelineUpdater,
+	followRepo TweetFollowChecker,
+	userRepo TweetUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.NewTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Moderation != nil && !ev.Moderation.IsOk {
+			return nil, tweetRepo.Blocklist(ev.Id)
+		}
+		if err := validateTweetEvent(ev); err != nil {
+			return nil, err
+		}
+
+		owner := authRepo.GetOwner()
+		if owner.UserId == ev.UserId {
+			return event.Accepted, nil
+		}
+		if followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId) {
+			return event.Accepted, nil
+		}
+		if !isSentByAuthor(ev.UserId, userRepo, s) {
+			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
+			return nil, ErrForeignTweetAuthor
+		}
+
+		tweet, err := tweetRepo.Create(ev.UserId, ev)
+		if err != nil {
+			return nil, err
+		}
+		if tweet.Id == "" {
+			return tweet, warpnet.WarpError("timeline handler: empty tweet id")
+		}
+		if err := timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
+			log.Infof("fail adding tweet to timeline: %v", err)
+		}
+		return tweet, nil
+	}
+}
+
+func isSentByAuthor(authorId string, userRepo TweetUserFetcher, s warpnet.WarpStream) bool {
+	if s == nil || s.Conn() == nil || userRepo == nil {
+		return false
+	}
+	author, err := userRepo.Get(authorId)
+	if err != nil || author.NodeId == "" {
+		return false
+	}
+	return author.NodeId == s.Conn().RemotePeer().String()
+}
+
+const ErrForeignTweetAuthor = warpnet.WarpError("timeline: tweet did not come from its author's node")

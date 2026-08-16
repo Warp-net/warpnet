@@ -197,7 +197,7 @@ func TestSelfStream_RoundTripsThroughTheRegisteredHandler(t *testing.T) {
 		},
 	})
 
-	resp, err := n.SelfStream(echoRoute, signedEnvelope(t, n, echoRoute, []byte(`{"ping":true}`)))
+	resp, err := n.SelfStream(n.Node().ID(), n.Node().ID(), echoRoute, signedEnvelope(t, n, echoRoute, []byte(`{"ping":true}`)))
 	require.NoError(t, err)
 	assert.Equal(t, `{"pong":true}`, string(resp))
 	assert.Equal(t, `{"ping":true}`, string(seen), "the handler must see the message body, not the envelope")
@@ -215,7 +215,7 @@ func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 		},
 	})
 
-	resp, err := n.SelfStream(echoRoute, []byte(`{"ping":true}`))
+	resp, err := n.SelfStream(n.Node().ID(), n.Node().ID(), echoRoute, []byte(`{"ping":true}`))
 	require.NoError(t, err)
 	assert.NotContains(t, string(resp), `"ok":true`)
 
@@ -225,7 +225,7 @@ func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 	})
 	require.NoError(t, err)
-	resp, err = n.SelfStream(echoRoute, unsigned)
+	resp, err = n.SelfStream(n.Node().ID(), n.Node().ID(), echoRoute, unsigned)
 	require.NoError(t, err)
 	assert.NotContains(t, string(resp), `"ok":true`)
 
@@ -236,7 +236,7 @@ func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 	tampered, err := json.Marshal(msg)
 	require.NoError(t, err)
 
-	resp, err = n.SelfStream(echoRoute, tampered)
+	resp, err = n.SelfStream(n.Node().ID(), n.Node().ID(), echoRoute, tampered)
 	require.NoError(t, err)
 	assert.NotContains(t, string(resp), `"ok":true`)
 
@@ -246,10 +246,10 @@ func TestSelfStream_RejectsUnsignedAndForgedEnvelopes(t *testing.T) {
 func TestSelfStream_RejectsEmptyDataAndUnknownRoute(t *testing.T) {
 	n := newTestNode(t)
 
-	_, err := n.SelfStream(echoRoute, nil)
+	_, err := n.SelfStream(n.Node().ID(), n.Node().ID(), echoRoute, nil)
 	assert.Error(t, err, "an empty self-stream is a programming error")
 
-	_, err = n.SelfStream(stream.WarpRoute("/public/get/nothing/0.0.0"), []byte(`{}`))
+	_, err = n.SelfStream(n.Node().ID(), n.Node().ID(), stream.WarpRoute("/public/get/nothing/0.0.0"), []byte(`{}`))
 	assert.Error(t, err, "an unregistered route must be reported, not silently dropped")
 }
 
@@ -269,7 +269,7 @@ func TestSelfStream_HandlerErrorStillAnswers(t *testing.T) {
 	var resp []byte
 	go func() {
 		defer close(done)
-		resp, _ = n.SelfStream(echoRoute, envelope)
+		resp, _ = n.SelfStream(n.Node().ID(), n.Node().ID(), echoRoute, envelope)
 	}()
 
 	select {
@@ -510,4 +510,93 @@ func TestConnTracer_ClassifiesRealConnections(t *testing.T) {
 		tr.Connected(client.Node().Network(), conns[0])
 		tr.Disconnected(client.Node().Network(), conns[0])
 	})
+}
+
+// A self-stream must report the node that actually sent the payload, so a
+// relayed envelope is checked against its author's key and gets none of the
+// owner's private-route access.
+func TestSelfStream_RelayedEnvelopeIsNotPrivileged(t *testing.T) {
+	n := newTestNode(t)
+
+	reached := map[string]int{}
+	for _, route := range []string{warpevent.PRIVATE_POST_BLOCK, warpevent.PUBLIC_POST_TIMELINE} {
+		n.SetStreamHandlers(warpnet.WarpStreamHandler{
+			Path: warpnet.WarpProtocolID(route),
+			Handler: func([]byte, warpnet.WarpStream) (any, error) {
+				reached[route]++
+				return []byte(`{"ok":true}`), nil
+			},
+		})
+	}
+
+	signedBy := func(t *testing.T, priv ed25519.PrivateKey, id, route string) []byte {
+		t.Helper()
+		msg := warpevent.Message{
+			Body:        json.RawMessage(`{"text":"update"}`),
+			MessageId:   "relayed",
+			NodeId:      id,
+			Destination: route,
+			Timestamp:   time.Now().UTC(),
+			Version:     "0.0.0",
+		}
+		msg.Signature = security.Sign(priv, msg.SigningBytes())
+		bt, err := json.Marshal(msg)
+		require.NoError(t, err)
+		return bt
+	}
+
+	pub, authorPriv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	authorId, err := warpnet.IDFromPublicKey(pub)
+	require.NoError(t, err)
+
+	_, err = n.SelfStream(authorId, n.Node().ID(), stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK),
+		signedBy(t, authorPriv, authorId.String(), warpevent.PRIVATE_POST_BLOCK))
+	require.NoError(t, err)
+	assert.Zero(t, reached[warpevent.PRIVATE_POST_BLOCK],
+		"a relayed envelope must not reach a privileged handler")
+
+	_, err = n.SelfStream(authorId, n.Node().ID(), stream.WarpRoute(warpevent.PUBLIC_POST_TIMELINE),
+		signedBy(t, authorPriv, authorId.String(), warpevent.PUBLIC_POST_TIMELINE))
+	require.NoError(t, err)
+	assert.Equal(t, 1, reached[warpevent.PUBLIC_POST_TIMELINE],
+		"a followed author's update must reach its handler")
+}
+
+// The destination is covered by the signature, so a message this node
+// published cannot be captured and repointed at a privileged handler.
+func TestSelfStream_RejectsARewrittenDestination(t *testing.T) {
+	n := newTestNode(t)
+
+	var reached int
+	n.SetStreamHandlers(warpnet.WarpStreamHandler{
+		Path: warpnet.WarpProtocolID(warpevent.PRIVATE_POST_BLOCK),
+		Handler: func([]byte, warpnet.WarpStream) (any, error) {
+			reached++
+			return []byte(`{"ok":true}`), nil
+		},
+	})
+
+	priv, err := n.Node().Peerstore().PrivKey(n.Node().ID()).Raw()
+	require.NoError(t, err)
+
+	msg := warpevent.Message{
+		Body:        json.RawMessage(`{"text":"our own gossiped tweet"}`),
+		MessageId:   "captured",
+		NodeId:      n.Node().ID().String(),
+		Destination: warpevent.PUBLIC_POST_TIMELINE,
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	msg.Signature = security.Sign(priv, msg.SigningBytes())
+
+	msg.Destination = warpevent.PRIVATE_POST_BLOCK
+
+	bt, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	_, err = n.SelfStream(n.Node().ID(), n.Node().ID(), stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK), bt)
+	require.NoError(t, err)
+
+	assert.Zero(t, reached, "a rewritten destination reached a privileged handler")
 }

@@ -298,13 +298,15 @@ type Message struct {
 	Signature   string          `json:"signature"`
 }
 
-// SigningBytes returns the bytes an ed25519 signature covers: the raw body plus
-// the timestamp as decimal Unix nanoseconds. Senders must set Timestamp first.
+// SigningBytes returns the bytes an ed25519 signature covers: the raw body, the
+// timestamp as decimal Unix nanoseconds, then the destination route. Senders
+// must set Timestamp and Destination first.
 func (m Message) SigningBytes() []byte {
 	ts := strconv.FormatInt(m.Timestamp.UnixNano(), 10)
-	buf := make([]byte, 0, len(m.Body)+len(ts))
+	buf := make([]byte, 0, len(m.Body)+len(ts)+len(m.Destination))
 	buf = append(buf, m.Body...)
 	buf = append(buf, ts...)
+	buf = append(buf, m.Destination...)
 	return buf
 }
 

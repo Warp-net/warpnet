@@ -64,7 +64,7 @@ func TestAuthMiddleware_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 		_, _ = s.Write([]byte(`{"ok":true}`))
 	})
 
-	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
+	client, server := stream.NewLoopbackStream("peer1", "peer1", "/private/post/video/0.0.0")
 	go handler(server)
 
 	limit := int64(MaxLimit)
@@ -95,7 +95,7 @@ func TestAuthMiddleware_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	defer mw.Close()
 
 	limit := int64(MaxLimit)
-	client, server := stream.NewLoopbackStream("peer1", "/private/post/video/0.0.0")
+	client, server := stream.NewLoopbackStream("peer1", "peer1", "/private/post/video/0.0.0")
 	go mw.AuthMiddleware(func(s warpnet.WarpStream) {})(server)
 
 	payload := bytes.Repeat([]byte("A"), int(limit))
@@ -170,7 +170,7 @@ func callPeer(
 		t.Fatalf("marshal message: %v", err)
 	}
 
-	client, server := stream.NewLoopbackStream(ownNodeId, warpnet.WarpProtocolID(route))
+	client, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, warpnet.WarpProtocolID(route))
 	go handler(remoteStream{
 		WarpStream: server,
 		conn:       remoteConn{local: ownNodeId, remote: peer},
