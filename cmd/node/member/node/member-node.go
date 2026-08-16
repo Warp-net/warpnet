@@ -476,7 +476,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_TIMELINE,
-			handler.StreamTimelineTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo),
+			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,

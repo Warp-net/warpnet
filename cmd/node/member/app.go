@@ -109,6 +109,7 @@ var errUnknownNetwork = errors.New("unknown network")
 // SelectNetwork relaunches the app on the chosen network. After the first
 // login the choice sticks by itself: config picks the network that already
 // has a database.
+// TODO remove
 func (a *App) SelectNetwork(network string) error {
 	if network != mainNetwork && network != testNetwork {
 		return fmt.Errorf("%w: %s", errUnknownNetwork, network)
@@ -138,7 +139,6 @@ func (a *App) SetPendingDeepLink(raw string) {
 	a.mx.Unlock()
 }
 
-// ConsumePendingDeepLink returns the pending warpnet:// URL and clears it.
 func (a *App) ConsumePendingDeepLink() string {
 	if a == nil || a.mx == nil {
 		return ""
@@ -150,11 +150,6 @@ func (a *App) ConsumePendingDeepLink() string {
 	return raw
 }
 
-// NotifyDeepLink stashes the URL and, if the Wails runtime is ready,
-// unminimises + shows the window and emits "deeplink:open" so the
-// frontend pulls ConsumePendingDeepLink without waiting for a navigation.
-// Called from SingleInstanceLock.OnSecondInstanceLaunch (Linux/Windows)
-// and mac.Options.OnUrlOpen — both arrive while the app is already up.
 func (a *App) NotifyDeepLink(raw string) {
 	if a == nil || raw == "" {
 		return
@@ -168,8 +163,6 @@ func (a *App) NotifyDeepLink(raw string) {
 	wailsruntime.EventsEmit(a.ctx, "deeplink:open")
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {

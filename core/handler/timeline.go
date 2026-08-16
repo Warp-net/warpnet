@@ -35,6 +35,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const ErrForeignTweetAuthor = warpnet.WarpError("timeline: tweet did not come from its author's node")
+
 type TimelineFetcher interface {
 	GetTimeline(string, *uint64, *string) ([]domain.Tweet, string, error)
 }
@@ -66,7 +68,7 @@ func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 	}
 }
 
-func StreamTimelineTweetHandler(
+func StreamTimelineNewTweetHandler(
 	authRepo OwnerTweetStorer,
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
@@ -78,6 +80,18 @@ func StreamTimelineTweetHandler(
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
+
+		author, err := userRepo.Get(ev.UserId)
+		if err != nil || author.NodeId == "" {
+			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
+			return nil, ErrForeignTweetAuthor
+		}
+
+		if author.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
+			return nil, ErrForeignTweetAuthor
+		}
+
 		if ev.Moderation != nil && !ev.Moderation.IsOk {
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
@@ -91,10 +105,6 @@ func StreamTimelineTweetHandler(
 		}
 		if followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId) {
 			return event.Accepted, nil
-		}
-		if !isSentByAuthor(ev.UserId, userRepo, s) {
-			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.UserId)
-			return nil, ErrForeignTweetAuthor
 		}
 
 		tweet, err := tweetRepo.Create(ev.UserId, ev)
@@ -110,16 +120,3 @@ func StreamTimelineTweetHandler(
 		return tweet, nil
 	}
 }
-
-func isSentByAuthor(authorId string, userRepo TweetUserFetcher, s warpnet.WarpStream) bool {
-	if s == nil || s.Conn() == nil || userRepo == nil {
-		return false
-	}
-	author, err := userRepo.Get(authorId)
-	if err != nil || author.NodeId == "" {
-		return false
-	}
-	return author.NodeId == s.Conn().RemotePeer().String()
-}
-
-const ErrForeignTweetAuthor = warpnet.WarpError("timeline: tweet did not come from its author's node")

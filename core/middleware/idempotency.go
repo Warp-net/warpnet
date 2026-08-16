@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"reflect"
 	"runtime"
 	"strings"
@@ -40,23 +41,51 @@ import (
 )
 
 const (
-	idempotencyTTL = 10 * time.Minute
-	// idempotencySize bounds the cache by entry count. Combined with
-	// idempotencyMaxPayloadBytes below, worst-case memory is bounded
-	// at ~(size * maxPayloadBytes).
-	idempotencySize = 1024
-	// idempotencyMaxPayloadBytes drops oversized payloads instead of
-	// caching them. Entry-count LRU alone offers no protection against
-	// a few large responses dominating memory; this guard keeps the
-	// cache cheap.
+	idempotencyTTL             = 10 * time.Minute
+	idempotencySize            = 1024
 	idempotencyMaxPayloadBytes = 64 * 1024 // 64 KiB
 )
 
-// idempotencyCache stores responses keyed by (protocol + peer + message id)
-// so that duplicate POST requests retried by clients (double-clicks, network
-// retries) return the original response without re-executing the side effect.
-// It also collapses concurrent same-key requests via an in-flight wait map,
-// so simultaneous retries share a single handler invocation.
+func (p *WarpMiddleware) IdempotencyStreamMiddleware(handler warpnet.StreamHandler) warpnet.StreamHandler {
+	return func(s warpnet.WarpStream) {
+		defer func() {
+			_ = s.Close()
+		}()
+
+		var (
+			data      []byte
+			messageID string
+		)
+
+		typedStream, ok := s.(*warpnet.WarpStreamBody)
+		if !ok {
+			return
+		}
+		data = typedStream.Body
+		messageID = typedStream.MessageId
+
+		protocol := string(s.Protocol())
+		idempotent := p.idempotency != nil && messageID != "" && isIdempotencyApplicable(protocol)
+		var cacheKey string
+		if idempotent {
+			var peerID string
+			if conn := s.Conn(); conn != nil {
+				peerID = conn.RemotePeer().String()
+			}
+			cacheKey = idempotencyKey(protocol, peerID, messageID)
+		}
+
+		if idempotent {
+			payload, err = p.idempotency.do(cacheKey, func() ([]byte, bool, error) {
+				return p.runHandler(handler, data, s)
+			})
+		} else {
+			payload, _, err = runHandler(handler, data, s)
+		}
+
+	}
+}
+
 type idempotencyCache struct {
 	cache  *lru.LRU[string, []byte]
 	closed sync.Once
@@ -65,10 +94,6 @@ type idempotencyCache struct {
 	inflight   map[string]*inflightCall
 }
 
-// inflightCall is the shared rendezvous for concurrent callers waiting on
-// the same idempotency key. The leader runs the compute function; followers
-// wait on `done` and read `payload` / `err`. `followers` is incremented
-// while holding inflightMu and is used only for testing/observability.
 type inflightCall struct {
 	done      chan struct{}
 	payload   []byte
@@ -81,18 +106,10 @@ func newIdempotencyCache(ttl time.Duration) *idempotencyCache {
 		cache:    lru.NewLRU[string, []byte](idempotencySize, nil, ttl),
 		inflight: make(map[string]*inflightCall),
 	}
-	// The library spawns a deleteExpired goroutine whose `done` channel is
-	// never closed by its public API, so the goroutine would normally outlive
-	// the cache. Set a finalizer that closes the channel via reflect+unsafe
-	// when the wrapper becomes unreachable, so the goroutine exits and the
-	// underlying LRU can be GC'd. The library goroutine holds the LRU
-	// strongly but does not reference this wrapper, so the wrapper itself
-	// remains finalizable independently.
 	runtime.SetFinalizer(c, func(c *idempotencyCache) { c.Close() })
 	return c
 }
 
-// get returns a defensive copy so callers can't mutate the cached value.
 func (c *idempotencyCache) get(key string) ([]byte, bool) {
 	v, ok := c.cache.Get(key)
 	if !ok {
@@ -101,7 +118,6 @@ func (c *idempotencyCache) get(key string) ([]byte, bool) {
 	return cloneBytes(v), true
 }
 
-// set stores a defensive copy of the payload. Empty payloads and payloads
 // larger than idempotencyMaxPayloadBytes are dropped to bound memory.
 func (c *idempotencyCache) set(key string, response []byte) {
 	if len(response) == 0 || len(response) > idempotencyMaxPayloadBytes {
@@ -119,12 +135,6 @@ func cloneBytes(b []byte) []byte {
 	return cp
 }
 
-// do returns the cached payload for `key` if present; otherwise it runs
-// `compute` exactly once for any set of concurrent callers sharing the same
-// key. Followers wait for the leader and receive a fresh copy of the
-// payload. The returned payload is stored in the cache only when compute
-// reports it cacheable (so error responses don't poison the cache) and
-// when its size is within idempotencyMaxPayloadBytes.
 func (c *idempotencyCache) do(
 	key string,
 	compute func() (payload []byte, cacheable bool, err error),
@@ -212,17 +222,4 @@ func isIdempotencyApplicable(protocol string) bool {
 
 func idempotencyKey(protocol, peerID, messageID string) string {
 	return protocol + "|" + peerID + "|" + messageID
-}
-
-// followerCount reports the number of in-flight followers waiting on the
-// leader for `key` (excluding the leader itself). Used by tests to build
-// a deterministic barrier without time.Sleep.
-func (c *idempotencyCache) followerCount(key string) int {
-	c.inflightMu.Lock()
-	defer c.inflightMu.Unlock()
-	call, ok := c.inflight[key]
-	if !ok {
-		return 0
-	}
-	return call.followers
 }

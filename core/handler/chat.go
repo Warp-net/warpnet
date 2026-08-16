@@ -302,23 +302,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		if ev.ChatId == "" || !strings.Contains(ev.ChatId, ":") {
 			return nil, warpnet.WarpError("message parameters are invalid")
 		}
-		imageKeys, areImageKeysValid := mediaKeys(ev.ImageKeys)
-		videoKey, isVideoKeyValid := mediaKey(ev.VideoKey)
-		if !areImageKeysValid || !isVideoKeyValid {
-			return nil, warpnet.WarpError("message attachment key is invalid")
-		}
-		// An attachment is a message in itself, so text is only required
-		// when nothing is attached.
-		if ev.Text == "" && len(imageKeys) == 0 && videoKey == nil {
-			return nil, warpnet.WarpError("message parameters are invalid")
-		}
+
 		if ev.SenderId == "" || ev.ReceiverId == "" {
 			return nil, warpnet.WarpError("sender and receiver parameters are invalid")
-		}
-		// Runes, not bytes: a message of emoji costs four bytes per character,
-		// so a byte limit would reject it at a quarter of the advertised length.
-		if utf8.RuneCountInString(ev.Text) > messageLimit {
-			return nil, warpnet.WarpError("message is too long")
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -327,6 +313,29 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		isMeParticipating := ev.SenderId == ownerId || ev.ReceiverId == ownerId
 		if !isMeParticipating {
 			return nil, warpnet.WarpError("not authorized to send message to this chat")
+		}
+
+		sender, err := userRepo.Get(ev.SenderId)
+		if err != nil || sender.NodeId == "" {
+			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.SenderId)
+			return nil, ErrForeignTweetAuthor
+		}
+
+		if sender.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("timeline: dropping tweet claiming to be from %s", ev.SenderId)
+			return nil, ErrForeignTweetAuthor
+		}
+
+		imageKeys, areImageKeysValid := mediaKeys(ev.ImageKeys)
+		videoKey, isVideoKeyValid := mediaKey(ev.VideoKey)
+		if !areImageKeysValid || !isVideoKeyValid {
+			return nil, warpnet.WarpError("message attachment key is invalid")
+		}
+		if ev.Text == "" && len(imageKeys) == 0 && videoKey == nil {
+			return nil, warpnet.WarpError("message parameters are invalid")
+		}
+		if utf8.RuneCountInString(ev.Text) > messageLimit {
+			return nil, warpnet.WarpError("message is too long")
 		}
 
 		chat, err := repo.GetChat(ev.ChatId)
@@ -347,12 +356,12 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			return nil, warpnet.WarpError("not authorized for this chat")
 		}
 
-		// The lookup the delivery below needs anyway, hoisted above the write:
-		// Mastodon has no direct messages, so a bridged recipient is refused
-		// before the message is stored.
 		isSelfChat := ev.SenderId == ev.ReceiverId
-		var otherUser domain.User
-		var otherUserErr error
+
+		var (
+			otherUser    domain.User
+			otherUserErr error
+		)
 		if !isSelfChat && !isOwnerReceiver {
 			otherUser, otherUserErr = userRepo.Get(ev.ReceiverId)
 			if otherUser.Network == mastodon.Network {
@@ -382,14 +391,9 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		}
 		if isOwnerReceiver { // the other user sent a message
 			log.Infoln("received new message!")
-			notifyUsername := ev.SenderId
-			sender, senderErr := userRepo.Get(ev.SenderId)
-			if senderErr == nil {
-				notifyUsername = sender.Username
-			}
 			if err := notifyRepo.Add(domain.Notification{
 				Type:        domain.NotificationMessageType,
-				Text:        notifyUsername + " sent you a message",
+				Text:        sender.Username + " sent you a message",
 				RecepientId: ownerId,
 				ActorId:     ev.SenderId,
 			}); err != nil {
@@ -399,21 +403,21 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		}
 
 		if errors.Is(otherUserErr, database.ErrUserNotFound) {
-			return event.NewMessageResponse(msg), nil
+			return msg, nil
 		}
 		if otherUserErr != nil {
 			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, otherUserErr)
 			msg.Status = statusUndelivered
-			return event.NewMessageResponse(msg), nil
+			return msg, nil
 		}
 
 		if ownNodeInfo.ID.String() == otherUser.NodeId {
-			return event.NewMessageResponse(msg), nil
+			return msg, nil
 		}
 		otherMsgData, err := streamer.GenericStream(
 			otherUser.NodeId,
 			event.PUBLIC_POST_MESSAGE,
-			event.NewMessageEvent(domain.ChatMessage{
+			domain.ChatMessage{
 				Id:         msg.Id,
 				ChatId:     ev.ChatId,
 				SenderId:   ownerId,
@@ -422,23 +426,21 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 				ImageKeys:  imageKeys,
 				VideoKey:   videoKey,
 				CreatedAt:  now,
-			}),
+			},
 		)
 		if err != nil {
 			log.Warnf("chat message not delivered to node %s: %v", otherUser.NodeId, err)
 			msg.Status = statusUndelivered
-			return event.NewMessageResponse(msg), nil
+			return msg, nil
 		}
 
-		// A non-zero Code marks a real error; the "Accepted" ack and the
-		// echoed message response carry Code 0 and mean delivered.
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(otherMsgData, &possibleError); possibleError.Code != 0 {
 			log.Errorf("unmarshal other message error response: %s", possibleError.Message)
 			msg.Status = statusUndelivered
 		}
 
-		return event.NewMessageResponse(msg), err
+		return msg, err
 	}
 }
 

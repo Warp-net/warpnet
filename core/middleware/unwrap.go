@@ -38,21 +38,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
+func UnwrapStream(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer func() {
 			_ = s.Close()
 		}()
 
-		var (
-			data      []byte
-			messageID string
-		)
-
+		var data []byte
 		switch typedStream := s.(type) {
 		case *warpnet.WarpStreamBody:
 			data = typedStream.Body
-			messageID = typedStream.MessageId
 		default:
 			reader := io.LimitReader(s, MaxLimit)
 			d, err := io.ReadAll(reader)
@@ -66,32 +61,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		protocol := string(s.Protocol())
-		idempotent := p.idempotency != nil && messageID != "" && isIdempotencyApplicable(protocol)
-		var cacheKey string
-		if idempotent {
-			// Scope the key by authenticated remote peer so two peers
-			// can't collide on the same message id within the TTL window.
-			var peerID string
-			if conn := s.Conn(); conn != nil {
-				peerID = conn.RemotePeer().String()
-			}
-			cacheKey = idempotencyKey(protocol, peerID, messageID)
-		}
-
-		// idempotencyCache.do collapses cache lookup, in-flight dedup, and
-		// store into one call: cache hits short-circuit the handler;
-		// concurrent same-key requests share a single handler invocation;
-		// the result is cached only when the compute reports it cacheable.
-		var payload []byte
-		var err error
-		if idempotent {
-			payload, err = p.idempotency.do(cacheKey, func() ([]byte, bool, error) {
-				return p.runHandler(handler, data, s)
-			})
-		} else {
-			payload, _, err = p.runHandler(handler, data, s)
-		}
+		payload, _, err := runHandler(handler, data, s)
 		if err != nil {
 			log.Errorf("middleware: handler dispatch error: %v", err)
 		}
@@ -105,12 +75,7 @@ func (p *WarpMiddleware) UnwrapStreamMiddleware(handler warpnet.WarpHandlerFunc)
 	}
 }
 
-// runHandler invokes the wrapped handler, normalises its return value into
-// a writable byte payload, and reports whether the result is cacheable.
-// Error-shaped responses (handler-returned ResponseError, the synthesized
-// "empty response" fallback, or a non-offline error) are not cacheable so
-// transient failures don't lock callers into the same response for the TTL.
-func (p *WarpMiddleware) runHandler(
+func runHandler(
 	handler warpnet.WarpHandlerFunc,
 	data []byte,
 	s warpnet.WarpStream,

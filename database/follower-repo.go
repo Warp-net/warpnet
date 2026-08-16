@@ -43,6 +43,7 @@ const (
 	followerSubName       = "FOLLOWER"
 	followingCountSubName = "FOLLOWINGCOUNT"
 	followerCountSubName  = "FOLLOWERCOUNT"
+	followRequestSubName  = "REQUEST"
 )
 
 type FollowerStorer interface {
@@ -360,8 +361,6 @@ func (repo *FollowRepo) GetFollowings(userId string, limit *uint64, cursor *stri
 
 	return followings, cur, nil
 }
-
-const followRequestSubName = "REQUEST"
 
 // AddFollowRequest records a pending follow request from followerId
 // against targetUserId (locked-user flow). On approval the entry

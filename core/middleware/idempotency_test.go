@@ -30,9 +30,6 @@ package middleware
 import (
 	"bytes"
 	"reflect"
-	"runtime"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
@@ -167,62 +164,6 @@ func TestIdempotencyCache_SetCopiesPayload(t *testing.T) {
 	}
 	if !bytes.Equal(got, []byte("original")) {
 		t.Fatalf("cache should not be mutated by caller: got %s", got)
-	}
-}
-
-// TestIdempotencyCache_DoCollapsesConcurrent verifies that concurrent
-// callers with the same key share a single compute invocation. Uses a
-// deterministic barrier on the cache's follower count so the test does
-// not depend on wall-clock timing.
-func TestIdempotencyCache_DoCollapsesConcurrent(t *testing.T) {
-	c := newCacheForTest(t, time.Minute)
-	key := idempotencyKey("/private/post/tweet/0.0.0", "peer-1", "msg-1")
-
-	var calls atomic.Int32
-	release := make(chan struct{})
-	compute := func() ([]byte, bool, error) { //nolint:unparam // signature matches do(); error path covered elsewhere
-		calls.Add(1)
-		<-release // hold the leader inside compute until all followers are queued
-		return []byte("payload-1"), true, nil
-	}
-
-	const N = 8
-	var wg sync.WaitGroup
-	results := make([][]byte, N)
-	for i := range N {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			payload, err := c.do(key, compute)
-			if err != nil {
-				t.Errorf("do err: %v", err)
-				return
-			}
-			results[i] = payload
-		}(i)
-	}
-
-	// Wait until all N-1 followers have registered on the leader's
-	// inflight call. Polling the cache's own bookkeeping makes this
-	// barrier deterministic instead of relying on a fixed sleep.
-	deadline := time.Now().Add(2 * time.Second)
-	for c.followerCount(key) < N-1 {
-		if time.Now().After(deadline) {
-			t.Fatalf("only %d/%d followers registered before deadline",
-				c.followerCount(key), N-1)
-		}
-		runtime.Gosched()
-	}
-	close(release)
-	wg.Wait()
-
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("expected compute to run exactly once, ran %d times", got)
-	}
-	for i, r := range results {
-		if !bytes.Equal(r, []byte("payload-1")) {
-			t.Fatalf("caller %d got unexpected payload: %s", i, r)
-		}
 	}
 }
 
