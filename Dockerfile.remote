@@ -23,6 +23,6 @@ FROM ubuntu:24.04
 COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 COPY --from=builder /warpnet/warpnet /warpnet/warpnet
 
-# Dashboard port; node.server.password is supplied at run time (env/flag), not baked in.
+# Dashboard port; the WS channel needs no secret — the node's Noise static key lives in the data volume.
 EXPOSE 4999
 CMD ["/warpnet/warpnet"]

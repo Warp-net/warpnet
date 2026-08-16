@@ -72,7 +72,6 @@ func init() {
 	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release automatically")
 
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
-	pflag.String("node.server.password", "", "Preshared secret that decrypts dashboard WS traffic")
 
 	pflag.String("logging.level", "info", "Logging level")
 	pflag.String("logging.format", "text", "'text' or 'json'")
@@ -135,8 +134,7 @@ func init() {
 				Gateway: viper.GetString("node.metrics.gateway"),
 			},
 			Server: server{
-				Port:     strings.TrimSpace(viper.GetString("node.server.port")),
-				Password: viper.GetString("node.server.password"),
+				Port: strings.TrimSpace(viper.GetString("node.server.port")),
 			},
 		},
 		Database: database{
@@ -194,8 +192,7 @@ type node struct {
 }
 
 type server struct {
-	Port     string
-	Password string
+	Port string
 }
 type metrics struct {
 	Gateway string

@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -51,10 +52,6 @@ import (
 )
 
 func main() {
-	pw := config.Config().Node.Server.Password
-	if pw == "" {
-		log.Fatal("password is required")
-	}
 	port := config.Config().Node.Server.Port
 	network := config.Config().Node.Network
 	version := config.Config().Version
@@ -109,8 +106,21 @@ func main() {
 		return
 	}
 
+	// The dashboard channel needs no preshared secret: the node authenticates
+	// to the browser with a long-lived Noise static key (pinned client-side on
+	// first contact), stored next to the database so it survives restarts.
+	staticKey, err := security.LoadOrCreateNoiseStaticKey(
+		filepath.Join(filepath.Dir(config.Config().Database.Path), "ws-noise.key"),
+	)
+	if err != nil {
+		log.Errorf("remote: noise static key: %v", err)
+		return
+	}
+
 	bridgeHandler := remote.NewBridgeHandler(
-		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
+		func(read func() ([]byte, error), write func([]byte) error) (remote.Channel, error) {
+			return security.NoiseHandshake(staticKey, read, write)
+		},
 		authService,
 		psk,
 		db.IsFirstRun, // queried lazily: flips to false once the DB is opened on first login
@@ -129,6 +139,10 @@ func main() {
 	}()
 
 	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
+	fmt.Printf(
+		"\033[1mNODE KEY FINGERPRINT: %s — THE BROWSER PINS IT ON FIRST CONNECT, COMPARE IF ASKED\033[0m\n",
+		security.NoiseFingerprint(staticKey.Public),
+	)
 
 	var node *node2.MemberNode
 	defer func() {
