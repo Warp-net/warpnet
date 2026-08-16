@@ -47,12 +47,6 @@ const (
 	idempotencyMaxPayloadBytes = 64 * 1024 // 64 KiB
 )
 
-// IdempotencyMiddleware deduplicates POST requests retried with the same
-// message id (double-clicks, network retries): the first request runs
-// downstream, replays are answered from the cache without re-executing the
-// side effect, and concurrent same-key requests share a single downstream
-// invocation. The handler's return value is memoized as-is — whoever ends
-// the chain decides how it goes out on the wire.
 func (p *WarpMiddleware) IdempotencyMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		typedStream, ok := s.(*warpnet.WarpStreamBody)
@@ -61,8 +55,6 @@ func (p *WarpMiddleware) IdempotencyMiddleware(next warpnet.WarpHandlerFunc) war
 			return next(data, s)
 		}
 
-		// Scope the key by authenticated remote peer so two peers
-		// can't collide on the same message id within the TTL window.
 		var peerID string
 		if conn := s.Conn(); conn != nil {
 			peerID = conn.RemotePeer().String()
@@ -76,9 +68,6 @@ func (p *WarpMiddleware) IdempotencyMiddleware(next warpnet.WarpHandlerFunc) war
 	}
 }
 
-// isCacheableResponse reports whether a reply may be replayed for a retry:
-// failures, empty replies and error envelopes must not be pinned in the
-// cache for the whole TTL.
 func isCacheableResponse(response any, err error) bool {
 	if err != nil || response == nil {
 		return false
@@ -121,8 +110,7 @@ func (c *idempotencyCache) get(key string) (any, bool) {
 	return cloneResponse(v), true
 }
 
-// set stores a reply for replays. Byte and string replies larger than
-// idempotencyMaxPayloadBytes are dropped to bound memory.
+// larger than idempotencyMaxPayloadBytes are dropped to bound memory.
 func (c *idempotencyCache) set(key string, response any) {
 	switch typed := response.(type) {
 	case nil:
@@ -139,8 +127,6 @@ func (c *idempotencyCache) set(key string, response any) {
 	c.cache.Add(key, cloneResponse(response))
 }
 
-// cloneResponse copies byte slices so neither cache nor callers can mutate
-// each other's data; other reply kinds are treated as read-only values.
 func cloneResponse(response any) any {
 	if bt, ok := response.([]byte); ok {
 		return cloneBytes(bt)
@@ -193,7 +179,8 @@ func (c *idempotencyCache) do(
 	}
 
 	response, cacheable, err := compute()
-	// Publish an owned copy, so handler-owned slices can't be mutated under
+	// Take an owned copy of the leader's response before publishing it via
+	// `call.response`, so handler-owned slices can't be mutated under
 	// followers after the leader returns.
 	call.response = cloneResponse(response)
 	call.err = err

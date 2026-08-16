@@ -81,4 +81,3 @@ func (p *WarpMiddleware) Close() {
 		p.idempotency.Close()
 	}
 }
-

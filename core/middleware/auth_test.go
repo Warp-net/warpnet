@@ -82,8 +82,6 @@ func newRemotePeer(t *testing.T) (warpnet.WarpPeerID, ed25519.PrivateKey) {
 	return id, priv
 }
 
-// callAsRemotePeer runs the auth middleware over a signed envelope arriving
-// from the given peer and reports whether the wrapped handler was reached.
 func callAsRemotePeer(
 	t *testing.T, mw *WarpMiddleware, ownNodeId, peer warpnet.WarpPeerID,
 	privKey ed25519.PrivateKey, route string,

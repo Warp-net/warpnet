@@ -52,7 +52,6 @@ func unwrapHandler(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return (&WarpNode{}).unwrap(handler)
 }
 
-// streamRequest drives one request/response over a loopback stream.
 func streamRequest(
 	t *testing.T, sh warpnet.StreamHandler, proto warpnet.WarpProtocolID, request []byte,
 ) []byte {
@@ -187,8 +186,6 @@ func TestUnwrap_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	assert.NotEmpty(t, resp, "a payload at the ceiling must still get a response")
 }
 
-// injectBody mimics the auth middleware's hand-off: the message id rides a
-// WarpStreamBody so the idempotency middleware can key on it.
 func injectBody(messageID string) StreamMiddleware {
 	return func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 		return func(data []byte, s warpnet.WarpStream) (any, error) {
@@ -200,8 +197,6 @@ func injectBody(messageID string) StreamMiddleware {
 	}
 }
 
-// idempotentChain mirrors the production composition:
-// unwrap(inject(idempotency(handler))).
 func idempotentChain(t *testing.T, messageID string, handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	t.Helper()
 	mw := middleware.NewWarpMiddleware("peer1", nil)

@@ -202,12 +202,8 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-// StreamMiddleware wraps a handler; the response returns back through the
-// chain and is written to the stream by the node once no middleware is left.
 type StreamMiddleware func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc
 
-// SetStreamMiddlewares registers the middleware chain applied to every
-// handler. Order matters: the first middleware is the outermost.
 func (n *WarpNode) SetStreamMiddlewares(mws ...StreamMiddleware) {
 	if n == nil || len(mws) == 0 {
 		return
@@ -232,10 +228,6 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 	}
 }
 
-// unwrap terminates the middleware chain: it reads the raw request from the
-// stream, runs the composed handler, and — since no middleware is left —
-// writes the returned payload back. This is the only place a response
-// touches the stream.
 func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer func() {
@@ -291,9 +283,6 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 	}
 }
 
-// marshalResponse turns a handler reply into wire bytes: strings and byte
-// slices go out verbatim, a missing reply becomes an explicit envelope,
-// everything else is JSON-encoded.
 func marshalResponse(response any) ([]byte, error) {
 	switch typed := response.(type) {
 	case nil:

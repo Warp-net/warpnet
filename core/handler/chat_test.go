@@ -105,8 +105,6 @@ func (s stubUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: userId, NodeId: senderNodeId}, nil
 }
 
-// senderNodeId matches senderConn's remote peer, so stub users pass the
-// message handler's sender-authenticity gate.
 var senderNodeId = warpnet.WarpPeerID("node-2").String()
 
 func senderConn(t *testing.T) warpnet.WarpStream {
