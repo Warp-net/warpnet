@@ -45,6 +45,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	ErrForeignMessageAuthor = warpnet.WarpError("messages: message did not come from its author's node")
+	ErrForeignChatAuthor    = warpnet.WarpError("chats: chat did not come from its author's node")
+	messageLimit            = 5000
+	mediaKeyLimit           = 128
+	maxMessageImages        = 4
+	statusUndelivered       = "undelivered"
+)
+
 type ChatAuthStorer interface {
 	GetOwner() domain.Owner
 }
@@ -86,21 +95,22 @@ func StreamCreateChatHandler(
 			return nil, warpnet.WarpError("owner ID or other user ID is empty")
 		}
 
+		otherUser, otherUserErr := userRepo.Get(ev.OtherUserId)
+		if otherUser.Network == mastodon.Network {
+			return nil, mastodon.ErrNotSupported
+		}
+		if otherUser.NodeId == "" {
+			log.Warnf("chat: dropping chat claiming to be from %s", ev.OtherUserId)
+			return nil, ErrForeignChatAuthor
+		}
+		if s == nil || s.Conn() == nil || otherUser.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("chat: dropping chat claiming to be from %s", ev.OtherUserId)
+			return nil, ErrForeignChatAuthor
+		}
+
 		ownNodeInfo := streamer.NodeInfo()
 		isSelfChat := ev.OwnerId == ev.OtherUserId
 		isOtherUserChat := ev.OwnerId != ownNodeInfo.OwnerId
-
-		// The lookup the streaming below needs anyway, hoisted above the
-		// write: Mastodon has no direct messages, so a bridged recipient is
-		// refused before the chat is stored.
-		var otherUser domain.User
-		var otherUserErr error
-		if !isSelfChat && !isOtherUserChat {
-			otherUser, otherUserErr = userRepo.Get(ev.OtherUserId)
-			if otherUser.Network == mastodon.Network {
-				return nil, mastodon.ErrNotSupported
-			}
-		}
 
 		ownerChat, err := repo.CreateChat(ev.ChatId, ev.OwnerId, ev.OtherUserId)
 		if err != nil {
@@ -148,8 +158,6 @@ func StreamCreateChatHandler(
 			return event.ChatCreatedResponse(ownerChat), nil
 		}
 
-		// A non-zero Code marks a real error; the "Accepted" ack and normal
-		// responses carry Code 0 and must not be treated as failures.
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(otherChatData, &possibleError); possibleError.Code != 0 {
 			log.Errorf("create chat: unmarshal other reply response: %s", possibleError.Message)
@@ -249,13 +257,6 @@ func StreamGetUserChatsHandler(repo ChatStorer, authRepo OwnerChatsStorer) warpn
 	}
 }
 
-const (
-	messageLimit      = 5000
-	mediaKeyLimit     = 128
-	maxMessageImages  = 4
-	statusUndelivered = "undelivered"
-)
-
 // mediaKey normalizes an attachment key: an absent one and an empty one mean
 // the same thing, and an oversized one is rejected outright.
 func mediaKey(key *string) (*string, bool) {
@@ -316,14 +317,17 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		}
 
 		sender, err := userRepo.Get(ev.SenderId)
-		if err != nil || sender.NodeId == "" {
+		if err != nil {
+			return nil, err
+		}
+		if sender.NodeId == "" {
 			log.Warnf("chat: dropping message claiming to be from %s", ev.SenderId)
-			return nil, ErrForeignTweetAuthor
+			return nil, ErrForeignMessageAuthor
 		}
 
 		if s == nil || s.Conn() == nil || sender.NodeId != s.Conn().RemotePeer().String() {
 			log.Warnf("chat: dropping message claiming to be from %s", ev.SenderId)
-			return nil, ErrForeignTweetAuthor
+			return nil, ErrForeignMessageAuthor
 		}
 
 		imageKeys, areImageKeysValid := mediaKeys(ev.ImageKeys)
