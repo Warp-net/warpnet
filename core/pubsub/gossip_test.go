@@ -171,7 +171,7 @@ func (n *liveNode) NodeInfo() warpnet.NodeInfo {
 	return warpnet.NodeInfo{ID: n.host.ID(), OwnerId: "owner-" + n.host.ID().String()}
 }
 
-func (n *liveNode) SelfStream(path stream.WarpRoute, data any) ([]byte, error) {
+func (n *liveNode) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 	bt, _ := data.([]byte)

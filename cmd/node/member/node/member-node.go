@@ -297,11 +297,13 @@ func (m *MemberNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
 	m.node.Prioritizer().SetMinPriority(pid)
 }
 
-func (m *MemberNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+func (m *MemberNode) SelfStream(
+	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (_ []byte, err error) {
 	if m == nil || m.node == nil {
 		return nil, nil
 	}
-	return m.node.SelfStream(path, data)
+	return m.node.SelfStream(from, to, path, data)
 }
 
 type streamNodeID = string

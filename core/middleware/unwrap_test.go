@@ -49,7 +49,7 @@ const testProto = warpnet.WarpProtocolID("/public/post/tweet/0.0.0")
 func roundTrip(t *testing.T, mw *WarpMiddleware, handler warpnet.WarpHandlerFunc, request []byte) []byte {
 	t.Helper()
 
-	client, server := stream.NewLoopbackStream("peer1", testProto)
+	client, server := stream.NewLoopbackStream("peer1", "peer1", testProto)
 	go mw.UnwrapStreamMiddleware(handler)(server)
 
 	var resp []byte
@@ -164,7 +164,7 @@ func TestUnwrap_UnencodableResponseWritesNothing(t *testing.T) {
 
 func bodyStream(t *testing.T, proto warpnet.WarpProtocolID, body []byte, messageID string) (*warpnet.WarpStreamBody, warpnet.WarpStream) {
 	t.Helper()
-	client, server := stream.NewLoopbackStream("peer1", proto)
+	client, server := stream.NewLoopbackStream("peer1", "peer1", proto)
 	return &warpnet.WarpStreamBody{
 		WarpStream: server,
 		Body:       body,

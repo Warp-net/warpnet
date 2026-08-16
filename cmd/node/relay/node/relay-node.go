@@ -205,11 +205,13 @@ func (rn *RelayNode) setupHandlers() {
 	)
 }
 
-func (rn *RelayNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+func (rn *RelayNode) SelfStream(
+	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (_ []byte, err error) {
 	if rn == nil || rn.node == nil {
 		return nil, nil
 	}
-	return rn.node.SelfStream(path, data)
+	return rn.node.SelfStream(from, to, path, data)
 }
 
 func (rn *RelayNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {

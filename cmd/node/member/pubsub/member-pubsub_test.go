@@ -53,7 +53,7 @@ func (c *liveConnector) NodeInfo() warpnet.NodeInfo {
 	return warpnet.NodeInfo{ID: c.host.ID(), OwnerId: c.ownerId}
 }
 
-func (c *liveConnector) SelfStream(path stream.WarpRoute, data any) ([]byte, error) {
+func (c *liveConnector) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error) {
 	return nil, nil
 }
 

@@ -58,7 +58,7 @@ type AppAuthServicer interface {
 }
 
 type NodeServer interface {
-	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 	Stop()
 	Start() error
@@ -353,7 +353,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
-		nodeId := a.node.NodeInfo().ID.String()
+		ownNodeId := a.node.NodeInfo().ID
+		nodeId := ownNodeId.String()
 		response.NodeId = nodeId
 		ts, _ := time.Parse(time.RFC3339, request.Timestamp)
 		if ts.IsZero() {
@@ -371,6 +372,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		msg.Signature = security.Sign(a.auth.PrivateKey(), msg.SigningBytes())
 
 		respData, err := a.node.SelfStream(
+			ownNodeId, ownNodeId,
 			stream.WarpRoute(request.Path),
 			msg,
 		)
