@@ -75,7 +75,8 @@ describe('Following.vue', () => {
   it('shows the empty state when the user follows no one', async () => {
     renderFollowing();
 
-    expect(await screen.findByText('no-users')).toBeInTheDocument();
+    expect(await screen.findByText('Not following anyone yet')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-list')).not.toBeInTheDocument();
   });
 
   it('navigates back to the profile when the back button is clicked', async () => {
