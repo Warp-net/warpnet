@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func TestNoiseHandshake_RoundTrip(t *testing.T) {
 	assert.Equal(t, static.Public, initiator.RemoteStatic())
 	assert.Nil(t, responder.RemoteStatic(), "NX clients are anonymous")
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		req := []byte(`{"path":"is-first-run"}`)
 		sealed, err := initiator.Encrypt(req)
 		require.NoError(t, err)
@@ -134,7 +135,9 @@ func TestLoadOrCreateNoiseStaticKey_PersistsAcrossRestarts(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "private key must not be world-readable")
+	if runtime.GOOS != "windows" { // Windows has no POSIX permission bits
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "private key must not be world-readable")
+	}
 
 	second, err := LoadOrCreateNoiseStaticKey(path)
 	require.NoError(t, err)

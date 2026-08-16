@@ -46,7 +46,7 @@ const noiseKeySize = 32
 var ErrNoiseKeyCorrupted = errors.New("security: noise static key file is corrupted")
 
 func LoadOrCreateNoiseStaticKey(path string) (noise.DHKey, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: path is the operator-configured key location
 	if errors.Is(err, os.ErrNotExist) {
 		key, err := noiseSuite.GenerateKeypair(nil)
 		if err != nil {
