@@ -84,11 +84,9 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.Wa
 			return nil, ErrUnknownClientPeer
 		}
 
-		// The verified body travels on; the message id rides the stream so
-		// downstream middlewares can key on it.
+		// The message id rides the stream so downstream middlewares can key on it.
 		return next(msg.Body, &warpnet.WarpStreamBody{
 			WarpStream: s,
-			Body:       msg.Body,
 			MessageId:  msg.MessageId,
 		})
 	}

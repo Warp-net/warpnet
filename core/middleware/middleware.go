@@ -28,15 +28,10 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"bytes"
-	"errors"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
-	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
-	log "github.com/sirupsen/logrus"
 )
 
 type middlewareError string
@@ -87,47 +82,3 @@ func (p *WarpMiddleware) Close() {
 	}
 }
 
-// NormalizeResponse converts a handler's return value into the byte payload
-// written to the stream, and reports whether that payload may be replayed
-// for an idempotent retry: failures and error envelopes must not be cached.
-func NormalizeResponse(response any, err error, data []byte, s warpnet.WarpStream) ([]byte, bool, error) {
-	if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-		clip := data
-		if len(clip) > 500 { //nolint:mnd
-			clip = clip[:500]
-		}
-		var remotePeer warpnet.WarpPeerID
-		if conn := s.Conn(); conn != nil {
-			remotePeer = conn.RemotePeer()
-		}
-		log.Errorf("middleware: handling of %s %s message: %s failed: %v\n",
-			s.Protocol(), remotePeer, string(clip), err)
-		response = event.ResponseError{Code: InternalNodeErrorCode, Message: err.Error()}
-	}
-
-	responseIsError := response == nil
-	if response == nil {
-		response = event.ResponseError{Message: "empty response"}
-	}
-	if _, ok := response.(event.ResponseError); ok {
-		responseIsError = true
-	}
-
-	var payload []byte
-	switch typedResponse := response.(type) {
-	case []byte:
-		payload = typedResponse
-	case string:
-		payload = []byte(typedResponse)
-	default:
-		var buf bytes.Buffer
-		if encErr := json.NewEncoder(&buf).Encode(response); encErr != nil {
-			log.Errorf("middleware: failed encoding generic response: %v %v", response, encErr)
-			return nil, false, encErr
-		}
-		payload = buf.Bytes()
-	}
-
-	cacheable := err == nil && !responseIsError
-	return payload, cacheable, nil
-}

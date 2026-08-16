@@ -36,6 +36,7 @@ import (
 	"unsafe"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
@@ -48,9 +49,10 @@ const (
 
 // IdempotencyMiddleware deduplicates POST requests retried with the same
 // message id (double-clicks, network retries): the first request runs
-// downstream and its normalized reply is cached, replays are answered from
-// the cache without re-executing the side effect, and concurrent same-key
-// requests share a single downstream invocation.
+// downstream, replays are answered from the cache without re-executing the
+// side effect, and concurrent same-key requests share a single downstream
+// invocation. The handler's return value is memoized as-is — whoever ends
+// the chain decides how it goes out on the wire.
 func (p *WarpMiddleware) IdempotencyMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		typedStream, ok := s.(*warpnet.WarpStreamBody)
@@ -67,18 +69,28 @@ func (p *WarpMiddleware) IdempotencyMiddleware(next warpnet.WarpHandlerFunc) war
 		}
 		cacheKey := idempotencyKey(string(s.Protocol()), peerID, typedStream.MessageId)
 
-		// Cache hits short-circuit downstream and concurrent same-key
-		// requests share a single invocation. The reply is normalized here
-		// so the cache holds the exact bytes the stream will carry.
-		return p.idempotency.do(cacheKey, func() ([]byte, bool, error) {
+		return p.idempotency.do(cacheKey, func() (any, bool, error) {
 			response, err := next(data, s)
-			return NormalizeResponse(response, err, data, s)
+			return response, isCacheableResponse(response, err), err
 		})
 	}
 }
 
+// isCacheableResponse reports whether a reply may be replayed for a retry:
+// failures, empty replies and error envelopes must not be pinned in the
+// cache for the whole TTL.
+func isCacheableResponse(response any, err error) bool {
+	if err != nil || response == nil {
+		return false
+	}
+	if _, ok := response.(event.ResponseError); ok {
+		return false
+	}
+	return true
+}
+
 type idempotencyCache struct {
-	cache  *lru.LRU[string, []byte]
+	cache  *lru.LRU[string, any]
 	closed sync.Once
 
 	inflightMu sync.Mutex
@@ -87,34 +99,53 @@ type idempotencyCache struct {
 
 type inflightCall struct {
 	done      chan struct{}
-	payload   []byte
+	response  any
 	err       error
 	followers int
 }
 
 func newIdempotencyCache(ttl time.Duration) *idempotencyCache {
 	c := &idempotencyCache{
-		cache:    lru.NewLRU[string, []byte](idempotencySize, nil, ttl),
+		cache:    lru.NewLRU[string, any](idempotencySize, nil, ttl),
 		inflight: make(map[string]*inflightCall),
 	}
 	runtime.SetFinalizer(c, func(c *idempotencyCache) { c.Close() })
 	return c
 }
 
-func (c *idempotencyCache) get(key string) ([]byte, bool) {
+func (c *idempotencyCache) get(key string) (any, bool) {
 	v, ok := c.cache.Get(key)
 	if !ok {
 		return nil, false
 	}
-	return cloneBytes(v), true
+	return cloneResponse(v), true
 }
 
-// larger than idempotencyMaxPayloadBytes are dropped to bound memory.
-func (c *idempotencyCache) set(key string, response []byte) {
-	if len(response) == 0 || len(response) > idempotencyMaxPayloadBytes {
+// set stores a reply for replays. Byte and string replies larger than
+// idempotencyMaxPayloadBytes are dropped to bound memory.
+func (c *idempotencyCache) set(key string, response any) {
+	switch typed := response.(type) {
+	case nil:
 		return
+	case []byte:
+		if len(typed) == 0 || len(typed) > idempotencyMaxPayloadBytes {
+			return
+		}
+	case string:
+		if typed == "" || len(typed) > idempotencyMaxPayloadBytes {
+			return
+		}
 	}
-	c.cache.Add(key, cloneBytes(response))
+	c.cache.Add(key, cloneResponse(response))
+}
+
+// cloneResponse copies byte slices so neither cache nor callers can mutate
+// each other's data; other reply kinds are treated as read-only values.
+func cloneResponse(response any) any {
+	if bt, ok := response.([]byte); ok {
+		return cloneBytes(bt)
+	}
+	return response
 }
 
 func cloneBytes(b []byte) []byte {
@@ -128,8 +159,8 @@ func cloneBytes(b []byte) []byte {
 
 func (c *idempotencyCache) do(
 	key string,
-	compute func() (payload []byte, cacheable bool, err error),
-) ([]byte, error) {
+	compute func() (response any, cacheable bool, err error),
+) (any, error) {
 	if v, ok := c.get(key); ok {
 		log.Debugf("middleware: idempotent replay (cache hit) for %s", key)
 		return v, nil
@@ -141,7 +172,7 @@ func (c *idempotencyCache) do(
 		c.inflightMu.Unlock()
 		<-call.done
 		log.Debugf("middleware: idempotent replay (in-flight follower) for %s", key)
-		return cloneBytes(call.payload), call.err
+		return cloneResponse(call.response), call.err
 	}
 	call := &inflightCall{done: make(chan struct{})}
 	c.inflight[key] = call
@@ -157,20 +188,19 @@ func (c *idempotencyCache) do(
 	// Re-check the cache under leadership: a previous leader may have
 	// completed and populated it between our miss and our claim.
 	if v, ok := c.get(key); ok {
-		call.payload = cloneBytes(v) // owned copy for any racing followers
+		call.response = cloneResponse(v) // owned copy for any racing followers
 		return v, nil
 	}
 
-	payload, cacheable, err := compute()
-	// Take an owned copy of the leader's payload before publishing it via
-	// `call.payload`, so handler-owned slices can't be mutated under
+	response, cacheable, err := compute()
+	// Publish an owned copy, so handler-owned slices can't be mutated under
 	// followers after the leader returns.
-	call.payload = cloneBytes(payload)
+	call.response = cloneResponse(response)
 	call.err = err
 	if err == nil && cacheable {
-		c.set(key, payload)
+		c.set(key, response)
 	}
-	return payload, err
+	return response, err
 }
 
 // Close stops the library's background deleteExpired goroutine by closing

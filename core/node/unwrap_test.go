@@ -187,14 +187,13 @@ func TestUnwrap_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 	assert.NotEmpty(t, resp, "a payload at the ceiling must still get a response")
 }
 
-// injectBody mimics the auth middleware's hand-off: the body and message id
-// ride a WarpStreamBody so the idempotency middleware can key on them.
+// injectBody mimics the auth middleware's hand-off: the message id rides a
+// WarpStreamBody so the idempotency middleware can key on it.
 func injectBody(messageID string) StreamMiddleware {
 	return func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 		return func(data []byte, s warpnet.WarpStream) (any, error) {
 			return next(data, &warpnet.WarpStreamBody{
 				WarpStream: s,
-				Body:       data,
 				MessageId:  messageID,
 			})
 		}
