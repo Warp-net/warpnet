@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package node
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"sync"
@@ -51,20 +52,14 @@ func unwrapHandler(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return (&WarpNode{}).unwrap(handler)
 }
 
-// idempotentChain mirrors the production composition: the idempotency
-// middleware wrapping the node's unwrap adapter.
-func idempotentChain(t *testing.T, handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
-	t.Helper()
-	mw := middleware.NewWarpMiddleware("peer1", nil)
-	t.Cleanup(mw.Close)
-	return mw.IdempotencyMiddleware(unwrapHandler(handler))
-}
-
-func roundTrip(t *testing.T, handler warpnet.WarpHandlerFunc, request []byte) []byte {
+// streamRequest drives one request/response over a loopback stream.
+func streamRequest(
+	t *testing.T, sh warpnet.StreamHandler, proto warpnet.WarpProtocolID, request []byte,
+) []byte {
 	t.Helper()
 
-	client, server := stream.NewLoopbackStream("peer1", "peer1", testProto)
-	go unwrapHandler(handler)(server)
+	client, server := stream.NewLoopbackStream("peer1", "peer1", proto)
+	go sh(server)
 
 	var resp []byte
 	done := make(chan struct{})
@@ -79,9 +74,14 @@ func roundTrip(t *testing.T, handler warpnet.WarpHandlerFunc, request []byte) []
 	select {
 	case <-done:
 	case <-time.After(20 * time.Second):
-		t.Fatal("unwrap deadlocked")
+		t.Error("unwrap deadlocked")
 	}
 	return resp
+}
+
+func roundTrip(t *testing.T, handler warpnet.WarpHandlerFunc, request []byte) []byte {
+	t.Helper()
+	return streamRequest(t, unwrapHandler(handler), testProto, request)
 }
 
 func TestUnwrap_StructResponseIsJSONEncoded(t *testing.T) {
@@ -124,7 +124,7 @@ func TestUnwrap_NilResponseBecomesAnErrorEnvelope(t *testing.T) {
 
 	var out event.ResponseError
 	require.NoError(t, json.Unmarshal(resp, &out))
-	assert.Equal(t, middleware.EmptyResponseMessage, out.Message)
+	assert.Equal(t, "empty response", out.Message)
 }
 
 func TestUnwrap_HandlerErrorBecomesResponseError(t *testing.T) {
@@ -155,47 +155,71 @@ func TestUnwrap_UnencodableResponseWritesNothing(t *testing.T) {
 	assert.Empty(t, resp)
 }
 
-func bodyStream(t *testing.T, proto warpnet.WarpProtocolID, body []byte, messageID string) (*warpnet.WarpStreamBody, warpnet.WarpStream) {
-	t.Helper()
-	client, server := stream.NewLoopbackStream("peer1", "peer1", proto)
-	return &warpnet.WarpStreamBody{
-		WarpStream: server,
-		Body:       body,
-		MessageId:  messageID,
-	}, client
+func TestUnwrap_PanickingHandlerClosesTheStream(t *testing.T) {
+	resp := roundTrip(t, func([]byte, warpnet.WarpStream) (any, error) {
+		panic("handler exploded")
+	}, []byte(`{}`))
+
+	assert.Empty(t, resp, "a panic must not leak a half-written response")
 }
 
-func drain(t *testing.T, client warpnet.WarpStream) []byte {
-	t.Helper()
-	_ = client.SetDeadline(time.Now().Add(20 * time.Second))
-	out, _ := io.ReadAll(client)
-	return out
+func TestUnwrap_OversizedPayloadDoesNotDeadlock(t *testing.T) {
+	var handlerCalled atomic.Bool
+	sh := unwrapHandler(func([]byte, warpnet.WarpStream) (any, error) {
+		handlerCalled.Store(true)
+		return event.Accepted, nil
+	})
+
+	payload := bytes.Repeat([]byte("A"), int(middleware.MaxLimit)+4096)
+	streamRequest(t, sh, testProto, payload)
+
+	assert.False(t, handlerCalled.Load(), "an over-limit payload must never reach the handler")
 }
 
-func TestUnwrap_BodyStreamUsesPreReadPayload(t *testing.T) {
-	body, client := bodyStream(t, testProto, []byte(`{"pre":"read"}`), "")
+func TestUnwrap_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
+	sh := unwrapHandler(func([]byte, warpnet.WarpStream) (any, error) {
+		return event.Accepted, nil
+	})
 
-	var seen string
-	go unwrapHandler(func(msg []byte, s warpnet.WarpStream) (any, error) {
-		seen = string(msg)
-		return []byte(`ok`), nil
-	})(body)
+	payload := bytes.Repeat([]byte("A"), int(middleware.MaxLimit))
+	resp := streamRequest(t, sh, testProto, payload)
 
-	assert.Equal(t, "ok", string(drain(t, client)))
-	assert.Equal(t, `{"pre":"read"}`, seen, "a pre-read body must not be re-read from the wire")
+	assert.NotEmpty(t, resp, "a payload at the ceiling must still get a response")
+}
+
+// injectBody mimics the auth middleware's hand-off: the body and message id
+// ride a WarpStreamBody so the idempotency middleware can key on them.
+func injectBody(messageID string) StreamMiddleware {
+	return func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
+		return func(data []byte, s warpnet.WarpStream) (any, error) {
+			return next(data, &warpnet.WarpStreamBody{
+				WarpStream: s,
+				Body:       data,
+				MessageId:  messageID,
+			})
+		}
+	}
+}
+
+// idempotentChain mirrors the production composition:
+// unwrap(inject(idempotency(handler))).
+func idempotentChain(t *testing.T, messageID string, handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
+	t.Helper()
+	mw := middleware.NewWarpMiddleware("peer1", nil)
+	t.Cleanup(mw.Close)
+	return unwrapHandler(injectBody(messageID)(mw.IdempotencyMiddleware(handler)))
 }
 
 func TestIdempotency_ReplayRunsHandlerOnce(t *testing.T) {
 	var calls int64
-	chain := idempotentChain(t, func([]byte, warpnet.WarpStream) (any, error) {
+	chain := idempotentChain(t, "same-message-id", func([]byte, warpnet.WarpStream) (any, error) {
 		atomic.AddInt64(&calls, 1)
 		return []byte(`{"created":true}`), nil
 	})
 
 	for i := 0; i < 3; i++ {
-		body, client := bodyStream(t, testProto, []byte(`{"text":"hi"}`), "same-message-id")
-		go chain(body)
-		assert.Equal(t, `{"created":true}`, string(drain(t, client)), "replay %d", i)
+		resp := streamRequest(t, chain, testProto, []byte(`{"text":"hi"}`))
+		assert.Equal(t, `{"created":true}`, string(resp), "replay %d", i)
 	}
 
 	assert.Equal(t, int64(1), atomic.LoadInt64(&calls),
@@ -204,15 +228,14 @@ func TestIdempotency_ReplayRunsHandlerOnce(t *testing.T) {
 
 func TestIdempotency_AcceptedResponseIsCached(t *testing.T) {
 	var calls int64
-	chain := idempotentChain(t, func([]byte, warpnet.WarpStream) (any, error) {
+	chain := idempotentChain(t, "accepted-id", func([]byte, warpnet.WarpStream) (any, error) {
 		atomic.AddInt64(&calls, 1)
 		return event.Accepted, nil
 	})
 
 	for i := 0; i < 2; i++ {
-		body, client := bodyStream(t, testProto, []byte(`{}`), "accepted-id")
-		go chain(body)
-		assert.Equal(t, event.Accepted, string(drain(t, client)), "replay %d", i)
+		resp := streamRequest(t, chain, testProto, []byte(`{}`))
+		assert.Equal(t, event.Accepted, string(resp), "replay %d", i)
 	}
 
 	assert.Equal(t, int64(1), atomic.LoadInt64(&calls),
@@ -221,15 +244,13 @@ func TestIdempotency_AcceptedResponseIsCached(t *testing.T) {
 
 func TestIdempotency_FailedResponseIsNotCached(t *testing.T) {
 	var calls int64
-	chain := idempotentChain(t, func([]byte, warpnet.WarpStream) (any, error) {
+	chain := idempotentChain(t, "retryable-id", func([]byte, warpnet.WarpStream) (any, error) {
 		atomic.AddInt64(&calls, 1)
 		return nil, errors.New("transient")
 	})
 
 	for i := 0; i < 2; i++ {
-		body, client := bodyStream(t, testProto, []byte(`{}`), "retryable-id")
-		go chain(body)
-		drain(t, client)
+		streamRequest(t, chain, testProto, []byte(`{}`))
 	}
 
 	assert.Equal(t, int64(2), atomic.LoadInt64(&calls),
@@ -239,7 +260,7 @@ func TestIdempotency_FailedResponseIsNotCached(t *testing.T) {
 func TestIdempotency_ConcurrentReplaysShareOneHandlerRun(t *testing.T) {
 	var calls int64
 	release := make(chan struct{})
-	chain := idempotentChain(t, func([]byte, warpnet.WarpStream) (any, error) {
+	chain := idempotentChain(t, "concurrent-id", func([]byte, warpnet.WarpStream) (any, error) {
 		atomic.AddInt64(&calls, 1)
 		<-release
 		return []byte(`{"ok":true}`), nil
@@ -249,11 +270,9 @@ func TestIdempotency_ConcurrentReplaysShareOneHandlerRun(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
-		body, client := bodyStream(t, testProto, []byte(`{}`), "concurrent-id")
-		go chain(body)
 		go func() {
 			defer wg.Done()
-			drain(t, client)
+			streamRequest(t, chain, testProto, []byte(`{}`))
 		}()
 	}
 
@@ -267,16 +286,14 @@ func TestIdempotency_ConcurrentReplaysShareOneHandlerRun(t *testing.T) {
 
 func TestIdempotency_NonIdempotentProtocolAlwaysRunsHandler(t *testing.T) {
 	var calls int64
-	chain := idempotentChain(t, func([]byte, warpnet.WarpStream) (any, error) {
+	chain := idempotentChain(t, "an-id", func([]byte, warpnet.WarpStream) (any, error) {
 		atomic.AddInt64(&calls, 1)
 		return []byte(`{}`), nil
 	})
 
 	proto := warpnet.WarpProtocolID("/public/get/user/0.0.0")
 	for i := 0; i < 2; i++ {
-		body, client := bodyStream(t, proto, []byte(`{}`), "an-id")
-		go chain(body)
-		drain(t, client)
+		streamRequest(t, chain, proto, []byte(`{}`))
 	}
 
 	assert.Equal(t, int64(2), atomic.LoadInt64(&calls),

@@ -28,9 +28,9 @@ resulting from the use or misuse of this software.
 package node
 
 import (
-	"bytes"
 	"errors"
 	"io"
+	"runtime/debug"
 
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -39,86 +39,51 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// unwrap adapts a WarpHandlerFunc to a raw stream handler: it reads the
-// request payload, dispatches the handler, and writes the response back.
-// Every handler registered via SetStreamHandlers is wrapped by it before
-// the stream middlewares are applied on top.
+// unwrap terminates the middleware chain: it reads the raw request from the
+// stream, runs the composed handler, and — since no further middleware is
+// left — writes the returned payload back. This is the only place a
+// response is written to the stream.
 func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	return func(s warpnet.WarpStream) {
 		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("node: unwrap: panic: %v %s", r, debug.Stack())
+			}
 			_ = s.Close()
 		}()
 
-		var data []byte
-		switch typedStream := s.(type) {
-		case *warpnet.WarpStreamBody:
-			data = typedStream.Body
-		default:
-			reader := io.LimitReader(s, middleware.MaxLimit)
-			d, err := io.ReadAll(reader)
-			if err != nil && !errors.Is(err, io.EOF) {
-				log.Errorf("node: unwrap: reading from stream: %v", err)
-				_ = json.NewEncoder(s).Encode(event.ResponseError{Message: middleware.ErrStreamReadError.Error()})
-				return
-			}
-			data = d
+		limit := int64(middleware.MaxLimit)
+		reader := io.LimitReader(s, limit+1)
+		data, err := io.ReadAll(reader)
+		if err != nil && !errors.Is(err, io.EOF) {
+			log.Errorf("node: unwrap: reading from stream: %v", err)
+			_ = json.NewEncoder(s).Encode(event.ResponseError{Message: middleware.ErrStreamReadError.Error()})
+			return
+		}
+		if int64(len(data)) > limit {
+			log.Errorf("node: unwrap: %s: payload exceeds the %d byte limit", s.Protocol(), limit)
+			_ = s.Reset()
+			return
 		}
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		payload, err := runHandler(handler, data, s)
-		if err != nil {
-			log.Errorf("node: unwrap: handler dispatch error: %v", err)
+		response, herr := handler(data, s)
+		if herr == nil && s.Protocol() == event.PRIVATE_POST_PAIR {
+			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
 		}
-		if len(payload) == 0 {
+
+		payload, _, encErr := middleware.NormalizeResponse(response, herr, data, s)
+		if encErr != nil {
 			return
 		}
 
+		log.Debugf("<<< STREAM RESPONSE: %s %s\n", string(s.Protocol()), string(payload))
+		if len(payload) == 0 {
+			return
+		}
 		if _, werr := s.Write(payload); werr != nil {
 			log.Errorf("node: unwrap: writing response to stream: %v", werr)
 		}
 	}
-}
-
-// runHandler invokes the wrapped handler and normalises its return value
-// into a writable byte payload.
-func runHandler(
-	handler warpnet.WarpHandlerFunc,
-	data []byte,
-	s warpnet.WarpStream,
-) ([]byte, error) {
-	response, err := handler(data, s)
-	if err == nil && s.Protocol() == event.PRIVATE_POST_PAIR {
-		log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
-	}
-	if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-		clip := data
-		if len(clip) > 500 { //nolint:mnd
-			clip = clip[:500]
-		}
-		log.Errorf("node: unwrap: handling of %s %s message: %s failed: %v\n",
-			s.Protocol(), s.Conn().RemotePeer(), string(clip), err)
-		response = event.ResponseError{Code: middleware.InternalNodeErrorCode, Message: err.Error()}
-	}
-
-	log.Debugf("<<< STREAM RESPONSE: %s %+v\n", string(s.Protocol()), response)
-	if response == nil {
-		response = event.ResponseError{Message: middleware.EmptyResponseMessage}
-	}
-
-	var payload []byte
-	switch typedResponse := response.(type) {
-	case []byte:
-		payload = typedResponse
-	case string:
-		payload = []byte(typedResponse)
-	default:
-		var buf bytes.Buffer
-		if encErr := json.NewEncoder(&buf).Encode(response); encErr != nil {
-			log.Errorf("node: unwrap: failed encoding generic response: %v %v", response, encErr)
-			return nil, encErr
-		}
-		payload = buf.Bytes()
-	}
-	return payload, nil
 }

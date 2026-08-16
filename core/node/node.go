@@ -200,8 +200,9 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	n.outbox = outbox
 }
 
-// StreamMiddleware decorates a raw stream handler.
-type StreamMiddleware func(next warpnet.StreamHandler) warpnet.StreamHandler
+// StreamMiddleware wraps a handler; the response returns back through the
+// chain and is written to the stream by the node once no middleware is left.
+type StreamMiddleware func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc
 
 // SetStreamMiddlewares registers the middleware chain applied to every
 // handler. Order matters: the first middleware is the outermost.
@@ -222,11 +223,12 @@ func (n *WarpNode) SetStreamHandlers(handlers ...warpnet.WarpStreamHandler) {
 			panic(fmt.Sprintf("node: invalid stream handler: %s", h.String()))
 		}
 
-		streamHandler := n.unwrap(h.Handler)
+		handler := h.Handler
 		for _, mw := range slices.Backward(n.middlewares) {
-			streamHandler = mw(streamHandler)
+			handler = mw(handler)
 		}
 
+		streamHandler := n.unwrap(handler)
 		n.node.SetStreamHandler(h.Path, streamHandler)
 		n.internalHandlers[h.Path] = streamHandler
 	}

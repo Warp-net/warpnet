@@ -28,8 +28,6 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"errors"
-	"io"
 	"slices"
 	"time"
 
@@ -41,86 +39,54 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (p *WarpMiddleware) AuthMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
-	return func(s warpnet.WarpStream) {
-		var isAuthSuccess bool
-		defer func() {
-			if isAuthSuccess {
-				return
-			}
-			_ = s.Close()
-		}()
+func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
+	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		if s.Conn() == nil {
 			log.Errorf("middleware: auth: connection is not ready")
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
+			return nil, ErrInternalNodeError
 		}
 		var (
 			route      = stream.FromPrIDToRoute(s.Protocol())
 			remotePeer = s.Conn().RemotePeer()
 		)
 
-		limit := int64(MaxLimit)
-		reader := io.LimitReader(s, limit+1)
-		data, err := io.ReadAll(reader)
-		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf("middleware: auth: reading from stream: %v", err)
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
-		}
-
-		if int64(len(data)) > limit {
-			log.Errorf(
-				"middleware: auth: %s: payload exceeds the %d byte limit for this route",
-				route, limit,
-			)
-			_ = s.Reset()
-			return
-		}
-
 		var msg event.Message
 		if err := json.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
 			log.Errorf("middleware: auth: unmarshaling data: %s %s %v", route, data, err)
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
+			return nil, ErrInternalNodeError
 		}
 
 		if msg.Signature == "" {
 			log.Errorf("middleware: auth: signature missing: %s", string(data))
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
+			return nil, ErrInternalNodeError
 		}
 		if remotePeer.Size() == 0 {
 			log.Errorf("middleware: auth: connection is not ready")
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
+			return nil, ErrInternalNodeError
 		}
 
 		pubKey := warpnet.FromIDToPubKey(remotePeer)
 		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
 			// Remote-side fault (foreign or outdated peer), not ours: warn, don't error.
 			log.Warnf("middleware: auth: signature invalid: %v: route %s, peer %s", err, route, remotePeer)
-			_, _ = s.Write(ErrInternalNodeError.Bytes())
-			return
+			return nil, ErrInternalNodeError
 		}
 
 		// Freshness gate for remote peers only; loopback self-streams are exempt.
 		if remotePeer != s.Conn().LocalPeer() && !p.isFresh(msg.Timestamp) {
 			log.Errorf("middleware: auth: %s: stale/replayed message from %s ts=%s",
 				route, remotePeer, msg.Timestamp)
-			_, _ = s.Write(ErrStaleMessage.Bytes())
-			return
+			return nil, ErrStaleMessage
 		}
 
 		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
 			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
-			_, _ = s.Write(ErrUnknownClientPeer.Bytes())
-			return
+			return nil, ErrUnknownClientPeer
 		}
 
-		isAuthSuccess = true
-
-		next(&warpnet.WarpStreamBody{
+		// The verified body travels on; the message id rides the stream so
+		// downstream middlewares can key on it.
+		return next(msg.Body, &warpnet.WarpStreamBody{
 			WarpStream: s,
 			Body:       msg.Body,
 			MessageId:  msg.MessageId,
