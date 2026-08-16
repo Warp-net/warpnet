@@ -2,6 +2,8 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"testing"
 
@@ -91,6 +93,35 @@ func (s stubReactionUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: userId, NodeId: "node-2"}, nil
 }
 
+// actorStream builds a user repo and an inbound stream whose remote peer
+// matches the NodeId the repo reports for actorId, so the authorship check
+// passes for events claiming to come from actorId. Lookups of other user ids
+// go to fallback, or to the stub default (NodeId "node-2") when fallback is nil.
+func actorStream(t *testing.T, actorId string, fallback func(userId string) (domain.User, error)) (stubReactionUserRepo, warpnet.WarpStream) {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate actor key: %v", err)
+	}
+	nodeId, err := warpnet.IDFromPublicKey(pub)
+	if err != nil {
+		t.Fatalf("derive actor node id: %v", err)
+	}
+
+	repo := stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
+		if userId == actorId {
+			return domain.User{Id: userId, NodeId: nodeId.String(), Username: "actor"}, nil
+		}
+		if fallback != nil {
+			return fallback(userId)
+		}
+		return domain.User{Id: userId, NodeId: "node-2"}, nil
+	}}
+	_, server := stream.NewLoopbackStream(nodeId, nodeId, "/test/route/0.0.0")
+	return repo, server
+}
+
 func TestStreamReactionHandler(t *testing.T) {
 	owner := "owner-1"
 	tweetOwner := "tweet-owner"
@@ -130,18 +161,30 @@ func TestStreamReactionHandler(t *testing.T) {
 
 	t.Run("reaction repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
+		users, conn := actorStream(t, owner, nil)
 		h := StreamReactionHandler(stubReactionRepo{reactFn: func(tweetId, userId, emoji string) (uint64, error) {
 			return 0, repoErr
-		}}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{})
-		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		}}, users, stubModerationNotifier{}, stubStreamer{})
+		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got: %v", err)
 		}
 	})
 
+	t.Run("foreign reactor is dropped", func(t *testing.T) {
+		users, _ := actorStream(t, owner, nil)
+		_, attacker := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{})
+		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), attacker)
+		if !errors.Is(err, ErrForeignReactionAuthor) {
+			t.Fatalf("expected foreign reaction author error, got: %v", err)
+		}
+	})
+
 	t.Run("own tweet reaction", func(t *testing.T) {
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), nil)
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -152,7 +195,8 @@ func TestStreamReactionHandler(t *testing.T) {
 
 	t.Run("someone else reacted (exchange finished)", func(t *testing.T) {
 		notified := false
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{addFn: func(not domain.Notification) error {
 			notified = true
 			if not.Type != domain.NotificationReactionType {
 				t.Fatalf("expected reaction type, got: %v", not.Type)
@@ -162,7 +206,7 @@ func TestStreamReactionHandler(t *testing.T) {
 			}
 			return nil
 		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -175,10 +219,11 @@ func TestStreamReactionHandler(t *testing.T) {
 	})
 
 	t.Run("reacted user not found", func(t *testing.T) {
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
+		users, conn := actorStream(t, owner, func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		})
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -189,23 +234,25 @@ func TestStreamReactionHandler(t *testing.T) {
 
 	t.Run("user repo error", func(t *testing.T) {
 		repoErr := errors.New("user repo")
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
+		users, conn := actorStream(t, owner, func(userId string) (domain.User, error) {
 			return domain.User{}, repoErr
-		}}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		})
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected user repo error: %v", err)
 		}
 	})
 
 	t.Run("stream node offline", func(t *testing.T) {
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
 			},
 		})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -216,13 +263,14 @@ func TestStreamReactionHandler(t *testing.T) {
 
 	t.Run("stream error", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
 			},
 		})
-		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		_, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
 		}
@@ -230,13 +278,14 @@ func TestStreamReactionHandler(t *testing.T) {
 
 	t.Run("remote response with error payload", func(t *testing.T) {
 		respErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "remote error"})
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return respErr, nil
 			},
 		})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -247,11 +296,12 @@ func TestStreamReactionHandler(t *testing.T) {
 
 	t.Run("strips retweet prefix from tweet id", func(t *testing.T) {
 		var capturedTweetId string
+		users, conn := actorStream(t, owner, nil)
 		h := StreamReactionHandler(stubReactionRepo{reactFn: func(tweetId, userId, emoji string) (uint64, error) {
 			capturedTweetId = tweetId
 			return 1, nil
-		}}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		_, err := h(marshal(t, event.ReactionEvent{TweetId: domain.RetweetPrefix + tweetId, OwnerId: owner, UserId: owner}), nil)
+		}}, users, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		_, err := h(marshal(t, event.ReactionEvent{TweetId: domain.RetweetPrefix + tweetId, OwnerId: owner, UserId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -261,13 +311,14 @@ func TestStreamReactionHandler(t *testing.T) {
 	})
 
 	t.Run("successful stream", func(t *testing.T) {
-		h := StreamReactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(stubReactionRepo{}, users, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return []byte("{}"), nil
 			},
 		})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -282,8 +333,9 @@ func TestStreamReactionHandler(t *testing.T) {
 				return nil, errors.New("db error")
 			},
 		}
-		h := StreamReactionHandler(repo, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), nil)
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(repo, users, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), conn)
 		if err != nil {
 			t.Fatalf("a failing breakdown must not fail the reaction: %v", err)
 		}
@@ -307,14 +359,15 @@ func TestStreamReactionHandler(t *testing.T) {
 				return map[string]uint64{"🔥": 2, "❤️": 1}, nil
 			},
 		}
-		h := StreamReactionHandler(repo, stubReactionUserRepo{}, stubModerationNotifier{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamReactionHandler(repo, users, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				forwardederev = data.(event.ReactionEvent)
 				return []byte("{}"), nil
 			},
 		})
-		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner, Emoji: "🔥"}), nil)
+		resp, err := h(marshal(t, event.ReactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner, Emoji: "🔥"}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -362,18 +415,20 @@ func TestStreamUnreactionHandler(t *testing.T) {
 
 	t.Run("unreaction repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
+		users, conn := actorStream(t, owner, nil)
 		h := StreamUnreactionHandler(stubReactionRepo{unreactFn: func(tweetId, userId string) (uint64, error) {
 			return 0, repoErr
-		}}, stubReactionUserRepo{}, stubStreamer{})
-		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		}}, users, stubStreamer{})
+		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got: %v", err)
 		}
 	})
 
 	t.Run("own tweet unreaction", func(t *testing.T) {
-		h := StreamUnreactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), nil)
+		users, conn := actorStream(t, owner, nil)
+		h := StreamUnreactionHandler(stubReactionRepo{}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -381,8 +436,8 @@ func TestStreamUnreactionHandler(t *testing.T) {
 	})
 
 	t.Run("someone else unreacted (exchange finished)", func(t *testing.T) {
-		h := StreamUnreactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: "other-node"}})
-		resp, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		users, conn := actorStream(t, owner, nil)
+		resp, err := StreamUnreactionHandler(stubReactionRepo{}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: "other-node"}})(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -390,23 +445,25 @@ func TestStreamUnreactionHandler(t *testing.T) {
 	})
 
 	t.Run("unreacted user not found", func(t *testing.T) {
-		h := StreamUnreactionHandler(stubReactionRepo{}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
+		users, conn := actorStream(t, owner, func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		})
+		h := StreamUnreactionHandler(stubReactionRepo{}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 
 	t.Run("stream node offline", func(t *testing.T) {
-		h := StreamUnreactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamUnreactionHandler(stubReactionRepo{}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
 			},
 		})
-		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -414,13 +471,14 @@ func TestStreamUnreactionHandler(t *testing.T) {
 
 	t.Run("stream error", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
-		h := StreamUnreactionHandler(stubReactionRepo{}, stubReactionUserRepo{}, stubStreamer{
+		users, conn := actorStream(t, owner, nil)
+		h := StreamUnreactionHandler(stubReactionRepo{}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
 			},
 		})
-		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), nil)
+		_, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: tweetOwner}), conn)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
 		}
@@ -428,11 +486,12 @@ func TestStreamUnreactionHandler(t *testing.T) {
 
 	t.Run("strips retweet prefix", func(t *testing.T) {
 		var capturedTweetId string
+		users, conn := actorStream(t, owner, nil)
 		h := StreamUnreactionHandler(stubReactionRepo{unreactFn: func(tweetId, userId string) (uint64, error) {
 			capturedTweetId = tweetId
 			return 0, nil
-		}}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		_, err := h(marshal(t, event.UnreactionEvent{TweetId: domain.RetweetPrefix + tweetId, OwnerId: owner, UserId: owner}), nil)
+		}}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		_, err := h(marshal(t, event.UnreactionEvent{TweetId: domain.RetweetPrefix + tweetId, OwnerId: owner, UserId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

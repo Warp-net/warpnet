@@ -58,14 +58,15 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("author views own tweet - counted", func(t *testing.T) {
 		var capturedViewerId string
+		users, conn := actorStream(t, author, nil)
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) {
 				capturedViewerId = viewerId
 				return 1, nil
 			},
-		}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
+		}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: author}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -79,15 +80,16 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("non-author view records and returns count - own node hosts author", func(t *testing.T) {
 		var capturedTweetId, capturedViewerId string
+		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) {
 				capturedTweetId = tweetId
 				capturedViewerId = viewerId
 				return 42, nil
 			},
-		}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
+		}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -101,14 +103,15 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("non-author view strips retweet prefix", func(t *testing.T) {
 		var capturedTweetId string
+		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) {
 				capturedTweetId = tweetId
 				return 1, nil
 			},
-		}, stubReactionUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
+		}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		_, err := h(marshal(t, event.ViewEvent{TweetId: domain.RetweetPrefix + tweetId, UserId: author, ViewerId: owner}), nil)
+		_, err := h(marshal(t, event.ViewEvent{TweetId: domain.RetweetPrefix + tweetId, UserId: author, ViewerId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -119,11 +122,12 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("non-author view forwards to remote author", func(t *testing.T) {
 		forwarded := false
+		users, conn := actorStream(t, owner, func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		})
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) { return 5, nil },
-		}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, NodeId: "remote-node"}, nil
-		}}, stubStreamer{
+		}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				forwarded = true
@@ -131,7 +135,7 @@ func TestStreamViewHandler(t *testing.T) {
 			},
 		})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -145,20 +149,21 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("forwarding errors fall back to local CRDT view", func(t *testing.T) {
 		recordCalled := false
+		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) {
 				recordCalled = true
 				return 9, nil
 			},
 			getFn: func(tweetId string) (uint64, error) { return 9, nil },
-		}, stubReactionUserRepo{}, stubStreamer{
+		}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, errors.New("network down")
 			},
 		})
 
-		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
+		resp, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -172,21 +177,22 @@ func TestStreamViewHandler(t *testing.T) {
 
 	t.Run("non-author node does not record locally on forward success", func(t *testing.T) {
 		recordCalled := false
+		users, conn := actorStream(t, owner, func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "remote-node"}, nil
+		})
 		h := StreamViewHandler(stubViewRepo{
 			recordFn: func(tweetId, viewerId string) (uint64, error) {
 				recordCalled = true
 				return 0, nil
 			},
-		}, stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, NodeId: "remote-node"}, nil
-		}}, stubStreamer{
+		}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return []byte(`{"count":5}`), nil
 			},
 		})
 
-		_, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), nil)
+		_, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

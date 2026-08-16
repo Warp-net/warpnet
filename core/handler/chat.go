@@ -99,12 +99,14 @@ func StreamCreateChatHandler(
 		if otherUser.Network == mastodon.Network {
 			return nil, mastodon.ErrNotSupported
 		}
-		if otherUser.NodeId == "" {
-			log.Warnf("chat: dropping chat claiming to be from %s", ev.OtherUserId)
+
+		initiator, err := userRepo.Get(ev.OwnerId)
+		if err != nil || initiator.NodeId == "" {
+			log.Warnf("chat: dropping chat claiming to be from %s", ev.OwnerId)
 			return nil, ErrForeignChatAuthor
 		}
-		if s == nil || s.Conn() == nil || otherUser.NodeId != s.Conn().RemotePeer().String() {
-			log.Warnf("chat: dropping chat claiming to be from %s", ev.OtherUserId)
+		if s == nil || s.Conn() == nil || initiator.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("chat: dropping chat claiming to be from %s", ev.OwnerId)
 			return nil, ErrForeignChatAuthor
 		}
 

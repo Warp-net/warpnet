@@ -92,6 +92,22 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	retweeter := owner
 	tweetId := "tweet-1"
 
+	// The handler only stores a retweet delivered by the retweeter's own
+	// node: userRepo.Get(actor).NodeId must match the stream's remote peer.
+	_, actorConn := authorStream(t)
+	actorNode := actorConn.Conn().RemotePeer().String()
+	actorUsers := func(actorId string, otherFn func(userId string) (domain.User, error)) stubRetweetUserRepo {
+		return stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == actorId {
+				return domain.User{Id: userId, Username: "retweeter-user", NodeId: actorNode}, nil
+			}
+			if otherFn != nil {
+				return otherFn(userId)
+			}
+			return domain.User{Id: userId, NodeId: "node-2"}, nil
+		}}
+	}
+
 	makeTweet := func() event.NewRetweetEvent {
 		rt := retweeter
 		return domain.Tweet{
@@ -132,22 +148,22 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db failed")
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{
+		h := StreamNewReTweetHandler(actorUsers(retweeter, nil), stubReTweetRepo{
 			newRetweetFn: func(tweet domain.Tweet) (domain.Tweet, error) { return domain.Tweet{}, repoErr },
 		}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{})
-		_, err := h(marshal(t, makeTweet()), nil)
+		_, err := h(marshal(t, makeTweet()), actorConn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
 
 	t.Run("own tweet retweet", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := StreamNewReTweetHandler(actorUsers(tweetOwner, nil), stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner},
 		})
 		rt := tweetOwner
 		tw := domain.Tweet{Id: tweetId, UserId: tweetOwner, RetweetedBy: &rt, CreatedAt: time.Now()}
-		resp, err := h(marshal(t, event.NewRetweetEvent(tw)), nil)
+		resp, err := h(marshal(t, event.NewRetweetEvent(tw)), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -158,7 +174,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("someone retweeted my tweet - adds notification", func(t *testing.T) {
 		notified := false
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
+		h := StreamNewReTweetHandler(actorUsers(retweeter, nil), stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{addFn: func(not domain.Notification) error {
 			notified = true
 			if not.Type != domain.NotificationRetweetType {
 				t.Fatalf("expected retweet type, got: %v", not.Type)
@@ -170,7 +186,7 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 		}}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner},
 		})
-		resp, err := h(marshal(t, makeTweet()), nil)
+		resp, err := h(marshal(t, makeTweet()), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -184,13 +200,13 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("owner retweeter adds to timeline", func(t *testing.T) {
 		timelineAdded := false
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{
+		h := StreamNewReTweetHandler(actorUsers(retweeter, nil), stubReTweetRepo{}, stubTimelineRepo{
 			addFn: func(userId string, tweet domain.Tweet) error {
 				timelineAdded = true
 				return nil
 			},
 		}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, makeTweet()), nil)
+		resp, err := h(marshal(t, makeTweet()), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -201,10 +217,10 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	})
 
 	t.Run("tweet owner user not found", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := StreamNewReTweetHandler(actorUsers(retweeter, func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, makeTweet()), nil)
+		}), stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, makeTweet()), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -214,13 +230,13 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 	})
 
 	t.Run("stream node offline", func(t *testing.T) {
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := StreamNewReTweetHandler(actorUsers(retweeter, nil), stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
 			},
 		})
-		_, err := h(marshal(t, makeTweet()), nil)
+		_, err := h(marshal(t, makeTweet()), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -228,13 +244,13 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("stream error", func(t *testing.T) {
 		streamErr := errors.New("broken")
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := StreamNewReTweetHandler(actorUsers(retweeter, nil), stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
 			},
 		})
-		_, err := h(marshal(t, makeTweet()), nil)
+		_, err := h(marshal(t, makeTweet()), actorConn)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
 		}
@@ -242,13 +258,13 @@ func TestStreamNewReTweetHandler(t *testing.T) {
 
 	t.Run("remote response with error payload", func(t *testing.T) {
 		respErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "oops"})
-		h := StreamNewReTweetHandler(stubRetweetUserRepo{}, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
+		h := StreamNewReTweetHandler(actorUsers(retweeter, nil), stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return respErr, nil
 			},
 		})
-		_, err := h(marshal(t, makeTweet()), nil)
+		_, err := h(marshal(t, makeTweet()), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -259,6 +275,21 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	owner := "owner-1"
 	tweetOwner := "tweet-owner"
 	tweetId := "tweet-1"
+
+	// The unretweet must arrive over a stream from the retweeter's own node.
+	_, actorConn := authorStream(t)
+	actorNode := actorConn.Conn().RemotePeer().String()
+	actorUsers := func(otherFn func(userId string) (domain.User, error)) stubRetweetUserRepo {
+		return stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == owner {
+				return domain.User{Id: userId, NodeId: actorNode}, nil
+			}
+			if otherFn != nil {
+				return otherFn(userId)
+			}
+			return domain.User{Id: userId, NodeId: "node-2"}, nil
+		}}
+	}
 
 	t.Run("invalid payload", func(t *testing.T) {
 		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubStreamer{})
@@ -288,8 +319,8 @@ func TestStreamUnretweetHandler(t *testing.T) {
 		repoErr := errors.New("not found")
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{}, repoErr
-		}}, stubRetweetUserRepo{}, stubStreamer{})
-		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), nil)
+		}}, actorUsers(nil), stubStreamer{})
+		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
@@ -299,8 +330,8 @@ func TestStreamUnretweetHandler(t *testing.T) {
 		repoErr := errors.New("db failed")
 		h := StreamUnretweetHandler(stubReTweetRepo{
 			unRetweetFn: func(retweetedByUserID, tweetId string) error { return repoErr },
-		}, stubRetweetUserRepo{}, stubStreamer{})
-		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), nil)
+		}, actorUsers(nil), stubStreamer{})
+		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected unretweet error: %v", err)
 		}
@@ -309,8 +340,8 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	t.Run("own tweet unretweet", func(t *testing.T) {
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: owner}, nil
-		}}, stubRetweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), nil)
+		}}, actorUsers(nil), stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -322,10 +353,10 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	t.Run("tweet owner not found", func(t *testing.T) {
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
-		}}, stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		}}, actorUsers(func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
-		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), nil)
+		}), stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -337,13 +368,13 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	t.Run("stream node offline", func(t *testing.T) {
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
-		}}, stubRetweetUserRepo{}, stubStreamer{
+		}}, actorUsers(nil), stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
 			},
 		})
-		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), nil)
+		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -356,13 +387,13 @@ func TestStreamUnretweetHandler(t *testing.T) {
 		streamErr := errors.New("broken")
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
-		}}, stubRetweetUserRepo{}, stubStreamer{
+		}}, actorUsers(nil), stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
 			},
 		})
-		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), nil)
+		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if !errors.Is(err, streamErr) {
 			t.Fatalf("expected stream error: %v", err)
 		}

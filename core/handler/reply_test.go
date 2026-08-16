@@ -396,9 +396,13 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 		return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 	}}
 
+	// The reply must arrive over a stream from its author's node; the stub
+	// reports every user on nodeID, so a loopback stream from nodeID passes.
+	_, conn := stream.NewLoopbackStream(nodeID, nodeID, "/test/route/0.0.0")
+
 	t.Run("stores a reply whose parent lives here", func(t *testing.T) {
 		h := build(localParent, stubModerationNotifier{})
-		resp, err := h(marshal(t, makeReply()), nil)
+		resp, err := h(marshal(t, makeReply()), conn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -419,7 +423,7 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 		}})
 		ev := makeReply()
 		ev.ParentUserId = &pu
-		if _, err := h(marshal(t, ev), nil); err != nil {
+		if _, err := h(marshal(t, ev), conn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if !notified {
@@ -432,26 +436,40 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 		ev := makeReply()
 		ev.ParentId = nil
 		ev.ParentUserId = nil
-		if _, err := h(marshal(t, ev), nil); !errors.Is(err, ErrNotAReply) {
+		if _, err := h(marshal(t, ev), conn); !errors.Is(err, ErrNotAReply) {
 			t.Fatalf("expected ErrNotAReply, got %v", err)
 		}
 	})
 
 	t.Run("rejects a thread that lives on another node", func(t *testing.T) {
 		h := build(stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == "stranger" {
+				return domain.User{Id: userId, NodeId: nodeID.String()}, nil
+			}
 			return domain.User{Id: userId, NodeId: "someone-else"}, nil
 		}}, stubModerationNotifier{})
-		if _, err := h(marshal(t, makeReply()), nil); !errors.Is(err, ErrForeignThread) {
+		if _, err := h(marshal(t, makeReply()), conn); !errors.Is(err, ErrForeignThread) {
 			t.Fatalf("expected ErrForeignThread, got %v", err)
 		}
 	})
 
 	t.Run("rejects an unknown parent author", func(t *testing.T) {
 		h := build(stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == "stranger" {
+				return domain.User{Id: userId, NodeId: nodeID.String()}, nil
+			}
 			return domain.User{}, database.ErrUserNotFound
 		}}, stubModerationNotifier{})
-		if _, err := h(marshal(t, makeReply()), nil); !errors.Is(err, ErrForeignThread) {
+		if _, err := h(marshal(t, makeReply()), conn); !errors.Is(err, ErrForeignThread) {
 			t.Fatalf("expected ErrForeignThread, got %v", err)
+		}
+	})
+
+	t.Run("rejects a reply delivered by a foreign node", func(t *testing.T) {
+		_, attacker := stream.NewLoopbackStream("attacker-node", "attacker-node", "/test/route/0.0.0")
+		h := build(localParent, stubModerationNotifier{})
+		if _, err := h(marshal(t, makeReply()), attacker); !errors.Is(err, ErrForeignReplyAuthor) {
+			t.Fatalf("expected ErrForeignReplyAuthor, got %v", err)
 		}
 	})
 
@@ -459,7 +477,7 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 		h := build(localParent, stubModerationNotifier{})
 		ev := makeReply()
 		ev.Text = strings.Repeat("a", tweetCharLimit+1)
-		if _, err := h(marshal(t, ev), nil); err == nil {
+		if _, err := h(marshal(t, ev), conn); err == nil {
 			t.Fatal("expected an oversized reply to be rejected")
 		}
 	})

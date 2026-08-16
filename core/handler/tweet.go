@@ -227,8 +227,10 @@ func validatePoll(p *domain.Poll) error {
 }
 
 const (
-	ErrNotAReply     = warpnet.WarpError("reply: tweet has no parent")
-	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
+	ErrNotAReply          = warpnet.WarpError("reply: tweet has no parent")
+	ErrForeignThread      = warpnet.WarpError("reply: parent tweet does not live on this node")
+	ErrForeignReplyAuthor = warpnet.WarpError("reply: reply did not come from its author's node")
+	ErrForeignPinAuthor   = warpnet.WarpError("pin: request did not come from the tweet author's node")
 )
 
 func StreamNewReplyHandler(
@@ -237,10 +239,20 @@ func StreamNewReplyHandler(
 	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
-	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
+		}
+
+		author, err := userRepo.Get(ev.UserId)
+		if err != nil || author.NodeId == "" {
+			log.Warnf("reply: dropping reply claiming to be from %s", ev.UserId)
+			return nil, ErrForeignReplyAuthor
+		}
+		if s == nil || s.Conn() == nil || author.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("reply: dropping reply claiming to be from %s", ev.UserId)
+			return nil, ErrForeignReplyAuthor
 		}
 
 		if ev.Moderation != nil && !ev.Moderation.IsOk {
@@ -867,15 +879,15 @@ func StreamGetTweetStatsHandler(
 	}
 }
 
-func StreamPinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+func StreamPinTweetHandler(repo TweetsStorer, userRepo TweetUserFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		return setPinnedFromEvent(buf, repo, true)
+		return setPinnedFromEvent(buf, repo, userRepo, s, true)
 	}
 }
 
-func StreamUnpinTweetHandler(repo TweetsStorer) warpnet.WarpHandlerFunc {
+func StreamUnpinTweetHandler(repo TweetsStorer, userRepo TweetUserFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		return setPinnedFromEvent(buf, repo, false)
+		return setPinnedFromEvent(buf, repo, userRepo, s, false)
 	}
 }
 
@@ -984,7 +996,7 @@ func cancelRetweetsForEditedTweet(repo TweetsStorer, tweetId string) {
 
 // setPinnedFromEvent decodes the pin/unpin payload, enforces author-only
 // pinning, and delegates the write.
-func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
+func setPinnedFromEvent(buf []byte, repo TweetsStorer, userRepo TweetUserFetcher, s warpnet.WarpStream, pin bool) (any, error) {
 	op := "unpin"
 	if pin {
 		op = "pin"
@@ -998,6 +1010,15 @@ func setPinnedFromEvent(buf []byte, repo TweetsStorer, pin bool) (any, error) {
 	}
 	if ev.TweetId == "" {
 		return nil, warpnet.WarpError(op + ": empty tweet id")
+	}
+	author, err := userRepo.Get(ev.UserId)
+	if err != nil || author.NodeId == "" {
+		log.Warnf("%s: dropping request claiming to be from %s", op, ev.UserId)
+		return nil, ErrForeignPinAuthor
+	}
+	if s == nil || s.Conn() == nil || author.NodeId != s.Conn().RemotePeer().String() {
+		log.Warnf("%s: dropping request claiming to be from %s", op, ev.UserId)
+		return nil, ErrForeignPinAuthor
 	}
 	tw, err := repo.Get(ev.UserId, ev.TweetId)
 	if err != nil {

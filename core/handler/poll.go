@@ -40,6 +40,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const ErrForeignVoter = warpnet.WarpError("poll: vote did not come from the voter's node")
+
 type PollVotesStorer interface {
 	Vote(tweetId, userId string, option int, isTransitive bool) error
 	Voted(tweetId, userId string) (option int, ok bool, err error)
@@ -86,6 +88,16 @@ func StreamPollVoteHandler(
 			return nil, warpnet.WarpError("poll: negative option")
 		}
 
+		voter, err := userRepo.Get(ev.OwnerId)
+		if err != nil || voter.NodeId == "" {
+			log.Warnf("poll: dropping vote claiming to be from %s", ev.OwnerId)
+			return nil, ErrForeignVoter
+		}
+		if s == nil || s.Conn() == nil || voter.NodeId != s.Conn().RemotePeer().String() {
+			log.Warnf("poll: dropping vote claiming to be from %s", ev.OwnerId)
+			return nil, ErrForeignVoter
+		}
+
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		optionsNum := ev.OptionsNum
 
@@ -107,7 +119,7 @@ func StreamPollVoteHandler(
 		// Mirrors the reaction path: the network-wide (CRDT) counter is bumped
 		// only on the voter's own node, so a vote stored on both the voter's
 		// and the author's node is counted once.
-		err := repo.Vote(tweetId, ev.OwnerId, ev.Option, ev.OwnerId == ownNodeInfo.OwnerId)
+		err = repo.Vote(tweetId, ev.OwnerId, ev.Option, ev.OwnerId == ownNodeInfo.OwnerId)
 		if err != nil && !errors.Is(err, database.ErrPollAlreadyVoted) {
 			log.Errorf("poll vote handler failed: %v", err)
 			return nil, err
