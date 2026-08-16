@@ -511,3 +511,43 @@ func TestConnTracer_ClassifiesRealConnections(t *testing.T) {
 		tr.Disconnected(client.Node().Network(), conns[0])
 	})
 }
+
+// Nothing else binds the route: a peer that captured a message this node
+// gossiped can otherwise repoint it at a privileged handler and replay it,
+// since the loopback then reports this node as the sender.
+func TestSelfStream_RejectsARewrittenDestination(t *testing.T) {
+	n := newTestNode(t)
+
+	var reached int
+	n.SetStreamHandlers(warpnet.WarpStreamHandler{
+		Path: warpnet.WarpProtocolID(warpevent.PRIVATE_POST_BLOCK),
+		Handler: func([]byte, warpnet.WarpStream) (any, error) {
+			reached++
+			return []byte(`{"ok":true}`), nil
+		},
+	})
+
+	priv, err := n.Node().Peerstore().PrivKey(n.Node().ID()).Raw()
+	require.NoError(t, err)
+
+	msg := warpevent.Message{
+		Body:        json.RawMessage(`{"text":"our own gossiped tweet"}`),
+		MessageId:   "captured",
+		NodeId:      n.Node().ID().String(),
+		Destination: warpevent.PUBLIC_POST_TIMELINE,
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	msg.Signature = security.Sign(priv, msg.SigningBytes())
+
+	msg.Destination = warpevent.PRIVATE_POST_BLOCK
+
+	bt, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	_, err = n.RelayStream(warpnet.FromStringToPeerID(msg.NodeId),
+		stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK), bt)
+	require.NoError(t, err)
+
+	assert.Zero(t, reached, "a rewritten destination reached a privileged handler")
+}
