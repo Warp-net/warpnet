@@ -1,16 +1,12 @@
 #!/bin/bash
 set -e
 
-# ── Firewall / NAT: идемпотентно и без разрушения сети хоста/чужих контейнеров ──
 ufw disable 2>/dev/null || true
 
-# НЕ перезапускаем systemd-networkd: это сбрасывает default route хоста и
-# gateway-IP docker-мостов → все контейнеры падают в [Errno 101] Network is
-# unreachable до следующей ручной починки. Именно это и роняло сервис.
 
-WAN_IF="$(ip route show default | grep -oP 'dev \K\S+' | head -n1)"   # реальный аплинк, не eth0
+WAN_IF="$(ip route show default | grep -oP 'dev \K\S+' | head -n1)"
 
-ensure() {  # добавить правило, только если его ещё нет (re-deploy не плодит дубли)
+ensure() {
   local t="$1" c="$2"; shift 2
   iptables -t "$t" -C "$c" "$@" 2>/dev/null || iptables -t "$t" -A "$c" "$@"
 }
@@ -18,8 +14,6 @@ ensure() {  # добавить правило, только если его ещ
 ensure filter INPUT -p tcp -m multiport --dports 4001:4099 -j ACCEPT
 ensure filter INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
-# Egress контейнеров. Если dockerd сам управляет iptables (дефолт) — Docker уже
-# делает это для всех сетей, и блок ниже не нужен; нужен только при iptables=false.
 if iptables -L DOCKER-USER -n >/dev/null 2>&1; then
   ensure filter DOCKER-USER -j ACCEPT
 fi
