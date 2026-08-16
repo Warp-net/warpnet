@@ -68,10 +68,14 @@ func sameOrigin(r *http.Request) bool {
 	return u.Host == r.Host
 }
 
-type Codec interface {
-	Decode(frame []byte) (plain []byte, encrypted bool)
-	Encode(reply []byte, encrypted bool) ([]byte, error)
+type Channel interface {
+	Encrypt(plain []byte) ([]byte, error)
+	Decrypt(frame []byte) ([]byte, error)
 }
+
+type HandshakeFunc func(read func() ([]byte, error), write func([]byte) error) (Channel, error)
+
+const handshakeTimeout = 10 * time.Second
 
 type Node interface {
 	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error)
@@ -87,26 +91,26 @@ type Authenticator interface {
 }
 
 type BridgeHandler struct {
-	codec    Codec
-	auth     Authenticator
-	firstRun func() bool
-	psk      security.PSK
+	handshake HandshakeFunc
+	auth      Authenticator
+	firstRun  func() bool
+	psk       security.PSK
 
 	mx   sync.RWMutex
 	node Node
 }
 
 func NewBridgeHandler(
-	codec Codec,
+	handshake HandshakeFunc,
 	auth Authenticator,
 	psk security.PSK,
 	firstRun func() bool,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		codec:    codec,
-		auth:     auth,
-		psk:      psk,
-		firstRun: firstRun,
+		handshake: handshake,
+		auth:      auth,
+		psk:       psk,
+		firstRun:  firstRun,
 	}
 }
 
@@ -120,28 +124,46 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 
 		defer func() { _ = conn.Close() }()
 
+		_ = conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
+		channel, err := b.handshake(
+			func() ([]byte, error) {
+				_, frame, err := conn.ReadMessage()
+				return frame, err
+			},
+			func(msg []byte) error {
+				return conn.WriteMessage(websocket.BinaryMessage, msg)
+			},
+		)
+		if err != nil {
+			log.Warnf("remote: ws handshake: %v", err)
+			return
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+
 		// Dispatch each message in its own goroutine so a slow libp2p self-stream
 		// can't head-of-line block every other dashboard call on the connection.
-		// writeMx serializes WriteMessage (gorilla allows a single writer); sem
-		// bounds in-flight work; the frontend matches replies by message_id, so
-		// out-of-order responses are fine.
+		// writeMx serializes Encrypt+WriteMessage (gorilla allows a single writer,
+		// counter nonces require wire order to match encryption order); sem bounds
+		// in-flight work; the frontend matches replies by message_id.
 		var writeMx sync.Mutex
 		var inflight sync.WaitGroup
 		sem := make(chan struct{}, maxInflightDispatches)
 
-		respond := func(req event.Message, encrypted bool) {
+		respond := func(req event.Message) {
 			out, err := json.Marshal(b.dispatch(req))
 			if err != nil {
 				log.Errorf("remote: ws marshal: %v", err)
 				return
 			}
-			if out, err = b.codec.Encode(out, encrypted); err != nil {
-				log.Errorf("remote: ws encode: %v", err)
-				return
-			}
 			writeMx.Lock()
 			defer writeMx.Unlock()
-			if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
+			sealed, err := channel.Encrypt(out)
+			if err != nil {
+				log.Errorf("remote: ws encrypt: %v", err)
+				_ = conn.Close()
+				return
+			}
+			if err := conn.WriteMessage(websocket.BinaryMessage, sealed); err != nil {
 				_ = conn.Close() // unblock ReadMessage so the loop exits
 			}
 		}
@@ -153,7 +175,13 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 				return
 			}
 
-			plain, encrypted := b.codec.Decode(frame)
+			plain, err := channel.Decrypt(frame)
+			if err != nil {
+				log.Warnf("remote: ws decrypt: %v", err)
+				inflight.Wait()
+				return
+			}
+
 			var req event.Message
 			if err := json.Unmarshal(plain, &req); err != nil {
 				log.Warnf("remote: ws envelope: %v", err)
@@ -165,14 +193,14 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			// any in-flight call: drain first, then run synchronously as a barrier.
 			if req.Destination == event.PRIVATE_POST_LOGIN || req.Destination == event.PRIVATE_POST_LOGOUT {
 				inflight.Wait()
-				respond(req, encrypted)
+				respond(req)
 				continue
 			}
 
 			sem <- struct{}{}
 			inflight.Go(func() {
 				defer func() { <-sem }()
-				respond(req, encrypted)
+				respond(req)
 			})
 		}
 	}

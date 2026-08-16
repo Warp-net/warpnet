@@ -87,7 +87,7 @@ resulting from the use or misuse of this software.
                than silently showing login with no sign-up path -->
           <div v-else-if="firstRunError" class="mt-4">
             <p class="text-red-600 text-sm font-medium mb-2" role="alert">
-              Couldn't reach your Warpnet node. Make sure it's running.
+              {{ firstRunErrorMessage }}
             </p>
             <button
               @click.prevent="resolveFirstRun"
@@ -374,6 +374,7 @@ export default {
       localStorageLoss: false,
       signUpError: "",
       firstRunError: false,
+      firstRunErrorMessage: "",
     };
   },
   computed: {
@@ -417,6 +418,9 @@ export default {
         // would then have no path to sign up. Surface a retry instead.
         console.error("failed to determine first-run state:", err);
         this.firstRunError = true;
+        this.firstRunErrorMessage = err && err.code === "ERR_NODE_KEY_CHANGED"
+          ? err.message
+          : "Couldn't reach your Warpnet node. Make sure it's running.";
       }
       console.log("Is first run:", this.isFirstRun);
     },

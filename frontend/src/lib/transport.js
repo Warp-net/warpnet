@@ -25,16 +25,12 @@ resulting from the use or misuse of this software.
 // transport bridges the frontend to its node, keeping the exact signatures the
 // service layer already calls. Under Wails (desktop/member) it delegates to the
 // bound Go App. Otherwise — the remote node's browser dashboard — it speaks a
-// single WebSocket: login, logout, is-first-run and every node call ride one
-// connection. The connection carries its own auth (a successful login
-// authenticates the socket), and every frame after login is AES-256-GCM sealed
-// with sha256(password); login and is-first-run precede the key, so they go in
-// cleartext.
+// single WebSocket secured by a Noise NX handshake (lib/noise.js) with the
+// node's static key pinned on first contact.
 import * as Wails from "../../wailsjs/go/main/App";
 import * as WailsRuntime from "../../wailsjs/runtime/runtime";
 import {generateUUID} from "@/lib/uuid";
-import { gcm } from "@noble/ciphers/aes";
-import { sha256 } from "@noble/hashes/sha256";
+import { NoiseInitiator, fingerprint } from "@/lib/noise";
 import { setConnectionStatus } from "@/lib/connection";
 
 // nodeError builds an Error whose message is safe to show a user verbatim
@@ -46,8 +42,6 @@ function nodeError(code, message) {
   return e;
 }
 
-const LOGIN_PATH = "/private/post/login/0.0.0";
-const LOGOUT_PATH = "/private/post/logout/0.0.0";
 const IS_FIRST_RUN_PATH = "is-first-run";
 const REQUEST_TIMEOUT_MS = 30000;
 
@@ -90,33 +84,21 @@ export function EventsOff(eventName, ...additional) {
 
 let socket = null;
 let connecting = null;
-// aesKey: raw 32-byte channel key (SHA-256 of the password). Persisted to
-// localStorage so reopening the tab or reloading the page resumes the
-// already-authenticated node's session (restoring the key here) instead of
-// bouncing to the login screen; cleared on logout.
-const CHANNEL_KEY_STORAGE = "warpnet.channel.key";
-let aesKey = restoreChannelKey();
+const NODE_KEY_STORAGE = "warpnet.node.key";
+let session = null;
 const pending = new Map(); // message_id -> { resolve, reject, timer }
 
-function restoreChannelKey() {
+function pinnedNodeKey() {
   try {
-    const saved = localStorage.getItem(CHANNEL_KEY_STORAGE);
-    return saved ? base64ToBytes(saved) : null;
+    return localStorage.getItem(NODE_KEY_STORAGE);
   } catch (_) {
     return null;
   }
 }
 
-function saveChannelKey() {
+function pinNodeKey(fp) {
   try {
-    if (aesKey) localStorage.setItem(CHANNEL_KEY_STORAGE, bytesToBase64(aesKey));
-  } catch (_) {}
-}
-
-function clearChannelKey() {
-  aesKey = null;
-  try {
-    localStorage.removeItem(CHANNEL_KEY_STORAGE);
+    localStorage.setItem(NODE_KEY_STORAGE, fp);
   } catch (_) {}
 }
 
@@ -134,7 +116,7 @@ function failPending(err) {
 }
 
 function connect() {
-  if (socket && socket.readyState === WebSocket.OPEN) {
+  if (socket && socket.readyState === WebSocket.OPEN && session) {
     return Promise.resolve();
   }
   if (connecting) {
@@ -143,47 +125,90 @@ function connect() {
   setConnectionStatus("connecting");
   connecting = new Promise((resolve, reject) => {
     const sock = new WebSocket(wsURL());
+    sock.binaryType = "arraybuffer";
+    const initiator = new NoiseInitiator();
+    let settled = false;
+    const fail = (err) => {
+      if (!settled) {
+        settled = true;
+        connecting = null;
+        setConnectionStatus("offline");
+        reject(err);
+      }
+      try { sock.close(); } catch (_) {}
+    };
     sock.onopen = () => {
-      socket = sock;
-      connecting = null;
-      setConnectionStatus("online");
-      resolve();
+      sock.send(initiator.writeMessageA());
     };
     sock.onerror = () => {
-      connecting = null;
-      setConnectionStatus("offline");
-      reject(nodeError(
+      fail(nodeError(
         "ERR_NODE_UNREACHABLE",
         "Can't reach your Warpnet node. Make sure it's running, then try again."
       ));
     };
     sock.onclose = () => {
       socket = null;
+      session = null;
       connecting = null;
       setConnectionStatus("offline");
-      // Re-arm the channel key from localStorage so an automatic
-      // reconnect resumes the encrypted session; after a logout the
-      // stored key is already cleared and this stays null.
-      aesKey = restoreChannelKey();
+      fail(nodeError(
+        "ERR_NODE_UNREACHABLE",
+        "Connection to your Warpnet node was lost."
+      ));
       failPending(nodeError(
         "ERR_NODE_UNREACHABLE",
         "Connection to your Warpnet node was lost."
       ));
     };
-    sock.onmessage = (ev) => { onMessage(ev.data); };
+    sock.onmessage = (ev) => {
+      if (session && socket === sock) {
+        onMessage(ev.data);
+        return;
+      }
+      let established;
+      try {
+        established = initiator.readMessageB(new Uint8Array(ev.data));
+      } catch (e) {
+        console.error("ws handshake failed:", e);
+        fail(nodeError(
+          "ERR_NODE_HANDSHAKE",
+          "Could not establish a secure channel to your Warpnet node."
+        ));
+        return;
+      }
+      const fp = fingerprint(established.remoteStatic);
+      const pinned = pinnedNodeKey();
+      if (pinned && pinned !== fp) {
+        fail(nodeError(
+          "ERR_NODE_KEY_CHANGED",
+          `This node's identity key changed (expected ${pinned.slice(0, 16)}…, ` +
+          `got ${fp.slice(0, 16)}…). If you reinstalled the node, clear this ` +
+          `site's data and reconnect; otherwise someone may be impersonating it.`
+        ));
+        return;
+      }
+      if (!pinned) {
+        pinNodeKey(fp);
+      }
+      session = established;
+      socket = sock;
+      settled = true;
+      connecting = null;
+      setConnectionStatus("online");
+      resolve();
+    };
   });
   return connecting;
 }
 
-async function onMessage(data) {
-  let text = data;
-  if (aesKey) {
-    try {
-      text = await aesDecrypt(aesKey, data);
-    } catch (e) {
-      console.error("ws decrypt failed:", e);
-      return;
-    }
+function onMessage(data) {
+  let text;
+  try {
+    text = new TextDecoder().decode(session.decrypt(new Uint8Array(data)));
+  } catch (e) {
+    console.error("ws decrypt failed:", e);
+    try { socket.close(); } catch (_) {}
+    return;
   }
   let msg;
   try {
@@ -208,10 +233,7 @@ async function send(request) {
   }
   const id = request.message_id;
 
-  let payload = JSON.stringify(request);
-  if (aesKey) {
-    payload = await aesEncrypt(aesKey, payload);
-  }
+  const payload = session.encrypt(new TextEncoder().encode(JSON.stringify(request)));
 
   // Archive import processes thousands of tweets server-side and can run
   // well past the default budget; give /import/ routes a long window.
@@ -241,36 +263,11 @@ async function send(request) {
 // Call sends a Wails envelope { path, body, message_id, node_id, timestamp }
 // and resolves to the response envelope (with .body), matching the Wails
 // binding exactly.
-//
-// The dashboard channel is AES-256-GCM with the password as the preshared key
-// (the same secret the server is launched with). is-first-run precedes the
-// password and goes in cleartext; the login frame is the first encrypted one,
-// so the key is derived from the entered password *before* sending it. A
-// rejected or failed login clears the key so the user can retry.
 export async function Call(request) {
   if (hasWails()) {
     return Wails.Call(request);
   }
-  if (request.path === LOGIN_PATH) {
-    aesKey = await importKey(request.body && request.body.password);
-    try {
-      const resp = await send(request);
-      if (resp && resp.body && resp.body.code) {
-        clearChannelKey(); // login rejected
-      } else {
-        saveChannelKey(); // persist so a page reload resumes the session
-      }
-      return resp;
-    } catch (e) {
-      clearChannelKey(); // wrong password / timeout — allow another attempt
-      throw e;
-    }
-  }
-  const resp = await send(request);
-  if (request.path === LOGOUT_PATH) {
-    clearChannelKey();
-  }
-  return resp;
+  return send(request);
 }
 
 export async function IsFirstRun() {
@@ -315,48 +312,3 @@ export function IsDesktop() {
   return hasWails();
 }
 
-// --- AES-256-GCM via @noble (pure JS — works over plain http:// where
-// crypto.subtle is unavailable). Wire-compatible with Go's security.AESCodec:
-// key = SHA-256(password); frame = base64( nonce(12) || ciphertext||tag(16) ).
-
-// importKey returns the raw 32-byte channel key, SHA-256(password), matching
-// Go's security.AESKeyFromPassword.
-function importKey(password) {
-  return sha256(new TextEncoder().encode(password || ""));
-}
-
-function aesEncrypt(key, plaintext) {
-  const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const ct = gcm(key, nonce).encrypt(new TextEncoder().encode(plaintext));
-  const frame = new Uint8Array(nonce.length + ct.length);
-  frame.set(nonce, 0);
-  frame.set(ct, nonce.length);
-  return bytesToBase64(frame);
-}
-
-function aesDecrypt(key, b64) {
-  const frame = base64ToBytes(b64);
-  const nonce = frame.slice(0, 12);
-  const ct = frame.slice(12);
-  return new TextDecoder().decode(gcm(key, nonce).decrypt(ct));
-}
-
-function bytesToBase64(bytes) {
-  // Encode in 32 KB chunks: a per-byte string build is O(n) garbage and a
-  // multi-MB import frame (tweet + photos) would otherwise stall the tab.
-  let s = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  }
-  return btoa(s);
-}
-
-function base64ToBytes(b64) {
-  const s = atob(b64);
-  const bytes = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) {
-    bytes[i] = s.charCodeAt(i);
-  }
-  return bytes;
-}

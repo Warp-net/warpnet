@@ -96,7 +96,7 @@ describe('Conversation.vue', () => {
     expect(screen.getByText('how are you')).toBeInTheDocument();
   });
 
-  it('appends a new message when the user sends one', async () => {
+  it('sends the message, clears the input, and shows it once the poll returns it', async () => {
     renderConversation();
     // Wait for full load so otherUser and chat are both ready.
     await screen.findByText('bob');
@@ -104,18 +104,33 @@ describe('Conversation.vue', () => {
     const input = screen.getByPlaceholderText(/Type a message/i);
     await fireEvent.update(input, 'hello bob');
 
+    warpnetService.sendDirectMessage.mockImplementation(async () => {
+      warpnetService.getDirectMessages.mockResolvedValue([
+        {
+          id: 'm-new',
+          text: 'hello bob',
+          sender_id: 'alice',
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      return {};
+    });
+
     await fireEvent.click(screen.getByRole('button', { name: /^Send$/ }));
 
-    await waitFor(() => {
-      expect(screen.getByText('hello bob')).toBeInTheDocument();
-    });
     expect(warpnetService.sendDirectMessage).toHaveBeenCalledWith({
       chatId: 'chat-1',
       receiverId: 'bob',
       text: 'hello bob',
     });
-    expect(input).toHaveValue('');
-  });
+    await waitFor(() => {
+      expect(input).toHaveValue('');
+    });
+
+    expect(
+      await screen.findByText('hello bob', undefined, { timeout: 5000 })
+    ).toBeInTheDocument();
+  }, 10000);
 
   it('renders the messages even when the peer profile hangs', async () => {
     warpnetService.getProfile.mockImplementation(() => new Promise(() => {}));

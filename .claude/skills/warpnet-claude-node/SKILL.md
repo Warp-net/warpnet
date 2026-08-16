@@ -46,8 +46,8 @@ docker build -f Dockerfile.remote -t warpnet-remote:claude .
 
 `deploy/docker-compose-testnet.yml` is the reference for the env vars each node takes.
 The `NODE_SEED` env fixes the node's deterministic libp2p ID (`config.go`:
-`node.seed` ← `NODE_SEED`); `NODE_SERVER_PASSWORD` is the dashboard `/ws` AES secret
-(and is **required** — an empty one is `log.Fatal`). Use `NODE_SEED=claude`, and mount the
+`node.seed` ← `NODE_SEED`). The `/ws` channel needs no secret — the node's Noise NX
+static key (`ws-noise.key`) lives in the data volume. Use `NODE_SEED=claude`, and mount the
 node's **own** named volume at `/root/.warpdata` so the `Claude` account persists:
 
 ```bash
@@ -56,7 +56,6 @@ docker volume create warpnet-claude-testnet-data   # idempotent; the node's dedi
 docker run -d --name warpnet-claude-testnet \
   -e NODE_NETWORK=testnet \
   -e NODE_SEED=claude \
-  -e NODE_SERVER_PASSWORD='Claude1234$' \
   -e NODE_SERVER_PORT=4999 \
   -e NODE_PORT=4001 \
   -e LOGGING_LEVEL=info \
@@ -90,7 +89,6 @@ Or, to keep it alongside the other testnet services, add a service to
       - NODE_NETWORK=testnet
       - NODE_SEED=claude
       - NODE_SERVER_PORT=4999
-      - NODE_SERVER_PASSWORD=Claude1234$
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
     volumes:
@@ -125,10 +123,11 @@ The avatar is a two-step flow that mirrors the Vue client
 
 Use the repo's own mark, `cmd/node/member/icon.png`, as the logo (or any PNG/JPG).
 
-The `/ws` bridge accepts **plaintext** JSON frames (`AESCodec.Decode` falls back to
-plaintext on decrypt failure — no need to reimplement the browser's AES layer). Drive it
-with a throwaway Go probe using the vendored `gorilla/websocket` (delete it after — never
-commit it):
+The `/ws` bridge speaks Noise NX with **no plaintext fallback**. A Go probe secures the
+connection with `security.NoiseHandshakeInitiator(read, write)` right after dialing
+(read/write adapters over gorilla's `ReadMessage`/`WriteMessage`, binary frames), then
+`session.Encrypt`/`session.Decrypt` each JSON frame. Drive it with a throwaway Go probe
+using the vendored `gorilla/websocket` (delete it after — never commit it):
 
 ```bash
 mkdir -p cmd/wsprobe && cat > cmd/wsprobe/main.go <<'EOF'
@@ -141,6 +140,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Warp-net/warpnet/security"
 	"github.com/gorilla/websocket"
 )
 
@@ -214,16 +214,15 @@ avatar is live. Open `http://localhost:4999` in the session browser and log in a
 
 **ALWAYS open a fresh browser tab after every container rebuild / restart / recreate —
 never reuse the same tab across a node restart.** The Vue frontend's transport is a
-module-level singleton (`socket`, `aesKey`, a `pending` map of per-request promises +
+module-level singleton (`socket`, the Noise `session`, a `pending` map of per-request promises +
 timers) with auto-reconnect (`frontend/src/lib/transport.js`). Restart the node under a
 long-lived tab a few times and that singleton wedges: a half-dead WebSocket plus pending
 promises that never resolve. The tell is nasty and easy to misdiagnose — `is-first-run`
-still works (it's a cleartext control frame), but **login hangs before it ever transmits
+still works, but **login hangs before it ever transmits
 the frame** (hook `WebSocket.prototype.send` and you'll see *zero* frames), with **no
 console error and no `authenticating user` line in the node logs**. Do **not** conclude
-"the browser login / `/ws` AES is broken" — it isn't: a plaintext `ws://…/ws` probe (or an
-AES probe using `security.AESCodec` with `AESKeyFromPassword(NODE_SERVER_PASSWORD)`)
-authenticates instantly, proving the node is healthy. The fix is simply a new tab / fresh
+"the browser login / `/ws` channel is broken" — it isn't: a Go probe using
+`security.NoiseHandshakeInitiator` authenticates instantly, proving the node is healthy. The fix is simply a new tab / fresh
 browser context, which resets the singleton. Reopen the tab whenever the node behaves as
 "logged out" or calls return empty/`Anonymous` after a restart.
 
