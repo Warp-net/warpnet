@@ -6,8 +6,12 @@
 | **Repository** | `github.com/Warp-net/warpnet` |
 | **Revision audited** | `27ead3ce` (branch `develop`) |
 | **Assessment date** | 2026-08-14 |
+| **Re-test revision** | `ada3d0a0` (branch `develop`) |
+| **Re-test date** | 2026-08-16 |
 | **Assessment type** | White-box source code review + automated static analysis + dependency analysis |
 | **Classification** | Internal — contains unremediated vulnerability details |
+
+> **Re-test status.** Findings struck through (~~like this~~) were re-verified against `ada3d0a0` and are **closed**. Findings marked ⚠️ **PARTIALLY FIXED** were re-verified and remain exploitable in whole or in part. See §10 for the verification record.
 
 ---
 
@@ -25,10 +29,12 @@ The signature layer is well built and correctly proves that a message was signed
 
 The four Critical findings:
 
-1. **Every `/private/*` route is reachable by any peer, with no owner check.** An attacker reads the victim's direct messages and notifications and overwrites their profile and settings. A `WarpRoute.IsPrivate()` helper exists in the codebase but is referenced *only by tests* — the authorization gate was designed and never wired up.
-2. **Following someone hands anyone impersonating them a remote write primitive.** Gossip payloads on a followed user's topic are re-signed *with the victim's own private key* and executed as a local self-stream on an attacker-chosen route, bypassing the replay gate. One publish compromises a user's entire follower graph.
-3. **Content authorship is taken from the request body, unbound to the signing peer.** An attacker sets `UserId` to the victim's ID and the node creates the tweet *inside the victim's account*, then broadcasts it to all the victim's followers as genuinely authored.
-4. **The remote dashboard's password gate fails open.** The AES codec falls back to accepting plaintext when decryption fails, the listener binds all interfaces while printing "localhost", and every request is signed with the owner's key — unauthenticated account takeover on hosted nodes.
+1. ~~**Every `/private/*` route is reachable by any peer, with no owner check.**~~ **CLOSED.** An attacker read the victim's direct messages and notifications and overwrote their profile and settings. A `WarpRoute.IsPrivate()` helper existed in the codebase but was referenced *only by tests* — the authorization gate was designed and never wired up. It is now enforced in the auth middleware.
+2. ~~**Following someone hands anyone impersonating them a remote write primitive.**~~ **CLOSED.** Gossip payloads on a followed user's topic were re-signed *with the victim's own private key* and executed as a local self-stream on an attacker-chosen route, bypassing the replay gate. The re-signing has been removed and self-streams now carry the real sender.
+3. ~~**Content authorship is taken from the request body, unbound to the signing peer.**~~ **CLOSED.** An attacker set `UserId` to the victim's ID and the node created the tweet *inside the victim's account*. Authorship is now bound to the connection's remote peer.
+4. ⚠️ **The remote dashboard grants owner authority to any client that can reach it.** The specific defect originally reported — an AES codec that accepted plaintext when decryption failed — is fixed, and the channel is now a fail-closed Noise session. **However the endpoint still binds all interfaces while printing "localhost", the Noise `NX` pattern authenticates only the server to the client, and the password concept was removed entirely.** Net exposure on a hosted node is unchanged: see WRP-04.
+
+**Re-test outcome (revision `ada3d0a0`).** Three of the four Critical findings are closed, together with three lower-severity findings (WRP-21, WRP-22, WRP-29). The fixes are well built — they address root causes rather than symptoms, they are covered by regression tests, and the full suite passes. WRP-04 is the exception: the reported defect was fixed but the finding as a whole was not, because two of its three components remain. It should not be considered closed.
 
 Two further observations worth the reader's attention:
 
@@ -40,13 +46,14 @@ We recommend treating WRP-01 through WRP-04 as blocking for any deployment carry
 
 ### Findings by severity
 
-| Severity | Count | IDs |
-|---|---|---|
-| **Critical** | 4 | WRP-01 … WRP-04 |
-| **High** | 11 | WRP-05 … WRP-15 |
-| **Medium** | 13 | WRP-16 … WRP-28 |
-| **Low** | 10 | WRP-29 … WRP-38 |
-| **Informational** | 6 | WRP-39 … WRP-44 |
+| Severity | Original | Closed at re-test | Open | Open IDs |
+|---|---|---|---|---|
+| **Critical** | 4 | 3 | **1** | WRP-04 (partial) |
+| **High** | 11 | 0 | **11** | WRP-05 … WRP-15 |
+| **Medium** | 13 | 2 | **11** | WRP-16 … WRP-20, WRP-23 … WRP-28 |
+| **Low** | 10 | 1 | **9** | WRP-30 … WRP-38 |
+| **Informational** | 6 | 0 (1 partial) | **6** | WRP-39 … WRP-44 |
+| **Total** | **44** | **6** | **38** | |
 
 ---
 
@@ -86,14 +93,22 @@ Severity uses CVSS 3.1 qualitative bands adjusted for exploitation context. Beca
 
 ## 3. Critical Findings
 
-### WRP-01 — Critical — All private routes are reachable by any network peer without authorization
+### ~~WRP-01 — Critical — All private routes are reachable by any network peer without authorization~~ ✅ CLOSED
 
 | | |
 |---|---|
 | **CWE** | CWE-862: Missing Authorization |
 | **CVSS 3.1** | 9.1 (`AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`) |
 | **Location** | `core/node/node.go:206-220`, `core/middleware/auth.go:98-104`, `core/stream/routes.go:46` |
-| **Status** | Verified by lead auditor; independently reported by three specialist reviews |
+| **Status** | **CLOSED at `ada3d0a0`** — verified by re-test |
+
+> **Resolution.** `core/middleware/auth.go:82` now gates every private route:
+> ```go
+> if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
+>     return nil, ErrUnknownClientPeer
+> }
+> ```
+> `isPrivateRouteAllowed` admits only the loopback self-stream (`remotePeer == localPeer`), the node's own ID, or a peer present in the paired-devices store; `PRIVATE_POST_PAIR` is the single deliberate exception, and it remains gated by the session-token check in `core/handler/pair.go:61`. `IsPrivate()` is now referenced from production code rather than only from tests. Covered by regression tests in `core/middleware/auth_test.go`. The fix is applied centrally in the middleware, as recommended, rather than per handler.
 
 **Description**
 
@@ -138,14 +153,21 @@ Enforce authorization centrally in the middleware rather than per handler. Rejec
 
 ---
 
-### WRP-02 — Critical — Gossip payloads are re-signed with the owner's key and executed as privileged self-streams
+### ~~WRP-02 — Critical — Gossip payloads are re-signed with the owner's key and executed as privileged self-streams~~ ✅ CLOSED
 
 | | |
 |---|---|
 | **CWE** | CWE-269: Improper Privilege Management; CWE-345: Insufficient Verification of Data Authenticity |
 | **CVSS 3.1** | 9.3 (`AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N`) |
 | **Location** | `core/pubsub/gossip.go:457-486`, `cmd/node/member/pubsub/member-pubsub.go:120-124`, `core/stream/loopback-stream.go:57-63` |
-| **Status** | Verified by lead auditor |
+| **Status** | **CLOSED at `ada3d0a0`** — verified by re-test |
+
+> **Resolution.** Two changes together close this, and both were needed.
+>
+> 1. The `ed25519.Sign(g.privKey, ...)` re-signing is **gone** from `SelfPublish` (`core/pubsub/gossip.go:457-485`). The original author's signature now travels with the message instead of being replaced by a locally-forged one.
+> 2. The loopback connection no longer reports the local peer at both ends. `core/stream/loopback-stream.go:57-62` now returns distinct `localPeerID` and `remotePeerID`, and `SelfStream` is called with the actual sender taken from the envelope.
+>
+> Consequently the auth middleware verifies a gossiped message against the *real author's* key, the freshness gate applies (the sender is no longer loopback), and — because the attacker can now only speak as themselves — the WRP-01 private-route gate rejects any attempt to reach a privileged write route this way. `PUBLIC_POST_TWEET` delivery additionally proves the author's signature. The signature also binds the destination now (see WRP-29), so a message captured for one route cannot be replayed onto another.
 
 **Description**
 
@@ -197,14 +219,26 @@ Never re-sign foreign data with the local key — this is the core defect. Verif
 
 ---
 
-### WRP-03 — Critical — Content authorship is taken from the request body, unbound to the authenticated peer
+### ~~WRP-03 — Critical — Content authorship is taken from the request body, unbound to the authenticated peer~~ ✅ CLOSED
 
 | | |
 |---|---|
 | **CWE** | CWE-345: Insufficient Verification of Data Authenticity; CWE-290: Authentication Bypass by Spoofing |
 | **CVSS 3.1** | 8.8 (`AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N`) |
 | **Location** | `core/handler/tweet.go:156-190`, `core/handler/following.go:124-168`, `core/handler/block.go:73-95`, `core/handler/reaction.go:86-131` |
-| **Status** | Verified by lead auditor |
+| **Status** | **CLOSED at `ada3d0a0`** — verified by re-test |
+
+> **Resolution.** A shared helper now binds the claimed actor to the authenticated peer:
+> ```go
+> // core/warpnet/warpnet.go:227
+> func VerifyAuthorship(s WarpStream, actorNodeId string) error {
+>     if actorNodeId != "" && s != nil && s.Conn() != nil && actorNodeId == s.Conn().RemotePeer().String() {
+>         return nil
+>     }
+>     return ErrForeignAuthor
+> }
+> ```
+> The claimed author is resolved through the user repository and their node ID compared against `s.Conn().RemotePeer()`, so setting `ev.UserId` to a victim's ID now fails with `ErrForeignAuthor`. It fails closed: an unknown or empty actor node ID is rejected rather than admitted. Applied at 16 call sites spanning tweets, replies, reactions, retweets, follows, polls, chats, views and timeline (`core/handler/{tweet,reply,reaction,retweet,following,poll,chat,view,timeline}.go`), with regression tests in `tweet_test.go`, `reaction_test.go` and `reply_test.go`. Implementing this as one helper rather than per-handler logic is the right shape — new handlers inherit the check by calling it.
 
 **Description**
 
@@ -237,15 +271,33 @@ Derive the acting identity from the authenticated peer, never from the payload. 
 
 ---
 
-### WRP-04 — Critical — Remote dashboard `/ws` executes any route as the owner, with a bypassable password gate on `0.0.0.0`
+### WRP-04 — Critical — Remote dashboard `/ws` executes any route as the owner ⚠️ PARTIALLY FIXED
 
 | | |
 |---|---|
-| **CWE** | CWE-287: Improper Authentication; CWE-306: Missing Authentication for Critical Function |
-| **CVSS 3.1** | 9.0 (`AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`) |
-| **Location** | `security/aes.go:160-168`, `cmd/node/member/remote/bridge.go:58-68,236-253`, `cmd/node/member/remote-member.go:123,131` |
+| **CWE** | CWE-306: Missing Authentication for Critical Function; ~~CWE-287: Improper Authentication~~ |
+| **CVSS 3.1** | 9.0 (`AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`) — unchanged |
+| **Location (re-test)** | `cmd/node/member/remote-member.go:130,138`, `cmd/node/member/remote/bridge.go:276-283`, `security/noise.go:98-125` |
 | **Affects** | `remote` build tag only (Docker/server deployments). The Wails desktop application is **not** affected. |
-| **Status** | **Verified empirically** with an executable proof-of-concept |
+| **Status** | ⚠️ **PARTIALLY FIXED at `ada3d0a0`** — component (a) closed; (b) and (c) remain, **re-verified empirically** |
+
+> **What was fixed.** ~~The AES codec's plaintext fallback~~ is gone: `AESCodec` has been removed from `security/aes.go` entirely and replaced by a mandatory Noise session. `cmd/node/member/remote/bridge.go:127-141` performs a handshake under a 10-second deadline and **returns on failure**, and every subsequent frame goes through `channel.Decrypt` with the connection closed on error — no plaintext path remains. The original proof-of-concept no longer compiles, let alone passes. Server-key fingerprint pinning (TOFU) additionally closes an impostor-node/MITM risk that was not in the original report. ~~WRP-22~~ (weak `SHA256(password)` channel key) is closed as a side effect.
+>
+> **What remains.** The finding is not closed, because two of its three components are unchanged and the password concept was removed rather than replaced:
+>
+> - **(b) No client authentication.** `security/noise.go:98-125` uses the Noise **`NX`** pattern, in which the initiator carries no static key. The handshake authenticates the *server to the client*, not the client to the server, and `NoiseSession.RemoteStatic()` is never consulted server-side. There is no client allowlist, no bearer token, and — since `NODE_SERVER_PASSWORD` was deleted from `remote-member.go` and every compose file — no credential of any kind. Auth state remains process-global, so `b.call()` still signs every request with the owner's key (`bridge.go:276-283`).
+> - **(c) Still binds all interfaces.** `remote-member.go:130` is unchanged at `Addr: ":" + port`, and line 138 still prints `NODE IS LISTENING ON 'localhost…'`. `Dockerfile.remote` still exposes 4999 and `docker-compose.yaml` still uses `network_mode: host`.
+>
+> **Re-test proof of concept.** A client with no password, no key and no prior pairing completes the handshake and produces a valid encrypted command frame:
+> ```
+> === RUN   TestAudit_AnonymousClientCompletesHandshake
+>     ANONYMOUS HANDSHAKE SUCCEEDED: no credential required;
+>     session established, 48-byte encrypted command ready
+> ```
+>
+> **Net effect.** For a hosted node on which the operator has logged in — the steady state — any host that can reach port 4999 still obtains full owner authority. The exploitation *mechanism* changed (plaintext frame → anonymous `NX` handshake); the *outcome* did not. Encrypting an unauthenticated channel raises the cost of passive interception but not of active abuse.
+>
+> **Recommendation (revised).** Bind to `127.0.0.1` by default and correct the banner to print the real address — this alone removes most real-world exposure and is a two-line change. Then authenticate the client: switch the handshake to Noise **`XX`** or **`KK`** so the browser presents a static key the node pins at pairing time, or gate `dispatch()` behind a per-connection token minted at login. Until then, operators must treat port 4999 as a fully privileged interface and firewall it accordingly.
 
 **Description**
 
@@ -531,9 +583,9 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 
 **WRP-20 — Image decompression bomb: no dimension bound before decode.** `core/handler/image.go:261-265`, reached from `core/handler/import.go:101`. Only the *compressed* input is bounded (50 MiB); the decoded pixel buffer is not, so a ~1 KB PNG declaring huge dimensions allocates `width*height*4` bytes. Reachable via the paired device and Twitter-archive import rather than by arbitrary peers, which caps severity. Foreign images fetched over `PUBLIC_GET_IMAGE` are stored as opaque base64 and never decoded — correctly avoiding a remote decode path. **Fix:** call `image.DecodeConfig` first and reject images above a pixel ceiling before `image.Decode`.
 
-**WRP-21 — Hardcoded dashboard password committed.** `docker-compose.yaml:14` contains `NODE_SERVER_PASSWORD=MySecretPassword9000$`. The `deploy/*.yml` files correctly use `${NODE_SERVER_PASSWORD}` interpolation, making this root file — the one most likely to be copied as a starting point — the outlier. **Fix:** use interpolation, rotate the value, add secret scanning to CI.
+~~**WRP-21 — Hardcoded dashboard password committed.**~~ ✅ **CLOSED at `ada3d0a0`.** `NODE_SERVER_PASSWORD=MySecretPassword9000$` no longer appears in `docker-compose.yaml` or in any tracked YAML — the variable was removed along with the password mechanism. *Note:* the credential is public in git history and should still be treated as burned if it was ever reused elsewhere.
 
-**WRP-22 — Dashboard channel key is an unsalted SHA-256 of the password.** `security/aes.go:153-156`, used at `cmd/node/member/remote-member.go:113`. No salt or stretching, so a weak password is trivially recovered from captured ciphertext. **Fix:** Argon2id with a salt, or a negotiated random session key.
+~~**WRP-22 — Dashboard channel key is an unsalted SHA-256 of the password.**~~ ✅ **CLOSED at `ada3d0a0`.** `AESKeyFromPassword` and `AESCodec` were removed from `security/aes.go`; the channel key is now established by the Noise handshake rather than derived from a password. (The channel is confidential but still unauthenticated on the client side — see WRP-04.)
 
 **WRP-23 — Every member node runs an open relay.** `core/node/options.go:62` enables `EnableRelayService` unconditionally. Any peer can reserve and relay traffic through any publicly reachable member node, consuming bandwidth and fronting traffic with the operator's IP — an abuse-attribution risk. Per-circuit caps at `core/relay/relay.go:67-86` do correctly prevent high-ratio amplification. **Fix:** enable the relay service only on designated relay nodes.
 
@@ -551,7 +603,7 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 
 ## 6. Low Severity Findings
 
-**WRP-29 — Message signature does not bind the destination route.** `event/event.go:303-309`. `SigningBytes()` covers only `Body` and the Unix-nanosecond timestamp; `Destination`, `MessageId`, `NodeId`, and `Version` are unsigned, so the signature is not domain-separated per route. Impact is low today because the libp2p protocol ID enforces the route and the signature is bound to the connection's peer, but it would become exploitable if a message were ever accepted off-connection. **Fix:** include route and message ID in the signing bytes.
+~~**WRP-29 — Message signature does not bind the destination route.**~~ ✅ **CLOSED at `ada3d0a0`.** `SigningBytes()` (`event/event.go:304-311`) now appends `m.Destination` alongside the body and timestamp, so a signature is domain-separated per route and cannot be replayed onto a different one. This mattered more than its original Low rating suggested: it is part of what makes the WRP-02 fix sound, since gossip messages are now accepted off-connection on the strength of the author's own signature. `MessageId` and `NodeId` remain unsigned, which is acceptable given the destination is now covered.
 
 **WRP-30 — Non-constant-time session token comparison.** `core/handler/pair.go:61` uses `!=`. The token is high-entropy and sits behind libp2p encryption and network jitter, so practical exploitation is unlikely. **Fix:** `crypto/subtle.ConstantTimeCompare`.
 
@@ -578,6 +630,8 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 **WRP-39 — The codebase-integrity challenge is dead code and cannot work as designed.** `core/challenge/` contains only `.gitkeep`. `GetCodebaseHashHex` and `walkAndHash` (`security/hashing.go:44`, `security/psk.go:55-107`) are referenced only from tests. `ChallengeEvent`, `ValidationEvent`, and `SelfHashHex` are defined (`event/event.go:500-523`) and `PUBLIC_POST_NODE_CHALLENGE` exists (`event/paths.go:33`), but none are registered in any handler list, `NodeRepo.RelaySelfHashHex` is never set, and the moderator's `StreamChallengeHandler` is self-documented as "NOT REGISTERED anywhere yet."
 
 Beyond being unwired, the scheme could not achieve its goal: a node self-computes and self-reports its own codebase hash, so a tampered node simply reports the clean value. Without a hardware root of trust or remote attestation binding the reported hash to the executing binary, it can detect accidental divergence among honest nodes but not a motivated adversary. **Recommendation:** either remove the dead types and routes to avoid conveying assurance that does not exist, or replace with genuine attestation if the threat model requires it. Never gate an authorization decision on a self-reported hash.
+
+> ⚠️ **PARTIALLY ADDRESSED at `ada3d0a0`.** The `core/challenge/` directory is gone. Remnants still convey the illusion of a control: `PUBLIC_POST_NODE_CHALLENGE` (`event/paths.go:33`), `SelfHashHex` (`event/event.go:522`), `RelaySelfHashHex` (`database/node-repo.go:72`) and `GetCodebaseHashHex` (`security/hashing.go:44`) all remain, none of them wired. Recommend finishing the removal.
 
 **WRP-40 — DHT forced to server mode on all nodes.** `core/dht/dht.go:127` sets `dht.ModeServer` unconditionally, so NAT'd home nodes serve DHT queries and store records for arbitrary peers. Consider `ModeAuto`.
 
@@ -623,12 +677,12 @@ These controls were reviewed and found sound. They should be preserved through r
 
 **Phase 1 — Blocking for any deployment with real user data**
 
-1. **WRP-01** — add a central authorization gate for `/private/*` keyed on `IsPrivate()`; wire up the helper that already exists.
-2. **WRP-02** — stop re-signing foreign gossip payloads with the local key; verify the original author signature; restrict `SelfPublish` to content routes; add topic validators.
-3. **WRP-03** — bind actor identity to the authenticated peer in one shared helper used by every mutating handler.
-4. **WRP-04** — make the AES codec fail closed, bind the dashboard to `127.0.0.1`, correct the misleading banner, add per-connection session tokens.
+1. ~~**WRP-01** — add a central authorization gate for `/private/*` keyed on `IsPrivate()`.~~ ✅ Done.
+2. ~~**WRP-02** — stop re-signing foreign gossip payloads with the local key; verify the original author signature.~~ ✅ Done.
+3. ~~**WRP-03** — bind actor identity to the authenticated peer in one shared helper.~~ ✅ Done.
+4. ⚠️ **WRP-04** — ~~make the AES codec fail closed~~ ✅ done; **still outstanding:** bind the dashboard to `127.0.0.1`, correct the misleading banner, and authenticate the client (Noise `XX`/`KK` with a pinned browser key, or a per-connection token). **This is now the only open Phase 1 item.**
 
-Findings 1–3 share a root cause and are best fixed together as a single authorization layer rather than as three patches.
+Findings 1–3 shared a root cause and were correctly fixed together as a single authorization layer rather than as three patches.
 
 **Phase 2 — High priority**
 
@@ -708,4 +762,45 @@ No private key material (`.pem`, `.key`, `.p12`, `.jks`) in the working tree or 
 
 ---
 
-*This report describes unremediated vulnerabilities and should be handled accordingly until the Phase 1 items are addressed.*
+## 10. Remediation Verification Record
+
+**Re-test performed:** 2026-08-16 against `ada3d0a0` (`develop`), covering 68 commits since the audited revision `27ead3ce`. Every claim below was verified by reading the changed code; the two claims about exploitability were verified by execution.
+
+### 10.1 Verification results
+
+| ID | Original severity | Result | Basis |
+|---|---|---|---|
+| WRP-01 | Critical | ✅ **Closed** | Private-route gate enforced in `core/middleware/auth.go:82`; regression tests present |
+| WRP-02 | Critical | ✅ **Closed** | Re-signing removed from `SelfPublish`; loopback reports the real sender |
+| WRP-03 | Critical | ✅ **Closed** | `VerifyAuthorship` binds actor to `RemotePeer()` at 16 call sites |
+| WRP-04 | Critical | ⚠️ **Partial** | Codec fails closed; `0.0.0.0` bind and anonymous `NX` handshake remain — PoC re-run |
+| WRP-21 | Medium | ✅ **Closed** | Committed password removed from all tracked YAML |
+| WRP-22 | Medium | ✅ **Closed** | `AESKeyFromPassword`/`AESCodec` removed |
+| WRP-29 | Low | ✅ **Closed** | `Destination` now covered by `SigningBytes()` |
+| WRP-39 | Info | ⚠️ **Partial** | `core/challenge/` removed; unwired remnants remain |
+
+### 10.2 Confirmed still open (spot-checked at `ada3d0a0`)
+
+| ID | Finding | Evidence |
+|---|---|---|
+| WRP-05 | PSK derived from public constants | `security/psk.go` unchanged |
+| WRP-06 | No moderator trust root | `core/handler/moderation.go:103-117` still derives the key from the claimed `ModeratorID`; no allowlist |
+| WRP-07 | Unsalted SHA-256 identity and DB keys | `database/auth-repo.go:113-120` unchanged |
+| WRP-10 | Unclamped `limit` | `database/local-store/db.go:719,747` still `make(..., 0, *limit)` |
+| WRP-11 | Unbounded `optionsNum` | `database/poll-repo.go:180` still guards only `<= 0` |
+| WRP-13 | 50 MiB pre-auth buffer, no read deadline | `MaxLimit` unchanged; no `SetReadDeadline` on inbound streams |
+| WRP-30 | Non-constant-time token compare | `core/handler/pair.go:61` still uses `!=` |
+
+### 10.3 Assessment of the remediation
+
+The three closed Critical findings were fixed at the root cause rather than patched at the symptom, which is the outcome worth noting. The private-route gate went into the middleware instead of into individual handlers; the authorship check became one shared helper rather than sixteen copies; and the gossip fix corrected the underlying identity confusion in the loopback stream instead of merely filtering routes. Each is covered by regression tests and the full suite passes. The signature-binding change (WRP-29) was a necessary companion to the WRP-02 fix, and shipping them together was correct.
+
+Two cautions:
+
+**WRP-04 should not be recorded as fixed.** The reported defect was fixed, but the finding was scoped to the *outcome* — unauthenticated owner authority over the network — and that outcome is unchanged. Noise `NX` gives confidentiality and server authentication; it does not authenticate the client, and it replaced a password that, while ineffective against the original bypass, was at least *intended* as a client credential. Nothing now fills that role. Binding to `127.0.0.1` is a two-line change that would remove most practical exposure immediately.
+
+**The unfixed remainder is now the leading risk.** With the authorization layer repaired, the highest-impact open findings are WRP-06 (any peer can forge moderation verdicts network-wide) and WRP-07 (offline recovery of unrevocable account identities). WRP-10 and WRP-11 remain one-line clamps guarding against an unauthenticated remote crash and are the cheapest outstanding fixes in the report.
+
+---
+
+*This report describes unremediated vulnerabilities and should be handled accordingly until the remaining Phase 1 item and the High-severity findings are addressed.*
