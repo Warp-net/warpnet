@@ -57,7 +57,10 @@ func TestNoiseHandshake_RoundTrip(t *testing.T) {
 		respErr <- err
 	}()
 
-	initiator, err := NoiseHandshakeInitiator(
+	clientKey, err := GenerateNoiseKey()
+	require.NoError(t, err)
+
+	initiator, err := NoiseHandshakeInitiator(clientKey,
 		func() ([]byte, error) { return <-p.toInit, nil },
 		func(msg []byte) error { p.toResp <- msg; return nil },
 	)
@@ -65,7 +68,7 @@ func TestNoiseHandshake_RoundTrip(t *testing.T) {
 	require.NoError(t, <-respErr)
 
 	assert.Equal(t, static.Public, initiator.RemoteStatic())
-	assert.Nil(t, responder.RemoteStatic(), "NX clients are anonymous")
+	assert.Equal(t, clientKey.Public, responder.RemoteStatic(), "XX identifies the client to the node")
 
 	for range 3 {
 		req := []byte(`{"path":"is-first-run"}`)
@@ -92,7 +95,12 @@ func TestNoiseSession_ReplayAndTamperAreRejected(t *testing.T) {
 	p := newPipe()
 	initiatorCh := make(chan *NoiseSession, 1)
 	go func() {
-		s, err := NoiseHandshakeInitiator(
+		clientKey, err := GenerateNoiseKey()
+		if err != nil {
+			close(initiatorCh)
+			return
+		}
+		s, err := NoiseHandshakeInitiator(clientKey,
 			func() ([]byte, error) { return <-p.toInit, nil },
 			func(msg []byte) error { p.toResp <- msg; return nil },
 		)

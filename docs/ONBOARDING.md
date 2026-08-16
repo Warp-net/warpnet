@@ -462,7 +462,7 @@ You almost never think about libp2p in the frontend. You call **one function**,
      exported methods on the Go `App` struct (`Call`, `IsFirstRun`,
      `ConsumePendingDeepLink`). Regenerated whenever you run `wails build`/`wails dev`.
    - **Browser (remote):** otherwise it opens a single **WebSocket** to `/ws`
-     and rides every request on it, encrypted with a per-connection **Noise NX**
+     and rides every request on it, encrypted with a per-connection **Noise XX**
      channel (`src/lib/noise.js`, see §9).
 
    The request envelope is `{ path, body, message_id, node_id, timestamp }` and
@@ -733,10 +733,10 @@ BROWSER`. There are **no health endpoints** — the old business node's
 `/healthz` and `/readyz` went away with it. `StaticHandler` is an SPA fallback,
 so any other path (including `/healthz`) serves `index.html` with a 200; that
 tells you the HTTP server is up and nothing more. Every `/ws` connection starts
-with a **Noise NX** handshake (`security/noise.go` on the node, `src/lib/noise.js`
-in the browser): the browser is an anonymous initiator, the node authenticates
-with a long-lived static X25519 key stored next to the database
-(`ws-noise.key`). There is **no preshared channel secret**:
+with a **Noise XX** handshake (`security/noise.go` on the node, `src/lib/noise.js`
+in the browser): both sides present a long-lived static X25519 key — the node's
+lives next to the database (`ws-noise.key`), the browser generates its own on
+first run. There is **no preshared channel secret**:
 
 - ephemeral ECDH gives each connection fresh session keys (forward secrecy);
 - transport frames use counter nonces, so they can’t be replayed or reordered,
@@ -746,8 +746,13 @@ with a long-lived static X25519 key stored next to the database
   if it ever changes; the node prints its key fingerprint at startup for manual
   comparison;
 - `is-first-run`, `login` and everything else ride *inside* the encrypted
-  channel — a successful login authenticates the socket, and the account
-  password never doubles as a channel key.
+  channel, and the account password never doubles as a channel key;
+- the node authorizes a connection by **which client key the handshake proved**.
+  A successful login enrolls that key for as long as the node runs, so the same
+  browser reconnects without the password, while a client the owner never
+  enrolled gets `401` on every route. The list lives in memory and nothing is
+  written to disk: a restarted node has a closed database and needs the
+  password again anyway. There are no session tokens or cookies in this path.
 
 ### Why you’d use it
 
@@ -848,6 +853,7 @@ names are the flag uppercased with dots → underscores (`node.port` → `NODE_P
 | `--node.print-psk` | `NODE_PRINT_PSK` | `false` | Print the network PSK on startup (handy for relays/moderators). |
 | `--node.metrics.gateway` | `NODE_METRICS_GATEWAY` | `207.154.221.44:4091` | Prometheus push-gateway address. |
 | `--node.moderator.modelpath` | `NODE_MODERATOR_MODELPATH` | `…/Llama-Guard-3-1B.Q8_0.gguf` | Path to the GGUF model (moderator role). |
+| `--node.server.host` | `NODE_SERVER_HOST` | `0.0.0.0` | Dashboard HTTP/WS bind address (remote role). Set `127.0.0.1` to serve the dashboard to the host only and reach it over an SSH tunnel. |
 | `--node.server.port` | `NODE_SERVER_PORT` | `4999` | Dashboard HTTP/WS port (remote role). |
 | `--logging.level` | `LOGGING_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `--logging.format` | `LOGGING_FORMAT` | `text` | `text` or `json`. |

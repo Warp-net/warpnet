@@ -115,7 +115,7 @@ The envelope is `event.Message` (`event/event.go`):
 `path` is the destination route. The reply echoes `message_id` and `path` and carries the
 result in `body`.
 
-**Channel handshake for probes:** the `/ws` bridge speaks Noise NX with **no plaintext
+**Channel handshake for probes:** the `/ws` bridge speaks Noise XX with **no plaintext
 fallback** — a non-protocol frame kills the connection. A Go probe doesn't need to
 reimplement anything: call `security.NoiseHandshakeInitiator(read, write)` right after
 dialing (read/write adapters over gorilla's `ReadMessage`/`WriteMessage`, binary frames),

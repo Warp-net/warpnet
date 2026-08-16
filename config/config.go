@@ -71,6 +71,7 @@ func init() {
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release automatically")
 
+	pflag.String("node.server.host", "0.0.0.0", "Dashboard HTTP/WS bind address. Set '127.0.0.1' to serve the dashboard to this host only")
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 
 	pflag.String("logging.level", "info", "Logging level")
@@ -134,6 +135,7 @@ func init() {
 				Gateway: viper.GetString("node.metrics.gateway"),
 			},
 			Server: server{
+				Host: strings.TrimSpace(viper.GetString("node.server.host")),
 				Port: strings.TrimSpace(viper.GetString("node.server.port")),
 			},
 		},
@@ -192,6 +194,7 @@ type node struct {
 }
 
 type server struct {
+	Host string
 	Port string
 }
 type metrics struct {

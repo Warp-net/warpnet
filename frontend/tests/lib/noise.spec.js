@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { NoiseInitiator, fingerprint } from "@/lib/noise";
-import { x25519 } from "@noble/curves/ed25519";
 
 function fromHex(hex) {
   const out = new Uint8Array(hex.length / 2);
@@ -17,39 +16,44 @@ function toHex(bytes) {
 // Official Noise_NX_25519_ChaChaPoly_SHA256 test vector
 // (vendor/github.com/flynn/noise/vectors.txt).
 const VECTOR = {
-  respStaticPriv: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
-  initEphemeralPriv: "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
-  msg0: "358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254",
-  msg1:
-    "64b101b1d0be5a8704bd078f9895001fc03e8e9f9522f188dd128d9846d4846686b5f4e8c51a605bcb276206a6df60ae938b905adaf29a2dae4a4951bbd9ac64830ab64f2329646560b930979ff52da8dda7c0677c502dba13c078b5afd1bf11",
-  msg2Payload: "79656c6c6f777375626d6172696e65",
-  msg2: "92613cda6ccb2936449efb8ff870b5a4536f5734a4e31056d38101230762e8",
-  msg3Payload: "7375626d6172696e6579656c6c6f77",
-  msg3: "ed89355072429afe6c3442ba7af66f6647499291bab58d40f6a392e79ff80a",
+  initStaticPriv: "2020202020202020202020202020202020202020202020202020202020202020",
+  initEphemeralPriv: "4040404040404040404040404040404040404040404040404040404040404040",
+  respStaticPub: "e50c239bc204f1341664c9d9c50c6a0d0fff6fc79d9301f1e713aab2e0344b3f",
+  msg1: "d7b5e81d336e578b13b8d706e82d061e3038c96bce66cdcf50d566b96ddbba10",
+  msg2: "ef38b4abd14b0a919cbe6839f6185b97d32607bee359c6c53c12cc7597867d59b91c9dc0a0820717ab98d7884c0374fd5a08eb1d378599ad79e652304dac93adfe8a8e360f0b15fde9306776ed327335aad2999c1ff889bffb258c59f6230764",
+  msg3: "3947175440092392aac66836380f0d934414af732dc68f5129eafeac02fd4671216c51259122c5a18122302b876f2c9df184223a8a5b71f31fa2dce281e6086a",
+  payload: "79656c6c6f777375626d6172696e65",
+  fromInitiator: "a177e6308e3442bb59761cd6ef55c59d800a81baecf010c71f10ec44b1da38",
+  fromResponder: "25dbe368f7b90458058631ccfc6342928fcc1b8510910c040475fd2b0c1cb7",
 };
 
-describe("Noise NX initiator", () => {
-  it("reproduces the official test vector end to end", () => {
-    const initiator = new NoiseInitiator(fromHex(VECTOR.initEphemeralPriv));
+const newInitiator = () =>
+  new NoiseInitiator(fromHex(VECTOR.initStaticPriv), fromHex(VECTOR.initEphemeralPriv));
 
-    expect(toHex(initiator.writeMessageA())).toBe(VECTOR.msg0);
+function handshake() {
+  const initiator = newInitiator();
+  initiator.writeMessageA();
+  initiator.readMessageB(fromHex(VECTOR.msg2));
+  return initiator.writeMessageC();
+}
 
-    const session = initiator.readMessageB(fromHex(VECTOR.msg1));
+describe("Noise XX initiator", () => {
+  it("reproduces the Go peer's handshake end to end", () => {
+    const initiator = newInitiator();
 
-    const respStaticPub = x25519.getPublicKey(fromHex(VECTOR.respStaticPriv));
-    expect(toHex(session.remoteStatic)).toBe(toHex(respStaticPub));
+    expect(toHex(initiator.writeMessageA())).toBe(VECTOR.msg1);
 
-    const sealed = session.encrypt(fromHex(VECTOR.msg2Payload));
-    expect(toHex(sealed)).toBe(VECTOR.msg2);
+    initiator.readMessageB(fromHex(VECTOR.msg2));
+    const { message, session } = initiator.writeMessageC();
 
-    const plain = session.decrypt(fromHex(VECTOR.msg3));
-    expect(toHex(plain)).toBe(VECTOR.msg3Payload);
+    expect(toHex(message)).toBe(VECTOR.msg3, "the node must recognise our static key");
+    expect(toHex(session.remoteStatic)).toBe(VECTOR.respStaticPub);
+    expect(toHex(session.encrypt(fromHex(VECTOR.payload)))).toBe(VECTOR.fromInitiator);
+    expect(toHex(session.decrypt(fromHex(VECTOR.fromResponder)))).toBe(VECTOR.payload);
   });
 
   it("advances counter nonces so identical plaintexts differ", () => {
-    const initiator = new NoiseInitiator(fromHex(VECTOR.initEphemeralPriv));
-    initiator.writeMessageA();
-    const session = initiator.readMessageB(fromHex(VECTOR.msg1));
+    const { session } = handshake();
 
     const a = session.encrypt(new TextEncoder().encode("same"));
     const b = session.encrypt(new TextEncoder().encode("same"));
@@ -57,24 +61,22 @@ describe("Noise NX initiator", () => {
   });
 
   it("rejects a tampered handshake response", () => {
-    const initiator = new NoiseInitiator(fromHex(VECTOR.initEphemeralPriv));
+    const initiator = newInitiator();
     initiator.writeMessageA();
-    const evil = fromHex(VECTOR.msg1);
+    const evil = fromHex(VECTOR.msg2);
     evil[evil.length - 1] ^= 0xff;
     expect(() => initiator.readMessageB(evil)).toThrow();
   });
 
   it("rejects a tampered transport frame", () => {
-    const initiator = new NoiseInitiator(fromHex(VECTOR.initEphemeralPriv));
-    initiator.writeMessageA();
-    const session = initiator.readMessageB(fromHex(VECTOR.msg1));
-    const evil = fromHex(VECTOR.msg3);
+    const { session } = handshake();
+    const evil = fromHex(VECTOR.fromResponder);
     evil[0] ^= 0xff;
     expect(() => session.decrypt(evil)).toThrow();
   });
 
   it("computes the same fingerprint format as the node", () => {
-    const fp = fingerprint(x25519.getPublicKey(fromHex(VECTOR.respStaticPriv)));
+    const fp = fingerprint(fromHex(VECTOR.respStaticPub));
     expect(fp).toMatch(/^[0-9a-f]{64}$/);
   });
 });

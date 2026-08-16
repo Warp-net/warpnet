@@ -46,7 +46,7 @@ docker build -f Dockerfile.remote -t warpnet-remote:claude .
 
 `deploy/docker-compose-testnet.yml` is the reference for the env vars each node takes.
 The `NODE_SEED` env fixes the node's deterministic libp2p ID (`config.go`:
-`node.seed` ← `NODE_SEED`). The `/ws` channel needs no secret — the node's Noise NX
+`node.seed` ← `NODE_SEED`). The `/ws` channel needs no secret — the node's Noise XX
 static key (`ws-noise.key`) lives in the data volume. Use `NODE_SEED=claude`, and mount the
 node's **own** named volume at `/root/.warpdata` so the `Claude` account persists:
 
@@ -123,7 +123,7 @@ The avatar is a two-step flow that mirrors the Vue client
 
 Use the repo's own mark, `cmd/node/member/icon.png`, as the logo (or any PNG/JPG).
 
-The `/ws` bridge speaks Noise NX with **no plaintext fallback**. A Go probe secures the
+The `/ws` bridge speaks Noise XX with **no plaintext fallback**. A Go probe secures the
 connection with `security.NoiseHandshakeInitiator(read, write)` right after dialing
 (read/write adapters over gorilla's `ReadMessage`/`WriteMessage`, binary frames), then
 `session.Encrypt`/`session.Decrypt` each JSON frame. Drive it with a throwaway Go probe
