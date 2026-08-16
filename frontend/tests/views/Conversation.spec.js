@@ -96,9 +96,6 @@ describe('Conversation.vue', () => {
     expect(screen.getByText('how are you')).toBeInTheDocument();
   });
 
-  // Sending no longer appends the raw send result locally (it can be empty
-  // and render a blank bubble): the input clears and the stored message is
-  // surfaced by the next refresh poll (Conversation.vue, 3s interval).
   it('sends the message, clears the input, and shows it once the poll returns it', async () => {
     renderConversation();
     // Wait for full load so otherUser and chat are both ready.
@@ -107,8 +104,6 @@ describe('Conversation.vue', () => {
     const input = screen.getByPlaceholderText(/Type a message/i);
     await fireEvent.update(input, 'hello bob');
 
-    // After a successful send, the server-side store holds the message and
-    // the poll's re-fetch returns it.
     warpnetService.sendDirectMessage.mockImplementation(async () => {
       warpnetService.getDirectMessages.mockResolvedValue([
         {

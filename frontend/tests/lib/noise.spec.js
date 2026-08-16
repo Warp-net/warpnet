@@ -14,18 +14,17 @@ function toHex(bytes) {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// Official Noise_NX_25519_ChaChaPoly_SHA256 test vector — the same one the
-// node's responder library ships (vendor/github.com/flynn/noise/vectors.txt).
-// Passing it proves wire-level compatibility with the Go side.
+// Official Noise_NX_25519_ChaChaPoly_SHA256 test vector
+// (vendor/github.com/flynn/noise/vectors.txt).
 const VECTOR = {
   respStaticPriv: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
   initEphemeralPriv: "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
   msg0: "358072d6365880d1aeea329adf9121383851ed21a28e3b75e965d0d2cd166254",
   msg1:
     "64b101b1d0be5a8704bd078f9895001fc03e8e9f9522f188dd128d9846d4846686b5f4e8c51a605bcb276206a6df60ae938b905adaf29a2dae4a4951bbd9ac64830ab64f2329646560b930979ff52da8dda7c0677c502dba13c078b5afd1bf11",
-  msg2Payload: "79656c6c6f777375626d6172696e65", // "yellowsubmarine"
+  msg2Payload: "79656c6c6f777375626d6172696e65",
   msg2: "92613cda6ccb2936449efb8ff870b5a4536f5734a4e31056d38101230762e8",
-  msg3Payload: "7375626d6172696e6579656c6c6f77", // "submarineyellow"
+  msg3Payload: "7375626d6172696e6579656c6c6f77",
   msg3: "ed89355072429afe6c3442ba7af66f6647499291bab58d40f6a392e79ff80a",
 };
 
@@ -37,15 +36,12 @@ describe("Noise NX initiator", () => {
 
     const session = initiator.readMessageB(fromHex(VECTOR.msg1));
 
-    // TOFU material: the learned static key is exactly the responder's.
     const respStaticPub = x25519.getPublicKey(fromHex(VECTOR.respStaticPriv));
     expect(toHex(session.remoteStatic)).toBe(toHex(respStaticPub));
 
-    // First transport frame initiator → responder.
     const sealed = session.encrypt(fromHex(VECTOR.msg2Payload));
     expect(toHex(sealed)).toBe(VECTOR.msg2);
 
-    // First transport frame responder → initiator.
     const plain = session.decrypt(fromHex(VECTOR.msg3));
     expect(toHex(plain)).toBe(VECTOR.msg3Payload);
   });

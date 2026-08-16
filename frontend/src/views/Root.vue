@@ -415,9 +415,7 @@ export default {
         this.isFirstRun = await warpnetService.isFirstRun();
       } catch (err) {
         // Don't silently fall back to the login screen — a brand-new user
-        // would then have no path to sign up. Surface a retry instead. A
-        // changed node identity key (possible impostor) must show its own
-        // message, not a generic "unreachable".
+        // would then have no path to sign up. Surface a retry instead.
         console.error("failed to determine first-run state:", err);
         this.firstRunError = true;
         this.firstRunErrorMessage = err && err.code === "ERR_NODE_KEY_CHANGED"

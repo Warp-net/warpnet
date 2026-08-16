@@ -106,9 +106,6 @@ func main() {
 		return
 	}
 
-	// The dashboard channel needs no preshared secret: the node authenticates
-	// to the browser with a long-lived Noise static key (pinned client-side on
-	// first contact), stored next to the database so it survives restarts.
 	staticKey, err := security.LoadOrCreateNoiseStaticKey(
 		filepath.Join(filepath.Dir(config.Config().Database.Path), "ws-noise.key"),
 	)

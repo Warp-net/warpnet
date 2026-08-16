@@ -68,23 +68,13 @@ func sameOrigin(r *http.Request) bool {
 	return u.Host == r.Host
 }
 
-// Channel is an established per-connection secure channel (Noise NX). Its
-// cipher states use counter nonces, so Encrypt must be serialized with the
-// actual socket write under one lock, and Decrypt must only run in the single
-// read loop: the peer processes frames strictly in arrival order.
 type Channel interface {
 	Encrypt(plain []byte) ([]byte, error)
 	Decrypt(frame []byte) ([]byte, error)
 }
 
-// HandshakeFunc secures a fresh WebSocket connection: it exchanges handshake
-// messages via read/write (one call per handshake message) and returns the
-// transport channel every subsequent frame goes through.
 type HandshakeFunc func(read func() ([]byte, error), write func([]byte) error) (Channel, error)
 
-// handshakeTimeout bounds how long a fresh connection may stall before
-// completing the Noise handshake, so idle or non-protocol clients can't hold
-// sockets open.
 const handshakeTimeout = 10 * time.Second
 
 type Node interface {
@@ -134,9 +124,6 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 
 		defer func() { _ = conn.Close() }()
 
-		// The connection starts with a Noise NX handshake; nothing else is
-		// accepted. There is no plaintext fallback: a frame that is not part of
-		// the protocol kills the connection.
 		_ = conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
 		channel, err := b.handshake(
 			func() ([]byte, error) {
@@ -156,9 +143,8 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		// Dispatch each message in its own goroutine so a slow libp2p self-stream
 		// can't head-of-line block every other dashboard call on the connection.
 		// writeMx serializes Encrypt+WriteMessage (gorilla allows a single writer,
-		// and the channel's counter nonces require frames to hit the wire in
-		// encryption order); sem bounds in-flight work; the frontend matches
-		// replies by message_id, so out-of-order responses are fine.
+		// counter nonces require wire order to match encryption order); sem bounds
+		// in-flight work; the frontend matches replies by message_id.
 		var writeMx sync.Mutex
 		var inflight sync.WaitGroup
 		sem := make(chan struct{}, maxInflightDispatches)
@@ -191,8 +177,6 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 
 			plain, err := channel.Decrypt(frame)
 			if err != nil {
-				// Tampered, replayed or out-of-sync frame: the channel state is
-				// no longer trustworthy, drop the connection.
 				log.Warnf("remote: ws decrypt: %v", err)
 				inflight.Wait()
 				return

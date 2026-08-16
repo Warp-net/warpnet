@@ -39,21 +39,12 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-// The dashboard /ws channel runs Noise NX: the browser is an anonymous
-// initiator, the node authenticates with a long-lived static X25519 key that
-// the browser pins on first contact (trust-on-first-use). Each connection
-// derives fresh session keys via ephemeral ECDH (forward secrecy), and the
-// transport cipher states use counter nonces, so frames cannot be replayed
-// or reordered within or across sessions. No preshared secret is involved;
-// the owner's account credentials travel inside the encrypted channel.
 var noiseSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256)
 
 const noiseKeySize = 32
 
 var ErrNoiseKeyCorrupted = errors.New("security: noise static key file is corrupted")
 
-// LoadOrCreateNoiseStaticKey reads the node's static X25519 private key from
-// path, generating and persisting a new one (0600) on first run.
 func LoadOrCreateNoiseStaticKey(path string) (noise.DHKey, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -82,22 +73,16 @@ func LoadOrCreateNoiseStaticKey(path string) (noise.DHKey, error) {
 	return noise.DHKey{Private: raw, Public: pub}, nil
 }
 
-// NoiseFingerprint is the human-comparable form of a static public key, shown
-// by the node at startup and by the browser when it pins an unknown node.
 func NoiseFingerprint(pub []byte) string {
 	sum := sha256.Sum256(pub)
 	return hex.EncodeToString(sum[:])
 }
 
-// NoiseSession is an established transport channel. Decrypt is only safe from
-// a single reader goroutine. Encrypt uses a counter nonce, so the caller must
-// serialize Encrypt with the actual network write under one lock: the peer
-// decrypts frames in arrival order.
 type NoiseSession struct {
 	send *noise.CipherState
 	recv *noise.CipherState
 
-	remoteStatic []byte // initiator side only: the responder's static key
+	remoteStatic []byte
 }
 
 func (s *NoiseSession) Encrypt(plain []byte) ([]byte, error) {
@@ -108,13 +93,8 @@ func (s *NoiseSession) Decrypt(frame []byte) ([]byte, error) {
 	return s.recv.Decrypt(nil, nil, frame)
 }
 
-// RemoteStatic returns the peer's static public key learned during the
-// handshake (initiator side); nil on the responder side (NX clients are
-// anonymous).
 func (s *NoiseSession) RemoteStatic() []byte { return s.remoteStatic }
 
-// NoiseHandshake runs the responder side of the NX handshake over a
-// message-oriented transport (one read/write per handshake message).
 func NoiseHandshake(static noise.DHKey, read func() ([]byte, error), write func([]byte) error) (*NoiseSession, error) {
 	hs, err := noise.NewHandshakeState(noise.Config{
 		CipherSuite:   noiseSuite,
@@ -133,8 +113,6 @@ func NoiseHandshake(static noise.DHKey, read func() ([]byte, error), write func(
 		return nil, fmt.Errorf("security: bad noise initiation: %w", err)
 	}
 
-	// Split() order is fixed by the Noise spec regardless of role: the first
-	// CipherState carries initiator→responder traffic, the second the reverse.
 	msg2, recv, send, err := hs.WriteMessage(nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("security: build noise response: %w", err)
@@ -145,9 +123,6 @@ func NoiseHandshake(static noise.DHKey, read func() ([]byte, error), write func(
 	return &NoiseSession{send: send, recv: recv}, nil
 }
 
-// NoiseHandshakeInitiator runs the initiator (client) side of the NX
-// handshake. The browser dashboard implements the same role in JS; this Go
-// version serves tests and throwaway probes.
 func NoiseHandshakeInitiator(read func() ([]byte, error), write func([]byte) error) (*NoiseSession, error) {
 	hs, err := noise.NewHandshakeState(noise.Config{
 		CipherSuite: noiseSuite,

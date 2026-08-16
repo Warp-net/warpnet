@@ -34,8 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// pipe wires an initiator and a responder together in-memory, message by
-// message, the way the /ws bridge exchanges binary frames.
 type pipe struct{ toResp, toInit chan []byte }
 
 func newPipe() *pipe {
@@ -65,11 +63,9 @@ func TestNoiseHandshake_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, <-respErr)
 
-	// TOFU material: the client must learn exactly the node's static key.
 	assert.Equal(t, static.Public, initiator.RemoteStatic())
 	assert.Nil(t, responder.RemoteStatic(), "NX clients are anonymous")
 
-	// Both directions, several frames: counter nonces must stay in sync.
 	for i := 0; i < 3; i++ {
 		req := []byte(`{"path":"is-first-run"}`)
 		sealed, err := initiator.Encrypt(req)
@@ -118,11 +114,9 @@ func TestNoiseSession_ReplayAndTamperAreRejected(t *testing.T) {
 	_, err = responder.Decrypt(frame)
 	require.NoError(t, err)
 
-	// Replaying the same frame must fail: the receive counter moved on.
 	_, err = responder.Decrypt(frame)
 	assert.Error(t, err, "replayed frame must not decrypt")
 
-	// A tampered frame must fail authentication.
 	frame2, err := initiator.Encrypt([]byte("two"))
 	require.NoError(t, err)
 	frame2[len(frame2)-1] ^= 0xff

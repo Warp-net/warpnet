@@ -22,21 +22,11 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-// Minimal Noise_NX_25519_ChaChaPoly_SHA256 initiator, wire-compatible with the
-// node's responder (security/noise.go, backed by flynn/noise). The dashboard
-// is an anonymous initiator; the node authenticates with its static X25519 key
-// which the caller pins on first contact (TOFU). Session keys are fresh per
-// connection (forward secrecy) and transport nonces are counters, so frames
-// cannot be replayed or reordered.
-//
-// Pure JS (@noble) because the dashboard is served over plain http:// where
-// crypto.subtle is unavailable.
 import { x25519 } from "@noble/curves/ed25519";
 import { chacha20poly1305 } from "@noble/ciphers/chacha";
 import { sha256 } from "@noble/hashes/sha256";
 import { hmac } from "@noble/hashes/hmac";
 
-// Exactly 32 bytes, so InitializeSymmetric uses it verbatim as h (Noise §5.2).
 const PROTOCOL_NAME = "Noise_NX_25519_ChaChaPoly_SHA256";
 const DHLEN = 32;
 const TAGLEN = 16;
@@ -53,8 +43,6 @@ function concat(...arrays) {
   return out;
 }
 
-// Noise HKDF (§4.3): HKDF-extract with salt = chaining key, then two expand
-// blocks with empty info.
 function hkdf2(chainingKey, ikm) {
   const temp = hmac(sha256, chainingKey, ikm);
   const out1 = hmac(sha256, temp, Uint8Array.of(1));
@@ -62,17 +50,15 @@ function hkdf2(chainingKey, ikm) {
   return [out1, out2];
 }
 
-// ChaChaPoly nonce (§5.1): 4 zero bytes || 64-bit little-endian counter.
 function nonceFor(n) {
   const b = new Uint8Array(12);
   new DataView(b.buffer).setBigUint64(4, BigInt(n), true);
   return b;
 }
 
-// CipherState (§5.1) with a counter nonce.
 class CipherState {
   constructor(key) {
-    this.key = key; // null = no key yet (handshake cleartext phase)
+    this.key = key;
     this.n = 0;
   }
 
@@ -86,18 +72,17 @@ class CipherState {
   decryptWithAd(ad, ciphertext) {
     if (!this.key) return ciphertext;
     const pt = chacha20poly1305(this.key, nonceFor(this.n), ad).decrypt(ciphertext);
-    this.n++; // only reached on successful authentication
+    this.n++;
     return pt;
   }
 }
 
-// SymmetricState (§5.2).
 class SymmetricState {
   constructor() {
     this.h = new TextEncoder().encode(PROTOCOL_NAME);
     this.ck = this.h;
     this.cs = new CipherState(null);
-    this.mixHash(EMPTY); // prologue
+    this.mixHash(EMPTY);
   }
 
   mixHash(data) {
@@ -124,17 +109,15 @@ class SymmetricState {
 
   split() {
     const [k1, k2] = hkdf2(this.ck, EMPTY);
-    // Spec order: k1 seals initiator→responder traffic, k2 the reverse.
     return [new CipherState(k1), new CipherState(k2)];
   }
 }
 
-// NoiseSession is the established transport channel.
 export class NoiseSession {
   constructor(send, recv, remoteStatic, handshakeHash) {
     this._send = send;
     this._recv = recv;
-    this.remoteStatic = remoteStatic; // the node's static public key — pin it
+    this.remoteStatic = remoteStatic;
     this.handshakeHash = handshakeHash;
   }
 
@@ -147,10 +130,6 @@ export class NoiseSession {
   }
 }
 
-// NoiseInitiator drives the two-message NX handshake:
-//   msg1 (browser → node): e
-//   msg2 (node → browser): e, ee, s, es
-// An ephemeral keypair may be injected for tests; production callers omit it.
 export class NoiseInitiator {
   constructor(ephemeralPriv) {
     this.ss = new SymmetricState();
@@ -158,35 +137,31 @@ export class NoiseInitiator {
     this.ePub = x25519.getPublicKey(this.ePriv);
   }
 
-  // writeMessageA returns msg1 bytes to send as a single binary frame.
   writeMessageA() {
     this.ss.mixHash(this.ePub);
     const payload = this.ss.encryptAndHash(EMPTY);
     return concat(this.ePub, payload);
   }
 
-  // readMessageB consumes msg2 and returns the established NoiseSession.
-  // Throws on any authentication failure.
   readMessageB(msg) {
     if (msg.length < DHLEN + DHLEN + TAGLEN + TAGLEN) {
       throw new Error("noise: handshake response is too short");
     }
     const re = msg.slice(0, DHLEN);
     this.ss.mixHash(re);
-    this.ss.mixKey(x25519.getSharedSecret(this.ePriv, re)); // ee
+    this.ss.mixKey(x25519.getSharedSecret(this.ePriv, re));
 
     const sealedStatic = msg.slice(DHLEN, DHLEN + DHLEN + TAGLEN);
-    const rs = this.ss.decryptAndHash(sealedStatic); // s
-    this.ss.mixKey(x25519.getSharedSecret(this.ePriv, rs)); // es
+    const rs = this.ss.decryptAndHash(sealedStatic);
+    this.ss.mixKey(x25519.getSharedSecret(this.ePriv, rs));
 
-    this.ss.decryptAndHash(msg.slice(DHLEN + DHLEN + TAGLEN)); // empty payload
+    this.ss.decryptAndHash(msg.slice(DHLEN + DHLEN + TAGLEN));
 
     const [send, recv] = this.ss.split();
     return new NoiseSession(send, recv, rs, this.ss.h);
   }
 }
 
-// fingerprint matches Go's security.NoiseFingerprint: hex(sha256(pub)).
 export function fingerprint(pub) {
   return Array.from(sha256(pub), (b) => b.toString(16).padStart(2, "0")).join("");
 }

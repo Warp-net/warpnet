@@ -25,13 +25,8 @@ resulting from the use or misuse of this software.
 // transport bridges the frontend to its node, keeping the exact signatures the
 // service layer already calls. Under Wails (desktop/member) it delegates to the
 // bound Go App. Otherwise — the remote node's browser dashboard — it speaks a
-// single WebSocket: login, logout, is-first-run and every node call ride one
-// connection. Each connection starts with a Noise NX handshake (lib/noise.js):
-// the browser is anonymous, the node authenticates with its static key, which
-// is pinned here on first contact (TOFU) and checked on every reconnect. Every
-// frame after the handshake is sealed with per-connection session keys; no
-// preshared secret is involved, the login credentials ride inside the
-// encrypted channel.
+// single WebSocket secured by a Noise NX handshake (lib/noise.js) with the
+// node's static key pinned on first contact.
 import * as Wails from "../../wailsjs/go/main/App";
 import * as WailsRuntime from "../../wailsjs/runtime/runtime";
 import {generateUUID} from "@/lib/uuid";
@@ -89,10 +84,6 @@ export function EventsOff(eventName, ...additional) {
 
 let socket = null;
 let connecting = null;
-// session: the Noise transport channel of the current connection. Session keys
-// are ephemeral — a reconnect or page reload simply handshakes again — so
-// nothing secret is ever persisted. What IS persisted is the node's static
-// public key fingerprint: the TOFU pin that detects an impostor node.
 const NODE_KEY_STORAGE = "warpnet.node.key";
 let session = null;
 const pending = new Map(); // message_id -> { resolve, reject, timer }
@@ -147,8 +138,6 @@ function connect() {
       try { sock.close(); } catch (_) {}
     };
     sock.onopen = () => {
-      // Handshake message 1: the browser's ephemeral key. The connection is
-      // usable only after the node's response authenticates it below.
       sock.send(initiator.writeMessageA());
     };
     sock.onerror = () => {
@@ -176,7 +165,6 @@ function connect() {
         onMessage(ev.data);
         return;
       }
-      // Handshake message 2: authenticate the node and pin its key (TOFU).
       let established;
       try {
         established = initiator.readMessageB(new Uint8Array(ev.data));
@@ -218,8 +206,6 @@ function onMessage(data) {
   try {
     text = new TextDecoder().decode(session.decrypt(new Uint8Array(data)));
   } catch (e) {
-    // A frame that fails authentication desyncs the channel's counters —
-    // drop the connection; the next call reconnects and handshakes anew.
     console.error("ws decrypt failed:", e);
     try { socket.close(); } catch (_) {}
     return;
@@ -277,11 +263,6 @@ async function send(request) {
 // Call sends a Wails envelope { path, body, message_id, node_id, timestamp }
 // and resolves to the response envelope (with .body), matching the Wails
 // binding exactly.
-//
-// Every frame — including login and is-first-run — already rides the
-// Noise-encrypted channel established by connect(), so the account
-// credentials never depend on any channel secret and nothing special
-// happens here for login or logout.
 export async function Call(request) {
   if (hasWails()) {
     return Wails.Call(request);
