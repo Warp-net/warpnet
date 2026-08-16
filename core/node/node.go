@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package node
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -262,13 +261,23 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 
 		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
 
-		response, herr := handler(data, s)
-		if herr == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
+		response, err := handler(data, s)
+		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
 		}
+		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			clip := data
+			if len(clip) > 500 { //nolint:mnd
+				clip = clip[:500]
+			}
+			log.Errorf("node: unwrap: handling of %s %s message: %s failed: %v\n",
+				s.Protocol(), s.Conn().RemotePeer(), string(clip), err)
+			response = warpevent.ResponseError{Code: middleware.InternalNodeErrorCode, Message: err.Error()}
+		}
 
-		payload, encErr := normalizeResponse(response, herr, data, s)
-		if encErr != nil {
+		payload, err := marshalResponse(response)
+		if err != nil {
+			log.Errorf("node: unwrap: encoding response: %v %v", response, err)
 			return
 		}
 
@@ -282,43 +291,20 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 	}
 }
 
-// normalizeResponse converts the chain's return value into wire bytes:
-// errors become response envelopes, a missing response becomes an explicit
-// one, strings and byte slices go out verbatim, the rest is marshaled.
-func normalizeResponse(response any, err error, data []byte, s warpnet.WarpStream) ([]byte, error) {
-	if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
-		clip := data
-		if len(clip) > 500 { //nolint:mnd
-			clip = clip[:500]
-		}
-		var remotePeer warpnet.WarpPeerID
-		if conn := s.Conn(); conn != nil {
-			remotePeer = conn.RemotePeer()
-		}
-		log.Errorf("node: unwrap: handling of %s %s message: %s failed: %v\n",
-			s.Protocol(), remotePeer, string(clip), err)
-		response = warpevent.ResponseError{Code: middleware.InternalNodeErrorCode, Message: err.Error()}
-	}
-
-	if response == nil {
-		response = warpevent.ResponseError{Message: "empty response"}
-	}
-
-	var payload []byte
-	switch typedResponse := response.(type) {
+// marshalResponse turns a handler reply into wire bytes: strings and byte
+// slices go out verbatim, a missing reply becomes an explicit envelope,
+// everything else is JSON-encoded.
+func marshalResponse(response any) ([]byte, error) {
+	switch typed := response.(type) {
+	case nil:
+		return json.Marshal(warpevent.ResponseError{Message: "empty response"})
 	case []byte:
-		payload = typedResponse
+		return typed, nil
 	case string:
-		payload = []byte(typedResponse)
+		return []byte(typed), nil
 	default:
-		var buf bytes.Buffer
-		if encErr := json.NewEncoder(&buf).Encode(response); encErr != nil {
-			log.Errorf("node: unwrap: failed encoding generic response: %v %v", response, encErr)
-			return nil, encErr
-		}
-		payload = buf.Bytes()
+		return json.Marshal(response)
 	}
-	return payload, nil
 }
 
 var localAddrActions = map[int]string{
