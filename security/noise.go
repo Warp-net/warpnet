@@ -98,7 +98,7 @@ func (s *NoiseSession) RemoteStatic() []byte { return s.remoteStatic }
 func NoiseHandshake(static noise.DHKey, read func() ([]byte, error), write func([]byte) error) (*NoiseSession, error) {
 	hs, err := noise.NewHandshakeState(noise.Config{
 		CipherSuite:   noiseSuite,
-		Pattern:       noise.HandshakeNX,
+		Pattern:       noise.HandshakeXX,
 		StaticKeypair: static,
 	})
 	if err != nil {
@@ -113,21 +113,33 @@ func NoiseHandshake(static noise.DHKey, read func() ([]byte, error), write func(
 		return nil, fmt.Errorf("security: bad noise initiation: %w", err)
 	}
 
-	msg2, recv, send, err := hs.WriteMessage(nil, nil)
+	msg2, _, _, err := hs.WriteMessage(nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("security: build noise response: %w", err)
 	}
 	if err := write(msg2); err != nil {
 		return nil, fmt.Errorf("security: write noise response: %w", err)
 	}
-	return &NoiseSession{send: send, recv: recv}, nil
+
+	msg3, err := read()
+	if err != nil {
+		return nil, fmt.Errorf("security: read noise client static: %w", err)
+	}
+	_, recv, send, err := hs.ReadMessage(nil, msg3)
+	if err != nil {
+		return nil, fmt.Errorf("security: bad noise client static: %w", err)
+	}
+	return &NoiseSession{send: send, recv: recv, remoteStatic: hs.PeerStatic()}, nil
 }
 
-func NoiseHandshakeInitiator(read func() ([]byte, error), write func([]byte) error) (*NoiseSession, error) {
+func NoiseHandshakeInitiator(
+	static noise.DHKey, read func() ([]byte, error), write func([]byte) error,
+) (*NoiseSession, error) {
 	hs, err := noise.NewHandshakeState(noise.Config{
-		CipherSuite: noiseSuite,
-		Pattern:     noise.HandshakeNX,
-		Initiator:   true,
+		CipherSuite:   noiseSuite,
+		Pattern:       noise.HandshakeXX,
+		StaticKeypair: static,
+		Initiator:     true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("security: init noise initiator: %w", err)
@@ -145,9 +157,20 @@ func NoiseHandshakeInitiator(read func() ([]byte, error), write func([]byte) err
 	if err != nil {
 		return nil, fmt.Errorf("security: read noise response: %w", err)
 	}
-	if _, send, recv, err := hs.ReadMessage(nil, msg2); err != nil {
+	if _, _, _, err := hs.ReadMessage(nil, msg2); err != nil {
 		return nil, fmt.Errorf("security: bad noise response: %w", err)
-	} else {
-		return &NoiseSession{send: send, recv: recv, remoteStatic: hs.PeerStatic()}, nil
 	}
+
+	msg3, send, recv, err := hs.WriteMessage(nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("security: build noise client static: %w", err)
+	}
+	if err := write(msg3); err != nil {
+		return nil, fmt.Errorf("security: write noise client static: %w", err)
+	}
+	return &NoiseSession{send: send, recv: recv, remoteStatic: hs.PeerStatic()}, nil
+}
+
+func GenerateNoiseKey() (noise.DHKey, error) {
+	return noiseSuite.GenerateKeypair(nil)
 }

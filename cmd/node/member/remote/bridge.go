@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/event"
@@ -71,6 +72,7 @@ func sameOrigin(r *http.Request) bool {
 type Channel interface {
 	Encrypt(plain []byte) ([]byte, error)
 	Decrypt(frame []byte) ([]byte, error)
+	RemoteStatic() []byte
 }
 
 type HandshakeFunc func(read func() ([]byte, error), write func([]byte) error) (Channel, error)
@@ -88,6 +90,7 @@ type Authenticator interface {
 	AuthLogout()
 	Reset()
 	PrivateKey() ed25519.PrivateKey
+	IsAuthenticated() bool
 }
 
 type BridgeHandler struct {
@@ -96,8 +99,9 @@ type BridgeHandler struct {
 	firstRun  func() bool
 	psk       security.PSK
 
-	mx   sync.RWMutex
-	node Node
+	mx      sync.RWMutex
+	node    Node
+	clients map[string]struct{}
 }
 
 func NewBridgeHandler(
@@ -111,7 +115,32 @@ func NewBridgeHandler(
 		auth:      auth,
 		psk:       psk,
 		firstRun:  firstRun,
+		clients:   make(map[string]struct{}),
 	}
+}
+
+func (b *BridgeHandler) isEnrolled(pub []byte) bool {
+	if len(pub) == 0 {
+		return false
+	}
+	b.mx.RLock()
+	defer b.mx.RUnlock()
+	_, ok := b.clients[string(pub)]
+	return ok
+}
+
+func (b *BridgeHandler) enroll(pub []byte) {
+	if len(pub) == 0 {
+		return
+	}
+	b.mx.Lock()
+	b.clients[string(pub)] = struct{}{}
+	b.mx.Unlock()
+}
+
+type clientConn struct {
+	static     []byte
+	authorized atomic.Bool
 }
 
 func (b *BridgeHandler) Handle() http.HandlerFunc {
@@ -149,8 +178,11 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		var inflight sync.WaitGroup
 		sem := make(chan struct{}, maxInflightDispatches)
 
+		c := &clientConn{static: channel.RemoteStatic()}
+		c.authorized.Store(b.isEnrolled(c.static))
+
 		respond := func(req event.Message) {
-			out, err := json.Marshal(b.dispatch(req))
+			out, err := json.Marshal(b.dispatch(req, c))
 			if err != nil {
 				log.Errorf("remote: ws marshal: %v", err)
 				return
@@ -212,7 +244,7 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Unlock()
 }
 
-func (b *BridgeHandler) dispatch(req event.Message) event.Message {
+func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf("remote: dispatch panic: %v", r)
@@ -230,12 +262,20 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 		body, _ := json.Marshal(b.firstRun())
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
-		resp.Body = b.login(req.Body)
+		resp.Body = b.login(req.Body, c)
 	case event.PRIVATE_POST_LOGOUT:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
 		resp.Body = b.call(req)
 	}
 
@@ -245,7 +285,11 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 	return resp
 }
 
-func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
+func (b *BridgeHandler) isAuthorized(c *clientConn) bool {
+	return c.authorized.Load() && b.auth.IsAuthenticated()
+}
+
+func (b *BridgeHandler) login(body json.RawMessage, c *clientConn) json.RawMessage {
 	var ev event.LoginEvent
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
@@ -259,6 +303,8 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
+	b.enroll(c.static)
+	c.authorized.Store(true)
 	return bt
 }
 
@@ -288,5 +334,13 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 
 func newErrorResp(msg string) json.RawMessage {
 	bt, _ := json.Marshal(event.ResponseError{Code: http.StatusInternalServerError, Message: msg})
+	return bt
+}
+
+func newUnauthorizedResp() json.RawMessage {
+	bt, _ := json.Marshal(event.ResponseError{
+		Code:    http.StatusUnauthorized,
+		Message: "this connection is not signed in: log in on this node first",
+	})
 	return bt
 }

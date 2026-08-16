@@ -25,12 +25,12 @@ resulting from the use or misuse of this software.
 // transport bridges the frontend to its node, keeping the exact signatures the
 // service layer already calls. Under Wails (desktop/member) it delegates to the
 // bound Go App. Otherwise — the remote node's browser dashboard — it speaks a
-// single WebSocket secured by a Noise NX handshake (lib/noise.js) with the
+// single WebSocket secured by a Noise XX handshake (lib/noise.js) with the
 // node's static key pinned on first contact.
 import * as Wails from "../../wailsjs/go/main/App";
 import * as WailsRuntime from "../../wailsjs/runtime/runtime";
 import {generateUUID} from "@/lib/uuid";
-import { NoiseInitiator, fingerprint } from "@/lib/noise";
+import { NoiseInitiator, fingerprint, loadOrCreateClientKey } from "@/lib/noise";
 import { setConnectionStatus } from "@/lib/connection";
 
 // nodeError builds an Error whose message is safe to show a user verbatim
@@ -126,7 +126,7 @@ function connect() {
   connecting = new Promise((resolve, reject) => {
     const sock = new WebSocket(wsURL());
     sock.binaryType = "arraybuffer";
-    const initiator = new NoiseInitiator();
+    const initiator = new NoiseInitiator(loadOrCreateClientKey());
     let settled = false;
     const fail = (err) => {
       if (!settled) {
@@ -167,7 +167,10 @@ function connect() {
       }
       let established;
       try {
-        established = initiator.readMessageB(new Uint8Array(ev.data));
+        initiator.readMessageB(new Uint8Array(ev.data));
+        const finished = initiator.writeMessageC();
+        sock.send(finished.message);
+        established = finished.session;
       } catch (e) {
         console.error("ws handshake failed:", e);
         fail(nodeError(

@@ -27,7 +27,7 @@ import { chacha20poly1305 } from "@noble/ciphers/chacha";
 import { sha256 } from "@noble/hashes/sha256";
 import { hmac } from "@noble/hashes/hmac";
 
-const PROTOCOL_NAME = "Noise_NX_25519_ChaChaPoly_SHA256";
+const PROTOCOL_NAME = "Noise_XX_25519_ChaChaPoly_SHA256";
 const DHLEN = 32;
 const TAGLEN = 16;
 const EMPTY = new Uint8Array(0);
@@ -131,8 +131,10 @@ export class NoiseSession {
 }
 
 export class NoiseInitiator {
-  constructor(ephemeralPriv) {
+  constructor(staticPriv, ephemeralPriv) {
     this.ss = new SymmetricState();
+    this.sPriv = staticPriv;
+    this.sPub = x25519.getPublicKey(staticPriv);
     this.ePriv = ephemeralPriv || x25519.utils.randomPrivateKey();
     this.ePub = x25519.getPublicKey(this.ePriv);
   }
@@ -157,11 +159,51 @@ export class NoiseInitiator {
 
     this.ss.decryptAndHash(msg.slice(DHLEN + DHLEN + TAGLEN));
 
+    this.rs = rs;
+    this.re = re;
+  }
+
+  writeMessageC() {
+    const sealedStatic = this.ss.encryptAndHash(this.sPub);
+    this.ss.mixKey(x25519.getSharedSecret(this.sPriv, this.re));
+    const payload = this.ss.encryptAndHash(EMPTY);
+
     const [send, recv] = this.ss.split();
-    return new NoiseSession(send, recv, rs, this.ss.h);
+    return {
+      message: concat(sealedStatic, payload),
+      session: new NoiseSession(send, recv, this.rs, this.ss.h),
+    };
   }
 }
 
 export function fingerprint(pub) {
-  return Array.from(sha256(pub), (b) => b.toString(16).padStart(2, "0")).join("");
+  return toHex(sha256(pub));
+}
+
+function toHex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function fromHex(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+const CLIENT_KEY_STORAGE = "warpnet.client.key";
+
+export function loadOrCreateClientKey() {
+  try {
+    const stored = localStorage.getItem(CLIENT_KEY_STORAGE);
+    if (stored && stored.length === DHLEN * 2) {
+      return fromHex(stored);
+    }
+  } catch (_) {}
+  const priv = x25519.utils.randomPrivateKey();
+  try {
+    localStorage.setItem(CLIENT_KEY_STORAGE, toHex(priv));
+  } catch (_) {}
+  return priv;
 }

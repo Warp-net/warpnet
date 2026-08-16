@@ -33,6 +33,7 @@ import (
 	"fmt"
 	node2 "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/remote"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -127,7 +128,11 @@ func main() {
 	mux.Handle("/ws", bridgeHandler.Handle())
 	mux.Handle("/", staticHandler)
 
-	srv := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{
+		Addr:              net.JoinHostPort(config.Config().Node.Server.Host, port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	defer srv.Shutdown(ctx) //nolint:errcheck
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -135,7 +140,14 @@ func main() {
 		}
 	}()
 
-	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
+	if host := config.Config().Node.Server.Host; host == "" || host == "0.0.0.0" || host == "::" {
+		fmt.Printf(
+			"\033[1mNODE IS LISTENING ON EVERY INTERFACE, PORT %s. OPEN 'http://<this-host>:%s' IN A BROWSER \033[0m\n",
+			port, port,
+		)
+	} else {
+		fmt.Printf("\033[1mNODE IS LISTENING ON 'http://%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
+	}
 	fmt.Printf(
 		"\033[1mNODE KEY FINGERPRINT: %s — THE BROWSER PINS IT ON FIRST CONNECT, COMPARE IF ASKED\033[0m\n",
 		security.NoiseFingerprint(staticKey.Public),
