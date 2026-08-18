@@ -4,7 +4,14 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to build (e.g., v0.7.475). Empty = build selected ref as latest"
+        required: false
+        type: string
 
 jobs:
   build-relay:
@@ -15,6 +22,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve image tag
+        id: meta
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "image_tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "image_tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=latest" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -32,7 +52,7 @@ jobs:
           context: .
           file: Dockerfile.relay
           push: true
-          tags: ghcr.io/warp-net/warpnet-relay:latest
+          tags: ghcr.io/warp-net/warpnet-relay:${{ steps.meta.outputs.image_tag }}
           cache-from: type=gha,scope=relay
           cache-to: type=gha,mode=max,scope=relay
 
