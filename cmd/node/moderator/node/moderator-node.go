@@ -141,6 +141,7 @@ func (mn *ModeratorNode) Start() (err error) {
 	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
+		mn.mw.RateLimiterMiddleware,
 		mn.mw.AuthMiddleware,
 		mn.mw.IdempotencyMiddleware,
 	)

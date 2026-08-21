@@ -35,6 +35,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/singleflight"
 )
@@ -201,6 +202,8 @@ func (o *Outbox) flush(nodeId string) {
 		return
 	}
 
+	limitedRoutes := make(map[string]struct{})
+
 	for _, msg := range messages {
 		select {
 		case <-o.stop:
@@ -210,10 +213,18 @@ func (o *Outbox) flush(nodeId string) {
 		if o.ctx.Err() != nil {
 			return
 		}
+		if _, ok := limitedRoutes[msg.Destination]; ok {
+			continue
+		}
 
-		_, err := sender.Send(warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body)
+		response, err := sender.Send(warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body)
 		switch {
 		case err == nil, errors.Is(err, ErrResponseRead):
+			if isRateLimited(response) {
+				log.Infof("outbox: %s rate limited %s, keeping it queued", nodeId, msg.Destination)
+				limitedRoutes[msg.Destination] = struct{}{}
+				continue
+			}
 			if delErr := o.store.Delete(nodeId, msg.MessageId); delErr != nil {
 				log.Errorf("outbox: delete delivered %s/%s: %v", nodeId, msg.MessageId, delErr)
 			}
@@ -225,6 +236,17 @@ func (o *Outbox) flush(nodeId string) {
 	}
 
 	o.clearIfDrained(nodeId)
+}
+
+func isRateLimited(response []byte) bool {
+	if len(response) == 0 {
+		return false
+	}
+	var respErr event.ResponseError
+	if err := json.Unmarshal(response, &respErr); err != nil {
+		return false
+	}
+	return respErr.Code == event.RateLimitErrorCode
 }
 
 func (o *Outbox) clearIfDrained(nodeId string) {

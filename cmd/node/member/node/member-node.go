@@ -214,6 +214,7 @@ func (m *MemberNode) Start() (err error) {
 	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
+		m.mw.RateLimiterMiddleware,
 		m.mw.AuthMiddleware,
 		m.mw.IdempotencyMiddleware,
 	)

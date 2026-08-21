@@ -198,6 +198,7 @@ func (rn *RelayNode) setupHandlers() {
 	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
+		rn.mw.RateLimiterMiddleware,
 		rn.mw.AuthMiddleware,
 		rn.mw.IdempotencyMiddleware,
 	)

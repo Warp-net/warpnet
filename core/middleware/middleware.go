@@ -28,10 +28,12 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/docker/go-units"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 type middlewareError string
@@ -45,6 +47,7 @@ const (
 	ErrStreamReadError   middlewareError = "middleware: stream: reading failed"
 	ErrInternalNodeError middlewareError = "middleware: internal node error"
 	ErrStaleMessage      middlewareError = "middleware: auth: stale or replayed message"
+	ErrRateLimited       middlewareError = "middleware: too many requests for this route"
 )
 
 // messageFreshnessWindow caps how far a signed timestamp may drift from now.
@@ -64,6 +67,9 @@ type WarpMiddleware struct {
 	freshnessWindow time.Duration
 	ownNodeId       warpnet.WarpPeerID
 	aliases         AliasPairer
+
+	rateLimitersMx sync.Mutex
+	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
@@ -72,6 +78,7 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
+		rateLimiters:    newRateLimitersCache(),
 	}
 	return wm
 }
@@ -79,5 +86,8 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 func (p *WarpMiddleware) Close() {
 	if p.idempotency != nil {
 		p.idempotency.Close()
+	}
+	if p.rateLimiters != nil {
+		closeExpirableLRU(p.rateLimiters)
 	}
 }
