@@ -49,6 +49,8 @@ const (
 	Accepted            string = `{"code":0,"message":"Accepted"}`
 	InternalRoutePrefix string = "/internal"
 	EndCursor           string = "end"
+
+	RateLimitErrorCode int = 5001
 )
 
 // ChatCreatedResponse defines model for ChatCreatedResponse.
