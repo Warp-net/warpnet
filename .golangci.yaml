@@ -46,6 +46,7 @@ linters:
     - dogsled
     - exhaustive
     - exhaustruct
+    - exhaustruct_v5
     - forbidigo
     - forcetypeassert
     - funcorder
