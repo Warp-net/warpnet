@@ -28,7 +28,6 @@ package stream
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -43,6 +42,7 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/retrier"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/docker/go-units"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/oklog/ulid/v2"
@@ -60,9 +60,14 @@ const (
 	// event arrives). offlineCacheSize bounds the number of tracked peers.
 	offlineCacheTTL  = 30 * time.Second
 	offlineCacheSize = 1024
+
+	controlReadTimeout  = 15 * time.Second
+	mediaReadTimeout    = 5 * time.Minute
+	responseReadTimeout = 2 * time.Minute
 )
 
 const ErrResponseRead = warpnet.WarpError("stream: response read failed after request delivered")
+const ErrPayloadTooLarge = warpnet.WarpError("stream: payload exceeds the route limit")
 
 type NodeStreamer interface {
 	NewStream(ctx context.Context, p warpnet.WarpPeerID, pids ...warpnet.WarpProtocolID) (warpnet.WarpStream, error)
@@ -248,14 +253,14 @@ func (p *streamPool) send(
 		return nil, fmt.Errorf("stream: writing: %w", err)
 	}
 
-	buf := bytes.NewBuffer(nil)
-	_, err = buf.ReadFrom(rw)
-	if err != nil && !errors.Is(err, io.EOF) {
+	_ = stream.SetReadDeadline(time.Now().Add(responseReadTimeout))
+	resp, err := readLimited(rw, maxResponseSize(r))
+	if err != nil {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
 		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
 	}
 
-	return buf.Bytes(), nil
+	return resp, nil
 }
 
 func closeStream(stream warpnet.WarpStream) {
@@ -268,6 +273,56 @@ func flush(rw *bufio.ReadWriter) {
 	if err := rw.Flush(); err != nil {
 		log.Errorf("stream: flush: %s", err)
 	}
+}
+
+const (
+	MaxMediaSize   int64 = units.MiB * 50
+	MaxListSize    int64 = units.MiB * 8
+	MaxControlSize int64 = units.MiB
+)
+
+func maxRequestSize(r WarpRoute) int64 {
+	switch r.String() {
+	case event.PRIVATE_POST_UPLOAD_IMAGE, event.PRIVATE_POST_UPLOAD_VIDEO,
+		event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
+		return MaxMediaSize
+	}
+	return MaxControlSize
+}
+
+func maxResponseSize(r WarpRoute) int64 {
+	switch r.String() {
+	case event.PUBLIC_GET_IMAGE, event.PUBLIC_GET_VIDEO:
+		return MaxMediaSize
+	}
+	if r.IsGet() {
+		return MaxListSize
+	}
+	return MaxControlSize
+}
+
+func ReadRequest(s warpnet.WarpStream) ([]byte, error) {
+	limit := maxRequestSize(FromPrIDToRoute(s.Protocol()))
+	if limit == MaxMediaSize {
+		return readRequest(s, limit, mediaReadTimeout)
+	}
+	return readRequest(s, limit, controlReadTimeout)
+}
+
+func readRequest(s warpnet.WarpStream, limit int64, timeout time.Duration) ([]byte, error) {
+	_ = s.SetReadDeadline(time.Now().Add(timeout))
+	return readLimited(s, limit)
+}
+
+func readLimited(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, ErrPayloadTooLarge
+	}
+	return data, nil
 }
 
 func closeWrite(s warpnet.WarpStream) {

@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/docker/go-units"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -54,7 +53,6 @@ const (
 const messageFreshnessWindow = 5 * time.Minute
 
 const (
-	MaxLimit              = units.MiB * 50
 	InternalNodeErrorCode = 5000
 )
 
