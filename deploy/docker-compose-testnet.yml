@@ -67,7 +67,7 @@ services:
 #      - NODE_NETWORK=testnet
 #      - LOGGING_LEVEL=info
 #      - LOGGING_FORMAT=json
-#      - NODE_SEED=warpnet-moderator-testnet
+#
 #      - NODE_METRICS_GATEWAY=207.154.221.44:4091
 #      - GOMEMLIMIT=512MiB
 #    volumes:
@@ -89,7 +89,7 @@ services:
 #      - NODE_NETWORK=testnet
 #      - LOGGING_LEVEL=info
 #      - LOGGING_FORMAT=json
-#      - NODE_SEED=warpnet-moderator-2-testnet
+#
 #      - NODE_METRICS_GATEWAY=207.154.221.44:4091
 #      - GOMEMLIMIT=512MiB
 #    volumes:
@@ -110,7 +110,7 @@ services:
 #      - NODE_NETWORK=testnet
 #      - LOGGING_LEVEL=info
 #      - LOGGING_FORMAT=json
-#      - NODE_SEED=warpnet-moderator-3-testnet
+#
 #      - NODE_METRICS_GATEWAY=207.154.221.44:4091
 #      - GOMEMLIMIT=512MiB
 #    volumes:
