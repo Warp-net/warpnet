@@ -79,6 +79,7 @@ func main() {
 
 	seed := []byte(config.Config().Node.Seed) // deterministic seed for 3 bootstrap nodes
 	if len(seed) == 0 {
+		seed = make([]byte, 32)
 		_, _ = rand.Read(seed)
 	}
 
