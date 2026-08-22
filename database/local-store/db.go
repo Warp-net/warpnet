@@ -251,8 +251,11 @@ func (db *DB) Run(username, password string) (err error) {
 	if db.isRunning.Load() {
 		return nil
 	}
-	hashSum := security.ConvertToSHA256([]byte(username + "@" + password))
-	execOpts := db.badgerOpts.WithEncryptionKey(hashSum)
+	encryptionKey, err := security.DeriveDatabaseKey(username, password)
+	if err != nil {
+		return err
+	}
+	execOpts := db.badgerOpts.WithEncryptionKey(encryptionKey)
 
 	db.badger, err = badger.Open(execOpts)
 	if errors.Is(err, badger.ErrEncryptionKeyMismatch) {
