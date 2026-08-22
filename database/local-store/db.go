@@ -706,20 +706,9 @@ func (t *warpTxn) ReverseList(prefix DatabaseKey, limit *uint64, cursor *string)
 }
 
 const (
-	// defaultLimit is the page size used when a caller passes none.
 	defaultLimit uint64 = 20
-
-	// MaxPageLimit is the hard ceiling on a page. A limit reaching this store may
-	// come from an unauthenticated peer, so it has to be bounded — but the
-	// ceiling has to stay above the page sizes internal paginators use (100),
-	// or they read one page, see a short result, and conclude they are done.
 	MaxPageLimit uint64 = 1000
-
-	// maxPrealloc caps the capacity reserved up front. The limit bounds the
-	// iteration, but it must never size an allocation on its own: the iterator
-	// stops at real data, so a large hint buys nothing and an attacker-supplied
-	// one is a memory-exhaustion primitive.
-	maxPrealloc uint64 = 20
+	maxPrealloc  uint64 = 20
 )
 
 func pageLimit(limit *uint64) *uint64 {
