@@ -32,8 +32,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +45,8 @@ const (
 	AuthRepoName    = "/AUTH"
 	PassSubName     = "PASS" // TODO pass restore functionality
 	DefaultOwnerKey = "OWNER"
+
+	sessionTokenSize = 32
 )
 
 var ErrNilAuthRepo = local_store.DBError("auth repo is nil")
@@ -104,22 +104,16 @@ func (repo *AuthRepo) Authenticate(username, password string) (err error) {
 }
 
 func (repo *AuthRepo) generateSecrets(username, password string) (token string, pk ed25519.PrivateKey, err error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(127))
-	if err != nil {
-		return "", nil, err
+	tokenSeed := make([]byte, sessionTokenSize)
+	if _, err := rand.Read(tokenSeed); err != nil {
+		return "", nil, fmt.Errorf("generate session token: %w", err)
 	}
-	randChar := string(uint8(n.Uint64())) //#nosec
-	tokenSeed := []byte(username + "@" + password + "@" + repo.network + "@" + randChar + "@" + time.Now().String())
-	token = base64.StdEncoding.EncodeToString(security.ConvertToSHA256(tokenSeed))
+	token = base64.StdEncoding.EncodeToString(tokenSeed)
 
-	pkSeed := base64.StdEncoding.EncodeToString(
-		security.ConvertToSHA256(
-			[]byte(username + "@" + password + "@" + repo.network + strings.Repeat("@", len(password))), // no random - private key must be determined
-		),
-	)
-	privateKey, err := security.GenerateKeyFromSeed([]byte(pkSeed))
+	// no random - private key must be determined
+	privateKey, err := security.DeriveIdentityKey(username, password, repo.network)
 	if err != nil {
-		return "", nil, fmt.Errorf("generate private key from seed: %w", err)
+		return "", nil, fmt.Errorf("derive identity key: %w", err)
 	}
 
 	return token, privateKey, nil
