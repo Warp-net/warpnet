@@ -74,7 +74,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seed := make([]byte, 0, 32)
+	seed := make([]byte, 32)
 	_, _ = rand.Read(seed)
 
 	privKey, err := security.GenerateKeyFromSeed(seed)

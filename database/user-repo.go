@@ -466,7 +466,7 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
-		want = *limit
+		want = min(*limit, local_store.MaxPageLimit)
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -530,7 +530,7 @@ func matchesUserQuery(u domain.User, q string) bool {
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
-		want = *limit
+		want = min(*limit, local_store.MaxPageLimit)
 	}
 
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).
