@@ -13,7 +13,7 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet1
+      - NODE_SEED=warpnet1 # deterministic seed for 3 bootstrap nodes
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - GOMEMLIMIT=144MiB
 
@@ -31,7 +31,7 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet2
+      - NODE_SEED=warpnet2 # deterministic seed for 3 bootstrap nodes
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - GOMEMLIMIT=144MiB
 
@@ -49,7 +49,7 @@ services:
       - NODE_NETWORK=testnet
       - LOGGING_LEVEL=info
       - LOGGING_FORMAT=json
-      - NODE_SEED=warpnet3
+      - NODE_SEED=warpnet3 # deterministic seed for 3 bootstrap nodes
       - NODE_METRICS_GATEWAY=207.154.221.44:4091
       - GOMEMLIMIT=144MiB
 

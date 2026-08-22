@@ -77,7 +77,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seed := []byte(config.Config().Node.Seed)
+	seed := []byte(config.Config().Node.Seed) // deterministic seed for 3 bootstrap nodes
 	if len(seed) == 0 {
 		_, _ = rand.Read(seed)
 	}
