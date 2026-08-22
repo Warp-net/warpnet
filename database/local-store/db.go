@@ -705,7 +705,34 @@ func (t *warpTxn) ReverseList(prefix DatabaseKey, limit *uint64, cursor *string)
 	return t.list(prefix, limit, cursor, true)
 }
 
-const maxLimit uint64 = 20
+const (
+	// defaultLimit is the page size used when a caller passes none.
+	defaultLimit uint64 = 20
+
+	// MaxPageLimit is the hard ceiling on a page. A limit reaching this store may
+	// come from an unauthenticated peer, so it has to be bounded — but the
+	// ceiling has to stay above the page sizes internal paginators use (100),
+	// or they read one page, see a short result, and conclude they are done.
+	MaxPageLimit uint64 = 1000
+
+	// maxPrealloc caps the capacity reserved up front. The limit bounds the
+	// iteration, but it must never size an allocation on its own: the iterator
+	// stops at real data, so a large hint buys nothing and an attacker-supplied
+	// one is a memory-exhaustion primitive.
+	maxPrealloc uint64 = 20
+)
+
+func pageLimit(limit *uint64) *uint64 {
+	if limit == nil || *limit == 0 {
+		l := defaultLimit
+		return &l
+	}
+	if *limit > MaxPageLimit {
+		l := MaxPageLimit
+		return &l
+	}
+	return limit
+}
 
 func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, reverse bool) ([]ListItem, string, error) {
 	var startCursor DatabaseKey
@@ -716,16 +743,9 @@ func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, revers
 		return []ListItem{}, endCursor, nil
 	}
 
-	if limit == nil {
-		defaultLimit := maxLimit
-		limit = &defaultLimit
-	}
-	if *limit > 20 {
-		defaultLimit := maxLimit
-		limit = &defaultLimit
-	}
+	limit = pageLimit(limit)
 
-	items := make([]ListItem, 0, *limit)
+	items := make([]ListItem, 0, min(*limit, maxPrealloc))
 	cur, err := iterate(
 		t.txn, prefix, startCursor, limit, true, reverse,
 		func(key string, value []byte) error {
@@ -748,16 +768,9 @@ func (t *warpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([
 		return []string{}, endCursor, nil
 	}
 
-	if limit == nil {
-		defaultLimit := maxLimit
-		limit = &defaultLimit
-	}
-	if *limit > 20 {
-		defaultLimit := maxLimit
-		limit = &defaultLimit
-	}
+	limit = pageLimit(limit)
 
-	items := make([]string, 0, *limit) //
+	items := make([]string, 0, min(*limit, maxPrealloc))
 	cur, err := iterate(
 		t.txn, prefix, startCursor, limit, false, false,
 		func(key string, _ []byte) error {
