@@ -9,6 +9,7 @@
 | **Re-test 1** | `ada3d0a0` — 2026-08-16 |
 | **Re-test 2** | `28eef1ef` — 2026-08-16 |
 | **Re-test 3** | `2c0802d3` — 2026-08-22 |
+| **Re-test 4** | `392e17d2` — 2026-08-22 |
 | **Assessment type** | White-box source code review + automated static analysis + dependency analysis |
 | **Classification** | Internal — contains unremediated vulnerability details |
 
@@ -39,10 +40,12 @@ The four Critical findings:
 
 **Re-test 3 (2026-08-22, `2c0802d3`).** Remediation continued across the High and Medium tiers. Newly closed: **WRP-11** (poll option ceiling), **WRP-16** (per-peer per-route leaky-bucket rate limiting in middleware), **WRP-27** (CSPRNG session tokens) and **WRP-40** (`dht.ModeAuto`). Five findings moved to partial: **WRP-07** (both root secrets now run through Argon2id — the headline "unsalted SHA-256" is gone, but the salt is a deterministic public value and the identity is still password-derived, so there is still no rotation path), **WRP-10** (clamped in the store, still unclamped in two user-repository routes), **WRP-08** (moderator seeds removed from compose, relay/bootstrap seeds still committed), **WRP-17** (report ingress rate-limited on streams but not on the pubsub topic the moderators actually read) and **WRP-39** (dead hashing code removed, unwired route and fields remain).
 
-Two defects were introduced by the re-test-3 remediation itself and are called out where they occur, because both are cheap to fix and one is a hard outage:
+**Re-test 4 (2026-08-22, `392e17d2`).** One PR (#458) on top of `2c0802d3`, with no other changes in between. It closes **WRP-10** and clears both defects that the re-test-3 remediation had introduced. The moderator's seed is now a real 32-byte random value rather than a zero-length slice, so the node starts and its identity is genuinely random — which also settles the moderator half of WRP-08. The `security` package builds under test again. WRP-10 is closed at the root: the capacity hint is bounded independently of the caller's limit, and `UserRepo.Search`/`WhoToFollow`, which allocate above the store and never saw the original clamp, are bounded too. The page-truncation regression that the original clamp caused is gone with it.
 
-1. **The moderator node can no longer start.** `cmd/node/moderator/main.go:77` allocates its random seed as `make([]byte, 0, 32)` — length zero, so `rand.Read` fills nothing and `GenerateKeyFromSeed` returns `ErrEmptySeed`. The process logs `moderator: fail generating key` and exits. See WRP-08.
-2. **The `security` package no longer compiles under test.** `GetCodebaseHashHex` was removed from `security/hashing.go` while `security/hashing_test.go` still calls it, so `go vet ./security/...` and `go test ./...` fail to build. See WRP-39.
+~~Two defects were introduced by the re-test-3 remediation itself and are called out where they occur, because both are cheap to fix and one is a hard outage:~~ **Both fixed at `392e17d2`** (#458). Recorded here because the pattern is worth keeping: neither would have reached `develop` had `go build ./... && go test ./...` been run on the remediation branch.
+
+1. ~~**The moderator node can no longer start.**~~ `cmd/node/moderator/main.go:77` allocated its random seed as `make([]byte, 0, 32)` — length zero, so `rand.Read` filled nothing and `GenerateKeyFromSeed` returned `ErrEmptySeed`. The process logged `moderator: fail generating key` and exited. Now `make([]byte, 32)`. See WRP-08.
+2. ~~**The `security` package no longer compiles under test.**~~ `GetCodebaseHashHex` was removed from `security/hashing.go` while `security/hashing_test.go` still called it, so `go vet ./security/...` and `go test ./...` failed to build. `psk_test.go` had two further stale references (`generateAnchoredEntropy`, `ErrPSKNetwrokRequired`) that the original report did not name. All removed. See WRP-39.
 
 WRP-04 took two rounds and is worth recording as a pattern. The first round fixed the *reported defect* — the plaintext fallback — but left the *reported outcome* intact, because the replacement used Noise `NX`, which authenticates the server to the client and not the reverse; the dashboard password had also been removed without anything taking its role. The second round closed it properly by switching to `XX` and gating every privileged route on a client key that only a successful login enrolls. The lesson generalizes: encrypting a channel is not authenticating its peer, and a finding is closed when its stated impact is unreachable, not when the specific code it cited has changed.
 
@@ -58,22 +61,22 @@ We recommend treating WRP-01 through WRP-04 as blocking for any deployment carry
 
 ### Findings by severity
 
-Counted at re-test 3 (`2c0802d3`). "Partial" means the cited code changed but part of the stated impact is still reachable; those findings are counted as open for prioritisation.
+Counted at re-test 4 (`392e17d2`). "Partial" means the cited code changed but part of the stated impact is still reachable; those findings are counted as open for prioritisation.
 
 | Severity | Original | Closed | Partial | Open | Open / partial IDs |
 |---|---|---|---|---|---|
 | **Critical** | 4 | **4** | 0 | **0** | — |
-| **High** | 11 | 1 | 3 | **10** | WRP-05, WRP-06, ⚠️WRP-07, ⚠️WRP-08, WRP-09, ⚠️WRP-10, WRP-12 … WRP-15 |
+| **High** | 11 | 2 | 2 | **9** | WRP-05, WRP-06, ⚠️WRP-07, ⚠️WRP-08, WRP-09, WRP-12 … WRP-15 |
 | **Medium** | 13 | 4 | 1 | **9** | ⚠️WRP-17, WRP-18 … WRP-20, WRP-23 … WRP-26, WRP-28 |
 | **Low** | 10 | 1 | 0 | **9** | WRP-30 … WRP-38 |
 | **Informational** | 6 | 1 | 1 | **5** | ⚠️WRP-39, WRP-41 … WRP-44 |
-| **Total** | **44** | **11** | **5** | **33** | |
+| **Total** | **44** | **12** | **4** | **32** | |
 
-**Closed:** WRP-01, WRP-02, WRP-03, WRP-04, WRP-11, WRP-16, WRP-21, WRP-22, WRP-27, WRP-29, WRP-40.
+**Closed:** WRP-01, WRP-02, WRP-03, WRP-04, WRP-10, WRP-11, WRP-16, WRP-21, WRP-22, WRP-27, WRP-29, WRP-40.
 
-**Highest-priority open findings:** WRP-06 (forgeable moderation verdicts), WRP-13 (pre-auth buffering), WRP-12 (Android identity), plus the WRP-10 residual — two unclamped `make` sites that are still a one-line fix each.
+**Highest-priority open findings:** WRP-06 (forgeable moderation verdicts), WRP-13 (pre-auth buffering) and WRP-12 (Android identity). All three are untouched since the original assessment.
 
-**Fix before anything else:** the moderator start-up failure and the broken `security` test build introduced at `2c0802d3` (see WRP-08 and WRP-39).
+**Cheapest outstanding fixes:** WRP-30 (`crypto/subtle` for the token compare), WRP-15 (`IsPublicMultiAddress` before dialing) and WRP-14 (least privilege plus a SHA pin in one workflow).
 
 ---
 
@@ -503,7 +506,9 @@ This is a brain wallet. The corresponding public key **is the libp2p peer ID**, 
 >
 > **(b) Relay and bootstrap — unchanged.** `cmd/node/relay/main.go:80` still derives from `config.Config().Node.Seed`, and `NODE_SEED=warpnet1|warpnet2|warpnet3` is still committed — and now *active* rather than commented — in `deploy/docker-compose-testnet.yml:16,34,52`. `NODE_SEED=echo-testnet` remains at line 165. The `config.go:116` default is still `"seed" + network + dbDir + host + port`. The relay's own random fallback has the same empty-slice bug (`main.go:81-83`), but it never runs because the config default is never empty. **The three bootstrap identities remain recomputable by any reader of the repository, and have not been rotated.**
 >
-> **Still to do:** fix the moderator seed allocation; move the relay and bootstrap seeds to injected deployment secrets; rotate the three currently-deployed bootstrap identities.
+> **Re-test 4 (`392e17d2`).** The moderator seed is now `make([]byte, 32)`, so `rand.Read` fills it and the node starts with a genuinely random identity — **the moderator half of this finding is closed.** The relay's dead fallback was fixed the same way. (b) is unchanged: `NODE_SEED=warpnet1|warpnet2|warpnet3` is still committed and active in `deploy/docker-compose-testnet.yml:16,34,52`, `NODE_SEED=echo-testnet` at line 165, and the `config.go:116` default is still built from public values.
+>
+> **Still to do:** move the relay and bootstrap seeds to injected deployment secrets; rotate the three currently-deployed bootstrap identities. Note that a random moderator identity per process is a deliberate trade — it removes the impersonation vector here, and it also means moderators cannot be pinned, which is the open question in WRP-06.
 
 Relay, moderator, and bootstrap identities derive from a `NODE_SEED` string via `GenerateKeyFromSeed`. The default seed is built entirely from public values:
 
@@ -532,27 +537,28 @@ The updater fetches an archive and a SHA-256 listing from a GitHub release and c
 
 ---
 
-### WRP-10 — High — Unclamped `limit` on public list routes causes remote memory exhaustion — ⚠️ **PARTIALLY CLOSED**
+### ~~WRP-10 — High — Unclamped `limit` on public list routes causes remote memory exhaustion~~ ✅ CLOSED
 
 **CWE-770, CWE-789** · `database/local-store/db.go:719,747`, `database/user-repo.go:485,557-558`
 
-> **Status at `2c0802d3`.** Both cited `db.go` sites are fixed; the two cited `user-repo.go` sites are not, so three of the five reachable routes are closed and two remain exploitable.
+> **Status at `2c0802d3` — partial.** Both cited `db.go` sites were clamped to `maxLimit = 20`, closing `PUBLIC_GET_USERS`, `PUBLIC_GET_FOLLOWERS` and `PUBLIC_GET_FOLLOWINGS`. The two cited `user-repo.go` sites were not: `Search` (`PUBLIC_GET_USERS_SEARCH`) and `WhoToFollow` (`PUBLIC_GET_WHOTOFOLLOW`) build their own slice *above* the store and never saw the clamp, so `{"query":"a","limit":100000000}` still reserved ~24 GB — `domain.User` is 240 bytes, worse per unit than the original `ListItem` path.
 >
-> **Fixed.** `database/local-store/db.go:723-726,755-758` clamps to `maxLimit = 20` in both `list` and `ListKeys` before the `make` at lines 728 and 760, at the store boundary as recommended. That closes `PUBLIC_GET_USERS` (`UserRepo.List` pre-allocates from `len(items)` off the clamped page), `PUBLIC_GET_FOLLOWERS` and `PUBLIC_GET_FOLLOWINGS` (`FollowRepo.GetFollowers`/`GetFollowings` hand `limit` straight to `ListKeys`).
+> That clamp also introduced a functional regression. Capping the *request* rather than the *allocation* made the store return 20 rows to a caller that asked for 100, and five internal paginators drive their loop off "a short page means the end": `OutboxRepo.ListByNode` (offline messages), two `NotificationRepo` scans, `FilterRepo.FindKeyword` and `cancelRetweetsForEditedTweet`. All stopped after the first 20 rows. `TestOutboxRepoSuite/TestListByNodeBeyondDefaultPage` caught it.
 >
-> **Still open.** Two user-repository routes derive their own capacity *above* the store and never see the clamp:
+> **Resolution. CLOSED at `392e17d2`** (#458), at the root rather than per call site:
 > ```go
-> // database/user-repo.go:467-469, 480 — Search (PUBLIC_GET_USERS_SEARCH)
-> want := uint64(20)
-> if limit != nil && *limit > 0 { want = *limit }   // attacker value, unclamped
-> ...
-> hits := make([]domain.User, 0, want)
->
-> // database/user-repo.go:530-533, 552-553 — WhoToFollow (PUBLIC_GET_WHOTOFOLLOW)
-> native := make([]domain.User, 0, want)
-> other  := make([]domain.User, 0, want)
+> // database/local-store/db.go:708-711, 735-737, 760-762
+> const (
+>     defaultLimit uint64 = 20
+>     MaxPageLimit uint64 = 1000
+>     maxPrealloc  uint64 = 20
+> )
+> limit = pageLimit(limit)
+> items := make([]ListItem, 0, min(*limit, maxPrealloc))
 > ```
-> `domain.User` is 240 bytes, so this is *worse* per unit than the original `ListItem` path: `{"query":"a","limit":100000000}` on `PUBLIC_GET_USERS_SEARCH` requests ~24 GB, and `WhoToFollow` asks for two such slices. The inner `txn.List` call is now clamped, so the scan is bounded — but the pre-allocation happens first and is what kills the process. **Fix:** clamp `want` in both functions, or drop the capacity hint entirely (the store returns at most 20 rows now, so the hint is worthless).
+> The capacity hint is now bounded independently of the caller's limit, which is the distinction the finding turned on: the untrusted value may bound an *iteration* — the iterator stops at real data anyway — but must never size an *allocation*. This is what the original recommendation asked for ("the pre-allocated capacity provides no benefit and can simply be a small constant"). `Search` and `WhoToFollow` cap their own capacity at `local_store.MaxPageLimit` (`user-repo.go:469,533`), closing the last two routes. The page ceiling stays, raised from 20 to 1000 so it sits above every internal page size instead of below it — a bounded 1000-row page is not the finding's impact.
+>
+> Verified: `go build ./...`, `go vet ./...`, `go test ./...` and `go test -race ./...` clean on the merged tree; the outbox regression test passes.
 
 An attacker-controlled `limit` is used directly as a slice capacity with no ceiling:
 
@@ -724,8 +730,8 @@ Beyond being unwired, the scheme could not achieve its goal: a node self-compute
 > ⚠️ **PARTIALLY ADDRESSED at `ada3d0a0`.** The `core/challenge/` directory is gone. Remnants still convey the illusion of a control: `PUBLIC_POST_NODE_CHALLENGE` (`event/paths.go:33`), `SelfHashHex` (`event/event.go:522`), `RelaySelfHashHex` (`database/node-repo.go:72`) and `GetCodebaseHashHex` (`security/hashing.go:44`) all remain, none of them wired. Recommend finishing the removal.
 >
 > ⚠️ **STILL PARTIAL at `2c0802d3` — and the removal broke the build.** `GetCodebaseHashHex` is gone from `security/hashing.go`, and `walkAndHash`, `hashFile`, `spbFounding` and `generateAnchoredEntropy` are gone from `security/psk.go`. Two problems:
-> 1. **`security/hashing_test.go` was not updated** and still calls `GetCodebaseHashHex` at lines 76, 89-90, 108-109 and 120. The package therefore fails to compile under test — `go vet ./security/...` reports `undefined: GetCodebaseHashHex`, and `go test ./...` cannot build, so CI's `-race` run over the module fails at this revision. Delete those four tests (`TestGetCodebaseHashHex*`) along with the code they cover. Production code builds cleanly; this is test-only.
-> 2. **The remaining remnants are unchanged.** `PUBLIC_POST_NODE_CHALLENGE` (`event/paths.go:33`), `SelfHashHex` (`event/event.go:524`) and `RelaySelfHashHex` (`database/node-repo.go:72`) are all still present and still unwired — and the route is now referenced by the new rate limiter's table (`core/middleware/rate-limiter.go:83`), which gives a dead route the appearance of a live, deliberately-throttled one.
+> 1. ~~**`security/hashing_test.go` was not updated**~~ and still called `GetCodebaseHashHex` at lines 76, 89-90, 108-109 and 120. The package therefore failed to compile under test — `go vet ./security/...` reported `undefined: GetCodebaseHashHex`, and `go test ./...` could not build, so CI's `-race` run over the module failed at that revision. **Fixed at `392e17d2`**: the four `TestGetCodebaseHashHex*` tests are gone with the `testFS` fixture that existed only for them, and so are two further stale references this report had not spotted — `psk_test.go` was still calling `generateAnchoredEntropy` and the renamed `ErrPSKNetwrokRequired`.
+> 2. **The remaining remnants are unchanged at `392e17d2`.** `PUBLIC_POST_NODE_CHALLENGE` (`event/paths.go:33`), `SelfHashHex` (`event/event.go:524`) and `RelaySelfHashHex` (`database/node-repo.go:72`) are all still present and still unwired — and the route is now referenced by the new rate limiter's table (`core/middleware/rate-limiter.go:83`), which gives a dead route the appearance of a live, deliberately-throttled one. This is what keeps the finding open.
 
 ~~**WRP-40 — DHT forced to server mode on all nodes.**~~ ✅ **CLOSED at `2c0802d3`.** `core/dht/dht.go:127` now sets `dht.ModeAuto`, so a node advertises itself as a DHT server only when libp2p judges it publicly reachable; NAT'd home nodes fall back to client mode and no longer store records for arbitrary peers.
 
@@ -779,16 +785,17 @@ These controls were reviewed and found sound. They should be preserved through r
 
 Findings 1–3 shared a root cause and were correctly fixed together as a single authorization layer rather than as three patches.
 
-**Phase 0 — Regressions introduced by the Phase 2 work (fix first, both trivial)**
+**Phase 0 — Regressions introduced by the Phase 2 work** — ✅ **COMPLETE at `392e17d2`** (#458)
 
-- **Moderator seed allocation** — `cmd/node/moderator/main.go:77`: `make([]byte, 0, 32)` → `make([]byte, 32)`. Without it the moderator node exits at start-up. (WRP-08)
-- **Broken test build** — delete the four `TestGetCodebaseHashHex*` tests in `security/hashing_test.go`, which reference a function removed from the package. Without it `go test ./...` cannot build. (WRP-39)
+- ~~**Moderator seed allocation** — `cmd/node/moderator/main.go:77`: `make([]byte, 0, 32)` → `make([]byte, 32)`. Without it the moderator node exits at start-up. (WRP-08)~~ ✅ Done, and the relay's identical dead fallback with it.
+- ~~**Broken test build** — delete the four `TestGetCodebaseHashHex*` tests in `security/hashing_test.go`, which reference a function removed from the package. Without it `go test ./...` cannot build. (WRP-39)~~ ✅ Done, plus two stale references in `psk_test.go`.
+- ~~**Page truncation** — the WRP-10 clamp capped the request rather than the allocation, so every list returned at most 20 rows and five internal paginators stopped early.~~ ✅ Done — see WRP-10.
 
 **Phase 2 — High priority** — partially complete
 
 5. ~~**WRP-07**~~ ✅ Argon2id now sits between the password and both keys. Residual: the salt is a public deterministic value, there is still no identity-rotation path, and existing accounts have no migration (they surface as "wrong password"). **WRP-12** remains — source the Android device identity from a Keystore-persisted random seed.
-6. **WRP-06 + WRP-08** — introduce a pinned moderator trust root and rotate all seed-derived infrastructure identities. These must ship together; neither is effective alone. WRP-08 is half-done: moderator seeds are out of compose (but the code that replaced them does not run), while the three bootstrap seeds remain committed and unrotated.
-7. ~~**WRP-11**~~ ✅ Done — `optionsNum` capped at 20 in the handler. **WRP-10** is half-done: clamped in `local-store`, still unclamped in `UserRepo.Search` and `UserRepo.WhoToFollow`. Two `make` calls; finish it.
+6. **WRP-06 + WRP-08** — introduce a pinned moderator trust root and rotate all seed-derived infrastructure identities. These must ship together; neither is effective alone. WRP-08 is half-done: moderator identities are now random per process, while the three bootstrap seeds remain committed and unrotated. Note the tension to resolve first — a per-process random moderator identity is the opposite of a pinnable one, so decide what WRP-06's trust root is before hardening either further.
+7. ~~**WRP-10 + WRP-11**~~ ✅ Both done — `optionsNum` capped in the handler, and the list pre-allocation bounded independently of the caller's limit.
 8. **WRP-09** — sign release artifacts and verify signatures before installing updates.
 9. **WRP-13** — add read deadlines and per-route size limits; bound outbound response reads. Note the new rate limiter does not help here: it runs after the 50 MiB read.
 10. **WRP-14** — reduce the Snap workflow to least privilege and SHA-pin its actions.
@@ -849,7 +856,7 @@ No private key material (`.pem`, `.key`, `.p12`, `.jks`) in the working tree or 
 
 At the audited revision `go test` passed across `security`, `core/middleware`, `event`, `database`, and `database/local-store`. The findings in this report are design-level defects, not regressions — the code behaves as written.
 
-**At `2c0802d3` the module no longer builds under test.** `go build ./...` is clean, but `go vet ./security/...` fails with `undefined: GetCodebaseHashHex` (`security/hashing_test.go:76`), which blocks `go test ./...` for the whole module. See WRP-39.
+~~**At `2c0802d3` the module no longer builds under test.**~~ `go build ./...` was clean, but `go vet ./security/...` failed with `undefined: GetCodebaseHashHex` (`security/hashing_test.go:76`), which blocked `go test ./...` for the whole module. **Restored at `392e17d2`**: `go build ./...`, `go vet ./...`, `go test ./...` and `go test -race ./...` are all clean on the merged tree. See WRP-39.
 
 ---
 
@@ -859,7 +866,7 @@ Closed findings are struck through; the capability rows themselves are unchanged
 
 | Attacker | Capability assumed | Findings enabled |
 |---|---|---|
-| **Any Internet host** | Derive the public PSK and join the overlay (WRP-05) | ~~WRP-01~~, ~~WRP-02~~, ~~WRP-03~~, WRP-06, ⚠️WRP-10, ~~WRP-11~~, WRP-13, WRP-15, ~~WRP-16~~, WRP-23 |
+| **Any Internet host** | Derive the public PSK and join the overlay (WRP-05) | ~~WRP-01~~, ~~WRP-02~~, ~~WRP-03~~, WRP-06, ~~WRP-10~~, ~~WRP-11~~, WRP-13, WRP-15, ~~WRP-16~~, WRP-23 |
 | **Network-adjacent host** | Reach a hosted node's dashboard port | ~~WRP-04~~, WRP-18, WRP-25 |
 | **Offline attacker** | Knows a target's peer ID and username, or holds a stolen DB volume | ⚠️WRP-07, ⚠️WRP-08, ~~WRP-22~~ |
 | **Supply-chain attacker** | Compromises a release credential or third-party action | WRP-09, WRP-14, WRP-26, WRP-37 |
@@ -873,6 +880,7 @@ Closed findings are struck through; the capability rows themselves are unchanged
 **Re-test 1:** 2026-08-16 against `ada3d0a0`, covering 68 commits since the audited revision `27ead3ce`.
 **Re-test 2:** 2026-08-16 against `28eef1ef`, covering the WRP-04 remediation (`4957085b`, `6a93896a`).
 **Re-test 3:** 2026-08-22 against `2c0802d3`, covering the 10 commits since `28eef1ef` (`24ad32d1`, `9f037278`, `fb714743`, `2ec79f38`, `67d94421`, `656fb962`, `37c60ebb`, `7e73b2f4`, `8404c0ef`, `2c0802d3`) and re-checking every finding still listed as open.
+**Re-test 4:** 2026-08-22 against `392e17d2`, covering PR #458 (`f5baf2ab`, `8c222874`, `2413027d`) — the only change on `develop` since `2c0802d3`.
 
 Every claim below was verified by reading the changed code; claims about exploitability were verified by execution.
 
@@ -891,13 +899,15 @@ Every claim below was verified by reading the changed code; claims about exploit
 | WRP-27 | Medium | ✅ **Closed** (r3) | 32 bytes of `crypto/rand`; password no longer in the token seed |
 | WRP-29 | Low | ✅ **Closed** (r1) | `Destination` now covered by `SigningBytes()` |
 | WRP-40 | Info | ✅ **Closed** (r3) | `core/dht/dht.go:127` set to `dht.ModeAuto` |
+| WRP-10 | High | ✅ **Closed** (r4) | Pre-allocation bounded by `maxPrealloc` independently of the caller's limit; `Search`/`WhoToFollow` capped at `MaxPageLimit` |
 | WRP-07 | High | ⚠️ **Partial** (r3) | Argon2id via `security/kdf.go`; salt still public and deterministic, no rotation path, no migration for existing accounts |
-| WRP-08 | High | ⚠️ **Partial** (r3) | Moderator seeds out of compose but the replacement fails to start the node; bootstrap seeds still committed and unrotated |
-| WRP-10 | High | ⚠️ **Partial** (r3) | Clamped at `local-store` (`maxLimit = 20`); `UserRepo.Search`/`WhoToFollow` still pre-allocate from the raw `limit` |
+| WRP-08 | High | ⚠️ **Partial** (r3, r4) | Moderator identity now random per process (r4); bootstrap seeds still committed and unrotated |
 | WRP-17 | Medium | ⚠️ **Partial** (r3) | `PUBLIC_POST_REPORT` stream limited; `ReportsTopic` pubsub ingress unlimited, no dedup or threshold |
-| WRP-39 | Info | ⚠️ **Partial** (r1, r3) | Hashing helpers removed — but `hashing_test.go` still calls them, so the package fails to build under test; route and event fields remain |
+| WRP-39 | Info | ⚠️ **Partial** (r1, r3, r4) | Hashing helpers removed and the test build restored (r4); unwired route and event fields remain |
 
-### 10.2 Confirmed still open at `2c0802d3`
+### 10.2 Confirmed still open at `392e17d2`
+
+PR #458 touched only `cmd/node/{moderator,relay}/main.go`, `database/local-store/db.go`, `database/user-repo.go` and two test files, so every row below was re-confirmed unchanged at `392e17d2`; the evidence citations are from re-test 3.
 
 | ID | Finding | Evidence |
 |---|---|---|
@@ -946,8 +956,16 @@ Four more findings closed and five moved to partial in six days, across the KDF,
 
 **Two of the five partials are partial because the fix stopped at the cited line numbers.** WRP-10 named four locations; the two in `local-store` were clamped and the two in `user-repo.go` — which the finding also named, and where the element type is 240 bytes rather than a `ListItem` — were not. WRP-17's rate limit went on the stream route named in the finding, not on the pubsub topic the description identifies as the flood vector. This is the same pattern §10.3 recorded for WRP-04 round 1, and the same remedy applies: check the stated *impact* against the patched tree, not the stated *location*.
 
-**Two changes need re-work before they count as fixes.** The moderator seed replacement allocates a zero-length slice, so the node exits at start-up rather than getting a random identity, and the dead-code removal left `security/hashing_test.go` calling a deleted function, so the module no longer builds under test. Both are one-line fixes, and both would have been caught by running `go build ./... && go test ./...` on the branch — worth adding as a gate given that CI runs `-race` over the whole module.
+**Two changes need re-work before they count as fixes.** The moderator seed replacement allocates a zero-length slice, so the node exits at start-up rather than getting a random identity, and the dead-code removal left `security/hashing_test.go` calling a deleted function, so the module no longer builds under test. Both are one-line fixes, and both would have been caught by running `go build ./... && go test ./...` on the branch — worth adding as a gate given that CI runs `-race` over the whole module. *(Both fixed at `392e17d2`.)*
+
+### 10.5 Assessment of re-test 4
+
+PR #458 closed WRP-10 and cleared all three Phase 0 items. Two things are worth recording.
+
+**WRP-10 closed by moving the bound, not by adding another clamp.** Re-test 3's fix capped the caller's `limit`; #458 caps the *capacity hint* instead and lets the limit bound only the iteration. That is the distinction the finding rests on — the iterator stops at real data, so an untrusted limit can safely govern how far you walk, but never how much you reserve. Capping the request instead had a cost the security review had not predicted: five internal paginators page at 100 and terminate on a short page, so every one of them silently stopped after 20 rows, including the offline-message outbox. A security control that changes a shared primitive's contract needs the callers checked, not just the attacker's path; the existing `TestOutboxRepoSuite` case was what surfaced it.
+
+**Phase 0 existed because the remediation was not built and tested.** Three defects — a node that cannot start, a module that cannot compile under test, and a store that silently truncated every page — all reached `develop` in two commits, and all three were caught by `go build ./... && go test ./...`. That is the cheapest gate available and it is worth making non-optional on remediation branches specifically, since security fixes tend to touch primitives with many callers.
 
 ---
 
-*All Critical findings are closed as of `28eef1ef`. At `2c0802d3` this report describes **33 findings not fully remediated** — 10 rated High, of which 3 are partially addressed — plus two build/start-up regressions introduced by the remediation itself (see Phase 0 in §9). It should be handled accordingly until those are addressed.*
+*All Critical findings are closed as of `28eef1ef`. At `392e17d2` this report describes **32 findings not fully remediated** — 9 rated High, of which 2 are partially addressed. The regressions introduced by the earlier remediation are resolved and the module builds and tests clean. The leading open risks are WRP-06, WRP-13 and WRP-12, all untouched since the original assessment.*
