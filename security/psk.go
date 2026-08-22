@@ -28,15 +28,17 @@ resulting from the use or misuse of this software.
 package security
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"sort"
 	"strconv"
 
 	"github.com/Masterminds/semver/v3"
+)
+
+var (
+	ErrPSKNetworkRequired = errors.New("psk: network required")
+	ErrPSKVersionRequired = errors.New("psk: version required")
 )
 
 type FileSystem interface {
@@ -51,95 +53,20 @@ func (s PSK) String() string {
 	return fmt.Sprintf("%x", []byte(s))
 }
 
-// TODO use github.com/karrick/godirwalk instead
-func walkAndHash(fsys FileSystem, dir string, h io.Writer) error {
-	entries, err := fsys.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("read dir %s: %w", dir, err)
-	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name() < entries[j].Name()
-	})
-
-	for _, entry := range entries {
-		path := dir + "/" + entry.Name()
-		if dir == "." {
-			path = entry.Name()
-		}
-
-		pathHash := sha256.Sum256([]byte(path))
-		_, _ = h.Write(pathHash[:])
-
-		if entry.IsDir() {
-			err := walkAndHash(fsys, path, h)
-			if err != nil {
-				return fmt.Errorf("walk and hash %s: %w", path, err)
-			}
-		} else {
-			fileHash, err := hashFile(fsys, path)
-			if err != nil {
-				return fmt.Errorf("file hash %s: %w", path, err)
-			}
-			_, _ = h.Write(fileHash)
-		}
-	}
-
-	return nil
-}
-
-func hashFile(fsys FileSystem, path string) ([]byte, error) {
-	file, err := fsys.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = file.Close()
-	}()
-
-	h := sha256.New()
-	_, err = io.Copy(h, file)
-	if err != nil {
-		return nil, err
-	}
-
-	return h.Sum(nil), nil
-}
-
-const spbFounding = -((int64(133129) << 16) + 51200)
-
-func generateAnchoredEntropy() []byte {
-	spbFoundingStr := strconv.FormatInt(spbFounding, 10)
-	input := []byte(spbFoundingStr)
-	for range 10 {
-		sum := sha256.Sum256(input)
-		input = sum[:]
-	}
-	return input
-}
-
-var (
-	ErrPSKNetwrokRequired = errors.New("psk: network required")
-	ErrPSKVersionRequired = errors.New("psk: version required")
-)
-
-// GeneratePSK TODO rotate PSK?
+// GeneratePSK - Preshared Secret Key is public for Warpnet goals - it's just separate networks and versions
 func GeneratePSK(network string, v *semver.Version) (PSK, error) {
 	if network == "" {
-		return nil, ErrPSKNetwrokRequired
+		return nil, ErrPSKNetworkRequired
 	}
 	if v == nil {
 		return nil, ErrPSKVersionRequired
 	}
-	// Normalize "mainnet" to "warpnet" to keep PSK consistent
-	// regardless of which alias is used.
+
 	if network == "mainnet" {
 		network = "warpnet"
 	}
-	entropy := generateAnchoredEntropy()
 	majorStr := strconv.FormatUint(v.Major(), 10)
 
 	seed := append([]byte(network), []byte(majorStr)...)
-	seed = append(seed, entropy...)
 	return ConvertToSHA256(seed), nil
 }

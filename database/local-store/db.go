@@ -702,6 +702,8 @@ func (t *warpTxn) ReverseList(prefix DatabaseKey, limit *uint64, cursor *string)
 	return t.list(prefix, limit, cursor, true)
 }
 
+const maxLimit uint64 = 20
+
 func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, reverse bool) ([]ListItem, string, error) {
 	var startCursor DatabaseKey
 	if cursor != nil && *cursor != "" {
@@ -712,11 +714,15 @@ func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, revers
 	}
 
 	if limit == nil {
-		defaultLimit := uint64(20)
+		defaultLimit := maxLimit
+		limit = &defaultLimit
+	}
+	if *limit > 20 {
+		defaultLimit := maxLimit
 		limit = &defaultLimit
 	}
 
-	items := make([]ListItem, 0, *limit) //
+	items := make([]ListItem, 0, *limit)
 	cur, err := iterate(
 		t.txn, prefix, startCursor, limit, true, reverse,
 		func(key string, value []byte) error {
@@ -740,7 +746,11 @@ func (t *warpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([
 	}
 
 	if limit == nil {
-		defaultLimit := uint64(20)
+		defaultLimit := maxLimit
+		limit = &defaultLimit
+	}
+	if *limit > 20 {
+		defaultLimit := maxLimit
 		limit = &defaultLimit
 	}
 

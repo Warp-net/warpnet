@@ -279,6 +279,10 @@ func pollResults(repo PollVotesStorer, tweetId, userId string, optionsNum int) (
 	if optionsNum <= 0 {
 		return event.PollResultsResponse{}, warpnet.WarpError("poll: empty options number")
 	}
+	if optionsNum > 20 {
+		return event.PollResultsResponse{}, warpnet.WarpError("poll: too many options")
+	}
+
 	votes, err := repo.Results(tweetId, optionsNum)
 	if err != nil {
 		return event.PollResultsResponse{}, err
