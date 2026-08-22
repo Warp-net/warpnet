@@ -237,17 +237,15 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 			_ = s.Close()
 		}()
 
-		limit := int64(middleware.MaxLimit)
-		reader := io.LimitReader(s, limit+1)
-		data, err := io.ReadAll(reader)
-		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorf("node: unwrap: reading from stream: %v", err)
-			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
+		data, err := stream.ReadRequest(s)
+		if errors.Is(err, stream.ErrPayloadTooLarge) {
+			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
+			_ = s.Reset()
 			return
 		}
-		if int64(len(data)) > limit {
-			log.Errorf("node: unwrap: %s: payload exceeds the %d byte limit", s.Protocol(), limit)
-			_ = s.Reset()
+		if err != nil {
+			log.Errorf("node: unwrap: reading from stream: %v", err)
+			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
 

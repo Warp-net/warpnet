@@ -169,7 +169,7 @@ func TestUnwrap_OversizedPayloadDoesNotDeadlock(t *testing.T) {
 		return event.Accepted, nil
 	})
 
-	payload := bytes.Repeat([]byte("A"), int(middleware.MaxLimit)+4096)
+	payload := bytes.Repeat([]byte("A"), int(stream.MaxControlSize)+4096)
 	streamRequest(t, sh, testProto, payload)
 
 	assert.False(t, handlerCalled.Load(), "an over-limit payload must never reach the handler")
@@ -180,7 +180,7 @@ func TestUnwrap_PayloadAtLimitIsNotRejectedForSize(t *testing.T) {
 		return event.Accepted, nil
 	})
 
-	payload := bytes.Repeat([]byte("A"), int(middleware.MaxLimit))
+	payload := bytes.Repeat([]byte("A"), int(stream.MaxControlSize))
 	resp := streamRequest(t, sh, testProto, payload)
 
 	assert.NotEmpty(t, resp, "a payload at the ceiling must still get a response")
