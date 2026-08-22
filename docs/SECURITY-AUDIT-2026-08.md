@@ -8,10 +8,11 @@
 | **Assessment date** | 2026-08-14 |
 | **Re-test 1** | `ada3d0a0` — 2026-08-16 |
 | **Re-test 2** | `28eef1ef` — 2026-08-16 |
+| **Re-test 3** | `2c0802d3` — 2026-08-22 |
 | **Assessment type** | White-box source code review + automated static analysis + dependency analysis |
 | **Classification** | Internal — contains unremediated vulnerability details |
 
-> **Re-test status.** Findings struck through (~~like this~~) were re-verified against the revision noted on each and are **closed**. **All four Critical findings are now closed.** See §10 for the verification record.
+> **Re-test status.** Findings struck through (~~like this~~) were re-verified against the revision noted on each and are **closed**. Findings marked ⚠️ are **partially** addressed — the cited code changed but some of the stated impact remains reachable. **All four Critical findings are closed**; re-test 3 closes four more and partially addresses five. See §10 for the verification record.
 
 ---
 
@@ -34,32 +35,45 @@ The four Critical findings:
 3. ~~**Content authorship is taken from the request body, unbound to the signing peer.**~~ **CLOSED.** An attacker set `UserId` to the victim's ID and the node created the tweet *inside the victim's account*. Authorship is now bound to the connection's remote peer.
 4. ~~**The remote dashboard's password gate fails open.**~~ **CLOSED.** The AES codec accepted plaintext when decryption failed, the listener bound all interfaces while printing "localhost", and every request was signed with the owner's key. The channel is now a fail-closed Noise `XX` session in which the client proves possession of a static key enrolled only by a successful login, and the bind address is configurable with an honest banner.
 
-**Re-test outcome.** **All four Critical findings are closed**, together with three lower-severity findings (WRP-21, WRP-22, WRP-29). The fixes address root causes rather than symptoms, are covered by regression tests, and the full suite passes.
+**Re-test outcome.** **All four Critical findings are closed**, together with seven lower-severity findings (WRP-11, WRP-16, WRP-21, WRP-22, WRP-27, WRP-29, WRP-40). The fixes address root causes rather than symptoms and are covered by regression tests.
+
+**Re-test 3 (2026-08-22, `2c0802d3`).** Remediation continued across the High and Medium tiers. Newly closed: **WRP-11** (poll option ceiling), **WRP-16** (per-peer per-route leaky-bucket rate limiting in middleware), **WRP-27** (CSPRNG session tokens) and **WRP-40** (`dht.ModeAuto`). Five findings moved to partial: **WRP-07** (both root secrets now run through Argon2id — the headline "unsalted SHA-256" is gone, but the salt is a deterministic public value and the identity is still password-derived, so there is still no rotation path), **WRP-10** (clamped in the store, still unclamped in two user-repository routes), **WRP-08** (moderator seeds removed from compose, relay/bootstrap seeds still committed), **WRP-17** (report ingress rate-limited on streams but not on the pubsub topic the moderators actually read) and **WRP-39** (dead hashing code removed, unwired route and fields remain).
+
+Two defects were introduced by the re-test-3 remediation itself and are called out where they occur, because both are cheap to fix and one is a hard outage:
+
+1. **The moderator node can no longer start.** `cmd/node/moderator/main.go:77` allocates its random seed as `make([]byte, 0, 32)` — length zero, so `rand.Read` fills nothing and `GenerateKeyFromSeed` returns `ErrEmptySeed`. The process logs `moderator: fail generating key` and exits. See WRP-08.
+2. **The `security` package no longer compiles under test.** `GetCodebaseHashHex` was removed from `security/hashing.go` while `security/hashing_test.go` still calls it, so `go vet ./security/...` and `go test ./...` fail to build. See WRP-39.
 
 WRP-04 took two rounds and is worth recording as a pattern. The first round fixed the *reported defect* — the plaintext fallback — but left the *reported outcome* intact, because the replacement used Noise `NX`, which authenticates the server to the client and not the reverse; the dashboard password had also been removed without anything taking its role. The second round closed it properly by switching to `XX` and gating every privileged route on a client key that only a successful login enrolls. The lesson generalizes: encrypting a channel is not authenticating its peer, and a finding is closed when its stated impact is unreachable, not when the specific code it cited has changed.
 
-The remaining risk is now concentrated in the untouched High-severity findings — chiefly WRP-06 (any peer can forge network-wide moderation verdicts) and WRP-07 (offline recovery of unrevocable account identities).
+The remaining risk is now concentrated in the untouched High-severity findings — chiefly WRP-06 (any peer can forge network-wide moderation verdicts), WRP-12 (Android device identity derived from public `Build` fields) and WRP-13 (50 MiB pre-authentication buffering with no read deadline).
 
 Two further observations worth the reader's attention:
 
-**A cryptographic inversion.** Argon2id with a 64 MiB memory cost protects a *throwaway, deliberately-brute-forceable* media password, while the *permanent, unrevocable account identity* gets one unsalted round of SHA-256 (WRP-07). The strong primitive is already in-tree and applied to the wrong asset. The same inversion appears on Android, where the device identity key is derived purely from public `android.os.Build` fields (WRP-12).
+**~~A cryptographic inversion.~~** ~~Argon2id with a 64 MiB memory cost protects a *throwaway, deliberately-brute-forceable* media password, while the *permanent, unrevocable account identity* gets one unsalted round of SHA-256 (WRP-07). The strong primitive is already in-tree and applied to the wrong asset.~~ **Corrected at `2c0802d3`** — `security/kdf.go` now routes both the identity key and the database key through the same Argon2id parameters. The inversion still applies on Android, where the device identity key is derived purely from public `android.os.Build` fields (WRP-12).
 
-**An integrity mechanism that cannot work.** The codebase-integrity challenge (`core/challenge/`, `GetCodebaseHashHex`) is unwired dead code, and by design could not defend against a tampered node even if wired: a node self-computes and self-reports its own hash, so a modified node simply reports the clean value (WRP-39). It should not be relied on for any trust decision.
+**An integrity mechanism that cannot work.** The codebase-integrity challenge (`core/challenge/`, `GetCodebaseHashHex`) is unwired dead code, and by design could not defend against a tampered node even if wired: a node self-computes and self-reports its own hash, so a modified node simply reports the clean value (WRP-39). It should not be relied on for any trust decision. Most of the dead code is gone as of `2c0802d3`; the route and the event fields are not.
 
 We recommend treating WRP-01 through WRP-04 as blocking for any deployment carrying real user data.
 
 ### Findings by severity
 
-| Severity | Original | Closed at re-test | Open | Open IDs |
-|---|---|---|---|---|
-| **Critical** | 4 | **4** | **0** | — |
-| **High** | 11 | 0 | **11** | WRP-05 … WRP-15 |
-| **Medium** | 13 | 2 | **11** | WRP-16 … WRP-20, WRP-23 … WRP-28 |
-| **Low** | 10 | 1 | **9** | WRP-30 … WRP-38 |
-| **Informational** | 6 | 0 (1 partial) | **6** | WRP-39 … WRP-44 |
-| **Total** | **44** | **7** | **37** | |
+Counted at re-test 3 (`2c0802d3`). "Partial" means the cited code changed but part of the stated impact is still reachable; those findings are counted as open for prioritisation.
 
-**Highest-priority open findings:** WRP-06, WRP-07 (High) and WRP-10, WRP-11 (High, one-line fixes).
+| Severity | Original | Closed | Partial | Open | Open / partial IDs |
+|---|---|---|---|---|---|
+| **Critical** | 4 | **4** | 0 | **0** | — |
+| **High** | 11 | 1 | 3 | **10** | WRP-05, WRP-06, ⚠️WRP-07, ⚠️WRP-08, WRP-09, ⚠️WRP-10, WRP-12 … WRP-15 |
+| **Medium** | 13 | 4 | 1 | **9** | ⚠️WRP-17, WRP-18 … WRP-20, WRP-23 … WRP-26, WRP-28 |
+| **Low** | 10 | 1 | 0 | **9** | WRP-30 … WRP-38 |
+| **Informational** | 6 | 1 | 1 | **5** | ⚠️WRP-39, WRP-41 … WRP-44 |
+| **Total** | **44** | **11** | **5** | **33** | |
+
+**Closed:** WRP-01, WRP-02, WRP-03, WRP-04, WRP-11, WRP-16, WRP-21, WRP-22, WRP-27, WRP-29, WRP-40.
+
+**Highest-priority open findings:** WRP-06 (forgeable moderation verdicts), WRP-13 (pre-auth buffering), WRP-12 (Android identity), plus the WRP-10 residual — two unclamped `make` sites that are still a one-line fix each.
+
+**Fix before anything else:** the moderator start-up failure and the broken `security` test build introduced at `2c0802d3` (see WRP-08 and WRP-39).
 
 ---
 
@@ -371,17 +385,18 @@ Fail closed: when a key is configured, reject any frame that does not decrypt ra
 
 ## 4. High Severity Findings
 
-### WRP-05 — High — The "private network" PSK is derived entirely from public constants
+### WRP-05 — High — The "private network" PSK is derived entirely from public constants — **ACCEPTED AS DESIGNED at `2c0802d3`**
 
-**CWE-798** · `security/psk.go:109-145`, `cmd/node/member/node/member-node.go:147`
+**CWE-798** · `security/psk.go:56-72`, `cmd/node/member/node/member-node.go:147`
 
-The libp2p private-network key is a hash of the network name, the major version, and a constant compiled into every binary:
+> **Status at re-test 3.** The recommendation was adopted in the only form available: the PSK is now *documented* as a partitioning value rather than a secret, and the `spbFounding` / `generateAnchoredEntropy` obfuscation — which suggested a secret where there was none — has been deleted. The derivation is now the honest one-liner `SHA256(network || major)` with the comment "Preshared Secret Key is public for Warpnet goals - it's just separate networks and versions". The property itself is unchanged and remains a documented design decision, so this finding stays listed: it is the premise the rest of the report is scored against, not a defect awaiting a patch.
+
+The libp2p private-network key is a hash of the network name and the major version:
 
 ```go
-const spbFounding = -((int64(133129) << 16) + 51200)   // security/psk.go:109
-entropy := generateAnchoredEntropy()                    // sha256 applied 10x to that constant
+// security/psk.go:69-71 (at 2c0802d3)
+majorStr := strconv.FormatUint(v.Major(), 10)
 seed := append([]byte(network), []byte(majorStr)...)
-seed = append(seed, entropy...)
 return ConvertToSHA256(seed), nil
 ```
 
@@ -417,9 +432,30 @@ The in-code comment at `moderation.go:99-102` shows the authors reasoned careful
 
 ---
 
-### WRP-07 — High — Identity private key and database encryption key derive from one unsalted SHA-256
+### ~~WRP-07 — High — Identity private key and database encryption key derive from one unsalted SHA-256~~ ⚠️ **PARTIALLY CLOSED** — downgraded to **Low**
 
 **CWE-916, CWE-759** · `database/auth-repo.go:106-126`, `security/pk.go:46-60`, `database/local-store/db.go:254-255`
+
+> **Resolution at `2c0802d3`.** Both root secrets now go through Argon2id. `security/kdf.go` adds two derivations that reuse the existing `deriveKey` helper — the same parameters already used for media metadata (`argon2.IDKey`, t=1, 64 MiB, p=4, 32-byte output):
+> ```go
+> // security/kdf.go:40-55
+> func DeriveIdentityKey(username, password, network string) (ed25519.PrivateKey, error) {
+>     seed := deriveKey([]byte(password), derivationSalt(identityKeyContext, network, username))
+>     defer Wipe(seed)
+>     return GenerateKeyFromSeed(seed)
+> }
+> func DeriveDatabaseKey(username, password string) ([]byte, error) {
+>     return deriveKey([]byte(password), derivationSalt(databaseKeyContext, username)), nil
+> }
+> ```
+> `database/auth-repo.go:114` and `database/local-store/db.go:254` call them, and the two ad-hoc SHA-256 seeds are gone. The contexts (`warpnet/kdf/v1/identity-key`, `warpnet/kdf/v1/database-key`) give proper domain separation, so the identity key and the DB key are no longer derivable from one another. The identity seed is wiped after use. Per-guess cost moves from ~two SHA-256 operations to one 64 MiB Argon2id — roughly five orders of magnitude, which takes GPU-farm cracking of a policy-conformant password off the table and is the substance of this finding.
+>
+> **Residual (why this is not fully closed).**
+> 1. **The salt is not random.** `derivationSalt` is `SHA256(context ‖ network ‖ username)` — every input is public, so it is domain separation, not a salt. A single Argon2id table is still valid for one known username across all installs; only the memory-hardness stops precomputation from being worthwhile, and the recommendation for a locally-persisted random salt is unimplemented. Fixing it for the DB key is cheap (nothing outside the machine needs to reproduce it); the identity key cannot take a random salt without changing the derivation model.
+> 2. **The identity is still password-derived, so compromise remains unrevocable.** The preferred design — a random ed25519 identity wrapped under an Argon2id-derived KEK — was not adopted, so there is still no rotation path short of abandoning the account.
+> 3. **No migration path.** Existing accounts derive different keys under the new KDF. `database/local-store/db.go:261` maps Badger's `ErrEncryptionKeyMismatch` to `ErrWrongPassword`, so a pre-`2c0802d3` user is told their password is wrong, with no re-enrollment or re-wrap flow. Confirm this is intended before shipping to installed users.
+>
+> Downgraded from High to **Low** on the residual: offline cracking of a conformant password is now impractical, and what remains is a missing rotation path plus a public salt.
 
 Both of the account's root secrets derive from the password with a single fast hash and **no salt**. The ed25519 identity key:
 
@@ -451,9 +487,23 @@ This is a brain wallet. The corresponding public key **is the libp2p peer ID**, 
 
 ---
 
-### WRP-08 — High — Predictable and committed node seeds allow infrastructure impersonation
+### WRP-08 — High — Predictable and committed node seeds allow infrastructure impersonation — ⚠️ **PARTIALLY ADDRESSED**
 
 **CWE-798, CWE-330** · `config/config.go:114-117`, `cmd/node/relay/main.go:80-85`, `cmd/node/moderator/main.go:76-77`, `deploy/docker-compose-testnet.yml`
+
+> **Status at `2c0802d3`.** Addressed for moderators in intent, unaddressed for relays and bootstrap nodes, and the moderator change does not work.
+>
+> **(a) Moderator — the fix is a start-up failure.** `NODE_SEED` was removed from every moderator service in `deploy/docker-compose-testnet.yml` and `deploy/docker-compose-warpnet.yml`, and `cmd/node/moderator/main.go` no longer reads it. The replacement does not generate a key:
+> ```go
+> // cmd/node/moderator/main.go:77-78
+> seed := make([]byte, 0, 32)   // length 0, capacity 32
+> _, _ = rand.Read(seed)        // fills nothing
+> ```
+> `rand.Read` writes into `seed[:len(seed)]`, which is empty, so `GenerateKeyFromSeed` hits its `len(seed) == 0` guard (`security/pk.go:46`), returns `ErrEmptySeed`, and `main` logs `moderator: fail generating key` and returns. **The moderator node cannot start at this revision.** The one-character fix is `make([]byte, 32)`. Until then the moderator identity is neither predictable nor random — it does not exist. (This is invisible in deployment today only because the moderator services are commented out for memory reasons.)
+>
+> **(b) Relay and bootstrap — unchanged.** `cmd/node/relay/main.go:80` still derives from `config.Config().Node.Seed`, and `NODE_SEED=warpnet1|warpnet2|warpnet3` is still committed — and now *active* rather than commented — in `deploy/docker-compose-testnet.yml:16,34,52`. `NODE_SEED=echo-testnet` remains at line 165. The `config.go:116` default is still `"seed" + network + dbDir + host + port`. The relay's own random fallback has the same empty-slice bug (`main.go:81-83`), but it never runs because the config default is never empty. **The three bootstrap identities remain recomputable by any reader of the repository, and have not been rotated.**
+>
+> **Still to do:** fix the moderator seed allocation; move the relay and bootstrap seeds to injected deployment secrets; rotate the three currently-deployed bootstrap identities.
 
 Relay, moderator, and bootstrap identities derive from a `NODE_SEED` string via `GenerateKeyFromSeed`. The default seed is built entirely from public values:
 
@@ -482,9 +532,27 @@ The updater fetches an archive and a SHA-256 listing from a GitHub release and c
 
 ---
 
-### WRP-10 — High — Unclamped `limit` on public list routes causes remote memory exhaustion
+### WRP-10 — High — Unclamped `limit` on public list routes causes remote memory exhaustion — ⚠️ **PARTIALLY CLOSED**
 
 **CWE-770, CWE-789** · `database/local-store/db.go:719,747`, `database/user-repo.go:485,557-558`
+
+> **Status at `2c0802d3`.** Both cited `db.go` sites are fixed; the two cited `user-repo.go` sites are not, so three of the five reachable routes are closed and two remain exploitable.
+>
+> **Fixed.** `database/local-store/db.go:723-726,755-758` clamps to `maxLimit = 20` in both `list` and `ListKeys` before the `make` at lines 728 and 760, at the store boundary as recommended. That closes `PUBLIC_GET_USERS` (`UserRepo.List` pre-allocates from `len(items)` off the clamped page), `PUBLIC_GET_FOLLOWERS` and `PUBLIC_GET_FOLLOWINGS` (`FollowRepo.GetFollowers`/`GetFollowings` hand `limit` straight to `ListKeys`).
+>
+> **Still open.** Two user-repository routes derive their own capacity *above* the store and never see the clamp:
+> ```go
+> // database/user-repo.go:467-469, 480 — Search (PUBLIC_GET_USERS_SEARCH)
+> want := uint64(20)
+> if limit != nil && *limit > 0 { want = *limit }   // attacker value, unclamped
+> ...
+> hits := make([]domain.User, 0, want)
+>
+> // database/user-repo.go:530-533, 552-553 — WhoToFollow (PUBLIC_GET_WHOTOFOLLOW)
+> native := make([]domain.User, 0, want)
+> other  := make([]domain.User, 0, want)
+> ```
+> `domain.User` is 240 bytes, so this is *worse* per unit than the original `ListItem` path: `{"query":"a","limit":100000000}` on `PUBLIC_GET_USERS_SEARCH` requests ~24 GB, and `WhoToFollow` asks for two such slices. The inner `txn.List` call is now clamped, so the scan is bounded — but the pre-allocation happens first and is what kills the process. **Fix:** clamp `want` in both functions, or drop the capacity hint entirely (the store returns at most 20 rows now, so the hint is worthless).
 
 An attacker-controlled `limit` is used directly as a slice capacity with no ceiling:
 
@@ -502,9 +570,17 @@ Reachable from public routes that forward `ev.Limit` unclamped: `PUBLIC_GET_USER
 
 ---
 
-### WRP-11 — High — Unbounded poll `optionsNum` causes remote memory exhaustion
+### ~~WRP-11 — High — Unbounded poll `optionsNum` causes remote memory exhaustion~~ ✅ CLOSED
 
 **CWE-770** · `database/poll-repo.go:180`, `core/handler/poll.go:90,123,150`
+
+> **Resolution.** **CLOSED at `2c0802d3`.** `core/handler/poll.go:282-284` rejects the request before any allocation:
+> ```go
+> if optionsNum > 20 {
+>     return event.PollResultsResponse{}, warpnet.WarpError("poll: too many options")
+> }
+> ```
+> Verified that this covers every path: `pollResults` is the only caller of `PollRepo.Results` in the tree, and both `PUBLIC_GET_POLL` (`poll.go:128`) and `PUBLIC_POST_POLL_VOTE` (`poll.go:168`) reach `Results` only through it. The clamp sits in the handler rather than in `poll-repo.go` as recommended, which leaves the repository trusting its caller — acceptable while `pollResults` is the sole entry point, but a bound inside `Results` would be more durable.
 
 ```go
 // database/poll-repo.go:180 — only guard is optionsNum <= 0
@@ -557,6 +633,8 @@ That path is reached automatically during discovery, so a malicious peer this no
 
 **Recommendation.** Set a short read deadline on inbound streams before reading. Size limits per route — JSON control messages need kilobytes, not 50 MiB — reserving a large ceiling only for media. Wrap outbound response reads in `io.LimitReader` with a per-route cap and a deadline.
 
+> **Re-confirmed open at `2c0802d3`, and note the ordering.** The read moved to `core/node/node.go:239-241` but is otherwise unchanged, there is still no `SetReadDeadline` on any inbound remote stream, and `core/stream/stream.go:251-252` still does an unbounded `buf.ReadFrom(rw)`. Importantly, the new rate limiter (WRP-16) does **not** mitigate this: `unwrap` is the outermost wrapper, so the full 50 MiB is buffered *before* `RateLimiterMiddleware` — or any other middleware — is entered. Rate limiting a request you have already read into the heap does not bound the heap. Moving the size and deadline enforcement ahead of the read, or the limiter ahead of `unwrap`, is the fix.
+
 ---
 
 ### WRP-14 — High — Snap release workflow grants `write-all` while running an unpinned third-party action
@@ -585,11 +663,11 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 
 ## 5. Medium Severity Findings
 
-**WRP-16 — No application-layer rate limiting on content creation.** `core/handler/*`, `core/middleware/`. Handlers validate shape only (280-rune tweets, poll bounds); there is no per-peer or per-user throttle anywhere. The only limits are the 50 MiB payload cap and an idempotency cache keyed by message ID, neither of which throttles distinct requests. Combined with WRP-01 and WRP-03 this permits unbounded forged tweets, reactions, follows, and notifications. **Fix:** token-bucket limits per authenticated peer and per acting user, applied in middleware before dispatch.
+~~**WRP-16 — No application-layer rate limiting on content creation.**~~ ✅ **CLOSED at `2c0802d3`.** `core/middleware/rate-limiter.go` adds a leaky-bucket limiter keyed on `route|remotePeer`, wired into the chain ahead of auth and dispatch on all three node types (`cmd/node/{member,relay,moderator}/node/*-node.go`). Routes fall into eight named classes — writes get burst 30 / 120 per minute, uploads 10 / 30, pairing 5 / 15, reports 10 / 30 — with unlisted routes defaulting by `IsGet()`. Buckets live in a 4096-entry LRU with a 10-minute TTL, so the limiter is itself bounded, and loopback and own-node streams are exempt. This is the recommended shape: token-bucket, per authenticated peer, in middleware before dispatch. Per-*acting-user* limiting was not added, but with WRP-03 closed the actor is bound to the peer, so per-peer is now equivalent for content routes. *Not covered:* pubsub-delivered events, which never pass through a stream handler (see WRP-17), and anything before `unwrap`'s 50 MiB read (see WRP-13).
 
-**WRP-17 — Report channel enables targeted takedowns and moderator resource exhaustion.** `core/handler/report.go:56-118`, `cmd/node/moderator/moderator.go:204-233`. Any user may report any target; validation covers only reason length and type. Each report opens a vote round involving a fetch plus LLM inference. Flooding `ReportsTopic` forces unbounded inference rounds across the moderator fleet. Reporter identity *is* correctly stamped by the publisher rather than taken from the body. **Fix:** rate-limit reports per reporter identity, deduplicate and threshold before opening rounds, and bound concurrent rounds.
+**WRP-17 — Report channel enables targeted takedowns and moderator resource exhaustion.** ⚠️ **Partially addressed at `2c0802d3`.** `core/handler/report.go:56-118`, `cmd/node/moderator/moderator.go:204-233`. `PUBLIC_POST_REPORT` is now rate-limited to burst 10 / 30 per minute per peer (`rate-limiter.go:80`), which bounds report *ingress through a member node's stream handler*. It does not bound the path that matters: `core/handler/report.go` republishes to `event.ReportsTopic`, and the moderator subscribes to that topic directly (`cmd/node/moderator/pubsub/publisher.go:104`), so an attacker publishing straight to `ReportsTopic` reaches the fleet without touching a rate-limited stream. Any user may still report any target, validation still covers only reason length and type, and there is still no dedup or threshold before a round opens. Reporter identity *is* correctly stamped by the publisher rather than taken from the body. **Fix:** apply the limit where reports are consumed — a per-reporter budget in the moderator's topic handler — plus dedup, thresholding, and a cap on concurrent rounds.
 
-**WRP-18 — No rate limiting or lockout on login.** ⬆️ **Priority raised at re-test.** `cmd/node/member/auth/auth.go:103-120`, `database/local-store/db.go:245-260`. No attempt counting, backoff, or lockout; `ErrWrongPassword` returns as fast as Badger can attempt a key (re-confirmed at `28eef1ef`). With WRP-04 closed, login is now the *only* way into the dashboard — which makes it the sole remaining network-facing attack surface there, and `node.server.host` still defaults to `0.0.0.0`. The credential it guards is the account password, which by WRP-07 also protects the identity key. **Fix:** per-connection and per-IP failed-attempt backoff and lockout; consider defaulting the bind to `127.0.0.1`.
+**WRP-18 — No rate limiting or lockout on login.** `cmd/node/member/auth/auth.go:103-120`, `database/local-store/db.go:245-263`. Re-confirmed open at `2c0802d3`: still no attempt counting, backoff, or lockout, and `node.server.host` still defaults to `0.0.0.0` (`config/config.go:74`). Two things changed, in opposite directions. The per-attempt cost is no longer "as fast as Badger can attempt a key" — WRP-07's Argon2id derivation now sits in front of the Badger open, so online guessing is throttled incidentally by ~5 orders of magnitude, which is the bulk of the original risk. But that same derivation allocates **64 MiB per attempt** on an unauthenticated, unthrottled, internet-facing endpoint, which converts the missing throttle from a credential-guessing problem into a memory-exhaustion one: a few dozen concurrent login attempts will OOM a 2 GiB node. **Fix:** per-connection and per-IP failed-attempt backoff and lockout — now load-shedding as much as anti-guessing — plus a cap on concurrent in-flight derivations; consider defaulting the bind to `127.0.0.1`.
 
 **WRP-19 — Social blocks are not enforced at the connection layer.** `database/node-repo.go:769-807`, `core/discovery/discovery.go:254`. `BlocklistPermanent` is written to the node repository, but with no `ConnectionGater` installed, `IsBlocklisted` is consulted only during discovery and for tweet-level content. A blocked peer can still dial the node and open streams directly, including the WRP-01 and WRP-03 surfaces — so "blocking" an abuser does not actually stop them. **Fix:** install a `ConnectionGater` consulting `IsBlocklisted` in `InterceptSecured`/`InterceptAddrDial`, and drop existing connections on block.
 
@@ -607,7 +685,7 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 
 **WRP-26 — Third-party GitHub Actions pinned to mutable tags.** `softprops/action-gh-release@v2`, `codecov/codecov-action@v5`, `docker/*@v3/@v6`, `gradle/actions/setup-gradle@v4`, and notably `golangci/golangci-lint-action@v8` **with `version: latest`** (`tests-static-check.yaml:30-33`), in jobs carrying `contents: write` and `packages: write`. **Fix:** pin to full commit SHAs; pin the linter version.
 
-**WRP-27 — Session token entropy derives from the password rather than a CSPRNG.** `database/auth-repo.go:106-113`. The seed is `username@password@network@randChar@time.Now().String()`, where `randChar` contributes only ~7 bits. Token secrecy rests on the password and a timestamp rather than on random bytes. Not independently exploitable, but the near-zero random contribution is misleading. **Fix:** generate from 32 bytes of `crypto/rand`.
+~~**WRP-27 — Session token entropy derives from the password rather than a CSPRNG.**~~ ✅ **CLOSED at `2c0802d3`.** `database/auth-repo.go:107-111` now reads 32 bytes from `crypto/rand` and base64-encodes them directly; the `username@password@network@randChar@time.Now()` seed and the SHA-256 over it are gone. The token no longer derives from the password at all, so it is independent of WRP-07. Note that this fixes the token's *entropy* only — its lifecycle is still unbounded (WRP-31).
 
 **WRP-28 — Predictable RNG for adversarial moderator audit sampling.** `cmd/node/moderator/moderator/moderator.go:162` seeds sampling with `rand.New(rand.NewSource(time.Now().UnixNano()))`. The `//nolint:gosec` annotation reasons that sampling is "not crypto" — but sampling here *is* adversarial: a node that predicts when it will be challenged can behave selectively while misbehaving otherwise. **Fix:** use `crypto/rand` for challenge selection.
 
@@ -619,9 +697,9 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 
 **WRP-30 — Non-constant-time session token comparison.** `core/handler/pair.go:61` uses `!=`. The token is high-entropy and sits behind libp2p encryption and network jitter, so practical exploitation is unlikely. **Fix:** `crypto/subtle.ConstantTimeCompare`.
 
-**WRP-31 — Pairing token has no expiry, single-use property, or revocation.** `core/handler/pair.go:57-64`, `database/auth-repo.go:98-100`. The token is set once and lives for the whole process lifetime, and `domain/warpnet.go:43-58` renders it together with the PSK into the pairing QR. A token that leaks once — a screenshot, a shoulder-surfed QR, a log line — grants permanent device pairing. **Fix:** short-lived single-use tokens with a revocation path; treat the QR as a secret in the UX.
+**WRP-31 — Pairing token has no expiry, single-use property, or revocation.** `core/handler/pair.go:57-64`, `database/auth-repo.go:98-100`. Re-confirmed open at `2c0802d3`. The token is now 32 CSPRNG bytes (WRP-27), but the lifecycle is unchanged: `auth-repo.go:98-100` still sets it once per process and never rotates or expires it, and `domain/warpnet.go:43-58` still renders it with the PSK into the pairing QR. A token that leaks once — a screenshot, a shoulder-surfed QR, a log line — grants permanent device pairing. **Fix:** short-lived single-use tokens with a revocation path; treat the QR as a secret in the UX.
 
-**WRP-32 — Frontend persists the channel AES key in `localStorage`.** `frontend/src/lib/transport.js:112`. Any XSS in the dashboard exfiltrates the channel key permanently. **Fix:** hold in memory or `sessionStorage`.
+**WRP-32 — Frontend persists a long-lived channel credential in `localStorage`.** ↻ **Re-scoped at `2c0802d3` — same defect, different secret.** The AES key is gone from `localStorage` along with the AES codec (WRP-22), and `frontend/src/lib/transport.js:87-102` now stores only the pinned server static-key fingerprint, which is public. But `frontend/src/lib/noise.js:197-208` persists the client's **x25519 static private key** there instead, and after the WRP-04 fix that key *is* the dashboard credential: the bridge enrols it on successful login and authorises every subsequent privileged route on it (`cmd/node/member/remote/bridge.go:181-182,267-277,305-307`). Any XSS in the dashboard therefore still exfiltrates a reusable credential — arguably a better one than before, since possession alone authorises routes for as long as the node process lives. **Fix:** hold the static key in memory or `sessionStorage` and re-enrol on each browser session. Server-side enrolment is already in-memory and does not survive a node restart, so a session-scoped client key costs nothing in usability. Pair with the CSP from WRP-33.
 
 **WRP-33 — No Content-Security-Policy on the Wails renderer.** `frontend/public/index.html`, `cmd/node/member/main.go:63-65`. No live XSS sink was found — there is no `v-html`, mustache escaping is used throughout, and `v-linkify` runs on already-escaped content with `ignoreTags:["script","style"]` — but the renderer displays bridged Mastodon content and loads remote media, and `app.go:280` `Call()` signs every message with the owner's key. Any future XSS would therefore act with full owner authority. **Fix:** add a strict CSP (`default-src 'self'`, constrained `img-src`/`frame-src`, no `unsafe-inline`).
 
@@ -644,8 +722,12 @@ The discovery topic handler trusts advertised `AddrInfo` structures from unauthe
 Beyond being unwired, the scheme could not achieve its goal: a node self-computes and self-reports its own codebase hash, so a tampered node simply reports the clean value. Without a hardware root of trust or remote attestation binding the reported hash to the executing binary, it can detect accidental divergence among honest nodes but not a motivated adversary. **Recommendation:** either remove the dead types and routes to avoid conveying assurance that does not exist, or replace with genuine attestation if the threat model requires it. Never gate an authorization decision on a self-reported hash.
 
 > ⚠️ **PARTIALLY ADDRESSED at `ada3d0a0`.** The `core/challenge/` directory is gone. Remnants still convey the illusion of a control: `PUBLIC_POST_NODE_CHALLENGE` (`event/paths.go:33`), `SelfHashHex` (`event/event.go:522`), `RelaySelfHashHex` (`database/node-repo.go:72`) and `GetCodebaseHashHex` (`security/hashing.go:44`) all remain, none of them wired. Recommend finishing the removal.
+>
+> ⚠️ **STILL PARTIAL at `2c0802d3` — and the removal broke the build.** `GetCodebaseHashHex` is gone from `security/hashing.go`, and `walkAndHash`, `hashFile`, `spbFounding` and `generateAnchoredEntropy` are gone from `security/psk.go`. Two problems:
+> 1. **`security/hashing_test.go` was not updated** and still calls `GetCodebaseHashHex` at lines 76, 89-90, 108-109 and 120. The package therefore fails to compile under test — `go vet ./security/...` reports `undefined: GetCodebaseHashHex`, and `go test ./...` cannot build, so CI's `-race` run over the module fails at this revision. Delete those four tests (`TestGetCodebaseHashHex*`) along with the code they cover. Production code builds cleanly; this is test-only.
+> 2. **The remaining remnants are unchanged.** `PUBLIC_POST_NODE_CHALLENGE` (`event/paths.go:33`), `SelfHashHex` (`event/event.go:524`) and `RelaySelfHashHex` (`database/node-repo.go:72`) are all still present and still unwired — and the route is now referenced by the new rate limiter's table (`core/middleware/rate-limiter.go:83`), which gives a dead route the appearance of a live, deliberately-throttled one.
 
-**WRP-40 — DHT forced to server mode on all nodes.** `core/dht/dht.go:127` sets `dht.ModeServer` unconditionally, so NAT'd home nodes serve DHT queries and store records for arbitrary peers. Consider `ModeAuto`.
+~~**WRP-40 — DHT forced to server mode on all nodes.**~~ ✅ **CLOSED at `2c0802d3`.** `core/dht/dht.go:127` now sets `dht.ModeAuto`, so a node advertises itself as a DHT server only when libp2p judges it publicly reachable; NAT'd home nodes fall back to client mode and no longer store records for arbitrary peers.
 
 **WRP-41 — Hardcoded Echo bot credential.** `cmd/node/member/echo-member.go:64-65` hardcodes the bot password and owner ID, making that identity reproducible by anyone. Low impact for a demo bot, but it should not be a committed constant if the identity is meant to be authentic.
 
@@ -666,7 +748,8 @@ These controls were reviewed and found sound. They should be preserved through r
 - **Replay protection.** A 5-minute symmetric freshness window rejects stale and replayed remote messages (`core/middleware/auth.go:107-112`).
 - **Idempotency cache.** Peer-scoped keys, bounded entry count and payload size, defensive copies, and single-leader collapse of concurrent duplicates (`core/middleware/idempotency.go:95-173`).
 - **Reporter identity is not spoofable.** Report events stamp the reporter from the verified publishing envelope, not the body (`member-pubsub.go:141-143`); moderator ballots likewise take `ModeratorID` from the verified gossip envelope (`vote/vote.go:54-56`), preventing ballot stuffing by a single node.
-- **Encryption at rest.** BadgerDB is genuinely encrypted (`database/local-store/db.go:255`) — the weakness is the KDF (WRP-07), not the absence of encryption.
+- **Encryption at rest.** BadgerDB is genuinely encrypted (`database/local-store/db.go:258`), and as of `2c0802d3` the key comes from Argon2id rather than a bare SHA-256 (WRP-07).
+- **Per-peer route rate limiting.** *Added at `2c0802d3`.* `core/middleware/rate-limiter.go` — leaky bucket keyed on route and remote peer, classed limits per route family, bucket store bounded by an expiring 4096-entry LRU, loopback exempt (WRP-16).
 - **Media metadata cryptography.** AES-256-GCM with Argon2id (64 MiB), random salt and nonce, and key zeroization after use (`security/aes.go:75-123`).
 - **Video parsing is properly defensive.** Strict ISO-BMFF `ftyp` validation, a bounded box walk with no infinite loop or overflow, a MIME allowlist, and a 36 MiB cap (`core/handler/video.go:117-280`).
 - **EXIF parsing is never exposed to untrusted bytes.** The `dsoprea` decoder runs only on Warpnet's own re-encoded JPEG output (`image.go:276`), so malformed-EXIF panics are unreachable from peer input.
@@ -694,22 +777,27 @@ These controls were reviewed and found sound. They should be preserved through r
 3. ~~**WRP-03** — bind actor identity to the authenticated peer in one shared helper.~~ ✅ Done.
 4. ~~**WRP-04** — make the codec fail closed, fix the bind and banner, authenticate the client.~~ ✅ Done (two rounds).
 
-Findings 1–3 shared a root cause and were correctly fixed together as a single authorization layer rather than as three patches. **Phase 2 is now the priority**, and within it WRP-06 and WRP-07 carry the most impact, while WRP-10 and WRP-11 are the cheapest.
+Findings 1–3 shared a root cause and were correctly fixed together as a single authorization layer rather than as three patches.
 
-**Phase 2 — High priority**
+**Phase 0 — Regressions introduced by the Phase 2 work (fix first, both trivial)**
 
-5. **WRP-07 + WRP-12** — put Argon2id with a stored random salt between the password and both the identity and database keys; source the Android device identity from a Keystore-persisted random seed.
-6. **WRP-06 + WRP-08** — introduce a pinned moderator trust root and rotate all seed-derived infrastructure identities. These must ship together; neither is effective alone.
-7. **WRP-10 + WRP-11** — clamp `limit` and `optionsNum` at the database boundary. These are one-line fixes for unauthenticated remote crashes and should not wait for Phase 2 scheduling if resources allow.
+- **Moderator seed allocation** — `cmd/node/moderator/main.go:77`: `make([]byte, 0, 32)` → `make([]byte, 32)`. Without it the moderator node exits at start-up. (WRP-08)
+- **Broken test build** — delete the four `TestGetCodebaseHashHex*` tests in `security/hashing_test.go`, which reference a function removed from the package. Without it `go test ./...` cannot build. (WRP-39)
+
+**Phase 2 — High priority** — partially complete
+
+5. ~~**WRP-07**~~ ✅ Argon2id now sits between the password and both keys. Residual: the salt is a public deterministic value, there is still no identity-rotation path, and existing accounts have no migration (they surface as "wrong password"). **WRP-12** remains — source the Android device identity from a Keystore-persisted random seed.
+6. **WRP-06 + WRP-08** — introduce a pinned moderator trust root and rotate all seed-derived infrastructure identities. These must ship together; neither is effective alone. WRP-08 is half-done: moderator seeds are out of compose (but the code that replaced them does not run), while the three bootstrap seeds remain committed and unrotated.
+7. ~~**WRP-11**~~ ✅ Done — `optionsNum` capped at 20 in the handler. **WRP-10** is half-done: clamped in `local-store`, still unclamped in `UserRepo.Search` and `UserRepo.WhoToFollow`. Two `make` calls; finish it.
 8. **WRP-09** — sign release artifacts and verify signatures before installing updates.
-9. **WRP-13** — add read deadlines and per-route size limits; bound outbound response reads.
+9. **WRP-13** — add read deadlines and per-route size limits; bound outbound response reads. Note the new rate limiter does not help here: it runs after the 50 MiB read.
 10. **WRP-14** — reduce the Snap workflow to least privilege and SHA-pin its actions.
 11. **WRP-15** — filter gossip-learned addresses through `IsPublicMultiAddress` before dialing.
 
 **Phase 3 — Hardening**
 
-12. WRP-16 through WRP-28: rate limiting, connection-layer block enforcement, secret removal from compose, container and monitoring hardening, SHA-pinned actions, CSPRNG for tokens and audit sampling.
-13. WRP-29 through WRP-44: signature domain separation, constant-time comparisons, pairing token lifecycle, CSP, build hermeticity, and removal of the dead challenge code.
+12. WRP-17 through WRP-28: extend rate limiting to the pubsub report path, login throttling (now also a load-shedding concern — see WRP-18), connection-layer block enforcement, container and monitoring hardening, SHA-pinned actions, CSPRNG for audit sampling. ~~WRP-16~~ ✅ and ~~WRP-27~~ ✅ are done.
+13. WRP-29 through WRP-44: constant-time comparisons, pairing token lifecycle, moving the dashboard client key out of `localStorage`, CSP, build hermeticity, and finishing removal of the dead challenge route and fields. ~~WRP-40~~ ✅ is done.
 
 **Cross-cutting recommendation.** WRP-05 (the public PSK) is not independently fixable in a meaningful way, and attempting to "fix" it by making the PSK secret would be the wrong lesson. The correct posture is to **document the network as publicly joinable and design every authorization decision on that assumption**. Several findings in this report exist because the PSK was implicitly treated as a membership boundary. Making that assumption explicit in the threat model is the single change most likely to prevent the next instance of this bug class.
 
@@ -736,6 +824,8 @@ Eight vulnerabilities affect code reachable from this module. Seven stem from th
 
 *Operational note:* a toolchain-version mismatch causes `govulncheck` to fail package loading rather than report findings. Confirm the CI step fails loudly on that condition rather than passing silently.
 
+**Re-confirmed open at `2c0802d3`:** `go.mod` still declares `go 1.26.3`, so all eight remain applicable. The one-line bump is still outstanding, and `security/hashing_test.go` currently breaks package loading for the whole module, which is exactly the silent-pass condition noted above.
+
 ### A.2 `gosec`
 
 128 files, 29,951 lines, 14 findings. Manual triage of the six HIGH-confidence results:
@@ -757,17 +847,21 @@ No private key material (`.pem`, `.key`, `.p12`, `.jks`) in the working tree or 
 
 ### A.4 Test suite
 
-`go test` passes across `security`, `core/middleware`, `event`, `database`, and `database/local-store`. The findings in this report are design-level defects, not regressions — the code behaves as written.
+At the audited revision `go test` passed across `security`, `core/middleware`, `event`, `database`, and `database/local-store`. The findings in this report are design-level defects, not regressions — the code behaves as written.
+
+**At `2c0802d3` the module no longer builds under test.** `go build ./...` is clean, but `go vet ./security/...` fails with `undefined: GetCodebaseHashHex` (`security/hashing_test.go:76`), which blocks `go test ./...` for the whole module. See WRP-39.
 
 ---
 
 ## Appendix B — Threat Model Summary
 
+Closed findings are struck through; the capability rows themselves are unchanged, since WRP-05 still holds.
+
 | Attacker | Capability assumed | Findings enabled |
 |---|---|---|
-| **Any Internet host** | Derive the public PSK and join the overlay (WRP-05) | WRP-01, WRP-02, WRP-03, WRP-06, WRP-10, WRP-11, WRP-13, WRP-15, WRP-16, WRP-23 |
-| **Network-adjacent host** | Reach a hosted node's dashboard port | WRP-04, WRP-18, WRP-25 |
-| **Offline attacker** | Knows a target's peer ID and username, or holds a stolen DB volume | WRP-07, WRP-08, WRP-22 |
+| **Any Internet host** | Derive the public PSK and join the overlay (WRP-05) | ~~WRP-01~~, ~~WRP-02~~, ~~WRP-03~~, WRP-06, ⚠️WRP-10, ~~WRP-11~~, WRP-13, WRP-15, ~~WRP-16~~, WRP-23 |
+| **Network-adjacent host** | Reach a hosted node's dashboard port | ~~WRP-04~~, WRP-18, WRP-25 |
+| **Offline attacker** | Knows a target's peer ID and username, or holds a stolen DB volume | ⚠️WRP-07, ⚠️WRP-08, ~~WRP-22~~ |
 | **Supply-chain attacker** | Compromises a release credential or third-party action | WRP-09, WRP-14, WRP-26, WRP-37 |
 | **Co-located mobile app** | Reads public `Build` fields; launches exported activities | WRP-12, WRP-34 |
 | **Local attacker** | Code execution on the user's machine | WRP-32, WRP-33, WRP-42 |
@@ -778,6 +872,7 @@ No private key material (`.pem`, `.key`, `.p12`, `.jks`) in the working tree or 
 
 **Re-test 1:** 2026-08-16 against `ada3d0a0`, covering 68 commits since the audited revision `27ead3ce`.
 **Re-test 2:** 2026-08-16 against `28eef1ef`, covering the WRP-04 remediation (`4957085b`, `6a93896a`).
+**Re-test 3:** 2026-08-22 against `2c0802d3`, covering the 10 commits since `28eef1ef` (`24ad32d1`, `9f037278`, `fb714743`, `2ec79f38`, `67d94421`, `656fb962`, `37c60ebb`, `7e73b2f4`, `8404c0ef`, `2c0802d3`) and re-checking every finding still listed as open.
 
 Every claim below was verified by reading the changed code; claims about exploitability were verified by execution.
 
@@ -789,22 +884,51 @@ Every claim below was verified by reading the changed code; claims about exploit
 | WRP-02 | Critical | ✅ **Closed** (r1) | Re-signing removed from `SelfPublish`; loopback reports the real sender |
 | WRP-03 | Critical | ✅ **Closed** (r1) | `VerifyAuthorship` binds actor to `RemotePeer()` at 16 call sites |
 | WRP-04 | Critical | ✅ **Closed** (r2) | Noise `XX` + login-gated key enrollment; adversarial test returns 401 on every privileged route |
+| WRP-11 | High | ✅ **Closed** (r3) | `poll.go:282` rejects `optionsNum > 20`; `pollResults` is the only path to `Results` |
+| WRP-16 | Medium | ✅ **Closed** (r3) | `RateLimiterMiddleware` per route+peer, wired ahead of dispatch on all three node types |
 | WRP-21 | Medium | ✅ **Closed** (r1) | Committed password removed from all tracked YAML |
 | WRP-22 | Medium | ✅ **Closed** (r1) | `AESKeyFromPassword`/`AESCodec` removed |
+| WRP-27 | Medium | ✅ **Closed** (r3) | 32 bytes of `crypto/rand`; password no longer in the token seed |
 | WRP-29 | Low | ✅ **Closed** (r1) | `Destination` now covered by `SigningBytes()` |
-| WRP-39 | Info | ⚠️ **Partial** (r1) | `core/challenge/` removed; unwired remnants remain |
+| WRP-40 | Info | ✅ **Closed** (r3) | `core/dht/dht.go:127` set to `dht.ModeAuto` |
+| WRP-07 | High | ⚠️ **Partial** (r3) | Argon2id via `security/kdf.go`; salt still public and deterministic, no rotation path, no migration for existing accounts |
+| WRP-08 | High | ⚠️ **Partial** (r3) | Moderator seeds out of compose but the replacement fails to start the node; bootstrap seeds still committed and unrotated |
+| WRP-10 | High | ⚠️ **Partial** (r3) | Clamped at `local-store` (`maxLimit = 20`); `UserRepo.Search`/`WhoToFollow` still pre-allocate from the raw `limit` |
+| WRP-17 | Medium | ⚠️ **Partial** (r3) | `PUBLIC_POST_REPORT` stream limited; `ReportsTopic` pubsub ingress unlimited, no dedup or threshold |
+| WRP-39 | Info | ⚠️ **Partial** (r1, r3) | Hashing helpers removed — but `hashing_test.go` still calls them, so the package fails to build under test; route and event fields remain |
 
-### 10.2 Confirmed still open (spot-checked at `ada3d0a0`, WRP-18 re-confirmed at `28eef1ef`)
+### 10.2 Confirmed still open at `2c0802d3`
 
 | ID | Finding | Evidence |
 |---|---|---|
-| WRP-05 | PSK derived from public constants | `security/psk.go` unchanged |
-| WRP-06 | No moderator trust root | `core/handler/moderation.go:103-117` still derives the key from the claimed `ModeratorID`; no allowlist |
-| WRP-07 | Unsalted SHA-256 identity and DB keys | `database/auth-repo.go:113-120` unchanged |
-| WRP-10 | Unclamped `limit` | `database/local-store/db.go:719,747` still `make(..., 0, *limit)` |
-| WRP-11 | Unbounded `optionsNum` | `database/poll-repo.go:180` still guards only `<= 0` |
-| WRP-13 | 50 MiB pre-auth buffer, no read deadline | `MaxLimit` unchanged; no `SetReadDeadline` on inbound streams |
+| WRP-05 | PSK derived from public values | `security/psk.go:69-71` — now `SHA256(network‖major)`; documented as public by design, unchanged as a property |
+| WRP-06 | No moderator trust root | `core/handler/moderation.go:103-116` still derives the key from the claimed `ModeratorID`; exhaustive search finds no allowlist |
+| WRP-09 | Update checksum shares the artifact's trust domain | `core/selfupdate/*` — checksum listing only, no signature verification |
+| WRP-12 | Android identity from public `Build` fields | `Ed25519IdentityStore.kt:31-67` unchanged |
+| WRP-13 | 50 MiB pre-auth buffer, no read deadline | `core/node/node.go:239-241`; no `SetReadDeadline` on inbound remote streams; `core/stream/stream.go:252` still unbounded |
+| WRP-14 | Snap workflow `write-all` + mutable action | `.github/workflows/snap.yml:13,30` unchanged |
+| WRP-15 | Unfiltered gossip addresses dialed | `core/pubsub/gossip.go:634-636` passes `AddrInfo` straight through; `IsPublicMultiAddress` used only at `member-node.go:894` |
+| WRP-18 | No login throttle or lockout | No attempt counter in `cmd/node/member/auth/auth.go`; bind still defaults to `0.0.0.0` (`config/config.go:74`) |
+| WRP-19 | No `ConnectionGater` | Exhaustive search: no `ConnectionGater`, `InterceptSecured` or `InterceptAddrDial` in `core/` or `cmd/` |
+| WRP-20 | No dimension bound before decode | `core/handler/image.go:373` still calls `image.Decode` with no `DecodeConfig` pre-check |
+| WRP-23 | Relay service on every member | `core/node/options.go:62` unconditional `EnableRelayService` |
+| WRP-24 | Root containers, host networking | No `USER` in `Dockerfile.remote`/`Dockerfile.moderator`; `network_mode: host` throughout `deploy/` |
+| WRP-25 | Unauthenticated monitoring | `docker-compose.metrics.yaml` — no `GF_SECURITY_ADMIN_PASSWORD`; pushgateway on `:4091` |
+| WRP-26 | Actions on mutable tags | Every `uses:` in `.github/workflows/` is tag-pinned; `golangci-lint-action@v8` still `version: latest` |
+| WRP-28 | Predictable audit sampling RNG | `cmd/node/moderator/moderator/moderator.go:162` unchanged |
 | WRP-30 | Non-constant-time token compare | `core/handler/pair.go:61` still uses `!=` |
+| WRP-31 | Pairing token lifecycle | `database/auth-repo.go:98-100` — set once per process, no expiry or revocation |
+| WRP-32 | Long-lived credential in `localStorage` | Re-scoped: `frontend/src/lib/noise.js:199-207` persists the client x25519 static private key |
+| WRP-33 | No CSP | `frontend/public/index.html` has no `Content-Security-Policy` meta |
+| WRP-34 | `REDIRECT_URL` extra honoured | `MainActivity.kt:548` unchanged |
+| WRP-35 | `/` accepted in untrusted IDs | `database/local-store/prefix-tree.go` still concatenates without rejecting `/` |
+| WRP-36 | One-hour connmgr grace period | `core/warpnet/warpnet.go:301-307` unchanged, limiter TODO still present |
+| WRP-37 | Non-hermetic builds | Unverified `curl` of the Go tarball in `Dockerfile.{remote,member,moderator}`; `Dockerfile.moderator:24` still `-mod=mod` |
+| WRP-38 | Deployment SSH hygiene | `deploy-mainnet.yaml:22-32`, `build-deploy-testnet.yaml:150-160` unchanged — `ssh-keyscan` TOFU, token into a root shell |
+| WRP-41 | Hardcoded Echo credential | `cmd/node/member/echo-member.go:64-66` unchanged |
+| WRP-42 | Anti-debugger theater | `security/anti-debugger.go:70` `TracerPid` check and `log.Fatalf` paths unchanged |
+| WRP-43 | Idempotency covers only `/post/` | `core/middleware/idempotency.go:228` unchanged |
+| WRP-44 | Broad `FileProvider` mappings | `file_paths.xml` still maps `external-path` and `cache-path` at `.` |
 
 ### 10.3 Assessment of the remediation
 
@@ -812,8 +936,18 @@ The three closed Critical findings were fixed at the root cause rather than patc
 
 **WRP-04 and the two-round pattern.** Round 1 fixed the defect the report cited (the plaintext fallback) while leaving the impact it described (unauthenticated owner authority) reachable, because the replacement authenticated the server to the client rather than the client to the server, and the dashboard password was retired without a successor. Round 2 closed it correctly. Two things made the difference and are worth carrying forward: the finding was scoped to an *outcome* rather than a line of code, so the gap was visible; and the re-test was an executed attack rather than a reading of the diff. A channel that is encrypted is not thereby authenticated, and this is an easy substitution to make under time pressure.
 
-**The unfixed remainder is now the leading risk.** With Phase 1 complete, the highest-impact open findings are WRP-06 (any peer can forge moderation verdicts network-wide) and WRP-07 (offline recovery of unrevocable account identities). WRP-10 and WRP-11 remain one-line clamps guarding against an unauthenticated remote crash and are the cheapest outstanding fixes in the report. WRP-18 deserves attention sooner than its Medium rating suggests: login is now the only network-facing entry to the dashboard, it is unthrottled, and the password it guards is by WRP-07 also the account's identity key.
+**The unfixed remainder is now the leading risk.** With Phase 1 complete, the highest-impact open findings are WRP-06 (any peer can forge moderation verdicts network-wide), WRP-13 (50 MiB buffered per stream before authentication, with no read deadline) and WRP-12 (Android device identity reconstructable from public `Build` fields).
+
+### 10.4 Assessment of re-test 3
+
+Four more findings closed and five moved to partial in six days, across the KDF, rate limiting, poll bounds, DHT mode and node seeds. Three observations.
+
+**The Argon2id change is the right fix and resolves the inversion this report opened on.** Reusing the existing `deriveKey` helper rather than introducing a second KDF is the correct instinct, and the `warpnet/kdf/v1/...` context strings give real domain separation between the identity and database keys. What is missing is not cryptographic but operational: existing accounts derive different keys under the new scheme and land on `ErrWrongPassword`, so decide deliberately whether this ships as a breaking change or with a re-wrap flow.
+
+**Two of the five partials are partial because the fix stopped at the cited line numbers.** WRP-10 named four locations; the two in `local-store` were clamped and the two in `user-repo.go` — which the finding also named, and where the element type is 240 bytes rather than a `ListItem` — were not. WRP-17's rate limit went on the stream route named in the finding, not on the pubsub topic the description identifies as the flood vector. This is the same pattern §10.3 recorded for WRP-04 round 1, and the same remedy applies: check the stated *impact* against the patched tree, not the stated *location*.
+
+**Two changes need re-work before they count as fixes.** The moderator seed replacement allocates a zero-length slice, so the node exits at start-up rather than getting a random identity, and the dead-code removal left `security/hashing_test.go` calling a deleted function, so the module no longer builds under test. Both are one-line fixes, and both would have been caught by running `go build ./... && go test ./...` on the branch — worth adding as a gate given that CI runs `-race` over the whole module.
 
 ---
 
-*All Critical findings are closed as of `28eef1ef`. This report still describes 37 unremediated findings, including 11 rated High, and should be handled accordingly until those are addressed.*
+*All Critical findings are closed as of `28eef1ef`. At `2c0802d3` this report describes **33 findings not fully remediated** — 10 rated High, of which 3 are partially addressed — plus two build/start-up regressions introduced by the remediation itself (see Phase 0 in §9). It should be handled accordingly until those are addressed.*
