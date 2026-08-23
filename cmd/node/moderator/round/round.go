@@ -85,6 +85,21 @@ type Participant interface {
 	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
 }
 
+// BallotObserver is an optional Participant capability: it is handed
+// every ballot of a decided round alongside the outcome, so a
+// participant can note who dissented.
+//
+// Kept out of the tally itself on purpose. planTally is a pure function
+// precisely so every participant reaches the same answer from the same
+// ballots and the chair/backup chain agrees without exchanging a
+// message. Weighting ballots by a rating would break that: each node
+// holds its own view of every moderator, so the weighted tallies would
+// differ and the round would split. Dissent is therefore observed and
+// replicated, never applied to the count.
+type BallotObserver interface {
+	ObserveBallots(outcome vote.Event, ballots map[string]vote.Event)
+}
+
 // round is one subject's vote round, self-contained: it collects ballots,
 // decides whether this participant should vote at all, tallies at the
 // window close, and either carries the decision (as chair) or stands by to
@@ -218,6 +233,22 @@ func (r *round) tally() {
 
 	subject := r.report
 	p := planTally(r.id, r.self, r.votes, subject != nil)
+	ballots := make(map[string]vote.Event, len(r.votes))
+	for id, v := range r.votes {
+		ballots[id] = v
+	}
+
+	// Every participant that saw the ballots notes the dissenters
+	// first-hand, not only the one that carries the decision: an
+	// observation is worth most when it is our own.
+	defer func() {
+		if p.role == roleBystander || subject == nil {
+			return
+		}
+		if observer, ok := r.member.(BallotObserver); ok {
+			observer.ObserveBallots(p.outcome, ballots)
+		}
+	}()
 
 	switch p.role {
 	case roleBystander:

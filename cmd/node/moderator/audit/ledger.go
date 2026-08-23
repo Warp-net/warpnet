@@ -3,7 +3,12 @@
 
 package audit
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/warpnet"
+)
 
 // Outcome is the auditor's classification of one challenge exchange.
 type Outcome int
@@ -113,24 +118,50 @@ type PeerReport struct {
 	Standing    Standing
 }
 
-// Ledger accumulates audit outcomes per moderator peer. In-memory and
-// local-first by design: every node judges from its own evidence; sharing
-// signed transcripts across nodes is a later layer.
+// Ledger accumulates audit outcomes per moderator peer and turns them
+// into rating observations.
+//
+// The statistical judgement stays here rather than moving into the
+// rating store, and that is deliberate. Audit quality is a *rate* —
+// agreement over many probes — while the rating counts discrete
+// offences, and a count cannot tell "six wrong out of sixty" from "six
+// wrong out of six". Feeding raw outcomes to the rating would punish
+// an honest moderator running a different model exactly as hard as a
+// bot with no model at all. So the ledger keeps the tolerance encoded
+// in the thresholds above, and reports to the rating only when a peer
+// crosses one — once per crossing, so a long-running audit does not
+// grind a peer down for a conclusion it already drew.
+//
+// This is what closes gap (1) of this package's doc: a standing is no
+// longer one node's private opinion that nothing consults. It becomes
+// a signed, replicated observation that every moderator weighs
+// alongside everyone else's, with the rating's own caps making sure no
+// single auditor can carry the decision.
 type Ledger struct {
-	mu    sync.Mutex
-	peers map[string]*peerStats
+	reporter rating.Reporter
+
+	mu       sync.Mutex
+	peers    map[string]*peerStats
+	reported map[string]Standing
 }
 
-func NewLedger() *Ledger {
-	return &Ledger{peers: make(map[string]*peerStats)}
+func NewLedger(reporter rating.Reporter) *Ledger {
+	if reporter == nil {
+		reporter = rating.Nop{}
+	}
+	return &Ledger{
+		reporter: reporter,
+		peers:    make(map[string]*peerStats),
+		reported: make(map[string]Standing),
+	}
 }
 
 func (l *Ledger) Record(peerID string, o Outcome) {
 	if peerID == "" {
 		return
 	}
+
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	s, ok := l.peers[peerID]
 	if !ok {
 		s = &peerStats{}
@@ -145,6 +176,62 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 		s.unreachable++
 	case OutcomeInvalid:
 		s.invalid++
+	}
+
+	standing := s.standing()
+	worsened := standing != l.reported[peerID] && severity(standing) > severity(l.reported[peerID])
+	if worsened {
+		l.reported[peerID] = standing
+	}
+	l.mu.Unlock()
+
+	// An unreachable peer may just be behind a bad link, so it is
+	// reported every time and weighs almost nothing; a standing is
+	// reported only when it first worsens.
+	if o == OutcomeUnreachable {
+		l.observe(peerID, rating.KindAuditUnreachable)
+	}
+	if worsened {
+		if kind, ok := standingKind(standing); ok {
+			l.observe(peerID, kind)
+		}
+	}
+}
+
+func (l *Ledger) observe(peerID string, kind rating.Kind) {
+	id := warpnet.FromStringToPeerID(peerID)
+	if id == "" {
+		return
+	}
+	l.reporter.Observe(id, kind)
+}
+
+// severity orders standings so only a genuine downgrade is reported.
+func severity(s Standing) int {
+	switch s {
+	case StandingTrusted, StandingProbation:
+		return 0
+	case StandingSuspect:
+		return 1
+	case StandingBanned:
+		return 2 //nolint:mnd
+	default:
+		return 0
+	}
+}
+
+// standingKind maps a worsened standing to what the rating records.
+// Probation and Trusted report nothing: an unproven peer is not an
+// offending one, and the rating starts everyone at full trust by
+// design.
+func standingKind(s Standing) (rating.Kind, bool) {
+	switch s {
+	case StandingSuspect:
+		return rating.KindAuditWrong, true
+	case StandingBanned:
+		return rating.KindAuditInvalid, true
+	default:
+		return 0, false
 	}
 }
 

@@ -142,10 +142,16 @@ func StreamModerationResultHandler(
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
+			// Past the signature check, so the moderator provably
+			// authored this: a verdict missing the very fields it
+			// needs to be applied is chargeable, unlike one whose
+			// signature never verified.
 			if ev.ObjectID == nil {
+				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
+				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoUserID
 			}
 
@@ -174,6 +180,7 @@ func StreamModerationResultHandler(
 
 		case domain.ModerationUserType:
 			if ev.UserID == "" {
+				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoUserID
 			}
 			if userRepo == nil {
@@ -204,6 +211,7 @@ func StreamModerationResultHandler(
 
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
+			chargeModerator(rater, moderatorPeer)
 			return event.Accepted, nil
 		}
 
@@ -231,6 +239,15 @@ func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, 
 		return
 	}
 	rater.Observe(nodeID, rating.KindModerationUpheld)
+}
+
+// chargeModerator records a malformed verdict against the moderator
+// that signed it.
+func chargeModerator(rater rating.Reporter, moderator warpnet.WarpPeerID) {
+	if rater == nil || moderator == "" {
+		return
+	}
+	rater.Observe(moderator, rating.KindVerdictMalformed)
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the

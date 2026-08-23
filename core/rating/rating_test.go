@@ -70,20 +70,17 @@ func TestCeilingsExceedTheirWeight(t *testing.T) {
 // a busy moment carries a ceiling.
 func TestOnlyDeliberateKindsAreUncapped(t *testing.T) {
 	deliberate := map[Kind]bool{
-		KindBadSignature:         true,
-		KindMissingSignature:     true,
-		KindPrivateRouteDenied:   true,
-		KindOversizePayload:      true,
-		KindMalformedFrame:       true,
-		KindStaleOrReplayed:      true,
-		KindForgedObservation:    true,
-		KindModerationUpheld:     true,
-		KindForeignAuthorship:    true,
-		KindVerdictBadSignature:  true,
-		KindVerdictNoModeratorID: true,
-		KindVerdictMalformed:     true,
-		KindVerdictUnsolicited:   true,
-		KindAuditInvalid:         true,
+		KindBadSignature:       true,
+		KindMissingSignature:   true,
+		KindPrivateRouteDenied: true,
+		KindOversizePayload:    true,
+		KindMalformedFrame:     true,
+		KindStaleOrReplayed:    true,
+		KindForgedObservation:  true,
+		KindModerationUpheld:   true,
+		KindForeignAuthorship:  true,
+		KindVerdictMalformed:   true,
+		KindAuditInvalid:       true,
 	}
 	for kind, o := range catalogue {
 		if o.ceiling == 0 {

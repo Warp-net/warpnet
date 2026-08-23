@@ -53,10 +53,7 @@ const (
 	KindFalseReportBurst
 
 	// moderation — moderator nodes
-	KindVerdictBadSignature
-	KindVerdictNoModeratorID
 	KindVerdictMalformed
-	KindVerdictUnsolicited
 	KindVerdictOutlier
 	KindAuditWrong
 	KindAuditInvalid
@@ -97,11 +94,18 @@ var catalogue = map[Kind]offence{
 	KindWriteFlood:        {"write_flood", Application, 20, 300},
 	KindFalseReportBurst:  {"false_report_burst", Application, 60, 300},
 
-	KindVerdictBadSignature:  {"verdict_bad_signature", Moderation, 500, 0},
-	KindVerdictNoModeratorID: {"verdict_no_moderator_id", Moderation, 500, 0},
-	KindAuditInvalid:         {"audit_invalid", Moderation, 500, 0},
-	KindVerdictUnsolicited:   {"verdict_unsolicited", Moderation, 250, 0},
-	KindVerdictMalformed:     {"verdict_malformed", Moderation, 200, 0},
+	// Deliberately absent: a verdict whose signature does not verify,
+	// or that carries no usable moderator id, names a moderator that
+	// may have had nothing to do with it. Verdicts travel by pubsub,
+	// so there is no relaying peer to charge either — the only honest
+	// response is to drop it. Everything below is chargeable because
+	// the signature verified first, which proves authorship.
+	// Also absent: an "unsolicited verdict". A round has no eligibility
+	// gate by design — the volunteer order is a delay, not a
+	// permission — so voting early is allowed and there is nothing to
+	// charge.
+	KindAuditInvalid:     {"audit_invalid", Moderation, 500, 0},
+	KindVerdictMalformed: {"verdict_malformed", Moderation, 200, 0},
 	// Honest model diversity produces disagreement, so an outlier
 	// ballot is cheap and capped. See gap (2) in
 	// cmd/node/moderator/audit/doc.go.

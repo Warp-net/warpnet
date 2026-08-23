@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/audit"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
@@ -58,10 +60,50 @@ func (m *Moderator) ChallengeHandler() warpnet.WarpHandlerFunc {
 }
 
 // AuditStanding reports what this node's own spot-checks make of a peer.
-// Nothing consults it yet — see the audit package docs on why a single
-// auditor must not be allowed to disqualify anyone on its own.
+// It is the statistical judgement only; what the network acts on is the
+// rating observation the ledger files when this standing worsens.
 func (m *Moderator) AuditStanding(peerID string) audit.Standing {
 	return m.ledger.StandingOf(peerID)
+}
+
+// ModeratorBand is a peer moderator's standing as the rating sees it:
+// this node's own audits plus what other auditors have replicated.
+// Used to weigh ballots — never to drop them, because establishing
+// which model a moderator runs is still unsolved.
+func (m *Moderator) ModeratorBand(peerID string) rating.Band {
+	id := warpnet.FromStringToPeerID(peerID)
+	if id == "" {
+		return rating.BandTrusted
+	}
+	return m.node.Rating().Band(id)
+}
+
+// ObserveBallots implements round.BallotObserver: it records which
+// moderators voted against the round's own outcome.
+//
+// Observation only — the tally is untouched. A dissenting ballot is
+// cheap and capped by design: moderators legitimately run different
+// models, so disagreement is evidence of nothing on its own and only
+// means something as a pattern. Until gap (2) of the audit package's
+// doc is closed — establishing which model a moderator runs rather
+// than assuming — this must never be enough to discount a vote.
+func (m *Moderator) ObserveBallots(outcome vote.Event, ballots map[string]vote.Event) {
+	if m == nil || len(ballots) == 0 {
+		return
+	}
+	self := m.selfID()
+	rater := m.node.Rating()
+
+	for moderatorID, ballot := range ballots {
+		if moderatorID == self || ballot.Result == outcome.Result {
+			continue
+		}
+		id := warpnet.FromStringToPeerID(moderatorID)
+		if id == "" {
+			continue
+		}
+		rater.Observe(id, rating.KindVerdictOutlier)
+	}
 }
 
 // runAudits spot-checks a random peer on a timer for as long as the node

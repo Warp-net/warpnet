@@ -169,7 +169,7 @@ func NewModerator(
 		votes:   votes,
 		privKey: privKey,
 		retrier: retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
-		ledger:  audit.NewLedger(),
+		ledger:  audit.NewLedger(node.Rating()),
 		corpus:  audit.NewCorpus(),
 		judged:  make(map[string]string, judgedCapacity),
 		clearedReports: expirable.NewLRU[string, *atomic.Int64](
