@@ -40,11 +40,13 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/middleware"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
@@ -76,7 +78,18 @@ type Prioritizer interface {
 	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
 	SetMinPriority(pid warpnet.WarpPeerID)
 	SetMaxPriority(pid warpnet.WarpPeerID)
+	SetRatingPriority(pid warpnet.WarpPeerID, band rating.Band)
 }
+
+const (
+	// connFlapWindow and connFlapThreshold turn raw connectedness
+	// churn into an offence. A peer that reconnects a couple of times
+	// in a minute is on a bad link; one that does it constantly is
+	// costing us handshakes.
+	connFlapWindow    = time.Minute
+	connFlapThreshold = 4
+	connFlapCacheSize = 256
+)
 
 type WarpNode struct {
 	ctx      context.Context
@@ -92,10 +105,36 @@ type WarpNode struct {
 	reachability atomic.Int64
 	prioritizer  Prioritizer
 
+	// rater is never nil: it starts as rating.Nop so a node running
+	// before its rating store exists penalises nobody.
+	rater    rating.Rater
+	connFlap *expirable.LRU[string, *atomic.Int64]
+
 	startTime        time.Time
 	eventsSub        event.Subscription
 	middlewares      []StreamMiddleware
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
+}
+
+// SetRating attaches the node's rating store, and pushes every peer's
+// standing into its connection weight from then on.
+func (n *WarpNode) SetRating(r rating.Rater) {
+	if n == nil || r == nil {
+		return
+	}
+	n.rater = r
+}
+
+// observePeer charges an offence to a remote peer.
+func (n *WarpNode) observePeer(s warpnet.WarpStream, kind rating.Kind) {
+	if n == nil || n.rater == nil || s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == "" || remote == s.Conn().LocalPeer() {
+		return
+	}
+	n.rater.Observe(remote, kind)
 }
 
 func NewWarpNode(
@@ -162,6 +201,10 @@ func NewWarpNode(
 		eventsSub:        sub,
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
+		rater:            rating.Nop{},
+		connFlap: expirable.NewLRU[string, *atomic.Int64](
+			connFlapCacheSize, nil, connFlapWindow,
+		),
 	}
 
 	go wn.trackIncomingEvents()
@@ -240,11 +283,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		data, err := stream.ReadRequest(s)
 		if errors.Is(err, stream.ErrPayloadTooLarge) {
 			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
+			n.observePeer(s, rating.KindOversizePayload)
 			_ = s.Reset()
 			return
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
+			n.observePeer(s, rating.KindMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
@@ -338,7 +383,13 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
+					// EffectiveBand is BandTrusted while in shadow mode,
+					// so this writes the neutral weight there.
+					n.prioritizer.SetRatingPriority(
+						typedEvent.Peer, n.rater.EffectiveBand(typedEvent.Peer),
+					)
 				}
+				n.trackConnectionFlap(typedEvent.Peer)
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
 				addrs := n.node.Peerstore().Addrs(pid)
@@ -390,6 +441,27 @@ func (n *WarpNode) trackIncomingEvents() {
 				log.Infof("node: event: %T %s", ev, bt)
 			}
 		}
+	}
+}
+
+// trackConnectionFlap counts connectedness transitions per peer inside
+// a rolling window and charges the peer once the churn stops looking
+// like a bad moment and starts looking like a cost. Charging every
+// transition would penalise ordinary mobile peers dropping off a
+// train's wifi.
+func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
+	if n == nil || n.connFlap == nil {
+		return
+	}
+	key := pid.String()
+	counter, ok := n.connFlap.Get(key)
+	if !ok {
+		counter = new(atomic.Int64)
+		n.connFlap.Add(key, counter)
+	}
+	if counter.Add(1) == connFlapThreshold {
+		// Once per window: the entry expires and starts over.
+		n.rater.Observe(pid, rating.KindConnectionFlap)
 	}
 }
 

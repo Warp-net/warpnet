@@ -681,16 +681,26 @@ func (s *Store) gcOwnExpired() {
 	}
 }
 
-// ReportShadow records what enforcement would have done. Called from
-// the enforcement points while in shadow mode.
-func (s *Store) ReportShadow(subject warpnet.WarpPeerID, band Band) {
-	if s == nil || s.shadow == nil || s.mode != ModeShadow {
-		return
+// EffectiveBand is what an enforcement point should actually apply.
+//
+// Keeping the mode check here rather than at each enforcement point
+// means no call site can forget it, and shadow mode costs one branch
+// in one place instead of four. In shadow the observed band is pushed
+// to the metrics sink instead of being applied — without somewhere
+// aggregable to send them, shadow decisions would be log lines nobody
+// reads and the mode would not earn its keep.
+func (s *Store) EffectiveBand(subject warpnet.WarpPeerID) Band {
+	if s == nil {
+		return BandTrusted
 	}
-	if band == BandTrusted {
-		return // the overwhelming majority; not worth the push
+	band := s.Band(subject)
+	if s.mode == ModeEnforce {
+		return band
 	}
-	s.shadow.PushRatingBand(subject.String(), band.String())
+	if s.shadow != nil && band != BandTrusted {
+		s.shadow.PushRatingBand(subject.String(), band.String())
+	}
+	return BandTrusted
 }
 
 func (s *Store) Close() error {

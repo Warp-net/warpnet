@@ -1,16 +1,23 @@
 package node
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sync"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const (
 	reachabilityTag = "reachability"
-	flappingPeriod  = 30 * time.Second
-	cacheSize       = 128
+	// ratingTag is deliberately separate from reachabilityTag: libp2p
+	// sums a peer's tags, so two independent signals written under two
+	// tags compose, whereas one tag would have the later writer
+	// silently erase the earlier one.
+	ratingTag      = "rating"
+	flappingPeriod = 30 * time.Second
+	cacheSize      = 128
 )
 
 type nodeReachabilityManager struct {
@@ -25,6 +32,18 @@ func newNodeReachabilityManager(cm warpnet.WarpConnManager) *nodeReachabilityMan
 		flapLRU: lru,
 		manager: cm,
 	}
+}
+
+// SetRatingPriority reflects a peer's standing into its connection
+// weight. It writes its own tag, so it neither fights with nor is
+// erased by the reachability signal, and it is not flap-guarded: a
+// rating changes on the scale of hours, not seconds.
+func (m *nodeReachabilityManager) SetRatingPriority(pid warpnet.WarpPeerID, band rating.Band) {
+	if m == nil || m.manager == nil {
+		return
+	}
+	value := rating.ConnTagValue(band)
+	m.manager.UpsertTag(pid, ratingTag, func(int) int { return value })
 }
 
 func (m *nodeReachabilityManager) SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {

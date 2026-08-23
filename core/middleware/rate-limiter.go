@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -93,6 +94,27 @@ func limitForRoute(route stream.WarpRoute) routeLimit {
 	return limitWrite
 }
 
+// scaleForBand tightens a route's allowance for a peer whose standing
+// has slipped. The multiplier never reaches zero: a low rating makes a
+// peer slow and last in the queue, it never refuses it service.
+func scaleForBand(limit routeLimit, band rating.Band) routeLimit {
+	multiplier := rating.LimitMultiplier(band)
+	if multiplier >= 1 {
+		return limit
+	}
+	scaled := routeLimit{
+		burst:     int64(float64(limit.burst) * multiplier),
+		perMinute: int64(float64(limit.perMinute) * multiplier),
+	}
+	if scaled.burst < 1 {
+		scaled.burst = 1
+	}
+	if scaled.perMinute < 1 {
+		scaled.perMinute = 1
+	}
+	return scaled
+}
+
 func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		conn := s.Conn()
@@ -108,6 +130,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
+			p.observe(s, rating.KindRateLimitHit)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil
@@ -121,13 +144,25 @@ func (p *WarpMiddleware) bucket(
 ) *leakyBucketRateLimiter {
 	key := route.String() + "|" + remotePeer.String()
 
+	// EffectiveBand is BandTrusted in shadow mode, so the allowance is
+	// untouched there and the observed band goes to metrics instead.
+	band := rating.BandTrusted
+	if p.rater != nil {
+		band = p.rater.EffectiveBand(remotePeer)
+	}
+
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
 
 	if b, ok := p.rateLimiters.Get(key); ok {
-		return b
+		if b.band == band {
+			return b
+		}
+		// Standing changed: rebuild at the new allowance rather than
+		// letting a peer keep the bucket it earned in a better band.
+		p.rateLimiters.Remove(key)
 	}
-	b := newRateLimiter(limitForRoute(route))
+	b := newRateLimiter(scaleForBand(limitForRoute(route), band), band)
 	p.rateLimiters.Add(key, b)
 	return b
 }
@@ -138,9 +173,13 @@ type leakyBucketRateLimiter struct {
 	filled       int64
 	lastLeak     time.Time
 	leakInterval time.Duration
+	// band the bucket was sized for, so a change in the peer's
+	// standing rebuilds it instead of silently keeping the old
+	// allowance.
+	band rating.Band
 }
 
-func newRateLimiter(limit routeLimit) *leakyBucketRateLimiter {
+func newRateLimiter(limit routeLimit, band rating.Band) *leakyBucketRateLimiter {
 	if limit.burst <= 0 {
 		limit.burst = 1
 	}
@@ -151,6 +190,7 @@ func newRateLimiter(limit routeLimit) *leakyBucketRateLimiter {
 		capacity:     limit.burst,
 		lastLeak:     time.Now(),
 		leakInterval: time.Minute / time.Duration(limit.perMinute),
+		band:         band,
 	}
 }
 

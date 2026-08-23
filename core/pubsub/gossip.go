@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/discovery"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -81,6 +82,7 @@ type Gossip struct {
 	handlersMap      map[string]topicHandler
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
+	rater            rating.Scorer
 }
 
 type TopicHandler struct {
@@ -218,7 +220,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
 	if err != nil {
 		return err
 	}
@@ -228,6 +230,48 @@ func (g *Gossip) runGossip() (err error) {
 	log.Infoln("gossip: started")
 
 	return
+}
+
+// SetRating attaches the node's rating store so a peer's standing
+// reaches gossipsub's own scoring. Must be called before Run: the
+// score function is baked into the router at construction.
+func (g *Gossip) SetRating(r rating.Scorer) {
+	if g == nil || r == nil {
+		return
+	}
+	g.rater = r
+}
+
+// scoreOptions wires the rating into gossipsub's AppSpecificScore, the
+// hook the router already consults when deciding whom to mesh with,
+// whom to gossip to and whom to stop reading from entirely.
+//
+// Only the app-specific term is set. gossipsub's own per-topic
+// delivery statistics stay at their defaults: they measure a different
+// thing (is this peer useful in this mesh) and mixing our weights into
+// them would make both harder to reason about.
+func (g *Gossip) scoreOptions() []pubsub.Option {
+	if g == nil || g.rater == nil {
+		return nil
+	}
+	params := &pubsub.PeerScoreParams{
+		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
+			// EffectiveBand is BandTrusted in shadow mode, which maps
+			// to a score of 0 — exactly what an unrated peer gets.
+			return rating.GossipAppScore(g.rater.EffectiveBand(p))
+		},
+		AppSpecificWeight: 1,
+		DecayInterval:     time.Minute,
+		DecayToZero:       0.01,
+		Topics:            map[string]*pubsub.TopicScoreParams{},
+	}
+	thresholds := &pubsub.PeerScoreThresholds{
+		GossipThreshold:   -10,
+		PublishThreshold:  -50,
+		GraylistThreshold: rating.GossipGraylistThreshold,
+		AcceptPXThreshold: 0,
+	}
+	return []pubsub.Option{pubsub.WithPeerScore(params, thresholds)}
 }
 
 func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {

@@ -39,7 +39,14 @@ type Reporter interface {
 // Scorer is the read side as seen by an enforcement point.
 type Scorer interface {
 	Score(subject warpnet.WarpPeerID) Score
+	// Band is the standing actually observed, for display and for
+	// deciding what to report.
 	Band(subject warpnet.WarpPeerID) Band
+	// EffectiveBand is the standing enforcement should apply. In
+	// shadow mode it is always BandTrusted and the observed band is
+	// reported instead, so no enforcement point has to know about
+	// modes and no call site can forget the check.
+	EffectiveBand(subject warpnet.WarpPeerID) Band
 	Mode() Mode
 }
 
@@ -58,9 +65,10 @@ type Rater interface {
 // than enforcement that silently does not.
 type Nop struct{}
 
-func (Nop) Observe(warpnet.WarpPeerID, Kind) {}
-func (Nop) Score(warpnet.WarpPeerID) Score   { return MaxScore }
-func (Nop) Band(warpnet.WarpPeerID) Band     { return BandTrusted }
-func (Nop) Mode() Mode                       { return ModeShadow }
+func (Nop) Observe(warpnet.WarpPeerID, Kind)      {}
+func (Nop) Score(warpnet.WarpPeerID) Score        { return MaxScore }
+func (Nop) Band(warpnet.WarpPeerID) Band          { return BandTrusted }
+func (Nop) EffectiveBand(warpnet.WarpPeerID) Band { return BandTrusted }
+func (Nop) Mode() Mode                            { return ModeShadow }
 
 var _ Rater = Nop{}

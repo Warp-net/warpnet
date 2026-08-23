@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
@@ -68,6 +69,11 @@ type WarpMiddleware struct {
 
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
+
+	// rater is never nil: it starts as rating.Nop, which reports
+	// everyone as trusted, so a middleware built before the rating
+	// store exists penalises nobody.
+	rater rating.Rater
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
@@ -77,8 +83,33 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
+		rater:           rating.Nop{},
 	}
 	return wm
+}
+
+// SetRating attaches the node's rating store. A setter rather than a
+// constructor argument because the store is only built once gossip is
+// running, well after the middleware chain exists.
+func (p *WarpMiddleware) SetRating(r rating.Rater) {
+	if p == nil || r == nil {
+		return
+	}
+	p.rater = r
+}
+
+// observe charges an offence to a remote peer. Self-streams and
+// unidentified connections are skipped: a node cannot rate itself, and
+// there is nobody to charge when the peer id is missing.
+func (p *WarpMiddleware) observe(s warpnet.WarpStream, kind rating.Kind) {
+	if p == nil || p.rater == nil || s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
+		return
+	}
+	p.rater.Observe(remote, kind)
 }
 
 func (p *WarpMiddleware) Close() {

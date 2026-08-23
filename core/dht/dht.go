@@ -122,19 +122,28 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		return nil, err
 	}
 
-	d.dht, err = dht.New(
-		d.ctx, n,
+	opts := []dht.Option{
 		dht.Mode(dht.ModeAuto),
-		dht.ProtocolPrefix(protocol.ID("/"+d.cfg.network)),
+		dht.ProtocolPrefix(protocol.ID("/" + d.cfg.network)),
 		dht.Datastore(d.cfg.store),
 		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
-		dht.RoutingTableRefreshQueryTimeout(time.Minute*5), //nolint:mnd
+		dht.RoutingTableRefreshQueryTimeout(time.Minute * 5), //nolint:mnd
 		dht.BootstrapPeers(d.cfg.bootstrapNodes...),
 		dht.ProviderStore(providerStore),
 		dht.RoutingTableLatencyTolerance(time.Minute),
 		dht.BucketSize(50), //nolint:mnd
-	)
+	}
+	if admit := d.cfg.admit; admit != nil {
+		// Both hooks, because keeping a peer out of the routing table
+		// does not stop a query from dialling it.
+		opts = append(opts,
+			dht.RoutingTableFilter(func(_ any, p peer.ID) bool { return admit(p) }),
+			dht.QueryFilter(func(_ any, ai peer.AddrInfo) bool { return admit(ai.ID) }),
+		)
+	}
+
+	d.dht, err = dht.New(d.ctx, n, opts...)
 	if err != nil {
 		log.Errorf("dht: new: %v", err)
 		return nil, err
@@ -143,8 +152,12 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	d.dht.RoutingTable().PeerAdded = defaultNodeAddedCallback
 	if d.cfg.addCallbacks != nil {
 		d.dht.RoutingTable().PeerAdded = func(id peer.ID) {
-			addrInfo, _ := d.dht.FindPeer(d.ctx, id)
-			log.Infof("dht: peer added: %s", addrInfo)
+			// No FindPeer here. This runs on the routing table's own
+			// insert path, and resolving the peer's addresses for a
+			// log line meant a full DHT walk per insert — an
+			// amplifier that turned every routing table churn into
+			// network-wide queries.
+			log.Debugf("dht: peer added: %s", id)
 			for _, addF := range d.cfg.addCallbacks {
 				if addF == nil {
 					continue
