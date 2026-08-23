@@ -25,7 +25,7 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package node
+package rating
 
 import (
 	"context"
@@ -35,20 +35,19 @@ import (
 
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt"
-	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	log "github.com/sirupsen/logrus"
 )
 
-// RatingDeps is everything a rating store needs from its node. The
+// CRDTDeps is everything a CRDT-backed store needs from its node. The
 // three node types differ only in the datastore they hand over: a
 // member node has a Badger-backed repo, a relay and a moderator hand
 // over the in-memory map datastore they already build. Both are
 // replicated the same way — which is the point of putting rating on a
 // CRDT at all, since a node with no disk gets its view back from the
 // DAG after a restart and cannot recover it any other way.
-type RatingDeps struct {
+type CRDTDeps struct {
 	Ctx      context.Context
 	Self     warpnet.WarpPeerID
 	PrivKey  ed25519.PrivateKey
@@ -57,39 +56,39 @@ type RatingDeps struct {
 	Router   crdt.CRDTRouter
 	Store    crdt.CRDTStorer
 	Gossip   crdt.GossipPubSuber
-	Shadow   rating.ShadowReporter
+	Shadow   ShadowReporter
 }
 
-// NewRatingStore builds the rating store and its CRDT replica.
-func NewRatingStore(d RatingDeps) (*rating.Store, error) {
+// NewCRDTStore builds the store together with its CRDT replica.
+func NewCRDTStore(d CRDTDeps) (*Store, error) {
 	if d.Host == nil || d.Gossip == nil || d.Store == nil {
-		return nil, fmt.Errorf("node: rating: incomplete dependencies") //nolint:err113
+		return nil, fmt.Errorf("rating: incomplete dependencies") //nolint:err113
 	}
 
-	mode, err := rating.ParseMode(config.Config().Node.RatingMode)
+	mode, err := ParseMode(config.Config().Node.RatingMode)
 	if err != nil {
 		// A typo in a flag must not silently arm enforcement.
-		log.Warnf("node: rating: %v, falling back to shadow", err)
-		mode = rating.ModeShadow
+		log.Warnf("rating: %v, falling back to shadow", err)
+		mode = ModeShadow
 	}
 
 	broadcaster, err := crdt.NewGossipBroadcasterOn(d.Ctx, d.Gossip, crdt.RatingTopic)
 	if err != nil {
-		return nil, fmt.Errorf("node: rating: broadcaster: %w", err)
+		return nil, fmt.Errorf("rating: broadcaster: %w", err)
 	}
 
-	open := func(hooks rating.Hooks) (rating.Datastore, error) {
+	open := func(hooks Hooks) (Datastore, error) {
 		return crdt.NewDatastore(d.Ctx, broadcaster, d.Store, d.Host, d.Router, crdt.DatastoreHooks{
 			Put:    func(k ds.Key, v []byte) { hooks.Put(k.String(), v) },
 			Delete: func(k ds.Key) { hooks.Delete(k.String()) },
 		})
 	}
 
-	store, err := rating.NewStore(rating.Config{
+	store, err := NewStore(Config{
 		Ctx:        d.Ctx,
 		Self:       d.Self,
 		PrivKey:    d.PrivKey,
-		Dimensions: rating.DimensionsFor(d.NodeType),
+		Dimensions: DimensionsFor(d.NodeType),
 		Mode:       mode,
 		Acquainted: connectionAge{host: d.Host},
 		Shadow:     d.Shadow,
@@ -98,7 +97,7 @@ func NewRatingStore(d RatingDeps) (*rating.Store, error) {
 		return nil, err
 	}
 
-	log.Infof("node: rating: store started in %s mode for a %s node", mode, d.NodeType)
+	log.Infof("rating: store started in %s mode for a %s node", mode, d.NodeType)
 	return store, nil
 }
 

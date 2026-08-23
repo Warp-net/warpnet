@@ -154,6 +154,16 @@ type StatsStorer interface {
 	Close() error
 }
 
+// RatingStorer is the node's view of the peer rating subsystem: the
+// write side the middleware and handlers observe through, the read side
+// the enforcement points key off, and the two report surfaces.
+type RatingStorer interface {
+	rating.Rater
+	Public(subject warpnet.WarpPeerID) domain.NodeRating
+	Own() domain.NodeRating
+	Close() error
+}
+
 type BlocksProvider interface {
 	Block(blockerId string, blockeeId string) error
 	List(blockerId string, limit *uint64, cursor *string) ([]string, string, error)

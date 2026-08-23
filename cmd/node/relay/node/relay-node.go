@@ -71,6 +71,15 @@ type DistributedHashTableCloser interface {
 	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo
 	Close()
 }
+
+// RatingStorer is the relay's view of the peer rating subsystem. A
+// relay only ever witnesses the wire, so it needs the observe/score
+// surface and nothing else.
+type RatingStorer interface {
+	rating.Rater
+	Close() error
+}
+
 type MetricsOnlinePusher interface {
 	PushStatusOnline(nodeId string)
 	PushStatusOffline(nodeId string)
@@ -93,15 +102,15 @@ type RelayNode struct {
 	// dies with the process — and the CRDT is exactly what gives the
 	// view back on the next start, replayed from peers.
 	ratingStore crdt.CRDTStorer
-	rating      *rating.Store
+	ratingDb    RatingStorer
 	metrics     MetricsOnlinePusher
 }
 
 func (rn *RelayNode) raterOrNop() rating.Rater {
-	if rn == nil || rn.rating == nil {
+	if rn == nil || rn.ratingDb == nil {
 		return rating.Nop{}
 	}
-	return rn.rating
+	return rn.ratingDb
 }
 
 func NewRelayNode(
@@ -210,7 +219,7 @@ func (rn *RelayNode) Start() (err error) {
 		return err
 	}
 
-	rn.rating, err = node.NewRatingStore(node.RatingDeps{
+	rn.ratingDb, err = rating.NewCRDTStore(rating.CRDTDeps{
 		Ctx:      rn.ctx,
 		Self:     rn.node.Node().ID(),
 		PrivKey:  rn.privKey,
@@ -337,8 +346,8 @@ func (rn *RelayNode) Stop() {
 			log.Errorf("relay: failed to close pubsub: %v", err)
 		}
 	}
-	if rn.rating != nil {
-		_ = rn.rating.Close()
+	if rn.ratingDb != nil {
+		_ = rn.ratingDb.Close()
 	}
 	if rn.dHashTable != nil {
 		rn.dHashTable.Close()

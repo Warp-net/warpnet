@@ -58,6 +58,14 @@ type DistributedHashTableDiscoverer interface {
 	Close()
 }
 
+// RatingStorer is the moderator's view of the peer rating subsystem:
+// it observes the wire and the verdicts its peers cast, and reads
+// standings back to weigh them.
+type RatingStorer interface {
+	rating.Rater
+	Close() error
+}
+
 type ModeratorNode struct {
 	ctx context.Context
 
@@ -71,7 +79,7 @@ type ModeratorNode struct {
 	// either, so its view is restored from the DAG after a restart
 	// rather than from anything local.
 	ratingStore crdt.CRDTStorer
-	rating      *rating.Store
+	ratingDb    RatingStorer
 
 	memoryStoreCloseF func() error
 
@@ -191,7 +199,7 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.S
 	if mn == nil || mn.node == nil {
 		return warpnet.WarpError("moderator: rating: node is not started")
 	}
-	store, err := node.NewRatingStore(node.RatingDeps{
+	store, err := rating.NewCRDTStore(rating.CRDTDeps{
 		Ctx:      mn.ctx,
 		Self:     mn.node.Node().ID(),
 		PrivKey:  mn.privKey,
@@ -205,7 +213,7 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.S
 	if err != nil {
 		return err
 	}
-	mn.rating = store
+	mn.ratingDb = store
 	mn.node.SetRating(store)
 	mn.mw.SetRating(store)
 	return nil
@@ -214,10 +222,10 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.S
 // Rating never returns nil: a moderator whose store failed to build
 // must penalise nobody.
 func (mn *ModeratorNode) Rating() rating.Rater {
-	if mn == nil || mn.rating == nil {
+	if mn == nil || mn.ratingDb == nil {
 		return rating.Nop{}
 	}
-	return mn.rating
+	return mn.ratingDb
 }
 
 // SetStreamHandlers registers additional routes after the node is up. The
@@ -265,8 +273,8 @@ func (mn *ModeratorNode) Stop() {
 	}
 	mn.isClosed.Store(true)
 
-	if mn.rating != nil {
-		_ = mn.rating.Close()
+	if mn.ratingDb != nil {
+		_ = mn.ratingDb.Close()
 	}
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()

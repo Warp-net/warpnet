@@ -73,7 +73,7 @@ type MemberNode struct {
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
 	ratingRepo       StatsProvider
-	rating           *rating.Store
+	ratingDb         RatingStorer
 	authRepo         AuthProvider
 	userRepo         UserProvider
 	aliasesRepo      AliasesProvider
@@ -89,10 +89,10 @@ type MemberNode struct {
 // raterOrNop never returns nil: a node whose rating store failed to
 // build must penalise nobody, not everybody.
 func (m *MemberNode) raterOrNop() rating.Rater {
-	if m == nil || m.rating == nil {
+	if m == nil || m.ratingDb == nil {
 		return rating.Nop{}
 	}
-	return m.rating
+	return m.ratingDb
 }
 
 func NewMemberNode(
@@ -230,7 +230,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.rating, err = node.NewRatingStore(node.RatingDeps{
+	m.ratingDb, err = rating.NewCRDTStore(rating.CRDTDeps{
 		Ctx:      m.ctx,
 		Self:     m.node.Node().ID(),
 		PrivKey:  m.privKey,
@@ -484,11 +484,11 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PRIVATE_GET_RATING,
-			handler.StreamGetOwnRatingHandler(m.rating),
+			handler.StreamGetOwnRatingHandler(m.ratingDb),
 		},
 		{
 			event.PUBLIC_GET_RATING,
-			handler.StreamGetRatingHandler(m.rating),
+			handler.StreamGetRatingHandler(m.ratingDb),
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
@@ -974,8 +974,8 @@ func (m *MemberNode) Stop() {
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()
 	}
-	if m.rating != nil {
-		_ = m.rating.Close()
+	if m.ratingDb != nil {
+		_ = m.ratingDb.Close()
 	}
 
 	if m.nodeRepo != nil {

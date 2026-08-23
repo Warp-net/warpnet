@@ -255,6 +255,16 @@ type GetUserEvent struct {
 	NodeId string `json:"node_id,omitempty"`
 }
 
+// GetRatingEvent defines model for GetRatingEvent.
+type GetRatingEvent struct {
+	// NodeId is the node whose standing is asked for. Empty on the
+	// private route means "my own".
+	NodeId domain.ID `json:"node_id"`
+}
+
+// GetRatingResponse defines model for GetRatingResponse.
+type GetRatingResponse = domain.NodeRating
+
 // ReactionEvent defines model for ReactionEvent.
 //
 // Emoji names the reaction. Clients that predate reactions omit it and
@@ -290,12 +300,6 @@ type LogoutEvent struct {
 }
 
 // Message defines model for Message.
-// GetRatingEvent asks for a node's standing. An empty NodeId on the
-// private route means "my own".
-type GetRatingEvent struct {
-	NodeId string `json:"node_id"`
-}
-
 type Message struct {
 	Body        json.RawMessage `json:"body"`
 	MessageId   domain.ID       `json:"message_id"`

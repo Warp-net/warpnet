@@ -36,8 +36,9 @@ import (
 
 const ErrRatingUnavailable = warpnet.WarpError("rating is not available on this node")
 
-// RatingReader is the read side of the rating store, as the handlers
-// need it.
+// RatingReader is the read side of the rating store, declared here and
+// kept to the two methods these handlers need — the same handler-local
+// interface style every other handler in this package uses.
 type RatingReader interface {
 	Public(subject warpnet.WarpPeerID) domain.NodeRating
 	Own() domain.NodeRating
@@ -55,7 +56,7 @@ func StreamGetOwnRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 		if reader == nil {
 			return nil, ErrRatingUnavailable
 		}
-		return reader.Own(), nil
+		return event.GetRatingResponse(reader.Own()), nil
 	}
 }
 
@@ -76,13 +77,13 @@ func StreamGetRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 			return nil, err
 		}
 		if ev.NodeId == "" {
-			return reader.Own(), nil
+			return event.GetRatingResponse(reader.Own()), nil
 		}
 
 		subject := warpnet.FromStringToPeerID(ev.NodeId)
 		if subject == "" {
 			return nil, warpnet.ErrMalformedNodeId
 		}
-		return reader.Public(subject), nil
+		return event.GetRatingResponse(reader.Public(subject)), nil
 	}
 }
