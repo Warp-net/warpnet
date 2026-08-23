@@ -110,6 +110,14 @@ func main() {
 		_ = publisher.Close()
 	}()
 
+	// Rating rides the moderator's own gossip, so it can only start
+	// once the publisher is running. A moderator that cannot build it
+	// keeps working: it goes blind, it does not refuse to run.
+	if err := n.StartRating(publisher.Gossip(), nil); err != nil {
+		log.Errorf("moderator: failed to start rating: %v", err)
+	}
+	publisher.Gossip().SetRating(n.Rating())
+
 	moder, err := moderator.NewModerator(ctx, n, publisher, publisher, publisher, privKey)
 	if err != nil {
 		log.Errorf("failed to init moderator: %v", err)

@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -53,6 +54,9 @@ import (
 type MetricsOnlinePusher interface {
 	PushStatusOnline(nodeId string)
 	PushStatusOffline(nodeId string)
+	// PushRatingBand carries what rating enforcement would have done
+	// while the node runs in shadow mode.
+	PushRatingBand(peerId, band string)
 }
 
 type MemberNode struct {
@@ -68,6 +72,8 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
+	ratingRepo       StatsProvider
+	rating           *rating.Store
 	authRepo         AuthProvider
 	userRepo         UserProvider
 	aliasesRepo      AliasesProvider
@@ -76,7 +82,17 @@ type MemberNode struct {
 	db               Storer
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
+	metrics          MetricsOnlinePusher
 	ownerId, network string
+}
+
+// raterOrNop never returns nil: a node whose rating store failed to
+// build must penalise nobody, not everybody.
+func (m *MemberNode) raterOrNop() rating.Rater {
+	if m == nil || m.rating == nil {
+		return rating.Nop{}
+	}
+	return m.rating
 }
 
 func NewMemberNode(
@@ -99,6 +115,7 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
+	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
@@ -166,6 +183,7 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
+		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -173,6 +191,7 @@ func NewMemberNode(
 		notifier:      notifier,
 		db:            db,
 		privKey:       privKey,
+		metrics:       metrics,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -211,7 +230,29 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
+	m.rating, err = node.NewRatingStore(node.RatingDeps{
+		Ctx:      m.ctx,
+		Self:     m.node.Node().ID(),
+		PrivKey:  m.privKey,
+		NodeType: warpnet.MemberNode,
+		Host:     m.node.Node(),
+		Router:   m.dHashTable,
+		Store:    m.ratingRepo,
+		Gossip:   m.pubsubService.Gossip(),
+		Shadow:   m.metrics,
+	})
+	if err != nil {
+		// Rating is a property of a node, not a feature of it, but a
+		// node that cannot build its store is still a working node:
+		// it goes blind rather than refusing to start.
+		log.Errorf("member: failed to initialize rating store: %v", err)
+	}
+	m.node.SetRating(m.raterOrNop())
+	m.discService.SetRating(m.raterOrNop())
+	m.pubsubService.Gossip().SetRating(m.raterOrNop())
+
 	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
+	m.mw.SetRating(m.raterOrNop())
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -440,6 +481,14 @@ func (m *MemberNode) adminHandlers(
 		{
 			event.PRIVATE_GET_STATS,
 			handler.StreamGetStatsHandler(m, db),
+		},
+		{
+			event.PRIVATE_GET_RATING,
+			handler.StreamGetOwnRatingHandler(m.rating),
+		},
+		{
+			event.PUBLIC_GET_RATING,
+			handler.StreamGetRatingHandler(m.rating),
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
@@ -922,6 +971,9 @@ func (m *MemberNode) Stop() {
 	}
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()
+	}
+	if m.rating != nil {
+		_ = m.rating.Close()
 	}
 
 	if m.nodeRepo != nil {

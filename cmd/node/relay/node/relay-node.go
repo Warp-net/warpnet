@@ -31,11 +31,14 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -51,6 +54,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
+	SetRating(r rating.Rater)
 	Close()
 }
 
@@ -58,6 +62,7 @@ type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
 	OwnerID() string
+	Gossip() *corePubsub.Gossip
 }
 
 type DistributedHashTableCloser interface {
@@ -69,6 +74,7 @@ type DistributedHashTableCloser interface {
 type MetricsOnlinePusher interface {
 	PushStatusOnline(nodeId string)
 	PushStatusOffline(nodeId string)
+	PushRatingBand(peerId, band string)
 }
 
 type RelayNode struct {
@@ -82,6 +88,20 @@ type RelayNode struct {
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
+
+	// mapStore backs the rating CRDT. A relay holds no disk, so this
+	// dies with the process — and the CRDT is exactly what gives the
+	// view back on the next start, replayed from peers.
+	ratingStore crdt.CRDTStorer
+	rating      *rating.Store
+	metrics     MetricsOnlinePusher
+}
+
+func (rn *RelayNode) raterOrNop() rating.Rater {
+	if rn == nil || rn.rating == nil {
+		return rating.Nop{}
+	}
+	return rn.rating
 }
 
 func NewRelayNode(
@@ -107,9 +127,14 @@ func NewRelayNode(
 		return nil, fmt.Errorf("relay: fail creating memory peerstore: %w", err)
 	}
 	mapStore := datastore.NewMapDatastore()
+	// A datastore of its own for the rating CRDT: the DHT's provider
+	// records and the CRDT's block bookkeeping have no business
+	// sharing a keyspace.
+	ratingStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
 		_ = memoryStore.Close()
+		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -155,6 +180,8 @@ func NewRelayNode(
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
+		ratingStore:       ratingStore,
+		metrics:           m,
 	}
 
 	return rn, nil
@@ -178,12 +205,30 @@ func (rn *RelayNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("relay: failed to init node: %w", err)
 	}
-	rn.setupHandlers()
-
 	rn.pubsubService.Run(rn)
 	if err := rn.discService.Run(rn); err != nil {
 		return err
 	}
+
+	rn.rating, err = node.NewRatingStore(node.RatingDeps{
+		Ctx:      rn.ctx,
+		Self:     rn.node.Node().ID(),
+		PrivKey:  rn.privKey,
+		NodeType: warpnet.RelayNode,
+		Host:     rn.node.Node(),
+		Router:   rn.dHashTable,
+		Store:    rn.ratingStore,
+		Gossip:   rn.pubsubService.Gossip(),
+		Shadow:   rn.metrics,
+	})
+	if err != nil {
+		log.Errorf("relay: failed to initialize rating store: %v", err)
+	}
+	rn.node.SetRating(rn.raterOrNop())
+	rn.discService.SetRating(rn.raterOrNop())
+	rn.pubsubService.Gossip().SetRating(rn.raterOrNop())
+
+	rn.setupHandlers()
 
 	nodeInfo := rn.NodeInfo()
 	println()
@@ -201,6 +246,7 @@ func (rn *RelayNode) setupHandlers() {
 	}
 
 	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
+	rn.mw.SetRating(rn.raterOrNop())
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,
@@ -290,6 +336,9 @@ func (rn *RelayNode) Stop() {
 		if err := rn.pubsubService.Close(); err != nil {
 			log.Errorf("relay: failed to close pubsub: %v", err)
 		}
+	}
+	if rn.rating != nil {
+		_ = rn.rating.Close()
 	}
 	if rn.dHashTable != nil {
 		rn.dHashTable.Close()

@@ -290,6 +290,12 @@ type LogoutEvent struct {
 }
 
 // Message defines model for Message.
+// GetRatingEvent asks for a node's standing. An empty NodeId on the
+// private route means "my own".
+type GetRatingEvent struct {
+	NodeId string `json:"node_id"`
+}
+
 type Message struct {
 	Body        json.RawMessage `json:"body"`
 	MessageId   domain.ID       `json:"message_id"`

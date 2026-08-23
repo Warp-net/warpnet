@@ -32,10 +32,12 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -65,6 +67,12 @@ type ModeratorNode struct {
 
 	dHashTable DistributedHashTableDiscoverer
 
+	// ratingStore backs the rating CRDT. A moderator holds no disk
+	// either, so its view is restored from the DAG after a restart
+	// rather than from anything local.
+	ratingStore crdt.CRDTStorer
+	rating      *rating.Store
+
 	memoryStoreCloseF func() error
 
 	version *semver.Version
@@ -85,9 +93,13 @@ func NewModeratorNode(
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
 	}
 	mapStore := datastore.NewMapDatastore()
+	// Separate from the DHT's store: provider records and CRDT block
+	// bookkeeping have no business sharing a keyspace.
+	ratingStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
 		_ = memoryStore.Close()
+		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -122,6 +134,7 @@ func NewModeratorNode(
 	mn := &ModeratorNode{
 		ctx:               ctx,
 		dHashTable:        dHashTable,
+		ratingStore:       ratingStore,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -144,6 +157,7 @@ func (mn *ModeratorNode) Start() (err error) {
 	}
 
 	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
+	mn.mw.SetRating(mn.Rating())
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -168,6 +182,42 @@ func (mn *ModeratorNode) Start() (err error) {
 	)
 	println()
 	return nil
+}
+
+// StartRating brings the rating store up once gossip exists. The
+// moderator node itself has no pubsub — the moderator process owns it
+// — so this cannot happen inside Start.
+func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.ShadowReporter) error {
+	if mn == nil || mn.node == nil {
+		return warpnet.WarpError("moderator: rating: node is not started")
+	}
+	store, err := node.NewRatingStore(node.RatingDeps{
+		Ctx:      mn.ctx,
+		Self:     mn.node.Node().ID(),
+		PrivKey:  mn.privKey,
+		NodeType: warpnet.ModeratorNode,
+		Host:     mn.node.Node(),
+		Router:   mn.dHashTable,
+		Store:    mn.ratingStore,
+		Gossip:   gossip,
+		Shadow:   shadow,
+	})
+	if err != nil {
+		return err
+	}
+	mn.rating = store
+	mn.node.SetRating(store)
+	mn.mw.SetRating(store)
+	return nil
+}
+
+// Rating never returns nil: a moderator whose store failed to build
+// must penalise nobody.
+func (mn *ModeratorNode) Rating() rating.Rater {
+	if mn == nil || mn.rating == nil {
+		return rating.Nop{}
+	}
+	return mn.rating
 }
 
 // SetStreamHandlers registers additional routes after the node is up. The
@@ -215,6 +265,9 @@ func (mn *ModeratorNode) Stop() {
 	}
 	mn.isClosed.Store(true)
 
+	if mn.rating != nil {
+		_ = mn.rating.Close()
+	}
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()
 	}

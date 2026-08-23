@@ -1,0 +1,88 @@
+/*
+
+Warpnet - Decentralized Social Network
+Copyright (C) 2025 Vadim Filin, https://github.com/Warp-net,
+<github.com.mecdy@passmail.net>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+WarpNet is provided "as is" without warranty of any kind, either expressed or implied.
+Use at your own risk. The maintainers shall not be liable for any damages or data loss
+resulting from the use or misuse of this software.
+*/
+
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package handler
+
+import (
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
+)
+
+const ErrRatingUnavailable = warpnet.WarpError("rating is not available on this node")
+
+// RatingReader is the read side of the rating store, as the handlers
+// need it.
+type RatingReader interface {
+	Public(subject warpnet.WarpPeerID) domain.NodeRating
+	Own() domain.NodeRating
+}
+
+// StreamGetOwnRatingHandler serves the owner their own node's standing.
+//
+// What comes back is the public aggregate, assembled entirely from
+// records other nodes wrote about this one. A node holds no opinion of
+// itself by construction, so there is nothing else it could report —
+// which is the point: the user sees themselves as the network sees
+// them, and the offence tallies say what to fix.
+func StreamGetOwnRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
+	return func(_ []byte, _ warpnet.WarpStream) (any, error) {
+		if reader == nil {
+			return nil, ErrRatingUnavailable
+		}
+		return reader.Own(), nil
+	}
+}
+
+// StreamGetRatingHandler serves this node's view of some other node.
+//
+// It is a convenience for clients that hold no CRDT replica of their
+// own — a paired phone, mostly. Full nodes read the CRDT directly, so
+// nothing in the rating mechanism depends on this route being
+// answered.
+func StreamGetRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		if reader == nil {
+			return nil, ErrRatingUnavailable
+		}
+
+		var ev event.GetRatingEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.NodeId == "" {
+			return reader.Own(), nil
+		}
+
+		subject := warpnet.FromStringToPeerID(ev.NodeId)
+		if subject == "" {
+			return nil, warpnet.ErrMalformedNodeId
+		}
+		return reader.Public(subject), nil
+	}
+}

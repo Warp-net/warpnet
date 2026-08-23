@@ -41,6 +41,7 @@ type MetricsClient struct {
 
 	socksGauge  *prometheus.GaugeVec
 	onlineGauge *prometheus.GaugeVec
+	ratingGauge *prometheus.GaugeVec
 
 	mx     sync.Mutex
 	pusher *push.Pusher
@@ -69,20 +70,48 @@ func NewMetricsClient(pushGatewayURL, ownNodeId, network string) *MetricsClient 
 		},
 		[]string{"peer_id", "ip"},
 	)
+	// ratingGauge carries what peer rating WOULD have done while the
+	// node runs in shadow mode. The offence weights are guesses that
+	// cannot be calibrated once enforcement starts changing the
+	// behaviour being measured, so shadow decisions have to be
+	// aggregable across the fleet rather than sitting in one node's
+	// log.
+	ratingGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "node_rating_band",
+			Help: "Observed peer rating band: 0 trusted, 1 watched, 2 degraded, 3 floor",
+		},
+		[]string{"peer_id", "band"},
+	)
+
 	pusher := push.New(pushGatewayURL, "warpnet_node").
 		Grouping("network", network).
 		Grouping("node_id", ownNodeId).
 		Collector(onlineGauge).
-		Collector(socksGauge)
+		Collector(socksGauge).
+		Collector(ratingGauge)
 
 	return &MetricsClient{
 		pushGatewayURL: pushGatewayURL,
 		jobName:        "warpnet_node",
 		onlineGauge:    onlineGauge,
 		socksGauge:     socksGauge,
+		ratingGauge:    ratingGauge,
 		pusher:         pusher,
 		network:        network,
 	}
+}
+
+// PushRatingBand reports a peer's observed standing. Called only from
+// shadow mode, where it is the whole point of the mode.
+func (c *MetricsClient) PushRatingBand(peerId, band string) {
+	if c == nil {
+		return
+	}
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	c.ratingGauge.WithLabelValues(peerId, band).Set(1)
+	logPushResult(c.pusher.Push())
 }
 
 func (c *MetricsClient) PushStatusOnline(peerId string) {

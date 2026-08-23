@@ -84,8 +84,14 @@ type Gossip struct {
 	handlersMap      map[string]topicHandler
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
-	rater            rating.Scorer
+
+	// rater is read by the score function on every scoring pass, and
+	// is swapped in after the router exists: the rating store is built
+	// on top of this very gossip, so it cannot be ready before Run.
+	rater atomic.Pointer[raterHolder]
 }
+
+type raterHolder struct{ scorer rating.Scorer }
 
 type TopicHandler struct {
 	TopicName string
@@ -235,13 +241,25 @@ func (g *Gossip) runGossip() (err error) {
 }
 
 // SetRating attaches the node's rating store so a peer's standing
-// reaches gossipsub's own scoring. Must be called before Run: the
-// score function is baked into the router at construction.
+// reaches gossipsub's own scoring. Safe to call after Run: the score
+// function reads the current rater on every pass, which it has to,
+// because the store is built on top of this gossip and cannot exist
+// before it.
 func (g *Gossip) SetRating(r rating.Scorer) {
 	if g == nil || r == nil {
 		return
 	}
-	g.rater = r
+	g.rater.Store(&raterHolder{scorer: r})
+}
+
+func (g *Gossip) scorer() rating.Scorer {
+	if g == nil {
+		return rating.Nop{}
+	}
+	if held := g.rater.Load(); held != nil && held.scorer != nil {
+		return held.scorer
+	}
+	return rating.Nop{}
 }
 
 // scoreOptions wires the rating into gossipsub's AppSpecificScore, the
@@ -253,14 +271,16 @@ func (g *Gossip) SetRating(r rating.Scorer) {
 // thing (is this peer useful in this mesh) and mixing our weights into
 // them would make both harder to reason about.
 func (g *Gossip) scoreOptions() []pubsub.Option {
-	if g == nil || g.rater == nil {
+	if g == nil {
 		return nil
 	}
 	params := &pubsub.PeerScoreParams{
 		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
-			// EffectiveBand is BandTrusted in shadow mode, which maps
-			// to a score of 0 — exactly what an unrated peer gets.
-			return rating.GossipAppScore(g.rater.EffectiveBand(p))
+			// EffectiveBand is BandTrusted in shadow mode and for the
+			// Nop rater, both of which map to 0 — exactly what an
+			// unrated peer gets, so scoring is inert until a store is
+			// attached and enforcing.
+			return rating.GossipAppScore(g.scorer().EffectiveBand(p))
 		},
 		AppSpecificWeight: 1,
 		DecayInterval:     time.Minute,

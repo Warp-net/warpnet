@@ -66,6 +66,7 @@ export default {
       showImportModal: false,
       items: [
         { name: 'SettingsPreferences', label: 'Preferences', hint: 'Default visibility, language', icon: 'fas fa-sliders-h' },
+        { name: 'SettingsRating', label: 'Node rating', hint: 'How the network rates your node', icon: 'fas fa-heart-pulse' },
         { name: 'SettingsBlocks', label: 'Blocked users', hint: 'Users you have blocked', icon: 'fas fa-ban' },
         { name: 'SettingsMutes', label: 'Muted users', hint: 'Users you have muted', icon: 'fas fa-volume-mute' },
         { name: 'SettingsFilters', label: 'Filters', hint: 'Hide tweets matching keywords', icon: 'fas fa-filter' },

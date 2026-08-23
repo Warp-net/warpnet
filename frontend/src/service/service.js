@@ -75,6 +75,7 @@ export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
+export const PRIVATE_GET_RATING = "/private/get/admin/rating/0.0.0"
 export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
 export const PRIVATE_POST_USER = "/private/post/user/0.0.0"
 export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
@@ -2227,6 +2228,16 @@ export const warpnetService = {
         }
 
         return await this.sendToNode(request);
+    },
+
+    // getOwnRating returns how the network rates this node. The node
+    // holds no opinion of itself, so everything here was written by
+    // other nodes.
+    async getOwnRating(){
+        return await this.sendToNode({
+            path: PRIVATE_GET_RATING,
+            body: {},
+        });
     },
 
     async sendToNode(request) {

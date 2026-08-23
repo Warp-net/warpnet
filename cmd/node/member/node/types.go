@@ -33,6 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -45,6 +46,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
+	SetRating(r rating.Rater)
 	Close()
 }
 
