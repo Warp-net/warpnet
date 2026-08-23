@@ -51,7 +51,7 @@ import (
 // the DAG after a restart and cannot recover it any other way.
 func NewCRDTRatingStore(
 	ctx context.Context,
-	crdtStore *Datastore,
+	crdtStore *Store,
 	node host.Host,
 	privKey ed25519.PrivateKey,
 	nodeType string,
@@ -60,7 +60,7 @@ func NewCRDTRatingStore(
 		return nil, fmt.Errorf("rating: incomplete dependencies") //nolint:err113
 	}
 
-	open := func(hooks rating.Hooks) (rating.Datastore, error) {
+	open := func(hooks rating.Hooks) (rating.Storer, error) {
 		crdtStore.OnPut(func(k ds.Key, v []byte) { hooks.Put(k.String(), v) })
 		crdtStore.OnDelete(func(k ds.Key) { hooks.Delete(k.String()) })
 		return crdtStore, nil

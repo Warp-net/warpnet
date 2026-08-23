@@ -76,7 +76,7 @@ type MemberNode struct {
 	followRepo       FollowStorer
 	notifier         notifications.Notifier
 	db               Storer
-	crdtDb           *crdt.Datastore
+	crdtDb           *crdt.Store
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
 	metrics          MetricsOnlinePusher
@@ -218,7 +218,7 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.crdtDb, err = crdt.NewDatastore(
+	m.crdtDb, err = crdt.NewStore(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {

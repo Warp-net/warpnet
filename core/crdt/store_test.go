@@ -17,13 +17,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newLiveDatastore(t *testing.T) *Datastore {
+func newLiveDatastore(t *testing.T) *Store {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	d, err := NewDatastore(
+	d, err := NewStore(
 		ctx,
 		&silentBroadcaster{},
 		dssync.MutexWrap(datastore.NewMapDatastore()),

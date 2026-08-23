@@ -74,8 +74,8 @@
 //     model; the store it runs on is built in core/crdt/rating.go and
 //     reaches this package through the Opener callback. The dependency
 //     runs core/crdt → core/rating and never back. That store is a
-//     tenant of the node's one CRDT datastore, sharing it with stat
-//     counters under a key prefix of its own — a second datastore would
+//     tenant of the node's one CRDT replica, sharing it with stat
+//     counters under a key prefix of its own — a second replica would
 //     only mean a second DAG and a second gossip topic replicating the
 //     same node's data.
 //

@@ -103,7 +103,7 @@ type RelayNode struct {
 	// the process — and the CRDT is exactly what gives the view back on
 	// the next start, replayed from peers.
 	mapStore warpnet.WarpBatching
-	crdtDb   *crdt.Datastore
+	crdtDb   *crdt.Store
 	ratingDb RatingStorer
 	metrics  MetricsOnlinePusher
 }
@@ -221,7 +221,7 @@ func (rn *RelayNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("relay: failed to start crdt gossip broadcaster: %w", err)
 	}
-	rn.crdtDb, err = crdt.NewDatastore(
+	rn.crdtDb, err = crdt.NewStore(
 		rn.ctx, crdtBroadcaster, rn.mapStore, rn.node.Node(), rn.dHashTable,
 	)
 	if err != nil {

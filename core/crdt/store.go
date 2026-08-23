@@ -40,13 +40,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Datastore is the node's CRDT replica, and a node has exactly one.
+// Store is the node's CRDT replica, and a node has exactly one.
 // Everything it replicates to its peers — stat counters, peer ratings
 // — lives in it under its own key prefix. One blockstore, one bitswap
 // exchange, one DAG and one gossip topic is all it takes to replicate
-// all of them; a second datastore would only buy a second copy of that
+// all of them; a second replica would only buy a second copy of that
 // machinery, and a second set of blocks to keep in sync.
-type Datastore struct {
+type Store struct {
 	*crdt.Datastore
 
 	mx      sync.RWMutex
@@ -56,54 +56,54 @@ type Datastore struct {
 
 // OnPut registers a hook fired for every merged delta. go-ds-crdt takes
 // one PutHook and copies its options at construction, so the stores
-// sharing this datastore subscribe here instead of through them.
-func (d *Datastore) OnPut(f func(k ds.Key, v []byte)) {
-	if d == nil || f == nil {
+// sharing this replica subscribe here instead of through them.
+func (s *Store) OnPut(f func(k ds.Key, v []byte)) {
+	if s == nil || f == nil {
 		return
 	}
-	d.mx.Lock()
-	d.puts = append(d.puts, f)
-	d.mx.Unlock()
+	s.mx.Lock()
+	s.puts = append(s.puts, f)
+	s.mx.Unlock()
 }
 
 // OnDelete registers a hook fired for every merged deletion.
-func (d *Datastore) OnDelete(f func(k ds.Key)) {
-	if d == nil || f == nil {
+func (s *Store) OnDelete(f func(k ds.Key)) {
+	if s == nil || f == nil {
 		return
 	}
-	d.mx.Lock()
-	d.deletes = append(d.deletes, f)
-	d.mx.Unlock()
+	s.mx.Lock()
+	s.deletes = append(s.deletes, f)
+	s.mx.Unlock()
 }
 
-func (d *Datastore) firePut(k ds.Key, v []byte) {
-	d.mx.RLock()
-	hooks := d.puts
-	d.mx.RUnlock()
+func (s *Store) firePut(k ds.Key, v []byte) {
+	s.mx.RLock()
+	hooks := s.puts
+	s.mx.RUnlock()
 	for _, h := range hooks {
 		h(k, v)
 	}
 }
 
-func (d *Datastore) fireDelete(k ds.Key) {
-	d.mx.RLock()
-	hooks := d.deletes
-	d.mx.RUnlock()
+func (s *Store) fireDelete(k ds.Key) {
+	s.mx.RLock()
+	hooks := s.deletes
+	s.mx.RUnlock()
 	for _, h := range hooks {
 		h(k)
 	}
 }
 
-// NewDatastore builds the node's go-ds-crdt datastore on top of its
-// bitswap exchange.
-func NewDatastore(
+// NewStore builds the node's CRDT replica on top of its bitswap
+// exchange.
+func NewStore(
 	ctx context.Context,
 	broadcaster Broadcaster,
 	datastore CRDTStorer,
 	node host.Host,
 	router CRDTRouter,
-) (*Datastore, error) {
-	d := new(Datastore)
+) (*Store, error) {
+	s := new(Store)
 
 	baseStore := ds.MutexWrap(datastore)
 
@@ -144,11 +144,11 @@ func NewDatastore(
 	opts.Logger = l
 	opts.PutHook = func(k ds.Key, v []byte) {
 		// l.Infof("crdt: item put: %s", k.String())
-		d.firePut(k, v)
+		s.firePut(k, v)
 	}
 	opts.DeleteHook = func(k ds.Key) {
 		// l.Infof("crdt: item deleted: %s", k.String())
-		d.fireDelete(k)
+		s.fireDelete(k)
 	}
 	opts.RebroadcastInterval = time.Minute
 	opts.DAGSyncerTimeout = time.Minute
@@ -164,6 +164,6 @@ func NewDatastore(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
-	d.Datastore = crdtStore
-	return d, nil
+	s.Datastore = crdtStore
+	return s, nil
 }

@@ -54,7 +54,7 @@ func bandOf(t *testing.T, s *Store, id warpnet.WarpPeerID) Band {
 	return band
 }
 
-func newTestStore(t *testing.T, self identity, store Datastore, clock *fixedClock) *Store {
+func newTestStore(t *testing.T, self identity, store Storer, clock *fixedClock) *Store {
 	t.Helper()
 	s, err := NewStore(Config{
 		Ctx:        t.Context(),

@@ -120,8 +120,8 @@ func (m *memStore) clone() *memStore {
 	return out
 }
 
-func opener(store Datastore) Opener {
-	return func(Hooks) (Datastore, error) { return store, nil }
+func opener(store Storer) Opener {
+	return func(Hooks) (Storer, error) { return store, nil }
 }
 
 // fixedClock lets a test place entries in specific buckets and

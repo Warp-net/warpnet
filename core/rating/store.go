@@ -53,25 +53,26 @@ const (
 	generationBytes      = 16
 )
 
-// Datastore is the subset of the CRDT datastore the store needs.
-type Datastore interface {
+// Storer is the subset of the node's CRDT replica this store needs.
+type Storer interface {
 	Get(ctx context.Context, key ds.Key) ([]byte, error)
 	Put(ctx context.Context, key ds.Key, value []byte) error
 	Delete(ctx context.Context, key ds.Key) error
 	Query(ctx context.Context, q ds.Query) (ds.Results, error)
 }
 
-// Hooks are handed to the datastore constructor so every merged CRDT
-// delta lands in the index without a re-query.
+// Hooks are registered on the CRDT replica so every merged delta lands
+// in the index without a re-query.
 type Hooks struct {
 	Put    func(key string, value []byte)
 	Delete func(key string)
 }
 
-// Opener builds the datastore once the store has hooks to give it.
-// The indirection exists because the hooks and the datastore are
-// mutually dependent at construction time.
-type Opener func(Hooks) (Datastore, error)
+// Opener hands over that replica once the store has hooks to give it.
+// The indirection exists because the hooks and the replica are mutually
+// dependent at construction time, and it is what keeps this package
+// free of any dependency on core/crdt.
+type Opener func(Hooks) (Storer, error)
 
 // Acquaintance reports how long we have been continuously connected to
 // a peer in this session.
@@ -113,7 +114,7 @@ type Store struct {
 	privKey    ed25519.PrivateKey
 	dims       []Dimension
 	now        func() time.Time
-	store      Datastore
+	store      Storer
 	idx        *index
 	acquainted Acquaintance
 
@@ -190,7 +191,7 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 	store, err := open(Hooks{Put: s.onPut, Delete: s.onDelete})
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("rating: open datastore: %w", err)
+		return nil, fmt.Errorf("rating: open store: %w", err)
 	}
 	s.store = store
 

@@ -107,7 +107,7 @@ type CRDTRouter interface {
 //     is fresh, so peers' replayed history is preserved verbatim and
 //     this process simply accrues a new sub-counter alongside.
 type CRDTStatsStore struct {
-	crdt       *Datastore
+	crdt       *Store
 	ctx        context.Context
 	prefix     string
 	nodeID     string
@@ -121,7 +121,7 @@ type CRDTStatsStore struct {
 // NewCRDTStatsStore creates a new CRDT-based statistics store on the
 // node's one CRDT datastore, which it shares with every other store
 // replicated the same way and does not own.
-func NewCRDTStatsStore(ctx context.Context, crdtStore *Datastore, node host.Host) (*CRDTStatsStore, error) {
+func NewCRDTStatsStore(ctx context.Context, crdtStore *Store, node host.Host) (*CRDTStatsStore, error) {
 	if crdtStore == nil || node == nil {
 		return nil, fmt.Errorf("crdt stats: incomplete dependencies") //nolint:err113
 	}

@@ -81,7 +81,7 @@ type ModeratorNode struct {
 	// so its view is restored from the DAG after a restart rather than
 	// from anything local.
 	mapStore warpnet.WarpBatching
-	crdtDb   *crdt.Datastore
+	crdtDb   *crdt.Store
 	ratingDb RatingStorer
 
 	memoryStoreCloseF func() error
@@ -203,7 +203,7 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber) error {
 	if err != nil {
 		return fmt.Errorf("moderator: failed to start crdt gossip broadcaster: %w", err)
 	}
-	mn.crdtDb, err = crdt.NewDatastore(
+	mn.crdtDb, err = crdt.NewStore(
 		mn.ctx, broadcaster, mn.mapStore, mn.node.Node(), mn.dHashTable,
 	)
 	if err != nil {

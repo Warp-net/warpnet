@@ -90,7 +90,7 @@ func newLiveStatsStore(t *testing.T) (*CRDTStatsStore, *silentBroadcaster) {
 
 	bc := &silentBroadcaster{}
 	host := newStatsHost(t)
-	crdtStore, err := NewDatastore(
+	crdtStore, err := NewStore(
 		ctx,
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
