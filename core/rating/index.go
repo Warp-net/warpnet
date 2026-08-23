@@ -45,16 +45,23 @@ type slot struct {
 type index struct {
 	mu   sync.RWMutex
 	data map[string]map[slot][]CountEntry
-	lru  *lru.Cache[string, struct{}]
+	// rev changes whenever a subject's entries do, so a cached score
+	// knows when it is stale without comparing the entries themselves.
+	rev map[string]uint64
+	lru *lru.Cache[string, struct{}]
 }
 
 func newIndex() (*index, error) {
-	idx := &index{data: make(map[string]map[slot][]CountEntry)}
+	idx := &index{
+		data: make(map[string]map[slot][]CountEntry),
+		rev:  make(map[string]uint64),
+	}
 	cache, err := lru.NewWithEvict[string, struct{}](
 		maxIndexedSubjects,
 		func(subject string, _ struct{}) {
 			idx.mu.Lock()
 			delete(idx.data, subject)
+			idx.rev[subject]++
 			idx.mu.Unlock()
 		},
 	)
@@ -81,6 +88,7 @@ func (i *index) put(rec Record) {
 		i.data[rec.Subject] = slots
 	}
 	slots[key] = rec.Counts
+	i.rev[rec.Subject]++
 	i.mu.Unlock()
 
 	// Outside the lock: eviction takes the same mutex.
@@ -97,6 +105,7 @@ func (i *index) drop(subject, observer string, dim Dimension, bucket int64, gene
 		return
 	}
 	delete(slots, key)
+	i.rev[subject]++
 	if len(slots) == 0 {
 		delete(i.data, subject)
 	}
@@ -139,6 +148,12 @@ func (i *index) has(subject string) bool {
 	_, ok := i.data[subject]
 	i.mu.RUnlock()
 	return ok
+}
+
+func (i *index) revision(subject string) uint64 {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return i.rev[subject]
 }
 
 func (i *index) subjects() []string {

@@ -365,6 +365,46 @@ func TestUnobservedSubjectIsNotRequeriedForever(t *testing.T) {
 		"a peer nobody observed is marked present so it is not re-queried on every request")
 }
 
+// The score is memoised between changes to a subject's entries, so
+// the clock is deliberately frozen here: if invalidation were broken,
+// both reads would return the stale value.
+func TestNewEvidenceInvalidatesTheCachedScore(t *testing.T) {
+	self := newIdentity(t)
+	other := newIdentity(t)
+	clock := newClock()
+	s := newTestStore(t, self, newMemStore(), clock)
+
+	require.Equal(t, MaxScore, scoreOf(t, s, other.id))
+
+	mustRecordN(t, s, other.id, KindBadSignature, 2)
+	flushNow(t, s)
+	first := scoreOf(t, s, other.id)
+	require.Less(t, first, MaxScore, "our own flushed evidence must land at once")
+
+	mustRecordN(t, s, other.id, KindBadSignature, 2)
+	flushNow(t, s)
+	assert.Less(t, scoreOf(t, s, other.id), first)
+}
+
+func TestAMergedForeignRecordInvalidatesTheCachedScore(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	victim := newIdentity(t)
+	clock := newClock()
+	s := newTestStore(t, self, newMemStore(), clock)
+
+	require.Equal(t, MaxScore, scoreOf(t, s, victim.id))
+
+	rec := signedRecord(peer, victim.id, Network, BucketOf(clock.Now()), genA,
+		CountEntry{KindBadSignature, 2})
+	payload, err := json.Marshal(rec)
+	require.NoError(t, err)
+	s.onPut(rec.Key(), payload)
+
+	assert.Less(t, scoreOf(t, s, victim.id), MaxScore,
+		"a delta merged from the DAG must not read as the cached score")
+}
+
 func TestNopRaterNeverPenalises(t *testing.T) {
 	var r Rater = Nop{}
 	id := warpnet.FromStringToPeerID("12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo")

@@ -44,6 +44,7 @@ import (
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
+	lru "github.com/hashicorp/golang-lru/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,6 +52,12 @@ const (
 	defaultFlushInterval = 30 * time.Second
 	gcInterval           = time.Hour
 	generationBytes      = 16
+
+	// scoreTTL bounds how stale a cached score may be while a subject's
+	// entries are unchanged. Scoring is on the request path and costs
+	// hundreds of microseconds for a well-observed peer; half-lives are
+	// measured in days, so seconds of staleness change nothing.
+	scoreTTL = 15 * time.Second
 )
 
 // Storer is the subset of the node's CRDT replica this store needs.
@@ -109,6 +116,7 @@ type Store struct {
 	dirty    map[pendingKey]struct{}
 
 	fallbackMx sync.Mutex
+	scores     *lru.Cache[string, cachedScore]
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -139,6 +147,11 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 		return nil, fmt.Errorf("rating: index: %w", err)
 	}
 
+	scores, err := lru.New[string, cachedScore](maxIndexedSubjects)
+	if err != nil {
+		return nil, fmt.Errorf("rating: score cache: %w", err)
+	}
+
 	generation, err := newGeneration()
 	if err != nil {
 		return nil, fmt.Errorf("rating: generation: %w", err)
@@ -153,6 +166,7 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 		dims:       slices.Clone(cfg.Dimensions),
 		now:        cfg.Now,
 		idx:        idx,
+		scores:     scores,
 		acquainted: cfg.Acquainted,
 		generation: generation,
 		counters:   make(map[pendingKey]pendingCounts),
@@ -215,21 +229,35 @@ func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 	if s == nil {
 		return MaxScore, nil
 	}
-	obs, err := s.entriesFor(subject.String())
+	id := subject.String()
+	rev := s.idx.revision(id)
+	now := s.now()
+	if hit, ok := s.scores.Get(id); ok && hit.rev == rev && now.Sub(hit.at) < scoreTTL {
+		return hit.score, nil
+	}
+
+	obs, err := s.entriesFor(id)
 	if err != nil {
 		return MaxScore, err
 	}
-	if len(obs) == 0 {
-		return MaxScore, nil
-	}
-	now := s.now()
 	worst := MaxScore
 	for _, dim := range dimensionsPresent(obs) {
 		if sc := s.scoreDim(obs, dim, now); sc < worst {
 			worst = sc
 		}
 	}
+	s.scores.Add(id, cachedScore{score: worst, rev: rev, at: now})
 	return worst, nil
+}
+
+// cachedScore memoises a subject's standing between changes to its
+// entries. Every enforcement point reads a band per request, and
+// recomputing decay over every record each time made that read cost
+// more than the request it was guarding.
+type cachedScore struct {
+	score Score
+	rev   uint64
+	at    time.Time
 }
 
 func (s *Store) ScoreDim(subject warpnet.WarpPeerID, dim Dimension) (Score, error) {
