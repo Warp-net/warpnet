@@ -41,8 +41,6 @@ func (c *capturingReporter) count(want rating.Kind) int {
 	return n
 }
 
-// ratedPeer is a real peer id: the ledger resolves the string before
-// reporting, so a placeholder would be silently dropped.
 func ratedPeer(t *testing.T) string {
 	t.Helper()
 	id := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
@@ -50,9 +48,6 @@ func ratedPeer(t *testing.T) string {
 	return id.String()
 }
 
-// An honest moderator on a different model disagrees now and then and
-// must cost nothing. This is why the rate judgement stays in the
-// ledger: a raw count of wrong answers cannot tell this peer from a bot.
 func TestHonestPeerIsNeverReported(t *testing.T) {
 	reporter := &capturingReporter{}
 	ledger := NewLedger(reporter)
@@ -74,10 +69,6 @@ func TestCoinFlippingBotIsReported(t *testing.T) {
 	ledger := NewLedger(reporter)
 	peer := ratedPeer(t)
 
-	// Half right, half wrong: a coin flip, no model behind it. It
-	// crosses the ban line the moment there is enough sample to judge,
-	// without ever passing through suspect — nothing is reported until
-	// then, and then the ban is.
 	for range 30 {
 		ledger.Record(peer, OutcomeCorrect)
 		ledger.Record(peer, OutcomeWrong)
@@ -88,15 +79,11 @@ func TestCoinFlippingBotIsReported(t *testing.T) {
 	assert.Zero(t, reporter.count(rating.KindAuditWrong))
 }
 
-// A peer that only drifts into the tolerance gap is reported as
-// suspect, and never as banned.
 func TestMildlyDisagreeingPeerIsReportedAsSuspectOnly(t *testing.T) {
 	reporter := &capturingReporter{}
 	ledger := NewLedger(reporter)
 	peer := ratedPeer(t)
 
-	// 75% agreement: past what model diversity explains, well short of
-	// guessing.
 	for range 15 {
 		ledger.Record(peer, OutcomeCorrect)
 		ledger.Record(peer, OutcomeCorrect)
@@ -109,9 +96,6 @@ func TestMildlyDisagreeingPeerIsReportedAsSuspectOnly(t *testing.T) {
 	assert.Zero(t, reporter.count(rating.KindAuditInvalid))
 }
 
-// A conclusion is reported when it is reached, not on every probe
-// afterwards: a long-running audit must not grind a peer down for
-// something it already said.
 func TestAStandingIsReportedOnlyOnce(t *testing.T) {
 	reporter := &capturingReporter{}
 	ledger := NewLedger(reporter)
@@ -126,9 +110,6 @@ func TestAStandingIsReportedOnlyOnce(t *testing.T) {
 	assert.LessOrEqual(t, reporter.count(rating.KindAuditWrong), 1)
 }
 
-// Invalid answers are deliberate — a bad signature or a rebound
-// challenge id is not something a working moderator produces — so they
-// ban outright.
 func TestInvalidAnswersReportImmediately(t *testing.T) {
 	reporter := &capturingReporter{}
 	ledger := NewLedger(reporter)
@@ -141,8 +122,6 @@ func TestInvalidAnswersReportImmediately(t *testing.T) {
 	assert.Equal(t, 1, reporter.count(rating.KindAuditInvalid))
 }
 
-// Silence may be the network's fault, so it is reported every time and
-// weighs almost nothing rather than being treated as a verdict.
 func TestUnreachableIsReportedEveryTimeAndCheaply(t *testing.T) {
 	reporter := &capturingReporter{}
 	ledger := NewLedger(reporter)

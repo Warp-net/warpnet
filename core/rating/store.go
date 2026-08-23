@@ -61,31 +61,21 @@ type Storer interface {
 	Query(ctx context.Context, q ds.Query) (ds.Results, error)
 }
 
-// Hooks are registered on the CRDT replica so every merged delta lands
-// in the index without a re-query.
 type Hooks struct {
 	Put    func(key string, value []byte)
 	Delete func(key string)
 }
 
-// Opener hands over that replica once the store has hooks to give it.
-// The indirection exists because the hooks and the replica are mutually
-// dependent at construction time, and it is what keeps this package
-// free of any dependency on core/crdt.
 type Opener func(Hooks) (Storer, error)
 
-// Acquaintance reports how long we have been continuously connected to
-// a peer in this session.
 type Acquaintance interface {
 	ConnectedSince(id warpnet.WarpPeerID) (time.Time, bool)
 }
 
 type Config struct {
-	Ctx     context.Context
-	Self    warpnet.WarpPeerID
-	PrivKey ed25519.PrivateKey
-	// Dimensions this node is able to witness. Observations for any
-	// other dimension are refused at Record.
+	Ctx        context.Context
+	Self       warpnet.WarpPeerID
+	PrivKey    ed25519.PrivateKey
 	Dimensions []Dimension
 	Flush      time.Duration
 	Now        func() time.Time
@@ -101,12 +91,6 @@ type pendingKey struct {
 // pendingCounts is one bucket's running totals for this generation.
 type pendingCounts map[Kind]uint32
 
-// Store holds this node's view of everyone else's standing.
-//
-// It never holds an opinion of itself: Record refuses a subject equal
-// to Self, and Validate refuses any record whose subject equals its
-// observer. A node's own rating is assembled from what its neighbours
-// wrote about it and nothing else.
 type Store struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -118,24 +102,12 @@ type Store struct {
 	idx        *index
 	acquainted Acquaintance
 
-	// generation is minted once per process start. Every key this
-	// process writes carries it, so a restart — including one that
-	// came back with an empty datastore, which is the normal case for
-	// a relay — cannot overwrite the records the DAG is replaying
-	// back. Readers sum across generations.
 	generation string
 
-	// mu guards counters and dirty. Folding an entry is a map
-	// bump and nothing else, so Record can do it inline and stay
-	// non-blocking; flush deliberately does its I/O outside this lock,
-	// because a Put re-enters the CRDT put hook, which calls Record.
 	mu       sync.Mutex
 	counters map[pendingKey]pendingCounts
 	dirty    map[pendingKey]struct{}
 
-	// fallbackMx serialises the cold-path datastore query for a
-	// subject that fell out of the index, so a burst of requests for
-	// one evicted peer issues one query, not a hundred.
 	fallbackMx sync.Mutex
 
 	closeOnce sync.Once
@@ -196,8 +168,6 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 	s.store = store
 
 	if err := s.scan(); err != nil {
-		// A failed scan costs accuracy until the DAG re-delivers, not
-		// correctness: the hooks keep feeding the index either way.
 		log.Warnf("rating: initial scan: %v", err)
 	}
 
@@ -205,10 +175,6 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 	return s, nil
 }
 
-// Record records one offence against subject. It is called from the
-// middleware chain and from stream handlers, so it does no I/O: the
-// count is folded into the current hour's bucket in memory and the
-// flush ticker persists it.
 func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) error {
 	return s.RecordN(subject, k, 1)
 }
@@ -221,15 +187,9 @@ func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error {
 	if id == "" {
 		return ErrEmptySubject
 	}
-	// A node cannot rate itself. Not a fault — the invariant holds by
-	// construction on both sides, here on the write side and in
-	// Validate on the read side — so it costs the caller nothing.
 	if id == s.self {
 		return nil
 	}
-	// A node may only report what its role can actually witness: a
-	// relay claiming to have seen a bad moderation verdict is refused
-	// at the door rather than written and ignored downstream.
 	if !k.Valid() {
 		return ErrUnknownKind
 	}
@@ -251,12 +211,6 @@ func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error {
 	return nil
 }
 
-// Score is the subject's standing: the minimum across every dimension
-// anyone has actually observed it on. A moderator that is clean on the
-// wire but forges verdicts is not a mostly-fine node.
-// Score returns MaxScore alongside any error: a subject we failed to
-// read is not thereby an offender, and every caller is an enforcement
-// point that must fail open.
 func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 	if s == nil {
 		return MaxScore, nil
@@ -298,13 +252,7 @@ func (s *Store) scoreDim(obs []entry, dim Dimension, now time.Time) Score {
 	return subjectiveScore(obs, dim, s.self, now, s.weightOf, s.countsTowardScore)
 }
 
-// weightOf discounts a remote observer by how much this node trusts
-// it, using only first-hand evidence about that observer so the
-// recursion is one level deep and always terminates.
 func (s *Store) weightOf(observer string) float64 {
-	// A read failure here means we know nothing against the observer,
-	// which is exactly the full-weight case; entriesFor has already
-	// logged it.
 	obs, err := s.entriesFor(observer)
 	if err != nil || len(obs) == 0 {
 		return 1
@@ -319,9 +267,6 @@ func (s *Store) weightOf(observer string) float64 {
 	return float64(worst) / float64(MaxScore)
 }
 
-// countsTowardScore drops observers we barely know. When no
-// acquaintance source is wired the guard is inactive and the caps in
-// aggregate.go carry the whole load, which they are sized to do.
 func (s *Store) countsTowardScore(observer string) bool {
 	if s.acquainted == nil {
 		return true
@@ -377,8 +322,6 @@ func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error) {
 	return result, nil
 }
 
-// Own is this node's own standing, assembled entirely from records
-// other nodes wrote about it.
 func (s *Store) Own() (domain.NodeRating, error) {
 	if s == nil {
 		return domain.NodeRating{Overall: int32(MaxScore), Band: BandTrusted.String()}, nil
@@ -412,8 +355,6 @@ func dimensionsPresent(obs []entry) []Dimension {
 	return out
 }
 
-// entriesFor reads the index, falling back to a one-off datastore
-// query for a subject the index evicted.
 func (s *Store) entriesFor(subject string) ([]entry, error) {
 	if subject == "" {
 		return nil, ErrEmptySubject
@@ -432,8 +373,6 @@ func (s *Store) entriesFor(subject string) ([]entry, error) {
 }
 
 func (s *Store) loadSubject(subject string) error {
-	// Mark it present even if empty, so a peer nobody ever observed
-	// does not re-query on every request.
 	s.idx.ensure(subject)
 	if s.store == nil {
 		return nil
@@ -454,9 +393,6 @@ func (s *Store) loadSubject(subject string) error {
 	return nil
 }
 
-// scan rebuilds the index at startup. For a node whose datastore is
-// empty — every relay and moderator restart — this finds nothing and
-// the index is filled by the put hook as the DAG replays instead.
 func (s *Store) scan() error {
 	if s.store == nil {
 		return nil
@@ -484,13 +420,6 @@ func (s *Store) scan() error {
 	return nil
 }
 
-// admit parses, authenticates and indexes one raw record.
-//
-// Two failures, handled differently. A record whose signature does not
-// verify names an observer that may have had nothing to do with it, so
-// there is nobody to charge — drop it. A record that verifies and is
-// still structurally illegal was provably authored by the observer it
-// names, and that is attributable.
 func (s *Store) admit(value []byte) (bool, error) {
 	if len(value) == 0 {
 		return false, ErrEmptyRecord
@@ -517,8 +446,6 @@ func (s *Store) onPut(key string, value []byte) {
 	if !strings.HasPrefix(key, KeyPrefix()) {
 		return
 	}
-	// The CRDT hook has nowhere to return to: a delta that fails to
-	// admit is one peer's bad record, not this node's failure.
 	if _, err := s.admit(value); err != nil {
 		log.Debugf("rating: dropping merged record: %v", err)
 	}
@@ -583,10 +510,6 @@ func (s *Store) run(flush time.Duration) {
 	}
 }
 
-// flush persists every dirty bucket. The datastore write happens
-// outside s.mu on purpose: a Put re-enters the CRDT put hook, which
-// calls admit, which can call Record — holding the lock across the
-// write would deadlock the node on its own entry.
 func (s *Store) flush() error {
 	s.mu.Lock()
 	pending := make(map[pendingKey][]CountEntry, len(s.dirty))
@@ -599,8 +522,6 @@ func (s *Store) flush() error {
 		return nil
 	}
 
-	// One bad bucket must not strand the rest: every failure keeps its
-	// bucket dirty for the next tick and the flush carries on.
 	var errs []error
 	now := s.now()
 	for key, counts := range pending {
@@ -629,18 +550,12 @@ func (s *Store) flush() error {
 				continue
 			}
 		}
-		// Index our own entry immediately rather than waiting
-		// for the delta to come back round through the DAG.
 		s.idx.put(rec)
 		s.clearIfUnchanged(key, counts)
 	}
 	return errors.Join(errs...)
 }
 
-// clearIfUnchanged drops the dirty flag only when nothing was observed
-// for that bucket while the write was in flight. If something was, the
-// bucket stays dirty and the next flush writes the newer absolute
-// total.
 func (s *Store) clearIfUnchanged(key pendingKey, written []CountEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -669,10 +584,6 @@ func entriesOf(counts pendingCounts) []CountEntry {
 	return sortedCounts(out)
 }
 
-// gcOwnExpired deletes this node's own records past retention. Only
-// the author ever deletes, so no node can erase another's evidence —
-// and nothing prunes foreign records for memory, because a CRDT delete
-// is a tombstone that propagates.
 func (s *Store) gcOwnExpired() error {
 	if s.store == nil {
 		return nil

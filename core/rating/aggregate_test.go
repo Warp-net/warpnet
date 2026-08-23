@@ -28,8 +28,6 @@ func TestDecayHalvesEveryHalfLife(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	half := halfLife[Network]
 
-	// One bad signature (weight 250) observed exactly one half-life ago
-	// must cost half its weight.
 	obs := []entry{
 		entryOf("obs", Network, BucketOf(now.Add(-half)), genA, CountEntry{KindBadSignature, 1}),
 	}
@@ -59,9 +57,6 @@ func TestGenerationsUnderOneBucketAreSummed(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	bucket := BucketOf(now)
 
-	// The same observer, same bucket, two process lifetimes: this is
-	// exactly what a restarted stateless node produces. Summing is
-	// what keeps the replayed history from being lost.
 	obs := []entry{
 		entryOf("obs", Network, bucket, genA, CountEntry{KindMalformedFrame, 1}),
 		entryOf("obs", Network, bucket, genB, CountEntry{KindMalformedFrame, 1}),
@@ -74,8 +69,6 @@ func TestKindCeilingCaps(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	bucket := BucketOf(now)
 
-	// 100 dial failures at weight 2 would be 200, but the kind is
-	// capped at 100: a flaky link must not talk a peer down.
 	obs := []entry{
 		entryOf("obs", Network, bucket, genA, CountEntry{KindDialFailure, 100}),
 	}
@@ -88,11 +81,6 @@ func TestKindCeilingCaps(t *testing.T) {
 	assert.InDelta(t, 1000, float64(penaltyOf(uncapped, Network, now)), 1)
 }
 
-// TestRemoteObservationsCannotReachDegraded is the load-bearing
-// invariant of the whole design: no amount of remote accusation, from
-// any number of observers, may push a peer below the bottom of
-// BandWatched. Slander costs an honest node a priority drop and
-// nothing more.
 func TestRemoteObservationsCannotReachDegraded(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	bucket := BucketOf(now)
@@ -114,8 +102,6 @@ func TestRemoteObservationsCannotReachDegraded(t *testing.T) {
 
 			assert.GreaterOrEqual(t, score, MaxScore-CapRemoteTotal,
 				"remote entries alone must never drop below %d", MaxScore-CapRemoteTotal)
-			// Bands ascend in severity, so this asserts the outcome is
-			// no worse than BandWatched.
 			assert.LessOrEqual(t, BandOf(score), BandWatched,
 				"remote-only accusations must never reach BandDegraded")
 		})

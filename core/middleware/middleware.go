@@ -75,9 +75,6 @@ type WarpMiddleware struct {
 	writeFloodMx sync.Mutex
 	writeFlood   *lru.LRU[string, *atomic.Int64]
 
-	// rater is never nil: it starts as rating.Nop, which reports
-	// everyone as trusted, so a middleware built before the rating
-	// store exists penalises nobody.
 	rater rating.Rater
 }
 
@@ -96,9 +93,6 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 	return wm
 }
 
-// SetRating attaches the node's rating store. A setter rather than a
-// constructor argument because the store is only built once gossip is
-// running, well after the middleware chain exists.
 func (p *WarpMiddleware) SetRating(r rating.Rater) {
 	if p == nil || r == nil {
 		return
@@ -106,14 +100,6 @@ func (p *WarpMiddleware) SetRating(r rating.Rater) {
 	p.rater = r
 }
 
-// record charges an offence to a remote peer. Self-streams and
-// unidentified connections are skipped: a node cannot rate itself, and
-// there is nobody to charge when the peer id is missing.
-//
-// A middleware has nowhere to return this to — the request it is
-// wrapping has its own outcome — so a refused charge is logged. It
-// means this node reported something its role cannot witness, which is
-// a bug here, not misbehaviour by the peer.
 func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
 	if p == nil || p.rater == nil || s == nil || s.Conn() == nil {
 		return
@@ -127,9 +113,6 @@ func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
 	}
 }
 
-// band reads a peer's standing for a limit decision. A read failure
-// leaves the peer at full trust: an enforcement point that cannot see
-// the evidence must not act as if it had.
 func (p *WarpMiddleware) band(remote warpnet.WarpPeerID) rating.Band {
 	if p == nil || p.rater == nil {
 		return rating.BandTrusted

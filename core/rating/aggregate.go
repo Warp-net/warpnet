@@ -33,43 +33,20 @@ import (
 	"time"
 )
 
-// BucketDuration is the granularity entries are folded to. One
-// hour keeps the key count low while still letting decay be computed
-// at read time from the bucket alone.
 const BucketDuration = time.Hour
 
 const (
-	// CapPerObserver is the most one remote observer may subtract from
-	// a subject's score.
-	CapPerObserver Score = 150
-	// CapRemoteTotal is the most every remote observer together may
-	// subtract. It is the load-bearing constant of the whole scheme:
-	// with it, remote entries alone can never push a peer below
-	// MaxScore-CapRemoteTotal = 600, the bottom of BandWatched.
-	// Reaching BandDegraded or BandFloor therefore requires evidence
-	// this node gathered on its own wire, so a slander campaign costs
-	// an honest node a mild priority drop and nothing more.
-	CapRemoteTotal Score = 400
-	// MinAcquaintance is how long we must have been connected to a
-	// remote observer before its records count. A drive-by accuser
-	// has no voice.
-	MinAcquaintance = time.Hour
+	CapPerObserver  Score = 150
+	CapRemoteTotal  Score = 400
+	MinAcquaintance       = time.Hour
 )
 
-// halfLife is how fast each dimension forgets. Transport misbehaviour
-// is often a bad build or a bad link, so it recovers within a day; an
-// upheld moderation verdict should outlive a news cycle.
-//
-//nolint:gochecknoglobals // a lookup table, not state
 var halfLife = map[Dimension]time.Duration{
 	Network:     12 * time.Hour,
 	Application: 7 * 24 * time.Hour,
 	Moderation:  7 * 24 * time.Hour,
 }
 
-// retentionHalfLives is how many half-lives a record is kept. After
-// eight, its contribution is 1/256 of its weight — below the
-// resolution of the score.
 const retentionHalfLives = 8
 
 func retention(d Dimension) time.Duration {
@@ -85,9 +62,6 @@ func bucketTime(bucket int64) time.Time {
 	return time.Unix(bucket*int64(BucketDuration/time.Second), 0).UTC()
 }
 
-// decayFactor is 2^(-age/halfLife), clamped to [0,1]. A record from
-// the future (clock skew within the validation slack) does not get
-// amplified.
 func decayFactor(age, half time.Duration) float64 {
 	if age <= 0 {
 		return 1
@@ -107,12 +81,6 @@ type entry struct {
 	counts     []CountEntry
 }
 
-// penaltyOf sums the decayed weight of every count in obs, clamping
-// each kind's total to its ceiling. Callers pass the entries of a
-// single (subject, observer, dimension) group: the ceiling is per
-// group, so a peer with a flaky link to us cannot be talked down by
-// its own dial failures, but two independent observers each reporting
-// dial failures still add up.
 func penaltyOf(obs []entry, dim Dimension, now time.Time) Score {
 	if len(obs) == 0 {
 		return 0
@@ -154,13 +122,6 @@ func groupByObserver(obs []entry, dim Dimension) map[string][]entry {
 	return out
 }
 
-// subjectiveScore is what this node enforces with: its own
-// entries at full weight and without cap, every remote observer
-// discounted by how much this node trusts it and capped twice over.
-//
-// weightOf is the caller's own-entries-only score for an
-// observer, normalised to [0,1]. Using an own-only score keeps the
-// recursion one level deep and terminating.
 func subjectiveScore(
 	obs []entry,
 	dim Dimension,
@@ -194,17 +155,11 @@ func subjectiveScore(
 	return (MaxScore - own - remote).clamp()
 }
 
-// ownOnlyScore uses nothing but this node's first-hand evidence. It
-// backs weightOf above and is the reason the weighting terminates.
 func ownOnlyScore(obs []entry, dim Dimension, self string, now time.Time) Score {
 	byObserver := groupByObserver(obs, dim)
 	return (MaxScore - penaltyOf(byObserver[self], dim, now)).clamp()
 }
 
-// publicScore is the unweighted median of what each observer thinks,
-// for display only. It never reaches a rate limiter, a priority tag or
-// a peer score: an unweighted number is exactly what a clique can
-// move.
 func publicScore(obs []entry, dim Dimension, now time.Time) (Score, int) {
 	byObserver := groupByObserver(obs, dim)
 	if len(byObserver) == 0 {
@@ -229,10 +184,6 @@ type tally struct {
 	lastAt time.Time
 }
 
-// recentTallies aggregates raw counts per kind across every observer,
-// so a user can see what their node is actually being marked for.
-// Undecayed on purpose: "37 rate-limit hits in the last six hours" is
-// what tells them what to fix, not 37 × 0.63.
 func recentTallies(obs []entry, dim Dimension) []tally {
 	agg := make(map[Kind]*tally)
 	for _, o := range obs {

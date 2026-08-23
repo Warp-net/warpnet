@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// recordingRater captures what discovery charges, so a test can assert
-// on offences instead of log lines.
 type recordingRater struct {
 	kinds []rating.Kind
 }
@@ -50,9 +48,6 @@ const (
 	peerB = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
 )
 
-// One chatty peer used to be able to spend the whole global budget,
-// starving discovery of everyone else. The per-peer bucket is what
-// stops that.
 func TestOnePeerCannotStarveTheDiscoveryBudget(t *testing.T) {
 	a := testPeer(t, peerA)
 	b := testPeer(t, peerB)
@@ -92,9 +87,6 @@ func TestWorseRatedPeerGetsASmallerShare(t *testing.T) {
 	assert.Positive(t, admitted, "but never shut out entirely")
 }
 
-// Rediscovery of a known peer used to cost a full info round trip
-// every time, which is what turned republished gossip into O(N²)
-// requests network-wide.
 func TestKnownPeerIsNotReprobed(t *testing.T) {
 	a := testPeer(t, peerA)
 	b := testPeer(t, peerB)
@@ -109,16 +101,10 @@ func TestKnownPeerIsNotReprobed(t *testing.T) {
 }
 
 func TestShouldProbeWithoutCacheAlwaysProbes(t *testing.T) {
-	// A service constructed without the cache (relay paths built in
-	// tests) must not silently stop discovering.
 	s := &discoveryService{}
 	assert.True(t, s.shouldProbe(testPeer(t, peerA)))
 }
 
-// A dial that never had an address to try says nothing about the peer:
-// it means gossip named someone our routing table cannot resolve yet.
-// Charging it made honest nodes rate each other down during ordinary
-// discovery in a live three-node run.
 func TestUnresolvableDialChargesNobody(t *testing.T) {
 	rater := &recordingRater{}
 	s := &discoveryService{}

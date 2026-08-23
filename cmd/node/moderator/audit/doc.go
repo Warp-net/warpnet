@@ -80,14 +80,6 @@ resulting from the use or misuse of this software.
 //     challenge/response transcripts and deciding by quorum, the same shape
 //     the vote round already uses for content.
 //
-//     Partly addressed: a worsened standing is filed as a signed rating
-//     record (see core/rating) and replicates, so a moderator aggregates
-//     what every auditor saw rather than only what it saw itself, and the
-//     rating's caps stop any one auditor carrying the decision. The
-//     transcript still is not exchanged, so an aggregating node cannot
-//     re-verify the evidence — which is why a standing weighs a
-//     moderator's ballots and never drops them.
-//
 //  2. Model identity has to be established, not assumed. The moment
 //     moderators legitimately differ (a newer Llama Guard, another guard
 //     model, a different quantization), a class disagreement no longer

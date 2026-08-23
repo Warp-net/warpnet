@@ -85,17 +85,6 @@ type Participant interface {
 	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
 }
 
-// DissentRecorder is an optional Participant capability: it is handed
-// every ballot of a decided round alongside the outcome, so a
-// participant can note who dissented.
-//
-// Kept out of the tally itself on purpose. planTally is a pure function
-// precisely so every participant reaches the same answer from the same
-// ballots and the chair/backup chain agrees without exchanging a
-// message. Weighting ballots by a rating would break that: each node
-// holds its own view of every moderator, so the weighted tallies would
-// differ and the round would split. Dissent is therefore observed and
-// replicated, never applied to the count.
 type DissentRecorder interface {
 	RecordDissent(outcome vote.Event, ballots map[string]vote.Event)
 }
@@ -238,9 +227,6 @@ func (r *round) tally() {
 		ballots[id] = v
 	}
 
-	// Every participant that saw the ballots notes the dissenters
-	// first-hand, not only the one that carries the decision: an
-	// observation is worth most when it is our own.
 	defer func() {
 		if p.role == roleBystander || subject == nil {
 			return

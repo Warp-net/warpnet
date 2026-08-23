@@ -31,9 +31,6 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
-// Dimension is one axis of a node's rating. Which axes a node tracks
-// depends on its role: a relay can only ever witness wire behaviour, a
-// moderator is additionally judged on the verdicts it casts.
 type Dimension uint8
 
 const (
@@ -42,8 +39,6 @@ const (
 	Moderation                   // moderator nodes
 )
 
-// String is the wire and key form. Kept short: it appears in every
-// CRDT key.
 func (d Dimension) String() string {
 	switch d {
 	case Network:
@@ -74,9 +69,6 @@ func (d Dimension) Valid() bool {
 	return d == Network || d == Application || d == Moderation
 }
 
-// DimensionsFor maps a warpnet.NodeInfo.Type to the axes that node
-// tracks. An unknown type gets the network axis only: every node
-// speaks the wire, nothing else can be assumed.
 func DimensionsFor(nodeType string) []Dimension {
 	switch nodeType {
 	case warpnet.MemberNode:
@@ -90,9 +82,6 @@ func DimensionsFor(nodeType string) []Dimension {
 	}
 }
 
-// Score is a node's standing on one axis, or the minimum across the
-// axes its role tracks. A node nobody has ever observed scores
-// MaxScore — full trust, no probation.
 type Score int32
 
 const (
@@ -110,8 +99,6 @@ func (s Score) clamp() Score {
 	return s
 }
 
-// Band buckets a Score into the four states enforcement actually
-// keys off. Thresholds live here and nowhere else.
 type Band uint8
 
 const (

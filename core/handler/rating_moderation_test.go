@@ -37,9 +37,6 @@ func (r *recordingRater) charged() []rating.Kind {
 	return append([]rating.Kind(nil), r.kinds...)
 }
 
-// moderatorIdentity mints a real keypair: a verdict is only acted on
-// if its signature verifies against the pubkey derived from the
-// moderator's own peer id.
 func moderatorIdentity(t *testing.T) (warpnet.WarpPeerID, ed25519.PrivateKey) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)

@@ -40,15 +40,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// NewCRDTRatingStore creates a new CRDT-based node rating store on the
-// node's one CRDT datastore, which it shares with the stats store and
-// does not own. Rating records sit under their own key prefix; what
-// they need from the CRDT is its replication, and that is exactly what
-// is already there.
-//
-// Replication is the point of putting rating on a CRDT at all: a node
-// with no disk — every relay, every moderator — gets its view back from
-// the DAG after a restart and cannot recover it any other way.
 func NewCRDTRatingStore(
 	ctx context.Context,
 	crdtStore *Store,
@@ -81,10 +72,6 @@ func NewCRDTRatingStore(
 	return store, nil
 }
 
-// connectionAge answers how long we have been connected to a peer,
-// which is what gates whether a remote observer's records count. It
-// reads libp2p's own connection stats rather than keeping a second
-// bookkeeping of the same thing.
 type connectionAge struct {
 	host host.Host
 }
@@ -97,9 +84,6 @@ func (c connectionAge) ConnectedSince(id peer.ID) (time.Time, bool) {
 	if len(conns) == 0 {
 		return time.Time{}, false
 	}
-	// The oldest live connection: a peer that reconnects should not
-	// reset its acquaintance, but one that has genuinely just arrived
-	// should not inherit any either.
 	oldest := time.Time{}
 	for _, conn := range conns {
 		opened := conn.Stat().Opened

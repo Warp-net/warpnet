@@ -11,13 +11,9 @@ import (
 
 const (
 	reachabilityTag = "reachability"
-	// ratingTag is deliberately separate from reachabilityTag: libp2p
-	// sums a peer's tags, so two independent signals written under two
-	// tags compose, whereas one tag would have the later writer
-	// silently erase the earlier one.
-	ratingTag      = "rating"
-	flappingPeriod = 30 * time.Second
-	cacheSize      = 128
+	ratingTag       = "rating"
+	flappingPeriod  = 30 * time.Second
+	cacheSize       = 128
 )
 
 type nodeReachabilityManager struct {
@@ -34,10 +30,6 @@ func newNodeReachabilityManager(cm warpnet.WarpConnManager) *nodeReachabilityMan
 	}
 }
 
-// SetRatingPriority reflects a peer's standing into its connection
-// weight. It writes its own tag, so it neither fights with nor is
-// erased by the reachability signal, and it is not flap-guarded: a
-// rating changes on the scale of hours, not seconds.
 func (m *nodeReachabilityManager) SetRatingPriority(pid warpnet.WarpPeerID, band rating.Band) {
 	if m == nil || m.manager == nil {
 		return

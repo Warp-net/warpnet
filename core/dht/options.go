@@ -35,10 +35,6 @@ type dhtConfig struct {
 }
 type Option func(*dhtConfig)
 
-// PeerAdmission gates which peers may enter the routing table and be
-// dialled during queries. Used to keep the worst-rated peers out of
-// the DHT's own working set; returning true for everyone is the
-// default and leaves libp2p's behaviour untouched.
 func PeerAdmission(admit func(warpnet.WarpPeerID) bool) Option {
 	return func(c *dhtConfig) {
 		c.admit = admit

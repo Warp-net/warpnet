@@ -66,10 +66,6 @@ func (m *Moderator) AuditStanding(peerID string) audit.Standing {
 	return m.ledger.StandingOf(peerID)
 }
 
-// ModeratorBand is a peer moderator's standing as the rating sees it:
-// this node's own audits plus what other auditors have replicated.
-// Used to weigh ballots — never to drop them, because establishing
-// which model a moderator runs is still unsolved.
 func (m *Moderator) ModeratorBand(peerID string) rating.Band {
 	id := warpnet.FromStringToPeerID(peerID)
 	if id == "" {
@@ -83,15 +79,6 @@ func (m *Moderator) ModeratorBand(peerID string) rating.Band {
 	return band
 }
 
-// RecordDissent implements round.DissentRecorder: it records which
-// moderators voted against the round's own outcome.
-//
-// Observation only — the tally is untouched. A dissenting ballot is
-// cheap and capped by design: moderators legitimately run different
-// models, so disagreement is evidence of nothing on its own and only
-// means something as a pattern. Until gap (2) of the audit package's
-// doc is closed — establishing which model a moderator runs rather
-// than assuming — this must never be enough to discount a vote.
 func (m *Moderator) RecordDissent(outcome vote.Event, ballots map[string]vote.Event) {
 	if m == nil || len(ballots) == 0 {
 		return

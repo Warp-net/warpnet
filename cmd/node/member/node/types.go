@@ -154,9 +154,6 @@ type StatsStorer interface {
 	Close() error
 }
 
-// RatingStorer is the node's view of the peer rating subsystem: the
-// write side the middleware and handlers observe through, the read side
-// the enforcement points key off, and the two report surfaces.
 type RatingStorer interface {
 	rating.Rater
 	Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)

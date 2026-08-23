@@ -257,8 +257,6 @@ type GetUserEvent struct {
 
 // GetRatingEvent defines model for GetRatingEvent.
 type GetRatingEvent struct {
-	// NodeId is the node whose standing is asked for. Empty on the
-	// private route means "my own".
 	NodeId domain.ID `json:"node_id"`
 }
 

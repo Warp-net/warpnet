@@ -808,6 +808,4 @@ func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
 	}
 }
 
-// Rating satisfies ModeratorNode. The stub never rates anyone: these
-// tests are about moderation decisions, not standing.
 func (stubModeratorNode) Rating() rating.Rater { return rating.Nop{} }

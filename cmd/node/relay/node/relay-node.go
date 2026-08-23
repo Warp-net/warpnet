@@ -67,15 +67,10 @@ type PubSubProvider interface {
 }
 
 type DistributedHashTableCloser interface {
-	// FindProvidersAsync is what the rating CRDT's bitswap exchange
-	// routes through; *distributedHashTable already implements it.
 	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo
 	Close()
 }
 
-// RatingStorer is the relay's view of the peer rating subsystem. A
-// relay only ever witnesses the wire, so it needs the observe/score
-// surface and nothing else.
 type RatingStorer interface {
 	rating.Rater
 	Close() error
@@ -98,10 +93,6 @@ type RelayNode struct {
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
 
-	// mapStore is the relay's only datastore: the DHT routes on it and
-	// the CRDT replicates on it. A relay holds no disk, so it dies with
-	// the process — and the CRDT is exactly what gives the view back on
-	// the next start, replayed from peers.
 	mapStore warpnet.WarpBatching
 	crdtDb   *crdt.Store
 	ratingDb RatingStorer

@@ -118,9 +118,6 @@ type CRDTStatsStore struct {
 	decrCounters map[string]uint64
 }
 
-// NewCRDTStatsStore creates a new CRDT-based statistics store on the
-// node's one CRDT datastore, which it shares with every other store
-// replicated the same way and does not own.
 func NewCRDTStatsStore(ctx context.Context, crdtStore *Store, node host.Host) (*CRDTStatsStore, error) {
 	if crdtStore == nil || node == nil {
 		return nil, fmt.Errorf("crdt stats: incomplete dependencies") //nolint:err113
@@ -236,8 +233,6 @@ func newGenerationID() (string, error) {
 	return hex.EncodeToString(buf[:]), nil
 }
 
-// Close stops the stats store. The CRDT datastore under it is shared
-// with the node's other stores and is closed by whoever built it.
 func (s *CRDTStatsStore) Close() error {
 	return nil
 }

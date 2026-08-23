@@ -134,18 +134,10 @@ func StreamModerationResultHandler(
 			return event.Accepted, nil
 		}
 
-		// A FAIL verdict is quorum-backed and already reaches every
-		// observer, so the application dimension needs no new wire
-		// message: each observer charges the offender's node from the
-		// verdict it just verified.
 		chargeModeratedNode(rater, userRepo, ev.UserID)
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
-			// Past the signature check, so the moderator provably
-			// authored this: a verdict missing the very fields it
-			// needs to be applied is chargeable, unlike one whose
-			// signature never verified.
 			if ev.ObjectID == nil {
 				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoObjectID
@@ -219,13 +211,7 @@ func StreamModerationResultHandler(
 	}
 }
 
-// chargeModeratedNode records an upheld moderation decision against
-// the node that hosts the offending user.
-//
-// The verdict names a user, not a node, so the offender's node has to
-// be looked up. Best effort by design: an observer that has never
-// cached this user simply has nobody to charge, which is the same
-// position it is already in for every other judgement about that user.
+// chargeModeratedNode charges the node hosting the moderated user.
 func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, userID string) {
 	if rater == nil || userRepo == nil || userID == "" {
 		return
@@ -241,8 +227,6 @@ func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, 
 	rater.Record(nodeID, rating.KindModerationUpheld)
 }
 
-// chargeModerator records a malformed verdict against the moderator
-// that signed it.
 func chargeModerator(rater rating.Reporter, moderator warpnet.WarpPeerID) {
 	if rater == nil || moderator == "" {
 		return

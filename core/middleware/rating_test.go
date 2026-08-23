@@ -17,16 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeRater records what the middleware charges and serves a fixed
-// band back.
 type fakeRater struct {
 	mu       sync.Mutex
 	observed []rating.Kind
 	subjects []warpnet.WarpPeerID
 	band     rating.Band
-	// bandErr makes the store unreadable, which every enforcement point
-	// has to survive by leaving the peer alone.
-	bandErr error
+	bandErr  error
 }
 
 func (f *fakeRater) Record(subject warpnet.WarpPeerID, k rating.Kind) error {
@@ -52,8 +48,6 @@ func (f *fakeRater) kinds() []rating.Kind {
 	return append([]rating.Kind(nil), f.observed...)
 }
 
-// Score is aliased so the fake satisfies rating.Scorer without
-// importing the type name twice in the signature above.
 type Score = rating.Score
 
 func callAuth(
@@ -103,8 +97,6 @@ func TestAuthDoesNotChargeSelfStreams(t *testing.T) {
 	rater := &fakeRater{}
 	mw := &WarpMiddleware{ownNodeId: self, rater: rater}
 
-	// A loopback self-stream carrying garbage: the node must not rate
-	// itself, however broken its own message is.
 	callAuth(t, mw, self, self, event.PUBLIC_GET_INFO, []byte("not json at all"))
 	assert.Empty(t, rater.kinds())
 }
@@ -143,9 +135,6 @@ func TestDegradedPeerGetsATighterBucket(t *testing.T) {
 		"a degraded peer must exhaust its burst far sooner")
 }
 
-// An enforcement point that cannot read the evidence must not act as
-// if it had: a peer whose standing failed to load keeps the allowance
-// of a peer with no record at all.
 func TestUnreadableStandingDoesNotTightenAnything(t *testing.T) {
 	local := warpnet.WarpPeerID("12D3KooWLocalLocalLocalLocalLocalLocalLoca")
 	remote := warpnet.WarpPeerID("12D3KooWRemoteRemoteRemoteRemoteRemoteRemo")
@@ -181,8 +170,6 @@ func TestBucketIsRebuiltWhenTheBandChanges(t *testing.T) {
 }
 
 func TestScaleForBandNeverStarvesAPeer(t *testing.T) {
-	// The floor multiplier applied to the tightest route still has to
-	// leave something: rating slows peers down, it never cuts them off.
 	scaled := scaleForBand(limitPairing, rating.BandFloor)
 	assert.GreaterOrEqual(t, scaled.burst, int64(1))
 	assert.GreaterOrEqual(t, scaled.perMinute, int64(1))

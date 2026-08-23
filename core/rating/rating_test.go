@@ -31,8 +31,6 @@ func TestDimensionRoundTrip(t *testing.T) {
 	assert.False(t, Dimension(9).Valid())
 }
 
-// Every kind must be reachable, named uniquely, and belong to the
-// dimension its detection site can actually witness.
 func TestCatalogueIsWellFormed(t *testing.T) {
 	names := make(map[string]Kind, len(catalogue))
 	for kind, o := range catalogue {
@@ -53,8 +51,6 @@ func TestCatalogueIsWellFormed(t *testing.T) {
 	}
 }
 
-// A ceiling below the kind's own weight would make the ceiling, not
-// the weight, the effective cost of a single occurrence.
 func TestCeilingsExceedTheirWeight(t *testing.T) {
 	for kind, o := range catalogue {
 		if o.ceiling == 0 {
@@ -65,9 +61,6 @@ func TestCeilingsExceedTheirWeight(t *testing.T) {
 	}
 }
 
-// The kinds that can drive a peer to BandFloor on their own must be
-// the deliberate ones. Anything that can fire because of a bad link or
-// a busy moment carries a ceiling.
 func TestOnlyDeliberateKindsAreUncapped(t *testing.T) {
 	deliberate := map[Kind]bool{
 		KindBadSignature:       true,

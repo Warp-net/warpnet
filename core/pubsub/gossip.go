@@ -85,9 +85,6 @@ type Gossip struct {
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
 
-	// rater is read by the score function on every scoring pass, and
-	// is swapped in after the router exists: the rating store is built
-	// on top of this very gossip, so it cannot be ready before Run.
 	rater atomic.Pointer[raterHolder]
 }
 
@@ -240,11 +237,6 @@ func (g *Gossip) runGossip() (err error) {
 	return
 }
 
-// SetRating attaches the node's rating store so a peer's standing
-// reaches gossipsub's own scoring. Safe to call after Run: the score
-// function reads the current rater on every pass, which it has to,
-// because the store is built on top of this gossip and cannot exist
-// before it.
 func (g *Gossip) SetRating(r rating.Scorer) {
 	if g == nil || r == nil {
 		return
@@ -262,25 +254,12 @@ func (g *Gossip) scorer() rating.Scorer {
 	return rating.Nop{}
 }
 
-// scoreOptions wires the rating into gossipsub's AppSpecificScore, the
-// hook the router already consults when deciding whom to mesh with,
-// whom to gossip to and whom to stop reading from entirely.
-//
-// Only the app-specific term is set. gossipsub's own per-topic
-// delivery statistics stay at their defaults: they measure a different
-// thing (is this peer useful in this mesh) and mixing our weights into
-// them would make both harder to reason about.
 func (g *Gossip) scoreOptions() []pubsub.Option {
 	if g == nil {
 		return nil
 	}
 	params := &pubsub.PeerScoreParams{
 		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
-			// gossipsub calls this on every scoring pass and takes no
-			// error, so a read failure leaves the peer at BandTrusted —
-			// which maps to 0, exactly what an unrated peer gets. The
-			// Nop rater lands in the same place, so scoring is inert
-			// until a store is attached.
 			band, err := g.scorer().Band(p)
 			if err != nil {
 				log.Warnf("gossip: reading standing of %s: %v", p, err)
@@ -689,21 +668,9 @@ type pubsubDiscoveryEnvelope struct {
 
 const discoveryEchoCacheSize = 512
 
-// discoveryEchoTTL is how long an announcement is remembered as
-// already handled. Slightly longer than the publish interval plus its
-// jitter, so a republication of an unchanged peer list is recognised
-// while a genuinely new list still gets through.
 const discoveryEchoTTL = 7 * time.Minute
 
 func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandler {
-	// Every topic is relayed, so one announcement reaches a node by
-	// several paths, and the publisher repeats it every few minutes
-	// whether or not anything changed. Feeding each copy into
-	// discovery meant re-learning the same peers over and over. Key
-	// the dedup on the announcement's content, not on a sequence
-	// number: an unsigned counter on the wire would let anyone
-	// suppress a peer's announcements by publishing a huge one under
-	// its id.
 	seen := expirable.NewLRU[string, [sha256.Size]byte](
 		discoveryEchoCacheSize, nil, discoveryEchoTTL,
 	)

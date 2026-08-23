@@ -60,9 +60,6 @@ func (h *hookLog) snapshot() ([]string, []string) {
 	return append([]string(nil), h.puts...), append([]string(nil), h.dels...)
 }
 
-// go-ds-crdt has room for exactly one PutHook and one DeleteHook, and a
-// node has exactly one datastore — so every store sharing it has to be
-// able to subscribe, not just the first one to ask.
 func TestDatastore_HooksFanOutToEveryTenant(t *testing.T) {
 	d := newLiveDatastore(t)
 
@@ -90,8 +87,6 @@ func TestDatastore_HooksFanOutToEveryTenant(t *testing.T) {
 	}, time.Second, 10*time.Millisecond, "both tenants must see the delete")
 }
 
-// Tenants share the datastore but not the keyspace: a prefix query must
-// return one tenant's records and none of the other's.
 func TestDatastore_TenantsAreSeparatedByPrefix(t *testing.T) {
 	d := newLiveDatastore(t)
 	ctx := context.Background()

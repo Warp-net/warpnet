@@ -13,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testPeerID and testOtherPeerID are real, decodable peer ids: the
-// discovery fan-out carries them straight into libp2p types.
 func testPeerID(t *testing.T) peer.ID {
 	t.Helper()
 	id, err := peer.Decode("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
@@ -42,9 +40,6 @@ func announcement(t *testing.T, nodeID string, ids ...peer.ID) []byte {
 	return data
 }
 
-// Every topic is relayed and the publisher repeats its announcement
-// every few minutes, so the same peer list arrives many times. Acting
-// on each copy is what made discovery re-learn peers it already knew.
 func TestUnchangedAnnouncementIsHandledOnce(t *testing.T) {
 	peerID := testPeerID(t)
 
@@ -86,8 +81,6 @@ func TestEchoDedupIsPerPublisher(t *testing.T) {
 		fanout = append(fanout, info.ID)
 	})
 
-	// Two publishers announcing the same peer are two independent
-	// pieces of evidence, not an echo.
 	require.NoError(t, th.Handler(announcement(t, "publisher-1", peerID)))
 	require.NoError(t, th.Handler(announcement(t, "publisher-2", peerID)))
 

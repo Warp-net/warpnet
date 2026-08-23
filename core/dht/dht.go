@@ -135,8 +135,6 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.BucketSize(50), //nolint:mnd
 	}
 	if admit := d.cfg.admit; admit != nil {
-		// Both hooks, because keeping a peer out of the routing table
-		// does not stop a query from dialling it.
 		opts = append(opts,
 			dht.RoutingTableFilter(func(_ any, p peer.ID) bool { return admit(p) }),
 			dht.QueryFilter(func(_ any, ai peer.AddrInfo) bool { return admit(ai.ID) }),

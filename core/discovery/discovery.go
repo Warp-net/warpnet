@@ -61,17 +61,10 @@ type DiscoveryInfoStorer interface {
 	SetMinNodePriority(pid warpnet.WarpPeerID)
 }
 
-// BackoffConnector dials through the node's backoff, so a dead peer
-// that gossip keeps republishing is not redialled forever.
 type BackoffConnector interface {
 	Connect(warpnet.WarpAddrInfo) error
 }
 
-// probeInterval is how long a peer stays "recently probed". Within it
-// we do not ask the same peer for its info again, however many times
-// gossip, mDNS and the DHT rediscover it. Without this the network
-// spent O(N²) info requests re-learning what it already knew, and any
-// node answering an info request discovered its asker and asked back.
 const probeInterval = 30 * time.Minute
 
 type NodeStorer interface {
@@ -113,13 +106,7 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
-	ownId warpnet.WarpPeerID
-	// Two budgets, because one cannot do both jobs. limiter caps how
-	// much discovery work this node accepts in total, whoever it comes
-	// from; peerLimiter divides that budget fairly and is where a bad
-	// standing costs a peer its share. A global bucket alone cannot
-	// tell "twelve new peers" from "one peer twelve times", and a
-	// per-peer bucket alone puts no ceiling on the sum.
+	ownId       warpnet.WarpPeerID
 	limiter     *leakyBucketRateLimiter
 	peerLimiter *peerLimiter
 
@@ -129,13 +116,8 @@ type discoveryService struct {
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
-	// probed remembers who we already asked for info recently, so
-	// rediscovering a known peer costs nothing.
-	probed *expirable.LRU[warpnet.WarpPeerID, struct{}]
+	probed     *expirable.LRU[warpnet.WarpPeerID, struct{}]
 
-	// rater is swapped rather than assigned: the mDNS, DHT and gossip
-	// callbacks are already running by the time the rating store is
-	// built, so they read it concurrently with SetRating.
 	rater atomic.Pointer[raterHolder]
 
 	m MetricsOnlineDiscoverer
@@ -143,8 +125,6 @@ type discoveryService struct {
 
 type raterHolder struct{ rater rating.Rater }
 
-// SetRating attaches the node's rating store: discovery both reports
-// flooders and gives worse-rated peers a smaller share of the budget.
 func (s *discoveryService) SetRating(r rating.Rater) {
 	if s == nil || r == nil {
 		return
@@ -152,8 +132,6 @@ func (s *discoveryService) SetRating(r rating.Rater) {
 	s.rater.Store(&raterHolder{rater: r})
 }
 
-// raterOrNop never returns nil: before the store exists, and on a node
-// that failed to build one, discovery must penalise nobody.
 func (s *discoveryService) raterOrNop() rating.Rater {
 	if held := s.rater.Load(); held != nil && held.rater != nil {
 		return held.rater
@@ -161,9 +139,6 @@ func (s *discoveryService) raterOrNop() rating.Rater {
 	return rating.Nop{}
 }
 
-// band reads a peer's standing for a budget decision. A read failure
-// leaves the peer at full trust: discovery must not throttle a peer
-// because we could not see its record.
 func (s *discoveryService) band(id warpnet.WarpPeerID) rating.Band {
 	b, err := s.raterOrNop().Band(id)
 	if err != nil {
@@ -293,8 +268,6 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		return
 	}
 
-	// Per-peer first: one chatty gossiper must not be able to spend
-	// the whole shared budget and starve discovery of everyone else.
 	if !s.peerLimiter.Allow(pi.ID) {
 		log.Debugf("discovery: source '%s': peer over its own budget: %s", source, pi.ID.String())
 		if err := s.raterOrNop().Record(pi.ID, rating.KindDiscoveryFlood); err != nil {
@@ -369,9 +342,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	// Every rediscovery of a peer used to cost a full info round trip,
-	// so republished gossip alone produced O(N²) requests across the
-	// network. Ask at most once per probeInterval.
 	if !s.shouldProbe(peer.ID) {
 		log.Debugf("discovery: source '%s': already probed recently: %s", peer.Source, pi.ID.String())
 		s.m.PushStatusOnline(pi.ID.String())
@@ -503,15 +473,6 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
-// recordDialFailure charges a peer for a dial that actually reached
-// for it and failed.
-//
-// A failure with no address to dial is *our* gap, not the peer's: it
-// means gossip named a peer our routing table cannot resolve yet, which
-// happens constantly and harmlessly while a node is still finding its
-// feet. Charging it made honest nodes rate each other down during
-// ordinary discovery — observed in a live three-node run before this
-// guard existed.
 func (s *discoveryService) recordDialFailure(pi warpnet.WarpAddrInfo) {
 	if s == nil {
 		return
@@ -528,8 +489,6 @@ func (s *discoveryService) recordDialFailure(pi warpnet.WarpAddrInfo) {
 	}
 }
 
-// shouldProbe reports whether this peer may be asked for its info now,
-// and marks it probed if so.
 func (s *discoveryService) shouldProbe(id warpnet.WarpPeerID) bool {
 	if s == nil || s.probed == nil {
 		return true
@@ -541,10 +500,6 @@ func (s *discoveryService) shouldProbe(id warpnet.WarpPeerID) bool {
 	return true
 }
 
-// connect dials through the node's backoff when it offers one. The
-// discovery loop used to call SimpleConnect, the raw host dial, which
-// skipped the backoff entirely — so a dead peer that gossip kept
-// republishing was redialled forever.
 func (s *discoveryService) connect(pi warpnet.WarpAddrInfo) error {
 	if backoffer, ok := s.node.(BackoffConnector); ok {
 		return backoffer.Connect(pi)

@@ -82,10 +82,6 @@ type Prioritizer interface {
 }
 
 const (
-	// connFlapWindow and connFlapThreshold turn raw connectedness
-	// churn into an offence. A peer that reconnects a couple of times
-	// in a minute is on a bad link; one that does it constantly is
-	// costing us handshakes.
 	connFlapWindow    = time.Minute
 	connFlapThreshold = 4
 	connFlapCacheSize = 256
@@ -105,8 +101,6 @@ type WarpNode struct {
 	reachability atomic.Int64
 	prioritizer  Prioritizer
 
-	// rater is never nil: it starts as rating.Nop so a node running
-	// before its rating store exists penalises nobody.
 	rater    rating.Rater
 	connFlap *expirable.LRU[string, *atomic.Int64]
 
@@ -116,8 +110,6 @@ type WarpNode struct {
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
-// SetRating attaches the node's rating store, and pushes every peer's
-// standing into its connection weight from then on.
 func (n *WarpNode) SetRating(r rating.Rater) {
 	if n == nil || r == nil {
 		return
@@ -134,9 +126,6 @@ func (n *WarpNode) recordOffence(s warpnet.WarpStream, kind rating.Kind) {
 	if remote == "" || remote == s.Conn().LocalPeer() {
 		return
 	}
-	// The stream has its own outcome to return; a refused charge means
-	// this node reported something its role cannot witness, which is a
-	// bug here rather than misbehaviour by the peer.
 	if err := n.rater.Record(remote, kind); err != nil {
 		log.Warnf("node: rating %s for %s: %v", kind, remote, err)
 	}
@@ -305,9 +294,6 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
 		}
-		// Caught here rather than at the sixteen VerifyAuthorship call
-		// sites: the error already means exactly the offence — this
-		// peer sent an event claiming to act for someone else.
 		if errors.Is(err, warpnet.ErrForeignAuthor) {
 			n.recordOffence(s, rating.KindForeignAuthorship)
 		}
@@ -452,11 +438,6 @@ func (n *WarpNode) trackIncomingEvents() {
 	}
 }
 
-// trackConnectionFlap counts connectedness transitions per peer inside
-// a rolling window and charges the peer once the churn stops looking
-// like a bad moment and starts looking like a cost. Charging every
-// transition would penalise ordinary mobile peers dropping off a
-// train's wifi.
 func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
 	if n == nil || n.connFlap == nil {
 		return
@@ -475,9 +456,6 @@ func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
 	}
 }
 
-// setRatingPriority weighs a peer's connection by its standing. A read
-// failure leaves it at BandTrusted: a peer whose record we cannot see
-// keeps the priority it would have had with no record at all.
 func (n *WarpNode) setRatingPriority(pid warpnet.WarpPeerID) {
 	band, err := n.rater.Band(pid)
 	if err != nil {

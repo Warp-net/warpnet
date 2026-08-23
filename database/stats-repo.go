@@ -22,9 +22,6 @@ type StatsStorer interface {
 
 const crdtPrefix = "CRDT"
 
-// NewStatsRepo backs the node's one CRDT datastore — stat counters,
-// peer ratings and anything else replicated the same way, each under
-// its own key prefix inside it.
 func NewStatsRepo(db StatsStorer) ds.Datastore {
 	prefix := crdtPrefix
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {

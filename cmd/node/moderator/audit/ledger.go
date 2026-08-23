@@ -122,14 +122,6 @@ type PeerReport struct {
 // Ledger accumulates audit outcomes per moderator peer. In-memory and
 // local-first by design: every node judges from its own evidence; sharing
 // signed transcripts across nodes is a later layer.
-//
-// The statistical judgement stays here rather than moving into the
-// rating store, and that is deliberate. Audit quality is a rate —
-// agreement over many probes — while the rating counts discrete
-// offences, and a count cannot tell "six wrong out of sixty" from "six
-// wrong out of six". So the ledger keeps the tolerance encoded in the
-// thresholds above and reports to the rating only when a peer crosses
-// one, once per crossing.
 type Ledger struct {
 	reporter rating.Reporter
 
@@ -178,9 +170,6 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 	}
 	l.mu.Unlock()
 
-	// An unreachable peer may just be behind a bad link, so it is
-	// reported every time and weighs almost nothing; a standing is
-	// reported only when it first worsens.
 	if o == OutcomeUnreachable {
 		l.report(peerID, rating.KindAuditUnreachable)
 	}
@@ -191,10 +180,6 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 	}
 }
 
-// report files one audit conclusion with the rating. A refused record
-// means this node reported something its role cannot witness, which is
-// a bug here rather than misbehaviour by the peer, and the audit loop
-// has nowhere to return it to.
 func (l *Ledger) report(peerID string, kind rating.Kind) {
 	id := warpnet.FromStringToPeerID(peerID)
 	if id == "" {
@@ -219,10 +204,6 @@ func severity(s Standing) int {
 	}
 }
 
-// standingKind maps a worsened standing to what the rating records.
-// Probation and Trusted report nothing: an unproven peer is not an
-// offending one, and the rating starts everyone at full trust by
-// design.
 func standingKind(s Standing) (rating.Kind, bool) {
 	switch s {
 	case StandingSuspect:

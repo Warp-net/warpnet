@@ -65,24 +65,11 @@ var (
 	ErrForeignDimension = errors.New("rating: node cannot witness this dimension")
 )
 
-// CountEntry is one offence kind and how many times this observer saw
-// it in this bucket. Records carry a slice, not a map, so the wire form
-// and the signing bytes are canonically ordered without any extra
-// normalisation step.
 type CountEntry struct {
 	Kind  Kind   `json:"k"`
 	Count uint32 `json:"n"`
 }
 
-// Record is one observer's view of one subject on one
-// dimension in one hour, as written by one process lifetime.
-//
-// The (subject, observer, dimension, bucket, generation) tuple has
-// exactly one writer for its whole lifetime, which is what makes LWW
-// inside the key safe: the in-memory count is always authoritative, so
-// eventual-consistency lag can never lose an entry, and a
-// restarted process cannot clobber the history the DAG is replaying
-// back to it.
 type Record struct {
 	Subject    string       `json:"s"`
 	Observer   string       `json:"o"`
@@ -94,8 +81,6 @@ type Record struct {
 	Signature  string       `json:"sig"`
 }
 
-// SigningBytes is canonical and identical on every architecture: no
-// map iteration, no float formatting, no locale.
 func (r Record) SigningBytes() []byte {
 	var b strings.Builder
 	b.WriteString(r.Subject)
@@ -119,8 +104,6 @@ func (r Record) SigningBytes() []byte {
 	return []byte(b.String())
 }
 
-// sortedCounts returns the entries in ascending Kind order without
-// mutating the caller's slice.
 func sortedCounts(in []CountEntry) []CountEntry {
 	if slices.IsSortedFunc(in, func(a, b CountEntry) int { return int(a.Kind) - int(b.Kind) }) {
 		return in
@@ -139,10 +122,6 @@ func (r *Record) Sign(priv ed25519.PrivateKey) error {
 	return nil
 }
 
-// Verify checks the signature against the pubkey derived from the
-// Observer peer id itself, the same way a moderation verdict is
-// verified in core/handler/moderation.go. A record is therefore
-// self-authenticating no matter which path relayed it.
 func (r Record) Verify() error {
 	if r.Signature == "" {
 		return ErrRecordNoSignature
@@ -158,11 +137,6 @@ func (r Record) Verify() error {
 	return security.VerifySignature(pubKey, r.SigningBytes(), r.Signature)
 }
 
-// Validate enforces the structural rules, independent of the
-// signature. A record that fails Verify names an observer that may
-// have had nothing to do with it and can only be dropped; a record
-// that passes Verify and fails Validate was provably authored by the
-// observer it names, and that is attributable.
 func (r Record) Validate(now time.Time) error {
 	if warpnet.FromStringToPeerID(r.Subject) == "" {
 		return ErrRecordBadSubject
@@ -209,9 +183,6 @@ func (r Record) Total() uint64 {
 	return total
 }
 
-// Key is the CRDT path this record lives at:
-//
-//	/RATING/obs/{subject}/{observer}/{dim}/{bucket}/{generation}
 func (r Record) Key() string {
 	return RecordKey(r.Subject, r.Observer, r.Dim, r.Bucket, r.Generation)
 }
@@ -225,8 +196,6 @@ func RecordKey(subject, observer string, dim Dimension, bucket int64, generation
 		generation
 }
 
-// KeyPrefix is the root every rating record hangs off, used for the
-// startup scan.
 func KeyPrefix() string { return "/" + RepoName + "/obs" }
 
 // SubjectPrefix scopes a query to one subject.

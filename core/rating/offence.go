@@ -27,9 +27,6 @@
 
 package rating
 
-// Kind is one observable offence. The numeric values are wire format:
-// they appear in signed records, so they may be appended to but never
-// renumbered.
 type Kind uint16
 
 const (
@@ -61,21 +58,14 @@ const (
 )
 
 type offence struct {
-	name   string
-	dim    Dimension
-	weight int32
-	// ceiling caps the decayed contribution of this kind within one
-	// (subject, observer, dimension). Zero means no ceiling. Kinds
-	// that can fire for reasons outside the subject's control — a
-	// flaky link, a busy moment — carry one, so they can never on
-	// their own push a peer out of BandWatched.
+	name    string
+	dim     Dimension
+	weight  int32
 	ceiling int32
 }
 
 //nolint:gochecknoglobals // a lookup table, not state
 var catalogue = map[Kind]offence{
-	// Deliberate and self-evident: these are the network weights that
-	// can reach BandFloor, and only ever from first-hand evidence.
 	KindBadSignature:       {"bad_signature", Network, 250, 0},
 	KindMissingSignature:   {"missing_signature", Network, 250, 0},
 	KindPrivateRouteDenied: {"private_route_denied", Network, 200, 0},
@@ -94,21 +84,8 @@ var catalogue = map[Kind]offence{
 	KindWriteFlood:        {"write_flood", Application, 20, 300},
 	KindFalseReportBurst:  {"false_report_burst", Application, 60, 300},
 
-	// Deliberately absent: a verdict whose signature does not verify,
-	// or that carries no usable moderator id, names a moderator that
-	// may have had nothing to do with it. Verdicts travel by pubsub,
-	// so there is no relaying peer to charge either — the only honest
-	// response is to drop it. Everything below is chargeable because
-	// the signature verified first, which proves authorship.
-	// Also absent: an "unsolicited verdict". A round has no eligibility
-	// gate by design — the volunteer order is a delay, not a
-	// permission — so voting early is allowed and there is nothing to
-	// charge.
 	KindAuditInvalid:     {"audit_invalid", Moderation, 500, 0},
 	KindVerdictMalformed: {"verdict_malformed", Moderation, 200, 0},
-	// Honest model diversity produces disagreement, so an outlier
-	// ballot is cheap and capped. See gap (2) in
-	// cmd/node/moderator/audit/doc.go.
 	KindVerdictOutlier:   {"verdict_outlier", Moderation, 60, 400},
 	KindAuditWrong:       {"audit_wrong", Moderation, 60, 400},
 	KindAuditUnreachable: {"audit_unreachable", Moderation, 5, 100},

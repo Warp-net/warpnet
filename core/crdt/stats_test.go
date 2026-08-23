@@ -249,8 +249,6 @@ func TestCRDTStats_CloseIsSafeOnNilAndLeavesTheDatastoreAlone(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 	assert.NoError(t, store.Close())
 
-	// The datastore is shared with the node's other stores, so closing
-	// one tenant must not take it down: counters still read.
 	_, err := store.GetAggregatedStat(datastore.NewKey("/TWEETS/LIKES/after-close"))
 	assert.NoError(t, err)
 }

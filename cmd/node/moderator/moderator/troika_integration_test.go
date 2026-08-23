@@ -210,6 +210,4 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond, "the Final announcement must clear every moderator's round")
 }
 
-// Rating satisfies ModeratorNode. The troika test exercises the vote
-// round, not standing, so nobody is rated here.
 func (*troikaConnector) Rating() rating.Rater { return rating.Nop{} }

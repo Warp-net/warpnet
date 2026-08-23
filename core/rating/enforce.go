@@ -27,20 +27,6 @@
 
 package rating
 
-// The knobs a band turns. Pure functions with no dependencies, so the
-// mapping from standing to consequence is testable on its own and
-// lives in exactly one place.
-//
-// What is deliberately absent: nothing here refuses service, and
-// nothing here blocklists. A low rating makes a peer slow and last in
-// the queue; it never cuts it off. Automatic blocklisting on a
-// gossiped reputation would let a slander campaign partition an honest
-// node off the network, which is a worse attack than the one being
-// defended against.
-
-// ConnTagValue is the libp2p ConnManager tag weight. Written under a
-// tag of its own, separate from the reachability tag, so the two
-// compose additively instead of overwriting each other.
 func ConnTagValue(b Band) int {
 	switch b {
 	case BandTrusted:
@@ -56,9 +42,6 @@ func ConnTagValue(b Band) int {
 	}
 }
 
-// GossipAppScore feeds gossipsub's AppSpecificScore. GraylistThreshold
-// is -100, so only BandFloor reaches it — and per CapRemoteTotal a
-// peer only reaches BandFloor on evidence we gathered ourselves.
 func GossipAppScore(b Band) float64 {
 	switch b {
 	case BandTrusted:
@@ -74,8 +57,6 @@ func GossipAppScore(b Band) float64 {
 	}
 }
 
-// GossipGraylistThreshold is the score below which gossipsub stops
-// reading from a peer entirely.
 const GossipGraylistThreshold = -100
 
 // LimitMultiplier scales a route's burst and per-minute allowance.
@@ -94,8 +75,6 @@ func LimitMultiplier(b Band) float64 {
 	}
 }
 
-// AllowInDHT reports whether a peer may enter the routing table and be
-// dialled during queries.
 func AllowInDHT(b Band) bool {
 	return b != BandFloor
 }

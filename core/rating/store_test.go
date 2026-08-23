@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The store reports read and write failures instead of hiding them, so
-// the tests assert on them once here and stay readable.
 func flushNow(t *testing.T, s *Store) {
 	t.Helper()
 	require.NoError(t, s.flush())
@@ -101,9 +99,6 @@ func TestStoreRefusesKindsOutsideItsRole(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
-	// A relay cannot witness a moderation verdict; the entry is
-	// refused at the door rather than written and ignored later, and
-	// the caller is told so rather than left guessing.
 	err = s.RecordN(other.id, KindAuditInvalid, 1)
 	assert.ErrorIs(t, err, ErrForeignDimension)
 	flushNow(t, s)
@@ -157,8 +152,6 @@ func TestObserveIsNonBlockingWhenPersistenceIsBroken(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Record blocked while the datastore was failing")
 	}
-	// Nothing is lost either: folding is in-memory, so a broken
-	// datastore costs persistence, never entries.
 	assert.EqualValues(t, 100_000, s.counters[pendingKey{
 		subject: other.id.String(), dim: Network, bucket: BucketOf(clock.Now()),
 	}][KindRateLimitHit])
@@ -232,11 +225,6 @@ func TestOverallScoreIsWorstDimension(t *testing.T) {
 	assert.Less(t, scoreOf(t, s, other.id), scoreDimOf(t, s, other.id, Network))
 }
 
-// TestStatelessRestartRecovery is the reason the rating rides a CRDT
-// at all. A relay holds no disk: when it dies its whole view goes with
-// it, and the only way back is the DAG replaying its own past records.
-// The generation segment is what keeps the fresh process from writing
-// over that history as it arrives.
 func TestStatelessRestartRecovery(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
@@ -252,8 +240,6 @@ func TestStatelessRestartRecovery(t *testing.T) {
 	replayed := store.clone() // what peers still hold
 	require.NoError(t, first.Close())
 
-	// The process comes back with nothing of its own, then the DAG
-	// hands its old records back.
 	empty := newMemStore()
 	second := newTestStore(t, self, empty, clock)
 	require.Equal(t, MaxScore, scoreOf(t, second, other.id), "an empty replica knows nothing yet")
@@ -268,8 +254,6 @@ func TestStatelessRestartRecovery(t *testing.T) {
 	assert.Equal(t, before, scoreOf(t, second, other.id),
 		"after replay the restarted node must be back where it was")
 
-	// New entries from the fresh generation must add to the
-	// replayed ones, not replace them.
 	mustRecordN(t, second, other.id, KindBadSignature, 1)
 	flushNow(t, second)
 	assert.Equal(t, Score(250), scoreOf(t, second, other.id))
@@ -299,8 +283,6 @@ func TestForgedRecordIsDroppedAndCharged(t *testing.T) {
 	})
 
 	t.Run("signed but illegal record charges its author", func(t *testing.T) {
-		// Correctly signed, and provably illegal: an application kind
-		// carried on a network record.
 		rec := Record{
 			Subject:    victim.id.String(),
 			Observer:   liar.id.String(),

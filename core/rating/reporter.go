@@ -29,18 +29,10 @@ package rating
 
 import "github.com/Warp-net/warpnet/core/warpnet"
 
-// Reporter is the write side as seen by an entry source. Keeping
-// it this narrow means middleware, handlers and the discovery loop
-// depend on one method, not on the store.
 type Reporter interface {
 	Record(subject warpnet.WarpPeerID, k Kind) error
 }
 
-// Scorer is the read side as seen by an enforcement point.
-//
-// Both methods return MaxScore/BandTrusted alongside any error: a
-// standing we failed to read is not evidence against anyone, and every
-// caller here is an enforcement point that has to fail open.
 type Scorer interface {
 	Score(subject warpnet.WarpPeerID) (Score, error)
 	Band(subject warpnet.WarpPeerID) (Band, error)
@@ -52,13 +44,6 @@ type Rater interface {
 	Scorer
 }
 
-// Nop stands in wherever no store was built — early startup, tests,
-// a node type that does not carry one yet.
-//
-// It reports BandTrusted for everyone, so an absent rating store means
-// "nobody is penalised" rather than "everybody is". Enforcement that
-// silently engages because a dependency is missing would be far worse
-// than enforcement that silently does not.
 type Nop struct{}
 
 func (Nop) Record(warpnet.WarpPeerID, Kind) error   { return nil }

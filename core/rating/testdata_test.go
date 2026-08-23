@@ -17,9 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// identity is a throwaway node keypair: rating records are verified
-// against the pubkey derived from the observer's peer id, so tests
-// need real ed25519 identities, not string literals.
 type identity struct {
 	id   warpnet.WarpPeerID
 	priv ed25519.PrivateKey
@@ -34,13 +31,9 @@ func newIdentity(t *testing.T) identity {
 	return identity{id: id, priv: priv}
 }
 
-// memStore is an in-memory stand-in for the CRDT datastore. Prefix
-// queries are all the store ever issues.
 type memStore struct {
-	mu   sync.Mutex
-	data map[string][]byte
-	// putErr, when set, fails every write — used to prove Record
-	// stays non-blocking when persistence is broken.
+	mu     sync.Mutex
+	data   map[string][]byte
 	putErr error
 }
 
@@ -108,8 +101,6 @@ func (m *memStore) len() int {
 	return len(m.data)
 }
 
-// clone copies the contents, standing in for what the CRDT DAG would
-// replay back to a node that restarted with nothing.
 func (m *memStore) clone() *memStore {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -124,8 +115,6 @@ func opener(store Storer) Opener {
 	return func(Hooks) (Storer, error) { return store, nil }
 }
 
-// fixedClock lets a test place entries in specific buckets and
-// then age them.
 type fixedClock struct {
 	mu  sync.Mutex
 	now time.Time

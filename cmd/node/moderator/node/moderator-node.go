@@ -53,15 +53,10 @@ import (
 
 type DistributedHashTableDiscoverer interface {
 	ClosestPeers() []warpnet.WarpPeerID
-	// FindProvidersAsync is what the rating CRDT's bitswap exchange
-	// routes through; *distributedHashTable already implements it.
 	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo
 	Close()
 }
 
-// RatingStorer is the moderator's view of the peer rating subsystem:
-// it observes the wire and the verdicts its peers cast, and reads
-// standings back to weigh them.
 type RatingStorer interface {
 	rating.Rater
 	Close() error
@@ -76,10 +71,6 @@ type ModeratorNode struct {
 
 	dHashTable DistributedHashTableDiscoverer
 
-	// mapStore is the moderator's only datastore: the DHT routes on it
-	// and the CRDT replicates on it. A moderator holds no disk either,
-	// so its view is restored from the DAG after a restart rather than
-	// from anything local.
 	mapStore warpnet.WarpBatching
 	crdtDb   *crdt.Store
 	ratingDb RatingStorer
@@ -192,9 +183,6 @@ func (mn *ModeratorNode) Start() (err error) {
 	return nil
 }
 
-// StartRating brings the rating store up once gossip exists. The
-// moderator node itself has no pubsub — the moderator process owns it
-// — so this cannot happen inside Start.
 func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber) error {
 	if mn == nil || mn.node == nil {
 		return warpnet.WarpError("moderator: rating: node is not started")
@@ -221,8 +209,6 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber) error {
 	return nil
 }
 
-// Rating never returns nil: a moderator whose store failed to build
-// must penalise nobody.
 func (mn *ModeratorNode) Rating() rating.Rater {
 	if mn == nil || mn.ratingDb == nil {
 		return rating.Nop{}

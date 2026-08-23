@@ -50,10 +50,6 @@ type GossipBroadcaster struct {
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
-// crdtTopic carries the deltas of the node's one CRDT datastore — stat
-// counters and peer ratings alike. The name is historical: the topic
-// predates anything but stats living in the CRDT, and renaming the
-// string would cut replication between versions for no gain.
 const crdtTopic = "/warpnet/stats/1.0.0"
 
 // NewGossipBroadcaster creates a new Gossip-based broadcaster for the CRDT datastore.

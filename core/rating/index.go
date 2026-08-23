@@ -33,16 +33,8 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-// maxIndexedSubjects bounds the in-memory index. Past it the
-// least-recently-touched subject is dropped from the index — and only
-// from the index. Nothing is ever deleted from the CRDT to save
-// memory: a CRDT delete is a tombstone that propagates and would
-// destroy other nodes' evidence. An evicted subject simply falls back
-// to a prefix query on its next scoring and re-enters.
 const maxIndexedSubjects = 16384
 
-// slot identifies one CRDT key within a subject. One writer owns each
-// slot for its whole lifetime, so the value is replaced wholesale.
 type slot struct {
 	observer   string
 	dim        Dimension
@@ -50,9 +42,6 @@ type slot struct {
 	generation string
 }
 
-// index is the read side of the store. Scoring runs once per inbound
-// request, so it must never touch the datastore; the index is kept
-// current by the CRDT put/delete hooks instead.
 type index struct {
 	mu   sync.RWMutex
 	data map[string]map[slot][]CountEntry
@@ -98,8 +87,6 @@ func (i *index) put(rec Record) {
 	i.lru.Add(rec.Subject, struct{}{})
 }
 
-// drop removes one record, addressed the way a CRDT delete hook
-// reports it.
 func (i *index) drop(subject, observer string, dim Dimension, bucket int64, generation string) {
 	key := slot{observer: observer, dim: dim, bucket: bucket, generation: generation}
 
@@ -115,9 +102,6 @@ func (i *index) drop(subject, observer string, dim Dimension, bucket int64, gene
 	}
 }
 
-// entries snapshots a subject. The returned slice is safe to use
-// without the lock; the CountEntry slices inside are never mutated in
-// place, only replaced wholesale by put.
 func (i *index) entries(subject string) []entry {
 	i.mu.RLock()
 	slots, ok := i.data[subject]
@@ -141,9 +125,6 @@ func (i *index) entries(subject string) []entry {
 	return out
 }
 
-// ensure marks a subject present even with no records, so a peer
-// nobody ever observed does not re-query the datastore on every
-// request.
 func (i *index) ensure(subject string) {
 	i.mu.Lock()
 	if _, ok := i.data[subject]; !ok {
@@ -153,8 +134,6 @@ func (i *index) ensure(subject string) {
 	i.lru.Add(subject, struct{}{})
 }
 
-// has reports whether the subject is currently indexed, so the store
-// knows when to fall back to a datastore query.
 func (i *index) has(subject string) bool {
 	i.mu.RLock()
 	_, ok := i.data[subject]

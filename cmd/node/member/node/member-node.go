@@ -83,8 +83,6 @@ type MemberNode struct {
 	ownerId, network string
 }
 
-// raterOrNop never returns nil: a node whose rating store failed to
-// build must penalise nobody, not everybody.
 func (m *MemberNode) raterOrNop() rating.Rater {
 	if m == nil || m.ratingDb == nil {
 		return rating.Nop{}
@@ -234,9 +232,6 @@ func (m *MemberNode) Start() (err error) {
 		m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode,
 	)
 	if err != nil {
-		// Rating is a property of a node, not a feature of it, but a
-		// node that cannot build its store is still a working node:
-		// it goes blind rather than refusing to start.
 		log.Errorf("member: failed to initialize rating store: %v", err)
 	}
 	m.node.SetRating(m.raterOrNop())

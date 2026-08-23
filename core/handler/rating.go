@@ -37,21 +37,11 @@ import (
 
 const ErrRatingUnavailable = warpnet.WarpError("rating is not available on this node")
 
-// RatingReader is the read side of the rating store, declared here and
-// kept to the two methods these handlers need — the same handler-local
-// interface style every other handler in this package uses.
 type RatingReader interface {
 	Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
 	Own() (domain.NodeRating, error)
 }
 
-// StreamGetOwnRatingHandler serves the owner their own node's standing.
-//
-// What comes back is the public aggregate, assembled entirely from
-// records other nodes wrote about this one. A node holds no opinion of
-// itself by construction, so there is nothing else it could report —
-// which is the point: the user sees themselves as the network sees
-// them, and the offence tallies say what to fix.
 func StreamGetOwnRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 	return func(_ []byte, _ warpnet.WarpStream) (any, error) {
 		if reader == nil {
@@ -66,12 +56,6 @@ func StreamGetOwnRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 	}
 }
 
-// StreamGetRatingHandler serves this node's view of some other node.
-//
-// It is a convenience for clients that hold no CRDT replica of their
-// own — a paired phone, mostly. Full nodes read the CRDT directly, so
-// nothing in the rating mechanism depends on this route being
-// answered.
 func StreamGetRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		if reader == nil {

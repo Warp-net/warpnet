@@ -40,12 +40,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Store is the node's CRDT replica, and a node has exactly one.
-// Everything it replicates to its peers — stat counters, peer ratings
-// — lives in it under its own key prefix. One blockstore, one bitswap
-// exchange, one DAG and one gossip topic is all it takes to replicate
-// all of them; a second replica would only buy a second copy of that
-// machinery, and a second set of blocks to keep in sync.
 type Store struct {
 	*crdt.Datastore
 
@@ -54,9 +48,6 @@ type Store struct {
 	deletes []func(k ds.Key)
 }
 
-// OnPut registers a hook fired for every merged delta. go-ds-crdt takes
-// one PutHook and copies its options at construction, so the stores
-// sharing this replica subscribe here instead of through them.
 func (s *Store) OnPut(f func(k ds.Key, v []byte)) {
 	if s == nil || f == nil {
 		return
@@ -94,8 +85,6 @@ func (s *Store) fireDelete(k ds.Key) {
 	}
 }
 
-// NewStore builds the node's CRDT replica on top of its bitswap
-// exchange.
 func NewStore(
 	ctx context.Context,
 	broadcaster Broadcaster,
@@ -107,30 +96,11 @@ func NewStore(
 
 	baseStore := ds.MutexWrap(datastore)
 
-	// Match the canonical ipfs-lite blockstore wiring for go-ds-crdt:
-	//   - WriteThrough(true) skips the redundant Has() check on every
-	//     Put. CRDT writes blocks once and never overwrites them, so
-	//     the check is pure overhead.
-	//   - NewIdStore synthesises blocks for "identity" multihashes
-	//     (small payloads encoded directly in the CID). go-ds-crdt
-	//     occasionally produces such inline blocks for tiny deltas;
-	//     without IdStore, bitswap cannot satisfy WANTs for those
-	//     CIDs and replication can stall in small clusters.
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
 	bitswapNetwork := warpnet.NewBitswapNetwork(node)
 	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
 
-	// Replay any libp2p connections that were already established
-	// when bitswap registered as a network notifier. libp2p's
-	// swarm.Notify only fires for FUTURE events, so peers that
-	// connected during the window between libp2p.New (the host
-	// starts listening) and bitswap.New (handlers wired) would
-	// otherwise be invisible to bitswap's PeerManager — leading to
-	// "No peers - broadcasting" loops that never converge in a small
-	// cluster. ipfs-lite avoids this by ensuring nothing inbound can
-	// connect before bitswap is up; here the host is already exposed
-	// by the time the store is built, so we have to replay explicitly.
 	for _, p := range node.Network().Peers() {
 		bitswapExchange.PeerConnected(p)
 	}

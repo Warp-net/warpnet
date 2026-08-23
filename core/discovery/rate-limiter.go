@@ -37,8 +37,6 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-// perPeerCapacity is how many discovery events one peer may spend in
-// the shared budget before it is throttled on its own.
 const (
 	perPeerCapacity      = 4
 	perPeerLeakPer10Sec  = 1
@@ -92,9 +90,6 @@ func (b *leakyBucketRateLimiter) Allow() bool {
 	return false
 }
 
-// peerLimiter throttles discovery per source peer on top of the global
-// budget, and scales a peer's allowance down with its standing so an
-// offender's entries are the first dropped under pressure.
 type peerLimiter struct {
 	mx      sync.Mutex
 	buckets *expirable.LRU[string, *leakyBucketRateLimiter]

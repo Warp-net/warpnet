@@ -95,9 +95,6 @@ func limitForRoute(route stream.WarpRoute) routeLimit {
 	return limitWrite
 }
 
-// scaleForBand tightens a route's allowance for a peer whose standing
-// has slipped. The multiplier never reaches zero: a low rating makes a
-// peer slow and last in the queue, it never refuses it service.
 func scaleForBand(limit routeLimit, band rating.Band) routeLimit {
 	multiplier := rating.LimitMultiplier(band)
 	if multiplier >= 1 {
@@ -142,18 +139,11 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 }
 
 const (
-	// writeFloodWindow and writeFloodThreshold separate a peer that
-	// briefly outran a write limit from one that keeps hammering it.
-	// Only the second is an application-level offence; the first is
-	// already covered by the network-level rate-limit hit.
 	writeFloodWindow    = 5 * time.Minute
 	writeFloodThreshold = 20
 	writeFloodCacheSize = 1024
 )
 
-// recordWriteFlood charges the application dimension once a peer has
-// been refused on write routes often enough in one window that it
-// cannot be ordinary posting.
 func (p *WarpMiddleware) recordWriteFlood(
 	s warpnet.WarpStream, route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
 ) {
@@ -170,8 +160,6 @@ func (p *WarpMiddleware) recordWriteFlood(
 	}
 	p.writeFloodMx.Unlock()
 
-	// Exactly at the threshold, so one charge per window rather than
-	// one per request past it.
 	if counter.Add(1) == writeFloodThreshold {
 		p.record(s, rating.KindWriteFlood)
 	}
@@ -191,8 +179,6 @@ func (p *WarpMiddleware) bucket(
 		if b.band == band {
 			return b
 		}
-		// Standing changed: rebuild at the new allowance rather than
-		// letting a peer keep the bucket it earned in a better band.
 		p.rateLimiters.Remove(key)
 	}
 	b := newRateLimiter(scaleForBand(limitForRoute(route), band), band)
@@ -206,10 +192,7 @@ type leakyBucketRateLimiter struct {
 	filled       int64
 	lastLeak     time.Time
 	leakInterval time.Duration
-	// band the bucket was sized for, so a change in the peer's
-	// standing rebuilds it instead of silently keeping the old
-	// allowance.
-	band rating.Band
+	band         rating.Band
 }
 
 func newRateLimiter(limit routeLimit, band rating.Band) *leakyBucketRateLimiter {

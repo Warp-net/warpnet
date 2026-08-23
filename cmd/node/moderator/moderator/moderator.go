@@ -133,10 +133,6 @@ type Moderator struct {
 	judgedMx sync.Mutex
 	judged   map[string]string
 
-	// clearedReports counts reports the quorum threw out, per reporting
-	// node. Only a moderator sees both a report and its outcome, so
-	// this is the only vantage point from which a reporter's accuracy
-	// is observable at all.
 	clearedMx      sync.Mutex
 	clearedReports *expirable.LRU[string, *atomic.Int64]
 
@@ -144,11 +140,6 @@ type Moderator struct {
 }
 
 const (
-	// falseReportWindow and falseReportThreshold decide when groundless
-	// reporting stops being a mistake. Reporting in good faith and
-	// being wrong must cost nothing — people misjudge content, and a
-	// network that punishes the first wrong report stops getting
-	// reports at all.
 	falseReportWindow    = 24 * time.Hour
 	falseReportThreshold = 5
 	falseReportCacheSize = 512
@@ -342,10 +333,6 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 	}
 }
 
-// recordClearedReport charges a node that keeps filing reports the
-// quorum throws out. Threshold, not per-report: an honest reader who
-// misjudges a post must pay nothing, while a node using the report
-// route to harass costs the network real model time.
 func (m *Moderator) recordClearedReport(rep event.ReportEvent) {
 	if m == nil || m.clearedReports == nil || rep.ReporterNodeID == "" {
 		return

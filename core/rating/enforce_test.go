@@ -52,8 +52,6 @@ func TestOnlyFloorIsGraylistedAndEvictedFromDHT(t *testing.T) {
 	assert.False(t, AllowInDHT(BandFloor))
 }
 
-// A trusted peer must be indistinguishable from one with no rating at
-// all, so the feature is inert until something is actually observed.
 func TestTrustedIsInert(t *testing.T) {
 	assert.Equal(t, float64(0), GossipAppScore(BandTrusted))
 	assert.Equal(t, float64(1), LimitMultiplier(BandTrusted))

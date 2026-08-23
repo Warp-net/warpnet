@@ -29,9 +29,6 @@ package domain
 
 import "time"
 
-// NodeRating is what a node reports about a peer's standing, or about
-// its own. A node's own rating is assembled entirely from records
-// written by others — it has no opinion of itself to report.
 type NodeRating struct {
 	NodeID     string            `json:"node_id"`
 	Overall    int32             `json:"overall"`
@@ -48,8 +45,6 @@ type DimensionRating struct {
 	Recent []OffenceTally `json:"recent"`
 }
 
-// OffenceTally is a raw, undecayed count: it answers "what is my node
-// being marked for", which is what a user needs to fix it.
 type OffenceTally struct {
 	Kind   string    `json:"kind"`
 	Count  uint32    `json:"count"`
