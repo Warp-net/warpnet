@@ -33,21 +33,17 @@ import "github.com/Warp-net/warpnet/core/warpnet"
 // it this narrow means middleware, handlers and the discovery loop
 // depend on one method, not on the store.
 type Reporter interface {
-	Record(subject warpnet.WarpPeerID, k Kind)
+	Record(subject warpnet.WarpPeerID, k Kind) error
 }
 
 // Scorer is the read side as seen by an enforcement point.
+//
+// Both methods return MaxScore/BandTrusted alongside any error: a
+// standing we failed to read is not evidence against anyone, and every
+// caller here is an enforcement point that has to fail open.
 type Scorer interface {
-	Score(subject warpnet.WarpPeerID) Score
-	// Band is the standing actually observed, for display and for
-	// deciding what to report.
-	Band(subject warpnet.WarpPeerID) Band
-	// EffectiveBand is the standing enforcement should apply. In
-	// shadow mode it is always BandTrusted and the observed band is
-	// reported instead, so no enforcement point has to know about
-	// modes and no call site can forget the check.
-	EffectiveBand(subject warpnet.WarpPeerID) Band
-	Mode() Mode
+	Score(subject warpnet.WarpPeerID) (Score, error)
+	Band(subject warpnet.WarpPeerID) (Band, error)
 }
 
 // Rater is both halves, which is what most call sites actually hold.
@@ -65,10 +61,8 @@ type Rater interface {
 // than enforcement that silently does not.
 type Nop struct{}
 
-func (Nop) Record(warpnet.WarpPeerID, Kind)       {}
-func (Nop) Score(warpnet.WarpPeerID) Score        { return MaxScore }
-func (Nop) Band(warpnet.WarpPeerID) Band          { return BandTrusted }
-func (Nop) EffectiveBand(warpnet.WarpPeerID) Band { return BandTrusted }
-func (Nop) Mode() Mode                            { return ModeShadow }
+func (Nop) Record(warpnet.WarpPeerID, Kind) error   { return nil }
+func (Nop) Score(warpnet.WarpPeerID) (Score, error) { return MaxScore, nil }
+func (Nop) Band(warpnet.WarpPeerID) (Band, error)   { return BandTrusted, nil }
 
 var _ Rater = Nop{}

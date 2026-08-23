@@ -157,7 +157,9 @@ func signedRecord(
 		Counts:     counts,
 		UpdatedAt:  bucketTime(bucket),
 	}
-	rec.Sign(observer.priv)
+	if err := rec.Sign(observer.priv); err != nil {
+		panic(err) // a test identity always carries a usable key
+	}
 	return rec
 }
 

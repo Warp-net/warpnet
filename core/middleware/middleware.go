@@ -35,6 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
+	log "github.com/sirupsen/logrus"
 )
 
 type middlewareError string
@@ -105,10 +106,15 @@ func (p *WarpMiddleware) SetRating(r rating.Rater) {
 	p.rater = r
 }
 
-// observe charges an offence to a remote peer. Self-streams and
+// record charges an offence to a remote peer. Self-streams and
 // unidentified connections are skipped: a node cannot rate itself, and
 // there is nobody to charge when the peer id is missing.
-func (p *WarpMiddleware) observe(s warpnet.WarpStream, kind rating.Kind) {
+//
+// A middleware has nowhere to return this to — the request it is
+// wrapping has its own outcome — so a refused charge is logged. It
+// means this node reported something its role cannot witness, which is
+// a bug here, not misbehaviour by the peer.
+func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
 	if p == nil || p.rater == nil || s == nil || s.Conn() == nil {
 		return
 	}
@@ -116,7 +122,24 @@ func (p *WarpMiddleware) observe(s warpnet.WarpStream, kind rating.Kind) {
 	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
 		return
 	}
-	p.rater.Record(remote, kind)
+	if err := p.rater.Record(remote, kind); err != nil {
+		log.Warnf("middleware: rating %s for %s: %v", kind, remote, err)
+	}
+}
+
+// band reads a peer's standing for a limit decision. A read failure
+// leaves the peer at full trust: an enforcement point that cannot see
+// the evidence must not act as if it had.
+func (p *WarpMiddleware) band(remote warpnet.WarpPeerID) rating.Band {
+	if p == nil || p.rater == nil {
+		return rating.BandTrusted
+	}
+	b, err := p.rater.Band(remote)
+	if err != nil {
+		log.Warnf("middleware: reading standing of %s: %v", remote, err)
+		return rating.BandTrusted
+	}
+	return b
 }
 
 func (p *WarpMiddleware) Close() {

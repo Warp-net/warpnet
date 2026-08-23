@@ -195,7 +195,7 @@ func (mn *ModeratorNode) Start() (err error) {
 // StartRating brings the rating store up once gossip exists. The
 // moderator node itself has no pubsub — the moderator process owns it
 // — so this cannot happen inside Start.
-func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.ShadowReporter) error {
+func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber) error {
 	if mn == nil || mn.node == nil {
 		return warpnet.WarpError("moderator: rating: node is not started")
 	}
@@ -210,7 +210,7 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.S
 		return fmt.Errorf("moderator: failed to initialize crdt datastore: %w", err)
 	}
 	store, err := crdt.NewCRDTRatingStore(
-		mn.ctx, mn.crdtDb, mn.node.Node(), mn.privKey, warpnet.ModeratorNode, shadow,
+		mn.ctx, mn.crdtDb, mn.node.Node(), mn.privKey, warpnet.ModeratorNode,
 	)
 	if err != nil {
 		return err

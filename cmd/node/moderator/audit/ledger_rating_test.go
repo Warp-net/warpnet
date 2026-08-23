@@ -18,10 +18,11 @@ type capturingReporter struct {
 	kinds []rating.Kind
 }
 
-func (c *capturingReporter) Record(_ warpnet.WarpPeerID, k rating.Kind) {
+func (c *capturingReporter) Record(_ warpnet.WarpPeerID, k rating.Kind) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.kinds = append(c.kinds, k)
+	return nil
 }
 
 func (c *capturingReporter) seen() []rating.Kind {

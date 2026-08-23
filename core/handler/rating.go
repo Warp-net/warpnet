@@ -32,6 +32,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 const ErrRatingUnavailable = warpnet.WarpError("rating is not available on this node")
@@ -40,8 +41,8 @@ const ErrRatingUnavailable = warpnet.WarpError("rating is not available on this 
 // kept to the two methods these handlers need — the same handler-local
 // interface style every other handler in this package uses.
 type RatingReader interface {
-	Public(subject warpnet.WarpPeerID) domain.NodeRating
-	Own() domain.NodeRating
+	Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 }
 
 // StreamGetOwnRatingHandler serves the owner their own node's standing.
@@ -56,7 +57,12 @@ func StreamGetOwnRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 		if reader == nil {
 			return nil, ErrRatingUnavailable
 		}
-		return event.GetRatingResponse(reader.Own()), nil
+		own, err := reader.Own()
+		if err != nil {
+			log.Errorf("rating handler: reading own standing: %v", err)
+			return nil, err
+		}
+		return event.GetRatingResponse(own), nil
 	}
 }
 
@@ -77,13 +83,23 @@ func StreamGetRatingHandler(reader RatingReader) warpnet.WarpHandlerFunc {
 			return nil, err
 		}
 		if ev.NodeId == "" {
-			return event.GetRatingResponse(reader.Own()), nil
+			own, err := reader.Own()
+			if err != nil {
+				log.Errorf("rating handler: reading own standing: %v", err)
+				return nil, err
+			}
+			return event.GetRatingResponse(own), nil
 		}
 
 		subject := warpnet.FromStringToPeerID(ev.NodeId)
 		if subject == "" {
 			return nil, warpnet.ErrMalformedNodeId
 		}
-		return event.GetRatingResponse(reader.Public(subject)), nil
+		public, err := reader.Public(subject)
+		if err != nil {
+			log.Errorf("rating handler: reading standing of %s: %v", ev.NodeId, err)
+			return nil, err
+		}
+		return event.GetRatingResponse(public), nil
 	}
 }

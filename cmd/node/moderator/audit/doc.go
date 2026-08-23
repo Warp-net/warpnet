@@ -29,10 +29,8 @@ resulting from the use or misuse of this software.
 // moderator answers challenges on ChallengeRoute, spot-checks a random peer
 // every few minutes, and files every decided round as reference material.
 // One thing is deliberately NOT wired — no verdict, vote or connection is
-// refused because of a Ledger standing — a worsened standing is filed as a
-// rating observation and weighs the peer down, but never disqualifies it.
-// See "What is missing" below for why that step needs more than this
-// package can prove on its own.
+// refused because of a Ledger standing. See "What is missing" below for
+// why that step needs more than this package can prove on its own.
 //
 // The problem it targets: the vote round (see the moderator package) stops a
 // forged verdict, but a moderator that actually joins the network and votes
@@ -72,22 +70,23 @@ resulting from the use or misuse of this software.
 // someone else's identity. That is worth having, and it is all this package
 // claims. Everything below stands between that and a verdict trustworthy
 // enough to disqualify anyone — which is exactly why no vote, verdict or
-// connection is refused on a Ledger standing.
+// connection is currently refused on a Ledger standing.
 //
-//  1. A single auditor must not judge. PARTLY ADDRESSED. A standing is
-//     no longer a private opinion that nothing consults: when it worsens,
-//     the Ledger files a signed rating observation (see core/rating),
-//     which replicates over CRDT so every moderator aggregates what all
-//     the auditors saw rather than only what it saw itself. The rating's
-//     caps do the rest — a remote observer can subtract at most 150, and
-//     all of them together at most 400, so no single auditor can carry a
-//     peer past BandWatched on its own say-so.
+//  1. A single auditor must not judge. A standing here is one node's
+//     opinion, formed from references only it has seen. Acting on it lets a
+//     malicious auditor disqualify honest moderators — a worse attack than
+//     the one being defended against. A ban has to come from independent
+//     auditors agreeing, which means gossiping the signed
+//     challenge/response transcripts and deciding by quorum, the same shape
+//     the vote round already uses for content.
 //
-//     What is still missing is the transcript. Peers exchange the
-//     conclusion, not the signed challenge/response pair behind it, so an
-//     aggregating node cannot re-verify the evidence; it trusts that the
-//     auditor judged honestly. That is why the rating weighs a moderator's
-//     ballots and never drops them.
+//     Partly addressed: a worsened standing is filed as a signed rating
+//     record (see core/rating) and replicates, so a moderator aggregates
+//     what every auditor saw rather than only what it saw itself, and the
+//     rating's caps stop any one auditor carrying the decision. The
+//     transcript still is not exchanged, so an aggregating node cannot
+//     re-verify the evidence — which is why a standing weighs a
+//     moderator's ballots and never drops them.
 //
 //  2. Model identity has to be established, not assumed. The moment
 //     moderators legitimately differ (a newer Llama Guard, another guard
@@ -118,6 +117,6 @@ resulting from the use or misuse of this software.
 //     work, a vouching web), a patient attacker outlasts any behavioural
 //     test.
 //
-// Until (1) and (2) hold fully, the honest reading of a Banned standing is
-// "I should not rely on this node", not "this node is a fake".
+// Until (1) and (2) hold, the honest reading of a Banned standing is "I
+// should not rely on this node", not "this node is a fake".
 package audit

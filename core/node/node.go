@@ -134,7 +134,12 @@ func (n *WarpNode) recordOffence(s warpnet.WarpStream, kind rating.Kind) {
 	if remote == "" || remote == s.Conn().LocalPeer() {
 		return
 	}
-	n.rater.Record(remote, kind)
+	// The stream has its own outcome to return; a refused charge means
+	// this node reported something its role cannot witness, which is a
+	// bug here rather than misbehaviour by the peer.
+	if err := n.rater.Record(remote, kind); err != nil {
+		log.Warnf("node: rating %s for %s: %v", kind, remote, err)
+	}
 }
 
 func NewWarpNode(
@@ -390,11 +395,7 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
-					// EffectiveBand is BandTrusted while in shadow mode,
-					// so this writes the neutral weight there.
-					n.prioritizer.SetRatingPriority(
-						typedEvent.Peer, n.rater.EffectiveBand(typedEvent.Peer),
-					)
+					n.setRatingPriority(typedEvent.Peer)
 				}
 				n.trackConnectionFlap(typedEvent.Peer)
 			case event.EvtPeerIdentificationFailed:
@@ -468,8 +469,22 @@ func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
 	}
 	if counter.Add(1) == connFlapThreshold {
 		// Once per window: the entry expires and starts over.
-		n.rater.Record(pid, rating.KindConnectionFlap)
+		if err := n.rater.Record(pid, rating.KindConnectionFlap); err != nil {
+			log.Warnf("node: rating connection flap of %s: %v", pid, err)
+		}
 	}
+}
+
+// setRatingPriority weighs a peer's connection by its standing. A read
+// failure leaves it at BandTrusted: a peer whose record we cannot see
+// keeps the priority it would have had with no record at all.
+func (n *WarpNode) setRatingPriority(pid warpnet.WarpPeerID) {
+	band, err := n.rater.Band(pid)
+	if err != nil {
+		log.Warnf("node: reading standing of %s: %v", pid, err)
+		band = rating.BandTrusted
+	}
+	n.prioritizer.SetRatingPriority(pid, band)
 }
 
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {

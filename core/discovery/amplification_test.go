@@ -18,14 +18,18 @@ type recordingRater struct {
 	kinds []rating.Kind
 }
 
-func (r *recordingRater) Record(_ warpnet.WarpPeerID, k rating.Kind) {
+func (r *recordingRater) Record(_ warpnet.WarpPeerID, k rating.Kind) error {
 	r.kinds = append(r.kinds, k)
+	return nil
 }
 
-func (r *recordingRater) Score(warpnet.WarpPeerID) rating.Score        { return rating.MaxScore }
-func (r *recordingRater) Band(warpnet.WarpPeerID) rating.Band          { return rating.BandTrusted }
-func (r *recordingRater) EffectiveBand(warpnet.WarpPeerID) rating.Band { return rating.BandTrusted }
-func (r *recordingRater) Mode() rating.Mode                            { return rating.ModeShadow }
+func (r *recordingRater) Score(warpnet.WarpPeerID) (rating.Score, error) {
+	return rating.MaxScore, nil
+}
+
+func (r *recordingRater) Band(warpnet.WarpPeerID) (rating.Band, error) {
+	return rating.BandTrusted, nil
+}
 
 func mustAddr(t *testing.T, s string) warpnet.WarpAddress {
 	t.Helper()

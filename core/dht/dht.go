@@ -152,12 +152,8 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	d.dht.RoutingTable().PeerAdded = defaultNodeAddedCallback
 	if d.cfg.addCallbacks != nil {
 		d.dht.RoutingTable().PeerAdded = func(id peer.ID) {
-			// The addresses are not resolved for this line any more:
-			// FindPeer here meant a full DHT walk per routing-table
-			// insert, which turned ordinary table churn into
-			// network-wide queries. The peerstore has the addresses
-			// if they are needed.
-			log.Infof("dht: peer added: %s", id)
+			addrInfo, _ := d.dht.FindPeer(d.ctx, id)
+			log.Infof("dht: peer added: %s", addrInfo)
 			for _, addF := range d.cfg.addCallbacks {
 				if addF == nil {
 					continue

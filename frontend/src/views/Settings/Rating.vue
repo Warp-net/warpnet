@@ -36,11 +36,6 @@
             {{ rating.observers === 1 ? 'other node has' : 'other nodes have' }}
             observed. It recovers on its own as older observations age out.
           </p>
-          <p v-if="rating.mode === 'shadow'" class="text-sm text-dark mt-2">
-            <i class="fas fa-flask mr-1"></i>
-            This node is in shadow mode: the rating is measured and shown, but
-            nothing acts on it yet.
-          </p>
         </div>
 
         <div
@@ -155,7 +150,6 @@ export default {
         band: 'trusted',
         observers: 0,
         dimensions: [],
-        mode: 'shadow',
       },
     };
   },

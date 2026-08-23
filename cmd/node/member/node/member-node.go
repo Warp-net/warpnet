@@ -54,9 +54,6 @@ import (
 type MetricsOnlinePusher interface {
 	PushStatusOnline(nodeId string)
 	PushStatusOffline(nodeId string)
-	// PushRatingBand carries what rating enforcement would have done
-	// while the node runs in shadow mode.
-	PushRatingBand(peerId, band string)
 }
 
 type MemberNode struct {
@@ -234,7 +231,7 @@ func (m *MemberNode) Start() (err error) {
 	}
 
 	m.ratingDb, err = crdt.NewCRDTRatingStore(
-		m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode, m.metrics,
+		m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode,
 	)
 	if err != nil {
 		// Rating is a property of a node, not a feature of it, but a

@@ -260,7 +260,7 @@ gate by design — the volunteer order in `cmd/node/moderator/round` is a
 delay, not a permission — so voting early is allowed and there is
 nothing to charge.
 
-All weights are calibration targets — see §10, shadow mode.
+All weights are calibration targets.
 
 ---
 
@@ -638,23 +638,14 @@ UI:
 
 ```go
 // core/rating/store.go
-type Mode uint8
-const (
-    ModeShadow Mode = iota // record, replicate, display; report decisions, apply none
-    ModeEnforce
-)
-func ParseMode(s string) (Mode, error)
-
 type Config struct {
     Ctx        context.Context
     Self       warpnet.WarpPeerID
     PrivKey    ed25519.PrivateKey
     Dimensions []Dimension
-    Mode       Mode
     Flush      time.Duration    // default 30s
     Now        func() time.Time // injectable for tests
     Acquainted Acquaintance     // how long we have known an observer
-    Shadow     ShadowReporter   // where shadow-mode decisions go
 }
 
 // Datastore is the subset of *crdt.Datastore the store needs.
@@ -675,20 +666,28 @@ type Opener func(Hooks) (Datastore, error)
 func NewStore(cfg Config, open Opener) (*Store, error)
 
 // write path — non-blocking, buffered, folded into hour buckets,
-// flushed every cfg.Flush
-func (s *Store) Record(subject warpnet.WarpPeerID, k Kind)
-func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32)
+// flushed every cfg.Flush. The error is the caller's own fault, not the
+// peer's: an empty subject, an unknown kind, or a dimension this node's
+// role cannot witness.
+func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) error
+func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error
 
-// read path — in-memory arithmetic only
-func (s *Store) Score(subject warpnet.WarpPeerID) Score
-func (s *Store) ScoreDim(subject warpnet.WarpPeerID, d Dimension) Score
-func (s *Store) Band(subject warpnet.WarpPeerID) Band
-func (s *Store) Public(subject warpnet.WarpPeerID) domain.NodeRating
-func (s *Store) Own() domain.NodeRating
+// read path — in-memory arithmetic, except for the cold-path reload of
+// a subject the index evicted, which is where the error comes from.
+func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error)
+func (s *Store) ScoreDim(subject warpnet.WarpPeerID, d Dimension) (Score, error)
+func (s *Store) Band(subject warpnet.WarpPeerID) (Band, error)
+func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
+func (s *Store) Own() (domain.NodeRating, error)
 
-func (s *Store) Mode() Mode
 func (s *Store) Close() error
 ```
+
+Every read returns `MaxScore`/`BandTrusted` **alongside** its error. Each
+caller is an enforcement point, and an enforcement point that cannot see
+the evidence must not act as if it had — so a failed read costs a peer
+nothing, and the boundary that cannot propagate the error (a gossipsub
+score callback, a middleware, a libp2p notifier) logs it and carries on.
 
 `Config` carries no generation field: `NewStore` mints one per call, exactly as
 `NewCRDTStatsStore` does at `core/crdt/stats.go:197`.
@@ -698,14 +697,12 @@ Narrow interfaces for injection, so no call site depends on the concrete store:
 ```go
 // core/rating/reporter.go
 type Reporter interface {
-    Record(subject warpnet.WarpPeerID, k Kind)
+    Record(subject warpnet.WarpPeerID, k Kind) error
 }
 
 type Scorer interface {
-    Score(subject warpnet.WarpPeerID) Score
-    Band(subject warpnet.WarpPeerID) Band
-    EffectiveBand(subject warpnet.WarpPeerID) Band
-    Mode() Mode
+    Score(subject warpnet.WarpPeerID) (Score, error)
+    Band(subject warpnet.WarpPeerID) (Band, error)
 }
 
 // Rater is both halves, which is what most call sites actually hold.
@@ -753,25 +750,19 @@ Ordering constraint on all three: the rating store must be constructed after
 gossip is running, the same ordering the member node already uses for the stats
 store at `member-node.go:203-212`.
 
-Config:
+No config: rating has no modes and no switch. A node cannot opt out of
+being rated by its neighbours, and a switch for whether it acts on what
+it sees would only produce a blind free-rider — which contradicts rating
+being an inherent property of a node. The consequences are soft by
+design (§6.4), so there is nothing here that needs arming carefully.
 
-```
---node.rating.mode   shadow | enforce   (env NODE_RATING_MODE, default: shadow)
-```
-
-There is deliberately no `off`. A node cannot opt out of being rated by
-its neighbours — only out of acting on what it sees — so an `off` state
-would just mean a blind free-rider, which contradicts rating being an
-inherent property of a node.
-
-Shadow mode earns its branch by exporting: `EffectiveBand` returns
-`BandTrusted` while shadowing and pushes the observed band to the
-Prometheus gateway (`metrics.PushRatingBand`) instead of applying it, so
-the offence weights can be calibrated across the fleet before anything
-enforces on them. Keeping the mode check inside `EffectiveBand` rather
-than at each enforcement point means no call site can forget it.
-
-added to `config/config.go` next to the existing `node.*` pflags.
+What replaces a staged rollout: the
+consequences themselves. Every knob in `enforce.go` is a weighting, not
+a refusal — `LimitMultiplier` never reaches zero, nothing blocklists —
+so a mis-set weight costs a peer latency, and the caps in §6.3 bound how
+far a wrong number can carry. Testability is in `Config` instead:
+`Now` injects the clock, `Flush` drives persistence by hand, and
+`enforce.go` is a set of pure mappings with no dependencies.
 
 ---
 
@@ -797,11 +788,10 @@ clean.
 
 ### Stage 1 — rating core, network dimension, enforcement, discovery fixes
 
-Ships with `--node.rating.mode=shadow` as the default: the store records,
-replicates and displays everything, and the enforcement callbacks log the
-decision they *would* have taken without applying it. The constants in §4 and
-§6 are calibration targets; shadow mode on testnet is how they get calibrated
-before `enforce` becomes the default.
+The constants in §4 and §6 are calibration targets. They are safe to get
+wrong: every consequence in `enforce.go` is a weighting rather than a
+refusal, so a mis-set weight costs a peer priority and latency, never
+service.
 
 New files:
 
@@ -825,7 +815,6 @@ Edited files:
 
 | File | Change |
 |---|---|
-| `config/config.go` | `node.rating.mode` flag + parse |
 | `event/paths.go` | two new routes |
 | `event/event.go` | `GetRatingEvent` |
 | `core/middleware/middleware.go` | `SetRating(Reporter, Scorer)` on `WarpMiddleware` — a setter rather than a constructor argument, so the three `NewWarpMiddleware` call sites stay untouched |
@@ -854,7 +843,7 @@ Tests:
 | `store_test.go` | `Observe` is non-blocking under a stalled datastore; buckets fold correctly; flush writes exactly one key per (subject, dim, bucket, generation) |
 | `store_test.go` | **stateless restart recovery**: a store whose datastore is wiped, restarted against a datastore pre-seeded with its own prior-generation records (as the DAG would replay them), reports the same score as before the wipe, and its new writes do not overwrite the replayed ones |
 | `index_test.go` | LRU eviction past `maxIndexedSubjects` never issues a CRDT delete; an evicted subject scores identically after falling back to a prefix query |
-| `enforce_test.go` | band → tag/score/multiplier/DHT mappings; `ModeShadow` applies nothing |
+| `enforce_test.go` | band → tag/score/multiplier/DHT mappings; the floor multiplier still serves a peer |
 | `rating_test.go` | `DimensionsFor` per node type; overall = min over dimensions |
 | `core/handler/rating_test.go` | own rating excludes self-authored records; `PUBLIC_GET_RATING` response shape |
 | `core/discovery/discovery_test.go` | (b) a second discovery event for a known peer issues no `PUBLIC_GET_INFO`; (d) one peer cannot exhaust the global budget; (f) a backoffed peer is not redialled |
@@ -929,11 +918,10 @@ mildly disagreeing peer is reported suspect and never banned, a conclusion is
 reported once however long the audit runs, and unreachability is reported
 every time but never bans.
 
-### Stage 4 — flip the default
+### Stage 4 — retune the constants
 
-Separate, deliberately small change: `--node.rating.mode` default `shadow` →
-`enforce`, after a release of testnet data confirms the §4/§6 constants. Nothing
-else in the diff.
+Separate, deliberately small change: adjust the §4/§6 weights once testnet
+data says what they should be. Nothing else in the diff.
 
 ---
 
@@ -985,6 +973,6 @@ Stated plainly, in the spirit of `cmd/node/moderator/audit/doc.go`.
    with no user context invites false positives. Plan says no.
 3. **`MinAcquaintance` on a mobile-heavy network.** One hour of connection before
    an observer counts may be too long for peers that are online in short bursts.
-   Worth measuring in shadow mode before fixing the constant.
-4. **Stage 4 trigger.** Whether flipping to `enforce` is a config default change
+   Worth measuring on a testnet before fixing the constant.
+4. **Retuning the constants.** Whether a weight change is an ordinary release
    or a network-epoch decision should be settled before Stage 1 merges.

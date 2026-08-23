@@ -8,6 +8,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	log "github.com/sirupsen/logrus"
 )
 
 // Outcome is the auditor's classification of one challenge exchange.
@@ -118,25 +119,17 @@ type PeerReport struct {
 	Standing    Standing
 }
 
-// Ledger accumulates audit outcomes per moderator peer and turns them
-// into rating observations.
+// Ledger accumulates audit outcomes per moderator peer. In-memory and
+// local-first by design: every node judges from its own evidence; sharing
+// signed transcripts across nodes is a later layer.
 //
 // The statistical judgement stays here rather than moving into the
-// rating store, and that is deliberate. Audit quality is a *rate* —
+// rating store, and that is deliberate. Audit quality is a rate —
 // agreement over many probes — while the rating counts discrete
 // offences, and a count cannot tell "six wrong out of sixty" from "six
-// wrong out of six". Feeding raw outcomes to the rating would punish
-// an honest moderator running a different model exactly as hard as a
-// bot with no model at all. So the ledger keeps the tolerance encoded
-// in the thresholds above, and reports to the rating only when a peer
-// crosses one — once per crossing, so a long-running audit does not
-// grind a peer down for a conclusion it already drew.
-//
-// This is what closes gap (1) of this package's doc: a standing is no
-// longer one node's private opinion that nothing consults. It becomes
-// a signed, replicated observation that every moderator weighs
-// alongside everyone else's, with the rating's own caps making sure no
-// single auditor can carry the decision.
+// wrong out of six". So the ledger keeps the tolerance encoded in the
+// thresholds above and reports to the rating only when a peer crosses
+// one, once per crossing.
 type Ledger struct {
 	reporter rating.Reporter
 
@@ -189,21 +182,27 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 	// reported every time and weighs almost nothing; a standing is
 	// reported only when it first worsens.
 	if o == OutcomeUnreachable {
-		l.observe(peerID, rating.KindAuditUnreachable)
+		l.report(peerID, rating.KindAuditUnreachable)
 	}
 	if worsened {
 		if kind, ok := standingKind(standing); ok {
-			l.observe(peerID, kind)
+			l.report(peerID, kind)
 		}
 	}
 }
 
-func (l *Ledger) observe(peerID string, kind rating.Kind) {
+// report files one audit conclusion with the rating. A refused record
+// means this node reported something its role cannot witness, which is
+// a bug here rather than misbehaviour by the peer, and the audit loop
+// has nowhere to return it to.
+func (l *Ledger) report(peerID string, kind rating.Kind) {
 	id := warpnet.FromStringToPeerID(peerID)
 	if id == "" {
 		return
 	}
-	l.reporter.Record(id, kind)
+	if err := l.reporter.Record(id, kind); err != nil {
+		log.Warnf("audit: rating %s for %s: %v", kind, peerID, err)
+	}
 }
 
 // severity orders standings so only a genuine downgrade is reported.

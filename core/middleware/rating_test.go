@@ -4,6 +4,7 @@
 package middleware
 
 import (
+	"errors"
 	"sync"
 	"testing"
 
@@ -23,28 +24,27 @@ type fakeRater struct {
 	observed []rating.Kind
 	subjects []warpnet.WarpPeerID
 	band     rating.Band
-	mode     rating.Mode
+	// bandErr makes the store unreadable, which every enforcement point
+	// has to survive by leaving the peer alone.
+	bandErr error
 }
 
-func (f *fakeRater) Record(subject warpnet.WarpPeerID, k rating.Kind) {
+func (f *fakeRater) Record(subject warpnet.WarpPeerID, k rating.Kind) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.observed = append(f.observed, k)
 	f.subjects = append(f.subjects, subject)
+	return nil
 }
 
-func (f *fakeRater) Score(warpnet.WarpPeerID) Score { return rating.MaxScore }
+func (f *fakeRater) Score(warpnet.WarpPeerID) (Score, error) { return rating.MaxScore, nil }
 
-func (f *fakeRater) Band(warpnet.WarpPeerID) rating.Band { return f.band }
-
-func (f *fakeRater) EffectiveBand(warpnet.WarpPeerID) rating.Band {
-	if f.mode == rating.ModeEnforce {
-		return f.band
+func (f *fakeRater) Band(warpnet.WarpPeerID) (rating.Band, error) {
+	if f.bandErr != nil {
+		return rating.BandTrusted, f.bandErr
 	}
-	return rating.BandTrusted
+	return f.band, nil
 }
-
-func (f *fakeRater) Mode() rating.Mode { return f.mode }
 
 func (f *fakeRater) kinds() []rating.Kind {
 	f.mu.Lock()
@@ -132,7 +132,7 @@ func TestDegradedPeerGetsATighterBucket(t *testing.T) {
 	local := warpnet.WarpPeerID("12D3KooWLocalLocalLocalLocalLocalLocalLoca")
 	remote := warpnet.WarpPeerID("12D3KooWRemoteRemoteRemoteRemoteRemoteRemo")
 
-	rater := &fakeRater{band: rating.BandDegraded, mode: rating.ModeEnforce}
+	rater := &fakeRater{band: rating.BandDegraded}
 	mw := newLimiterMiddlewareForTest(t, local)
 	mw.rater = rater
 
@@ -143,19 +143,21 @@ func TestDegradedPeerGetsATighterBucket(t *testing.T) {
 		"a degraded peer must exhaust its burst far sooner")
 }
 
-func TestShadowModeDoesNotTightenAnything(t *testing.T) {
+// An enforcement point that cannot read the evidence must not act as
+// if it had: a peer whose standing failed to load keeps the allowance
+// of a peer with no record at all.
+func TestUnreadableStandingDoesNotTightenAnything(t *testing.T) {
 	local := warpnet.WarpPeerID("12D3KooWLocalLocalLocalLocalLocalLocalLoca")
 	remote := warpnet.WarpPeerID("12D3KooWRemoteRemoteRemoteRemoteRemoteRemo")
 
-	rater := &fakeRater{band: rating.BandFloor, mode: rating.ModeShadow}
+	rater := &fakeRater{band: rating.BandFloor, bandErr: errors.New("datastore is down")}
 	mw := newLimiterMiddlewareForTest(t, local)
 	mw.rater = rater
 
-	// Even at the floor, shadow mode must serve the full burst.
 	route := event.PRIVATE_POST_PAIR
 	for i := range 5 {
 		assert.True(t, callLimited(t, mw, local, remote, route),
-			"shadow mode must not apply the band (request %d)", i+1)
+			"a failed standing read must not apply a band (request %d)", i+1)
 	}
 }
 
@@ -163,7 +165,7 @@ func TestBucketIsRebuiltWhenTheBandChanges(t *testing.T) {
 	local := warpnet.WarpPeerID("12D3KooWLocalLocalLocalLocalLocalLocalLoca")
 	remote := warpnet.WarpPeerID("12D3KooWRemoteRemoteRemoteRemoteRemoteRemo")
 
-	rater := &fakeRater{band: rating.BandTrusted, mode: rating.ModeEnforce}
+	rater := &fakeRater{band: rating.BandTrusted}
 	mw := newLimiterMiddlewareForTest(t, local)
 	mw.rater = rater
 

@@ -79,14 +79,6 @@ type Acquaintance interface {
 	ConnectedSince(id warpnet.WarpPeerID) (time.Time, bool)
 }
 
-// ShadowReporter receives what enforcement would have done while the
-// store is in shadow mode. Without somewhere aggregable to send them,
-// shadow decisions are log lines nobody reads and the mode does not
-// earn the branch it costs at every enforcement point.
-type ShadowReporter interface {
-	PushRatingBand(peerId, band string)
-}
-
 type Config struct {
 	Ctx     context.Context
 	Self    warpnet.WarpPeerID
@@ -94,11 +86,9 @@ type Config struct {
 	// Dimensions this node is able to witness. Observations for any
 	// other dimension are refused at Record.
 	Dimensions []Dimension
-	Mode       Mode
 	Flush      time.Duration
 	Now        func() time.Time
 	Acquainted Acquaintance
-	Shadow     ShadowReporter
 }
 
 type pendingKey struct {
@@ -122,12 +112,10 @@ type Store struct {
 	self       string
 	privKey    ed25519.PrivateKey
 	dims       []Dimension
-	mode       Mode
 	now        func() time.Time
 	store      Datastore
 	idx        *index
 	acquainted Acquaintance
-	shadow     ShadowReporter
 
 	// generation is minted once per process start. Every key this
 	// process writes carries it, so a restart — including one that
@@ -190,11 +178,9 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 		self:       cfg.Self.String(),
 		privKey:    cfg.PrivKey,
 		dims:       slices.Clone(cfg.Dimensions),
-		mode:       cfg.Mode,
 		now:        cfg.Now,
 		idx:        idx,
 		acquainted: cfg.Acquainted,
-		shadow:     cfg.Shadow,
 		generation: generation,
 		counters:   make(map[pendingKey]pendingCounts),
 		dirty:      make(map[pendingKey]struct{}),
@@ -222,25 +208,32 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 // middleware chain and from stream handlers, so it does no I/O: the
 // count is folded into the current hour's bucket in memory and the
 // flush ticker persists it.
-func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) {
-	s.RecordN(subject, k, 1)
+func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) error {
+	return s.RecordN(subject, k, 1)
 }
 
-func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) {
+func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error {
 	if s == nil || n == 0 {
-		return
+		return nil
 	}
 	id := subject.String()
-	// A node cannot rate itself. This is the write-side half of the
-	// rule; Validate is the read-side half.
-	if id == "" || id == s.self {
-		return
+	if id == "" {
+		return ErrEmptySubject
+	}
+	// A node cannot rate itself. Not a fault — the invariant holds by
+	// construction on both sides, here on the write side and in
+	// Validate on the read side — so it costs the caller nothing.
+	if id == s.self {
+		return nil
 	}
 	// A node may only report what its role can actually witness: a
 	// relay claiming to have seen a bad moderation verdict is refused
 	// at the door rather than written and ignored downstream.
-	if !k.Valid() || !slices.Contains(s.dims, k.Dimension()) {
-		return
+	if !k.Valid() {
+		return ErrUnknownKind
+	}
+	if !slices.Contains(s.dims, k.Dimension()) {
+		return fmt.Errorf("%w: %s", ErrForeignDimension, k.Dimension())
 	}
 
 	key := pendingKey{subject: id, dim: k.Dimension(), bucket: BucketOf(s.now())}
@@ -254,25 +247,25 @@ func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) {
 	counts[k] += n
 	s.dirty[key] = struct{}{}
 	s.mu.Unlock()
-}
-
-func (s *Store) Mode() Mode {
-	if s == nil {
-		return ModeShadow
-	}
-	return s.mode
+	return nil
 }
 
 // Score is the subject's standing: the minimum across every dimension
 // anyone has actually observed it on. A moderator that is clean on the
 // wire but forges verdicts is not a mostly-fine node.
-func (s *Store) Score(subject warpnet.WarpPeerID) Score {
+// Score returns MaxScore alongside any error: a subject we failed to
+// read is not thereby an offender, and every caller is an enforcement
+// point that must fail open.
+func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 	if s == nil {
-		return MaxScore
+		return MaxScore, nil
 	}
-	obs := s.entriesFor(subject.String())
+	obs, err := s.entriesFor(subject.String())
+	if err != nil {
+		return MaxScore, err
+	}
 	if len(obs) == 0 {
-		return MaxScore
+		return MaxScore, nil
 	}
 	now := s.now()
 	worst := MaxScore
@@ -281,18 +274,23 @@ func (s *Store) Score(subject warpnet.WarpPeerID) Score {
 			worst = sc
 		}
 	}
-	return worst
+	return worst, nil
 }
 
-func (s *Store) ScoreDim(subject warpnet.WarpPeerID, dim Dimension) Score {
+func (s *Store) ScoreDim(subject warpnet.WarpPeerID, dim Dimension) (Score, error) {
 	if s == nil {
-		return MaxScore
+		return MaxScore, nil
 	}
-	return s.scoreDim(s.entriesFor(subject.String()), dim, s.now())
+	obs, err := s.entriesFor(subject.String())
+	if err != nil {
+		return MaxScore, err
+	}
+	return s.scoreDim(obs, dim, s.now()), nil
 }
 
-func (s *Store) Band(subject warpnet.WarpPeerID) Band {
-	return BandOf(s.Score(subject))
+func (s *Store) Band(subject warpnet.WarpPeerID) (Band, error) {
+	score, err := s.Score(subject)
+	return BandOf(score), err
 }
 
 func (s *Store) scoreDim(obs []entry, dim Dimension, now time.Time) Score {
@@ -303,8 +301,11 @@ func (s *Store) scoreDim(obs []entry, dim Dimension, now time.Time) Score {
 // it, using only first-hand evidence about that observer so the
 // recursion is one level deep and always terminates.
 func (s *Store) weightOf(observer string) float64 {
-	obs := s.entriesFor(observer)
-	if len(obs) == 0 {
+	// A read failure here means we know nothing against the observer,
+	// which is exactly the full-weight case; entriesFor has already
+	// logged it.
+	obs, err := s.entriesFor(observer)
+	if err != nil || len(obs) == 0 {
 		return 1
 	}
 	now := s.now()
@@ -332,21 +333,22 @@ func (s *Store) countsTowardScore(observer string) bool {
 }
 
 // Public is the unweighted view, for display only.
-func (s *Store) Public(subject warpnet.WarpPeerID) domain.NodeRating {
+func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error) {
 	id := subject.String()
 	result := domain.NodeRating{
 		NodeID:    id,
 		Overall:   int32(MaxScore),
 		Band:      BandTrusted.String(),
 		UpdatedAt: time.Now().UTC(),
-		Mode:      ModeShadow.String(),
 	}
 	if s == nil {
-		return result
+		return result, nil
 	}
-	result.Mode = s.mode.String()
 
-	obs := s.entriesFor(id)
+	obs, err := s.entriesFor(id)
+	if err != nil {
+		return result, err
+	}
 	now := s.now()
 	overall := MaxScore
 	observers := map[string]struct{}{}
@@ -371,14 +373,14 @@ func (s *Store) Public(subject warpnet.WarpPeerID) domain.NodeRating {
 	result.Band = BandOf(overall).String()
 	result.Observers = len(observers)
 	result.UpdatedAt = now.UTC()
-	return result
+	return result, nil
 }
 
 // Own is this node's own standing, assembled entirely from records
 // other nodes wrote about it.
-func (s *Store) Own() domain.NodeRating {
+func (s *Store) Own() (domain.NodeRating, error) {
 	if s == nil {
-		return domain.NodeRating{Overall: int32(MaxScore), Band: BandTrusted.String()}
+		return domain.NodeRating{Overall: int32(MaxScore), Band: BandTrusted.String()}, nil
 	}
 	return s.Public(warpnet.FromStringToPeerID(s.self))
 }
@@ -411,42 +413,44 @@ func dimensionsPresent(obs []entry) []Dimension {
 
 // entriesFor reads the index, falling back to a one-off datastore
 // query for a subject the index evicted.
-func (s *Store) entriesFor(subject string) []entry {
+func (s *Store) entriesFor(subject string) ([]entry, error) {
 	if subject == "" {
-		return nil
+		return nil, ErrEmptySubject
 	}
 	if s.idx.has(subject) {
-		return s.idx.entries(subject)
+		return s.idx.entries(subject), nil
 	}
 
 	s.fallbackMx.Lock()
 	defer s.fallbackMx.Unlock()
 	if s.idx.has(subject) { // another caller filled it while we waited
-		return s.idx.entries(subject)
+		return s.idx.entries(subject), nil
 	}
-	s.loadSubject(subject)
-	return s.idx.entries(subject)
+	err := s.loadSubject(subject)
+	return s.idx.entries(subject), err
 }
 
-func (s *Store) loadSubject(subject string) {
+func (s *Store) loadSubject(subject string) error {
 	// Mark it present even if empty, so a peer nobody ever observed
 	// does not re-query on every request.
 	s.idx.ensure(subject)
 	if s.store == nil {
-		return
+		return nil
 	}
 	results, err := s.store.Query(s.ctx, ds.Query{Prefix: SubjectPrefix(subject)})
 	if err != nil {
-		log.Warnf("rating: query subject %s: %v", subject, err)
-		return
+		return fmt.Errorf("rating: query subject %s: %w", subject, err)
 	}
 	defer func() { _ = results.Close() }()
 	for r := range results.Next() {
 		if r.Error != nil {
 			continue
 		}
-		s.admit(r.Value)
+		if _, err := s.admit(r.Value); err != nil {
+			log.Debugf("rating: dropping record for %s: %v", subject, err)
+		}
 	}
+	return nil
 }
 
 // scan rebuilds the index at startup. For a node whose datastore is
@@ -467,7 +471,11 @@ func (s *Store) scan() error {
 		if r.Error != nil {
 			continue
 		}
-		if s.admit(r.Value) {
+		ok, err := s.admit(r.Value)
+		if err != nil {
+			log.Debugf("rating: dropping record at startup: %v", err)
+		}
+		if ok {
 			admitted++
 		}
 	}
@@ -482,32 +490,37 @@ func (s *Store) scan() error {
 // there is nobody to charge — drop it. A record that verifies and is
 // still structurally illegal was provably authored by the observer it
 // names, and that is attributable.
-func (s *Store) admit(value []byte) bool {
+func (s *Store) admit(value []byte) (bool, error) {
 	if len(value) == 0 {
-		return false
+		return false, ErrEmptyRecord
 	}
 	var rec Record
 	if err := json.Unmarshal(value, &rec); err != nil {
-		return false
+		return false, fmt.Errorf("rating: unmarshal record: %w", err)
 	}
 	if err := rec.Verify(); err != nil {
-		log.Debugf("rating: dropping unverifiable record for %s: %v", rec.Subject, err)
-		return false
+		return false, fmt.Errorf("rating: unverifiable record for %s: %w", rec.Subject, err)
 	}
 	if err := rec.Validate(s.now()); err != nil {
 		log.Warnf("rating: observer %s authored an invalid record: %v", rec.Observer, err)
-		s.Record(warpnet.FromStringToPeerID(rec.Observer), KindForgedRecord)
-		return false
+		if chargeErr := s.Record(warpnet.FromStringToPeerID(rec.Observer), KindForgedRecord); chargeErr != nil {
+			log.Warnf("rating: charging %s for a forged record: %v", rec.Observer, chargeErr)
+		}
+		return false, err
 	}
 	s.idx.put(rec)
-	return true
+	return true, nil
 }
 
 func (s *Store) onPut(key string, value []byte) {
 	if !strings.HasPrefix(key, KeyPrefix()) {
 		return
 	}
-	s.admit(value)
+	// The CRDT hook has nowhere to return to: a delta that fails to
+	// admit is one peer's bad record, not this node's failure.
+	if _, err := s.admit(value); err != nil {
+		log.Debugf("rating: dropping merged record: %v", err)
+	}
 }
 
 func (s *Store) onDelete(key string) {
@@ -550,12 +563,19 @@ func (s *Store) run(flush time.Duration) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			s.flush() // best effort: persist what this generation accrued
+			// Best effort: persist what this generation accrued.
+			if err := s.flush(); err != nil {
+				log.Errorf("rating: final flush: %v", err)
+			}
 			return
 		case <-ticker.C:
-			s.flush()
+			if err := s.flush(); err != nil {
+				log.Errorf("rating: flush: %v", err)
+			}
 			if s.now().Sub(lastGC) >= gcInterval {
-				s.gcOwnExpired()
+				if err := s.gcOwnExpired(); err != nil {
+					log.Warnf("rating: gc: %v", err)
+				}
 				lastGC = s.now()
 			}
 		}
@@ -566,7 +586,7 @@ func (s *Store) run(flush time.Duration) {
 // outside s.mu on purpose: a Put re-enters the CRDT put hook, which
 // calls admit, which can call Record — holding the lock across the
 // write would deadlock the node on its own entry.
-func (s *Store) flush() {
+func (s *Store) flush() error {
 	s.mu.Lock()
 	pending := make(map[pendingKey][]CountEntry, len(s.dirty))
 	for key := range s.dirty {
@@ -575,9 +595,12 @@ func (s *Store) flush() {
 	s.mu.Unlock()
 
 	if len(pending) == 0 {
-		return
+		return nil
 	}
 
+	// One bad bucket must not strand the rest: every failure keeps its
+	// bucket dirty for the next tick and the flush carries on.
+	var errs []error
 	now := s.now()
 	for key, counts := range pending {
 		rec := Record{
@@ -589,17 +612,20 @@ func (s *Store) flush() {
 			Counts:     counts,
 			UpdatedAt:  now.UTC(),
 		}
-		rec.Sign(s.privKey)
+		if err := rec.Sign(s.privKey); err != nil {
+			errs = append(errs, fmt.Errorf("sign record for %s: %w", key.subject, err))
+			continue
+		}
 
 		payload, err := json.Marshal(rec)
 		if err != nil {
-			log.Errorf("rating: marshal record for %s: %v", key.subject, err)
+			errs = append(errs, fmt.Errorf("marshal record for %s: %w", key.subject, err))
 			continue
 		}
 		if s.store != nil {
 			if err := s.store.Put(s.ctx, ds.NewKey(rec.Key()), payload); err != nil {
-				log.Errorf("rating: write record %s: %v", rec.Key(), err)
-				continue // stays dirty, retried on the next tick
+				errs = append(errs, fmt.Errorf("write record %s: %w", rec.Key(), err))
+				continue
 			}
 		}
 		// Index our own entry immediately rather than waiting
@@ -607,6 +633,7 @@ func (s *Store) flush() {
 		s.idx.put(rec)
 		s.clearIfUnchanged(key, counts)
 	}
+	return errors.Join(errs...)
 }
 
 // clearIfUnchanged drops the dirty flag only when nothing was observed
@@ -645,17 +672,17 @@ func entriesOf(counts pendingCounts) []CountEntry {
 // the author ever deletes, so no node can erase another's evidence —
 // and nothing prunes foreign records for memory, because a CRDT delete
 // is a tombstone that propagates.
-func (s *Store) gcOwnExpired() {
+func (s *Store) gcOwnExpired() error {
 	if s.store == nil {
-		return
+		return nil
 	}
 	results, err := s.store.Query(s.ctx, ds.Query{Prefix: KeyPrefix(), KeysOnly: true})
 	if err != nil {
-		log.Warnf("rating: gc query: %v", err)
-		return
+		return fmt.Errorf("rating: gc query: %w", err)
 	}
 	defer func() { _ = results.Close() }()
 
+	var errs []error
 	now := s.now()
 	var removed int
 	for r := range results.Next() {
@@ -670,7 +697,7 @@ func (s *Store) gcOwnExpired() {
 			continue
 		}
 		if err := s.store.Delete(s.ctx, ds.NewKey(r.Key)); err != nil {
-			log.Warnf("rating: gc delete %s: %v", r.Key, err)
+			errs = append(errs, fmt.Errorf("gc delete %s: %w", r.Key, err))
 			continue
 		}
 		s.idx.drop(subject, observer, dim, bucket, generation)
@@ -679,28 +706,7 @@ func (s *Store) gcOwnExpired() {
 	if removed > 0 {
 		log.Infof("rating: gc removed %d expired own records", removed)
 	}
-}
-
-// EffectiveBand is what an enforcement point should actually apply.
-//
-// Keeping the mode check here rather than at each enforcement point
-// means no call site can forget it, and shadow mode costs one branch
-// in one place instead of four. In shadow the observed band is pushed
-// to the metrics sink instead of being applied — without somewhere
-// aggregable to send them, shadow decisions would be log lines nobody
-// reads and the mode would not earn its keep.
-func (s *Store) EffectiveBand(subject warpnet.WarpPeerID) Band {
-	if s == nil {
-		return BandTrusted
-	}
-	band := s.Band(subject)
-	if s.mode == ModeEnforce {
-		return band
-	}
-	if s.shadow != nil && band != BandTrusted {
-		s.shadow.PushRatingBand(subject.String(), band.String())
-	}
-	return BandTrusted
+	return errors.Join(errs...)
 }
 
 func (s *Store) Close() error {

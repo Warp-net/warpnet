@@ -68,8 +68,6 @@ func init() {
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.String("node.metrics.gateway", "207.154.221.44:4091", "Prometheus push metrics server")
-	pflag.String("node.rating.mode", "shadow",
-		"Peer rating enforcement: 'shadow' observes and reports without acting, 'enforce' applies it")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release automatically")
 
@@ -132,7 +130,6 @@ func init() {
 			Port:         port,
 			Network:      network,
 			IsPskPrinted: viper.GetBool("node.print-psk"),
-			RatingMode:   strings.TrimSpace(viper.GetString("node.rating.mode")),
 			IsSelfUpdate: viper.GetBool("node.self-update"),
 			Metrics: metrics{
 				Gateway: viper.GetString("node.metrics.gateway"),
@@ -191,13 +188,9 @@ type node struct {
 	Network      string
 	IsPskPrinted bool
 	IsSelfUpdate bool
-	// RatingMode is "shadow" or "enforce". There is no "off": a node
-	// cannot opt out of being rated by its neighbours, only out of
-	// acting on what it sees.
-	RatingMode string
-	Metrics    metrics
-	Server     server
-	Seed       string
+	Metrics      metrics
+	Server       server
+	Seed         string
 }
 
 type server struct {

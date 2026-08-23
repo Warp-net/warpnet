@@ -33,7 +33,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/rating"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -56,17 +55,9 @@ func NewCRDTRatingStore(
 	node host.Host,
 	privKey ed25519.PrivateKey,
 	nodeType string,
-	shadow rating.ShadowReporter,
 ) (*rating.Store, error) {
 	if node == nil || crdtStore == nil {
 		return nil, fmt.Errorf("rating: incomplete dependencies") //nolint:err113
-	}
-
-	mode, err := rating.ParseMode(config.Config().Node.RatingMode)
-	if err != nil {
-		// A typo in a flag must not silently arm enforcement.
-		log.Warnf("rating: %v, falling back to shadow", err)
-		mode = rating.ModeShadow
 	}
 
 	open := func(hooks rating.Hooks) (rating.Datastore, error) {
@@ -80,15 +71,13 @@ func NewCRDTRatingStore(
 		Self:       node.ID(),
 		PrivKey:    privKey,
 		Dimensions: rating.DimensionsFor(nodeType),
-		Mode:       mode,
 		Acquainted: connectionAge{host: node},
-		Shadow:     shadow,
 	}, open)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Infof("rating: store started in %s mode for a %s node", mode, nodeType)
+	log.Infof("rating: store started for a %s node", nodeType)
 	return store, nil
 }
 

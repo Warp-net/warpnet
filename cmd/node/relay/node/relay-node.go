@@ -84,7 +84,6 @@ type RatingStorer interface {
 type MetricsOnlinePusher interface {
 	PushStatusOnline(nodeId string)
 	PushStatusOffline(nodeId string)
-	PushRatingBand(peerId, band string)
 }
 
 type RelayNode struct {
@@ -229,7 +228,7 @@ func (rn *RelayNode) Start() (err error) {
 		return fmt.Errorf("relay: failed to initialize crdt datastore: %w", err)
 	}
 	rn.ratingDb, err = crdt.NewCRDTRatingStore(
-		rn.ctx, rn.crdtDb, rn.node.Node(), rn.privKey, warpnet.RelayNode, rn.metrics,
+		rn.ctx, rn.crdtDb, rn.node.Node(), rn.privKey, warpnet.RelayNode,
 	)
 	if err != nil {
 		log.Errorf("relay: failed to initialize rating store: %v", err)

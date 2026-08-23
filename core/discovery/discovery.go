@@ -161,8 +161,16 @@ func (s *discoveryService) raterOrNop() rating.Rater {
 	return rating.Nop{}
 }
 
-func (s *discoveryService) effectiveBand(id warpnet.WarpPeerID) rating.Band {
-	return s.raterOrNop().EffectiveBand(id)
+// band reads a peer's standing for a budget decision. A read failure
+// leaves the peer at full trust: discovery must not throttle a peer
+// because we could not see its record.
+func (s *discoveryService) band(id warpnet.WarpPeerID) rating.Band {
+	b, err := s.raterOrNop().Band(id)
+	if err != nil {
+		log.Warnf("discovery: reading standing of %s: %v", id, err)
+		return rating.BandTrusted
+	}
+	return b
 }
 
 //goland:noinspection ALL
@@ -188,7 +196,7 @@ func NewDiscoveryService(
 		probed:          newProbedCache(),
 		m:               m,
 	}
-	s.peerLimiter = newPeerLimiter(s.effectiveBand)
+	s.peerLimiter = newPeerLimiter(s.band)
 	return s
 }
 
@@ -204,7 +212,7 @@ func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *d
 		probed:          newProbedCache(),
 		m:               m,
 	}
-	s.peerLimiter = newPeerLimiter(s.effectiveBand)
+	s.peerLimiter = newPeerLimiter(s.band)
 	return s
 }
 
@@ -289,7 +297,9 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 	// the whole shared budget and starve discovery of everyone else.
 	if !s.peerLimiter.Allow(pi.ID) {
 		log.Debugf("discovery: source '%s': peer over its own budget: %s", source, pi.ID.String())
-		s.raterOrNop().Record(pi.ID, rating.KindDiscoveryFlood)
+		if err := s.raterOrNop().Record(pi.ID, rating.KindDiscoveryFlood); err != nil {
+			log.Warnf("discovery: rating flood by %s: %v", pi.ID, err)
+		}
 		return
 	}
 	if !s.limiter.Allow() {
@@ -513,7 +523,9 @@ func (s *discoveryService) recordDialFailure(pi warpnet.WarpAddrInfo) {
 	if !known {
 		return
 	}
-	s.raterOrNop().Record(pi.ID, rating.KindDialFailure)
+	if err := s.raterOrNop().Record(pi.ID, rating.KindDialFailure); err != nil {
+		log.Warnf("discovery: rating dial failure of %s: %v", pi.ID, err)
+	}
 }
 
 // shouldProbe reports whether this peer may be asked for its info now,

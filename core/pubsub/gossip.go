@@ -276,11 +276,17 @@ func (g *Gossip) scoreOptions() []pubsub.Option {
 	}
 	params := &pubsub.PeerScoreParams{
 		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
-			// EffectiveBand is BandTrusted in shadow mode and for the
-			// Nop rater, both of which map to 0 — exactly what an
-			// unrated peer gets, so scoring is inert until a store is
-			// attached and enforcing.
-			return rating.GossipAppScore(g.scorer().EffectiveBand(p))
+			// gossipsub calls this on every scoring pass and takes no
+			// error, so a read failure leaves the peer at BandTrusted —
+			// which maps to 0, exactly what an unrated peer gets. The
+			// Nop rater lands in the same place, so scoring is inert
+			// until a store is attached.
+			band, err := g.scorer().Band(p)
+			if err != nil {
+				log.Warnf("gossip: reading standing of %s: %v", p, err)
+				return rating.GossipAppScore(rating.BandTrusted)
+			}
+			return rating.GossipAppScore(band)
 		},
 		AppSpecificWeight: 1,
 		DecayInterval:     time.Minute,

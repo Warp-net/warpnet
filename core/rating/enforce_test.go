@@ -66,20 +66,3 @@ func TestLimitMultiplierNeverReachesZero(t *testing.T) {
 		assert.Positive(t, LimitMultiplier(b), "%s must still be served", b)
 	}
 }
-
-func TestParseMode(t *testing.T) {
-	shadow, err := ParseMode("shadow")
-	assert.NoError(t, err)
-	assert.Equal(t, ModeShadow, shadow)
-
-	enforce, err := ParseMode("enforce")
-	assert.NoError(t, err)
-	assert.Equal(t, ModeEnforce, enforce)
-
-	empty, err := ParseMode("")
-	assert.NoError(t, err)
-	assert.Equal(t, ModeShadow, empty, "the safe default is shadow")
-
-	_, err = ParseMode("off")
-	assert.Error(t, err, "there is no off: a node cannot opt out of being rated")
-}

@@ -39,9 +39,6 @@ type NodeRating struct {
 	Dimensions []DimensionRating `json:"dimensions"`
 	Observers  int               `json:"observers"`
 	UpdatedAt  time.Time         `json:"updated_at"`
-	// Mode is "shadow" or "enforce". In shadow the bands below are
-	// what enforcement would have applied, not what it did.
-	Mode string `json:"mode"`
 }
 
 type DimensionRating struct {

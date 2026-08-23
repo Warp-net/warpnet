@@ -57,6 +57,12 @@ var (
 	ErrRecordBucketStale   = errors.New("rating: record bucket is past retention")
 	ErrRecordNoSignature   = errors.New("rating: record is unsigned")
 	ErrRecordNoPubKey      = errors.New("rating: cannot derive pubkey from observer id")
+	ErrRecordNoPrivKey     = errors.New("rating: cannot sign without a private key")
+
+	ErrEmptySubject     = errors.New("rating: empty subject node id")
+	ErrEmptyRecord      = errors.New("rating: empty record")
+	ErrUnknownKind      = errors.New("rating: unknown offence kind")
+	ErrForeignDimension = errors.New("rating: node cannot witness this dimension")
 )
 
 // CountEntry is one offence kind and how many times this observer saw
@@ -124,9 +130,13 @@ func sortedCounts(in []CountEntry) []CountEntry {
 	return out
 }
 
-func (r *Record) Sign(priv ed25519.PrivateKey) {
+func (r *Record) Sign(priv ed25519.PrivateKey) error {
+	if len(priv) != ed25519.PrivateKeySize {
+		return ErrRecordNoPrivKey
+	}
 	r.Counts = sortedCounts(r.Counts)
 	r.Signature = security.Sign(priv, r.SigningBytes())
+	return nil
 }
 
 // Verify checks the signature against the pubkey derived from the

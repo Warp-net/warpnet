@@ -23,11 +23,12 @@ type recordingRater struct {
 	kinds    []rating.Kind
 }
 
-func (r *recordingRater) Record(subject warpnet.WarpPeerID, k rating.Kind) {
+func (r *recordingRater) Record(subject warpnet.WarpPeerID, k rating.Kind) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.subjects = append(r.subjects, subject)
 	r.kinds = append(r.kinds, k)
+	return nil
 }
 
 func (r *recordingRater) charged() []rating.Kind {

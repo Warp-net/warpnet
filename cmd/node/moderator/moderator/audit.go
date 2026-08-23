@@ -75,7 +75,12 @@ func (m *Moderator) ModeratorBand(peerID string) rating.Band {
 	if id == "" {
 		return rating.BandTrusted
 	}
-	return m.node.Rating().Band(id)
+	band, err := m.node.Rating().Band(id)
+	if err != nil {
+		log.Warnf("moderator: reading standing of %s: %v", peerID, err)
+		return rating.BandTrusted
+	}
+	return band
 }
 
 // RecordDissent implements round.DissentRecorder: it records which

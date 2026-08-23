@@ -28,8 +28,6 @@
 package rating
 
 import (
-	"fmt"
-
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
@@ -154,43 +152,5 @@ func (b Band) String() string {
 		return "floor"
 	default:
 		return "unknown"
-	}
-}
-
-// Mode decides whether the enforcement callbacks bite.
-//
-// There is deliberately no "off": a node that stops observing does not
-// switch its own rating off — others still rate it — it only goes blind
-// and stops contributing evidence. Rating is an inherent property of a
-// node, so the only real choice is whether this node acts on what it
-// sees.
-type Mode uint8
-
-const (
-	// ModeShadow records, replicates and displays everything, and
-	// reports what enforcement would have done without doing it.
-	// Exists because the offence weights are guesses that cannot be
-	// calibrated once enforcement starts changing the behaviour being
-	// measured, and because an early adopter enforcing on evidence
-	// only a minority of the network produces partitions itself.
-	ModeShadow Mode = iota
-	ModeEnforce
-)
-
-func (m Mode) String() string {
-	if m == ModeEnforce {
-		return "enforce"
-	}
-	return "shadow"
-}
-
-func ParseMode(s string) (Mode, error) {
-	switch s {
-	case "shadow", "":
-		return ModeShadow, nil
-	case "enforce":
-		return ModeEnforce, nil
-	default:
-		return ModeShadow, fmt.Errorf("rating: unknown mode %q, want shadow or enforce", s) //nolint:err113
 	}
 }

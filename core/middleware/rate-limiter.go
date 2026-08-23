@@ -131,7 +131,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
-			p.observe(s, rating.KindRateLimitHit)
+			p.record(s, rating.KindRateLimitHit)
 			p.recordWriteFlood(s, route, remotePeer)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
@@ -173,7 +173,7 @@ func (p *WarpMiddleware) recordWriteFlood(
 	// Exactly at the threshold, so one charge per window rather than
 	// one per request past it.
 	if counter.Add(1) == writeFloodThreshold {
-		p.observe(s, rating.KindWriteFlood)
+		p.record(s, rating.KindWriteFlood)
 	}
 }
 
@@ -182,12 +182,7 @@ func (p *WarpMiddleware) bucket(
 ) *leakyBucketRateLimiter {
 	key := route.String() + "|" + remotePeer.String()
 
-	// EffectiveBand is BandTrusted in shadow mode, so the allowance is
-	// untouched there and the observed band goes to metrics instead.
-	band := rating.BandTrusted
-	if p.rater != nil {
-		band = p.rater.EffectiveBand(remotePeer)
-	}
+	band := p.band(remotePeer)
 
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()

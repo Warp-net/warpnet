@@ -159,8 +159,8 @@ type StatsStorer interface {
 // the enforcement points key off, and the two report surfaces.
 type RatingStorer interface {
 	rating.Rater
-	Public(subject warpnet.WarpPeerID) domain.NodeRating
-	Own() domain.NodeRating
+	Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 	Close() error
 }
 
