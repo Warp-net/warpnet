@@ -1,15 +1,15 @@
 # Node rating — design and implementation plan
 
-Status: plan, nothing implemented yet.
+Status: plan. Nothing implemented.
 
 A node's rating is an inherent property of every Warpnet node, computed and
 stored **by its neighbours** — never by itself — replicated over CRDT, decaying
 back to full trust over time, and fed back into libp2p, the DHT, gossipsub and
 the per-peer rate limiters through callbacks.
 
-This document is the implementation plan. It states what exists today, what
-gets built, in which order, and — in the last section — what the scheme does
-**not** protect against.
+This document is the complete implementation specification: every type, every
+constant, every edit point, every test, for all three stages. It is meant to be
+executed without further design work.
 
 ---
 
@@ -19,31 +19,32 @@ gets built, in which order, and — in the last section — what the scheme does
 |---|---|---|
 | 1 | Trust model | **Hybrid.** Signed first-hand observations in CRDT. Enforcement uses each node's own *subjective* score (first-hand at full weight, remote observers weighted and capped). A separate unweighted *public aggregate* is display-only and never enforces. |
 | 2 | What a low rating may do | **Priority (ConnManager + DHT filters) and gossipsub peer score, plus tightening of per-peer rate limits.** No refusal of routes. No automatic blocklisting. |
-| 3 | Relays and moderators | **Observations go to the network, state stays in memory.** No persistent store is added to relay/moderator nodes; they publish signed observations and rebuild their view from the CRDT DAG after a restart. |
-| 4 | Order of work | **Staged: network → application → moderation.** Stage 1 also carries the discovery-amplification fixes, without which every honest node looks like a flooder. |
+| 3 | Relays and moderators | **Observations go to the network, state stays in memory.** No persistent store, and no CRDT replica, is added to relay/moderator nodes. |
+| 4 | Order of work | **Staged: network → application → moderation**, preceded by a no-behaviour-change prep stage. Stage 1 also carries the discovery-amplification fixes. |
 
 ---
 
 ## 2. What already exists
 
-The plan is deliberately built on machinery that is already in the tree:
+The plan is deliberately built on machinery already in the tree.
 
 | Existing | File | Reused for |
 |---|---|---|
-| PN-counter over `go-ds-crdt`, generation-tagged single-writer keys, bitswap/DAG wiring | `core/crdt/stats.go` | The CRDT datastore wiring is extracted and reused; the rating store is a sibling, not a counter. |
-| Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/gossip-adapter.go` | Parametrised by topic so rating gets `/warpnet/rating/1.0.0`. |
-| `UpsertTag`-based connection priority with a flap LRU | `core/node/priority.go` | Gains a second, independent `rating` tag. |
-| Per-`route|peer` leaky buckets | `core/middleware/rate-limiter.go` | Bucket parameters become a function of the peer's band. |
-| Signature / freshness / private-route checks | `core/middleware/auth.go:54-85` | The main source of first-hand network observations. |
-| Payload-size and frame errors | `core/node/node.go` (`unwrap`) | Malformed-frame and oversize observations. |
-| Exponential blocklist | `database/node-repo.go` | Left alone. Rating does **not** drive it (decision 2). |
-| Moderator spot-check ledger with `Outcome`/`Standing` | `cmd/node/moderator/audit/` | Becomes the moderation dimension's observation source; its `Standing` is superseded by the rating score. |
-| Verdict signature verification | `core/handler/moderation.go:103-116` | Moderation-dimension observations about moderators. |
-| `dht.AddPeerCallbacks` / `RemovePeerCallbacks` | `core/dht/options.go` | Joined by rating-aware `QueryFilter` / `RoutingTableFilter`. |
-| `pubsub.WithPeerScore` with `AppSpecificScore` | `vendor/github.com/libp2p/go-libp2p-pubsub/gossipsub.go:367` | The libp2p callback the rating drives. Currently unused: `NewGossipSub` is called with no options. |
+| PN-counter over `go-ds-crdt`, single-writer generation-tagged keys, bitswap/DAG wiring | `core/crdt/stats.go` | The datastore wiring is extracted and reused; the rating store is a sibling, not a counter. |
+| Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/gossip-adapter.go` | Parametrised by topic. |
+| `UpsertTag` connection priority with a flap LRU | `core/node/priority.go` | Gains a second, independent `rating` tag. |
+| Per-`route\|peer` leaky buckets | `core/middleware/rate-limiter.go` | Bucket parameters become a function of the peer's band. |
+| Signature / freshness / private-route checks | `core/middleware/auth.go:54-85` | Main source of first-hand network observations. |
+| Payload-size and frame errors | `core/node/node.go:241,246` | Malformed-frame and oversize observations. |
+| Exponential blocklist | `database/node-repo.go:703` | Left alone. Rating does **not** drive it. |
+| Moderator spot-check ledger, `Outcome`/`Standing` | `cmd/node/moderator/audit/ledger.go` | Becomes the moderation dimension's observation source. |
+| Verdict signature verification | `core/handler/moderation.go:103-116` | Moderation observations about moderators. |
+| `dht.AddPeerCallbacks` / `RemovePeerCallbacks` | `core/dht/options.go:43-53` | Joined by rating-aware query/routing-table filters. |
+| `pubsub.WithPeerScore` + `AppSpecificScore` | `vendor/github.com/libp2p/go-libp2p-pubsub/gossipsub.go:367` | The libp2p callback the rating drives. Currently unused — `NewGossipSub` is called with no options at `core/pubsub/gossip.go:221`. |
+| `dht.QueryFilter` / `dht.RoutingTableFilter` | `vendor/github.com/libp2p/go-libp2p-kad-dht/dht_options.go:271,280` | The DHT callbacks the rating drives. Currently unused. |
 
-No rating, reputation or trust-score code exists in the tree today. `audit.Ledger`
-is the closest thing and is explicitly local, in-memory, and wired to nothing —
+No rating, reputation or trust-score code exists today. `audit.Ledger` is the
+closest thing, is explicitly local and in-memory, and is wired to nothing —
 `cmd/node/moderator/audit/doc.go` says so and explains why.
 
 ---
@@ -54,6 +55,8 @@ is the closest thing and is explicitly local, in-memory, and wired to nothing �
 
 ```go
 // core/rating/rating.go
+package rating
+
 type Dimension uint8
 
 const (
@@ -62,18 +65,22 @@ const (
     Moderation                   // moderator nodes
 )
 
+func (d Dimension) String() string
+func ParseDimension(s string) (Dimension, bool)
+
 // DimensionsFor maps warpnet.NodeInfo.Type to the axes that node tracks.
-//   relay     -> {Network}
-//   member    -> {Network, Application}
-//   moderator -> {Network, Moderation}
+//   warpnet.RelayNode     -> {Network}
+//   warpnet.MemberNode    -> {Network, Application}
+//   warpnet.ModeratorNode -> {Network, Moderation}
+//   unknown               -> {Network}
 func DimensionsFor(nodeType string) []Dimension
 ```
 
-A node tracks and publishes only the dimensions its role owns, and reads only the
-dimensions of the peer's role. A relay observing a member still only ever writes
-`Network` observations — it has no way to witness anything else.
+A node writes only the dimensions its own role can witness, and reads only the
+dimensions of the subject's role. A relay observing a member still only ever
+writes `Network`.
 
-### 3.2 Score
+### 3.2 Score and bands
 
 ```go
 type Score int32
@@ -82,16 +89,19 @@ const (
     MaxScore Score = 1000 // a node never seen before: full trust
     MinScore Score = 0
 )
+
+type Band uint8
+
+const (
+    BandTrusted  Band = iota // 800..1000  no effect
+    BandWatched              // 500..799   mild deprioritisation
+    BandDegraded             // 200..499   halved rate limits, low priority
+    BandFloor                // 0..199     minimum priority, gossipsub graylist range
+)
+
+func BandOf(s Score) Band
+func (b Band) String() string
 ```
-
-Bands, used everywhere a threshold is needed:
-
-| Band | Range | Meaning |
-|---|---|---|
-| `BandTrusted` | 800–1000 | default state, no effect |
-| `BandWatched` | 500–799 | mild deprioritisation |
-| `BandDegraded` | 200–499 | halved rate limits, low priority |
-| `BandFloor` | 0–199 | minimum priority, gossipsub graylist range |
 
 A node's overall score is the **minimum** across the dimensions its role tracks:
 a moderator that is clean on the wire but hands out forged verdicts is not a
@@ -99,127 +109,183 @@ a moderator that is clean on the wire but hands out forged verdicts is not a
 
 ### 3.3 New nodes start at maximum
 
-There is no probation period, by requirement. A subject with no observations
-scores `MaxScore`. This is a deliberate Sybil trade-off: identity is free, so a
-probation period would only punish honest newcomers while a patient attacker
-waits it out. The protection lives in the enforcement ceiling (§6) instead —
-the worst a fresh malicious identity achieves is being deprioritised faster than
-it can mint new ones.
+No probation period, by requirement. A subject with no observations scores
+`MaxScore`. Deliberate Sybil trade-off: identity is free, so probation would only
+punish honest newcomers while a patient attacker waits it out. The protection
+lives in the enforcement ceiling (§6.4) instead.
 
 ### 3.4 Decay — self-healing
 
-Every observation lands in an hour bucket. The score is a pure read-time
-function of the observation set:
+Observations land in hour buckets. Score is a pure read-time function:
 
 ```
-penalty(subject, dim) = Σ  weight(kind) × count × 2^( -age_hours / halfLife )
+penalty(subject, dim) = Σ  weight(kind) × count × 2^( -age_hours / halfLife(dim) )
                        obs
 
 score(subject, dim)   = clamp(MaxScore - penalty, MinScore, MaxScore)
 ```
 
-| Dimension | Half-life | Rationale |
-|---|---|---|
-| `Network` | 12 h | transport misbehaviour is often a bad build or a bad link; recover fast |
-| `Application` | 7 d | an upheld moderation verdict should outlive a news cycle |
-| `Moderation` | 7 d | a moderator's standing must not be washable overnight |
+```go
+// core/rating/aggregate.go
+const BucketDuration = time.Hour
 
-Read-time decay means: no background sweeper, no rewrite traffic, no clock
-skew between nodes changing anyone's *stored* data, and identical results on
-every node given the same observation set. Buckets older than `8 × halfLife`
-contribute nothing and are deleted from the CRDT **by their author only**, so
-one node can never erase another's evidence.
+var halfLife = map[Dimension]time.Duration{
+    Network:     12 * time.Hour,
+    Application: 7 * 24 * time.Hour,
+    Moderation:  7 * 24 * time.Hour,
+}
+
+// retention is how far back records still contribute; older ones are
+// ignored on read and GC'd by their author.
+func retention(d Dimension) time.Duration { return 8 * halfLife[d] }
+
+func decayFactor(age, half time.Duration) float64
+```
+
+| Dimension | Half-life | Retention | Rationale |
+|---|---|---|---|
+| `Network` | 12 h | 4 d | transport misbehaviour is often a bad build or a bad link; recover fast |
+| `Application` | 7 d | 56 d | an upheld moderation verdict should outlive a news cycle |
+| `Moderation` | 7 d | 56 d | a moderator's standing must not be washable overnight |
+
+Read-time decay means no background sweeper, no rewrite traffic, no clock skew
+changing anyone's *stored* data, and identical results on every node given the
+same observation set.
 
 ---
 
 ## 4. Offence catalogue
 
-Weights are penalty points at age zero. All are calibration targets — see §10,
-shadow mode.
+```go
+// core/rating/offence.go
+type Kind uint16
 
-### 4.1 Network (all node types)
+const (
+    // network
+    KindBadSignature Kind = iota + 1
+    KindMissingSignature
+    KindMalformedFrame
+    KindOversizePayload
+    KindStaleOrReplayed
+    KindPrivateRouteDenied
+    KindRateLimitHit
+    KindDiscoveryFlood
+    KindConnectionFlap
+    KindDialFailure
+    KindForgedObservation
+    // application
+    KindModerationUpheld
+    KindForeignAuthorship
+    KindWriteFlood
+    KindFalseReportBurst
+    // moderation
+    KindVerdictBadSignature
+    KindVerdictNoModeratorID
+    KindVerdictMalformed
+    KindVerdictUnsolicited
+    KindVerdictOutlier
+    KindAuditWrong
+    KindAuditInvalid
+    KindAuditUnreachable
+)
 
-| Kind | Weight | First-hand only | Existing detection site |
+type offence struct {
+    dim    Dimension
+    weight int32
+    // ceiling is the most this kind may ever contribute to one
+    // (subject, observer, dimension) penalty, before decay. Zero means
+    // no ceiling. Liveness-ish kinds carry one so a flaky link can
+    // never on its own push a peer out of BandWatched.
+    ceiling int32
+}
+
+var catalogue = map[Kind]offence{ /* table below */ }
+
+func (k Kind) Dimension() Dimension
+func (k Kind) Weight() int32
+func (k Kind) Ceiling() int32
+func (k Kind) String() string   // stable wire/UI name, e.g. "bad_signature"
+func (k Kind) Valid() bool
+func KindByName(s string) (Kind, bool)
+```
+
+### 4.1 Network — every node type
+
+| Kind | Weight | Ceiling | Detection site |
 |---|---|---|---|
-| `BadSignature` | 250 | yes | `core/middleware/auth.go:69` |
-| `MissingSignature` | 250 | yes | `core/middleware/auth.go:59` |
-| `MalformedFrame` | 120 | yes | `core/middleware/auth.go:54`, `core/node/node.go:246` |
-| `OversizePayload` | 150 | yes | `core/node/node.go:241` (`stream.ErrPayloadTooLarge`) |
-| `StaleOrReplayed` | 120 | yes | `core/middleware/auth.go:76` |
-| `PrivateRouteDenied` | 200 | yes | `core/middleware/auth.go:82` |
-| `RateLimitHit` | 15 | yes | `core/middleware/rate-limiter.go:110` |
-| `DiscoveryFlood` | 25 | yes | new, `core/discovery` per-peer bucket (§7) |
-| `ConnectionFlap` | 10 | yes | `core/node/priority.go` flap LRU |
-| `DialFailure` | 2 | yes | `core/discovery/discovery.go:268` — liveness only, capped so it can never reach `BandDegraded` on its own |
-| `ForgedObservation` | 400 | yes | a rating record whose signature does not verify against the pubkey derived from its `Observer` id (§5.3) |
+| `KindBadSignature` | 250 | — | `core/middleware/auth.go:69` |
+| `KindMissingSignature` | 250 | — | `core/middleware/auth.go:59` |
+| `KindMalformedFrame` | 120 | — | `core/middleware/auth.go:54`, `core/node/node.go:246` |
+| `KindOversizePayload` | 150 | — | `core/node/node.go:241` (`stream.ErrPayloadTooLarge`) |
+| `KindStaleOrReplayed` | 120 | — | `core/middleware/auth.go:76` |
+| `KindPrivateRouteDenied` | 200 | — | `core/middleware/auth.go:82` |
+| `KindRateLimitHit` | 15 | 300 | `core/middleware/rate-limiter.go:109` |
+| `KindDiscoveryFlood` | 25 | 300 | new per-peer discovery bucket (§7d) |
+| `KindConnectionFlap` | 10 | 200 | `core/node/priority.go` flap LRU |
+| `KindDialFailure` | 2 | 100 | `core/discovery/discovery.go:268` |
+| `KindForgedObservation` | 400 | — | a rating record whose signature does not verify (§5.4) |
 
-`BadSignature`, `MissingSignature` and `PrivateRouteDenied` are the only network
-kinds that are self-evidently deliberate. They carry the weights that can reach
-`BandFloor` quickly, and only ever from first-hand evidence.
+`KindBadSignature`, `KindMissingSignature` and `KindPrivateRouteDenied` are the
+only network kinds that are self-evidently deliberate. They carry the weights
+that reach `BandFloor` quickly, and only from first-hand evidence.
 
-### 4.2 Application (member nodes)
+### 4.2 Application — member nodes
 
-| Kind | Weight | Source |
-|---|---|---|
-| `ModerationUpheld` | 300 | a FAIL verdict from the moderator quorum naming this node's owner — already delivered to every observer at `core/handler/moderation.go` |
-| `ForeignAuthorship` | 350 | `warpnet.VerifyAuthorship` → `ErrForeignAuthor`: publishing events on behalf of another user |
-| `WriteFlood` | 20 | sustained rate-limit hits on write routes (tweet / reply / react / message) |
-| `FalseReportBurst` | 60 | reports filed by this node that the quorum cleared, counted only above a per-window threshold so an honest mistaken report costs nothing |
+| Kind | Weight | Ceiling | Source |
+|---|---|---|---|
+| `KindModerationUpheld` | 300 | — | FAIL verdict from the moderator quorum naming this node's owner, already delivered to every observer at `core/handler/moderation.go` |
+| `KindForeignAuthorship` | 350 | — | `warpnet.VerifyAuthorship` → `ErrForeignAuthor` |
+| `KindWriteFlood` | 20 | 300 | sustained rate-limit hits on write routes |
+| `KindFalseReportBurst` | 60 | 300 | reports from this node the quorum cleared, counted only above a per-window threshold |
 
-`ModerationUpheld` is the join point between the existing moderation pipeline
-and the rating: the verdict already arrives signed and quorum-backed at every
-observer, so no new wire message is needed — the rating layer subscribes to the
-same handler and records an observation about the offender's **node**.
+### 4.3 Moderation — moderator nodes
 
-### 4.3 Moderation (moderator nodes)
+| Kind | Weight | Ceiling | Source |
+|---|---|---|---|
+| `KindVerdictBadSignature` | 500 | — | `core/handler/moderation.go:113` |
+| `KindVerdictNoModeratorID` | 500 | — | `core/handler/moderation.go:105-111` |
+| `KindVerdictMalformed` | 200 | — | missing object/user id for the verdict type |
+| `KindVerdictUnsolicited` | 250 | — | ballot/verdict for a round this moderator was not selected for |
+| `KindVerdictOutlier` | 60 | 400 | ballot disagreeing with the round's quorum result |
+| `KindAuditWrong` | 60 | 400 | `audit.OutcomeWrong` |
+| `KindAuditInvalid` | 500 | — | `audit.OutcomeInvalid` |
+| `KindAuditUnreachable` | 5 | 100 | `audit.OutcomeUnreachable` |
 
-| Kind | Weight | Source |
-|---|---|---|
-| `VerdictBadSignature` | 500 | `core/handler/moderation.go:113` — `ev.Verify(pubKey)` fails |
-| `VerdictNoModeratorID` | 500 | `core/handler/moderation.go:105-111` |
-| `VerdictMalformed` | 200 | missing object/user id for the verdict type |
-| `VerdictUnsolicited` | 250 | a verdict or ballot for a round this moderator was not selected for — `cmd/node/moderator/round/tally.go` already computes selection |
-| `VerdictOutlier` | 60 | a ballot that disagreed with the round's final quorum result; low weight because honest model diversity produces these |
-| `AuditWrong` | 60 | `audit.OutcomeWrong` |
-| `AuditInvalid` | 500 | `audit.OutcomeInvalid` — bad signature, foreign responder id, mismatched challenge binding |
-| `AuditUnreachable` | 5 | `audit.OutcomeUnreachable` — may be the network's fault; capped like `DialFailure` |
-
-The existing `audit.Ledger` thresholds (`minSample`, `banAgreeBelow`, …) are
-replaced by the score/band mechanism. `audit.Outcome` stays as the auditor's
-classification vocabulary; `Standing` is removed in favour of `rating.Band`.
-
-**This closes gap (1) in `audit/doc.go`** ("a single auditor must not judge"):
-audit outcomes become signed observations replicated to every moderator, and a
-moderator's score is the weighted aggregate over independent auditors, not one
-node's opinion. Gaps (2)–(5) of that document remain open and are restated in
-§11.
+All weights are calibration targets — see §10, shadow mode.
 
 ---
 
 ## 5. Storage
 
-### 5.1 Where
+### 5.1 Two transports, one record format
 
-A second CRDT store beside the stats one:
+| Node type | Holds a CRDT replica? | How its observations reach the network |
+|---|---|---|
+| member | yes, Badger-backed (`RATING` prefix) | direct CRDT writes; also **proxy-persists** records received on the proxy topic |
+| relay | no | publishes signed records on the proxy topic; members persist them |
+| moderator | no | publishes signed records on the proxy topic; members persist them |
 
-- New datastore prefix `RATING`, mirroring `database.NewStatsRepo` — add
-  `database.NewRatingRepo(db)` in `database/stats-repo.go` (~6 lines, same
-  `NodeRepo` with a different prefix).
-- New gossip topic `/warpnet/rating/1.0.0`, so rating replication never
-  competes with stat counters for the stats topic's buffer.
-- `crdt.NewGossipBroadcaster` currently hardcodes `statsTopic`. Add
-  `crdt.NewGossipBroadcasterOn(ctx, gossip, topic)` and make the existing
-  constructor a one-line wrapper — keeps the diff minimal and every current
-  caller untouched.
-- The ~60 lines of blockstore/bitswap/DAG/crdt.New wiring in
-  `NewCRDTStatsStore` are extracted into an unexported
-  `newCRDTDatastore(ctx, broadcaster, store, node, router, prefix)` used by both
-  stores. No behaviour change to stats.
+This is what decision 3 buys: relays and moderators never replicate the whole
+rating dataset (unbounded in RAM for a lightweight node), they only emit. Their
+own view for enforcement is an in-memory table of what they witnessed this
+session, topped up by `PUBLIC_GET_RATING` pulls (§8) with a short-TTL cache.
 
-Relays and moderators pass `datastore.NewMapDatastore()` (which they already
-construct) instead of the Badger-backed repo. They replicate during the session
-and rebuild from peers after a restart — the same recovery path
-`core/crdt/stats.go` documents for total local-data loss.
+Topics:
+
+```go
+// core/crdt/gossip-adapter.go
+const (
+    statsTopic  = "/warpnet/stats/1.0.0"
+    RatingTopic = "/warpnet/rating/1.0.0"       // CRDT deltas, members only
+)
+// core/rating/proxy.go
+const ProxyTopic = "/warpnet/rating/proxy/1.0.0" // signed records from CRDT-less nodes
+```
+
+`RatingTopic` is separate from `statsTopic` so rating replication never competes
+with stat counters for the same broadcaster buffer. `ProxyTopic` is separate
+from `RatingTopic` because a raw record is not a CRDT delta and would be
+garbage to a `GossipBroadcaster`.
 
 ### 5.2 Key layout
 
@@ -227,18 +293,45 @@ and rebuild from peers after a restart — the same recovery path
 /RATING/obs/{subjectID}/{observerID}/{dimension}/{bucketHour}
 ```
 
-Value:
+### 5.3 Record
 
 ```go
+// core/rating/record.go
+type Counts map[Kind]uint32
+
 type ObservationRecord struct {
-    Subject   string            `json:"s"`
-    Observer  string            `json:"o"`
-    Dim       Dimension         `json:"d"`
-    Bucket    int64             `json:"b"`   // unix hour
-    Counts    map[Kind]uint32   `json:"c"`   // absolute counts for this bucket
-    UpdatedAt time.Time         `json:"u"`
-    Signature string            `json:"sig"` // observer's ed25519 over canonical bytes
+    Subject   string    `json:"s"`
+    Observer  string    `json:"o"`
+    Dim       Dimension `json:"d"`
+    Bucket    int64     `json:"b"`   // unix hour
+    Counts    Counts    `json:"c"`   // absolute counts for this bucket
+    UpdatedAt time.Time `json:"u"`
+    Signature string    `json:"sig"` // observer's ed25519 over SigningBytes
 }
+
+// SigningBytes is canonical and stable across architectures:
+//   subject "|" observer "|" itoa(dim) "|" itoa(bucket) "|"
+//   for each kind in ascending numeric order: itoa(kind) "=" itoa(count) ","
+//   "|" itoa(updatedAt.UnixMilli())
+func (r ObservationRecord) SigningBytes() []byte
+
+func (r *ObservationRecord) Sign(priv ed25519.PrivateKey)
+
+// Verify derives the pubkey from the Observer peer id and checks the
+// signature — the same trick StreamModerationResultHandler uses at
+// core/handler/moderation.go:103-116.
+func (r ObservationRecord) Verify() error
+
+// Validate enforces the structural rules, independent of signature:
+//   - Subject and Observer parse as peer ids
+//   - Subject != Observer            (a node cannot rate itself)
+//   - Dim is a known dimension
+//   - every Kind is valid and belongs to Dim
+//   - Bucket is not in the future beyond one bucket, not older than retention
+func (r ObservationRecord) Validate() error
+
+func (r ObservationRecord) Total() uint64
+func (r ObservationRecord) Key() string // the /RATING/obs/... path above
 ```
 
 Properties this buys:
@@ -247,275 +340,503 @@ Properties this buys:
   writes `.../{observerID}/...`, so LWW inside the key is safe and there is no
   read-modify-write hazard against the eventually-consistent local view.
 - **`Subject == Observer` is invalid** and dropped on read. A node cannot rate
-  itself, by construction, not by convention.
+  itself by construction, not by convention.
 - **Bounded restart loss.** No `generation` segment (unlike stats): a process
   restarting mid-hour seeds its in-memory bucket by reading back that one key
-  before the first write. Worst case it loses part of one hour of one dimension
-  from one observer — irrelevant to a decaying score, whereas for stats a lost
+  before its first write. Worst case it loses part of one hour of one dimension
+  from one observer — irrelevant to a decaying score, whereas a lost stats
   increment is permanent, which is why stats needs generations and rating does
   not.
-- **Idempotent proxy writes.** A relay with no CRDT replica can gossip a signed
-  record and let member nodes persist it under the same key. Two members writing
-  it produce the same key with the same bytes. A proxy must read the key first
-  and skip the write if the stored record already has an equal or higher total
-  count, so a stale replay cannot roll a bucket backwards.
+- **Idempotent proxy writes.** Two members persisting the same relay record
+  write the same key with the same bytes. The proxy write rule (§5.5) makes
+  replay harmless.
 
-### 5.3 Authenticity
+### 5.4 Authenticity
 
-Every record is verified on read the same way a moderation verdict is
-(`core/handler/moderation.go:103-116`): derive the pubkey from the `Observer`
-peer id, verify the signature over the canonical bytes. A record that fails is
-dropped, and if we know which peer handed it to us, that peer earns a
-`ForgedObservation` mark. Authenticity therefore does not depend on who relayed
-the record, which is what makes proxy persistence safe.
+Every record is verified on read *and* before any proxy write. A record that
+fails `Verify()` or `Validate()` is dropped; when the peer that handed it over
+is known (proxy topic delivery), that peer earns `KindForgedObservation`.
+Authenticity therefore never depends on who relayed the record — which is
+exactly what makes proxy persistence safe.
 
-### 5.4 Size
+### 5.5 Proxy write rule
 
-Worst case per node: `peers × observers × dimensions × buckets_retained`. With
-1-hour buckets, 8 half-lives of retention and empty buckets never written, a
-node that misbehaves continuously for a week against 50 observers produces
-~8k records — a few MB. Idle peers cost zero bytes. Author-side GC of expired
-buckets keeps it flat.
+```go
+// core/rating/proxy.go
+// PersistForeign stores a record published by a CRDT-less node.
+// Rules, in order:
+//   1. rec.Validate() and rec.Verify() must pass; otherwise drop and
+//      charge the sender KindForgedObservation.
+//   2. rec.Observer must not be us (we write our own keys directly).
+//   3. read the existing value at rec.Key(); if it exists and its
+//      Total() >= rec.Total(), skip the write — a stale replay must
+//      never roll a bucket backwards.
+//   4. otherwise Put.
+func (s *Store) PersistForeign(sender warpnet.WarpPeerID, rec ObservationRecord) error
+```
+
+Rule 3 is a single-key read, not a scan, so it is cheap enough to run per
+inbound record. It is also what makes concurrent persistence by several members
+converge instead of flapping.
+
+### 5.6 Size
+
+Worst case per member: `subjects × observers × dimensions × buckets_retained`.
+With hour buckets, 4 days of network retention and empty buckets never written,
+a node misbehaving continuously for a week against 50 observers produces ~8k
+records — single-digit MB. Idle peers cost zero bytes. Author-side GC of expired
+buckets keeps it flat:
+
+```go
+// runs on the flush ticker, once per hour at most
+func (s *Store) gcOwnExpired() error // deletes only /RATING/obs/*/{self}/... past retention
+```
+
+Only the author deletes its own records, so one node can never erase another's
+evidence.
 
 ---
 
 ## 6. Aggregation and enforcement
 
-### 6.1 Two numbers
+### 6.1 The in-memory index — why scoring is not a CRDT query
+
+Scoring runs on the rate-limiter hot path, i.e. once per inbound request. A
+prefix query per request is not acceptable. The store therefore keeps an
+in-memory index and answers scores from arithmetic only:
+
+```go
+// core/rating/index.go
+type index struct {
+    mu   sync.RWMutex
+    // subject -> dimension -> observer -> bucket -> Counts
+    data map[string]map[Dimension]map[string]map[int64]Counts
+}
+```
+
+- Built at startup by one full prefix scan of `/RATING/obs/`.
+- Kept current by `crdt.Options.PutHook` / `DeleteHook`, which fire on every
+  merged delta. `core/crdt/stats.go:175-180` currently sets both to no-op
+  closures with the logging commented out; the extracted helper (§10, Stage 0)
+  takes them as parameters so the rating store can use them for real.
+- Records failing `Validate`/`Verify` never enter the index.
+- Memory is bounded by the same arithmetic as §5.6.
+
+### 6.2 Two numbers
 
 **Local (subjective) score — the only one that enforces.**
 
 ```
 penalty_local(subject, dim) =
-      Σ  decayed(obs)                                   // our own observations, full weight
-   own
-  +   min( Σ_remote_i  min( decayed(obs_i) × w(observer_i), CapPerObserver ),
+      Σ decayed(own observations)                           // full weight, uncapped
+  +   min( Σ_i min( decayed(obs_i) × w(observer_i), CapPerObserver ),
            CapRemoteTotal )
 
-w(observer) = score_local(observer) / MaxScore          // a distrusted accuser barely counts
-CapPerObserver  = 150
-CapRemoteTotal  = 400
+w(observer) = score_local(observer) / MaxScore
 ```
 
-**Public (aggregate) score — display only.** Unweighted median across observers.
-Shown to the node's own user and, later, in peer detail views. It never touches
-a rate limiter, a priority tag or a peer score.
+```go
+const (
+    CapPerObserver Score = 150
+    CapRemoteTotal Score = 400
+    // MinAcquaintance: a remote observer's records are ignored until we
+    // have been connected to it for this long in this session. A
+    // drive-by accuser has no voice.
+    MinAcquaintance = time.Hour
+)
+```
 
-### 6.2 The invariant that makes slander survivable
+`w(observer)` is computed from that observer's **first-hand-only** local score to
+keep the recursion one level deep and terminating.
+
+**Public (aggregate) score — display only.** Unweighted median across observers
+per dimension. Shown to the node's own user and in peer detail views. It never
+touches a rate limiter, a priority tag or a peer score.
+
+### 6.3 The invariant that makes slander survivable
 
 `CapRemoteTotal = 400` means **remote observations alone can never push a peer
 below 600** — the bottom of `BandWatched`. Reaching `BandDegraded` or
 `BandFloor` requires first-hand evidence gathered on our own wire.
 
-Consequence: a coordinated slander campaign against an honest node costs that
-node a mild priority drop and nothing else, on every node that has not itself
-witnessed a problem. A genuinely misbehaving node hits the floor on exactly the
-peers it is misbehaving against, which is where the enforcement matters.
+Consequence: a coordinated slander campaign against an honest node costs it a
+mild priority drop and nothing else, on every node that has not itself witnessed
+a problem. A genuinely misbehaving node hits the floor on exactly the peers it is
+misbehaving against, which is where enforcement matters. This invariant gets its
+own test (§10, Stage 1).
 
-Additional guards on remote observations:
-- only counted from observers we have been connected to for ≥ 1 h in this
-  session (a drive-by accuser has no voice);
-- an observer's contribution about any single subject is capped as above,
-  regardless of how many kinds it reports;
-- `w(observer)` uses our *local* score for that observer, so an accuser we have
-  first-hand reason to distrust is discounted before its accusations land.
+### 6.4 Where the score is applied
 
-### 6.3 Where the score is applied
+```go
+// core/rating/enforce.go — pure mappings, no dependencies, trivially testable
+func ConnTagValue(b Band) int        // 60 / 30 / 10 / 1
+func GossipAppScore(b Band) float64  // 0 / -10 / -60 / -200
+func LimitMultiplier(b Band) float64 // 1.0 / 0.5 / 0.25 / 0.1
+func AllowInDHT(b Band) bool         // false only for BandFloor
+```
 
 | Surface | Change | File |
 |---|---|---|
-| ConnManager | new `SetRatingPriority(pid, score)` writing a **separate** `rating` tag — `Trusted 60 / Watched 30 / Degraded 10 / Floor 1`. Kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. Reuses the existing flap LRU. | `core/node/priority.go` |
-| gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)` with `AppSpecificScore: func(p peer.ID) float64` reading the local score — `Trusted 0 / Watched −10 / Degraded −60 / Floor −200`, `GraylistThreshold −100`. Per §6.2 only first-hand evidence can reach the graylist range. | `core/pubsub/gossip.go:221` |
-| DHT | `dht.QueryFilter` and `dht.RoutingTableFilter` (both present in the vendored kad-dht, `dht_options.go:271,280`) reject `BandFloor` peers from queries and from the routing table. Exposed as new `dht.Option`s alongside `AddPeerCallbacks`. | `core/dht/options.go`, `core/dht/dht.go` |
-| Rate limits | `limitForRoute(route)` becomes `limitForRoute(route, band)`, multiplying `burst` and `perMinute` by `Trusted 1.0 / Watched 0.5 / Degraded 0.25 / Floor 0.1`. The per-`route|peer` LRU bucket stores the band it was built for and is rebuilt when the band changes. | `core/middleware/rate-limiter.go` |
-| Discovery | the per-peer discovery bucket (§7) is scaled by the same band, so an offender's discovery entries are the first dropped under pressure. | `core/discovery/` |
+| ConnManager | new `SetRatingPriority(pid, score)` writing a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. Reuses the existing flap LRU. | `core/node/priority.go` |
+| gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)` with `AppSpecificScore` reading the local score; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go:221` |
+| DHT | new `dht.QueryFilter` / `dht.RoutingTableFilter` options rejecting `BandFloor` peers. | `core/dht/options.go`, `core/dht/dht.go` |
+| Rate limits | `limitForRoute(route)` → `limitForRoute(route, band)`, multiplying `burst` and `perMinute`. The per-`route\|peer` LRU bucket records the band it was built for and is rebuilt when the band changes. | `core/middleware/rate-limiter.go` |
+| Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
-### 6.4 Deliberately not done
+### 6.5 Deliberately not done
 
 - **No automatic blocklisting.** `BlocklistExponential` stays a user/operator
-  action. A slandered node must never be cut off from the network by an
-  automatic process.
-- **No route refusal.** A `BandFloor` peer is served slowly and last; it is
-  never told "no".
-- **No rating in `NodeInfo`.** A node self-reporting its rating is worthless.
-  "Rating is an inherent property of a node" is realised by every node type
-  owning a `rating.Store` in its core and every peer having a score in it — not
-  by a field on the wire.
+  action. A slandered node must never be cut off by an automatic process.
+- **No route refusal.** A `BandFloor` peer is served slowly and last, never told
+  "no".
+- **No rating field in `NodeInfo`.** A node self-reporting its rating is
+  worthless. "Rating is an inherent property of a node" is realised by every
+  node type owning a rating store in its core and every peer having a score in
+  it — not by a field on the wire.
 
 ---
 
 ## 7. Discovery self-amplification — prerequisite for Stage 1
 
-The suspicion is correct: the current discovery path makes every node generate
-traffic against its peers that the network dimension would score as flooding.
-These must be fixed in the same stage, or rating will penalise honest nodes.
+The current discovery path makes every node generate traffic its peers would
+score as flooding. These must land with Stage 1, or rating will penalise honest
+nodes.
 
 | # | Problem | Site | Fix |
 |---|---|---|---|
-| a | Answering `PUBLIC_GET_INFO` enqueues the requester for discovery, which then requests *its* info back. `DiscoveryHandlerStream` short-circuits only when the peerstore already holds addrs, which is false on first contact — so every first contact costs an info ping-pong. | `core/handler/info.go:56`, `core/discovery/discovery.go:202` | Do not enqueue from the info handler for a peer we are already connected to; the connection is the discovery. |
-| b | `handleAsMember` issues `requestNodeInfo` on **every** discovery event for a peer, including peers already connected and already known. | `core/discovery/discovery.go:290` | Per-peer "recently probed" LRU (30 min TTL) in front of `requestNodeInfo`; skip entirely when connected and the user row is fresh. |
-| c | `publishPeerInfo` republishes up to 11 AddrInfos every 5 min, and every topic is `topic.Relay()`-ed, multiplying fan-out. Receivers treat every entry as a fresh discovery. With N nodes this is O(N²) info requests network-wide. | `core/pubsub/gossip.go:534`, `:274` | Publish own AddrInfo plus only recently *verified* peers; carry a monotonic epoch so receivers drop repeats; receivers skip entries already in the peerstore. |
-| d | The discovery leaky bucket is **global** — `newRateLimiter(32, 2)`, ~12/min for the whole service. It cannot tell "12 new peers" from "one peer 12 times", and one chatty peer starves discovery for everyone. | `core/discovery/discovery.go:129,224` | Per-source buckets plus a per-peer dedup LRU in front; make the per-peer bucket rating-aware (§6.3). This is also where `DiscoveryFlood` observations are raised. |
-| e | The DHT `PeerAdded` hook runs `d.dht.FindPeer(ctx, id)` — a full DHT walk per routing-table insert — purely to log the addresses. | `core/dht/dht.go:146` | Drop the `FindPeer`; log the id. Move callbacks off the routing-table hook onto a buffered channel so a slow callback cannot stall the table. |
-| f | Discovery dials with `SimpleConnect` (raw `host.Connect`), bypassing `WarpNode.Connect`'s backoff check, so a dead peer republished by gossip is redialled forever. | `core/discovery/discovery.go:262`, `core/node/node.go:181` | Route discovery dials through the backoff-aware path. |
+| a | Answering `PUBLIC_GET_INFO` enqueues the requester for discovery, which requests *its* info back. `DiscoveryHandlerStream` short-circuits only when the peerstore already holds addrs, which is false on first contact — so every first contact costs an info ping-pong. | `core/handler/info.go:56`, `core/discovery/discovery.go:202` | Do not enqueue from the info handler for an already-connected peer; the connection is the discovery. |
+| b | `handleAsMember` issues `requestNodeInfo` on **every** discovery event, including for peers already connected and already known. | `core/discovery/discovery.go:290` | Per-peer "recently probed" LRU, 30 min TTL, in front of `requestNodeInfo`; skip entirely when connected and the user row is fresh. |
+| c | `publishPeerInfo` republishes up to 11 AddrInfos every 5 min, every topic is `topic.Relay()`-ed, and receivers treat every entry as a fresh discovery — O(N²) info requests network-wide. | `core/pubsub/gossip.go:534`, `:274` | Publish own AddrInfo plus only recently *verified* peers; carry a monotonic epoch so receivers drop repeats; receivers skip entries already in the peerstore. |
+| d | The discovery leaky bucket is **global** — `newRateLimiter(32, 2)`, ~12/min for the whole service. It cannot tell "12 new peers" from "one peer 12 times", and one chatty peer starves discovery for everyone. | `core/discovery/discovery.go:129,224` | Per-source buckets plus a per-peer dedup LRU in front; per-peer bucket scaled by band (§6.4). This is where `KindDiscoveryFlood` is raised. |
+| e | The DHT `PeerAdded` hook runs `d.dht.FindPeer(ctx, id)` — a full DHT walk per routing-table insert — purely to log addresses. | `core/dht/dht.go:146` | Drop the `FindPeer`; log the id. Move callbacks off the routing-table hook onto a buffered channel so a slow callback cannot stall the table. |
+| f | Discovery dials with `SimpleConnect` (raw `host.Connect`), bypassing `WarpNode.Connect`'s backoff, so a dead peer republished by gossip is redialled forever. | `core/discovery/discovery.go:262`, `core/node/node.go:181` | Route discovery dials through the backoff-aware path. |
 
-(a)–(f) are independently reviewable and independently testable; they can land
-as their own commits ahead of the rating core.
-
----
-
-## 8. Showing the rating to its own user
-
-The node reads `/RATING/obs/{ownID}/*` — records written entirely by other
-nodes — and presents the **public aggregate**, not its own subjective view
-(which is empty for itself by construction).
-
-- New route `PRIVATE_GET_RATING` → `{ overall, per_dimension[], recent_kinds[], observer_count, trend }`.
-  `recent_kinds` is what makes the feature useful: "37 rate-limit hits and 4
-  malformed frames in the last 6 hours" tells the user what to fix.
-- New route `PUBLIC_GET_RATING` (Stage 2) → this node's signed view of a given
-  subject. Needed for thin clients (warpdroid), for cold-start on relays and
-  moderators whose state is in memory, and later for quorum work.
-- Desktop UI: a new `frontend/src/views/Settings/Rating.vue` beside
-  `Blocks.vue` / `Mutes.vue`, plus a compact badge in `InfoOverlay.vue`.
-- warpdroid: out of scope for this plan; `PUBLIC_GET_RATING` is designed so it
-  can be added without protocol changes.
+Each is an independent commit with its own regression test.
 
 ---
 
-## 9. Per-node-type wiring
+## 8. Wire surface
 
-`rating.Store` is constructed in each node's `Start()` with the dimensions its
-role owns:
+```go
+// event/paths.go
+PRIVATE_GET_RATING = "/private/get/rating/0.0.0"
+PUBLIC_GET_RATING  = "/public/get/rating/0.0.0"
+```
 
-**Member** (`cmd/node/member/node/member-node.go`) — full store on the Badger
-repo, both `Network` and `Application`, joined to the rating topic through the
-existing `m.pubsubService.Gossip()`. Reporter injected into the middleware chain
-and the moderation handler.
+```go
+// event/event.go
+type GetRatingEvent struct {
+    NodeId string `json:"node_id"` // empty on the private route = self
+}
+```
 
-**Relay** (`cmd/node/relay/node/relay-node.go`) — `Network` only, backed by the
-`MapDatastore` it already creates. Needs a `Gossip()` accessor on
-`cmd/node/relay/pubsub` (member's `MemberPubSub` already has one at
-`member-pubsub.go:184`). Publishes observations; its own view dies with the
-process and is rebuilt from peers.
+```go
+// domain/rating.go
+type NodeRating struct {
+    NodeID     string            `json:"node_id"`
+    Overall    int32             `json:"overall"`
+    Band       string            `json:"band"`
+    Dimensions []DimensionRating `json:"dimensions"`
+    Observers  int               `json:"observers"`
+    UpdatedAt  time.Time         `json:"updated_at"`
+}
 
-**Moderator** (`cmd/node/moderator/node/moderator-node.go`) — `Network` and
-`Moderation`, backed by its `MapDatastore`. `ModeratorNode` itself has no
-pubsub, but the moderator *process* does (`cmd/node/moderator/pubsub/publisher.go`
-wraps a `*pubsub.Gossip`); add a `Gossip()` accessor there and build the store
-on it. The auditor's outcomes are routed into the store instead of into
-`audit.Ledger`.
+type DimensionRating struct {
+    Name   string         `json:"name"`
+    Score  int32          `json:"score"`
+    Band   string         `json:"band"`
+    Recent []OffenceTally `json:"recent"`
+}
+
+type OffenceTally struct {
+    Kind   string    `json:"kind"`
+    Count  uint32    `json:"count"`
+    LastAt time.Time `json:"last_at"`
+}
+```
+
+- `PRIVATE_GET_RATING` → the owner's **public aggregate** for their own node,
+  read from `/RATING/obs/{self}/*`, i.e. entirely from records written by others.
+  The node's subjective view of itself is empty by construction.
+  `Recent` is what makes the feature useful: "37 rate-limit hits and 4 malformed
+  frames in the last 6 hours" tells the user what to fix.
+- `PUBLIC_GET_RATING` → this node's signed view of a given subject. Needed for
+  thin clients, for relay/moderator cold start (§5.1), and later for quorum work.
+  Rate-limited under `limitRead`.
+- Route limits: add both to `routeLimits` in `core/middleware/rate-limiter.go`
+  (`limitRead`).
+
+UI:
+- `frontend/src/views/Settings/Rating.vue`, beside `Blocks.vue`/`Mutes.vue`;
+  router entry in `frontend/src/router`; call added to
+  `frontend/src/service/service.js`.
+- Compact badge in `frontend/src/components/InfoOverlay.vue`.
+- warpdroid is out of scope; `PUBLIC_GET_RATING` is shaped so it can be added
+  later with no protocol change.
 
 ---
 
-## 10. Stages
+## 9. Store API and per-node wiring
 
-Each stage is independently mergeable and independently testable.
+```go
+// core/rating/store.go
+type Mode uint8
+const (
+    ModeOff Mode = iota
+    ModeShadow  // record, replicate, display; log enforcement decisions, apply none
+    ModeEnforce
+)
+func ParseMode(s string) (Mode, error)
 
-### Stage 1 — core + network dimension + discovery fixes
+type Config struct {
+    Ctx        context.Context
+    Self       warpnet.WarpPeerID
+    PrivKey    ed25519.PrivateKey
+    Dimensions []Dimension
+    Mode       Mode
+    Flush      time.Duration    // default 30s
+    Now        func() time.Time // injectable for tests
+}
 
-**Shadow mode first.** New flag `--node.rating.mode` (`off` | `shadow` |
-`enforce`, default `shadow` for one release). In `shadow` the store records,
+// CRDTDatastore is the subset of *crdt.Datastore the store needs;
+// nil for CRDT-less nodes, which then keep everything in the index and
+// emit on ProxyTopic instead.
+type CRDTDatastore interface {
+    Get(context.Context, ds.Key) ([]byte, error)
+    Put(context.Context, ds.Key, []byte) error
+    Delete(context.Context, ds.Key) error
+    Query(context.Context, ds.Query) (ds.Results, error)
+}
+
+type Publisher interface{ PublishRaw(topic string, data []byte) error }
+
+func NewStore(cfg Config, store CRDTDatastore, pub Publisher) (*Store, error)
+
+// write path — non-blocking, buffered, folded into hour buckets,
+// flushed every cfg.Flush
+func (s *Store) Observe(subject warpnet.WarpPeerID, k Kind)
+func (s *Store) ObserveN(subject warpnet.WarpPeerID, k Kind, n uint32)
+
+// read path — in-memory arithmetic only
+func (s *Store) Score(subject warpnet.WarpPeerID) Score
+func (s *Store) ScoreDim(subject warpnet.WarpPeerID, d Dimension) Score
+func (s *Store) Band(subject warpnet.WarpPeerID) Band
+func (s *Store) Public(subject warpnet.WarpPeerID) domain.NodeRating
+func (s *Store) Own() domain.NodeRating
+
+func (s *Store) PersistForeign(sender warpnet.WarpPeerID, rec ObservationRecord) error
+func (s *Store) Mode() Mode
+func (s *Store) Close() error
+```
+
+Narrow interfaces for injection, so no call site depends on the concrete store:
+
+```go
+// core/rating/reporter.go
+type Reporter interface {
+    Observe(subject warpnet.WarpPeerID, k Kind)
+}
+
+type Scorer interface {
+    Score(subject warpnet.WarpPeerID) Score
+    Band(subject warpnet.WarpPeerID) Band
+    Mode() Mode
+}
+
+// Nop is the zero-cost stand-in for nodes and tests without a store.
+// Nop.Band always returns BandTrusted, so an absent store means
+// "everyone is fine" and nothing is ever penalised by accident.
+var Nop nopRating
+```
+
+Wiring:
+
+| Node | Dimensions | Backing | Gossip |
+|---|---|---|---|
+| **member** (`cmd/node/member/node/member-node.go`) | `Network`, `Application` | `database.NewRatingRepo(db)` + CRDT | `m.pubsubService.Gossip()`, `RatingTopic` (deltas) + `ProxyTopic` (subscribe → `PersistForeign`) |
+| **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | in-memory index only, `store == nil` | needs a new `Gossip()` accessor on `cmd/node/relay/pubsub`; publishes on `ProxyTopic` |
+| **moderator** (`cmd/node/moderator/node/moderator-node.go` + `cmd/node/moderator/moderator/moderator.go`) | `Network`, `Moderation` | in-memory index only | `ModeratorNode` has no pubsub, but the moderator *process* does (`cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`); add a `Gossip()` accessor there |
+
+Member already exposes `Gossip()` at `cmd/node/member/pubsub/member-pubsub.go:184`.
+
+Config:
+
+```
+--node.rating.mode   off | shadow | enforce   (env NODE_RATING_MODE, default: shadow)
+```
+
+added to `config/config.go` next to the existing `node.*` pflags.
+
+---
+
+## 10. Work breakdown
+
+Five stages, each independently reviewable, mergeable and testable.
+
+### Stage 0 — prep, no behaviour change
+
+| File | Change |
+|---|---|
+| `core/crdt/datastore.go` (new) | `newCRDTDatastore(ctx, broadcaster, store, node, router, putHook, deleteHook)` — the blockstore/bitswap/DAG/`crdt.New` block extracted verbatim from `NewCRDTStatsStore`. |
+| `core/crdt/stats.go` | call the helper; delete the inlined block. |
+| `core/crdt/gossip-adapter.go` | add `RatingTopic`; add `NewGossipBroadcasterOn(ctx, gossip, topic)`; `NewGossipBroadcaster` becomes a one-line wrapper. |
+| `database/stats-repo.go` | add `NewRatingRepo(db)` under prefix `RATING`, factored with `NewStatsRepo`. |
+| `cmd/node/relay/pubsub/relay-pubsub.go` | add `Gossip() *pubsub.Gossip`. |
+| `cmd/node/moderator/pubsub/publisher.go` | add `Gossip() *pubsub.Gossip`. |
+
+**Acceptance:** `core/crdt/stats_test.go` passes **unmodified**. `go build ./...`
+clean.
+
+### Stage 1 — rating core, network dimension, enforcement, discovery fixes
+
+Ships with `--node.rating.mode=shadow` as the default: the store records,
 replicates and displays everything, and the enforcement callbacks log the
-decision they *would* have taken without applying it. Constants in §4/§6 are
-calibration targets; shadow mode on testnet is how they get calibrated before
-`enforce` becomes the default.
+decision they *would* have taken without applying it. The constants in §4 and
+§6 are calibration targets; shadow mode on testnet is how they get calibrated
+before `enforce` becomes the default.
 
-1. `core/rating/`: `rating.go` (Dimension, Score, Band, DimensionsFor),
-   `offence.go` (Kind catalogue + weights), `record.go` (`ObservationRecord`,
-   canonical bytes, sign/verify), `store.go` (CRDT store, buffered reporter,
-   hour-bucket folding, 30 s flush, author-side GC), `aggregate.go` (decay,
-   subjective and public aggregation, caps).
-2. `core/crdt/`: extract `newCRDTDatastore`; add `NewGossipBroadcasterOn`.
-   `database/`: add `NewRatingRepo`.
-3. Observation sources: `core/middleware/auth.go`, `core/middleware/rate-limiter.go`,
-   `core/node/node.go` (`unwrap`), `core/node/priority.go` (flap).
-4. Enforcement callbacks: `core/node/priority.go` (`rating` tag),
-   `core/pubsub/gossip.go` (`WithPeerScore`), `core/dht/` (`QueryFilter`,
-   `RoutingTableFilter`), `core/middleware/rate-limiter.go` (band multiplier).
-5. Discovery fixes (a)–(f) from §7.
-6. `PRIVATE_GET_RATING` + `frontend/src/views/Settings/Rating.vue`.
-7. Wiring for all three node types (§9).
+New files:
 
-Tests: unit tests for decay determinism, cap enforcement, the "remote-only score
-never drops below 600" invariant, self-observation rejection, forged-record
-rejection, idempotent proxy writes, band→limit mapping. Discovery fixes get
-regression tests asserting the info ping-pong and the repeat-probe no longer
-occur. End-to-end on testnet via the `warpnet-testnet-verify` skill: three
-nodes, one deliberately sending unsigned messages, assert the other two
-converge on the same band and that a fourth node with no first-hand contact
-stays above 600.
+| File | Contents |
+|---|---|
+| `core/rating/doc.go` | package rationale + the honest limitations of §11, in the style of `cmd/node/moderator/audit/doc.go` |
+| `core/rating/rating.go` | `Dimension`, `Score`, `Band`, `BandOf`, `DimensionsFor` |
+| `core/rating/offence.go` | `Kind`, catalogue, accessors |
+| `core/rating/record.go` | `ObservationRecord`, `SigningBytes`, `Sign`, `Verify`, `Validate`, `Key` |
+| `core/rating/index.go` | in-memory index, put/delete hooks, startup scan |
+| `core/rating/aggregate.go` | decay, subjective and public aggregation, caps |
+| `core/rating/enforce.go` | pure band → knob mappings |
+| `core/rating/reporter.go` | `Reporter`, `Scorer`, `Nop` |
+| `core/rating/store.go` | `Store`, `Config`, `Mode`, buffered writer, flush, GC |
+| `core/rating/proxy.go` | `ProxyTopic`, publish, `PersistForeign` |
+| `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` |
+| `domain/rating.go` | `NodeRating`, `DimensionRating`, `OffenceTally` |
+| `frontend/src/views/Settings/Rating.vue` | own rating, per-dimension bars, recent offences |
+
+Edited files:
+
+| File | Change |
+|---|---|
+| `config/config.go` | `node.rating.mode` flag + parse |
+| `event/paths.go` | two new routes |
+| `event/event.go` | `GetRatingEvent` |
+| `core/middleware/middleware.go` | `SetRating(Reporter, Scorer)` on `WarpMiddleware` — a setter rather than a constructor argument, so the three `NewWarpMiddleware` call sites stay untouched |
+| `core/middleware/auth.go` | `Observe` at the five sites in §4.1 |
+| `core/middleware/rate-limiter.go` | `Observe(KindRateLimitHit)`; `limitForRoute(route, band)`; bucket carries its band and is rebuilt on change; register the two new routes under `limitRead` |
+| `core/node/node.go` | `Observe` on oversize/read error in `unwrap`; `SetRating` passthrough |
+| `core/node/priority.go` | `rating` tag; `Observe(KindConnectionFlap)` |
+| `core/pubsub/gossip.go` | `WithPeerScore` + `AppSpecificScore`; fix (c) |
+| `core/dht/options.go`, `core/dht/dht.go` | `QueryFilter`/`RoutingTableFilter` options; fix (e) |
+| `core/discovery/discovery.go`, `core/discovery/rate-limiter.go` | fixes (b), (d), (f); `KindDiscoveryFlood`, `KindDialFailure` |
+| `core/handler/info.go` | fix (a) |
+| `cmd/node/member/node/member-node.go`, `types.go` | build the store, subscribe `ProxyTopic`, register the private route |
+| `cmd/node/relay/node/relay-node.go` | build a `Network`-only CRDT-less store |
+| `cmd/node/moderator/node/moderator-node.go` | build a CRDT-less store; `Moderation` wired in Stage 3 |
+| `frontend/src/router`, `frontend/src/service/service.js`, `frontend/src/views/Settings.vue` | route + link |
+
+Tests:
+
+| Test | Asserts |
+|---|---|
+| `record_test.go` | signing bytes are canonical and order-independent; `Verify` rejects a foreign signature; `Validate` rejects `Subject == Observer`, unknown kinds, a kind from the wrong dimension, an out-of-window bucket |
+| `aggregate_test.go` | decay is deterministic and monotonic; a record exactly one half-life old contributes half its weight; kind ceilings hold; `CapPerObserver` and `CapRemoteTotal` hold |
+| `aggregate_test.go` | **the §6.3 invariant**: any number of remote observers, any number of records, score never < 600 |
+| `aggregate_test.go` | first-hand evidence alone reaches `BandFloor` |
+| `store_test.go` | `Observe` is non-blocking under a stalled datastore; buckets fold correctly; flush writes exactly one key per (subject, dim, bucket); mid-hour restart seeds from the CRDT and does not lose the bucket |
+| `proxy_test.go` | `PersistForeign` is idempotent; a stale replay does not roll a bucket back; a forged record is dropped and the sender charged |
+| `enforce_test.go` | band → tag/score/multiplier/DHT mappings; `ModeShadow` applies nothing |
+| `rating_test.go` | `DimensionsFor` per node type; overall = min over dimensions |
+| `core/handler/rating_test.go` | own rating excludes self-authored records; `PUBLIC_GET_RATING` response shape |
+| `core/discovery/discovery_test.go` | (b) a second discovery event for a known peer issues no `PUBLIC_GET_INFO`; (d) one peer cannot exhaust the global budget; (f) a backoffed peer is not redialled |
+| `core/handler/info_test.go` | (a) answering info does not enqueue an already-connected peer |
+| `core/pubsub/gossip_test.go` | (c) a repeated epoch is dropped |
+
+End-to-end on testnet, via the `warpnet-testnet-verify` skill: three member
+nodes, one deliberately sending unsigned messages; assert the two honest nodes
+converge on the same band for the offender, that the offender's own
+`PRIVATE_GET_RATING` reports the drop, and that a fourth node with no first-hand
+contact stays above 600.
 
 ### Stage 2 — application dimension (member nodes)
 
-1. `ModerationUpheld` recorded from `core/handler/moderation.go` when a FAIL
-   verdict names a known node.
-2. `ForeignAuthorship` from `warpnet.VerifyAuthorship` failures.
-3. `WriteFlood` from sustained write-route limit hits.
-4. `FalseReportBurst` with a per-window threshold.
-5. `PUBLIC_GET_RATING`.
-6. Rating badge in the peer detail overlay.
+| File | Change |
+|---|---|
+| `core/handler/moderation.go` | on a FAIL verdict, `Observe(offenderNode, KindModerationUpheld)` — the verdict already arrives signed and quorum-backed at every observer, so no new wire message is needed |
+| `core/warpnet/warpnet.go` call sites of `VerifyAuthorship` | `Observe(peer, KindForeignAuthorship)` on `ErrForeignAuthor` |
+| `core/middleware/rate-limiter.go` | classify write routes; `KindWriteFlood` above a sustained-hit threshold |
+| `core/handler/report.go` + moderator round result | `KindFalseReportBurst` above a per-window threshold, so an honest mistaken report costs nothing |
+| `core/handler/rating.go` | register `PUBLIC_GET_RATING` on the member node |
+| `frontend/src/components/InfoOverlay.vue` | peer rating badge |
 
-Tests: a verdict against a peer moves only that peer's `Application` score;
-`overall = min(dimensions)`; an honest single false report costs nothing.
+**Tests:** a FAIL verdict moves only the named node's `Application` score and no
+one else's; `overall == min(dimensions)`; a single cleared report costs zero; the
+`KindWriteFlood` threshold does not trigger on ordinary posting rates.
 
 ### Stage 3 — moderation dimension (moderator nodes)
 
-1. `audit.Outcome` → rating observations; delete `audit.Standing`, keep
-   `Outcome`; `audit.Ledger` becomes a thin adapter over `rating.Store`.
-2. `VerdictBadSignature` / `VerdictNoModeratorID` / `VerdictMalformed` recorded
-   from `core/handler/moderation.go` — note these are observed by *member*
-   nodes about *moderators*, which is exactly the cross-role case the CRDT is
-   for.
-3. `VerdictOutlier` and `VerdictUnsolicited` from `cmd/node/moderator/round/`.
-4. Moderator score consulted when weighting ballots in `round/tally.go` —
-   weighting only; never disqualification (gap (2) of `audit/doc.go` is still
-   open, so a low score must not silence a moderator).
-5. Update `docs/MODERATION.md` with the user-facing explanation.
+| File | Change |
+|---|---|
+| `cmd/node/moderator/audit/ledger.go` | delete `Standing` and the threshold constants; keep `Outcome`; `Ledger` becomes a thin adapter mapping `Outcome` → `Kind` and forwarding to `rating.Store` |
+| `cmd/node/moderator/audit/auditor.go` | report outcomes through the adapter |
+| `core/handler/moderation.go` | `KindVerdictBadSignature`, `KindVerdictNoModeratorID`, `KindVerdictMalformed` — observed by *member* nodes about *moderators*, the cross-role case the CRDT exists for |
+| `cmd/node/moderator/round/tally.go`, `registry.go` | `KindVerdictUnsolicited` (ballot from a moderator not selected for the round — selection is already computed here) and `KindVerdictOutlier` (ballot against the quorum result) |
+| `cmd/node/moderator/round/tally.go` | weight ballots by the caster's moderation score — **weighting only, never disqualification**, because gap (2) of `audit/doc.go` is still open |
+| `cmd/node/moderator/moderator/moderator.go` | build the moderation-dimension store; pull peer scores via `PUBLIC_GET_RATING` with a short-TTL cache |
+| `docs/MODERATION.md` | user-facing paragraph on what moderator standing now means |
+| `cmd/node/moderator/audit/doc.go` | mark gap (1) closed, restate (2)–(5) |
 
-Tests: `troika_integration_test.go` extended with a dishonest moderator; assert
-its score converges across independent auditors and that its ballots lose weight
-without being dropped.
+**Tests:** `cmd/node/moderator/moderator/troika_integration_test.go` extended with
+a dishonest moderator; assert its score converges across independent auditors,
+that its ballots lose weight, and that they are still counted.
+
+### Stage 4 — flip the default
+
+Separate, deliberately small change: `--node.rating.mode` default `shadow` →
+`enforce`, after a release of testnet data confirms the §4/§6 constants. Nothing
+else in the diff.
 
 ---
 
 ## 11. What this does not protect against
 
-Stated plainly, in the spirit of `cmd/node/moderator/audit/doc.go`:
+Stated plainly, in the spirit of `cmd/node/moderator/audit/doc.go`.
 
 1. **Identity is free.** A node at `BandFloor` restarts with a new key at
    `MaxScore`. Rating raises the cost of sustained abuse from one identity; it
    does not price identity. Only a stake, proof of work or a vouching web would,
    and none is in scope.
 2. **Remote observations are advisory, therefore partly ignorable.** The caps in
-   §6.2 that defeat slander also mean a real offender is only fully sanctioned
-   by the peers it has actually attacked. That is the intended trade.
-3. **The observer weighting is circular.** `w(observer)` uses our local score for
-   that observer, which is itself partly built from others' observations. The
-   caps bound the damage but do not remove the circularity; a large honest-looking
-   clique can still shift the public aggregate. The aggregate is display-only
-   for exactly this reason.
-4. **Model diversity still muddies the moderation dimension.** `VerdictOutlier`
-   carries a low weight because gap (2) of `audit/doc.go` — establishing model
-   identity rather than assuming it — remains unsolved. Until it is, a
-   moderator's score must weight ballots, never disqualify them.
+   §6.3 that defeat slander also mean a real offender is fully sanctioned only by
+   the peers it actually attacked. That is the intended trade.
+3. **The observer weighting is circular.** `w(observer)` is computed from that
+   observer's first-hand-only score to keep the recursion one level deep, but a
+   large honest-looking clique can still shift the public aggregate. The
+   aggregate is display-only for exactly this reason.
+4. **Model diversity still muddies the moderation dimension.**
+   `KindVerdictOutlier` carries a low weight and a ceiling because gap (2) of
+   `audit/doc.go` — establishing model identity rather than assuming it — is
+   unsolved. Until it is, a moderator's score must weight ballots, never
+   disqualify them.
 5. **Rating is not evidence.** A record proves an observer *claimed* something,
    not that it happened. Nothing here reaches the standard needed to ban a node,
-   which is precisely why §6.4 forbids automatic blocklisting.
+   which is why §6.5 forbids automatic blocklisting.
+6. **A CRDT-less node's own view dies with the process.** Relays and moderators
+   rebuild from `PUBLIC_GET_RATING` pulls, which is a weaker source than their
+   own first-hand history. A relay restarted in a loop is effectively memoryless.
 
 ---
 
 ## 12. Open questions for review
 
-1. **Retention vs. usefulness of `recent_kinds`.** Author-side GC at
-   `8 × halfLife` drops network records after ~4 days. Is that enough history
-   for a user to diagnose their own node, or should the *display* keep a longer,
-   coarser summary (daily buckets, no per-kind detail) beyond the enforcement
-   window?
-2. **Should relays observe the application dimension at all?** They see enough
-   traffic to notice write floods, but scoring content-adjacent behaviour from a
-   node with no user context invites false positives. Plan says no; worth a
-   second opinion.
-3. **`enforce` as default.** The plan ships `shadow` by default for one release.
-   Whether the switch is a config default change or a network-epoch decision
-   should be settled before Stage 1 merges.
+1. **Retention vs. usefulness of `Recent`.** Author-side GC drops network records
+   after ~4 days. Enough for a user to diagnose their own node, or should the
+   *display* keep a longer, coarser summary (daily buckets, no per-kind detail)
+   beyond the enforcement window?
+2. **Should relays observe the application dimension?** They see enough traffic
+   to notice write floods, but scoring content-adjacent behaviour from a node
+   with no user context invites false positives. Plan says no.
+3. **`MinAcquaintance` on a mobile-heavy network.** One hour of connection before
+   an observer counts may be too long for peers that are online in short bursts.
+   Worth measuring in shadow mode before fixing the constant.
+4. **Stage 4 trigger.** Whether flipping to `enforce` is a config default change
+   or a network-epoch decision should be settled before Stage 1 merges.
