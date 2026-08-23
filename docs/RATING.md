@@ -1,15 +1,16 @@
 # Node rating — design and implementation plan
 
-Status: plan. Nothing implemented.
+Status: implemented. This document is both the design and the record of
+what was built; where the implementation departed from the original plan,
+the section says so and why.
 
 A node's rating is an inherent property of every Warpnet node, computed and
 stored **by its neighbours** — never by itself — replicated over CRDT, decaying
 back to full trust over time, and fed back into libp2p, the DHT, gossipsub and
 the per-peer rate limiters through callbacks.
 
-This document is the complete implementation specification: every type, every
-constant, every edit point, every test, for all three stages. It is meant to be
-executed without further design work.
+This document is the complete specification: every type, every constant,
+every edit point, every test, across all stages.
 
 ---
 
@@ -19,7 +20,7 @@ executed without further design work.
 |---|---|---|
 | 1 | Trust model | **Hybrid.** Signed first-hand observations in CRDT. Enforcement uses each node's own *subjective* score (first-hand at full weight, remote observers weighted and capped). A separate unweighted *public aggregate* is display-only and never enforces. |
 | 2 | What a low rating may do | **Priority (ConnManager + DHT filters) and gossipsub peer score, plus tightening of per-peer rate limits.** No refusal of routes. No automatic blocklisting. |
-| 3 | Relays and moderators | **Observations go to the network, state stays in memory.** No persistent store, and no CRDT replica, is added to relay/moderator nodes. |
+| 3 | Relays and moderators | **Observations go to the network, state stays in memory.** No persistent store is added; they do hold a CRDT replica on an in-memory datastore, because that replica is the only thing that gives their view back after a restart. |
 | 4 | Order of work | **Staged: network → application → moderation**, preceded by a no-behaviour-change prep stage. Stage 1 also carries the discovery-amplification fixes. |
 
 ---
@@ -179,10 +180,7 @@ const (
     KindWriteFlood
     KindFalseReportBurst
     // moderation
-    KindVerdictBadSignature
-    KindVerdictNoModeratorID
     KindVerdictMalformed
-    KindVerdictUnsolicited
     KindVerdictOutlier
     KindAuditWrong
     KindAuditInvalid
@@ -242,14 +240,25 @@ that reach `BandFloor` quickly, and only from first-hand evidence.
 
 | Kind | Weight | Ceiling | Source |
 |---|---|---|---|
-| `KindVerdictBadSignature` | 500 | — | `core/handler/moderation.go:113` |
-| `KindVerdictNoModeratorID` | 500 | — | `core/handler/moderation.go:105-111` |
-| `KindVerdictMalformed` | 200 | — | missing object/user id for the verdict type |
-| `KindVerdictUnsolicited` | 250 | — | ballot/verdict for a round this moderator was not selected for |
-| `KindVerdictOutlier` | 60 | 400 | ballot disagreeing with the round's quorum result |
-| `KindAuditWrong` | 60 | 400 | `audit.OutcomeWrong` |
-| `KindAuditInvalid` | 500 | — | `audit.OutcomeInvalid` |
-| `KindAuditUnreachable` | 5 | 100 | `audit.OutcomeUnreachable` |
+| `KindVerdictMalformed` | 200 | — | missing object/user id, or an unknown type, on a verdict whose signature already verified |
+| `KindVerdictOutlier` | 60 | 400 | ballot disagreeing with the round's own outcome |
+| `KindAuditWrong` | 60 | 400 | the audit ledger's standing worsening to Suspect |
+| `KindAuditInvalid` | 500 | — | the audit ledger's standing worsening to Banned |
+| `KindAuditUnreachable` | 5 | 100 | `audit.OutcomeUnreachable`, per probe |
+
+**Three kinds from the plan were dropped rather than shipped inert.**
+
+`VerdictBadSignature` and `VerdictNoModeratorID` are not chargeable. A
+verdict that fails verification names a moderator that may have had
+nothing to do with it, and verdicts travel by pubsub, so there is no
+relaying peer to charge either. The only honest response is to drop it.
+Everything that remains is chargeable precisely because the signature
+verified first, which proves authorship.
+
+`VerdictUnsolicited` has no detection site: a round has no eligibility
+gate by design — the volunteer order in `cmd/node/moderator/round` is a
+delay, not a permission — so voting early is allowed and there is
+nothing to charge.
 
 All weights are calibration targets — see §10, shadow mode.
 
@@ -501,7 +510,8 @@ func AllowInDHT(b Band) bool         // false only for BandFloor
 | ConnManager | new `SetRatingPriority(pid, score)` writing a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. Reuses the existing flap LRU. | `core/node/priority.go` |
 | gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)` with `AppSpecificScore` reading the local score; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go:221` |
 | DHT | new `dht.QueryFilter` / `dht.RoutingTableFilter` options rejecting `BandFloor` peers. | `core/dht/options.go`, `core/dht/dht.go` |
-| Rate limits | `limitForRoute(route)` → `limitForRoute(route, band)`, multiplying `burst` and `perMinute`. The per-`route\|peer` LRU bucket records the band it was built for and is rebuilt when the band changes. | `core/middleware/rate-limiter.go` |
+| Rate limits | `limitForRoute(route)` → `limitForRoute(route, band)`, multiplying `burst` and `perMinute`, floored at 1 so no peer is ever starved outright. The per-`route\|peer` LRU bucket records the band it was built for and is rebuilt when the band changes. | `core/middleware/rate-limiter.go` |
+| Moderation ballots | **Nothing.** Weighting a vote round's ballots by rating was planned and rejected: `planTally` must be a pure function of the ballots so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
 ### 6.5 Deliberately not done
@@ -700,8 +710,20 @@ store at `member-node.go:203-212`.
 Config:
 
 ```
---node.rating.mode   off | shadow | enforce   (env NODE_RATING_MODE, default: shadow)
+--node.rating.mode   shadow | enforce   (env NODE_RATING_MODE, default: shadow)
 ```
+
+There is deliberately no `off`. A node cannot opt out of being rated by
+its neighbours — only out of acting on what it sees — so an `off` state
+would just mean a blind free-rider, which contradicts rating being an
+inherent property of a node.
+
+Shadow mode earns its branch by exporting: `EffectiveBand` returns
+`BandTrusted` while shadowing and pushes the observed band to the
+Prometheus gateway (`metrics.PushRatingBand`) instead of applying it, so
+the offence weights can be calibrated across the fleet before anything
+enforces on them. Keeping the mode check inside `EffectiveBand` rather
+than at each enforcement point means no call site can forget it.
 
 added to `config/config.go` next to the existing `node.*` pflags.
 
@@ -823,18 +845,42 @@ one else's; `overall == min(dimensions)`; a single cleared report costs zero; th
 
 | File | Change |
 |---|---|
-| `cmd/node/moderator/audit/ledger.go` | delete `Standing` and the threshold constants; keep `Outcome`; `Ledger` becomes a thin adapter mapping `Outcome` → `Kind` and forwarding to `rating.Store` |
-| `cmd/node/moderator/audit/auditor.go` | report outcomes through the adapter |
-| `core/handler/moderation.go` | `KindVerdictBadSignature`, `KindVerdictNoModeratorID`, `KindVerdictMalformed` — observed by *member* nodes about *moderators*, the cross-role case the CRDT exists for |
-| `cmd/node/moderator/round/tally.go`, `registry.go` | `KindVerdictUnsolicited` (ballot from a moderator not selected for the round — selection is already computed here) and `KindVerdictOutlier` (ballot against the quorum result) |
-| `cmd/node/moderator/round/tally.go` | weight ballots by the caster's moderation score — **weighting only, never disqualification**, because gap (2) of `audit/doc.go` is still open |
-| `cmd/node/moderator/moderator/moderator.go` | add the `Moderation` dimension to the store built in Stage 1 |
-| `docs/MODERATION.md` | user-facing paragraph on what moderator standing now means |
-| `cmd/node/moderator/audit/doc.go` | mark gap (1) closed, restate (2)–(5) |
+| `cmd/node/moderator/audit/ledger.go` | `Ledger` gains a `rating.Reporter` and files an observation when a peer's standing **worsens** — once per crossing, so a long audit does not grind a peer down for a conclusion it already drew |
+| `core/handler/moderation.go` | `KindVerdictMalformed` — observed by *member* nodes about *moderators*, the cross-role case the CRDT exists for |
+| `cmd/node/moderator/round/round.go` | new optional `BallotObserver` capability, handed every ballot of a decided round |
+| `cmd/node/moderator/moderator/audit.go` | implements `BallotObserver`: charges `KindVerdictOutlier` to moderators that voted against the outcome |
+| `cmd/node/moderator/moderator/moderator.go` | ledger wired to the node's rating store |
+| `docs/MODERATION.md` | user-facing sections on moderator standing and on the node's own rating |
+| `cmd/node/moderator/audit/doc.go` | gap (1) marked partly addressed, with what is still missing |
 
-**Tests:** `cmd/node/moderator/moderator/troika_integration_test.go` extended with
-a dishonest moderator; assert its score converges across independent auditors,
-that its ballots lose weight, and that they are still counted.
+**Three deviations from the plan, each forced by the code.**
+
+*`Standing` stays.* The plan called for deleting it and feeding raw
+outcomes to the rating. That does not work: audit quality is a **rate** —
+agreement over many probes — while the rating counts discrete offences,
+and a count cannot tell six wrong answers out of sixty from six out of
+six. Feeding raw outcomes would punish an honest moderator on a
+different model exactly as hard as a bot with no model at all. The
+statistical tolerance therefore stays in the ledger, and only threshold
+crossings reach the rating.
+
+*Ballots are not weighted by rating.* `planTally` is a pure function
+precisely so every participant reaches the same answer from the same
+ballots, which is what lets the round pick a chair and a takeover order
+without exchanging a message. Each node holds its own view of every
+moderator, so weighted tallies would differ between participants and the
+round would split. Dissent is observed and replicated instead — cheap
+and capped, because model diversity produces it honestly.
+
+*Two kinds dropped*, per §4.3.
+
+**Tests:** the audit ledger's existing standing tests are kept intact — they
+encode the tolerance that separates an honest exotic model from a bot — and
+`ledger_rating_test.go` adds the reporting behaviour: an honest peer produces
+no observations at all, a coin-flipper crosses straight to the ban line, a
+mildly disagreeing peer is reported suspect and never banned, a conclusion is
+reported once however long the audit runs, and unreachability is reported
+every time but never bans.
 
 ### Stage 4 — flip the default
 
