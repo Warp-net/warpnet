@@ -116,7 +116,7 @@ func (p *WarpMiddleware) observe(s warpnet.WarpStream, kind rating.Kind) {
 	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
 		return
 	}
-	p.rater.Observe(remote, kind)
+	p.rater.Record(remote, kind)
 }
 
 func (p *WarpMiddleware) Close() {

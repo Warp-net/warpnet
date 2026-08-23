@@ -25,7 +25,7 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package rating
+package crdt
 
 import (
 	"context"
@@ -34,70 +34,63 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/crdt"
-	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/core/rating"
 	ds "github.com/Warp-net/warpnet/database/datastore"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 )
 
-// CRDTDeps is everything a CRDT-backed store needs from its node. The
-// three node types differ only in the datastore they hand over: a
-// member node has a Badger-backed repo, a relay and a moderator hand
-// over the in-memory map datastore they already build. Both are
-// replicated the same way — which is the point of putting rating on a
-// CRDT at all, since a node with no disk gets its view back from the
-// DAG after a restart and cannot recover it any other way.
-type CRDTDeps struct {
-	Ctx      context.Context
-	Self     warpnet.WarpPeerID
-	PrivKey  ed25519.PrivateKey
-	NodeType string
-	Host     warpnet.P2PNode
-	Router   crdt.CRDTRouter
-	Store    crdt.CRDTStorer
-	Gossip   crdt.GossipPubSuber
-	Shadow   ShadowReporter
-}
-
-// NewCRDTStore builds the store together with its CRDT replica.
-func NewCRDTStore(d CRDTDeps) (*Store, error) {
-	if d.Host == nil || d.Gossip == nil || d.Store == nil {
+// NewCRDTRatingStore creates a new CRDT-based node rating store.
+//
+// The three node types differ only in the datastore they hand over: a
+// member has a Badger-backed repo, a relay and a moderator hand over
+// the in-memory map datastore they already build. Both are replicated
+// the same way — which is the point of putting rating on a CRDT at
+// all, since a node with no disk gets its view back from the DAG after
+// a restart and cannot recover it any other way.
+func NewCRDTRatingStore(
+	ctx context.Context,
+	broadcaster Broadcaster,
+	datastore CRDTStorer,
+	node host.Host,
+	router CRDTRouter,
+	privKey ed25519.PrivateKey,
+	nodeType string,
+	shadow rating.ShadowReporter,
+) (*rating.Store, error) {
+	if node == nil || datastore == nil {
 		return nil, fmt.Errorf("rating: incomplete dependencies") //nolint:err113
 	}
 
-	mode, err := ParseMode(config.Config().Node.RatingMode)
+	mode, err := rating.ParseMode(config.Config().Node.RatingMode)
 	if err != nil {
 		// A typo in a flag must not silently arm enforcement.
 		log.Warnf("rating: %v, falling back to shadow", err)
-		mode = ModeShadow
+		mode = rating.ModeShadow
 	}
 
-	broadcaster, err := crdt.NewGossipBroadcasterOn(d.Ctx, d.Gossip, crdt.RatingTopic)
-	if err != nil {
-		return nil, fmt.Errorf("rating: broadcaster: %w", err)
-	}
-
-	open := func(hooks Hooks) (Datastore, error) {
-		return crdt.NewDatastore(d.Ctx, broadcaster, d.Store, d.Host, d.Router, crdt.DatastoreHooks{
+	open := func(hooks rating.Hooks) (rating.Datastore, error) {
+		return NewDatastore(ctx, broadcaster, datastore, node, router, DatastoreHooks{
 			Put:    func(k ds.Key, v []byte) { hooks.Put(k.String(), v) },
 			Delete: func(k ds.Key) { hooks.Delete(k.String()) },
 		})
 	}
 
-	store, err := NewStore(Config{
-		Ctx:        d.Ctx,
-		Self:       d.Self,
-		PrivKey:    d.PrivKey,
-		Dimensions: DimensionsFor(d.NodeType),
+	store, err := rating.NewStore(rating.Config{
+		Ctx:        ctx,
+		Self:       node.ID(),
+		PrivKey:    privKey,
+		Dimensions: rating.DimensionsFor(nodeType),
 		Mode:       mode,
-		Acquainted: connectionAge{host: d.Host},
-		Shadow:     d.Shadow,
+		Acquainted: connectionAge{host: node},
+		Shadow:     shadow,
 	}, open)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Infof("rating: store started in %s mode for a %s node", mode, d.NodeType)
+	log.Infof("rating: store started in %s mode for a %s node", mode, nodeType)
 	return store, nil
 }
 
@@ -106,10 +99,10 @@ func NewCRDTStore(d CRDTDeps) (*Store, error) {
 // reads libp2p's own connection stats rather than keeping a second
 // bookkeeping of the same thing.
 type connectionAge struct {
-	host warpnet.P2PNode
+	host host.Host
 }
 
-func (c connectionAge) ConnectedSince(id warpnet.WarpPeerID) (time.Time, bool) {
+func (c connectionAge) ConnectedSince(id peer.ID) (time.Time, bool) {
 	if c.host == nil || c.host.Network() == nil {
 		return time.Time{}, false
 	}

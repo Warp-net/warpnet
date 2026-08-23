@@ -18,7 +18,7 @@ type capturingReporter struct {
 	kinds []rating.Kind
 }
 
-func (c *capturingReporter) Observe(_ warpnet.WarpPeerID, k rating.Kind) {
+func (c *capturingReporter) Record(_ warpnet.WarpPeerID, k rating.Kind) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.kinds = append(c.kinds, k)

@@ -76,7 +76,7 @@ func TestOnlyDeliberateKindsAreUncapped(t *testing.T) {
 		KindOversizePayload:    true,
 		KindMalformedFrame:     true,
 		KindStaleOrReplayed:    true,
-		KindForgedObservation:  true,
+		KindForgedRecord:       true,
 		KindModerationUpheld:   true,
 		KindForeignAuthorship:  true,
 		KindVerdictMalformed:   true,

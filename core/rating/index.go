@@ -77,7 +77,7 @@ func newIndex() (*index, error) {
 }
 
 // put inserts or replaces one record's counts.
-func (i *index) put(rec ObservationRecord) {
+func (i *index) put(rec Record) {
 	key := slot{
 		observer:   rec.Observer,
 		dim:        rec.Dim,
@@ -115,19 +115,19 @@ func (i *index) drop(subject, observer string, dim Dimension, bucket int64, gene
 	}
 }
 
-// observations snapshots a subject. The returned slice is safe to use
+// entries snapshots a subject. The returned slice is safe to use
 // without the lock; the CountEntry slices inside are never mutated in
 // place, only replaced wholesale by put.
-func (i *index) observations(subject string) []observation {
+func (i *index) entries(subject string) []entry {
 	i.mu.RLock()
 	slots, ok := i.data[subject]
 	if !ok {
 		i.mu.RUnlock()
 		return nil
 	}
-	out := make([]observation, 0, len(slots))
+	out := make([]entry, 0, len(slots))
 	for key, counts := range slots {
-		out = append(out, observation{
+		out = append(out, entry{
 			observer:   key.observer,
 			dim:        key.dim,
 			bucket:     key.bucket,

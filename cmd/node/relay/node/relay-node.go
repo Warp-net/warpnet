@@ -219,17 +219,14 @@ func (rn *RelayNode) Start() (err error) {
 		return err
 	}
 
-	rn.ratingDb, err = rating.NewCRDTStore(rating.CRDTDeps{
-		Ctx:      rn.ctx,
-		Self:     rn.node.Node().ID(),
-		PrivKey:  rn.privKey,
-		NodeType: warpnet.RelayNode,
-		Host:     rn.node.Node(),
-		Router:   rn.dHashTable,
-		Store:    rn.ratingStore,
-		Gossip:   rn.pubsubService.Gossip(),
-		Shadow:   rn.metrics,
-	})
+	ratingBroadcaster, err := crdt.NewRatingGossipBroadcaster(rn.ctx, rn.pubsubService.Gossip())
+	if err != nil {
+		return fmt.Errorf("relay: failed to start crdt rating broadcaster: %w", err)
+	}
+	rn.ratingDb, err = crdt.NewCRDTRatingStore(
+		rn.ctx, ratingBroadcaster, rn.ratingStore, rn.node.Node(), rn.dHashTable,
+		rn.privKey, warpnet.RelayNode, rn.metrics,
+	)
 	if err != nil {
 		log.Errorf("relay: failed to initialize rating store: %v", err)
 	}

@@ -230,17 +230,14 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.ratingDb, err = rating.NewCRDTStore(rating.CRDTDeps{
-		Ctx:      m.ctx,
-		Self:     m.node.Node().ID(),
-		PrivKey:  m.privKey,
-		NodeType: warpnet.MemberNode,
-		Host:     m.node.Node(),
-		Router:   m.dHashTable,
-		Store:    m.ratingRepo,
-		Gossip:   m.pubsubService.Gossip(),
-		Shadow:   m.metrics,
-	})
+	ratingBroadcaster, err := crdt.NewRatingGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	if err != nil {
+		return fmt.Errorf("member: failed to start crdt rating broadcaster: %w", err)
+	}
+	m.ratingDb, err = crdt.NewCRDTRatingStore(
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
+		m.privKey, warpnet.MemberNode, m.metrics,
+	)
 	if err != nil {
 		// Rating is a property of a node, not a feature of it, but a
 		// node that cannot build its store is still a working node:

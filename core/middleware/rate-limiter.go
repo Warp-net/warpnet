@@ -132,7 +132,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
 			p.observe(s, rating.KindRateLimitHit)
-			p.observeWriteFlood(s, route, remotePeer)
+			p.recordWriteFlood(s, route, remotePeer)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil
@@ -151,10 +151,10 @@ const (
 	writeFloodCacheSize = 1024
 )
 
-// observeWriteFlood charges the application dimension once a peer has
+// recordWriteFlood charges the application dimension once a peer has
 // been refused on write routes often enough in one window that it
 // cannot be ordinary posting.
-func (p *WarpMiddleware) observeWriteFlood(
+func (p *WarpMiddleware) recordWriteFlood(
 	s warpnet.WarpStream, route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
 ) {
 	if p == nil || p.writeFlood == nil || route.IsGet() {

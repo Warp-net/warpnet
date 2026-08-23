@@ -64,11 +64,17 @@
 //     nothing.
 //
 //   - A ceiling on slander (aggregate.go, CapRemoteTotal). Remote
-//     observations together can never subtract more than 400, so they
+//     entries together can never subtract more than 400, so they
 //     cannot push anyone below the bottom of BandWatched. Degrading a
 //     peer past that takes evidence gathered on our own wire. A
 //     coordinated slander campaign therefore costs an honest node a
 //     mild priority drop and nothing else.
+//
+//   - No storage here (store.go, Opener). This package holds the
+//     model; the CRDT-replicated store it runs on is built in
+//     core/crdt/rating.go beside the stats store, and reaches this
+//     package through the Opener callback. The dependency runs
+//     core/crdt → core/rating and never back.
 //
 //   - Soft consequences only (enforce.go). Low standing costs
 //     connection priority, gossipsub score, DHT routing-table presence
@@ -86,7 +92,7 @@
 //     not price identity. Only a stake, proof of work or a vouching web
 //     would.
 //
-//  2. Remote observations are advisory, therefore partly ignorable. The
+//  2. Remote entries are advisory, therefore partly ignorable. The
 //     caps that defeat slander also mean a real offender is fully
 //     sanctioned only by the peers it actually attacked. That is the
 //     trade, taken deliberately.

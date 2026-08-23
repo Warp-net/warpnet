@@ -38,9 +38,7 @@ import (
 )
 
 // perPeerCapacity is how many discovery events one peer may spend in
-// the shared budget before it is throttled on its own. The global
-// bucket alone could not tell "twelve new peers" from "one peer twelve
-// times", so a single chatty gossiper starved discovery for everyone.
+// the shared budget before it is throttled on its own.
 const (
 	perPeerCapacity      = 4
 	perPeerLeakPer10Sec  = 1

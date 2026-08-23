@@ -92,7 +92,7 @@ type Config struct {
 	Self    warpnet.WarpPeerID
 	PrivKey ed25519.PrivateKey
 	// Dimensions this node is able to witness. Observations for any
-	// other dimension are refused at Observe.
+	// other dimension are refused at Record.
 	Dimensions []Dimension
 	Mode       Mode
 	Flush      time.Duration
@@ -112,7 +112,7 @@ type pendingCounts map[Kind]uint32
 
 // Store holds this node's view of everyone else's standing.
 //
-// It never holds an opinion of itself: Observe refuses a subject equal
+// It never holds an opinion of itself: Record refuses a subject equal
 // to Self, and Validate refuses any record whose subject equals its
 // observer. A node's own rating is assembled from what its neighbours
 // wrote about it and nothing else.
@@ -136,10 +136,10 @@ type Store struct {
 	// back. Readers sum across generations.
 	generation string
 
-	// mu guards counters and dirty. Folding an observation is a map
-	// bump and nothing else, so Observe can do it inline and stay
+	// mu guards counters and dirty. Folding an entry is a map
+	// bump and nothing else, so Record can do it inline and stay
 	// non-blocking; flush deliberately does its I/O outside this lock,
-	// because a Put re-enters the CRDT put hook, which calls Observe.
+	// because a Put re-enters the CRDT put hook, which calls Record.
 	mu       sync.Mutex
 	counters map[pendingKey]pendingCounts
 	dirty    map[pendingKey]struct{}
@@ -218,15 +218,15 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 	return s, nil
 }
 
-// Observe records one offence against subject. It is called from the
+// Record records one offence against subject. It is called from the
 // middleware chain and from stream handlers, so it does no I/O: the
 // count is folded into the current hour's bucket in memory and the
 // flush ticker persists it.
-func (s *Store) Observe(subject warpnet.WarpPeerID, k Kind) {
-	s.ObserveN(subject, k, 1)
+func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) {
+	s.RecordN(subject, k, 1)
 }
 
-func (s *Store) ObserveN(subject warpnet.WarpPeerID, k Kind, n uint32) {
+func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) {
 	if s == nil || n == 0 {
 		return
 	}
@@ -270,7 +270,7 @@ func (s *Store) Score(subject warpnet.WarpPeerID) Score {
 	if s == nil {
 		return MaxScore
 	}
-	obs := s.observationsFor(subject.String())
+	obs := s.entriesFor(subject.String())
 	if len(obs) == 0 {
 		return MaxScore
 	}
@@ -288,14 +288,14 @@ func (s *Store) ScoreDim(subject warpnet.WarpPeerID, dim Dimension) Score {
 	if s == nil {
 		return MaxScore
 	}
-	return s.scoreDim(s.observationsFor(subject.String()), dim, s.now())
+	return s.scoreDim(s.entriesFor(subject.String()), dim, s.now())
 }
 
 func (s *Store) Band(subject warpnet.WarpPeerID) Band {
 	return BandOf(s.Score(subject))
 }
 
-func (s *Store) scoreDim(obs []observation, dim Dimension, now time.Time) Score {
+func (s *Store) scoreDim(obs []entry, dim Dimension, now time.Time) Score {
 	return subjectiveScore(obs, dim, s.self, now, s.weightOf, s.countsTowardScore)
 }
 
@@ -303,7 +303,7 @@ func (s *Store) scoreDim(obs []observation, dim Dimension, now time.Time) Score 
 // it, using only first-hand evidence about that observer so the
 // recursion is one level deep and always terminates.
 func (s *Store) weightOf(observer string) float64 {
-	obs := s.observationsFor(observer)
+	obs := s.entriesFor(observer)
 	if len(obs) == 0 {
 		return 1
 	}
@@ -346,7 +346,7 @@ func (s *Store) Public(subject warpnet.WarpPeerID) domain.NodeRating {
 	}
 	result.Mode = s.mode.String()
 
-	obs := s.observationsFor(id)
+	obs := s.entriesFor(id)
 	now := s.now()
 	overall := MaxScore
 	observers := map[string]struct{}{}
@@ -395,7 +395,7 @@ func tallyDTOs(in []tally) []domain.OffenceTally {
 	return out
 }
 
-func dimensionsPresent(obs []observation) []Dimension {
+func dimensionsPresent(obs []entry) []Dimension {
 	seen := make(map[Dimension]struct{}, 3) //nolint:mnd
 	for _, o := range obs {
 		seen[o.dim] = struct{}{}
@@ -409,23 +409,23 @@ func dimensionsPresent(obs []observation) []Dimension {
 	return out
 }
 
-// observationsFor reads the index, falling back to a one-off datastore
+// entriesFor reads the index, falling back to a one-off datastore
 // query for a subject the index evicted.
-func (s *Store) observationsFor(subject string) []observation {
+func (s *Store) entriesFor(subject string) []entry {
 	if subject == "" {
 		return nil
 	}
 	if s.idx.has(subject) {
-		return s.idx.observations(subject)
+		return s.idx.entries(subject)
 	}
 
 	s.fallbackMx.Lock()
 	defer s.fallbackMx.Unlock()
 	if s.idx.has(subject) { // another caller filled it while we waited
-		return s.idx.observations(subject)
+		return s.idx.entries(subject)
 	}
 	s.loadSubject(subject)
-	return s.idx.observations(subject)
+	return s.idx.entries(subject)
 }
 
 func (s *Store) loadSubject(subject string) {
@@ -471,7 +471,7 @@ func (s *Store) scan() error {
 			admitted++
 		}
 	}
-	log.Infof("rating: indexed %d observation records at startup", admitted)
+	log.Infof("rating: indexed %d entry records at startup", admitted)
 	return nil
 }
 
@@ -486,7 +486,7 @@ func (s *Store) admit(value []byte) bool {
 	if len(value) == 0 {
 		return false
 	}
-	var rec ObservationRecord
+	var rec Record
 	if err := json.Unmarshal(value, &rec); err != nil {
 		return false
 	}
@@ -496,7 +496,7 @@ func (s *Store) admit(value []byte) bool {
 	}
 	if err := rec.Validate(s.now()); err != nil {
 		log.Warnf("rating: observer %s authored an invalid record: %v", rec.Observer, err)
-		s.Observe(warpnet.FromStringToPeerID(rec.Observer), KindForgedObservation)
+		s.Record(warpnet.FromStringToPeerID(rec.Observer), KindForgedRecord)
 		return false
 	}
 	s.idx.put(rec)
@@ -564,8 +564,8 @@ func (s *Store) run(flush time.Duration) {
 
 // flush persists every dirty bucket. The datastore write happens
 // outside s.mu on purpose: a Put re-enters the CRDT put hook, which
-// calls admit, which can call Observe — holding the lock across the
-// write would deadlock the node on its own observation.
+// calls admit, which can call Record — holding the lock across the
+// write would deadlock the node on its own entry.
 func (s *Store) flush() {
 	s.mu.Lock()
 	pending := make(map[pendingKey][]CountEntry, len(s.dirty))
@@ -580,7 +580,7 @@ func (s *Store) flush() {
 
 	now := s.now()
 	for key, counts := range pending {
-		rec := ObservationRecord{
+		rec := Record{
 			Subject:    key.subject,
 			Observer:   s.self,
 			Dim:        key.dim,
@@ -602,7 +602,7 @@ func (s *Store) flush() {
 				continue // stays dirty, retried on the next tick
 			}
 		}
-		// Index our own observation immediately rather than waiting
+		// Index our own entry immediately rather than waiting
 		// for the delta to come back round through the DAG.
 		s.idx.put(rec)
 		s.clearIfUnchanged(key, counts)

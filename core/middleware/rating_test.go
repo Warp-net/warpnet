@@ -26,7 +26,7 @@ type fakeRater struct {
 	mode     rating.Mode
 }
 
-func (f *fakeRater) Observe(subject warpnet.WarpPeerID, k rating.Kind) {
+func (f *fakeRater) Record(subject warpnet.WarpPeerID, k rating.Kind) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.observed = append(f.observed, k)

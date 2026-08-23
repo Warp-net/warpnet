@@ -41,7 +41,7 @@ func TestStoreRefusesToRateItself(t *testing.T) {
 	clock := newClock()
 	s := newTestStore(t, self, newMemStore(), clock)
 
-	s.Observe(self.id, KindBadSignature)
+	s.Record(self.id, KindBadSignature)
 	s.flush()
 
 	assert.Equal(t, MaxScore, s.Score(self.id))
@@ -65,9 +65,9 @@ func TestStoreRefusesKindsOutsideItsRole(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
-	// A relay cannot witness a moderation verdict; the observation is
+	// A relay cannot witness a moderation verdict; the entry is
 	// refused at the door rather than written and ignored later.
-	s.ObserveN(other.id, KindAuditInvalid, 1)
+	s.RecordN(other.id, KindAuditInvalid, 1)
 	s.flush()
 	assert.Equal(t, 0, store.len())
 }
@@ -80,9 +80,9 @@ func TestObserveFoldsIntoOneKeyPerTuple(t *testing.T) {
 	s := newTestStore(t, self, store, clock)
 
 	for range 5 {
-		s.Observe(other.id, KindRateLimitHit)
+		s.Record(other.id, KindRateLimitHit)
 	}
-	s.Observe(other.id, KindMalformedFrame)
+	s.Record(other.id, KindMalformedFrame)
 	s.flush()
 
 	keys := store.keys()
@@ -90,7 +90,7 @@ func TestObserveFoldsIntoOneKeyPerTuple(t *testing.T) {
 
 	raw, err := store.Get(t.Context(), ds.NewKey(keys[0]))
 	require.NoError(t, err)
-	var rec ObservationRecord
+	var rec Record
 	require.NoError(t, json.Unmarshal(raw, &rec))
 	require.NoError(t, rec.Verify())
 	assert.Equal(t, other.id.String(), rec.Subject)
@@ -110,17 +110,17 @@ func TestObserveIsNonBlockingWhenPersistenceIsBroken(t *testing.T) {
 	go func() {
 		defer close(done)
 		for range 100_000 {
-			s.Observe(other.id, KindRateLimitHit)
+			s.Record(other.id, KindRateLimitHit)
 		}
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("Observe blocked while the datastore was failing")
+		t.Fatal("Record blocked while the datastore was failing")
 	}
 	// Nothing is lost either: folding is in-memory, so a broken
-	// datastore costs persistence, never observations.
+	// datastore costs persistence, never entries.
 	assert.EqualValues(t, 100_000, s.counters[pendingKey{
 		subject: other.id.String(), dim: Network, bucket: BucketOf(clock.Now()),
 	}][KindRateLimitHit])
@@ -134,7 +134,7 @@ func TestFailedWriteStaysDirtyAndRetries(t *testing.T) {
 	store.putErr = errors.New("datastore is down")
 	s := newTestStore(t, self, store, clock)
 
-	s.Observe(other.id, KindBadSignature)
+	s.Record(other.id, KindBadSignature)
 	s.flush()
 	require.Equal(t, 0, store.len())
 
@@ -154,7 +154,7 @@ func TestScoreDropsOnFirstHandEvidence(t *testing.T) {
 
 	require.Equal(t, MaxScore, s.Score(other.id), "an unseen node starts at full trust")
 
-	s.ObserveN(other.id, KindBadSignature, 2)
+	s.RecordN(other.id, KindBadSignature, 2)
 	s.flush()
 
 	assert.Equal(t, Score(500), s.Score(other.id))
@@ -167,7 +167,7 @@ func TestScoreRecoversOverTime(t *testing.T) {
 	clock := newClock()
 	s := newTestStore(t, self, newMemStore(), clock)
 
-	s.ObserveN(other.id, KindBadSignature, 2)
+	s.RecordN(other.id, KindBadSignature, 2)
 	s.flush()
 	damaged := s.Score(other.id)
 
@@ -185,8 +185,8 @@ func TestOverallScoreIsWorstDimension(t *testing.T) {
 	clock := newClock()
 	s := newTestStore(t, self, newMemStore(), clock)
 
-	s.Observe(other.id, KindRateLimitHit)          // network, cheap
-	s.ObserveN(other.id, KindForeignAuthorship, 2) // application, expensive
+	s.Record(other.id, KindRateLimitHit)          // network, cheap
+	s.RecordN(other.id, KindForeignAuthorship, 2) // application, expensive
 	s.flush()
 
 	assert.Equal(t, s.ScoreDim(other.id, Application), s.Score(other.id),
@@ -206,7 +206,7 @@ func TestStatelessRestartRecovery(t *testing.T) {
 
 	store := newMemStore()
 	first := newTestStore(t, self, store, clock)
-	first.ObserveN(other.id, KindBadSignature, 2)
+	first.RecordN(other.id, KindBadSignature, 2)
 	first.flush()
 
 	before := first.Score(other.id)
@@ -230,9 +230,9 @@ func TestStatelessRestartRecovery(t *testing.T) {
 	assert.Equal(t, before, second.Score(other.id),
 		"after replay the restarted node must be back where it was")
 
-	// New observations from the fresh generation must add to the
+	// New entries from the fresh generation must add to the
 	// replayed ones, not replace them.
-	second.ObserveN(other.id, KindBadSignature, 1)
+	second.RecordN(other.id, KindBadSignature, 1)
 	second.flush()
 	assert.Equal(t, Score(250), second.Score(other.id))
 	assert.Equal(t, 2, empty.len(), "the new generation writes its own key")
@@ -263,7 +263,7 @@ func TestForgedRecordIsDroppedAndCharged(t *testing.T) {
 	t.Run("signed but illegal record charges its author", func(t *testing.T) {
 		// Correctly signed, and provably illegal: an application kind
 		// carried on a network record.
-		rec := ObservationRecord{
+		rec := Record{
 			Subject:    victim.id.String(),
 			Observer:   liar.id.String(),
 			Dim:        Network,
@@ -292,7 +292,7 @@ func TestGCRemovesOnlyOwnExpiredRecords(t *testing.T) {
 	store := newMemStore()
 	s := newTestStore(t, self, store, clock)
 
-	s.Observe(subject.id, KindBadSignature)
+	s.Record(subject.id, KindBadSignature)
 	s.flush()
 
 	// A foreign record in the same expired window.
@@ -319,7 +319,7 @@ func TestEvictedSubjectFallsBackToQuery(t *testing.T) {
 	store := newMemStore()
 	s := newTestStore(t, self, store, clock)
 
-	s.ObserveN(other.id, KindBadSignature, 2)
+	s.RecordN(other.id, KindBadSignature, 2)
 	s.flush()
 	expected := s.Score(other.id)
 
@@ -348,7 +348,7 @@ func TestUnobservedSubjectIsNotRequeriedForever(t *testing.T) {
 func TestNopRaterNeverPenalises(t *testing.T) {
 	var r Rater = Nop{}
 	id := warpnet.FromStringToPeerID("12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo")
-	r.Observe(id, KindBadSignature)
+	r.Record(id, KindBadSignature)
 	assert.Equal(t, MaxScore, r.Score(id))
 	assert.Equal(t, BandTrusted, r.Band(id))
 }
@@ -357,7 +357,7 @@ func TestNilStoreIsSafe(t *testing.T) {
 	var s *Store
 	id := warpnet.FromStringToPeerID("12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo")
 	assert.NotPanics(t, func() {
-		s.Observe(id, KindBadSignature)
+		s.Record(id, KindBadSignature)
 		assert.Equal(t, MaxScore, s.Score(id))
 		assert.Equal(t, BandTrusted, s.Band(id))
 		assert.Equal(t, ModeShadow, s.Mode())

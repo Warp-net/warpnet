@@ -14,8 +14,8 @@ import (
 
 func fullWeight(string) float64 { return 1 }
 
-func obsOf(observer string, dim Dimension, bucket int64, generation string, counts ...CountEntry) observation {
-	return observation{
+func entryOf(observer string, dim Dimension, bucket int64, generation string, counts ...CountEntry) entry {
+	return entry{
 		observer:   observer,
 		dim:        dim,
 		bucket:     bucket,
@@ -30,14 +30,14 @@ func TestDecayHalvesEveryHalfLife(t *testing.T) {
 
 	// One bad signature (weight 250) observed exactly one half-life ago
 	// must cost half its weight.
-	obs := []observation{
-		obsOf("obs", Network, BucketOf(now.Add(-half)), genA, CountEntry{KindBadSignature, 1}),
+	obs := []entry{
+		entryOf("obs", Network, BucketOf(now.Add(-half)), genA, CountEntry{KindBadSignature, 1}),
 	}
 	got := penaltyOf(obs, Network, now)
 	assert.InDelta(t, 125, float64(got), 1, "one half-life must halve the penalty")
 
-	fresh := []observation{
-		obsOf("obs", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
+	fresh := []entry{
+		entryOf("obs", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
 	}
 	assert.InDelta(t, 250, float64(penaltyOf(fresh, Network, now)), 1)
 }
@@ -46,8 +46,8 @@ func TestDecayIsMonotonic(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	var previous Score = MaxScore
 	for age := time.Duration(0); age < retention(Network); age += 6 * time.Hour {
-		obs := []observation{
-			obsOf("obs", Network, BucketOf(now.Add(-age)), genA, CountEntry{KindBadSignature, 1}),
+		obs := []entry{
+			entryOf("obs", Network, BucketOf(now.Add(-age)), genA, CountEntry{KindBadSignature, 1}),
 		}
 		got := penaltyOf(obs, Network, now)
 		assert.LessOrEqual(t, got, previous, "penalty must never grow with age")
@@ -62,9 +62,9 @@ func TestGenerationsUnderOneBucketAreSummed(t *testing.T) {
 	// The same observer, same bucket, two process lifetimes: this is
 	// exactly what a restarted stateless node produces. Summing is
 	// what keeps the replayed history from being lost.
-	obs := []observation{
-		obsOf("obs", Network, bucket, genA, CountEntry{KindMalformedFrame, 1}),
-		obsOf("obs", Network, bucket, genB, CountEntry{KindMalformedFrame, 1}),
+	obs := []entry{
+		entryOf("obs", Network, bucket, genA, CountEntry{KindMalformedFrame, 1}),
+		entryOf("obs", Network, bucket, genB, CountEntry{KindMalformedFrame, 1}),
 	}
 	assert.InDelta(t, 240, float64(penaltyOf(obs, Network, now)), 1,
 		"two generations in one bucket must add up, not overwrite")
@@ -76,14 +76,14 @@ func TestKindCeilingCaps(t *testing.T) {
 
 	// 100 dial failures at weight 2 would be 200, but the kind is
 	// capped at 100: a flaky link must not talk a peer down.
-	obs := []observation{
-		obsOf("obs", Network, bucket, genA, CountEntry{KindDialFailure, 100}),
+	obs := []entry{
+		entryOf("obs", Network, bucket, genA, CountEntry{KindDialFailure, 100}),
 	}
 	assert.EqualValues(t, KindDialFailure.Ceiling(), penaltyOf(obs, Network, now))
 
 	// An uncapped kind keeps accumulating.
-	uncapped := []observation{
-		obsOf("obs", Network, bucket, genA, CountEntry{KindBadSignature, 4}),
+	uncapped := []entry{
+		entryOf("obs", Network, bucket, genA, CountEntry{KindBadSignature, 4}),
 	}
 	assert.InDelta(t, 1000, float64(penaltyOf(uncapped, Network, now)), 1)
 }
@@ -100,20 +100,20 @@ func TestRemoteObservationsCannotReachDegraded(t *testing.T) {
 
 	for _, observers := range []int{1, 3, 50, 500} {
 		t.Run(fmt.Sprintf("%d_observers", observers), func(t *testing.T) {
-			obs := make([]observation, 0, observers)
+			obs := make([]entry, 0, observers)
 			for i := range observers {
-				obs = append(obs, obsOf(
+				obs = append(obs, entryOf(
 					fmt.Sprintf("accuser-%d", i), Network, bucket, genA,
 					// Everything they can throw, at full trust.
 					CountEntry{KindBadSignature, 50},
 					CountEntry{KindPrivateRouteDenied, 50},
-					CountEntry{KindForgedObservation, 50},
+					CountEntry{KindForgedRecord, 50},
 				))
 			}
 			score := subjectiveScore(obs, Network, self, now, fullWeight, nil)
 
 			assert.GreaterOrEqual(t, score, MaxScore-CapRemoteTotal,
-				"remote observations alone must never drop below %d", MaxScore-CapRemoteTotal)
+				"remote entries alone must never drop below %d", MaxScore-CapRemoteTotal)
 			// Bands ascend in severity, so this asserts the outcome is
 			// no worse than BandWatched.
 			assert.LessOrEqual(t, BandOf(score), BandWatched,
@@ -124,8 +124,8 @@ func TestRemoteObservationsCannotReachDegraded(t *testing.T) {
 
 func TestSingleRemoteObserverIsCappedTighter(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
-	obs := []observation{
-		obsOf("accuser", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 100}),
+	obs := []entry{
+		entryOf("accuser", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 100}),
 	}
 	score := subjectiveScore(obs, Network, "self", now, fullWeight, nil)
 	assert.Equal(t, MaxScore-CapPerObserver, score)
@@ -134,8 +134,8 @@ func TestSingleRemoteObserverIsCappedTighter(t *testing.T) {
 func TestFirstHandEvidenceReachesFloor(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	const self = "self"
-	obs := []observation{
-		obsOf(self, Network, BucketOf(now), genA, CountEntry{KindBadSignature, 4}),
+	obs := []entry{
+		entryOf(self, Network, BucketOf(now), genA, CountEntry{KindBadSignature, 4}),
 	}
 	score := subjectiveScore(obs, Network, self, now, fullWeight, nil)
 	assert.Equal(t, MinScore, score)
@@ -144,8 +144,8 @@ func TestFirstHandEvidenceReachesFloor(t *testing.T) {
 
 func TestDistrustedAccuserIsDiscounted(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
-	obs := []observation{
-		obsOf("accuser", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
+	obs := []entry{
+		entryOf("accuser", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
 	}
 
 	trusted := subjectiveScore(obs, Network, "self", now, fullWeight, nil)
@@ -157,8 +157,8 @@ func TestDistrustedAccuserIsDiscounted(t *testing.T) {
 
 func TestUnacquaintedObserverHasNoVoice(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
-	obs := []observation{
-		obsOf("stranger", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
+	obs := []entry{
+		entryOf("stranger", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
 	}
 	score := subjectiveScore(obs, Network, "self", now, fullWeight,
 		func(string) bool { return false })
@@ -168,10 +168,10 @@ func TestUnacquaintedObserverHasNoVoice(t *testing.T) {
 func TestPublicScoreIsUnweightedMedian(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	bucket := BucketOf(now)
-	obs := []observation{
-		obsOf("a", Network, bucket, genA, CountEntry{KindBadSignature, 1}), // 750
-		obsOf("b", Network, bucket, genA, CountEntry{KindBadSignature, 1}), // 750
-		obsOf("c", Network, bucket, genA, CountEntry{KindRateLimitHit, 1}), // 985
+	obs := []entry{
+		entryOf("a", Network, bucket, genA, CountEntry{KindBadSignature, 1}), // 750
+		entryOf("b", Network, bucket, genA, CountEntry{KindBadSignature, 1}), // 750
+		entryOf("c", Network, bucket, genA, CountEntry{KindRateLimitHit, 1}), // 985
 	}
 	score, observers := publicScore(obs, Network, now)
 	assert.Equal(t, 3, observers)
@@ -186,9 +186,9 @@ func TestPublicScoreOfUnobservedSubjectIsMax(t *testing.T) {
 
 func TestRecentTalliesAreUndecayedAndSortedByCount(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
-	obs := []observation{
-		obsOf("a", Network, BucketOf(now.Add(-48*time.Hour)), genA, CountEntry{KindRateLimitHit, 30}),
-		obsOf("b", Network, BucketOf(now), genA, CountEntry{KindRateLimitHit, 7}, CountEntry{KindMalformedFrame, 4}),
+	obs := []entry{
+		entryOf("a", Network, BucketOf(now.Add(-48*time.Hour)), genA, CountEntry{KindRateLimitHit, 30}),
+		entryOf("b", Network, BucketOf(now), genA, CountEntry{KindRateLimitHit, 7}, CountEntry{KindMalformedFrame, 4}),
 	}
 	tallies := recentTallies(obs, Network)
 	require.Len(t, tallies, 2)
@@ -201,8 +201,8 @@ func TestRecentTalliesAreUndecayedAndSortedByCount(t *testing.T) {
 
 func TestOtherDimensionsAreIgnored(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
-	obs := []observation{
-		obsOf("self", Moderation, BucketOf(now), genA, CountEntry{KindAuditInvalid, 4}),
+	obs := []entry{
+		entryOf("self", Moderation, BucketOf(now), genA, CountEntry{KindAuditInvalid, 4}),
 	}
 	assert.Equal(t, MaxScore, subjectiveScore(obs, Network, "self", now, fullWeight, nil),
 		"a moderation offence must not move the network score")

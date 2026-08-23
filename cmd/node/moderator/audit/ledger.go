@@ -203,7 +203,7 @@ func (l *Ledger) observe(peerID string, kind rating.Kind) {
 	if id == "" {
 		return
 	}
-	l.reporter.Observe(id, kind)
+	l.reporter.Record(id, kind)
 }
 
 // severity orders standings so only a genuine downgrade is reported.

@@ -85,7 +85,7 @@ type Participant interface {
 	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
 }
 
-// BallotObserver is an optional Participant capability: it is handed
+// DissentRecorder is an optional Participant capability: it is handed
 // every ballot of a decided round alongside the outcome, so a
 // participant can note who dissented.
 //
@@ -96,8 +96,8 @@ type Participant interface {
 // holds its own view of every moderator, so the weighted tallies would
 // differ and the round would split. Dissent is therefore observed and
 // replicated, never applied to the count.
-type BallotObserver interface {
-	ObserveBallots(outcome vote.Event, ballots map[string]vote.Event)
+type DissentRecorder interface {
+	RecordDissent(outcome vote.Event, ballots map[string]vote.Event)
 }
 
 // round is one subject's vote round, self-contained: it collects ballots,
@@ -245,8 +245,8 @@ func (r *round) tally() {
 		if p.role == roleBystander || subject == nil {
 			return
 		}
-		if observer, ok := r.member.(BallotObserver); ok {
-			observer.ObserveBallots(p.outcome, ballots)
+		if observer, ok := r.member.(DissentRecorder); ok {
+			observer.RecordDissent(p.outcome, ballots)
 		}
 	}()
 

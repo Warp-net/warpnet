@@ -52,19 +52,23 @@ type GossipBroadcaster struct {
 
 const (
 	statsTopic = "/warpnet/stats/1.0.0"
-	// RatingTopic carries the rating CRDT's deltas. Kept apart from
+	// ratingTopic carries the rating CRDT's deltas. Kept apart from
 	// statsTopic so rating replication never competes with stat
 	// counters for the same broadcaster buffer.
-	RatingTopic = "/warpnet/rating/1.0.0"
+	ratingTopic = "/warpnet/rating/1.0.0"
 )
 
 // NewGossipBroadcaster creates a new Gossip-based broadcaster for CRDT stats.
 func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
-	return NewGossipBroadcasterOn(ctx, gossip, statsTopic)
+	return newGossipBroadcasterOn(ctx, gossip, statsTopic)
 }
 
-// NewGossipBroadcasterOn creates a Gossip-based broadcaster on an explicit topic.
-func NewGossipBroadcasterOn(
+// NewRatingGossipBroadcaster creates a new Gossip-based broadcaster for CRDT node ratings.
+func NewRatingGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
+	return newGossipBroadcasterOn(ctx, gossip, ratingTopic)
+}
+
+func newGossipBroadcasterOn(
 	ctx context.Context, gossip GossipPubSuber, topic string,
 ) (*GossipBroadcaster, error) {
 	gb := &GossipBroadcaster{

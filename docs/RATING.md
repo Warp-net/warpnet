@@ -291,12 +291,23 @@ Topics:
 // core/crdt/gossip-adapter.go
 const (
     statsTopic  = "/warpnet/stats/1.0.0"
-    RatingTopic = "/warpnet/rating/1.0.0"
+    ratingTopic = "/warpnet/rating/1.0.0"
 )
 ```
 
-`RatingTopic` is separate from `statsTopic` so rating replication never competes
+`ratingTopic` is separate from `statsTopic` so rating replication never competes
 with stat counters for the same broadcaster buffer.
+
+**Why not put this in the existing stats store.** `CRDTStatsStore` is a
+PN-counter: one `uint64` per key, merged by summing. A rating entry is a signed
+record — observer, dimension, hour bucket, per-kind counts, signature — that has
+to be verified before it is believed and re-signed whenever it changes. A
+counter cannot carry a signature, and a node that could bump another node's
+counter directly is exactly the forgery the signature exists to stop. So it is a
+sibling of the stats store, not a user of it: same package (`core/crdt`), same
+replication plumbing (`NewDatastore`), same generation-nonce trick, different
+value type — and its own key prefix (`database.NewRatingRepo`, `/RATING`) so a
+rating wipe cannot touch stat counters or vice versa.
 
 ### 5.2 Key layout
 
@@ -615,8 +626,7 @@ UI:
 // core/rating/store.go
 type Mode uint8
 const (
-    ModeOff Mode = iota
-    ModeShadow  // record, replicate, display; log enforcement decisions, apply none
+    ModeShadow Mode = iota // record, replicate, display; report decisions, apply none
     ModeEnforce
 )
 func ParseMode(s string) (Mode, error)
@@ -629,23 +639,31 @@ type Config struct {
     Mode       Mode
     Flush      time.Duration    // default 30s
     Now        func() time.Time // injectable for tests
+    Acquainted Acquaintance     // how long we have known an observer
+    Shadow     ShadowReporter   // where shadow-mode decisions go
 }
 
-// CRDTDatastore is the subset of *crdt.Datastore the store needs.
+// Datastore is the subset of *crdt.Datastore the store needs.
 // Every node type has one — see §5.1.
-type CRDTDatastore interface {
+type Datastore interface {
     Get(context.Context, ds.Key) ([]byte, error)
     Put(context.Context, ds.Key, []byte) error
     Delete(context.Context, ds.Key) error
     Query(context.Context, ds.Query) (ds.Results, error)
 }
 
-func NewStore(cfg Config, store CRDTDatastore) (*Store, error)
+// Opener builds that datastore once the store has hooks to give it.
+// The indirection exists because the hooks and the datastore are
+// mutually dependent at construction time — and it is also what keeps
+// this package free of any dependency on core/crdt.
+type Opener func(Hooks) (Datastore, error)
+
+func NewStore(cfg Config, open Opener) (*Store, error)
 
 // write path — non-blocking, buffered, folded into hour buckets,
 // flushed every cfg.Flush
-func (s *Store) Observe(subject warpnet.WarpPeerID, k Kind)
-func (s *Store) ObserveN(subject warpnet.WarpPeerID, k Kind, n uint32)
+func (s *Store) Record(subject warpnet.WarpPeerID, k Kind)
+func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32)
 
 // read path — in-memory arithmetic only
 func (s *Store) Score(subject warpnet.WarpPeerID) Score
@@ -666,19 +684,26 @@ Narrow interfaces for injection, so no call site depends on the concrete store:
 ```go
 // core/rating/reporter.go
 type Reporter interface {
-    Observe(subject warpnet.WarpPeerID, k Kind)
+    Record(subject warpnet.WarpPeerID, k Kind)
 }
 
 type Scorer interface {
     Score(subject warpnet.WarpPeerID) Score
     Band(subject warpnet.WarpPeerID) Band
+    EffectiveBand(subject warpnet.WarpPeerID) Band
     Mode() Mode
+}
+
+// Rater is both halves, which is what most call sites actually hold.
+type Rater interface {
+    Reporter
+    Scorer
 }
 
 // Nop is the zero-cost stand-in for nodes and tests without a store.
 // Nop.Band always returns BandTrusted, so an absent store means
 // "everyone is fine" and nothing is ever penalised by accident.
-var Nop nopRating
+type Nop struct{}
 ```
 
 Wiring — identical shape on all three, differing only in the backing datastore
@@ -690,9 +715,15 @@ and the dimension set:
 | **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | the `datastore.NewMapDatastore()` it already builds at `relay-node.go:104` | needs a new `Gossip()` accessor on `cmd/node/relay/pubsub` |
 | **moderator** (`cmd/node/moderator/node/moderator-node.go`, built in `cmd/node/moderator/moderator/moderator.go`) | `Network`, `Moderation` | the `datastore.NewMapDatastore()` it already builds at `moderator-node.go:82` | `ModeratorNode` has no pubsub, but the moderator *process* does (`cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`); add a `Gossip()` accessor there |
 
-Each builds `crdt.NewGossipBroadcasterOn(ctx, gossip, crdt.RatingTopic)` and
-passes it, plus the datastore above, to `newCRDTDatastore` (§10 Stage 0), then
-to `rating.NewStore`.
+Each builds `crdt.NewRatingGossipBroadcaster(ctx, gossip)` and passes it, plus
+the datastore above, to `crdt.NewCRDTRatingStore` — the exact two-line shape the
+member node already uses for the stats store.
+
+The construction lives in `core/crdt/rating.go`, beside `core/crdt/stats.go`,
+because that is where this codebase builds CRDT-replicated stores; `core/rating`
+holds the model and nothing that knows about replication. That is also why
+`NewStore` takes an `Opener` rather than a `*crdt.Datastore`: the dependency
+runs `core/crdt` → `core/rating` and never back.
 
 Two interface widenings are needed, both satisfied by the existing concrete
 type — `*distributedHashTable` already implements `FindProvidersAsync`
@@ -737,9 +768,9 @@ Five stages, each independently reviewable, mergeable and testable.
 
 | File | Change |
 |---|---|
-| `core/crdt/datastore.go` (new) | `newCRDTDatastore(ctx, broadcaster, store, node, router, putHook, deleteHook)` — the blockstore/bitswap/DAG/`crdt.New` block extracted verbatim from `NewCRDTStatsStore`. |
+| `core/crdt/datastore.go` (new) | `NewDatastore(ctx, broadcaster, store, node, router, hooks)` — the blockstore/bitswap/DAG/`crdt.New` block extracted verbatim from `NewCRDTStatsStore`. |
 | `core/crdt/stats.go` | call the helper; delete the inlined block. |
-| `core/crdt/gossip-adapter.go` | add `RatingTopic`; add `NewGossipBroadcasterOn(ctx, gossip, topic)`; `NewGossipBroadcaster` becomes a one-line wrapper. |
+| `core/crdt/gossip-adapter.go` | add `ratingTopic` and `NewRatingGossipBroadcaster(ctx, gossip)`; both broadcaster constructors become one-line wrappers over the topic. |
 | `database/stats-repo.go` | add `NewRatingRepo(db)` under prefix `RATING`, factored with `NewStatsRepo`. |
 | `cmd/node/relay/pubsub/relay-pubsub.go` | add `Gossip() *pubsub.Gossip`. |
 | `cmd/node/moderator/pubsub/publisher.go` | add `Gossip() *pubsub.Gossip`. |
@@ -764,12 +795,13 @@ New files:
 | `core/rating/doc.go` | package rationale + the honest limitations of §11, in the style of `cmd/node/moderator/audit/doc.go` |
 | `core/rating/rating.go` | `Dimension`, `Score`, `Band`, `BandOf`, `DimensionsFor` |
 | `core/rating/offence.go` | `Kind`, catalogue, accessors |
-| `core/rating/record.go` | `ObservationRecord`, `SigningBytes`, `Sign`, `Verify`, `Validate`, `Key` |
+| `core/rating/record.go` | `Record`, `SigningBytes`, `Sign`, `Verify`, `Validate`, `Key` |
 | `core/rating/index.go` | in-memory index, put/delete hooks, startup scan, LRU eviction |
 | `core/rating/aggregate.go` | decay, generation summing, subjective and public aggregation, caps |
 | `core/rating/enforce.go` | pure band → knob mappings |
-| `core/rating/reporter.go` | `Reporter`, `Scorer`, `Nop` |
-| `core/rating/store.go` | `Store`, `Config`, `Mode`, generation minting, buffered writer, flush, GC |
+| `core/rating/reporter.go` | `Reporter`, `Scorer`, `Rater`, `Nop` |
+| `core/rating/store.go` | `Store`, `Config`, `Opener`, generation minting, buffered writer, flush, GC |
+| `core/crdt/rating.go` | `NewCRDTRatingStore` — the store plus its CRDT replica, beside `core/crdt/stats.go` |
 | `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` |
 | `domain/rating.go` | `NodeRating`, `DimensionRating`, `OffenceTally` |
 | `frontend/src/views/Settings/Rating.vue` | own rating, per-dimension bars, recent offences |
@@ -782,10 +814,10 @@ Edited files:
 | `event/paths.go` | two new routes |
 | `event/event.go` | `GetRatingEvent` |
 | `core/middleware/middleware.go` | `SetRating(Reporter, Scorer)` on `WarpMiddleware` — a setter rather than a constructor argument, so the three `NewWarpMiddleware` call sites stay untouched |
-| `core/middleware/auth.go` | `Observe` at the five sites in §4.1 |
-| `core/middleware/rate-limiter.go` | `Observe(KindRateLimitHit)`; `limitForRoute(route, band)`; bucket carries its band and is rebuilt on change; register the two new routes under `limitRead` |
-| `core/node/node.go` | `Observe` on oversize/read error in `unwrap`; `SetRating` passthrough |
-| `core/node/priority.go` | `rating` tag; `Observe(KindConnectionFlap)` |
+| `core/middleware/auth.go` | `Record` at the five sites in §4.1 |
+| `core/middleware/rate-limiter.go` | `Record(KindRateLimitHit)`; `limitForRoute(route, band)`; bucket carries its band and is rebuilt on change; register the two new routes under `limitRead` |
+| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; `SetRating` passthrough |
+| `core/node/priority.go` | `rating` tag; `Record(KindConnectionFlap)` |
 | `core/pubsub/gossip.go` | `WithPeerScore` + `AppSpecificScore`; fix (c) |
 | `core/dht/options.go`, `core/dht/dht.go` | `QueryFilter`/`RoutingTableFilter` options; fix (e) |
 | `core/discovery/discovery.go`, `core/discovery/rate-limiter.go` | fixes (b), (d), (f); `KindDiscoveryFlood`, `KindDialFailure` |

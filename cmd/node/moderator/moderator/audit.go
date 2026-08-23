@@ -78,7 +78,7 @@ func (m *Moderator) ModeratorBand(peerID string) rating.Band {
 	return m.node.Rating().Band(id)
 }
 
-// ObserveBallots implements round.BallotObserver: it records which
+// RecordDissent implements round.DissentRecorder: it records which
 // moderators voted against the round's own outcome.
 //
 // Observation only — the tally is untouched. A dissenting ballot is
@@ -87,7 +87,7 @@ func (m *Moderator) ModeratorBand(peerID string) rating.Band {
 // means something as a pattern. Until gap (2) of the audit package's
 // doc is closed — establishing which model a moderator runs rather
 // than assuming — this must never be enough to discount a vote.
-func (m *Moderator) ObserveBallots(outcome vote.Event, ballots map[string]vote.Event) {
+func (m *Moderator) RecordDissent(outcome vote.Event, ballots map[string]vote.Event) {
 	if m == nil || len(ballots) == 0 {
 		return
 	}
@@ -102,7 +102,7 @@ func (m *Moderator) ObserveBallots(outcome vote.Event, ballots map[string]vote.E
 		if id == "" {
 			continue
 		}
-		rater.Observe(id, rating.KindVerdictOutlier)
+		rater.Record(id, rating.KindVerdictOutlier)
 	}
 }
 

@@ -33,7 +33,7 @@ import (
 	"time"
 )
 
-// BucketDuration is the granularity observations are folded to. One
+// BucketDuration is the granularity entries are folded to. One
 // hour keeps the key count low while still letting decay be computed
 // at read time from the bucket alone.
 const BucketDuration = time.Hour
@@ -44,7 +44,7 @@ const (
 	CapPerObserver Score = 150
 	// CapRemoteTotal is the most every remote observer together may
 	// subtract. It is the load-bearing constant of the whole scheme:
-	// with it, remote observations alone can never push a peer below
+	// with it, remote entries alone can never push a peer below
 	// MaxScore-CapRemoteTotal = 600, the bottom of BandWatched.
 	// Reaching BandDegraded or BandFloor therefore requires evidence
 	// this node gathered on its own wire, so a slander campaign costs
@@ -98,8 +98,8 @@ func decayFactor(age, half time.Duration) float64 {
 	return math.Exp2(-age.Hours() / half.Hours())
 }
 
-// observation is the index's flattened view of one record.
-type observation struct {
+// entry is the index's flattened view of one record.
+type entry struct {
 	observer   string
 	dim        Dimension
 	bucket     int64
@@ -108,12 +108,12 @@ type observation struct {
 }
 
 // penaltyOf sums the decayed weight of every count in obs, clamping
-// each kind's total to its ceiling. Callers pass the observations of a
+// each kind's total to its ceiling. Callers pass the entries of a
 // single (subject, observer, dimension) group: the ceiling is per
 // group, so a peer with a flaky link to us cannot be talked down by
 // its own dial failures, but two independent observers each reporting
 // dial failures still add up.
-func penaltyOf(obs []observation, dim Dimension, now time.Time) Score {
+func penaltyOf(obs []entry, dim Dimension, now time.Time) Score {
 	if len(obs) == 0 {
 		return 0
 	}
@@ -142,9 +142,9 @@ func penaltyOf(obs []observation, dim Dimension, now time.Time) Score {
 	return Score(total)
 }
 
-// groupByObserver splits a subject's observations on one dimension.
-func groupByObserver(obs []observation, dim Dimension) map[string][]observation {
-	out := make(map[string][]observation)
+// groupByObserver splits a subject's entries on one dimension.
+func groupByObserver(obs []entry, dim Dimension) map[string][]entry {
+	out := make(map[string][]entry)
 	for _, o := range obs {
 		if o.dim != dim {
 			continue
@@ -155,14 +155,14 @@ func groupByObserver(obs []observation, dim Dimension) map[string][]observation 
 }
 
 // subjectiveScore is what this node enforces with: its own
-// observations at full weight and without cap, every remote observer
+// entries at full weight and without cap, every remote observer
 // discounted by how much this node trusts it and capped twice over.
 //
-// weightOf is the caller's own-observations-only score for an
+// weightOf is the caller's own-entries-only score for an
 // observer, normalised to [0,1]. Using an own-only score keeps the
 // recursion one level deep and terminating.
 func subjectiveScore(
-	obs []observation,
+	obs []entry,
 	dim Dimension,
 	self string,
 	now time.Time,
@@ -196,7 +196,7 @@ func subjectiveScore(
 
 // ownOnlyScore uses nothing but this node's first-hand evidence. It
 // backs weightOf above and is the reason the weighting terminates.
-func ownOnlyScore(obs []observation, dim Dimension, self string, now time.Time) Score {
+func ownOnlyScore(obs []entry, dim Dimension, self string, now time.Time) Score {
 	byObserver := groupByObserver(obs, dim)
 	return (MaxScore - penaltyOf(byObserver[self], dim, now)).clamp()
 }
@@ -205,7 +205,7 @@ func ownOnlyScore(obs []observation, dim Dimension, self string, now time.Time) 
 // for display only. It never reaches a rate limiter, a priority tag or
 // a peer score: an unweighted number is exactly what a clique can
 // move.
-func publicScore(obs []observation, dim Dimension, now time.Time) (Score, int) {
+func publicScore(obs []entry, dim Dimension, now time.Time) (Score, int) {
 	byObserver := groupByObserver(obs, dim)
 	if len(byObserver) == 0 {
 		return MaxScore, 0
@@ -233,7 +233,7 @@ type tally struct {
 // so a user can see what their node is actually being marked for.
 // Undecayed on purpose: "37 rate-limit hits in the last six hours" is
 // what tells them what to fix, not 37 × 0.63.
-func recentTallies(obs []observation, dim Dimension) []tally {
+func recentTallies(obs []entry, dim Dimension) []tally {
 	agg := make(map[Kind]*tally)
 	for _, o := range obs {
 		if o.dim != dim {

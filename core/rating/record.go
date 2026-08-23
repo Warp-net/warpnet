@@ -68,16 +68,16 @@ type CountEntry struct {
 	Count uint32 `json:"n"`
 }
 
-// ObservationRecord is one observer's view of one subject on one
+// Record is one observer's view of one subject on one
 // dimension in one hour, as written by one process lifetime.
 //
 // The (subject, observer, dimension, bucket, generation) tuple has
 // exactly one writer for its whole lifetime, which is what makes LWW
 // inside the key safe: the in-memory count is always authoritative, so
-// eventual-consistency lag can never lose an observation, and a
+// eventual-consistency lag can never lose an entry, and a
 // restarted process cannot clobber the history the DAG is replaying
 // back to it.
-type ObservationRecord struct {
+type Record struct {
 	Subject    string       `json:"s"`
 	Observer   string       `json:"o"`
 	Dim        Dimension    `json:"d"`
@@ -90,7 +90,7 @@ type ObservationRecord struct {
 
 // SigningBytes is canonical and identical on every architecture: no
 // map iteration, no float formatting, no locale.
-func (r ObservationRecord) SigningBytes() []byte {
+func (r Record) SigningBytes() []byte {
 	var b strings.Builder
 	b.WriteString(r.Subject)
 	b.WriteByte('|')
@@ -124,7 +124,7 @@ func sortedCounts(in []CountEntry) []CountEntry {
 	return out
 }
 
-func (r *ObservationRecord) Sign(priv ed25519.PrivateKey) {
+func (r *Record) Sign(priv ed25519.PrivateKey) {
 	r.Counts = sortedCounts(r.Counts)
 	r.Signature = security.Sign(priv, r.SigningBytes())
 }
@@ -133,7 +133,7 @@ func (r *ObservationRecord) Sign(priv ed25519.PrivateKey) {
 // Observer peer id itself, the same way a moderation verdict is
 // verified in core/handler/moderation.go. A record is therefore
 // self-authenticating no matter which path relayed it.
-func (r ObservationRecord) Verify() error {
+func (r Record) Verify() error {
 	if r.Signature == "" {
 		return ErrRecordNoSignature
 	}
@@ -153,7 +153,7 @@ func (r ObservationRecord) Verify() error {
 // have had nothing to do with it and can only be dropped; a record
 // that passes Verify and fails Validate was provably authored by the
 // observer it names, and that is attributable.
-func (r ObservationRecord) Validate(now time.Time) error {
+func (r Record) Validate(now time.Time) error {
 	if warpnet.FromStringToPeerID(r.Subject) == "" {
 		return ErrRecordBadSubject
 	}
@@ -191,7 +191,7 @@ func (r ObservationRecord) Validate(now time.Time) error {
 	return nil
 }
 
-func (r ObservationRecord) Total() uint64 {
+func (r Record) Total() uint64 {
 	var total uint64
 	for _, c := range r.Counts {
 		total += uint64(c.Count)
@@ -202,7 +202,7 @@ func (r ObservationRecord) Total() uint64 {
 // Key is the CRDT path this record lives at:
 //
 //	/RATING/obs/{subject}/{observer}/{dim}/{bucket}/{generation}
-func (r ObservationRecord) Key() string {
+func (r Record) Key() string {
 	return RecordKey(r.Subject, r.Observer, r.Dim, r.Bucket, r.Generation)
 }
 

@@ -39,7 +39,7 @@ func newIdentity(t *testing.T) identity {
 type memStore struct {
 	mu   sync.Mutex
 	data map[string][]byte
-	// putErr, when set, fails every write — used to prove Observe
+	// putErr, when set, fails every write — used to prove Record
 	// stays non-blocking when persistence is broken.
 	putErr error
 }
@@ -124,7 +124,7 @@ func opener(store Datastore) Opener {
 	return func(Hooks) (Datastore, error) { return store, nil }
 }
 
-// fixedClock lets a test place observations in specific buckets and
+// fixedClock lets a test place entries in specific buckets and
 // then age them.
 type fixedClock struct {
 	mu  sync.Mutex
@@ -147,8 +147,8 @@ func (c *fixedClock) advance(d time.Duration) {
 func signedRecord(
 	observer identity, subject warpnet.WarpPeerID, dim Dimension,
 	bucket int64, generation string, counts ...CountEntry,
-) ObservationRecord {
-	rec := ObservationRecord{
+) Record {
+	rec := Record{
 		Subject:    subject.String(),
 		Observer:   observer.id.String(),
 		Dim:        dim,

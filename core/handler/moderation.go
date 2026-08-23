@@ -238,7 +238,7 @@ func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, 
 	if nodeID == "" {
 		return
 	}
-	rater.Observe(nodeID, rating.KindModerationUpheld)
+	rater.Record(nodeID, rating.KindModerationUpheld)
 }
 
 // chargeModerator records a malformed verdict against the moderator
@@ -247,7 +247,7 @@ func chargeModerator(rater rating.Reporter, moderator warpnet.WarpPeerID) {
 	if rater == nil || moderator == "" {
 		return
 	}
-	rater.Observe(moderator, rating.KindVerdictMalformed)
+	rater.Record(moderator, rating.KindVerdictMalformed)
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the

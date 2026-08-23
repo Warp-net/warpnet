@@ -342,11 +342,11 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 	}
 }
 
-// observeClearedReport charges a node that keeps filing reports the
+// recordClearedReport charges a node that keeps filing reports the
 // quorum throws out. Threshold, not per-report: an honest reader who
 // misjudges a post must pay nothing, while a node using the report
 // route to harass costs the network real model time.
-func (m *Moderator) observeClearedReport(rep event.ReportEvent) {
+func (m *Moderator) recordClearedReport(rep event.ReportEvent) {
 	if m == nil || m.clearedReports == nil || rep.ReporterNodeID == "" {
 		return
 	}
@@ -364,7 +364,7 @@ func (m *Moderator) observeClearedReport(rep event.ReportEvent) {
 	m.clearedMx.Unlock()
 
 	if counter.Add(1) == falseReportThreshold {
-		m.node.Rating().Observe(reporter, rating.KindFalseReportBurst)
+		m.node.Rating().Record(reporter, rating.KindFalseReportBurst)
 	}
 }
 
@@ -514,7 +514,7 @@ func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []
 	m.notifyReporter(rep, outcome, voters)
 
 	if bool(outcome.Result) {
-		m.observeClearedReport(rep)
+		m.recordClearedReport(rep)
 		return
 	}
 

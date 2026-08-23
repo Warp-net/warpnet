@@ -34,6 +34,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"math/rand/v2"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
@@ -112,7 +113,13 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
-	ownId       warpnet.WarpPeerID
+	ownId warpnet.WarpPeerID
+	// Two budgets, because one cannot do both jobs. limiter caps how
+	// much discovery work this node accepts in total, whoever it comes
+	// from; peerLimiter divides that budget fairly and is where a bad
+	// standing costs a peer its share. A global bucket alone cannot
+	// tell "twelve new peers" from "one peer twelve times", and a
+	// per-peer bucket alone puts no ceiling on the sum.
 	limiter     *leakyBucketRateLimiter
 	peerLimiter *peerLimiter
 
@@ -126,10 +133,15 @@ type discoveryService struct {
 	// rediscovering a known peer costs nothing.
 	probed *expirable.LRU[warpnet.WarpPeerID, struct{}]
 
-	rater rating.Rater
+	// rater is swapped rather than assigned: the mDNS, DHT and gossip
+	// callbacks are already running by the time the rating store is
+	// built, so they read it concurrently with SetRating.
+	rater atomic.Pointer[raterHolder]
 
 	m MetricsOnlineDiscoverer
 }
+
+type raterHolder struct{ rater rating.Rater }
 
 // SetRating attaches the node's rating store: discovery both reports
 // flooders and gives worse-rated peers a smaller share of the budget.
@@ -137,8 +149,20 @@ func (s *discoveryService) SetRating(r rating.Rater) {
 	if s == nil || r == nil {
 		return
 	}
-	s.rater = r
-	s.peerLimiter = newPeerLimiter(r.EffectiveBand)
+	s.rater.Store(&raterHolder{rater: r})
+}
+
+// raterOrNop never returns nil: before the store exists, and on a node
+// that failed to build one, discovery must penalise nobody.
+func (s *discoveryService) raterOrNop() rating.Rater {
+	if held := s.rater.Load(); held != nil && held.rater != nil {
+		return held.rater
+	}
+	return rating.Nop{}
+}
+
+func (s *discoveryService) effectiveBand(id warpnet.WarpPeerID) rating.Band {
+	return s.raterOrNop().EffectiveBand(id)
 }
 
 //goland:noinspection ALL
@@ -152,12 +176,11 @@ func NewDiscoveryService(
 	leakPerTenSec := 2
 
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
-	return &discoveryService{
+	s := &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
-		peerLimiter:     newPeerLimiter(nil),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -165,14 +188,15 @@ func NewDiscoveryService(
 		probed:          newProbedCache(),
 		m:               m,
 	}
+	s.peerLimiter = newPeerLimiter(s.effectiveBand)
+	return s
 }
 
 func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
-	return &discoveryService{
+	s := &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
-		peerLimiter:     newPeerLimiter(nil),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -180,6 +204,8 @@ func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *d
 		probed:          newProbedCache(),
 		m:               m,
 	}
+	s.peerLimiter = newPeerLimiter(s.effectiveBand)
+	return s
 }
 
 func newProbedCache() *expirable.LRU[warpnet.WarpPeerID, struct{}] {
@@ -263,9 +289,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 	// the whole shared budget and starve discovery of everyone else.
 	if !s.peerLimiter.Allow(pi.ID) {
 		log.Debugf("discovery: source '%s': peer over its own budget: %s", source, pi.ID.String())
-		if s.rater != nil {
-			s.rater.Observe(pi.ID, rating.KindDiscoveryFlood)
-		}
+		s.raterOrNop().Record(pi.ID, rating.KindDiscoveryFlood)
 		return
 	}
 	if !s.limiter.Allow() {
@@ -324,7 +348,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
 		s.m.PushStatusOffline(pi.ID.String())
-		s.observeDialFailure(pi)
+		s.recordDialFailure(pi)
 		return
 	}
 
@@ -469,7 +493,7 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
-// observeDialFailure charges a peer for a dial that actually reached
+// recordDialFailure charges a peer for a dial that actually reached
 // for it and failed.
 //
 // A failure with no address to dial is *our* gap, not the peer's: it
@@ -478,8 +502,8 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 // feet. Charging it made honest nodes rate each other down during
 // ordinary discovery — observed in a live three-node run before this
 // guard existed.
-func (s *discoveryService) observeDialFailure(pi warpnet.WarpAddrInfo) {
-	if s == nil || s.rater == nil {
+func (s *discoveryService) recordDialFailure(pi warpnet.WarpAddrInfo) {
+	if s == nil {
 		return
 	}
 	known := len(pi.Addrs) > 0
@@ -489,7 +513,7 @@ func (s *discoveryService) observeDialFailure(pi warpnet.WarpAddrInfo) {
 	if !known {
 		return
 	}
-	s.rater.Observe(pi.ID, rating.KindDialFailure)
+	s.raterOrNop().Record(pi.ID, rating.KindDialFailure)
 }
 
 // shouldProbe reports whether this peer may be asked for its info now,

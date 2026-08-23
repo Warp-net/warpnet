@@ -29,11 +29,11 @@ package rating
 
 import "github.com/Warp-net/warpnet/core/warpnet"
 
-// Reporter is the write side as seen by an observation source. Keeping
+// Reporter is the write side as seen by an entry source. Keeping
 // it this narrow means middleware, handlers and the discovery loop
 // depend on one method, not on the store.
 type Reporter interface {
-	Observe(subject warpnet.WarpPeerID, k Kind)
+	Record(subject warpnet.WarpPeerID, k Kind)
 }
 
 // Scorer is the read side as seen by an enforcement point.
@@ -65,7 +65,7 @@ type Rater interface {
 // than enforcement that silently does not.
 type Nop struct{}
 
-func (Nop) Observe(warpnet.WarpPeerID, Kind)      {}
+func (Nop) Record(warpnet.WarpPeerID, Kind)       {}
 func (Nop) Score(warpnet.WarpPeerID) Score        { return MaxScore }
 func (Nop) Band(warpnet.WarpPeerID) Band          { return BandTrusted }
 func (Nop) EffectiveBand(warpnet.WarpPeerID) Band { return BandTrusted }

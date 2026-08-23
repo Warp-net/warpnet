@@ -125,8 +125,8 @@ func (n *WarpNode) SetRating(r rating.Rater) {
 	n.rater = r
 }
 
-// observePeer charges an offence to a remote peer.
-func (n *WarpNode) observePeer(s warpnet.WarpStream, kind rating.Kind) {
+// recordOffence charges an offence to a remote peer.
+func (n *WarpNode) recordOffence(s warpnet.WarpStream, kind rating.Kind) {
 	if n == nil || n.rater == nil || s == nil || s.Conn() == nil {
 		return
 	}
@@ -134,7 +134,7 @@ func (n *WarpNode) observePeer(s warpnet.WarpStream, kind rating.Kind) {
 	if remote == "" || remote == s.Conn().LocalPeer() {
 		return
 	}
-	n.rater.Observe(remote, kind)
+	n.rater.Record(remote, kind)
 }
 
 func NewWarpNode(
@@ -283,13 +283,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		data, err := stream.ReadRequest(s)
 		if errors.Is(err, stream.ErrPayloadTooLarge) {
 			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
-			n.observePeer(s, rating.KindOversizePayload)
+			n.recordOffence(s, rating.KindOversizePayload)
 			_ = s.Reset()
 			return
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
-			n.observePeer(s, rating.KindMalformedFrame)
+			n.recordOffence(s, rating.KindMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
@@ -304,7 +304,7 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		// sites: the error already means exactly the offence — this
 		// peer sent an event claiming to act for someone else.
 		if errors.Is(err, warpnet.ErrForeignAuthor) {
-			n.observePeer(s, rating.KindForeignAuthorship)
+			n.recordOffence(s, rating.KindForeignAuthorship)
 		}
 
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
@@ -468,7 +468,7 @@ func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
 	}
 	if counter.Add(1) == connFlapThreshold {
 		// Once per window: the entry expires and starts over.
-		n.rater.Observe(pid, rating.KindConnectionFlap)
+		n.rater.Record(pid, rating.KindConnectionFlap)
 	}
 }
 

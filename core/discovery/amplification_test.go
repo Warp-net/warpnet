@@ -18,7 +18,7 @@ type recordingRater struct {
 	kinds []rating.Kind
 }
 
-func (r *recordingRater) Observe(_ warpnet.WarpPeerID, k rating.Kind) {
+func (r *recordingRater) Record(_ warpnet.WarpPeerID, k rating.Kind) {
 	r.kinds = append(r.kinds, k)
 }
 
@@ -117,19 +117,21 @@ func TestShouldProbeWithoutCacheAlwaysProbes(t *testing.T) {
 // discovery in a live three-node run.
 func TestUnresolvableDialChargesNobody(t *testing.T) {
 	rater := &recordingRater{}
-	s := &discoveryService{rater: rater}
+	s := &discoveryService{}
+	s.SetRating(rater)
 
-	s.observeDialFailure(warpnet.WarpAddrInfo{ID: testPeer(t, peerA)})
+	s.recordDialFailure(warpnet.WarpAddrInfo{ID: testPeer(t, peerA)})
 
 	assert.Empty(t, rater.kinds, "a dial with no address to try must charge nobody")
 }
 
 func TestFailedDialToAKnownAddressIsCharged(t *testing.T) {
 	rater := &recordingRater{}
-	s := &discoveryService{rater: rater}
+	s := &discoveryService{}
+	s.SetRating(rater)
 	id := testPeer(t, peerA)
 
-	s.observeDialFailure(warpnet.WarpAddrInfo{
+	s.recordDialFailure(warpnet.WarpAddrInfo{
 		ID:    id,
 		Addrs: []warpnet.WarpAddress{mustAddr(t, "/ip4/127.0.0.1/tcp/1")},
 	})

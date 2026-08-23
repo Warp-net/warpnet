@@ -44,7 +44,7 @@ const (
 	KindDiscoveryFlood
 	KindConnectionFlap
 	KindDialFailure
-	KindForgedObservation
+	KindForgedRecord
 
 	// application — member nodes
 	KindModerationUpheld
@@ -82,7 +82,7 @@ var catalogue = map[Kind]offence{
 	KindOversizePayload:    {"oversize_payload", Network, 150, 0},
 	KindMalformedFrame:     {"malformed_frame", Network, 120, 0},
 	KindStaleOrReplayed:    {"stale_or_replayed", Network, 120, 0},
-	KindForgedObservation:  {"forged_observation", Network, 400, 0},
+	KindForgedRecord:       {"forged_observation", Network, 400, 0},
 	// Pressure signals: cheap individually, capped in aggregate.
 	KindRateLimitHit:   {"rate_limit_hit", Network, 15, 300},
 	KindDiscoveryFlood: {"discovery_flood", Network, 25, 300},

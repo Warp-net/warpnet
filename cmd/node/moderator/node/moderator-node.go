@@ -199,17 +199,14 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.S
 	if mn == nil || mn.node == nil {
 		return warpnet.WarpError("moderator: rating: node is not started")
 	}
-	store, err := rating.NewCRDTStore(rating.CRDTDeps{
-		Ctx:      mn.ctx,
-		Self:     mn.node.Node().ID(),
-		PrivKey:  mn.privKey,
-		NodeType: warpnet.ModeratorNode,
-		Host:     mn.node.Node(),
-		Router:   mn.dHashTable,
-		Store:    mn.ratingStore,
-		Gossip:   gossip,
-		Shadow:   shadow,
-	})
+	broadcaster, err := crdt.NewRatingGossipBroadcaster(mn.ctx, gossip)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to start crdt rating broadcaster: %w", err)
+	}
+	store, err := crdt.NewCRDTRatingStore(
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
+		mn.privKey, warpnet.ModeratorNode, shadow,
+	)
 	if err != nil {
 		return err
 	}
