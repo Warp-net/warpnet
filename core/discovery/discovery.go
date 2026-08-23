@@ -324,9 +324,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
 		s.m.PushStatusOffline(pi.ID.String())
-		if s.rater != nil {
-			s.rater.Observe(pi.ID, rating.KindDialFailure)
-		}
+		s.observeDialFailure(pi)
 		return
 	}
 
@@ -469,6 +467,29 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
+}
+
+// observeDialFailure charges a peer for a dial that actually reached
+// for it and failed.
+//
+// A failure with no address to dial is *our* gap, not the peer's: it
+// means gossip named a peer our routing table cannot resolve yet, which
+// happens constantly and harmlessly while a node is still finding its
+// feet. Charging it made honest nodes rate each other down during
+// ordinary discovery — observed in a live three-node run before this
+// guard existed.
+func (s *discoveryService) observeDialFailure(pi warpnet.WarpAddrInfo) {
+	if s == nil || s.rater == nil {
+		return
+	}
+	known := len(pi.Addrs) > 0
+	if !known && s.node != nil && s.node.Peerstore() != nil {
+		known = len(s.node.Peerstore().Addrs(pi.ID)) > 0
+	}
+	if !known {
+		return
+	}
+	s.rater.Observe(pi.ID, rating.KindDialFailure)
 }
 
 // shouldProbe reports whether this peer may be asked for its info now,

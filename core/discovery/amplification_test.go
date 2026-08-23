@@ -12,6 +12,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// recordingRater captures what discovery charges, so a test can assert
+// on offences instead of log lines.
+type recordingRater struct {
+	kinds []rating.Kind
+}
+
+func (r *recordingRater) Observe(_ warpnet.WarpPeerID, k rating.Kind) {
+	r.kinds = append(r.kinds, k)
+}
+
+func (r *recordingRater) Score(warpnet.WarpPeerID) rating.Score        { return rating.MaxScore }
+func (r *recordingRater) Band(warpnet.WarpPeerID) rating.Band          { return rating.BandTrusted }
+func (r *recordingRater) EffectiveBand(warpnet.WarpPeerID) rating.Band { return rating.BandTrusted }
+func (r *recordingRater) Mode() rating.Mode                            { return rating.ModeShadow }
+
+func mustAddr(t *testing.T, s string) warpnet.WarpAddress {
+	t.Helper()
+	a, err := warpnet.NewMultiaddr(s)
+	require.NoError(t, err)
+	return a
+}
+
 func testPeer(t *testing.T, seed string) warpnet.WarpPeerID {
 	t.Helper()
 	id := warpnet.FromStringToPeerID(seed)
@@ -87,4 +109,30 @@ func TestShouldProbeWithoutCacheAlwaysProbes(t *testing.T) {
 	// tests) must not silently stop discovering.
 	s := &discoveryService{}
 	assert.True(t, s.shouldProbe(testPeer(t, peerA)))
+}
+
+// A dial that never had an address to try says nothing about the peer:
+// it means gossip named someone our routing table cannot resolve yet.
+// Charging it made honest nodes rate each other down during ordinary
+// discovery in a live three-node run.
+func TestUnresolvableDialChargesNobody(t *testing.T) {
+	rater := &recordingRater{}
+	s := &discoveryService{rater: rater}
+
+	s.observeDialFailure(warpnet.WarpAddrInfo{ID: testPeer(t, peerA)})
+
+	assert.Empty(t, rater.kinds, "a dial with no address to try must charge nobody")
+}
+
+func TestFailedDialToAKnownAddressIsCharged(t *testing.T) {
+	rater := &recordingRater{}
+	s := &discoveryService{rater: rater}
+	id := testPeer(t, peerA)
+
+	s.observeDialFailure(warpnet.WarpAddrInfo{
+		ID:    id,
+		Addrs: []warpnet.WarpAddress{mustAddr(t, "/ip4/127.0.0.1/tcp/1")},
+	})
+
+	assert.Equal(t, []rating.Kind{rating.KindDialFailure}, rater.kinds)
 }
