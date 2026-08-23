@@ -92,8 +92,16 @@ func NewDatastore(
 	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
 	dagService := warpnet.NewDAGService(blockService)
 
+	l := log.StandardLogger().WithContext(ctx)
+
 	opts := crdt.DefaultOptions()
-	opts.Logger = log.StandardLogger().WithContext(ctx)
+	opts.Logger = l
+	opts.PutHook = func(k ds.Key, _ []byte) {
+		// l.Infof("crdt: item put: %s", k.String())
+	}
+	opts.DeleteHook = func(k ds.Key) {
+		// l.Infof("crdt: item deleted: %s", k.String())
+	}
 	opts.RebroadcastInterval = time.Minute
 	opts.DAGSyncerTimeout = time.Minute
 	opts.MultiHeadProcessing = true
