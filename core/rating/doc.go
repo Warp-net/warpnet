@@ -71,10 +71,13 @@
 //     mild priority drop and nothing else.
 //
 //   - No storage here (store.go, Opener). This package holds the
-//     model; the CRDT-replicated store it runs on is built in
-//     core/crdt/rating.go beside the stats store, and reaches this
-//     package through the Opener callback. The dependency runs
-//     core/crdt → core/rating and never back.
+//     model; the store it runs on is built in core/crdt/rating.go and
+//     reaches this package through the Opener callback. The dependency
+//     runs core/crdt → core/rating and never back. That store is a
+//     tenant of the node's one CRDT datastore, sharing it with stat
+//     counters under a key prefix of its own — a second datastore would
+//     only mean a second DAG and a second gossip topic replicating the
+//     same node's data.
 //
 //   - Soft consequences only (enforce.go). Low standing costs
 //     connection priority, gossipsub score, DHT routing-table presence

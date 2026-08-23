@@ -40,6 +40,7 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-cid"
@@ -75,11 +76,13 @@ type ModeratorNode struct {
 
 	dHashTable DistributedHashTableDiscoverer
 
-	// ratingStore backs the rating CRDT. A moderator holds no disk
-	// either, so its view is restored from the DAG after a restart
-	// rather than from anything local.
-	ratingStore crdt.CRDTStorer
-	ratingDb    RatingStorer
+	// mapStore is the moderator's only datastore: the DHT routes on it
+	// and the CRDT replicates on it. A moderator holds no disk either,
+	// so its view is restored from the DAG after a restart rather than
+	// from anything local.
+	mapStore warpnet.WarpBatching
+	crdtDb   *crdt.Datastore
+	ratingDb RatingStorer
 
 	memoryStoreCloseF func() error
 
@@ -100,14 +103,11 @@ func NewModeratorNode(
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
 	}
-	mapStore := datastore.NewMapDatastore()
-	// Separate from the DHT's store: provider records and CRDT block
-	// bookkeeping have no business sharing a keyspace.
-	ratingStore := datastore.NewMapDatastore()
+	// Wrapped once, because both the DHT and the CRDT read and write it.
+	mapStore := ds.MutexWrap(datastore.NewMapDatastore())
 
 	closeF := func() error {
 		_ = memoryStore.Close()
-		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -142,7 +142,7 @@ func NewModeratorNode(
 	mn := &ModeratorNode{
 		ctx:               ctx,
 		dHashTable:        dHashTable,
-		ratingStore:       ratingStore,
+		mapStore:          mapStore,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -199,13 +199,18 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber, shadow rating.S
 	if mn == nil || mn.node == nil {
 		return warpnet.WarpError("moderator: rating: node is not started")
 	}
-	broadcaster, err := crdt.NewRatingGossipBroadcaster(mn.ctx, gossip)
+	broadcaster, err := crdt.NewGossipBroadcaster(mn.ctx, gossip)
 	if err != nil {
-		return fmt.Errorf("moderator: failed to start crdt rating broadcaster: %w", err)
+		return fmt.Errorf("moderator: failed to start crdt gossip broadcaster: %w", err)
+	}
+	mn.crdtDb, err = crdt.NewDatastore(
+		mn.ctx, broadcaster, mn.mapStore, mn.node.Node(), mn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to initialize crdt datastore: %w", err)
 	}
 	store, err := crdt.NewCRDTRatingStore(
-		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
-		mn.privKey, warpnet.ModeratorNode, shadow,
+		mn.ctx, mn.crdtDb, mn.node.Node(), mn.privKey, warpnet.ModeratorNode, shadow,
 	)
 	if err != nil {
 		return err
@@ -272,6 +277,9 @@ func (mn *ModeratorNode) Stop() {
 
 	if mn.ratingDb != nil {
 		_ = mn.ratingDb.Close()
+	}
+	if mn.crdtDb != nil {
+		_ = mn.crdtDb.Close()
 	}
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()

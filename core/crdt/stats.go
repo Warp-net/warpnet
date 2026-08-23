@@ -37,7 +37,6 @@ import (
 
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/ipfs/go-cid"
-	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -108,46 +107,33 @@ type CRDTRouter interface {
 //     is fresh, so peers' replayed history is preserved verbatim and
 //     this process simply accrues a new sub-counter alongside.
 type CRDTStatsStore struct {
-	crdt        *crdt.Datastore
-	broadcaster Broadcaster
-	ctx         context.Context
-	cancel      context.CancelFunc
-	prefix      string
-	nodeID      string
-	generation  string
+	crdt       *Datastore
+	ctx        context.Context
+	prefix     string
+	nodeID     string
+	generation string
 
 	mu           sync.Mutex
 	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
 	decrCounters map[string]uint64
 }
 
-// NewCRDTStatsStore creates a new CRDT-based statistics store
-func NewCRDTStatsStore(
-	ctx context.Context,
-	broadcaster Broadcaster,
-	datastore CRDTStorer,
-	node host.Host,
-	router CRDTRouter,
-) (*CRDTStatsStore, error) {
-	ctx, cancel := context.WithCancel(ctx)
-
-	crdtStore, err := NewDatastore(ctx, broadcaster, datastore, node, router, DatastoreHooks{})
-	if err != nil {
-		cancel()
-		return nil, err
+// NewCRDTStatsStore creates a new CRDT-based statistics store on the
+// node's one CRDT datastore, which it shares with every other store
+// replicated the same way and does not own.
+func NewCRDTStatsStore(ctx context.Context, crdtStore *Datastore, node host.Host) (*CRDTStatsStore, error) {
+	if crdtStore == nil || node == nil {
+		return nil, fmt.Errorf("crdt stats: incomplete dependencies") //nolint:err113
 	}
 
 	gen, err := newGenerationID()
 	if err != nil {
-		cancel()
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
 	store := &CRDTStatsStore{
 		crdt:         crdtStore,
-		broadcaster:  broadcaster,
 		ctx:          ctx,
-		cancel:       cancel,
 		nodeID:       node.ID().String(),
 		prefix:       StatsRepoName,
 		generation:   gen,
@@ -250,13 +236,10 @@ func newGenerationID() (string, error) {
 	return hex.EncodeToString(buf[:]), nil
 }
 
-// Close stops the CRDT store
+// Close stops the stats store. The CRDT datastore under it is shared
+// with the node's other stores and is closed by whoever built it.
 func (s *CRDTStatsStore) Close() error {
-	if s == nil {
-		return nil
-	}
-	s.cancel()
-	return s.crdt.Close()
+	return nil
 }
 
 func encodeCounter(value uint64) []byte {

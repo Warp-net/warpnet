@@ -20,22 +20,13 @@ type StatsStorer interface {
 	Delete(key local_store.DatabaseKey) error
 }
 
-const (
-	crdtPrefix   = "CRDT"
-	ratingPrefix = "RATING"
-)
+const crdtPrefix = "CRDT"
 
+// NewStatsRepo backs the node's one CRDT datastore — stat counters,
+// peer ratings and anything else replicated the same way, each under
+// its own key prefix inside it.
 func NewStatsRepo(db StatsStorer) ds.Datastore {
-	return newCRDTBackedRepo(db, crdtPrefix)
-}
-
-// NewRatingRepo backs the rating CRDT. Its own prefix keeps a rating
-// wipe from touching stat counters and vice versa.
-func NewRatingRepo(db StatsStorer) ds.Datastore {
-	return newCRDTBackedRepo(db, ratingPrefix)
-}
-
-func newCRDTBackedRepo(db StatsStorer, prefix string) ds.Datastore {
+	prefix := crdtPrefix
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
 		prefix = requiredPrefixSlash + prefix
 	}

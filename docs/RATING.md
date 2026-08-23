@@ -276,11 +276,22 @@ process dies; on the next start the DAG replays it back from peers, exactly the
 counters. Without CRDT a relay would be permanently memoryless and its
 observations would die with it.
 
-| Node type | Rating datastore | Survives restart via |
+A node has **one** CRDT datastore, and rating is a tenant of it — not a
+second one. One blockstore, one bitswap exchange, one DAG and one gossip
+topic replicate stat counters and peer ratings alike; a second datastore
+would only buy a second copy of that machinery and a second set of blocks
+to keep in sync.
+
+| Node type | The node's one datastore | Survives restart via |
 |---|---|---|
-| member | `database.NewRatingRepo(db)`, Badger-backed | its own disk, plus the DAG for anything it missed while down |
-| relay | `datastore.NewMapDatastore()` — the one it already constructs | the DAG only |
-| moderator | `datastore.NewMapDatastore()` — the one it already constructs | the DAG only |
+| member | `database.NewStatsRepo(db)`, Badger-backed — already there for stats | its own disk, plus the DAG for anything it missed while down |
+| relay | the `datastore.NewMapDatastore()` it already constructs for the DHT | the DAG only |
+| moderator | the `datastore.NewMapDatastore()` it already constructs for the DHT | the DAG only |
+
+Tenants are separated by key prefix — `/STATS/...` and `/RATING/obs/...` —
+and share nothing else. On the relay and the moderator the map store is
+`MutexWrap`ped once at construction, because the DHT and the CRDT both
+read and write it.
 
 This is what decision 3 means in practice: state in memory, observations in the
 network, and the network gives the state back.
@@ -289,25 +300,28 @@ Topics:
 
 ```go
 // core/crdt/gossip-adapter.go
-const (
-    statsTopic  = "/warpnet/stats/1.0.0"
-    ratingTopic = "/warpnet/rating/1.0.0"
-)
+const crdtTopic = "/warpnet/stats/1.0.0"
 ```
 
-`ratingTopic` is separate from `statsTopic` so rating replication never competes
-with stat counters for the same broadcaster buffer.
+One datastore, one broadcaster, one topic. The name of the string is
+historical — it predates anything but stats living in the CRDT — and renaming
+it would cut replication between versions for no gain.
 
-**Why not put this in the existing stats store.** `CRDTStatsStore` is a
-PN-counter: one `uint64` per key, merged by summing. A rating entry is a signed
-record — observer, dimension, hour bucket, per-kind counts, signature — that has
-to be verified before it is believed and re-signed whenever it changes. A
-counter cannot carry a signature, and a node that could bump another node's
-counter directly is exactly the forgery the signature exists to stop. So it is a
-sibling of the stats store, not a user of it: same package (`core/crdt`), same
-replication plumbing (`NewDatastore`), same generation-nonce trick, different
-value type — and its own key prefix (`database.NewRatingRepo`, `/RATING`) so a
-rating wipe cannot touch stat counters or vice versa.
+**Why rating is not the stats store itself.** `CRDTStatsStore` is a PN-counter:
+one `uint64` per key, merged by summing. A rating entry is a signed record —
+observer, dimension, hour bucket, per-kind counts, signature — that has to be
+verified before it is believed and re-signed whenever it changes. A counter
+cannot carry a signature, and a node that could bump another node's counter
+directly is exactly the forgery the signature exists to stop. So the two are
+sibling tenants of the one datastore: same package (`core/crdt`), same
+replication, same generation-nonce trick, different value type, different key
+prefix.
+
+**How two tenants share one set of hooks.** go-ds-crdt takes exactly one
+`PutHook` and one `DeleteHook`, fixed at construction. `crdt.Datastore` installs
+a dispatcher there and exposes `OnPut`/`OnDelete`, so each tenant subscribes and
+every merged delta reaches all of them. The rating store filters by its own key
+prefix; the stats store subscribes to nothing.
 
 ### 5.2 Key layout
 
@@ -715,9 +729,10 @@ and the dimension set:
 | **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | the `datastore.NewMapDatastore()` it already builds at `relay-node.go:104` | needs a new `Gossip()` accessor on `cmd/node/relay/pubsub` |
 | **moderator** (`cmd/node/moderator/node/moderator-node.go`, built in `cmd/node/moderator/moderator/moderator.go`) | `Network`, `Moderation` | the `datastore.NewMapDatastore()` it already builds at `moderator-node.go:82` | `ModeratorNode` has no pubsub, but the moderator *process* does (`cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`); add a `Gossip()` accessor there |
 
-Each builds `crdt.NewRatingGossipBroadcaster(ctx, gossip)` and passes it, plus
-the datastore above, to `crdt.NewCRDTRatingStore` — the exact two-line shape the
-member node already uses for the stats store.
+Each builds its one datastore — `crdt.NewGossipBroadcaster(ctx, gossip)` then
+`crdt.NewDatastore(ctx, broadcaster, store, node, router)` — and hands it to
+`crdt.NewCRDTRatingStore`, and on the member node to `crdt.NewCRDTStatsStore`
+as well. Neither store owns it: whoever built it closes it.
 
 The construction lives in `core/crdt/rating.go`, beside `core/crdt/stats.go`,
 because that is where this codebase builds CRDT-replicated stores; `core/rating`
@@ -768,10 +783,10 @@ Five stages, each independently reviewable, mergeable and testable.
 
 | File | Change |
 |---|---|
-| `core/crdt/datastore.go` (new) | `NewDatastore(ctx, broadcaster, store, node, router, hooks)` — the blockstore/bitswap/DAG/`crdt.New` block extracted verbatim from `NewCRDTStatsStore`. |
-| `core/crdt/stats.go` | call the helper; delete the inlined block. |
-| `core/crdt/gossip-adapter.go` | add `ratingTopic` and `NewRatingGossipBroadcaster(ctx, gossip)`; both broadcaster constructors become one-line wrappers over the topic. |
-| `database/stats-repo.go` | add `NewRatingRepo(db)` under prefix `RATING`, factored with `NewStatsRepo`. |
+| `core/crdt/datastore.go` (new) | `Datastore` — the node's one CRDT replica: the blockstore/bitswap/DAG/`crdt.New` block extracted verbatim from `NewCRDTStatsStore`, plus `OnPut`/`OnDelete` so more than one store can share it. |
+| `core/crdt/stats.go` | take the datastore instead of building one; delete the inlined block. |
+| `core/crdt/gossip-adapter.go` | `statsTopic` becomes `crdtTopic`: one datastore, one broadcaster, one topic. |
+| `database/stats-repo.go` | unchanged — `NewStatsRepo(db)` already backs the node's one CRDT datastore. |
 | `cmd/node/relay/pubsub/relay-pubsub.go` | add `Gossip() *pubsub.Gossip`. |
 | `cmd/node/moderator/pubsub/publisher.go` | add `Gossip() *pubsub.Gossip`. |
 | `cmd/node/relay/node/relay-node.go` | widen `DistributedHashTableCloser` with `FindProvidersAsync`. |
@@ -822,9 +837,9 @@ Edited files:
 | `core/dht/options.go`, `core/dht/dht.go` | `QueryFilter`/`RoutingTableFilter` options; fix (e) |
 | `core/discovery/discovery.go`, `core/discovery/rate-limiter.go` | fixes (b), (d), (f); `KindDiscoveryFlood`, `KindDialFailure` |
 | `core/handler/info.go` | fix (a) |
-| `cmd/node/member/node/member-node.go`, `types.go` | build the store on `NewRatingRepo`, register the private route |
-| `cmd/node/relay/node/relay-node.go` | build a `Network`-only store on its `MapDatastore` |
-| `cmd/node/moderator/node/moderator-node.go`, `cmd/node/moderator/moderator/moderator.go` | build a store on its `MapDatastore`; `Moderation` observations wired in Stage 3 |
+| `cmd/node/member/node/member-node.go`, `types.go` | build the one datastore, put both stores on it, register the private route |
+| `cmd/node/relay/node/relay-node.go` | build a `Network`-only store on the `MapDatastore` it already has |
+| `cmd/node/moderator/node/moderator-node.go`, `cmd/node/moderator/moderator/moderator.go` | build a store on the `MapDatastore` it already has; `Moderation` observations wired in Stage 3 |
 | `frontend/src/router`, `frontend/src/service/service.js`, `frontend/src/views/Settings.vue` | route + link |
 
 Tests:

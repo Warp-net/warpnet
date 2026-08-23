@@ -72,7 +72,6 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
-	ratingRepo       StatsProvider
 	ratingDb         RatingStorer
 	authRepo         AuthProvider
 	userRepo         UserProvider
@@ -80,6 +79,7 @@ type MemberNode struct {
 	followRepo       FollowStorer
 	notifier         notifications.Notifier
 	db               Storer
+	crdtDb           *crdt.Datastore
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
 	metrics          MetricsOnlinePusher
@@ -115,7 +115,6 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
-	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
@@ -183,7 +182,6 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
-		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -223,20 +221,20 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.statsDb, err = crdt.NewCRDTStatsStore(
+	m.crdtDb, err = crdt.NewDatastore(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
+	if err != nil {
+		return fmt.Errorf("member: failed to initialize crdt datastore: %w", err)
+	}
+
+	m.statsDb, err = crdt.NewCRDTStatsStore(m.ctx, m.crdtDb, m.node.Node())
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	ratingBroadcaster, err := crdt.NewRatingGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
-	if err != nil {
-		return fmt.Errorf("member: failed to start crdt rating broadcaster: %w", err)
-	}
 	m.ratingDb, err = crdt.NewCRDTRatingStore(
-		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
-		m.privKey, warpnet.MemberNode, m.metrics,
+		m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode, m.metrics,
 	)
 	if err != nil {
 		// Rating is a property of a node, not a feature of it, but a
@@ -973,6 +971,9 @@ func (m *MemberNode) Stop() {
 	}
 	if m.ratingDb != nil {
 		_ = m.ratingDb.Close()
+	}
+	if m.crdtDb != nil {
+		_ = m.crdtDb.Close()
 	}
 
 	if m.nodeRepo != nil {

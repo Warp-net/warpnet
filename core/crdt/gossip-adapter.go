@@ -50,34 +50,21 @@ type GossipBroadcaster struct {
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
-const (
-	statsTopic = "/warpnet/stats/1.0.0"
-	// ratingTopic carries the rating CRDT's deltas. Kept apart from
-	// statsTopic so rating replication never competes with stat
-	// counters for the same broadcaster buffer.
-	ratingTopic = "/warpnet/rating/1.0.0"
-)
+// crdtTopic carries the deltas of the node's one CRDT datastore — stat
+// counters and peer ratings alike. The name is historical: the topic
+// predates anything but stats living in the CRDT, and renaming the
+// string would cut replication between versions for no gain.
+const crdtTopic = "/warpnet/stats/1.0.0"
 
-// NewGossipBroadcaster creates a new Gossip-based broadcaster for CRDT stats.
+// NewGossipBroadcaster creates a new Gossip-based broadcaster for the CRDT datastore.
 func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
-	return newGossipBroadcasterOn(ctx, gossip, statsTopic)
-}
-
-// NewRatingGossipBroadcaster creates a new Gossip-based broadcaster for CRDT node ratings.
-func NewRatingGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
-	return newGossipBroadcasterOn(ctx, gossip, ratingTopic)
-}
-
-func newGossipBroadcasterOn(
-	ctx context.Context, gossip GossipPubSuber, topic string,
-) (*GossipBroadcaster, error) {
 	gb := &GossipBroadcaster{
 		gossip:   gossip,
-		topic:    topic,
+		topic:    crdtTopic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
 	}
-	err := gossip.SubscribeRaw(topic, func(data []byte) error {
+	err := gossip.SubscribeRaw(crdtTopic, func(data []byte) error {
 		gb.Receive(data)
 		return nil
 	})

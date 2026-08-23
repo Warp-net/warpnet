@@ -45,7 +45,7 @@ func TestNewGossipBroadcaster(t *testing.T) {
 	gb, err := NewGossipBroadcaster(ctx, mock)
 	assert.NoError(t, err)
 	assert.NotNil(t, gb)
-	assert.Equal(t, statsTopic, gb.topic)
+	assert.Equal(t, crdtTopic, gb.topic)
 }
 
 func TestNewGossipBroadcaster_SubscribeError(t *testing.T) {
@@ -63,7 +63,7 @@ func TestBroadcast(t *testing.T) {
 	err := gb.Broadcast(ctx, []byte("hello"))
 	assert.NoError(t, err)
 	assert.Len(t, mock.published, 1)
-	assert.Equal(t, statsTopic, mock.published[0].topic)
+	assert.Equal(t, crdtTopic, mock.published[0].topic)
 	assert.Equal(t, []byte("hello"), mock.published[0].data)
 }
 

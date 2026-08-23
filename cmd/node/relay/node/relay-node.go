@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-cid"
@@ -98,12 +99,14 @@ type RelayNode struct {
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
 
-	// mapStore backs the rating CRDT. A relay holds no disk, so this
-	// dies with the process — and the CRDT is exactly what gives the
-	// view back on the next start, replayed from peers.
-	ratingStore crdt.CRDTStorer
-	ratingDb    RatingStorer
-	metrics     MetricsOnlinePusher
+	// mapStore is the relay's only datastore: the DHT routes on it and
+	// the CRDT replicates on it. A relay holds no disk, so it dies with
+	// the process — and the CRDT is exactly what gives the view back on
+	// the next start, replayed from peers.
+	mapStore warpnet.WarpBatching
+	crdtDb   *crdt.Datastore
+	ratingDb RatingStorer
+	metrics  MetricsOnlinePusher
 }
 
 func (rn *RelayNode) raterOrNop() rating.Rater {
@@ -135,15 +138,11 @@ func NewRelayNode(
 	if err != nil {
 		return nil, fmt.Errorf("relay: fail creating memory peerstore: %w", err)
 	}
-	mapStore := datastore.NewMapDatastore()
-	// A datastore of its own for the rating CRDT: the DHT's provider
-	// records and the CRDT's block bookkeeping have no business
-	// sharing a keyspace.
-	ratingStore := datastore.NewMapDatastore()
+	// Wrapped once, because both the DHT and the CRDT read and write it.
+	mapStore := ds.MutexWrap(datastore.NewMapDatastore())
 
 	closeF := func() error {
 		_ = memoryStore.Close()
-		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -189,7 +188,7 @@ func NewRelayNode(
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
-		ratingStore:       ratingStore,
+		mapStore:          mapStore,
 		metrics:           m,
 	}
 
@@ -219,13 +218,18 @@ func (rn *RelayNode) Start() (err error) {
 		return err
 	}
 
-	ratingBroadcaster, err := crdt.NewRatingGossipBroadcaster(rn.ctx, rn.pubsubService.Gossip())
+	crdtBroadcaster, err := crdt.NewGossipBroadcaster(rn.ctx, rn.pubsubService.Gossip())
 	if err != nil {
-		return fmt.Errorf("relay: failed to start crdt rating broadcaster: %w", err)
+		return fmt.Errorf("relay: failed to start crdt gossip broadcaster: %w", err)
+	}
+	rn.crdtDb, err = crdt.NewDatastore(
+		rn.ctx, crdtBroadcaster, rn.mapStore, rn.node.Node(), rn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("relay: failed to initialize crdt datastore: %w", err)
 	}
 	rn.ratingDb, err = crdt.NewCRDTRatingStore(
-		rn.ctx, ratingBroadcaster, rn.ratingStore, rn.node.Node(), rn.dHashTable,
-		rn.privKey, warpnet.RelayNode, rn.metrics,
+		rn.ctx, rn.crdtDb, rn.node.Node(), rn.privKey, warpnet.RelayNode, rn.metrics,
 	)
 	if err != nil {
 		log.Errorf("relay: failed to initialize rating store: %v", err)
@@ -345,6 +349,9 @@ func (rn *RelayNode) Stop() {
 	}
 	if rn.ratingDb != nil {
 		_ = rn.ratingDb.Close()
+	}
+	if rn.crdtDb != nil {
+		_ = rn.crdtDb.Close()
 	}
 	if rn.dHashTable != nil {
 		rn.dHashTable.Close()

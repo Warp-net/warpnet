@@ -41,25 +41,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// NewCRDTRatingStore creates a new CRDT-based node rating store.
+// NewCRDTRatingStore creates a new CRDT-based node rating store on the
+// node's one CRDT datastore, which it shares with the stats store and
+// does not own. Rating records sit under their own key prefix; what
+// they need from the CRDT is its replication, and that is exactly what
+// is already there.
 //
-// The three node types differ only in the datastore they hand over: a
-// member has a Badger-backed repo, a relay and a moderator hand over
-// the in-memory map datastore they already build. Both are replicated
-// the same way — which is the point of putting rating on a CRDT at
-// all, since a node with no disk gets its view back from the DAG after
-// a restart and cannot recover it any other way.
+// Replication is the point of putting rating on a CRDT at all: a node
+// with no disk — every relay, every moderator — gets its view back from
+// the DAG after a restart and cannot recover it any other way.
 func NewCRDTRatingStore(
 	ctx context.Context,
-	broadcaster Broadcaster,
-	datastore CRDTStorer,
+	crdtStore *Datastore,
 	node host.Host,
-	router CRDTRouter,
 	privKey ed25519.PrivateKey,
 	nodeType string,
 	shadow rating.ShadowReporter,
 ) (*rating.Store, error) {
-	if node == nil || datastore == nil {
+	if node == nil || crdtStore == nil {
 		return nil, fmt.Errorf("rating: incomplete dependencies") //nolint:err113
 	}
 
@@ -71,10 +70,9 @@ func NewCRDTRatingStore(
 	}
 
 	open := func(hooks rating.Hooks) (rating.Datastore, error) {
-		return NewDatastore(ctx, broadcaster, datastore, node, router, DatastoreHooks{
-			Put:    func(k ds.Key, v []byte) { hooks.Put(k.String(), v) },
-			Delete: func(k ds.Key) { hooks.Delete(k.String()) },
-		})
+		crdtStore.OnPut(func(k ds.Key, v []byte) { hooks.Put(k.String(), v) })
+		crdtStore.OnDelete(func(k ds.Key) { hooks.Delete(k.String()) })
+		return crdtStore, nil
 	}
 
 	store, err := rating.NewStore(rating.Config{
