@@ -34,15 +34,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
-	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/ipfs/go-cid"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -134,64 +131,10 @@ func NewCRDTStatsStore(
 ) (*CRDTStatsStore, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	baseStore := ds.MutexWrap(datastore)
-
-	// Match the canonical ipfs-lite blockstore wiring for go-ds-crdt:
-	//   - WriteThrough(true) skips the redundant Has() check on every
-	//     Put. CRDT writes blocks once and never overwrites them, so
-	//     the check is pure overhead.
-	//   - NewIdStore synthesises blocks for "identity" multihashes
-	//     (small payloads encoded directly in the CID). go-ds-crdt
-	//     occasionally produces such inline blocks for tiny deltas;
-	//     without IdStore, bitswap cannot satisfy WANTs for those
-	//     CIDs and replication can stall in small clusters.
-	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
-
-	bitswapNetwork := warpnet.NewBitswapNetwork(node)
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
-
-	// Replay any libp2p connections that were already established
-	// when bitswap registered as a network notifier. libp2p's
-	// swarm.Notify only fires for FUTURE events, so peers that
-	// connected during the window between libp2p.New (the host
-	// starts listening) and bitswap.New (handlers wired) would
-	// otherwise be invisible to bitswap's PeerManager — leading to
-	// "No peers - broadcasting" loops that never converge in a small
-	// cluster. ipfs-lite avoids this by ensuring nothing inbound can
-	// connect before bitswap is up; here the host is already exposed
-	// by the time NewCRDTStatsStore runs, so we have to replay
-	// explicitly.
-	for _, p := range node.Network().Peers() {
-		bitswapExchange.PeerConnected(p)
-	}
-
-	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
-	dagService := warpnet.NewDAGService(blockService)
-
-	l := log.StandardLogger().WithContext(ctx)
-
-	opts := crdt.DefaultOptions()
-	opts.Logger = l
-	opts.PutHook = func(k ds.Key, _ []byte) {
-		// l.Infof("crdt: item put: %s", k.String())
-	}
-	opts.DeleteHook = func(k ds.Key) {
-		// l.Infof("crdt: item deleted: %s", k.String())
-	}
-	opts.RebroadcastInterval = time.Minute
-	opts.DAGSyncerTimeout = time.Minute
-	opts.MultiHeadProcessing = true
-
-	crdtStore, err := crdt.New(
-		baseStore,
-		ds.NewKey(""), // node repo's already set the prefix
-		dagService,
-		broadcaster,
-		opts,
-	)
+	crdtStore, err := NewDatastore(ctx, broadcaster, datastore, node, router, DatastoreHooks{})
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
+		return nil, err
 	}
 
 	gen, err := newGenerationID()

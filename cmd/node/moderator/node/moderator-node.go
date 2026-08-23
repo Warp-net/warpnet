@@ -40,14 +40,19 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
 
 type DistributedHashTableDiscoverer interface {
 	ClosestPeers() []warpnet.WarpPeerID
+	// FindProvidersAsync is what the rating CRDT's bitswap exchange
+	// routes through; *distributedHashTable already implements it.
+	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo
 	Close()
 }
 

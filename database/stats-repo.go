@@ -20,10 +20,22 @@ type StatsStorer interface {
 	Delete(key local_store.DatabaseKey) error
 }
 
-const crdtPrefix = "CRDT"
+const (
+	crdtPrefix   = "CRDT"
+	ratingPrefix = "RATING"
+)
 
 func NewStatsRepo(db StatsStorer) ds.Datastore {
-	prefix := crdtPrefix
+	return newCRDTBackedRepo(db, crdtPrefix)
+}
+
+// NewRatingRepo backs the rating CRDT. Its own prefix keeps a rating
+// wipe from touching stat counters and vice versa.
+func NewRatingRepo(db StatsStorer) ds.Datastore {
+	return newCRDTBackedRepo(db, ratingPrefix)
+}
+
+func newCRDTBackedRepo(db StatsStorer, prefix string) ds.Datastore {
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
 		prefix = requiredPrefixSlash + prefix
 	}

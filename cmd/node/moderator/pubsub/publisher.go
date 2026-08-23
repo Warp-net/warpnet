@@ -75,6 +75,14 @@ func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
 	return g.pubsub.Run(node)
 }
 
+// Gossip exposes the underlying gossip so the rating CRDT can ride it.
+func (g *moderatorPubSub) Gossip() *pubsub.Gossip {
+	if g == nil {
+		return nil
+	}
+	return g.pubsub
+}
+
 func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) (err error) {
 	if g == nil || !g.pubsub.IsGossipRunning() {
 		return warpnet.WarpError("pubsub: service not initialized")

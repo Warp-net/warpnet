@@ -73,6 +73,14 @@ func (g *relayPubSub) OwnerID() string {
 	return "None"
 }
 
+// Gossip exposes the underlying gossip so the rating CRDT can ride it.
+func (g *relayPubSub) Gossip() *pubsub.Gossip {
+	if g == nil {
+		return nil
+	}
+	return g.pubsub
+}
+
 func (g *relayPubSub) Close() (err error) {
 	return g.pubsub.Close()
 }
