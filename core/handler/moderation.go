@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -87,6 +88,7 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
+	rater rating.Reporter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
@@ -131,6 +133,12 @@ func StreamModerationResultHandler(
 		if bool(ev.Verdict) {
 			return event.Accepted, nil
 		}
+
+		// A FAIL verdict is quorum-backed and already reaches every
+		// observer, so the application dimension needs no new wire
+		// message: each observer charges the offender's node from the
+		// verdict it just verified.
+		chargeModeratedNode(rater, userRepo, ev.UserID)
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
@@ -201,6 +209,28 @@ func StreamModerationResultHandler(
 
 		return event.Accepted, nil
 	}
+}
+
+// chargeModeratedNode records an upheld moderation decision against
+// the node that hosts the offending user.
+//
+// The verdict names a user, not a node, so the offender's node has to
+// be looked up. Best effort by design: an observer that has never
+// cached this user simply has nobody to charge, which is the same
+// position it is already in for every other judgement about that user.
+func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, userID string) {
+	if rater == nil || userRepo == nil || userID == "" {
+		return
+	}
+	user, err := userRepo.Get(userID)
+	if err != nil || user.NodeId == "" {
+		return
+	}
+	nodeID := warpnet.FromStringToPeerID(user.NodeId)
+	if nodeID == "" {
+		return
+	}
+	rater.Observe(nodeID, rating.KindModerationUpheld)
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the

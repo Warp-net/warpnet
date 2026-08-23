@@ -29,6 +29,7 @@ package middleware
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/rating"
@@ -131,11 +132,48 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
 			p.observe(s, rating.KindRateLimitHit)
+			p.observeWriteFlood(s, route, remotePeer)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil
 		}
 		return next(data, s)
+	}
+}
+
+const (
+	// writeFloodWindow and writeFloodThreshold separate a peer that
+	// briefly outran a write limit from one that keeps hammering it.
+	// Only the second is an application-level offence; the first is
+	// already covered by the network-level rate-limit hit.
+	writeFloodWindow    = 5 * time.Minute
+	writeFloodThreshold = 20
+	writeFloodCacheSize = 1024
+)
+
+// observeWriteFlood charges the application dimension once a peer has
+// been refused on write routes often enough in one window that it
+// cannot be ordinary posting.
+func (p *WarpMiddleware) observeWriteFlood(
+	s warpnet.WarpStream, route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
+) {
+	if p == nil || p.writeFlood == nil || route.IsGet() {
+		return
+	}
+	key := remotePeer.String()
+
+	p.writeFloodMx.Lock()
+	counter, ok := p.writeFlood.Get(key)
+	if !ok {
+		counter = new(atomic.Int64)
+		p.writeFlood.Add(key, counter)
+	}
+	p.writeFloodMx.Unlock()
+
+	// Exactly at the threshold, so one charge per window rather than
+	// one per request past it.
+	if counter.Add(1) == writeFloodThreshold {
+		p.observe(s, rating.KindWriteFlood)
 	}
 }
 

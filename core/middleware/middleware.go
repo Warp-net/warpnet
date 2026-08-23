@@ -29,6 +29,7 @@ package middleware
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/rating"
@@ -70,6 +71,9 @@ type WarpMiddleware struct {
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
+	writeFloodMx sync.Mutex
+	writeFlood   *lru.LRU[string, *atomic.Int64]
+
 	// rater is never nil: it starts as rating.Nop, which reports
 	// everyone as trusted, so a middleware built before the rating
 	// store exists penalises nobody.
@@ -83,7 +87,10 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
-		rater:           rating.Nop{},
+		writeFlood: lru.NewLRU[string, *atomic.Int64](
+			writeFloodCacheSize, nil, writeFloodWindow,
+		),
+		rater: rating.Nop{},
 	}
 	return wm
 }
@@ -118,5 +125,8 @@ func (p *WarpMiddleware) Close() {
 	}
 	if p.rateLimiters != nil {
 		closeExpirableLRU(p.rateLimiters)
+	}
+	if p.writeFlood != nil {
+		closeExpirableLRU(p.writeFlood)
 	}
 }

@@ -300,6 +300,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
 		}
+		// Caught here rather than at the sixteen VerifyAuthorship call
+		// sites: the error already means exactly the offence — this
+		// peer sent an event claiming to act for someone else.
+		if errors.Is(err, warpnet.ErrForeignAuthor) {
+			n.observePeer(s, rating.KindForeignAuthorship)
+		}
+
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			clip := data
 			if len(clip) > 500 { //nolint:mnd

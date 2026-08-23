@@ -42,12 +42,14 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/moderator/isolation"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/retrier"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -83,6 +85,8 @@ type ModeratorNode interface {
 	ID() warpnet.WarpPeerID
 	NodeInfo() warpnet.NodeInfo
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
+	// Rating is never nil; it is rating.Nop until the store is built.
+	Rating() rating.Rater
 }
 
 type Publisher interface {
@@ -129,8 +133,26 @@ type Moderator struct {
 	judgedMx sync.Mutex
 	judged   map[string]string
 
+	// clearedReports counts reports the quorum threw out, per reporting
+	// node. Only a moderator sees both a report and its outcome, so
+	// this is the only vantage point from which a reporter's accuracy
+	// is observable at all.
+	clearedMx      sync.Mutex
+	clearedReports *expirable.LRU[string, *atomic.Int64]
+
 	isClosed *atomic.Bool
 }
+
+const (
+	// falseReportWindow and falseReportThreshold decide when groundless
+	// reporting stops being a mistake. Reporting in good faith and
+	// being wrong must cost nothing — people misjudge content, and a
+	// network that punishes the first wrong report stops getting
+	// reports at all.
+	falseReportWindow    = 24 * time.Hour
+	falseReportThreshold = 5
+	falseReportCacheSize = 512
+)
 
 func NewModerator(
 	ctx context.Context,
@@ -141,15 +163,18 @@ func NewModerator(
 	privKey ed25519.PrivateKey,
 ) (*Moderator, error) {
 	m := &Moderator{
-		ctx:      ctx,
-		node:     node,
-		sub:      sub,
-		votes:    votes,
-		privKey:  privKey,
-		retrier:  retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
-		ledger:   audit.NewLedger(),
-		corpus:   audit.NewCorpus(),
-		judged:   make(map[string]string, judgedCapacity),
+		ctx:     ctx,
+		node:    node,
+		sub:     sub,
+		votes:   votes,
+		privKey: privKey,
+		retrier: retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
+		ledger:  audit.NewLedger(),
+		corpus:  audit.NewCorpus(),
+		judged:  make(map[string]string, judgedCapacity),
+		clearedReports: expirable.NewLRU[string, *atomic.Int64](
+			falseReportCacheSize, nil, falseReportWindow,
+		),
 		isClosed: new(atomic.Bool),
 	}
 	m.isolation = isolation.NewIsolationProtocol(pub, privKey)
@@ -317,6 +342,32 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 	}
 }
 
+// observeClearedReport charges a node that keeps filing reports the
+// quorum throws out. Threshold, not per-report: an honest reader who
+// misjudges a post must pay nothing, while a node using the report
+// route to harass costs the network real model time.
+func (m *Moderator) observeClearedReport(rep event.ReportEvent) {
+	if m == nil || m.clearedReports == nil || rep.ReporterNodeID == "" {
+		return
+	}
+	reporter := warpnet.FromStringToPeerID(rep.ReporterNodeID)
+	if reporter == "" {
+		return
+	}
+
+	m.clearedMx.Lock()
+	counter, ok := m.clearedReports.Get(rep.ReporterNodeID)
+	if !ok {
+		counter = new(atomic.Int64)
+		m.clearedReports.Add(rep.ReporterNodeID, counter)
+	}
+	m.clearedMx.Unlock()
+
+	if counter.Add(1) == falseReportThreshold {
+		m.node.Rating().Observe(reporter, rating.KindFalseReportBurst)
+	}
+}
+
 // assessment is what this moderator made of a reported object: the ballot
 // it will cast, plus the text the engine actually judged. The text is kept
 // so a decided round can file it as an audit reference.
@@ -463,6 +514,7 @@ func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []
 	m.notifyReporter(rep, outcome, voters)
 
 	if bool(outcome.Result) {
+		m.observeClearedReport(rep)
 		return
 	}
 

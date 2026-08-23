@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -102,7 +103,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		users stubModerationUserUpdater,
 		timeline stubModerationTimelineDeleter,
 	) func([]byte, interface{}) (any, error) {
-		h := StreamModerationResultHandler(notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}})
+		h := StreamModerationResultHandler(notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}}, rating.Nop{})
 		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
 	}
 
