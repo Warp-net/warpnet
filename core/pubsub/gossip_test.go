@@ -121,7 +121,7 @@ func TestNewDiscoveryTopicHandler(t *testing.T) {
 
 	t.Run("empty body", func(t *testing.T) {
 		th := NewDiscoveryTopicHandler(func(warpnet.WarpAddrInfo) {})
-		data, _ := json.Marshal(pubsubDiscoveryMessage{Body: nil})
+		data, _ := json.Marshal(pubsubDiscoveryEnvelope{Body: nil})
 		assert.ErrorIs(t, th.Handler(data), ErrPubsubEmptyMessage)
 	})
 
@@ -130,9 +130,9 @@ func TestNewDiscoveryTopicHandler(t *testing.T) {
 		th := NewDiscoveryTopicHandler(func(info warpnet.WarpAddrInfo) {
 			got = append(got, info.ID)
 		})
-		data, err := json.Marshal(pubsubDiscoveryMessage{
-			Body: []warpnet.WarpAddrInfo{{ID: peerID}},
-		})
+		body, err := json.Marshal([]warpnet.WarpAddrInfo{{ID: peerID}})
+		assert.NoError(t, err)
+		data, err := json.Marshal(pubsubDiscoveryEnvelope{Body: body})
 		assert.NoError(t, err)
 		assert.NoError(t, th.Handler(data))
 		assert.Equal(t, []peer.ID{peerID}, got)

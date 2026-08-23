@@ -28,8 +28,24 @@ resulting from the use or misuse of this software.
 package discovery
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/hashicorp/golang-lru/v2/expirable"
+)
+
+// perPeerCapacity is how many discovery events one peer may spend in
+// the shared budget before it is throttled on its own. The global
+// bucket alone could not tell "twelve new peers" from "one peer twelve
+// times", so a single chatty gossiper starved discovery for everyone.
+const (
+	perPeerCapacity      = 4
+	perPeerLeakPer10Sec  = 1
+	perPeerCacheSize     = 1024
+	perPeerCacheLifetime = 10 * time.Minute
 )
 
 type leakyBucketRateLimiter struct {
@@ -76,4 +92,54 @@ func (b *leakyBucketRateLimiter) Allow() bool {
 	}
 
 	return false
+}
+
+// peerLimiter throttles discovery per source peer on top of the global
+// budget, and scales a peer's allowance down with its standing so an
+// offender's entries are the first dropped under pressure.
+type peerLimiter struct {
+	mx      sync.Mutex
+	buckets *expirable.LRU[string, *leakyBucketRateLimiter]
+	band    func(warpnet.WarpPeerID) rating.Band
+}
+
+func newPeerLimiter(band func(warpnet.WarpPeerID) rating.Band) *peerLimiter {
+	return &peerLimiter{
+		buckets: expirable.NewLRU[string, *leakyBucketRateLimiter](
+			perPeerCacheSize, nil, perPeerCacheLifetime,
+		),
+		band: band,
+	}
+}
+
+func (p *peerLimiter) Allow(id warpnet.WarpPeerID) bool {
+	if p == nil {
+		return true
+	}
+	key := id.String()
+
+	p.mx.Lock()
+	bucket, ok := p.buckets.Get(key)
+	if !ok {
+		capacity := perPeerCapacity
+		if p.band != nil {
+			scaled := int(float64(capacity) * rating.LimitMultiplier(p.band(id)))
+			if scaled < 1 {
+				scaled = 1
+			}
+			capacity = scaled
+		}
+		bucket = newRateLimiter(capacity, perPeerLeakPer10Sec)
+		p.buckets.Add(key, bucket)
+	}
+	p.mx.Unlock()
+
+	return bucket.Allow()
+}
+
+func (p *peerLimiter) Close() {
+	if p == nil || p.buckets == nil {
+		return
+	}
+	p.buckets.Purge()
 }

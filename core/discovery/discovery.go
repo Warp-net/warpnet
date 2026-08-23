@@ -38,6 +38,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -58,6 +59,19 @@ type DiscoveryInfoStorer interface {
 	SetMaxNodePriority(pid warpnet.WarpPeerID)
 	SetMinNodePriority(pid warpnet.WarpPeerID)
 }
+
+// BackoffConnector dials through the node's backoff, so a dead peer
+// that gossip keeps republishing is not redialled forever.
+type BackoffConnector interface {
+	Connect(warpnet.WarpAddrInfo) error
+}
+
+// probeInterval is how long a peer stays "recently probed". Within it
+// we do not ask the same peer for its info again, however many times
+// gossip, mDNS and the DHT rediscover it. Without this the network
+// spent O(N²) info requests re-learning what it already knew, and any
+// node answering an info request discovered its asker and asked back.
+const probeInterval = 30 * time.Minute
 
 type NodeStorer interface {
 	BlocklistRemove(peerId string) error
@@ -98,8 +112,9 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
-	ownId   warpnet.WarpPeerID
-	limiter *leakyBucketRateLimiter
+	ownId       warpnet.WarpPeerID
+	limiter     *leakyBucketRateLimiter
+	peerLimiter *peerLimiter
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -107,8 +122,23 @@ type discoveryService struct {
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
+	// probed remembers who we already asked for info recently, so
+	// rediscovering a known peer costs nothing.
+	probed *expirable.LRU[warpnet.WarpPeerID, struct{}]
+
+	rater rating.Rater
 
 	m MetricsOnlineDiscoverer
+}
+
+// SetRating attaches the node's rating store: discovery both reports
+// flooders and gives worse-rated peers a smaller share of the budget.
+func (s *discoveryService) SetRating(r rating.Rater) {
+	if s == nil || r == nil {
+		return
+	}
+	s.rater = r
+	s.peerLimiter = newPeerLimiter(r.EffectiveBand)
 }
 
 //goland:noinspection ALL
@@ -127,10 +157,12 @@ func NewDiscoveryService(
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
+		peerLimiter:     newPeerLimiter(nil),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
+		probed:          newProbedCache(),
 		m:               m,
 	}
 }
@@ -140,12 +172,18 @@ func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *d
 	return &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
+		peerLimiter:     newPeerLimiter(nil),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
+		probed:          newProbedCache(),
 		m:               m,
 	}
+}
+
+func newProbedCache() *expirable.LRU[warpnet.WarpPeerID, struct{}] {
+	return expirable.NewLRU[warpnet.WarpPeerID, struct{}](4096, nil, probeInterval) //nolint:mnd
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -221,6 +259,15 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		return
 	}
 
+	// Per-peer first: one chatty gossiper must not be able to spend
+	// the whole shared budget and starve discovery of everyone else.
+	if !s.peerLimiter.Allow(pi.ID) {
+		log.Debugf("discovery: source '%s': peer over its own budget: %s", source, pi.ID.String())
+		if s.rater != nil {
+			s.rater.Observe(pi.ID, rating.KindDiscoveryFlood)
+		}
+		return
+	}
 	if !s.limiter.Allow() {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
@@ -259,7 +306,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	pi := warpnet.WarpAddrInfo{ID: peer.ID, Addrs: peer.Addrs}
 
-	err := s.node.SimpleConnect(pi)
+	err := s.connect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': connecting is backoffed: %s", peer.Source, pi.ID)
 		s.m.PushStatusOffline(pi.ID.String())
@@ -277,6 +324,9 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
 		s.m.PushStatusOffline(pi.ID.String())
+		if s.rater != nil {
+			s.rater.Observe(pi.ID, rating.KindDialFailure)
+		}
 		return
 	}
 
@@ -284,6 +334,15 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Infof("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
 		s.m.PushStatusOnline(pi.ID.String())
 		s.node.SetMaxNodePriority(pi.ID)
+		return
+	}
+
+	// Every rediscovery of a peer used to cost a full info round trip,
+	// so republished gossip alone produced O(N²) requests across the
+	// network. Ask at most once per probeInterval.
+	if !s.shouldProbe(peer.ID) {
+		log.Debugf("discovery: source '%s': already probed recently: %s", peer.Source, pi.ID.String())
+		s.m.PushStatusOnline(pi.ID.String())
 		return
 	}
 
@@ -362,7 +421,7 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 	pi := warpnet.WarpAddrInfo{ID: peer.ID, Addrs: peer.Addrs}
 
-	err := s.node.SimpleConnect(pi)
+	err := s.connect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': relay handle: connecting is backoffed: %s", peer.Source, pi.ID)
 		s.m.PushStatusOffline(pi.ID.String())
@@ -392,6 +451,10 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 	s.m.PushStatusOnline(pi.ID.String())
 
+	if !s.shouldProbe(peer.ID) {
+		return
+	}
+
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
 		log.Warnf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
@@ -406,6 +469,30 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
+}
+
+// shouldProbe reports whether this peer may be asked for its info now,
+// and marks it probed if so.
+func (s *discoveryService) shouldProbe(id warpnet.WarpPeerID) bool {
+	if s == nil || s.probed == nil {
+		return true
+	}
+	if s.probed.Contains(id) {
+		return false
+	}
+	s.probed.Add(id, struct{}{})
+	return true
+}
+
+// connect dials through the node's backoff when it offers one. The
+// discovery loop used to call SimpleConnect, the raw host dial, which
+// skipped the backoff entirely — so a dead peer that gossip kept
+// republishing was redialled forever.
+func (s *discoveryService) connect(pi warpnet.WarpAddrInfo) error {
+	if backoffer, ok := s.node.(BackoffConnector); ok {
+		return backoffer.Connect(pi)
+	}
+	return s.node.SimpleConnect(pi)
 }
 
 const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")
@@ -485,6 +572,7 @@ func (s *discoveryService) Close() {
 		return
 	}
 	s.discoveryTicker.Stop()
+	s.peerLimiter.Close()
 	close(s.stopChan)
 	close(s.discoveryChan)
 	log.Infoln("discovery: closed")

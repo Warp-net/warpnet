@@ -30,6 +30,7 @@ package pubsub
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -47,6 +48,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
@@ -654,11 +656,32 @@ func (g *Gossip) Close() (err error) {
 	return err
 }
 
-type pubsubDiscoveryMessage struct {
-	Body []warpnet.WarpAddrInfo `json:"body"`
+type pubsubDiscoveryEnvelope struct {
+	Body   json.RawMessage `json:"body"`
+	NodeId string          `json:"node_id"`
 }
 
+const discoveryEchoCacheSize = 512
+
+// discoveryEchoTTL is how long an announcement is remembered as
+// already handled. Slightly longer than the publish interval plus its
+// jitter, so a republication of an unchanged peer list is recognised
+// while a genuinely new list still gets through.
+const discoveryEchoTTL = 7 * time.Minute
+
 func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandler {
+	// Every topic is relayed, so one announcement reaches a node by
+	// several paths, and the publisher repeats it every few minutes
+	// whether or not anything changed. Feeding each copy into
+	// discovery meant re-learning the same peers over and over. Key
+	// the dedup on the announcement's content, not on a sequence
+	// number: an unsigned counter on the wire would let anyone
+	// suppress a peer's announcements by publishing a huge one under
+	// its id.
+	seen := expirable.NewLRU[string, [sha256.Size]byte](
+		discoveryEchoCacheSize, nil, discoveryEchoTTL,
+	)
+
 	return TopicHandler{
 		TopicName: pubSubDiscoveryTopic,
 		Handler: func(data []byte) error {
@@ -666,16 +689,33 @@ func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandl
 				return nil
 			}
 
-			var msg pubsubDiscoveryMessage
-			if err := json.Unmarshal(data, &msg); err != nil {
+			var envelope pubsubDiscoveryEnvelope
+			if err := json.Unmarshal(data, &envelope); err != nil {
 				return fmt.Errorf("pubsub: discovery: unmarshal pubsub message: %w %s", err, data)
 			}
 
-			if len(msg.Body) == 0 {
+			if len(envelope.Body) == 0 {
 				return fmt.Errorf("pubsub: discovery: %w: %s", ErrPubsubEmptyMessage, string(data))
 			}
 
-			for _, info := range msg.Body {
+			var infos []warpnet.WarpAddrInfo
+			if err := json.Unmarshal(envelope.Body, &infos); err != nil {
+				return fmt.Errorf("pubsub: discovery: unmarshal peer infos: %w %s", err, data)
+			}
+			if len(infos) == 0 {
+				return fmt.Errorf("pubsub: discovery: %w: %s", ErrPubsubEmptyMessage, string(data))
+			}
+
+			if envelope.NodeId != "" {
+				digest := sha256.Sum256(envelope.Body)
+				if previous, ok := seen.Get(envelope.NodeId); ok && previous == digest {
+					log.Debugf("pubsub: discovery: unchanged announcement from %s, skipped", envelope.NodeId)
+					return nil
+				}
+				seen.Add(envelope.NodeId, digest)
+			}
+
+			for _, info := range infos {
 				discHandler(info)
 			}
 			return nil
