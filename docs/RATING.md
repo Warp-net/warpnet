@@ -651,22 +651,19 @@ type Config struct {
     Acquainted Acquaintance     // how long we have known an observer
 }
 
-// Storer is the subset of the node's CRDT replica this store needs.
-// Every node type has one — see §5.1.
-type Storer interface {
+// Replica is the subset of the node's one CRDT replica this store needs:
+// the datastore surface plus the merged-delta hooks. crdt.Store satisfies
+// it; nothing in this package imports core/crdt.
+type Replica interface {
     Get(context.Context, ds.Key) ([]byte, error)
     Put(context.Context, ds.Key, []byte) error
     Delete(context.Context, ds.Key) error
     Query(context.Context, ds.Query) (ds.Results, error)
+    OnPut(func(ds.Key, []byte))
+    OnDelete(func(ds.Key))
 }
 
-// Opener hands over that replica once the store has hooks to give it.
-// The indirection exists because the hooks and the replica are mutually
-// dependent at construction time — and it is also what keeps this
-// package free of any dependency on core/crdt.
-type Opener func(Hooks) (Storer, error)
-
-func NewStore(cfg Config, open Opener) (*Store, error)
+func NewStore(cfg Config, replica Replica) (*Store, error)
 
 // write path — non-blocking, buffered, folded into hour buckets,
 // flushed every cfg.Flush. The error is the caller's own fault, not the
@@ -695,29 +692,35 @@ score callback, a middleware, a libp2p notifier) logs it and carries on.
 `Config` carries no generation field: `NewStore` mints one per call, exactly as
 `NewCRDTStatsStore` does at `core/crdt/stats.go:197`.
 
-Narrow interfaces for injection, so no call site depends on the concrete store:
+What everything else holds is not the store but the **Handle** — one per
+node process, created with the node, shared by middleware, discovery,
+gossip and the moderator, and the only rating API an enforcement point
+sees:
 
 ```go
-// core/rating/reporter.go
-type Reporter interface {
-    Record(subject warpnet.WarpPeerID, k Kind) error
-}
+// core/rating/handle.go
+type Handle struct{ /* atomic slot */ }
 
-type Scorer interface {
+func NewHandle() *Handle
+func (h *Handle) Set(r Rater)                         // attach the store, safe while serving
+func (h *Handle) Record(subject warpnet.WarpPeerID, k Kind)
+func (h *Handle) Band(subject warpnet.WarpPeerID) Band
+```
+
+The Handle owns everything that would otherwise be reimplemented at
+every call site: the no-store default (nobody is penalised), the
+atomic swap of the store built after gossip — on a moderator, after the
+node is already serving — the fail-open policy on a read failure, and
+the logging of refused records. Consumers hold one field and call two
+methods; none of them know a store exists.
+
+```go
+// core/rating/reporter.go — the store's surface, held only by the Handle
+type Rater interface {
+    Record(subject warpnet.WarpPeerID, k Kind) error
     Score(subject warpnet.WarpPeerID) (Score, error)
     Band(subject warpnet.WarpPeerID) (Band, error)
 }
-
-// Rater is both halves, which is what most call sites actually hold.
-type Rater interface {
-    Reporter
-    Scorer
-}
-
-// Nop is the zero-cost stand-in for nodes and tests without a store.
-// Nop.Band always returns BandTrusted, so an absent store means
-// "everyone is fine" and nothing is ever penalised by accident.
-type Nop struct{}
 ```
 
 Wiring — identical shape on all three, differing only in the backing datastore
@@ -731,14 +734,14 @@ and the dimension set:
 
 Each builds its one replica — `crdt.NewGossipBroadcaster(ctx, gossip)` then
 `crdt.NewStore(ctx, broadcaster, store, node, router)` — and hands it to
-`crdt.NewCRDTRatingStore`, and on the member node to `crdt.NewCRDTStatsStore`
-as well. Neither store owns it: whoever built it closes it.
+`rating.NewNodeStore(ctx, replica, node, privKey, nodeType)`, then
+`handle.Set(store)`. Neither store owns the replica: whoever built it closes it.
 
-The construction lives in `core/crdt/rating.go`, beside `core/crdt/stats.go`,
-because that is where this codebase builds CRDT-replicated stores; `core/rating`
-holds the model and nothing that knows about replication. That is also why
-`rating.NewStore` takes an `Opener` rather than a `*crdt.Store`: the
-dependency runs `core/crdt` → `core/rating` and never back.
+All rating construction lives in `core/rating` (`NewNodeStore` fills the
+dimensions from the node type and the acquaintance gate from live libp2p
+connections); all replica construction lives in `core/crdt`. Neither package
+imports the other: `rating.Replica` is the interface `crdt.Store` happens to
+satisfy, and the assemblies are the only place the two meet.
 
 Two interface widenings are needed, both satisfied by the existing concrete
 type — `*distributedHashTable` already implements `FindProvidersAsync`
@@ -807,9 +810,10 @@ New files:
 | `core/rating/index.go` | in-memory index, per-subject revisions, startup scan, LRU eviction |
 | `core/rating/aggregate.go` | decay, generation summing, subjective and public aggregation, caps |
 | `core/rating/enforce.go` | pure band → knob mappings |
-| `core/rating/reporter.go` | `Reporter`, `Scorer`, `Rater`, `Nop` |
-| `core/rating/store.go` | `Store`, `Config`, `Opener`, generation minting, buffered writer, flush, GC |
-| `core/crdt/rating.go` | `NewCRDTRatingStore` — the store plus its CRDT replica, beside `core/crdt/stats.go` |
+| `core/rating/reporter.go` | `Rater` — the store's surface, held only by the Handle |
+| `core/rating/handle.go` | `Handle` — the one rating object everything else holds |
+| `core/rating/store.go` | `Store`, `Config`, `Replica`, generation minting, buffered writer, flush, GC |
+| `core/rating/node.go` | `NewNodeStore` — the store as a node builds it, acquaintance from live connections |
 | `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` |
 | `domain/rating.go` | `NodeRating`, `DimensionRating`, `OffenceTally` |
 | `frontend/src/views/Settings/Rating.vue` | own rating, per-dimension bars, recent offences |
@@ -820,10 +824,10 @@ Edited files:
 |---|---|
 | `event/paths.go` | two new routes |
 | `event/event.go` | `GetRatingEvent` |
-| `core/middleware/middleware.go` | `SetRating(Reporter, Scorer)` on `WarpMiddleware` — a setter rather than a constructor argument, so the three `NewWarpMiddleware` call sites stay untouched |
+| `core/middleware/middleware.go` | `NewWarpMiddleware` takes the `*rating.Handle`; `record` filters self-streams and charges through it |
 | `core/middleware/auth.go` | `Record` at the five sites in §4.1 |
 | `core/middleware/rate-limiter.go` | `Record(KindRateLimitHit)`; `limitForRoute(route, band)`; bucket carries its band and is rebuilt on change; register the two new routes under `limitRead` |
-| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; `SetRating` passthrough |
+| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; the node takes the `*rating.Handle` at construction |
 | `core/node/priority.go` | `rating` tag; `Record(KindConnectionFlap)` |
 | `core/pubsub/gossip.go` | `WithPeerScore` + `AppSpecificScore`; fix (c) |
 | `core/dht/options.go`, `core/dht/dht.go` | `QueryFilter`/`RoutingTableFilter` options; fix (e) |
