@@ -69,6 +69,7 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
+	rating           *rating.Handle
 	ratingDb         RatingStorer
 	authRepo         AuthProvider
 	userRepo         UserProvider
@@ -81,13 +82,6 @@ type MemberNode struct {
 	privKey          ed25519.PrivateKey
 	metrics          MetricsOnlinePusher
 	ownerId, network string
-}
-
-func (m *MemberNode) raterOrNop() rating.Rater {
-	if m == nil || m.ratingDb == nil {
-		return rating.Nop{}
-	}
-	return m.ratingDb
 }
 
 func NewMemberNode(
@@ -129,7 +123,8 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
+	ratingHandle := rating.NewHandle()
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics, ratingHandle)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -171,6 +166,7 @@ func NewMemberNode(
 	mn := &MemberNode{
 		ctx:           ctx,
 		opts:          opts,
+		rating:        ratingHandle,
 		discService:   discService,
 		mdnsService:   mdnsService,
 		pubsubService: pubsubService,
@@ -195,6 +191,7 @@ func NewMemberNode(
 func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
+		m.rating,
 		m.opts...,
 	)
 	if err != nil {
@@ -203,6 +200,7 @@ func (m *MemberNode) Start() (err error) {
 
 	m.node.SetOutbox(database.NewOutboxRepo(m.db))
 
+	m.pubsubService.Gossip().SetRating(m.rating)
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {
 		return err
@@ -228,18 +226,15 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.ratingDb, err = crdt.NewCRDTRatingStore(
-		m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode,
-	)
+	store, err := rating.NewNodeStore(m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode)
 	if err != nil {
 		log.Errorf("member: failed to initialize rating store: %v", err)
+	} else {
+		m.ratingDb = store
+		m.rating.Set(store)
 	}
-	m.node.SetRating(m.raterOrNop())
-	m.discService.SetRating(m.raterOrNop())
-	m.pubsubService.Gossip().SetRating(m.raterOrNop())
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
-	m.mw.SetRating(m.raterOrNop())
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.rating)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -480,7 +475,7 @@ func (m *MemberNode) adminHandlers(
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
 			handler.StreamModerationResultHandler(
-				m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo, m.raterOrNop(),
+				m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo, m.rating,
 			),
 		},
 		{
