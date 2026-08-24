@@ -52,7 +52,7 @@ func bandOf(t *testing.T, s *Store, id warpnet.WarpPeerID) Band {
 	return band
 }
 
-func newTestStore(t *testing.T, self identity, store Storer, clock *fixedClock) *Store {
+func newTestStore(t *testing.T, self identity, store Replica, clock *fixedClock) *Store {
 	t.Helper()
 	s, err := NewStore(Config{
 		Ctx:        t.Context(),
@@ -61,7 +61,7 @@ func newTestStore(t *testing.T, self identity, store Storer, clock *fixedClock) 
 		Dimensions: []Dimension{Network, Application},
 		Flush:      time.Hour, // tests drive the flush by hand
 		Now:        clock.Now,
-	}, opener(store))
+	}, store)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	return s
@@ -95,7 +95,7 @@ func TestStoreRefusesKindsOutsideItsRole(t *testing.T) {
 		Dimensions: []Dimension{Network}, // a relay
 		Flush:      time.Hour,
 		Now:        clock.Now,
-	}, opener(store))
+	}, store)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -453,18 +453,43 @@ func TestSettledBucketsAreFreed(t *testing.T) {
 	}
 }
 
-func TestNopRaterNeverPenalises(t *testing.T) {
-	var r Rater = Nop{}
+// A handle with no store attached is the "rating not built" state on
+// every node type: it must penalise nobody and never panic.
+func TestEmptyHandleNeverPenalises(t *testing.T) {
+	h := NewHandle()
 	id := warpnet.FromStringToPeerID("12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo")
-	require.NoError(t, r.Record(id, KindBadSignature))
 
-	score, err := r.Score(id)
-	require.NoError(t, err)
-	assert.Equal(t, MaxScore, score)
+	assert.NotPanics(t, func() { h.Record(id, KindBadSignature) })
+	assert.Equal(t, BandTrusted, h.Band(id))
 
-	band, err := r.Band(id)
-	require.NoError(t, err)
-	assert.Equal(t, BandTrusted, band)
+	var nilHandle *Handle
+	assert.NotPanics(t, func() { nilHandle.Record(id, KindBadSignature) })
+	assert.Equal(t, BandTrusted, nilHandle.Band(id))
+}
+
+// The store fails a read; the handle must fail open, not closed.
+func TestHandleFailsOpenOnAnUnreadableStore(t *testing.T) {
+	self := newIdentity(t)
+	other := newIdentity(t)
+	clock := newClock()
+	store := newMemStore()
+	s := newTestStore(t, self, store, clock)
+
+	mustRecordN(t, s, other.id, KindBadSignature, 4)
+	flushNow(t, s)
+
+	h := NewHandle()
+	h.Set(s)
+	require.Equal(t, BandFloor, h.Band(other.id), "with a working store the handle reports the real band")
+
+	// Evict the subject and break the datastore: the reload fails.
+	s.idx.lru.Remove(other.id.String())
+	store.mu.Lock()
+	store.queryErr = errors.New("datastore is down")
+	store.mu.Unlock()
+
+	assert.Equal(t, BandTrusted, h.Band(other.id),
+		"a standing the handle cannot read must cost the peer nothing")
 }
 
 func TestNilStoreIsSafe(t *testing.T) {

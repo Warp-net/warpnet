@@ -50,6 +50,12 @@ func (f *fakeRater) kinds() []rating.Kind {
 
 type Score = rating.Score
 
+func handleOf(r rating.Rater) *rating.Handle {
+	h := rating.NewHandle()
+	h.Set(r)
+	return h
+}
+
 func callAuth(
 	t *testing.T, mw *WarpMiddleware, local, remote warpnet.WarpPeerID, route string, body []byte,
 ) {
@@ -85,8 +91,7 @@ func TestAuthChargesTheRightOffences(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rater := &fakeRater{}
-			mw := &WarpMiddleware{ownNodeId: local}
-			mw.SetRating(rater)
+			mw := &WarpMiddleware{ownNodeId: local, rating: handleOf(rater)}
 			callAuth(t, mw, local, remote, event.PUBLIC_GET_INFO, tc.body)
 			assert.Equal(t, []rating.Kind{tc.want}, rater.kinds())
 		})
@@ -96,8 +101,7 @@ func TestAuthChargesTheRightOffences(t *testing.T) {
 func TestAuthDoesNotChargeSelfStreams(t *testing.T) {
 	self := warpnet.WarpPeerID("12D3KooWSelfSelfSelfSelfSelfSelfSelfSelfSe")
 	rater := &fakeRater{}
-	mw := &WarpMiddleware{ownNodeId: self}
-	mw.SetRating(rater)
+	mw := &WarpMiddleware{ownNodeId: self, rating: handleOf(rater)}
 
 	callAuth(t, mw, self, self, event.PUBLIC_GET_INFO, []byte("not json at all"))
 	assert.Empty(t, rater.kinds())
@@ -109,7 +113,7 @@ func TestRateLimitHitIsCharged(t *testing.T) {
 
 	rater := &fakeRater{}
 	mw := newLimiterMiddlewareForTest(t, local)
-	mw.SetRating(rater)
+	mw.rating = handleOf(rater)
 
 	// limitPairing is the tightest bucket: burst 5.
 	route := event.PRIVATE_POST_PAIR
@@ -128,7 +132,7 @@ func TestDegradedPeerGetsATighterBucket(t *testing.T) {
 
 	rater := &fakeRater{band: rating.BandDegraded}
 	mw := newLimiterMiddlewareForTest(t, local)
-	mw.SetRating(rater)
+	mw.rating = handleOf(rater)
 
 	// limitPairing burst 5, degraded multiplier 0.25 -> 1.
 	route := event.PRIVATE_POST_PAIR
@@ -143,7 +147,7 @@ func TestUnreadableStandingDoesNotTightenAnything(t *testing.T) {
 
 	rater := &fakeRater{band: rating.BandFloor, bandErr: errors.New("datastore is down")}
 	mw := newLimiterMiddlewareForTest(t, local)
-	mw.SetRating(rater)
+	mw.rating = handleOf(rater)
 
 	route := event.PRIVATE_POST_PAIR
 	for i := range 5 {
@@ -158,7 +162,7 @@ func TestBucketIsRebuiltWhenTheBandChanges(t *testing.T) {
 
 	rater := &fakeRater{band: rating.BandTrusted}
 	mw := newLimiterMiddlewareForTest(t, local)
-	mw.SetRating(rater)
+	mw.rating = handleOf(rater)
 
 	route := stream.WarpRoute(event.PRIVATE_POST_PAIR)
 	trusted := mw.bucket(route, remote)
@@ -178,24 +182,25 @@ func TestScaleForBandNeverStarvesAPeer(t *testing.T) {
 }
 
 // The moderator attaches its rating store after the node is already
-// serving streams, so SetRating runs concurrently with band reads.
-// Fails under -race if the rater is ever a plain field again.
+// serving streams, so Handle.Set runs concurrently with band reads.
+// Fails under -race if the handle's slot is ever a plain field again.
 func TestSetRatingIsSafeWhileServing(t *testing.T) {
 	remote := warpnet.WarpPeerID("12D3KooWRemoteRemoteRemoteRemoteRemoteRemo")
-	mw := NewWarpMiddleware("12D3KooWLocalLocalLocalLocalLocalLocalLoca", nil)
+	h := rating.NewHandle()
+	mw := NewWarpMiddleware("12D3KooWLocalLocalLocalLocalLocalLocalLoca", nil, h)
 	t.Cleanup(mw.Close)
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for range 1000 {
-			_ = mw.band(remote)
+			_ = mw.rating.Band(remote)
 		}
 	}()
 	for range 1000 {
-		mw.SetRating(&fakeRater{band: rating.BandWatched})
+		h.Set(&fakeRater{band: rating.BandWatched})
 	}
 	<-done
 
-	assert.Equal(t, rating.BandWatched, mw.band(remote))
+	assert.Equal(t, rating.BandWatched, mw.rating.Band(remote))
 }
