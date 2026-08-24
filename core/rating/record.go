@@ -58,6 +58,7 @@ var (
 	ErrRecordNoSignature   = errors.New("rating: record is unsigned")
 	ErrRecordNoPubKey      = errors.New("rating: cannot derive pubkey from observer id")
 	ErrRecordNoPrivKey     = errors.New("rating: cannot sign without a private key")
+	ErrNoNode              = errors.New("rating: node and replica are required")
 
 	ErrEmptySubject     = errors.New("rating: empty subject node id")
 	ErrEmptyRecord      = errors.New("rating: empty record")

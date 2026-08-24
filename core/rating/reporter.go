@@ -29,25 +29,11 @@ package rating
 
 import "github.com/Warp-net/warpnet/core/warpnet"
 
-type Reporter interface {
+// Rater is what a Handle holds: the store's error-returning surface.
+// Enforcement points never touch it directly — they go through Handle,
+// which owns the no-store default and the fail-open policy.
+type Rater interface {
 	Record(subject warpnet.WarpPeerID, k Kind) error
-}
-
-type Scorer interface {
 	Score(subject warpnet.WarpPeerID) (Score, error)
 	Band(subject warpnet.WarpPeerID) (Band, error)
 }
-
-// Rater is both halves, which is what most call sites actually hold.
-type Rater interface {
-	Reporter
-	Scorer
-}
-
-type Nop struct{}
-
-func (Nop) Record(warpnet.WarpPeerID, Kind) error   { return nil }
-func (Nop) Score(warpnet.WarpPeerID) (Score, error) { return MaxScore, nil }
-func (Nop) Band(warpnet.WarpPeerID) (Band, error)   { return BandTrusted, nil }
-
-var _ Rater = Nop{}

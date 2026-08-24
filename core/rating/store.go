@@ -60,20 +60,18 @@ const (
 	scoreTTL = 15 * time.Second
 )
 
-// Storer is the subset of the node's CRDT replica this store needs.
-type Storer interface {
+// Replica is what this store needs from the node's CRDT replica:
+// storage, plus a subscription to every merged delta so the index
+// stays current without re-querying. crdt.Store satisfies it; the
+// dependency stays one-way — this package never imports core/crdt.
+type Replica interface {
 	Get(ctx context.Context, key ds.Key) ([]byte, error)
 	Put(ctx context.Context, key ds.Key, value []byte) error
 	Delete(ctx context.Context, key ds.Key) error
 	Query(ctx context.Context, q ds.Query) (ds.Results, error)
+	OnPut(func(k ds.Key, v []byte))
+	OnDelete(func(k ds.Key))
 }
-
-type Hooks struct {
-	Put    func(key string, value []byte)
-	Delete func(key string)
-}
-
-type Opener func(Hooks) (Storer, error)
 
 type Acquaintance interface {
 	ConnectedSince(id warpnet.WarpPeerID) (time.Time, bool)
@@ -105,7 +103,7 @@ type Store struct {
 	privKey    ed25519.PrivateKey
 	dims       []Dimension
 	now        func() time.Time
-	store      Storer
+	store      Replica
 	idx        *index
 	acquainted Acquaintance
 
@@ -122,7 +120,7 @@ type Store struct {
 	done      chan struct{}
 }
 
-func NewStore(cfg Config, open Opener) (*Store, error) {
+func NewStore(cfg Config, replica Replica) (*Store, error) {
 	if cfg.Ctx == nil {
 		return nil, errors.New("rating: nil context") //nolint:err113
 	}
@@ -174,12 +172,11 @@ func NewStore(cfg Config, open Opener) (*Store, error) {
 		done:       make(chan struct{}),
 	}
 
-	store, err := open(Hooks{Put: s.onPut, Delete: s.onDelete})
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("rating: open store: %w", err)
+	s.store = replica
+	if replica != nil {
+		replica.OnPut(func(k ds.Key, v []byte) { s.onPut(k.String(), v) })
+		replica.OnDelete(func(k ds.Key) { s.onDelete(k.String()) })
 	}
-	s.store = store
 
 	if err := s.scan(); err != nil {
 		log.Warnf("rating: initial scan: %v", err)
