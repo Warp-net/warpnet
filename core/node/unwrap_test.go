@@ -199,7 +199,7 @@ func injectBody(messageID string) StreamMiddleware {
 
 func idempotentChain(t *testing.T, messageID string, handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	t.Helper()
-	mw := middleware.NewWarpMiddleware("peer1", nil)
+	mw := middleware.NewWarpMiddleware("peer1", nil, nil)
 	t.Cleanup(mw.Close)
 	return unwrapHandler(injectBody(messageID)(mw.IdempotencyMiddleware(handler)))
 }
