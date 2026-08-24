@@ -94,7 +94,9 @@ func (m *Moderator) RecordDissent(outcome vote.Event, ballots map[string]vote.Ev
 		if id == "" {
 			continue
 		}
-		rater.Record(id, rating.KindVerdictOutlier)
+		if err := rater.Record(id, rating.KindVerdictOutlier); err != nil {
+			log.Warnf("moderator: rating dissent of %s: %v", moderatorID, err)
+		}
 	}
 }
 

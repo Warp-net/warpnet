@@ -75,8 +75,12 @@ type WarpMiddleware struct {
 	writeFloodMx sync.Mutex
 	writeFlood   *lru.LRU[string, *atomic.Int64]
 
-	rater rating.Rater
+	// rater is swapped, not assigned: the moderator attaches its store
+	// after the node is already serving streams.
+	rater atomic.Pointer[raterHolder]
 }
+
+type raterHolder struct{ rater rating.Rater }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
 	wm := &WarpMiddleware{
@@ -88,8 +92,8 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		writeFlood: lru.NewLRU[string, *atomic.Int64](
 			writeFloodCacheSize, nil, writeFloodWindow,
 		),
-		rater: rating.Nop{},
 	}
+	wm.rater.Store(&raterHolder{rater: rating.Nop{}})
 	return wm
 }
 
@@ -97,27 +101,34 @@ func (p *WarpMiddleware) SetRating(r rating.Rater) {
 	if p == nil || r == nil {
 		return
 	}
-	p.rater = r
+	p.rater.Store(&raterHolder{rater: r})
+}
+
+func (p *WarpMiddleware) raterOrNop() rating.Rater {
+	if held := p.rater.Load(); held != nil && held.rater != nil {
+		return held.rater
+	}
+	return rating.Nop{}
 }
 
 func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
-	if p == nil || p.rater == nil || s == nil || s.Conn() == nil {
+	if p == nil || s == nil || s.Conn() == nil {
 		return
 	}
 	remote := s.Conn().RemotePeer()
 	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
 		return
 	}
-	if err := p.rater.Record(remote, kind); err != nil {
+	if err := p.raterOrNop().Record(remote, kind); err != nil {
 		log.Warnf("middleware: rating %s for %s: %v", kind, remote, err)
 	}
 }
 
 func (p *WarpMiddleware) band(remote warpnet.WarpPeerID) rating.Band {
-	if p == nil || p.rater == nil {
+	if p == nil {
 		return rating.BandTrusted
 	}
-	b, err := p.rater.Band(remote)
+	b, err := p.raterOrNop().Band(remote)
 	if err != nil {
 		log.Warnf("middleware: reading standing of %s: %v", remote, err)
 		return rating.BandTrusted

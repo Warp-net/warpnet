@@ -45,10 +45,13 @@ type slot struct {
 type index struct {
 	mu   sync.RWMutex
 	data map[string]map[slot][]CountEntry
-	// rev changes whenever a subject's entries do, so a cached score
-	// knows when it is stale without comparing the entries themselves.
-	rev map[string]uint64
-	lru *lru.Cache[string, struct{}]
+	// rev holds a value unique to the subject's current entry set, so a
+	// cached score knows it is stale without comparing entries. Values
+	// come from a counter and are never reused, so a subject evicted
+	// and re-indexed can never collide with a score cached before.
+	rev     map[string]uint64
+	lastRev uint64
+	lru     *lru.Cache[string, struct{}]
 }
 
 func newIndex() (*index, error) {
@@ -61,7 +64,7 @@ func newIndex() (*index, error) {
 		func(subject string, _ struct{}) {
 			idx.mu.Lock()
 			delete(idx.data, subject)
-			idx.rev[subject]++
+			delete(idx.rev, subject)
 			idx.mu.Unlock()
 		},
 	)
@@ -72,8 +75,24 @@ func newIndex() (*index, error) {
 	return idx, nil
 }
 
-// put inserts or replaces one record's counts.
+// put inserts or replaces one record's counts, creating the subject if
+// needed. Only the full-load paths (scan, loadSubject) may call it: they
+// have just read everything the datastore holds for the subject, so the
+// entry set they build is complete.
 func (i *index) put(rec Record) {
+	i.apply(rec, true)
+}
+
+// update replaces one record's counts only if the subject is already
+// indexed, and reports whether it applied. The incremental paths — the
+// CRDT put hook and the flush — must use it: creating a subject from a
+// single record would shadow the rest of its history in the datastore,
+// and scoring would run on that sliver until the next eviction.
+func (i *index) update(rec Record) bool {
+	return i.apply(rec, false)
+}
+
+func (i *index) apply(rec Record, create bool) bool {
 	key := slot{
 		observer:   rec.Observer,
 		dim:        rec.Dim,
@@ -84,15 +103,21 @@ func (i *index) put(rec Record) {
 	i.mu.Lock()
 	slots, ok := i.data[rec.Subject]
 	if !ok {
+		if !create {
+			i.mu.Unlock()
+			return false
+		}
 		slots = make(map[slot][]CountEntry, 1)
 		i.data[rec.Subject] = slots
 	}
 	slots[key] = rec.Counts
-	i.rev[rec.Subject]++
+	i.lastRev++
+	i.rev[rec.Subject] = i.lastRev
 	i.mu.Unlock()
 
 	// Outside the lock: eviction takes the same mutex.
 	i.lru.Add(rec.Subject, struct{}{})
+	return true
 }
 
 func (i *index) drop(subject, observer string, dim Dimension, bucket int64, generation string) {
@@ -105,10 +130,13 @@ func (i *index) drop(subject, observer string, dim Dimension, bucket int64, gene
 		return
 	}
 	delete(slots, key)
-	i.rev[subject]++
 	if len(slots) == 0 {
 		delete(i.data, subject)
+		delete(i.rev, subject)
+		return
 	}
+	i.lastRev++
+	i.rev[subject] = i.lastRev
 }
 
 func (i *index) entries(subject string) []entry {
@@ -150,18 +178,10 @@ func (i *index) has(subject string) bool {
 	return ok
 }
 
+// revision is 0 for a subject with no indexed records; a score cached
+// against 0 is the empty-subject fast path.
 func (i *index) revision(subject string) uint64 {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return i.rev[subject]
-}
-
-func (i *index) subjects() []string {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	out := make([]string, 0, len(i.data))
-	for subject := range i.data {
-		out = append(out, subject)
-	}
-	return out
 }
