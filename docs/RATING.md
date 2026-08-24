@@ -651,19 +651,22 @@ type Config struct {
     Acquainted Acquaintance     // how long we have known an observer
 }
 
-// Replica is the subset of the node's one CRDT replica this store needs:
-// the datastore surface plus the merged-delta hooks. crdt.Store satisfies
-// it; nothing in this package imports core/crdt.
-type Replica interface {
+// Storer is the subset of the node's CRDT replica this store needs.
+// Every node type has one — see §5.1.
+type Storer interface {
     Get(context.Context, ds.Key) ([]byte, error)
     Put(context.Context, ds.Key, []byte) error
     Delete(context.Context, ds.Key) error
     Query(context.Context, ds.Query) (ds.Results, error)
-    OnPut(func(ds.Key, []byte))
-    OnDelete(func(ds.Key))
 }
 
-func NewStore(cfg Config, replica Replica) (*Store, error)
+// Opener hands over that replica once the store has hooks to give it.
+// The indirection exists because the hooks and the replica are mutually
+// dependent at construction time — and it is also what keeps this
+// package free of any dependency on core/crdt.
+type Opener func(Hooks) (Storer, error)
+
+func NewStore(cfg Config, open Opener) (*Store, error)
 
 // write path — non-blocking, buffered, folded into hour buckets,
 // flushed every cfg.Flush. The error is the caller's own fault, not the
@@ -827,7 +830,7 @@ Edited files:
 | `core/middleware/middleware.go` | `NewWarpMiddleware` takes the `*rating.Handle`; `record` filters self-streams and charges through it |
 | `core/middleware/auth.go` | `Record` at the five sites in §4.1 |
 | `core/middleware/rate-limiter.go` | `Record(KindRateLimitHit)`; `limitForRoute(route, band)`; bucket carries its band and is rebuilt on change; register the two new routes under `limitRead` |
-| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; the node takes the `*rating.Handle` at construction |
+| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; `SetRating` passthrough |
 | `core/node/priority.go` | `rating` tag; `Record(KindConnectionFlap)` |
 | `core/pubsub/gossip.go` | `WithPeerScore` + `AppSpecificScore`; fix (c) |
 | `core/dht/options.go`, `core/dht/dht.go` | `QueryFilter`/`RoutingTableFilter` options; fix (e) |
