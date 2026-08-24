@@ -224,14 +224,18 @@ func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, 
 	if nodeID == "" {
 		return
 	}
-	rater.Record(nodeID, rating.KindModerationUpheld)
+	if err := rater.Record(nodeID, rating.KindModerationUpheld); err != nil {
+		log.Warnf("moderation handler: rating node %s: %v", nodeID, err)
+	}
 }
 
 func chargeModerator(rater rating.Reporter, moderator warpnet.WarpPeerID) {
 	if rater == nil || moderator == "" {
 		return
 	}
-	rater.Record(moderator, rating.KindVerdictMalformed)
+	if err := rater.Record(moderator, rating.KindVerdictMalformed); err != nil {
+		log.Warnf("moderation handler: rating moderator %s: %v", moderator, err)
+	}
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the

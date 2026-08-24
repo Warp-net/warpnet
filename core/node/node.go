@@ -101,7 +101,9 @@ type WarpNode struct {
 	reachability atomic.Int64
 	prioritizer  Prioritizer
 
-	rater    rating.Rater
+	// rater is swapped, not assigned: the moderator attaches its store
+	// after the node is already serving streams.
+	rater    atomic.Pointer[raterHolder]
 	connFlap *expirable.LRU[string, *atomic.Int64]
 
 	startTime        time.Time
@@ -110,23 +112,32 @@ type WarpNode struct {
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
+type raterHolder struct{ rater rating.Rater }
+
 func (n *WarpNode) SetRating(r rating.Rater) {
 	if n == nil || r == nil {
 		return
 	}
-	n.rater = r
+	n.rater.Store(&raterHolder{rater: r})
+}
+
+func (n *WarpNode) raterOrNop() rating.Rater {
+	if held := n.rater.Load(); held != nil && held.rater != nil {
+		return held.rater
+	}
+	return rating.Nop{}
 }
 
 // recordOffence charges an offence to a remote peer.
 func (n *WarpNode) recordOffence(s warpnet.WarpStream, kind rating.Kind) {
-	if n == nil || n.rater == nil || s == nil || s.Conn() == nil {
+	if n == nil || s == nil || s.Conn() == nil {
 		return
 	}
 	remote := s.Conn().RemotePeer()
 	if remote == "" || remote == s.Conn().LocalPeer() {
 		return
 	}
-	if err := n.rater.Record(remote, kind); err != nil {
+	if err := n.raterOrNop().Record(remote, kind); err != nil {
 		log.Warnf("node: rating %s for %s: %v", kind, remote, err)
 	}
 }
@@ -195,7 +206,6 @@ func NewWarpNode(
 		eventsSub:        sub,
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
-		rater:            rating.Nop{},
 		connFlap: expirable.NewLRU[string, *atomic.Int64](
 			connFlapCacheSize, nil, connFlapWindow,
 		),
@@ -450,14 +460,14 @@ func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
 	}
 	if counter.Add(1) == connFlapThreshold {
 		// Once per window: the entry expires and starts over.
-		if err := n.rater.Record(pid, rating.KindConnectionFlap); err != nil {
+		if err := n.raterOrNop().Record(pid, rating.KindConnectionFlap); err != nil {
 			log.Warnf("node: rating connection flap of %s: %v", pid, err)
 		}
 	}
 }
 
 func (n *WarpNode) setRatingPriority(pid warpnet.WarpPeerID) {
-	band, err := n.rater.Band(pid)
+	band, err := n.raterOrNop().Band(pid)
 	if err != nil {
 		log.Warnf("node: reading standing of %s: %v", pid, err)
 		band = rating.BandTrusted

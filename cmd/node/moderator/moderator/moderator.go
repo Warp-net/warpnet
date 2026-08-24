@@ -351,7 +351,9 @@ func (m *Moderator) recordClearedReport(rep event.ReportEvent) {
 	m.clearedMx.Unlock()
 
 	if counter.Add(1) == falseReportThreshold {
-		m.node.Rating().Record(reporter, rating.KindFalseReportBurst)
+		if err := m.node.Rating().Record(reporter, rating.KindFalseReportBurst); err != nil {
+			log.Warnf("moderator: rating reporter %s: %v", reporter, err)
+		}
 	}
 }
 
