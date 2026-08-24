@@ -71,12 +71,7 @@ func (m *Moderator) ModeratorBand(peerID string) rating.Band {
 	if id == "" {
 		return rating.BandTrusted
 	}
-	band, err := m.node.Rating().Band(id)
-	if err != nil {
-		log.Warnf("moderator: reading standing of %s: %v", peerID, err)
-		return rating.BandTrusted
-	}
-	return band
+	return m.node.Rating().Band(id)
 }
 
 func (m *Moderator) RecordDissent(outcome vote.Event, ballots map[string]vote.Event) {
@@ -94,9 +89,7 @@ func (m *Moderator) RecordDissent(outcome vote.Event, ballots map[string]vote.Ev
 		if id == "" {
 			continue
 		}
-		if err := rater.Record(id, rating.KindVerdictOutlier); err != nil {
-			log.Warnf("moderator: rating dissent of %s: %v", moderatorID, err)
-		}
+		rater.Record(id, rating.KindVerdictOutlier)
 	}
 }
 

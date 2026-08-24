@@ -85,8 +85,8 @@ type ModeratorNode interface {
 	ID() warpnet.WarpPeerID
 	NodeInfo() warpnet.NodeInfo
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
-	// Rating is never nil; it is rating.Nop until the store is built.
-	Rating() rating.Rater
+	// Rating is never nil; it reports nobody until the store is built.
+	Rating() *rating.Handle
 }
 
 type Publisher interface {
@@ -351,9 +351,7 @@ func (m *Moderator) recordClearedReport(rep event.ReportEvent) {
 	m.clearedMx.Unlock()
 
 	if counter.Add(1) == falseReportThreshold {
-		if err := m.node.Rating().Record(reporter, rating.KindFalseReportBurst); err != nil {
-			log.Warnf("moderator: rating reporter %s: %v", reporter, err)
-		}
+		m.node.Rating().Record(reporter, rating.KindFalseReportBurst)
 	}
 }
 

@@ -808,4 +808,4 @@ func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
 	}
 }
 
-func (stubModeratorNode) Rating() rating.Rater { return rating.Nop{} }
+func (stubModeratorNode) Rating() *rating.Handle { return rating.NewHandle() }

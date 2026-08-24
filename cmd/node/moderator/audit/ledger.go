@@ -8,7 +8,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	log "github.com/sirupsen/logrus"
 )
 
 // Outcome is the auditor's classification of one challenge exchange.
@@ -123,17 +122,19 @@ type PeerReport struct {
 // local-first by design: every node judges from its own evidence; sharing
 // signed transcripts across nodes is a later layer.
 type Ledger struct {
-	reporter rating.Reporter
+	reporter Reporter
 
 	mu       sync.Mutex
 	peers    map[string]*peerStats
 	reported map[string]Standing
 }
 
-func NewLedger(reporter rating.Reporter) *Ledger {
-	if reporter == nil {
-		reporter = rating.Nop{}
-	}
+// Reporter is the slice of the rating this ledger files conclusions to.
+type Reporter interface {
+	Record(subject warpnet.WarpPeerID, k rating.Kind)
+}
+
+func NewLedger(reporter Reporter) *Ledger {
 	return &Ledger{
 		reporter: reporter,
 		peers:    make(map[string]*peerStats),
@@ -181,13 +182,14 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 }
 
 func (l *Ledger) report(peerID string, kind rating.Kind) {
+	if l.reporter == nil {
+		return
+	}
 	id := warpnet.FromStringToPeerID(peerID)
 	if id == "" {
 		return
 	}
-	if err := l.reporter.Record(id, kind); err != nil {
-		log.Warnf("audit: rating %s for %s: %v", kind, peerID, err)
-	}
+	l.reporter.Record(id, kind)
 }
 
 // severity orders standings so only a genuine downgrade is reported.
