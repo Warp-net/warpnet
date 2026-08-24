@@ -34,7 +34,6 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"math/rand/v2"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
@@ -118,34 +117,9 @@ type discoveryService struct {
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
 	probed     *expirable.LRU[warpnet.WarpPeerID, struct{}]
 
-	rater atomic.Pointer[raterHolder]
+	rating *rating.Handle
 
 	m MetricsOnlineDiscoverer
-}
-
-type raterHolder struct{ rater rating.Rater }
-
-func (s *discoveryService) SetRating(r rating.Rater) {
-	if s == nil || r == nil {
-		return
-	}
-	s.rater.Store(&raterHolder{rater: r})
-}
-
-func (s *discoveryService) raterOrNop() rating.Rater {
-	if held := s.rater.Load(); held != nil && held.rater != nil {
-		return held.rater
-	}
-	return rating.Nop{}
-}
-
-func (s *discoveryService) band(id warpnet.WarpPeerID) rating.Band {
-	b, err := s.raterOrNop().Band(id)
-	if err != nil {
-		log.Warnf("discovery: reading standing of %s: %v", id, err)
-		return rating.BandTrusted
-	}
-	return b
 }
 
 //goland:noinspection ALL
@@ -154,41 +128,48 @@ func NewDiscoveryService(
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
 	m MetricsOnlineDiscoverer,
+	r *rating.Handle,
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
 
+	if r == nil {
+		r = rating.NewHandle()
+	}
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
-	s := &discoveryService{
+	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
+		peerLimiter:     newPeerLimiter(r.Band),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
 		probed:          newProbedCache(),
+		rating:          r,
 		m:               m,
 	}
-	s.peerLimiter = newPeerLimiter(s.band)
-	return s
 }
 
-func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *discoveryService {
+func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer, r *rating.Handle) *discoveryService {
+	if r == nil {
+		r = rating.NewHandle()
+	}
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
-	s := &discoveryService{
+	return &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
+		peerLimiter:     newPeerLimiter(r.Band),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
 		probed:          newProbedCache(),
+		rating:          r,
 		m:               m,
 	}
-	s.peerLimiter = newPeerLimiter(s.band)
-	return s
 }
 
 func newProbedCache() *expirable.LRU[warpnet.WarpPeerID, struct{}] {
@@ -270,9 +251,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 
 	if !s.peerLimiter.Allow(pi.ID) {
 		log.Debugf("discovery: source '%s': peer over its own budget: %s", source, pi.ID.String())
-		if err := s.raterOrNop().Record(pi.ID, rating.KindDiscoveryFlood); err != nil {
-			log.Warnf("discovery: rating flood by %s: %v", pi.ID, err)
-		}
+		s.rating.Record(pi.ID, rating.KindDiscoveryFlood)
 		return
 	}
 	if !s.limiter.Allow() {
@@ -484,9 +463,7 @@ func (s *discoveryService) recordDialFailure(pi warpnet.WarpAddrInfo) {
 	if !known {
 		return
 	}
-	if err := s.raterOrNop().Record(pi.ID, rating.KindDialFailure); err != nil {
-		log.Warnf("discovery: rating dial failure of %s: %v", pi.ID, err)
-	}
+	s.rating.Record(pi.ID, rating.KindDialFailure)
 }
 
 func (s *discoveryService) shouldProbe(id warpnet.WarpPeerID) bool {

@@ -85,10 +85,9 @@ type Gossip struct {
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
 
-	rater atomic.Pointer[raterHolder]
+	// rating is injected before Run and only read afterwards.
+	rating *rating.Handle
 }
-
-type raterHolder struct{ scorer rating.Scorer }
 
 type TopicHandler struct {
 	TopicName string
@@ -237,21 +236,13 @@ func (g *Gossip) runGossip() (err error) {
 	return
 }
 
-func (g *Gossip) SetRating(r rating.Scorer) {
+// SetRating attaches the node's rating handle. Must happen before Run:
+// the score callback reads it on every gossipsub scoring pass.
+func (g *Gossip) SetRating(r *rating.Handle) {
 	if g == nil || r == nil {
 		return
 	}
-	g.rater.Store(&raterHolder{scorer: r})
-}
-
-func (g *Gossip) scorer() rating.Scorer {
-	if g == nil {
-		return rating.Nop{}
-	}
-	if held := g.rater.Load(); held != nil && held.scorer != nil {
-		return held.scorer
-	}
-	return rating.Nop{}
+	g.rating = r
 }
 
 func (g *Gossip) scoreOptions() []pubsub.Option {
@@ -260,12 +251,7 @@ func (g *Gossip) scoreOptions() []pubsub.Option {
 	}
 	params := &pubsub.PeerScoreParams{
 		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
-			band, err := g.scorer().Band(p)
-			if err != nil {
-				log.Warnf("gossip: reading standing of %s: %v", p, err)
-				return rating.GossipAppScore(rating.BandTrusted)
-			}
-			return rating.GossipAppScore(band)
+			return rating.GossipAppScore(g.rating.Band(p))
 		},
 		AppSpecificWeight: 1,
 		DecayInterval:     time.Minute,
