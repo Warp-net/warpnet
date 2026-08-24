@@ -22,9 +22,7 @@ type fakeRater struct {
 	observed []rating.Kind
 	subjects []warpnet.WarpPeerID
 	band     rating.Band
-	// bandErr makes the store unreadable, which every enforcement point
-	// has to survive by leaving the peer alone.
-	bandErr error
+	bandErr  error
 }
 
 func (f *fakeRater) Record(subject warpnet.WarpPeerID, k rating.Kind) error {
