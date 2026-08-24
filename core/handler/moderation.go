@@ -69,6 +69,11 @@ type ModerationAuthStorer interface {
 	GetOwner() domain.Owner
 }
 
+// ModerationRater is the slice of the rating the verdict handler needs.
+type ModerationRater interface {
+	Record(subject warpnet.WarpPeerID, k rating.Kind)
+}
+
 // StreamModerationResultHandler receives a verdict from a moderator and
 // applies it locally so this node's view of the offending object is
 // downgraded. Two design notes:
@@ -88,7 +93,7 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
-	rater rating.Reporter,
+	rater ModerationRater,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
@@ -212,7 +217,7 @@ func StreamModerationResultHandler(
 }
 
 // chargeModeratedNode charges the node hosting the moderated user.
-func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, userID string) {
+func chargeModeratedNode(rater ModerationRater, userRepo ModerationUserUpdater, userID string) {
 	if rater == nil || userRepo == nil || userID == "" {
 		return
 	}
@@ -224,18 +229,14 @@ func chargeModeratedNode(rater rating.Reporter, userRepo ModerationUserUpdater, 
 	if nodeID == "" {
 		return
 	}
-	if err := rater.Record(nodeID, rating.KindModerationUpheld); err != nil {
-		log.Warnf("moderation handler: rating node %s: %v", nodeID, err)
-	}
+	rater.Record(nodeID, rating.KindModerationUpheld)
 }
 
-func chargeModerator(rater rating.Reporter, moderator warpnet.WarpPeerID) {
+func chargeModerator(rater ModerationRater, moderator warpnet.WarpPeerID) {
 	if rater == nil || moderator == "" {
 		return
 	}
-	if err := rater.Record(moderator, rating.KindVerdictMalformed); err != nil {
-		log.Warnf("moderation handler: rating moderator %s: %v", moderator, err)
-	}
+	rater.Record(moderator, rating.KindVerdictMalformed)
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the
