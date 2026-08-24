@@ -58,7 +58,6 @@ type DistributedHashTableDiscoverer interface {
 }
 
 type RatingStorer interface {
-	rating.Rater
 	Close() error
 }
 
@@ -73,6 +72,7 @@ type ModeratorNode struct {
 
 	mapStore warpnet.WarpBatching
 	crdtDb   *crdt.Store
+	rating   *rating.Handle
 	ratingDb RatingStorer
 
 	memoryStoreCloseF func() error
@@ -134,6 +134,7 @@ func NewModeratorNode(
 		ctx:               ctx,
 		dHashTable:        dHashTable,
 		mapStore:          mapStore,
+		rating:            rating.NewHandle(),
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -150,13 +151,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.rating, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
-	mn.mw.SetRating(mn.Rating())
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.rating)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -197,23 +197,22 @@ func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber) error {
 	if err != nil {
 		return fmt.Errorf("moderator: failed to initialize crdt datastore: %w", err)
 	}
-	store, err := crdt.NewCRDTRatingStore(
-		mn.ctx, mn.crdtDb, mn.node.Node(), mn.privKey, warpnet.ModeratorNode,
-	)
+	store, err := rating.NewNodeStore(mn.ctx, mn.crdtDb, mn.node.Node(), mn.privKey, warpnet.ModeratorNode)
 	if err != nil {
 		return err
 	}
 	mn.ratingDb = store
-	mn.node.SetRating(store)
-	mn.mw.SetRating(store)
+	mn.rating.Set(store)
 	return nil
 }
 
-func (mn *ModeratorNode) Rating() rating.Rater {
-	if mn == nil || mn.ratingDb == nil {
-		return rating.Nop{}
+// Rating never returns nil: with no store attached the handle reports
+// nobody.
+func (mn *ModeratorNode) Rating() *rating.Handle {
+	if mn == nil || mn.rating == nil {
+		return rating.NewHandle()
 	}
-	return mn.ratingDb
+	return mn.rating
 }
 
 // SetStreamHandlers registers additional routes after the node is up. The

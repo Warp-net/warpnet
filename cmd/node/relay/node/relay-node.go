@@ -55,7 +55,6 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
-	SetRating(r rating.Rater)
 	Close()
 }
 
@@ -72,7 +71,6 @@ type DistributedHashTableCloser interface {
 }
 
 type RatingStorer interface {
-	rating.Rater
 	Close() error
 }
 
@@ -95,15 +93,9 @@ type RelayNode struct {
 
 	mapStore warpnet.WarpBatching
 	crdtDb   *crdt.Store
+	rating   *rating.Handle
 	ratingDb RatingStorer
 	metrics  MetricsOnlinePusher
-}
-
-func (rn *RelayNode) raterOrNop() rating.Rater {
-	if rn == nil || rn.ratingDb == nil {
-		return rating.Nop{}
-	}
-	return rn.ratingDb
 }
 
 func NewRelayNode(
@@ -117,7 +109,8 @@ func NewRelayNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 
-	discService := discovery.NewRelayDiscoveryService(ctx, m)
+	ratingHandle := rating.NewHandle()
+	discService := discovery.NewRelayDiscoveryService(ctx, m, ratingHandle)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -179,6 +172,7 @@ func NewRelayNode(
 		psk:               psk,
 		privKey:           privKey,
 		mapStore:          mapStore,
+		rating:            ratingHandle,
 		metrics:           m,
 	}
 
@@ -198,11 +192,13 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
+		rn.rating,
 		rn.opts...,
 	)
 	if err != nil {
 		return fmt.Errorf("relay: failed to init node: %w", err)
 	}
+	rn.pubsubService.Gossip().SetRating(rn.rating)
 	rn.pubsubService.Run(rn)
 	if err := rn.discService.Run(rn); err != nil {
 		return err
@@ -218,15 +214,13 @@ func (rn *RelayNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("relay: failed to initialize crdt datastore: %w", err)
 	}
-	rn.ratingDb, err = crdt.NewCRDTRatingStore(
-		rn.ctx, rn.crdtDb, rn.node.Node(), rn.privKey, warpnet.RelayNode,
-	)
+	store, err := rating.NewNodeStore(rn.ctx, rn.crdtDb, rn.node.Node(), rn.privKey, warpnet.RelayNode)
 	if err != nil {
 		log.Errorf("relay: failed to initialize rating store: %v", err)
+	} else {
+		rn.ratingDb = store
+		rn.rating.Set(store)
 	}
-	rn.node.SetRating(rn.raterOrNop())
-	rn.discService.SetRating(rn.raterOrNop())
-	rn.pubsubService.Gossip().SetRating(rn.raterOrNop())
 
 	rn.setupHandlers()
 
@@ -245,8 +239,7 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
-	rn.mw.SetRating(rn.raterOrNop())
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.rating)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

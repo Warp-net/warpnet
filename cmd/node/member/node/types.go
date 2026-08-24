@@ -46,7 +46,6 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
-	SetRating(r rating.Rater)
 	Close()
 }
 

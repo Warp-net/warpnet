@@ -102,6 +102,7 @@ func main() {
 	defer n.Stop()
 
 	publisher := pubsub.NewPubSub(ctx)
+	publisher.Gossip().SetRating(n.Rating())
 	if err := publisher.Run(n); err != nil {
 		log.Errorf("failed to start moderator pubsub: %v", err)
 		return
@@ -113,7 +114,6 @@ func main() {
 	if err := n.StartRating(publisher.Gossip()); err != nil {
 		log.Errorf("moderator: failed to start rating: %v", err)
 	}
-	publisher.Gossip().SetRating(n.Rating())
 
 	moder, err := moderator.NewModerator(ctx, n, publisher, publisher, publisher, privKey)
 	if err != nil {
