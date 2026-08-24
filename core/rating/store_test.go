@@ -40,9 +40,9 @@ func scoreOf(t *testing.T, s *Store, id warpnet.WarpPeerID) Score {
 
 func scoreDimOf(t *testing.T, s *Store, id warpnet.WarpPeerID, dim Dimension) Score {
 	t.Helper()
-	score, err := s.ScoreDim(id, dim)
+	obs, err := s.entriesFor(id.String())
 	require.NoError(t, err)
-	return score
+	return s.scoreDim(obs, dim, s.now())
 }
 
 func bandOf(t *testing.T, s *Store, id warpnet.WarpPeerID) Band {
@@ -343,10 +343,8 @@ func TestEvictedSubjectFallsBackToQuery(t *testing.T) {
 	flushNow(t, s)
 	expected := scoreOf(t, s, other.id)
 
-	// Simulate LRU eviction: the index forgets, the datastore does not.
-	s.idx.mu.Lock()
-	delete(s.idx.data, other.id.String())
-	s.idx.mu.Unlock()
+	// Remove fires the eviction callback: the index forgets, the
+	// datastore does not.
 	s.idx.lru.Remove(other.id.String())
 	require.False(t, s.idx.has(other.id.String()))
 
@@ -403,6 +401,56 @@ func TestAMergedForeignRecordInvalidatesTheCachedScore(t *testing.T) {
 
 	assert.Less(t, scoreOf(t, s, victim.id), MaxScore,
 		"a delta merged from the DAG must not read as the cached score")
+}
+
+// A delta for a subject the index does not hold must not create a
+// one-record view that shadows the rest of the subject's history in
+// the datastore.
+func TestMergedDeltaForUnindexedSubjectDoesNotShadowHistory(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	victim := newIdentity(t)
+	clock := newClock()
+	store := newMemStore()
+	s := newTestStore(t, self, store, clock)
+
+	// Heavy history in the datastore only — as after an eviction.
+	old := signedRecord(self, victim.id, Network, BucketOf(clock.Now()), genA,
+		CountEntry{KindBadSignature, 2})
+	payload, err := json.Marshal(old)
+	require.NoError(t, err)
+	require.NoError(t, store.Put(t.Context(), ds.NewKey(old.Key()), payload))
+
+	// A benign delta arrives over the DAG for the unindexed subject.
+	benign := signedRecord(peer, victim.id, Network, BucketOf(clock.Now()), genB,
+		CountEntry{KindRateLimitHit, 1})
+	payload, err = json.Marshal(benign)
+	require.NoError(t, err)
+	s.onPut(benign.Key(), payload)
+
+	assert.Equal(t, Score(500), scoreOf(t, s, victim.id),
+		"the score must come from the full datastore history, not the last delta")
+}
+
+func TestSettledBucketsAreFreed(t *testing.T) {
+	self := newIdentity(t)
+	other := newIdentity(t)
+	clock := newClock()
+	s := newTestStore(t, self, newMemStore(), clock)
+
+	mustRecord(t, s, other.id, KindRateLimitHit)
+	flushNow(t, s)
+
+	clock.advance(2 * time.Hour)
+	mustRecord(t, s, other.id, KindRateLimitHit)
+	flushNow(t, s)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	require.Len(t, s.counters, 1, "flushed past buckets must be freed, they can never change again")
+	for key := range s.counters {
+		assert.Equal(t, BucketOf(clock.Now()), key.bucket)
+	}
 }
 
 func TestNopRaterNeverPenalises(t *testing.T) {

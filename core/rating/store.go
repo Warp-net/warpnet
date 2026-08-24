@@ -230,9 +230,8 @@ func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 		return MaxScore, nil
 	}
 	id := subject.String()
-	rev := s.idx.revision(id)
 	now := s.now()
-	if hit, ok := s.scores.Get(id); ok && hit.rev == rev && now.Sub(hit.at) < scoreTTL {
+	if hit, ok := s.scores.Get(id); ok && hit.rev == s.idx.revision(id) && now.Sub(hit.at) < scoreTTL {
 		return hit.score, nil
 	}
 
@@ -240,6 +239,10 @@ func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 	if err != nil {
 		return MaxScore, err
 	}
+	// The revision is read after entriesFor: a cold load bumps it, and
+	// caching against the pre-load value would collide with the zero a
+	// later eviction resets it to.
+	rev := s.idx.revision(id)
 	worst := MaxScore
 	for _, dim := range dimensionsPresent(obs) {
 		if sc := s.scoreDim(obs, dim, now); sc < worst {
@@ -258,17 +261,6 @@ type cachedScore struct {
 	score Score
 	rev   uint64
 	at    time.Time
-}
-
-func (s *Store) ScoreDim(subject warpnet.WarpPeerID, dim Dimension) (Score, error) {
-	if s == nil {
-		return MaxScore, nil
-	}
-	obs, err := s.entriesFor(subject.String())
-	if err != nil {
-		return MaxScore, err
-	}
-	return s.scoreDim(obs, dim, s.now()), nil
 }
 
 func (s *Store) Band(subject warpnet.WarpPeerID) (Band, error) {
@@ -401,22 +393,29 @@ func (s *Store) entriesFor(subject string) ([]entry, error) {
 }
 
 func (s *Store) loadSubject(subject string) error {
-	s.idx.ensure(subject)
 	if s.store == nil {
+		s.idx.ensure(subject)
 		return nil
 	}
 	results, err := s.store.Query(s.ctx, ds.Query{Prefix: SubjectPrefix(subject)})
 	if err != nil {
+		// Not marked present: a failed load must be retried on the
+		// next read, not remembered as an empty subject.
 		return fmt.Errorf("rating: query subject %s: %w", subject, err)
 	}
 	defer func() { _ = results.Close() }()
+
+	s.idx.ensure(subject)
 	for r := range results.Next() {
 		if r.Error != nil {
 			continue
 		}
-		if _, err := s.admit(r.Value); err != nil {
+		rec, err := s.admit(r.Value)
+		if err != nil {
 			log.Debugf("rating: dropping record for %s: %v", subject, err)
+			continue
 		}
+		s.idx.put(rec)
 	}
 	return nil
 }
@@ -436,47 +435,54 @@ func (s *Store) scan() error {
 		if r.Error != nil {
 			continue
 		}
-		ok, err := s.admit(r.Value)
+		rec, err := s.admit(r.Value)
 		if err != nil {
 			log.Debugf("rating: dropping record at startup: %v", err)
+			continue
 		}
-		if ok {
-			admitted++
-		}
+		s.idx.put(rec)
+		admitted++
 	}
 	log.Infof("rating: indexed %d entry records at startup", admitted)
 	return nil
 }
 
-func (s *Store) admit(value []byte) (bool, error) {
-	if len(value) == 0 {
-		return false, ErrEmptyRecord
-	}
+// admit parses and authenticates one raw record; indexing it is the
+// caller's decision, because only the caller knows whether it holds the
+// subject's complete entry set.
+func (s *Store) admit(value []byte) (Record, error) {
 	var rec Record
+	if len(value) == 0 {
+		return rec, ErrEmptyRecord
+	}
 	if err := json.Unmarshal(value, &rec); err != nil {
-		return false, fmt.Errorf("rating: unmarshal record: %w", err)
+		return rec, fmt.Errorf("rating: unmarshal record: %w", err)
 	}
 	if err := rec.Verify(); err != nil {
-		return false, fmt.Errorf("rating: unverifiable record for %s: %w", rec.Subject, err)
+		return rec, fmt.Errorf("rating: unverifiable record for %s: %w", rec.Subject, err)
 	}
 	if err := rec.Validate(s.now()); err != nil {
 		log.Warnf("rating: observer %s authored an invalid record: %v", rec.Observer, err)
 		if chargeErr := s.Record(warpnet.FromStringToPeerID(rec.Observer), KindForgedRecord); chargeErr != nil {
 			log.Warnf("rating: charging %s for a forged record: %v", rec.Observer, chargeErr)
 		}
-		return false, err
+		return rec, err
 	}
-	s.idx.put(rec)
-	return true, nil
+	return rec, nil
 }
 
 func (s *Store) onPut(key string, value []byte) {
 	if !strings.HasPrefix(key, KeyPrefix()) {
 		return
 	}
-	if _, err := s.admit(value); err != nil {
+	rec, err := s.admit(value)
+	if err != nil {
 		log.Debugf("rating: dropping merged record: %v", err)
+		return
 	}
+	// Update-only: the record is already in the datastore, so if the
+	// subject is not indexed the next read loads it whole.
+	s.idx.update(rec)
 }
 
 func (s *Store) onDelete(key string) {
@@ -578,10 +584,32 @@ func (s *Store) flush() error {
 				continue
 			}
 		}
-		s.idx.put(rec)
+		// Update-only: if the subject is not indexed, the next read
+		// loads it whole from the datastore, which now includes this
+		// record.
+		s.idx.update(rec)
 		s.clearIfUnchanged(key, counts)
 	}
+	s.dropSettledBuckets()
 	return errors.Join(errs...)
+}
+
+// dropSettledBuckets frees counters for past hours. Record only ever
+// writes the current bucket, so once a past bucket is flushed clean it
+// can never change again and holding it would grow the map with uptime.
+func (s *Store) dropSettledBuckets() {
+	current := BucketOf(s.now())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key := range s.counters {
+		if key.bucket >= current {
+			continue
+		}
+		if _, dirty := s.dirty[key]; dirty {
+			continue
+		}
+		delete(s.counters, key)
+	}
 }
 
 func (s *Store) clearIfUnchanged(key pendingKey, written []CountEntry) {
