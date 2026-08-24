@@ -173,7 +173,7 @@ const (
     KindDiscoveryFlood
     KindConnectionFlap
     KindDialFailure
-    KindForgedObservation
+    KindForgedRecord
     // application
     KindModerationUpheld
     KindForeignAuthorship
@@ -221,7 +221,7 @@ func KindByName(s string) (Kind, bool)
 | `KindDiscoveryFlood` | 25 | 300 | new per-peer discovery bucket (§7d) |
 | `KindConnectionFlap` | 10 | 200 | `core/node/priority.go` flap LRU |
 | `KindDialFailure` | 2 | 100 | `core/discovery/discovery.go:268` |
-| `KindForgedObservation` | 400 | — | a correctly signed rating record that is structurally illegal — self-rating, wrong-dimension kind, back-dated bucket (§5.4) |
+| `KindForgedRecord` | 400 | — | a correctly signed rating record that is structurally illegal — self-rating, wrong-dimension kind, back-dated bucket (§5.4) |
 
 `KindBadSignature`, `KindMissingSignature` and `KindPrivateRouteDenied` are the
 only network kinds that are self-evidently deliberate. They carry the weights
@@ -357,7 +357,7 @@ Consequences:
 // core/rating/record.go
 type Counts map[Kind]uint32
 
-type ObservationRecord struct {
+type Record struct {
     Subject    string    `json:"s"`
     Observer   string    `json:"o"`
     Dim        Dimension `json:"d"`
@@ -372,14 +372,14 @@ type ObservationRecord struct {
 //   subject "|" observer "|" itoa(dim) "|" itoa(bucket) "|" generation "|"
 //   for each kind in ascending numeric order: itoa(kind) "=" itoa(count) ","
 //   "|" itoa(updatedAt.UnixMilli())
-func (r ObservationRecord) SigningBytes() []byte
+func (r Record) SigningBytes() []byte
 
-func (r *ObservationRecord) Sign(priv ed25519.PrivateKey)
+func (r *Record) Sign(priv ed25519.PrivateKey) error
 
 // Verify derives the pubkey from the Observer peer id and checks the
 // signature — the same trick StreamModerationResultHandler uses at
 // core/handler/moderation.go:103-116.
-func (r ObservationRecord) Verify() error
+func (r Record) Verify() error
 
 // Validate enforces the structural rules, independent of signature:
 //   - Subject and Observer parse as peer ids
@@ -388,10 +388,10 @@ func (r ObservationRecord) Verify() error
 //   - every Kind is valid and belongs to Dim
 //   - Generation is 32 hex characters
 //   - Bucket is not in the future beyond one bucket, not older than retention
-func (r ObservationRecord) Validate() error
+func (r Record) Validate(now time.Time) error
 
-func (r ObservationRecord) Total() uint64
-func (r ObservationRecord) Key() string // the /RATING/obs/... path above
+func (r Record) Total() uint64
+func (r Record) Key() string // the /RATING/obs/... path above
 ```
 
 Properties this buys:
@@ -411,7 +411,10 @@ Properties this buys:
 ### 5.4 Authenticity
 
 Every record is verified before it enters the index, on both the startup scan
-and the CRDT put hook. Two distinct failures, handled differently:
+and the CRDT put hook. The hook only *updates* subjects the index already
+holds: creating one from a single delta would shadow the rest of its history in
+the datastore, so an unindexed subject is instead loaded whole on its next
+read. Two distinct failures, handled differently:
 
 - **`Verify()` fails** — the signature does not match the pubkey derived from
   the claimed `Observer` peer id. Nobody is attributable: anyone can forge a
@@ -420,7 +423,7 @@ and the CRDT put hook. Two distinct failures, handled differently:
 - **`Verify()` passes but `Validate()` fails** — the signature proves the named
   observer really authored a structurally illegal record (rated itself, used a
   kind from another dimension, back-dated a bucket). That *is* attributable, so
-  the observer earns `KindForgedObservation`.
+  the observer earns `KindForgedRecord`.
 
 This is the one place the CRDT transport is weaker than a point-to-point one:
 authenticity survives any relay path, but blame for unsigned garbage does not.
@@ -672,10 +675,10 @@ func NewStore(cfg Config, open Opener) (*Store, error)
 func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) error
 func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error
 
-// read path — in-memory arithmetic, except for the cold-path reload of
-// a subject the index evicted, which is where the error comes from.
+// read path — in-memory arithmetic, memoised per subject against an
+// index revision (15s ceiling), except for the cold-path reload of a
+// subject the index evicted, which is where the error comes from.
 func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error)
-func (s *Store) ScoreDim(subject warpnet.WarpPeerID, d Dimension) (Score, error)
 func (s *Store) Band(subject warpnet.WarpPeerID) (Band, error)
 func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
 func (s *Store) Own() (domain.NodeRating, error)
@@ -801,7 +804,7 @@ New files:
 | `core/rating/rating.go` | `Dimension`, `Score`, `Band`, `BandOf`, `DimensionsFor` |
 | `core/rating/offence.go` | `Kind`, catalogue, accessors |
 | `core/rating/record.go` | `Record`, `SigningBytes`, `Sign`, `Verify`, `Validate`, `Key` |
-| `core/rating/index.go` | in-memory index, put/delete hooks, startup scan, LRU eviction |
+| `core/rating/index.go` | in-memory index, per-subject revisions, startup scan, LRU eviction |
 | `core/rating/aggregate.go` | decay, generation summing, subjective and public aggregation, caps |
 | `core/rating/enforce.go` | pure band → knob mappings |
 | `core/rating/reporter.go` | `Reporter`, `Scorer`, `Rater`, `Nop` |
@@ -836,11 +839,11 @@ Tests:
 | Test | Asserts |
 |---|---|
 | `record_test.go` | signing bytes are canonical and order-independent; `Verify` rejects a foreign signature; `Validate` rejects `Subject == Observer`, unknown kinds, a kind from the wrong dimension, a malformed generation, an out-of-window bucket |
-| `record_test.go` | an unsigned/forged record is dropped and charges nobody; a correctly signed but structurally illegal one charges its observer `KindForgedObservation` (§5.4) |
+| `record_test.go` | an unsigned/forged record is dropped and charges nobody; a correctly signed but structurally illegal one charges its observer `KindForgedRecord` (§5.4) |
 | `aggregate_test.go` | decay is deterministic and monotonic; a record exactly one half-life old contributes half its weight; generations under one bucket are summed, not overwritten; kind ceilings hold; `CapPerObserver` and `CapRemoteTotal` hold |
 | `aggregate_test.go` | **the §6.3 invariant**: any number of remote observers, any number of records, score never < 600 |
 | `aggregate_test.go` | first-hand evidence alone reaches `BandFloor` |
-| `store_test.go` | `Observe` is non-blocking under a stalled datastore; buckets fold correctly; flush writes exactly one key per (subject, dim, bucket, generation) |
+| `store_test.go` | `Record` is non-blocking under a stalled datastore; buckets fold correctly; flush writes exactly one key per (subject, dim, bucket, generation) |
 | `store_test.go` | **stateless restart recovery**: a store whose datastore is wiped, restarted against a datastore pre-seeded with its own prior-generation records (as the DAG would replay them), reports the same score as before the wipe, and its new writes do not overwrite the replayed ones |
 | `index_test.go` | LRU eviction past `maxIndexedSubjects` never issues a CRDT delete; an evicted subject scores identically after falling back to a prefix query |
 | `enforce_test.go` | band → tag/score/multiplier/DHT mappings; the floor multiplier still serves a peer |
@@ -866,8 +869,8 @@ End-to-end on testnet, via the `warpnet-testnet-verify` skill:
 
 | File | Change |
 |---|---|
-| `core/handler/moderation.go` | on a FAIL verdict, `Observe(offenderNode, KindModerationUpheld)` — the verdict already arrives signed and quorum-backed at every observer, so no new wire message is needed |
-| `core/warpnet/warpnet.go` call sites of `VerifyAuthorship` | `Observe(peer, KindForeignAuthorship)` on `ErrForeignAuthor` |
+| `core/handler/moderation.go` | on a FAIL verdict, `Record(offenderNode, KindModerationUpheld)` — the verdict already arrives signed and quorum-backed at every observer, so no new wire message is needed |
+| `core/warpnet/warpnet.go` call sites of `VerifyAuthorship` | `Record(peer, KindForeignAuthorship)` on `ErrForeignAuthor` |
 | `core/middleware/rate-limiter.go` | classify write routes; `KindWriteFlood` above a sustained-hit threshold |
 | `core/handler/report.go` + moderator round result | `KindFalseReportBurst` above a per-window threshold, so an honest mistaken report costs nothing |
 | `core/handler/rating.go` | register `PUBLIC_GET_RATING` on the member node |
