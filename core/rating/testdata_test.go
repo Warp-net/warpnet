@@ -32,9 +32,10 @@ func newIdentity(t *testing.T) identity {
 }
 
 type memStore struct {
-	mu     sync.Mutex
-	data   map[string][]byte
-	putErr error
+	mu       sync.Mutex
+	data     map[string][]byte
+	putErr   error
+	queryErr error
 }
 
 func newMemStore() *memStore {
@@ -71,6 +72,9 @@ func (m *memStore) Delete(_ context.Context, key ds.Key) error {
 func (m *memStore) Query(_ context.Context, q ds.Query) (ds.Results, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.queryErr != nil {
+		return nil, m.queryErr
+	}
 	entries := make([]dsq.Entry, 0, len(m.data))
 	for k, v := range m.data {
 		if q.Prefix != "" && !strings.HasPrefix(k, q.Prefix) {
@@ -111,9 +115,8 @@ func (m *memStore) clone() *memStore {
 	return out
 }
 
-func opener(store Storer) Opener {
-	return func(Hooks) (Storer, error) { return store, nil }
-}
+func (m *memStore) OnPut(func(ds.Key, []byte)) {}
+func (m *memStore) OnDelete(func(ds.Key))      {}
 
 type fixedClock struct {
 	mu  sync.Mutex

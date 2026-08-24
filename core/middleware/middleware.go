@@ -35,7 +35,6 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
-	log "github.com/sirupsen/logrus"
 )
 
 type middlewareError string
@@ -75,14 +74,13 @@ type WarpMiddleware struct {
 	writeFloodMx sync.Mutex
 	writeFlood   *lru.LRU[string, *atomic.Int64]
 
-	// rater is swapped, not assigned: the moderator attaches its store
-	// after the node is already serving streams.
-	rater atomic.Pointer[raterHolder]
+	rating *rating.Handle
 }
 
-type raterHolder struct{ rater rating.Rater }
-
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer, r *rating.Handle) *WarpMiddleware {
+	if r == nil {
+		r = rating.NewHandle()
+	}
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
@@ -92,25 +90,13 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		writeFlood: lru.NewLRU[string, *atomic.Int64](
 			writeFloodCacheSize, nil, writeFloodWindow,
 		),
+		rating: r,
 	}
-	wm.rater.Store(&raterHolder{rater: rating.Nop{}})
 	return wm
 }
 
-func (p *WarpMiddleware) SetRating(r rating.Rater) {
-	if p == nil || r == nil {
-		return
-	}
-	p.rater.Store(&raterHolder{rater: r})
-}
-
-func (p *WarpMiddleware) raterOrNop() rating.Rater {
-	if held := p.rater.Load(); held != nil && held.rater != nil {
-		return held.rater
-	}
-	return rating.Nop{}
-}
-
+// record charges an offence to the stream's remote peer. Self-streams
+// and unidentified connections have nobody to charge.
 func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
 	if p == nil || s == nil || s.Conn() == nil {
 		return
@@ -119,21 +105,7 @@ func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
 	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
 		return
 	}
-	if err := p.raterOrNop().Record(remote, kind); err != nil {
-		log.Warnf("middleware: rating %s for %s: %v", kind, remote, err)
-	}
-}
-
-func (p *WarpMiddleware) band(remote warpnet.WarpPeerID) rating.Band {
-	if p == nil {
-		return rating.BandTrusted
-	}
-	b, err := p.raterOrNop().Band(remote)
-	if err != nil {
-		log.Warnf("middleware: reading standing of %s: %v", remote, err)
-		return rating.BandTrusted
-	}
-	return b
+	p.rating.Record(remote, kind)
 }
 
 func (p *WarpMiddleware) Close() {

@@ -29,6 +29,12 @@ func (r *recordingRater) Band(warpnet.WarpPeerID) (rating.Band, error) {
 	return rating.BandTrusted, nil
 }
 
+func handleOf(r rating.Rater) *rating.Handle {
+	h := rating.NewHandle()
+	h.Set(r)
+	return h
+}
+
 func mustAddr(t *testing.T, s string) warpnet.WarpAddress {
 	t.Helper()
 	a, err := warpnet.NewMultiaddr(s)
@@ -107,8 +113,7 @@ func TestShouldProbeWithoutCacheAlwaysProbes(t *testing.T) {
 
 func TestUnresolvableDialChargesNobody(t *testing.T) {
 	rater := &recordingRater{}
-	s := &discoveryService{}
-	s.SetRating(rater)
+	s := &discoveryService{rating: handleOf(rater)}
 
 	s.recordDialFailure(warpnet.WarpAddrInfo{ID: testPeer(t, peerA)})
 
@@ -117,8 +122,7 @@ func TestUnresolvableDialChargesNobody(t *testing.T) {
 
 func TestFailedDialToAKnownAddressIsCharged(t *testing.T) {
 	rater := &recordingRater{}
-	s := &discoveryService{}
-	s.SetRating(rater)
+	s := &discoveryService{rating: handleOf(rater)}
 	id := testPeer(t, peerA)
 
 	s.recordDialFailure(warpnet.WarpAddrInfo{

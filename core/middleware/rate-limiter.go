@@ -170,7 +170,7 @@ func (p *WarpMiddleware) bucket(
 ) *leakyBucketRateLimiter {
 	key := route.String() + "|" + remotePeer.String()
 
-	band := p.band(remotePeer)
+	band := p.rating.Band(remotePeer)
 
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
