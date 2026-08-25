@@ -1,14 +1,17 @@
 package node
 
 import (
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sync"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const (
 	reachabilityTag = "reachability"
+	ratingTag       = "rating"
 	flappingPeriod  = 30 * time.Second
 	cacheSize       = 128
 )
@@ -25,6 +28,14 @@ func newNodeReachabilityManager(cm warpnet.WarpConnManager) *nodeReachabilityMan
 		flapLRU: lru,
 		manager: cm,
 	}
+}
+
+func (m *nodeReachabilityManager) SetRatingPriority(pid warpnet.WarpPeerID, band rating.Band) {
+	if m == nil || m.manager == nil {
+		return
+	}
+	value := rating.ConnTagValue(band)
+	m.manager.UpsertTag(pid, ratingTag, func(int) int { return value })
 }
 
 func (m *nodeReachabilityManager) SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {

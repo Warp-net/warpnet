@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/audit"
+	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
@@ -58,10 +60,37 @@ func (m *Moderator) ChallengeHandler() warpnet.WarpHandlerFunc {
 }
 
 // AuditStanding reports what this node's own spot-checks make of a peer.
-// Nothing consults it yet — see the audit package docs on why a single
-// auditor must not be allowed to disqualify anyone on its own.
+// It is the statistical judgement only; what the network acts on is the
+// rating observation the ledger files when this standing worsens.
 func (m *Moderator) AuditStanding(peerID string) audit.Standing {
 	return m.ledger.StandingOf(peerID)
+}
+
+func (m *Moderator) ModeratorBand(peerID string) rating.Band {
+	id := warpnet.FromStringToPeerID(peerID)
+	if id == "" {
+		return rating.BandTrusted
+	}
+	return m.node.Rating().Band(id)
+}
+
+func (m *Moderator) RecordDissent(outcome vote.Event, ballots map[string]vote.Event) {
+	if m == nil || len(ballots) == 0 {
+		return
+	}
+	self := m.selfID()
+	rater := m.node.Rating()
+
+	for moderatorID, ballot := range ballots {
+		if moderatorID == self || ballot.Result == outcome.Result {
+			continue
+		}
+		id := warpnet.FromStringToPeerID(moderatorID)
+		if id == "" {
+			continue
+		}
+		rater.Record(id, rating.KindVerdictOutlier)
+	}
 }
 
 // runAudits spot-checks a random peer on a timer for as long as the node

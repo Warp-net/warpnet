@@ -85,6 +85,10 @@ type Participant interface {
 	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
 }
 
+type DissentRecorder interface {
+	RecordDissent(outcome vote.Event, ballots map[string]vote.Event)
+}
+
 // round is one subject's vote round, self-contained: it collects ballots,
 // decides whether this participant should vote at all, tallies at the
 // window close, and either carries the decision (as chair) or stands by to
@@ -218,6 +222,19 @@ func (r *round) tally() {
 
 	subject := r.report
 	p := planTally(r.id, r.self, r.votes, subject != nil)
+	ballots := make(map[string]vote.Event, len(r.votes))
+	for id, v := range r.votes {
+		ballots[id] = v
+	}
+
+	defer func() {
+		if p.role == roleBystander || subject == nil {
+			return
+		}
+		if observer, ok := r.member.(DissentRecorder); ok {
+			observer.RecordDissent(p.outcome, ballots)
+		}
+	}()
 
 	switch p.role {
 	case roleBystander:

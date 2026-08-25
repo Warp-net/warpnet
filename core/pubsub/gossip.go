@@ -30,6 +30,7 @@ package pubsub
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -41,11 +42,13 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/discovery"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
@@ -81,6 +84,9 @@ type Gossip struct {
 	handlersMap      map[string]topicHandler
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
+
+	// rating is injected before Run and only read afterwards.
+	rating *rating.Handle
 }
 
 type TopicHandler struct {
@@ -218,7 +224,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
 	if err != nil {
 		return err
 	}
@@ -228,6 +234,37 @@ func (g *Gossip) runGossip() (err error) {
 	log.Infoln("gossip: started")
 
 	return
+}
+
+// SetRating attaches the node's rating handle. Must happen before Run:
+// the score callback reads it on every gossipsub scoring pass.
+func (g *Gossip) SetRating(r *rating.Handle) {
+	if g == nil || r == nil {
+		return
+	}
+	g.rating = r
+}
+
+func (g *Gossip) scoreOptions() []pubsub.Option {
+	if g == nil {
+		return nil
+	}
+	params := &pubsub.PeerScoreParams{
+		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
+			return rating.GossipAppScore(g.rating.Band(p))
+		},
+		AppSpecificWeight: 1,
+		DecayInterval:     time.Minute,
+		DecayToZero:       0.01,
+		Topics:            map[string]*pubsub.TopicScoreParams{},
+	}
+	thresholds := &pubsub.PeerScoreThresholds{
+		GossipThreshold:   -10,
+		PublishThreshold:  -50,
+		GraylistThreshold: rating.GossipGraylistThreshold,
+		AcceptPXThreshold: 0,
+	}
+	return []pubsub.Option{pubsub.WithPeerScore(params, thresholds)}
 }
 
 func (g *Gossip) Subscribe(handlers ...TopicHandler) (err error) {
@@ -610,11 +647,20 @@ func (g *Gossip) Close() (err error) {
 	return err
 }
 
-type pubsubDiscoveryMessage struct {
-	Body []warpnet.WarpAddrInfo `json:"body"`
+type pubsubDiscoveryEnvelope struct {
+	Body   json.RawMessage `json:"body"`
+	NodeId string          `json:"node_id"`
 }
 
+const discoveryEchoCacheSize = 512
+
+const discoveryEchoTTL = 7 * time.Minute
+
 func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandler {
+	seen := expirable.NewLRU[string, [sha256.Size]byte](
+		discoveryEchoCacheSize, nil, discoveryEchoTTL,
+	)
+
 	return TopicHandler{
 		TopicName: pubSubDiscoveryTopic,
 		Handler: func(data []byte) error {
@@ -622,16 +668,33 @@ func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandl
 				return nil
 			}
 
-			var msg pubsubDiscoveryMessage
-			if err := json.Unmarshal(data, &msg); err != nil {
+			var envelope pubsubDiscoveryEnvelope
+			if err := json.Unmarshal(data, &envelope); err != nil {
 				return fmt.Errorf("pubsub: discovery: unmarshal pubsub message: %w %s", err, data)
 			}
 
-			if len(msg.Body) == 0 {
+			if len(envelope.Body) == 0 {
 				return fmt.Errorf("pubsub: discovery: %w: %s", ErrPubsubEmptyMessage, string(data))
 			}
 
-			for _, info := range msg.Body {
+			var infos []warpnet.WarpAddrInfo
+			if err := json.Unmarshal(envelope.Body, &infos); err != nil {
+				return fmt.Errorf("pubsub: discovery: unmarshal peer infos: %w %s", err, data)
+			}
+			if len(infos) == 0 {
+				return fmt.Errorf("pubsub: discovery: %w: %s", ErrPubsubEmptyMessage, string(data))
+			}
+
+			if envelope.NodeId != "" {
+				digest := sha256.Sum256(envelope.Body)
+				if previous, ok := seen.Get(envelope.NodeId); ok && previous == digest {
+					log.Debugf("pubsub: discovery: unchanged announcement from %s, skipped", envelope.NodeId)
+					return nil
+				}
+				seen.Add(envelope.NodeId, digest)
+			}
+
+			for _, info := range infos {
 				discHandler(info)
 			}
 			return nil

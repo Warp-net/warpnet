@@ -34,15 +34,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
-	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/ipfs/go-cid"
-	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -111,100 +107,30 @@ type CRDTRouter interface {
 //     is fresh, so peers' replayed history is preserved verbatim and
 //     this process simply accrues a new sub-counter alongside.
 type CRDTStatsStore struct {
-	crdt        *crdt.Datastore
-	broadcaster Broadcaster
-	ctx         context.Context
-	cancel      context.CancelFunc
-	prefix      string
-	nodeID      string
-	generation  string
+	crdt       *Store
+	ctx        context.Context
+	prefix     string
+	nodeID     string
+	generation string
 
 	mu           sync.Mutex
 	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
 	decrCounters map[string]uint64
 }
 
-// NewCRDTStatsStore creates a new CRDT-based statistics store
-func NewCRDTStatsStore(
-	ctx context.Context,
-	broadcaster Broadcaster,
-	datastore CRDTStorer,
-	node host.Host,
-	router CRDTRouter,
-) (*CRDTStatsStore, error) {
-	ctx, cancel := context.WithCancel(ctx)
-
-	baseStore := ds.MutexWrap(datastore)
-
-	// Match the canonical ipfs-lite blockstore wiring for go-ds-crdt:
-	//   - WriteThrough(true) skips the redundant Has() check on every
-	//     Put. CRDT writes blocks once and never overwrites them, so
-	//     the check is pure overhead.
-	//   - NewIdStore synthesises blocks for "identity" multihashes
-	//     (small payloads encoded directly in the CID). go-ds-crdt
-	//     occasionally produces such inline blocks for tiny deltas;
-	//     without IdStore, bitswap cannot satisfy WANTs for those
-	//     CIDs and replication can stall in small clusters.
-	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
-
-	bitswapNetwork := warpnet.NewBitswapNetwork(node)
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
-
-	// Replay any libp2p connections that were already established
-	// when bitswap registered as a network notifier. libp2p's
-	// swarm.Notify only fires for FUTURE events, so peers that
-	// connected during the window between libp2p.New (the host
-	// starts listening) and bitswap.New (handlers wired) would
-	// otherwise be invisible to bitswap's PeerManager — leading to
-	// "No peers - broadcasting" loops that never converge in a small
-	// cluster. ipfs-lite avoids this by ensuring nothing inbound can
-	// connect before bitswap is up; here the host is already exposed
-	// by the time NewCRDTStatsStore runs, so we have to replay
-	// explicitly.
-	for _, p := range node.Network().Peers() {
-		bitswapExchange.PeerConnected(p)
-	}
-
-	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
-	dagService := warpnet.NewDAGService(blockService)
-
-	l := log.StandardLogger().WithContext(ctx)
-
-	opts := crdt.DefaultOptions()
-	opts.Logger = l
-	opts.PutHook = func(k ds.Key, _ []byte) {
-		// l.Infof("crdt: item put: %s", k.String())
-	}
-	opts.DeleteHook = func(k ds.Key) {
-		// l.Infof("crdt: item deleted: %s", k.String())
-	}
-	opts.RebroadcastInterval = time.Minute
-	opts.DAGSyncerTimeout = time.Minute
-	opts.MultiHeadProcessing = true
-
-	crdtStore, err := crdt.New(
-		baseStore,
-		ds.NewKey(""), // node repo's already set the prefix
-		dagService,
-		broadcaster,
-		opts,
-	)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
+func NewCRDTStatsStore(ctx context.Context, crdtStore *Store, node host.Host) (*CRDTStatsStore, error) {
+	if crdtStore == nil || node == nil {
+		return nil, fmt.Errorf("crdt stats: incomplete dependencies") //nolint:err113
 	}
 
 	gen, err := newGenerationID()
 	if err != nil {
-		cancel()
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
 	store := &CRDTStatsStore{
 		crdt:         crdtStore,
-		broadcaster:  broadcaster,
 		ctx:          ctx,
-		cancel:       cancel,
 		nodeID:       node.ID().String(),
 		prefix:       StatsRepoName,
 		generation:   gen,
@@ -307,13 +233,8 @@ func newGenerationID() (string, error) {
 	return hex.EncodeToString(buf[:]), nil
 }
 
-// Close stops the CRDT store
 func (s *CRDTStatsStore) Close() error {
-	if s == nil {
-		return nil
-	}
-	s.cancel()
-	return s.crdt.Close()
+	return nil
 }
 
 func encodeCounter(value uint64) []byte {

@@ -150,6 +150,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/rating",
+    name: "SettingsRating",
+    component: () =>
+      import(/* webpackChunkName: "settings-rating" */ "../views/Settings/Rating.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/settings/blocks",
     name: "SettingsBlocks",
     component: () =>

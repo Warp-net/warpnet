@@ -32,6 +32,8 @@ const (
 	PRIVATE_POST_PAIR          = "/private/post/admin/pair/0.0.0"
 	PUBLIC_POST_NODE_CHALLENGE = "/public/post/admin/challenge/0.0.0"
 	PRIVATE_GET_STATS          = "/private/get/admin/stats/0.0.0"
+	PRIVATE_GET_RATING         = "/private/get/admin/rating/0.0.0"
+	PUBLIC_GET_RATING          = "/public/get/admin/rating/0.0.0"
 	// moderation
 	PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
 	PUBLIC_POST_REPORT            = "/public/post/report/0.0.0"

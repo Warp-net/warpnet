@@ -40,11 +40,13 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/middleware"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/event"
 	log "github.com/sirupsen/logrus"
@@ -76,7 +78,14 @@ type Prioritizer interface {
 	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
 	SetMinPriority(pid warpnet.WarpPeerID)
 	SetMaxPriority(pid warpnet.WarpPeerID)
+	SetRatingPriority(pid warpnet.WarpPeerID, band rating.Band)
 }
+
+const (
+	connFlapWindow    = time.Minute
+	connFlapThreshold = 4
+	connFlapCacheSize = 256
+)
 
 type WarpNode struct {
 	ctx      context.Context
@@ -92,14 +101,30 @@ type WarpNode struct {
 	reachability atomic.Int64
 	prioritizer  Prioritizer
 
+	rating   *rating.Handle
+	connFlap *expirable.LRU[string, *atomic.Int64]
+
 	startTime        time.Time
 	eventsSub        event.Subscription
 	middlewares      []StreamMiddleware
 	internalHandlers map[warpnet.WarpProtocolID]warpnet.StreamHandler
 }
 
+// recordOffence charges an offence to a remote peer.
+func (n *WarpNode) recordOffence(s warpnet.WarpStream, kind rating.Kind) {
+	if n == nil || s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == "" || remote == s.Conn().LocalPeer() {
+		return
+	}
+	n.rating.Record(remote, kind)
+}
+
 func NewWarpNode(
 	ctx context.Context,
+	ratingHandle *rating.Handle,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -150,6 +175,9 @@ func NewWarpNode(
 	}
 	version := config.Config().Version
 
+	if ratingHandle == nil {
+		ratingHandle = rating.NewHandle()
+	}
 	wn := &WarpNode{
 		ctx:              ctx,
 		node:             node,
@@ -162,6 +190,10 @@ func NewWarpNode(
 		eventsSub:        sub,
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
+		rating:           ratingHandle,
+		connFlap: expirable.NewLRU[string, *atomic.Int64](
+			connFlapCacheSize, nil, connFlapWindow,
+		),
 	}
 
 	go wn.trackIncomingEvents()
@@ -240,11 +272,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		data, err := stream.ReadRequest(s)
 		if errors.Is(err, stream.ErrPayloadTooLarge) {
 			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
+			n.recordOffence(s, rating.KindOversizePayload)
 			_ = s.Reset()
 			return
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
+			n.recordOffence(s, rating.KindMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
@@ -255,6 +289,10 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
 		}
+		if errors.Is(err, warpnet.ErrForeignAuthor) {
+			n.recordOffence(s, rating.KindForeignAuthorship)
+		}
+
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			clip := data
 			if len(clip) > 500 { //nolint:mnd
@@ -338,7 +376,11 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
+					n.prioritizer.SetRatingPriority(
+						typedEvent.Peer, n.rating.Band(typedEvent.Peer),
+					)
 				}
+				n.trackConnectionFlap(typedEvent.Peer)
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
 				addrs := n.node.Peerstore().Addrs(pid)
@@ -390,6 +432,22 @@ func (n *WarpNode) trackIncomingEvents() {
 				log.Infof("node: event: %T %s", ev, bt)
 			}
 		}
+	}
+}
+
+func (n *WarpNode) trackConnectionFlap(pid warpnet.WarpPeerID) {
+	if n == nil || n.connFlap == nil {
+		return
+	}
+	key := pid.String()
+	counter, ok := n.connFlap.Get(key)
+	if !ok {
+		counter = new(atomic.Int64)
+		n.connFlap.Add(key, counter)
+	}
+	if counter.Add(1) == connFlapThreshold {
+		// Once per window: the entry expires and starts over.
+		n.rating.Record(pid, rating.KindConnectionFlap)
 	}
 }
 

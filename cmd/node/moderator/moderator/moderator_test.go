@@ -11,6 +11,7 @@ import (
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -806,3 +807,5 @@ func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
 		t.Fatalf("nothing was judged, so nothing may be referenced: %d/%d", safe, unsafe)
 	}
 }
+
+func (stubModeratorNode) Rating() *rating.Handle { return rating.NewHandle() }

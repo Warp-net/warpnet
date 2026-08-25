@@ -3,7 +3,12 @@
 
 package audit
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/warpnet"
+)
 
 // Outcome is the auditor's classification of one challenge exchange.
 type Outcome int
@@ -117,20 +122,32 @@ type PeerReport struct {
 // local-first by design: every node judges from its own evidence; sharing
 // signed transcripts across nodes is a later layer.
 type Ledger struct {
-	mu    sync.Mutex
-	peers map[string]*peerStats
+	reporter Reporter
+
+	mu       sync.Mutex
+	peers    map[string]*peerStats
+	reported map[string]Standing
 }
 
-func NewLedger() *Ledger {
-	return &Ledger{peers: make(map[string]*peerStats)}
+// Reporter is the slice of the rating this ledger files conclusions to.
+type Reporter interface {
+	Record(subject warpnet.WarpPeerID, k rating.Kind)
+}
+
+func NewLedger(reporter Reporter) *Ledger {
+	return &Ledger{
+		reporter: reporter,
+		peers:    make(map[string]*peerStats),
+		reported: make(map[string]Standing),
+	}
 }
 
 func (l *Ledger) Record(peerID string, o Outcome) {
 	if peerID == "" {
 		return
 	}
+
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	s, ok := l.peers[peerID]
 	if !ok {
 		s = &peerStats{}
@@ -145,6 +162,58 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 		s.unreachable++
 	case OutcomeInvalid:
 		s.invalid++
+	}
+
+	standing := s.standing()
+	worsened := standing != l.reported[peerID] && severity(standing) > severity(l.reported[peerID])
+	if worsened {
+		l.reported[peerID] = standing
+	}
+	l.mu.Unlock()
+
+	if o == OutcomeUnreachable {
+		l.report(peerID, rating.KindAuditUnreachable)
+	}
+	if worsened {
+		if kind, ok := standingKind(standing); ok {
+			l.report(peerID, kind)
+		}
+	}
+}
+
+func (l *Ledger) report(peerID string, kind rating.Kind) {
+	if l.reporter == nil {
+		return
+	}
+	id := warpnet.FromStringToPeerID(peerID)
+	if id == "" {
+		return
+	}
+	l.reporter.Record(id, kind)
+}
+
+// severity orders standings so only a genuine downgrade is reported.
+func severity(s Standing) int {
+	switch s {
+	case StandingTrusted, StandingProbation:
+		return 0
+	case StandingSuspect:
+		return 1
+	case StandingBanned:
+		return 2 //nolint:mnd
+	default:
+		return 0
+	}
+}
+
+func standingKind(s Standing) (rating.Kind, bool) {
+	switch s {
+	case StandingSuspect:
+		return rating.KindAuditWrong, true
+	case StandingBanned:
+		return rating.KindAuditInvalid, true
+	default:
+		return 0, false
 	}
 }
 

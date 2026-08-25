@@ -33,6 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -149,6 +150,13 @@ type StatsStorer interface {
 	Increment(key ds.Key) error
 	Decrement(key ds.Key) error
 	GetAggregatedStat(key ds.Key) (uint64, error)
+	Close() error
+}
+
+type RatingStorer interface {
+	rating.Rater
+	Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 	Close() error
 }
 

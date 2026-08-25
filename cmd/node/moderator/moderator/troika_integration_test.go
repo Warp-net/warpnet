@@ -12,6 +12,7 @@ import (
 	modpubsub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -208,3 +209,5 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 		return true
 	}, 10*time.Second, 200*time.Millisecond, "the Final announcement must clear every moderator's round")
 }
+
+func (*troikaConnector) Rating() *rating.Handle { return rating.NewHandle() }
