@@ -29,8 +29,10 @@ package middleware
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -93,6 +95,24 @@ func limitForRoute(route stream.WarpRoute) routeLimit {
 	return limitWrite
 }
 
+func scaleForBand(limit routeLimit, band rating.Band) routeLimit {
+	multiplier := rating.LimitMultiplier(band)
+	if multiplier >= 1 {
+		return limit
+	}
+	scaled := routeLimit{
+		burst:     int64(float64(limit.burst) * multiplier),
+		perMinute: int64(float64(limit.perMinute) * multiplier),
+	}
+	if scaled.burst < 1 {
+		scaled.burst = 1
+	}
+	if scaled.perMinute < 1 {
+		scaled.perMinute = 1
+	}
+	return scaled
+}
+
 func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		conn := s.Conn()
@@ -108,6 +128,8 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
+			p.record(s, rating.KindRateLimitHit)
+			p.recordWriteFlood(s, route, remotePeer)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil
@@ -116,18 +138,50 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 	}
 }
 
+const (
+	writeFloodWindow    = 5 * time.Minute
+	writeFloodThreshold = 20
+	writeFloodCacheSize = 1024
+)
+
+func (p *WarpMiddleware) recordWriteFlood(
+	s warpnet.WarpStream, route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
+) {
+	if p == nil || p.writeFlood == nil || route.IsGet() {
+		return
+	}
+	key := remotePeer.String()
+
+	p.writeFloodMx.Lock()
+	counter, ok := p.writeFlood.Get(key)
+	if !ok {
+		counter = new(atomic.Int64)
+		p.writeFlood.Add(key, counter)
+	}
+	p.writeFloodMx.Unlock()
+
+	if counter.Add(1) == writeFloodThreshold {
+		p.record(s, rating.KindWriteFlood)
+	}
+}
+
 func (p *WarpMiddleware) bucket(
 	route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
 ) *leakyBucketRateLimiter {
 	key := route.String() + "|" + remotePeer.String()
 
+	band := p.rating.Band(remotePeer)
+
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
 
 	if b, ok := p.rateLimiters.Get(key); ok {
-		return b
+		if b.band == band {
+			return b
+		}
+		p.rateLimiters.Remove(key)
 	}
-	b := newRateLimiter(limitForRoute(route))
+	b := newRateLimiter(scaleForBand(limitForRoute(route), band), band)
 	p.rateLimiters.Add(key, b)
 	return b
 }
@@ -138,9 +192,10 @@ type leakyBucketRateLimiter struct {
 	filled       int64
 	lastLeak     time.Time
 	leakInterval time.Duration
+	band         rating.Band
 }
 
-func newRateLimiter(limit routeLimit) *leakyBucketRateLimiter {
+func newRateLimiter(limit routeLimit, band rating.Band) *leakyBucketRateLimiter {
 	if limit.burst <= 0 {
 		limit.burst = 1
 	}
@@ -151,6 +206,7 @@ func newRateLimiter(limit routeLimit) *leakyBucketRateLimiter {
 		capacity:     limit.burst,
 		lastLeak:     time.Now(),
 		leakInterval: time.Minute / time.Duration(limit.perMinute),
+		band:         band,
 	}
 }
 

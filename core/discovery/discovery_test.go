@@ -247,7 +247,7 @@ func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fak
 	nodes := newFakeNodeRepo()
 	metrics := &fakeMetrics{}
 
-	s := NewDiscoveryService(ctx, users, nodes, metrics)
+	s := NewDiscoveryService(ctx, users, nodes, metrics, nil)
 	t.Cleanup(s.Close)
 
 	s.node = node
@@ -522,7 +522,7 @@ func TestHandleAsMember_NilDependenciesAreInert(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	bare := NewDiscoveryService(ctx, nil, nil, &fakeMetrics{})
+	bare := NewDiscoveryService(ctx, nil, nil, &fakeMetrics{}, nil)
 	defer bare.Close()
 	assert.NotPanics(t, func() { bare.handleAsMember(discovered(peerID)) })
 }
@@ -642,7 +642,7 @@ func TestRun_RoutesByNodeRoleAndStopsCleanly(t *testing.T) {
 	nodes := newFakeNodeRepo()
 	metrics := &fakeMetrics{}
 
-	s := NewDiscoveryService(ctx, users, nodes, metrics)
+	s := NewDiscoveryService(ctx, users, nodes, metrics, nil)
 	require.NoError(t, s.Run(node))
 
 	s.DiscoveryHandlerPubSub(warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)})
@@ -665,7 +665,7 @@ func TestRelayDiscoveryService_HasNoUserRepositories(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := NewRelayDiscoveryService(ctx, &fakeMetrics{})
+	s := NewRelayDiscoveryService(ctx, &fakeMetrics{}, nil)
 	defer s.Close()
 
 	assert.Nil(t, s.userRepo, "a relay stores no users")

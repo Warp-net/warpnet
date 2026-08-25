@@ -32,23 +32,33 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
 
 type DistributedHashTableDiscoverer interface {
 	ClosestPeers() []warpnet.WarpPeerID
+	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo
 	Close()
+}
+
+type RatingStorer interface {
+	Close() error
 }
 
 type ModeratorNode struct {
@@ -59,6 +69,11 @@ type ModeratorNode struct {
 	mw      *middleware.WarpMiddleware
 
 	dHashTable DistributedHashTableDiscoverer
+
+	mapStore warpnet.WarpBatching
+	crdtDb   *crdt.Store
+	rating   *rating.Handle
+	ratingDb RatingStorer
 
 	memoryStoreCloseF func() error
 
@@ -79,7 +94,8 @@ func NewModeratorNode(
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
 	}
-	mapStore := datastore.NewMapDatastore()
+	// Wrapped once, because both the DHT and the CRDT read and write it.
+	mapStore := ds.MutexWrap(datastore.NewMapDatastore())
 
 	closeF := func() error {
 		_ = memoryStore.Close()
@@ -117,6 +133,8 @@ func NewModeratorNode(
 	mn := &ModeratorNode{
 		ctx:               ctx,
 		dHashTable:        dHashTable,
+		mapStore:          mapStore,
+		rating:            rating.NewHandle(),
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -133,12 +151,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.rating, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.rating)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -163,6 +181,38 @@ func (mn *ModeratorNode) Start() (err error) {
 	)
 	println()
 	return nil
+}
+
+func (mn *ModeratorNode) StartRating(gossip crdt.GossipPubSuber) error {
+	if mn == nil || mn.node == nil {
+		return warpnet.WarpError("moderator: rating: node is not started")
+	}
+	broadcaster, err := crdt.NewGossipBroadcaster(mn.ctx, gossip)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to start crdt gossip broadcaster: %w", err)
+	}
+	mn.crdtDb, err = crdt.NewStore(
+		mn.ctx, broadcaster, mn.mapStore, mn.node.Node(), mn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to initialize crdt datastore: %w", err)
+	}
+	store, err := rating.NewNodeStore(mn.ctx, mn.crdtDb, mn.node.Node(), mn.privKey, warpnet.ModeratorNode)
+	if err != nil {
+		return err
+	}
+	mn.ratingDb = store
+	mn.rating.Set(store)
+	return nil
+}
+
+// Rating never returns nil: with no store attached the handle reports
+// nobody.
+func (mn *ModeratorNode) Rating() *rating.Handle {
+	if mn == nil || mn.rating == nil {
+		return rating.NewHandle()
+	}
+	return mn.rating
 }
 
 // SetStreamHandlers registers additional routes after the node is up. The
@@ -210,6 +260,12 @@ func (mn *ModeratorNode) Stop() {
 	}
 	mn.isClosed.Store(true)
 
+	if mn.ratingDb != nil {
+		_ = mn.ratingDb.Close()
+	}
+	if mn.crdtDb != nil {
+		_ = mn.crdtDb.Close()
+	}
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()
 	}

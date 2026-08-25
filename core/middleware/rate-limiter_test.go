@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -82,7 +83,7 @@ func callLimited(
 }
 
 func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
-	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000})
+	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000}, rating.BandTrusted)
 
 	for i := range 3 {
 		if !b.Allow() {
@@ -100,7 +101,7 @@ func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
 }
 
 func TestLeakyBucket_ZeroLimitFallsBackToOne(t *testing.T) {
-	b := newRateLimiter(routeLimit{})
+	b := newRateLimiter(routeLimit{}, rating.BandTrusted)
 	if !b.Allow() {
 		t.Fatal("expected the first request to be admitted")
 	}

@@ -31,17 +31,23 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
@@ -56,11 +62,18 @@ type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
 	Close() error
 	OwnerID() string
+	Gossip() *corePubsub.Gossip
 }
 
 type DistributedHashTableCloser interface {
+	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) <-chan peer.AddrInfo
 	Close()
 }
+
+type RatingStorer interface {
+	Close() error
+}
+
 type MetricsOnlinePusher interface {
 	PushStatusOnline(nodeId string)
 	PushStatusOffline(nodeId string)
@@ -77,6 +90,12 @@ type RelayNode struct {
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
+
+	mapStore warpnet.WarpBatching
+	crdtDb   *crdt.Store
+	rating   *rating.Handle
+	ratingDb RatingStorer
+	metrics  MetricsOnlinePusher
 }
 
 func NewRelayNode(
@@ -90,7 +109,8 @@ func NewRelayNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 
-	discService := discovery.NewRelayDiscoveryService(ctx, m)
+	ratingHandle := rating.NewHandle()
+	discService := discovery.NewRelayDiscoveryService(ctx, m, ratingHandle)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -101,7 +121,8 @@ func NewRelayNode(
 	if err != nil {
 		return nil, fmt.Errorf("relay: fail creating memory peerstore: %w", err)
 	}
-	mapStore := datastore.NewMapDatastore()
+	// Wrapped once, because both the DHT and the CRDT read and write it.
+	mapStore := ds.MutexWrap(datastore.NewMapDatastore())
 
 	closeF := func() error {
 		_ = memoryStore.Close()
@@ -150,6 +171,9 @@ func NewRelayNode(
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
+		mapStore:          mapStore,
+		rating:            ratingHandle,
+		metrics:           m,
 	}
 
 	return rn, nil
@@ -168,17 +192,37 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
+		rn.rating,
 		rn.opts...,
 	)
 	if err != nil {
 		return fmt.Errorf("relay: failed to init node: %w", err)
 	}
-	rn.setupHandlers()
-
+	rn.pubsubService.Gossip().SetRating(rn.rating)
 	rn.pubsubService.Run(rn)
 	if err := rn.discService.Run(rn); err != nil {
 		return err
 	}
+
+	crdtBroadcaster, err := crdt.NewGossipBroadcaster(rn.ctx, rn.pubsubService.Gossip())
+	if err != nil {
+		return fmt.Errorf("relay: failed to start crdt gossip broadcaster: %w", err)
+	}
+	rn.crdtDb, err = crdt.NewStore(
+		rn.ctx, crdtBroadcaster, rn.mapStore, rn.node.Node(), rn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("relay: failed to initialize crdt datastore: %w", err)
+	}
+	store, err := rating.NewNodeStore(rn.ctx, rn.crdtDb, rn.node.Node(), rn.privKey, warpnet.RelayNode)
+	if err != nil {
+		log.Errorf("relay: failed to initialize rating store: %v", err)
+	} else {
+		rn.ratingDb = store
+		rn.rating.Set(store)
+	}
+
+	rn.setupHandlers()
 
 	nodeInfo := rn.NodeInfo()
 	println()
@@ -195,7 +239,7 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.rating)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,
@@ -285,6 +329,12 @@ func (rn *RelayNode) Stop() {
 		if err := rn.pubsubService.Close(); err != nil {
 			log.Errorf("relay: failed to close pubsub: %v", err)
 		}
+	}
+	if rn.ratingDb != nil {
+		_ = rn.ratingDb.Close()
+	}
+	if rn.crdtDb != nil {
+		_ = rn.crdtDb.Close()
 	}
 	if rn.dHashTable != nil {
 		rn.dHashTable.Close()

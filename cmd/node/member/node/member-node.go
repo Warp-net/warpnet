@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -68,14 +69,18 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
+	rating           *rating.Handle
+	ratingDb         RatingStorer
 	authRepo         AuthProvider
 	userRepo         UserProvider
 	aliasesRepo      AliasesProvider
 	followRepo       FollowStorer
 	notifier         notifications.Notifier
 	db               Storer
+	crdtDb           *crdt.Store
 	statsDb          StatsStorer
 	privKey          ed25519.PrivateKey
+	metrics          MetricsOnlinePusher
 	ownerId, network string
 }
 
@@ -118,7 +123,8 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
+	ratingHandle := rating.NewHandle()
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics, ratingHandle)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -160,6 +166,7 @@ func NewMemberNode(
 	mn := &MemberNode{
 		ctx:           ctx,
 		opts:          opts,
+		rating:        ratingHandle,
 		discService:   discService,
 		mdnsService:   mdnsService,
 		pubsubService: pubsubService,
@@ -173,6 +180,7 @@ func NewMemberNode(
 		notifier:      notifier,
 		db:            db,
 		privKey:       privKey,
+		metrics:       metrics,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -183,6 +191,7 @@ func NewMemberNode(
 func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
+		m.rating,
 		m.opts...,
 	)
 	if err != nil {
@@ -191,6 +200,7 @@ func (m *MemberNode) Start() (err error) {
 
 	m.node.SetOutbox(database.NewOutboxRepo(m.db))
 
+	m.pubsubService.Gossip().SetRating(m.rating)
 	m.pubsubService.Run(m)
 	if err := m.discService.Run(m); err != nil {
 		return err
@@ -204,14 +214,27 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.statsDb, err = crdt.NewCRDTStatsStore(
+	m.crdtDb, err = crdt.NewStore(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
+	if err != nil {
+		return fmt.Errorf("member: failed to initialize crdt datastore: %w", err)
+	}
+
+	m.statsDb, err = crdt.NewCRDTStatsStore(m.ctx, m.crdtDb, m.node.Node())
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
+	store, err := rating.NewNodeStore(m.ctx, m.crdtDb, m.node.Node(), m.privKey, warpnet.MemberNode)
+	if err != nil {
+		log.Errorf("member: failed to initialize rating store: %v", err)
+	} else {
+		m.ratingDb = store
+		m.rating.Set(store)
+	}
+
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.rating)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -442,8 +465,18 @@ func (m *MemberNode) adminHandlers(
 			handler.StreamGetStatsHandler(m, db),
 		},
 		{
+			event.PRIVATE_GET_RATING,
+			handler.StreamGetOwnRatingHandler(m.ratingDb),
+		},
+		{
+			event.PUBLIC_GET_RATING,
+			handler.StreamGetRatingHandler(m.ratingDb),
+		},
+		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
+			handler.StreamModerationResultHandler(
+				m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo, m.rating,
+			),
 		},
 		{
 			event.PUBLIC_POST_REPORT,
@@ -922,6 +955,12 @@ func (m *MemberNode) Stop() {
 	}
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()
+	}
+	if m.ratingDb != nil {
+		_ = m.ratingDb.Close()
+	}
+	if m.crdtDb != nil {
+		_ = m.crdtDb.Close()
 	}
 
 	if m.nodeRepo != nil {

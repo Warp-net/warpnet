@@ -102,7 +102,7 @@ func enginePeer(engine Engine, sign ResponseSigner) Challenger {
 // runAudit drives n spot-checks of one peer and returns its final standing.
 func runAudit(t *testing.T, peerID string, corpus *Corpus, challenger Challenger, n int) (*Ledger, Standing) {
 	t.Helper()
-	ledger := NewLedger()
+	ledger := NewLedger(nil)
 	a := NewAuditor("auditor-self", challenger, ledger, corpus, testRNG())
 	a.cooldown = 0 // audit the same peer repeatedly in one test
 
@@ -371,7 +371,7 @@ func TestAudit_EngineErrorCountsAsUnreachable(t *testing.T) {
 }
 
 func TestAuditor_SkipsSelfAndCooldownPeers(t *testing.T) {
-	ledger := NewLedger()
+	ledger := NewLedger(nil)
 	corpus, truth := referenceCorpus(t, 8)
 	peer := enginePeer(honestEngine(truth, testRNG(), 0), nil)
 	a := NewAuditor("auditor-self", peer, ledger, corpus, testRNG())

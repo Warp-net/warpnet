@@ -29,8 +29,10 @@ package middleware
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
@@ -68,17 +70,42 @@ type WarpMiddleware struct {
 
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
+
+	writeFloodMx sync.Mutex
+	writeFlood   *lru.LRU[string, *atomic.Int64]
+
+	rating *rating.Handle
 }
 
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer, r *rating.Handle) *WarpMiddleware {
+	if r == nil {
+		r = rating.NewHandle()
+	}
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
+		writeFlood: lru.NewLRU[string, *atomic.Int64](
+			writeFloodCacheSize, nil, writeFloodWindow,
+		),
+		rating: r,
 	}
 	return wm
+}
+
+// record charges an offence to the stream's remote peer. Self-streams
+// and unidentified connections have nobody to charge.
+func (p *WarpMiddleware) record(s warpnet.WarpStream, kind rating.Kind) {
+	if p == nil || s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
+		return
+	}
+	p.rating.Record(remote, kind)
 }
 
 func (p *WarpMiddleware) Close() {
@@ -87,5 +114,8 @@ func (p *WarpMiddleware) Close() {
 	}
 	if p.rateLimiters != nil {
 		closeExpirableLRU(p.rateLimiters)
+	}
+	if p.writeFlood != nil {
+		closeExpirableLRU(p.writeFlood)
 	}
 }
