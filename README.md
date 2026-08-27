@@ -176,7 +176,6 @@ warpnet/
 ├── security/         # keys, signing, Noise/PSK plumbing
 ├── config/           # node configuration
 ├── frontend/         # Vue desktop UI (talks to the node via Wails)
-├── metrics/          # observability
 ├── deploy/           # deployment manifests
 └── snap/             # Snap packaging
 ```

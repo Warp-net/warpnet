@@ -61,10 +61,6 @@ type PubSubProvider interface {
 type DistributedHashTableCloser interface {
 	Close()
 }
-type MetricsOnlinePusher interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
-}
 
 type RelayNode struct {
 	ctx               context.Context
@@ -84,13 +80,12 @@ func NewRelayNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	m MetricsOnlinePusher,
 ) (_ *RelayNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
 
-	discService := discovery.NewRelayDiscoveryService(ctx, m)
+	discService := discovery.NewRelayDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,

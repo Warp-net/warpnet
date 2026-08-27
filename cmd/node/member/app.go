@@ -6,7 +6,6 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
 	"os/exec"
@@ -215,12 +214,6 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Fatalf("failed to get current node ID: %v", err)
 	}
 
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		ownNodeId.String(),
-		network,
-	)
-
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
 		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
@@ -234,7 +227,6 @@ func (a *App) runNode(network string, psk security.PSK) {
 		a.auth.Storage(),
 		a.db,
 		infos,
-		m,
 	)
 	if err != nil {
 		log.Errorf("failed to init node: %v \n", err)

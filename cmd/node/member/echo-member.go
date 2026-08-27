@@ -53,7 +53,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
@@ -146,11 +145,6 @@ func main() {
 	authInfo := <-readyChan
 
 	nodeId, _ := warpnet.IDFromPublicKey(authRepo.PrivateKey().Public().(ed25519.PublicKey))
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		nodeId.String(),
-		config.Config().Node.Network,
-	)
 
 	bootstrapNodes, _ := config.Config().Node.AddrInfos()
 	echoNode, err := member.NewMemberNode(
@@ -161,7 +155,6 @@ func main() {
 		authRepo,
 		db,
 		bootstrapNodes,
-		m,
 	)
 	if err != nil {
 		log.Fatalf("failed to init node: %v", err)

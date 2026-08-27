@@ -67,7 +67,6 @@ func init() {
 	pflag.String("node.seed", "", "Node seed for deterministic ID generation")
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
-	pflag.String("node.metrics.gateway", "207.154.221.44:4091", "Prometheus push metrics server")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
 	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release automatically")
 
@@ -131,9 +130,6 @@ func init() {
 			Network:      network,
 			IsPskPrinted: viper.GetBool("node.print-psk"),
 			IsSelfUpdate: viper.GetBool("node.self-update"),
-			Metrics: metrics{
-				Gateway: viper.GetString("node.metrics.gateway"),
-			},
 			Server: server{
 				Host: strings.TrimSpace(viper.GetString("node.server.host")),
 				Port: strings.TrimSpace(viper.GetString("node.server.port")),
@@ -188,7 +184,6 @@ type node struct {
 	Network      string
 	IsPskPrinted bool
 	IsSelfUpdate bool
-	Metrics      metrics
 	Server       server
 	Seed         string
 }
@@ -197,9 +192,7 @@ type server struct {
 	Host string
 	Port string
 }
-type metrics struct {
-	Gateway string
-}
+
 type database struct {
 	Path string
 }

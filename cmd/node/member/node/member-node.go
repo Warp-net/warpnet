@@ -50,11 +50,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type MetricsOnlinePusher interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
-}
-
 type MemberNode struct {
 	ctx context.Context
 
@@ -87,7 +82,6 @@ func NewMemberNode(
 	authRepo AuthProvider,
 	db Storer,
 	bootstrapNodes []warpnet.WarpAddrInfo,
-	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
@@ -118,7 +112,7 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
