@@ -213,31 +213,7 @@ func (f *fakeUserRepo) counts() (int, int) {
 	return len(f.created), len(f.updated)
 }
 
-type fakeMetrics struct {
-	mu      sync.Mutex
-	online  []string
-	offline []string
-}
-
-func (f *fakeMetrics) PushStatusOnline(nodeId string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.online = append(f.online, nodeId)
-}
-
-func (f *fakeMetrics) PushStatusOffline(nodeId string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.offline = append(f.offline, nodeId)
-}
-
-func (f *fakeMetrics) snapshot() ([]string, []string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]string(nil), f.online...), append([]string(nil), f.offline...)
-}
-
-func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fakeNodeRepo, *fakeMetrics) {
+func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fakeNodeRepo) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -245,14 +221,13 @@ func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fak
 	node := newFakeNode()
 	users := newFakeUserRepo()
 	nodes := newFakeNodeRepo()
-	metrics := &fakeMetrics{}
 
-	s := NewDiscoveryService(ctx, users, nodes, metrics)
+	s := NewDiscoveryService(ctx, users, nodes)
 	t.Cleanup(s.Close)
 
 	s.node = node
 	s.ownId = node.info.ID
-	return s, node, users, nodes, metrics
+	return s, node, users, nodes
 }
 
 func infoJSON(t *testing.T, info warpnet.NodeInfo) []byte {
@@ -270,7 +245,7 @@ func discovered(id string) discoveredPeer {
 }
 
 func TestEnqueue_IgnoresSelfAndEmptyPeers(t *testing.T) {
-	s, _, _, _, _ := newService(t)
+	s, _, _, _ := newService(t)
 
 	s.enqueue(warpnet.WarpAddrInfo{}, sourceMDNS)
 	s.enqueue(warpnet.WarpAddrInfo{ID: s.ownId}, sourceDHT)
@@ -279,7 +254,7 @@ func TestEnqueue_IgnoresSelfAndEmptyPeers(t *testing.T) {
 }
 
 func TestEnqueue_AcceptsRealPeersFromEverySource(t *testing.T) {
-	s, _, _, _, _ := newService(t)
+	s, _, _, _ := newService(t)
 	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
 
 	s.DiscoveryHandlerMDNS(pi)
@@ -300,7 +275,7 @@ func TestEnqueue_AcceptsRealPeersFromEverySource(t *testing.T) {
 }
 
 func TestEnqueue_RateLimiterShedsFloods(t *testing.T) {
-	s, _, _, _, _ := newService(t)
+	s, _, _, _ := newService(t)
 
 	for i := 0; i < 500; i++ {
 		s.enqueue(warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}, sourceGossip)
@@ -318,7 +293,7 @@ func TestEnqueue_NilServiceIsInert(t *testing.T) {
 }
 
 func TestHandleAsMember_BlocklistedPeerIsNeverDialled(t *testing.T) {
-	s, node, users, nodes, metrics := newService(t)
+	s, node, users, nodes := newService(t)
 	nodes.blocklisted[peerID] = true
 
 	s.handleAsMember(discovered(peerID))
@@ -329,12 +304,9 @@ func TestHandleAsMember_BlocklistedPeerIsNeverDialled(t *testing.T) {
 
 	created, _ := users.counts()
 	assert.Zero(t, created)
-
-	_, offline := metrics.snapshot()
-	assert.Contains(t, offline, peerID)
 }
 
-func TestHandleAsMember_BackoffAndDialFailureAreReportedOffline(t *testing.T) {
+func TestHandleAsMember_BackoffAndDialFailureStopTheHandling(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
@@ -344,7 +316,7 @@ func TestHandleAsMember_BackoffAndDialFailureAreReportedOffline(t *testing.T) {
 		{"generic failure", errors.New("connection refused")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, node, users, _, metrics := newService(t)
+			s, node, users, _ := newService(t)
 			node.connectErr = tc.err
 
 			s.handleAsMember(discovered(peerID))
@@ -354,15 +326,12 @@ func TestHandleAsMember_BackoffAndDialFailureAreReportedOffline(t *testing.T) {
 
 			created, _ := users.counts()
 			assert.Zero(t, created)
-
-			_, offline := metrics.snapshot()
-			assert.Contains(t, offline, peerID)
 		})
 	}
 }
 
 func TestHandleAsMember_KnownAliasIsPinnedAndSkipped(t *testing.T) {
-	s, node, users, _, metrics := newService(t)
+	s, node, users, _ := newService(t)
 
 	aliasID := warpnet.FromStringToPeerID(peerID)
 	s.aliasCache.Add(aliasID, warpnet.FromStringToPeerID(peerID2))
@@ -376,9 +345,6 @@ func TestHandleAsMember_KnownAliasIsPinnedAndSkipped(t *testing.T) {
 	assert.Zero(t, created)
 
 	assert.Contains(t, node.maxPriority, peerID, "an alias of our own node must stay connected")
-
-	online, _ := metrics.snapshot()
-	assert.Contains(t, online, peerID)
 }
 
 func TestHandleAsMember_RejectsUnusableNodeInfo(t *testing.T) {
@@ -395,7 +361,7 @@ func TestHandleAsMember_RejectsUnusableNodeInfo(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s, node, users, _, _ := newService(t)
+			s, node, users, _ := newService(t)
 			node.infoResp, node.infoErr = c.infoResp, c.infoErr
 
 			s.handleAsMember(discovered(peerID))
@@ -417,7 +383,7 @@ func TestHandleAsMember_InfrastructurePeersAreNotUsers(t *testing.T) {
 		{"moderator", warpnet.NodeInfo{OwnerId: "mod-owner", Type: warpnet.ModeratorNode}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, node, users, _, _ := newService(t)
+			s, node, users, _ := newService(t)
 			node.infoResp = infoJSON(t, tc.info)
 
 			s.handleAsMember(discovered(peerID))
@@ -429,7 +395,7 @@ func TestHandleAsMember_InfrastructurePeersAreNotUsers(t *testing.T) {
 }
 
 func TestHandleAsMember_RegistersGenuinelyNewUser(t *testing.T) {
-	s, node, users, _, metrics := newService(t)
+	s, node, users, _ := newService(t)
 
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{
 		OwnerId:      "remote-owner",
@@ -454,14 +420,11 @@ func TestHandleAsMember_RegistersGenuinelyNewUser(t *testing.T) {
 	_, _, priorities := node.snapshot()
 	assert.Equal(t, warpnet.ReachabilityPublic, priorities[peerID])
 
-	online, _ := metrics.snapshot()
-	assert.Contains(t, online, peerID)
-
 	assert.True(t, s.aliasCache.Contains(warpnet.FromStringToPeerID(peerID2)))
 }
 
 func TestHandleAsMember_KnownOnlineUserIsNotRefetched(t *testing.T) {
-	s, node, users, _, _ := newService(t)
+	s, node, users, _ := newService(t)
 
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{OwnerId: "remote-owner"})
 	users.existing[peerID] = domain.User{Id: "remote-owner", IsOffline: false}
@@ -477,7 +440,7 @@ func TestHandleAsMember_KnownOnlineUserIsNotRefetched(t *testing.T) {
 }
 
 func TestHandleAsMember_OfflineUserIsRefreshed(t *testing.T) {
-	s, node, users, _, _ := newService(t)
+	s, node, users, _ := newService(t)
 
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{OwnerId: "remote-owner"})
 	node.userResp = []byte(`{"id":"remote-owner","username":"back"}`)
@@ -491,7 +454,7 @@ func TestHandleAsMember_OfflineUserIsRefreshed(t *testing.T) {
 }
 
 func TestHandleAsMember_ExistingUserIsUpdatedNotDuplicated(t *testing.T) {
-	s, node, users, _, _ := newService(t)
+	s, node, users, _ := newService(t)
 
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{OwnerId: "remote-owner"})
 	node.userResp = []byte(`{"id":"remote-owner","username":"remote"}`)
@@ -505,7 +468,7 @@ func TestHandleAsMember_ExistingUserIsUpdatedNotDuplicated(t *testing.T) {
 }
 
 func TestHandleAsMember_UnreadableUserPayloadIsDropped(t *testing.T) {
-	s, node, users, _, _ := newService(t)
+	s, node, users, _ := newService(t)
 
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{OwnerId: "remote-owner"})
 	node.userResp = []byte("not json")
@@ -522,13 +485,13 @@ func TestHandleAsMember_NilDependenciesAreInert(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	bare := NewDiscoveryService(ctx, nil, nil, &fakeMetrics{})
+	bare := NewDiscoveryService(ctx, nil, nil)
 	defer bare.Close()
 	assert.NotPanics(t, func() { bare.handleAsMember(discovered(peerID)) })
 }
 
 func TestHandleAsRelay_SkipsSelfAndEmptyPeers(t *testing.T) {
-	s, node, _, _, _ := newService(t)
+	s, node, _, _ := newService(t)
 
 	s.handleAsRelay(discoveredPeer{})
 	s.handleAsRelay(discoveredPeer{ID: s.ownId})
@@ -538,7 +501,7 @@ func TestHandleAsRelay_SkipsSelfAndEmptyPeers(t *testing.T) {
 }
 
 func TestHandleAsRelay_ConnectsAndRecordsPriority(t *testing.T) {
-	s, node, _, _, metrics := newService(t)
+	s, node, _, _ := newService(t)
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{
 		OwnerId:      "member-owner",
 		Reachability: warpnet.ReachabilityPrivate,
@@ -551,27 +514,21 @@ func TestHandleAsRelay_ConnectsAndRecordsPriority(t *testing.T) {
 	assert.Contains(t, connected, peerID)
 	assert.Equal(t, warpnet.ReachabilityPrivate, priorities[peerID])
 
-	online, _ := metrics.snapshot()
-	assert.Contains(t, online, peerID)
-
 	assert.True(t, s.aliasCache.Contains(warpnet.FromStringToPeerID(peerID2)))
 }
 
-func TestHandleAsRelay_UnreachablePeerIsReportedOffline(t *testing.T) {
-	s, node, _, _, metrics := newService(t)
+func TestHandleAsRelay_UnreachablePeerIsNotInterrogated(t *testing.T) {
+	s, node, _, _ := newService(t)
 	node.connectErr = warpnet.ErrAllDialsFailed
 
 	s.handleAsRelay(discovered(peerID))
-
-	_, offline := metrics.snapshot()
-	assert.Contains(t, offline, peerID)
 
 	_, streamed, _ := node.snapshot()
 	assert.Empty(t, streamed)
 }
 
 func TestHandleAsRelay_KnownAliasSkipsInterrogation(t *testing.T) {
-	s, node, _, _, _ := newService(t)
+	s, node, _, _ := newService(t)
 	s.aliasCache.Add(warpnet.FromStringToPeerID(peerID), warpnet.FromStringToPeerID(peerID2))
 
 	s.handleAsRelay(discovered(peerID))
@@ -586,7 +543,7 @@ func TestHandleAsRelay_NilServiceIsInert(t *testing.T) {
 }
 
 func TestHandleAsModerator_IsObserveOnly(t *testing.T) {
-	s, node, users, _, _ := newService(t)
+	s, node, users, _ := newService(t)
 
 	s.handleAsModerator(discovered(peerID))
 
@@ -599,7 +556,7 @@ func TestHandleAsModerator_IsObserveOnly(t *testing.T) {
 }
 
 func TestRequestNodeUser_RejectsEmptyUserAndBadPayloads(t *testing.T) {
-	s, node, _, _, _ := newService(t)
+	s, node, _, _ := newService(t)
 	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
 
 	_, err := s.requestNodeUser(pi, "")
@@ -620,7 +577,7 @@ func TestRequestNodeUser_RejectsEmptyUserAndBadPayloads(t *testing.T) {
 }
 
 func TestRequestNodeUser_StampsNodeIdentityAndRTT(t *testing.T) {
-	s, node, _, _, _ := newService(t)
+	s, node, _, _ := newService(t)
 	node.userResp = []byte(`{"id":"owner","username":"u","node_id":"someone-elses-node","isOffline":true}`)
 
 	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
@@ -640,9 +597,8 @@ func TestRun_RoutesByNodeRoleAndStopsCleanly(t *testing.T) {
 	node.info.Type = warpnet.RelayNode
 	users := newFakeUserRepo()
 	nodes := newFakeNodeRepo()
-	metrics := &fakeMetrics{}
 
-	s := NewDiscoveryService(ctx, users, nodes, metrics)
+	s := NewDiscoveryService(ctx, users, nodes)
 	require.NoError(t, s.Run(node))
 
 	s.DiscoveryHandlerPubSub(warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)})
@@ -665,7 +621,7 @@ func TestRelayDiscoveryService_HasNoUserRepositories(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := NewRelayDiscoveryService(ctx, &fakeMetrics{})
+	s := NewRelayDiscoveryService(ctx)
 	defer s.Close()
 
 	assert.Nil(t, s.userRepo, "a relay stores no users")
