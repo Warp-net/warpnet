@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -70,43 +71,6 @@ type FollowingStorer interface {
 	AddFollowRequest(targetUserId, followerId string) error
 	RemoveFollowRequest(targetUserId, followerId string) error
 	ListFollowRequests(targetUserId string, limit *uint64, cursor *string) ([]string, string, error)
-}
-
-// fetchFollower returns the follower's profile, resolving it from the node that
-// delivered the follow when it is unknown locally, and storing it. A follow is
-// stored only after this succeeds: a follower we hold as an id alone renders as
-// that raw id in the notification and as an empty row in the followers list.
-// The delivering node is the right source on any network — it is either the
-// follower's own node or the home node the follower is bridged from.
-func fetchFollower(
-	userRepo FollowingUserStorer, streamer FollowNodeStreamer, s warpnet.WarpStream, followerId string,
-) (domain.User, error) {
-	follower, err := userRepo.Get(followerId)
-	if err == nil {
-		return follower, nil
-	}
-	if !errors.Is(err, database.ErrUserNotFound) {
-		return domain.User{}, err
-	}
-
-	senderNodeId := s.Conn().RemotePeer().String()
-	resp, err := streamer.GenericStream(senderNodeId, event.PUBLIC_GET_USER, event.GetUserEvent{
-		UserId: domain.ID(followerId),
-		NodeId: senderNodeId,
-	})
-	if err != nil {
-		return domain.User{}, err
-	}
-	if err := json.Unmarshal(resp, &follower); err != nil {
-		return domain.User{}, err
-	}
-	if follower.Id == "" {
-		return domain.User{}, database.ErrUserNotFound
-	}
-	if _, err := userRepo.Create(follower); err != nil && !errors.Is(err, database.ErrUserAlreadyExists) {
-		return domain.User{}, err
-	}
-	return follower, nil
 }
 
 type FollowNotifier interface {
@@ -150,7 +114,7 @@ func StreamFollowHandler(
 			if s == nil || s.Conn() == nil {
 				return nil, warpnet.ErrForeignAuthor
 			}
-			followerUser, err := fetchFollower(userRepo, streamer, s, ev.FollowerId)
+			followerUser, err := authorship.FetchActor(userRepo, streamer, s, ev.FollowerId)
 			if err != nil {
 				return nil, err
 			}
@@ -285,8 +249,7 @@ func StreamUnfollowHandler(
 		isMeUnfollowed := ownerUserId == ev.FollowingId
 
 		if isMeUnfollowed {
-			follower, _ := userRepo.Get(ev.FollowerId)
-			if err := warpnet.VerifyAuthorship(s, follower.NodeId); err != nil {
+			if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.FollowerId); err != nil {
 				return nil, err
 			}
 			err = followRepo.Unfollow(ev.FollowerId, ev.FollowingId)

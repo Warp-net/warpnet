@@ -16,7 +16,8 @@ import (
 )
 
 type stubReplyUserRepo struct {
-	getFn func(userId string) (domain.User, error)
+	getFn    func(userId string) (domain.User, error)
+	createFn func(user domain.User) (domain.User, error)
 }
 
 func (s stubReplyUserRepo) Get(userId string) (domain.User, error) {
@@ -24,6 +25,12 @@ func (s stubReplyUserRepo) Get(userId string) (domain.User, error) {
 		return s.getFn(userId)
 	}
 	return domain.User{Id: userId, NodeId: "node-2"}, nil
+}
+func (s stubReplyUserRepo) Create(user domain.User) (domain.User, error) {
+	if s.createFn != nil {
+		return s.createFn(user)
+	}
+	return user, nil
 }
 
 // Replies are created through StreamNewTweetHandler: a tweet with a parent
