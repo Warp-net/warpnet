@@ -1,63 +1,63 @@
 services:
-  warpnet1:
-    container_name: warpnet-mainnet-1
-    image: ghcr.io/warp-net/warpnet-relay:${WARPNET_VERSION:-latest}
-    network_mode: host
-    restart: unless-stopped
-    mem_limit: 256m
-    mem_reservation: 128m
-    oom_score_adj: -500
-    environment:
-#      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
-      - NODE_PORT=4001
-      - NODE_HOST_V4=207.154.221.44
-      - NODE_SEED=warpnet1
-      - NODE_NETWORK=warpnet
-      - LOGGING_FORMAT=json
-      - LOGGING_LEVEL=info
-      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-      - SOCKS5_ENABLED=false
-      - GOMEMLIMIT=192MiB
+#   warpnet1:
+#     container_name: warpnet-mainnet-1
+#     image: ghcr.io/warp-net/warpnet-relay:${WARPNET_VERSION:-latest}
+#     network_mode: host
+#     restart: unless-stopped
+#     mem_limit: 256m
+#     mem_reservation: 128m
+#     oom_score_adj: -500
+#     environment:
+# #      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
+#       - NODE_PORT=4001
+#       - NODE_HOST_V4=207.154.221.44
+#       - NODE_SEED=warpnet1
+#       - NODE_NETWORK=warpnet
+#       - LOGGING_FORMAT=json
+#       - LOGGING_LEVEL=info
+#       - NODE_METRICS_GATEWAY=207.154.221.44:4091
+#       - SOCKS5_ENABLED=false
+#       - GOMEMLIMIT=192MiB
 
-  warpnet2:
-    container_name: warpnet-mainnet-2
-    image: ghcr.io/warp-net/warpnet-relay:${WARPNET_VERSION:-latest}
-    network_mode: host
-    restart: unless-stopped
-    mem_limit: 256m
-    mem_reservation: 128m
-    oom_score_adj: -500
-    environment:
-#      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
-      - NODE_PORT=4002
-      - NODE_HOST_V4=207.154.221.44
-      - NODE_SEED=warpnet2
-      - NODE_NETWORK=warpnet
-      - LOGGING_FORMAT=json
-      - LOGGING_LEVEL=info
-      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-      - SOCKS5_ENABLED=false
-      - GOMEMLIMIT=192MiB
+#   warpnet2:
+#     container_name: warpnet-mainnet-2
+#     image: ghcr.io/warp-net/warpnet-relay:${WARPNET_VERSION:-latest}
+#     network_mode: host
+#     restart: unless-stopped
+#     mem_limit: 256m
+#     mem_reservation: 128m
+#     oom_score_adj: -500
+#     environment:
+# #      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
+#       - NODE_PORT=4002
+#       - NODE_HOST_V4=207.154.221.44
+#       - NODE_SEED=warpnet2
+#       - NODE_NETWORK=warpnet
+#       - LOGGING_FORMAT=json
+#       - LOGGING_LEVEL=info
+#       - NODE_METRICS_GATEWAY=207.154.221.44:4091
+#       - SOCKS5_ENABLED=false
+#       - GOMEMLIMIT=192MiB
 
-  warpnet3:
-    container_name: warpnet-mainnet-3
-    image: ghcr.io/warp-net/warpnet-relay:${WARPNET_VERSION:-latest}
-    network_mode: host
-    restart: unless-stopped
-    mem_limit: 256m
-    mem_reservation: 128m
-    oom_score_adj: -500
-    environment:
-      - NODE_PORT=4003
-#      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
-      - NODE_SEED=warpnet3
-      - NODE_HOST_V4=207.154.221.44
-      - NODE_NETWORK=warpnet
-      - LOGGING_FORMAT=json
-      - LOGGING_LEVEL=info
-      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-      - SOCKS5_ENABLED=false
-      - GOMEMLIMIT=192MiB
+#   warpnet3:
+#     container_name: warpnet-mainnet-3
+#     image: ghcr.io/warp-net/warpnet-relay:${WARPNET_VERSION:-latest}
+#     network_mode: host
+#     restart: unless-stopped
+#     mem_limit: 256m
+#     mem_reservation: 128m
+#     oom_score_adj: -500
+#     environment:
+#       - NODE_PORT=4003
+# #      - GOLOG_LOG_LEVEL=tcp-tpt=debug,swarm=debug,swarm2=debug,net=debug,connmgr=debug
+#       - NODE_SEED=warpnet3
+#       - NODE_HOST_V4=207.154.221.44
+#       - NODE_NETWORK=warpnet
+#       - LOGGING_FORMAT=json
+#       - LOGGING_LEVEL=info
+#       - NODE_METRICS_GATEWAY=207.154.221.44:4091
+#       - SOCKS5_ENABLED=false
+#       - GOMEMLIMIT=192MiB
 
 #  warpnet-moderator-1:
 #    container_name: moderator
