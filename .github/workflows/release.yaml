@@ -193,12 +193,19 @@ jobs:
           test -d "$NDK_DIR"
           echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
 
-      - name: Build Warpnet native library (gomobile)
-        working-directory: warpdroid/node
+      - name: Build Warpnet native library (gomobile) at F-Droid's build path
         run: |
           set -euo pipefail
-          (cd "$GITHUB_WORKSPACE" && go mod download)
-          bash build-native.sh
+          FDROID_DIR=/home/vagrant/build/site.warpnet.warpdroid
+          sudo mkdir -p /home/vagrant/build
+          sudo cp -a "$GITHUB_WORKSPACE" "$FDROID_DIR"
+          sudo chown -R "$(id -un):$(id -gn)" /home/vagrant/build
+          (cd "$FDROID_DIR" && go mod download)
+          (cd "$FDROID_DIR/warpdroid/node" && bash build-native.sh)
+          libs="$GITHUB_WORKSPACE/warpdroid/warpnet-transport/libs"
+          mkdir -p "$libs"
+          cp "$FDROID_DIR/warpdroid/warpnet-transport/libs/warpnet.aar" "$libs/warpnet.aar"
+          cp "$FDROID_DIR/warpdroid/warpnet-transport/libs/warpnet-sources.jar" "$libs/warpnet-sources.jar"
 
       - name: Decode release keystore (if configured)
         id: keystore
