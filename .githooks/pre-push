@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Mirrors pushed code to the Codeberg mirror (codeberg.org/Warpnet/warpnet).
-# Tags are not mirrored here: the Release workflow owns tagging.
+# Cuts the release tag for the version in `version` (bumped by pre-commit) and
+# mirrors pushed code to the Codeberg mirror (codeberg.org/Warpnet/warpnet).
 
-# Re-entry guard: the mirror push below invokes `git push` again, which would
+# Re-entry guard: the pushes below invoke `git push` again, which would
 # otherwise re-trigger this hook (this recursion previously spawned runaway
 # hook/`git push codeberg` processes that hung for hours).
 if [ -n "${WARPNET_PREPUSH:-}" ]; then
@@ -11,23 +11,55 @@ if [ -n "${WARPNET_PREPUSH:-}" ]; then
 fi
 export WARPNET_PREPUSH=1
 
-# Never mirror a push that is already aimed at the mirror.
+# Never re-process a push that is already aimed at the mirror.
 case "${2:-}" in
     *codeberg.org*) exit 0 ;;
 esac
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
-# Only the long-lived branches exist on the mirror; feature branches stay local.
+# Only the long-lived branches are released and exist on the mirror; feature
+# branches stay local.
 case "$BRANCH" in
     main|develop) ;;
     *) exit 0 ;;
 esac
 
+echo "Pre-push hook started..."
+
+FILE="version"
+
+if [ ! -f "$FILE" ]; then
+    echo "Version file not found!"
+    exit 1
+fi
+
+CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$FILE" || true)
+
+if [ -n "$CURRENT_VERSION" ]; then
+    TAG="v$CURRENT_VERSION"
+
+    # Create the release tag once; re-running on the same version is a no-op.
+    if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+        echo "Tag $TAG already exists."
+    else
+        git tag -a "$TAG" -m "Release version $CURRENT_VERSION"
+        echo "Tagged $TAG."
+    fi
+
+    # Best-effort: each push is bounded by a timeout so an unreachable or slow
+    # remote can never block or hang the push, and --no-verify keeps the inner
+    # pushes out of this hook.
+    timeout --kill-after=5 20 git push --no-verify origin "$TAG" \
+        || echo "warn: pushing $TAG to origin failed or timed out (continuing)"
+    timeout --kill-after=5 20 git push --no-verify codeberg "$TAG" \
+        || echo "warn: pushing $TAG to codeberg failed or timed out (continuing)"
+else
+    echo "warn: version file is not strict semver, skipping the release tag"
+fi
+
 echo "Pre-push hook: mirroring $BRANCH to codeberg..."
 
-# Best-effort: bounded by a timeout so an unreachable or slow mirror can never
-# block the push, and --no-verify keeps the inner push out of this hook.
 timeout --kill-after=5 20 git push --no-verify codeberg "$BRANCH" \
     || echo "warn: mirroring $BRANCH to codeberg failed or timed out (continuing)"
 
