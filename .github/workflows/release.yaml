@@ -193,12 +193,6 @@ jobs:
           test -d "$NDK_DIR"
           echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
 
-      # Build the gomobile native library at the SAME absolute path F-Droid's
-      # buildserver uses (/home/vagrant/build/<appid>). gomobile ignores -trimpath
-      # for the main module, so libgojni.so's .go.buildinfo embeds the checkout
-      # path; matching the path is F-Droid's documented fix for embedded build
-      # paths (https://f-droid.org/docs/Reproducible_Builds/). The built .aar is
-      # then copied back into the workspace for the Gradle step.
       - name: Build Warpnet native library (gomobile) at F-Droid's build path
         run: |
           set -euo pipefail
