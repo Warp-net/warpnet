@@ -53,17 +53,9 @@ docker pull ghcr.io/warp-net/warpnet-vadim:latest
 
 export HOSTNAME=''
 
-if [ "$MAINNET" = "true" ]; then
-    echo "Mainnet is enabled"
-    mkdir -p /root/mainnet
-    mv docker-compose-mainnet.yml mainnet/docker-compose-mainnet.yml
-    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml down
-    docker compose -p warpnet-mainnet -f mainnet/docker-compose-mainnet.yml up -d --build
-else
-    echo "Mainnet is disabled"
-    mkdir -p /root/testnet
-    mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
-    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down
-    docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
-fi
+mkdir -p /root/testnet
+mv docker-compose-testnet.yml testnet/docker-compose-testnet.yml
+docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml down
+docker compose -p warpnet-testnet -f testnet/docker-compose-testnet.yml up -d --build
+
 docker image prune --force
