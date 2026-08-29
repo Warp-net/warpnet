@@ -33,6 +33,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -52,6 +53,7 @@ type ReactionTweetsStorer interface {
 type ReactedUserFetcher interface {
 	GetBatch(userIds ...string) (users []domain.User, err error)
 	Get(userId string) (users domain.User, err error)
+	Create(user domain.User) (domain.User, error)
 }
 
 type ReactionStreamer interface {
@@ -95,8 +97,8 @@ func StreamReactionHandler(
 			return nil, warpnet.WarpError("react: empty tweet id")
 		}
 
-		reactor, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
+		reactor, err := authorship.VerifyActor(userRepo, streamer, s, ev.OwnerId)
+		if err != nil {
 			return nil, err
 		}
 
@@ -216,8 +218,7 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		reactor, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.OwnerId); err != nil {
 			return nil, err
 		}
 

@@ -1,0 +1,5 @@
+Emoji reactions replace the old binary Like. React to a post with any emoji, see who reacted, and get "reacted to your post" notifications. Likes, Liked by and the Likes notification channel are now Reactions throughout.
+
+Hardened request signing: the timestamp and the destination peer are now covered by every signature, so stale or replayed requests are rejected.
+
+Direct messages to bridged Mastodon accounts are disabled, so DMs stay inside the peer-to-peer network.
