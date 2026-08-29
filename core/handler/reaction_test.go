@@ -78,6 +78,14 @@ func (s stubReactionRepo) Reacted(userId string, limit *uint64, cursor *string) 
 type stubReactionUserRepo struct {
 	getBatchFn func(userIds ...string) ([]domain.User, error)
 	getFn      func(userId string) (domain.User, error)
+	createFn   func(user domain.User) (domain.User, error)
+}
+
+func (s stubReactionUserRepo) Create(user domain.User) (domain.User, error) {
+	if s.createFn != nil {
+		return s.createFn(user)
+	}
+	return user, nil
 }
 
 func (s stubReactionUserRepo) GetBatch(userIds ...string) ([]domain.User, error) {

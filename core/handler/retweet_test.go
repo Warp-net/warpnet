@@ -17,6 +17,14 @@ import (
 type stubRetweetUserRepo struct {
 	getBatchFn func(ids ...string) ([]domain.User, error)
 	getFn      func(userId string) (domain.User, error)
+	createFn   func(user domain.User) (domain.User, error)
+}
+
+func (s stubRetweetUserRepo) Create(user domain.User) (domain.User, error) {
+	if s.createFn != nil {
+		return s.createFn(user)
+	}
+	return user, nil
 }
 
 func (s stubRetweetUserRepo) GetBatch(ids ...string) ([]domain.User, error) {
