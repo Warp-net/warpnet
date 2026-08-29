@@ -62,8 +62,7 @@ func TestNotificationsDeliveredToRecipient_Reply(t *testing.T) {
 			return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 		}},
 		repo,
-		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner, ID: nodeID}},
-	)
+		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner, ID: nodeID}})
 
 	parentUserID := tweetOwner
 	ev := event.NewTweetEvent{
@@ -103,15 +102,16 @@ func TestNotificationsDeliveredToRecipient_Reaction(t *testing.T) {
 	tweetOwner := "alice"
 	reactor := "bob"
 
+	users, conn := actorStream(t, reactor, nil)
 	h := StreamReactionHandler(
 		stubReactionRepo{},
-		stubReactionUserRepo{},
+		users,
 		repo,
 		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}},
 	)
 
 	ev := event.ReactionEvent{TweetId: "tweet-1", OwnerId: reactor, UserId: tweetOwner}
-	if _, err := h(marshal(t, ev), nil); err != nil {
+	if _, err := h(marshal(t, ev), conn); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
 
@@ -134,8 +134,11 @@ func TestNotificationsDeliveredToRecipient_Retweet(t *testing.T) {
 	tweetOwner := "alice"
 	retweeter := "bob"
 
+	nodeId, conn := actorNodeStream(t)
 	h := StreamNewReTweetHandler(
-		stubRetweetUserRepo{},
+		stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: nodeId.String()}, nil
+		}},
 		stubReTweetRepo{},
 		stubTimelineRepo{},
 		repo,
@@ -150,7 +153,7 @@ func TestNotificationsDeliveredToRecipient_Retweet(t *testing.T) {
 		RetweetedBy: &rt,
 		CreatedAt:   time.Now(),
 	}
-	if _, err := h(marshal(t, event.NewRetweetEvent(tw)), nil); err != nil {
+	if _, err := h(marshal(t, event.NewRetweetEvent(tw)), conn); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
 
@@ -173,17 +176,20 @@ func TestNotificationsDeliveredToRecipient_Follow(t *testing.T) {
 	followed := "alice"
 	follower := "bob"
 
+	nodeId, conn := actorNodeStream(t)
 	h := StreamFollowHandler(
 		stubFollowBroadcaster{},
 		stubFollowRepo{},
 		stubAuth{owner: domain.Owner{UserId: followed}},
-		stubFollowUserRepo{},
+		stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: nodeId.String()}, nil
+		}},
 		repo,
 		stubFollowStreamer{},
 	)
 
 	ev := event.NewFollowEvent{FollowerId: follower, FollowingId: followed}
-	if _, err := h(marshal(t, ev), nil); err != nil {
+	if _, err := h(marshal(t, ev), conn); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
 
@@ -219,8 +225,7 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 				return domain.User{Id: userId, NodeId: nodeID.String()}, nil
 			}},
 			repo,
-			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
-		)
+			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}})
 
 		parentUserID := owner
 		ev := event.NewTweetEvent{
@@ -244,14 +249,15 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 	t.Run("self reaction", func(t *testing.T) {
 		repo := newNotificationsRepo(t)
 		owner := "alice"
+		users, conn := actorStream(t, owner, nil)
 		h := StreamReactionHandler(
 			stubReactionRepo{},
-			stubReactionUserRepo{},
+			users,
 			repo,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}},
 		)
 		ev := event.ReactionEvent{TweetId: "tweet-1", OwnerId: owner, UserId: owner}
-		if _, err := h(marshal(t, ev), nil); err != nil {
+		if _, err := h(marshal(t, ev), conn); err != nil {
 			t.Fatalf("handler: %v", err)
 		}
 		if r := listNotificationsFor(t, repo, owner); len(r.Notifications) != 0 {
@@ -262,8 +268,11 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 	t.Run("self retweet", func(t *testing.T) {
 		repo := newNotificationsRepo(t)
 		owner := "alice"
+		nodeId, conn := actorNodeStream(t)
 		h := StreamNewReTweetHandler(
-			stubRetweetUserRepo{},
+			stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, NodeId: nodeId.String()}, nil
+			}},
 			stubReTweetRepo{},
 			stubTimelineRepo{},
 			repo,
@@ -277,7 +286,7 @@ func TestNotifications_NoSelfNotification(t *testing.T) {
 			RetweetedBy: &rt,
 			CreatedAt:   time.Now(),
 		}
-		if _, err := h(marshal(t, event.NewRetweetEvent(tw)), nil); err != nil {
+		if _, err := h(marshal(t, event.NewRetweetEvent(tw)), conn); err != nil {
 			t.Fatalf("handler: %v", err)
 		}
 		if r := listNotificationsFor(t, repo, owner); len(r.Notifications) != 0 {

@@ -6,7 +6,6 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/metrics"
 	"net/http"
 	"os"
 	"os/exec"
@@ -58,7 +57,7 @@ type AppAuthServicer interface {
 }
 
 type NodeServer interface {
-	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 	Stop()
 	Start() error
@@ -109,6 +108,7 @@ var errUnknownNetwork = errors.New("unknown network")
 // SelectNetwork relaunches the app on the chosen network. After the first
 // login the choice sticks by itself: config picks the network that already
 // has a database.
+// TODO remove
 func (a *App) SelectNetwork(network string) error {
 	if network != mainNetwork && network != testNetwork {
 		return fmt.Errorf("%w: %s", errUnknownNetwork, network)
@@ -138,7 +138,6 @@ func (a *App) SetPendingDeepLink(raw string) {
 	a.mx.Unlock()
 }
 
-// ConsumePendingDeepLink returns the pending warpnet:// URL and clears it.
 func (a *App) ConsumePendingDeepLink() string {
 	if a == nil || a.mx == nil {
 		return ""
@@ -150,11 +149,6 @@ func (a *App) ConsumePendingDeepLink() string {
 	return raw
 }
 
-// NotifyDeepLink stashes the URL and, if the Wails runtime is ready,
-// unminimises + shows the window and emits "deeplink:open" so the
-// frontend pulls ConsumePendingDeepLink without waiting for a navigation.
-// Called from SingleInstanceLock.OnSecondInstanceLaunch (Linux/Windows)
-// and mac.Options.OnUrlOpen — both arrive while the app is already up.
 func (a *App) NotifyDeepLink(raw string) {
 	if a == nil || raw == "" {
 		return
@@ -168,8 +162,6 @@ func (a *App) NotifyDeepLink(raw string) {
 	wailsruntime.EventsEmit(a.ctx, "deeplink:open")
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -222,19 +214,12 @@ func (a *App) runNode(network string, psk security.PSK) {
 		log.Fatalf("failed to get current node ID: %v", err)
 	}
 
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		ownNodeId.String(),
-		network,
-	)
-
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
 		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
 	}
 
-	a.mx.Lock()
-	a.node, err = member.NewMemberNode(
+	node, err := member.NewMemberNode(
 		a.ctx,
 		a.auth.PrivateKey(),
 		psk,
@@ -242,30 +227,26 @@ func (a *App) runNode(network string, psk security.PSK) {
 		a.auth.Storage(),
 		a.db,
 		infos,
-		m,
 	)
 	if err != nil {
-		a.mx.Unlock()
-		log.Errorf("failed to init node: %v \n", err)
-		return
-	}
-	a.mx.Unlock()
-
-	if err != nil {
 		log.Errorf("failed to init node: %v \n", err)
 		return
 	}
 
-	err = a.node.Start()
-	if err != nil {
+	if err = node.Start(); err != nil {
 		log.Errorf("failed to start member node: %v \n", err)
 		return
 	}
 
+	// attach only a node that really started: a dead one panics in Call
+	a.mx.Lock()
+	a.node = node
+	a.mx.Unlock()
+
 	// report to auth handler - Node set up and running
 	serverNodeAuthInfo.ID = ownNodeId.String()
 	serverNodeAuthInfo.Network = network
-	serverNodeAuthInfo.Addresses = a.node.NodeInfo().Addresses
+	serverNodeAuthInfo.Addresses = node.NodeInfo().Addresses
 	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
 	a.readyChan <- serverNodeAuthInfo
 }
@@ -335,7 +316,9 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.node.Stop() // close node first
+		if a.node != nil {
+			a.node.Stop() // close node first
+		}
 		a.auth.AuthLogout()
 		response.Body = []byte(`["logged_out"]`)
 		return response
@@ -355,7 +338,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
-		nodeId := a.node.NodeInfo().ID.String()
+		ownNodeId := a.node.NodeInfo().ID
+		nodeId := ownNodeId.String()
 		response.NodeId = nodeId
 		ts, _ := time.Parse(time.RFC3339, request.Timestamp)
 		if ts.IsZero() {
@@ -373,6 +357,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		msg.Signature = security.Sign(a.auth.PrivateKey(), msg.SigningBytes())
 
 		respData, err := a.node.SelfStream(
+			ownNodeId, ownNodeId,
 			stream.WarpRoute(request.Path),
 			msg,
 		)
@@ -410,7 +395,9 @@ func (a *App) close(_ context.Context) {
 
 	log.Infoln("app: closing...")
 
-	a.node.Stop() // close node first
+	if a.node != nil {
+		a.node.Stop() // close node first
+	}
 
 	a.auth.AuthLogout()
 

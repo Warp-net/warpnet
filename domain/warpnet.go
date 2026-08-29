@@ -29,10 +29,6 @@ package domain
 
 import (
 	"time"
-	"unicode"
-	"unicode/utf8"
-
-	"github.com/Warp-net/warpnet/core/warpnet"
 
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
@@ -40,10 +36,6 @@ import (
 
 type ID = string
 
-// QRByteModeCapacity is the maximum payload (bytes) that fits in a QR code at
-// version 40 with error correction level 'L' in byte mode. The desktop UI
-// renders the AuthNodeInfo envelope as a pairing QR; JSON payloads larger
-// than this cannot be encoded and the QR modal renders blank.
 const QRByteModeCapacity = 2953
 
 // AuthNodeInfo defines model for AuthNodeInfo.
@@ -53,14 +45,10 @@ type AuthNodeInfo struct {
 	PSK            string   `json:"psk"`
 	ID             string   `json:"node_id"`
 	Addresses      []string `json:"addresses"`
-	Role           string   `json:"role"`
 	BootstrapPeers []string `json:"bootstrap_peers"`
 	Network        string   `json:"network,omitempty"`
 }
 
-// LogSize logs the JSON-encoded size of the AuthNodeInfo and warns when it
-// exceeds QRByteModeCapacity, surfacing pairing-QR overflow in node logs
-// before users hit a blank QR modal.
 func (a AuthNodeInfo) LogSize() {
 	data, err := json.Marshal(a)
 	if err != nil {
@@ -87,7 +75,6 @@ type Chat struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// ChatMessage defines model for ChatMessage.
 type ChatMessage struct {
 	ChatId     string    `json:"chat_id"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -104,16 +91,12 @@ type ChatMessage struct {
 	Status string `json:"status,omitempty"`
 }
 
-// IsEmpty reports whether the message carries nothing at all. Spelled out
-// field by field because ImageKeys makes ChatMessage uncomparable, so the
-// zero-value check this replaces no longer compiles.
 func (m ChatMessage) IsEmpty() bool {
 	return m.ChatId == "" && m.Id == "" && m.SenderId == "" && m.ReceiverId == "" &&
 		m.Text == "" && len(m.ImageKeys) == 0 && m.VideoKey == nil &&
 		m.Status == "" && m.CreatedAt.IsZero()
 }
 
-// Error defines model for Error.
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -130,9 +113,6 @@ type Identity struct {
 	PSK   string `json:"psk"`
 }
 
-// Bookmark defines model for Bookmark — the local pin a user puts on
-// someone's tweet. The owner id is stored alongside so the timeline render
-// can fetch the tweet without an extra resolution round-trip.
 type Bookmark struct {
 	UserId      string    `json:"user_id"`
 	TweetId     string    `json:"tweet_id"`
@@ -140,49 +120,12 @@ type Bookmark struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// Reaction defines model for Reaction.
 type Reaction struct {
 	TweetId string `json:"tweet_id"`
 	UserId  string `json:"user_id"`
 	Emoji   string `json:"emoji,omitempty"`
 }
 
-// DefaultReaction is the emoji a reaction carries when the client named
-// none: every reaction made before emoji existed, and every one from a
-// client that still speaks the old wire shape.
-const DefaultReaction = "❤️"
-
-// maxReactionRunes caps a reaction so an emoji can never blow up a
-// database key. The longest sensible sequence (flag + skin tone + ZWJ
-// family) stays well under it.
-const maxReactionRunes = 8
-
-// NormalizeReaction validates a reaction emoji arriving off the wire and
-// substitutes DefaultReaction when the caller named none. Reactions become
-// database key segments, so anything with a delimiter, whitespace or a
-// control character is rejected rather than silently coerced.
-func NormalizeReaction(emoji string) (string, error) {
-	if emoji == "" {
-		return DefaultReaction, nil
-	}
-	if !utf8.ValidString(emoji) {
-		return "", warpnet.WarpError("reaction: not a valid utf-8 string")
-	}
-	if utf8.RuneCountInString(emoji) > maxReactionRunes {
-		return "", warpnet.WarpError("reaction: too long")
-	}
-	for _, r := range emoji {
-		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
-			return "", warpnet.WarpError("reaction: forbidden character")
-		}
-	}
-	return emoji, nil
-}
-
-// ReactedTweet defines model for ReactedTweet — one entry of a user's
-// "tweets I reacted to" index. OwnerUserId is the tweet author's id, stored
-// alongside so clients can fetch the tweet without an extra resolution
-// round-trip.
 type ReactedTweet struct {
 	UserId      string    `json:"user_id"`
 	TweetId     string    `json:"tweet_id"`
@@ -190,7 +133,6 @@ type ReactedTweet struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// Owner defines model for Owner.
 type Owner struct {
 	CreatedAt       time.Time `json:"created_at"`
 	NodeId          string    `json:"node_id"`
@@ -199,25 +141,8 @@ type Owner struct {
 	Username        string    `json:"username"`
 }
 
-type Device struct {
-	ID         ID                 `json:"id"`
-	CreatedAt  time.Time          `json:"created_at"`
-	NodeId     warpnet.WarpPeerID `json:"node_id"`
-	Token      string             `json:"token"`
-	Platform   string             `json:"platform"`
-	LastActive time.Time          `json:"last_active"`
-}
-
 const RetweetPrefix = "RT:"
 
-// Tweet defines model for Tweet.
-//
-// ParentId is the parent TWEET id (not a user id) for replies; nil for
-// top-level tweets and for replies that hang directly off RootId. A tweet
-// with a non-nil ParentId is a reply: it lives inside its RootId thread
-// instead of the author's timeline. ParentUserId is the parent tweet's
-// author id — the routing key used to forward a reply to the node hosting
-// the parent so the thread stays consistent across peers.
 type Tweet struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    *time.Time `json:"updated_at,omitempty"`
@@ -241,8 +166,6 @@ type Tweet struct {
 	Poll          *Poll            `json:"poll,omitempty"`
 }
 
-// IsReply reports whether the tweet is a reply, i.e. it hangs off a parent
-// tweet inside a thread rather than being a top-level timeline tweet.
 func (t *Tweet) IsReply() bool {
 	return t.ParentId != nil && *t.ParentId != ""
 }
@@ -251,17 +174,6 @@ func (t *Tweet) IsModerated() bool {
 	return t.Moderation != nil
 }
 
-const (
-	PollMinOptions      = 2
-	PollMaxOptions      = 4
-	PollOptionRuneLimit = 25
-)
-
-// Poll is an optional single-choice poll carried by a tweet. Only the
-// immutable definition lives here, so it travels with the tweet through
-// every existing distribution path (storage, gossip, timeline snapshots).
-// The votes themselves are held per node by the poll repo, keyed by tweet
-// id, and aggregated across the network the same way reactions are.
 type Poll struct {
 	Options   []string  `json:"options"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -276,10 +188,6 @@ type ModelType string
 
 const LLAMAGuard3 ModelType = "LlamaGuard3"
 
-// TweetEdit is an immutable revision row. Tweets are mutated in-place
-// (Tweet.Text rewritten) and a TweetEdit is appended for each edit so
-// the client can show "edited at X" history. EditedAt = the moment the
-// edit was committed; the original tweet's CreatedAt stays untouched.
 type TweetEdit struct {
 	Id              string    `json:"id"`
 	OriginalTweetId string    `json:"original_tweet_id"`
@@ -296,16 +204,6 @@ type TweetModeration struct {
 	TimeAt      time.Time        `json:"time_at"`
 }
 
-// Filter is a per-user keyword/regex filter. Filters apply at timeline-read
-// time; they're never replicated to peers. Keywords are stored as an
-// embedded slice (Mastodon models them as a sub-resource with their own
-// ids — we keep the same shape on the wire but the storage is one record
-// per filter).
-// FilterContext is where a content filter applies. Closed enum — only
-// these values are accepted on the wire. Note: there is no "account"
-// context in Warpnet — Warpnet has users and nodes, not accounts.
-// Warpnet has no "public" context either — every tweet is public by
-// default, so a filter on a "public" timeline would be redundant.
 type FilterContext string
 
 const (
@@ -345,28 +243,24 @@ type User struct {
 	AvatarKey string `json:"avatar_key,omitempty"`
 
 	// BackgroundImage mime type + "," + base64
-	BackgroundImageKey string     `json:"background_image_key"`
-	Bio                string     `json:"bio"`
-	Birthdate          string     `json:"birthdate"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
-	FollowingsCount    int64      `json:"followings_count"`
-	FollowersCount     int64      `json:"followers_count"`
-	Id                 string     `json:"id"`
-	IsOffline          bool       `json:"isOffline"`
-	LastSeen           *time.Time `json:"last_seen,omitempty"`
-	NodeId             string     `json:"node_id"`
-	Network            string     `json:"network"`
-	// Role mirrors NodeInfo.Type. Only a remote node stamps it, and it reports
-	// "member" like every other member node; the desktop node leaves it empty.
-	// Nothing reads it since the "business" badge was dropped.
-	Role          string            `json:"role,omitempty"`
-	RoundTripTime int64             `json:"rtt"`
-	TweetsCount   int64             `json:"tweets_count"`
-	Username      string            `json:"username"`
-	Website       *string           `json:"website,omitempty"`
-	Moderation    *UserModeration   `json:"moderation"`
-	Metadata      map[string]string `json:"metadata"`
+	BackgroundImageKey string            `json:"background_image_key"`
+	Bio                string            `json:"bio"`
+	Birthdate          string            `json:"birthdate"`
+	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          *time.Time        `json:"updated_at,omitempty"`
+	FollowingsCount    int64             `json:"followings_count"`
+	FollowersCount     int64             `json:"followers_count"`
+	Id                 string            `json:"id"`
+	IsOffline          bool              `json:"isOffline"`
+	LastSeen           *time.Time        `json:"last_seen,omitempty"`
+	NodeId             string            `json:"node_id"`
+	Network            string            `json:"network"`
+	RoundTripTime      int64             `json:"rtt"`
+	TweetsCount        int64             `json:"tweets_count"`
+	Username           string            `json:"username"`
+	Website            *string           `json:"website,omitempty"`
+	Moderation         *UserModeration   `json:"moderation"`
+	Metadata           map[string]string `json:"metadata"`
 	// Locked is the "manually-approve followers" flag. When true, an
 	// inbound follow lands in the follow-request queue instead of being
 	// accepted automatically.
@@ -410,11 +304,6 @@ type Notification struct {
 	CreatedAt   time.Time        `json:"created_at"`
 }
 
-// NotificationSettings holds a user's per-node notification preferences,
-// including the email channel. SMTP credentials are the user's own
-// (bring-your-own): the node connects to them to relay email. The whole
-// local store is encrypted at rest, so the SMTP password lives here in
-// plaintext form only inside the encrypted DB.
 type NotificationSettings struct {
 	EmailEnabled bool   `json:"email_enabled"`
 	Recipient    string `json:"recipient"`
@@ -428,8 +317,6 @@ type NotificationSettings struct {
 	Types map[NotificationType]bool `json:"types"`
 }
 
-// GatewaySettings holds the ActivityPub gateway peer id this node bridges
-// through. An empty NodeID means "use the built-in default".
 type GatewaySettings struct {
 	NodeID string `json:"node_id"`
 }
@@ -463,4 +350,20 @@ func (t ModerationObjectType) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+type (
+	Base64Image string
+	ImageKey    string
+	Base64Video string
+	VideoKey    string
+)
+
+type Alias struct {
+	ID         ID        `json:"id"`
+	CreatedAt  time.Time `json:"created_at"`
+	NodeId     string    `json:"node_id"`
+	Token      string    `json:"token"`
+	Platform   string    `json:"platform"`
+	LastActive time.Time `json:"last_active"`
 }

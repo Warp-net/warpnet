@@ -30,6 +30,8 @@ package handler
 import (
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -93,23 +95,29 @@ func StreamReactionHandler(
 			return nil, warpnet.WarpError("react: empty tweet id")
 		}
 
+		reactor, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
+			return nil, err
+		}
+
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		ownNodeInfo := streamer.NodeInfo()
-		// The network-wide (CRDT) reaction counter is bumped only on the reactor's
-		// own node, so a reaction observed on both the reactor's and the author's
-		// node is counted once.
-		num, err := repo.React(tweetId, ev.OwnerId, ev.Emoji, ev.OwnerId == ownNodeInfo.OwnerId) // store my reaction
+
+		emoji, err := normalizeReaction(ev.Emoji)
+		if err != nil {
+			return nil, err
+		}
+
+		num, err := repo.React(tweetId, ev.OwnerId, emoji, ev.OwnerId == ownNodeInfo.OwnerId) // store my reaction
 		if err != nil {
 			log.Errorf("reaction handler failed: %v", err)
 			return nil, err
 		}
-		// Best-effort "tweets I reacted to" index; the reaction itself already
-		// succeeded, so an index failure must not fail the request.
+
 		if err := repo.SetReacted(ev.OwnerId, tweetId, ev.UserId); err != nil {
 			log.Warnf("reaction handler: reacted index: %v", err)
 		}
-		// Every exit below answers the same shape, and nothing they do
-		// changes the local tally, so build it once.
+
 		resp := event.ReactionsCountResponse{Count: num, Reactions: getReactionsWithDefault(repo, tweetId)}
 
 		isOwnTweetReaction := ev.OwnerId == ev.UserId
@@ -119,11 +127,7 @@ func StreamReactionHandler(
 
 		isSomeoneReactedToMe := ev.OwnerId != ownNodeInfo.OwnerId
 		if isSomeoneReactedToMe { // reactions exchange finished
-			notifyUsername := ev.OwnerId
-			reactor, reactorErr := userRepo.Get(ev.OwnerId)
-			if reactorErr == nil {
-				notifyUsername = reactor.Username
-			}
+			notifyUsername := reactor.Username
 			if err := notifyRepo.Add(domain.Notification{
 				Type:        domain.NotificationReactionType,
 				Text:        notifyUsername + " reacted your tweet",
@@ -174,6 +178,29 @@ func StreamReactionHandler(
 	}
 }
 
+const (
+	defaultReaction  = "❤️"
+	maxReactionRunes = 8
+)
+
+func normalizeReaction(emoji string) (string, error) {
+	if emoji == "" {
+		return defaultReaction, nil
+	}
+	if !utf8.ValidString(emoji) {
+		return "", warpnet.WarpError("reaction: not a valid utf-8 string")
+	}
+	if utf8.RuneCountInString(emoji) > maxReactionRunes {
+		return "", warpnet.WarpError("reaction: too long")
+	}
+	for _, r := range emoji {
+		if r == '/' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return "", warpnet.WarpError("reaction: forbidden character")
+		}
+	}
+	return emoji, nil
+}
+
 func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, streamer ReactionStreamer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UnreactionEvent
@@ -187,6 +214,11 @@ func StreamUnreactionHandler(repo ReactionsStorer, userRepo ReactedUserFetcher, 
 		}
 		if ev.TweetId == "" {
 			return nil, warpnet.WarpError("empty tweet id")
+		}
+
+		reactor, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, reactor.NodeId); err != nil {
+			return nil, err
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)

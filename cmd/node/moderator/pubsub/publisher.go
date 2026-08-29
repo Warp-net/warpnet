@@ -52,7 +52,7 @@ const (
 type PubsubServerNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
-	SelfStream(path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 

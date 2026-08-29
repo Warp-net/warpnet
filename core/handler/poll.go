@@ -86,6 +86,11 @@ func StreamPollVoteHandler(
 			return nil, warpnet.WarpError("poll: negative option")
 		}
 
+		voter, _ := userRepo.Get(ev.OwnerId)
+		if err := warpnet.VerifyAuthorship(s, voter.NodeId); err != nil {
+			return nil, err
+		}
+
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		optionsNum := ev.OptionsNum
 
@@ -274,6 +279,10 @@ func pollResults(repo PollVotesStorer, tweetId, userId string, optionsNum int) (
 	if optionsNum <= 0 {
 		return event.PollResultsResponse{}, warpnet.WarpError("poll: empty options number")
 	}
+	if optionsNum > 20 {
+		return event.PollResultsResponse{}, warpnet.WarpError("poll: too many options")
+	}
+
 	votes, err := repo.Results(tweetId, optionsNum)
 	if err != nil {
 		return event.PollResultsResponse{}, err

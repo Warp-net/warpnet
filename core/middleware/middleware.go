@@ -28,10 +28,11 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/docker/go-units"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 type middlewareError string
@@ -39,43 +40,52 @@ type middlewareError string
 func (e middlewareError) Error() string {
 	return string(e)
 }
-func (e middlewareError) Bytes() []byte {
-	return []byte(e)
-}
 
 const (
-	ErrUnknownClientPeer middlewareError = `["middleware: auth: unknown client peer"]`
-	ErrStreamReadError   middlewareError = `["middleware: stream: reading failed"]`
-	ErrInternalNodeError middlewareError = `["middleware: internal node error"]`
-	ErrStaleMessage      middlewareError = `["middleware: auth: stale or replayed message"]`
+	ErrUnknownClientPeer middlewareError = "middleware: auth: unknown client peer"
+	ErrStreamReadError   middlewareError = "middleware: stream: reading failed"
+	ErrInternalNodeError middlewareError = "middleware: internal node error"
+	ErrStaleMessage      middlewareError = "middleware: auth: stale or replayed message"
+	ErrRateLimited       middlewareError = "middleware: too many requests for this route"
 )
 
 // messageFreshnessWindow caps how far a signed timestamp may drift from now.
 const messageFreshnessWindow = 5 * time.Minute
 
 const (
-	MaxLimit              = units.MiB * 50
 	InternalNodeErrorCode = 5000
 )
+
+type AliasPairer interface {
+	GetNodeIDs() (ids []string, err error)
+}
 
 type WarpMiddleware struct {
 	idempotency     *idempotencyCache
 	freshnessWindow time.Duration
+	ownNodeId       warpnet.WarpPeerID
+	aliases         AliasPairer
+
+	rateLimitersMx sync.Mutex
+	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 }
 
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
+func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
+		ownNodeId:       ownNodeId,
+		aliases:         aliases,
+		rateLimiters:    newRateLimitersCache(),
 	}
 	return wm
 }
 
-// Close releases background resources owned by the middleware (currently
-// the idempotency cache's expirable-LRU janitor goroutine). Safe to call
-// multiple times.
 func (p *WarpMiddleware) Close() {
 	if p.idempotency != nil {
 		p.idempotency.Close()
+	}
+	if p.rateLimiters != nil {
+		closeExpirableLRU(p.rateLimiters)
 	}
 }

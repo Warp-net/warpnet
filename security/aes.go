@@ -31,8 +31,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -41,7 +39,10 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-var ErrCiphertextTooShort = errors.New("security: ciphertext too short")
+var (
+	ErrCiphertextTooShort = errors.New("security: ciphertext too short")
+	ErrEmptyPassword      = errors.New("security: empty password")
+)
 
 // Sealed layout: salt || nonce || ciphertext || tag.
 const (
@@ -77,23 +78,10 @@ func deriveKey(password, salt []byte) []byte {
 }
 
 // EncryptAES seals plainData with AES-256-GCM under an Argon2id-derived key.
-// A nil password means the caller wants the weak single-use password of the
-// media-metadata scheme: one is generated here, used once and discarded, so
-// the plaintext is recoverable by brute force alone. The random salt and nonce
-// are public and travel with the ciphertext.
+// The random salt and nonce are public and travel with the ciphertext.
 func EncryptAES(plainData, password []byte) ([]byte, error) {
-	if password == nil {
-		n, err := rand.Int(rand.Reader, big.NewInt(weakPasswordSpace))
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate weak password: %w", err)
-		}
-		password = make([]byte, weakPasswordSize)
-		binary.BigEndian.PutUint64(password, n.Uint64())
-		defer func() {
-			for i := range password { // never stored, never logged
-				password[i] = 0
-			}
-		}()
+	if len(password) == 0 {
+		return nil, ErrEmptyPassword
 	}
 
 	salt := make([]byte, saltSize)
@@ -150,68 +138,30 @@ func decryptAES(sealed, password []byte) ([]byte, error) {
 	return plain, nil
 }
 
-func AESKeyFromPassword(password string) []byte {
-	sum := sha256.Sum256([]byte(password))
-	return sum[:]
-}
-
-type AESCodec struct{ Key []byte }
-
-func (c AESCodec) Decode(frame []byte) (plain []byte, encrypted bool) {
-	if len(c.Key) == 0 {
-		return frame, false
-	}
-	if p, err := aesGCMDecrypt(c.Key, frame); err == nil {
-		return p, true
-	}
-	return frame, false
-}
-
-func (c AESCodec) Encode(reply []byte, encrypted bool) ([]byte, error) {
-	if !encrypted || len(c.Key) == 0 {
-		return reply, nil
-	}
-	return aesGCMEncrypt(c.Key, reply)
-}
-
-func aesGCMEncrypt(key, plaintext []byte) ([]byte, error) {
-	gcm, err := newAESGCM(key)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-	ct := gcm.Seal(nonce, nonce, plaintext, nil)
-	out := make([]byte, base64.StdEncoding.EncodedLen(len(ct)))
-	base64.StdEncoding.Encode(out, ct)
-	return out, nil
-}
-
-func aesGCMDecrypt(key, sealed []byte) ([]byte, error) {
-	data := make([]byte, base64.StdEncoding.DecodedLen(len(sealed)))
-	n, err := base64.StdEncoding.Decode(data, sealed)
-	if err != nil {
-		return nil, err
-	}
-	data = data[:n]
-
-	gcm, err := newAESGCM(key)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) < gcm.NonceSize() {
-		return nil, ErrCiphertextTooShort
-	}
-	nonce, ct := data[:gcm.NonceSize()], data[gcm.NonceSize():]
-	return gcm.Open(nil, nonce, ct, nil)
-}
-
 func newAESGCM(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
+}
+
+// NewWeakPassword draws a single-use password from the bounded space above:
+// small enough that brute force stays possible, expensive enough that it costs
+// a data centre. Wipe returns the bytes to zero once they have been used.
+func NewWeakPassword() ([]byte, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(weakPasswordSpace))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate weak password: %w", err)
+	}
+
+	password := make([]byte, weakPasswordSize)
+	binary.BigEndian.PutUint64(password, n.Uint64())
+	return password, nil
+}
+
+func Wipe(secret []byte) {
+	for i := range secret {
+		secret[i] = 0
+	}
 }

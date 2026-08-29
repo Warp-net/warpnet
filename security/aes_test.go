@@ -31,8 +31,6 @@ package security
 import (
 	"bytes"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"strings"
 	"testing"
 )
 
@@ -59,12 +57,15 @@ func TestAESEncryptDecrypt_WrongPassword(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// The nil-password branch is the one media uploads actually use
+// The weak password is the one media uploads actually use
 // (core/handler/image.go). It was previously untested.
-func TestAESEncrypt_WeakPasswordBranch(t *testing.T) {
+func TestAESEncrypt_WeakPassword(t *testing.T) {
 	in := []byte(`{"MAC":"3c:52:82:1a:9b:04"}`)
 
-	sealed, err := EncryptAES(in, nil)
+	password, err := NewWeakPassword()
+	assert.NoError(t, err)
+
+	sealed, err := EncryptAES(in, password)
 	assert.NoError(t, err)
 
 	// Salt and nonce are public and embedded, per the scheme's design.
@@ -84,10 +85,14 @@ func TestAESEncrypt_WeakPasswordBranch(t *testing.T) {
 func TestAESEncrypt_WeakPasswordIsNotDerivedFromClock(t *testing.T) {
 	in := []byte("same plaintext, same second")
 
-	first, err := EncryptAES(in, nil)
+	firstPassword, err := NewWeakPassword()
+	assert.NoError(t, err)
+	first, err := EncryptAES(in, firstPassword)
 	assert.NoError(t, err)
 
-	second, err := EncryptAES(in, nil)
+	secondPassword, err := NewWeakPassword()
+	assert.NoError(t, err)
+	second, err := EncryptAES(in, secondPassword)
 	assert.NoError(t, err)
 
 	assert.NotEqual(t, first[:saltSize], second[:saltSize], "salt must be per-call random")
@@ -107,165 +112,23 @@ func TestAESDecrypt_TooShort(t *testing.T) {
 	_, err = decryptAES(make([]byte, saltSize+nonceSize-1), []byte("pw"))
 	assert.ErrorIs(t, err, ErrCiphertextTooShort)
 }
-func TestAESKeyFromPassword_IsStableAndDistinct(t *testing.T) {
-	a := AESKeyFromPassword("hunter2")
-	b := AESKeyFromPassword("hunter2")
-	c := AESKeyFromPassword("hunter3")
+func TestAESEncrypt_RefusesEmptyPassword(t *testing.T) {
+	_, err := EncryptAES([]byte("data"), nil)
+	assert.ErrorIs(t, err, ErrEmptyPassword)
 
-	assert.Len(t, a, 32, "AES-256 needs a 32-byte key")
-	assert.Equal(t, a, b, "the same dashboard password must derive the same key")
-	assert.NotEqual(t, a, c, "a different password must not collide")
-
-	assert.Len(t, AESKeyFromPassword(""), 32)
+	_, err = EncryptAES([]byte("data"), []byte{})
+	assert.ErrorIs(t, err, ErrEmptyPassword)
 }
 
-func TestAESCodec_RoundTrip(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("dashboard-secret")}
+func TestNewWeakPassword_IsBoundedAndRandom(t *testing.T) {
+	first, err := NewWeakPassword()
+	assert.NoError(t, err)
+	assert.Len(t, first, weakPasswordSize)
 
-	plain := []byte(`{"text":"привет 🔥","private":true}`)
+	second, err := NewWeakPassword()
+	assert.NoError(t, err)
+	assert.NotEqual(t, first, second, "each upload draws its own password")
 
-	sealed, err := codec.Encode(plain, true)
-	require.NoError(t, err)
-	assert.NotEqual(t, plain, sealed, "the payload must not travel in the clear")
-	assert.NotContains(t, string(sealed), "привет")
-
-	got, encrypted := codec.Decode(sealed)
-	assert.True(t, encrypted)
-	assert.Equal(t, plain, got)
-}
-
-func TestAESCodec_NonceIsFresh(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("secret")}
-	plain := []byte("same message")
-
-	first, err := codec.Encode(plain, true)
-	require.NoError(t, err)
-	second, err := codec.Encode(plain, true)
-	require.NoError(t, err)
-
-	assert.NotEqual(t, first, second, "ciphertexts must not repeat for identical input")
-
-	one, ok := codec.Decode(first)
-	assert.True(t, ok)
-	two, ok := codec.Decode(second)
-	assert.True(t, ok)
-	assert.Equal(t, one, two)
-}
-
-func TestAESCodec_NoKeyIsPassthrough(t *testing.T) {
-	codec := AESCodec{}
-	payload := []byte("plain text")
-
-	out, err := codec.Encode(payload, true)
-	require.NoError(t, err)
-	assert.Equal(t, payload, out)
-
-	got, encrypted := codec.Decode(payload)
-	assert.Equal(t, payload, got)
-	assert.False(t, encrypted, "an unkeyed codec must never claim a frame was encrypted")
-}
-
-func TestAESCodec_EncodeRespectsEncryptedFlag(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("secret")}
-	payload := []byte("public notice")
-
-	out, err := codec.Encode(payload, false)
-	require.NoError(t, err)
-	assert.Equal(t, payload, out, "a frame marked plain must go out plain")
-}
-
-func TestAESCodec_WrongKeyDoesNotDecrypt(t *testing.T) {
-	sender := AESCodec{Key: AESKeyFromPassword("correct-password")}
-	attacker := AESCodec{Key: AESKeyFromPassword("guessed-password")}
-
-	plain := []byte("session token: abc123")
-	sealed, err := sender.Encode(plain, true)
-	require.NoError(t, err)
-
-	got, encrypted := attacker.Decode(sealed)
-	assert.False(t, encrypted, "a wrong key must never report a successful decrypt")
-	assert.NotEqual(t, plain, got)
-	assert.Equal(t, sealed, got, "the frame is handed back untouched")
-}
-
-func TestAESCodec_TamperedCiphertextIsRejected(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("secret")}
-
-	sealed, err := codec.Encode([]byte("transfer 10 to alice"), true)
-	require.NoError(t, err)
-
-	tampered := bytes.Clone(sealed)
-	idx := len(tampered) / 2
-	if tampered[idx] == 'A' {
-		tampered[idx] = 'B'
-	} else {
-		tampered[idx] = 'A'
-	}
-
-	got, encrypted := codec.Decode(tampered)
-	assert.False(t, encrypted, "a tampered frame must not authenticate")
-	assert.Equal(t, tampered, got)
-}
-
-func TestAESCodec_MalformedFramesAreRejectedNotPanicking(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("secret")}
-
-	frames := [][]byte{
-		nil,
-		{},
-		[]byte("not base64 at all !!!"),
-		[]byte("AAAA"),                       // valid base64, far too short for a nonce
-		[]byte(strings.Repeat("A", 16)),      // still shorter than nonce+tag
-		[]byte("////"),                       // valid base64, junk bytes
-		[]byte(strings.Repeat("QUJD", 1000)), // long but meaningless
-	}
-
-	for _, frame := range frames {
-		assert.NotPanics(t, func() {
-			got, encrypted := codec.Decode(frame)
-			assert.False(t, encrypted)
-			assert.Equal(t, frame, got)
-		})
-	}
-}
-
-func TestAESCodec_EmptyPayloadRoundTrips(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("secret")}
-
-	sealed, err := codec.Encode([]byte{}, true)
-	require.NoError(t, err)
-	assert.NotEmpty(t, sealed, "even an empty body carries a nonce and tag")
-
-	got, encrypted := codec.Decode(sealed)
-	assert.True(t, encrypted)
-	assert.Empty(t, got)
-}
-
-func TestAESCodec_LargePayloadRoundTrips(t *testing.T) {
-	codec := AESCodec{Key: AESKeyFromPassword("secret")}
-
-	plain := bytes.Repeat([]byte("warpnet"), 100_000)
-	sealed, err := codec.Encode(plain, true)
-	require.NoError(t, err)
-
-	got, encrypted := codec.Decode(sealed)
-	assert.True(t, encrypted)
-	assert.Equal(t, plain, got)
-}
-
-func TestAESGCM_RejectsInvalidKeySizes(t *testing.T) {
-	for _, size := range []int{0, 1, 15, 17, 31, 33, 64} {
-		_, err := aesGCMEncrypt(make([]byte, size), []byte("x"))
-		assert.Errorf(t, err, "key size %d must be rejected", size)
-
-		_, err = aesGCMDecrypt(make([]byte, size), []byte("QUJD"))
-		assert.Errorf(t, err, "key size %d must be rejected", size)
-	}
-}
-
-func TestAESGCM_ShortCiphertextIsReported(t *testing.T) {
-	key := AESKeyFromPassword("secret")
-
-	_, err := aesGCMDecrypt(key, []byte("QUJD"))
-	assert.ErrorIs(t, err, ErrCiphertextTooShort)
+	Wipe(first)
+	assert.Equal(t, make([]byte, weakPasswordSize), first)
 }

@@ -251,8 +251,11 @@ func (db *DB) Run(username, password string) (err error) {
 	if db.isRunning.Load() {
 		return nil
 	}
-	hashSum := security.ConvertToSHA256([]byte(username + "@" + password))
-	execOpts := db.badgerOpts.WithEncryptionKey(hashSum)
+	encryptionKey, err := security.DeriveDatabaseKey(username, password)
+	if err != nil {
+		return err
+	}
+	execOpts := db.badgerOpts.WithEncryptionKey(encryptionKey)
 
 	db.badger, err = badger.Open(execOpts)
 	if errors.Is(err, badger.ErrEncryptionKeyMismatch) {
@@ -702,6 +705,24 @@ func (t *warpTxn) ReverseList(prefix DatabaseKey, limit *uint64, cursor *string)
 	return t.list(prefix, limit, cursor, true)
 }
 
+const (
+	defaultLimit uint64 = 20
+	MaxPageLimit uint64 = 1000
+	maxPrealloc  uint64 = 20
+)
+
+func pageLimit(limit *uint64) *uint64 {
+	if limit == nil || *limit == 0 {
+		l := defaultLimit
+		return &l
+	}
+	if *limit > MaxPageLimit {
+		l := MaxPageLimit
+		return &l
+	}
+	return limit
+}
+
 func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, reverse bool) ([]ListItem, string, error) {
 	var startCursor DatabaseKey
 	if cursor != nil && *cursor != "" {
@@ -711,12 +732,9 @@ func (t *warpTxn) list(prefix DatabaseKey, limit *uint64, cursor *string, revers
 		return []ListItem{}, endCursor, nil
 	}
 
-	if limit == nil {
-		defaultLimit := uint64(20)
-		limit = &defaultLimit
-	}
+	limit = pageLimit(limit)
 
-	items := make([]ListItem, 0, *limit) //
+	items := make([]ListItem, 0, min(*limit, maxPrealloc))
 	cur, err := iterate(
 		t.txn, prefix, startCursor, limit, true, reverse,
 		func(key string, value []byte) error {
@@ -739,12 +757,9 @@ func (t *warpTxn) ListKeys(prefix DatabaseKey, limit *uint64, cursor *string) ([
 		return []string{}, endCursor, nil
 	}
 
-	if limit == nil {
-		defaultLimit := uint64(20)
-		limit = &defaultLimit
-	}
+	limit = pageLimit(limit)
 
-	items := make([]string, 0, *limit) //
+	items := make([]string, 0, min(*limit, maxPrealloc))
 	cur, err := iterate(
 		t.txn, prefix, startCursor, limit, false, false,
 		func(key string, _ []byte) error {

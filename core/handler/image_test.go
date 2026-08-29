@@ -30,6 +30,7 @@ package handler
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
 	"image"
@@ -38,6 +39,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/security"
+
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -62,20 +66,34 @@ func (u u) GetOtherNetworkUser(network, userId string) (user domain.User, err er
 	return domain.User{}, err
 }
 
-func (m m) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (m m) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
 }
 
-func (m m) GetImage(userId, key string) (database.Base64Image, error) {
+func (m m) GetImage(userId, key string) (domain.Base64Image, error) {
 	return "", nil
 }
 
-func (m m) SetImage(userId string, img database.Base64Image) (key database.ImageKey, err error) {
+func (m m) SetImage(userId string, img domain.Base64Image) (key domain.ImageKey, err error) {
 	return "", nil
+}
+
+var testSignerKey, testSignerID = mustTestSigner()
+
+func mustTestSigner() (ed25519.PrivateKey, warpnet.WarpPeerID) {
+	priv, err := security.GenerateKeyFromSeed([]byte("media-meta-test-seed"))
+	if err != nil {
+		panic(err)
+	}
+	id, err := warpnet.IDFromPublicKey(priv.Public().(ed25519.PublicKey))
+	if err != nil {
+		panic(err)
+	}
+	return priv, id
 }
 
 func (n n) NodeInfo() warpnet.NodeInfo {
-	return warpnet.NodeInfo{}
+	return warpnet.NodeInfo{ID: testSignerID, OwnerId: ownerID}
 }
 
 func (s s) Read(p []byte) (n int, err error) {
@@ -143,22 +161,22 @@ func (s s) Scope() network.StreamScope {
 }
 
 func (u u) Get(userId string) (user domain.User, err error) {
-	return domain.User{}, nil
+	return domain.User{Id: ownerID, NodeId: testSignerID.String()}, nil
 }
 
 type cachedMediaRepo struct {
-	cached database.Base64Image
+	cached domain.Base64Image
 }
 
-func (c cachedMediaRepo) GetImage(userId, key string) (database.Base64Image, error) {
+func (c cachedMediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
 	return c.cached, nil
 }
 
-func (c cachedMediaRepo) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+func (c cachedMediaRepo) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
 	return "", nil
 }
 
-func (c cachedMediaRepo) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (c cachedMediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
 }
 
@@ -190,7 +208,7 @@ func TestUploadImage_Success(t *testing.T) {
 	bt, err := json.Marshal(ev)
 	assert.NoError(t, err)
 
-	_, err = StreamUploadImageHandler(n{}, m{}, u{})(bt, s{})
+	_, err = StreamUploadImageHandler(n{}, testSignerKey, m{}, u{})(bt, s{})
 	assert.NoError(t, err)
 }
 
@@ -204,7 +222,7 @@ func TestUploadMultipleImages_Success(t *testing.T) {
 	bt, err := json.Marshal(ev)
 	assert.NoError(t, err)
 
-	_, err = StreamUploadImageHandler(n{}, m{}, u{})(bt, s{})
+	_, err = StreamUploadImageHandler(n{}, testSignerKey, m{}, u{})(bt, s{})
 	assert.NoError(t, err)
 }
 
@@ -213,64 +231,8 @@ func TestUploadImage_NoImages(t *testing.T) {
 	bt, err := json.Marshal(ev)
 	assert.NoError(t, err)
 
-	_, err = StreamUploadImageHandler(n{}, m{}, u{})(bt, s{})
+	_, err = StreamUploadImageHandler(n{}, testSignerKey, m{}, u{})(bt, s{})
 	assert.ErrorIs(t, err, ErrNoImagesProvided)
-}
-
-const (
-	testMetaTag   = imageDescriptionTag
-	testMetaValue = "test meta value"
-)
-
-func TestAmendExif_Success(t *testing.T) {
-	parts := strings.SplitN(testImagePNG, ",", 2)
-
-	imgBytes, err := base64.StdEncoding.DecodeString(parts[1])
-	assert.NoError(t, err)
-
-	img, _, err := image.Decode(bytes.NewReader(imgBytes))
-	assert.NoError(t, err)
-
-	var imageBuf bytes.Buffer
-	err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100})
-	assert.NoError(t, err)
-
-	metaBytes := []byte(testMetaValue)
-
-	result, err := amendExifMetadata(imageBuf.Bytes(), metaBytes)
-	assert.NoError(t, err)
-
-	validateExif(t, result)
-	assert.NoError(t, err)
-}
-
-func validateExif(t *testing.T, data []byte) {
-	t.Helper()
-
-	parser := jis.NewJpegMediaParser()
-
-	intfc, err := parser.ParseBytes(data)
-	assert.NoError(t, err)
-
-	sl, ok := intfc.(*jis.SegmentList)
-	assert.True(t, ok, "validate: invalid exif type: not a segment list")
-
-	_, _, exifTags, err := sl.DumpExif()
-	assert.NoError(t, err)
-
-	var isFound bool
-	for _, et := range exifTags {
-		decoded, err := base64.StdEncoding.DecodeString(et.FormattedFirst)
-		assert.NoError(t, err)
-
-		if et.TagName == testMetaTag {
-			assert.Equal(t, testMetaValue, string(decoded))
-			isFound = true
-			break
-		}
-	}
-
-	assert.True(t, isFound, "validate: meta data not found")
 }
 
 // Layout produced by security.EncryptAES and embedded verbatim into media
@@ -318,7 +280,7 @@ func readExifMeta(t *testing.T, data []byte) []byte {
 	assert.NoError(t, err)
 
 	for _, et := range exifTags {
-		if et.TagName != imageDescriptionTag {
+		if et.TagName != media_meta.ImageDescriptionTag {
 			continue
 		}
 		decoded, err := base64.StdEncoding.DecodeString(et.FormattedFirst)
@@ -331,8 +293,9 @@ func readExifMeta(t *testing.T, data []byte) []byte {
 }
 
 func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
-	meta, _, err := buildEncryptedMediaMeta(n{}, u{})
+	watermark, err := buildWatermark(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
+	meta := watermark.EncryptedMeta
 
 	assertSealedMediaMeta(t, meta)
 
@@ -348,7 +311,7 @@ func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
 	err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100})
 	assert.NoError(t, err)
 
-	amended, err := amendExifMetadata(imageBuf.Bytes(), meta)
+	amended, err := media_meta.EmbedInJPEG(imageBuf.Bytes(), meta)
 	assert.NoError(t, err)
 
 	// The blob must survive the EXIF round trip byte for byte.
@@ -356,11 +319,13 @@ func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
 }
 
 func TestMediaMeta_EachUploadSealsAfresh(t *testing.T) {
-	first, _, err := buildEncryptedMediaMeta(n{}, u{})
+	firstWatermark, err := buildWatermark(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
+	first := firstWatermark.EncryptedMeta
 
-	second, _, err := buildEncryptedMediaMeta(n{}, u{})
+	secondWatermark, err := buildWatermark(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
+	second := secondWatermark.EncryptedMeta
 
 	assert.NotEqual(t, first, second, "identical metadata must not seal identically")
 	assert.NotEqual(t, first[:metaSaltSize], second[:metaSaltSize], "salt must be per-upload")
@@ -372,7 +337,7 @@ func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
 	var streamed bool
 	h := StreamGetImageHandler(
 		recordingStreamer{streamed: &streamed},
-		cachedMediaRepo{cached: database.Base64Image("data:image/png;base64,CACHED")},
+		cachedMediaRepo{cached: domain.Base64Image("data:image/png;base64,CACHED")},
 		foreignUserRepo{},
 	)
 
@@ -422,22 +387,22 @@ func (m *mediaStreamerDouble) GenericStream(nodeId string, path stream.WarpRoute
 }
 
 type imageRepoDouble struct {
-	images     map[string]database.Base64Image
+	images     map[string]domain.Base64Image
 	getErr     error
-	getPartial database.Base64Image
+	getPartial domain.Base64Image
 
-	foreignStored map[string]database.Base64Image
+	foreignStored map[string]domain.Base64Image
 	foreignErr    error
 }
 
 func newImageRepoDouble() *imageRepoDouble {
 	return &imageRepoDouble{
-		images:        map[string]database.Base64Image{},
-		foreignStored: map[string]database.Base64Image{},
+		images:        map[string]domain.Base64Image{},
+		foreignStored: map[string]domain.Base64Image{},
 	}
 }
 
-func (r *imageRepoDouble) GetImage(userId, key string) (database.Base64Image, error) {
+func (r *imageRepoDouble) GetImage(userId, key string) (domain.Base64Image, error) {
 	if r.getErr != nil {
 		return r.getPartial, r.getErr
 	}
@@ -448,12 +413,12 @@ func (r *imageRepoDouble) GetImage(userId, key string) (database.Base64Image, er
 	return img, nil
 }
 
-func (r *imageRepoDouble) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+func (r *imageRepoDouble) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
 	r.images[userId+"/key"] = img
 	return "key", nil
 }
 
-func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	if r.foreignErr != nil {
 		return r.foreignErr
 	}
@@ -462,21 +427,21 @@ func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img databas
 }
 
 type videoRepoDouble struct {
-	videos     map[string]database.Base64Video
+	videos     map[string]domain.Base64Video
 	getErr     error
-	getPartial database.Base64Video
+	getPartial domain.Base64Video
 
-	foreignStored map[string]database.Base64Video
+	foreignStored map[string]domain.Base64Video
 }
 
 func newVideoRepoDouble() *videoRepoDouble {
 	return &videoRepoDouble{
-		videos:        map[string]database.Base64Video{},
-		foreignStored: map[string]database.Base64Video{},
+		videos:        map[string]domain.Base64Video{},
+		foreignStored: map[string]domain.Base64Video{},
 	}
 }
 
-func (r *videoRepoDouble) GetVideo(userId, key string) (database.Base64Video, error) {
+func (r *videoRepoDouble) GetVideo(userId, key string) (domain.Base64Video, error) {
 	if r.getErr != nil {
 		return r.getPartial, r.getErr
 	}
@@ -487,12 +452,12 @@ func (r *videoRepoDouble) GetVideo(userId, key string) (database.Base64Video, er
 	return v, nil
 }
 
-func (r *videoRepoDouble) SetVideo(userId string, video database.Base64Video) (database.VideoKey, error) {
+func (r *videoRepoDouble) SetVideo(userId string, video domain.Base64Video) (domain.VideoKey, error) {
 	r.videos[userId+"/key"] = video
 	return "key", nil
 }
 
-func (r *videoRepoDouble) SetForeignVideoWithTTL(userId, key string, video database.Base64Video) error {
+func (r *videoRepoDouble) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
 	r.foreignStored[userId+"/"+key] = video
 	return nil
 }
@@ -658,26 +623,25 @@ func TestStreamGetImageHandler(t *testing.T) {
 	})
 
 	t.Run("fetched foreign image is cached for next time", func(t *testing.T) {
+		file, key := watermarkedImage(t, "remote")
 		repo := newImageRepoDouble()
 		streamer := &mediaStreamerDouble{
-			response: mustJSON(t, event.GetImageResponse{File: "data:image/jpeg;base64,REMOTE"}),
+			response: mustJSON(t, event.GetImageResponse{File: file}),
 		}
 		users := mediaUserDouble{users: map[string]domain.User{
-			"remote": {Id: "remote", NodeId: remoteNodeID},
+			"remote": {Id: "remote", NodeId: testSignerID.String()},
 		}}
 
 		h := StreamGetImageHandler(streamer, repo, users)
-		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
+		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: key}), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, []string{remoteNodeID}, streamer.streamedTo)
-		assert.Equal(t, database.Base64Image("data:image/jpeg;base64,REMOTE"),
-			repo.foreignStored["remote/avatar"])
+		assert.Equal(t, []string{testSignerID.String()}, streamer.streamedTo)
+		assert.Equal(t, domain.Base64Image(file), repo.foreignStored["remote/"+key])
 	})
 
-	t.Run("cache write failure still returns the image", func(t *testing.T) {
+	t.Run("unattributable foreign image is refused", func(t *testing.T) {
 		repo := newImageRepoDouble()
-		repo.foreignErr = errors.New("disk full")
 		streamer := &mediaStreamerDouble{
 			response: mustJSON(t, event.GetImageResponse{File: "data:image/jpeg;base64,REMOTE"}),
 		}
@@ -688,16 +652,27 @@ func TestStreamGetImageHandler(t *testing.T) {
 		h := StreamGetImageHandler(streamer, repo, users)
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		require.NoError(t, err)
-		assert.NotNil(t, out)
+
+		assert.Equal(t, event.GetImageResponse{File: ""}, out)
+		assert.Empty(t, repo.foreignStored)
 	})
-}
 
-func TestAmendExifMetadata_RejectsNonJPEG(t *testing.T) {
-	_, err := amendExifMetadata([]byte("this is not a jpeg"), []byte("meta"))
-	assert.Error(t, err, "a non-JPEG upload must not be parsed as one")
+	t.Run("cache write failure still returns the image", func(t *testing.T) {
+		file, key := watermarkedImage(t, "remote")
+		repo := newImageRepoDouble()
+		repo.foreignErr = errors.New("disk full")
+		streamer := &mediaStreamerDouble{
+			response: mustJSON(t, event.GetImageResponse{File: file}),
+		}
+		users := mediaUserDouble{users: map[string]domain.User{
+			"remote": {Id: "remote", NodeId: testSignerID.String()},
+		}}
 
-	_, err = amendExifMetadata(nil, []byte("meta"))
-	assert.Error(t, err)
+		h := StreamGetImageHandler(streamer, repo, users)
+		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: key}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, event.GetImageResponse{File: file}, out)
+	})
 }
 
 func TestJSONHelperRoundTrip(t *testing.T) {

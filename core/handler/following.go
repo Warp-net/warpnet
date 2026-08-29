@@ -147,8 +147,14 @@ func StreamFollowHandler(
 
 		isMeFollowed := ownerUserId == ev.FollowingId
 		if isMeFollowed { //nolint:nestif
+			if s == nil || s.Conn() == nil {
+				return nil, warpnet.ErrForeignAuthor
+			}
 			followerUser, err := fetchFollower(userRepo, streamer, s, ev.FollowerId)
 			if err != nil {
+				return nil, err
+			}
+			if err := warpnet.VerifyAuthorship(s, followerUser.NodeId); err != nil {
 				return nil, err
 			}
 			err = followRepo.Follow(ev.FollowerId, ownerUserId)
@@ -166,6 +172,13 @@ func StreamFollowHandler(
 				}
 			}
 			return event.Accepted, nil
+		}
+
+		if ev.FollowerId != ownerUserId {
+			return nil, warpnet.ErrForeignAuthor
+		}
+		if err := warpnet.VerifyAuthorship(s, owner.NodeId); err != nil {
+			return nil, err
 		}
 
 		followDataResp := []byte(event.Accepted)
@@ -272,11 +285,22 @@ func StreamUnfollowHandler(
 		isMeUnfollowed := ownerUserId == ev.FollowingId
 
 		if isMeUnfollowed {
+			follower, _ := userRepo.Get(ev.FollowerId)
+			if err := warpnet.VerifyAuthorship(s, follower.NodeId); err != nil {
+				return nil, err
+			}
 			err = followRepo.Unfollow(ev.FollowerId, ev.FollowingId)
 			if err != nil {
 				return nil, err
 			}
 			return event.Accepted, nil
+		}
+
+		if ev.FollowerId != ownerUserId {
+			return nil, warpnet.ErrForeignAuthor
+		}
+		if err := warpnet.VerifyAuthorship(s, owner.NodeId); err != nil {
+			return nil, err
 		}
 
 		followingUser, err := userRepo.Get(ev.FollowingId)

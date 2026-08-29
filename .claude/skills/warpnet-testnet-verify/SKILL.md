@@ -33,8 +33,7 @@ Why the *remote* node specifically (and not the member/desktop node):
 ```
 1. build     go build -mod=vendor -tags remote -o <scratch>/remote ./cmd/node/member
 2. fresh     rm -rf ~/.warpdata/testnet          # only for a clean first-run/register
-3. run       <scratch>/remote --node.network=testnet \
-                 --node.server.password='TestPass123!' --node.server.port=4999 &
+3. run       <scratch>/remote --node.network=testnet --node.server.port=4999 &
 4. wait      curl -s -o /dev/null -w '%{http_code}' localhost:4999/   # → 200 once serving
 5. drive     ws://localhost:4999/ws :  is-first-run → login → <your route(s)>
 6. assert    inspect the JSON body of the reply to your route
@@ -66,7 +65,6 @@ the source of truth for the version.
 ```bash
 "$SB/remote" \
   --node.network=testnet \
-  --node.server.password='TestPass123!' \
   --node.server.port=4999 \
   --logging.level=info > "$SB/remote.log" 2>&1 &
 ```
@@ -76,7 +74,6 @@ Key flags (all from `config/config.go`, override via `--flag` or `NODE_*` env):
 | flag | default | notes |
 |------|---------|-------|
 | `--node.network` | `warpnet` | **use `testnet`** — it auto-appends the testnet bootstrap peers and flips `IsTestnet()` |
-| `--node.server.password` | *(empty → `log.Fatal`)* | required; also the AES key for `/ws` traffic. Must pass the password policy (below) |
 | `--node.server.port` | `4999` | dashboard HTTP/WS port |
 | `--node.port` | `4001` | libp2p listen port |
 | `--node.bootstrap` | *(empty)* | comma-separated multiaddrs; testnet peers are added automatically on top |
@@ -118,11 +115,12 @@ The envelope is `event.Message` (`event/event.go`):
 `path` is the destination route. The reply echoes `message_id` and `path` and carries the
 result in `body`.
 
-**Codec shortcut for testing:** the bridge's `AESCodec.Decode` tries to AES-GCM-decrypt
-each frame and, *on failure, treats the frame as plaintext* and replies in plaintext
-(`security/aes.go`). So a test client can send **plaintext JSON** and read plaintext
-replies — no need to reimplement the AES layer the browser uses. (The browser encrypts
-because it shares the password; your probe doesn't have to.)
+**Channel handshake for probes:** the `/ws` bridge speaks Noise XX with **no plaintext
+fallback** — a non-protocol frame kills the connection. A Go probe doesn't need to
+reimplement anything: call `security.NoiseHandshakeInitiator(read, write)` right after
+dialing (read/write adapters over gorilla's `ReadMessage`/`WriteMessage`, binary frames),
+then `session.Encrypt`/`session.Decrypt` each JSON frame. The login *account* password
+below is unrelated to the channel — there is no channel secret.
 
 Three destinations are handled specially by the bridge (`handlers/bridge.go::dispatch`);
 everything else is signed and forwarded to `node.SelfStream`:
@@ -153,6 +151,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Warp-net/warpnet/security"
 	"github.com/gorilla/websocket"
 )
 
@@ -292,9 +291,9 @@ RELAY_ID=$(grep -oP 'RELAY NODE STARTED WITH ID \K[^ ]+' "$SB/relay.log" | head 
 BOOT="/ip4/127.0.0.1/tcp/4000/p2p/$RELAY_ID"
 
 # 2) two app nodes, each bootstrapping off the relay; distinct ports + db dirs
-"$SB/remote" --node.network=testnet --node.server.password='TestPass123!' \
+"$SB/remote" --node.network=testnet \
     --node.port=4001 --node.server.port=4999 --database.dir=storage-a --node.bootstrap="$BOOT" &
-"$SB/remote" --node.network=testnet --node.server.password='TestPass123!' \
+"$SB/remote" --node.network=testnet \
     --node.port=4002 --node.server.port=5000 --database.dir=storage-b --node.bootstrap="$BOOT" &
 
 # 3) log into BOTH over /ws — this boots each node's libp2p host (see the flow above)

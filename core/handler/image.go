@@ -29,8 +29,10 @@ package handler
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -39,6 +41,8 @@ import (
 	_ "image/png"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -47,9 +51,6 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/docker/go-units"
-	"github.com/dsoprea/go-exif/v3"
-	exifcommon "github.com/dsoprea/go-exif/v3/common"
-	jis "github.com/dsoprea/go-jpeg-image-structure/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -74,7 +75,16 @@ const (
 	userMetaKey = "user"
 	macMetaKey  = "MAC"
 
+	contentKeyLen = 64
+
 	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 media data"
+	ErrMediaKeyMismatch       warpnet.WarpError = "media content does not match the requested key"
+
+	imagePrefix = "data:image/jpeg;base64,"
+
+	ErrTooLargeImage    warpnet.WarpError = "image is too large"
+	ErrEmptyImageKey    warpnet.WarpError = "empty image key"
+	ErrNoImagesProvided warpnet.WarpError = "at least one image must be provided"
 )
 
 type MediaNodeInformer interface {
@@ -90,109 +100,15 @@ type MediaStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-// MediaMetaStorer is the slice of MediaRepo the alt-text / focal-point
-// handlers need.
-type MediaMetaStorer interface {
-	SetImageMeta(userId, key string, meta database.MediaMeta) error
-	GetImageMeta(userId, key string) (database.MediaMeta, error)
-}
-
-func StreamUpdateMediaMetaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.UpdateMediaMetaEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("media meta: empty user id")
-		}
-		if ev.Key == "" {
-			return nil, warpnet.WarpError("media meta: empty media key")
-		}
-		meta := database.MediaMeta{
-			Description: ev.Description,
-			FocusX:      ev.FocusX,
-			FocusY:      ev.FocusY,
-		}
-		if err := repo.SetImageMeta(ev.UserId, ev.Key, meta); err != nil {
-			return nil, err
-		}
-		return event.Accepted, nil
-	}
-}
-
-func StreamGetMediaHandler(repo MediaMetaStorer) warpnet.WarpHandlerFunc {
-	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetMediaEvent
-		if err := json.Unmarshal(buf, &ev); err != nil {
-			return nil, err
-		}
-		if ev.UserId == "" {
-			return nil, warpnet.WarpError("get media: empty user id")
-		}
-		if ev.Key == "" {
-			return nil, warpnet.WarpError("get media: empty media key")
-		}
-		meta, err := repo.GetImageMeta(ev.UserId, ev.Key)
-		if err != nil {
-			return nil, err
-		}
-		return event.GetMediaResponse{
-			Key:         ev.Key,
-			Description: meta.Description,
-			FocusX:      meta.FocusX,
-			FocusY:      meta.FocusY,
-		}, nil
-	}
-}
-
-func buildEncryptedMediaMeta(
-	info MediaNodeInformer,
-	userRepo MediaUserFetcher,
-) (encryptedMeta []byte, ownerUser domain.User, err error) {
-	nodeInfo := info.NodeInfo()
-	ownerUser, err = userRepo.Get(nodeInfo.OwnerId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return nil, ownerUser, err
-	}
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: fetching user: %w", err)
-	}
-
-	metaData := map[string]any{
-		nodeMetaKey: nodeInfo, userMetaKey: ownerUser, macMetaKey: warpnet.GetMacAddr(),
-	}
-	metaBytes, err := json.Marshal(metaData)
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: marshalling meta data: %w", err)
-	}
-
-	encryptedMeta, err = security.EncryptAES(metaBytes, nil) // unknown password
-	if err != nil {
-		return nil, ownerUser, fmt.Errorf("image meta: AES encrypting: %w", err)
-	}
-	return encryptedMeta, ownerUser, nil
-}
-
-const (
-	imageDescriptionTag = "ImageDescription"
-
-	imagePrefix = "data:image/jpeg;base64,"
-
-	ErrTooLargeImage    warpnet.WarpError = "image is too large"
-	ErrEmptyImageKey    warpnet.WarpError = "empty image key"
-	ErrNoImagesProvided warpnet.WarpError = "at least one image must be provided"
-	ErrInvalidEXIF      warpnet.WarpError = "invalid exif type: not a segment list"
-)
-
 type MediaStorer interface {
-	GetImage(userId, key string) (database.Base64Image, error)
-	SetImage(userId string, img database.Base64Image) (_ database.ImageKey, err error)
-	SetForeignImageWithTTL(userId, key string, img database.Base64Image) error
+	GetImage(userId, key string) (domain.Base64Image, error)
+	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
+	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
 }
 
 func StreamUploadImageHandler(
 	info MediaNodeInformer,
+	privKey ed25519.PrivateKey,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
@@ -215,7 +131,14 @@ func StreamUploadImageHandler(
 			return nil, ErrNoImagesProvided
 		}
 
-		encryptedMeta, ownerUser, err := buildEncryptedMediaMeta(info, userRepo)
+		nodeInfo := info.NodeInfo()
+
+		owner, err := userRepo.Get(nodeInfo.OwnerId)
+		if err != nil {
+			return nil, fmt.Errorf("upload: image: fetching owner: %w", err)
+		}
+
+		watermark, err := buildWatermark(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, err
 		}
@@ -226,11 +149,16 @@ func StreamUploadImageHandler(
 				continue
 			}
 
-			key, err := processAndStoreImage(file, encryptedMeta, ownerUser.Id, mediaRepo)
+			img, err := watermarkUploadedImage(file, watermark)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
 			}
-			keys[i] = key
+
+			key, err := mediaRepo.SetImage(watermark.OwnerId, img)
+			if err != nil {
+				return nil, fmt.Errorf("upload: image%d: storing media: %w", i+1, err)
+			}
+			keys[i] = string(key)
 		}
 
 		return event.UploadImageResponse{
@@ -240,57 +168,6 @@ func StreamUploadImageHandler(
 			Key4: keys[3],
 		}, nil
 	}
-}
-
-func processAndStoreImage(
-	file string,
-	encryptedMeta []byte,
-	userId string,
-	mediaRepo MediaStorer,
-) (string, error) {
-	parts := strings.SplitN(file, ",", 2) //nolint:mnd
-	if len(parts) != 2 {                  //nolint:mnd
-		return "", ErrInvalidBase64Signature
-	}
-
-	imgBytes, err := base64.StdEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("base64 decoding: %w", err)
-	}
-
-	if size := binary.Size(imgBytes); size > units.MiB*50 {
-		return "", ErrTooLargeImage
-	}
-
-	img, _, err := image.Decode(bytes.NewReader(imgBytes))
-	if errors.Is(err, image.ErrFormat) {
-		return "", warpnet.WarpError(
-			"invalid image format: PNG, JPG, JPEG, GIF are only allowed", // TODO add more types
-		)
-	}
-	if err != nil {
-		return "", fmt.Errorf("image decoding: %w", err)
-	}
-
-	var imageBuf bytes.Buffer
-	err = jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100}) //nolint:mnd
-	if err != nil {
-		return "", fmt.Errorf("JPEG encoding: %w", err)
-	}
-
-	amendedImg, err := amendExifMetadata(imageBuf.Bytes(), encryptedMeta)
-	if err != nil {
-		return "", fmt.Errorf("meta data amending: %w", err)
-	}
-
-	encoded := base64.StdEncoding.EncodeToString(amendedImg)
-
-	key, err := mediaRepo.SetImage(userId, database.Base64Image(imagePrefix+encoded))
-	if err != nil {
-		return "", fmt.Errorf("storing media: %w", err)
-	}
-
-	return string(key), nil
 }
 
 func StreamGetImageHandler(
@@ -344,8 +221,8 @@ func StreamGetImageHandler(
 		// Serve the persisted copy first so a foreign avatar (e.g. Mastodon,
 		// keyed by URL) survives node restarts and doesn't need a gateway
 		// round-trip on every view.
-		if cached, cErr := mediaRepo.GetImage(ev.UserId, ev.Key); cErr == nil && cached != "" {
-			return event.GetImageResponse{File: string(cached)}, nil
+		if stored, cErr := mediaRepo.GetImage(ev.UserId, ev.Key); cErr == nil && stored != "" {
+			return event.GetImageResponse{File: string(stored)}, nil
 		}
 
 		resp, err := streamer.GenericStream(u.NodeId, event.PUBLIC_GET_IMAGE, ev)
@@ -361,66 +238,168 @@ func StreamGetImageHandler(
 			return nil, fmt.Errorf("get image: unmarshalling response: %w", err)
 		}
 
-		if err := mediaRepo.SetForeignImageWithTTL(u.Id, ev.Key, database.Base64Image(imgResp.File)); err != nil {
-			log.Errorf("get image: storing foreign image: %v", err)
+		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
+			log.Warnf("get image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
+			return event.GetImageResponse{File: ""}, nil
 		}
 
-		return resp, nil
+		if imgResp.File != "" {
+			if err := mediaRepo.SetForeignImageWithTTL(
+				u.Id, ev.Key, domain.Base64Image(imgResp.File),
+			); err != nil {
+				log.Errorf("get image: storing foreign image: %v", err)
+			}
+		}
+
+		return imgResp, nil
 	}
 }
 
-func amendExifMetadata(imageBytes, metadata []byte) ([]byte, error) {
-	parser := jis.NewJpegMediaParser()
+func verifyForeignImage(u domain.User, key, file string) error {
+	return verifyForeignMedia(u, key, file, media_meta.VerifyImage)
+}
 
-	intfc, err := parser.ParseBytes(imageBytes)
+func verifyForeignMedia(
+	u domain.User,
+	key, file string,
+	verifyWatermark func(raw []byte, nodeId, ownerId string) error,
+) error {
+	if file == "" || isForeignOriginMedia(u) {
+		return nil
+	}
+	if err := verifyContentKey(key, file); err != nil {
+		return err
+	}
+
+	_, raw, err := splitDataURI(file)
 	if err != nil {
-		return nil, fmt.Errorf("amend EXIF: parse bytes: %w", err)
+		return err
+	}
+	return verifyWatermark(raw, u.NodeId, u.Id)
+}
+
+func isForeignOriginMedia(u domain.User) bool {
+	return u.Network == mastodon.Network || u.NodeId == mastodon.GatewayNodeID()
+}
+
+func isContentKey(key string) bool {
+	if len(key) != contentKeyLen {
+		return false
+	}
+	_, err := hex.DecodeString(key)
+	return err == nil
+}
+
+func verifyContentKey(key, file string) error {
+	if !isContentKey(key) {
+		return nil
+	}
+	if hex.EncodeToString(security.ConvertToSHA256([]byte(file))) != key {
+		return ErrMediaKeyMismatch
+	}
+	return nil
+}
+
+func splitDataURI(file string) (header string, data []byte, err error) {
+	parts := strings.SplitN(file, ",", 2) //nolint:mnd
+	if len(parts) != 2 {                  //nolint:mnd
+		return "", nil, ErrInvalidBase64Signature
 	}
 
-	sl, ok := intfc.(*jis.SegmentList)
-	if !ok {
-		return nil, fmt.Errorf("amend EXIF: %w", ErrInvalidEXIF)
-	}
-
-	ifdMapping, err := exifcommon.NewIfdMappingWithStandard()
+	data, err = base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("amend EXIF: new IFD mapping: %w", err)
+		return "", nil, fmt.Errorf("base64 decoding: %w", err)
 	}
+	return parts[0], data, nil
+}
 
-	ti := exif.NewTagIndex()
-
-	err = exif.LoadStandardTags(ti)
+func buildWatermark(
+	nodeInfo warpnet.NodeInfo,
+	privKey ed25519.PrivateKey,
+	owner domain.User,
+) (media_meta.Watermark, error) {
+	metaData := map[string]any{
+		nodeMetaKey: nodeInfo, userMetaKey: owner, macMetaKey: warpnet.GetMacAddr(),
+	}
+	metaBytes, err := json.Marshal(metaData)
 	if err != nil {
-		return nil, fmt.Errorf("amend EXIF: load standard tags: %w", err)
+		return media_meta.Watermark{}, fmt.Errorf("image meta: marshalling meta data: %w", err)
 	}
 
-	identity := exifcommon.NewIfdIdentity(
-		exifcommon.IfdStandardIfdIdentity.IfdTag(),
-		exifcommon.IfdIdentityPart{
-			Name:  exifcommon.IfdStandardIfdIdentity.Name(),
-			Index: exifcommon.IfdStandardIfdIdentity.Index(),
-		},
-	)
-
-	rootIb := exif.NewIfdBuilder(ifdMapping, ti, identity, exifcommon.EncodeDefaultByteOrder)
-
-	encodedMetadata := base64.StdEncoding.EncodeToString(metadata)
-
-	err = rootIb.SetStandardWithName(imageDescriptionTag, encodedMetadata)
+	password, err := security.NewWeakPassword()
 	if err != nil {
-		return nil, fmt.Errorf("amend EXIF: add standard tag: %w", err)
+		return media_meta.Watermark{}, fmt.Errorf("image meta: weak password: %w", err)
 	}
+	defer security.Wipe(password)
 
-	err = sl.SetExif(rootIb)
+	encryptedMeta, err := security.EncryptAES(metaBytes, password)
 	if err != nil {
-		return nil, fmt.Errorf("amend EXIF: set: %w", err)
+		return media_meta.Watermark{}, fmt.Errorf("image meta: AES encrypting: %w", err)
 	}
 
-	buf := new(bytes.Buffer)
-	err = sl.Write(buf)
+	return media_meta.Watermark{
+		PrivKey:       privKey,
+		NodeId:        nodeInfo.ID.String(),
+		OwnerId:       owner.Id,
+		EncryptedMeta: encryptedMeta,
+	}, nil
+}
+
+func watermarkUploadedImage(file string, watermark media_meta.Watermark) (domain.Base64Image, error) {
+	_, imgBytes, err := splitDataURI(file)
 	if err != nil {
-		return nil, fmt.Errorf("amend EXIF: write bytes: %w", err)
+		return "", err
 	}
 
-	return buf.Bytes(), nil
+	jpegBytes, err := transcodeToJPEG(imgBytes)
+	if err != nil {
+		return "", err
+	}
+
+	watermarked, err := watermarkJPEG(jpegBytes, watermark)
+	if err != nil {
+		return "", err
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(watermarked)
+	return domain.Base64Image(imagePrefix + encoded), nil
+}
+
+func transcodeToJPEG(imgBytes []byte) ([]byte, error) {
+	if size := binary.Size(imgBytes); size > units.MiB*50 {
+		return nil, ErrTooLargeImage
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	if errors.Is(err, image.ErrFormat) {
+		return nil, warpnet.WarpError(
+			"invalid image format: PNG, JPG, JPEG, GIF are only allowed", // TODO add more types
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("image decoding: %w", err)
+	}
+
+	var imageBuf bytes.Buffer
+	if err := jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100}); err != nil { //nolint:mnd
+		return nil, fmt.Errorf("JPEG encoding: %w", err)
+	}
+	return imageBuf.Bytes(), nil
+}
+
+func watermarkJPEG(jpegBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
+	watermarkBytes, err := watermark.Sign(security.ConvertToSHA256(jpegBytes))
+	if err != nil {
+		return nil, fmt.Errorf("meta data signing: %w", err)
+	}
+
+	watermarked, err := media_meta.EmbedInJPEG(jpegBytes, watermarkBytes)
+	if err != nil {
+		return nil, fmt.Errorf("meta data amending: %w", err)
+	}
+
+	if err := media_meta.VerifyImage(watermarked, watermark.NodeId, watermark.OwnerId); err != nil {
+		return nil, fmt.Errorf("meta data self check: %w", err)
+	}
+	return watermarked, nil
 }

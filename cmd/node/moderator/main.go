@@ -27,6 +27,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
@@ -73,7 +74,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seed := []byte(config.Config().Node.Seed)
+	seed := make([]byte, 32)
+	_, _ = rand.Read(seed)
+
 	privKey, err := security.GenerateKeyFromSeed(seed)
 	if err != nil {
 		log.Errorf("moderator: fail generating key: %v", err)

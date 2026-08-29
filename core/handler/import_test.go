@@ -20,7 +20,7 @@ import (
 type stubImportInformer struct{ ownerId string }
 
 func (s stubImportInformer) NodeInfo() warpnet.NodeInfo {
-	return warpnet.NodeInfo{OwnerId: s.ownerId, Type: warpnet.MemberNode}
+	return warpnet.NodeInfo{OwnerId: s.ownerId, ID: testSignerID, Type: warpnet.MemberNode}
 }
 
 type stubImportUserRepo struct{ user domain.User }
@@ -52,14 +52,14 @@ func (s *stubImportTweetRepo) Create(_ string, tweet domain.Tweet) (domain.Tweet
 
 type stubImportMediaRepo struct{ saved int }
 
-func (s *stubImportMediaRepo) GetImage(userId, key string) (database.Base64Image, error) {
+func (s *stubImportMediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
 	return "", nil
 }
-func (s *stubImportMediaRepo) SetImage(userId string, img database.Base64Image) (database.ImageKey, error) {
+func (s *stubImportMediaRepo) SetImage(userId string, img domain.Base64Image) (domain.ImageKey, error) {
 	s.saved++
-	return database.ImageKey("imgkey"), nil
+	return domain.ImageKey("imgkey"), nil
 }
-func (s *stubImportMediaRepo) SetForeignImageWithTTL(userId, key string, img database.Base64Image) error {
+func (s *stubImportMediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
 }
 
@@ -90,7 +90,7 @@ func newImportTweetHandler(t *testing.T) (warpnet.WarpHandlerFunc, *stubImportTw
 	mediaRepo := &stubImportMediaRepo{}
 	informer := stubImportInformer{ownerId: "owner-1"}
 	userRepo := stubImportUserRepo{user: domain.User{Id: "owner-1", Username: "alice"}}
-	return StreamImportTweetHandler(informer, tweetRepo, mediaRepo, userRepo), tweetRepo, mediaRepo
+	return StreamImportTweetHandler(informer, testSignerKey, tweetRepo, mediaRepo, userRepo), tweetRepo, mediaRepo
 }
 
 func TestStreamImportTweetHandler(t *testing.T) {

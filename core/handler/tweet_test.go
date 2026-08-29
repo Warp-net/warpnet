@@ -2,6 +2,8 @@
 package handler
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"strings"
 	"testing"
@@ -155,6 +157,25 @@ func (s stubTweetBroadcaster) PublishUpdateToFollowers(ownerId, dest string, bt 
 	return nil
 }
 
+func authorStream(t *testing.T) (stubTweetUserRepo, warpnet.WarpStream) {
+	t.Helper()
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate author key: %v", err)
+	}
+	nodeId, err := warpnet.IDFromPublicKey(pub)
+	if err != nil {
+		t.Fatalf("derive author node id: %v", err)
+	}
+
+	repo := stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: nodeId.String()}, nil
+	}}
+	_, server := stream.NewLoopbackStream(nodeId, nodeId, "/test/route/0.0.0")
+	return repo, server
+}
+
 type stubTweetUserRepo struct {
 	getFn func(userId string) (domain.User, error)
 }
@@ -303,7 +324,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 
 	t.Run("poll validation", func(t *testing.T) {
 		expires := time.Now().Add(time.Hour)
-		longOption := strings.Repeat("a", domain.PollOptionRuneLimit+1)
+		longOption := strings.Repeat("a", pollOptionRuneLimit+1)
 		for _, tt := range []struct {
 			name string
 			poll *domain.Poll
@@ -430,8 +451,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 			stubFollowChecker{following: false},
 			stubTweetUserRepo{},
 			stubModerationNotifier{},
-			stubStreamer{},
-		)
+			stubStreamer{})
 		resp, err := h(marshal(t, event.NewTweetEvent{Id: "x1", UserId: "stranger-1", Text: "unsolicited"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -483,8 +503,7 @@ func TestStreamNewTweetHandler_TweetThenReply(t *testing.T) {
 		stubFollowChecker{},
 		stubTweetUserRepo{},
 		stubModerationNotifier{},
-		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}},
-	)
+		stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 
 	// 1) a top-level tweet: stored and added to the timeline.
 	resp, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "hello"}), nil)
@@ -692,7 +711,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -700,7 +719,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -708,7 +727,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -719,7 +738,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{deleteFn: func(userID, tweetID string) error {
 			return repoErr
-		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -731,7 +750,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -749,7 +768,7 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
 			published = true
 			return nil
-		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: "other-1", TweetId: tweetId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -1440,18 +1459,26 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "delete reply and forward to parent author",
+			name: "delete reply locally",
 			ev:   event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
 			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer) {
 				ts.DeleteReplyFunc = func(p, id string) (domain.Tweet, error) {
 					parent := "parentUser"
 					return domain.Tweet{ParentUserId: &parent}, nil
 				}
-				uf.GetFunc = func(string) (domain.User, error) {
-					return domain.User{NodeId: "other-node"}, nil
-				}
 				s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
+					t.Error("a reply delete must not leave this node")
 					return nil, nil
+				}
+			},
+		},
+		{
+			name:    "delete reply error",
+			ev:      event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
+			wantErr: true,
+			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer) {
+				ts.DeleteReplyFunc = func(p, id string) (domain.Tweet, error) {
+					return domain.Tweet{}, errors.New("db failed")
 				}
 			},
 		},
@@ -1465,7 +1492,7 @@ func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 			s := &mockStreamer{}
 			tt.setup(ts, uf, s)
 
-			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, uf, s)
+			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, s)
 			_, err := handler(marshal(t, tt.ev), nil)
 
 			if tt.wantErr {
@@ -1494,8 +1521,16 @@ func TestSetPinnedFromEvent(t *testing.T) {
 		repo.GetFunc = func(_, _ string) (domain.Tweet, error) {
 			return domain.Tweet{UserId: "other"}, nil
 		}
-		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, true)
+		users, conn := authorStream(t)
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, conn, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "only the author can pin")
+	})
+
+	t.Run("sent by another node", func(t *testing.T) {
+		users, _ := authorStream(t)
+		_, attacker := authorStream(t)
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, attacker, true)
+		assert.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 	})
 }

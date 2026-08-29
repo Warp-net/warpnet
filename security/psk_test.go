@@ -24,7 +24,7 @@ func TestGeneratePSK_EmptyNetwork(t *testing.T) {
 	v := semver.MustParse("1.0.0")
 	psk, err := GeneratePSK("", v)
 	assert.Error(t, err)
-	assert.Equal(t, ErrPSKNetwrokRequired, err)
+	assert.Equal(t, ErrPSKNetworkRequired, err)
 	assert.Nil(t, psk)
 }
 
@@ -70,11 +70,4 @@ func TestGeneratePSK_MainnetNormalization(t *testing.T) {
 	p1, _ := GeneratePSK("mainnet", v)
 	p2, _ := GeneratePSK("warpnet", v)
 	assert.Equal(t, p1, p2, "mainnet should be normalized to warpnet")
-}
-
-func TestGenerateAnchoredEntropy(t *testing.T) {
-	e1 := generateAnchoredEntropy()
-	e2 := generateAnchoredEntropy()
-	assert.Equal(t, e1, e2, "anchored entropy should be deterministic")
-	assert.Len(t, e1, 32)
 }

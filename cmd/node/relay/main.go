@@ -1,3 +1,5 @@
+//go:build !windows
+
 /*
 
  Warpnet - Decentralized Social Network
@@ -29,6 +31,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
@@ -37,7 +40,6 @@ import (
 
 	relay "github.com/Warp-net/warpnet/cmd/node/relay/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
@@ -74,8 +76,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seed := []byte(config.Config().Node.Seed)
+	seed := []byte(config.Config().Node.Seed) // deterministic seed for 3 bootstrap nodes
 	if len(seed) == 0 {
+		seed = make([]byte, 32)
 		_, _ = rand.Read(seed)
 	}
 
@@ -86,13 +89,8 @@ func main() {
 	}
 
 	nodeId, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		nodeId.String(),
-		network,
-	)
 
-	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId, m)
+	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId)
 	if err != nil {
 		log.Errorf("failed to init relay node: %v", err)
 		return
@@ -106,6 +104,12 @@ func main() {
 
 	if config.Config().Node.IsPskPrinted {
 		log.Infof("CURRENT PSK: %s", psk.String())
+	}
+
+	if config.Config().Node.IsSelfUpdate {
+		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.RelayArtifact())
+		defer updater.Close()
+		updater.Run(n.Stop)
 	}
 
 	<-interruptChan

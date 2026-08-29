@@ -31,11 +31,13 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	node2 "github.com/Warp-net/warpnet/cmd/node/member/node"
+	"github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/remote"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -45,16 +47,11 @@ import (
 	"github.com/Warp-net/warpnet/database"
 	localstore "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	pw := config.Config().Node.Server.Password
-	if pw == "" {
-		log.Fatal("password is required")
-	}
 	port := config.Config().Node.Server.Port
 	network := config.Config().Node.Network
 	version := config.Config().Version
@@ -109,8 +106,18 @@ func main() {
 		return
 	}
 
+	staticKey, err := security.LoadOrCreateNoiseStaticKey(
+		filepath.Join(filepath.Dir(config.Config().Database.Path), "ws-noise.key"),
+	)
+	if err != nil {
+		log.Errorf("remote: noise static key: %v", err)
+		return
+	}
+
 	bridgeHandler := remote.NewBridgeHandler(
-		security.AESCodec{Key: security.AESKeyFromPassword(pw)},
+		func(read func() ([]byte, error), write func([]byte) error) (remote.Channel, error) {
+			return security.NoiseHandshake(staticKey, read, write)
+		},
 		authService,
 		psk,
 		db.IsFirstRun, // queried lazily: flips to false once the DB is opened on first login
@@ -120,7 +127,11 @@ func main() {
 	mux.Handle("/ws", bridgeHandler.Handle())
 	mux.Handle("/", staticHandler)
 
-	srv := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{
+		Addr:              net.JoinHostPort(config.Config().Node.Server.Host, port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	defer srv.Shutdown(ctx) //nolint:errcheck
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -128,12 +139,23 @@ func main() {
 		}
 	}()
 
-	fmt.Printf("\033[1mNODE IS LISTENING ON 'localhost%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
+	if host := config.Config().Node.Server.Host; host == "" || host == "0.0.0.0" || host == "::" {
+		fmt.Printf(
+			"\033[1mNODE IS LISTENING ON EVERY INTERFACE, PORT %s. OPEN 'http://<this-host>:%s' IN A BROWSER \033[0m\n",
+			port, port,
+		)
+	} else {
+		fmt.Printf("\033[1mNODE IS LISTENING ON 'http://%s'. PUT THIS ADDRESS INTO A BROWSER \033[0m\n", srv.Addr)
+	}
+	fmt.Printf(
+		"\033[1mNODE KEY FINGERPRINT: %s — THE BROWSER PINS IT ON FIRST CONNECT, COMPARE IF ASKED\033[0m\n",
+		security.NoiseFingerprint(staticKey.Public),
+	)
 
-	var node *node2.MemberNode
+	var n *node.MemberNode
 	defer func() {
-		if node != nil {
-			node.Stop()
+		if n != nil {
+			n.Stop()
 		}
 	}()
 
@@ -149,7 +171,7 @@ func main() {
 			log.Infoln("remote: database authentication passed")
 		}
 
-		if node == nil {
+		if n == nil {
 			privateKey := authService.PrivateKey()
 			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
 			if err != nil {
@@ -157,8 +179,7 @@ func main() {
 				return
 			}
 
-			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
-			node, err = node2.NewMemberNode(
+			n, err = node.NewMemberNode(
 				ctx,
 				privateKey,
 				psk,
@@ -166,26 +187,24 @@ func main() {
 				authRepo,
 				db,
 				infos,
-				m,
 			)
 			if err != nil {
 				log.Errorf("remote: init node: %v", err)
 				return
 			}
 
-			if err := node.Start(); err != nil {
+			if err := n.Start(); err != nil {
 				log.Errorf("remote: start node: %v", err)
 				return
 			}
 
-			bridgeHandler.AttachNode(node)
+			bridgeHandler.AttachNode(n)
 		}
 
-		ni := node.NodeInfo()
+		ni := n.NodeInfo()
 		info.ID = ni.ID.String()
 		info.Network = network
 		info.Addresses = ni.Addresses
-		info.Role = ni.Type
 		info.BootstrapPeers = config.Config().Node.Bootstrap
 		readyChan <- info
 	}

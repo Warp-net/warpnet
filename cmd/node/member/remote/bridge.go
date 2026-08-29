@@ -27,10 +27,12 @@ package remote
 import (
 	"crypto/ed25519"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/event"
@@ -67,13 +69,18 @@ func sameOrigin(r *http.Request) bool {
 	return u.Host == r.Host
 }
 
-type Codec interface {
-	Decode(frame []byte) (plain []byte, encrypted bool)
-	Encode(reply []byte, encrypted bool) ([]byte, error)
+type Channel interface {
+	Encrypt(plain []byte) ([]byte, error)
+	Decrypt(frame []byte) ([]byte, error)
+	RemoteStatic() []byte
 }
 
+type HandshakeFunc func(read func() ([]byte, error), write func([]byte) error) (Channel, error)
+
+const handshakeTimeout = 10 * time.Second
+
 type Node interface {
-	SelfStream(path stream.WarpRoute, data any) ([]byte, error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error)
 }
 
 // Authenticator is the slice of the auth service the dispatcher uses: log the
@@ -83,30 +90,57 @@ type Authenticator interface {
 	AuthLogout()
 	Reset()
 	PrivateKey() ed25519.PrivateKey
+	IsAuthenticated() bool
 }
 
 type BridgeHandler struct {
-	codec    Codec
-	auth     Authenticator
-	firstRun func() bool
-	psk      security.PSK
+	handshake HandshakeFunc
+	auth      Authenticator
+	firstRun  func() bool
+	psk       security.PSK
 
-	mx   sync.RWMutex
-	node Node
+	mx      sync.RWMutex
+	node    Node
+	clients map[string]struct{}
 }
 
 func NewBridgeHandler(
-	codec Codec,
+	handshake HandshakeFunc,
 	auth Authenticator,
 	psk security.PSK,
 	firstRun func() bool,
 ) *BridgeHandler {
 	return &BridgeHandler{
-		codec:    codec,
-		auth:     auth,
-		psk:      psk,
-		firstRun: firstRun,
+		handshake: handshake,
+		auth:      auth,
+		psk:       psk,
+		firstRun:  firstRun,
+		clients:   make(map[string]struct{}),
 	}
+}
+
+func (b *BridgeHandler) isEnrolled(pub []byte) bool {
+	if len(pub) == 0 {
+		return false
+	}
+	b.mx.RLock()
+	defer b.mx.RUnlock()
+	_, ok := b.clients[string(pub)]
+	return ok
+}
+
+func (b *BridgeHandler) enroll(pub []byte) {
+	if len(pub) == 0 {
+		return
+	}
+	b.mx.Lock()
+	b.clients[string(pub)] = struct{}{}
+	b.mx.Unlock()
+}
+
+type clientConn struct {
+	static     []byte
+	authorized atomic.Bool
 }
 
 func (b *BridgeHandler) Handle() http.HandlerFunc {
@@ -119,28 +153,49 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 
 		defer func() { _ = conn.Close() }()
 
+		_ = conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
+		channel, err := b.handshake(
+			func() ([]byte, error) {
+				_, frame, err := conn.ReadMessage()
+				return frame, err
+			},
+			func(msg []byte) error {
+				return conn.WriteMessage(websocket.BinaryMessage, msg)
+			},
+		)
+		if err != nil {
+			log.Warnf("remote: ws handshake: %v", err)
+			return
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+
 		// Dispatch each message in its own goroutine so a slow libp2p self-stream
 		// can't head-of-line block every other dashboard call on the connection.
-		// writeMx serializes WriteMessage (gorilla allows a single writer); sem
-		// bounds in-flight work; the frontend matches replies by message_id, so
-		// out-of-order responses are fine.
+		// writeMx serializes Encrypt+WriteMessage (gorilla allows a single writer,
+		// counter nonces require wire order to match encryption order); sem bounds
+		// in-flight work; the frontend matches replies by message_id.
 		var writeMx sync.Mutex
 		var inflight sync.WaitGroup
 		sem := make(chan struct{}, maxInflightDispatches)
 
-		respond := func(req event.Message, encrypted bool) {
-			out, err := json.Marshal(b.dispatch(req))
+		c := &clientConn{static: channel.RemoteStatic()}
+		c.authorized.Store(b.isEnrolled(c.static))
+
+		respond := func(req event.Message) {
+			out, err := json.Marshal(b.dispatch(req, c))
 			if err != nil {
 				log.Errorf("remote: ws marshal: %v", err)
 				return
 			}
-			if out, err = b.codec.Encode(out, encrypted); err != nil {
-				log.Errorf("remote: ws encode: %v", err)
-				return
-			}
 			writeMx.Lock()
 			defer writeMx.Unlock()
-			if err := conn.WriteMessage(websocket.TextMessage, out); err != nil {
+			sealed, err := channel.Encrypt(out)
+			if err != nil {
+				log.Errorf("remote: ws encrypt: %v", err)
+				_ = conn.Close()
+				return
+			}
+			if err := conn.WriteMessage(websocket.BinaryMessage, sealed); err != nil {
 				_ = conn.Close() // unblock ReadMessage so the loop exits
 			}
 		}
@@ -152,7 +207,13 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 				return
 			}
 
-			plain, encrypted := b.codec.Decode(frame)
+			plain, err := channel.Decrypt(frame)
+			if err != nil {
+				log.Warnf("remote: ws decrypt: %v", err)
+				inflight.Wait()
+				return
+			}
+
 			var req event.Message
 			if err := json.Unmarshal(plain, &req); err != nil {
 				log.Warnf("remote: ws envelope: %v", err)
@@ -164,14 +225,14 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 			// any in-flight call: drain first, then run synchronously as a barrier.
 			if req.Destination == event.PRIVATE_POST_LOGIN || req.Destination == event.PRIVATE_POST_LOGOUT {
 				inflight.Wait()
-				respond(req, encrypted)
+				respond(req)
 				continue
 			}
 
 			sem <- struct{}{}
 			inflight.Go(func() {
 				defer func() { <-sem }()
-				respond(req, encrypted)
+				respond(req)
 			})
 		}
 	}
@@ -183,7 +244,7 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Unlock()
 }
 
-func (b *BridgeHandler) dispatch(req event.Message) event.Message {
+func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf("remote: dispatch panic: %v", r)
@@ -201,12 +262,20 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 		body, _ := json.Marshal(b.firstRun())
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
-		resp.Body = b.login(req.Body)
+		resp.Body = b.login(req.Body, c)
 	case event.PRIVATE_POST_LOGOUT:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 		resp.Body = json.RawMessage(`["logged_out"]`)
 	default:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
 		resp.Body = b.call(req)
 	}
 
@@ -216,7 +285,11 @@ func (b *BridgeHandler) dispatch(req event.Message) event.Message {
 	return resp
 }
 
-func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
+func (b *BridgeHandler) isAuthorized(c *clientConn) bool {
+	return c.authorized.Load() && b.auth.IsAuthenticated()
+}
+
+func (b *BridgeHandler) login(body json.RawMessage, c *clientConn) json.RawMessage {
 	var ev event.LoginEvent
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
@@ -230,6 +303,8 @@ func (b *BridgeHandler) login(body json.RawMessage) json.RawMessage {
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
+	b.enroll(c.static)
+	c.authorized.Store(true)
 	return bt
 }
 
@@ -244,8 +319,13 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 		req.Timestamp = time.Now()
 	}
 	req.Timestamp = req.Timestamp.UTC()
-	req.Signature = security.Sign(b.auth.PrivateKey(), req.SigningBytes())
-	respData, err := n.SelfStream(stream.WarpRoute(req.Destination), req)
+	privKey := b.auth.PrivateKey()
+	ownNodeId, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	req.Signature = security.Sign(privKey, req.SigningBytes())
+	respData, err := n.SelfStream(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
@@ -254,5 +334,13 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 
 func newErrorResp(msg string) json.RawMessage {
 	bt, _ := json.Marshal(event.ResponseError{Code: http.StatusInternalServerError, Message: msg})
+	return bt
+}
+
+func newUnauthorizedResp() json.RawMessage {
+	bt, _ := json.Marshal(event.ResponseError{
+		Code:    http.StatusUnauthorized,
+		Message: "this connection is not signed in: log in on this node first",
+	})
 	return bt
 }

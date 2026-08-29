@@ -47,6 +47,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	ownerNodeID := ownerPeerID.String()
 	ownerInfo := warpnet.NodeInfo{OwnerId: owner, ID: ownerPeerID}
 	auth := stubAuth{owner: domain.Owner{UserId: owner, NodeId: ownerNodeID}}
+	_, ownerConn := stream.NewLoopbackStream(ownerPeerID, ownerPeerID, "/test/route/0.0.0")
 
 	// Each of the user repos below returns a record whose NodeId points at
 	// the owner's own node. A buggy handler would forward this to the
@@ -131,7 +132,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	t.Run("StreamFollowHandler - someone follows owner", func(t *testing.T) {
 		streamer := stubFollowStreamer{genericStreamFn: failOnStream(t)}
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, auth, ownerFollowUserRepo, stubModerationNotifier{}, streamer)
-		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: "stranger", FollowingId: owner}), nil); err != nil {
+		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: "stranger", FollowingId: owner}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -139,7 +140,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 	t.Run("StreamUnfollowHandler - someone unfollows owner", func(t *testing.T) {
 		streamer := stubFollowStreamer{genericStreamFn: failOnStream(t)}
 		h := StreamUnfollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, auth, ownerFollowUserRepo, streamer)
-		if _, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: "stranger", FollowingId: owner}), nil); err != nil {
+		if _, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: "stranger", FollowingId: owner}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -167,7 +168,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		}
 		chatId := chatID
 		h := StreamCreateChatHandler(stubChatRepo{}, ownerChatUserRepo, streamer)
-		if _, err := h(marshal(t, event.NewChatEvent{ChatId: &chatId, OwnerId: owner, OtherUserId: owner}), nil); err != nil {
+		if _, err := h(marshal(t, event.NewChatEvent{ChatId: &chatId, OwnerId: owner, OtherUserId: owner}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -181,8 +182,9 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			return domain.Chat{Id: id, OwnerId: owner, OtherUserId: owner}, nil
 		}}
 		h := StreamNewMessageHandler(repo, ownerChatUserRepo, stubModerationNotifier{}, streamer)
+		_, ownConn := stream.NewLoopbackStream(ownerPeerID, ownerPeerID, "/test/route/0.0.0")
 		// chatId must contain ":" to satisfy the parameter validation.
-		if _, err := h(marshal(t, event.NewMessageEvent{ChatId: owner + ":" + owner, SenderId: owner, ReceiverId: owner, Text: "hi"}), nil); err != nil {
+		if _, err := h(marshal(t, event.NewMessageEvent{ChatId: owner + ":" + owner, SenderId: owner, ReceiverId: owner, Text: "hi"}), ownConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -193,7 +195,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			genericStreamFn: failOnStream(t),
 		}
 		h := StreamReactionHandler(stubReactionRepo{}, ownerReactionUserRepo, stubModerationNotifier{}, streamer)
-		if _, err := h(marshal(t, event.ReactionEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), nil); err != nil {
+		if _, err := h(marshal(t, event.ReactionEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -204,7 +206,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			genericStreamFn: failOnStream(t),
 		}
 		h := StreamUnreactionHandler(stubReactionRepo{}, ownerReactionUserRepo, streamer)
-		if _, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), nil); err != nil {
+		if _, err := h(marshal(t, event.UnreactionEvent{TweetId: tweetID, OwnerId: owner, UserId: owner}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -221,7 +223,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			RetweetedBy: &retweetedBy,
 		}
 		h := StreamNewReTweetHandler(ownerRetweetUserRepo, stubReTweetRepo{}, stubTimelineRepo{}, stubModerationNotifier{}, streamer)
-		if _, err := h(marshal(t, ev), nil); err != nil {
+		if _, err := h(marshal(t, ev), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -235,7 +237,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			return domain.Tweet{Id: tweetId, UserId: owner}, nil
 		}}
 		h := StreamUnretweetHandler(repo, ownerRetweetUserRepo, streamer)
-		if _, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetID, RetweeterId: "stranger"}), nil); err != nil {
+		if _, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetID, RetweeterId: "stranger"}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -295,7 +297,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			genericStreamFn: failOnStream(t),
 		}
 		h := StreamViewHandler(stubViewRepo{}, ownerReactionUserRepo, streamer)
-		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetID, UserId: owner, ViewerId: "stranger"}), nil); err != nil {
+		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetID, UserId: owner, ViewerId: "stranger"}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})

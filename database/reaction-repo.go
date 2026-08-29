@@ -30,14 +30,13 @@ package database
 import (
 	"encoding/binary"
 	"errors"
-	"strings"
-	"time"
-
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+	"strings"
+	"time"
 )
 
 const (
@@ -46,12 +45,8 @@ const (
 	ReactorSubNamespace = "REACTOR"
 	ReactedSubNamespace = "REACTED" // per-user index of reacted tweet refs
 	EmojiSubNamespace   = "EMOJI"   // per-emoji counters, one key per reaction
-)
 
-// maxReactionKinds bounds one page of the per-emoji tally. Beyond it the
-// breakdown is reported as-is instead of folding the remainder into
-// DefaultReaction, which would inflate hearts.
-const maxReactionKinds = uint64(128)
+)
 
 var ErrReactionsNotFound = local_store.DBError("reaction not found")
 
@@ -82,10 +77,6 @@ func (repo *ReactionRepo) React(tweetId, userId, emoji string, isTransitive bool
 	if userId == "" {
 		return 0, local_store.DBError("empty user id")
 	}
-	emoji, err = domain.NormalizeReaction(emoji)
-	if err != nil {
-		return 0, err
-	}
 
 	reactionKey := reactionsCountKey(tweetId)
 	reactorKey := reactorKey(tweetId, userId)
@@ -107,8 +98,6 @@ func (repo *ReactionRepo) React(tweetId, userId, emoji string, isTransitive bool
 	}
 }
 
-// addReaction records a user's first reaction on a tweet: the total counter
-// and the emoji's own counter both go up by one. Commits txn.
 func (repo *ReactionRepo) addReaction(
 	txn local_store.WarpTransactioner,
 	reactorKey, reactionKey local_store.DatabaseKey,
@@ -137,9 +126,6 @@ func (repo *ReactionRepo) addReaction(
 	return reactionsCount, nil
 }
 
-// switchReaction moves an existing reaction to a different emoji. The
-// reaction itself stays, so only the per-emoji tallies move and the total
-// counter is left alone. Commits txn.
 func (repo *ReactionRepo) switchReaction(
 	txn local_store.WarpTransactioner,
 	reactorKey local_store.DatabaseKey,
@@ -217,10 +203,11 @@ func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (re
 	return reactionsCount, nil
 }
 
-// Reactions returns the per-emoji tally for a tweet. Likes stored before
-// reactions existed carry no per-emoji counter, so whatever the total
-// counter holds beyond the sum of the named emoji is attributed to
-// DefaultReaction — old hearts stay hearts.
+const (
+	maxReactionKinds = uint64(128)
+	defaultReaction  = "❤️"
+)
+
 func (repo *ReactionRepo) Reactions(tweetId string) (map[string]uint64, error) {
 	if tweetId == "" {
 		return nil, local_store.DBError("empty tweet id")
@@ -268,13 +255,11 @@ func (repo *ReactionRepo) Reactions(tweetId string) (map[string]uint64, error) {
 		return nil, err
 	}
 	if total > named {
-		reactions[domain.DefaultReaction] += total - named
+		reactions[defaultReaction] += total - named
 	}
 	return reactions, nil
 }
 
-// Reaction reports the emoji this user put on the tweet, or an empty
-// string when they haven't reacted to it.
 func (repo *ReactionRepo) Reaction(tweetId, userId string) (string, error) {
 	if tweetId == "" {
 		return "", local_store.DBError("empty tweet id")
@@ -389,9 +374,6 @@ func (repo *ReactionRepo) SetReacted(userId, tweetId, ownerUserId string) error 
 		CreatedAt:   time.Now(),
 	}
 
-	// Same fixed/sortable key pair as the chat message repo: the fixed key
-	// gives deterministic lookup for unlike and is skipped by iteration,
-	// the sortable key orders the list newest-reacted-first.
 	fixedKey := local_store.NewPrefixBuilder(ReactionRepoName).
 		AddSubPrefix(ReactedSubNamespace).
 		AddRootID(userId).
@@ -526,35 +508,18 @@ func reactionCountKey(tweetId, emoji string) local_store.DatabaseKey {
 		Build()
 }
 
-// keyID returns the last segment of a database key — the reactor's user id
-// for a LIKER key, the emoji for a REACT key.
 func keyID(key string) string {
 	return key[strings.LastIndex(key, local_store.Delimeter)+1:]
 }
 
-// storedReaction decodes the emoji a reactor row carries. Rows written before
-// reactions existed stored the reactor's own id as the value, so they read
-// back as hearts.
 func storedReaction(value []byte, userId string) string {
 	emoji := string(value)
 	if emoji == "" || emoji == userId {
-		return domain.DefaultReaction
+		return defaultReaction
 	}
 	return emoji
 }
 
-// isTransitive tells whether this action should propagate to the network-wide
-// (CRDT) counter, which is replicated ("transits") across nodes. The caller
-// (handler) sets it true only on the acting user's own node, so an action
-// observed on more than one node is counted once. The local per-node counter
-// is always updated (it backs the read-time fallback).
-//
-// A user holds at most one reaction per tweet: reacting again with a
-// different emoji moves the per-emoji tallies but leaves the reaction itself
-// (and therefore the total counter) alone.
-
-// decodeCount reads a counter value written by the store's Increment,
-// tolerating a short or missing value.
 func decodeCount(value []byte) uint64 {
 	if len(value) < 8 { //nolint:mnd
 		return 0

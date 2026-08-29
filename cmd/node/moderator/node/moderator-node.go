@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -55,6 +56,7 @@ type ModeratorNode struct {
 
 	node    *node.WarpNode
 	options []libp2p.Option
+	mw      *middleware.WarpMiddleware
 
 	dHashTable DistributedHashTableDiscoverer
 
@@ -136,6 +138,14 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
+	mn.node.SetStreamMiddlewares(
+		mn.mw.LoggingMiddleware,
+		mn.mw.RateLimiterMiddleware,
+		mn.mw.AuthMiddleware,
+		mn.mw.IdempotencyMiddleware,
+	)
+
 	//nolint:govet
 	mn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{ //nolint:govet
@@ -189,7 +199,7 @@ func (mn *ModeratorNode) GenericStream(nodeIdStr string, path stream.WarpRoute, 
 	return mn.node.Stream(nodeId, path, data)
 }
 
-func (mn *ModeratorNode) SelfStream(_ stream.WarpRoute, _ any) (_ []byte, err error) {
+func (mn *ModeratorNode) SelfStream(_, _ warpnet.WarpPeerID, _ stream.WarpRoute, _ any) (_ []byte, err error) {
 	return nil, warpnet.ErrNotImplemented
 }
 
@@ -208,6 +218,9 @@ func (mn *ModeratorNode) Stop() {
 		if err := mn.memoryStoreCloseF(); err != nil {
 			log.Errorf("moderator: failed to close memory store: %v", err)
 		}
+	}
+	if mn.mw != nil {
+		mn.mw.Close()
 	}
 
 	mn.node.StopNode()

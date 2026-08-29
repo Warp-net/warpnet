@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -60,15 +61,12 @@ type PubSubProvider interface {
 type DistributedHashTableCloser interface {
 	Close()
 }
-type MetricsOnlinePusher interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
-}
 
 type RelayNode struct {
 	ctx               context.Context
 	node              *node.WarpNode
 	opts              []warpnet.WarpOption
+	mw                *middleware.WarpMiddleware
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
@@ -82,13 +80,12 @@ func NewRelayNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	m MetricsOnlinePusher,
 ) (_ *RelayNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
 
-	discService := discovery.NewRelayDiscoveryService(ctx, m)
+	discService := discovery.NewRelayDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -193,6 +190,14 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
+	rn.node.SetStreamMiddlewares(
+		rn.mw.LoggingMiddleware,
+		rn.mw.RateLimiterMiddleware,
+		rn.mw.AuthMiddleware,
+		rn.mw.IdempotencyMiddleware,
+	)
+
 	//nolint:govet
 	rn.node.SetStreamHandlers(
 		warpnet.WarpStreamHandler{ //nolint:govet
@@ -202,11 +207,13 @@ func (rn *RelayNode) setupHandlers() {
 	)
 }
 
-func (rn *RelayNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+func (rn *RelayNode) SelfStream(
+	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (_ []byte, err error) {
 	if rn == nil || rn.node == nil {
 		return nil, nil
 	}
-	return rn.node.SelfStream(path, data)
+	return rn.node.SelfStream(from, to, path, data)
 }
 
 func (rn *RelayNode) GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error) {
@@ -281,6 +288,9 @@ func (rn *RelayNode) Stop() {
 		if err := rn.memoryStoreCloseF(); err != nil {
 			log.Errorf("relay: failed to close memory store: %v", err)
 		}
+	}
+	if rn.mw != nil {
+		rn.mw.Close()
 	}
 
 	rn.node.StopNode()

@@ -38,6 +38,7 @@ import (
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
+	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -49,16 +50,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type MetricsOnlinePusher interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
-}
-
 type MemberNode struct {
 	ctx context.Context
 
 	node *node.WarpNode
 	opts []warpnet.WarpOption
+	mw   *middleware.WarpMiddleware
 
 	discService      DiscoveryHandler
 	mdnsService      MDNSStarterCloser
@@ -68,7 +65,7 @@ type MemberNode struct {
 	statsRepo        StatsProvider
 	authRepo         AuthProvider
 	userRepo         UserProvider
-	deviceRepo       DeviceProvider
+	aliasesRepo      AliasesProvider
 	followRepo       FollowStorer
 	notifier         notifications.Notifier
 	db               Storer
@@ -85,7 +82,6 @@ func NewMemberNode(
 	authRepo AuthProvider,
 	db Storer,
 	bootstrapNodes []warpnet.WarpAddrInfo,
-	metrics MetricsOnlinePusher,
 ) (_ *MemberNode, err error) {
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
@@ -98,7 +94,7 @@ func NewMemberNode(
 
 	statsRepo := database.NewStatsRepo(db)
 	followRepo := database.NewFollowRepo(db)
-	deviceRepo := database.NewDevicesRepo(db)
+	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
 
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
@@ -116,7 +112,7 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, metrics)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -166,10 +162,11 @@ func NewMemberNode(
 		statsRepo:     statsRepo,
 		userRepo:      userRepo,
 		followRepo:    followRepo,
-		deviceRepo:    deviceRepo,
+		aliasesRepo:   aliasesRepo,
 		authRepo:      authRepo,
 		notifier:      notifier,
 		db:            db,
+		privKey:       privKey,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -207,6 +204,14 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
+
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
+	m.node.SetStreamMiddlewares(
+		m.mw.LoggingMiddleware,
+		m.mw.RateLimiterMiddleware,
+		m.mw.AuthMiddleware,
+		m.mw.IdempotencyMiddleware,
+	)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -269,12 +274,12 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	// pair handler (s.Conn().LocalPeer()), not under the owner's user ID,
 	// so look them up with the same key here.
 	ownerPeerId := bi.ID.String()
-	devices, err := m.deviceRepo.GetDevices(ownerPeerId)
+	aliases, err := m.aliasesRepo.GetAliases()
 	if err != nil {
 		log.Infof("member: failed to get devices for owner %s: %s", ownerPeerId, err)
 	}
-	for _, device := range devices {
-		bi.Aliases = append(bi.Aliases, device.NodeId)
+	for _, alias := range aliases {
+		bi.Aliases = append(bi.Aliases, warpnet.WarpPeerID(alias.NodeId))
 	}
 	return bi
 }
@@ -291,11 +296,13 @@ func (m *MemberNode) SetMinNodePriority(pid warpnet.WarpPeerID) {
 	m.node.Prioritizer().SetMinPriority(pid)
 }
 
-func (m *MemberNode) SelfStream(path stream.WarpRoute, data any) (_ []byte, err error) {
+func (m *MemberNode) SelfStream(
+	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (_ []byte, err error) {
 	if m == nil || m.node == nil {
 		return nil, nil
 	}
-	return m.node.SelfStream(path, data)
+	return m.node.SelfStream(from, to, path, data)
 }
 
 type streamNodeID = string
@@ -418,7 +425,7 @@ func (m *MemberNode) adminHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_PAIR,
-			handler.StreamNodesPairingHandler(authRepo, m.deviceRepo, m),
+			handler.StreamNodesPairingHandler(authRepo, m.aliasesRepo, m),
 		},
 		{
 			event.PUBLIC_GET_INFO,
@@ -455,12 +462,20 @@ func (m *MemberNode) tweetHandlers(
 			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
 		},
 		{
+			event.PUBLIC_POST_REPLY,
+			handler.StreamNewReplyHandler(r.tweetRepo, userRepo, m.notifier, m),
+		},
+		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
-			handler.StreamImportTweetHandler(m, r.tweetRepo, r.mediaRepo, userRepo),
+			handler.StreamImportTweetHandler(m, m.privKey, r.tweetRepo, r.mediaRepo, userRepo),
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, userRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, m),
+		},
+		{
+			event.PUBLIC_POST_TIMELINE,
+			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
@@ -480,11 +495,11 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_PIN,
-			handler.StreamPinTweetHandler(r.tweetRepo),
+			handler.StreamPinTweetHandler(r.tweetRepo, userRepo),
 		},
 		{
 			event.PUBLIC_POST_UNPIN,
-			handler.StreamUnpinTweetHandler(r.tweetRepo),
+			handler.StreamUnpinTweetHandler(r.tweetRepo, userRepo),
 		},
 		{
 			event.PUBLIC_POST_RETWEET,
@@ -741,7 +756,7 @@ func (m *MemberNode) mediaHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_UPLOAD_IMAGE,
-			handler.StreamUploadImageHandler(m, r.mediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
@@ -749,19 +764,11 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
-			handler.StreamUploadVideoHandler(m, r.mediaRepo, userRepo),
+			handler.StreamUploadVideoHandler(m, m.privKey, r.mediaRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_VIDEO,
 			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
-		},
-		{
-			event.PRIVATE_POST_MEDIA_META,
-			handler.StreamUpdateMediaMetaHandler(r.mediaRepo),
-		},
-		{
-			event.PRIVATE_GET_MEDIA,
-			handler.StreamGetMediaHandler(r.mediaRepo),
 		},
 	}
 }
@@ -915,6 +922,9 @@ func (m *MemberNode) Stop() {
 		if err := m.nodeRepo.Close(); err != nil {
 			log.Errorf("member: failed to close node repo: %v", err)
 		}
+	}
+	if m.mw != nil {
+		m.mw.Close()
 	}
 	m.node.StopNode()
 }

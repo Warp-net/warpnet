@@ -49,6 +49,8 @@ const (
 	Accepted            string = `{"code":0,"message":"Accepted"}`
 	InternalRoutePrefix string = "/internal"
 	EndCursor           string = "end"
+
+	RateLimitErrorCode int = 5001
 )
 
 // ChatCreatedResponse defines model for ChatCreatedResponse.
@@ -298,13 +300,15 @@ type Message struct {
 	Signature   string          `json:"signature"`
 }
 
-// SigningBytes returns the bytes an ed25519 signature covers: the raw body plus
-// the timestamp as decimal Unix nanoseconds. Senders must set Timestamp first.
+// SigningBytes returns the bytes an ed25519 signature covers: the raw body, the
+// timestamp as decimal Unix nanoseconds, then the destination route. Senders
+// must set Timestamp and Destination first.
 func (m Message) SigningBytes() []byte {
 	ts := strconv.FormatInt(m.Timestamp.UnixNano(), 10)
-	buf := make([]byte, 0, len(m.Body)+len(ts))
+	buf := make([]byte, 0, len(m.Body)+len(ts)+len(m.Destination))
 	buf = append(buf, m.Body...)
 	buf = append(buf, ts...)
+	buf = append(buf, m.Destination...)
 	return buf
 }
 
@@ -837,29 +841,6 @@ type SubscribeUserEvent struct {
 
 // UnsubscribeUserEvent defines model for UnsubscribeUserEvent.
 type UnsubscribeUserEvent = SubscribeUserEvent
-
-// UpdateMediaMetaEvent defines model for UpdateMediaMetaEvent.
-type UpdateMediaMetaEvent struct {
-	UserId      domain.ID `json:"user_id"`
-	Key         string    `json:"key"`
-	Description string    `json:"description"`
-	FocusX      float32   `json:"focus_x"`
-	FocusY      float32   `json:"focus_y"`
-}
-
-// GetMediaEvent defines model for GetMediaEvent.
-type GetMediaEvent struct {
-	UserId domain.ID `json:"user_id"`
-	Key    string    `json:"key"`
-}
-
-// GetMediaResponse defines model for GetMediaResponse.
-type GetMediaResponse struct {
-	Key         string  `json:"key"`
-	Description string  `json:"description"`
-	FocusX      float32 `json:"focus_x"`
-	FocusY      float32 `json:"focus_y"`
-}
 
 // SearchUsersEvent defines model for SearchUsersEvent.
 type SearchUsersEvent struct {

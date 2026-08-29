@@ -396,9 +396,9 @@ CGO_CXXFLAGS="-w -Wno-format -Wno-delete-incomplete" \
   go run -tags=llama cmd/node/moderator/main.go \
   --node.network testnet --node.port 4002 --node.seed moderatorlocalhost
 
-# remote (headless node + browser dashboard). Password is REQUIRED — see §9.
+# remote (headless node + browser dashboard). No channel secret needed — see §9.
 go run -tags remote ./cmd/node/member \
-  --node.network testnet --node.server.port 4999 --node.server.password 'choose-a-secret'
+  --node.network testnet --node.server.port 4999
 
 # Echo (headless bot member, in-memory store — great for tests/local swarms)
 go run -tags echo cmd/node/member/echo-member.go \
@@ -462,8 +462,8 @@ You almost never think about libp2p in the frontend. You call **one function**,
      exported methods on the Go `App` struct (`Call`, `IsFirstRun`,
      `ConsumePendingDeepLink`). Regenerated whenever you run `wails build`/`wails dev`.
    - **Browser (remote):** otherwise it opens a single **WebSocket** to `/ws`
-     and rides every request on it, **AES-256-GCM encrypted** with
-     `SHA-256(password)` (see §9).
+     and rides every request on it, encrypted with a per-connection **Noise XX**
+     channel (`src/lib/noise.js`, see §9).
 
    The request envelope is `{ path, body, message_id, node_id, timestamp }` and
    the response is `{ body, … }` — identical in both transports.
@@ -537,7 +537,7 @@ cd cmd/node/member && wails build -devtools -tags webkit2_41
 
 ```bash
 go run -tags remote ./cmd/node/member --node.network testnet \
-  --node.server.port 4999 --node.server.password 'secret'
+  --node.server.port 4999
 # then open http://localhost:4999 in your browser
 ```
 
@@ -732,18 +732,27 @@ and prints `NODE IS LISTENING ON 'localhost:<port>'. PUT THIS ADDRESS INTO A
 BROWSER`. There are **no health endpoints** — the old business node's
 `/healthz` and `/readyz` went away with it. `StaticHandler` is an SPA fallback,
 so any other path (including `/healthz`) serves `index.html` with a 200; that
-tells you the HTTP server is up and nothing more. The WebSocket frames are sealed with **AES-256-GCM** using
-`key = SHA-256(password)` — the very same `--node.server.password` you launch it
-with. The browser’s `transport.js` derives the identical key from the password
-the user types, so:
+tells you the HTTP server is up and nothing more. Every `/ws` connection starts
+with a **Noise XX** handshake (`security/noise.go` on the node, `src/lib/noise.js`
+in the browser): both sides present a long-lived static X25519 key — the node's
+lives next to the database (`ws-noise.key`), the browser generates its own on
+first run. There is **no preshared channel secret**:
 
-- `is-first-run` and the `login` frame establish the channel (login precedes the
-  key, so it’s the first encrypted frame);
-- every frame after a successful login is encrypted;
-- a successful login authenticates the socket.
-
-That’s why `--node.server.password` is **required** (the node refuses to start
-without it): it’s the pre-shared key for the UI↔node channel.
+- ephemeral ECDH gives each connection fresh session keys (forward secrecy);
+- transport frames use counter nonces, so they can’t be replayed or reordered,
+  and there is **no plaintext fallback** — a non-protocol frame kills the
+  connection;
+- the browser **pins the node’s static key on first contact (TOFU)** and hard-fails
+  if it ever changes; the node prints its key fingerprint at startup for manual
+  comparison;
+- `is-first-run`, `login` and everything else ride *inside* the encrypted
+  channel, and the account password never doubles as a channel key;
+- the node authorizes a connection by **which client key the handshake proved**.
+  A successful login enrolls that key for as long as the node runs, so the same
+  browser reconnects without the password, while a client the owner never
+  enrolled gets `401` on every route. The list lives in memory and nothing is
+  written to disk: a restarted node has a closed database and needs the
+  password again anyway. There are no session tokens or cookies in this path.
 
 ### Why you’d use it
 
@@ -844,8 +853,8 @@ names are the flag uppercased with dots → underscores (`node.port` → `NODE_P
 | `--node.print-psk` | `NODE_PRINT_PSK` | `false` | Print the network PSK on startup (handy for relays/moderators). |
 | `--node.metrics.gateway` | `NODE_METRICS_GATEWAY` | `207.154.221.44:4091` | Prometheus push-gateway address. |
 | `--node.moderator.modelpath` | `NODE_MODERATOR_MODELPATH` | `…/Llama-Guard-3-1B.Q8_0.gguf` | Path to the GGUF model (moderator role). |
+| `--node.server.host` | `NODE_SERVER_HOST` | `0.0.0.0` | Dashboard HTTP/WS bind address (remote role). Set `127.0.0.1` to serve the dashboard to the host only and reach it over an SSH tunnel. |
 | `--node.server.port` | `NODE_SERVER_PORT` | `4999` | Dashboard HTTP/WS port (remote role). |
-| `--node.server.password` | `NODE_SERVER_PASSWORD` | *(empty)* | Pre-shared secret that encrypts dashboard WS traffic (remote role — required). |
 | `--logging.level` | `LOGGING_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `--logging.format` | `LOGGING_FORMAT` | `text` | `text` or `json`. |
 | `--database.dir` | `DATABASE_DIR` | `storage` | Subdirectory under `~/.warpdata/<network>/`. |
@@ -1245,7 +1254,6 @@ frontend fixes, better error messages/docs, or running a public relay node.
 | Two nodes won’t see each other | Different `--node.network`, or **version mismatch** — the PSK is derived from `(network, version)`. Match both. |
 | UI changes don’t show up (desktop) | `wails.json` has `skipfrontend: true` and the binary embeds `frontend/dist`. Run `make frontend` **then** rebuild the binary (or use `wails dev`). See §7. |
 | Android shows blank rows/fields, desktop is fine | DTO/route **drift**: Kotlin Moshi DTO or `ProtocolIds.kt` out of sync with Go. Realign and rebuild the AAR. See §8/§13. |
-| remote node won’t start | `--node.server.password` is **required** (it’s the WS channel key). See §9. |
 | Member node won’t start in Docker | By design — it needs the Wails GUI. Run relay/moderator/remote/echo in Docker. |
 | Moderator fails to start | Missing GGUF model at `--node.moderator.modelpath`, or built without `-tags=llama` / cgo. |
 | `wails build` fails on Linux | Missing GTK/WebKit dev libs — install the `apt` packages in §6 and use `-tags webkit2_41`. |

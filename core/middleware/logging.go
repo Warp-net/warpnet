@@ -28,29 +28,23 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"runtime/debug"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	log "github.com/sirupsen/logrus"
 )
 
-func (p *WarpMiddleware) LoggingMiddleware(next warpnet.StreamHandler) warpnet.StreamHandler {
-	return func(s warpnet.WarpStream) {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Errorf("middleware: panic: %v %s", r, debug.Stack())
-			}
-		}() //#nosec
-
+func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
+	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		log.Debugf("middleware: server stream opened: %s %s\n", s.Protocol(), s.Conn().RemotePeer())
 		before := time.Now()
-		next(s)
+		response, err := next(data, s)
 		log.Debugf(
 			"middleware: server stream closed: %s %s, elapsed: %s\n",
 			s.Protocol(),
 			s.Conn().RemotePeer(),
 			time.Since(before).String(),
 		)
+		return response, err
 	}
 }

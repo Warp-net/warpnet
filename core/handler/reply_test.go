@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,8 +57,7 @@ func TestStreamNewReplyHandler(t *testing.T) {
 			stubFollowChecker{},
 			userRepo,
 			notifier,
-			streamer,
-		)
+			streamer)
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -358,4 +358,172 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 			t.Fatalf("expected the local fallback, got %+v", r.Tweets)
 		}
 	})
+}
+
+func TestStreamNewReplyHandler_Public(t *testing.T) {
+	const (
+		owner      = "owner-1"
+		nodeID     = warpnet.WarpPeerID("my-node")
+		parentUser = "parent-user"
+		parentId   = "parent-1"
+	)
+
+	makeReply := func() event.NewTweetEvent {
+		pu := parentUser
+		pid := parentId
+		return event.NewTweetEvent{
+			CreatedAt:    time.Now(),
+			Id:           "reply-1",
+			ParentId:     &pid,
+			ParentUserId: &pu,
+			RootId:       parentId,
+			Text:         "a reply from elsewhere",
+			UserId:       "stranger",
+			Username:     "stranger",
+		}
+	}
+
+	build := func(userRepo stubReplyUserRepo, notifier stubModerationNotifier) warpnet.WarpHandlerFunc {
+		return StreamNewReplyHandler(
+			stubTweetRepo{},
+			userRepo,
+			notifier,
+			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
+		)
+	}
+
+	localParent := stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: nodeID.String()}, nil
+	}}
+
+	_, conn := stream.NewLoopbackStream(nodeID, nodeID, "/test/route/0.0.0")
+
+	t.Run("stores a reply whose parent lives here", func(t *testing.T) {
+		h := build(localParent, stubModerationNotifier{})
+		resp, err := h(marshal(t, makeReply()), conn)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(domain.Tweet).Text != "a reply from elsewhere" {
+			t.Fatalf("unexpected response: %v", resp)
+		}
+	})
+
+	t.Run("notifies when the parent tweet is the owner's", func(t *testing.T) {
+		notified := false
+		pu := owner
+		h := build(localParent, stubModerationNotifier{addFn: func(not domain.Notification) error {
+			notified = true
+			if not.RecepientId != owner {
+				t.Fatalf("expected notification for the owner, got %v", not.RecepientId)
+			}
+			return nil
+		}})
+		ev := makeReply()
+		ev.ParentUserId = &pu
+		if _, err := h(marshal(t, ev), conn); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !notified {
+			t.Error("expected the owner to be notified")
+		}
+	})
+
+	t.Run("rejects a tweet with no parent", func(t *testing.T) {
+		h := build(localParent, stubModerationNotifier{})
+		ev := makeReply()
+		ev.ParentId = nil
+		ev.ParentUserId = nil
+		if _, err := h(marshal(t, ev), conn); !errors.Is(err, ErrNotAReply) {
+			t.Fatalf("expected ErrNotAReply, got %v", err)
+		}
+	})
+
+	t.Run("rejects a thread that lives on another node", func(t *testing.T) {
+		h := build(stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == "stranger" {
+				return domain.User{Id: userId, NodeId: nodeID.String()}, nil
+			}
+			return domain.User{Id: userId, NodeId: "someone-else"}, nil
+		}}, stubModerationNotifier{})
+		if _, err := h(marshal(t, makeReply()), conn); !errors.Is(err, ErrForeignThread) {
+			t.Fatalf("expected ErrForeignThread, got %v", err)
+		}
+	})
+
+	t.Run("rejects an unknown parent author", func(t *testing.T) {
+		h := build(stubReplyUserRepo{getFn: func(userId string) (domain.User, error) {
+			if userId == "stranger" {
+				return domain.User{Id: userId, NodeId: nodeID.String()}, nil
+			}
+			return domain.User{}, database.ErrUserNotFound
+		}}, stubModerationNotifier{})
+		if _, err := h(marshal(t, makeReply()), conn); !errors.Is(err, ErrForeignThread) {
+			t.Fatalf("expected ErrForeignThread, got %v", err)
+		}
+	})
+
+	t.Run("rejects a reply delivered by a foreign node", func(t *testing.T) {
+		_, attacker := stream.NewLoopbackStream("attacker-node", "attacker-node", "/test/route/0.0.0")
+		h := build(localParent, stubModerationNotifier{})
+		if _, err := h(marshal(t, makeReply()), attacker); !errors.Is(err, warpnet.ErrForeignAuthor) {
+			t.Fatalf("expected ErrForeignAuthor, got %v", err)
+		}
+	})
+
+	t.Run("applies the compose limits", func(t *testing.T) {
+		h := build(localParent, stubModerationNotifier{})
+		ev := makeReply()
+		ev.Text = strings.Repeat("a", tweetCharLimit+1)
+		if _, err := h(marshal(t, ev), conn); err == nil {
+			t.Fatal("expected an oversized reply to be rejected")
+		}
+	})
+}
+
+func TestHandleNewReply_ForwardRoute(t *testing.T) {
+	owner := "owner-1"
+	pu := "parent-user"
+	parentId := "parent-1"
+
+	ev := event.NewTweetEvent{
+		CreatedAt:    time.Now(),
+		Id:           "reply-1",
+		ParentId:     &parentId,
+		ParentUserId: &pu,
+		RootId:       parentId,
+		Text:         "a reply",
+		UserId:       owner,
+		Username:     "testuser",
+	}
+
+	build := func(streamer stubStreamer) warpnet.WarpHandlerFunc {
+		return StreamNewTweetHandler(
+			stubTweetBroadcaster{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetRepo{},
+			stubTimelineRepo{},
+			stubFollowChecker{},
+			stubReplyUserRepo{},
+			stubModerationNotifier{},
+			streamer)
+	}
+
+	t.Run("uses the public reply route", func(t *testing.T) {
+		var used []stream.WarpRoute
+		h := build(stubStreamer{
+			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				used = append(used, path)
+				return []byte("{}"), nil
+			},
+		})
+		if _, err := h(marshal(t, ev), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(used) != 1 || used[0] != event.PUBLIC_POST_REPLY {
+			t.Fatalf("expected a single %s call, got %v", event.PUBLIC_POST_REPLY, used)
+		}
+	})
+
 }

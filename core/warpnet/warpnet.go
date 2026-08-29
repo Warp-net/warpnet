@@ -190,7 +190,6 @@ type (
 type WarpStreamBody struct {
 	WarpStream
 
-	Body      []byte
 	MessageId string
 }
 
@@ -221,6 +220,15 @@ func (wh *WarpStreamHandler) IsValid() bool {
 
 func (wh *WarpStreamHandler) String() string {
 	return fmt.Sprintf("%s %T", wh.Path, wh.Handler)
+}
+
+const ErrForeignAuthor = WarpError("event did not come from its author's node")
+
+func VerifyAuthorship(s WarpStream, actorNodeId string) error {
+	if actorNodeId != "" && s != nil && s.Conn() != nil && actorNodeId == s.Conn().RemotePeer().String() {
+		return nil
+	}
+	return ErrForeignAuthor
 }
 
 type NodeInfo struct {

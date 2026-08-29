@@ -43,17 +43,17 @@ type stubPairAuth struct{ token string }
 
 func (s *stubPairAuth) SessionToken() string { return s.token }
 
-type stubDeviceRepo struct {
-	saved       int
-	setDeviceFn func(ownerNodeId string, device domain.Device) error
+type stubAliasRepo struct {
+	saved      int
+	setAliasFn func(alias domain.Alias) error
 }
 
-func (s *stubDeviceRepo) SetDevice(ownerNodeId string, device domain.Device) error {
-	if s.setDeviceFn == nil {
+func (s *stubAliasRepo) SetAlias(alias domain.Alias) error {
+	if s.setAliasFn == nil {
 		s.saved++
 		return nil
 	}
-	if err := s.setDeviceFn(ownerNodeId, device); err != nil {
+	if err := s.setAliasFn(alias); err != nil {
 		return err
 	}
 	s.saved++
@@ -98,7 +98,7 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 
 	t.Run("invalid payload", func(t *testing.T) {
 		auth := &stubPairAuth{token: serverToken}
-		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{}, stubNodeAddresser{})
+		h := StreamNodesPairingHandler(auth, &stubAliasRepo{}, stubNodeAddresser{})
 		_, err := h([]byte("{"), stream)
 		if err == nil {
 			t.Fatal("expected error")
@@ -107,7 +107,7 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 
 	t.Run("empty token", func(t *testing.T) {
 		auth := &stubPairAuth{token: serverToken}
-		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{}, stubNodeAddresser{})
+		h := StreamNodesPairingHandler(auth, &stubAliasRepo{}, stubNodeAddresser{})
 		_, err := h(marshal(t, domain.AuthNodeInfo{Token: ""}), stream)
 		if err == nil || err.Error() != "empty token" {
 			t.Fatalf("unexpected err: %v", err)
@@ -116,7 +116,7 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 
 	t.Run("token mismatch", func(t *testing.T) {
 		auth := &stubPairAuth{token: serverToken}
-		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{}, stubNodeAddresser{})
+		h := StreamNodesPairingHandler(auth, &stubAliasRepo{}, stubNodeAddresser{})
 		_, err := h(marshal(t, domain.AuthNodeInfo{Token: "wrong-token"}), stream)
 		if err == nil || err.Error() != "token mismatch" {
 			t.Fatalf("unexpected err: %v", err)
@@ -126,8 +126,8 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 	t.Run("device repo error", func(t *testing.T) {
 		repoErr := errors.New("db down")
 		auth := &stubPairAuth{token: serverToken}
-		h := StreamNodesPairingHandler(auth, &stubDeviceRepo{
-			setDeviceFn: func(ownerNodeId string, device domain.Device) error {
+		h := StreamNodesPairingHandler(auth, &stubAliasRepo{
+			setAliasFn: func(domain.Alias) error {
 				return repoErr
 			},
 		}, stubNodeAddresser{})
@@ -139,12 +139,10 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 
 	t.Run("successful pairing", func(t *testing.T) {
 		addr, _ := ma.NewMultiaddr("/ip4/1.2.3.4/tcp/4001")
-		var capturedOwner string
-		var capturedDevice domain.Device
-		repo := &stubDeviceRepo{
-			setDeviceFn: func(ownerNodeId string, device domain.Device) error {
-				capturedOwner = ownerNodeId
-				capturedDevice = device
+		var capturedAlias domain.Alias
+		repo := &stubAliasRepo{
+			setAliasFn: func(alias domain.Alias) error {
+				capturedAlias = alias
 				return nil
 			},
 		}
@@ -155,14 +153,11 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if capturedOwner != localPeer.String() {
-			t.Fatalf("expected owner %q, got %q", localPeer.String(), capturedOwner)
+		if capturedAlias.NodeId != remotePeer.String() {
+			t.Fatalf("expected alias node id %q, got %q", remotePeer.String(), capturedAlias.NodeId)
 		}
-		if capturedDevice.NodeId != remotePeer {
-			t.Fatalf("expected device node id %q, got %q", remotePeer, capturedDevice.NodeId)
-		}
-		if capturedDevice.Token != serverToken {
-			t.Fatalf("expected device token %q, got %q", serverToken, capturedDevice.Token)
+		if capturedAlias.Token != serverToken {
+			t.Fatalf("expected alias token %q, got %q", serverToken, capturedAlias.Token)
 		}
 		addrs, ok := resp.([]string)
 		if !ok {
@@ -176,8 +171,8 @@ func TestStreamNodesPairingHandler(t *testing.T) {
 
 func TestStreamNodesPairingHandler_ReadsLiveToken(t *testing.T) {
 	auth := &stubPairAuth{token: "tokenA"}
-	devices := &stubDeviceRepo{}
-	h := StreamNodesPairingHandler(auth, devices, stubNodeAddresser{})
+	aliases := &stubAliasRepo{}
+	h := StreamNodesPairingHandler(auth, aliases, stubNodeAddresser{})
 
 	peerID, _ := peer.Decode("QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
 	stream := stubPairStream{conn: stubPairConn{localPeerID: peerID, remotePeerID: peerID}}
@@ -191,7 +186,7 @@ func TestStreamNodesPairingHandler_ReadsLiveToken(t *testing.T) {
 	if _, err := h(body, stream); err != nil {
 		t.Fatalf("expected pairing to succeed after the session token rotated to tokenB, got: %v", err)
 	}
-	if devices.saved != 1 {
-		t.Fatalf("expected device saved once, got %d", devices.saved)
+	if aliases.saved != 1 {
+		t.Fatalf("expected alias saved once, got %d", aliases.saved)
 	}
 }

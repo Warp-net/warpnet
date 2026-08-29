@@ -75,7 +75,8 @@ describe('Followers.vue', () => {
   it('shows the empty state when the user has no followers', async () => {
     renderFollowers();
 
-    expect(await screen.findByText('no-users')).toBeInTheDocument();
+    expect(await screen.findByText('No followers yet')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-list')).not.toBeInTheDocument();
   });
 
   it('navigates back to the profile when the back button is clicked', async () => {

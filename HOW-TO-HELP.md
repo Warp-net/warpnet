@@ -31,7 +31,6 @@ Look at [good first issues](https://github.com/warp-net/warpnet/labels/good%20fi
 
 * Write a desktop client or cross-platform GUI
 * Make a mobile aliases (iOS and Android)
-* Create visualizations or dashboards for peers/network metrics
 
 WarpNet is modular. Anything that speaks the protocol can join the network.
 

@@ -29,7 +29,6 @@ package security
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 )
 
 func ConvertToSHA256(input []byte) []byte {
@@ -39,15 +38,4 @@ func ConvertToSHA256(input []byte) []byte {
 	hash := sha256.New()
 	hash.Write(input)
 	return hash.Sum(nil)
-}
-
-func GetCodebaseHashHex(codebase FileSystem) (string, error) {
-	h := sha256.New()
-
-	err := walkAndHash(codebase, ".", h)
-	if err != nil {
-		return "", err
-	}
-
-	return hex.EncodeToString(h.Sum(nil)), nil
 }

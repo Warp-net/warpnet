@@ -166,9 +166,6 @@ func (repo *PollRepo) Voted(tweetId, userId string) (option int, ok bool, err er
 	return option, true, nil
 }
 
-// Results returns the vote count for each of the poll's optionsNum options,
-// in option order. Like the other engagement counters it prefers the
-// network-wide (CRDT) total and falls back to this node's own counter.
 func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, err error) {
 	if tweetId == "" {
 		return nil, local_store.DBError("empty tweet id")
@@ -187,13 +184,6 @@ func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, e
 	return votes, nil
 }
 
-// optionVotes reads one option's tally. It prefers the network-wide (CRDT)
-// total and falls back to this node's own counters.
-//
-// The CRDT store keeps its own positive/negative split for whichever key it
-// is handed, so only the INCR key goes to it — same as likes, where an
-// unlike decrements that very key. The local fallback is the plain
-// difference of the two counters.
 func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 	incrKey := pollVotesKey(tweetId, option, VotesIncrSubNamespace)
 

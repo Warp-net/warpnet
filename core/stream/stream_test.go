@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -342,6 +343,75 @@ func TestStreamPool_DifferentPayloadsAreNotCollapsed(t *testing.T) {
 	wg.Wait()
 
 	assert.Len(t, *received, 3, "distinct bodies are distinct requests")
+}
+
+func TestMaxRequestSize(t *testing.T) {
+	cases := map[string]int64{
+		event.PRIVATE_POST_UPLOAD_IMAGE:         MaxMediaSize,
+		event.PRIVATE_POST_UPLOAD_VIDEO:         MaxMediaSize,
+		event.PRIVATE_POST_IMPORT_TWITTER_TWEET: MaxMediaSize,
+		event.PUBLIC_GET_IMAGE:                  MaxControlSize,
+		event.PRIVATE_POST_TWEET:                MaxControlSize,
+		event.PUBLIC_GET_TWEETS:                 MaxControlSize,
+		"":                                      MaxControlSize,
+	}
+	for route, want := range cases {
+		assert.Equal(t, want, maxRequestSize(WarpRoute(route)), "route %q", route)
+	}
+}
+
+func TestMaxResponseSize(t *testing.T) {
+	cases := map[string]int64{
+		event.PUBLIC_GET_IMAGE:          MaxMediaSize,
+		event.PUBLIC_GET_VIDEO:          MaxMediaSize,
+		event.PUBLIC_GET_TWEETS:         MaxListSize,
+		event.PUBLIC_GET_USERS:          MaxListSize,
+		event.PRIVATE_POST_UPLOAD_IMAGE: MaxControlSize,
+		event.PUBLIC_POST_TIMELINE:      MaxControlSize,
+	}
+	for route, want := range cases {
+		assert.Equal(t, want, maxResponseSize(WarpRoute(route)), "route %q", route)
+	}
+}
+
+func TestSend_OversizedResponseIsRefused(t *testing.T) {
+	const route = WarpRoute(event.PUBLIC_POST_VIEW)
+
+	server, client := newStreamHost(t), newStreamHost(t)
+	server.SetStreamHandler(route.ProtocolID(), func(s warpnet.WarpStream) {
+		defer func() { _ = s.Close() }()
+		_, _ = io.ReadAll(s)
+		_, _ = s.Write(bytes.Repeat([]byte("A"), int(MaxControlSize)+4096))
+		_ = s.CloseWrite()
+	})
+	t.Cleanup(func() { server.RemoveStreamHandler(route.ProtocolID()) })
+	linkHosts(t, client, server)
+
+	_, err := newPool(t, client).send(addrOf(server), route, []byte(`{}`), "")
+
+	assert.ErrorIs(t, err, ErrResponseRead)
+	assert.ErrorIs(t, err, ErrPayloadTooLarge)
+}
+
+func TestReadRequest_StalledPeerIsCutOff(t *testing.T) {
+	client, server := NewLoopbackStream("peer1", "peer2", testRoute.ProtocolID())
+	t.Cleanup(func() { _ = client.Close() })
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := readRequest(server, MaxControlSize, 100*time.Millisecond)
+		done <- err
+	}()
+
+	_, err := client.Write([]byte("{"))
+	require.NoError(t, err)
+
+	select {
+	case err := <-done:
+		assert.Error(t, err, "the stalled read must fail instead of blocking forever")
+	case <-time.After(5 * time.Second):
+		t.Fatal("a stalled peer held the reading goroutine")
+	}
 }
 
 func TestHashBody_IsStableAndDiscriminating(t *testing.T) {

@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
@@ -71,11 +72,6 @@ type UserStorer interface {
 	GetByNodeID(nodeID string) (user domain.User, err error)
 }
 
-type MetricsOnlineDiscoverer interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
-}
-
 type discoverySource string
 
 const (
@@ -106,8 +102,6 @@ type discoveryService struct {
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
-
-	m MetricsOnlineDiscoverer
 }
 
 //goland:noinspection ALL
@@ -115,7 +109,6 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
-	m MetricsOnlineDiscoverer,
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
@@ -130,11 +123,10 @@ func NewDiscoveryService(
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		m:               m,
 	}
 }
 
-func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *discoveryService {
+func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
@@ -143,7 +135,6 @@ func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer) *d
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		m:               m,
 	}
 }
 
@@ -252,7 +243,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	if s.nodeRepo.IsBlocklisted(peer.ID.String()) {
 		log.Infof("discovery: source '%s': found blocklisted peer: %s", peer.Source, peer.ID.String())
-		s.m.PushStatusOffline(peer.ID.String())
 		return
 	}
 
@@ -261,7 +251,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': connecting is backoffed: %s", peer.Source, pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -275,20 +264,18 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Warnf(
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 
 	if s.aliasCache.Contains(peer.ID) {
 		log.Infof("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
-		s.m.PushStatusOnline(pi.ID.String())
 		s.node.SetMaxNodePriority(pi.ID)
 		return
 	}
 
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf(
+		log.Warnf(
 			"discovery: source '%s': request node %s info: %s",
 			peer.Source, pi.ID.String(), err.Error(),
 		)
@@ -307,8 +294,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if pi.ID.String() == mastodon.GatewayNodeID() {
 		return
 	}
-
-	s.m.PushStatusOnline(pi.ID.String())
 
 	if info.IsModerator() {
 		return
@@ -364,7 +349,6 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': relay handle: connecting is backoffed: %s", peer.Source, pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -379,21 +363,17 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 			"discovery: source '%s': relay handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 
 	if s.aliasCache.Contains(peer.ID) {
 		log.Debugf("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
-		s.m.PushStatusOnline(pi.ID.String())
 		return
 	}
 
-	s.m.PushStatusOnline(pi.ID.String())
-
 	info, err := s.requestNodeInfo(pi)
 	if err != nil {
-		log.Errorf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
+		log.Warnf("discovery: source '%s': request node info: %s", peer.Source, err.Error())
 		return
 	}
 	s.node.SetNodePriority(pi.ID, info.Reachability)
@@ -407,6 +387,8 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
+const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")
+
 func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpnet.NodeInfo, err error) {
 	infoResp, err := s.node.GenericStream(pi.ID.String(), event.PUBLIC_GET_INFO, nil)
 	if err != nil {
@@ -416,6 +398,19 @@ func (s *discoveryService) requestNodeInfo(pi warpnet.WarpAddrInfo) (info warpne
 	if len(infoResp) == 0 {
 		err := warpnet.WarpError("no info response from new peer")
 		return info, fmt.Errorf("%w: %s", err, pi.ID.String())
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(infoResp, &possibleError); possibleError.Message != "" {
+		return info, fmt.Errorf("%w: %s: %s", errPeerRejectedInfo, pi.ID.String(), possibleError.Message)
+	}
+	// back compat: older nodes replied to middleware failures with a bare
+	// JSON array of messages instead of event.ResponseError.
+	var legacyError []string
+	if _ = json.Unmarshal(infoResp, &legacyError); len(legacyError) != 0 {
+		return info, fmt.Errorf(
+			"%w: %s: %s", errPeerRejectedInfo, pi.ID.String(), strings.Join(legacyError, "; "),
+		)
 	}
 
 	err = json.Unmarshal(infoResp, &info)

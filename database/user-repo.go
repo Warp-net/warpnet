@@ -246,11 +246,6 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if newUser.Network != "" {
 		existingUser.Network = newUser.Network
 	}
-	// Only ever set, never clear: a stale "" from a peer that doesn't report
-	// the role must not wipe a role already learned from the node's NodeInfo.
-	if newUser.Role != "" {
-		existingUser.Role = newUser.Role
-	}
 	if newUser.Moderation != nil {
 		if existingUser.Moderation == nil {
 			existingUser.Moderation = newUser.Moderation
@@ -471,7 +466,7 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
-		want = *limit
+		want = min(*limit, local_store.MaxPageLimit)
 	}
 
 	txn, err := repo.db.NewTxn()
@@ -535,7 +530,7 @@ func matchesUserQuery(u domain.User, q string) bool {
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
-		want = *limit
+		want = min(*limit, local_store.MaxPageLimit)
 	}
 
 	prefix := local_store.NewPrefixBuilder(UsersRepoName).

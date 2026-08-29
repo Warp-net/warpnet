@@ -77,10 +77,6 @@ func StreamGetNotificationsHandler(
 	}
 }
 
-// StreamGetPushesHandler returns notifications newer than the given
-// cursor (delta pull) via ReverseList, keeping the response cursor as a
-// high-water mark. The plain notifications route stays on List so the desktop
-// UI's older-page pagination (cursor -> end) is unaffected.
 func StreamGetPushesHandler(
 	repo NotifierFetcher,
 	authRepo NotifierAuthStorer,
@@ -99,9 +95,6 @@ func StreamGetPushesHandler(
 	}
 }
 
-// notificationsResponse attaches the all-notifications unread count (not the
-// page-local count, which makes the badge flicker as the UI re-polls) and
-// sorts unread-first, newest-first.
 func notificationsResponse(
 	repo NotifierFetcher,
 	userId string,
@@ -173,11 +166,6 @@ func StreamMarkNotificationReadHandler(
 	}
 }
 
-// StreamMarkAllNotificationsReadHandler flips every unread notification for
-// the owner in one round-trip. The UI's "Mark all as read" (and the
-// open-the-notifications-view auto-read) used to page through
-// PRIVATE_GET_NOTIFICATIONS and post per-id reads, which only ever covered
-// the first page — unread items beyond it kept the badge alive forever.
 func StreamMarkAllNotificationsReadHandler(
 	repo NotifierAllMarker,
 	authRepo NotifierAuthStorer,

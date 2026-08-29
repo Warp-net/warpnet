@@ -36,6 +36,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -99,21 +100,35 @@ func (r *fakeStore) ListNodes() ([]string, error) {
 }
 
 type fakeSender struct {
-	mu      sync.Mutex
-	results []error
-	calls   int
+	mu        sync.Mutex
+	results   []error
+	responses [][]byte
+	sentTo    []WarpRoute
+	calls     int
 }
 
 func (s *fakeSender) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
+	s.sentTo = append(s.sentTo, r)
 	var err error
 	if len(s.results) > 0 {
 		err = s.results[0]
 		s.results = s.results[1:]
 	}
-	return nil, err
+	var response []byte
+	if len(s.responses) > 0 {
+		response = s.responses[0]
+		s.responses = s.responses[1:]
+	}
+	return response, err
+}
+
+func (s *fakeSender) routes() []WarpRoute {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]WarpRoute(nil), s.sentTo...)
 }
 
 func (s *fakeSender) callCount() int {
@@ -260,6 +275,55 @@ func TestFlushKeepsRejectedForTTL(t *testing.T) {
 	require.Len(t, entries, 1, "rejected message stays queued")
 	require.Equal(t, string(routeMessage), entries[0].Destination)
 	require.Equal(t, 2, sender.callCount(), "failure doesn't block later messages")
+}
+
+func TestFlushKeepsRateLimitedQueued(t *testing.T) {
+	store := newFakeStore()
+	mustEnqueue(store, testPeerA, string(routeMessage))
+	mustEnqueue(store, testPeerA, string(routeMessage))
+	mustEnqueue(store, testPeerA, string(routeReaction))
+
+	limited, _ := json.Marshal(event.ResponseError{
+		Code: event.RateLimitErrorCode, Message: "too many requests for this route",
+	})
+	sender := &fakeSender{
+		results:   []error{nil, nil},
+		responses: [][]byte{limited, nil},
+	}
+	o := newTestOutbox(t, store, sender)
+	o.mu.Lock()
+	o.pending[testPeerA] = struct{}{}
+	o.mu.Unlock()
+
+	o.flushNode(testPeerA)
+
+	entries, _ := store.ListByNode(testPeerA)
+	require.Len(t, entries, 2, "rate limited messages stay queued")
+	for _, e := range entries {
+		require.Equal(t, string(routeMessage), e.Destination)
+	}
+	require.Equal(
+		t, []WarpRoute{routeMessage, routeReaction}, sender.routes(),
+		"the limited route is skipped for the rest of the pass, other routes still flush",
+	)
+	require.True(t, o.hasQueued(testPeerA), "peer still has work for the next flush")
+}
+
+func TestIsRateLimited(t *testing.T) {
+	limited, err := json.Marshal(event.ResponseError{
+		Code: event.RateLimitErrorCode, Message: "too many requests",
+	})
+	require.NoError(t, err)
+	require.True(t, isRateLimited(limited))
+
+	internal, err := json.Marshal(event.ResponseError{Code: 5000, Message: "internal node error"})
+	require.NoError(t, err)
+	require.False(t, isRateLimited(internal))
+
+	require.False(t, isRateLimited([]byte(event.Accepted)))
+	require.False(t, isRateLimited([]byte(`{"tweet_id":"tweet-1"}`)))
+	require.False(t, isRateLimited([]byte("not json")))
+	require.False(t, isRateLimited(nil))
 }
 
 func TestFlushNoSenderKeepsEntries(t *testing.T) {

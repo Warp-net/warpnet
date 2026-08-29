@@ -383,12 +383,12 @@ func TestRound_LateVoterIsSuppressed(t *testing.T) {
 func TestRound_AbstainingVoterBroadcastsNothing(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	member.abstain = true
-	rs := NewRegistry("self", member, frozen())
-	t.Cleanup(rs.StopAll)
 
 	subj := subject("tweet-1")
-	rs.Open(subj)
-	liveRound(rs, subj.ReportID()).castVote()
+	r := newRound(subj.ReportID(), "self", member, frozen(), func(string) {})
+	t.Cleanup(r.stop)
+	r.setReport(subj, time.Hour)
+	r.castVote()
 
 	if ballots, broadcasts, _ := member.counts(); ballots != 1 || broadcasts != 0 {
 		t.Fatalf("an abstention must not broadcast, got %d ballots %d broadcasts", ballots, broadcasts)
