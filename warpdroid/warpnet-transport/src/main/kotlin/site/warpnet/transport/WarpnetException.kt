@@ -20,7 +20,16 @@ sealed class WarpnetException(message: String, cause: Throwable? = null) : Excep
 
     /** Stream opened but the desktop rejected the request. Message is from the node. */
     class ProtocolError(val code: Int, val serverMessage: String) :
-        WarpnetException("Warpnet error $code: $serverMessage")
+        WarpnetException("Warpnet error $code: $serverMessage") {
+
+        /** The node's per-route, per-peer rate limiter shed this request. */
+        val isRateLimited: Boolean get() = code == RATE_LIMITED
+
+        companion object {
+            /** Mirrors `event.RateLimitErrorCode` in warpnet/event/event.go. */
+            const val RATE_LIMITED = 5001
+        }
+    }
 
     /** libp2p-level transport failure (TCP, Noise, handshake). */
     class TransportFailure(message: String, cause: Throwable? = null) :

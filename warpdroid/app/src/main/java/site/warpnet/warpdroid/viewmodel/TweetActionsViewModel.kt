@@ -181,6 +181,24 @@ abstract class TweetActionsViewModel(
         }
     }
 
+    /**
+     * Cast [option] on [statusId]'s poll. The node answers with the tallies
+     * but the timeline is keyed on whole tweets, so the refreshed tweet is
+     * what gets dispatched — the poll it carries is the vote's result.
+     */
+    fun voteInPoll(statusId: String, authorId: String, option: Int, optionsNum: Int) {
+        viewModelScope.launch {
+            warpnetApi.voteInPoll(statusId, authorId, option, optionsNum).fold(
+                onSuccess = { status ->
+                    eventHub.dispatch(TweetChangedEvent(status))
+                },
+                onFailure = { e ->
+                    Timber.tag(TAG).w(e, "Failed to vote in poll")
+                }
+            )
+        }
+    }
+
     fun bookmark(statusId: String, authorId: String, bookmark: Boolean) {
         viewModelScope.launch {
             if (bookmark) {

@@ -58,6 +58,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
+import site.warpnet.warpdroid.util.WarpnetVideoDataSource
+import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -173,8 +175,15 @@ object PlayerModule {
     fun provideDataSourceFactory(
         @ApplicationContext context: Context,
         okHttpClient: OkHttpClient,
+        warpnetRepository: WarpnetRepository,
     ): DataSource.Factory {
-        return DefaultDataSource.Factory(context, OkHttpDataSource.Factory(okHttpClient))
+        // A Warpnet attachment has no URL the player can dial — it is a blob
+        // key fetched over libp2p — so the Warpnet source is layered in front
+        // of the normal file/HTTP handling rather than replacing it.
+        return WarpnetVideoDataSource.Factory(
+            DefaultDataSource.Factory(context, OkHttpDataSource.Factory(okHttpClient)),
+            warpnetRepository,
+        )
     }
 
     @Provides

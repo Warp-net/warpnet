@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="8dp">
+
+        <!-- Option fields are added here at runtime: Warpnet accepts between
+             two and four, so the dialog starts with two and grows. -->
+        <LinearLayout
+            android:id="@+id/pollChoices"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/addChoiceButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:drawablePadding="8dp"
+            android:padding="8dp"
+            android:text="@string/add_poll_choice"
+            android:textColor="?attr/colorPrimary"
+            android:textSize="?attr/tweet_text_medium"
+            app:drawableStartCompat="@drawable/ic_add_24dp"
+            app:drawableTint="?attr/colorPrimary"
+            xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/label_duration"
+            android:textSize="?attr/tweet_text_medium" />
+
+        <Spinner
+            android:id="@+id/pollDurationSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:entries="@array/poll_duration_names" />
+
+    </LinearLayout>
+
+</ScrollView>

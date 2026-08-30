@@ -6,14 +6,18 @@
 package site.warpnet.warpdroid.warpnet
 
 import site.warpnet.warpdroid.entity.AccountSource
+import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
+import site.warpnet.warpdroid.entity.Poll
+import site.warpnet.warpdroid.entity.PollOption
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.entity.notificationTypeFromString
 import java.util.Date
 import site.warpnet.transport.dto.WarpnetNotification
+import site.warpnet.transport.dto.WarpnetPoll
 import site.warpnet.transport.dto.WarpnetTweet
 import site.warpnet.transport.dto.WarpnetUser
 
@@ -81,6 +85,56 @@ object WarpnetMapper {
         if (userId.isBlank() || key.isNullOrBlank()) ""
         else "warpnet://avatar/$userId/$key"
 
+    /**
+     * Video counterpart of [warpnetImageUrl]. Resolved by
+     * [site.warpnet.warpdroid.util.WarpnetVideoDataSource] rather than
+     * Glide, so it carries its own scheme prefix — a video blob is fetched
+     * over `PUBLIC_GET_VIDEO`, not `PUBLIC_GET_IMAGE`.
+     */
+    fun warpnetVideoUrl(userId: String, key: String?): String =
+        if (userId.isBlank() || key.isNullOrBlank()) ""
+        else "warpnet://video/$userId/$key"
+
+    /**
+     * Warpnet stores attachments as content-addressed blob keys on the tweet
+     * itself — up to four images plus one video — with no per-attachment
+     * record, so the [Attachment] rows are synthesised here. The key doubles
+     * as the attachment id: it is a content hash, so it is stable and unique
+     * within the tweet.
+     */
+    private fun WarpnetTweet.toAttachments(): List<Attachment> {
+        val images = imageKeys.orEmpty().filter { it.isNotBlank() }.map { key ->
+            Attachment(
+                id = key,
+                url = warpnetImageUrl(userId, key),
+                previewUrl = warpnetImageUrl(userId, key),
+                type = Attachment.Type.IMAGE,
+            )
+        }
+        val video = videoKey?.takeIf { it.isNotBlank() }?.let { key ->
+            Attachment(
+                id = key,
+                url = warpnetVideoUrl(userId, key),
+                // A Warpnet video carries no separate poster frame; the
+                // player renders its own first frame once it opens.
+                previewUrl = null,
+                type = Attachment.Type.VIDEO,
+            )
+        }
+        return if (video == null) images else images + video
+    }
+
+    /**
+     * Map the poll carried by the tweet. Tallies are not on the wire here —
+     * they are a separate read — so the counts start at zero and
+     * [site.warpnet.warpdroid.warpnet.WarpnetRepository] folds in the real
+     * ones before the tweet reaches the UI.
+     */
+    private fun WarpnetPoll.toPoll(): Poll = Poll(
+        options = options.map { PollOption(title = it) },
+        expiresAt = expiresAt.takeIf { it.isNotEmpty() }?.let(::parseDate),
+    )
+
     fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
         val account = author?.toTimelineUser() ?: stubTimelineUser(userId, username)
         return Tweet(
@@ -104,9 +158,10 @@ object WarpnetMapper {
             sensitive = false,
             spoilerText = "",
             visibility = Tweet.Visibility.PUBLIC,
-            attachments = emptyList(),
+            attachments = toAttachments(),
             mentions = emptyList(),
             quote = null,
+            poll = poll?.toPoll(),
         )
     }
 

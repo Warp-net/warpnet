@@ -135,6 +135,12 @@ fun ColumnScope.TweetContent(
         modifier = Modifier.padding(top = 6.dp)
     )
 
+    PollCard(
+        statusViewData = statusViewData,
+        onVote = { option -> listener.onVoteInPoll(statusViewData, option) },
+        modifier = Modifier.padding(top = 6.dp)
+    )
+
     Quote(
         statusViewData = statusViewData,
         isExpanded = isExpanded,

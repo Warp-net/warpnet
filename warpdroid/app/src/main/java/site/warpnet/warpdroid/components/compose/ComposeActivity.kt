@@ -75,6 +75,7 @@ import site.warpnet.warpdroid.components.compose.ComposeViewModel.ConfirmationKi
 import site.warpnet.warpdroid.components.compose.ComposeViewModel.QueuedMedia
 import site.warpnet.warpdroid.components.compose.dialog.CaptionDialog
 import site.warpnet.warpdroid.components.compose.dialog.makeFocusDialog
+import site.warpnet.warpdroid.components.compose.dialog.showAddPollDialog
 import site.warpnet.warpdroid.components.compose.view.ComposeOptionsListener
 import site.warpnet.warpdroid.components.editimage.EditImageContract
 import site.warpnet.warpdroid.components.editimage.EditImageOptions
@@ -523,6 +524,16 @@ class ComposeActivity :
         }
 
         lifecycleScope.launch {
+            viewModel.poll.collect { poll ->
+                // The attached poll has no preview row of its own, so the
+                // sheet entry itself reports whether the draft carries one.
+                binding.actionAddPoll.setText(
+                    if (poll == null) R.string.action_add_poll else R.string.edit_poll
+                )
+            }
+        }
+
+        lifecycleScope.launch {
             viewModel.uploadError.collect { throwable ->
                 val errorString = when (throwable) {
                     is UploadServerError -> throwable.errorMessage
@@ -589,6 +600,10 @@ class ComposeActivity :
 
         binding.actionPhotoTake.setOnClickListener { initiateCameraApp() }
         binding.actionPhotoPick.setOnClickListener { onMediaPick() }
+        binding.actionAddPoll.setOnClickListener {
+            addMediaBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+            showAddPollDialog(this, viewModel.poll.value, viewModel::pollChanged)
+        }
 
         onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
     }

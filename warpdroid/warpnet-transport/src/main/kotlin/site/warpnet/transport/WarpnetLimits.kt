@@ -13,4 +13,30 @@ package site.warpnet.transport
 object WarpnetLimits {
     /** Mirrors `tweetCharLimit` in core/handler/tweet.go. */
     const val MAX_TWEET_CHARS: Int = 280
+
+    /** Mirrors `pollMinOptions` in core/handler/tweet.go. */
+    const val MIN_POLL_OPTIONS: Int = 2
+
+    /** Mirrors `pollMaxOptions` in core/handler/tweet.go. */
+    const val MAX_POLL_OPTIONS: Int = 4
+
+    /** Mirrors `pollOptionRuneLimit` in core/handler/tweet.go. */
+    const val MAX_POLL_OPTION_CHARS: Int = 25
+
+    /** Mirrors the four `image1..image4` slots of `event.UploadImageEvent`. */
+    const val MAX_IMAGES_PER_TWEET: Int = 4
+
+    /** Mirrors `maxVideoSize` in core/handler/video.go (36 MiB). */
+    const val MAX_VIDEO_BYTES: Long = 36L * 1024L * 1024L
+
+    /**
+     * Mirrors `acceptedVideoPrefixes` in core/handler/video.go. A video of
+     * any other type is rejected by the node, so reject it before spending
+     * the upload.
+     */
+    val ACCEPTED_VIDEO_MIME_TYPES: Set<String> = setOf(
+        "video/mp4",
+        "video/quicktime",
+        "video/x-m4v",
+    )
 }

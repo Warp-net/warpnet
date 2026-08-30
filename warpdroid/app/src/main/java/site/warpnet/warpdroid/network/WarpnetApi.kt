@@ -34,6 +34,7 @@ import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.FilterKeyword
 import site.warpnet.warpdroid.entity.MediaUploadResult
+import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
@@ -42,8 +43,11 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TweetContext
 import site.warpnet.warpdroid.entity.TweetSource
 import site.warpnet.warpdroid.entity.TimelineUser
+import site.warpnet.transport.dto.WarpnetPoll
 import site.warpnet.warpdroid.warpnet.WarpnetMapper
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -300,25 +304,22 @@ class WarpnetApi @Inject constructor(
     // media
     // ---------------------------------------------------------------
 
+    /**
+     * Warpnet stores an attachment as a content-addressed blob and nothing
+     * else: `domain.Tweet` carries bare `image_keys` / `video_key`, and no
+     * node route accepts alt text or a focal point. The edit is therefore
+     * kept on the draft only — echo it back so the compose screen renders
+     * what the user typed instead of stalling on a route the node does not
+     * serve. Restore the round-trip once the wire carries attachment metadata.
+     */
     suspend fun updateMedia(
         mediaId: String,
         description: String?,
         focus: String?,
     ): NetworkResult<Attachment> {
-        val active = accountManager.activeAccount ?: return stubFailure("updateMedia")
+        if (accountManager.activeAccount == null) return stubFailure("updateMedia")
         val (fx, fy) = parseFocus(focus)
         return result {
-            warpnet.updateMediaMeta(
-                userId = active.accountId,
-                key = mediaId,
-                description = description.orEmpty(),
-                focusX = fx,
-                focusY = fy,
-            )
-            // Warpnet's stored attachment isn't surfaced as a separate
-            // record — the next status fetch reads description / focus
-            // alongside the tweet. Return a minimal Attachment so the
-            // compose screen can echo the edit back.
             Attachment(
                 id = mediaId,
                 url = "",
@@ -331,15 +332,10 @@ class WarpnetApi @Inject constructor(
         }
     }
 
+    /** See [updateMedia]: the id is all Warpnet holds about an attachment. */
     suspend fun getMedia(mediaId: String): Response<MediaUploadResult> {
-        val active = accountManager.activeAccount ?: return stubError()
-        return response {
-            val meta = warpnet.getMediaMeta(userId = active.accountId, key = mediaId)
-            // MediaUploadResult intentionally only carries the id — see
-            // entity/MediaUploadResult.kt. The descriptive metadata flows
-            // back via the Attachment surface on the next status fetch.
-            MediaUploadResult(id = meta.key)
-        }
+        if (accountManager.activeAccount == null) return stubError()
+        return response { MediaUploadResult(id = mediaId) }
     }
 
     private fun parseFocus(focus: String?): Pair<Float, Float> {
@@ -368,13 +364,59 @@ class WarpnetApi @Inject constructor(
         // post shows up authored by the ULID. Fall back to the @-handle if
         // displayName isn't populated yet.
         val authorName = active.displayName.ifBlank { active.username }
+        // Warpnet splits attachments by kind — up to four image keys plus one
+        // video key — so the flat media_ids list is sorted back out by the tag
+        // the upload put on each id. A second video can't be represented on
+        // the wire, so the first one wins.
+        val untagged = status.mediaIds.map { it to MediaKind.untag(it) }
+        val imageKeys = untagged.filterNot { MediaKind.isVideo(it.first) }.map { it.second }
+        val videoKey = untagged.firstOrNull { MediaKind.isVideo(it.first) }?.second
         return result {
             warpnet.postStatus(
                 text = status.status,
                 authorUserId = active.accountId,
                 authorUsername = authorName,
                 parentId = status.inReplyToId,
+                imageKeys = imageKeys,
+                videoKey = videoKey,
+                poll = status.poll?.toWire(),
             )
+        }
+    }
+
+    /**
+     * Turn the composer's duration into the absolute deadline Warpnet stores.
+     * Computed at send time so a draft that waited in the send queue still
+     * runs for the span the user picked.
+     */
+    private fun NewPoll.toWire(): WarpnetPoll = WarpnetPoll(
+        options = options,
+        expiresAt = DateTimeFormatter.ISO_INSTANT.format(
+            Instant.now().plusSeconds(expiresInSeconds.toLong()),
+        ),
+    )
+
+    /**
+     * Cast [option] on [statusId]'s poll and return the tweet with the fresh
+     * tallies folded in. A vote is final — the node rejects a second one — so
+     * the UI must not offer a re-vote after this succeeds.
+     */
+    suspend fun voteInPoll(
+        statusId: String,
+        authorId: String,
+        option: Int,
+        optionsNum: Int,
+    ): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("voteInPoll")
+        return result {
+            warpnet.votePoll(
+                tweetId = statusId,
+                authorId = authorId,
+                voterId = active.accountId,
+                option = option,
+                optionsNum = optionsNum,
+            )
+            warpnet.getStatus(tweetId = statusId, userId = authorId)
         }
     }
 

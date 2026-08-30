@@ -58,13 +58,13 @@ import timber.log.Timber
 /**
  * The only entry point from view models into the Warpnet transport.
  *
- * Scope is deliberately small: this is the set of operations that the
- * existing Warpdroid view models actually need to render the home timeline,
- * one user profile, posting/deleting tweets, follow/unfollow and
- * notifications. Endpoints without Warpnet equivalents
- * (filters, announcements, trending, lists, reports, scheduled statuses,
- * translations, polls, media uploads) are **not** exposed here — the
- * corresponding Warpdroid features are removed in Phase 5 rather than faked.
+ * Scope tracks what the node actually serves (see `warpnet/event/paths.go`):
+ * timelines, profiles, tweets, follows, notifications, chats, bookmarks,
+ * blocks/mutes, filters, follow requests, reports, search, polls and media.
+ * Endpoints without a Warpnet route — announcements, trending, lists,
+ * scheduled statuses, translations, attachment metadata — are **not**
+ * exposed here; the corresponding Warpdroid features are removed rather
+ * than faked.
  *
  * Author lookups are resolved lazily via [resolveUser], which layers a
  * per-call cache over a process-wide TTL'd [userCache]; a 40-tweet
@@ -112,10 +112,16 @@ class WarpnetRepository @Inject constructor(
     private val getBlocksRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetBlocksResponse>()
     private val getTweetReactorsAdapter = moshi.adapter<site.warpnet.transport.dto.GetTweetReactorsEvent>()
     private val subscribeUserAdapter = moshi.adapter<site.warpnet.transport.dto.SubscribeUserEvent>()
-    private val updateMediaMetaAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateMediaMetaEvent>()
-    private val getMediaAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaEvent>()
-    private val getMediaRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetMediaResponse>()
     private val getImageEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageEvent>()
+    private val uploadImageAdapter = moshi.adapter<site.warpnet.transport.dto.UploadImageEvent>()
+    private val uploadImageRespAdapter = moshi.adapter<site.warpnet.transport.dto.UploadImageResponse>()
+    private val uploadVideoAdapter = moshi.adapter<site.warpnet.transport.dto.UploadVideoEvent>()
+    private val uploadVideoRespAdapter = moshi.adapter<site.warpnet.transport.dto.UploadVideoResponse>()
+    private val getVideoEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetVideoEvent>()
+    private val getVideoRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetVideoResponse>()
+    private val pollVoteAdapter = moshi.adapter<site.warpnet.transport.dto.PollVoteEvent>()
+    private val getPollAdapter = moshi.adapter<site.warpnet.transport.dto.GetPollEvent>()
+    private val pollResultsAdapter = moshi.adapter<site.warpnet.transport.dto.PollResultsResponse>()
     private val getImageRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageResponse>()
     private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
     private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
@@ -210,7 +216,10 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getStatus(tweetId: String, userId: String): Tweet {
         val tweet = fetchTweetRaw(tweetId, userId)
-        val base = tweet.toTweet(author = runCatching { getUser(tweet.userId) }.getOrNull())
+        val base = withPollResults(
+            tweet.toTweet(author = runCatching { getUser(tweet.userId) }.getOrNull()),
+            authorId = tweet.userId,
+        )
         val stats = runCatching { getTweetStats(tweetId = tweet.id, userId = userId) }.getOrNull()
         return if (stats == null) base else base.copy(
             reactionsCount = stats.reactionsCount.clampToInt(),
@@ -317,7 +326,15 @@ class WarpnetRepository @Inject constructor(
     // Posting
     // -----------------------------------------------------------------
 
-    suspend fun postStatus(text: String, authorUserId: String, authorUsername: String, parentId: String? = null): Tweet {
+    suspend fun postStatus(
+        text: String,
+        authorUserId: String,
+        authorUsername: String,
+        parentId: String? = null,
+        imageKeys: List<String> = emptyList(),
+        videoKey: String? = null,
+        poll: site.warpnet.transport.dto.WarpnetPoll? = null,
+    ): Tweet {
         // createdAt is left null so the backend stamps the creation time
         // (database/tweet-repo.go:152). Emitting "" instead fails the
         // server-side time.Time decode before the zero-value fallback
@@ -329,6 +346,9 @@ class WarpnetRepository @Inject constructor(
             userId = authorUserId,
             username = authorUsername,
             parentId = parentId,
+            imageKeys = imageKeys.ifEmpty { null },
+            videoKey = videoKey?.takeIf { it.isNotBlank() },
+            poll = poll,
         )
         val raw = client.request(ProtocolIds.PRIVATE_POST_TWEET, newTweetAdapter.toJson(draft))
         val created = tweetAdapter.fromJson(raw)
@@ -382,6 +402,126 @@ class WarpnetRepository @Inject constructor(
             reactionEventAdapter.toJson(ReactionEvent(tweetId = tweetId, userId = userId, ownerId = ownerId)),
         )
         return reactionsCountAdapter.fromJson(raw) ?: ReactionsCountResponse()
+    }
+
+    // -----------------------------------------------------------------
+    // Polls
+    // -----------------------------------------------------------------
+
+    /**
+     * Read the tallies for [tweetId]'s poll. [authorId] routes the read to
+     * the node holding the tweet — it sees every vote — while "did I vote"
+     * is answered by the paired node, which records the local user's own
+     * vote even when the author is offline. [optionsNum] sizes the reply
+     * because tallies are stored per option index.
+     */
+    suspend fun getPollResults(
+        tweetId: String,
+        authorId: String,
+        voterId: String,
+        optionsNum: Int,
+    ): site.warpnet.transport.dto.PollResultsResponse? {
+        if (tweetId.isBlank() || authorId.isBlank() || optionsNum <= 0) return null
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_POLL,
+            getPollAdapter.toJson(
+                site.warpnet.transport.dto.GetPollEvent(
+                    tweetId = tweetId,
+                    userId = authorId,
+                    ownerId = voterId,
+                    optionsNum = optionsNum,
+                ),
+            ),
+        )
+        return pollResultsAdapter.fromJson(raw)
+    }
+
+    /**
+     * Cast [option] on [tweetId]'s poll and return the tallies the node
+     * knows about. A vote is final and the node rejects a second one, so
+     * callers must not offer a re-vote once this returns.
+     */
+    suspend fun votePoll(
+        tweetId: String,
+        authorId: String,
+        voterId: String,
+        option: Int,
+        optionsNum: Int,
+    ): site.warpnet.transport.dto.PollResultsResponse? {
+        val raw = client.request(
+            ProtocolIds.PUBLIC_POST_POLL_VOTE,
+            pollVoteAdapter.toJson(
+                site.warpnet.transport.dto.PollVoteEvent(
+                    tweetId = tweetId,
+                    userId = authorId,
+                    ownerId = voterId,
+                    option = option,
+                    optionsNum = optionsNum,
+                ),
+            ),
+        )
+        return pollResultsAdapter.fromJson(raw)
+    }
+
+    // -----------------------------------------------------------------
+    // Media upload
+    // -----------------------------------------------------------------
+
+    /**
+     * Upload one image and return its content-addressed key. [file] is the
+     * `"<mime>,<base64>"` string the node stores and reads back verbatim.
+     * The route takes four images per call; a single-slot upload keeps the
+     * queue-driven uploader's one-file-at-a-time contract intact.
+     */
+    suspend fun uploadImage(file: String): String {
+        if (file.isBlank()) return ""
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_UPLOAD_IMAGE,
+            uploadImageAdapter.toJson(site.warpnet.transport.dto.UploadImageEvent(image1 = file)),
+        )
+        return uploadImageRespAdapter.fromJson(raw)?.keys?.firstOrNull().orEmpty()
+    }
+
+    /**
+     * Upload a video and return its key. [file] is
+     * `"data:<mime>;base64,<data>"`; the node re-encodes it with a
+     * watermark, so the returned key names the stored copy, not the input.
+     */
+    suspend fun uploadVideo(file: String): String {
+        if (file.isBlank()) return ""
+        val raw = client.request(
+            ProtocolIds.PRIVATE_POST_UPLOAD_VIDEO,
+            uploadVideoAdapter.toJson(site.warpnet.transport.dto.UploadVideoEvent(video = file)),
+        )
+        return uploadVideoRespAdapter.fromJson(raw)?.key.orEmpty()
+    }
+
+    /**
+     * Fetch a stored video blob by (owning user, key), decoded to raw
+     * bytes. The node returns `"data:<mime>;base64,<data>"`; the prefix is
+     * dropped so a player can be handed the bytes directly. Returns null on
+     * an empty key, an empty answer, or a decode failure.
+     *
+     * Not cached in memory: a video is up to 36 MiB and would evict every
+     * avatar in [imageCache]. Callers spool it to disk instead.
+     */
+    suspend fun getVideoBytes(userId: String, key: String): ByteArray? {
+        if (userId.isBlank() || key.isBlank()) return null
+        val raw = client.request(
+            ProtocolIds.PUBLIC_GET_VIDEO,
+            getVideoEventAdapter.toJson(
+                site.warpnet.transport.dto.GetVideoEvent(userId = userId, key = key),
+            ),
+        )
+        val file = getVideoRespAdapter.fromJson(raw)?.file.orEmpty()
+        if (file.isEmpty()) return null
+        // "data:<mime>;base64,<data>" — everything before the comma is the
+        // data-URL header the Vue frontend feeds to a <video> tag.
+        val comma = file.indexOf(',')
+        val b64 = if (comma >= 0) file.substring(comma + 1) else file
+        return runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
     }
 
     // -----------------------------------------------------------------
@@ -763,40 +903,6 @@ class WarpnetRepository @Inject constructor(
         )
         val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
         return page.users.map { it.toTimelineUser() } to page.cursor
-    }
-
-    // -----------------------------------------------------------------
-    // Media metadata (alt-text + focal point on uploaded images)
-    // -----------------------------------------------------------------
-
-    suspend fun updateMediaMeta(
-        userId: String,
-        key: String,
-        description: String,
-        focusX: Float,
-        focusY: Float,
-    ) {
-        client.request(
-            ProtocolIds.PRIVATE_POST_MEDIA_META,
-            updateMediaMetaAdapter.toJson(
-                site.warpnet.transport.dto.UpdateMediaMetaEvent(
-                    userId = userId,
-                    key = key,
-                    description = description,
-                    focusX = focusX,
-                    focusY = focusY,
-                ),
-            ),
-        )
-    }
-
-    suspend fun getMediaMeta(userId: String, key: String): site.warpnet.transport.dto.GetMediaResponse {
-        val raw = client.request(
-            ProtocolIds.PRIVATE_GET_MEDIA,
-            getMediaAdapter.toJson(site.warpnet.transport.dto.GetMediaEvent(userId = userId, key = key)),
-        )
-        return getMediaRespAdapter.fromJson(raw)
-            ?: throw IllegalStateException("getMediaMeta returned empty body for $key")
     }
 
     // -----------------------------------------------------------------
@@ -1232,15 +1338,19 @@ class WarpnetRepository @Inject constructor(
     }
 
     // Account recommendations ("who to follow"). The fat node already drops the
-    // owner, offline nodes and already-followed users, so the carousel renders
-    // the page as-is. Limit mirrors the desktop front-end (20).
+    // owner, offline nodes and already-followed users. Bridged accounts are
+    // dropped here: the node's handler skips its network filter when the
+    // requester is the node owner — which a paired device always is — so its
+    // page mixes Mastodon actors in, and the carousel only recommends native
+    // Warpnet peers. Limit mirrors the desktop front-end (20).
     suspend fun whoToFollow(userId: String, cursor: String = "", limit: Int = 20): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_WHOTOFOLLOW,
             getAllUsersAdapter.toJson(GetAllUsersEvent(userId = userId, cursor = cursor, limit = limit)),
         )
         val page = usersRespAdapter.fromJson(raw) ?: return emptyList<TimelineUser>() to ""
-        return page.users.map { it.toTimelineUser() } to page.cursor
+        val native = page.users.map { it.toTimelineUser() }.filterNot { it.isBridged }
+        return native to page.cursor
     }
 
     // -----------------------------------------------------------------
@@ -1290,9 +1400,31 @@ class WarpnetRepository @Inject constructor(
                 async { runCatching { getStatus(tweetId = qId, userId = qUser) }.getOrNull() }
             }
 
+        // Poll tallies are a separate read, fired only for the tweets that
+        // actually carry a poll — a page without one pays nothing. Keyed by
+        // (tweetId, authorId) because the read routes to the author's node.
+        val pollJobs = tweets
+            .mapNotNull { t ->
+                val optionsNum = t.poll?.options?.size ?: 0
+                if (optionsNum == 0) null else Triple(t.id, t.userId, optionsNum)
+            }
+            .distinct()
+            .associate { (tweetId, authorId, optionsNum) ->
+                (tweetId to authorId) to async {
+                    runCatching {
+                        getPollResults(
+                            tweetId = tweetId,
+                            authorId = authorId,
+                            voterId = viewerId,
+                            optionsNum = optionsNum,
+                        )
+                    }.getOrNull()
+                }
+            }
+
         val baseTweets: suspend (WarpnetTweet) -> Tweet = { t ->
             val base = t.toTweet(resolveUser(t.userId, cache))
-            attachQuote(t, base, quoteJobs)
+            attachPoll(t, attachQuote(t, base, quoteJobs), pollJobs)
         }
 
         if (viewerId.isBlank()) {
@@ -1316,6 +1448,21 @@ class WarpnetRepository @Inject constructor(
                 reacted = s.myReaction.isNotEmpty(),
             )
         }
+    }
+
+    /**
+     * Fold the tallies fetched alongside a timeline page into the rendered
+     * tweet's poll. A missing or failed read leaves the poll at zero counts
+     * and unvoted, which renders as a votable poll with no results yet.
+     */
+    private suspend fun attachPoll(
+        wire: WarpnetTweet,
+        base: Tweet,
+        results: Map<Pair<String, String>, kotlinx.coroutines.Deferred<site.warpnet.transport.dto.PollResultsResponse?>>,
+    ): Tweet {
+        val poll = base.poll ?: return base
+        val r = results[wire.id to wire.userId]?.await() ?: return base
+        return base.copy(poll = poll.withResults(r.votes, r.totalVotes, r.votedOption))
     }
 
     /**
@@ -1355,6 +1502,32 @@ class WarpnetRepository @Inject constructor(
     }
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
+
+    /**
+     * Fold the live tallies into a tweet's poll. The poll definition rides on
+     * the tweet, but the counts change after it is written, so they are a
+     * separate read routed to [authorId]'s node. A tweet without a poll, or a
+     * read that fails, is returned untouched — an unfetched poll renders as
+     * "no votes yet" and stays votable rather than disappearing.
+     */
+    private suspend fun withPollResults(tweet: Tweet, authorId: String): Tweet {
+        val poll = tweet.poll ?: return tweet
+        if (poll.options.isEmpty()) return tweet
+        val voterId = pairedNodeStore.load()?.userId.orEmpty()
+        if (voterId.isBlank()) return tweet
+        val results = runCatching {
+            getPollResults(
+                tweetId = tweet.id,
+                authorId = authorId,
+                voterId = voterId,
+                optionsNum = poll.options.size,
+            )
+        }.getOrElse { e ->
+            Timber.tag(TAG).w(e, "poll results for ${tweet.id} failed")
+            null
+        } ?: return tweet
+        return tweet.copy(poll = poll.withResults(results.votes, results.totalVotes, results.votedOption))
+    }
 
     private suspend fun resolveUser(
         userId: String,

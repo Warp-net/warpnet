@@ -456,10 +456,14 @@ private fun MediaItem(
             } else {
                 if (showMedia) {
                     Icon(
-                        painter = if (attachment.type == Attachment.Type.AUDIO) {
-                            painterResource(R.drawable.ic_music_box_24dp)
-                        } else {
-                            painterResource(R.drawable.ic_broken_image_24dp)
+                        // A Warpnet video has no poster frame — the node
+                        // stores the blob and nothing else — so "no preview"
+                        // is the normal state for one, not a broken image.
+                        painter = when (attachment.type) {
+                            Attachment.Type.AUDIO -> painterResource(R.drawable.ic_music_box_24dp)
+                            Attachment.Type.VIDEO -> painterResource(R.drawable.ic_slideshow_24dp)
+                            Attachment.Type.GIFV -> painterResource(R.drawable.ic_gif_box_24dp)
+                            else -> painterResource(R.drawable.ic_broken_image_24dp)
                         },
                         tint = warpdroidColors.tertiaryTextColor,
                         contentDescription = attachmentDescription,

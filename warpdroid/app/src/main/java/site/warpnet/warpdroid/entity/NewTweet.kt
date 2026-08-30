@@ -29,8 +29,22 @@ data class NewTweet(
     val sensitive: Boolean,
     @Json(name = "media_ids") val mediaIds: List<String> = emptyList(),
     @Json(name = "media_attributes") val mediaAttributes: List<MediaAttribute> = emptyList(),
-    val language: String? = null
+    val language: String? = null,
+    val poll: NewPoll? = null
 )
+
+/**
+ * Poll to attach to a new tweet. Warpnet takes an absolute deadline, but the
+ * composer offers durations, so the wire timestamp is computed at send time
+ * from [expiresInSeconds] — a draft that sits in the queue for a while still
+ * gets the duration the user picked, counted from when it is actually sent.
+ */
+@JsonClass(generateAdapter = true)
+@Parcelize
+data class NewPoll(
+    val options: List<String>,
+    @Json(name = "expires_in") val expiresInSeconds: Int
+) : Parcelable
 
 // It would be nice if we could reuse MediaToSend,
 // but the server requires a different format for focus
