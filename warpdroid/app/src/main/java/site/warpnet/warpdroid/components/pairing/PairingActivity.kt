@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
@@ -36,6 +37,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import site.warpnet.transport.dto.AuthNodeInfo
+import site.warpnet.warpdroid.util.InternetPermission
 
 /**
  * Single-screen pairing flow: camera preview → confirm → connect → hand off
@@ -77,13 +79,21 @@ class PairingActivity : AppCompatActivity() {
         if (granted) {
             startCamera()
         } else {
-            showManualInput()
+            showManualInput(R.string.warpnet_pair_camera_denied)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_pairing)
+
+        // Pairing dials the fat node over libp2p; without a network there is
+        // nothing to scan for.
+        if (!InternetPermission.isGranted(this)) {
+            InternetPermission.showRequiredDialog(this)
+            return
+        }
+
         previewView = findViewById(R.id.previewView)
         progress = findViewById(R.id.progress)
         progressBar = findViewById(R.id.progressBar)
@@ -243,7 +253,9 @@ class PairingActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun showManualInput() {
+    // bodyRes distinguishes "this device has no usable camera" from "you
+    // denied camera access"; both land on the same manual-entry dialog.
+    private fun showManualInput(@StringRes bodyRes: Int = R.string.warpnet_pair_manual_body) {
         scanPrompt.visibility = View.GONE
         manualEntryLink.visibility = View.GONE
         previewView.visibility = View.GONE
@@ -255,7 +267,7 @@ class PairingActivity : AppCompatActivity() {
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.warpnet_pair_manual_title)
-            .setMessage(R.string.warpnet_pair_manual_body)
+            .setMessage(bodyRes)
             .setView(input)
             .setCancelable(false)
             .setPositiveButton(R.string.warpnet_pair_manual_submit) { _, _ ->
