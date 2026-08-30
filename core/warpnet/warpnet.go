@@ -190,20 +190,12 @@ type (
 type WarpStreamBody struct {
 	WarpStream
 
-	MessageId string
-	// PairedAlias marks a stream opened by a device paired with this node
-	// (core/handler/pair.go). Such a device acts for this node's owner, so an
-	// event it delivers is authored here even though the connection's remote
-	// peer is the device and not this node.
+	MessageId   string
 	PairedAlias bool
 }
 
 func (b *WarpStreamBody) IsPairedAlias() bool { return b.PairedAlias }
 
-// PairedAliasStream is a stream that knows whether the peer on the other end is
-// a device paired with this node. Only the auth middleware can answer that, so
-// a stream that does not implement this — a loopback stream, a test double — is
-// treated as not paired, which is the restrictive answer.
 type PairedAliasStream interface {
 	IsPairedAlias() bool
 }
@@ -246,8 +238,6 @@ func VerifyAuthorship(s WarpStream, actorNodeId string) error {
 	if actorNodeId == s.Conn().RemotePeer().String() {
 		return nil
 	}
-	// A paired device speaks for this node's owner, so it may author events
-	// attributed to this node — and only to this node.
 	p, ok := s.(PairedAliasStream)
 	if ok && p.IsPairedAlias() && actorNodeId == s.Conn().LocalPeer().String() {
 		return nil

@@ -12,8 +12,6 @@
         android:paddingEnd="24dp"
         android:paddingBottom="8dp">
 
-        <!-- Option fields are added here at runtime: Warpnet accepts between
-             two and four, so the dialog starts with two and grows. -->
         <LinearLayout
             android:id="@+id/pollChoices"
             android:layout_width="match_parent"

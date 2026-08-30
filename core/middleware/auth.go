@@ -106,8 +106,6 @@ func (p *WarpMiddleware) isPrivateRouteAllowed(
 	return isPairedAlias
 }
 
-// isPairedAlias reports whether remotePeer is a device paired with this node.
-// A self-stream is not one: it already speaks as this node.
 func (p *WarpMiddleware) isPairedAlias(remotePeer, localPeer warpnet.WarpPeerID) bool {
 	if p.aliases == nil || remotePeer == localPeer || remotePeer == p.ownNodeId {
 		return false

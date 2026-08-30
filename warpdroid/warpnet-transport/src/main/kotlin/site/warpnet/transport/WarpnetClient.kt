@@ -201,15 +201,8 @@ class WarpnetClient(
      * are NOT retried to avoid double-applying non-idempotent
      * mutations — see [isRetryableTransportError].
      *
-     * A rate-limited reply ([WarpnetException.ProtocolError.RATE_LIMITED])
-     * is retried on the same ladder: the node's limiter sheds the request
-     * in middleware, before the handler runs, so a retry can't double-apply
-     * a mutation. A timeline page fans out one stats call per tweet and
-     * overruns the read bucket's burst on back-to-back refreshes, which
-     * would otherwise surface as a failed refresh.
-     *
-     * Every other protocol-level error propagates immediately; retrying
-     * those would only annoy the user.
+     * Protocol-level errors (4xx-style ResponseError) propagate
+     * immediately, except a rate-limited one, which is retried.
      */
     suspend fun request(protocolId: String, bodyJson: String): String = withContext(Dispatchers.IO) {
         // No mutex: the Go binding's libp2p host is thread-safe and yamux
@@ -384,10 +377,9 @@ interface WarpnetBinding {
      * by [ConnectionMonitor]; see [LinkState.fromBinding] for the
      * mapping of returned strings to UI-level state.
      *
-     * The default collapses to a binary "Connected" / "NotConnected" read
-     * from [isConnected] so fakes stay cheap; [DefaultBinding] overrides it
-     * with the binding's own three-state answer, which distinguishes
-     * "Limited" (relay-only).
+     * The default falls back to a binary "Connected" / "NotConnected"
+     * read from [isConnected]; [DefaultBinding] overrides it with the
+     * three-state value including "Limited" (relay-only).
      */
     fun connectedness(): String = if (isConnected()) "Connected" else "NotConnected"
     fun disconnect(): String

@@ -304,14 +304,6 @@ class WarpnetApi @Inject constructor(
     // media
     // ---------------------------------------------------------------
 
-    /**
-     * Warpnet stores an attachment as a content-addressed blob and nothing
-     * else: `domain.Tweet` carries bare `image_keys` / `video_key`, and no
-     * node route accepts alt text or a focal point. The edit is therefore
-     * kept on the draft only — echo it back so the compose screen renders
-     * what the user typed instead of stalling on a route the node does not
-     * serve. Restore the round-trip once the wire carries attachment metadata.
-     */
     suspend fun updateMedia(
         mediaId: String,
         description: String?,
@@ -332,7 +324,6 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    /** See [updateMedia]: the id is all Warpnet holds about an attachment. */
     suspend fun getMedia(mediaId: String): Response<MediaUploadResult> {
         if (accountManager.activeAccount == null) return stubError()
         return response { MediaUploadResult(id = mediaId) }
@@ -364,10 +355,6 @@ class WarpnetApi @Inject constructor(
         // post shows up authored by the ULID. Fall back to the @-handle if
         // displayName isn't populated yet.
         val authorName = active.displayName.ifBlank { active.username }
-        // Warpnet splits attachments by kind — up to four image keys plus one
-        // video key — so the flat media_ids list is sorted back out by the tag
-        // the upload put on each id. A second video can't be represented on
-        // the wire, so the first one wins.
         val untagged = status.mediaIds.map { it to MediaKind.untag(it) }
         val imageKeys = untagged.filterNot { MediaKind.isVideo(it.first) }.map { it.second }
         val videoKey = untagged.firstOrNull { MediaKind.isVideo(it.first) }?.second
@@ -384,11 +371,6 @@ class WarpnetApi @Inject constructor(
         }
     }
 
-    /**
-     * Turn the composer's duration into the absolute deadline Warpnet stores.
-     * Computed at send time so a draft that waited in the send queue still
-     * runs for the span the user picked.
-     */
     private fun NewPoll.toWire(): WarpnetPoll = WarpnetPoll(
         options = options,
         expiresAt = DateTimeFormatter.ISO_INSTANT.format(
@@ -396,11 +378,6 @@ class WarpnetApi @Inject constructor(
         ),
     )
 
-    /**
-     * Cast [option] on [statusId]'s poll and return the tweet with the fresh
-     * tallies folded in. A vote is final — the node rejects a second one — so
-     * the UI must not offer a re-vote after this succeeds.
-     */
     suspend fun voteInPoll(
         statusId: String,
         authorId: String,

@@ -74,7 +74,6 @@ data class Tweet(
     val filtered: List<FilterResult>? = null,
     /** Some implementations have a incompatible quote format, we ignore those quotes */
     @Guarded val quote: Quote?,
-    /** Poll attached to this tweet, null on an ordinary post. */
     val poll: Poll? = null
 ) {
 

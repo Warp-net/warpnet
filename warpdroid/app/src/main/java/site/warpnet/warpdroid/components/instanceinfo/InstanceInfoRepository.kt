@@ -50,9 +50,6 @@ class InstanceInfoRepository @Inject constructor() {
     suspend fun getUpdatedInstanceInfoOrFallback(): InstanceInfo = defaultInstanceInfo
 
     companion object {
-        // Poll and media bounds are the node's, not Mastodon's: a draft that
-        // exceeds them is refused on the wire, so the composer has to stop it
-        // before the upload is spent.
         private val DEFAULT_MAX_OPTION_COUNT = WarpnetLimits.MAX_POLL_OPTIONS
         private val DEFAULT_MAX_OPTION_LENGTH = WarpnetLimits.MAX_POLL_OPTION_CHARS
         private const val DEFAULT_MIN_POLL_DURATION = 300

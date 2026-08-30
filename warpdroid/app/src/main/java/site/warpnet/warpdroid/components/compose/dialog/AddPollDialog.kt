@@ -28,14 +28,6 @@ import site.warpnet.warpdroid.databinding.DialogAddPollBinding
 import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.util.visible
 
-/**
- * Compose a poll to attach to the tweet being written.
- *
- * The bounds are the node's, mirrored in [WarpnetLimits]: between two and
- * four options of at most 25 characters, and a deadline that must exist —
- * so the duration spinner has no "indefinite" entry and the OK button is
- * refused until enough options are filled in.
- */
 fun showAddPollDialog(
     context: Context,
     poll: NewPoll?,
@@ -70,8 +62,6 @@ fun showAddPollDialog(
     val durations = context.resources.getIntArray(R.array.poll_duration_values)
     binding.pollDurationSpinner.setSelection(
         durations.indexOf(poll?.expiresInSeconds ?: 0).takeIf { it >= 0 }
-            // No stored choice: start at one day, the midpoint of the list and
-            // the same default the desktop composer offers.
             ?: durations.indexOf(DEFAULT_POLL_DURATION_SECONDS).coerceAtLeast(0),
     )
 
@@ -80,9 +70,6 @@ fun showAddPollDialog(
         .setView(binding.root)
         .setPositiveButton(android.R.string.ok) { _, _ ->
             val options = fields.map { it.text.toString().trim() }.filter { it.isNotEmpty() }
-            // Fewer than two filled-in choices is not a poll the node would
-            // take, so treat it as "never mind" rather than posting a broken
-            // one — the OK button stays live so the dialog isn't a dead end.
             if (options.size < WarpnetLimits.MIN_POLL_OPTIONS) {
                 onUpdate(null)
                 return@setPositiveButton
@@ -105,5 +92,4 @@ fun showAddPollDialog(
         .show()
 }
 
-/** One day, in seconds — an entry of `R.array.poll_duration_values`. */
 private const val DEFAULT_POLL_DURATION_SECONDS = 86_400

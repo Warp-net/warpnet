@@ -456,9 +456,6 @@ private fun MediaItem(
             } else {
                 if (showMedia) {
                     Icon(
-                        // A Warpnet video has no poster frame — the node
-                        // stores the blob and nothing else — so "no preview"
-                        // is the normal state for one, not a broken image.
                         painter = when (attachment.type) {
                             Attachment.Type.AUDIO -> painterResource(R.drawable.ic_music_box_24dp)
                             Attachment.Type.VIDEO -> painterResource(R.drawable.ic_slideshow_24dp)

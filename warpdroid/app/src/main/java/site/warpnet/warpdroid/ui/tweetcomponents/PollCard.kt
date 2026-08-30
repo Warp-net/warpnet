@@ -50,15 +50,6 @@ import site.warpnet.warpdroid.ui.preferences.LocalPreferences
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.viewdata.TweetViewData
 
-/**
- * The poll attached to a tweet.
- *
- * A Warpnet vote is single-choice and final, so there are exactly two states:
- * open and unvoted, where every option is a button; and settled — voted or
- * closed — where every option is a bar showing its share. The tally stays
- * hidden until this account has had its say, matching the desktop frontend,
- * so early results can't steer later voters.
- */
 @Composable
 fun ColumnScope.PollCard(
     statusViewData: TweetViewData.Concrete,
@@ -68,9 +59,6 @@ fun ColumnScope.PollCard(
     val poll = statusViewData.actionable.poll ?: return
     if (poll.options.isEmpty()) return
 
-    // Latch the tap so a double tap can't spend two votes on a wire where the
-    // second is rejected. Reset when the poll object itself changes — that is
-    // the refreshed tweet arriving with the vote applied.
     var voting by remember(poll) { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -112,7 +100,6 @@ fun ColumnScope.PollCard(
     }
 }
 
-/** One votable option, before this account has voted. */
 @Composable
 private fun PollChoiceRow(
     title: String,
@@ -138,7 +125,6 @@ private fun PollChoiceRow(
     )
 }
 
-/** One option's share, once the poll is settled. */
 @Composable
 private fun PollResultRow(
     title: String,
@@ -156,8 +142,6 @@ private fun PollResultRow(
                 if (isOwnVote) contentDescription = "$ownVoteDescription: $title, $percent%"
             },
     ) {
-        // A translucent tint rather than a solid fill: the themed surface
-        // shows through, so the label keeps its contrast in both themes.
         Box(modifier = Modifier.matchParentSize()) {
             Box(
                 modifier = Modifier
@@ -189,11 +173,6 @@ private fun PollResultRow(
     }
 }
 
-/**
- * "3 days left" / "closed", matching the desktop frontend's footer. A poll
- * without a parseable deadline reads as closed — the node requires one, so
- * its absence means a payload we can't vote on anyway.
- */
 @Composable
 private fun pollTimeLeft(expiresAt: Date?): String {
     val remaining = expiresAt?.time?.minus(System.currentTimeMillis()) ?: 0L

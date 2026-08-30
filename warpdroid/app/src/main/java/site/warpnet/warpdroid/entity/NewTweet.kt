@@ -33,12 +33,6 @@ data class NewTweet(
     val poll: NewPoll? = null
 )
 
-/**
- * Poll to attach to a new tweet. Warpnet takes an absolute deadline, but the
- * composer offers durations, so the wire timestamp is computed at send time
- * from [expiresInSeconds] — a draft that sits in the queue for a while still
- * gets the duration the user picked, counted from when it is actually sent.
- */
 @JsonClass(generateAdapter = true)
 @Parcelize
 data class NewPoll(

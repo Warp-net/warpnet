@@ -22,11 +22,9 @@ sealed class WarpnetException(message: String, cause: Throwable? = null) : Excep
     class ProtocolError(val code: Int, val serverMessage: String) :
         WarpnetException("Warpnet error $code: $serverMessage") {
 
-        /** The node's per-route, per-peer rate limiter shed this request. */
         val isRateLimited: Boolean get() = code == RATE_LIMITED
 
         companion object {
-            /** Mirrors `event.RateLimitErrorCode` in warpnet/event/event.go. */
             const val RATE_LIMITED = 5001
         }
     }

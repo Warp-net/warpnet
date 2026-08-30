@@ -58,13 +58,13 @@ import timber.log.Timber
 /**
  * The only entry point from view models into the Warpnet transport.
  *
- * Scope tracks what the node actually serves (see `warpnet/event/paths.go`):
- * timelines, profiles, tweets, follows, notifications, chats, bookmarks,
- * blocks/mutes, filters, follow requests, reports, search, polls and media.
- * Endpoints without a Warpnet route — announcements, trending, lists,
- * scheduled statuses, translations, attachment metadata — are **not**
- * exposed here; the corresponding Warpdroid features are removed rather
- * than faked.
+ * Scope is deliberately small: this is the set of operations that the
+ * existing Warpdroid view models actually need to render the home timeline,
+ * one user profile, posting/deleting tweets, follow/unfollow and
+ * notifications. Endpoints without Warpnet equivalents
+ * (announcements, trending, lists, scheduled statuses, translations) are
+ * **not** exposed here — the corresponding Warpdroid features are removed
+ * rather than faked.
  *
  * Author lookups are resolved lazily via [resolveUser], which layers a
  * per-call cache over a process-wide TTL'd [userCache]; a 40-tweet
@@ -404,17 +404,7 @@ class WarpnetRepository @Inject constructor(
         return reactionsCountAdapter.fromJson(raw) ?: ReactionsCountResponse()
     }
 
-    // -----------------------------------------------------------------
-    // Polls
-    // -----------------------------------------------------------------
 
-    /**
-     * Read the tallies for [tweetId]'s poll. [authorId] routes the read to
-     * the node holding the tweet — it sees every vote — while "did I vote"
-     * is answered by the paired node, which records the local user's own
-     * vote even when the author is offline. [optionsNum] sizes the reply
-     * because tallies are stored per option index.
-     */
     suspend fun getPollResults(
         tweetId: String,
         authorId: String,
@@ -436,11 +426,6 @@ class WarpnetRepository @Inject constructor(
         return pollResultsAdapter.fromJson(raw)
     }
 
-    /**
-     * Cast [option] on [tweetId]'s poll and return the tallies the node
-     * knows about. A vote is final and the node rejects a second one, so
-     * callers must not offer a re-vote once this returns.
-     */
     suspend fun votePoll(
         tweetId: String,
         authorId: String,
@@ -463,16 +448,7 @@ class WarpnetRepository @Inject constructor(
         return pollResultsAdapter.fromJson(raw)
     }
 
-    // -----------------------------------------------------------------
-    // Media upload
-    // -----------------------------------------------------------------
 
-    /**
-     * Upload one image and return its content-addressed key. [file] is the
-     * `"<mime>,<base64>"` string the node stores and reads back verbatim.
-     * The route takes four images per call; a single-slot upload keeps the
-     * queue-driven uploader's one-file-at-a-time contract intact.
-     */
     suspend fun uploadImage(file: String): String {
         if (file.isBlank()) return ""
         val raw = client.request(
@@ -482,11 +458,6 @@ class WarpnetRepository @Inject constructor(
         return uploadImageRespAdapter.fromJson(raw)?.keys?.firstOrNull().orEmpty()
     }
 
-    /**
-     * Upload a video and return its key. [file] is
-     * `"data:<mime>;base64,<data>"`; the node re-encodes it with a
-     * watermark, so the returned key names the stored copy, not the input.
-     */
     suspend fun uploadVideo(file: String): String {
         if (file.isBlank()) return ""
         val raw = client.request(
@@ -496,15 +467,6 @@ class WarpnetRepository @Inject constructor(
         return uploadVideoRespAdapter.fromJson(raw)?.key.orEmpty()
     }
 
-    /**
-     * Fetch a stored video blob by (owning user, key), decoded to raw
-     * bytes. The node returns `"data:<mime>;base64,<data>"`; the prefix is
-     * dropped so a player can be handed the bytes directly. Returns null on
-     * an empty key, an empty answer, or a decode failure.
-     *
-     * Not cached in memory: a video is up to 36 MiB and would evict every
-     * avatar in [imageCache]. Callers spool it to disk instead.
-     */
     suspend fun getVideoBytes(userId: String, key: String): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
         val raw = client.request(
@@ -515,8 +477,6 @@ class WarpnetRepository @Inject constructor(
         )
         val file = getVideoRespAdapter.fromJson(raw)?.file.orEmpty()
         if (file.isEmpty()) return null
-        // "data:<mime>;base64,<data>" — everything before the comma is the
-        // data-URL header the Vue frontend feeds to a <video> tag.
         val comma = file.indexOf(',')
         val b64 = if (comma >= 0) file.substring(comma + 1) else file
         return runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }
@@ -1338,11 +1298,8 @@ class WarpnetRepository @Inject constructor(
     }
 
     // Account recommendations ("who to follow"). The fat node already drops the
-    // owner, offline nodes and already-followed users. Bridged accounts are
-    // dropped here: the node's handler skips its network filter when the
-    // requester is the node owner — which a paired device always is — so its
-    // page mixes Mastodon actors in, and the carousel only recommends native
-    // Warpnet peers. Limit mirrors the desktop front-end (20).
+    // owner, offline nodes and already-followed users, so the carousel renders
+    // the page as-is. Limit mirrors the desktop front-end (20).
     suspend fun whoToFollow(userId: String, cursor: String = "", limit: Int = 20): Pair<List<TimelineUser>, String> {
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_WHOTOFOLLOW,
@@ -1400,9 +1357,6 @@ class WarpnetRepository @Inject constructor(
                 async { runCatching { getStatus(tweetId = qId, userId = qUser) }.getOrNull() }
             }
 
-        // Poll tallies are a separate read, fired only for the tweets that
-        // actually carry a poll — a page without one pays nothing. Keyed by
-        // (tweetId, authorId) because the read routes to the author's node.
         val pollJobs = tweets
             .mapNotNull { t ->
                 val optionsNum = t.poll?.options?.size ?: 0
@@ -1450,11 +1404,6 @@ class WarpnetRepository @Inject constructor(
         }
     }
 
-    /**
-     * Fold the tallies fetched alongside a timeline page into the rendered
-     * tweet's poll. A missing or failed read leaves the poll at zero counts
-     * and unvoted, which renders as a votable poll with no results yet.
-     */
     private suspend fun attachPoll(
         wire: WarpnetTweet,
         base: Tweet,
@@ -1503,13 +1452,6 @@ class WarpnetRepository @Inject constructor(
 
     private fun Long.clampToInt(): Int = coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
 
-    /**
-     * Fold the live tallies into a tweet's poll. The poll definition rides on
-     * the tweet, but the counts change after it is written, so they are a
-     * separate read routed to [authorId]'s node. A tweet without a poll, or a
-     * read that fails, is returned untouched — an unfetched poll renders as
-     * "no votes yet" and stays votable rather than disappearing.
-     */
     private suspend fun withPollResults(tweet: Tweet, authorId: String): Tweet {
         val poll = tweet.poll ?: return tweet
         if (poll.options.isEmpty()) return tweet

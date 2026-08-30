@@ -44,13 +44,6 @@ interface TweetActionListener : LinkListener {
 
     fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean)
 
-    /**
-     * Cast a vote on the poll attached to [viewData].
-     * @param option zero-based index into the poll's options
-     *
-     * A Warpnet vote is final — the node rejects a second one — so this is
-     * only ever called once per poll per account.
-     */
     fun onVoteInPoll(viewData: TweetViewData.Concrete, option: Int)
 
     fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean)

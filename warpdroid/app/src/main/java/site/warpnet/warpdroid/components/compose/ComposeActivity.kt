@@ -525,8 +525,6 @@ class ComposeActivity :
 
         lifecycleScope.launch {
             viewModel.poll.collect { poll ->
-                // The attached poll has no preview row of its own, so the
-                // sheet entry itself reports whether the draft carries one.
                 binding.actionAddPoll.setText(
                     if (poll == null) R.string.action_add_poll else R.string.edit_poll
                 )

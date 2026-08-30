@@ -27,9 +27,6 @@ func newAliasPeer(t *testing.T) warpnet.WarpPeerID {
 	return id
 }
 
-// pairedDeviceStream mirrors what a paired mobile client produces: it dials
-// this node, so the connection's remote peer is the device while the acting
-// user's stored NodeId is this node itself.
 func pairedDeviceStream(
 	t *testing.T, route warpnet.WarpProtocolID, ownNodeId, device warpnet.WarpPeerID, paired bool,
 ) warpnet.WarpStream {

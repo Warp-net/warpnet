@@ -390,7 +390,6 @@ class ComposeViewModel @AssistedInject constructor(
         updateCloseConfirmation()
     }
 
-    /** Attach [newPoll] to the draft, or pass null to drop the poll. */
     fun pollChanged(newPoll: NewPoll?) {
         _poll.value = newPoll
         updateCloseConfirmation()

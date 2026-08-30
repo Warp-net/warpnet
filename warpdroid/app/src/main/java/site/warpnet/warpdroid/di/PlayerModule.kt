@@ -177,9 +177,6 @@ object PlayerModule {
         okHttpClient: OkHttpClient,
         warpnetRepository: WarpnetRepository,
     ): DataSource.Factory {
-        // A Warpnet attachment has no URL the player can dial — it is a blob
-        // key fetched over libp2p — so the Warpnet source is layered in front
-        // of the normal file/HTTP handling rather than replacing it.
         return WarpnetVideoDataSource.Factory(
             DefaultDataSource.Factory(context, OkHttpDataSource.Factory(okHttpClient)),
             warpnetRepository,

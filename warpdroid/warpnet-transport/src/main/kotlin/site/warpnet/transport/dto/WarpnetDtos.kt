@@ -43,29 +43,17 @@ data class WarpnetTweet(
     @Json(name = "user_id") val userId: String,
     val username: String,
     @Json(name = "image_keys") val imageKeys: List<String>? = null,
-    // Content-addressed key of the attached video, one per tweet. Fetch the
-    // blob itself over PUBLIC_GET_VIDEO.
     @Json(name = "video_key") val videoKey: String? = null,
     val network: String = "",
     val pinned: Boolean = false,
     @Json(name = "quoted_tweet_id") val quotedTweetId: String? = null,
     @Json(name = "quoted_user_id") val quotedUserId: String? = null,
-    // Poll definition, absent on an ordinary tweet. Only the question options
-    // and the deadline travel with the tweet; the tallies are a separate read
-    // (PUBLIC_GET_POLL) because they change after the tweet is written.
     val poll: WarpnetPoll? = null,
 )
 
-/**
- * Poll attached to a tweet — `domain.Poll`. The node accepts 2..4 options of
- * at most 25 characters each and requires a non-zero deadline, so a draft
- * built here must satisfy [site.warpnet.transport.WarpnetLimits] before it
- * goes on the wire.
- */
 @JsonClass(generateAdapter = true)
 data class WarpnetPoll(
     val options: List<String> = emptyList(),
-    // RFC3339; Go decodes into time.Time and rejects a zero value.
     @Json(name = "expires_at") val expiresAt: String = "",
 )
 
@@ -305,15 +293,6 @@ data class SubscribeUserEvent(
     @Json(name = "target_id") val targetId: String,
 )
 
-/**
- * Poll vote — `event.PollVoteEvent`. Same actor/target split as
- * [ReactionEvent]: [userId] is the tweet's author (the routing key, so the
- * node can forward the vote to whoever holds the tweet) and [ownerId] is the
- * voter. [option] is the zero-based index into the poll's options.
- *
- * [optionsNum] tells a node that doesn't hold the tweet how many counters to
- * read back, since tallies are stored per option index.
- */
 @JsonClass(generateAdapter = true)
 data class PollVoteEvent(
     @Json(name = "tweet_id") val tweetId: String,
@@ -323,7 +302,6 @@ data class PollVoteEvent(
     @Json(name = "options_num") val optionsNum: Int,
 )
 
-/** Poll tally read — `event.GetPollEvent`. Fields as in [PollVoteEvent]. */
 @JsonClass(generateAdapter = true)
 data class GetPollEvent(
     @Json(name = "tweet_id") val tweetId: String,
@@ -332,11 +310,6 @@ data class GetPollEvent(
     @Json(name = "options_num") val optionsNum: Int,
 )
 
-/**
- * Poll tallies — `event.PollResultsResponse`. [votes] is the count per
- * option in option order; [votedOption] is the option this user picked, null
- * until they vote.
- */
 @JsonClass(generateAdapter = true)
 data class PollResultsResponse(
     @Json(name = "tweet_id") val tweetId: String = "",
@@ -625,12 +598,6 @@ data class GetImageResponse(
     val file: String = "",
 )
 
-/**
- * Image upload — `event.UploadImageEvent`. The route takes up to four images
- * in one call and answers with a key per slot, so a single-attachment upload
- * fills [image1] and reads [UploadImageResponse.key1]. Each image is the
- * same "<mime>,<base64>" string the read side returns.
- */
 @JsonClass(generateAdapter = true)
 data class UploadImageEvent(
     val image1: String = "",
@@ -646,15 +613,9 @@ data class UploadImageResponse(
     val key3: String = "",
     val key4: String = "",
 ) {
-    /** Keys in slot order, blanks dropped. */
     val keys: List<String> get() = listOf(key1, key2, key3, key4).filter { it.isNotBlank() }
 }
 
-/**
- * Video upload — `event.UploadVideoEvent`. One video per call, carried as
- * "data:<mime>;base64,<data>"; the node accepts MP4, QuickTime and M4V only
- * and caps the payload at [site.warpnet.transport.WarpnetLimits.MAX_VIDEO_BYTES].
- */
 @JsonClass(generateAdapter = true)
 data class UploadVideoEvent(
     val video: String,
@@ -669,8 +630,6 @@ data class UploadVideoResponse(
 data class GetVideoEvent(
     @Json(name = "user_id") val userId: String,
     val key: String,
-    // Ask for the size only, without the blob — lets a caller decide whether
-    // the download is worth it before paying for it.
     val deferred: Boolean = false,
 )
 
