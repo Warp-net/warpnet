@@ -181,6 +181,19 @@ abstract class TweetActionsViewModel(
         }
     }
 
+    fun voteInPoll(statusId: String, authorId: String, option: Int, optionsNum: Int) {
+        viewModelScope.launch {
+            warpnetApi.voteInPoll(statusId, authorId, option, optionsNum).fold(
+                onSuccess = { status ->
+                    eventHub.dispatch(TweetChangedEvent(status))
+                },
+                onFailure = { e ->
+                    Timber.tag(TAG).w(e, "Failed to vote in poll")
+                }
+            )
+        }
+    }
+
     fun bookmark(statusId: String, authorId: String, bookmark: Boolean) {
         viewModelScope.launch {
             if (bookmark) {

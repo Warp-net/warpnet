@@ -229,6 +229,17 @@
             app:drawableStartCompat="@drawable/ic_image_24dp"
             app:drawableTint="?android:attr/textColorTertiary" />
 
+        <TextView
+            android:id="@+id/actionAddPoll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:drawablePadding="8dp"
+            android:padding="8dp"
+            android:text="@string/action_add_poll"
+            android:textSize="?attr/tweet_text_medium"
+            app:drawableStartCompat="@drawable/ic_insert_chart_24dp"
+            app:drawableTint="?android:attr/textColorTertiary" />
+
     </LinearLayout>
 
     <site.warpnet.warpdroid.components.compose.view.ComposeOptionsView

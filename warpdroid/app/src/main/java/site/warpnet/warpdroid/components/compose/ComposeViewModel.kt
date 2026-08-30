@@ -29,6 +29,7 @@ import site.warpnet.warpdroid.components.instanceinfo.InstanceInfoRepository
 import site.warpnet.warpdroid.components.search.SearchType
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
+import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
 import site.warpnet.warpdroid.service.MediaToSend
@@ -106,6 +107,13 @@ class ComposeViewModel @AssistedInject constructor(
         initialValue = emptyList()
     )
     val media: StateFlow<List<QueuedMedia>> = _media.asStateFlow()
+
+    private val _poll: SavedStateFlow<NewPoll?> = SavedStateFlow(
+        savedStateHandle = state,
+        key = "POLL",
+        initialValue = null
+    )
+    val poll: StateFlow<NewPoll?> = _poll.asStateFlow()
 
     private val _uploadError = MutableSharedFlow<Throwable>(
         replay = 0,
@@ -367,16 +375,23 @@ class ComposeViewModel @AssistedInject constructor(
         val textChanged = content.orEmpty() != startingText.orEmpty()
         val contentWarningChanged = contentWarning.orEmpty() != startingContentWarning
         val mediaChanged = _media.value.isNotEmpty()
+        val pollChanged = _poll.value != null
 
-        return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged
+        return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged || pollChanged
     }
 
     private fun isEmpty(content: String?, contentWarning: String?): Boolean {
-        return !modifiedInitialState && (content.isNullOrBlank() && contentWarning.isNullOrBlank() && _media.value.isEmpty())
+        return !modifiedInitialState && content.isNullOrBlank() && contentWarning.isNullOrBlank() &&
+            _media.value.isEmpty() && _poll.value == null
     }
 
     fun contentWarningChanged(value: Boolean) {
         _showContentWarning.value = value
+        updateCloseConfirmation()
+    }
+
+    fun pollChanged(newPoll: NewPoll?) {
+        _poll.value = newPoll
         updateCloseConfirmation()
     }
 
@@ -414,6 +429,9 @@ class ComposeViewModel @AssistedInject constructor(
             check(_media.value.isEmpty()) {
                 "quote retweets cannot carry media on the Warpnet wire"
             }
+            check(_poll.value == null) {
+                "quote retweets cannot carry a poll on the Warpnet wire"
+            }
             api.retweetStatus(
                 statusId = quotedId,
                 visibility = _statusVisibility.value.stringValue,
@@ -449,7 +467,8 @@ class ComposeViewModel @AssistedInject constructor(
             idempotencyKey = randomAlphanumericString(16),
             retries = 0,
             language = postLanguage,
-            statusId = composeOptions?.statusId
+            statusId = composeOptions?.statusId,
+            poll = _poll.value
         )
 
         serviceClient.sendTweet(tweetToSend)

@@ -202,14 +202,14 @@ class WarpnetClient(
      * mutations — see [isRetryableTransportError].
      *
      * Protocol-level errors (4xx-style ResponseError) propagate
-     * immediately; retrying them would only annoy the user.
+     * immediately, except a rate-limited one, which is retried.
      */
     suspend fun request(protocolId: String, bodyJson: String): String = withContext(Dispatchers.IO) {
         // No mutex: the Go binding's libp2p host is thread-safe and yamux
         // multiplexes concurrent streams over the single connection.
         // Serialising here made every refresh block behind the slowest
         // in-flight call (timeline stalls behind a 15s stream-open).
-        var lastFailure: WarpnetException.TransportFailure? = null
+        var lastFailure: WarpnetException? = null
         for (attempt in 0..STREAM_RETRY_BACKOFFS.size) {
             if (_state.value !is ConnectionState.Connected) {
                 throw WarpnetException.NotConnected()
@@ -237,6 +237,12 @@ class WarpnetClient(
                 if (!isRetryableTransportError(e.message.orEmpty()) ||
                     attempt == STREAM_RETRY_BACKOFFS.size
                 ) {
+                    throw e
+                }
+                lastFailure = e
+                delay(STREAM_RETRY_BACKOFFS[attempt])
+            } catch (e: WarpnetException.ProtocolError) {
+                if (!e.isRateLimited || attempt == STREAM_RETRY_BACKOFFS.size) {
                     throw e
                 }
                 lastFailure = e
@@ -372,11 +378,8 @@ interface WarpnetBinding {
      * mapping of returned strings to UI-level state.
      *
      * The default falls back to a binary "Connected" / "NotConnected"
-     * read from [isConnected] so the interface can be added without
-     * requiring an AAR rebuild — once the freshly generated gomobile
-     * binding exposes node.Node.connectedness(), [DefaultBinding]
-     * should override this to return the proper three-state value
-     * including "Limited" (relay-only).
+     * read from [isConnected]; [DefaultBinding] overrides it with the
+     * three-state value including "Limited" (relay-only).
      */
     fun connectedness(): String = if (isConnected()) "Connected" else "NotConnected"
     fun disconnect(): String
@@ -439,11 +442,7 @@ object DefaultBinding : WarpnetBinding {
 
     override fun isConnected(): Boolean = node.Node.isConnected() == "true"
 
-    // Once the AAR is rebuilt against mobile.go's Connectedness() export
-    // (`make gen-aar`), override this to call node.Node.connectedness()
-    // directly for the three-state Connected / Limited / NotConnected
-    // distinction. Until then the interface default keeps CI green by
-    // collapsing to the two-state isConnected() answer.
+    override fun connectedness(): String = node.Node.connectedness()
 
     override fun disconnect(): String = node.Node.disconnect()
 
