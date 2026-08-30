@@ -85,6 +85,8 @@ dependencies {
     // it visible at compile time for this module.
     implementation libs.tink.android
     ksp libs.moshi.kotlin.codegen
+
+    testImplementation libs.junit
 }
 
 // AGP forbids direct local .aar file dependencies when building an AAR

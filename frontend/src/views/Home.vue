@@ -351,6 +351,20 @@ export default {
         this.focusCompose();
       }
     },
+    // The periodic refresh only prepends unseen tweets, so rows already on
+    // screen keep their original counters. Clicking Home reloads the first
+    // page outright, which is the only way to pick those changes up.
+    async '$route.query.refresh'(val) {
+      if (!val || this.loading) return;
+      this.loading = true;
+      try {
+        await this.loadInitial();
+      } catch (err) {
+        console.error('Failed to reload timeline:', err);
+      } finally {
+        this.loading = false;
+      }
+    },
   },
   computed: {
     tweetLength() {

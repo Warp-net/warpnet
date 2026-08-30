@@ -267,6 +267,29 @@ export const warpnetService = {
         } catch (e) {}
     },
 
+    // resumeSession reports whether the node still holds the session the
+    // restored owner belongs to. The node accepts only one login per process,
+    // so offering the login form again over a live session dead-ends on
+    // "already authenticated"; a probe tells the two states apart. False means
+    // the node was restarted since, and logging in again is the right move.
+    async resumeSession() {
+        const owner = this.getOwnerProfile()
+        if (!owner || !owner.user_id) return false
+        try {
+            const resp = await this.sendToNode({
+                path: PUBLIC_GET_USER,
+                body: {user_id: owner.user_id},
+            })
+            // Every routed call needs a signed-in connection, so an owner
+            // coming back is proof the session is still live. An error body
+            // (401 while signed out) and the empty object sendToNode falls
+            // back to both mean it isn't.
+            return Boolean(resp) && !resp.code && resp.id === owner.user_id
+        } catch (e) {
+            return false
+        }
+    },
+
     async isFirstRun() {
         return Boolean(await IsFirstRun());
     },

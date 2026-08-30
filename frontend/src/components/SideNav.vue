@@ -322,15 +322,27 @@ export default {
   methods: {
     async open(target) {
       const current = this.$route.name;
-      if (
-        target !== current ||
-        this.$route.params.id !== this.profile.user_id
-      ) {
+      // Home carries no :id, so comparing params there would always look like
+      // a different view and push a route the router then dedupes away.
+      const alreadyHere =
+        target === current &&
+        (this.$route.params.id === undefined ||
+          this.$route.params.id === this.profile.user_id);
+      if (!alreadyHere) {
         this.$router.push({
           name: target,
           params: {
             id: this.profile.user_id,
           },
+        });
+        return;
+      }
+      // Re-pushing the route you are on is a no-op, so stamp the query
+      // instead and let the view reload itself.
+      if (target === 'Home') {
+        this.$router.push({
+          name: target,
+          query: {refresh: Date.now().toString()},
         });
       }
     },
