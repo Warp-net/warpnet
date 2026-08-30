@@ -339,7 +339,9 @@ class WarpnetClient(
         return buf.readUtf8()
     }
 
-    private fun throwIfErrorResponse(raw: String) {
+    // internal, not private, so the unit tests can drive the classification
+    // without a connected binding.
+    internal fun throwIfErrorResponse(raw: String) {
         if (raw.isEmpty()) return
         // A well-formed ResponseError is exactly `{"code":N,"message":"..."}`.
         // Anything else is either a valid payload or a transport-layer error
@@ -349,7 +351,10 @@ class WarpnetClient(
             throw WarpnetException.TransportFailure(raw)
         }
         val err = runCatching { errorAdapter.fromJson(raw) }.getOrNull() ?: return
-        if (err.code == 0 && err.message.isEmpty()) return
+        // Every error the node emits carries a non-zero code (500, 401, 5000,
+        // 5001), while plain success is `event.Accepted` —
+        // {"code":0,"message":"Accepted"} — so the code alone decides.
+        if (err.code == 0) return
         throw WarpnetException.ProtocolError(err.code, err.message)
     }
 
