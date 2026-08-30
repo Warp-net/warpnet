@@ -9,6 +9,7 @@ vi.mock('@/service/service', () => ({
     isDesktopNode: vi.fn(),
     selectNetwork: vi.fn(),
     network: vi.fn(),
+    resumeSession: vi.fn(),
   },
 }));
 
@@ -16,6 +17,7 @@ import Root from '@/views/Root.vue';
 import { warpnetService } from '@/service/service';
 
 const routerPush = vi.fn();
+const routerReplace = vi.fn();
 
 // Must satisfy isPasswordStrong (lib/password.js), or the wizard never
 // advances past step 3.
@@ -26,7 +28,7 @@ const renderRoot = ({ firstRun = true } = {}) => {
   return render(Root, {
     global: {
       mocks: {
-        $router: { push: routerPush },
+        $router: { push: routerPush, replace: routerReplace },
       },
       directives: { escape: () => {} },
       stubs: {
@@ -52,6 +54,8 @@ afterAll(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   routerPush.mockClear();
+  routerReplace.mockClear();
+  warpnetService.resumeSession.mockResolvedValue(false);
   warpnetService.signInUser.mockResolvedValue(undefined);
   warpnetService.isFirstRun.mockResolvedValue(true);
   warpnetService.consumePendingDeepLink.mockResolvedValue("");
@@ -377,5 +381,59 @@ describe('Root.vue', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Reveal password/i }));
     expect(passwordField).toHaveAttribute('type', 'text');
     expect(passwordConfirmField).toHaveAttribute('type', 'text');
+  });
+});
+
+// The node accepts a single login per process. Reloading the page used to land
+// back here and offer the login form over a session the node still held, and
+// signing in again failed with "already authenticated" — a dead end that only
+// a node restart cleared.
+describe('Root.vue session resume', () => {
+  it('hands a live session straight back to Home', async () => {
+    warpnetService.resumeSession.mockResolvedValue(true);
+
+    renderRoot({ firstRun: false });
+
+    await waitFor(() =>
+      expect(routerReplace).toHaveBeenCalledWith({ name: 'Home' })
+    );
+  });
+
+  it('does not render the login form while resuming', async () => {
+    warpnetService.resumeSession.mockResolvedValue(true);
+
+    renderRoot({ firstRun: false });
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalled());
+    expect(screen.queryByTestId('login-stub')).not.toBeInTheDocument();
+  });
+
+  it('skips the first-run probe entirely when resuming', async () => {
+    warpnetService.resumeSession.mockResolvedValue(true);
+
+    renderRoot({ firstRun: false });
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalled());
+    expect(warpnetService.isFirstRun).not.toHaveBeenCalled();
+  });
+
+  it('shows the login form when the node no longer holds the session', async () => {
+    warpnetService.resumeSession.mockResolvedValue(false);
+
+    renderRoot({ firstRun: false });
+
+    expect(await screen.findByTestId('login-stub')).toBeInTheDocument();
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it('shows the sign-up path on a first run and never resumes', async () => {
+    warpnetService.resumeSession.mockResolvedValue(false);
+
+    renderRoot({ firstRun: true });
+
+    expect(
+      await screen.findByRole('button', { name: /^Sign up$/ })
+    ).toBeInTheDocument();
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });
