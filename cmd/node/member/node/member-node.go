@@ -284,6 +284,19 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	return bi
 }
 
+// PairedDeviceIDs lists the peer ids of devices paired with this node, in the
+// text form the pair handler stored. Kept separate from NodeInfo.Aliases: that
+// field converts the same strings straight to WarpPeerID, which is a binary
+// type, so its entries are only usable as opaque keys.
+func (m *MemberNode) PairedDeviceIDs() []string {
+	ids, err := m.aliasesRepo.GetNodeIDs()
+	if err != nil {
+		log.Errorf("member: paired devices: %v", err)
+		return nil
+	}
+	return ids
+}
+
 func (m *MemberNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
 	m.node.Prioritizer().SetPriority(pid, r)
 }
@@ -495,11 +508,11 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_PIN,
-			handler.StreamPinTweetHandler(r.tweetRepo, userRepo),
+			handler.StreamPinTweetHandler(r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_POST_UNPIN,
-			handler.StreamUnpinTweetHandler(r.tweetRepo, userRepo),
+			handler.StreamUnpinTweetHandler(r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_POST_RETWEET,

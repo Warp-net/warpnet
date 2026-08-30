@@ -44,6 +44,8 @@ import (
 
 type FollowNodeStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
+	NodeInfo() warpnet.NodeInfo
+	PairedDeviceIDs() []string
 }
 
 type FollowingAuthStorer interface {
@@ -141,7 +143,7 @@ func StreamFollowHandler(
 		if ev.FollowerId != ownerUserId {
 			return nil, warpnet.ErrForeignAuthor
 		}
-		if err := warpnet.VerifyAuthorship(s, owner.NodeId); err != nil {
+		if err := authorship.VerifyAuthor(streamer, s, owner.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -262,7 +264,7 @@ func StreamUnfollowHandler(
 		if ev.FollowerId != ownerUserId {
 			return nil, warpnet.ErrForeignAuthor
 		}
-		if err := warpnet.VerifyAuthorship(s, owner.NodeId); err != nil {
+		if err := authorship.VerifyAuthor(streamer, s, owner.NodeId); err != nil {
 			return nil, err
 		}
 

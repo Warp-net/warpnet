@@ -191,11 +191,6 @@ type WarpStreamBody struct {
 	WarpStream
 
 	MessageId string
-	// PairedAlias marks a stream opened by a device paired with this node
-	// (core/handler/pair.go). Such a device acts for this node's owner, so an
-	// event it delivers is authored here even though the connection's remote
-	// peer is the device and not this node.
-	PairedAlias bool
 }
 
 type WarpHandlerFunc func(msg []byte, s WarpStream) (any, error)
@@ -230,16 +225,7 @@ func (wh *WarpStreamHandler) String() string {
 const ErrForeignAuthor = WarpError("event did not come from its author's node")
 
 func VerifyAuthorship(s WarpStream, actorNodeId string) error {
-	if actorNodeId == "" || s == nil || s.Conn() == nil {
-		return ErrForeignAuthor
-	}
-	if actorNodeId == s.Conn().RemotePeer().String() {
-		return nil
-	}
-	// A paired device speaks for this node's owner, so it may author events
-	// attributed to this node — and only to this node.
-	if b, ok := s.(*WarpStreamBody); ok && b.PairedAlias &&
-		actorNodeId == s.Conn().LocalPeer().String() {
+	if actorNodeId != "" && s != nil && s.Conn() != nil && actorNodeId == s.Conn().RemotePeer().String() {
 		return nil
 	}
 	return ErrForeignAuthor

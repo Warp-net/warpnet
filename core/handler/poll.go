@@ -57,6 +57,7 @@ type PollTweetFetcher interface {
 type PollStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
+	PairedDeviceIDs() []string
 }
 
 type PollUserFetcher interface {

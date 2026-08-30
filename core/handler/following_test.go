@@ -134,7 +134,13 @@ func (s stubFollowUserRepo) Create(user domain.User) (domain.User, error) {
 
 type stubFollowStreamer struct {
 	genericStreamFn func(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
+	nodeInfo        warpnet.NodeInfo
+	pairedDeviceIDs []string
 }
+
+func (s stubFollowStreamer) PairedDeviceIDs() []string { return s.pairedDeviceIDs }
+
+func (s stubFollowStreamer) NodeInfo() warpnet.NodeInfo { return s.nodeInfo }
 
 func (s stubFollowStreamer) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 	if s.genericStreamFn != nil {

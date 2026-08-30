@@ -281,7 +281,7 @@ func TestIsPrivateRouteAllowed_SelfStream(t *testing.T) {
 	defer mw.Close()
 
 	route := stream.WarpRoute("/private/get/messages/0.0.0")
-	if !mw.isPrivateRouteAllowed(route, ownNodeId, ownNodeId, false) {
+	if !mw.isPrivateRouteAllowed(route, ownNodeId, ownNodeId) {
 		t.Error("the node itself must always pass the private route gate")
 	}
 }

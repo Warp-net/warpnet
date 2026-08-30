@@ -116,7 +116,10 @@ func senderConn(t *testing.T) warpnet.WarpStream {
 type stubStreamer struct {
 	genericStreamFn func(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 	nodeInfo        warpnet.NodeInfo
+	pairedDeviceIDs []string
 }
+
+func (s stubStreamer) PairedDeviceIDs() []string { return s.pairedDeviceIDs }
 
 func (s stubStreamer) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 	if s.genericStreamFn != nil {

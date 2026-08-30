@@ -33,6 +33,7 @@ package authorship
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -50,9 +51,18 @@ type UserStorer interface {
 	Create(user domain.User) (domain.User, error)
 }
 
-// NodeStreamer asks another node for a profile.
+// NodeStreamer asks another node for a profile, reports this node's own
+// identity, and lists the devices paired with it.
+//
+// PairedDeviceIDs returns peer ids in their text form, the same shape the pair
+// handler stores and the auth middleware gates private routes on. Do not read
+// them out of NodeInfo.Aliases instead: those entries are built by converting
+// the stored text straight to WarpPeerID, which holds binary multihash bytes,
+// so they never compare equal to a real peer id.
 type NodeStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
+	NodeInfo() warpnet.NodeInfo
+	PairedDeviceIDs() []string
 }
 
 // FetchActor returns actorId's profile, resolving it from the node that
@@ -107,5 +117,35 @@ func VerifyActor(
 	if err != nil {
 		log.Infof("verify actor %s: %v", actorId, err)
 	}
-	return actor, warpnet.VerifyAuthorship(s, actor.NodeId)
+	return actor, VerifyAuthor(streamer, s, actor.NodeId)
+}
+
+// VerifyAuthor checks that an event naming actorNodeId as its author's node
+// reached us from a peer entitled to author it.
+//
+// Normally that is the actor's own node, which is all warpnet.VerifyAuthorship
+// knows how to check. The exception is a device paired with this node
+// (core/handler/pair.go): it dials with its own peer id while acting for the
+// owner, so the plain comparison rejects it. Such a device is trusted only for
+// actors this node hosts, so it cannot author for a third party — and only
+// while it is still paired, so unpairing revokes it.
+//
+// Use this for routes an owner drives from their own client. Node-to-node
+// routes — follower delivery, an inbound follow from a stranger — must keep
+// the strict warpnet.VerifyAuthorship: no device may author those.
+func VerifyAuthor(streamer NodeStreamer, s warpnet.WarpStream, actorNodeId string) error {
+	if err := warpnet.VerifyAuthorship(s, actorNodeId); err == nil {
+		return nil
+	}
+	if actorNodeId == "" || s == nil || s.Conn() == nil {
+		return warpnet.ErrForeignAuthor
+	}
+
+	if actorNodeId != streamer.NodeInfo().ID.String() {
+		return warpnet.ErrForeignAuthor // the actor is not hosted here
+	}
+	if !slices.Contains(streamer.PairedDeviceIDs(), s.Conn().RemotePeer().String()) {
+		return warpnet.ErrForeignAuthor // not one of this node's paired devices
+	}
+	return nil
 }
