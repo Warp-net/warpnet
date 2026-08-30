@@ -1,5 +1,3 @@
-Emoji reactions replace the old binary Like. React to a post with any emoji, see who reacted, and get "reacted to your post" notifications. Likes, Liked by and the Likes notification channel are now Reactions throughout.
+Your paired phone can finally write: follows, replies, reactions, poll votes, chats — every one was being rejected by the node.
 
-Hardened request signing: the timestamp and the destination peer are now covered by every signature, so stale or replayed requests are rejected.
-
-Direct messages to bridged Mastodon accounts are disabled, so DMs stay inside the peer-to-peer network.
+Also: polls and media attachments in the Android app, and the desktop stops dead-ending on the login form after a reload.
