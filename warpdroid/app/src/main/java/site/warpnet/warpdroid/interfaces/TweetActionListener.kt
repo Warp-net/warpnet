@@ -44,6 +44,8 @@ interface TweetActionListener : LinkListener {
 
     fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean)
 
+    fun onVoteInPoll(viewData: TweetViewData.Concrete, option: Int)
+
     fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean)
 
     fun onContentHiddenChange(viewData: TweetViewData.Concrete, isShowing: Boolean)

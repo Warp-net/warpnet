@@ -41,6 +41,7 @@ import site.warpnet.warpdroid.components.compose.UploadEvent
 import site.warpnet.warpdroid.db.AccountManager
 import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.MediaAttribute
+import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.network.WarpnetApi
@@ -230,6 +231,7 @@ class SendTweetService : Service() {
                 visibility = statusToSend.visibility,
                 sensitive = statusToSend.sensitive,
                 mediaIds = media.map { it.id!! },
+                poll = statusToSend.poll,
                 language = statusToSend.language,
                 mediaAttributes = media.map { mediaItem ->
                     MediaAttribute(
@@ -458,7 +460,8 @@ data class TweetToSend(
     val idempotencyKey: String,
     var retries: Int,
     val language: String?,
-    val statusId: String?
+    val statusId: String?,
+    val poll: NewPoll? = null
 ) : Parcelable
 
 @Parcelize

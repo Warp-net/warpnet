@@ -13,6 +13,20 @@ func TestAcceptedResponse(t *testing.T) {
 	assert.Equal(t, `{"code":0,"message":"Accepted"}`, Accepted)
 }
 
+// Clients tell a plain success from a failure by the code alone — the message
+// carries no verdict. Accepted must therefore decode to a zero code, and the
+// codes handlers fail with must not.
+func TestAcceptedDecodesToZeroCode(t *testing.T) {
+	var resp ResponseError
+	assert.NoError(t, json.Unmarshal([]byte(Accepted), &resp))
+	assert.Equal(t, 0, resp.Code)
+	assert.Equal(t, "Accepted", resp.Message)
+}
+
+func TestErrorCodeIsNonZero(t *testing.T) {
+	assert.NotZero(t, RateLimitErrorCode)
+}
+
 func TestInternalRoutePrefix(t *testing.T) {
 	assert.Equal(t, "/internal", InternalRoutePrefix)
 }

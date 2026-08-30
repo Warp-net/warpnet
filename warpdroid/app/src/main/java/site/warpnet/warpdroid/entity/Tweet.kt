@@ -73,7 +73,8 @@ data class Tweet(
      *  Iceshrimp and maybe other implementations explicitly send filtered=null so we can't default to empty list. */
     val filtered: List<FilterResult>? = null,
     /** Some implementations have a incompatible quote format, we ignore those quotes */
-    @Guarded val quote: Quote?
+    @Guarded val quote: Quote?,
+    val poll: Poll? = null
 ) {
 
     val actionableId: String

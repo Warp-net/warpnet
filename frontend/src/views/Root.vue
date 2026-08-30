@@ -396,6 +396,12 @@ export default {
     },
   },
   async mounted() {
+    // A reload lands here even when the node is still signed in; showing the
+    // login form then is a dead end, so hand the live session back to Home.
+    if (await warpnetService.resumeSession()) {
+      this.$router.replace({ name: "Home" });
+      return;
+    }
     this.isDesktop = warpnetService.isDesktopNode();
     if (this.isDesktop) {
       try {
