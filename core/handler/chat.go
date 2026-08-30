@@ -30,7 +30,6 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"strings"
 	"time"
@@ -60,7 +59,6 @@ type ChatAuthStorer interface {
 type ChatStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
-	PairedDeviceIDs() []string
 }
 
 type ChatUserFetcher interface {
@@ -101,7 +99,7 @@ func StreamCreateChatHandler(
 		}
 
 		initiator, _ := userRepo.Get(ev.OwnerId)
-		if err := authorship.VerifyAuthor(streamer, s, initiator.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, initiator.NodeId); err != nil {
 			return nil, err
 		}
 
@@ -314,7 +312,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		}
 
 		sender, _ := userRepo.Get(ev.SenderId)
-		if err := authorship.VerifyAuthor(streamer, s, sender.NodeId); err != nil {
+		if err := warpnet.VerifyAuthorship(s, sender.NodeId); err != nil {
 			return nil, err
 		}
 

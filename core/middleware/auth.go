@@ -79,20 +79,23 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.Wa
 			return nil, ErrStaleMessage
 		}
 
-		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer()) {
+		isPairedAlias := p.isPairedAlias(remotePeer, s.Conn().LocalPeer())
+
+		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer(), isPairedAlias) {
 			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
 			return nil, ErrUnknownClientPeer
 		}
 
 		return next(msg.Body, &warpnet.WarpStreamBody{
-			WarpStream: s,
-			MessageId:  msg.MessageId,
+			WarpStream:  s,
+			MessageId:   msg.MessageId,
+			PairedAlias: isPairedAlias,
 		})
 	}
 }
 
 func (p *WarpMiddleware) isPrivateRouteAllowed(
-	route stream.WarpRoute, remotePeer, localPeer warpnet.WarpPeerID,
+	route stream.WarpRoute, remotePeer, localPeer warpnet.WarpPeerID, isPairedAlias bool,
 ) bool {
 	if remotePeer == localPeer || remotePeer == p.ownNodeId {
 		return true
@@ -100,7 +103,13 @@ func (p *WarpMiddleware) isPrivateRouteAllowed(
 	if route.ProtocolID() == event.PRIVATE_POST_PAIR {
 		return true
 	}
-	if p.aliases == nil {
+	return isPairedAlias
+}
+
+// isPairedAlias reports whether remotePeer is a device paired with this node.
+// A self-stream is not one: it already speaks as this node.
+func (p *WarpMiddleware) isPairedAlias(remotePeer, localPeer warpnet.WarpPeerID) bool {
+	if p.aliases == nil || remotePeer == localPeer || remotePeer == p.ownNodeId {
 		return false
 	}
 

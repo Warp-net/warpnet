@@ -1158,7 +1158,6 @@ func (m *mockBroadcaster) PublishUpdateToFollowers(o, d string, b []byte) error 
 type mockStreamer struct {
 	GenericStreamFunc func(string, stream.WarpRoute, any) ([]byte, error)
 	NodeInfoFunc      func() warpnet.NodeInfo
-	pairedDeviceIDs   []string
 }
 
 func (m *mockStreamer) GenericStream(n string, p stream.WarpRoute, d any) ([]byte, error) {
@@ -1167,8 +1166,6 @@ func (m *mockStreamer) GenericStream(n string, p stream.WarpRoute, d any) ([]byt
 	}
 	return nil, nil
 }
-func (m *mockStreamer) PairedDeviceIDs() []string { return m.pairedDeviceIDs }
-
 func (m *mockStreamer) NodeInfo() warpnet.NodeInfo {
 	if m.NodeInfoFunc != nil {
 		return m.NodeInfoFunc()
@@ -1540,7 +1537,7 @@ func TestSetPinnedFromEvent(t *testing.T) {
 			return domain.Tweet{UserId: "other"}, nil
 		}
 		users, conn := authorStream(t)
-		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, stubStreamer{}, conn, true)
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, conn, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "only the author can pin")
 	})
@@ -1548,7 +1545,7 @@ func TestSetPinnedFromEvent(t *testing.T) {
 	t.Run("sent by another node", func(t *testing.T) {
 		users, _ := authorStream(t)
 		_, attacker := authorStream(t)
-		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, stubStreamer{}, attacker, true)
+		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, attacker, true)
 		assert.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 	})
 }

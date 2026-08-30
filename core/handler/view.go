@@ -54,7 +54,6 @@ type ViewUserFetcher interface {
 type ViewStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
-	PairedDeviceIDs() []string
 }
 
 func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer ViewStreamer) warpnet.WarpHandlerFunc {
