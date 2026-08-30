@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
+import { reactive } from 'vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
@@ -302,5 +303,73 @@ describe('Home composer watchers', () => {
     const box = await screen.findByLabelText('Compose a tweet');
 
     await waitFor(() => expect(document.activeElement).toBe(box));
+  });
+});
+
+// The 10s poll only prepends tweets it has not seen, so a row already on
+// screen keeps the counters it was rendered with — a like or a vote landing
+// from another client never shows up. Clicking Home stamps ?refresh, and that
+// has to reload the first page outright.
+describe('Home manual refresh', () => {
+  it('reloads the first page when ?refresh changes', async () => {
+    const query = reactive({});
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-02T10:00:00Z')]);
+
+    renderHome(query);
+    await waitFor(() => expect(screen.getByText('warpnet w1')).toBeInTheDocument());
+    expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(1);
+
+    query.refresh = '1700000000000';
+
+    await waitFor(() => expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(2));
+  });
+
+  it('replaces rows already on screen rather than only prepending', async () => {
+    const query = reactive({});
+    const stale = { ...wTweet('w1', '2026-01-02T10:00:00Z'), text: 'warpnet stale' };
+    const fresh = { ...wTweet('w1', '2026-01-02T10:00:00Z'), text: 'warpnet fresh' };
+    warpnetService.getMyTimeline.mockResolvedValue([stale]);
+
+    renderHome(query);
+    await waitFor(() => expect(screen.getByText('warpnet stale')).toBeInTheDocument());
+
+    warpnetService.getMyTimeline.mockResolvedValue([fresh]);
+    query.refresh = '1700000000000';
+
+    await waitFor(() => expect(screen.getByText('warpnet fresh')).toBeInTheDocument());
+    expect(screen.queryByText('warpnet stale')).not.toBeInTheDocument();
+  });
+
+  it('reloads again on a second, different stamp', async () => {
+    const query = reactive({});
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-02T10:00:00Z')]);
+
+    renderHome(query);
+    await waitFor(() => expect(screen.getByText('warpnet w1')).toBeInTheDocument());
+
+    // Wait for each reload to land before asking for the next one: a stamp
+    // arriving mid-reload is dropped on purpose.
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w2', '2026-01-02T11:00:00Z')]);
+    query.refresh = '1700000000000';
+    await waitFor(() => expect(screen.getByText('warpnet w2')).toBeInTheDocument());
+
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w3', '2026-01-02T12:00:00Z')]);
+    query.refresh = '1700000000001';
+    await waitFor(() => expect(screen.getByText('warpnet w3')).toBeInTheDocument());
+
+    expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(3);
+  });
+
+  it('ignores a cleared stamp', async () => {
+    const query = reactive({ refresh: '1700000000000' });
+    warpnetService.getMyTimeline.mockResolvedValue([wTweet('w1', '2026-01-02T10:00:00Z')]);
+
+    renderHome(query);
+    await waitFor(() => expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(1));
+
+    query.refresh = '';
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(warpnetService.getMyTimeline).toHaveBeenCalledTimes(1);
   });
 });
