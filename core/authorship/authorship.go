@@ -43,22 +43,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// UserStorer reads the actor behind an incoming event and stores one learned
-// from the network.
 type UserStorer interface {
 	Get(userId string) (user domain.User, err error)
 	Create(user domain.User) (domain.User, error)
 }
 
-// NodeStreamer asks another node for a profile.
 type NodeStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
-// FetchActor returns actorId's profile, resolving it from the node that
-// delivered the event when it is unknown locally, and storing it. The
-// delivering node is the right source on any network — it is either the
-// actor's own node or the home node the actor is bridged from.
 func FetchActor(
 	userRepo UserStorer, streamer NodeStreamer, s warpnet.WarpStream, actorId string,
 ) (domain.User, error) {
@@ -93,13 +86,6 @@ func FetchActor(
 	return actor, nil
 }
 
-// VerifyActor checks that the event came from its actor's own node, resolving
-// an actor unknown locally from the delivering node first. Replying to or
-// favouriting a post without following its author is ordinary on the Fediverse,
-// so a bridged actor reaches a node with no prior record of them and only the
-// gateway that delivered the event can answer for them. A failed resolve stays
-// non-fatal: it leaves an empty node id, which VerifyAuthorship rejects exactly
-// as before.
 func VerifyActor(
 	userRepo UserStorer, streamer NodeStreamer, s warpnet.WarpStream, actorId string,
 ) (domain.User, error) {
