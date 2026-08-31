@@ -163,8 +163,6 @@ func TestLimitForRoute(t *testing.T) {
 	}
 }
 
-// The gateway is one peer id carrying the whole Fediverse, so it is charged its
-// own budget instead of the per-person one every other peer gets.
 func TestLimitForRouteGivesTheGatewayItsOwnBudget(t *testing.T) {
 	gateway := warpnet.FromStringToPeerID(mastodon.GatewayNodeID())
 	if gateway == "" {
@@ -179,8 +177,6 @@ func TestLimitForRouteGivesTheGatewayItsOwnBudget(t *testing.T) {
 	}
 }
 
-// The gateway budget must still be a budget: a peer id that only looks like the
-// gateway's is charged the ordinary limits.
 func TestLimitForRouteKeepsOtherPeersOnTheirBudget(t *testing.T) {
 	if got := limitForRoute(stream.WarpRoute(event.PUBLIC_GET_USER), warpnet.WarpPeerID("someone-else")); got != limitRead {
 		t.Fatalf("expected %+v, got %+v", limitRead, got)

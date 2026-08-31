@@ -58,13 +58,7 @@ var (
 	limitUpload    = routeLimit{burst: 10, perMinute: 30}
 	limitReport    = routeLimit{burst: 10, perMinute: 30}
 	limitPairing   = routeLimit{burst: 5, perMinute: 15}
-
-	// limitGateway is the ActivityPub gateway's budget. Every limit above is
-	// sized for one person's client; the gateway is a single peer id carrying
-	// the whole Fediverse, and one Mastodon instance discovering one account
-	// already fans out to a profile, its collections and its media. Charging it
-	// a person's budget throttles it into dropping federated activity.
-	limitGateway = routeLimit{burst: 600, perMinute: 6000}
+	limitGateway   = routeLimit{burst: 600, perMinute: 6000}
 )
 
 var routeLimits = map[string]routeLimit{
