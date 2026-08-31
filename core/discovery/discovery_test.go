@@ -285,6 +285,53 @@ func TestEnqueue_RateLimiterShedsFloods(t *testing.T) {
 		"the queue must never exceed its capacity")
 }
 
+func TestEnqueue_AfterCloseNeverSendsOnAClosedQueue(t *testing.T) {
+	s, _, _, _ := newService(t)
+	s.limiter = newRateLimiter(1<<20, 1) // the rate limiter must not hide the race
+
+	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
+	s.Close()
+
+	// mdns, gossip, DHT and stream handlers all keep firing while the node tears
+	// down: a send on a closed queue panics in their goroutine and kills the node,
+	// so this test reports the regression by crashing the whole binary.
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 250 {
+				s.DiscoveryHandlerMDNS(pi)
+				s.DiscoveryHandlerPubSub(pi)
+				s.DiscoveryHandlerDHT(pi.ID)
+				s.DiscoveryHandlerStream(pi)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Empty(t, s.discoveryChan, "a closed service must not queue new discoveries")
+}
+
+func TestClose_KeepsTheQueueOpenForLateSenders(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	node := newFakeNode()
+	node.info.Type = warpnet.RelayNode
+
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo())
+	require.NoError(t, s.Run(node))
+
+	s.Close()
+
+	select {
+	case _, ok := <-s.discoveryChan:
+		require.True(t, ok, "the discovery queue must stay open after Close")
+	default:
+	}
+}
+
 func TestEnqueue_NilServiceIsInert(t *testing.T) {
 	var s *discoveryService
 	assert.NotPanics(t, func() {
