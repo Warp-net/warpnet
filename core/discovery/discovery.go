@@ -205,6 +205,9 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		log.Errorf("discovery: handle new peer found: nil discovery service")
 		return
 	}
+	if s.isStopped() { // mdns, gossip, DHT and stream handlers outlive Close
+		return
+	}
 	log.Debugf("discovery: found peer: %s, source: %s", pi.ID.String(), source)
 
 	if pi.ID == "" || pi.ID == s.ownId {
@@ -232,6 +235,16 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		for range dropMessagesNum {
 			<-s.discoveryChan // drop old data
 		}
+	}
+}
+
+// isStopped reports whether Close has already run.
+func (s *discoveryService) isStopped() bool {
+	select {
+	case <-s.stopChan:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -464,7 +477,8 @@ func (s *discoveryService) Close() {
 		return
 	}
 	s.discoveryTicker.Stop()
+	// discoveryChan is left open on purpose: senders outlive Close and a send on
+	// a closed channel panics. The reader exits on stopChan alone.
 	close(s.stopChan)
-	close(s.discoveryChan)
 	log.Infoln("discovery: closed")
 }
