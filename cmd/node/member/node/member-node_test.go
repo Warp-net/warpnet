@@ -37,8 +37,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	corenode "github.com/Warp-net/warpnet/core/node"
-	"testing"
-
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
@@ -336,8 +334,7 @@ func TestStartBringsUpTheNode(t *testing.T) {
 	// a stream to an unknown peer fails rather than hanging
 	_, err := m.GenericStream(otherID.String(), "/public/get/info", nil)
 	require.Error(t, err)
-	"github.com/stretchr/testify/require"
-)
+}
 
 // The desktop app stops the node twice: logout (PRIVATE_POST_LOGOUT) stops it,
 // then the wails shutdown hook (App.close) stops it again when the window

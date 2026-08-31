@@ -287,13 +287,7 @@ func TestStartRendezvousAdvertisesAndStops(t *testing.T) {
 			t.Logf("dht close: %v", err)
 		}
 	})
-	"testing"
-
-	datastore "github.com/ipfs/go-datastore"
-	dssync "github.com/ipfs/go-datastore/sync"
-	"github.com/libp2p/go-libp2p"
-	"github.com/stretchr/testify/require"
-)
+}
 
 // The desktop app stops the node twice - logout stops it, then the wails
 // shutdown hook stops it again - so a second close must be a no-op.
@@ -301,17 +295,8 @@ func TestCloseIsIdempotent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
-	require.NoError(t, err)
-	defer func() { _ = h.Close() }()
-
-	table := NewDHTable(
-		ctx,
-		Network("testnet"),
-		RoutingStore(dssync.MutexWrap(datastore.NewMapDatastore())),
-	)
-
-	_, err = table.StartRouting(h)
+	table := NewDHTable(ctx, Network("testnet"), RoutingStore(memStore()))
+	_, err := table.StartRouting(newHost(t))
 	require.NoError(t, err)
 
 	table.Close()
