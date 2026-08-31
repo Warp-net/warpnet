@@ -30,6 +30,7 @@ package dht
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -84,10 +85,11 @@ type RoutingStorer interface {
 }
 
 type distributedHashTable struct {
-	ctx      context.Context
-	cfg      dhtConfig
-	dht      *dht.IpfsDHT
-	stopChan chan struct{}
+	ctx       context.Context
+	cfg       dhtConfig
+	dht       *dht.IpfsDHT
+	stopChan  chan struct{}
+	closeOnce sync.Once
 }
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
@@ -334,12 +336,14 @@ func (d *distributedHashTable) Close() {
 		return
 	}
 
-	close(d.stopChan)
+	d.closeOnce.Do(func() {
+		close(d.stopChan)
 
-	log.Infoln("dht: closing...")
-	if err := d.dht.Close(); err != nil {
-		log.Errorf("dht: close: %s", err.Error())
-	}
+		log.Infoln("dht: closing...")
+		if err := d.dht.Close(); err != nil {
+			log.Errorf("dht: close: %s", err.Error())
+		}
 
-	log.Infoln("dht: closed")
+		log.Infoln("dht: closed")
+	})
 }
