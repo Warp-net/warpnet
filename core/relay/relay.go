@@ -80,9 +80,15 @@ var DefaultResources = relayv2.Resources{
 	MaxReservationsPerASN: 32,
 }
 
+// A relayed connection is reset once either limit is reached, and a peer that
+// is reachable ONLY over a circuit — the ActivityPub gateway forces private
+// reachability — has no direct address to fall back on: it just has to dial
+// again, paying a DHT lookup, a reservation and a dial each time. The duration
+// therefore matches ReservationTTL, and the data limit is large enough to carry
+// a working set of media rather than two attachments.
 const (
-	DefaultRelayDataLimit     = 32 << 20 // 32 MiB
-	DefaultRelayDurationLimit = 5 * time.Minute
+	DefaultRelayDataLimit     = 1 << 30 // 1 GiB
+	DefaultRelayDurationLimit = time.Hour
 )
 
 func NewRelay(node warpnet.P2PNode) (*relayv2.Relay, error) {
