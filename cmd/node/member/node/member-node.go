@@ -185,10 +185,12 @@ func (m *MemberNode) Start() (err error) {
 
 	m.node.SetOutbox(database.NewOutboxRepo(m.db))
 
-	m.pubsubService.Run(m)
+	// Discovery first: the gossip listener feeds DiscoveryHandlerPubSub, which
+	// reads the fields discService.Run sets. Starting pubsub first races them.
 	if err := m.discService.Run(m); err != nil {
 		return err
 	}
+	m.pubsubService.Run(m)
 
 	m.mdnsService.Start(m)
 

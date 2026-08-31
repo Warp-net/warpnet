@@ -347,7 +347,10 @@ func (s *DBTestSuite) TestRun_EmptyCredentials() {
 }
 
 func TestDBTestSuite(t *testing.T) {
-	defer goleak.VerifyNone(t)
+	// IgnoreCurrent snapshots at test start: badger leaks a cache monitor when
+	// Open rejects a wrong encryption key, and that earlier test's goroutine
+	// would otherwise be blamed on this suite.
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 	suite.Run(t, new(DBTestSuite))
 }
 
