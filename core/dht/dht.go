@@ -90,7 +90,16 @@ type distributedHashTable struct {
 	dht       *dht.IpfsDHT
 	stopChan  chan struct{}
 	closeOnce sync.Once
+	// bootstrapped is closed when the goroutine StartRouting launches returns.
+	// Close waits on it: go-libp2p-kad-dht is not safe against a Close that
+	// lands while Bootstrap or RefreshRoutingTable is still in flight, which is
+	// what a node stopped right after starting does.
+	bootstrapped chan struct{}
 }
+
+// bootstrapDrainTimeout bounds how long Close waits for the bootstrap
+// goroutine. A wedged refresh must not hang shutdown.
+const bootstrapDrainTimeout = 5 * time.Second
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
 	log.Debugln("dht: node removed", id)
@@ -106,9 +115,10 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 		opt(&cfg)
 	}
 	return &distributedHashTable{
-		ctx:      ctx,
-		cfg:      cfg,
-		stopChan: make(chan struct{}),
+		ctx:          ctx,
+		cfg:          cfg,
+		stopChan:     make(chan struct{}),
+		bootstrapped: make(chan struct{}),
 	}
 }
 
@@ -168,7 +178,12 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		}
 	}
 
-	go d.bootstrapDHT()
+	// Signalled here rather than inside bootstrapDHT: this is the one goroutine
+	// Close has to wait for, and bootstrapDHT is also called directly.
+	go func() {
+		defer close(d.bootstrapped)
+		d.bootstrapDHT()
+	}()
 	log.Infoln("dht: routing started")
 	return d.dht, nil
 }
@@ -338,6 +353,15 @@ func (d *distributedHashTable) Close() {
 
 	d.closeOnce.Do(func() {
 		close(d.stopChan)
+
+		// Let the bootstrap goroutine finish first: tearing the table down
+		// underneath an in-flight Bootstrap/RefreshRoutingTable races the
+		// library's own refresh manager.
+		select {
+		case <-d.bootstrapped:
+		case <-time.After(bootstrapDrainTimeout):
+			log.Warnln("dht: bootstrap still running at close, tearing down anyway")
+		}
 
 		log.Infoln("dht: closing...")
 		if err := d.dht.Close(); err != nil {
