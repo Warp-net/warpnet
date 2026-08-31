@@ -205,7 +205,9 @@ func TestStartRendezvousStopsOnSignals(t *testing.T) {
 		_, err := d.StartRouting(newHost(t))
 		require.NoError(t, err)
 
-		close(d.stopChan)
+		// Close is what closes stopChan in production, and it also drains the
+		// bootstrap goroutine before tearing the table down.
+		d.Close()
 		d.startRendezvous(make(chan struct{}))
 	})
 }
@@ -273,7 +275,7 @@ func TestStartRendezvousAdvertisesAndStops(t *testing.T) {
 	// the first advertise/findPeers pass runs before the ticker; stop the loop
 	// as soon as it is under way
 	time.Sleep(200 * time.Millisecond)
-	close(d.stopChan)
+	d.Close()
 
 	select {
 	case <-done:
@@ -281,12 +283,8 @@ func TestStartRendezvousAdvertisesAndStops(t *testing.T) {
 		t.Fatal("the rendezvous loop did not stop")
 	}
 
-	// the table is already stopped: Close must not double-close it
-	require.NotPanics(t, func() {
-		if err := d.dht.Close(); err != nil {
-			t.Logf("dht close: %v", err)
-		}
-	})
+	// already torn down: a second Close is a no-op rather than a double close
+	require.NotPanics(t, d.Close)
 }
 
 // The desktop app stops the node twice - logout stops it, then the wails
