@@ -33,6 +33,7 @@ import (
 	"math"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/datastore"
@@ -65,9 +66,10 @@ type NodeStorer interface {
 }
 
 type NodeRepo struct {
-	db       NodeStorer
-	prefix   string
-	stopChan chan struct{}
+	db        NodeStorer
+	prefix    string
+	stopChan  chan struct{}
+	closeOnce sync.Once
 
 	RelaySelfHashHex string
 }
@@ -530,8 +532,10 @@ func (d *NodeRepo) Close() (err error) {
 		return nil
 	}
 
-	close(d.stopChan)
-	log.Infoln("node repo: closed")
+	d.closeOnce.Do(func() {
+		close(d.stopChan)
+		log.Infoln("node repo: closed")
+	})
 	return nil
 }
 
