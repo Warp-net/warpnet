@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -156,8 +157,28 @@ func TestLimitForRoute(t *testing.T) {
 		event.PRIVATE_DELETE_TWEET: limitWrite,
 	}
 	for route, want := range cases {
-		if got := limitForRoute(stream.WarpRoute(route)); got != want {
+		if got := limitForRoute(stream.WarpRoute(route), warpnet.WarpPeerID("member-peer")); got != want {
 			t.Fatalf("%s: expected %+v, got %+v", route, want, got)
 		}
+	}
+}
+
+func TestLimitForRouteGivesTheGatewayItsOwnBudget(t *testing.T) {
+	gateway := warpnet.FromStringToPeerID(mastodon.GatewayNodeID())
+	if gateway == "" {
+		t.Fatalf("mastodon.GatewayNodeID() is not a valid peer id: %q", mastodon.GatewayNodeID())
+	}
+	for _, route := range []string{
+		event.PUBLIC_GET_USER, event.PUBLIC_GET_IMAGE, event.PUBLIC_POST_REACT, event.PRIVATE_POST_PAIR,
+	} {
+		if got := limitForRoute(stream.WarpRoute(route), gateway); got != limitGateway {
+			t.Fatalf("%s: expected the gateway budget %+v, got %+v", route, limitGateway, got)
+		}
+	}
+}
+
+func TestLimitForRouteKeepsOtherPeersOnTheirBudget(t *testing.T) {
+	if got := limitForRoute(stream.WarpRoute(event.PUBLIC_GET_USER), warpnet.WarpPeerID("someone-else")); got != limitRead {
+		t.Fatalf("expected %+v, got %+v", limitRead, got)
 	}
 }
