@@ -12,7 +12,6 @@ import (
 	modpubsub "github.com/Warp-net/warpnet/cmd/node/moderator/pubsub"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/round"
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
-	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"

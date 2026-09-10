@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	RepoName        = "/RATING"
+	RatingRepoName  = "/RATING"
 	generationBytes = 16
 )
 
@@ -255,7 +255,7 @@ func parseKey(key string) (peerId, observer string, dim string, bucket int64, ge
 }
 
 func RecordKey(peerId, observer string, dim string, bucket int64, generation string) string {
-	return "/" + RepoName + "/obs/" +
+	return "/" + RatingRepoName + "/record/" +
 		peerId + "/" +
 		observer + "/" +
 		dim + "/" +
@@ -263,7 +263,7 @@ func RecordKey(peerId, observer string, dim string, bucket int64, generation str
 		generation
 }
 
-func KeyPrefix() string { return "/" + RepoName + "/obs" }
+func KeyPrefix() string { return "/" + RatingRepoName + "/record" }
 
 func PeerPrefix(peerId string) string { return KeyPrefix() + "/" + peerId }
 

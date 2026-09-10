@@ -31,7 +31,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	node2 "github.com/Warp-net/warpnet/cmd/node/member/node"
+	"github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/cmd/node/member/remote"
 	"net"
 	"net/http"
@@ -47,7 +47,6 @@ import (
 	"github.com/Warp-net/warpnet/database"
 	localstore "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
@@ -153,10 +152,10 @@ func main() {
 		security.NoiseFingerprint(staticKey.Public),
 	)
 
-	var node *node2.MemberNode
+	var n *node.MemberNode
 	defer func() {
-		if node != nil {
-			node.Stop()
+		if n != nil {
+			n.Stop()
 		}
 	}()
 
@@ -172,7 +171,7 @@ func main() {
 			log.Infoln("remote: database authentication passed")
 		}
 
-		if node == nil {
+		if n == nil {
 			privateKey := authService.PrivateKey()
 			ownNodeId, err := warpnet.IDFromPublicKey(privateKey.Public().(ed25519.PublicKey))
 			if err != nil {
@@ -180,8 +179,7 @@ func main() {
 				return
 			}
 
-			m := metrics.NewMetricsClient(config.Config().Node.Metrics.Gateway, ownNodeId.String(), network)
-			node, err = node2.NewMemberNode(
+			n, err = node.NewMemberNode(
 				ctx,
 				privateKey,
 				psk,
@@ -189,22 +187,21 @@ func main() {
 				authRepo,
 				db,
 				infos,
-				m,
 			)
 			if err != nil {
 				log.Errorf("remote: init node: %v", err)
 				return
 			}
 
-			if err := node.Start(); err != nil {
+			if err := n.Start(); err != nil {
 				log.Errorf("remote: start node: %v", err)
 				return
 			}
 
-			bridgeHandler.AttachNode(node)
+			bridgeHandler.AttachNode(n)
 		}
 
-		ni := node.NodeInfo()
+		ni := n.NodeInfo()
 		info.ID = ni.ID.String()
 		info.Network = network
 		info.Addresses = ni.Addresses

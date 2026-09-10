@@ -50,11 +50,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type MetricsOnlinePusher interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
-}
-
 type MemberNode struct {
 	ctx context.Context
 

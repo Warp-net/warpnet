@@ -50,17 +50,17 @@ type GossipBroadcaster struct {
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
-const crdtTopic = "/warpnet/stats/1.0.0"
+const statsTopic = "/warpnet/stats/1.0.0"
 
-// NewGossipBroadcaster creates a new Gossip-based broadcaster for the CRDT datastore.
+// NewGossipBroadcaster creates a new Gossip-based broadcaster for CRDT
 func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
 	gb := &GossipBroadcaster{
 		gossip:   gossip,
-		topic:    crdtTopic,
+		topic:    statsTopic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
 	}
-	err := gossip.SubscribeRaw(crdtTopic, func(data []byte) error {
+	err := gossip.SubscribeRaw(statsTopic, func(data []byte) error {
 		gb.Receive(data)
 		return nil
 	})

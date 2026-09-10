@@ -81,8 +81,8 @@ var DefaultResources = relayv2.Resources{
 }
 
 const (
-	DefaultRelayDataLimit     = 32 << 20 // 32 MiB
-	DefaultRelayDurationLimit = 5 * time.Minute
+	DefaultRelayDataLimit     = 1 << 30 // 1 GiB
+	DefaultRelayDurationLimit = time.Hour
 )
 
 func NewRelay(node warpnet.P2PNode) (*relayv2.Relay, error) {

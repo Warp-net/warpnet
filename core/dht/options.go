@@ -31,15 +31,8 @@ type dhtConfig struct {
 	addCallbacks, removeCallbacks []func(info warpnet.WarpPeerID)
 	bootstrapNodes                []warpnet.WarpAddrInfo
 	network                       string
-	admit                         func(warpnet.WarpPeerID) bool
 }
 type Option func(*dhtConfig)
-
-func PeerAdmission(admit func(warpnet.WarpPeerID) bool) Option {
-	return func(c *dhtConfig) {
-		c.admit = admit
-	}
-}
 
 func RoutingStore(store RoutingStorer) Option {
 	return func(c *dhtConfig) {

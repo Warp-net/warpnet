@@ -190,7 +190,14 @@ type (
 type WarpStreamBody struct {
 	WarpStream
 
-	MessageId string
+	MessageId   string
+	PairedAlias bool
+}
+
+func (b *WarpStreamBody) IsPairedAlias() bool { return b.PairedAlias }
+
+type PairedAliasStream interface {
+	IsPairedAlias() bool
 }
 
 type WarpHandlerFunc func(msg []byte, s WarpStream) (any, error)
@@ -225,7 +232,14 @@ func (wh *WarpStreamHandler) String() string {
 const ErrForeignAuthor = WarpError("event did not come from its author's node")
 
 func VerifyAuthorship(s WarpStream, actorNodeId string) error {
-	if actorNodeId != "" && s != nil && s.Conn() != nil && actorNodeId == s.Conn().RemotePeer().String() {
+	if actorNodeId == "" || s == nil || s.Conn() == nil {
+		return ErrForeignAuthor
+	}
+	if actorNodeId == s.Conn().RemotePeer().String() {
+		return nil
+	}
+	p, ok := s.(PairedAliasStream)
+	if ok && p.IsPairedAlias() && actorNodeId == s.Conn().LocalPeer().String() {
 		return nil
 	}
 	return ErrForeignAuthor

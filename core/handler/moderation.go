@@ -32,7 +32,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -69,11 +68,6 @@ type ModerationAuthStorer interface {
 	GetOwner() domain.Owner
 }
 
-// ModerationRater is the slice of the rating the verdict handler needs.
-type ModerationRater interface {
-	Record(subject warpnet.WarpPeerID, k rating.Kind)
-}
-
 // StreamModerationResultHandler receives a verdict from a moderator and
 // applies it locally so this node's view of the offending object is
 // downgraded. Two design notes:
@@ -93,7 +87,6 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
-	rater ModerationRater,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
@@ -139,16 +132,12 @@ func StreamModerationResultHandler(
 			return event.Accepted, nil
 		}
 
-		chargeModeratedNode(rater, userRepo, ev.UserID)
-
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
-				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
-				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoUserID
 			}
 
@@ -177,7 +166,6 @@ func StreamModerationResultHandler(
 
 		case domain.ModerationUserType:
 			if ev.UserID == "" {
-				chargeModerator(rater, moderatorPeer)
 				return nil, ErrNoUserID
 			}
 			if userRepo == nil {
@@ -208,35 +196,11 @@ func StreamModerationResultHandler(
 
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
-			chargeModerator(rater, moderatorPeer)
 			return event.Accepted, nil
 		}
 
 		return event.Accepted, nil
 	}
-}
-
-// chargeModeratedNode charges the node hosting the moderated user.
-func chargeModeratedNode(rater ModerationRater, userRepo ModerationUserUpdater, userID string) {
-	if rater == nil || userRepo == nil || userID == "" {
-		return
-	}
-	user, err := userRepo.Get(userID)
-	if err != nil || user.NodeId == "" {
-		return
-	}
-	nodeID := warpnet.FromStringToPeerID(user.NodeId)
-	if nodeID == "" {
-		return
-	}
-	rater.Record(nodeID, rating.KindModerationUpheld)
-}
-
-func chargeModerator(rater ModerationRater, moderator warpnet.WarpPeerID) {
-	if rater == nil || moderator == "" {
-		return
-	}
-	rater.Record(moderator, rating.KindVerdictMalformed)
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the
