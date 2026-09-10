@@ -198,11 +198,3 @@ func TestSubscribeHandler_ReceivesData(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("subscribed data"), data)
 }
-
-func TestNewRatingGossipBroadcaster_UsesItsOwnTopic(t *testing.T) {
-	mock := &mockGossipPubSub{}
-	gb, err := NewRatingGossipBroadcaster(context.Background(), mock)
-	assert.NoError(t, err)
-	assert.Equal(t, ratingTopic, gb.topic)
-	assert.NotEqual(t, statsTopic, gb.topic, "two CRDTs on one topic would merge each other's deltas")
-}

@@ -806,5 +806,3 @@ func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
 		t.Fatalf("nothing was judged, so nothing may be referenced: %d/%d", safe, unsafe)
 	}
 }
-
-func (stubModeratorNode) Rating() *rating.Handle { return rating.NewHandle() }

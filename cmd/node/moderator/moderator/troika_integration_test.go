@@ -208,5 +208,3 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 		return true
 	}, 10*time.Second, 200*time.Millisecond, "the Final announcement must clear every moderator's round")
 }
-
-func (*troikaConnector) Rating() *rating.Handle { return rating.NewHandle() }
