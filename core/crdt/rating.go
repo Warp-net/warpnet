@@ -127,7 +127,7 @@ func NewCRDTRatingStore(
 
 // Put writes one of this node's own records; the key is derived from the record.
 func (s *CRDTRatingStore) Put(rec domain.RatingRecord) error {
-	if rec.ObserverId != s.nodeID {
+	if rec.ObserverID != s.nodeID {
 		return ErrForeignRatingRecord
 	}
 	key, err := recordKey(rec)
@@ -144,12 +144,12 @@ func (s *CRDTRatingStore) Put(rec domain.RatingRecord) error {
 	return nil
 }
 
-// List returns every replicated record about peerId, own and foreign.
-func (s *CRDTRatingStore) List(peerId string) ([]domain.RatingRecord, error) {
-	if peerId == "" || strings.Contains(peerId, "/") {
+// List returns every replicated record about peerID, own and foreign.
+func (s *CRDTRatingStore) List(peerID string) ([]domain.RatingRecord, error) {
+	if peerID == "" || strings.Contains(peerID, "/") {
 		return nil, ErrMalformedRatingRecord
 	}
-	prefix := recordPrefix + "/" + peerId
+	prefix := recordPrefix + "/" + peerID
 	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: prefix})
 	if err != nil {
 		return nil, fmt.Errorf("crdt rating: query %s: %w", prefix, err)
@@ -187,7 +187,7 @@ func (s *CRDTRatingStore) DeleteExpired(dimension string, beforeBucket int64) er
 			return fmt.Errorf("crdt rating: iterate records: %w", r.Error)
 		}
 		rec, ok := parseRecordKey(r.Key)
-		if !ok || rec.ObserverId != s.nodeID || rec.Dimension != dimension || rec.Bucket >= beforeBucket {
+		if !ok || rec.ObserverID != s.nodeID || rec.Dimension != dimension || rec.Bucket >= beforeBucket {
 			continue
 		}
 		expired = append(expired, r.Key)
@@ -262,16 +262,16 @@ func (s *CRDTRatingStore) Close() error {
 	return s.crdt.Close()
 }
 
-// recordKey is /RATING/record/{peerId}/{observerId}/{dimension}/{bucket}/{generation}.
+// recordKey is /RATING/record/{peerID}/{observerId}/{dimension}/{bucket}/{generation}.
 func recordKey(rec domain.RatingRecord) (ds.Key, error) {
-	for _, part := range []string{rec.PeerId, rec.ObserverId, rec.Dimension, rec.Generation} {
+	for _, part := range []string{rec.PeerID, rec.ObserverID, rec.Dimension, rec.Generation} {
 		if part == "" || strings.Contains(part, "/") {
 			return ds.Key{}, ErrMalformedRatingRecord
 		}
 	}
 	return ds.NewKey(fmt.Sprintf(
 		"%s/%s/%s/%s/%d/%s",
-		recordPrefix, rec.PeerId, rec.ObserverId, rec.Dimension, rec.Bucket, rec.Generation,
+		recordPrefix, rec.PeerID, rec.ObserverID, rec.Dimension, rec.Bucket, rec.Generation,
 	)), nil
 }
 
@@ -292,8 +292,8 @@ func parseRecordKey(key string) (domain.RatingRecord, bool) {
 		return domain.RatingRecord{}, false
 	}
 	return domain.RatingRecord{
-		PeerId:     parts[0],
-		ObserverId: parts[1],
+		PeerID:     parts[0],
+		ObserverID: parts[1],
 		Dimension:  parts[2],
 		Bucket:     bucket,
 		Generation: parts[4],

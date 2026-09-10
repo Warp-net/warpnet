@@ -45,11 +45,11 @@ const (
 type slot struct {
 	observer   string
 	dim        Dimension
-	bucket     int64
+	bucket     bucket
 	generation string
 }
 
-func slotOf(e entry) slot {
+func (e entry) slot() slot {
 	return slot{observer: e.observer, dim: e.dim, bucket: e.bucket, generation: e.generation}
 }
 
@@ -65,9 +65,9 @@ type indexedPeer struct {
 }
 
 // set replaces one record's counts.
-func (p *indexedPeer) set(s slot, counts []kindCount) {
+func (p *indexedPeer) set(s slot, cs []kindCount) {
 	p.mu.Lock()
-	p.slots[s] = counts
+	p.slots[s] = cs
 	p.rev++
 	p.mu.Unlock()
 }
@@ -76,7 +76,7 @@ func (p *indexedPeer) set(s slot, counts []kindCount) {
 func (p *indexedPeer) fill(e entry) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	s := slotOf(e)
+	s := e.slot()
 	if _, ok := p.slots[s]; ok {
 		return
 	}
@@ -84,17 +84,17 @@ func (p *indexedPeer) fill(e entry) {
 	p.rev++
 }
 
-func (p *indexedPeer) entries() ([]entry, uint64) {
+func (p *indexedPeer) entries() (entries, uint64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]entry, 0, len(p.slots))
-	for s, counts := range p.slots {
+	out := make(entries, 0, len(p.slots))
+	for s, cs := range p.slots {
 		out = append(out, entry{
 			observer:   s.observer,
 			dim:        s.dim,
 			bucket:     s.bucket,
 			generation: s.generation,
-			counts:     counts,
+			counts:     cs,
 		})
 	}
 	return out, p.rev
@@ -134,29 +134,29 @@ func newIndexer() (*indexer, error) {
 	return &indexer{peers: peers}, nil
 }
 
-func (i *indexer) get(peerId string) (*indexedPeer, bool) {
-	return i.peers.Get(peerId)
+func (i *indexer) peer(peerID string) (*indexedPeer, bool) {
+	return i.peers.Get(peerID)
 }
 
-func (i *indexer) has(peerId string) bool {
-	return i.peers.Contains(peerId)
+func (i *indexer) has(peerID string) bool {
+	return i.peers.Contains(peerID)
 }
 
-func (i *indexer) add(peerId string) *indexedPeer {
+func (i *indexer) add(peerID string) *indexedPeer {
 	p := &indexedPeer{slots: make(map[slot][]kindCount)}
-	i.peers.Add(peerId, p)
+	i.peers.Add(peerID, p)
 	return p
 }
 
 // update replaces one record of a peer the index already holds. Creating
 // a peer from a single record would shadow the rest of its history in
 // the store, so an unknown peer is left to be loaded whole on its next read.
-func (i *indexer) update(peerId string, e entry) {
-	if p, ok := i.peers.Peek(peerId); ok {
-		p.set(slotOf(e), e.counts)
+func (i *indexer) update(peerID string, e entry) {
+	if p, ok := i.peers.Peek(peerID); ok {
+		p.set(e.slot(), e.counts)
 	}
 }
 
-func (i *indexer) forget(peerId string) {
-	i.peers.Remove(peerId)
+func (i *indexer) forget(peerID string) {
+	i.peers.Remove(peerID)
 }

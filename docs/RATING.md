@@ -69,14 +69,16 @@ const (
 )
 
 func (d Dimension) String() string
+func (d Dimension) HalfLife() time.Duration   // 12 h on Network, 7 d elsewhere
+func (d Dimension) Retention() time.Duration  // eight half-lives
 func ParseDimension(s string) (Dimension, bool)
 
-// DimensionsFor maps warpnet.NodeInfo.Type to the axes that node tracks.
+// Dimensions maps warpnet.NodeInfo.Type to the axes that node tracks.
 //   warpnet.RelayNode     -> {Network}
 //   warpnet.MemberNode    -> {Network, Application}
 //   warpnet.ModeratorNode -> {Network, Moderation}
 //   unknown               -> {Network}
-func DimensionsFor(nodeType string) []Dimension
+func Dimensions(nodeType string) []Dimension
 ```
 
 A node writes only the dimensions its own role can witness, and reads only the
@@ -102,8 +104,8 @@ const (
     TierFloor                // 0..199     minimum priority, gossipsub graylist range
 )
 
-func TierOf(s Score) Tier
-func (b Tier) String() string
+func (s Score) Tier() Tier
+func (t Tier) String() string
 ```
 
 A node's overall score is the **minimum** across the dimensions its role tracks:
@@ -129,20 +131,21 @@ score(subject, dim)   = clamp(MaxScore - penalty, MinScore, MaxScore)
 ```
 
 ```go
-// core/rating/aggregate.go
-const BucketDuration = time.Hour
+// core/rating/rating.go
+func (d Dimension) HalfLife() time.Duration
+func (d Dimension) Retention() time.Duration // eight half-lives: older records are
+                                             // ignored on read and deleted by their author
+func (d Dimension) decay(age time.Duration) float64
 
-var halfLife = map[Dimension]time.Duration{
-    Network:     12 * time.Hour,
-    Application: 7 * 24 * time.Hour,
-    Moderation:  7 * 24 * time.Hour,
-}
+// core/rating/entries.go — one peer's records and the arithmetic over them
+type bucket int64                              // unix hour
+func bucketAt(t time.Time) bucket
+func (b bucket) start() time.Time
 
-// retention is how far back records still contribute; older ones are
-// ignored on read and GC'd by their author.
-func retention(d Dimension) time.Duration { return 8 * halfLife[d] }
-
-func decayFactor(age, half time.Duration) float64
+type entries []entry
+func (es entries) penalty(dim Dimension, now time.Time) Score
+func (es entries) median(dim Dimension, now time.Time) (Score, int)
+func (es entries) tallies(dim Dimension) []domain.OffenceTally
 ```
 
 | Dimension | Half-life | Retention | Rationale |
@@ -206,7 +209,7 @@ func (k Kind) Weight() int32
 func (k Kind) Ceiling() int32
 func (k Kind) String() string   // stable wire/UI name, e.g. "bad_signature"
 func (k Kind) Valid() bool
-func KindByName(s string) (Kind, bool)
+func ParseKind(name string) (Kind, bool)
 ```
 
 ### 4.1 Network — every node type
@@ -308,7 +311,7 @@ exactly the forgery the signature exists to stop.
 **Where the layers meet.** `core/crdt/rating.go` is the database layer: it owns
 the key schema, the JSON encoding, the replication wiring and the merge hooks,
 and it enforces that a node writes and deletes **only its own records**
-(`Put` refuses a foreign `ObserverId`, `DeleteExpired` skips foreign keys).
+(`Put` refuses a foreign `ObserverID`, `DeleteExpired` skips foreign keys).
 `core/rating` is the engine: signing, verification, validation, indexing and
 scoring. The two share `domain.RatingRecord` and nothing else; `core/rating`
 declares the `Storer` interface it needs and `*crdt.CRDTRatingStore` satisfies
@@ -317,11 +320,11 @@ it, so neither package imports the other.
 ### 5.2 Key layout
 
 ```
-/RATING/record/{peerId}/{observerId}/{dimension}/{bucketHour}/{generation}
+/RATING/record/{peerID}/{observerID}/{dimension}/{bucketHour}/{generation}
 ```
 
 Built and parsed only in `core/crdt/rating.go`; the engine never sees a key.
-`List(peerId)` is one prefix query, and a value whose content disagrees with
+`List(peerID)` is one prefix query, and a value whose content disagrees with
 the key it sits under is dropped on read.
 
 `{generation}` is a fresh 128-bit nonce minted once per engine start — the same
@@ -352,8 +355,8 @@ Consequences:
 ```go
 // domain/rating.go — the persisted unit, like domain.Tweet
 type RatingRecord struct {
-    PeerId     string         `json:"peer_id"`
-    ObserverId string         `json:"observer_id"`
+    PeerID     string         `json:"peer_id"`
+    ObserverID string         `json:"observer_id"`
     Dimension  string         `json:"dimension"`   // "net" | "app" | "mod"
     Bucket     int64          `json:"bucket"`      // unix hour
     Generation string         `json:"generation"`  // hex(16 random bytes), one per engine start
@@ -372,34 +375,37 @@ Kinds and dimensions travel by name, not by number, so a renumbered enum can
 never silently change what an old record means.
 
 ```go
-// core/rating/record.go — unexported; the engine is the only user
+// core/rating/record.go — the persisted shape with the engine's behaviour
+// attached; unexported, the engine is the only user
+type record domain.RatingRecord
+
 // signing bytes, canonical and stable across architectures:
 //   peer "|" observer "|" dimension "|" itoa(bucket) "|" generation "|"
 //   for each offence in ascending kind-name order: kind "=" itoa(count) ","
 //   "|" itoa(updatedAt.UnixMilli())
-func signingBytes(rec domain.RatingRecord) []byte
-func signRecord(rec *domain.RatingRecord, priv ed25519.PrivateKey) error
+func (r record) signingBytes() []byte
+func (r *record) sign(priv ed25519.PrivateKey) error
 
-// verifyRecord derives the pubkey from the observer peer id and checks the
+// verify derives the pubkey from the observer peer id and checks the
 // signature — the same trick StreamModerationResultHandler uses.
-func verifyRecord(rec domain.RatingRecord) error
+func (r record) verify() error
 
-// validateRecord enforces the structural rules, independent of signature:
-//   - PeerId and ObserverId parse as peer ids, PeerId != ObserverId
+// validate enforces the structural rules, independent of signature:
+//   - PeerID and ObserverID parse as peer ids, PeerID != ObserverID
 //   - Dimension is known; every kind is known and belongs to it
 //   - Generation is 32 hex characters; Offences is not empty
 //   - Bucket is not in the future beyond one bucket, not older than retention
-func validateRecord(rec domain.RatingRecord, now time.Time) error
+func (r record) validate(now time.Time) error
 ```
 
 Properties this buys:
 
-- **One writer per key, for the key's whole lifetime.** Only `ObserverId` writes
+- **One writer per key, for the key's whole lifetime.** Only `ObserverID` writes
   `.../{observerId}/...`, the store refuses anything else, and only one process
   ever owns a given `{generation}`. LWW inside the key is therefore trivially
   safe: no read-modify-write, no eventual-consistency window, and no way for a
   restarted process to clobber its own replayed history (§5.2).
-- **`PeerId == ObserverId` is invalid** and dropped on read. A node cannot rate
+- **`PeerID == ObserverID` is invalid** and dropped on read. A node cannot rate
   itself by construction, not by convention.
 - **Restart-safe by the same argument as the stats store.** A stateless node
   that comes back with an empty datastore mints a fresh generation, starts a new
@@ -468,10 +474,17 @@ in-memory index and answers scores from arithmetic only:
 type indexer struct {
     peers *lru.Cache[string, *indexedPeer] // peer -> its complete record set + memoised score
 }
+
+// core/rating/engine.go — scoring is the engine's, because it depends on
+// who this node is, whom it trusts and whom it is connected to
+func (e *Engine) score(es entries, dim Dimension, now time.Time) Score     // local, enforced
+func (e *Engine) firstHand(es entries, dim Dimension, now time.Time) Score // own evidence only
+func (e *Engine) weight(observer string) float64                           // firstHand(observer) / MaxScore
+func (e *Engine) acquainted(observer string) bool                          // connected >= 1 h
 ```
 
 - **Loaded lazily, one peer at a time.** The first score of a peer is one
-  `Storer.List(peerId)`; there is no startup scan. A peer nobody has observed
+  `Storer.List(peerID)`; there is no startup scan. A peer nobody has observed
   is indexed empty, so it is not re-queried on every request.
 - **Kept current by the store's merge hooks.** A merged record updates the
   peer's slot if the peer is indexed; a deletion forgets the peer, which is
@@ -494,20 +507,21 @@ type indexer struct {
 ```
 penalty_local(subject, dim) =
       Σ decayed(own observations)                           // full weight, uncapped
-  +   min( Σ_i min( decayed(obs_i) × w(observer_i), CapPerObserver ),
-           CapRemoteTotal )
+  +   min( Σ_i min( decayed(obs_i) × w(observer_i), capPerObserver ),
+           capRemoteTotal )
 
 w(observer) = score_local(observer) / MaxScore
 ```
 
 ```go
+// core/rating/engine.go
 const (
-    CapPerObserver Score = 150
-    CapRemoteTotal Score = 400
-    // MinAcquaintance: a remote observer's records are ignored until we
+    capPerObserver Score = 150
+    capRemoteTotal Score = 400
+    // minAcquaintance: a remote observer's records are ignored until we
     // have been connected to it for this long in this session. A
     // drive-by accuser has no voice.
-    MinAcquaintance = time.Hour
+    minAcquaintance = time.Hour
 )
 ```
 
@@ -520,7 +534,7 @@ touches a rate limiter, a priority tag or a peer score.
 
 ### 6.3 The invariant that makes slander survivable
 
-`CapRemoteTotal = 400` means **remote observations alone can never push a peer
+`capRemoteTotal = 400` means **remote observations alone can never push a peer
 below 600** — the bottom of `TierWatched`. Reaching `TierDegraded` or
 `TierFloor` requires first-hand evidence gathered on our own wire.
 
@@ -533,11 +547,11 @@ own test (§10, Stage 1).
 ### 6.4 Where the score is applied
 
 ```go
-// core/rating/enforce.go — pure mappings, no dependencies, trivially testable
-func ConnTagValue(b Tier) int        // 60 / 30 / 10 / 1
-func GossipAppScore(b Tier) float64  // 0 / -10 / -60 / -200
-func LimitMultiplier(b Tier) float64 // 1.0 / 0.5 / 0.25 / 0.1
-func AllowInDHT(b Tier) bool         // false only for TierFloor
+// core/rating/enforce.go — pure mappings on the tier, no dependencies
+func (t Tier) ConnTag() int             // 60 / 30 / 10 / 1
+func (t Tier) GossipScore() float64     // 0 / -10 / -60 / -200
+func (t Tier) LimitMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
+func (t Tier) AllowedInDHT() bool       // false only for TierFloor
 ```
 
 | Surface | Change | File |
@@ -599,7 +613,7 @@ type GetRatingEvent struct {
 ```go
 // domain/rating.go
 type NodeRating struct {
-    NodeId     string            `json:"node_id"`
+    NodeID     string            `json:"node_id"`
     Overall    int32             `json:"overall"`
     Tier       string            `json:"tier"`
     Dimensions []DimensionRating `json:"dimensions"`
@@ -653,7 +667,7 @@ UI:
 // *crdt.CRDTRatingStore satisfies it.
 type Storer interface {
     Put(rec domain.RatingRecord) error                     // own records only
-    List(peerId string) ([]domain.RatingRecord, error)     // own and foreign
+    List(peerID string) ([]domain.RatingRecord, error)     // own and foreign
     DeleteExpired(dimension string, beforeBucket int64) error
     OnPut(hook func(domain.RatingRecord))                  // every merged record
     OnDelete(hook func(domain.RatingRecord))               // key fields only
@@ -677,16 +691,16 @@ func NewEngine(
 // write path — non-blocking, buffered, folded into hour buckets, signed and
 // written every 30 s. Misuse (an unknown kind, a dimension this role cannot
 // witness) is a bug at the call site, so it is logged, not returned.
-func (e *Engine) Record(peerId warpnet.WarpPeerID, kind Kind)
+func (e *Engine) Record(peerID warpnet.WarpPeerID, kind Kind)
 
 // read path — in-memory arithmetic, memoised per peer. Fail-open: a peer
 // whose records cannot be read scores MaxScore, because an enforcement
-// point must not act on evidence it has not seen.
-func (e *Engine) Score(peerId warpnet.WarpPeerID) Score
-func (e *Engine) Tier(peerId warpnet.WarpPeerID) Tier
+// point must not act on evidence it has not seen. Enforcement points act
+// on Score(peer).Tier().
+func (e *Engine) Score(peerID warpnet.WarpPeerID) Score
 
 // display — the public aggregate (§6.2) and what the network says about us
-func (e *Engine) View(peerId warpnet.WarpPeerID) (domain.NodeRating, error)
+func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
 func (e *Engine) Own() (domain.NodeRating, error)
 
 func (e *Engine) Close() error // final flush; the store is closed by whoever built it
@@ -697,7 +711,7 @@ A nil `*Engine` is safe on every method and penalises nobody: that is the
 
 Consumers depend on the engine the way the rest of the tree depends on
 anything — through an interface they declare themselves with the one or two
-methods they call (`Tier` for an enforcement point, `Record` for a detection
+methods they call (`Score` for an enforcement point, `Record` for a detection
 site, `View`/`Own` for the handlers). There is no shared handle object and
 nothing to inject before the engine exists: `core/node` already exposes
 `WarpNode.Event()`, and the intended write path is a consumer goroutine that
@@ -760,13 +774,13 @@ New files:
 
 | File | Contents |
 |---|---|
-| `core/rating/rating.go` | `Dimension`, `Score`, `Tier`, `TierOf`, `DimensionsFor` |
-| `core/rating/offence.go` | `Kind`, catalogue, accessors |
-| `core/rating/record.go` | signing bytes, sign, verify, validate over `domain.RatingRecord`; generation minting |
+| `core/rating/rating.go` | `Dimension` with its half-life and retention, `Score` with its `Tier`, `Dimensions` per node type |
+| `core/rating/offence.go` | `Kind`, catalogue, accessors, `ParseKind` |
+| `core/rating/record.go` | `record`: signing bytes, sign, verify, validate; generation minting |
+| `core/rating/entries.go` | `bucket`, `entries`: decay, generation summing, penalty, median, tallies |
 | `core/rating/indexer.go` | lazily loaded per-peer index, memoised scores, LRU eviction |
-| `core/rating/aggregate.go` | decay, generation summing, local and public aggregation, caps |
-| `core/rating/enforce.go` | pure tier → knob mappings |
-| `core/rating/engine.go` | `Engine`, `Storer`, `ConnectionsProvider`, buffered writer, flush, GC, merge hooks |
+| `core/rating/enforce.go` | `Tier` methods: the enforcement knobs |
+| `core/rating/engine.go` | `Engine`, `Storer`, `ConnectionsProvider`, local scoring, buffered writer, flush, GC, merge hooks |
 | `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` |
 | `frontend/src/views/Settings/Rating.vue` | own rating, per-dimension bars, recent offences |
 
@@ -799,7 +813,7 @@ Tests:
 |---|---|
 | `record_test.go` | signing bytes are canonical and order-independent; `Verify` rejects a foreign signature; `Validate` rejects `Subject == Observer`, unknown kinds, a kind from the wrong dimension, a malformed generation, an out-of-window bucket |
 | `record_test.go` | an unsigned/forged record is dropped and charges nobody; a correctly signed but structurally illegal one charges its observer `KindForgedRecord` (§5.4) |
-| `aggregate_test.go` | decay is deterministic and monotonic; a record exactly one half-life old contributes half its weight; generations under one bucket are summed, not overwritten; kind ceilings hold; `CapPerObserver` and `CapRemoteTotal` hold |
+| `aggregate_test.go` | decay is deterministic and monotonic; a record exactly one half-life old contributes half its weight; generations under one bucket are summed, not overwritten; kind ceilings hold; `capPerObserver` and `capRemoteTotal` hold |
 | `aggregate_test.go` | **the §6.3 invariant**: any number of remote observers, any number of records, score never < 600 |
 | `aggregate_test.go` | first-hand evidence alone reaches `TierFloor` |
 | `engine_test.go` | `Record` is non-blocking under a stalled store; buckets fold correctly; flush writes exactly one record per (peer, dim, bucket, generation) |
@@ -807,7 +821,7 @@ Tests:
 | `engine_test.go` | eviction never issues a CRDT delete; an evicted peer scores identically after falling back to a prefix query; a forgery is charged once however often its victim is reloaded |
 | `core/crdt/rating_test.go` | own-records-only writes and deletes; key/value consistency; hooks fire for local and replicated records; every write is broadcast |
 | `enforce_test.go` | tier → tag/score/multiplier/DHT mappings; the floor multiplier still serves a peer |
-| `rating_test.go` | `DimensionsFor` per node type; overall = min over dimensions |
+| `rating_test.go` | `Dimensions` per node type; overall = min over dimensions |
 | `core/handler/rating_test.go` | own rating excludes self-authored records; `PUBLIC_GET_RATING` response shape |
 | `core/discovery/discovery_test.go` | (b) a second discovery event for a known peer issues no `PUBLIC_GET_INFO`; (d) one peer cannot exhaust the global budget; (f) a backoffed peer is not redialled |
 | `core/handler/info_test.go` | (a) answering info does not enqueue an already-connected peer |
@@ -934,7 +948,7 @@ Stated plainly, in the spirit of `cmd/node/moderator/audit/doc.go`.
 2. **Should relays observe the application dimension?** They see enough traffic
    to notice write floods, but scoring content-adjacent behaviour from a node
    with no user context invites false positives. Plan says no.
-3. **`MinAcquaintance` on a mobile-heavy network.** One hour of connection before
+3. **`minAcquaintance` on a mobile-heavy network.** One hour of connection before
    an observer counts may be too long for peers that are online in short bursts.
    Worth measuring on a testnet before fixing the constant.
 4. **Retuning the constants.** Whether a weight change is an ordinary release

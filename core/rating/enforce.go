@@ -27,8 +27,12 @@
 
 package rating
 
-func ConnTagValue(b Tier) int {
-	switch b {
+// GossipGraylistThreshold is the gossipsub score below which a peer is graylisted.
+const GossipGraylistThreshold = -100
+
+// ConnTag is the connection manager's tag value for a peer of this tier.
+func (t Tier) ConnTag() int {
+	switch t {
 	case TierTrusted:
 		return 60
 	case TierWatched:
@@ -42,8 +46,9 @@ func ConnTagValue(b Tier) int {
 	}
 }
 
-func GossipAppScore(b Tier) float64 {
-	switch b {
+// GossipScore is the application-specific gossipsub score for this tier.
+func (t Tier) GossipScore() float64 {
+	switch t {
 	case TierTrusted:
 		return 0
 	case TierWatched:
@@ -57,11 +62,10 @@ func GossipAppScore(b Tier) float64 {
 	}
 }
 
-const GossipGraylistThreshold = -100
-
-// LimitMultiplier scales a route's burst and per-minute allowance.
-func LimitMultiplier(b Tier) float64 {
-	switch b {
+// LimitMultiplier scales a route's burst and per-minute allowance. It never
+// reaches zero: a low tier slows a peer down, it does not refuse it service.
+func (t Tier) LimitMultiplier() float64 {
+	switch t {
 	case TierTrusted:
 		return 1
 	case TierWatched:
@@ -75,6 +79,7 @@ func LimitMultiplier(b Tier) float64 {
 	}
 }
 
-func AllowInDHT(b Tier) bool {
-	return b != TierFloor
+// AllowedInDHT reports whether peers of this tier stay in the routing table.
+func (t Tier) AllowedInDHT() bool {
+	return t != TierFloor
 }

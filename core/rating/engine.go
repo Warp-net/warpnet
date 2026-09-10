@@ -25,6 +25,7 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// Package rating rates peers by the offences their neighbours witness and replicate.
 package rating
 
 import (
@@ -46,12 +47,28 @@ const (
 	defaultFlushInterval = 30 * time.Second
 	gcInterval           = time.Hour
 	closeTimeout         = 5 * time.Second
+
+	// capPerObserver and capRemoteTotal bound what remote evidence can do:
+	// on its own it never pushes a peer below TierWatched.
+	capPerObserver Score = 150
+	capRemoteTotal Score = 400
+
+	// minAcquaintance is how long this node must have been connected to an
+	// observer before its records count. A drive-by accuser has no voice.
+	minAcquaintance = time.Hour
+)
+
+// Errors NewEngine returns for missing dependencies.
+const (
+	ErrNilStore           = ratingError("record store is nil")
+	ErrNilConnections     = ratingError("connections provider is nil")
+	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
 // Storer is the replicated record store; crdt.CRDTRatingStore satisfies it.
 type Storer interface {
 	Put(rec domain.RatingRecord) error
-	List(peerId string) ([]domain.RatingRecord, error)
+	List(peerID string) ([]domain.RatingRecord, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
 	OnPut(hook func(domain.RatingRecord))
 	OnDelete(hook func(domain.RatingRecord))
@@ -63,6 +80,7 @@ type ConnectionsProvider interface {
 	ConnsToPeer(id warpnet.WarpPeerID) []network.Conn
 }
 
+// Option configures an Engine at construction.
 type Option func(*Engine)
 
 // WithClock replaces the wall clock: buckets, decay and retention follow it.
@@ -84,9 +102,9 @@ func WithFlushInterval(d time.Duration) Option {
 }
 
 type pendingKey struct {
-	peerId string
+	peerID string
 	dim    Dimension
-	bucket int64
+	bucket bucket
 }
 
 // Engine is a node's rating of its peers: it records what this node
@@ -108,7 +126,7 @@ type Engine struct {
 	index *indexer
 
 	mu       sync.Mutex
-	counters map[pendingKey]map[Kind]uint32
+	counters map[pendingKey]counts
 	dirty    map[pendingKey]struct{}
 
 	loadMx sync.Mutex
@@ -155,14 +173,14 @@ func NewEngine(
 		cancel:        cancel,
 		self:          self.String(),
 		privKey:       privKey,
-		dims:          DimensionsFor(nodeType),
+		dims:          Dimensions(nodeType),
 		generation:    generation,
 		now:           time.Now,
 		flushInterval: defaultFlushInterval,
 		store:         store,
 		conns:         conns,
 		index:         index,
-		counters:      make(map[pendingKey]map[Kind]uint32),
+		counters:      make(map[pendingKey]counts),
 		dirty:         make(map[pendingKey]struct{}),
 		done:          make(chan struct{}),
 	}
@@ -180,11 +198,11 @@ func NewEngine(
 // Record charges one offence to a peer. It never blocks on the store. A
 // kind this node's role cannot witness is a bug at the call site, not
 // misbehaviour by the peer, so it is logged and dropped.
-func (e *Engine) Record(peerId warpnet.WarpPeerID, kind Kind) {
+func (e *Engine) Record(peerID warpnet.WarpPeerID, kind Kind) {
 	if e == nil {
 		return
 	}
-	id := peerId.String()
+	id := peerID.String()
 	if id == "" || id == e.self {
 		return
 	}
@@ -197,15 +215,15 @@ func (e *Engine) Record(peerId warpnet.WarpPeerID, kind Kind) {
 		return
 	}
 
-	key := pendingKey{peerId: id, dim: kind.Dimension(), bucket: BucketOf(e.now())}
+	key := pendingKey{peerID: id, dim: kind.Dimension(), bucket: bucketAt(e.now())}
 
 	e.mu.Lock()
-	counts, ok := e.counters[key]
+	c, ok := e.counters[key]
 	if !ok {
-		counts = make(map[Kind]uint32, 1)
-		e.counters[key] = counts
+		c = make(counts, 1)
+		e.counters[key] = c
 	}
-	counts[kind]++
+	c[kind]++
 	e.dirty[key] = struct{}{}
 	e.mu.Unlock()
 }
@@ -214,11 +232,11 @@ func (e *Engine) Record(peerId warpnet.WarpPeerID, kind Kind) {
 // dimensions it has evidence in. Fail-open: a peer whose records cannot
 // be read costs nothing, because an enforcement point must not act on
 // evidence it has not seen.
-func (e *Engine) Score(peerId warpnet.WarpPeerID) Score {
+func (e *Engine) Score(peerID warpnet.WarpPeerID) Score {
 	if e == nil {
 		return MaxScore
 	}
-	id := peerId.String()
+	id := peerID.String()
 	if id == "" {
 		return MaxScore
 	}
@@ -232,27 +250,21 @@ func (e *Engine) Score(peerId warpnet.WarpPeerID) Score {
 		return score
 	}
 
-	obs, rev := p.entries()
+	es, rev := p.entries()
 	worst := MaxScore
-	for _, dim := range dimensionsPresent(obs) {
-		if sc := localScore(obs, dim, e.self, now, e.weightOf, e.countsTowardScore); sc < worst {
-			worst = sc
-		}
+	for _, dim := range es.dimensions() {
+		worst = min(worst, e.score(es, dim, now))
 	}
 	p.setScore(worst, now, rev)
 	return worst
 }
 
-func (e *Engine) Tier(peerId warpnet.WarpPeerID) Tier {
-	return TierOf(e.Score(peerId))
-}
-
 // View is the public aggregate of a peer, for display: the unweighted
 // median over observers per dimension, with raw recent counts.
-func (e *Engine) View(peerId warpnet.WarpPeerID) (domain.NodeRating, error) {
-	id := peerId.String()
+func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
+	id := peerID.String()
 	result := domain.NodeRating{
-		NodeId:    id,
+		NodeID:    id,
 		Overall:   int32(MaxScore),
 		Tier:      TierTrusted.String(),
 		UpdatedAt: time.Now().UTC(),
@@ -265,29 +277,27 @@ func (e *Engine) View(peerId warpnet.WarpPeerID) (domain.NodeRating, error) {
 	if err != nil {
 		return result, err
 	}
-	obs, _ := p.entries()
+	es, _ := p.entries()
 	now := e.now()
 	overall := MaxScore
-	observers := make(map[string]struct{})
+	observers := make(map[string]struct{}, len(es))
 
-	for _, dim := range dimensionsPresent(obs) {
-		score, _ := publicScore(obs, dim, now)
-		if score < overall {
-			overall = score
-		}
+	for _, dim := range es.dimensions() {
+		score, _ := es.median(dim, now)
+		overall = min(overall, score)
 		result.Dimensions = append(result.Dimensions, domain.DimensionRating{
 			Name:   dim.String(),
 			Score:  int32(score),
-			Tier:   TierOf(score).String(),
-			Recent: tallyDTOs(recentTallies(obs, dim)),
+			Tier:   score.Tier().String(),
+			Recent: es.tallies(dim),
 		})
 	}
-	for _, o := range obs {
-		observers[o.observer] = struct{}{}
+	for _, en := range es {
+		observers[en.observer] = struct{}{}
 	}
 
 	result.Overall = int32(overall)
-	result.Tier = TierOf(overall).String()
+	result.Tier = overall.Tier().String()
 	result.Observers = len(observers)
 	result.UpdatedAt = now.UTC()
 	return result, nil
@@ -318,29 +328,17 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-func tallyDTOs(in []tally) []domain.OffenceTally {
-	out := make([]domain.OffenceTally, 0, len(in))
-	for _, t := range in {
-		out = append(out, domain.OffenceTally{
-			Kind:   t.kind.String(),
-			Count:  t.count,
-			LastAt: t.lastAt,
-		})
-	}
-	return out
-}
-
 // peer returns a peer's indexed record set, loading it whole from the
 // store on first use. A failed load is not remembered, so it is retried
 // on the next read instead of reading as an empty peer.
 func (e *Engine) peer(id string) (*indexedPeer, error) {
-	if p, ok := e.index.get(id); ok {
+	if p, ok := e.index.peer(id); ok {
 		return p, nil
 	}
 
 	e.loadMx.Lock()
 	defer e.loadMx.Unlock()
-	if p, ok := e.index.get(id); ok {
+	if p, ok := e.index.peer(id); ok {
 		return p, nil
 	}
 
@@ -364,22 +362,23 @@ func (e *Engine) peer(id string) (*indexedPeer, error) {
 // authenticate checks one replicated record: its signature against the
 // observer's peer id, then the structural rules.
 func (e *Engine) authenticate(rec domain.RatingRecord) (entry, error) {
-	if err := verifyRecord(rec); err != nil {
+	r := record(rec)
+	if err := r.verify(); err != nil {
 		return entry{}, err
 	}
-	if err := validateRecord(rec, e.now()); err != nil {
+	if err := r.validate(e.now()); err != nil {
 		return entry{}, err
 	}
-	return entryOf(rec), nil
+	return r.entry(), nil
 }
 
-// forged is a record that verifies but breaks the structural rules: its
-// observer really authored it. An unverifiable record names an observer
-// that may be innocent, and a record outside the time window is merely
-// late, so neither is anyone's fault.
-func forged(err error) bool {
+// isForgery reports a record that verifies but breaks the structural
+// rules: its observer really authored it. An unverifiable record names
+// an observer that may be innocent, and a record outside the time window
+// is merely late, so neither is anyone's fault.
+func isForgery(err error) bool {
 	for _, structural := range []error{
-		ErrRecordSelfRated, ErrRecordBadPeerId, ErrRecordBadDimension,
+		ErrRecordSelfRated, ErrRecordBadPeerID, ErrRecordBadDimension,
 		ErrRecordBadGeneration, ErrRecordEmptyOffences, ErrRecordBadKind,
 	} {
 		if errors.Is(err, structural) {
@@ -394,43 +393,69 @@ func forged(err error) bool {
 func (e *Engine) onPut(rec domain.RatingRecord) {
 	en, err := e.authenticate(rec)
 	if err != nil {
-		if forged(err) {
-			log.Warnf("rating: observer %s authored an invalid record: %v", rec.ObserverId, err)
-			e.Record(warpnet.FromStringToPeerID(rec.ObserverId), KindForgedRecord)
+		if isForgery(err) {
+			log.Warnf("rating: observer %s authored an invalid record: %v", rec.ObserverID, err)
+			e.Record(warpnet.FromStringToPeerID(rec.ObserverID), KindForgedRecord)
 			return
 		}
-		log.Debugf("rating: dropping merged record about %s: %v", rec.PeerId, err)
+		log.Debugf("rating: dropping merged record about %s: %v", rec.PeerID, err)
 		return
 	}
-	e.index.update(rec.PeerId, en)
+	e.index.update(rec.PeerID, en)
 }
 
 func (e *Engine) onDelete(rec domain.RatingRecord) {
-	e.index.forget(rec.PeerId)
+	e.index.forget(rec.PeerID)
 }
 
-// weightOf discounts an observer by its own first-hand standing with us.
+// score is this node's own view of one dimension: first-hand evidence at
+// full weight, remote observers weighted by their standing and capped, so
+// remote evidence alone never reaches TierDegraded.
+func (e *Engine) score(es entries, dim Dimension, now time.Time) Score {
+	byObserver := es.byObserver(dim)
+
+	own := byObserver[e.self].penalty(dim, now)
+
+	var remote Score
+	for observer, group := range byObserver {
+		if observer == e.self || !e.acquainted(observer) {
+			continue
+		}
+		weighted := Score(float64(group.penalty(dim, now)) * e.weight(observer))
+		remote += min(weighted, capPerObserver)
+	}
+	remote = min(remote, capRemoteTotal)
+
+	return (MaxScore - own - remote).clamp()
+}
+
+// firstHand is the score from this node's own evidence alone.
+func (e *Engine) firstHand(es entries, dim Dimension, now time.Time) Score {
+	return (MaxScore - es.byObserver(dim)[e.self].penalty(dim, now)).clamp()
+}
+
+// weight discounts an observer by its first-hand standing with us.
 // First-hand only, so the recursion stops here.
-func (e *Engine) weightOf(observer string) float64 {
+func (e *Engine) weight(observer string) float64 {
 	p, err := e.peer(observer)
 	if err != nil {
 		return 1
 	}
-	obs, _ := p.entries()
-	if len(obs) == 0 {
+	es, _ := p.entries()
+	if len(es) == 0 {
 		return 1
 	}
 	now := e.now()
 	worst := MaxScore
-	for _, dim := range dimensionsPresent(obs) {
-		if sc := ownOnlyScore(obs, dim, e.self, now); sc < worst {
-			worst = sc
-		}
+	for _, dim := range es.dimensions() {
+		worst = min(worst, e.firstHand(es, dim, now))
 	}
 	return float64(worst) / float64(MaxScore)
 }
 
-func (e *Engine) countsTowardScore(observer string) bool {
+// acquainted reports whether this node has been connected to an observer
+// long enough for its records to count.
+func (e *Engine) acquainted(observer string) bool {
 	id := warpnet.FromStringToPeerID(observer)
 	if id == "" {
 		return false
@@ -444,7 +469,7 @@ func (e *Engine) countsTowardScore(observer string) bool {
 	if oldest.IsZero() {
 		return false
 	}
-	return e.now().Sub(oldest) >= MinAcquaintance
+	return e.now().Sub(oldest) >= minAcquaintance
 }
 
 func (e *Engine) run() {
@@ -479,7 +504,7 @@ func (e *Engine) flush() error {
 	e.mu.Lock()
 	pending := make(map[pendingKey][]domain.OffenceCount, len(e.dirty))
 	for key := range e.dirty {
-		pending[key] = offencesOf(e.counters[key])
+		pending[key] = e.counters[key].offences()
 	}
 	e.mu.Unlock()
 
@@ -490,24 +515,25 @@ func (e *Engine) flush() error {
 	var errs []error
 	now := e.now().UTC()
 	for key, offences := range pending {
-		rec := domain.RatingRecord{
-			PeerId:     key.peerId,
-			ObserverId: e.self,
+		rec := record{
+			PeerID:     key.peerID,
+			ObserverID: e.self,
 			Dimension:  key.dim.String(),
-			Bucket:     key.bucket,
+			Bucket:     int64(key.bucket),
 			Generation: e.generation,
 			Offences:   offences,
 			UpdatedAt:  now,
 		}
-		if err := signRecord(&rec, e.privKey); err != nil {
-			errs = append(errs, fmt.Errorf("sign record for %s: %w", key.peerId, err))
+		rec, err := rec.signed(e.privKey)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("sign record for %s: %w", key.peerID, err))
 			continue
 		}
-		if err := e.store.Put(rec); err != nil {
-			errs = append(errs, fmt.Errorf("write record for %s: %w", key.peerId, err))
+		if err := e.store.Put(domain.RatingRecord(rec)); err != nil {
+			errs = append(errs, fmt.Errorf("write record for %s: %w", key.peerID, err))
 			continue
 		}
-		e.index.update(rec.PeerId, entryOf(rec))
+		e.index.update(rec.PeerID, rec.entry())
 		e.clearIfUnchanged(key, offences)
 	}
 	e.dropSettledBuckets()
@@ -517,7 +543,7 @@ func (e *Engine) flush() error {
 func (e *Engine) clearIfUnchanged(key pendingKey, written []domain.OffenceCount) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if slices.Equal(offencesOf(e.counters[key]), written) {
+	if slices.Equal(e.counters[key].offences(), written) {
 		delete(e.dirty, key)
 	}
 }
@@ -525,7 +551,7 @@ func (e *Engine) clearIfUnchanged(key pendingKey, written []domain.OffenceCount)
 // dropSettledBuckets frees the counters of past hours: Record only ever
 // writes the current bucket, so a flushed past bucket never changes again.
 func (e *Engine) dropSettledBuckets() {
-	current := BucketOf(e.now())
+	current := bucketAt(e.now())
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for key := range e.counters {
@@ -544,8 +570,8 @@ func (e *Engine) dropSettledBuckets() {
 func (e *Engine) gc() {
 	now := e.now()
 	for _, dim := range e.dims {
-		cutoff := BucketOf(now.Add(-retention(dim)))
-		if err := e.store.DeleteExpired(dim.String(), cutoff); err != nil {
+		cutoff := bucketAt(now.Add(-dim.Retention()))
+		if err := e.store.DeleteExpired(dim.String(), int64(cutoff)); err != nil {
 			log.Warnf("rating: gc %s: %v", dim, err)
 		}
 	}

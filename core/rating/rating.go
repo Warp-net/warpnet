@@ -28,11 +28,16 @@
 package rating
 
 import (
+	"math"
+	"time"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 const unknownName = "unknown"
 
+// Dimension is one axis of a node's behaviour. A node witnesses only the
+// dimensions its role can observe.
 type Dimension uint8
 
 const (
@@ -41,6 +46,10 @@ const (
 	Moderation                   // moderator nodes
 )
 
+// retentionHalfLives is how many half-lives a record stays relevant.
+const retentionHalfLives = 8
+
+// String is the wire name of the dimension.
 func (d Dimension) String() string {
 	switch d {
 	case Network:
@@ -54,6 +63,42 @@ func (d Dimension) String() string {
 	}
 }
 
+// Valid reports whether d is a known dimension.
+func (d Dimension) Valid() bool {
+	return d == Network || d == Application || d == Moderation
+}
+
+// HalfLife is the time a penalty on this dimension takes to halve.
+func (d Dimension) HalfLife() time.Duration {
+	switch d {
+	case Network:
+		return 12 * time.Hour
+	case Application, Moderation:
+		return 7 * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+// Retention is how long a record on this dimension still counts; older
+// records are ignored on read and deleted by their author.
+func (d Dimension) Retention() time.Duration {
+	return retentionHalfLives * d.HalfLife()
+}
+
+// decay is the weight left on evidence of the given age.
+func (d Dimension) decay(age time.Duration) float64 {
+	if age <= 0 {
+		return 1
+	}
+	half := d.HalfLife()
+	if half <= 0 {
+		return 0
+	}
+	return math.Exp2(-age.Hours() / half.Hours())
+}
+
+// ParseDimension resolves a dimension from its wire name.
 func ParseDimension(s string) (Dimension, bool) {
 	switch s {
 	case "net":
@@ -67,40 +112,32 @@ func ParseDimension(s string) (Dimension, bool) {
 	}
 }
 
-func (d Dimension) Valid() bool {
-	return d == Network || d == Application || d == Moderation
-}
-
-func DimensionsFor(nodeType string) []Dimension {
+// Dimensions lists what a node of the given type can witness.
+func Dimensions(nodeType string) []Dimension {
 	switch nodeType {
 	case warpnet.MemberNode:
 		return []Dimension{Network, Application}
 	case warpnet.ModeratorNode:
 		return []Dimension{Network, Moderation}
-	case warpnet.RelayNode:
-		return []Dimension{Network}
 	default:
 		return []Dimension{Network}
 	}
 }
 
+// Score is a peer's standing. A peer nobody has observed holds MaxScore.
 type Score int32
 
+// MaxScore is full trust and MinScore the floor; every score lies between them.
 const (
 	MaxScore Score = 1000
 	MinScore Score = 0
 )
 
 func (s Score) clamp() Score {
-	if s > MaxScore {
-		return MaxScore
-	}
-	if s < MinScore {
-		return MinScore
-	}
-	return s
+	return max(MinScore, min(MaxScore, s))
 }
 
+// Tier is the coarse standing that enforcement acts on.
 type Tier uint8
 
 const (
@@ -116,7 +153,8 @@ const (
 	degradedFloor Score = 200
 )
 
-func TierOf(s Score) Tier {
+// Tier is the coarse standing this score falls into.
+func (s Score) Tier() Tier {
 	switch {
 	case s >= trustedFloor:
 		return TierTrusted
@@ -129,8 +167,9 @@ func TierOf(s Score) Tier {
 	}
 }
 
-func (b Tier) String() string {
-	switch b {
+// String is the wire name of the tier.
+func (t Tier) String() string {
+	switch t {
 	case TierTrusted:
 		return "trusted"
 	case TierWatched:

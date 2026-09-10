@@ -30,10 +30,10 @@ package domain
 import "time"
 
 // RatingRecord is one node's signed count of another node's offences
-// within one hour bucket. Only ObserverId ever writes it.
+// within one hour bucket. Only ObserverID ever writes it.
 type RatingRecord struct {
-	PeerId     string         `json:"peer_id"`
-	ObserverId string         `json:"observer_id"`
+	PeerID     string         `json:"peer_id"`
+	ObserverID string         `json:"observer_id"`
 	Dimension  string         `json:"dimension"`
 	Bucket     int64          `json:"bucket"` // unix hour
 	Generation string         `json:"generation"`
@@ -42,13 +42,15 @@ type RatingRecord struct {
 	Signature  string         `json:"signature"`
 }
 
+// OffenceCount is how many times one kind of offence was seen.
 type OffenceCount struct {
 	Kind  string `json:"kind"`
 	Count uint32 `json:"count"`
 }
 
+// NodeRating is the public aggregate of a node, for display.
 type NodeRating struct {
-	NodeId     string            `json:"node_id"`
+	NodeID     string            `json:"node_id"`
 	Overall    int32             `json:"overall"`
 	Tier       string            `json:"tier"`
 	Dimensions []DimensionRating `json:"dimensions"`
@@ -56,6 +58,7 @@ type NodeRating struct {
 	UpdatedAt  time.Time         `json:"updated_at"`
 }
 
+// DimensionRating is one axis of a NodeRating.
 type DimensionRating struct {
 	Name   string         `json:"name"`
 	Score  int32          `json:"score"`
@@ -63,6 +66,7 @@ type DimensionRating struct {
 	Recent []OffenceTally `json:"recent"`
 }
 
+// OffenceTally is the recent raw count of one offence kind.
 type OffenceTally struct {
 	Kind   string    `json:"kind"`
 	Count  uint32    `json:"count"`

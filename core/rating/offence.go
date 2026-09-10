@@ -27,6 +27,7 @@
 
 package rating
 
+// Kind is one observable offence.
 type Kind uint16
 
 const (
@@ -61,10 +62,9 @@ type offence struct {
 	name    string
 	dim     Dimension
 	weight  int32
-	ceiling int32
+	ceiling int32 // the most this kind may cost in one penalty; 0 is uncapped
 }
 
-//nolint:gochecknoglobals // a lookup table, not state
 var catalogue = map[Kind]offence{
 	KindBadSignature:       {"bad_signature", Network, 250, 0},
 	KindMissingSignature:   {"missing_signature", Network, 250, 0},
@@ -91,24 +91,22 @@ var catalogue = map[Kind]offence{
 	KindAuditUnreachable: {"audit_unreachable", Moderation, 5, 100},
 }
 
-//nolint:gochecknoglobals // derived from catalogue at init
-var kindsByName = func() map[string]Kind {
-	m := make(map[string]Kind, len(catalogue))
-	for k, o := range catalogue {
-		m[o.name] = k
-	}
-	return m
-}()
-
+// Valid reports whether k is in the catalogue.
 func (k Kind) Valid() bool {
 	_, ok := catalogue[k]
 	return ok
 }
 
+// Dimension is the axis this kind is witnessed on.
 func (k Kind) Dimension() Dimension { return catalogue[k].dim }
-func (k Kind) Weight() int32        { return catalogue[k].weight }
-func (k Kind) Ceiling() int32       { return catalogue[k].ceiling }
 
+// Weight is the penalty one occurrence costs before decay.
+func (k Kind) Weight() int32 { return catalogue[k].weight }
+
+// Ceiling is the most this kind may cost in one penalty; zero means uncapped.
+func (k Kind) Ceiling() int32 { return catalogue[k].ceiling }
+
+// String is the stable wire name of the kind.
 func (k Kind) String() string {
 	if o, ok := catalogue[k]; ok {
 		return o.name
@@ -116,7 +114,12 @@ func (k Kind) String() string {
 	return unknownName
 }
 
-func KindByName(s string) (Kind, bool) {
-	k, ok := kindsByName[s]
-	return k, ok
+// ParseKind resolves a kind from its wire name.
+func ParseKind(name string) (Kind, bool) {
+	for k, o := range catalogue {
+		if o.name == name {
+			return k, true
+		}
+	}
+	return 0, false
 }
