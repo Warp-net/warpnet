@@ -1,6 +1,6 @@
 # Node rating — design and implementation plan
 
-Status: the storage layer (`core/crdt/rating.go`, `database/rating-repo.go`,
+Status: the storage layer (`core/crdt/ratingstore`, `database/rating-repo.go`,
 `domain.RatingRecord`) and the engine (`core/rating`) are implemented and
 tested; nothing is wired into the node yet. §6.4, §7, §8 and the wiring in §9
 describe the integration still to come. Where the implementation departed
@@ -33,7 +33,7 @@ The plan is deliberately built on machinery already in the tree.
 
 | Existing | File | Reused for |
 |---|---|---|
-| PN-counter over `go-ds-crdt`, single-writer generation-tagged keys, bitswap/DAG wiring | `core/crdt/stats.go` | `CRDTRatingStore` is built the same way, as a sibling with its own datastore; it stores signed records, not counters. |
+| PN-counter over `go-ds-crdt`, single-writer generation-tagged keys, bitswap/DAG wiring | `core/crdt/statsstore` | `ratingstore.Store` is built the same way, in a sibling package with its own datastore; it stores signed records, not counters. |
 | Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/gossip-adapter.go` | Gains a second topic, `/warpnet/rating/1.0.0`, so the two CRDTs never see each other's heads. |
 | `UpsertTag` connection priority with a flap LRU | `core/node/priority.go` | Gains a second, independent `rating` tag. |
 | Per-`route\|peer` leaky buckets | `core/middleware/rate-limiter.go` | Bucket parameters become a function of the peer's tier. |
@@ -277,15 +277,20 @@ Every node type joins the rating CRDT. That is the whole point of using one
 here: relays and moderators hold no disk, so **the CRDT is what lets them
 survive a restart**. A stateless node loses its entire local view when the
 process dies; on the next start the DAG replays it back from peers, exactly the
-"total local-data loss" recovery path `core/crdt/stats.go` already documents for
+"total local-data loss" recovery path `core/crdt/statsstore` already documents for
 counters. Without CRDT a relay would be permanently memoryless and its
 observations would die with it.
 
-Rating has **its own** `go-ds-crdt` datastore, `crdt.CRDTRatingStore`, built
-exactly like `crdt.CRDTStatsStore`: its own backing datastore, its own
-blockstore and bitswap exchange, its own gossip topic. A go-ds-crdt instance
-owns its whole namespace and its set of heads, so two of them cannot share a
-backing store or a topic without merging each other's deltas.
+Rating has **its own** `go-ds-crdt` datastore, `ratingstore.Store`, built
+exactly like `statsstore.Store`: its own backing datastore, its own blockstore
+and bitswap exchange, its own gossip topic. A go-ds-crdt instance owns its
+whole namespace and its set of heads, so two of them cannot share a backing
+store or a topic without merging each other's deltas.
+
+The two are separate packages that share nothing. Each declares the
+interfaces it needs — `Broadcaster`, `Datastore`, `Router` — and neither
+imports the other. `core/crdt` keeps only the gossip broadcaster they both
+ride, so a change to one tenant cannot reach the other.
 
 | Node type | Backing datastore | Survives restart via |
 |---|---|---|
@@ -301,20 +306,20 @@ statsTopic  = "/warpnet/stats/1.0.0"
 ratingTopic = "/warpnet/rating/1.0.0"   // crdt.NewRatingGossipBroadcaster
 ```
 
-**Why rating is not the stats store itself.** `CRDTStatsStore` is a PN-counter:
+**Why rating is not the stats store itself.** `statsstore.Store` is a PN-counter:
 one `uint64` per key, merged by summing. A rating record is signed — observer,
 dimension, hour bucket, per-kind counts, signature — and has to be verified
 before it is believed and re-signed whenever it changes. A counter cannot carry
 a signature, and a node that could bump another node's counter directly is
 exactly the forgery the signature exists to stop.
 
-**Where the layers meet.** `core/crdt/rating.go` is the database layer: it owns
+**Where the layers meet.** `core/crdt/ratingstore` is the database layer: it owns
 the key schema, the JSON encoding, the replication wiring and the merge hooks,
 and it enforces that a node writes and deletes **only its own records**
 (`Put` refuses a foreign `ObserverID`, `DeleteExpired` skips foreign keys).
 `core/rating` is the engine: signing, verification, validation, indexing and
 scoring. The two share `domain.RatingRecord` and nothing else; `core/rating`
-declares the `Storer` interface it needs and `*crdt.CRDTRatingStore` satisfies
+declares the `Storer` interface it needs and `*ratingstore.Store` satisfies
 it, so neither package imports the other.
 
 ### 5.2 Key layout
@@ -323,12 +328,12 @@ it, so neither package imports the other.
 /RATING/record/{peerID}/{observerID}/{dimension}/{bucketHour}/{generation}
 ```
 
-Built and parsed only in `core/crdt/rating.go`; the engine never sees a key.
+Built and parsed only in `core/crdt/ratingstore`; the engine never sees a key.
 `List(peerID)` is one prefix query, and a value whose content disagrees with
 the key it sits under is dropped on read.
 
 `{generation}` is a fresh 128-bit nonce minted once per engine start — the same
-device `core/crdt/stats.go` uses, and for the same reason, only more acutely
+device `core/crdt/statsstore` uses, and for the same reason, only more acutely
 here. A stateless relay restarts with an empty datastore and starts observing
 immediately. Without a generation segment its first write of bucket B (count 1)
 would land on the same key as the count-50 record the DAG is still replaying, and
@@ -446,8 +451,8 @@ A node misbehaving continuously for a week against 50 observers produces ~8k
 records, single-digit MB. Idle peers cost zero bytes.
 
 ```go
-// core/crdt/rating.go — deletes only this node's own keys of one dimension
-func (s *CRDTRatingStore) DeleteExpired(dimension string, beforeBucket int64) error
+// core/crdt/ratingstore — deletes only this node's own keys of one dimension
+func (s *Store) DeleteExpired(dimension string, beforeBucket int64) error
 
 // core/rating/engine.go — on the flush ticker, at most once per hour,
 // once per dimension the node witnesses, with that dimension's retention
@@ -664,7 +669,7 @@ UI:
 // core/rating/engine.go
 
 // Storer is what the engine needs from the database layer;
-// *crdt.CRDTRatingStore satisfies it.
+// *ratingstore.Store satisfies it.
 type Storer interface {
     Put(rec domain.RatingRecord) error                     // own records only
     List(peerID string) ([]domain.RatingRecord, error)     // own and foreign
@@ -728,7 +733,7 @@ and the node type:
 
 ```go
 broadcaster, err := crdt.NewRatingGossipBroadcaster(ctx, gossip)
-store, err := crdt.NewCRDTRatingStore(ctx, broadcaster, ratingRepo, node.Node(), dHashTable)
+store, err := ratingstore.New(ctx, broadcaster, ratingRepo, node.Node(), dHashTable)
 engine, err := rating.NewEngine(ctx, store, node.Node().Network(), privKey, warpnet.MemberNode)
 // ... on Stop: engine.Close() first, then store.Close()
 ```
@@ -756,7 +761,8 @@ Five stages, each independently reviewable, mergeable and testable.
 | File | Contents |
 |---|---|
 | `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `OffenceTally` — the wire DTOs |
-| `core/crdt/rating.go` | `CRDTRatingStore`: own go-ds-crdt datastore, key schema, encoding, merge hooks, own-records-only writes and deletes |
+| `core/crdt/ratingstore` | `Store`: own go-ds-crdt datastore, key schema, encoding, merge hooks, own-records-only writes and deletes |
+| `core/crdt/statsstore` | the PN-counter, moved out of `core/crdt` so the two tenants share no package |
 | `core/crdt/gossip-adapter.go` | `NewRatingGossipBroadcaster` on `/warpnet/rating/1.0.0` |
 | `database/rating-repo.go` | `NewRatingRepo(db)` — the member node's Badger-backed datastore for the rating CRDT, prefix `/RATING` |
 
@@ -819,7 +825,7 @@ Tests:
 | `engine_test.go` | `Record` is non-blocking under a stalled store; buckets fold correctly; flush writes exactly one record per (peer, dim, bucket, generation) |
 | `engine_test.go` | **stateless restart recovery**: an engine whose store is wiped, fed its own prior-generation records the way the DAG would replay them, reports the same score as before the wipe, and its new writes do not overwrite the replayed ones |
 | `engine_test.go` | eviction never issues a CRDT delete; an evicted peer scores identically after falling back to a prefix query; a forgery is charged once however often its victim is reloaded |
-| `core/crdt/rating_test.go` | own-records-only writes and deletes; key/value consistency; hooks fire for local and replicated records; every write is broadcast |
+| `core/crdt/ratingstore/store_test.go` | own-records-only writes and deletes; key/value consistency; hooks fire for local and replicated records; every write is broadcast |
 | `enforce_test.go` | tier → tag/score/multiplier/DHT mappings; the floor multiplier still serves a peer |
 | `rating_test.go` | `Dimensions` per node type; overall = min over dimensions |
 | `core/handler/rating_test.go` | own rating excludes self-authored records; `PUBLIC_GET_RATING` response shape |
