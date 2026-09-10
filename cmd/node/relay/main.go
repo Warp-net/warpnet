@@ -40,7 +40,6 @@ import (
 
 	relay "github.com/Warp-net/warpnet/cmd/node/relay/node"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/metrics"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
@@ -90,13 +89,8 @@ func main() {
 	}
 
 	nodeId, _ := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
-	m := metrics.NewMetricsClient(
-		config.Config().Node.Metrics.Gateway,
-		nodeId.String(),
-		network,
-	)
 
-	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId, m)
+	n, err := relay.NewRelayNode(ctx, privKey, psk, nodeId)
 	if err != nil {
 		log.Errorf("failed to init relay node: %v", err)
 		return

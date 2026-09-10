@@ -98,6 +98,7 @@ import site.warpnet.warpdroid.interfaces.ReselectableFragment
 import site.warpnet.warpdroid.pager.MainPagerAdapter
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.usecase.LogoutUsecase
+import site.warpnet.warpdroid.util.InternetPermission
 import site.warpnet.warpdroid.util.getParcelableExtraCompat
 import site.warpnet.warpdroid.util.hide
 import site.warpnet.warpdroid.util.loadHeader
@@ -179,6 +180,11 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 viewModel.setupNotifications(this)
+                requestBackgroundDeliveryExemptions()
+            } else {
+                // Nothing left to post: tear down anything a previous session
+                // or the boot receiver may have started.
+                notificationHelper.disablePullNotifications()
             }
         }
 
@@ -193,6 +199,15 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             installSplashScreen()
         }
         super.onCreate(savedInstanceState)
+
+        // Hard requirement: nothing in Warpdroid works without a network. The
+        // content view goes up first because we bail out without finish(), so
+        // BottomSheetActivity.onPostCreate still has to find its layout.
+        if (!InternetPermission.isGranted(this)) {
+            setContentView(binding.root)
+            InternetPermission.showRequiredDialog(this)
+            return
+        }
 
         // make sure MainActivity doesn't hide other activities when launcher icon is clicked again
         if (!isTaskRoot &&
@@ -233,6 +248,13 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             viewModel.setupNotifications(this)
         }
 
+        // Covers a revocation from system settings between two launches: the
+        // permission dialog is not shown again once permanently denied, so
+        // stop the push service here instead of waiting for a callback.
+        if (!notificationHelper.notificationsAllowed()) {
+            notificationHelper.disablePullNotifications()
+        }
+
         // check for savedInstanceState in order to not handle intent events more than once
         if (intent != null && savedInstanceState == null) {
             handleIntent(intent, activeAccount)
@@ -242,8 +264,9 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
             }
         }
 
-        requestIgnoreBatteryOptimizations()
-        maybeShowDontKillMe()
+        if (notificationHelper.notificationsAllowed()) {
+            requestBackgroundDeliveryExemptions()
+        }
 
         setContentView(binding.root)
 
@@ -1067,6 +1090,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         }
         preferences.edit { putBoolean(PrefKeys.ASKED_DONT_KILL_ME, true) }
         startActivity(Intent(this, DontKillMeActivity::class.java))
+    }
+
+    // Battery-exemption and OEM "don't kill me" prompts exist purely so the
+    // push service survives Doze. Without POST_NOTIFICATIONS there is no
+    // service to keep alive, so neither prompt is shown.
+    private fun requestBackgroundDeliveryExemptions() {
+        requestIgnoreBatteryOptimizations()
+        maybeShowDontKillMe()
     }
 
     @SuppressLint("BatteryLife")

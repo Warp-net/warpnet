@@ -2,7 +2,7 @@ name: Tests / Build Warpdroid
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
 
 permissions:
   contents: read
@@ -29,12 +29,7 @@ jobs:
         with:
           build-root-directory: warpdroid
 
-      # services.gradle.org redirects to github.com/gradle/gradle-distributions,
-      # which intermittently returns 504. The Gradle wrapper retries
-      # immediately and gives up after one failure, so seed the wrapper's
-      # cache ahead of time with curl, whose --retry-all-errors knows how to
-      # ride out 5xx responses. The cache directory is the MD5-of-URL-in-base36
-      # path the wrapper computes from gradle-wrapper.properties.
+
       - name: Pre-fetch Gradle distribution
         run: |
           set -euo pipefail
@@ -50,10 +45,6 @@ jobs:
             -o "$cache_dir/gradle-9.0.0-bin.zip" \
             https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
 
-      # The gomobile native library (warpnet.aar) is not committed; build it
-      # from warpdroid/node before Gradle runs. Gradle's buildWarpnetAar task
-      # would otherwise trigger this itself, but doing it explicitly keeps the
-      # Go/NDK toolchain out of the Gradle process.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:

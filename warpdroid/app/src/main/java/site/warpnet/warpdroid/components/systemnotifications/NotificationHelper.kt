@@ -87,6 +87,15 @@ class NotificationHelper @Inject constructor(
         createSyncServiceNotificationChannel()
     }
 
+    /**
+     * Whether the app may post notifications at all. Everything the push
+     * service exists for (foreground slot, wake lock, poll loop, battery
+     * exemption) is gated on this, so a denied POST_NOTIFICATIONS costs no
+     * battery instead of running an invisible always-on service.
+     */
+    fun notificationsAllowed(): Boolean =
+        WarpnetNotificationService.notificationsAllowed(context)
+
     fun areNotificationsEnabledBySystem(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // on Android >= O, notifications are enabled, if at least one channel is enabled
@@ -114,11 +123,19 @@ class NotificationHelper @Inject constructor(
     }
 
     fun enablePullNotifications() {
+        if (!notificationsAllowed()) {
+            Timber.tag(TAG).d("POST_NOTIFICATIONS denied; not starting push service.")
+            disablePullNotifications()
+            return
+        }
         // The foreground service replaces the old periodic poll; drop any
         // leftover periodic work from a previous version.
         workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
         runCatching { WarpnetNotificationService.start(context) }
             .onFailure { Timber.tag(TAG).w(it, "could not start push service") }
+        // Re-arm the receivers disablePullNotifications() tears down, so
+        // toggling the setting back on doesn't wait for a foreground event.
+        startOpportunisticRefresh()
     }
 
     fun createNotificationChannelsForAccount(account: AccountEntity) {
@@ -154,6 +171,9 @@ class NotificationHelper @Inject constructor(
     fun fetchNotificationsNow() = enqueueOneTimeWorker(null)
 
     fun startOpportunisticRefresh() {
+        if (!notificationsAllowed()) {
+            return
+        }
         if (chargingReceiver == null) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
@@ -209,6 +229,9 @@ class NotificationHelper @Inject constructor(
     }
 
     private fun enqueueOneTimeWorker(account: AccountEntity?) {
+        if (!notificationsAllowed()) {
+            return
+        }
         val oneTimeRequestBuilder = OneTimeWorkRequest.Builder(NotificationWorker::class.java)
             .setExpedited(OutOfQuotaPolicy.DROP_WORK_REQUEST)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -229,6 +252,7 @@ class NotificationHelper @Inject constructor(
     fun disablePullNotifications() {
         workManager.cancelUniqueWork(NOTIFICATION_PULL_NAME)
         WarpnetNotificationService.stop(context)
+        stopOpportunisticRefresh()
         Timber.tag(TAG).d("Disabled pull checks.")
     }
 

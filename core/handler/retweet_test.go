@@ -17,6 +17,14 @@ import (
 type stubRetweetUserRepo struct {
 	getBatchFn func(ids ...string) ([]domain.User, error)
 	getFn      func(userId string) (domain.User, error)
+	createFn   func(user domain.User) (domain.User, error)
+}
+
+func (s stubRetweetUserRepo) Create(user domain.User) (domain.User, error) {
+	if s.createFn != nil {
+		return s.createFn(user)
+	}
+	return user, nil
 }
 
 func (s stubRetweetUserRepo) GetBatch(ids ...string) ([]domain.User, error) {
@@ -72,10 +80,14 @@ func (s stubReTweetRepo) Retweeters(tweetId string, limit *uint64, cursor *strin
 }
 
 type stubTimelineRepo struct {
-	addFn func(userId string, tweet domain.Tweet) error
+	addFn    func(userId string, tweet domain.Tweet) error
+	deleteFn func(userID, tweetID string) error
 }
 
 func (s stubTimelineRepo) DeleteTweetFromTimeline(userID, tweetID string) error {
+	if s.deleteFn != nil {
+		return s.deleteFn(userID, tweetID)
+	}
 	return nil
 }
 

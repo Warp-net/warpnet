@@ -50,18 +50,18 @@ class InstanceInfoRepository @Inject constructor() {
     suspend fun getUpdatedInstanceInfoOrFallback(): InstanceInfo = defaultInstanceInfo
 
     companion object {
-        private const val DEFAULT_MAX_OPTION_COUNT = 4
-        private const val DEFAULT_MAX_OPTION_LENGTH = 50
+        private val DEFAULT_MAX_OPTION_COUNT = WarpnetLimits.MAX_POLL_OPTIONS
+        private val DEFAULT_MAX_OPTION_LENGTH = WarpnetLimits.MAX_POLL_OPTION_CHARS
         private const val DEFAULT_MIN_POLL_DURATION = 300
         private const val DEFAULT_MAX_POLL_DURATION = 604800
 
-        private const val DEFAULT_VIDEO_SIZE_LIMIT = 41943040
+        private val DEFAULT_VIDEO_SIZE_LIMIT = WarpnetLimits.MAX_VIDEO_BYTES.toInt()
         private const val DEFAULT_IMAGE_SIZE_LIMIT = 10485760
         private const val DEFAULT_IMAGE_MATRIX_LIMIT = 16777216
 
         const val DEFAULT_MEDIA_DESCRIPTION_LIMIT = 1500
         const val DEFAULT_CHARACTERS_RESERVED_PER_URL = 23
-        const val DEFAULT_MAX_MEDIA_ATTACHMENTS = 4
+        val DEFAULT_MAX_MEDIA_ATTACHMENTS = WarpnetLimits.MAX_IMAGES_PER_TWEET
         const val DEFAULT_MAX_ACCOUNT_FIELDS = 4
     }
 }

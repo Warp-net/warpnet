@@ -57,8 +57,8 @@ type snapshot struct {
 	Seed           string   `json:"seed"`
 	Network        string   `json:"network"`
 	Bootstrap      []string `json:"bootstrap"`
-	MetricsGateway string   `json:"metrics_gateway"`
 	IsPskPrinted   bool     `json:"is_psk_printed"`
+	ServerHost     string   `json:"server_host"`
 	ServerPort     string   `json:"server_port"`
 	DatabasePath   string   `json:"database_path"`
 	LoggingLevel   string   `json:"logging_level"`
@@ -80,8 +80,8 @@ func TestMain(m *testing.M) {
 			Seed:           c.Node.Seed,
 			Network:        c.Node.Network,
 			Bootstrap:      c.Node.Bootstrap,
-			MetricsGateway: c.Node.Metrics.Gateway,
 			IsPskPrinted:   c.Node.IsPskPrinted,
+			ServerHost:     c.Node.Server.Host,
 			ServerPort:     c.Node.Server.Port,
 			DatabasePath:   c.Database.Path,
 			LoggingLevel:   c.Logging.Level,
@@ -139,8 +139,8 @@ func run(t *testing.T, mode string, args []string, env map[string]string) snapsh
 func childEnv(mode string, extra map[string]string) []string {
 	managed := []string{
 		"NODE_HOST_V4", "NODE_HOST_V6", "NODE_PORT", "NODE_SEED", "NODE_NETWORK",
-		"NODE_BOOTSTRAP", "NODE_METRICS_GATEWAY", "NODE_PRINT_PSK",
-		"NODE_SERVER_PORT",
+		"NODE_BOOTSTRAP", "NODE_PRINT_PSK",
+		"NODE_SERVER_HOST", "NODE_SERVER_PORT",
 		"LOGGING_LEVEL", "LOGGING_FORMAT", "DATABASE_DIR",
 	}
 
@@ -196,8 +196,8 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, "::", c.HostV6)
 	assert.Equal(t, "4001", c.Port)
 	assert.Equal(t, warpnetNetwork, c.Network)
-	assert.Equal(t, "207.154.221.44:4091", c.MetricsGateway)
 	assert.False(t, c.IsPskPrinted)
+	assert.Equal(t, "0.0.0.0", c.ServerHost)
 	assert.Equal(t, "4999", c.ServerPort)
 	assert.Equal(t, "info", c.LoggingLevel)
 	assert.Equal(t, string(TextFormat), c.LoggingFormat)
@@ -226,8 +226,8 @@ func TestFlagsAreApplied(t *testing.T) {
 		"--node.port", "4002",
 		"--node.seed", "my-seed",
 		"--node.network", testNetNetwork,
-		"--node.metrics.gateway", "10.0.0.1:9091",
 		"--node.print-psk",
+		"--node.server.host", "127.0.0.1",
 		"--node.server.port", "5099",
 		"--logging.level", "debug",
 		"--logging.format", "json",
@@ -239,8 +239,8 @@ func TestFlagsAreApplied(t *testing.T) {
 	assert.Equal(t, "4002", c.Port)
 	assert.Equal(t, "my-seed", c.Seed)
 	assert.Equal(t, testNetNetwork, c.Network)
-	assert.Equal(t, "10.0.0.1:9091", c.MetricsGateway)
 	assert.True(t, c.IsPskPrinted)
+	assert.Equal(t, "127.0.0.1", c.ServerHost)
 	assert.Equal(t, "5099", c.ServerPort)
 	assert.Equal(t, "debug", c.LoggingLevel)
 	assert.Equal(t, string(JSONFormat), c.LoggingFormat)
@@ -262,8 +262,8 @@ func TestEnvVarsAreApplied(t *testing.T) {
 		"NODE_PORT":            "4003",
 		"NODE_SEED":            "env-seed",
 		"NODE_NETWORK":         testNetNetwork,
-		"NODE_METRICS_GATEWAY": "10.0.0.2:9091",
 		"NODE_PRINT_PSK":       "true",
+		"NODE_SERVER_HOST":     "127.0.0.2",
 		"NODE_SERVER_PORT":     "6000",
 		"LOGGING_LEVEL":        "warn",
 		"LOGGING_FORMAT":       "json",
@@ -275,8 +275,8 @@ func TestEnvVarsAreApplied(t *testing.T) {
 	assert.Equal(t, "4003", c.Port)
 	assert.Equal(t, "env-seed", c.Seed)
 	assert.Equal(t, testNetNetwork, c.Network)
-	assert.Equal(t, "10.0.0.2:9091", c.MetricsGateway)
 	assert.True(t, c.IsPskPrinted)
+	assert.Equal(t, "127.0.0.2", c.ServerHost)
 	assert.Equal(t, "6000", c.ServerPort)
 	assert.Equal(t, "warn", c.LoggingLevel)
 	assert.Equal(t, string(JSONFormat), c.LoggingFormat)

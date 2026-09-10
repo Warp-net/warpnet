@@ -143,6 +143,7 @@ val fourAttachments = listOf(
 val noopListener = object : TweetActionListener {
     override fun onRetweet(viewData: TweetViewData.Concrete, retweet: Boolean, visibility: Tweet.Visibility?, state: SparkButtonState?) {}
     override fun onReact(viewData: TweetViewData.Concrete, like: Boolean, state: SparkButtonState?, emoji: String) { }
+    override fun onVoteInPoll(viewData: TweetViewData.Concrete, option: Int) { }
     override fun onBookmark(viewData: TweetViewData.Concrete, bookmark: Boolean) { }
     override fun onViewMedia(viewData: TweetViewData.Concrete, attachmentIndex: Int) { }
     override fun onViewThread(viewData: TweetViewData.Concrete) { }

@@ -31,6 +31,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -60,6 +61,7 @@ type PollStreamer interface {
 
 type PollUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
+	Create(user domain.User) (domain.User, error)
 }
 
 func StreamPollVoteHandler(
@@ -86,8 +88,7 @@ func StreamPollVoteHandler(
 			return nil, warpnet.WarpError("poll: negative option")
 		}
 
-		voter, _ := userRepo.Get(ev.OwnerId)
-		if err := warpnet.VerifyAuthorship(s, voter.NodeId); err != nil {
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.OwnerId); err != nil {
 			return nil, err
 		}
 

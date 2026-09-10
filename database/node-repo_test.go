@@ -227,6 +227,16 @@ func (s *NodeRepoDatastoreTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
+// The desktop app stops the node twice - logout stops it, then the wails
+// shutdown hook stops it again - so a second close must be a no-op.
+func (s *NodeRepoDatastoreTestSuite) TestCloseIsIdempotent() {
+	repo := NewNodeRepo(s.db)
+
+	s.Require().NoError(repo.Close())
+	s.NoError(repo.Close())
+	s.NoError(repo.Close())
+}
+
 func (s *NodeRepoDatastoreTestSuite) TestBlocklistEscalationLadderSaturates() {
 	peer := "12D3KooWEscalate"
 

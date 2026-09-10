@@ -31,6 +31,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -48,6 +49,7 @@ type RetweetStreamer interface {
 type RetweetedUserFetcher interface {
 	GetBatch(retweetersIds ...string) (users []domain.User, err error)
 	Get(userId string) (users domain.User, err error)
+	Create(user domain.User) (domain.User, error)
 }
 
 type OwnerReTweetStorer interface {
@@ -90,8 +92,8 @@ func StreamNewReTweetHandler(
 			return nil, warpnet.WarpError("empty retweet id")
 		}
 
-		retweeter, _ := userRepo.Get(*retweetEvent.RetweetedBy)
-		if err := warpnet.VerifyAuthorship(s, retweeter.NodeId); err != nil {
+		retweeter, err := authorship.VerifyActor(userRepo, streamer, s, *retweetEvent.RetweetedBy)
+		if err != nil {
 			return nil, err
 		}
 
@@ -204,8 +206,7 @@ func StreamUnretweetHandler(
 			return nil, warpnet.WarpError("empty tweet id")
 		}
 
-		retweeter, _ := userRepo.Get(ev.RetweeterId)
-		if err := warpnet.VerifyAuthorship(s, retweeter.NodeId); err != nil {
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.RetweeterId); err != nil {
 			return nil, err
 		}
 

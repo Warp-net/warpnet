@@ -37,6 +37,8 @@ object ProtocolIds {
     const val PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
     const val PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
     const val PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
+    const val PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
+    const val PUBLIC_GET_POLL = "/public/get/poll/0.0.0"
 
     // public writes
     const val PUBLIC_POST_REACT = "/public/post/react/0.0.0"
@@ -52,6 +54,7 @@ object ProtocolIds {
     const val PUBLIC_POST_MESSAGE = "/public/post/message/0.0.0"
     const val PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
     const val PUBLIC_POST_REPORT = "/public/post/report/0.0.0"
+    const val PUBLIC_POST_POLL_VOTE = "/public/post/poll/vote/0.0.0"
 
     // private reads (require pairing)
     const val PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
@@ -60,6 +63,8 @@ object ProtocolIds {
     const val PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
     const val PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
     const val PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
+    const val PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
+    const val PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
     const val PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
     const val PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
     const val PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -76,8 +81,6 @@ object ProtocolIds {
     const val PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
     const val PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
     const val PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
-    const val PRIVATE_POST_MEDIA_META = "/private/post/media/meta/0.0.0"
-    const val PRIVATE_GET_MEDIA = "/private/get/media/0.0.0"
     const val PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
     const val PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
     const val PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
@@ -101,6 +104,7 @@ object ProtocolIds {
     const val PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
     const val PRIVATE_POST_USER = "/private/post/user/0.0.0"
     const val PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
+    const val PRIVATE_POST_UPLOAD_VIDEO = "/private/post/video/0.0.0"
     const val PRIVATE_DELETE_CHAT = "/private/delete/chat/0.0.0"
     const val PRIVATE_DELETE_MESSAGE = "/private/delete/message/0.0.0"
 }

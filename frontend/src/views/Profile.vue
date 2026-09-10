@@ -55,7 +55,9 @@ resulting from the use or misuse of this software.
             from <b>{{ profile.network }}</b>. Anything you do here (post, reply,
             like, follow) leaves the peer-to-peer network and is stored on
             <b>{{ profile.network }}</b>'s servers — you no longer own or control
-            that data. Moderation there is performed by human administrators, not
+            that data. It also passes through the Warpnet↔Fediverse gateway, which
+            decrypts and re-encrypts it — so it is briefly in plain text there.
+            Moderation there is performed by human administrators, not
             by Warpnet's automated (LLM) moderation.
           </span>
           <button

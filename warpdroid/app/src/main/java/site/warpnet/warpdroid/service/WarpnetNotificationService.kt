@@ -6,10 +6,12 @@
 
 package site.warpnet.warpdroid.service
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -80,13 +82,23 @@ class WarpnetNotificationService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onCreate() {
-        super.onCreate()
-        acquireWakeLock()
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Covers the OS-driven START_STICKY restart after POST_NOTIFICATIONS
+        // was revoked: with nothing left to post, don't run the poll loop or
+        // hold a wake lock. startForeground() still has to be called even on
+        // the way out — startForegroundService() obliges us to, and skipping
+        // it kills the process with ForegroundServiceDidNotStartInTimeException
+        // the moment the service goes down.
+        if (!notificationsAllowed(this)) {
+            Timber.tag(TAG).i("POST_NOTIFICATIONS denied; stopping push service")
+            startAsForeground()
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            isRunning = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
         isRunning = true // also set here to cover OS-driven START_STICKY restarts
+        acquireWakeLock()
         startAsForeground()
         if (loopJob?.isActive != true) {
             loopJob = scope.launch { runLoop() }
@@ -213,7 +225,20 @@ class WarpnetNotificationService : Service() {
         var isRunning: Boolean = false
             private set
 
+        // The push service only exists to post notifications; without the
+        // permission it would be an invisible always-on battery drain.
+        fun notificationsAllowed(context: Context): Boolean =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+
         fun start(context: Context) {
+            if (!notificationsAllowed(context)) {
+                isRunning = false
+                return
+            }
             isRunning = true
             val intent = Intent(context, WarpnetNotificationService::class.java)
             ContextCompat.startForegroundService(context, intent)

@@ -35,6 +35,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -49,6 +50,7 @@ const tweetCharLimit = 280
 
 type TweetUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
+	Create(user domain.User) (domain.User, error)
 }
 
 type TweetStreamer interface {
@@ -243,8 +245,7 @@ func StreamNewReplyHandler(
 			return nil, err
 		}
 
-		author, _ := userRepo.Get(ev.UserId)
-		if err := warpnet.VerifyAuthorship(s, author.NodeId); err != nil {
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId); err != nil {
 			return nil, err
 		}
 

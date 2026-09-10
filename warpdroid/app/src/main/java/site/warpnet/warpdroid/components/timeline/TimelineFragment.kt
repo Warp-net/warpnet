@@ -657,6 +657,16 @@ class TimelineFragment :
         viewModel.bookmark(viewData.actionableId, viewData.actionable.account.id, bookmark)
     }
 
+    override fun onVoteInPoll(viewData: TweetViewData.Concrete, option: Int) {
+        val poll = viewData.actionable.poll ?: return
+        viewModel.voteInPoll(
+            viewData.actionableId,
+            viewData.actionable.account.id,
+            option,
+            poll.options.size,
+        )
+    }
+
     override fun onExpandedChange(viewData: TweetViewData.Concrete, expanded: Boolean) {
         viewModel.changeExpanded(expanded, viewData)
     }

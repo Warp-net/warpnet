@@ -34,6 +34,7 @@ type stubTweetRepo struct {
 	getReplyFn      func(rootID, replyID string) (domain.Tweet, error)
 	deleteReplyFn   func(rootID, replyID string) (domain.Tweet, error)
 	repliesFn       func(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+	retweetersFn    func(tweetId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
 func (s stubTweetRepo) TweetsCount(userId string) (uint64, error) {
@@ -92,6 +93,9 @@ func (s stubTweetRepo) UnRetweet(retweetedByUserID, tweetId string, _ bool) erro
 	return nil
 }
 func (s stubTweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string) ([]string, string, error) {
+	if s.retweetersFn != nil {
+		return s.retweetersFn(tweetId, limit, cursor)
+	}
 	return nil, "", nil
 }
 func (s stubTweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error) {
@@ -177,7 +181,8 @@ func authorStream(t *testing.T) (stubTweetUserRepo, warpnet.WarpStream) {
 }
 
 type stubTweetUserRepo struct {
-	getFn func(userId string) (domain.User, error)
+	getFn    func(userId string) (domain.User, error)
+	createFn func(user domain.User) (domain.User, error)
 }
 
 func (s stubTweetUserRepo) Get(userId string) (domain.User, error) {
@@ -185,6 +190,12 @@ func (s stubTweetUserRepo) Get(userId string) (domain.User, error) {
 		return s.getFn(userId)
 	}
 	return domain.User{Id: userId, NodeId: "node-2"}, nil
+}
+func (s stubTweetUserRepo) Create(user domain.User) (domain.User, error) {
+	if s.createFn != nil {
+		return s.createFn(user)
+	}
+	return user, nil
 }
 
 type stubTweetReactionRepo struct {
@@ -1119,7 +1130,8 @@ func (m *mockFollowChecker) IsFollowing(o, a string) bool {
 }
 
 type mockUserFetcher struct {
-	GetFunc func(string) (domain.User, error)
+	GetFunc    func(string) (domain.User, error)
+	CreateFunc func(domain.User) (domain.User, error)
 }
 
 func (m *mockUserFetcher) Get(id string) (domain.User, error) {
@@ -1127,6 +1139,13 @@ func (m *mockUserFetcher) Get(id string) (domain.User, error) {
 		return m.GetFunc(id)
 	}
 	return domain.User{}, errUserNotFound
+}
+
+func (m *mockUserFetcher) Create(user domain.User) (domain.User, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(user)
+	}
+	return user, nil
 }
 
 type mockBroadcaster struct {

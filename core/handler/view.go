@@ -31,6 +31,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -47,6 +48,7 @@ type ViewsStorer interface {
 
 type ViewUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
+	Create(user domain.User) (domain.User, error)
 }
 
 type ViewStreamer interface {
@@ -71,8 +73,7 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 			return nil, warpnet.WarpError("view: empty viewer id")
 		}
 
-		viewer, _ := userRepo.Get(ev.ViewerId)
-		if err := warpnet.VerifyAuthorship(s, viewer.NodeId); err != nil {
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.ViewerId); err != nil {
 			return nil, err
 		}
 

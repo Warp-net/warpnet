@@ -6,14 +6,18 @@
 package site.warpnet.warpdroid.warpnet
 
 import site.warpnet.warpdroid.entity.AccountSource
+import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
+import site.warpnet.warpdroid.entity.Poll
+import site.warpnet.warpdroid.entity.PollOption
 import site.warpnet.warpdroid.entity.Relationship
 import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TimelineUser
 import site.warpnet.warpdroid.entity.notificationTypeFromString
 import java.util.Date
 import site.warpnet.transport.dto.WarpnetNotification
+import site.warpnet.transport.dto.WarpnetPoll
 import site.warpnet.transport.dto.WarpnetTweet
 import site.warpnet.transport.dto.WarpnetUser
 
@@ -81,6 +85,35 @@ object WarpnetMapper {
         if (userId.isBlank() || key.isNullOrBlank()) ""
         else "warpnet://avatar/$userId/$key"
 
+    fun warpnetVideoUrl(userId: String, key: String?): String =
+        if (userId.isBlank() || key.isNullOrBlank()) ""
+        else "warpnet://video/$userId/$key"
+
+    private fun WarpnetTweet.toAttachments(): List<Attachment> {
+        val images = imageKeys.orEmpty().filter { it.isNotBlank() }.map { key ->
+            Attachment(
+                id = key,
+                url = warpnetImageUrl(userId, key),
+                previewUrl = warpnetImageUrl(userId, key),
+                type = Attachment.Type.IMAGE,
+            )
+        }
+        val video = videoKey?.takeIf { it.isNotBlank() }?.let { key ->
+            Attachment(
+                id = key,
+                url = warpnetVideoUrl(userId, key),
+                previewUrl = null,
+                type = Attachment.Type.VIDEO,
+            )
+        }
+        return if (video == null) images else images + video
+    }
+
+    private fun WarpnetPoll.toPoll(): Poll = Poll(
+        options = options.map { PollOption(title = it) },
+        expiresAt = expiresAt.takeIf { it.isNotEmpty() }?.let(::parseDate),
+    )
+
     fun WarpnetTweet.toTweet(author: WarpnetUser?): Tweet {
         val account = author?.toTimelineUser() ?: stubTimelineUser(userId, username)
         return Tweet(
@@ -104,9 +137,10 @@ object WarpnetMapper {
             sensitive = false,
             spoilerText = "",
             visibility = Tweet.Visibility.PUBLIC,
-            attachments = emptyList(),
+            attachments = toAttachments(),
             mentions = emptyList(),
             quote = null,
+            poll = poll?.toPoll(),
         )
     }
 

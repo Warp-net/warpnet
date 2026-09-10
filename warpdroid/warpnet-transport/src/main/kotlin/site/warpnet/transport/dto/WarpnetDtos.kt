@@ -43,10 +43,18 @@ data class WarpnetTweet(
     @Json(name = "user_id") val userId: String,
     val username: String,
     @Json(name = "image_keys") val imageKeys: List<String>? = null,
+    @Json(name = "video_key") val videoKey: String? = null,
     val network: String = "",
     val pinned: Boolean = false,
     @Json(name = "quoted_tweet_id") val quotedTweetId: String? = null,
     @Json(name = "quoted_user_id") val quotedUserId: String? = null,
+    val poll: WarpnetPoll? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class WarpnetPoll(
+    val options: List<String> = emptyList(),
+    @Json(name = "expires_at") val expiresAt: String = "",
 )
 
 @JsonClass(generateAdapter = true)
@@ -286,26 +294,28 @@ data class SubscribeUserEvent(
 )
 
 @JsonClass(generateAdapter = true)
-data class UpdateMediaMetaEvent(
+data class PollVoteEvent(
+    @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
-    val key: String,
-    val description: String = "",
-    @Json(name = "focus_x") val focusX: Float = 0f,
-    @Json(name = "focus_y") val focusY: Float = 0f,
+    @Json(name = "owner_id") val ownerId: String,
+    val option: Int,
+    @Json(name = "options_num") val optionsNum: Int,
 )
 
 @JsonClass(generateAdapter = true)
-data class GetMediaEvent(
+data class GetPollEvent(
+    @Json(name = "tweet_id") val tweetId: String,
     @Json(name = "user_id") val userId: String,
-    val key: String,
+    @Json(name = "owner_id") val ownerId: String,
+    @Json(name = "options_num") val optionsNum: Int,
 )
 
 @JsonClass(generateAdapter = true)
-data class GetMediaResponse(
-    val key: String = "",
-    val description: String = "",
-    @Json(name = "focus_x") val focusX: Float = 0f,
-    @Json(name = "focus_y") val focusY: Float = 0f,
+data class PollResultsResponse(
+    @Json(name = "tweet_id") val tweetId: String = "",
+    val votes: List<Long> = emptyList(),
+    @Json(name = "total_votes") val totalVotes: Long = 0,
+    @Json(name = "voted_option") val votedOption: Int? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -586,6 +596,48 @@ data class GetImageEvent(
 @JsonClass(generateAdapter = true)
 data class GetImageResponse(
     val file: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class UploadImageEvent(
+    val image1: String = "",
+    val image2: String = "",
+    val image3: String = "",
+    val image4: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class UploadImageResponse(
+    val key1: String = "",
+    val key2: String = "",
+    val key3: String = "",
+    val key4: String = "",
+) {
+    val keys: List<String> get() = listOf(key1, key2, key3, key4).filter { it.isNotBlank() }
+}
+
+@JsonClass(generateAdapter = true)
+data class UploadVideoEvent(
+    val video: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class UploadVideoResponse(
+    val key: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class GetVideoEvent(
+    @Json(name = "user_id") val userId: String,
+    val key: String,
+    val deferred: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class GetVideoResponse(
+    val file: String = "",
+    val size: Long = 0,
+    val deferred: Boolean = false,
 )
 
 // Wire shape mirrors event.GetAllMessagesEvent on the fat node.

@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -57,6 +58,7 @@ var (
 	limitUpload    = routeLimit{burst: 10, perMinute: 30}
 	limitReport    = routeLimit{burst: 10, perMinute: 30}
 	limitPairing   = routeLimit{burst: 5, perMinute: 15}
+	limitGateway   = routeLimit{burst: 600, perMinute: 6000}
 )
 
 var routeLimits = map[string]routeLimit{
@@ -83,7 +85,10 @@ var routeLimits = map[string]routeLimit{
 	event.PUBLIC_POST_NODE_CHALLENGE: limitPairing,
 }
 
-func limitForRoute(route stream.WarpRoute) routeLimit {
+func limitForRoute(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) routeLimit {
+	if remotePeer.String() == mastodon.GatewayNodeID() {
+		return limitGateway
+	}
 	if limit, ok := routeLimits[route.String()]; ok {
 		return limit
 	}
@@ -127,7 +132,7 @@ func (p *WarpMiddleware) bucket(
 	if b, ok := p.rateLimiters.Get(key); ok {
 		return b
 	}
-	b := newRateLimiter(limitForRoute(route))
+	b := newRateLimiter(limitForRoute(route, remotePeer))
 	p.rateLimiters.Add(key, b)
 	return b
 }

@@ -170,10 +170,12 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.setupHandlers()
 
-	rn.pubsubService.Run(rn)
+	// Discovery first: the gossip listener feeds DiscoveryHandlerPubSub, which
+	// reads the fields discService.Run sets. Starting pubsub first races them.
 	if err := rn.discService.Run(rn); err != nil {
 		return err
 	}
+	rn.pubsubService.Run(rn)
 
 	nodeInfo := rn.NodeInfo()
 	println()

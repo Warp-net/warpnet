@@ -34,6 +34,7 @@ import site.warpnet.warpdroid.entity.Emoji
 import site.warpnet.warpdroid.entity.Filter
 import site.warpnet.warpdroid.entity.FilterKeyword
 import site.warpnet.warpdroid.entity.MediaUploadResult
+import site.warpnet.warpdroid.entity.NewPoll
 import site.warpnet.warpdroid.entity.NewTweet
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Relationship
@@ -42,8 +43,11 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.entity.TweetContext
 import site.warpnet.warpdroid.entity.TweetSource
 import site.warpnet.warpdroid.entity.TimelineUser
+import site.warpnet.transport.dto.WarpnetPoll
 import site.warpnet.warpdroid.warpnet.WarpnetMapper
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -305,20 +309,9 @@ class WarpnetApi @Inject constructor(
         description: String?,
         focus: String?,
     ): NetworkResult<Attachment> {
-        val active = accountManager.activeAccount ?: return stubFailure("updateMedia")
+        if (accountManager.activeAccount == null) return stubFailure("updateMedia")
         val (fx, fy) = parseFocus(focus)
         return result {
-            warpnet.updateMediaMeta(
-                userId = active.accountId,
-                key = mediaId,
-                description = description.orEmpty(),
-                focusX = fx,
-                focusY = fy,
-            )
-            // Warpnet's stored attachment isn't surfaced as a separate
-            // record — the next status fetch reads description / focus
-            // alongside the tweet. Return a minimal Attachment so the
-            // compose screen can echo the edit back.
             Attachment(
                 id = mediaId,
                 url = "",
@@ -332,14 +325,8 @@ class WarpnetApi @Inject constructor(
     }
 
     suspend fun getMedia(mediaId: String): Response<MediaUploadResult> {
-        val active = accountManager.activeAccount ?: return stubError()
-        return response {
-            val meta = warpnet.getMediaMeta(userId = active.accountId, key = mediaId)
-            // MediaUploadResult intentionally only carries the id — see
-            // entity/MediaUploadResult.kt. The descriptive metadata flows
-            // back via the Attachment surface on the next status fetch.
-            MediaUploadResult(id = meta.key)
-        }
+        if (accountManager.activeAccount == null) return stubError()
+        return response { MediaUploadResult(id = mediaId) }
     }
 
     private fun parseFocus(focus: String?): Pair<Float, Float> {
@@ -368,13 +355,45 @@ class WarpnetApi @Inject constructor(
         // post shows up authored by the ULID. Fall back to the @-handle if
         // displayName isn't populated yet.
         val authorName = active.displayName.ifBlank { active.username }
+        val untagged = status.mediaIds.map { it to MediaKind.untag(it) }
+        val imageKeys = untagged.filterNot { MediaKind.isVideo(it.first) }.map { it.second }
+        val videoKey = untagged.firstOrNull { MediaKind.isVideo(it.first) }?.second
         return result {
             warpnet.postStatus(
                 text = status.status,
                 authorUserId = active.accountId,
                 authorUsername = authorName,
                 parentId = status.inReplyToId,
+                imageKeys = imageKeys,
+                videoKey = videoKey,
+                poll = status.poll?.toWire(),
             )
+        }
+    }
+
+    private fun NewPoll.toWire(): WarpnetPoll = WarpnetPoll(
+        options = options,
+        expiresAt = DateTimeFormatter.ISO_INSTANT.format(
+            Instant.now().plusSeconds(expiresInSeconds.toLong()),
+        ),
+    )
+
+    suspend fun voteInPoll(
+        statusId: String,
+        authorId: String,
+        option: Int,
+        optionsNum: Int,
+    ): NetworkResult<Tweet> {
+        val active = accountManager.activeAccount ?: return stubFailure("voteInPoll")
+        return result {
+            warpnet.votePoll(
+                tweetId = statusId,
+                authorId = authorId,
+                voterId = active.accountId,
+                option = option,
+                optionsNum = optionsNum,
+            )
+            warpnet.getStatus(tweetId = statusId, userId = authorId)
         }
     }
 

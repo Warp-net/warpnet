@@ -12,7 +12,7 @@
     <string name="action_cancel">Cancel</string>
     <string name="warpnet_pair_title">Connect to my node</string>
     <string name="warpnet_pair_confirm_body">Owner: %1$s\nNode: %2$s\nAddress: %3$s</string>
-    <string name="warpnet_pair_camera_denied">Camera permission is required to scan the pairing QR. Grant it in Settings and try again.</string>
+    <string name="warpnet_pair_camera_denied">Camera access was denied, so the QR cannot be scanned. Copy the full pairing JSON from the desktop app (containing identity, PSK, network, node addresses) and paste it here, or grant camera access in Settings and start the app again.</string>
     <string name="warpnet_pair_invalid_qr">Could not read QR: %1$s</string>
     <string name="warpnet_pair_manual_title">Enter pairing data</string>
     <string name="warpnet_pair_manual_body">No camera is available. Copy the full pairing JSON from the desktop app (containing identity, PSK, network, node addresses) and paste it here.</string>

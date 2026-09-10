@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Permission-related UI. Every runtime permission Warpdroid asks for is
+         optional except INTERNET, which the app cannot work without. -->
+    <string name="warpnet_internet_required_title">Network access required</string>
+    <string name="warpnet_internet_required_body">Warpdroid talks to your Warpnet node over the network and cannot run without internet access. Allow the "Network" permission for Warpdroid in system settings and start the app again.</string>
+</resources>

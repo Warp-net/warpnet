@@ -13,6 +13,7 @@ Warpnet is a fully decentralized, peer-to-peer social network built in Go. Every
 [![Snap](https://snapcraft.io/warpnet/badge.svg)](https://snapcraft.io/warpnet)
 [![Telegram](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#-contributing)
+[![GitGem](https://gitgem.org/api/badge/github/Warp-net/warpnet.svg)](https://gitgem.org/github/Warp-net/warpnet)
 
 [**Install**](#-quick-start-users) · [**Build from source**](#-build-from-source-developers) · [**How it works**](#-how-it-works) · [**Contributing**](#-contributing) · [**Roadmap**](#-roadmap)
 
@@ -176,7 +177,6 @@ warpnet/
 ├── security/         # keys, signing, Noise/PSK plumbing
 ├── config/           # node configuration
 ├── frontend/         # Vue desktop UI (talks to the node via Wails)
-├── metrics/          # observability
 ├── deploy/           # deployment manifests
 └── snap/             # Snap packaging
 ```

@@ -1,0 +1,93 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Bumps the patch version across every artifact that carries one, so each commit
+# on a release branch is independently installable and self-updatable.
+# Release branches only: feature branches must not move the version, and the
+# .claude/worktrees checkouts run these same hook files (core.hooksPath is an
+# absolute path to the main repo), so they are filtered out here too.
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+case "$BRANCH" in
+    main|develop) ;;
+    *) exit 0 ;;
+esac
+
+echo "Pre-commit hook started..."
+
+CONFIG="version"
+SNAPCRAFT="snap/snapcraft.yaml"
+FRONTEND_PKG="frontend/package.json"
+FRONTEND_LOCK="frontend/package-lock.json"
+FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
+CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "Version file not found!"
+    exit 1
+fi
+
+CURRENT_VERSION=$(grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG" || true)
+if [ -z "$CURRENT_VERSION" ]; then
+    echo "Version file is not strict MAJOR.MINOR.PATCH semver!"
+    exit 1
+fi
+
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+PATCH=$((10#$PATCH + 1))
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+echo "Version: $CURRENT_VERSION -> $NEW_VERSION"
+
+# Backend: the single source of truth. Embedded into the binary (embedded.go),
+# load-bearing for the PSK derivation, and read by warpdroid/app/build.gradle,
+# which derives versionName/versionCode from it — so the Android client stays in
+# lockstep without a file of its own.
+sed -i "s/^$CURRENT_VERSION\$/$NEW_VERSION/" "$CONFIG"
+git add "$CONFIG"
+
+# Snap package.
+if [ -f "$SNAPCRAFT" ]; then
+    sed -i -E "s/^version:[[:space:]]*'?([0-9]+\.[0-9]+\.[0-9]+)'?/version: ${NEW_VERSION}/" "$SNAPCRAFT"
+    git add "$SNAPCRAFT"
+fi
+
+# Frontend: kept in lockstep with the node version.
+if [ -f "$FRONTEND_PKG" ]; then
+    FRONTEND_VERSION=$(grep -m1 -Eo '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$FRONTEND_PKG" \
+        | sed -E 's/.*"([^"]+)"$/\1/' || true)
+    sed -i -E "0,/\"version\"[[:space:]]*:/s/(\"version\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"/\1\"${NEW_VERSION}\"/" "$FRONTEND_PKG"
+    git add "$FRONTEND_PKG"
+
+    # npm refuses to install from a lockfile whose own version drifted from
+    # package.json, so the root entries (top level + packages."") move together.
+    if [ -f "$FRONTEND_LOCK" ] && [ -n "$FRONTEND_VERSION" ]; then
+        sed -i "1,12s/\"version\": \"$FRONTEND_VERSION\"/\"version\": \"$NEW_VERSION\"/" "$FRONTEND_LOCK"
+        git add "$FRONTEND_LOCK"
+    fi
+fi
+
+# Publish the F-Droid versionCode so fdroiddata's UpdateCheckMode: Tags can read
+# warpdroid/fdroid/versionCode at the tag. Single APK, no VercodeOperation:
+# code = major*1000000 + minor*10000 + patch, then *10 (no ABI offset), matching
+# warpdroid/app/build.gradle.
+NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
+if [ -f "$FDROID_VERSIONCODE" ]; then
+    echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
+    git add "$FDROID_VERSIONCODE"
+fi
+
+# Keep the warpdroid F-Droid fastlane changelog in sync with the new
+# versionCode. Single-APK model: F-Droid expects exactly one changelog file
+# named <versionCode>.txt. Carry the most recent note forward to the new name
+# and delete any others.
+if [ -d "$CHANGELOGS" ]; then
+    NEW="$CHANGELOGS/$NEW_BASE.txt"
+    LATEST=$(ls "$CHANGELOGS"/*.txt 2>/dev/null | sort -V | tail -1 || true)
+    if [ -n "$LATEST" ] && [ "$LATEST" != "$NEW" ]; then
+        mv -f "$LATEST" "$NEW"
+        echo "Changelog: $(basename "$LATEST") -> $(basename "$NEW")"
+    fi
+    find "$CHANGELOGS" -maxdepth 1 -name '*.txt' ! -name "$NEW_BASE.txt" -exec rm -f {} +
+    git add -A "$CHANGELOGS"
+fi
