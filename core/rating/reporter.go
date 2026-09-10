@@ -33,7 +33,7 @@ import "github.com/Warp-net/warpnet/core/warpnet"
 // Enforcement points never touch it directly — they go through Handle,
 // which owns the no-store default and the fail-open policy.
 type Rater interface {
-	Record(subject warpnet.WarpPeerID, k Kind) error
-	Score(subject warpnet.WarpPeerID) (Score, error)
-	Band(subject warpnet.WarpPeerID) (Band, error)
+	Record(peerId warpnet.WarpPeerID, k Kind) error
+	Score(peerId warpnet.WarpPeerID) (Score, error)
+	Tier(peerId warpnet.WarpPeerID) (Tier, error)
 }

@@ -67,13 +67,6 @@ func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBr
 	return gb, err
 }
 
-// Broadcast sends data via Gossip.
-//
-// gb.gossip and gb.topic are set once at construction and never
-// mutated, so this method intentionally does NOT take gb.mx —
-// otherwise a slow PublishRaw (network I/O) would block close() and
-// Receive() through the same lock, defeating the deadlock fix in
-// Receive().
 func (gb *GossipBroadcaster) Broadcast(_ context.Context, data []byte) error {
 	return gb.gossip.PublishRaw(gb.topic, data)
 }
@@ -91,18 +84,6 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	}
 }
 
-// Receive is called by Gossip subscription handler to deliver data.
-//
-// All channel operations are non-blocking. If the buffer is full, the
-// oldest pending message is dropped and the new one is enqueued. The
-// previous implementation did `<-gb.dataChan` unconditionally inside the
-// `default` branch, which could deadlock under the held mutex when a
-// concurrent Next() drained the channel between the select decision
-// and the receive.
-//
-// The `closed` flag and `close()` taking the same mutex prevent a
-// "send on closed channel" panic when Next() shuts the broadcaster
-// down concurrently with an in-flight Receive.
 func (gb *GossipBroadcaster) Receive(data []byte) {
 	gb.mx.Lock()
 	defer gb.mx.Unlock()

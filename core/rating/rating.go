@@ -99,13 +99,13 @@ func (s Score) clamp() Score {
 	return s
 }
 
-type Band uint8
+type Tier uint8
 
 const (
-	BandTrusted  Band = iota // 800..1000  no effect
-	BandWatched              // 500..799   mild deprioritisation
-	BandDegraded             // 200..499   halved rate limits, low priority
-	BandFloor                // 0..199     minimum priority, gossipsub graylist range
+	TierTrusted  Tier = iota // 800..1000  no effect
+	TierWatched              // 500..799   mild deprioritisation
+	TierDegraded             // 200..499   halved rate limits, low priority
+	TierFloor                // 0..199     minimum priority, gossipsub graylist range
 )
 
 const (
@@ -114,28 +114,28 @@ const (
 	degradedFloor Score = 200
 )
 
-func BandOf(s Score) Band {
+func TierOf(s Score) Tier {
 	switch {
 	case s >= trustedFloor:
-		return BandTrusted
+		return TierTrusted
 	case s >= watchedFloor:
-		return BandWatched
+		return TierWatched
 	case s >= degradedFloor:
-		return BandDegraded
+		return TierDegraded
 	default:
-		return BandFloor
+		return TierFloor
 	}
 }
 
-func (b Band) String() string {
+func (b Tier) String() string {
 	switch b {
-	case BandTrusted:
+	case TierTrusted:
 		return "trusted"
-	case BandWatched:
+	case TierWatched:
 		return "watched"
-	case BandDegraded:
+	case TierDegraded:
 		return "degraded"
-	case BandFloor:
+	case TierFloor:
 		return "floor"
 	default:
 		return "unknown"

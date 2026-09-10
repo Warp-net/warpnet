@@ -59,7 +59,7 @@ func (h *Handle) Set(r Rater) {
 // something its role cannot witness — a bug at the call site, not
 // misbehaviour by the peer — so it is logged, not returned: enforcement
 // points sit on request paths with no caller to hand it to.
-func (h *Handle) Record(subject warpnet.WarpPeerID, k Kind) {
+func (h *Handle) Record(peerId warpnet.WarpPeerID, k Kind) {
 	if h == nil {
 		return
 	}
@@ -67,26 +67,26 @@ func (h *Handle) Record(subject warpnet.WarpPeerID, k Kind) {
 	if r == nil {
 		return
 	}
-	if err := (*r).Record(subject, k); err != nil {
-		log.Warnf("rating: recording %s for %s: %v", k, subject, err)
+	if err := (*r).Record(peerId, k); err != nil {
+		log.Warnf("rating: recording %s for %s: %v", k, peerId, err)
 	}
 }
 
-// Band is a peer's standing for an enforcement decision. Fail-open by
-// policy: no store yet, or a store that cannot be read, is BandTrusted
+// Tier is a peer's standing for an enforcement decision. Fail-open by
+// policy: no store yet, or a store that cannot be read, is TierTrusted
 // — a peer whose evidence we cannot see must not be penalised for it.
-func (h *Handle) Band(subject warpnet.WarpPeerID) Band {
+func (h *Handle) Tier(peerId warpnet.WarpPeerID) Tier {
 	if h == nil {
-		return BandTrusted
+		return TierTrusted
 	}
 	r := h.rater.Load()
 	if r == nil {
-		return BandTrusted
+		return TierTrusted
 	}
-	band, err := (*r).Band(subject)
+	band, err := (*r).Tier(peerId)
 	if err != nil {
-		log.Warnf("rating: reading standing of %s: %v", subject, err)
-		return BandTrusted
+		log.Warnf("rating: reading standing of %s: %v", peerId, err)
+		return TierTrusted
 	}
 	return band
 }

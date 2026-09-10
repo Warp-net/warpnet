@@ -38,7 +38,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/mastodon"
-	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -60,12 +59,6 @@ type DiscoveryInfoStorer interface {
 	SetMinNodePriority(pid warpnet.WarpPeerID)
 }
 
-type BackoffConnector interface {
-	Connect(warpnet.WarpAddrInfo) error
-}
-
-const probeInterval = 30 * time.Minute
-
 type NodeStorer interface {
 	BlocklistRemove(peerId string) error
 	IsBlocklisted(peerId string) bool
@@ -77,11 +70,6 @@ type UserStorer interface {
 	Create(user domain.User) (domain.User, error)
 	Update(userId string, newUser domain.User) (domain.User, error)
 	GetByNodeID(nodeID string) (user domain.User, err error)
-}
-
-type MetricsOnlineDiscoverer interface {
-	PushStatusOnline(nodeId string)
-	PushStatusOffline(nodeId string)
 }
 
 type discoverySource string
@@ -105,9 +93,8 @@ type discoveryService struct {
 	userRepo UserStorer
 	nodeRepo NodeStorer
 
-	ownId       warpnet.WarpPeerID
-	limiter     *leakyBucketRateLimiter
-	peerLimiter *peerLimiter
+	ownId   warpnet.WarpPeerID
+	limiter *leakyBucketRateLimiter
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -115,11 +102,6 @@ type discoveryService struct {
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
-	probed     *expirable.LRU[warpnet.WarpPeerID, struct{}]
-
-	rating *rating.Handle
-
-	m MetricsOnlineDiscoverer
 }
 
 //goland:noinspection ALL
@@ -127,53 +109,33 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
-	m MetricsOnlineDiscoverer,
-	r *rating.Handle,
 ) *discoveryService {
 	capacity := 32
 	leakPerTenSec := 2
 
-	if r == nil {
-		r = rating.NewHandle()
-	}
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newRateLimiter(capacity, leakPerTenSec),
-		peerLimiter:     newPeerLimiter(r.Band),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		probed:          newProbedCache(),
-		rating:          r,
-		m:               m,
 	}
 }
 
-func NewRelayDiscoveryService(ctx context.Context, m MetricsOnlineDiscoverer, r *rating.Handle) *discoveryService {
-	if r == nil {
-		r = rating.NewHandle()
-	}
+func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
 		limiter:         newRateLimiter(32, 2),
-		peerLimiter:     newPeerLimiter(r.Band),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		probed:          newProbedCache(),
-		rating:          r,
-		m:               m,
 	}
-}
-
-func newProbedCache() *expirable.LRU[warpnet.WarpPeerID, struct{}] {
-	return expirable.NewLRU[warpnet.WarpPeerID, struct{}](4096, nil, probeInterval) //nolint:mnd
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -249,11 +211,6 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		return
 	}
 
-	if !s.peerLimiter.Allow(pi.ID) {
-		log.Debugf("discovery: source '%s': peer over its own budget: %s", source, pi.ID.String())
-		s.rating.Record(pi.ID, rating.KindDiscoveryFlood)
-		return
-	}
 	if !s.limiter.Allow() {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
@@ -286,16 +243,14 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	if s.nodeRepo.IsBlocklisted(peer.ID.String()) {
 		log.Infof("discovery: source '%s': found blocklisted peer: %s", peer.Source, peer.ID.String())
-		s.m.PushStatusOffline(peer.ID.String())
 		return
 	}
 
 	pi := warpnet.WarpAddrInfo{ID: peer.ID, Addrs: peer.Addrs}
 
-	err := s.connect(pi)
+	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': connecting is backoffed: %s", peer.Source, pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -309,21 +264,12 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Warnf(
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
-		s.m.PushStatusOffline(pi.ID.String())
-		s.recordDialFailure(pi)
 		return
 	}
 
 	if s.aliasCache.Contains(peer.ID) {
 		log.Infof("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
-		s.m.PushStatusOnline(pi.ID.String())
 		s.node.SetMaxNodePriority(pi.ID)
-		return
-	}
-
-	if !s.shouldProbe(peer.ID) {
-		log.Debugf("discovery: source '%s': already probed recently: %s", peer.Source, pi.ID.String())
-		s.m.PushStatusOnline(pi.ID.String())
 		return
 	}
 
@@ -348,8 +294,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if pi.ID.String() == mastodon.GatewayNodeID() {
 		return
 	}
-
-	s.m.PushStatusOnline(pi.ID.String())
 
 	if info.IsModerator() {
 		return
@@ -402,10 +346,9 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 	pi := warpnet.WarpAddrInfo{ID: peer.ID, Addrs: peer.Addrs}
 
-	err := s.connect(pi)
+	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
 		log.Debugf("discovery: source '%s': relay handle: connecting is backoffed: %s", peer.Source, pi.ID)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 	if err != nil {
@@ -420,19 +363,11 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 			"discovery: source '%s': relay handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
-		s.m.PushStatusOffline(pi.ID.String())
 		return
 	}
 
 	if s.aliasCache.Contains(peer.ID) {
 		log.Debugf("discovery: source '%s': found alias peer: %s", peer.Source, peer.ID.String())
-		s.m.PushStatusOnline(pi.ID.String())
-		return
-	}
-
-	s.m.PushStatusOnline(pi.ID.String())
-
-	if !s.shouldProbe(peer.ID) {
 		return
 	}
 
@@ -450,38 +385,6 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
-}
-
-func (s *discoveryService) recordDialFailure(pi warpnet.WarpAddrInfo) {
-	if s == nil {
-		return
-	}
-	known := len(pi.Addrs) > 0
-	if !known && s.node != nil && s.node.Peerstore() != nil {
-		known = len(s.node.Peerstore().Addrs(pi.ID)) > 0
-	}
-	if !known {
-		return
-	}
-	s.rating.Record(pi.ID, rating.KindDialFailure)
-}
-
-func (s *discoveryService) shouldProbe(id warpnet.WarpPeerID) bool {
-	if s == nil || s.probed == nil {
-		return true
-	}
-	if s.probed.Contains(id) {
-		return false
-	}
-	s.probed.Add(id, struct{}{})
-	return true
-}
-
-func (s *discoveryService) connect(pi warpnet.WarpAddrInfo) error {
-	if backoffer, ok := s.node.(BackoffConnector); ok {
-		return backoffer.Connect(pi)
-	}
-	return s.node.SimpleConnect(pi)
 }
 
 const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")
@@ -561,7 +464,6 @@ func (s *discoveryService) Close() {
 		return
 	}
 	s.discoveryTicker.Stop()
-	s.peerLimiter.Close()
 	close(s.stopChan)
 	close(s.discoveryChan)
 	log.Infoln("discovery: closed")

@@ -51,9 +51,8 @@ import (
 const (
 	defaultFlushInterval = 30 * time.Second
 	gcInterval           = time.Hour
-	generationBytes      = 16
 
-	// scoreTTL bounds how stale a cached score may be while a subject's
+	// scoreTTL bounds how stale a cached score may be while a peerId's
 	// entries are unchanged. Scoring is on the request path and costs
 	// hundreds of microseconds for a well-observed peer; half-lives are
 	// measured in days, so seconds of staleness change nothing.
@@ -88,13 +87,23 @@ type Config struct {
 }
 
 type pendingKey struct {
-	subject string
-	dim     Dimension
-	bucket  int64
+	peerId string
+	dim    Dimension
+	bucket int64
 }
 
 // pendingCounts is one bucket's running totals for this generation.
 type pendingCounts map[Kind]uint32
+
+// cachedScore memoises a peerId's standing between changes to its
+// entries. Every enforcement point reads a band per request, and
+// recomputing decay over every record each time made that read cost
+// more than the request it was guarding.
+type cachedScore struct {
+	score Score
+	rev   uint64
+	at    time.Time
+}
 
 type Store struct {
 	ctx        context.Context
@@ -104,7 +113,7 @@ type Store struct {
 	dims       []Dimension
 	now        func() time.Time
 	store      Replica
-	idx        *index
+	indexer    *indexer
 	acquainted Acquaintance
 
 	generation string
@@ -140,12 +149,12 @@ func NewStore(cfg Config, replica Replica) (*Store, error) {
 		cfg.Now = time.Now
 	}
 
-	idx, err := newIndex()
+	indexer, err := newIndexer()
 	if err != nil {
 		return nil, fmt.Errorf("rating: index: %w", err)
 	}
 
-	scores, err := lru.New[string, cachedScore](maxIndexedSubjects)
+	scores, err := lru.New[string, cachedScore](indexer.maxIndexedSubjects())
 	if err != nil {
 		return nil, fmt.Errorf("rating: score cache: %w", err)
 	}
@@ -163,7 +172,7 @@ func NewStore(cfg Config, replica Replica) (*Store, error) {
 		privKey:    cfg.PrivKey,
 		dims:       slices.Clone(cfg.Dimensions),
 		now:        cfg.Now,
-		idx:        idx,
+		indexer:    indexer,
 		scores:     scores,
 		acquainted: cfg.Acquainted,
 		generation: generation,
@@ -186,15 +195,15 @@ func NewStore(cfg Config, replica Replica) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) error {
-	return s.RecordN(subject, k, 1)
+func (s *Store) Record(peerId warpnet.WarpPeerID, k Kind) error {
+	return s.RecordN(peerId, k, 1)
 }
 
-func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error {
+func (s *Store) RecordN(peerId warpnet.WarpPeerID, k Kind, n uint32) error {
 	if s == nil || n == 0 {
 		return nil
 	}
-	id := subject.String()
+	id := peerId.String()
 	if id == "" {
 		return ErrEmptySubject
 	}
@@ -208,7 +217,7 @@ func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error {
 		return fmt.Errorf("%w: %s", ErrForeignDimension, k.Dimension())
 	}
 
-	key := pendingKey{subject: id, dim: k.Dimension(), bucket: BucketOf(s.now())}
+	key := pendingKey{peerId: id, dim: k.Dimension(), bucket: BucketOf(s.now())}
 
 	s.mu.Lock()
 	counts, ok := s.counters[key]
@@ -222,13 +231,13 @@ func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error {
 	return nil
 }
 
-func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
+func (s *Store) Score(peerId warpnet.WarpPeerID) (Score, error) {
 	if s == nil {
 		return MaxScore, nil
 	}
-	id := subject.String()
+	id := peerId.String()
 	now := s.now()
-	if hit, ok := s.scores.Get(id); ok && hit.rev == s.idx.revision(id) && now.Sub(hit.at) < scoreTTL {
+	if hit, ok := s.scores.Get(id); ok && hit.rev == s.indexer.revision(id) && now.Sub(hit.at) < scoreTTL {
 		return hit.score, nil
 	}
 
@@ -239,7 +248,7 @@ func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 	// The revision is read after entriesFor: a cold load bumps it, and
 	// caching against the pre-load value would collide with the zero a
 	// later eviction resets it to.
-	rev := s.idx.revision(id)
+	rev := s.indexer.revision(id)
 	worst := MaxScore
 	for _, dim := range dimensionsPresent(obs) {
 		if sc := s.scoreDim(obs, dim, now); sc < worst {
@@ -250,23 +259,13 @@ func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error) {
 	return worst, nil
 }
 
-// cachedScore memoises a subject's standing between changes to its
-// entries. Every enforcement point reads a band per request, and
-// recomputing decay over every record each time made that read cost
-// more than the request it was guarding.
-type cachedScore struct {
-	score Score
-	rev   uint64
-	at    time.Time
-}
-
-func (s *Store) Band(subject warpnet.WarpPeerID) (Band, error) {
-	score, err := s.Score(subject)
-	return BandOf(score), err
+func (s *Store) Tier(peerId warpnet.WarpPeerID) (Tier, error) {
+	score, err := s.Score(peerId)
+	return TierOf(score), err
 }
 
 func (s *Store) scoreDim(obs []entry, dim Dimension, now time.Time) Score {
-	return subjectiveScore(obs, dim, s.self, now, s.weightOf, s.countsTowardScore)
+	return peerIdiveScore(obs, dim, s.self, now, s.weightOf, s.countsTowardScore)
 }
 
 func (s *Store) weightOf(observer string) float64 {
@@ -295,13 +294,12 @@ func (s *Store) countsTowardScore(observer string) bool {
 	return s.now().Sub(since) >= MinAcquaintance
 }
 
-// Public is the unweighted view, for display only.
-func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error) {
-	id := subject.String()
+func (s *Store) View(peerId warpnet.WarpPeerID) (domain.NodeRating, error) {
+	id := peerId.String()
 	result := domain.NodeRating{
 		NodeID:    id,
 		Overall:   int32(MaxScore),
-		Band:      BandTrusted.String(),
+		Tier:      TierTrusted.String(),
 		UpdatedAt: time.Now().UTC(),
 	}
 	if s == nil {
@@ -324,7 +322,7 @@ func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error) {
 		result.Dimensions = append(result.Dimensions, domain.DimensionRating{
 			Name:   dim.String(),
 			Score:  int32(score),
-			Band:   BandOf(score).String(),
+			Tier:   TierOf(score).String(),
 			Recent: tallyDTOs(recentTallies(obs, dim)),
 		})
 	}
@@ -333,7 +331,7 @@ func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error) {
 	}
 
 	result.Overall = int32(overall)
-	result.Band = BandOf(overall).String()
+	result.Tier = TierOf(overall).String()
 	result.Observers = len(observers)
 	result.UpdatedAt = now.UTC()
 	return result, nil
@@ -341,9 +339,9 @@ func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error) {
 
 func (s *Store) Own() (domain.NodeRating, error) {
 	if s == nil {
-		return domain.NodeRating{Overall: int32(MaxScore), Band: BandTrusted.String()}, nil
+		return domain.NodeRating{Overall: int32(MaxScore), Tier: TierTrusted.String()}, nil
 	}
-	return s.Public(warpnet.FromStringToPeerID(s.self))
+	return s.View(warpnet.FromStringToPeerID(s.self))
 }
 
 func tallyDTOs(in []tally) []domain.OffenceTally {
@@ -372,145 +370,123 @@ func dimensionsPresent(obs []entry) []Dimension {
 	return out
 }
 
-func (s *Store) entriesFor(subject string) ([]entry, error) {
-	if subject == "" {
-		return nil, ErrEmptySubject
-	}
-	if s.idx.has(subject) {
-		return s.idx.entries(subject), nil
-	}
-
-	s.fallbackMx.Lock()
-	defer s.fallbackMx.Unlock()
-	if s.idx.has(subject) { // another caller filled it while we waited
-		return s.idx.entries(subject), nil
-	}
-	err := s.loadSubject(subject)
-	return s.idx.entries(subject), err
-}
-
-func (s *Store) loadSubject(subject string) error {
-	if s.store == nil {
-		s.idx.ensure(subject)
-		return nil
-	}
-	results, err := s.store.Query(s.ctx, ds.Query{Prefix: SubjectPrefix(subject)})
-	if err != nil {
-		// Not marked present: a failed load must be retried on the
-		// next read, not remembered as an empty subject.
-		return fmt.Errorf("rating: query subject %s: %w", subject, err)
-	}
-	defer func() { _ = results.Close() }()
-
-	s.idx.ensure(subject)
-	for r := range results.Next() {
-		if r.Error != nil {
-			continue
-		}
-		rec, err := s.admit(r.Value)
-		if err != nil {
-			log.Debugf("rating: dropping record for %s: %v", subject, err)
-			continue
-		}
-		s.idx.put(rec)
-	}
-	return nil
-}
-
-func (s *Store) scan() error {
-	if s.store == nil {
-		return nil
-	}
-	results, err := s.store.Query(s.ctx, ds.Query{Prefix: KeyPrefix()})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = results.Close() }()
-
-	var admitted int
-	for r := range results.Next() {
-		if r.Error != nil {
-			continue
-		}
-		rec, err := s.admit(r.Value)
-		if err != nil {
-			log.Debugf("rating: dropping record at startup: %v", err)
-			continue
-		}
-		s.idx.put(rec)
-		admitted++
-	}
-	log.Infof("rating: indexed %d entry records at startup", admitted)
-	return nil
-}
-
-// admit parses and authenticates one raw record; indexing it is the
-// caller's decision, because only the caller knows whether it holds the
-// subject's complete entry set.
-func (s *Store) admit(value []byte) (Record, error) {
-	var rec Record
-	if len(value) == 0 {
-		return rec, ErrEmptyRecord
-	}
-	if err := json.Unmarshal(value, &rec); err != nil {
-		return rec, fmt.Errorf("rating: unmarshal record: %w", err)
-	}
-	if err := rec.Verify(); err != nil {
-		return rec, fmt.Errorf("rating: unverifiable record for %s: %w", rec.Subject, err)
-	}
-	if err := rec.Validate(s.now()); err != nil {
-		log.Warnf("rating: observer %s authored an invalid record: %v", rec.Observer, err)
-		if chargeErr := s.Record(warpnet.FromStringToPeerID(rec.Observer), KindForgedRecord); chargeErr != nil {
-			log.Warnf("rating: charging %s for a forged record: %v", rec.Observer, chargeErr)
-		}
-		return rec, err
-	}
-	return rec, nil
-}
-
-func (s *Store) onPut(key string, value []byte) {
-	if !strings.HasPrefix(key, KeyPrefix()) {
-		return
-	}
-	rec, err := s.admit(value)
-	if err != nil {
-		log.Debugf("rating: dropping merged record: %v", err)
-		return
-	}
-	// Update-only: the record is already in the datastore, so if the
-	// subject is not indexed the next read loads it whole.
-	s.idx.update(rec)
-}
-
-func (s *Store) onDelete(key string) {
-	subject, observer, dim, bucket, generation, ok := parseKey(key)
-	if !ok {
-		return
-	}
-	s.idx.drop(subject, observer, dim, bucket, generation)
-}
-
-// parseKey splits /RATING/obs/{subject}/{observer}/{dim}/{bucket}/{generation}.
-func parseKey(key string) (subject, observer string, dim Dimension, bucket int64, generation string, ok bool) {
-	trimmed := strings.TrimPrefix(strings.TrimPrefix(key, "/"), RepoName+"/obs/")
-	if trimmed == key {
-		return "", "", 0, 0, "", false
-	}
-	parts := strings.Split(trimmed, "/")
-	const wantParts = 5
-	if len(parts) != wantParts {
-		return "", "", 0, 0, "", false
-	}
-	dim, ok = ParseDimension(parts[2])
-	if !ok {
-		return "", "", 0, 0, "", false
-	}
-	bucket, err := strconv.ParseInt(parts[3], 10, 64)
-	if err != nil {
-		return "", "", 0, 0, "", false
-	}
-	return parts[0], parts[1], dim, bucket, parts[4], true
-}
+//func (s *Store) entriesFor(peerId string) ([]entry, error) {
+//	if peerId == "" {
+//		return nil, ErrEmptySubject
+//	}
+//	if s.indexer.has(peerId) {
+//		return s.indexer.entries(peerId), nil
+//	}
+//
+//	s.fallbackMx.Lock()
+//	defer s.fallbackMx.Unlock()
+//	if s.indexer.has(peerId) { // another caller filled it while we waited
+//		return s.indexer.entries(peerId), nil
+//	}
+//	err := s.loadSubject(peerId)
+//	return s.indexer.entries(peerId), err
+//}
+//
+//func (s *Store) loadSubject(peerId string) error {
+//	if s.store == nil {
+//		s.indexer.ensure(peerId)
+//		return nil
+//	}
+//	results, err := s.store.Query(s.ctx, ds.Query{Prefix: PeerPrefix(peerId)})
+//	if err != nil {
+//		// Not marked present: a failed load must be retried on the
+//		// next read, not remembered as an empty peerId.
+//		return fmt.Errorf("rating: query peerId %s: %w", peerId, err)
+//	}
+//	defer func() { _ = results.Close() }()
+//
+//	s.indexer.ensure(peerId)
+//	for r := range results.Next() {
+//		if r.Error != nil {
+//			continue
+//		}
+//		rec, err := s.admit(r.Value)
+//		if err != nil {
+//			log.Debugf("rating: dropping record for %s: %v", peerId, err)
+//			continue
+//		}
+//		s.indexer.put(rec)
+//	}
+//	return nil
+//}
+//
+//func (s *Store) scan() error {
+//	if s.store == nil {
+//		return nil
+//	}
+//	results, err := s.store.Query(s.ctx, ds.Query{Prefix: KeyPrefix()})
+//	if err != nil {
+//		return err
+//	}
+//	defer func() { _ = results.Close() }()
+//
+//	var admitted int
+//	for r := range results.Next() {
+//		if r.Error != nil {
+//			continue
+//		}
+//		rec, err := s.admit(r.Value)
+//		if err != nil {
+//			log.Debugf("rating: dropping record at startup: %v", err)
+//			continue
+//		}
+//		s.indexer.put(rec)
+//		admitted++
+//	}
+//	log.Infof("rating: indexed %d entry records at startup", admitted)
+//	return nil
+//}
+//
+//// admit parses and authenticates one raw record; indexing it is the
+//// caller's decision, because only the caller knows whether it holds the
+//// peerId's complete entry set.
+//func (s *Store) admit(value []byte) (Record, error) {
+//	var rec Record
+//	if len(value) == 0 {
+//		return rec, ErrEmptyRecord
+//	}
+//	if err := json.Unmarshal(value, &rec); err != nil {
+//		return rec, fmt.Errorf("rating: unmarshal record: %w", err)
+//	}
+//	if err := rec.Verify(); err != nil {
+//		return rec, fmt.Errorf("rating: unverifiable record for %s: %w", rec.Subject, err)
+//	}
+//	if err := rec.Validate(s.now()); err != nil {
+//		log.Warnf("rating: observer %s authored an invalid record: %v", rec.Observer, err)
+//		if chargeErr := s.Record(warpnet.FromStringToPeerID(rec.Observer), KindForgedRecord); chargeErr != nil {
+//			log.Warnf("rating: charging %s for a forged record: %v", rec.Observer, chargeErr)
+//		}
+//		return rec, err
+//	}
+//	return rec, nil
+//}
+//
+//func (s *Store) onPut(key string, value []byte) {
+//	if !strings.HasPrefix(key, KeyPrefix()) {
+//		return
+//	}
+//	rec, err := s.admit(value)
+//	if err != nil {
+//		log.Debugf("rating: dropping merged record: %v", err)
+//		return
+//	}
+//	// Update-only: the record is already in the datastore, so if the
+//	// peerId is not indexed the next read loads it whole.
+//	s.indexer.update(rec)
+//}
+//
+//func (s *Store) onDelete(key string) {
+//	peerId, observer, dim, bucket, generation, ok := parseKey(key)
+//	if !ok {
+//		return
+//	}
+//	s.indexer.drop(peerId, observer, dim, bucket, generation)
+//}
 
 func (s *Store) run(flush time.Duration) {
 	defer close(s.done)
@@ -557,7 +533,7 @@ func (s *Store) flush() error {
 	now := s.now()
 	for key, counts := range pending {
 		rec := Record{
-			Subject:    key.subject,
+			Subject:    key.peerId,
 			Observer:   s.self,
 			Dim:        key.dim,
 			Bucket:     key.bucket,
@@ -566,13 +542,13 @@ func (s *Store) flush() error {
 			UpdatedAt:  now.UTC(),
 		}
 		if err := rec.Sign(s.privKey); err != nil {
-			errs = append(errs, fmt.Errorf("sign record for %s: %w", key.subject, err))
+			errs = append(errs, fmt.Errorf("sign record for %s: %w", key.peerId, err))
 			continue
 		}
 
 		payload, err := json.Marshal(rec)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("marshal record for %s: %w", key.subject, err))
+			errs = append(errs, fmt.Errorf("marshal record for %s: %w", key.peerId, err))
 			continue
 		}
 		if s.store != nil {
@@ -581,10 +557,10 @@ func (s *Store) flush() error {
 				continue
 			}
 		}
-		// Update-only: if the subject is not indexed, the next read
+		// Update-only: if the peerId is not indexed, the next read
 		// loads it whole from the datastore, which now includes this
 		// record.
-		s.idx.update(rec)
+		s.indexer.update(rec)
 		s.clearIfUnchanged(key, counts)
 	}
 	s.dropSettledBuckets()
@@ -654,7 +630,7 @@ func (s *Store) gcOwnExpired() error {
 		if r.Error != nil {
 			continue
 		}
-		subject, observer, dim, bucket, generation, ok := parseKey(r.Key)
+		peerId, observer, dim, bucket, generation, ok := parseKey(r.Key)
 		if !ok || observer != s.self {
 			continue
 		}
@@ -665,7 +641,7 @@ func (s *Store) gcOwnExpired() error {
 			errs = append(errs, fmt.Errorf("gc delete %s: %w", r.Key, err))
 			continue
 		}
-		s.idx.drop(subject, observer, dim, bucket, generation)
+		s.indexer.drop(peerId, observer, dim, bucket, generation)
 		removed++
 	}
 	if removed > 0 {
@@ -687,14 +663,6 @@ func (s *Store) Close() error {
 		}
 	})
 	return nil
-}
-
-func newGeneration() (string, error) {
-	var buf [generationBytes]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf[:]), nil
 }
 
 var _ Rater = (*Store)(nil)

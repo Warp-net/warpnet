@@ -27,30 +27,30 @@
 
 package rating
 
-func ConnTagValue(b Band) int {
+func ConnTagValue(b Tier) int {
 	switch b {
-	case BandTrusted:
+	case TierTrusted:
 		return 60
-	case BandWatched:
+	case TierWatched:
 		return 30
-	case BandDegraded:
+	case TierDegraded:
 		return 10
-	case BandFloor:
+	case TierFloor:
 		return 1
 	default:
 		return 60
 	}
 }
 
-func GossipAppScore(b Band) float64 {
+func GossipAppScore(b Tier) float64 {
 	switch b {
-	case BandTrusted:
+	case TierTrusted:
 		return 0
-	case BandWatched:
+	case TierWatched:
 		return -10
-	case BandDegraded:
+	case TierDegraded:
 		return -60
-	case BandFloor:
+	case TierFloor:
 		return -200
 	default:
 		return 0
@@ -60,21 +60,21 @@ func GossipAppScore(b Band) float64 {
 const GossipGraylistThreshold = -100
 
 // LimitMultiplier scales a route's burst and per-minute allowance.
-func LimitMultiplier(b Band) float64 {
+func LimitMultiplier(b Tier) float64 {
 	switch b {
-	case BandTrusted:
+	case TierTrusted:
 		return 1
-	case BandWatched:
+	case TierWatched:
 		return 0.5
-	case BandDegraded:
+	case TierDegraded:
 		return 0.25
-	case BandFloor:
+	case TierFloor:
 		return 0.1
 	default:
 		return 1
 	}
 }
 
-func AllowInDHT(b Band) bool {
-	return b != BandFloor
+func AllowInDHT(b Tier) bool {
+	return b != TierFloor
 }

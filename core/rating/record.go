@@ -30,7 +30,7 @@ package rating
 import (
 	"crypto/ed25519"
 	"encoding/hex"
-	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -40,30 +40,32 @@ import (
 	"github.com/Warp-net/warpnet/security"
 )
 
+type ratingErr string
+
+func (e ratingErr) Error() string {
+	return fmt.Sprintf("rating: %s", string(e))
+}
+
 // RepoName is the CRDT key namespace for rating records.
-const RepoName = "RATING"
+const (
+	ErrRecordSelfRated     = ratingErr("record peerId equals observer")
+	ErrRecordBadSubject    = ratingErr("record peerId is not a peer id")
+	ErrRecordBadObserver   = ratingErr(" record observer is not a peer id")
+	ErrRecordBadDimension  = ratingErr("record dimension unknown")
+	ErrRecordBadGeneration = ratingErr("record generation malformed")
+	ErrRecordEmptyCounts   = ratingErr("record carries no counts")
+	ErrRecordBadKind       = ratingErr("record kind unknown or foreign to its dimension")
+	ErrRecordBucketFuture  = ratingErr("record bucket is in the future")
+	ErrRecordBucketStale   = ratingErr("record bucket is past retention")
+	ErrRecordNoSignature   = ratingErr("record is unsigned")
+	ErrRecordNoPubKey      = ratingErr("cannot derive pubkey from observer id")
+	ErrRecordNoPrivKey     = ratingErr(" cannot sign without a private key")
+	ErrNoNode              = ratingErr("node and replica are required")
 
-const generationHexLen = 32 // 16 random bytes
-
-var (
-	ErrRecordSelfRated     = errors.New("rating: record subject equals observer")
-	ErrRecordBadSubject    = errors.New("rating: record subject is not a peer id")
-	ErrRecordBadObserver   = errors.New("rating: record observer is not a peer id")
-	ErrRecordBadDimension  = errors.New("rating: record dimension unknown")
-	ErrRecordBadGeneration = errors.New("rating: record generation malformed")
-	ErrRecordEmptyCounts   = errors.New("rating: record carries no counts")
-	ErrRecordBadKind       = errors.New("rating: record kind unknown or foreign to its dimension")
-	ErrRecordBucketFuture  = errors.New("rating: record bucket is in the future")
-	ErrRecordBucketStale   = errors.New("rating: record bucket is past retention")
-	ErrRecordNoSignature   = errors.New("rating: record is unsigned")
-	ErrRecordNoPubKey      = errors.New("rating: cannot derive pubkey from observer id")
-	ErrRecordNoPrivKey     = errors.New("rating: cannot sign without a private key")
-	ErrNoNode              = errors.New("rating: node and replica are required")
-
-	ErrEmptySubject     = errors.New("rating: empty subject node id")
-	ErrEmptyRecord      = errors.New("rating: empty record")
-	ErrUnknownKind      = errors.New("rating: unknown offence kind")
-	ErrForeignDimension = errors.New("rating: node cannot witness this dimension")
+	ErrEmptySubject     = ratingErr("empty peerId node id")
+	ErrEmptyRecord      = ratingErr("empty record")
+	ErrUnknownKind      = ratingErr("unknown offence kind")
+	ErrForeignDimension = ratingErr("node cannot witness this dimension")
 )
 
 type CountEntry struct {
@@ -187,17 +189,3 @@ func (r Record) Total() uint64 {
 func (r Record) Key() string {
 	return RecordKey(r.Subject, r.Observer, r.Dim, r.Bucket, r.Generation)
 }
-
-func RecordKey(subject, observer string, dim Dimension, bucket int64, generation string) string {
-	return "/" + RepoName + "/obs/" +
-		subject + "/" +
-		observer + "/" +
-		dim.String() + "/" +
-		strconv.FormatInt(bucket, 10) + "/" +
-		generation
-}
-
-func KeyPrefix() string { return "/" + RepoName + "/obs" }
-
-// SubjectPrefix scopes a query to one subject.
-func SubjectPrefix(subject string) string { return KeyPrefix() + "/" + subject }

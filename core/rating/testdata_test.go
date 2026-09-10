@@ -135,13 +135,13 @@ func (c *fixedClock) advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// signedRecord builds a valid record from observer about subject.
+// signedRecord builds a valid record from observer about peerId.
 func signedRecord(
-	observer identity, subject warpnet.WarpPeerID, dim Dimension,
+	observer identity, peerId warpnet.WarpPeerID, dim Dimension,
 	bucket int64, generation string, counts ...CountEntry,
 ) Record {
 	rec := Record{
-		Subject:    subject.String(),
+		Subject:    peerId.String(),
 		Observer:   observer.id.String(),
 		Dim:        dim,
 		Bucket:     bucket,

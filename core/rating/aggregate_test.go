@@ -98,12 +98,12 @@ func TestRemoteObservationsCannotReachDegraded(t *testing.T) {
 					CountEntry{KindForgedRecord, 50},
 				))
 			}
-			score := subjectiveScore(obs, Network, self, now, fullWeight, nil)
+			score := peerIdiveScore(obs, Network, self, now, fullWeight, nil)
 
 			assert.GreaterOrEqual(t, score, MaxScore-CapRemoteTotal,
 				"remote entries alone must never drop below %d", MaxScore-CapRemoteTotal)
-			assert.LessOrEqual(t, BandOf(score), BandWatched,
-				"remote-only accusations must never reach BandDegraded")
+			assert.LessOrEqual(t, TierOf(score), TierWatched,
+				"remote-only accusations must never reach TierDegraded")
 		})
 	}
 }
@@ -113,7 +113,7 @@ func TestSingleRemoteObserverIsCappedTighter(t *testing.T) {
 	obs := []entry{
 		entryOf("accuser", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 100}),
 	}
-	score := subjectiveScore(obs, Network, "self", now, fullWeight, nil)
+	score := peerIdiveScore(obs, Network, "self", now, fullWeight, nil)
 	assert.Equal(t, MaxScore-CapPerObserver, score)
 }
 
@@ -123,9 +123,9 @@ func TestFirstHandEvidenceReachesFloor(t *testing.T) {
 	obs := []entry{
 		entryOf(self, Network, BucketOf(now), genA, CountEntry{KindBadSignature, 4}),
 	}
-	score := subjectiveScore(obs, Network, self, now, fullWeight, nil)
+	score := peerIdiveScore(obs, Network, self, now, fullWeight, nil)
 	assert.Equal(t, MinScore, score)
-	assert.Equal(t, BandFloor, BandOf(score))
+	assert.Equal(t, TierFloor, TierOf(score))
 }
 
 func TestDistrustedAccuserIsDiscounted(t *testing.T) {
@@ -134,8 +134,8 @@ func TestDistrustedAccuserIsDiscounted(t *testing.T) {
 		entryOf("accuser", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
 	}
 
-	trusted := subjectiveScore(obs, Network, "self", now, fullWeight, nil)
-	distrusted := subjectiveScore(obs, Network, "self", now,
+	trusted := peerIdiveScore(obs, Network, "self", now, fullWeight, nil)
+	distrusted := peerIdiveScore(obs, Network, "self", now,
 		func(string) float64 { return 0.1 }, nil)
 
 	assert.Less(t, trusted, distrusted, "an accuser we distrust must move the score less")
@@ -146,7 +146,7 @@ func TestUnacquaintedObserverHasNoVoice(t *testing.T) {
 	obs := []entry{
 		entryOf("stranger", Network, BucketOf(now), genA, CountEntry{KindBadSignature, 1}),
 	}
-	score := subjectiveScore(obs, Network, "self", now, fullWeight,
+	score := peerIdiveScore(obs, Network, "self", now, fullWeight,
 		func(string) bool { return false })
 	assert.Equal(t, MaxScore, score)
 }
@@ -190,6 +190,6 @@ func TestOtherDimensionsAreIgnored(t *testing.T) {
 	obs := []entry{
 		entryOf("self", Moderation, BucketOf(now), genA, CountEntry{KindAuditInvalid, 4}),
 	}
-	assert.Equal(t, MaxScore, subjectiveScore(obs, Network, "self", now, fullWeight, nil),
+	assert.Equal(t, MaxScore, peerIdiveScore(obs, Network, "self", now, fullWeight, nil),
 		"a moderation offence must not move the network score")
 }

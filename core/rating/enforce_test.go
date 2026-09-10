@@ -9,27 +9,27 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBandThresholds(t *testing.T) {
+func TestTierThresholds(t *testing.T) {
 	for _, tc := range []struct {
 		score Score
-		want  Band
+		want  Tier
 	}{
-		{MaxScore, BandTrusted},
-		{800, BandTrusted},
-		{799, BandWatched},
-		{600, BandWatched}, // the remote-only floor
-		{500, BandWatched},
-		{499, BandDegraded},
-		{200, BandDegraded},
-		{199, BandFloor},
-		{MinScore, BandFloor},
+		{MaxScore, TierTrusted},
+		{800, TierTrusted},
+		{799, TierWatched},
+		{600, TierWatched}, // the remote-only floor
+		{500, TierWatched},
+		{499, TierDegraded},
+		{200, TierDegraded},
+		{199, TierFloor},
+		{MinScore, TierFloor},
 	} {
-		assert.Equal(t, tc.want, BandOf(tc.score), "score %d", tc.score)
+		assert.Equal(t, tc.want, TierOf(tc.score), "score %d", tc.score)
 	}
 }
 
 func TestEnforcementKnobsWorsenMonotonically(t *testing.T) {
-	bands := []Band{BandTrusted, BandWatched, BandDegraded, BandFloor}
+	bands := []Tier{TierTrusted, TierWatched, TierDegraded, TierFloor}
 
 	for i := 1; i < len(bands); i++ {
 		prev, cur := bands[i-1], bands[i]
@@ -43,24 +43,24 @@ func TestEnforcementKnobsWorsenMonotonically(t *testing.T) {
 }
 
 func TestOnlyFloorIsGraylistedAndEvictedFromDHT(t *testing.T) {
-	for _, b := range []Band{BandTrusted, BandWatched, BandDegraded} {
+	for _, b := range []Tier{TierTrusted, TierWatched, TierDegraded} {
 		assert.Greater(t, GossipAppScore(b), float64(GossipGraylistThreshold),
 			"%s must stay above the gossipsub graylist", b)
 		assert.True(t, AllowInDHT(b), "%s must stay in the routing table", b)
 	}
-	assert.Less(t, GossipAppScore(BandFloor), float64(GossipGraylistThreshold))
-	assert.False(t, AllowInDHT(BandFloor))
+	assert.Less(t, GossipAppScore(TierFloor), float64(GossipGraylistThreshold))
+	assert.False(t, AllowInDHT(TierFloor))
 }
 
 func TestTrustedIsInert(t *testing.T) {
-	assert.Equal(t, float64(0), GossipAppScore(BandTrusted))
-	assert.Equal(t, float64(1), LimitMultiplier(BandTrusted))
-	assert.True(t, AllowInDHT(BandTrusted))
+	assert.Equal(t, float64(0), GossipAppScore(TierTrusted))
+	assert.Equal(t, float64(1), LimitMultiplier(TierTrusted))
+	assert.True(t, AllowInDHT(TierTrusted))
 }
 
 func TestLimitMultiplierNeverReachesZero(t *testing.T) {
 	// A low rating slows a peer down; it never refuses it service.
-	for _, b := range []Band{BandTrusted, BandWatched, BandDegraded, BandFloor} {
+	for _, b := range []Tier{TierTrusted, TierWatched, TierDegraded, TierFloor} {
 		assert.Positive(t, LimitMultiplier(b), "%s must still be served", b)
 	}
 }

@@ -32,7 +32,7 @@ import "time"
 type NodeRating struct {
 	NodeID     string            `json:"node_id"`
 	Overall    int32             `json:"overall"`
-	Band       string            `json:"band"`
+	Tier       string            `json:"tier"`
 	Dimensions []DimensionRating `json:"dimensions"`
 	Observers  int               `json:"observers"`
 	UpdatedAt  time.Time         `json:"updated_at"`
@@ -41,7 +41,7 @@ type NodeRating struct {
 type DimensionRating struct {
 	Name   string         `json:"name"`
 	Score  int32          `json:"score"`
-	Band   string         `json:"band"`
+	Tier   string         `json:"tier"`
 	Recent []OffenceTally `json:"recent"`
 }
 

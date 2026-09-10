@@ -105,7 +105,7 @@ func TestValidate(t *testing.T) {
 		assert.ErrorIs(t, rec.Validate(now), ErrRecordBucketStale)
 	})
 
-	t.Run("subject that is not a peer id is refused", func(t *testing.T) {
+	t.Run("peerId that is not a peer id is refused", func(t *testing.T) {
 		rec := valid
 		rec.Subject = "definitely-not-a-peer-id"
 		assert.ErrorIs(t, rec.Validate(now), ErrRecordBadSubject)
@@ -118,9 +118,9 @@ func TestKeyRoundTrip(t *testing.T) {
 	bucket := BucketOf(time.Now())
 	rec := signedRecord(obs, sub.id, Moderation, bucket, genB, CountEntry{KindAuditWrong, 3})
 
-	subject, observer, dim, gotBucket, generation, ok := parseKey(rec.Key())
+	peerId, observer, dim, gotBucket, generation, ok := parseKey(rec.Key())
 	require.True(t, ok, "key %q must parse", rec.Key())
-	assert.Equal(t, rec.Subject, subject)
+	assert.Equal(t, rec.Subject, peerId)
 	assert.Equal(t, rec.Observer, observer)
 	assert.Equal(t, Moderation, dim)
 	assert.Equal(t, bucket, gotBucket)

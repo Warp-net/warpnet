@@ -34,11 +34,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/ipfs/go-cid"
+	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -70,67 +74,81 @@ type CRDTRouter interface {
 	FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo
 }
 
-// CRDTStatsStore implements a PN-counter on top of go-ds-crdt that
-// stays correct under total local-data loss while keeping storage
-// proportional to (nodes × restarts × keys) instead of (operations).
-//
-// Layout.
-// Every value lives under a key of the shape
-//
-//	/STATS/{incr|decr}/{dataKey}/{nodeID}/{generation}
-//
-// where {generation} is a fresh 128-bit cryptographic nonce minted
-// once per process start. Each (namespace, dataKey, nodeID,
-// generation) tuple is owned by exactly one writer — the process
-// that minted that generation — so write semantics inside it are
-// trivially safe: we keep the value in memory, bump it under a
-// mutex, and Put the new value to the CRDT. We never read our own
-// value back from the CRDT, so eventual-consistency lag in the
-// local DAG view cannot lose increments.
-//
-// GetAggregatedStat sums values across all (nodeID, generation)
-// sub-counters under the prefix and returns
-// `Σ incr − Σ decr` (clamped at zero).
-//
-// Crash-safety.
-//   - Soft crash (process restart, disk intact): the next process
-//     boots with a brand-new generation. The previous generation's
-//     last-persisted value is still in the CRDT (and on peers); the
-//     new generation starts from 0 and is summed into the aggregate
-//     on top of the old one. The only loss is whatever +1's the
-//     dying process buffered locally without persisting/broadcasting
-//     — same fundamental durability boundary as the underlying
-//     datastore.
-//   - Total local-data loss: identical recovery path. Old generations
-//     are pulled back via the CRDT DAG from peers; the new
-//     generation cannot collide with any of them because its nonce
-//     is fresh, so peers' replayed history is preserved verbatim and
-//     this process simply accrues a new sub-counter alongside.
 type CRDTStatsStore struct {
-	crdt       *Store
-	ctx        context.Context
-	prefix     string
-	nodeID     string
-	generation string
+	crdt        *crdt.Datastore
+	broadcaster Broadcaster
+	ctx         context.Context
+	cancel      context.CancelFunc
+	prefix      string
+	nodeID      string
+	generation  string
 
 	mu           sync.Mutex
 	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
 	decrCounters map[string]uint64
 }
 
-func NewCRDTStatsStore(ctx context.Context, crdtStore *Store, node host.Host) (*CRDTStatsStore, error) {
-	if crdtStore == nil || node == nil {
-		return nil, fmt.Errorf("crdt stats: incomplete dependencies") //nolint:err113
+// NewCRDTStatsStore creates a new CRDT-based statistics store
+func NewCRDTStatsStore(
+	ctx context.Context,
+	broadcaster Broadcaster,
+	datastore CRDTStorer,
+	node host.Host,
+	router CRDTRouter,
+) (*CRDTStatsStore, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	baseStore := ds.MutexWrap(datastore)
+
+	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
+
+	bitswapNetwork := warpnet.NewBitswapNetwork(node)
+	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
+
+	for _, p := range node.Network().Peers() {
+		bitswapExchange.PeerConnected(p)
+	}
+
+	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
+	dagService := warpnet.NewDAGService(blockService)
+
+	l := log.StandardLogger().WithContext(ctx)
+
+	opts := crdt.DefaultOptions()
+	opts.Logger = l
+	opts.PutHook = func(k ds.Key, _ []byte) {
+		// l.Infof("crdt: item put: %s", k.String())
+	}
+	opts.DeleteHook = func(k ds.Key) {
+		// l.Infof("crdt: item deleted: %s", k.String())
+	}
+	opts.RebroadcastInterval = time.Minute
+	opts.DAGSyncerTimeout = time.Minute
+	opts.MultiHeadProcessing = true
+
+	crdtStore, err := crdt.New(
+		baseStore,
+		ds.NewKey(""), // node repo's already set the prefix
+		dagService,
+		broadcaster,
+		opts,
+	)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
 
 	gen, err := newGenerationID()
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
 	store := &CRDTStatsStore{
 		crdt:         crdtStore,
+		broadcaster:  broadcaster,
 		ctx:          ctx,
+		cancel:       cancel,
 		nodeID:       node.ID().String(),
 		prefix:       StatsRepoName,
 		generation:   gen,
@@ -141,9 +159,6 @@ func NewCRDTStatsStore(ctx context.Context, crdtStore *Store, node host.Host) (*
 	return store, nil
 }
 
-// GetAggregatedStat returns the cluster-wide PN-counter for key.
-// Sum is taken across every (nodeID, generation) sub-counter that
-// has been merged into the local CRDT view.
 func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	positive, err := s.sumNamespace(incrNamespace, key)
 	if err != nil {
@@ -159,24 +174,14 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	return positive - negative, nil
 }
 
-// Increment bumps this process's `incr` sub-counter for key by 1
-// and persists the new running total to the CRDT.
 func (s *CRDTStatsStore) Increment(key ds.Key) error {
 	return s.bump(incrNamespace, key, s.incrCounters)
 }
 
-// Decrement bumps this process's `decr` sub-counter for key by 1
-// and persists the new running total to the CRDT.
 func (s *CRDTStatsStore) Decrement(key ds.Key) error {
 	return s.bump(decrNamespace, key, s.decrCounters)
 }
 
-// bump increases this process's sub-counter for (namespace, dataKey)
-// by 1 and writes the new running total to the CRDT under the
-// generation-tagged key. The (nodeID, generation) sub-counter is
-// owned exclusively by this process, so the in-memory value is
-// always authoritative — no CRDT read, no eventual-consistency
-// window, no read-modify-write hazard.
 func (s *CRDTStatsStore) bump(namespace string, dataKey ds.Key, cache map[string]uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -195,11 +200,6 @@ func (s *CRDTStatsStore) bump(namespace string, dataKey ds.Key, cache map[string
 	return nil
 }
 
-// sumNamespace queries every sub-counter under the (namespace, key)
-// prefix — across all known nodes and all known generations — and
-// returns their sum. This is what makes a fresh post-disaster
-// generation simply layer on top of the prior history that peers
-// replay back to us.
 func (s *CRDTStatsStore) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 	prefix := ds.NewKey(
 		fmt.Sprintf("/%s/%s/%s", s.prefix, namespace, key.String()),
@@ -233,8 +233,13 @@ func newGenerationID() (string, error) {
 	return hex.EncodeToString(buf[:]), nil
 }
 
+// Close stops the CRDT store
 func (s *CRDTStatsStore) Close() error {
-	return nil
+	if s == nil {
+		return nil
+	}
+	s.cancel()
+	return s.crdt.Close()
 }
 
 func encodeCounter(value uint64) []byte {

@@ -110,7 +110,7 @@ func penaltyOf(obs []entry, dim Dimension, now time.Time) Score {
 	return Score(total)
 }
 
-// groupByObserver splits a subject's entries on one dimension.
+// groupByObserver splits a peerId's entries on one dimension.
 func groupByObserver(obs []entry, dim Dimension) map[string][]entry {
 	out := make(map[string][]entry)
 	for _, o := range obs {
@@ -122,7 +122,7 @@ func groupByObserver(obs []entry, dim Dimension) map[string][]entry {
 	return out
 }
 
-func subjectiveScore(
+func peerIdiveScore(
 	obs []entry,
 	dim Dimension,
 	self string,
@@ -177,7 +177,7 @@ func publicScore(obs []entry, dim Dimension, now time.Time) (Score, int) {
 	return (scores[mid-1] + scores[mid]) / 2, len(scores) //nolint:mnd
 }
 
-// tally is one offence kind's live count for a subject, for the UI.
+// tally is one offence kind's live count for a peerId, for the UI.
 type tally struct {
 	kind   Kind
 	count  uint32

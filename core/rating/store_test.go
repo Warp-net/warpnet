@@ -45,9 +45,9 @@ func scoreDimOf(t *testing.T, s *Store, id warpnet.WarpPeerID, dim Dimension) Sc
 	return s.scoreDim(obs, dim, s.now())
 }
 
-func bandOf(t *testing.T, s *Store, id warpnet.WarpPeerID) Band {
+func bandOf(t *testing.T, s *Store, id warpnet.WarpPeerID) Tier {
 	t.Helper()
-	band, err := s.Band(id)
+	band, err := s.Tier(id)
 	require.NoError(t, err)
 	return band
 }
@@ -119,7 +119,7 @@ func TestObserveFoldsIntoOneKeyPerTuple(t *testing.T) {
 	flushNow(t, s)
 
 	keys := store.keys()
-	require.Len(t, keys, 1, "one subject, one dimension, one bucket, one generation")
+	require.Len(t, keys, 1, "one peerId, one dimension, one bucket, one generation")
 
 	raw, err := store.Get(t.Context(), ds.NewKey(keys[0]))
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestObserveIsNonBlockingWhenPersistenceIsBroken(t *testing.T) {
 		t.Fatal("Record blocked while the datastore was failing")
 	}
 	assert.EqualValues(t, 100_000, s.counters[pendingKey{
-		subject: other.id.String(), dim: Network, bucket: BucketOf(clock.Now()),
+		peerId: other.id.String(), dim: Network, bucket: BucketOf(clock.Now()),
 	}][KindRateLimitHit])
 }
 
@@ -189,7 +189,7 @@ func TestScoreDropsOnFirstHandEvidence(t *testing.T) {
 	flushNow(t, s)
 
 	assert.Equal(t, Score(500), scoreOf(t, s, other.id))
-	assert.Equal(t, BandWatched, bandOf(t, s, other.id))
+	assert.Equal(t, TierWatched, bandOf(t, s, other.id))
 }
 
 func TestScoreRecoversOverTime(t *testing.T) {
@@ -307,16 +307,16 @@ func TestForgedRecordIsDroppedAndCharged(t *testing.T) {
 func TestGCRemovesOnlyOwnExpiredRecords(t *testing.T) {
 	self := newIdentity(t)
 	peer := newIdentity(t)
-	subject := newIdentity(t)
+	peerId := newIdentity(t)
 	clock := newClock()
 	store := newMemStore()
 	s := newTestStore(t, self, store, clock)
 
-	mustRecord(t, s, subject.id, KindBadSignature)
+	mustRecord(t, s, peerId.id, KindBadSignature)
 	flushNow(t, s)
 
 	// A foreign record in the same expired window.
-	foreign := signedRecord(peer, subject.id, Network, BucketOf(clock.Now()), genB,
+	foreign := signedRecord(peer, peerId.id, Network, BucketOf(clock.Now()), genB,
 		CountEntry{KindBadSignature, 1})
 	payload, err := json.Marshal(foreign)
 	require.NoError(t, err)
@@ -348,7 +348,7 @@ func TestEvictedSubjectFallsBackToQuery(t *testing.T) {
 	s.idx.lru.Remove(other.id.String())
 	require.False(t, s.idx.has(other.id.String()))
 
-	assert.Equal(t, expected, scoreOf(t, s, other.id), "an evicted subject must reload from the datastore")
+	assert.Equal(t, expected, scoreOf(t, s, other.id), "an evicted peerId must reload from the datastore")
 	assert.True(t, s.idx.has(other.id.String()), "and re-enter the index")
 }
 
@@ -363,7 +363,7 @@ func TestUnobservedSubjectIsNotRequeriedForever(t *testing.T) {
 		"a peer nobody observed is marked present so it is not re-queried on every request")
 }
 
-// The score is memoised between changes to a subject's entries, so
+// The score is memoised between changes to a peerId's entries, so
 // the clock is deliberately frozen here: if invalidation were broken,
 // both reads would return the stale value.
 func TestNewEvidenceInvalidatesTheCachedScore(t *testing.T) {
@@ -403,8 +403,8 @@ func TestAMergedForeignRecordInvalidatesTheCachedScore(t *testing.T) {
 		"a delta merged from the DAG must not read as the cached score")
 }
 
-// A delta for a subject the index does not hold must not create a
-// one-record view that shadows the rest of the subject's history in
+// A delta for a peerId the index does not hold must not create a
+// one-record view that shadows the rest of the peerId's history in
 // the datastore.
 func TestMergedDeltaForUnindexedSubjectDoesNotShadowHistory(t *testing.T) {
 	self := newIdentity(t)
@@ -421,7 +421,7 @@ func TestMergedDeltaForUnindexedSubjectDoesNotShadowHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.Put(t.Context(), ds.NewKey(old.Key()), payload))
 
-	// A benign delta arrives over the DAG for the unindexed subject.
+	// A benign delta arrives over the DAG for the unindexed peerId.
 	benign := signedRecord(peer, victim.id, Network, BucketOf(clock.Now()), genB,
 		CountEntry{KindRateLimitHit, 1})
 	payload, err = json.Marshal(benign)
@@ -460,11 +460,11 @@ func TestEmptyHandleNeverPenalises(t *testing.T) {
 	id := warpnet.FromStringToPeerID("12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo")
 
 	assert.NotPanics(t, func() { h.Record(id, KindBadSignature) })
-	assert.Equal(t, BandTrusted, h.Band(id))
+	assert.Equal(t, TierTrusted, h.Tier(id))
 
 	var nilHandle *Handle
 	assert.NotPanics(t, func() { nilHandle.Record(id, KindBadSignature) })
-	assert.Equal(t, BandTrusted, nilHandle.Band(id))
+	assert.Equal(t, TierTrusted, nilHandle.Tier(id))
 }
 
 // The store fails a read; the handle must fail open, not closed.
@@ -480,15 +480,15 @@ func TestHandleFailsOpenOnAnUnreadableStore(t *testing.T) {
 
 	h := NewHandle()
 	h.Set(s)
-	require.Equal(t, BandFloor, h.Band(other.id), "with a working store the handle reports the real band")
+	require.Equal(t, TierFloor, h.Tier(other.id), "with a working store the handle reports the real band")
 
-	// Evict the subject and break the datastore: the reload fails.
+	// Evict the peerId and break the datastore: the reload fails.
 	s.idx.lru.Remove(other.id.String())
 	store.mu.Lock()
 	store.queryErr = errors.New("datastore is down")
 	store.mu.Unlock()
 
-	assert.Equal(t, BandTrusted, h.Band(other.id),
+	assert.Equal(t, TierTrusted, h.Tier(other.id),
 		"a standing the handle cannot read must cost the peer nothing")
 }
 
@@ -498,7 +498,7 @@ func TestNilStoreIsSafe(t *testing.T) {
 	assert.NotPanics(t, func() {
 		assert.NoError(t, s.Record(id, KindBadSignature))
 		assert.Equal(t, MaxScore, scoreOf(t, s, id))
-		assert.Equal(t, BandTrusted, bandOf(t, s, id))
+		assert.Equal(t, TierTrusted, bandOf(t, s, id))
 		_, err := s.Own()
 		assert.NoError(t, err)
 		assert.NoError(t, s.Close())
