@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,12 +18,12 @@ func TestSigningBytesAreOrderIndependent(t *testing.T) {
 	now := time.Now()
 
 	ascending := signedRecord(obs, sub.id, Network, BucketOf(now), genA,
-		CountEntry{KindMalformedFrame, 2}, CountEntry{KindRateLimitHit, 5})
+		kindCount{KindMalformedFrame, 2}, kindCount{KindRateLimitHit, 5})
 	descending := signedRecord(obs, sub.id, Network, BucketOf(now), genA,
-		CountEntry{KindRateLimitHit, 5}, CountEntry{KindMalformedFrame, 2})
+		kindCount{KindRateLimitHit, 5}, kindCount{KindMalformedFrame, 2})
 
-	assert.Equal(t, string(ascending.SigningBytes()), string(descending.SigningBytes()),
-		"count order must not change the signed bytes")
+	assert.Equal(t, string(signingBytes(ascending)), string(signingBytes(descending)),
+		"offence order must not change the signed bytes")
 	assert.Equal(t, ascending.Signature, descending.Signature)
 }
 
@@ -30,24 +31,25 @@ func TestVerifyRejectsForeignSignature(t *testing.T) {
 	obs := newIdentity(t)
 	impostor := newIdentity(t)
 	sub := newIdentity(t)
-	bucket := BucketOf(time.Now())
 
-	rec := signedRecord(obs, sub.id, Network, bucket, genA, CountEntry{KindBadSignature, 1})
-	require.NoError(t, rec.Verify())
+	rec := signedRecord(obs, sub.id, Network, BucketOf(time.Now()), genA, kindCount{KindBadSignature, 1})
+	require.NoError(t, verifyRecord(rec))
 
-	// Same content, but claiming to come from someone else.
-	rec.Observer = impostor.id.String()
-	assert.Error(t, rec.Verify(), "a record must not verify under a foreign observer id")
+	rec.ObserverId = impostor.id.String() // same content, claiming another author
+	assert.Error(t, verifyRecord(rec), "a record must not verify under a foreign observer id")
 }
 
 func TestVerifyRejectsTamperedCounts(t *testing.T) {
 	obs := newIdentity(t)
 	sub := newIdentity(t)
-	rec := signedRecord(obs, sub.id, Network, BucketOf(time.Now()), genA,
-		CountEntry{KindRateLimitHit, 1})
+	rec := signedRecord(obs, sub.id, Network, BucketOf(time.Now()), genA, kindCount{KindRateLimitHit, 1})
 
-	rec.Counts[0].Count = 9999
-	assert.Error(t, rec.Verify(), "inflating a count must break the signature")
+	rec.Offences[0].Count = 9999
+	assert.Error(t, verifyRecord(rec), "inflating a count must break the signature")
+
+	unsigned := rec
+	unsigned.Signature = ""
+	assert.ErrorIs(t, verifyRecord(unsigned), ErrRecordNoSignature)
 }
 
 func TestValidate(t *testing.T) {
@@ -56,85 +58,103 @@ func TestValidate(t *testing.T) {
 	now := time.Now()
 	bucket := BucketOf(now)
 
-	valid := signedRecord(obs, sub.id, Network, bucket, genA, CountEntry{KindRateLimitHit, 1})
-	require.NoError(t, valid.Validate(now))
+	valid := signedRecord(obs, sub.id, Network, bucket, genA, kindCount{KindRateLimitHit, 1})
+	require.NoError(t, validateRecord(valid, now))
 
 	t.Run("self rating is refused", func(t *testing.T) {
 		rec := valid
-		rec.Subject = rec.Observer
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordSelfRated)
+		rec.PeerId = rec.ObserverId
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordSelfRated)
 	})
 
 	t.Run("kind from another dimension is refused", func(t *testing.T) {
 		rec := valid
-		rec.Counts = []CountEntry{{KindModerationUpheld, 1}} // application kind on a network record
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordBadKind)
+		rec.Offences = []domain.OffenceCount{{Kind: KindModerationUpheld.String(), Count: 1}}
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBadKind)
 	})
 
 	t.Run("unknown kind is refused", func(t *testing.T) {
 		rec := valid
-		rec.Counts = []CountEntry{{Kind(60000), 1}}
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordBadKind)
+		rec.Offences = []domain.OffenceCount{{Kind: "made_up", Count: 1}}
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBadKind)
+	})
+
+	t.Run("unknown dimension is refused", func(t *testing.T) {
+		rec := valid
+		rec.Dimension = "vibes"
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBadDimension)
 	})
 
 	t.Run("malformed generation is refused", func(t *testing.T) {
 		rec := valid
 		rec.Generation = "not-hex"
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordBadGeneration)
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBadGeneration)
 	})
 
-	t.Run("empty counts are refused", func(t *testing.T) {
+	t.Run("empty offences are refused", func(t *testing.T) {
 		rec := valid
-		rec.Counts = nil
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordEmptyCounts)
+		rec.Offences = nil
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordEmptyOffences)
 	})
 
 	t.Run("future bucket is refused beyond one bucket of skew", func(t *testing.T) {
 		rec := valid
 		rec.Bucket = bucket + 2
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordBucketFuture)
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBucketFuture)
 
-		rec.Bucket = bucket + 1 // one bucket of clock skew is tolerated
-		assert.NoError(t, rec.Validate(now))
+		rec.Bucket = bucket + 1
+		assert.NoError(t, validateRecord(rec, now))
 	})
 
 	t.Run("bucket past retention is refused", func(t *testing.T) {
 		rec := signedRecord(obs, sub.id, Network,
-			BucketOf(now.Add(-retention(Network)-time.Hour)), genA,
-			CountEntry{KindRateLimitHit, 1})
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordBucketStale)
+			BucketOf(now.Add(-retention(Network)-time.Hour)), genA, kindCount{KindRateLimitHit, 1})
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBucketStale)
 	})
 
-	t.Run("peerId that is not a peer id is refused", func(t *testing.T) {
+	t.Run("peer that is not a peer id is refused", func(t *testing.T) {
 		rec := valid
-		rec.Subject = "definitely-not-a-peer-id"
-		assert.ErrorIs(t, rec.Validate(now), ErrRecordBadSubject)
+		rec.PeerId = "definitely-not-a-peer-id"
+		assert.ErrorIs(t, validateRecord(rec, now), ErrRecordBadPeerId)
 	})
 }
 
-func TestKeyRoundTrip(t *testing.T) {
+func TestOnlyStructuralFailuresAreForgery(t *testing.T) {
+	for _, err := range []error{
+		ErrRecordSelfRated, ErrRecordBadPeerId, ErrRecordBadDimension,
+		ErrRecordBadGeneration, ErrRecordEmptyOffences, ErrRecordBadKind,
+	} {
+		assert.True(t, forged(err), "%v proves its author wrote nonsense", err)
+	}
+	for _, err := range []error{ErrRecordBucketStale, ErrRecordBucketFuture, ErrRecordNoSignature, ErrRecordNoPubKey} {
+		assert.False(t, forged(err), "%v is not attributable to the named observer", err)
+	}
+}
+
+func TestEntryOfConvertsNamesBackToKinds(t *testing.T) {
 	obs := newIdentity(t)
 	sub := newIdentity(t)
 	bucket := BucketOf(time.Now())
-	rec := signedRecord(obs, sub.id, Moderation, bucket, genB, CountEntry{KindAuditWrong, 3})
+	rec := signedRecord(obs, sub.id, Moderation, bucket, genB, kindCount{KindAuditWrong, 3})
 
-	peerId, observer, dim, gotBucket, generation, ok := parseKey(rec.Key())
-	require.True(t, ok, "key %q must parse", rec.Key())
-	assert.Equal(t, rec.Subject, peerId)
-	assert.Equal(t, rec.Observer, observer)
-	assert.Equal(t, Moderation, dim)
-	assert.Equal(t, bucket, gotBucket)
-	assert.Equal(t, genB, generation)
+	assert.Equal(t, entry{
+		observer:   obs.id.String(),
+		dim:        Moderation,
+		bucket:     bucket,
+		generation: genB,
+		counts:     []kindCount{{KindAuditWrong, 3}},
+	}, entryOf(rec))
 }
 
-func TestParseKeyRejectsForeignKeys(t *testing.T) {
-	for _, key := range []string{
-		"/STATS/incr/whatever/node/gen",
-		"/RATING/obs/too/few/parts",
-		"/RATING/obs/a/b/badDim/1/" + genA,
-		"/RATING/obs/a/b/net/notanumber/" + genA,
-	} {
-		_, _, _, _, _, ok := parseKey(key)
-		assert.False(t, ok, "key %q must not parse", key)
+func TestGenerationIsUniquePerProcess(t *testing.T) {
+	seen := make(map[string]struct{}, 64)
+	for range 64 {
+		gen, err := newGeneration()
+		require.NoError(t, err)
+		assert.Len(t, gen, generationHexLen)
+
+		_, dup := seen[gen]
+		assert.False(t, dup, "generation nonces must never repeat")
+		seen[gen] = struct{}{}
 	}
 }

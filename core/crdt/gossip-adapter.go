@@ -50,17 +50,29 @@ type GossipBroadcaster struct {
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
-const statsTopic = "/warpnet/stats/1.0.0"
+const (
+	statsTopic  = "/warpnet/stats/1.0.0"
+	ratingTopic = "/warpnet/rating/1.0.0"
+)
 
-// NewGossipBroadcaster creates a new Gossip-based broadcaster for CRDT
+// NewGossipBroadcaster creates a new Gossip-based broadcaster for the stats CRDT
 func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
+	return newGossipBroadcaster(ctx, gossip, statsTopic)
+}
+
+// NewRatingGossipBroadcaster creates a new Gossip-based broadcaster for the rating CRDT
+func NewRatingGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
+	return newGossipBroadcaster(ctx, gossip, ratingTopic)
+}
+
+func newGossipBroadcaster(ctx context.Context, gossip GossipPubSuber, topic string) (*GossipBroadcaster, error) {
 	gb := &GossipBroadcaster{
 		gossip:   gossip,
-		topic:    statsTopic,
+		topic:    topic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
 	}
-	err := gossip.SubscribeRaw(statsTopic, func(data []byte) error {
+	err := gossip.SubscribeRaw(topic, func(data []byte) error {
 		gb.Receive(data)
 		return nil
 	})

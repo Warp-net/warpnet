@@ -113,7 +113,7 @@ func (k Kind) String() string {
 	if o, ok := catalogue[k]; ok {
 		return o.name
 	}
-	return "unknown"
+	return unknownName
 }
 
 func KindByName(s string) (Kind, bool) {

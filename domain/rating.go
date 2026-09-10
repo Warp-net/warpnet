@@ -29,8 +29,26 @@ package domain
 
 import "time"
 
+// RatingRecord is one node's signed count of another node's offences
+// within one hour bucket. Only ObserverId ever writes it.
+type RatingRecord struct {
+	PeerId     string         `json:"peer_id"`
+	ObserverId string         `json:"observer_id"`
+	Dimension  string         `json:"dimension"`
+	Bucket     int64          `json:"bucket"` // unix hour
+	Generation string         `json:"generation"`
+	Offences   []OffenceCount `json:"offences"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	Signature  string         `json:"signature"`
+}
+
+type OffenceCount struct {
+	Kind  string `json:"kind"`
+	Count uint32 `json:"count"`
+}
+
 type NodeRating struct {
-	NodeID     string            `json:"node_id"`
+	NodeId     string            `json:"node_id"`
 	Overall    int32             `json:"overall"`
 	Tier       string            `json:"tier"`
 	Dimensions []DimensionRating `json:"dimensions"`

@@ -31,6 +31,8 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
+const unknownName = "unknown"
+
 type Dimension uint8
 
 const (
@@ -48,7 +50,7 @@ func (d Dimension) String() string {
 	case Moderation:
 		return "mod"
 	default:
-		return "unknown"
+		return unknownName
 	}
 }
 
@@ -138,6 +140,6 @@ func (b Tier) String() string {
 	case TierFloor:
 		return "floor"
 	default:
-		return "unknown"
+		return unknownName
 	}
 }

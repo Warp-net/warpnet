@@ -45,7 +45,7 @@ func TestNewGossipBroadcaster(t *testing.T) {
 	gb, err := NewGossipBroadcaster(ctx, mock)
 	assert.NoError(t, err)
 	assert.NotNil(t, gb)
-	assert.Equal(t, crdtTopic, gb.topic)
+	assert.Equal(t, statsTopic, gb.topic)
 }
 
 func TestNewGossipBroadcaster_SubscribeError(t *testing.T) {
@@ -63,7 +63,7 @@ func TestBroadcast(t *testing.T) {
 	err := gb.Broadcast(ctx, []byte("hello"))
 	assert.NoError(t, err)
 	assert.Len(t, mock.published, 1)
-	assert.Equal(t, crdtTopic, mock.published[0].topic)
+	assert.Equal(t, statsTopic, mock.published[0].topic)
 	assert.Equal(t, []byte("hello"), mock.published[0].data)
 }
 
@@ -197,4 +197,12 @@ func TestSubscribeHandler_ReceivesData(t *testing.T) {
 	data, err := gb.Next(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("subscribed data"), data)
+}
+
+func TestNewRatingGossipBroadcaster_UsesItsOwnTopic(t *testing.T) {
+	mock := &mockGossipPubSub{}
+	gb, err := NewRatingGossipBroadcaster(context.Background(), mock)
+	assert.NoError(t, err)
+	assert.Equal(t, ratingTopic, gb.topic)
+	assert.NotEqual(t, statsTopic, gb.topic, "two CRDTs on one topic would merge each other's deltas")
 }

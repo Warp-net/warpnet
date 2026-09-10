@@ -1,8 +1,10 @@
 # Node rating — design and implementation plan
 
-Status: implemented. This document is both the design and the record of
-what was built; where the implementation departed from the original plan,
-the section says so and why.
+Status: the storage layer (`core/crdt/rating.go`, `database/rating-repo.go`,
+`domain.RatingRecord`) and the engine (`core/rating`) are implemented and
+tested; nothing is wired into the node yet. §6.4, §7, §8 and the wiring in §9
+describe the integration still to come. Where the implementation departed
+from the original plan, the section says so and why.
 
 A node's rating is an inherent property of every Warpnet node, computed and
 stored **by its neighbours** — never by itself — replicated over CRDT, decaying
@@ -31,10 +33,10 @@ The plan is deliberately built on machinery already in the tree.
 
 | Existing | File | Reused for |
 |---|---|---|
-| PN-counter over `go-ds-crdt`, single-writer generation-tagged keys, bitswap/DAG wiring | `core/crdt/stats.go` | The datastore wiring is extracted and reused; the rating store is a sibling, not a counter. |
-| Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/gossip-adapter.go` | Parametrised by topic. |
+| PN-counter over `go-ds-crdt`, single-writer generation-tagged keys, bitswap/DAG wiring | `core/crdt/stats.go` | `CRDTRatingStore` is built the same way, as a sibling with its own datastore; it stores signed records, not counters. |
+| Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/gossip-adapter.go` | Gains a second topic, `/warpnet/rating/1.0.0`, so the two CRDTs never see each other's heads. |
 | `UpsertTag` connection priority with a flap LRU | `core/node/priority.go` | Gains a second, independent `rating` tag. |
-| Per-`route\|peer` leaky buckets | `core/middleware/rate-limiter.go` | Bucket parameters become a function of the peer's band. |
+| Per-`route\|peer` leaky buckets | `core/middleware/rate-limiter.go` | Bucket parameters become a function of the peer's tier. |
 | Signature / freshness / private-route checks | `core/middleware/auth.go:54-85` | Main source of first-hand network observations. |
 | Payload-size and frame errors | `core/node/node.go:241,246` | Malformed-frame and oversize observations. |
 | Exponential blocklist | `database/node-repo.go:703` | Left alone. Rating does **not** drive it. |
@@ -81,7 +83,7 @@ A node writes only the dimensions its own role can witness, and reads only the
 dimensions of the subject's role. A relay observing a member still only ever
 writes `Network`.
 
-### 3.2 Score and bands
+### 3.2 Score and tiers
 
 ```go
 type Score int32
@@ -91,17 +93,17 @@ const (
     MinScore Score = 0
 )
 
-type Band uint8
+type Tier uint8
 
 const (
-    BandTrusted  Band = iota // 800..1000  no effect
-    BandWatched              // 500..799   mild deprioritisation
-    BandDegraded             // 200..499   halved rate limits, low priority
-    BandFloor                // 0..199     minimum priority, gossipsub graylist range
+    TierTrusted  Tier = iota // 800..1000  no effect
+    TierWatched              // 500..799   mild deprioritisation
+    TierDegraded             // 200..499   halved rate limits, low priority
+    TierFloor                // 0..199     minimum priority, gossipsub graylist range
 )
 
-func BandOf(s Score) Band
-func (b Band) String() string
+func TierOf(s Score) Tier
+func (b Tier) String() string
 ```
 
 A node's overall score is the **minimum** across the dimensions its role tracks:
@@ -193,7 +195,7 @@ type offence struct {
     // ceiling is the most this kind may ever contribute to one
     // (subject, observer, dimension) penalty, before decay. Zero means
     // no ceiling. Liveness-ish kinds carry one so a flaky link can
-    // never on its own push a peer out of BandWatched.
+    // never on its own push a peer out of TierWatched.
     ceiling int32
 }
 
@@ -225,7 +227,7 @@ func KindByName(s string) (Kind, bool)
 
 `KindBadSignature`, `KindMissingSignature` and `KindPrivateRouteDenied` are the
 only network kinds that are self-evidently deliberate. They carry the weights
-that reach `BandFloor` quickly, and only from first-hand evidence.
+that reach `TierFloor` quickly, and only from first-hand evidence.
 
 ### 4.2 Application — member nodes
 
@@ -276,60 +278,53 @@ process dies; on the next start the DAG replays it back from peers, exactly the
 counters. Without CRDT a relay would be permanently memoryless and its
 observations would die with it.
 
-A node has **one** CRDT replica (`crdt.Store`), and rating is a tenant of
-it — not a second one. One blockstore, one bitswap exchange, one DAG and one gossip
-topic replicate stat counters and peer ratings alike; a second datastore
-would only buy a second copy of that machinery and a second set of blocks
-to keep in sync.
+Rating has **its own** `go-ds-crdt` datastore, `crdt.CRDTRatingStore`, built
+exactly like `crdt.CRDTStatsStore`: its own backing datastore, its own
+blockstore and bitswap exchange, its own gossip topic. A go-ds-crdt instance
+owns its whole namespace and its set of heads, so two of them cannot share a
+backing store or a topic without merging each other's deltas.
 
-| Node type | The node's one backing store | Survives restart via |
+| Node type | Backing datastore | Survives restart via |
 |---|---|---|
-| member | `database.NewStatsRepo(db)`, Badger-backed — already there for stats | its own disk, plus the DAG for anything it missed while down |
-| relay | the `datastore.NewMapDatastore()` it already constructs for the DHT | the DAG only |
-| moderator | the `datastore.NewMapDatastore()` it already constructs for the DHT | the DAG only |
-
-Tenants are separated by key prefix — `/STATS/...` and `/RATING/obs/...` —
-and share nothing else. On the relay and the moderator the map store is
-`MutexWrap`ped once at construction, because the DHT and the CRDT both
-read and write it.
-
-This is what decision 3 means in practice: state in memory, observations in the
-network, and the network gives the state back.
+| member | `database.NewRatingRepo(db)`, Badger-backed, prefix `/RATING`, beside the stats repo's `/CRDT` | its own disk, plus the DAG for anything it missed while down |
+| relay | a `datastore.NewMapDatastore()` of its own | the DAG only |
+| moderator | a `datastore.NewMapDatastore()` of its own | the DAG only |
 
 Topics:
 
 ```go
 // core/crdt/gossip-adapter.go
-const crdtTopic = "/warpnet/stats/1.0.0"
+statsTopic  = "/warpnet/stats/1.0.0"
+ratingTopic = "/warpnet/rating/1.0.0"   // crdt.NewRatingGossipBroadcaster
 ```
 
-One datastore, one broadcaster, one topic. The name of the string is
-historical — it predates anything but stats living in the CRDT — and renaming
-it would cut replication between versions for no gain.
-
 **Why rating is not the stats store itself.** `CRDTStatsStore` is a PN-counter:
-one `uint64` per key, merged by summing. A rating entry is a signed record —
-observer, dimension, hour bucket, per-kind counts, signature — that has to be
-verified before it is believed and re-signed whenever it changes. A counter
-cannot carry a signature, and a node that could bump another node's counter
-directly is exactly the forgery the signature exists to stop. So the two are
-sibling tenants of the one datastore: same package (`core/crdt`), same
-replication, same generation-nonce trick, different value type, different key
-prefix.
+one `uint64` per key, merged by summing. A rating record is signed — observer,
+dimension, hour bucket, per-kind counts, signature — and has to be verified
+before it is believed and re-signed whenever it changes. A counter cannot carry
+a signature, and a node that could bump another node's counter directly is
+exactly the forgery the signature exists to stop.
 
-**How two tenants share one set of hooks.** go-ds-crdt takes exactly one
-`PutHook` and one `DeleteHook`, fixed at construction. `crdt.Store` installs a
-dispatcher there and exposes `OnPut`/`OnDelete`, so each tenant subscribes and
-every merged delta reaches all of them. The rating store filters by its own key
-prefix; the stats store subscribes to nothing.
+**Where the layers meet.** `core/crdt/rating.go` is the database layer: it owns
+the key schema, the JSON encoding, the replication wiring and the merge hooks,
+and it enforces that a node writes and deletes **only its own records**
+(`Put` refuses a foreign `ObserverId`, `DeleteExpired` skips foreign keys).
+`core/rating` is the engine: signing, verification, validation, indexing and
+scoring. The two share `domain.RatingRecord` and nothing else; `core/rating`
+declares the `Storer` interface it needs and `*crdt.CRDTRatingStore` satisfies
+it, so neither package imports the other.
 
 ### 5.2 Key layout
 
 ```
-/RATING/obs/{subjectID}/{observerID}/{dimension}/{bucketHour}/{generation}
+/RATING/record/{peerId}/{observerId}/{dimension}/{bucketHour}/{generation}
 ```
 
-`{generation}` is a fresh 128-bit nonce minted once per process start — the same
+Built and parsed only in `core/crdt/rating.go`; the engine never sees a key.
+`List(peerId)` is one prefix query, and a value whose content disagrees with
+the key it sits under is dropped on read.
+
+`{generation}` is a fresh 128-bit nonce minted once per engine start — the same
 device `core/crdt/stats.go` uses, and for the same reason, only more acutely
 here. A stateless relay restarts with an empty datastore and starts observing
 immediately. Without a generation segment its first write of bucket B (count 1)
@@ -337,11 +332,12 @@ would land on the same key as the count-50 record the DAG is still replaying, an
 LWW would silently destroy the replayed history — the exact failure the CRDT is
 supposed to prevent. With it, the new process owns a key no past process can
 collide with, the replayed records survive verbatim, and the reader **sums
-across generations** within a bucket.
+across generations** within a bucket. The generation is part of the signed
+content, which is why the signer mints it rather than the store.
 
 Consequences:
 
-- No read-before-write anywhere. Each `(subject, observer, dim, bucket,
+- No read-before-write anywhere. Each `(peer, observer, dim, bucket,
   generation)` tuple has exactly one writer for its whole lifetime, so the
   in-memory count is always authoritative and eventual-consistency lag cannot
   lose an observation.
@@ -354,54 +350,56 @@ Consequences:
 ### 5.3 Record
 
 ```go
-// core/rating/record.go
-type Counts map[Kind]uint32
-
-type Record struct {
-    Subject    string    `json:"s"`
-    Observer   string    `json:"o"`
-    Dim        Dimension `json:"d"`
-    Bucket     int64     `json:"b"`   // unix hour
-    Generation string    `json:"g"`   // hex(16 random bytes), one per process start
-    Counts     Counts    `json:"c"`   // this generation's running counts for this bucket
-    UpdatedAt  time.Time `json:"u"`
-    Signature  string    `json:"sig"` // observer's ed25519 over SigningBytes
+// domain/rating.go — the persisted unit, like domain.Tweet
+type RatingRecord struct {
+    PeerId     string         `json:"peer_id"`
+    ObserverId string         `json:"observer_id"`
+    Dimension  string         `json:"dimension"`   // "net" | "app" | "mod"
+    Bucket     int64          `json:"bucket"`      // unix hour
+    Generation string         `json:"generation"`  // hex(16 random bytes), one per engine start
+    Offences   []OffenceCount `json:"offences"`    // ascending by kind name
+    UpdatedAt  time.Time      `json:"updated_at"`
+    Signature  string         `json:"signature"`   // observer's ed25519 over the signing bytes
 }
 
-// SigningBytes is canonical and stable across architectures:
-//   subject "|" observer "|" itoa(dim) "|" itoa(bucket) "|" generation "|"
-//   for each kind in ascending numeric order: itoa(kind) "=" itoa(count) ","
+type OffenceCount struct {
+    Kind  string `json:"kind"`  // stable name, e.g. "bad_signature"
+    Count uint32 `json:"count"`
+}
+```
+
+Kinds and dimensions travel by name, not by number, so a renumbered enum can
+never silently change what an old record means.
+
+```go
+// core/rating/record.go — unexported; the engine is the only user
+// signing bytes, canonical and stable across architectures:
+//   peer "|" observer "|" dimension "|" itoa(bucket) "|" generation "|"
+//   for each offence in ascending kind-name order: kind "=" itoa(count) ","
 //   "|" itoa(updatedAt.UnixMilli())
-func (r Record) SigningBytes() []byte
+func signingBytes(rec domain.RatingRecord) []byte
+func signRecord(rec *domain.RatingRecord, priv ed25519.PrivateKey) error
 
-func (r *Record) Sign(priv ed25519.PrivateKey) error
+// verifyRecord derives the pubkey from the observer peer id and checks the
+// signature — the same trick StreamModerationResultHandler uses.
+func verifyRecord(rec domain.RatingRecord) error
 
-// Verify derives the pubkey from the Observer peer id and checks the
-// signature — the same trick StreamModerationResultHandler uses at
-// core/handler/moderation.go:103-116.
-func (r Record) Verify() error
-
-// Validate enforces the structural rules, independent of signature:
-//   - Subject and Observer parse as peer ids
-//   - Subject != Observer            (a node cannot rate itself)
-//   - Dim is a known dimension
-//   - every Kind is valid and belongs to Dim
-//   - Generation is 32 hex characters
+// validateRecord enforces the structural rules, independent of signature:
+//   - PeerId and ObserverId parse as peer ids, PeerId != ObserverId
+//   - Dimension is known; every kind is known and belongs to it
+//   - Generation is 32 hex characters; Offences is not empty
 //   - Bucket is not in the future beyond one bucket, not older than retention
-func (r Record) Validate(now time.Time) error
-
-func (r Record) Total() uint64
-func (r Record) Key() string // the /RATING/obs/... path above
+func validateRecord(rec domain.RatingRecord, now time.Time) error
 ```
 
 Properties this buys:
 
-- **One writer per key, for the key's whole lifetime.** Only `Observer` writes
-  `.../{observerID}/...`, and only one process ever owns a given
-  `{generation}`. LWW inside the key is therefore trivially safe: no
-  read-modify-write, no eventual-consistency window, and no way for a restarted
-  process to clobber its own replayed history (§5.2).
-- **`Subject == Observer` is invalid** and dropped on read. A node cannot rate
+- **One writer per key, for the key's whole lifetime.** Only `ObserverId` writes
+  `.../{observerId}/...`, the store refuses anything else, and only one process
+  ever owns a given `{generation}`. LWW inside the key is therefore trivially
+  safe: no read-modify-write, no eventual-consistency window, and no way for a
+  restarted process to clobber its own replayed history (§5.2).
+- **`PeerId == ObserverId` is invalid** and dropped on read. A node cannot rate
   itself by construction, not by convention.
 - **Restart-safe by the same argument as the stats store.** A stateless node
   that comes back with an empty datastore mints a fresh generation, starts a new
@@ -410,20 +408,25 @@ Properties this buys:
 
 ### 5.4 Authenticity
 
-Every record is verified before it enters the index, on both the startup scan
-and the CRDT put hook. The hook only *updates* subjects the index already
-holds: creating one from a single delta would shadow the rest of its history in
-the datastore, so an unindexed subject is instead loaded whole on its next
-read. Two distinct failures, handled differently:
+Every record is verified before it enters the index, both when a peer is loaded
+from the store and when the store's put hook delivers a merged record. The hook
+only *updates* peers the index already holds: creating one from a single delta
+would shadow the rest of its history in the store, so an unindexed peer is
+instead loaded whole on its next read. Three distinct failures:
 
-- **`Verify()` fails** — the signature does not match the pubkey derived from
-  the claimed `Observer` peer id. Nobody is attributable: anyone can forge a
-  claim naming any observer. Drop it silently and count it in a local metric
-  only. Over CRDT there is no relaying peer to charge, so nothing is charged.
-- **`Verify()` passes but `Validate()` fails** — the signature proves the named
-  observer really authored a structurally illegal record (rated itself, used a
-  kind from another dimension, back-dated a bucket). That *is* attributable, so
-  the observer earns `KindForgedRecord`.
+- **`verifyRecord` fails** — the signature does not match the pubkey derived
+  from the claimed observer. Nobody is attributable: anyone can forge a claim
+  naming any observer. Dropped silently. Over CRDT there is no relaying peer to
+  charge, so nothing is charged.
+- **verifies, but breaks a structural rule** — self-rated, a kind from another
+  dimension, a malformed generation, empty offences. The signature proves the
+  named observer really authored it, so the observer earns `KindForgedRecord`
+  — **once, when the record arrives**. A forgery stays in the store forever
+  (only its author could delete it), so reloading its victim must not charge
+  the author again.
+- **verifies, but is outside the time window** — a bucket past retention or
+  more than one bucket in the future. That is a late replica or a bad clock,
+  not forgery: dropped, nobody charged.
 
 This is the one place the CRDT transport is weaker than a point-to-point one:
 authenticity survives any relay path, but blame for unsigned garbage does not.
@@ -437,8 +440,12 @@ A node misbehaving continuously for a week against 50 observers produces ~8k
 records, single-digit MB. Idle peers cost zero bytes.
 
 ```go
-// runs on the flush ticker, at most once per hour
-func (s *Store) gcOwnExpired() error // deletes only /RATING/obs/*/{self}/... past retention
+// core/crdt/rating.go — deletes only this node's own keys of one dimension
+func (s *CRDTRatingStore) DeleteExpired(dimension string, beforeBucket int64) error
+
+// core/rating/engine.go — on the flush ticker, at most once per hour,
+// once per dimension the node witnesses, with that dimension's retention
+func (e *Engine) gc()
 ```
 
 Only the author deletes its own records, so one node can never erase another's
@@ -453,32 +460,32 @@ is bounded instead (§6.1); the datastore is bounded only by retention.
 ### 6.1 The in-memory index — why scoring is not a CRDT query
 
 Scoring runs on the rate-limiter hot path, i.e. once per inbound request. A
-prefix query per request is not acceptable. The store therefore keeps an
+prefix query per request is not acceptable. The engine therefore keeps an
 in-memory index and answers scores from arithmetic only:
 
 ```go
-// core/rating/index.go
-type index struct {
-    mu   sync.RWMutex
-    // subject -> dimension -> observer -> bucket -> generation -> Counts
-    data map[string]map[Dimension]map[string]map[int64]map[string]Counts
-    lru  *expirable.LRU[string, struct{}] // subject recency, for eviction
+// core/rating/indexer.go
+type indexer struct {
+    peers *lru.Cache[string, *indexedPeer] // peer -> its complete record set + memoised score
 }
 ```
 
-- Built at startup by one full prefix scan of `/RATING/obs/`.
-- Kept current by `crdt.Options.PutHook` / `DeleteHook`, which fire on every
-  merged delta. `core/crdt/stats.go:175-180` currently sets both to no-op
-  closures with the logging commented out; the extracted helper (§10, Stage 0)
-  takes them as parameters so the rating store can use them for real.
-- Records failing `Validate`/`Verify` never enter the index.
-- **Bounded by subject count, not by dataset size.** Above `maxIndexedSubjects`
-  (16k) the least-recently-scored subject is evicted from the index. Eviction
+- **Loaded lazily, one peer at a time.** The first score of a peer is one
+  `Storer.List(peerId)`; there is no startup scan. A peer nobody has observed
+  is indexed empty, so it is not re-queried on every request.
+- **Kept current by the store's merge hooks.** A merged record updates the
+  peer's slot if the peer is indexed; a deletion forgets the peer, which is
+  then reloaded whole on its next read.
+- **Memoised.** Each peer carries its last score, revalidated for 15 s while
+  its record set is unchanged; any update or merge invalidates it.
+- Records failing verification or validation never enter the index.
+- **Bounded by peer count, not by dataset size.** Above `maxIndexedPeers`
+  (16k) the least-recently-scored peer is evicted from the index. Eviction
   is index-only — it never deletes from the CRDT, because a CRDT delete is a
   tombstone that would propagate and destroy other nodes' evidence (§5.5). An
-  evicted subject simply falls back to a one-off prefix query on its next
-  scoring, and re-enters the index. This is what keeps a stateless relay's
-  memory flat regardless of how large the replicated dataset grows.
+  evicted peer simply falls back to one prefix query on its next scoring and
+  re-enters the index. This is what keeps a stateless relay's memory flat
+  regardless of how large the replicated dataset grows.
 
 ### 6.2 Two numbers
 
@@ -514,8 +521,8 @@ touches a rate limiter, a priority tag or a peer score.
 ### 6.3 The invariant that makes slander survivable
 
 `CapRemoteTotal = 400` means **remote observations alone can never push a peer
-below 600** — the bottom of `BandWatched`. Reaching `BandDegraded` or
-`BandFloor` requires first-hand evidence gathered on our own wire.
+below 600** — the bottom of `TierWatched`. Reaching `TierDegraded` or
+`TierFloor` requires first-hand evidence gathered on our own wire.
 
 Consequence: a coordinated slander campaign against an honest node costs it a
 mild priority drop and nothing else, on every node that has not itself witnessed
@@ -527,18 +534,18 @@ own test (§10, Stage 1).
 
 ```go
 // core/rating/enforce.go — pure mappings, no dependencies, trivially testable
-func ConnTagValue(b Band) int        // 60 / 30 / 10 / 1
-func GossipAppScore(b Band) float64  // 0 / -10 / -60 / -200
-func LimitMultiplier(b Band) float64 // 1.0 / 0.5 / 0.25 / 0.1
-func AllowInDHT(b Band) bool         // false only for BandFloor
+func ConnTagValue(b Tier) int        // 60 / 30 / 10 / 1
+func GossipAppScore(b Tier) float64  // 0 / -10 / -60 / -200
+func LimitMultiplier(b Tier) float64 // 1.0 / 0.5 / 0.25 / 0.1
+func AllowInDHT(b Tier) bool         // false only for TierFloor
 ```
 
 | Surface | Change | File |
 |---|---|---|
 | ConnManager | new `SetRatingPriority(pid, score)` writing a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. Reuses the existing flap LRU. | `core/node/priority.go` |
 | gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)` with `AppSpecificScore` reading the local score; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go:221` |
-| DHT | new `dht.QueryFilter` / `dht.RoutingTableFilter` options rejecting `BandFloor` peers. | `core/dht/options.go`, `core/dht/dht.go` |
-| Rate limits | `limitForRoute(route)` → `limitForRoute(route, band)`, multiplying `burst` and `perMinute`, floored at 1 so no peer is ever starved outright. The per-`route\|peer` LRU bucket records the band it was built for and is rebuilt when the band changes. | `core/middleware/rate-limiter.go` |
+| DHT | new `dht.QueryFilter` / `dht.RoutingTableFilter` options rejecting `TierFloor` peers. | `core/dht/options.go`, `core/dht/dht.go` |
+| Rate limits | `limitForRoute(route)` → `limitForRoute(route, tier)`, multiplying `burst` and `perMinute`, floored at 1 so no peer is ever starved outright. The per-`route\|peer` LRU bucket records the tier it was built for and is rebuilt when the tier changes. | `core/middleware/rate-limiter.go` |
 | Moderation ballots | **Nothing.** Weighting a vote round's ballots by rating was planned and rejected: `planTally` must be a pure function of the ballots so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
@@ -546,7 +553,7 @@ func AllowInDHT(b Band) bool         // false only for BandFloor
 
 - **No automatic blocklisting.** `BlocklistExponential` stays a user/operator
   action. A slandered node must never be cut off by an automatic process.
-- **No route refusal.** A `BandFloor` peer is served slowly and last, never told
+- **No route refusal.** A `TierFloor` peer is served slowly and last, never told
   "no".
 - **No rating field in `NodeInfo`.** A node self-reporting its rating is
   worthless. "Rating is an inherent property of a node" is realised by every
@@ -566,7 +573,7 @@ nodes.
 | a | Answering `PUBLIC_GET_INFO` enqueues the requester for discovery, which requests *its* info back. `DiscoveryHandlerStream` short-circuits only when the peerstore already holds addrs, which is false on first contact — so every first contact costs an info ping-pong. | `core/handler/info.go:56`, `core/discovery/discovery.go:202` | Do not enqueue from the info handler for an already-connected peer; the connection is the discovery. |
 | b | `handleAsMember` issues `requestNodeInfo` on **every** discovery event, including for peers already connected and already known. | `core/discovery/discovery.go:290` | Per-peer "recently probed" LRU, 30 min TTL, in front of `requestNodeInfo`; skip entirely when connected and the user row is fresh. |
 | c | `publishPeerInfo` republishes up to 11 AddrInfos every 5 min, every topic is `topic.Relay()`-ed, and receivers treat every entry as a fresh discovery — O(N²) info requests network-wide. | `core/pubsub/gossip.go:534`, `:274` | Publish own AddrInfo plus only recently *verified* peers; carry a monotonic epoch so receivers drop repeats; receivers skip entries already in the peerstore. |
-| d | The discovery leaky bucket is **global** — `newRateLimiter(32, 2)`, ~12/min for the whole service. It cannot tell "12 new peers" from "one peer 12 times", and one chatty peer starves discovery for everyone. | `core/discovery/discovery.go:129,224` | Per-source buckets plus a per-peer dedup LRU in front; per-peer bucket scaled by band (§6.4). This is where `KindDiscoveryFlood` is raised. |
+| d | The discovery leaky bucket is **global** — `newRateLimiter(32, 2)`, ~12/min for the whole service. It cannot tell "12 new peers" from "one peer 12 times", and one chatty peer starves discovery for everyone. | `core/discovery/discovery.go:129,224` | Per-source buckets plus a per-peer dedup LRU in front; per-peer bucket scaled by tier (§6.4). This is where `KindDiscoveryFlood` is raised. |
 | e | The DHT `PeerAdded` hook runs `d.dht.FindPeer(ctx, id)` — a full DHT walk per routing-table insert — purely to log addresses. | `core/dht/dht.go:146` | Drop the `FindPeer`; log the id. Move callbacks off the routing-table hook onto a buffered channel so a slow callback cannot stall the table. |
 | f | Discovery dials with `SimpleConnect` (raw `host.Connect`), bypassing `WarpNode.Connect`'s backoff, so a dead peer republished by gossip is redialled forever. | `core/discovery/discovery.go:262`, `core/node/node.go:181` | Route discovery dials through the backoff-aware path. |
 
@@ -592,9 +599,9 @@ type GetRatingEvent struct {
 ```go
 // domain/rating.go
 type NodeRating struct {
-    NodeID     string            `json:"node_id"`
+    NodeId     string            `json:"node_id"`
     Overall    int32             `json:"overall"`
-    Band       string            `json:"band"`
+    Tier       string            `json:"tier"`
     Dimensions []DimensionRating `json:"dimensions"`
     Observers  int               `json:"observers"`
     UpdatedAt  time.Time         `json:"updated_at"`
@@ -603,7 +610,7 @@ type NodeRating struct {
 type DimensionRating struct {
     Name   string         `json:"name"`
     Score  int32          `json:"score"`
-    Band   string         `json:"band"`
+    Tier   string         `json:"tier"`
     Recent []OffenceTally `json:"recent"`
 }
 
@@ -615,7 +622,7 @@ type OffenceTally struct {
 ```
 
 - `PRIVATE_GET_RATING` → the owner's **public aggregate** for their own node,
-  read from `/RATING/obs/{self}/*`, i.e. entirely from records written by others.
+  read from `/RATING/record/{self}/*`, i.e. entirely from records written by others.
   The node's subjective view of itself is empty by construction.
   `Recent` is what makes the feature useful: "37 rate-limit hits and 4 malformed
   frames in the last 6 hours" tells the user what to fix.
@@ -637,141 +644,92 @@ UI:
 
 ---
 
-## 9. Store API and per-node wiring
+## 9. Engine API and per-node wiring
 
 ```go
-// core/rating/store.go
-type Config struct {
-    Ctx        context.Context
-    Self       warpnet.WarpPeerID
-    PrivKey    ed25519.PrivateKey
-    Dimensions []Dimension
-    Flush      time.Duration    // default 30s
-    Now        func() time.Time // injectable for tests
-    Acquainted Acquaintance     // how long we have known an observer
-}
+// core/rating/engine.go
 
-// Storer is the subset of the node's CRDT replica this store needs.
-// Every node type has one — see §5.1.
+// Storer is what the engine needs from the database layer;
+// *crdt.CRDTRatingStore satisfies it.
 type Storer interface {
-    Get(context.Context, ds.Key) ([]byte, error)
-    Put(context.Context, ds.Key, []byte) error
-    Delete(context.Context, ds.Key) error
-    Query(context.Context, ds.Query) (ds.Results, error)
+    Put(rec domain.RatingRecord) error                     // own records only
+    List(peerId string) ([]domain.RatingRecord, error)     // own and foreign
+    DeleteExpired(dimension string, beforeBucket int64) error
+    OnPut(hook func(domain.RatingRecord))                  // every merged record
+    OnDelete(hook func(domain.RatingRecord))               // key fields only
 }
 
-// Opener hands over that replica once the store has hooks to give it.
-// The indirection exists because the hooks and the replica are mutually
-// dependent at construction time — and it is also what keeps this
-// package free of any dependency on core/crdt.
-type Opener func(Hooks) (Storer, error)
-
-func NewStore(cfg Config, open Opener) (*Store, error)
-
-// write path — non-blocking, buffered, folded into hour buckets,
-// flushed every cfg.Flush. The error is the caller's own fault, not the
-// peer's: an empty subject, an unknown kind, or a dimension this node's
-// role cannot witness.
-func (s *Store) Record(subject warpnet.WarpPeerID, k Kind) error
-func (s *Store) RecordN(subject warpnet.WarpPeerID, k Kind, n uint32) error
-
-// read path — in-memory arithmetic, memoised per subject against an
-// index revision (15s ceiling), except for the cold-path reload of a
-// subject the index evicted, which is where the error comes from.
-func (s *Store) Score(subject warpnet.WarpPeerID) (Score, error)
-func (s *Store) Band(subject warpnet.WarpPeerID) (Band, error)
-func (s *Store) Public(subject warpnet.WarpPeerID) (domain.NodeRating, error)
-func (s *Store) Own() (domain.NodeRating, error)
-
-func (s *Store) Close() error
-```
-
-Every read returns `MaxScore`/`BandTrusted` **alongside** its error. Each
-caller is an enforcement point, and an enforcement point that cannot see
-the evidence must not act as if it had — so a failed read costs a peer
-nothing, and the boundary that cannot propagate the error (a gossipsub
-score callback, a middleware, a libp2p notifier) logs it and carries on.
-
-`Config` carries no generation field: `NewStore` mints one per call, exactly as
-`NewCRDTStatsStore` does at `core/crdt/stats.go:197`.
-
-What everything else holds is not the store but the **Handle** — one per
-node process, created with the node, shared by middleware, discovery,
-gossip and the moderator, and the only rating API an enforcement point
-sees:
-
-```go
-// core/rating/handle.go
-type Handle struct{ /* atomic slot */ }
-
-func NewHandle() *Handle
-func (h *Handle) Set(r Rater)                         // attach the store, safe while serving
-func (h *Handle) Record(subject warpnet.WarpPeerID, k Kind)
-func (h *Handle) Band(subject warpnet.WarpPeerID) Band
-```
-
-The Handle owns everything that would otherwise be reimplemented at
-every call site: the no-store default (nobody is penalised), the
-atomic swap of the store built after gossip — on a moderator, after the
-node is already serving — the fail-open policy on a read failure, and
-the logging of refused records. Consumers hold one field and call two
-methods; none of them know a store exists.
-
-```go
-// core/rating/reporter.go — the store's surface, held only by the Handle
-type Rater interface {
-    Record(subject warpnet.WarpPeerID, k Kind) error
-    Score(subject warpnet.WarpPeerID) (Score, error)
-    Band(subject warpnet.WarpPeerID) (Band, error)
+// ConnectionsProvider gates remote observers by acquaintance;
+// the node's libp2p network satisfies it.
+type ConnectionsProvider interface {
+    ConnsToPeer(id warpnet.WarpPeerID) []network.Conn
 }
+
+func NewEngine(
+    ctx context.Context,
+    store Storer,
+    conns ConnectionsProvider,
+    privKey ed25519.PrivateKey, // self and the record signature both derive from it
+    nodeType string,            // warpnet.MemberNode | RelayNode | ModeratorNode -> dimensions
+    opts ...Option,             // WithClock, WithFlushInterval: for tests
+) (*Engine, error)
+
+// write path — non-blocking, buffered, folded into hour buckets, signed and
+// written every 30 s. Misuse (an unknown kind, a dimension this role cannot
+// witness) is a bug at the call site, so it is logged, not returned.
+func (e *Engine) Record(peerId warpnet.WarpPeerID, kind Kind)
+
+// read path — in-memory arithmetic, memoised per peer. Fail-open: a peer
+// whose records cannot be read scores MaxScore, because an enforcement
+// point must not act on evidence it has not seen.
+func (e *Engine) Score(peerId warpnet.WarpPeerID) Score
+func (e *Engine) Tier(peerId warpnet.WarpPeerID) Tier
+
+// display — the public aggregate (§6.2) and what the network says about us
+func (e *Engine) View(peerId warpnet.WarpPeerID) (domain.NodeRating, error)
+func (e *Engine) Own() (domain.NodeRating, error)
+
+func (e *Engine) Close() error // final flush; the store is closed by whoever built it
 ```
+
+A nil `*Engine` is safe on every method and penalises nobody: that is the
+"rating not built" state.
+
+Consumers depend on the engine the way the rest of the tree depends on
+anything — through an interface they declare themselves with the one or two
+methods they call (`Tier` for an enforcement point, `Record` for a detection
+site, `View`/`Own` for the handlers). There is no shared handle object and
+nothing to inject before the engine exists: `core/node` already exposes
+`WarpNode.Event()`, and the intended write path is a consumer goroutine that
+turns those events into `Record` calls.
 
 Wiring — identical shape on all three, differing only in the backing datastore
-and the dimension set:
+and the node type:
 
 | Node | Dimensions | Backing datastore | Gossip source |
 |---|---|---|---|
-| **member** (`cmd/node/member/node/member-node.go`) | `Network`, `Application` | `database.NewRatingRepo(db)` | `m.pubsubService.Gossip()` — already exposed at `cmd/node/member/pubsub/member-pubsub.go:184` |
-| **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | the `datastore.NewMapDatastore()` it already builds at `relay-node.go:104` | needs a new `Gossip()` accessor on `cmd/node/relay/pubsub` |
-| **moderator** (`cmd/node/moderator/node/moderator-node.go`, built in `cmd/node/moderator/moderator/moderator.go`) | `Network`, `Moderation` | the `datastore.NewMapDatastore()` it already builds at `moderator-node.go:82` | `ModeratorNode` has no pubsub, but the moderator *process* does (`cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`); add a `Gossip()` accessor there |
+| **member** (`cmd/node/member/node/member-node.go`) | `Network`, `Application` | `database.NewRatingRepo(db)` | `m.pubsubService.Gossip()` |
+| **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | a `datastore.NewMapDatastore()` of its own | needs a `Gossip()` accessor on `cmd/node/relay/pubsub` |
+| **moderator** (`cmd/node/moderator/node/moderator-node.go`) | `Network`, `Moderation` | a `datastore.NewMapDatastore()` of its own | `cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`; add a `Gossip()` accessor |
 
-Each builds its one replica — `crdt.NewGossipBroadcaster(ctx, gossip)` then
-`crdt.NewStore(ctx, broadcaster, store, node, router)` — and hands it to
-`rating.NewNodeStore(ctx, replica, node, privKey, nodeType)`, then
-`handle.Set(store)`. Neither store owns the replica: whoever built it closes it.
+```go
+broadcaster, err := crdt.NewRatingGossipBroadcaster(ctx, gossip)
+store, err := crdt.NewCRDTRatingStore(ctx, broadcaster, ratingRepo, node.Node(), dHashTable)
+engine, err := rating.NewEngine(ctx, store, node.Node().Network(), privKey, warpnet.MemberNode)
+// ... on Stop: engine.Close() first, then store.Close()
+```
 
-All rating construction lives in `core/rating` (`NewNodeStore` fills the
-dimensions from the node type and the acquaintance gate from live libp2p
-connections); all replica construction lives in `core/crdt`. Neither package
-imports the other: `rating.Replica` is the interface `crdt.Store` happens to
-satisfy, and the assemblies are the only place the two meet.
-
-Two interface widenings are needed, both satisfied by the existing concrete
-type — `*distributedHashTable` already implements `FindProvidersAsync`
-(`core/dht/dht.go:328`), the node-local interfaces just do not name it:
-
-- `RelayNode.dHashTable` is typed `DistributedHashTableCloser` (`Close()` only)
-  → add `FindProvidersAsync`.
-- `ModeratorNode.dHashTable` is typed `DistributedHashTableDiscoverer`
-  (`ClosestPeers`, `Close`) → add `FindProvidersAsync`.
-
-Ordering constraint on all three: the rating store must be constructed after
-gossip is running, the same ordering the member node already uses for the stats
-store at `member-node.go:203-212`.
+Ordering constraint on all three: the store must be constructed after gossip
+is running, the same ordering the member node already uses for the stats store.
 
 No config: rating has no modes and no switch. A node cannot opt out of
 being rated by its neighbours, and a switch for whether it acts on what
 it sees would only produce a blind free-rider — which contradicts rating
 being an inherent property of a node. The consequences are soft by
 design (§6.4), so there is nothing here that needs arming carefully.
-
-What replaces a staged rollout: the
-consequences themselves. Every knob in `enforce.go` is a weighting, not
-a refusal — `LimitMultiplier` never reaches zero, nothing blocklists —
-so a mis-set weight costs a peer latency, and the caps in §6.3 bound how
-far a wrong number can carry. Testability is in `Config` instead:
-`Now` injects the clock, `Flush` drives persistence by hand, and
-`enforce.go` is a set of pure mappings with no dependencies.
+Every knob in `enforce.go` is a weighting, not a refusal — `LimitMultiplier`
+never reaches zero, nothing blocklists — so a mis-set weight costs a peer
+latency, and the caps in §6.3 bound how far a wrong number can carry.
 
 ---
 
@@ -779,18 +737,14 @@ far a wrong number can carry. Testability is in `Config` instead:
 
 Five stages, each independently reviewable, mergeable and testable.
 
-### Stage 0 — prep, no behaviour change
+### Stage 0 — storage layer (landed)
 
-| File | Change |
+| File | Contents |
 |---|---|
-| `core/crdt/store.go` (new) | `crdt.Store` — the node's one CRDT replica: the blockstore/bitswap/DAG/`crdt.New` block extracted verbatim from `NewCRDTStatsStore`, plus `OnPut`/`OnDelete` so more than one store can share it. |
-| `core/crdt/stats.go` | take the replica instead of building one; delete the inlined block. |
-| `core/crdt/gossip-adapter.go` | `statsTopic` becomes `crdtTopic`: one datastore, one broadcaster, one topic. |
-| `database/stats-repo.go` | unchanged — `NewStatsRepo(db)` already backs the node's one CRDT datastore. |
-| `cmd/node/relay/pubsub/relay-pubsub.go` | add `Gossip() *pubsub.Gossip`. |
-| `cmd/node/moderator/pubsub/publisher.go` | add `Gossip() *pubsub.Gossip`. |
-| `cmd/node/relay/node/relay-node.go` | widen `DistributedHashTableCloser` with `FindProvidersAsync`. |
-| `cmd/node/moderator/node/moderator-node.go` | widen `DistributedHashTableDiscoverer` with `FindProvidersAsync`. |
+| `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `OffenceTally` — the wire DTOs |
+| `core/crdt/rating.go` | `CRDTRatingStore`: own go-ds-crdt datastore, key schema, encoding, merge hooks, own-records-only writes and deletes |
+| `core/crdt/gossip-adapter.go` | `NewRatingGossipBroadcaster` on `/warpnet/rating/1.0.0` |
+| `database/rating-repo.go` | `NewRatingRepo(db)` — the member node's Badger-backed datastore for the rating CRDT, prefix `/RATING` |
 
 **Acceptance:** `core/crdt/stats_test.go` passes **unmodified**. `go build ./...`
 clean.
@@ -806,20 +760,18 @@ New files:
 
 | File | Contents |
 |---|---|
-| `core/rating/doc.go` | package rationale + the honest limitations of §11, in the style of `cmd/node/moderator/audit/doc.go` |
-| `core/rating/rating.go` | `Dimension`, `Score`, `Band`, `BandOf`, `DimensionsFor` |
+| `core/rating/rating.go` | `Dimension`, `Score`, `Tier`, `TierOf`, `DimensionsFor` |
 | `core/rating/offence.go` | `Kind`, catalogue, accessors |
-| `core/rating/record.go` | `Record`, `SigningBytes`, `Sign`, `Verify`, `Validate`, `Key` |
-| `core/rating/index.go` | in-memory index, per-subject revisions, startup scan, LRU eviction |
-| `core/rating/aggregate.go` | decay, generation summing, subjective and public aggregation, caps |
-| `core/rating/enforce.go` | pure band → knob mappings |
-| `core/rating/reporter.go` | `Rater` — the store's surface, held only by the Handle |
-| `core/rating/handle.go` | `Handle` — the one rating object everything else holds |
-| `core/rating/store.go` | `Store`, `Config`, `Replica`, generation minting, buffered writer, flush, GC |
-| `core/rating/node.go` | `NewNodeStore` — the store as a node builds it, acquaintance from live connections |
+| `core/rating/record.go` | signing bytes, sign, verify, validate over `domain.RatingRecord`; generation minting |
+| `core/rating/indexer.go` | lazily loaded per-peer index, memoised scores, LRU eviction |
+| `core/rating/aggregate.go` | decay, generation summing, local and public aggregation, caps |
+| `core/rating/enforce.go` | pure tier → knob mappings |
+| `core/rating/engine.go` | `Engine`, `Storer`, `ConnectionsProvider`, buffered writer, flush, GC, merge hooks |
 | `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` |
-| `domain/rating.go` | `NodeRating`, `DimensionRating`, `OffenceTally` |
 | `frontend/src/views/Settings/Rating.vue` | own rating, per-dimension bars, recent offences |
+
+The engine and the storage layer of Stage 0 are landed; everything below is
+the integration still to do.
 
 Edited files:
 
@@ -827,10 +779,10 @@ Edited files:
 |---|---|
 | `event/paths.go` | two new routes |
 | `event/event.go` | `GetRatingEvent` |
-| `core/middleware/middleware.go` | `NewWarpMiddleware` takes the `*rating.Handle`; `record` filters self-streams and charges through it |
+| `core/middleware/middleware.go` | `NewWarpMiddleware` takes a consumer-declared interface over `*rating.Engine`; `record` filters self-streams and charges through it |
 | `core/middleware/auth.go` | `Record` at the five sites in §4.1 |
-| `core/middleware/rate-limiter.go` | `Record(KindRateLimitHit)`; `limitForRoute(route, band)`; bucket carries its band and is rebuilt on change; register the two new routes under `limitRead` |
-| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; `SetRating` passthrough |
+| `core/middleware/rate-limiter.go` | `Record(KindRateLimitHit)`; `limitForRoute(route, tier)`; bucket carries its tier and is rebuilt on change; register the two new routes under `limitRead` |
+| `core/node/node.go` | `Record` on oversize/read error in `unwrap`; offending libp2p events reach the engine through `WarpNode.Event()` |
 | `core/node/priority.go` | `rating` tag; `Record(KindConnectionFlap)` |
 | `core/pubsub/gossip.go` | `WithPeerScore` + `AppSpecificScore`; fix (c) |
 | `core/dht/options.go`, `core/dht/dht.go` | `QueryFilter`/`RoutingTableFilter` options; fix (e) |
@@ -849,11 +801,12 @@ Tests:
 | `record_test.go` | an unsigned/forged record is dropped and charges nobody; a correctly signed but structurally illegal one charges its observer `KindForgedRecord` (§5.4) |
 | `aggregate_test.go` | decay is deterministic and monotonic; a record exactly one half-life old contributes half its weight; generations under one bucket are summed, not overwritten; kind ceilings hold; `CapPerObserver` and `CapRemoteTotal` hold |
 | `aggregate_test.go` | **the §6.3 invariant**: any number of remote observers, any number of records, score never < 600 |
-| `aggregate_test.go` | first-hand evidence alone reaches `BandFloor` |
-| `store_test.go` | `Record` is non-blocking under a stalled datastore; buckets fold correctly; flush writes exactly one key per (subject, dim, bucket, generation) |
-| `store_test.go` | **stateless restart recovery**: a store whose datastore is wiped, restarted against a datastore pre-seeded with its own prior-generation records (as the DAG would replay them), reports the same score as before the wipe, and its new writes do not overwrite the replayed ones |
-| `index_test.go` | LRU eviction past `maxIndexedSubjects` never issues a CRDT delete; an evicted subject scores identically after falling back to a prefix query |
-| `enforce_test.go` | band → tag/score/multiplier/DHT mappings; the floor multiplier still serves a peer |
+| `aggregate_test.go` | first-hand evidence alone reaches `TierFloor` |
+| `engine_test.go` | `Record` is non-blocking under a stalled store; buckets fold correctly; flush writes exactly one record per (peer, dim, bucket, generation) |
+| `engine_test.go` | **stateless restart recovery**: an engine whose store is wiped, fed its own prior-generation records the way the DAG would replay them, reports the same score as before the wipe, and its new writes do not overwrite the replayed ones |
+| `engine_test.go` | eviction never issues a CRDT delete; an evicted peer scores identically after falling back to a prefix query; a forgery is charged once however often its victim is reloaded |
+| `core/crdt/rating_test.go` | own-records-only writes and deletes; key/value consistency; hooks fire for local and replicated records; every write is broadcast |
+| `enforce_test.go` | tier → tag/score/multiplier/DHT mappings; the floor multiplier still serves a peer |
 | `rating_test.go` | `DimensionsFor` per node type; overall = min over dimensions |
 | `core/handler/rating_test.go` | own rating excludes self-authored records; `PUBLIC_GET_RATING` response shape |
 | `core/discovery/discovery_test.go` | (b) a second discovery event for a known peer issues no `PUBLIC_GET_INFO`; (d) one peer cannot exhaust the global budget; (f) a backoffed peer is not redialled |
@@ -863,7 +816,7 @@ Tests:
 End-to-end on testnet, via the `warpnet-testnet-verify` skill:
 
 1. Three member nodes, one deliberately sending unsigned messages. Assert the
-   two honest nodes converge on the same band for the offender, that the
+   two honest nodes converge on the same tier for the offender, that the
    offender's own `PRIVATE_GET_RATING` reports the drop, and that a fourth node
    with no first-hand contact stays above 600.
 2. **Stateless restart** — the scenario the CRDT exists for. Run a relay
@@ -939,7 +892,7 @@ data says what they should be. Nothing else in the diff.
 
 Stated plainly, in the spirit of `cmd/node/moderator/audit/doc.go`.
 
-1. **Identity is free.** A node at `BandFloor` restarts with a new key at
+1. **Identity is free.** A node at `TierFloor` restarts with a new key at
    `MaxScore`. Rating raises the cost of sustained abuse from one identity; it
    does not price identity. Only a stake, proof of work or a vouching web would,
    and none is in scope.

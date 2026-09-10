@@ -36,9 +36,13 @@ import (
 const BucketDuration = time.Hour
 
 const (
-	CapPerObserver  Score = 150
-	CapRemoteTotal  Score = 400
-	MinAcquaintance       = time.Hour
+	// CapPerObserver and CapRemoteTotal bound what remote evidence can do:
+	// alone it never pushes a peer below TierWatched.
+	CapPerObserver Score = 150
+	CapRemoteTotal Score = 400
+	// MinAcquaintance is how long this node must have been connected to an
+	// observer before its records count. A drive-by accuser has no voice.
+	MinAcquaintance = time.Hour
 )
 
 var halfLife = map[Dimension]time.Duration{
@@ -72,13 +76,18 @@ func decayFactor(age, half time.Duration) float64 {
 	return math.Exp2(-age.Hours() / half.Hours())
 }
 
-// entry is the index's flattened view of one record.
+type kindCount struct {
+	kind  Kind
+	count uint32
+}
+
+// entry is one record as the indexer holds it.
 type entry struct {
 	observer   string
 	dim        Dimension
 	bucket     int64
 	generation string
-	counts     []CountEntry
+	counts     []kindCount
 }
 
 func penaltyOf(obs []entry, dim Dimension, now time.Time) Score {
@@ -93,7 +102,7 @@ func penaltyOf(obs []entry, dim Dimension, now time.Time) Score {
 			continue
 		}
 		for _, c := range o.counts {
-			perKind[c.Kind] += float64(c.Kind.Weight()) * float64(c.Count) * factor
+			perKind[c.kind] += float64(c.kind.Weight()) * float64(c.count) * factor
 		}
 	}
 
@@ -110,7 +119,6 @@ func penaltyOf(obs []entry, dim Dimension, now time.Time) Score {
 	return Score(total)
 }
 
-// groupByObserver splits a peerId's entries on one dimension.
 func groupByObserver(obs []entry, dim Dimension) map[string][]entry {
 	out := make(map[string][]entry)
 	for _, o := range obs {
@@ -122,7 +130,9 @@ func groupByObserver(obs []entry, dim Dimension) map[string][]entry {
 	return out
 }
 
-func peerIdiveScore(
+// localScore is this node's own view: first-hand evidence at full weight,
+// remote observers weighted by their own standing and capped.
+func localScore(
 	obs []entry,
 	dim Dimension,
 	self string,
@@ -143,14 +153,9 @@ func peerIdiveScore(
 			continue
 		}
 		weighted := Score(float64(penaltyOf(group, dim, now)) * weightOf(observer))
-		if weighted > CapPerObserver {
-			weighted = CapPerObserver
-		}
-		remote += weighted
+		remote += min(weighted, CapPerObserver)
 	}
-	if remote > CapRemoteTotal {
-		remote = CapRemoteTotal
-	}
+	remote = min(remote, CapRemoteTotal)
 
 	return (MaxScore - own - remote).clamp()
 }
@@ -160,6 +165,7 @@ func ownOnlyScore(obs []entry, dim Dimension, self string, now time.Time) Score 
 	return (MaxScore - penaltyOf(byObserver[self], dim, now)).clamp()
 }
 
+// publicScore is the unweighted median over observers: display only, never enforced.
 func publicScore(obs []entry, dim Dimension, now time.Time) (Score, int) {
 	byObserver := groupByObserver(obs, dim)
 	if len(byObserver) == 0 {
@@ -177,13 +183,13 @@ func publicScore(obs []entry, dim Dimension, now time.Time) (Score, int) {
 	return (scores[mid-1] + scores[mid]) / 2, len(scores) //nolint:mnd
 }
 
-// tally is one offence kind's live count for a peerId, for the UI.
 type tally struct {
 	kind   Kind
 	count  uint32
 	lastAt time.Time
 }
 
+// recentTallies are raw, undecayed counts per kind, busiest first.
 func recentTallies(obs []entry, dim Dimension) []tally {
 	agg := make(map[Kind]*tally)
 	for _, o := range obs {
@@ -192,12 +198,12 @@ func recentTallies(obs []entry, dim Dimension) []tally {
 		}
 		at := bucketTime(o.bucket)
 		for _, c := range o.counts {
-			t, ok := agg[c.Kind]
+			t, ok := agg[c.kind]
 			if !ok {
-				t = &tally{kind: c.Kind}
-				agg[c.Kind] = t
+				t = &tally{kind: c.kind}
+				agg[c.kind] = t
 			}
-			t.count += c.Count
+			t.count += c.count
 			if at.After(t.lastAt) {
 				t.lastAt = at
 			}
@@ -209,9 +215,23 @@ func recentTallies(obs []entry, dim Dimension) []tally {
 	}
 	slices.SortFunc(out, func(a, b tally) int {
 		if a.count != b.count {
-			return int(b.count) - int(a.count) // busiest first
+			return int(b.count) - int(a.count)
 		}
 		return int(a.kind) - int(b.kind)
 	})
+	return out
+}
+
+func dimensionsPresent(obs []entry) []Dimension {
+	seen := make(map[Dimension]struct{}, len(halfLife))
+	for _, o := range obs {
+		seen[o.dim] = struct{}{}
+	}
+	out := make([]Dimension, 0, len(seen))
+	for _, dim := range []Dimension{Network, Application, Moderation} {
+		if _, ok := seen[dim]; ok {
+			out = append(out, dim)
+		}
+	}
 	return out
 }

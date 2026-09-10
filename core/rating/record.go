@@ -29,107 +29,99 @@ package rating
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/security"
 )
 
-type ratingErr string
+type ratingError string
 
-func (e ratingErr) Error() string {
-	return fmt.Sprintf("rating: %s", string(e))
+func (e ratingError) Error() string {
+	return "rating: " + string(e)
 }
 
-// RepoName is the CRDT key namespace for rating records.
 const (
-	ErrRecordSelfRated     = ratingErr("record peerId equals observer")
-	ErrRecordBadSubject    = ratingErr("record peerId is not a peer id")
-	ErrRecordBadObserver   = ratingErr(" record observer is not a peer id")
-	ErrRecordBadDimension  = ratingErr("record dimension unknown")
-	ErrRecordBadGeneration = ratingErr("record generation malformed")
-	ErrRecordEmptyCounts   = ratingErr("record carries no counts")
-	ErrRecordBadKind       = ratingErr("record kind unknown or foreign to its dimension")
-	ErrRecordBucketFuture  = ratingErr("record bucket is in the future")
-	ErrRecordBucketStale   = ratingErr("record bucket is past retention")
-	ErrRecordNoSignature   = ratingErr("record is unsigned")
-	ErrRecordNoPubKey      = ratingErr("cannot derive pubkey from observer id")
-	ErrRecordNoPrivKey     = ratingErr(" cannot sign without a private key")
-	ErrNoNode              = ratingErr("node and replica are required")
+	ErrRecordSelfRated     = ratingError("record peer equals observer")
+	ErrRecordBadPeerId     = ratingError("record peer is not a peer id")
+	ErrRecordBadObserver   = ratingError("record observer is not a peer id")
+	ErrRecordBadDimension  = ratingError("record dimension unknown")
+	ErrRecordBadGeneration = ratingError("record generation malformed")
+	ErrRecordEmptyOffences = ratingError("record carries no offences")
+	ErrRecordBadKind       = ratingError("record kind unknown or foreign to its dimension")
+	ErrRecordBucketFuture  = ratingError("record bucket is in the future")
+	ErrRecordBucketStale   = ratingError("record bucket is past retention")
+	ErrRecordNoSignature   = ratingError("record is unsigned")
+	ErrRecordNoPubKey      = ratingError("cannot derive pubkey from observer id")
 
-	ErrEmptySubject     = ratingErr("empty peerId node id")
-	ErrEmptyRecord      = ratingErr("empty record")
-	ErrUnknownKind      = ratingErr("unknown offence kind")
-	ErrForeignDimension = ratingErr("node cannot witness this dimension")
+	ErrPrivateKeyRequired = ratingError("private key is required")
+	ErrNilStore           = ratingError("record store is nil")
+	ErrNilConnections     = ratingError("connections provider is nil")
 )
 
-type CountEntry struct {
-	Kind  Kind   `json:"k"`
-	Count uint32 `json:"n"`
-}
+const (
+	generationBytes  = 16
+	generationHexLen = generationBytes * 2
+)
 
-type Record struct {
-	Subject    string       `json:"s"`
-	Observer   string       `json:"o"`
-	Dim        Dimension    `json:"d"`
-	Bucket     int64        `json:"b"` // unix hour
-	Generation string       `json:"g"` // hex(16 random bytes), one per process start
-	Counts     []CountEntry `json:"c"` // ascending by Kind
-	UpdatedAt  time.Time    `json:"u"`
-	Signature  string       `json:"sig"`
-}
-
-func (r Record) SigningBytes() []byte {
+// signingBytes is canonical: key fields, offences ascending by kind, then the timestamp.
+func signingBytes(rec domain.RatingRecord) []byte {
 	var b strings.Builder
-	b.WriteString(r.Subject)
+	b.WriteString(rec.PeerId)
 	b.WriteByte('|')
-	b.WriteString(r.Observer)
+	b.WriteString(rec.ObserverId)
 	b.WriteByte('|')
-	b.WriteString(strconv.Itoa(int(r.Dim)))
+	b.WriteString(rec.Dimension)
 	b.WriteByte('|')
-	b.WriteString(strconv.FormatInt(r.Bucket, 10))
+	b.WriteString(strconv.FormatInt(rec.Bucket, 10))
 	b.WriteByte('|')
-	b.WriteString(r.Generation)
+	b.WriteString(rec.Generation)
 	b.WriteByte('|')
-	for _, c := range sortedCounts(r.Counts) {
-		b.WriteString(strconv.Itoa(int(c.Kind)))
+	for _, o := range sortedOffences(rec.Offences) {
+		b.WriteString(o.Kind)
 		b.WriteByte('=')
-		b.WriteString(strconv.FormatUint(uint64(c.Count), 10))
+		b.WriteString(strconv.FormatUint(uint64(o.Count), 10))
 		b.WriteByte(',')
 	}
 	b.WriteByte('|')
-	b.WriteString(strconv.FormatInt(r.UpdatedAt.UnixMilli(), 10))
+	b.WriteString(strconv.FormatInt(rec.UpdatedAt.UnixMilli(), 10))
 	return []byte(b.String())
 }
 
-func sortedCounts(in []CountEntry) []CountEntry {
-	if slices.IsSortedFunc(in, func(a, b CountEntry) int { return int(a.Kind) - int(b.Kind) }) {
+func compareOffences(a, b domain.OffenceCount) int {
+	return strings.Compare(a.Kind, b.Kind)
+}
+
+func sortedOffences(in []domain.OffenceCount) []domain.OffenceCount {
+	if slices.IsSortedFunc(in, compareOffences) {
 		return in
 	}
 	out := slices.Clone(in)
-	slices.SortFunc(out, func(a, b CountEntry) int { return int(a.Kind) - int(b.Kind) })
+	slices.SortFunc(out, compareOffences)
 	return out
 }
 
-func (r *Record) Sign(priv ed25519.PrivateKey) error {
+func signRecord(rec *domain.RatingRecord, priv ed25519.PrivateKey) error {
 	if len(priv) != ed25519.PrivateKeySize {
-		return ErrRecordNoPrivKey
+		return ErrPrivateKeyRequired
 	}
-	r.Counts = sortedCounts(r.Counts)
-	r.Signature = security.Sign(priv, r.SigningBytes())
+	rec.Offences = sortedOffences(rec.Offences)
+	rec.Signature = security.Sign(priv, signingBytes(*rec))
 	return nil
 }
 
-func (r Record) Verify() error {
-	if r.Signature == "" {
+// verifyRecord checks the signature against the key embedded in the observer's peer id.
+func verifyRecord(rec domain.RatingRecord) error {
+	if rec.Signature == "" {
 		return ErrRecordNoSignature
 	}
-	observer := warpnet.FromStringToPeerID(r.Observer)
+	observer := warpnet.FromStringToPeerID(rec.ObserverId)
 	if observer == "" {
 		return ErrRecordBadObserver
 	}
@@ -137,55 +129,80 @@ func (r Record) Verify() error {
 	if len(pubKey) == 0 {
 		return ErrRecordNoPubKey
 	}
-	return security.VerifySignature(pubKey, r.SigningBytes(), r.Signature)
+	return security.VerifySignature(pubKey, signingBytes(rec), rec.Signature)
 }
 
-func (r Record) Validate(now time.Time) error {
-	if warpnet.FromStringToPeerID(r.Subject) == "" {
-		return ErrRecordBadSubject
+// validateRecord enforces the structural rules a signature cannot: no
+// self-rating, kinds of the record's own dimension, a bucket inside the
+// retention window with one bucket of clock skew.
+func validateRecord(rec domain.RatingRecord, now time.Time) error {
+	if warpnet.FromStringToPeerID(rec.PeerId) == "" {
+		return ErrRecordBadPeerId
 	}
-	if warpnet.FromStringToPeerID(r.Observer) == "" {
+	if warpnet.FromStringToPeerID(rec.ObserverId) == "" {
 		return ErrRecordBadObserver
 	}
-	if r.Subject == r.Observer {
+	if rec.PeerId == rec.ObserverId {
 		return ErrRecordSelfRated
 	}
-	if !r.Dim.Valid() {
+	dim, ok := ParseDimension(rec.Dimension)
+	if !ok {
 		return ErrRecordBadDimension
 	}
-	if len(r.Generation) != generationHexLen {
+	if len(rec.Generation) != generationHexLen {
 		return ErrRecordBadGeneration
 	}
-	if _, err := hex.DecodeString(r.Generation); err != nil {
+	if _, err := hex.DecodeString(rec.Generation); err != nil {
 		return ErrRecordBadGeneration
 	}
-	if len(r.Counts) == 0 {
-		return ErrRecordEmptyCounts
+	if len(rec.Offences) == 0 {
+		return ErrRecordEmptyOffences
 	}
-	for _, c := range r.Counts {
-		if !c.Kind.Valid() || c.Kind.Dimension() != r.Dim {
+	for _, o := range rec.Offences {
+		kind, ok := KindByName(o.Kind)
+		if !ok || kind.Dimension() != dim {
 			return ErrRecordBadKind
 		}
 	}
-	nowBucket := BucketOf(now)
-	// One bucket of slack absorbs ordinary clock skew between peers.
-	if r.Bucket > nowBucket+1 {
+	if rec.Bucket > BucketOf(now)+1 {
 		return ErrRecordBucketFuture
 	}
-	if bucketTime(r.Bucket).Before(now.Add(-retention(r.Dim))) {
+	if bucketTime(rec.Bucket).Before(now.Add(-retention(dim))) {
 		return ErrRecordBucketStale
 	}
 	return nil
 }
 
-func (r Record) Total() uint64 {
-	var total uint64
-	for _, c := range r.Counts {
-		total += uint64(c.Count)
+// entryOf flattens a validated record for the indexer.
+func entryOf(rec domain.RatingRecord) entry {
+	dim, _ := ParseDimension(rec.Dimension)
+	counts := make([]kindCount, 0, len(rec.Offences))
+	for _, o := range rec.Offences {
+		kind, _ := KindByName(o.Kind)
+		counts = append(counts, kindCount{kind: kind, count: o.Count})
 	}
-	return total
+	return entry{
+		observer:   rec.ObserverId,
+		dim:        dim,
+		bucket:     rec.Bucket,
+		generation: rec.Generation,
+		counts:     counts,
+	}
 }
 
-func (r Record) Key() string {
-	return RecordKey(r.Subject, r.Observer, r.Dim, r.Bucket, r.Generation)
+func offencesOf(counts map[Kind]uint32) []domain.OffenceCount {
+	out := make([]domain.OffenceCount, 0, len(counts))
+	for kind, n := range counts {
+		out = append(out, domain.OffenceCount{Kind: kind.String(), Count: n})
+	}
+	return sortedOffences(out)
+}
+
+// newGeneration mints the nonce that makes every key this process writes its own.
+func newGeneration() (string, error) {
+	var buf [generationBytes]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
 }

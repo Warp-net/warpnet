@@ -89,18 +89,13 @@ func newLiveStatsStore(t *testing.T) (*CRDTStatsStore, *silentBroadcaster) {
 	t.Cleanup(cancel)
 
 	bc := &silentBroadcaster{}
-	host := newStatsHost(t)
-	crdtStore, err := NewStore(
+	store, err := NewCRDTStatsStore(
 		ctx,
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
-		host,
+		newStatsHost(t),
 		noProviderRouter{},
 	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = crdtStore.Close() })
-
-	store, err := NewCRDTStatsStore(ctx, crdtStore, host)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 
@@ -243,14 +238,21 @@ func TestCRDTStats_GenerationIsUniquePerProcess(t *testing.T) {
 	}
 }
 
-func TestCRDTStats_CloseIsSafeOnNilAndLeavesTheDatastoreAlone(t *testing.T) {
+func TestCRDTStats_CloseIsSafeOnNilAndStopsTheStore(t *testing.T) {
 	assert.NoError(t, (*CRDTStatsStore)(nil).Close())
 
-	store, _ := newLiveStatsStore(t)
-	assert.NoError(t, store.Close())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	_, err := store.GetAggregatedStat(datastore.NewKey("/TWEETS/LIKES/after-close"))
-	assert.NoError(t, err)
+	store, err := NewCRDTStatsStore(
+		ctx,
+		&silentBroadcaster{},
+		dssync.MutexWrap(datastore.NewMapDatastore()),
+		newStatsHost(t),
+		noProviderRouter{},
+	)
+	require.NoError(t, err)
+	assert.NoError(t, store.Close())
 }
 
 func TestCRDTStats_CounterCodecRoundTrip(t *testing.T) {

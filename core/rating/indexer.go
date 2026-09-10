@@ -29,11 +29,18 @@ package rating
 
 import (
 	"sync"
+	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-const maxIndexedSubjects = 16384
+const (
+	maxIndexedPeers = 16384
+
+	// scoreTTL bounds how stale a memoised score may be while a peer's
+	// records are unchanged; half-lives are measured in hours and days.
+	scoreTTL = 15 * time.Second
+)
 
 type slot struct {
 	observer   string
@@ -42,150 +49,114 @@ type slot struct {
 	generation string
 }
 
-type indexer struct {
-	mu   sync.RWMutex
-	data map[string]map[slot][]CountEntry
-	// rev holds a value unique to the peerId's current entry set, so a
-	// cached score knows it is stale without comparing entries. Values
-	// come from a counter and are never reused, so a peerId evicted
-	// and re-indexered can never collide with a score cached before.
-	rev     map[string]uint64
-	lastRev uint64
-	lru     *lru.Cache[string, struct{}]
+func slotOf(e entry) slot {
+	return slot{observer: e.observer, dim: e.dim, bucket: e.bucket, generation: e.generation}
 }
 
-func newIndexer() (*indexer, error) {
-	idx := &indexer{
-		data: make(map[string]map[slot][]CountEntry),
-		rev:  make(map[string]uint64),
-	}
-	cache, err := lru.NewWithEvict[string, struct{}](
-		maxIndexedSubjects,
-		func(peerId string, _ struct{}) {
-			idx.mu.Lock()
-			delete(idx.data, peerId)
-			delete(idx.rev, peerId)
-			idx.mu.Unlock()
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	idx.lru = cache
-	return idx, nil
+// indexedPeer is one peer's complete record set plus its memoised score.
+type indexedPeer struct {
+	mu    sync.Mutex
+	slots map[slot][]kindCount
+	rev   uint64
+
+	score    Score
+	scoredAt time.Time
+	scoreRev uint64
 }
 
-func (i *indexer) maxIndexedSubjects() int {
-	return maxIndexedSubjects
+// set replaces one record's counts.
+func (p *indexedPeer) set(s slot, counts []kindCount) {
+	p.mu.Lock()
+	p.slots[s] = counts
+	p.rev++
+	p.mu.Unlock()
 }
 
-// put inserts or replaces one record's counts, creating the peerId if
-// needed. Only the full-load paths (scan, loadSubject) may call it: they
-// have just read everything the datastore holds for the peerId, so the
-// entry set they build is complete.
-func (i *indexer) put(rec Record) {
-	i.apply(rec, true)
-}
-
-// update replaces one record's counts only if the peerId is already
-// indexered, and reports whether it applied. The incremental paths — the
-// CRDT put hook and the flush — must use it: creating a peerId from a
-// single record would shadow the rest of its history in the datastore,
-// and scoring would run on that sliver until the next eviction.
-func (i *indexer) update(rec Record) bool {
-	return i.apply(rec, false)
-}
-
-func (i *indexer) apply(rec Record, create bool) bool {
-	key := slot{
-		observer:   rec.Observer,
-		dim:        rec.Dim,
-		bucket:     rec.Bucket,
-		generation: rec.Generation,
-	}
-
-	i.mu.Lock()
-	slots, ok := i.data[rec.Subject]
-	if !ok {
-		if !create {
-			i.mu.Unlock()
-			return false
-		}
-		slots = make(map[slot][]CountEntry, 1)
-		i.data[rec.Subject] = slots
-	}
-	slots[key] = rec.Counts
-	i.lastRev++
-	i.rev[rec.Subject] = i.lastRev
-	i.mu.Unlock()
-
-	// Outside the lock: eviction takes the same mutex.
-	i.lru.Add(rec.Subject, struct{}{})
-	return true
-}
-
-func (i *indexer) drop(peerId, observer string, dim Dimension, bucket int64, generation string) {
-	key := slot{observer: observer, dim: dim, bucket: bucket, generation: generation}
-
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	slots, ok := i.data[peerId]
-	if !ok {
+// fill adds a loaded record unless a merge already delivered a newer one.
+func (p *indexedPeer) fill(e entry) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := slotOf(e)
+	if _, ok := p.slots[s]; ok {
 		return
 	}
-	delete(slots, key)
-	if len(slots) == 0 {
-		delete(i.data, peerId)
-		delete(i.rev, peerId)
-		return
-	}
-	i.lastRev++
-	i.rev[peerId] = i.lastRev
+	p.slots[s] = e.counts
+	p.rev++
 }
 
-func (i *indexer) entries(peerId string) []entry {
-	i.mu.RLock()
-	slots, ok := i.data[peerId]
-	if !ok {
-		i.mu.RUnlock()
-		return nil
-	}
-	out := make([]entry, 0, len(slots))
-	for key, counts := range slots {
+func (p *indexedPeer) entries() ([]entry, uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]entry, 0, len(p.slots))
+	for s, counts := range p.slots {
 		out = append(out, entry{
-			observer:   key.observer,
-			dim:        key.dim,
-			bucket:     key.bucket,
-			generation: key.generation,
+			observer:   s.observer,
+			dim:        s.dim,
+			bucket:     s.bucket,
+			generation: s.generation,
 			counts:     counts,
 		})
 	}
-	i.mu.RUnlock()
-
-	i.lru.Get(peerId) // refresh recency
-	return out
+	return out, p.rev
 }
 
-func (i *indexer) ensure(peerId string) {
-	i.mu.Lock()
-	if _, ok := i.data[peerId]; !ok {
-		i.data[peerId] = make(map[slot][]CountEntry)
+func (p *indexedPeer) cachedScore(now time.Time) (Score, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.scoredAt.IsZero() || p.scoreRev != p.rev || now.Sub(p.scoredAt) >= scoreTTL {
+		return 0, false
 	}
-	i.mu.Unlock()
-	i.lru.Add(peerId, struct{}{})
+	return p.score, true
+}
+
+// setScore memoises a score computed from the entries of revision rev.
+func (p *indexedPeer) setScore(score Score, at time.Time, rev uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if rev != p.rev {
+		return
+	}
+	p.score, p.scoredAt, p.scoreRev = score, at, rev
+}
+
+// indexer holds the record sets of recently scored peers so a score is
+// arithmetic, not a datastore query. Eviction is index-only: the store
+// keeps everything, and an evicted peer is reloaded on its next read.
+type indexer struct {
+	peers *lru.Cache[string, *indexedPeer]
+}
+
+func newIndexer() (*indexer, error) {
+	peers, err := lru.New[string, *indexedPeer](maxIndexedPeers)
+	if err != nil {
+		return nil, err
+	}
+	return &indexer{peers: peers}, nil
+}
+
+func (i *indexer) get(peerId string) (*indexedPeer, bool) {
+	return i.peers.Get(peerId)
 }
 
 func (i *indexer) has(peerId string) bool {
-	i.mu.RLock()
-	_, ok := i.data[peerId]
-	i.mu.RUnlock()
-	return ok
+	return i.peers.Contains(peerId)
 }
 
-// revision is 0 for a peerId with no indexered records; a score cached
-// against 0 is the empty-peerId fast path.
-func (i *indexer) revision(peerId string) uint64 {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	return i.rev[peerId]
+func (i *indexer) add(peerId string) *indexedPeer {
+	p := &indexedPeer{slots: make(map[slot][]kindCount)}
+	i.peers.Add(peerId, p)
+	return p
+}
+
+// update replaces one record of a peer the index already holds. Creating
+// a peer from a single record would shadow the rest of its history in
+// the store, so an unknown peer is left to be loaded whole on its next read.
+func (i *indexer) update(peerId string, e entry) {
+	if p, ok := i.peers.Peek(peerId); ok {
+		p.set(slotOf(e), e.counts)
+	}
+}
+
+func (i *indexer) forget(peerId string) {
+	i.peers.Remove(peerId)
 }

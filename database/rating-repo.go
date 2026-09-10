@@ -25,15 +25,41 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package rating
+package database
 
-import "github.com/Warp-net/warpnet/core/warpnet"
+import (
+	"strings"
+	"time"
 
-// Rater is what a Handle holds: the store's error-returning surface.
-// Enforcement points never touch it directly — they go through Handle,
-// which owns the no-store default and the fail-open policy.
-type Rater interface {
-	Record(peerId warpnet.WarpPeerID, k Kind) error
-	Score(peerId warpnet.WarpPeerID) (Score, error)
-	Tier(peerId warpnet.WarpPeerID) (Tier, error)
+	ds "github.com/Warp-net/warpnet/database/datastore"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
+)
+
+type RatingStorer interface {
+	NewTxn() (local_store.WarpTransactioner, error)
+	Get(key local_store.DatabaseKey) ([]byte, error)
+	GetExpiration(key local_store.DatabaseKey) (uint64, error)
+	GetSize(key local_store.DatabaseKey) (int64, error)
+	Sync() error
+	IsClosed() bool
+	InnerDB() *local_store.WarpDB
+	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Set(key local_store.DatabaseKey, value []byte) error
+	Delete(key local_store.DatabaseKey) error
+}
+
+const ratingPrefix = "RATING"
+
+// NewRatingRepo backs the rating CRDT. It is kept apart from the stats
+// CRDT because each go-ds-crdt instance owns its whole namespace.
+func NewRatingRepo(db RatingStorer) ds.Datastore {
+	prefix := ratingPrefix
+	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
+		prefix = requiredPrefixSlash + prefix
+	}
+	return &NodeRepo{
+		db:       db,
+		prefix:   prefix,
+		stopChan: make(chan struct{}),
+	}
 }
