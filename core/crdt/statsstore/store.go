@@ -25,7 +25,8 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package crdt
+// Package statsstore replicates network-wide counters over a CRDT.
+package statsstore
 
 import (
 	"context"
@@ -46,7 +47,7 @@ import (
 )
 
 const (
-	StatsRepoName = "/STATS"
+	repoName = "/STATS"
 
 	incrNamespace = "incr"
 	decrNamespace = "decr"
@@ -60,21 +61,25 @@ const (
 	generationIDBytes = 16
 )
 
-// Broadcaster interface for CRDT synchronization
+// Broadcaster carries this store's deltas to the other replicas.
 type Broadcaster interface {
 	Broadcast(ctx context.Context, data []byte) error
 	Next(ctx context.Context) ([]byte, error)
 }
 
-type CRDTStorer interface {
+// Datastore is the local storage the replica is built on.
+type Datastore interface {
 	ds.Datastore
 }
 
-type CRDTRouter interface {
+// Router finds the peers holding a block.
+type Router interface {
 	FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo
 }
 
-type CRDTStatsStore struct {
+// Store is a PN-counter replicated over go-ds-crdt: every process owns
+// the keys of its own generation, and a read sums them all.
+type Store struct {
 	crdt        *crdt.Datastore
 	broadcaster Broadcaster
 	ctx         context.Context
@@ -88,14 +93,14 @@ type CRDTStatsStore struct {
 	decrCounters map[string]uint64
 }
 
-// NewCRDTStatsStore creates a new CRDT-based statistics store
-func NewCRDTStatsStore(
+// New creates a new CRDT-based statistics store
+func New(
 	ctx context.Context,
 	broadcaster Broadcaster,
-	datastore CRDTStorer,
+	datastore Datastore,
 	node host.Host,
-	router CRDTRouter,
-) (*CRDTStatsStore, error) {
+	router Router,
+) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	baseStore := ds.MutexWrap(datastore)
@@ -144,13 +149,13 @@ func NewCRDTStatsStore(
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
-	store := &CRDTStatsStore{
+	store := &Store{
 		crdt:         crdtStore,
 		broadcaster:  broadcaster,
 		ctx:          ctx,
 		cancel:       cancel,
 		nodeID:       node.ID().String(),
-		prefix:       StatsRepoName,
+		prefix:       repoName,
 		generation:   gen,
 		incrCounters: make(map[string]uint64),
 		decrCounters: make(map[string]uint64),
@@ -159,7 +164,7 @@ func NewCRDTStatsStore(
 	return store, nil
 }
 
-func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
+func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
 	positive, err := s.sumNamespace(incrNamespace, key)
 	if err != nil {
 		return 0, err
@@ -174,15 +179,15 @@ func (s *CRDTStatsStore) GetAggregatedStat(key ds.Key) (uint64, error) {
 	return positive - negative, nil
 }
 
-func (s *CRDTStatsStore) Increment(key ds.Key) error {
+func (s *Store) Increment(key ds.Key) error {
 	return s.bump(incrNamespace, key, s.incrCounters)
 }
 
-func (s *CRDTStatsStore) Decrement(key ds.Key) error {
+func (s *Store) Decrement(key ds.Key) error {
 	return s.bump(decrNamespace, key, s.decrCounters)
 }
 
-func (s *CRDTStatsStore) bump(namespace string, dataKey ds.Key, cache map[string]uint64) error {
+func (s *Store) bump(namespace string, dataKey ds.Key, cache map[string]uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -200,7 +205,7 @@ func (s *CRDTStatsStore) bump(namespace string, dataKey ds.Key, cache map[string
 	return nil
 }
 
-func (s *CRDTStatsStore) sumNamespace(namespace string, key ds.Key) (uint64, error) {
+func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 	prefix := ds.NewKey(
 		fmt.Sprintf("/%s/%s/%s", s.prefix, namespace, key.String()),
 	)
@@ -234,7 +239,7 @@ func newGenerationID() (string, error) {
 }
 
 // Close stops the CRDT store
-func (s *CRDTStatsStore) Close() error {
+func (s *Store) Close() error {
 	if s == nil {
 		return nil
 	}

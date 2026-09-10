@@ -25,7 +25,8 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package crdt
+// Package ratingstore replicates the signed rating records of every node.
+package ratingstore
 
 import (
 	"context"
@@ -41,26 +42,45 @@ import (
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/ipfs/go-cid"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 )
 
+// Broadcaster carries this store's deltas to the other replicas.
+type Broadcaster interface {
+	Broadcast(ctx context.Context, data []byte) error
+	Next(ctx context.Context) ([]byte, error)
+}
+
+// Datastore is the local storage the replica is built on.
+type Datastore interface {
+	ds.Datastore
+}
+
+// Router finds the peers holding a block.
+type Router interface {
+	FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo
+}
+
 const (
-	RatingRepoName = "/RATING"
+	repoName = "/RATING"
 
 	recordNamespace = "record"
-	recordPrefix    = RatingRepoName + "/" + recordNamespace
+	recordPrefix    = repoName + "/" + recordNamespace
 	recordKeyParts  = 5
 
-	ErrForeignRatingRecord     = warpnet.WarpError("crdt rating: record is not authored by this node")
-	ErrMalformedRatingRecord   = warpnet.WarpError("crdt rating: record key part is empty or contains a slash")
-	ErrRatingRecordKeyMismatch = warpnet.WarpError("crdt rating: record content does not match its key")
+	// Errors a record is refused for.
+	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
+	ErrMalformedRecord = warpnet.WarpError("rating store: record key part is empty or contains a slash")
+	ErrKeyMismatch     = warpnet.WarpError("rating store: record content does not match its key")
 )
 
-// CRDTRatingStore replicates signed rating records. A node writes and
-// deletes only its own records; everyone else's arrive through the DAG.
-type CRDTRatingStore struct {
+// Store replicates signed rating records. A node writes and deletes only
+// its own records; everyone else's arrive through the DAG.
+type Store struct {
 	crdt   *crdt.Datastore
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -71,14 +91,14 @@ type CRDTRatingStore struct {
 	deleteHooks []func(domain.RatingRecord)
 }
 
-// NewCRDTRatingStore creates a new CRDT-based rating records store
-func NewCRDTRatingStore(
+// New creates a new CRDT-based rating records store
+func New(
 	ctx context.Context,
 	broadcaster Broadcaster,
-	datastore CRDTStorer,
+	datastore Datastore,
 	node host.Host,
-	router CRDTRouter,
-) (*CRDTRatingStore, error) {
+	router Router,
+) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	baseStore := ds.MutexWrap(datastore)
@@ -95,7 +115,7 @@ func NewCRDTRatingStore(
 	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
 	dagService := warpnet.NewDAGService(blockService)
 
-	store := &CRDTRatingStore{
+	store := &Store{
 		ctx:    ctx,
 		cancel: cancel,
 		nodeID: node.ID().String(),
@@ -126,9 +146,9 @@ func NewCRDTRatingStore(
 }
 
 // Put writes one of this node's own records; the key is derived from the record.
-func (s *CRDTRatingStore) Put(rec domain.RatingRecord) error {
+func (s *Store) Put(rec domain.RatingRecord) error {
 	if rec.ObserverID != s.nodeID {
-		return ErrForeignRatingRecord
+		return ErrForeignRecord
 	}
 	key, err := recordKey(rec)
 	if err != nil {
@@ -136,34 +156,34 @@ func (s *CRDTRatingStore) Put(rec domain.RatingRecord) error {
 	}
 	value, err := json.Marshal(rec)
 	if err != nil {
-		return fmt.Errorf("crdt rating: marshal record %s: %w", key, err)
+		return fmt.Errorf("rating store: marshal record %s: %w", key, err)
 	}
 	if err := s.crdt.Put(s.ctx, key, value); err != nil {
-		return fmt.Errorf("crdt rating: write record %s: %w", key, err)
+		return fmt.Errorf("rating store: write record %s: %w", key, err)
 	}
 	return nil
 }
 
 // List returns every replicated record about peerID, own and foreign.
-func (s *CRDTRatingStore) List(peerID string) ([]domain.RatingRecord, error) {
+func (s *Store) List(peerID string) ([]domain.RatingRecord, error) {
 	if peerID == "" || strings.Contains(peerID, "/") {
-		return nil, ErrMalformedRatingRecord
+		return nil, ErrMalformedRecord
 	}
 	prefix := recordPrefix + "/" + peerID
 	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: prefix})
 	if err != nil {
-		return nil, fmt.Errorf("crdt rating: query %s: %w", prefix, err)
+		return nil, fmt.Errorf("rating store: query %s: %w", prefix, err)
 	}
 	defer func() { _ = results.Close() }()
 
 	var records []domain.RatingRecord
 	for r := range results.Next() {
 		if r.Error != nil {
-			return nil, fmt.Errorf("crdt rating: iterate %s: %w", prefix, r.Error)
+			return nil, fmt.Errorf("rating store: iterate %s: %w", prefix, r.Error)
 		}
 		rec, err := decodeRecord(r.Key, r.Value)
 		if err != nil {
-			log.Debugf("crdt rating: skipping record %s: %v", r.Key, err)
+			log.Debugf("rating store: skipping record %s: %v", r.Key, err)
 			continue
 		}
 		records = append(records, rec)
@@ -174,17 +194,17 @@ func (s *CRDTRatingStore) List(peerID string) ([]domain.RatingRecord, error) {
 // DeleteExpired removes this node's own records of one dimension with a
 // bucket before beforeBucket. Foreign records are never deleted: a CRDT
 // delete is a tombstone that propagates to every replica.
-func (s *CRDTRatingStore) DeleteExpired(dimension string, beforeBucket int64) error {
+func (s *Store) DeleteExpired(dimension string, beforeBucket int64) error {
 	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: recordPrefix, KeysOnly: true})
 	if err != nil {
-		return fmt.Errorf("crdt rating: query records: %w", err)
+		return fmt.Errorf("rating store: query records: %w", err)
 	}
 
 	var expired []string
 	for r := range results.Next() {
 		if r.Error != nil {
 			_ = results.Close()
-			return fmt.Errorf("crdt rating: iterate records: %w", r.Error)
+			return fmt.Errorf("rating store: iterate records: %w", r.Error)
 		}
 		rec, ok := parseRecordKey(r.Key)
 		if !ok || rec.ObserverID != s.nodeID || rec.Dimension != dimension || rec.Bucket >= beforeBucket {
@@ -197,17 +217,17 @@ func (s *CRDTRatingStore) DeleteExpired(dimension string, beforeBucket int64) er
 	var errs []error
 	for _, key := range expired {
 		if err := s.crdt.Delete(s.ctx, ds.NewKey(key)); err != nil {
-			errs = append(errs, fmt.Errorf("crdt rating: delete %s: %w", key, err))
+			errs = append(errs, fmt.Errorf("rating store: delete %s: %w", key, err))
 		}
 	}
 	if removed := len(expired) - len(errs); removed > 0 {
-		log.Infof("crdt rating: removed %d expired own records", removed)
+		log.Infof("rating store: removed %d expired own records", removed)
 	}
 	return errors.Join(errs...)
 }
 
 // OnPut registers a hook fired for every record merged into the store, own or foreign.
-func (s *CRDTRatingStore) OnPut(hook func(domain.RatingRecord)) {
+func (s *Store) OnPut(hook func(domain.RatingRecord)) {
 	if s == nil || hook == nil {
 		return
 	}
@@ -217,7 +237,7 @@ func (s *CRDTRatingStore) OnPut(hook func(domain.RatingRecord)) {
 }
 
 // OnDelete registers a hook fired for every removed record; only its key fields are set.
-func (s *CRDTRatingStore) OnDelete(hook func(domain.RatingRecord)) {
+func (s *Store) OnDelete(hook func(domain.RatingRecord)) {
 	if s == nil || hook == nil {
 		return
 	}
@@ -226,10 +246,10 @@ func (s *CRDTRatingStore) OnDelete(hook func(domain.RatingRecord)) {
 	s.mu.Unlock()
 }
 
-func (s *CRDTRatingStore) onPut(k ds.Key, v []byte) {
+func (s *Store) onPut(k ds.Key, v []byte) {
 	rec, err := decodeRecord(k.String(), v)
 	if err != nil {
-		log.Debugf("crdt rating: ignoring merged record %s: %v", k, err)
+		log.Debugf("rating store: ignoring merged record %s: %v", k, err)
 		return
 	}
 	s.mu.RLock()
@@ -240,7 +260,7 @@ func (s *CRDTRatingStore) onPut(k ds.Key, v []byte) {
 	}
 }
 
-func (s *CRDTRatingStore) onDelete(k ds.Key) {
+func (s *Store) onDelete(k ds.Key) {
 	rec, ok := parseRecordKey(k.String())
 	if !ok {
 		return
@@ -254,7 +274,7 @@ func (s *CRDTRatingStore) onDelete(k ds.Key) {
 }
 
 // Close stops the CRDT store
-func (s *CRDTRatingStore) Close() error {
+func (s *Store) Close() error {
 	if s == nil {
 		return nil
 	}
@@ -266,7 +286,7 @@ func (s *CRDTRatingStore) Close() error {
 func recordKey(rec domain.RatingRecord) (ds.Key, error) {
 	for _, part := range []string{rec.PeerID, rec.ObserverID, rec.Dimension, rec.Generation} {
 		if part == "" || strings.Contains(part, "/") {
-			return ds.Key{}, ErrMalformedRatingRecord
+			return ds.Key{}, ErrMalformedRecord
 		}
 	}
 	return ds.NewKey(fmt.Sprintf(
@@ -311,7 +331,7 @@ func decodeRecord(key string, value []byte) (domain.RatingRecord, error) {
 		return rec, err
 	}
 	if own.String() != key {
-		return rec, ErrRatingRecordKeyMismatch
+		return rec, ErrKeyMismatch
 	}
 	return rec, nil
 }

@@ -26,7 +26,7 @@ resulting from the use or misuse of this software.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //nolint:all
-package crdt
+package statsstore
 
 import (
 	"context"
@@ -82,14 +82,14 @@ func newStatsHost(t *testing.T) host.Host {
 	return h
 }
 
-func newLiveStatsStore(t *testing.T) (*CRDTStatsStore, *silentBroadcaster) {
+func newLiveStatsStore(t *testing.T) (*Store, *silentBroadcaster) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
 	bc := &silentBroadcaster{}
-	store, err := NewCRDTStatsStore(
+	store, err := New(
 		ctx,
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
@@ -239,12 +239,12 @@ func TestCRDTStats_GenerationIsUniquePerProcess(t *testing.T) {
 }
 
 func TestCRDTStats_CloseIsSafeOnNilAndStopsTheStore(t *testing.T) {
-	assert.NoError(t, (*CRDTStatsStore)(nil).Close())
+	assert.NoError(t, (*Store)(nil).Close())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	store, err := NewCRDTStatsStore(
+	store, err := New(
 		ctx,
 		&silentBroadcaster{},
 		dssync.MutexWrap(datastore.NewMapDatastore()),

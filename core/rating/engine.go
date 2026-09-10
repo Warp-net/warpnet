@@ -65,7 +65,7 @@ const (
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
-// Storer is the replicated record store; crdt.CRDTRatingStore satisfies it.
+// Storer is the replicated record store; ratingstore.Store satisfies it.
 type Storer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
