@@ -1,5 +1,8 @@
 # Development Guidelines
 
+## Semantic compression
+Use semantic compression skill all the time .claude/skills/semantic-compression/SKILL.md
+
 ## Documentation
 First find and read the relevant codebase, then act.
 
