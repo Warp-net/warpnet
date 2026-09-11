@@ -55,7 +55,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
-	Event() <-chan domain.PeerEvent
+	Event() <-chan warpnet.PeerEvent
 	Close()
 }
 
@@ -68,8 +68,13 @@ type PubSubProvider interface {
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
-	Listen(events <-chan domain.PeerEvent)
+	Listen(sources ...<-chan warpnet.PeerEvent)
 	Close() error
+}
+
+// RatingProvider is the local storage the rating replica is built on.
+type RatingProvider interface {
+	ds.Datastore
 }
 
 // RatingStorer is the replicated record store the rating engine writes to.
@@ -95,7 +100,7 @@ type RelayNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
-	ratingStore       ds.Datastore
+	ratingStore       RatingProvider
 	ratingDb          RatingStorer
 	rating            PeerRater
 	memoryStoreCloseF func() error
@@ -244,9 +249,7 @@ func (rn *RelayNode) startRating() error {
 		return fmt.Errorf("relay: failed to start rating engine: %w", err)
 	}
 
-	go rn.rating.Listen(rn.node.Event())
-	go rn.rating.Listen(rn.mw.Event())
-	go rn.rating.Listen(rn.discService.Event())
+	rn.rating.Listen(rn.node.Event(), rn.mw.Event(), rn.discService.Event())
 	return nil
 }
 

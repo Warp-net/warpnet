@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -70,7 +69,7 @@ type WarpMiddleware struct {
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
-	events domain.PeerEmitter
+	events warpnet.PeerEmitter
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
@@ -80,19 +79,19 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
-		events:          domain.NewPeerEmitter(),
+		events:          warpnet.NewPeerEmitter(),
 	}
 	return wm
 }
 
 // Event is what the middlewares saw the peers do. The channel is never closed.
-func (p *WarpMiddleware) Event() <-chan domain.PeerEvent {
+func (p *WarpMiddleware) Event() <-chan warpnet.PeerEvent {
 	return p.events
 }
 
 // emit reports an observation about the stream's remote peer. A self-stream
 // names nobody, so it reports nothing.
-func (p *WarpMiddleware) emitStream(s warpnet.WarpStream, t domain.PeerEventType) {
+func (p *WarpMiddleware) emitStream(s warpnet.WarpStream, t warpnet.PeerEventType) {
 	if p == nil || s == nil || s.Conn() == nil {
 		return
 	}
@@ -100,7 +99,7 @@ func (p *WarpMiddleware) emitStream(s warpnet.WarpStream, t domain.PeerEventType
 	if remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
 		return
 	}
-	p.events.Emit(domain.PeerEvent{
+	p.events.Emit(warpnet.PeerEvent{
 		PeerID: remote.String(),
 		Type:   t,
 		Route:  string(s.Protocol()),

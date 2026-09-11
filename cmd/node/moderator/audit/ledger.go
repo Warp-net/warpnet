@@ -6,7 +6,7 @@ package audit
 import (
 	"sync"
 
-	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
 // Outcome is the auditor's classification of one challenge exchange.
@@ -124,26 +124,26 @@ type Ledger struct {
 	mu    sync.Mutex
 	peers map[string]*peerStats
 
-	events domain.PeerEmitter
+	events warpnet.PeerEmitter
 }
 
 func NewLedger() *Ledger {
 	return &Ledger{
 		peers:  make(map[string]*peerStats),
-		events: domain.NewPeerEmitter(),
+		events: warpnet.NewPeerEmitter(),
 	}
 }
 
 // Event is what the audit saw the moderators do. The channel is never closed.
-func (l *Ledger) Event() <-chan domain.PeerEvent {
+func (l *Ledger) Event() <-chan warpnet.PeerEvent {
 	return l.events
 }
 
-func (l *Ledger) emit(peerID string, t domain.PeerEventType) {
+func (l *Ledger) emit(peerID string, t warpnet.PeerEventType) {
 	if l == nil {
 		return
 	}
-	l.events.Emit(domain.PeerEvent{PeerID: peerID, Type: t})
+	l.events.Emit(warpnet.PeerEvent{PeerID: peerID, Type: t})
 }
 
 func (l *Ledger) Record(peerID string, o Outcome) {
@@ -171,16 +171,16 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 	l.mu.Unlock()
 
 	if o == OutcomeUnreachable {
-		l.emit(peerID, domain.PeerAuditUnreachable)
+		l.emit(peerID, warpnet.PeerAuditUnreachable)
 	}
 	// Only a crossing is reported: a long audit must not grind a peer
 	// down for a conclusion it had already drawn.
 	if after > before {
 		switch after {
 		case StandingSuspect:
-			l.emit(peerID, domain.PeerAuditWrong)
+			l.emit(peerID, warpnet.PeerAuditWrong)
 		case StandingBanned:
-			l.emit(peerID, domain.PeerAuditInvalid)
+			l.emit(peerID, warpnet.PeerAuditInvalid)
 		}
 	}
 }

@@ -194,7 +194,7 @@ func (m *Moderator) Start() error {
 
 // Event is what the audit saw the other moderators do, for whoever rates
 // them. The moderator node points the rating engine at it.
-func (m *Moderator) Event() <-chan domain.PeerEvent {
+func (m *Moderator) Event() <-chan warpnet.PeerEvent {
 	if m == nil || m.ledger == nil {
 		return nil
 	}

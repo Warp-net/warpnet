@@ -87,7 +87,7 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
-	events domain.PeerEmitter,
+	events warpnet.PeerEmitter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
@@ -135,19 +135,19 @@ func StreamModerationResultHandler(
 
 		// A verdict arrives signed and quorum-backed, so both the node it
 		// names and the moderator that malformed it are attributable.
-		events.Emit(domain.PeerEvent{
+		events.Emit(warpnet.PeerEvent{
 			PeerID: userNodeID(userRepo, ev.UserID),
-			Type:   domain.PeerModerationUpheld,
+			Type:   warpnet.PeerModerationUpheld,
 		})
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
-				events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
+				events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
-				events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
+				events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 				return nil, ErrNoUserID
 			}
 
@@ -176,7 +176,7 @@ func StreamModerationResultHandler(
 
 		case domain.ModerationUserType:
 			if ev.UserID == "" {
-				events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
+				events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 				return nil, ErrNoUserID
 			}
 			if userRepo == nil {
@@ -207,7 +207,7 @@ func StreamModerationResultHandler(
 
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
-			events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
+			events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 			return event.Accepted, nil
 		}
 

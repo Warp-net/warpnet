@@ -103,7 +103,7 @@ type discoveryService struct {
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
 
-	events domain.PeerEmitter
+	events warpnet.PeerEmitter
 }
 
 //goland:noinspection ALL
@@ -125,7 +125,7 @@ func NewDiscoveryService(
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		events:          domain.NewPeerEmitter(),
+		events:          warpnet.NewPeerEmitter(),
 	}
 }
 
@@ -138,22 +138,22 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		events:          domain.NewPeerEmitter(),
+		events:          warpnet.NewPeerEmitter(),
 	}
 }
 
 // Event is what discovery saw the peers do. The channel is never closed.
-func (s *discoveryService) Event() <-chan domain.PeerEvent {
+func (s *discoveryService) Event() <-chan warpnet.PeerEvent {
 	return s.events
 }
 
 // emit reports one observation about a peer. How often a peer may turn up
 // before that is flooding is the rating's call.
-func (s *discoveryService) emit(peerID warpnet.WarpPeerID, t domain.PeerEventType) {
+func (s *discoveryService) emit(peerID warpnet.WarpPeerID, t warpnet.PeerEventType) {
 	if s == nil || peerID == s.ownId {
 		return
 	}
-	s.events.Emit(domain.PeerEvent{PeerID: peerID.String(), Type: t})
+	s.events.Emit(warpnet.PeerEvent{PeerID: peerID.String(), Type: t})
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -232,7 +232,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		return
 	}
 
-	s.emit(pi.ID, domain.PeerDiscovered)
+	s.emit(pi.ID, warpnet.PeerDiscovered)
 
 	if !s.limiter.Allow() {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
@@ -433,7 +433,7 @@ func (s *discoveryService) emitDialFailure(pi warpnet.WarpAddrInfo) {
 	if !known {
 		return
 	}
-	s.emit(pi.ID, domain.PeerDialFailure)
+	s.emit(pi.ID, warpnet.PeerDialFailure)
 }
 
 const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")

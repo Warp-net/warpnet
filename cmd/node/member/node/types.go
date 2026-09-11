@@ -45,7 +45,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
-	Event() <-chan domain.PeerEvent
+	Event() <-chan warpnet.PeerEvent
 	Close()
 }
 
@@ -93,7 +93,7 @@ type RatingProvider interface {
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
-	Listen(events <-chan domain.PeerEvent)
+	Listen(sources ...<-chan warpnet.PeerEvent)
 	Close() error
 }
 

@@ -47,7 +47,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -77,7 +76,7 @@ type MemberNode struct {
 	statsDb          StatsStorer
 	ratingDb         RatingStorer
 	rating           PeerRater
-	events           domain.PeerEmitter
+	events           warpnet.PeerEmitter
 	privKey          ed25519.PrivateKey
 	ownerId, network string
 }
@@ -170,7 +169,7 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
 		ratingRepo:    ratingRepo,
-		events:        domain.NewPeerEmitter(),
+		events:        warpnet.NewPeerEmitter(),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -244,10 +243,7 @@ func (m *MemberNode) Start() (err error) {
 		m.mw.IdempotencyMiddleware,
 	)
 
-	go m.rating.Listen(m.node.Event())
-	go m.rating.Listen(m.mw.Event())
-	go m.rating.Listen(m.discService.Event())
-	go m.rating.Listen(m.events)
+	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.events)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 

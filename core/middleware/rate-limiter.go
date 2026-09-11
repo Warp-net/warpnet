@@ -34,7 +34,6 @@ import (
 	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
@@ -114,7 +113,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
-			p.emitStream(s, domain.PeerRateLimited)
+			p.emitStream(s, warpnet.PeerRateLimited)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil

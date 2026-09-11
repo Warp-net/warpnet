@@ -33,7 +33,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -76,12 +75,22 @@ func (b *burst) reached(peerID string) bool {
 	return count == b.threshold
 }
 
-// Listen charges the peers a module's fan-out names, until the channel
-// closes or the engine does. It blocks: the caller owns the goroutine.
-func (e *Engine) Listen(events <-chan domain.PeerEvent) {
-	if e == nil || events == nil {
+// Listen charges the peers the modules' fan-outs name. It returns at
+// once; each listener runs until its channel closes or the engine does,
+// and Close waits for them.
+func (e *Engine) Listen(sources ...<-chan warpnet.PeerEvent) {
+	if e == nil || e.ctx.Err() != nil {
 		return
 	}
+	for _, events := range sources {
+		if events == nil {
+			continue
+		}
+		e.listeners.Go(func() { e.listen(events) })
+	}
+}
+
+func (e *Engine) listen(events <-chan warpnet.PeerEvent) {
 	for {
 		select {
 		case <-e.ctx.Done():
@@ -98,22 +107,22 @@ func (e *Engine) Listen(events <-chan domain.PeerEvent) {
 // observe turns one observation into the offences it is worth. A type
 // this node does not charge for is not an error: it is a plain fact, or
 // an axis its role cannot witness.
-func (e *Engine) observe(ev domain.PeerEvent) {
+func (e *Engine) observe(ev warpnet.PeerEvent) {
 	peerID := warpnet.FromStringToPeerID(ev.PeerID)
 	if peerID == "" {
 		return
 	}
 
 	switch ev.Type {
-	case domain.PeerConnected:
+	case warpnet.PeerConnected:
 		if e.flaps.reached(ev.PeerID) {
 			e.record(peerID, KindConnectionFlap)
 		}
-	case domain.PeerDiscovered:
+	case warpnet.PeerDiscovered:
 		if e.discoveries.reached(ev.PeerID) {
 			e.record(peerID, KindDiscoveryFlood)
 		}
-	case domain.PeerRateLimited:
+	case warpnet.PeerRateLimited:
 		e.record(peerID, KindRateLimitHit)
 		if !stream.WarpRoute(ev.Route).IsGet() && e.writes.reached(ev.PeerID) {
 			e.record(peerID, KindWriteFlood)

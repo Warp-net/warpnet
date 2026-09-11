@@ -43,7 +43,6 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p"
@@ -92,7 +91,7 @@ type WarpNode struct {
 
 	reachability atomic.Int64
 	prioritizer  Prioritizer
-	events       domain.PeerEmitter
+	events       warpnet.PeerEmitter
 
 	startTime        time.Time
 	eventsSub        event.Subscription
@@ -163,7 +162,7 @@ func NewWarpNode(
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
-		events:           domain.NewPeerEmitter(),
+		events:           warpnet.NewPeerEmitter(),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
 
@@ -243,13 +242,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		data, err := stream.ReadRequest(s)
 		if errors.Is(err, stream.ErrPayloadTooLarge) {
 			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
-			n.emitStream(s, domain.PeerOversizePayload)
+			n.emitStream(s, warpnet.PeerOversizePayload)
 			_ = s.Reset()
 			return
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
-			n.emitStream(s, domain.PeerMalformedFrame)
+			n.emitStream(s, warpnet.PeerMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
@@ -261,7 +260,7 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
 		}
 		if errors.Is(err, warpnet.ErrForeignAuthor) {
-			n.emitStream(s, domain.PeerForeignAuthorship)
+			n.emitStream(s, warpnet.PeerForeignAuthorship)
 		}
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			clip := data
@@ -346,7 +345,7 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
-					n.events.Emit(domain.PeerEvent{PeerID: pid, Type: domain.PeerConnected})
+					n.events.Emit(warpnet.PeerEvent{PeerID: pid, Type: warpnet.PeerConnected})
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
@@ -403,13 +402,13 @@ func (n *WarpNode) trackIncomingEvents() {
 }
 
 // Event is what this node saw its peers do. The channel is never closed.
-func (n *WarpNode) Event() <-chan domain.PeerEvent {
+func (n *WarpNode) Event() <-chan warpnet.PeerEvent {
 	return n.events
 }
 
 // emitStream reports an observation about the stream's remote peer. A
 // self-stream names nobody, so it reports nothing.
-func (n *WarpNode) emitStream(s warpnet.WarpStream, t domain.PeerEventType) {
+func (n *WarpNode) emitStream(s warpnet.WarpStream, t warpnet.PeerEventType) {
 	if n == nil || s == nil || s.Conn() == nil {
 		return
 	}
@@ -417,7 +416,7 @@ func (n *WarpNode) emitStream(s warpnet.WarpStream, t domain.PeerEventType) {
 	if remote == s.Conn().LocalPeer() {
 		return
 	}
-	n.events.Emit(domain.PeerEvent{
+	n.events.Emit(warpnet.PeerEvent{
 		PeerID: remote.String(),
 		Type:   t,
 		Route:  string(s.Protocol()),

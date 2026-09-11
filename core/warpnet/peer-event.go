@@ -25,7 +25,7 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package domain
+package warpnet
 
 // PeerEventType names something one node observed another node do on the
 // wire. The vocabulary is the observation only: what it is worth, and on

@@ -128,6 +128,8 @@ type Engine struct {
 	discoveries *burst
 	writes      *burst
 
+	listeners sync.WaitGroup
+
 	mu       sync.Mutex
 	counters map[pendingKey]counts
 	dirty    map[pendingKey]struct{}
@@ -329,6 +331,7 @@ func (e *Engine) Close() error {
 		case <-time.After(closeTimeout):
 			log.Warnln("rating: flush loop did not stop in time")
 		}
+		e.listeners.Wait()
 	})
 	return nil
 }
