@@ -39,7 +39,11 @@ import (
 
 func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	t.Helper()
-	mw := &WarpMiddleware{ownNodeId: ownNodeId, rateLimiters: newRateLimitersCache()}
+	mw := &WarpMiddleware{
+		ownNodeId:    ownNodeId,
+		rateLimiters: newRateLimitersCache(),
+		events:       warpnet.NewPeerEmitter(),
+	}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 	return mw
 }
