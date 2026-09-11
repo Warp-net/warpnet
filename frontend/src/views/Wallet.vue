@@ -132,6 +132,9 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {buildQRCode} from "@/lib/qr";
 
+const historyPollEvery = 15000;
+const historyPollTries = 6;
+
 const SCAN = {
   testnet: "https://nile.tronscan.org/#",
   mainnet: "https://tronscan.org/#",
@@ -157,6 +160,7 @@ export default {
       history: [],
       contacts: [],
       contactsTimer: null,
+      historyTimer: null,
       recipientMode: "user",
       recipientUser: "",
       sendTo: "",
@@ -245,15 +249,27 @@ export default {
       if (this.qr || !this.wallet.address) return;
       this.qr = await buildQRCode(this.wallet.address).catch(() => "");
     },
-    async loadHistory() {
-      this.loadingHistory = true;
+    async loadHistory(quiet) {
+      if (!quiet) this.loadingHistory = true;
       try {
         this.history = await warpnetService.getWalletHistory(25);
       } catch {
-        this.history = [];
+        if (!quiet) this.history = [];
       } finally {
         this.loadingHistory = false;
       }
+    },
+    watchForTransfer(tx) {
+      clearTimeout(this.historyTimer);
+      if (!tx) return;
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        await this.loadHistory(true);
+        if (this.history.some((t) => t.tx === tx) || attempts >= historyPollTries) return;
+        this.historyTimer = setTimeout(poll, historyPollEvery);
+      };
+      this.historyTimer = setTimeout(poll, historyPollEvery);
     },
     async loadContacts(force) {
       this.loadingContacts = true;
@@ -299,6 +315,7 @@ export default {
         this.sendAmount = "";
         this.loadWallet();
         this.loadHistory();
+        this.watchForTransfer(this.sendResult);
       } catch (err) {
         this.sendError = (err && err.message) || "Transfer failed";
       } finally {
@@ -331,6 +348,7 @@ export default {
   },
   beforeUnmount() {
     clearTimeout(this.contactsTimer);
+    clearTimeout(this.historyTimer);
   },
 };
 </script>

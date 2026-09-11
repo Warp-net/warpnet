@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, waitFor, fireEvent } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
@@ -131,6 +131,38 @@ describe('Wallet.vue', () => {
     renderWallet();
     await waitFor(() => expect(screen.getByText('engine unavailable')).toBeTruthy());
     expect(screen.getByText('History')).toBeTruthy();
+  });
+
+  it('keeps polling the history until the sent transfer solidifies', async () => {
+    vi.useFakeTimers();
+    try {
+      warpnetService.sendUsdt.mockResolvedValue({ tx: 'newtx' });
+      warpnetService.getWalletHistory.mockResolvedValue([]);
+      warpnetService.getWalletContacts.mockResolvedValue([
+        { user_id: 'u2', username: 'Vadim', address: 'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6' },
+      ]);
+      renderWallet();
+      await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(false));
+
+      await fireEvent.update(screen.getByRole('combobox'), 'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6');
+      await fireEvent.update(screen.getByPlaceholderText('0.0'), '1');
+      await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await vi.waitFor(() => expect(warpnetService.sendUsdt).toHaveBeenCalled());
+
+      const afterSend = warpnetService.getWalletHistory.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(warpnetService.getWalletHistory.mock.calls.length).toBe(afterSend + 1);
+
+      warpnetService.getWalletHistory.mockResolvedValue([
+        { tx: 'newtx', from: 'TMe', to: 'TThem', value: '1000000', incoming: false },
+      ]);
+      await vi.advanceTimersByTimeAsync(15000);
+      const settled = warpnetService.getWalletHistory.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(warpnetService.getWalletHistory.mock.calls.length).toBe(settled);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('clears every section loader once the calls answer', async () => {
