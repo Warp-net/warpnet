@@ -76,7 +76,7 @@ func ParseDimension(s string) (Dimension, bool)
 // Dimensions maps warpnet.NodeInfo.Type to the axes that node tracks.
 //   warpnet.RelayNode     -> {Network}
 //   warpnet.MemberNode    -> {Network, Application}
-//   warpnet.ModeratorNode -> {Network, Moderation}
+//   warpnet.ModeratorNode -> {Network, Application, Moderation}
 //   unknown               -> {Network}
 func Dimensions(nodeType string) []Dimension
 ```
@@ -236,7 +236,7 @@ that reach `TierFloor` quickly, and only from first-hand evidence.
 
 | Kind | Weight | Ceiling | Source |
 |---|---|---|---|
-| `KindModerationUpheld` | 300 | — | FAIL verdict from the moderator quorum naming this node's owner, already delivered to every observer at `core/handler/moderation.go` |
+| `KindModerationUpheld` | 300 | — | the moderator that carried a decided round, in `Moderator.Decided`: the report it judged already names the offending node, so one verdict is one observation rather than one per node it reaches |
 | `KindForeignAuthorship` | 350 | — | `warpnet.VerifyAuthorship` → `ErrForeignAuthor` |
 | `KindWriteFlood` | 20 | 300 | sustained rate-limit hits on write routes |
 | `KindFalseReportBurst` | 60 | 300 | reports from this node the quorum cleared, counted only above a per-window threshold |
@@ -736,7 +736,7 @@ and the node type:
 |---|---|---|---|
 | **member** (`cmd/node/member/node/member-node.go`) | `Network`, `Application` | `database.NewRatingRepo(db)` | `m.pubsubService.Gossip()` |
 | **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | a `datastore.NewMapDatastore()` of its own | needs a `Gossip()` accessor on `cmd/node/relay/pubsub` |
-| **moderator** (`cmd/node/moderator/node/moderator-node.go`) | `Network`, `Moderation` | a `datastore.NewMapDatastore()` of its own | `cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`; add a `Gossip()` accessor |
+| **moderator** (`cmd/node/moderator/node/moderator-node.go`) | `Network`, `Application`, `Moderation` | a `datastore.NewMapDatastore()` of its own | `cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`; add a `Gossip()` accessor |
 
 ```go
 broadcaster, err := broadcast.NewGossip(ctx, gossip, ratingstore.GossipTopic)
@@ -856,7 +856,7 @@ End-to-end on testnet, via the `warpnet-testnet-verify` skill:
 
 | File | Change |
 |---|---|
-| `core/handler/moderation.go` | on a FAIL verdict, `Record(offenderNode, KindModerationUpheld)` — the verdict already arrives signed and quorum-backed at every observer, so no new wire message is needed |
+| `cmd/node/moderator/moderator/moderator.go` | on a FAIL verdict, the chair reports the offending node named by the report it judged; observers never re-report a verdict they only received |
 | `core/warpnet/warpnet.go` call sites of `VerifyAuthorship` | `Record(peer, KindForeignAuthorship)` on `ErrForeignAuthor` |
 | `core/middleware/rate-limiter.go` | classify write routes; `KindWriteFlood` above a sustained-hit threshold |
 | `core/handler/report.go` + moderator round result | `KindFalseReportBurst` above a per-window threshold, so an honest mistaken report costs nothing |
