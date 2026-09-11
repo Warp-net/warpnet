@@ -32,7 +32,7 @@ import (
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/crdt"
+	"github.com/Warp-net/warpnet/core/crdt/broadcast"
 	"github.com/Warp-net/warpnet/core/crdt/statsstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -197,7 +197,7 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	crdtBroadcaster, err := crdt.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	crdtBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), statsstore.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}

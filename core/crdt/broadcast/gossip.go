@@ -25,21 +25,24 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package crdt
+// Package broadcast carries CRDT deltas between replicas.
+package broadcast
 
 import (
 	"context"
 	"sync"
 )
 
-// GossipPublisher interface for publishing to Gossip
+// GossipPubSuber is the pubsub this broadcaster rides.
 type GossipPubSuber interface {
 	PublishRaw(topicName string, data []byte) error
 	SubscribeRaw(topicName string, h func([]byte) error) error
 }
 
-// GossipBroadcaster adapts Gossip to CRDT Broadcaster interface
-type GossipBroadcaster struct {
+// Gossip adapts a gossip topic to the broadcaster a CRDT datastore expects.
+// Each datastore needs a topic of its own: replicas of different stores on
+// one topic would merge each other's heads.
+type Gossip struct {
 	ctx context.Context
 
 	gossip   GossipPubSuber
@@ -50,23 +53,9 @@ type GossipBroadcaster struct {
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
-const (
-	statsTopic  = "/warpnet/stats/1.0.0"
-	ratingTopic = "/warpnet/rating/1.0.0"
-)
-
-// NewGossipBroadcaster creates a new Gossip-based broadcaster for the stats CRDT
-func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
-	return newGossipBroadcaster(ctx, gossip, statsTopic)
-}
-
-// NewRatingGossipBroadcaster creates a new Gossip-based broadcaster for the rating CRDT
-func NewRatingGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
-	return newGossipBroadcaster(ctx, gossip, ratingTopic)
-}
-
-func newGossipBroadcaster(ctx context.Context, gossip GossipPubSuber, topic string) (*GossipBroadcaster, error) {
-	gb := &GossipBroadcaster{
+// NewGossip subscribes to topic and broadcasts on it.
+func NewGossip(ctx context.Context, gossip GossipPubSuber, topic string) (*Gossip, error) {
+	gb := &Gossip{
 		gossip:   gossip,
 		topic:    topic,
 		dataChan: make(chan []byte, 100),
@@ -79,12 +68,12 @@ func newGossipBroadcaster(ctx context.Context, gossip GossipPubSuber, topic stri
 	return gb, err
 }
 
-func (gb *GossipBroadcaster) Broadcast(_ context.Context, data []byte) error {
+func (gb *Gossip) Broadcast(_ context.Context, data []byte) error {
 	return gb.gossip.PublishRaw(gb.topic, data)
 }
 
 // Next receives broadcasted data
-func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
+func (gb *Gossip) Next(ctx context.Context) ([]byte, error) {
 	select {
 	case data := <-gb.dataChan:
 		return data, nil
@@ -96,7 +85,7 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	}
 }
 
-func (gb *GossipBroadcaster) Receive(data []byte) {
+func (gb *Gossip) Receive(data []byte) {
 	gb.mx.Lock()
 	defer gb.mx.Unlock()
 
@@ -122,7 +111,7 @@ func (gb *GossipBroadcaster) Receive(data []byte) {
 	}
 }
 
-func (gb *GossipBroadcaster) close() {
+func (gb *Gossip) close() {
 	if gb == nil {
 		return
 	}

@@ -43,6 +43,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// GossipTopic is the pubsub topic this store's replicas converge on.
+const GossipTopic = "/warpnet/stats/1.0.0"
+
 const (
 	repoName = "/STATS"
 

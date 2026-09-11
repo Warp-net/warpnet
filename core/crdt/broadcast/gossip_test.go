@@ -1,4 +1,4 @@
-package crdt
+package broadcast
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+const testTopic = "/warpnet/test/1.0.0"
 
 type mockGossipPubSub struct {
 	published []struct {
@@ -42,35 +44,35 @@ func (m *mockGossipPubSub) SubscribeRaw(topicName string, h func([]byte) error) 
 func TestNewGossipBroadcaster(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, err := NewGossipBroadcaster(ctx, mock)
+	gb, err := NewGossip(ctx, mock, testTopic)
 	assert.NoError(t, err)
 	assert.NotNil(t, gb)
-	assert.Equal(t, statsTopic, gb.topic)
+	assert.Equal(t, testTopic, gb.topic)
 }
 
 func TestNewGossipBroadcaster_SubscribeError(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{subscribeErr: errors.New("subscribe failed")}
-	_, err := NewGossipBroadcaster(ctx, mock)
+	_, err := NewGossip(ctx, mock, testTopic)
 	assert.Error(t, err)
 }
 
 func TestBroadcast(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	err := gb.Broadcast(ctx, []byte("hello"))
 	assert.NoError(t, err)
 	assert.Len(t, mock.published, 1)
-	assert.Equal(t, statsTopic, mock.published[0].topic)
+	assert.Equal(t, testTopic, mock.published[0].topic)
 	assert.Equal(t, []byte("hello"), mock.published[0].data)
 }
 
 func TestBroadcast_Error(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{publishErr: errors.New("publish failed")}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	err := gb.Broadcast(ctx, []byte("data"))
 	assert.Error(t, err)
@@ -79,7 +81,7 @@ func TestBroadcast_Error(t *testing.T) {
 func TestReceiveAndNext(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	gb.Receive([]byte("message1"))
 
@@ -91,7 +93,7 @@ func TestReceiveAndNext(t *testing.T) {
 func TestNext_ContextCancelled(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	nextCtx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -104,7 +106,7 @@ func TestNext_ContextCancelled(t *testing.T) {
 func TestNext_ParentContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	cancel()
 	// Give a short delay for the goroutine to notice
@@ -117,7 +119,7 @@ func TestNext_ParentContextCancelled(t *testing.T) {
 func TestReceive_ChannelFull_DropsOldest(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	// Fill channel to capacity
 	for i := range 100 {
@@ -140,7 +142,7 @@ func TestReceive_ChannelFull_DropsOldest(t *testing.T) {
 func TestReceive_ConcurrentWithNext_NoDeadlock(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	// Consumer blocks on Next() until either data arrives or its
 	// context is cancelled — no busy-wait, no per-iter context churn.
@@ -187,7 +189,7 @@ func TestReceive_ConcurrentWithNext_NoDeadlock(t *testing.T) {
 func TestSubscribeHandler_ReceivesData(t *testing.T) {
 	ctx := context.Background()
 	mock := &mockGossipPubSub{}
-	gb, _ := NewGossipBroadcaster(ctx, mock)
+	gb, _ := NewGossip(ctx, mock, testTopic)
 
 	// Simulate data coming through subscription
 	assert.NotNil(t, mock.subscribeHandler)

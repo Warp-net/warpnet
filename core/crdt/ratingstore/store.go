@@ -62,6 +62,9 @@ type Router interface {
 	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
 }
 
+// GossipTopic is the pubsub topic this store's replicas converge on.
+const GossipTopic = "/warpnet/rating/1.0.0"
+
 const (
 	repoName = "/RATING"
 

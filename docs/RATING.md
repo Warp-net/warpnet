@@ -34,7 +34,7 @@ The plan is deliberately built on machinery already in the tree.
 | Existing | File | Reused for |
 |---|---|---|
 | PN-counter over `go-ds-crdt`, single-writer generation-tagged keys, bitswap/DAG wiring | `core/crdt/statsstore` | `ratingstore.Store` is built the same way, in a sibling package with its own datastore; it stores signed records, not counters. |
-| Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/gossip-adapter.go` | Gains a second topic, `/warpnet/rating/1.0.0`, so the two CRDTs never see each other's heads. |
+| Gossip broadcaster adapter, topic `/warpnet/stats/1.0.0` | `core/crdt/broadcast` | Takes the topic as an argument, so each store rides one of its own and the two CRDTs never see each other's heads. |
 | `UpsertTag` connection priority with a flap LRU | `core/node/priority.go` | Gains a second, independent `rating` tag. |
 | Per-`route\|peer` leaky buckets | `core/middleware/rate-limiter.go` | Bucket parameters become a function of the peer's tier. |
 | Signature / freshness / private-route checks | `core/middleware/auth.go:54-85` | Main source of first-hand network observations. |
@@ -288,9 +288,11 @@ whole namespace and its set of heads, so two of them cannot share a backing
 store or a topic without merging each other's deltas.
 
 The two are separate packages that share nothing. Each declares the
-interfaces it needs — `Broadcaster`, `Datastore`, `Router` — and neither
-imports the other. `core/crdt` keeps only the gossip broadcaster they both
-ride, so a change to one tenant cannot reach the other.
+interfaces it needs — `Broadcaster`, `Datastore`, `Router` — and owns the
+topic its replicas converge on. Neither imports the other, and neither
+imports an umbrella package above it: the broadcaster they both ride is a
+leaf package, `core/crdt/broadcast`, that knows nothing of either tenant.
+Only the node assembly depends on all three.
 
 | Node type | Backing datastore | Survives restart via |
 |---|---|---|
@@ -301,9 +303,11 @@ ride, so a change to one tenant cannot reach the other.
 Topics:
 
 ```go
-// core/crdt/gossip-adapter.go
-statsTopic  = "/warpnet/stats/1.0.0"
-ratingTopic = "/warpnet/rating/1.0.0"   // crdt.NewRatingGossipBroadcaster
+// core/crdt/broadcast — one broadcaster, a topic per store
+func NewGossip(ctx context.Context, gossip GossipPubSuber, topic string) (*Gossip, error)
+
+statsstore.GossipTopic  // "/warpnet/stats/1.0.0"
+ratingstore.GossipTopic // "/warpnet/rating/1.0.0"
 ```
 
 **Why rating is not the stats store itself.** `statsstore.Store` is a PN-counter:
@@ -732,7 +736,7 @@ and the node type:
 | **moderator** (`cmd/node/moderator/node/moderator-node.go`) | `Network`, `Moderation` | a `datastore.NewMapDatastore()` of its own | `cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`; add a `Gossip()` accessor |
 
 ```go
-broadcaster, err := crdt.NewRatingGossipBroadcaster(ctx, gossip)
+broadcaster, err := broadcast.NewGossip(ctx, gossip, ratingstore.GossipTopic)
 store, err := ratingstore.New(ctx, broadcaster, ratingRepo, node.Node(), dHashTable)
 engine, err := rating.NewEngine(ctx, store, node.Node().Network(), privKey, warpnet.MemberNode)
 // ... on Stop: engine.Close() first, then store.Close()
@@ -763,7 +767,7 @@ Five stages, each independently reviewable, mergeable and testable.
 | `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `OffenceTally` — the wire DTOs |
 | `core/crdt/ratingstore` | `Store`: own go-ds-crdt datastore, key schema, encoding, merge hooks, own-records-only writes and deletes |
 | `core/crdt/statsstore` | the PN-counter, moved out of `core/crdt` so the two tenants share no package |
-| `core/crdt/gossip-adapter.go` | `NewRatingGossipBroadcaster` on `/warpnet/rating/1.0.0` |
+| `core/crdt/broadcast` | the gossip broadcaster, moved out of the umbrella package and parametrised by topic |
 | `database/rating-repo.go` | `NewRatingRepo(db)` — the member node's Badger-backed datastore for the rating CRDT, prefix `/RATING` |
 
 **Acceptance:** `core/crdt/stats_test.go` passes **unmodified**. `go build ./...`
@@ -787,7 +791,7 @@ New files:
 | `core/rating/indexer.go` | lazily loaded per-peer index, memoised scores, LRU eviction |
 | `core/rating/enforce.go` | `Tier` methods: the enforcement knobs |
 | `core/rating/engine.go` | `Engine`, `Storer`, `ConnectionsProvider`, local scoring, buffered writer, flush, GC, merge hooks |
-| `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` |
+| `core/handler/rating.go` | `StreamGetOwnRatingHandler`, `StreamGetRatingHandler` over `Engine.View` and `Engine.Own` — not in the storage/engine change |
 | `frontend/src/views/Settings/Rating.vue` | own rating, per-dimension bars, recent offences |
 
 The engine and the storage layer of Stage 0 are landed; everything below is
