@@ -31,13 +31,19 @@ import (
 	"fmt"
 	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt/broadcast"
+	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
@@ -49,16 +55,47 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
+	Event() <-chan warpnet.PeerEvent
 	Close()
 }
 
 type PubSubProvider interface {
 	Run(m pubsub.PubsubServerNodeConnector)
+	Gossip() *corePubsub.Gossip
 	Close() error
 	OwnerID() string
 }
 
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan warpnet.PeerEvent)
+	Close() error
+}
+
+// RatingProvider is the local storage the rating replica is built on.
+type RatingProvider interface {
+	Get(ctx context.Context, key ds.Key) ([]byte, error)
+	Has(ctx context.Context, key ds.Key) (bool, error)
+	GetSize(ctx context.Context, key ds.Key) (int, error)
+	Query(ctx context.Context, q ds.Query) (ds.Results, error)
+	Put(ctx context.Context, key ds.Key, value []byte) error
+	Delete(ctx context.Context, key ds.Key) error
+	Sync(ctx context.Context, prefix ds.Key) error
+	Close() error
+}
+
+// RatingStorer is the replicated record store the rating engine writes to.
+type RatingStorer interface {
+	Put(rec domain.RatingRecord) error
+	List(peerID string) ([]domain.RatingRecord, error)
+	DeleteExpired(dimension string, beforeBucket int64) error
+	OnPut(hook func(domain.RatingRecord))
+	OnDelete(hook func(domain.RatingRecord))
+	Close() error
+}
+
 type DistributedHashTableCloser interface {
+	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	Close()
 }
 
@@ -70,6 +107,9 @@ type RelayNode struct {
 	discService       DiscoveryHandler
 	pubsubService     PubSubProvider
 	dHashTable        DistributedHashTableCloser
+	ratingStore       RatingProvider
+	ratingDb          RatingStorer
+	rating            PeerRater
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -97,9 +137,13 @@ func NewRelayNode(
 		return nil, fmt.Errorf("relay: fail creating memory peerstore: %w", err)
 	}
 	mapStore := datastore.NewMapDatastore()
+	// The rating CRDT owns its whole namespace, so it cannot share the
+	// datastore the DHT keeps its records in.
+	ratingStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
 		_ = memoryStore.Close()
+		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -142,6 +186,7 @@ func NewRelayNode(
 		discService:       discService,
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
+		ratingStore:       ratingStore,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -177,6 +222,10 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.pubsubService.Run(rn)
 
+	if err := rn.startRating(); err != nil {
+		return err
+	}
+
 	nodeInfo := rn.NodeInfo()
 	println()
 	fmt.Printf(
@@ -184,6 +233,30 @@ func (rn *RelayNode) Start() (err error) {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+	return nil
+}
+
+// startRating rates the peers a relay can judge: it sees the wire and
+// nothing else, so its observations are the network ones.
+func (rn *RelayNode) startRating() error {
+	broadcaster, err := broadcast.NewGossip(rn.ctx, rn.pubsubService.Gossip(), ratingstore.GossipTopic)
+	if err != nil {
+		return fmt.Errorf("relay: failed to start rating gossip broadcaster: %w", err)
+	}
+	rn.ratingDb, err = ratingstore.New(
+		rn.ctx, broadcaster, rn.ratingStore, rn.node.Node(), rn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("relay: failed to initialize rating store: %w", err)
+	}
+	rn.rating, err = rating.NewEngine(
+		rn.ctx, rn.ratingDb, rn.node.Node().Network(), rn.privKey, warpnet.RelayNode,
+	)
+	if err != nil {
+		return fmt.Errorf("relay: failed to start rating engine: %w", err)
+	}
+
+	rn.rating.Listen(rn.node.Event(), rn.mw.Event(), rn.discService.Event())
 	return nil
 }
 
@@ -282,6 +355,12 @@ func (rn *RelayNode) Stop() {
 		if err := rn.pubsubService.Close(); err != nil {
 			log.Errorf("relay: failed to close pubsub: %v", err)
 		}
+	}
+	if rn.rating != nil {
+		_ = rn.rating.Close()
+	}
+	if rn.ratingDb != nil {
+		_ = rn.ratingDb.Close()
 	}
 	if rn.dHashTable != nil {
 		rn.dHashTable.Close()

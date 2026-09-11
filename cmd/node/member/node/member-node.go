@@ -32,7 +32,9 @@ import (
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/crdt"
+	"github.com/Warp-net/warpnet/core/crdt/broadcast"
+	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
+	"github.com/Warp-net/warpnet/core/crdt/statsstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -41,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -63,6 +66,7 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
+	ratingRepo       RatingProvider
 	authRepo         AuthProvider
 	userRepo         UserProvider
 	aliasesRepo      AliasesProvider
@@ -70,6 +74,8 @@ type MemberNode struct {
 	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
+	ratingDb         RatingStorer
+	rating           PeerRater
 	privKey          ed25519.PrivateKey
 	ownerId, network string
 }
@@ -93,6 +99,7 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
+	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
@@ -160,6 +167,7 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
+		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -196,15 +204,33 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	crdtBroadcaster, err := crdt.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	crdtBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), statsstore.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.statsDb, err = crdt.NewCRDTStatsStore(
+	m.statsDb, err = statsstore.New(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
+	}
+
+	ratingBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), ratingstore.GossipTopic)
+	if err != nil {
+		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
+	}
+	m.ratingDb, err = ratingstore.New(
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to initialize rating store: %w", err)
+	}
+
+	m.rating, err = rating.NewEngine(
+		m.ctx, m.ratingDb, m.node.Node().Network(), m.privKey, warpnet.MemberNode,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
 	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
@@ -214,6 +240,8 @@ func (m *MemberNode) Start() (err error) {
 		m.mw.AuthMiddleware,
 		m.mw.IdempotencyMiddleware,
 	)
+
+	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event())
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -915,6 +943,12 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
+	}
+	if m.rating != nil {
+		_ = m.rating.Close()
+	}
+	if m.ratingDb != nil {
+		_ = m.ratingDb.Close()
 	}
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()

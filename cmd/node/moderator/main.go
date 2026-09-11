@@ -121,6 +121,13 @@ func main() {
 	}
 	defer moder.Close()
 
+	// After the moderator starts: the rating rides the pubsub and listens
+	// to the audit, and neither exists before this point.
+	if err := n.StartRating(publisher.Gossip(), moder.Event()); err != nil {
+		log.Errorf("failed to start rating: %v", err)
+		return
+	}
+
 	// Registered after the moderator starts: answering an audit needs the
 	// engine, which only exists by then.
 	n.SetStreamHandlers(warpnet.WarpStreamHandler{ //nolint:govet

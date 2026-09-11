@@ -25,21 +25,24 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package crdt
+// Package broadcast carries CRDT deltas between replicas.
+package broadcast
 
 import (
 	"context"
 	"sync"
 )
 
-// GossipPublisher interface for publishing to Gossip
+// GossipPubSuber is the pubsub this broadcaster rides.
 type GossipPubSuber interface {
 	PublishRaw(topicName string, data []byte) error
 	SubscribeRaw(topicName string, h func([]byte) error) error
 }
 
-// GossipBroadcaster adapts Gossip to CRDT Broadcaster interface
-type GossipBroadcaster struct {
+// Gossip adapts a gossip topic to the broadcaster a CRDT datastore expects.
+// Each datastore needs a topic of its own: replicas of different stores on
+// one topic would merge each other's heads.
+type Gossip struct {
 	ctx context.Context
 
 	gossip   GossipPubSuber
@@ -50,36 +53,27 @@ type GossipBroadcaster struct {
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 }
 
-const statsTopic = "/warpnet/stats/1.0.0"
-
-// NewGossipBroadcaster creates a new Gossip-based broadcaster for CRDT
-func NewGossipBroadcaster(ctx context.Context, gossip GossipPubSuber) (*GossipBroadcaster, error) {
-	gb := &GossipBroadcaster{
+// NewGossip subscribes to topic and broadcasts on it.
+func NewGossip(ctx context.Context, gossip GossipPubSuber, topic string) (*Gossip, error) {
+	gb := &Gossip{
 		gossip:   gossip,
-		topic:    statsTopic,
+		topic:    topic,
 		dataChan: make(chan []byte, 100),
 		ctx:      ctx,
 	}
-	err := gossip.SubscribeRaw(statsTopic, func(data []byte) error {
+	err := gossip.SubscribeRaw(topic, func(data []byte) error {
 		gb.Receive(data)
 		return nil
 	})
 	return gb, err
 }
 
-// Broadcast sends data via Gossip.
-//
-// gb.gossip and gb.topic are set once at construction and never
-// mutated, so this method intentionally does NOT take gb.mx —
-// otherwise a slow PublishRaw (network I/O) would block close() and
-// Receive() through the same lock, defeating the deadlock fix in
-// Receive().
-func (gb *GossipBroadcaster) Broadcast(_ context.Context, data []byte) error {
+func (gb *Gossip) Broadcast(_ context.Context, data []byte) error {
 	return gb.gossip.PublishRaw(gb.topic, data)
 }
 
 // Next receives broadcasted data
-func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
+func (gb *Gossip) Next(ctx context.Context) ([]byte, error) {
 	select {
 	case data := <-gb.dataChan:
 		return data, nil
@@ -91,19 +85,7 @@ func (gb *GossipBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	}
 }
 
-// Receive is called by Gossip subscription handler to deliver data.
-//
-// All channel operations are non-blocking. If the buffer is full, the
-// oldest pending message is dropped and the new one is enqueued. The
-// previous implementation did `<-gb.dataChan` unconditionally inside the
-// `default` branch, which could deadlock under the held mutex when a
-// concurrent Next() drained the channel between the select decision
-// and the receive.
-//
-// The `closed` flag and `close()` taking the same mutex prevent a
-// "send on closed channel" panic when Next() shuts the broadcaster
-// down concurrently with an in-flight Receive.
-func (gb *GossipBroadcaster) Receive(data []byte) {
+func (gb *Gossip) Receive(data []byte) {
 	gb.mx.Lock()
 	defer gb.mx.Unlock()
 
@@ -129,7 +111,7 @@ func (gb *GossipBroadcaster) Receive(data []byte) {
 	}
 }
 
-func (gb *GossipBroadcaster) close() {
+func (gb *Gossip) close() {
 	if gb == nil {
 		return
 	}

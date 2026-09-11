@@ -255,6 +255,14 @@ type GetUserEvent struct {
 	NodeId string `json:"node_id,omitempty"`
 }
 
+// GetRatingEvent defines model for GetRatingEvent.
+type GetRatingEvent struct {
+	NodeId domain.ID `json:"node_id"`
+}
+
+// GetRatingResponse defines model for GetRatingResponse.
+type GetRatingResponse = domain.NodeRating
+
 // ReactionEvent defines model for ReactionEvent.
 //
 // Emoji names the reaction. Clients that predate reactions omit it and

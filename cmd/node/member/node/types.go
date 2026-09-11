@@ -45,6 +45,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
+	Event() <-chan warpnet.PeerEvent
 	Close()
 }
 
@@ -84,6 +85,34 @@ type NodeProvider interface {
 
 type StatsProvider interface {
 	datastore.Datastore
+}
+
+// RatingProvider is the local storage the rating replica is built on.
+type RatingProvider interface {
+	Get(ctx context.Context, key datastore.Key) ([]byte, error)
+	Has(ctx context.Context, key datastore.Key) (bool, error)
+	GetSize(ctx context.Context, key datastore.Key) (int, error)
+	Query(ctx context.Context, q datastore.Query) (datastore.Results, error)
+	Put(ctx context.Context, key datastore.Key, value []byte) error
+	Delete(ctx context.Context, key datastore.Key) error
+	Sync(ctx context.Context, prefix datastore.Key) error
+	Close() error
+}
+
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan warpnet.PeerEvent)
+	Close() error
+}
+
+// RatingStorer is the replicated record store the rating engine writes to.
+type RatingStorer interface {
+	Put(rec domain.RatingRecord) error
+	List(peerID string) ([]domain.RatingRecord, error)
+	DeleteExpired(dimension string, beforeBucket int64) error
+	OnPut(hook func(domain.RatingRecord))
+	OnDelete(hook func(domain.RatingRecord))
+	Close() error
 }
 
 type AuthProvider interface {

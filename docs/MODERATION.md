@@ -145,12 +145,42 @@ so the expected answer is known. A machine that answers at random, always says
 the same thing, or has no AI model at all fails these checks and gets flagged
 locally as unreliable.
 
-Being honest about the limits of that last part: **those flags do not yet block
-anyone.** They are recorded and logged, not enforced, because a check performed
-by a single machine is still a single machine's opinion — and letting one node
-disqualify another would create exactly the abuse it is meant to prevent.
-Enforcement requires several independent checkers to agree first, and that is
-not built yet.
+Those flags are now shared. When a moderator concludes that another one is
+unreliable, it records that as a signed observation which spreads to the rest
+of the network, so every machine can weigh what all the checkers found rather
+than only what it saw itself. No single checker can carry the judgement: one
+machine's opinion about another is capped, and so is the total of everyone
+else's, precisely so that a group cannot gang up on an honest moderator.
+
+Being honest about the limits: **a flagged moderator still votes.** Its
+standing is weighed, never used to throw its vote out. Two reasons. Machines
+share the conclusion, not the evidence behind it, so a receiving node has to
+take the checker's word for it. And moderators legitimately run different AI
+models, which disagree with each other sometimes — until the network can tell
+"different model" from "no model", disagreement is not proof of anything.
+
+---
+
+## Your node has a rating
+
+Every node in the network carries one, and it is not something your node
+decides about itself — it cannot. It is what the machines around yours have
+observed: whether your node speaks the protocol correctly, whether it floods
+its neighbours, whether content it published was moderated.
+
+Three things worth knowing:
+
+- **A new node starts at full trust.** There is no waiting period to earn your
+  way in.
+- **It repairs itself.** Observations fade with time on their own; a bad day
+  does not follow your node around.
+- **You can see it.** Settings → Node rating shows the score, what it is made
+  of, and what your node has recently been marked for — the point is to let
+  you fix something, not to hide a verdict from you.
+
+A low rating never cuts your node off. It makes other machines answer it later
+and less often when they are busy. Nothing about it blocks you from the
+network, and no rating alone can get your node banned.
 
 ---
 

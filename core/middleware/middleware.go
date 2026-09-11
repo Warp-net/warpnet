@@ -68,6 +68,8 @@ type WarpMiddleware struct {
 
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
+
+	events warpnet.PeerEmitter
 }
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
@@ -77,8 +79,31 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
+		events:          warpnet.NewPeerEmitter(),
 	}
 	return wm
+}
+
+// Event is what the middlewares saw the peers do. The channel is never closed.
+func (p *WarpMiddleware) Event() <-chan warpnet.PeerEvent {
+	return p.events
+}
+
+// emit reports an observation about the stream's remote peer. A self-stream
+// names nobody, so it reports nothing.
+func (p *WarpMiddleware) emitStream(s warpnet.WarpStream, t warpnet.PeerEventType) {
+	if p == nil || s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
+		return
+	}
+	p.events.Emit(warpnet.PeerEvent{
+		PeerID: remote.String(),
+		Type:   t,
+		Route:  string(s.Protocol()),
+	})
 }
 
 func (p *WarpMiddleware) Close() {
