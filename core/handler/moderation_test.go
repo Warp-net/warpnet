@@ -102,7 +102,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		users stubModerationUserUpdater,
 		timeline stubModerationTimelineDeleter,
 	) func([]byte, interface{}) (any, error) {
-		h := StreamModerationResultHandler(notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}}, nil)
+		h := StreamModerationResultHandler(notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}})
 		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
 	}
 

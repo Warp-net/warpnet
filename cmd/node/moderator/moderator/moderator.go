@@ -126,6 +126,10 @@ type Moderator struct {
 	ledger  *audit.Ledger
 	corpus  *audit.Corpus
 
+	// events is what this moderator saw its peers do: the nodes it ruled
+	// against, and the moderators the audit found wanting.
+	events warpnet.PeerEmitter
+
 	judgedMx sync.Mutex
 	judged   map[string]string
 
@@ -140,14 +144,16 @@ func NewModerator(
 	votes VoteExchange,
 	privKey ed25519.PrivateKey,
 ) (*Moderator, error) {
+	events := warpnet.NewPeerEmitter()
 	m := &Moderator{
 		ctx:      ctx,
 		node:     node,
 		sub:      sub,
 		votes:    votes,
 		privKey:  privKey,
+		events:   events,
 		retrier:  retrier.New(fetchRetryDelay, fetchAttempts, retrier.FixedBackoff),
-		ledger:   audit.NewLedger(),
+		ledger:   audit.NewLedger(events),
 		corpus:   audit.NewCorpus(),
 		judged:   make(map[string]string, judgedCapacity),
 		isClosed: new(atomic.Bool),
@@ -192,13 +198,13 @@ func (m *Moderator) Start() error {
 	return nil
 }
 
-// Event is what the audit saw the other moderators do, for whoever rates
-// them. The moderator node points the rating engine at it.
+// Event is what this moderator concluded about its peers: the verdicts it
+// carried, and what the audit made of the other moderators.
 func (m *Moderator) Event() <-chan warpnet.PeerEvent {
-	if m == nil || m.ledger == nil {
+	if m == nil {
 		return nil
 	}
-	return m.ledger.Event()
+	return m.events
 }
 
 func (m *Moderator) Close() {
@@ -474,6 +480,14 @@ func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []
 	if bool(outcome.Result) {
 		return
 	}
+
+	// The quorum upheld the report, and this node is the one carrying the
+	// decision, so the offending node is charged once: by the moderator
+	// that judged it, not by every node the verdict reaches.
+	m.events.Emit(warpnet.PeerEvent{
+		PeerID: rep.TargetNodeID,
+		Type:   warpnet.PeerModerationUpheld,
+	})
 
 	switch rep.Type {
 	case domain.ModerationTweetType:

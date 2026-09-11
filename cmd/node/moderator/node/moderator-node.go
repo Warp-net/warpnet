@@ -59,7 +59,14 @@ type PeerRater interface {
 
 // RatingProvider is the local storage the rating replica is built on.
 type RatingProvider interface {
-	ds.Datastore
+	Get(ctx context.Context, key ds.Key) ([]byte, error)
+	Has(ctx context.Context, key ds.Key) (bool, error)
+	GetSize(ctx context.Context, key ds.Key) (int, error)
+	Query(ctx context.Context, q ds.Query) (ds.Results, error)
+	Put(ctx context.Context, key ds.Key, value []byte) error
+	Delete(ctx context.Context, key ds.Key) error
+	Sync(ctx context.Context, prefix ds.Key) error
+	Close() error
 }
 
 // RatingStorer is the replicated record store the rating engine writes to.

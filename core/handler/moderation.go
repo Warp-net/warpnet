@@ -87,7 +87,6 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
-	events warpnet.PeerEmitter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
@@ -133,21 +132,12 @@ func StreamModerationResultHandler(
 			return event.Accepted, nil
 		}
 
-		// A verdict arrives signed and quorum-backed, so both the node it
-		// names and the moderator that malformed it are attributable.
-		events.Emit(warpnet.PeerEvent{
-			PeerID: userNodeID(userRepo, ev.UserID),
-			Type:   warpnet.PeerModerationUpheld,
-		})
-
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
-				events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
-				events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 				return nil, ErrNoUserID
 			}
 
@@ -176,7 +166,6 @@ func StreamModerationResultHandler(
 
 		case domain.ModerationUserType:
 			if ev.UserID == "" {
-				events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 				return nil, ErrNoUserID
 			}
 			if userRepo == nil {
@@ -207,25 +196,11 @@ func StreamModerationResultHandler(
 
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
-			events.Emit(warpnet.PeerEvent{PeerID: moderatorId, Type: warpnet.PeerVerdictMalformed})
 			return event.Accepted, nil
 		}
 
 		return event.Accepted, nil
 	}
-}
-
-// userNodeID resolves the node a moderated user lives on. A user this
-// node has never cached names no peer, and nobody is charged for them.
-func userNodeID(userRepo ModerationUserUpdater, userID string) string {
-	if userRepo == nil || userID == "" {
-		return ""
-	}
-	user, err := userRepo.Get(userID)
-	if err != nil {
-		return ""
-	}
-	return user.NodeId
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the

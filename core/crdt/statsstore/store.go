@@ -51,7 +51,14 @@ type Broadcaster interface {
 
 // Datastore is the local storage the replica is built on.
 type Datastore interface {
-	ds.Datastore
+	Get(ctx context.Context, key ds.Key) ([]byte, error)
+	Has(ctx context.Context, key ds.Key) (bool, error)
+	GetSize(ctx context.Context, key ds.Key) (int, error)
+	Query(ctx context.Context, q ds.Query) (ds.Results, error)
+	Put(ctx context.Context, key ds.Key, value []byte) error
+	Delete(ctx context.Context, key ds.Key) error
+	Sync(ctx context.Context, prefix ds.Key) error
+	Close() error
 }
 
 // Router finds the peers holding a block.

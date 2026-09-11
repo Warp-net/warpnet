@@ -127,16 +127,13 @@ type Ledger struct {
 	events warpnet.PeerEmitter
 }
 
-func NewLedger() *Ledger {
+// NewLedger reports what it concludes into events, the fan-out of the
+// moderator that owns it.
+func NewLedger(events warpnet.PeerEmitter) *Ledger {
 	return &Ledger{
 		peers:  make(map[string]*peerStats),
-		events: warpnet.NewPeerEmitter(),
+		events: events,
 	}
-}
-
-// Event is what the audit saw the moderators do. The channel is never closed.
-func (l *Ledger) Event() <-chan warpnet.PeerEvent {
-	return l.events
 }
 
 func (l *Ledger) emit(peerID string, t warpnet.PeerEventType) {

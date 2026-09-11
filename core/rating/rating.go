@@ -118,7 +118,9 @@ func Dimensions(nodeType string) []Dimension {
 	case warpnet.MemberNode:
 		return []Dimension{Network, Application}
 	case warpnet.ModeratorNode:
-		return []Dimension{Network, Moderation}
+		// A moderator judges content for a living, so it witnesses the
+		// application axis as well as the wire and its own peers.
+		return []Dimension{Network, Application, Moderation}
 	default:
 		return []Dimension{Network}
 	}

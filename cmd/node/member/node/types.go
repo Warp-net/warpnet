@@ -87,8 +87,16 @@ type StatsProvider interface {
 	datastore.Datastore
 }
 
+// RatingProvider is the local storage the rating replica is built on.
 type RatingProvider interface {
-	datastore.Datastore
+	Get(ctx context.Context, key datastore.Key) ([]byte, error)
+	Has(ctx context.Context, key datastore.Key) (bool, error)
+	GetSize(ctx context.Context, key datastore.Key) (int, error)
+	Query(ctx context.Context, q datastore.Query) (datastore.Results, error)
+	Put(ctx context.Context, key datastore.Key, value []byte) error
+	Delete(ctx context.Context, key datastore.Key) error
+	Sync(ctx context.Context, prefix datastore.Key) error
+	Close() error
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.
