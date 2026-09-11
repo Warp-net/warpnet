@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -98,6 +99,27 @@ type RatingProvider interface {
 	Delete(ctx context.Context, key datastore.Key) error
 	Sync(ctx context.Context, prefix datastore.Key) error
 	Close() error
+}
+
+// WalletProvider is the payment engine as this node holds it: what the
+// wallet handlers ask of it, and the process it has to stop.
+type WalletProvider interface {
+	Address(ctx context.Context, seed string) (string, error)
+	Balance(ctx context.Context, address string) (wallet.Account, error)
+	Transfer(ctx context.Context, seed, to, amount string) (string, error)
+	Export(ctx context.Context, seed string) (address, privateKey string, err error)
+	History(ctx context.Context, address string, limit int) ([]wallet.Transfer, error)
+	Token() string
+	Decimals() uint8
+	Network() string
+	Close()
+}
+
+// WalletAddressProvider is what this node keeps of the wallet addresses
+// its peers published.
+type WalletAddressProvider interface {
+	SetAddress(chain, userId, address string) error
+	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
 }
 
 // PeerLimiter is what the rating decided each peer may have: the rating

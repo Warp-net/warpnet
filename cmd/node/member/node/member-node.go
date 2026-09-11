@@ -81,8 +81,8 @@ type MemberNode struct {
 	rating           PeerRater
 	limits           PeerLimiter
 	privKey          ed25519.PrivateKey
-	walletClient     *wallet.Client
-	walletRepo       *database.WalletRepo
+	walletClient     WalletProvider
+	walletRepo       WalletAddressProvider
 	ownerId, network string
 }
 
