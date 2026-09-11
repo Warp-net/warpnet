@@ -42,7 +42,7 @@ func runningPubSub(t *testing.T) *moderatorPubSub {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
 
-	g := NewPubSub(ctx)
+	g := NewPubSub(ctx, warpnet.NewPeerStandings())
 	require.NoError(t, g.Run(&liveNode{host: h}))
 	t.Cleanup(func() { _ = g.Close() })
 	return g

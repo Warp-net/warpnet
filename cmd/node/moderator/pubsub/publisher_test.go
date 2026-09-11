@@ -103,7 +103,7 @@ func TestModeratorPubSubBeforeRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	g := NewPubSub(ctx)
+	g := NewPubSub(ctx, warpnet.NewPeerStandings())
 	require.NotNil(t, g)
 
 	require.Error(t, g.PublishUpdateToFollowers("owner-1", event.PUBLIC_POST_MODERATION_RESULT, struct{}{}))

@@ -76,6 +76,7 @@ type MemberNode struct {
 	statsDb          StatsStorer
 	ratingDb         RatingStorer
 	rating           PeerRater
+	standings        *warpnet.PeerStandings
 	privKey          ed25519.PrivateKey
 	ownerId, network string
 }
@@ -119,6 +120,7 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
+	standings := warpnet.NewPeerStandings()
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
@@ -132,13 +134,14 @@ func NewMemberNode(
 		pubSubHandlers,
 		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
-	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
+	pubsubService := memberPubSub.NewPubSub(ctx, standings, pubSubHandlers...)
 
 	warpNetwork := config.Config().Node.Network
 
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
+		dht.Standings(standings),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(bootstrapNodes...),
 		dht.Network(warpNetwork),
@@ -166,6 +169,7 @@ func NewMemberNode(
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
+		standings:     standings,
 		statsRepo:     statsRepo,
 		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
@@ -233,7 +237,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.standings)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -242,7 +246,7 @@ func (m *MemberNode) Start() (err error) {
 	)
 
 	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event())
-	m.rating.Enforce(m.node, m.mw, m.pubsubService.Gossip(), m.dHashTable)
+	m.rating.Enforce(m.standings, m.node)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 

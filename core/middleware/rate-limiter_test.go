@@ -35,7 +35,6 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
@@ -44,7 +43,7 @@ func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *Wa
 		ownNodeId:    ownNodeId,
 		rateLimiters: newRateLimitersCache(),
 		events:       warpnet.NewPeerEmitter(),
-		standings:    lru.NewLRU[string, float64](standingsCacheSize, nil, standingsCacheTTL),
+		standings:    warpnet.NewPeerStandings(),
 	}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 	return mw
@@ -89,7 +88,7 @@ func callLimited(
 }
 
 func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
-	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000})
+	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000}, 1)
 
 	for i := range 3 {
 		if !b.Allow() {
@@ -107,7 +106,7 @@ func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
 }
 
 func TestLeakyBucket_ZeroLimitFallsBackToOne(t *testing.T) {
-	b := newRateLimiter(routeLimit{})
+	b := newRateLimiter(routeLimit{}, 1)
 	if !b.Allow() {
 		t.Fatal("expected the first request to be admitted")
 	}

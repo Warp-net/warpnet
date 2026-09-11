@@ -34,7 +34,7 @@ func TestAPeerInPoorStandingSpendsLess(t *testing.T) {
 	degraded, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	mw.Apply(warpnet.PeerStanding{PeerID: degraded.String(), LimitMultiplier: 0.25})
+	mw.standings.Apply(warpnet.PeerStanding{PeerID: degraded.String(), LimitMultiplier: 0.25})
 
 	full := spend(t, mw, ownNodeId, trusted)
 	tightened := spend(t, mw, ownNodeId, degraded)
@@ -48,8 +48,9 @@ func TestAPeerNobodyHasRatedSpendsEverything(t *testing.T) {
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	assert.Equal(t, float64(1), mw.allowance(peer.String()))
-	assert.Equal(t, limitPairing, scale(limitPairing, mw.allowance(peer.String())))
+	allowance := mw.standings.Peer(peer).LimitMultiplier
+	assert.Equal(t, float64(1), allowance)
+	assert.Equal(t, limitPairing, limitPairing.scaled(allowance))
 }
 
 // A peer that filled its bucket at the old allowance must not keep it.
@@ -61,7 +62,7 @@ func TestANewStandingDropsTheBucketsFilledUnderTheOldOne(t *testing.T) {
 	require.Positive(t, spend(t, mw, ownNodeId, peer), "the peer drains its bucket")
 	require.Zero(t, spend(t, mw, ownNodeId, peer), "and it stays drained")
 
-	mw.Apply(warpnet.PeerStanding{PeerID: peer.String(), LimitMultiplier: 0.5})
+	mw.standings.Apply(warpnet.PeerStanding{PeerID: peer.String(), LimitMultiplier: 0.5})
 
 	assert.Positive(t, spend(t, mw, ownNodeId, peer),
 		"a peer whose standing changed is measured against the allowance it has now")
@@ -73,27 +74,27 @@ func TestTheSameStandingTwiceKeepsTheBucket(t *testing.T) {
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
 	standing := warpnet.PeerStanding{PeerID: peer.String(), LimitMultiplier: 0.5}
-	mw.Apply(standing)
+	mw.standings.Apply(standing)
 
 	require.Positive(t, spend(t, mw, ownNodeId, peer))
 
-	mw.Apply(standing) // unchanged: nothing to reset
+	mw.standings.Apply(standing) // unchanged: nothing to reset
 	assert.Zero(t, spend(t, mw, ownNodeId, peer),
 		"an unchanged standing must not hand a peer a fresh bucket")
 }
 
 func TestScaleNeverStarvesAPeer(t *testing.T) {
-	tightest := scale(routeLimit{burst: 1, perMinute: 1}, 0.1)
+	tightest := routeLimit{burst: 1, perMinute: 1}.scaled(0.1)
 	assert.EqualValues(t, 1, tightest.burst)
 	assert.EqualValues(t, 1, tightest.perMinute)
 }
 
-func TestApplyIgnoresAStandingThatNamesNobody(t *testing.T) {
+func TestAMiddlewareWithNoStandingsServesEveryPeerInFull(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := newLimiterMiddlewareForTest(t, ownNodeId)
+	peer, _ := newRemotePeer(t)
+	mw := &WarpMiddleware{ownNodeId: ownNodeId, rateLimiters: newRateLimitersCache()}
+	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 
-	assert.NotPanics(t, func() { mw.Apply(warpnet.PeerStanding{LimitMultiplier: 0.1}) })
-
-	var nilMiddleware *WarpMiddleware
-	assert.NotPanics(t, func() { nilMiddleware.Apply(warpnet.PeerStanding{PeerID: "peer"}) })
+	assert.Equal(t, float64(1), mw.standings.Peer(peer).LimitMultiplier)
+	assert.Positive(t, spend(t, mw, ownNodeId, peer))
 }

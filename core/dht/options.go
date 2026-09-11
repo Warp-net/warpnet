@@ -28,11 +28,20 @@ import "github.com/Warp-net/warpnet/core/warpnet"
 
 type dhtConfig struct {
 	store                         RoutingStorer
+	standings                     *warpnet.PeerStandings
 	addCallbacks, removeCallbacks []func(info warpnet.WarpPeerID)
 	bootstrapNodes                []warpnet.WarpAddrInfo
 	network                       string
 }
 type Option func(*dhtConfig)
+
+// Standings is where the routing table reads how far a peer is trusted.
+// Without it every peer is welcome.
+func Standings(standings *warpnet.PeerStandings) Option {
+	return func(c *dhtConfig) {
+		c.standings = standings
+	}
+}
 
 func RoutingStore(store RoutingStorer) Option {
 	return func(c *dhtConfig) {

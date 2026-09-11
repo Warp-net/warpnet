@@ -13,31 +13,32 @@ import (
 
 const ratedPeer = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
 
-func TestAPeerNobodyHasRatedIsAdmitted(t *testing.T) {
-	d := NewDHTable(context.Background(), RoutingStore(memStore()))
+// admits is what the routing table and query filters ask of a peer.
+func admits(d *distributedHashTable, peerID warpnet.WarpPeerID) bool {
+	return d.cfg.standings.Peer(peerID).AllowedInDHT
+}
 
-	assert.True(t, d.admits(warpnet.FromStringToPeerID(ratedPeer)),
+func TestAPeerNobodyHasRatedIsAdmitted(t *testing.T) {
+	d := NewDHTable(context.Background(), RoutingStore(memStore()), Standings(warpnet.NewPeerStandings()))
+
+	assert.True(t, admits(d, warpnet.FromStringToPeerID(ratedPeer)),
 		"the rating only ever takes peers out of the routing table")
 }
 
 func TestAPeerAtTheFloorIsKeptOutAndLetBackIn(t *testing.T) {
-	d := NewDHTable(context.Background(), RoutingStore(memStore()))
+	standings := warpnet.NewPeerStandings()
+	d := NewDHTable(context.Background(), RoutingStore(memStore()), Standings(standings))
 	peerID := warpnet.FromStringToPeerID(ratedPeer)
 
-	d.Apply(warpnet.PeerStanding{PeerID: ratedPeer, AllowedInDHT: false})
-	assert.False(t, d.admits(peerID))
+	standings.Apply(warpnet.PeerStanding{PeerID: ratedPeer, AllowedInDHT: false})
+	assert.False(t, admits(d, peerID))
 
-	d.Apply(warpnet.PeerStanding{PeerID: ratedPeer, AllowedInDHT: true})
-	assert.True(t, d.admits(peerID), "a standing that recovers lets the peer back in")
+	standings.Apply(warpnet.PeerStanding{PeerID: ratedPeer, AllowedInDHT: true})
+	assert.True(t, admits(d, peerID), "a standing that recovers lets the peer back in")
 }
 
-func TestApplyIgnoresAStandingThatNamesNobody(t *testing.T) {
+func TestATableWithNoStandingsAdmitsEveryPeer(t *testing.T) {
 	d := NewDHTable(context.Background(), RoutingStore(memStore()))
 
-	assert.NotPanics(t, func() { d.Apply(warpnet.PeerStanding{AllowedInDHT: false}) })
-	assert.True(t, d.admits(warpnet.FromStringToPeerID(ratedPeer)))
-
-	var nilTable *distributedHashTable
-	assert.NotPanics(t, func() { nilTable.Apply(warpnet.PeerStanding{PeerID: ratedPeer}) })
-	assert.True(t, nilTable.admits(warpnet.FromStringToPeerID(ratedPeer)))
+	assert.True(t, admits(d, warpnet.FromStringToPeerID(ratedPeer)))
 }

@@ -98,7 +98,6 @@ type RatingStorer interface {
 }
 
 type DistributedHashTableCloser interface {
-	Apply(standing warpnet.PeerStanding)
 	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	Close()
 }
@@ -114,6 +113,7 @@ type RelayNode struct {
 	ratingStore       RatingProvider
 	ratingDb          RatingStorer
 	rating            PeerRater
+	standings         *warpnet.PeerStandings
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -129,10 +129,12 @@ func NewRelayNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 
+	standings := warpnet.NewPeerStandings()
 	discService := discovery.NewRelayDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
+		standings,
 		pubsub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 
@@ -159,6 +161,7 @@ func NewRelayNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
+		dht.Standings(standings),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
@@ -191,6 +194,7 @@ func NewRelayNode(
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
 		ratingStore:       ratingStore,
+		standings:         standings,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -261,7 +265,7 @@ func (rn *RelayNode) startRating() error {
 	}
 
 	rn.rating.Listen(rn.node.Event(), rn.mw.Event(), rn.discService.Event())
-	rn.rating.Enforce(rn.node, rn.mw, rn.pubsubService.Gossip(), rn.dHashTable)
+	rn.rating.Enforce(rn.standings, rn.node)
 	return nil
 }
 
@@ -270,7 +274,7 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.standings)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

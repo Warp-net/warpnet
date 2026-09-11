@@ -46,7 +46,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
@@ -83,16 +82,10 @@ type Gossip struct {
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
 
-	// standings is the application-specific score of a peer, as the rating
-	// last concluded it. A peer nobody has rated scores zero, the same as
-	// one in good standing.
-	standings *lru.LRU[string, float64]
+	standings *warpnet.PeerStandings
 }
 
 const (
-	standingsCacheSize = 4096
-	standingsCacheTTL  = 24 * time.Hour
-
 	// graylistThreshold is the score at which gossipsub stops reading a
 	// peer at all. Only first-hand evidence takes a peer that low.
 	graylistThreshold = -100
@@ -100,28 +93,13 @@ const (
 	publishThreshold  = -50
 )
 
-// Apply keeps a peer scored as the rating last concluded.
-func (g *Gossip) Apply(standing warpnet.PeerStanding) {
-	if g == nil || g.standings == nil || standing.PeerID == "" {
-		return
-	}
-	g.standings.Add(standing.PeerID, standing.GossipScore)
-}
-
-// appScore is what gossipsub asks on every scoring pass.
-func (g *Gossip) appScore(peerID warpnet.WarpPeerID) float64 {
-	if g == nil || g.standings == nil {
-		return 0
-	}
-	score, _ := g.standings.Get(peerID.String())
-	return score
-}
-
-// scoreOptions weigh a peer by its standing and nothing else: the rest of
-// gossipsub's own scoring stays at its defaults.
+// scoreOptions weigh a peer by where it stands and nothing else: the rest
+// of gossipsub's own scoring stays at its defaults.
 func (g *Gossip) scoreOptions() []pubsub.Option {
 	params := &pubsub.PeerScoreParams{
-		AppSpecificScore:  g.appScore,
+		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
+			return g.standings.Peer(p).GossipScore
+		},
 		AppSpecificWeight: 1,
 		DecayInterval:     time.Minute,
 		DecayToZero:       0.01,
@@ -143,6 +121,7 @@ type TopicHandler struct {
 
 func NewGossip(
 	ctx context.Context,
+	standings *warpnet.PeerStandings,
 	handlers ...TopicHandler,
 ) *Gossip {
 	handlersMap := make(map[string]topicHandler)
@@ -152,7 +131,7 @@ func NewGossip(
 
 	return &Gossip{
 		ctx:              ctx,
-		standings:        lru.NewLRU[string, float64](standingsCacheSize, nil, standingsCacheTTL),
+		standings:        standings,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		handlersMap:      handlersMap,

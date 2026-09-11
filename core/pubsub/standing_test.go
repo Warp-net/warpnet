@@ -14,27 +14,37 @@ import (
 
 const scoredPeer = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
 
-func TestAPeerNobodyHasRatedScoresLikeOneInGoodStanding(t *testing.T) {
-	g := NewGossip(context.Background())
+// appScore is what gossipsub asks on every scoring pass.
+func appScore(t *testing.T, g *Gossip, peerID warpnet.WarpPeerID) float64 {
+	t.Helper()
+	opts := g.scoreOptions()
+	require.Len(t, opts, 1, "gossipsub is configured with the peer score and nothing else")
+	return g.standings.Peer(peerID).GossipScore
+}
 
-	assert.Equal(t, float64(0), g.appScore(warpnet.FromStringToPeerID(scoredPeer)))
+func TestAPeerNobodyHasRatedScoresLikeOneInGoodStanding(t *testing.T) {
+	g := NewGossip(context.Background(), warpnet.NewPeerStandings())
+
+	assert.Equal(t, float64(0), appScore(t, g, warpnet.FromStringToPeerID(scoredPeer)))
 }
 
 func TestAPeerScoresWhatItsStandingSays(t *testing.T) {
-	g := NewGossip(context.Background())
+	standings := warpnet.NewPeerStandings()
+	g := NewGossip(context.Background(), standings)
 	peerID := warpnet.FromStringToPeerID(scoredPeer)
 
-	g.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: -60})
-	assert.Equal(t, float64(-60), g.appScore(peerID))
+	standings.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: -60})
+	assert.Equal(t, float64(-60), appScore(t, g, peerID))
 
-	g.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: 0})
-	assert.Equal(t, float64(0), g.appScore(peerID), "a standing that recovers is scored again")
+	standings.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: 0})
+	assert.Equal(t, float64(0), appScore(t, g, peerID), "a standing that recovers is scored again")
 }
 
 // Only a peer this node witnessed misbehaving itself goes low enough to
 // be graylisted; remote evidence alone cannot take it there.
 func TestOnlyTheWorstStandingIsGraylisted(t *testing.T) {
-	g := NewGossip(context.Background())
+	standings := warpnet.NewPeerStandings()
+	g := NewGossip(context.Background(), standings)
 	peerID := warpnet.FromStringToPeerID(scoredPeer)
 
 	for _, tc := range []struct {
@@ -46,25 +56,13 @@ func TestOnlyTheWorstStandingIsGraylisted(t *testing.T) {
 		{score: -60, graylists: false},
 		{score: -200, graylists: true},
 	} {
-		g.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: tc.score})
-		assert.Equal(t, tc.graylists, g.appScore(peerID) < graylistThreshold, "score %v", tc.score)
+		standings.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: tc.score})
+		assert.Equal(t, tc.graylists, appScore(t, g, peerID) < graylistThreshold, "score %v", tc.score)
 	}
 }
 
-func TestScoreOptionsAskTheStandingOfEveryPeer(t *testing.T) {
-	g := NewGossip(context.Background())
-	g.Apply(warpnet.PeerStanding{PeerID: scoredPeer, GossipScore: -60})
+func TestAGossipWithNoStandingsScoresNobody(t *testing.T) {
+	g := NewGossip(context.Background(), nil)
 
-	opts := g.scoreOptions()
-	require.Len(t, opts, 1, "gossipsub is configured with the peer score and nothing else")
-}
-
-func TestApplyIgnoresAStandingThatNamesNobody(t *testing.T) {
-	g := NewGossip(context.Background())
-
-	assert.NotPanics(t, func() { g.Apply(warpnet.PeerStanding{GossipScore: -200}) })
-
-	var nilGossip *Gossip
-	assert.NotPanics(t, func() { nilGossip.Apply(warpnet.PeerStanding{PeerID: scoredPeer}) })
-	assert.Equal(t, float64(0), nilGossip.appScore(warpnet.FromStringToPeerID(scoredPeer)))
+	assert.Equal(t, float64(0), appScore(t, g, warpnet.FromStringToPeerID(scoredPeer)))
 }

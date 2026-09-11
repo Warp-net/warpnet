@@ -89,7 +89,8 @@ func main() {
 		return
 	}
 
-	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId)
+	standings := warpnet.NewPeerStandings()
+	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, standings)
 	if err != nil {
 		log.Errorf("failed to init moderator node: %v", err)
 		return
@@ -101,7 +102,7 @@ func main() {
 	}
 	defer n.Stop()
 
-	publisher := pubsub.NewPubSub(ctx)
+	publisher := pubsub.NewPubSub(ctx, standings)
 	if err := publisher.Run(n); err != nil {
 		log.Errorf("failed to start moderator pubsub: %v", err)
 		return

@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
@@ -86,11 +85,8 @@ type RoutingStorer interface {
 }
 
 type distributedHashTable struct {
-	ctx context.Context
-	cfg dhtConfig
-	// refused are the peers the rating put at its floor. Everyone else is
-	// welcome, including every peer nobody has rated.
-	refused   *lru.LRU[string, struct{}]
+	ctx       context.Context
+	cfg       dhtConfig
 	dht       *dht.IpfsDHT
 	stopChan  chan struct{}
 	closeOnce sync.Once
@@ -103,12 +99,7 @@ type distributedHashTable struct {
 
 // bootstrapDrainTimeout bounds how long Close waits for the bootstrap
 // goroutine. A wedged refresh must not hang shutdown.
-const (
-	bootstrapDrainTimeout = 5 * time.Second
-
-	refusedCacheSize = 1024
-	refusedCacheTTL  = 24 * time.Hour
-)
+const bootstrapDrainTimeout = 5 * time.Second
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
 	log.Debugln("dht: node removed", id)
@@ -126,32 +117,9 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 	return &distributedHashTable{
 		ctx:          ctx,
 		cfg:          cfg,
-		refused:      lru.NewLRU[string, struct{}](refusedCacheSize, nil, refusedCacheTTL),
 		stopChan:     make(chan struct{}),
 		bootstrapped: make(chan struct{}),
 	}
-}
-
-// Apply keeps a peer out of the routing table while the rating holds it at
-// its floor, and lets it back in when the standing recovers.
-func (d *distributedHashTable) Apply(standing warpnet.PeerStanding) {
-	if d == nil || d.refused == nil || standing.PeerID == "" {
-		return
-	}
-	if standing.AllowedInDHT {
-		d.refused.Remove(standing.PeerID)
-		return
-	}
-	d.refused.Add(standing.PeerID, struct{}{})
-}
-
-// admits reports a peer the routing table may hold. A peer nobody has
-// rated is admitted: the rating only ever takes peers out.
-func (d *distributedHashTable) admits(peerID warpnet.WarpPeerID) bool {
-	if d == nil || d.refused == nil {
-		return true
-	}
-	return !d.refused.Contains(peerID.String())
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
@@ -168,8 +136,12 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	d.dht, err = dht.New(
 		d.ctx, n,
-		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool { return d.admits(p) }),
-		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool { return d.admits(ai.ID) }),
+		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool {
+			return d.cfg.standings.Peer(p).AllowedInDHT
+		}),
+		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool {
+			return d.cfg.standings.Peer(ai.ID).AllowedInDHT
+		}),
 		dht.Mode(dht.ModeAuto),
 		dht.ProtocolPrefix(protocol.ID("/"+d.cfg.network)),
 		dht.Datastore(d.cfg.store),

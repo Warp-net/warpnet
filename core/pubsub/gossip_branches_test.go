@@ -52,7 +52,7 @@ func TestPublishRaw(t *testing.T) {
 	})
 
 	t.Run("refuses when the gossip is down", func(t *testing.T) {
-		down := NewGossip(context.Background())
+		down := NewGossip(context.Background(), warpnet.NewPeerStandings())
 		require.ErrorIs(t, down.PublishRaw("topic", []byte("payload")), ErrPubsubNotInit)
 
 		var nilGossip *Gossip
@@ -79,7 +79,7 @@ func TestRunPreSubscribesHandlers(t *testing.T) {
 	t.Cleanup(cancel)
 
 	node := newLiveNode(t)
-	g := NewGossip(ctx, TopicHandler{
+	g := NewGossip(ctx, warpnet.NewPeerStandings(), TopicHandler{
 		TopicName: "preloaded-topic",
 		Handler:   func([]byte) error { return nil },
 	})
@@ -97,7 +97,7 @@ func TestRunRejectsAnInvalidPreSubscription(t *testing.T) {
 	t.Cleanup(cancel)
 
 	node := newLiveNode(t)
-	g := NewGossip(ctx, TopicHandler{TopicName: "", Handler: func([]byte) error { return nil }})
+	g := NewGossip(ctx, warpnet.NewPeerStandings(), TopicHandler{TopicName: "", Handler: func([]byte) error { return nil }})
 
 	err := g.Run(node)
 	require.Error(t, err)

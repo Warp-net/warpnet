@@ -568,9 +568,9 @@ func (t Tier) LimitMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
 func (t Tier) AllowedInDHT() bool       // false only for TierFloor
 ```
 
-A module never reads a score, a tier or the rating at all. On the flush
-tick the engine re-reads the peers it holds evidence about and hands the
-ones whose tier moved to whoever registered:
+A module never reads a score, a tier or the rating at all, and none of
+them keeps a copy of one. A node holds a single `warpnet.PeerStandings`,
+written by the rating and read by everyone else:
 
 ```go
 // core/rating
@@ -585,7 +585,16 @@ type PeerStanding struct {
 	LimitMultiplier float64 // core/middleware: the share of a route it may spend
 	AllowedInDHT    bool    // core/dht: whether it stays in the routing table
 }
+
+// one per node, handed to the modules that read it and to the engine
+type PeerStandings struct{ ... }
+func (s *PeerStandings) Apply(standing PeerStanding)      // the rating writes
+func (s *PeerStandings) Peer(peerID WarpPeerID) PeerStanding // the modules read
 ```
+
+`engine.Enforce(standings, node)` is the whole wiring: the standings are
+the read model, and the node is there because a connection tag has to be
+pushed to libp2p rather than read from anywhere.
 
 The pass is also what notices a standing that recovered: evidence decays,
 so a peer improves with no event to announce it. A peer nobody has rated
