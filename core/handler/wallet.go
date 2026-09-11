@@ -33,6 +33,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -42,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -62,22 +64,9 @@ type WalletBackend interface {
 	Network() string
 }
 
-func walletSeed(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) (seed string, owner domain.Owner, err error) {
-	owner = auth.GetOwner()
-	if owner.Username == "" {
-		return "", owner, warpnet.WarpError("wallet: no owner in session")
-	}
-	if len(identityKey) == 0 {
-		return "", owner, warpnet.WarpError("wallet: no identity key in session")
-	}
-	raw := security.DeriveWalletSeed(identityKey, backend.Network(), owner.Username)
-	defer security.Wipe(raw)
-	return hex.EncodeToString(raw), owner, nil
-}
-
 func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		seed, _, err := walletSeed(auth, identityKey, backend)
+		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +118,7 @@ func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.Private
 		if ev.Amount == "" {
 			return nil, warpnet.WarpError("wallet: empty amount")
 		}
-		seed, _, err := walletSeed(auth, identityKey, backend)
+		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +137,7 @@ func StreamGetWalletHistoryHandler(auth WalletOwnerStorer, identityKey ed25519.P
 		if len(buf) > 0 {
 			_ = json.Unmarshal(buf, &ev)
 		}
-		seed, _, err := walletSeed(auth, identityKey, backend)
+		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +169,7 @@ func StreamGetWalletHistoryHandler(auth WalletOwnerStorer, identityKey ed25519.P
 
 func StreamGetWalletKeyHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		seed, _, err := walletSeed(auth, identityKey, backend)
+		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -198,6 +187,7 @@ const (
 	walletContactsLimit  = 50
 	walletContactsWait   = 1200 * time.Millisecond
 	walletContactsRetry  = 10 * time.Minute
+	walletContactsHolds  = 256
 )
 
 type WalletAddressStorer interface {
@@ -221,7 +211,8 @@ type WalletStreamer interface {
 
 func StreamGetWalletAddressHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		seed, owner, err := walletSeed(auth, identityKey, backend)
+		owner := auth.GetOwner()
+		seed, err := walletSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -247,13 +238,14 @@ func StreamGetWalletContactsHandler(
 	users WalletUserFetcher,
 	streamer WalletStreamer,
 ) warpnet.WarpHandlerFunc {
-	refresher := &walletContactsRefresher{unreachable: map[string]time.Time{}}
+	refresher := newWalletContactsRefresher()
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.WalletContactsEvent
 		if len(buf) > 0 {
 			_ = json.Unmarshal(buf, &ev)
 		}
-		seed, owner, err := walletSeed(auth, identityKey, backend)
+		owner := auth.GetOwner()
+		seed, err := walletSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -299,9 +291,14 @@ func StreamGetWalletContactsHandler(
 }
 
 type walletContactsRefresher struct {
-	mu          sync.Mutex
-	running     bool
-	unreachable map[string]time.Time
+	running     atomic.Bool
+	unreachable *expirable.LRU[string, struct{}]
+}
+
+func newWalletContactsRefresher() *walletContactsRefresher {
+	return &walletContactsRefresher{
+		unreachable: expirable.NewLRU[string, struct{}](walletContactsHolds, nil, walletContactsRetry),
+	}
 }
 
 func (r *walletContactsRefresher) start(
@@ -313,44 +310,29 @@ func (r *walletContactsRefresher) start(
 	streamer WalletStreamer,
 ) <-chan struct{} {
 	done := make(chan struct{})
-	r.mu.Lock()
-	if r.running {
-		r.mu.Unlock()
+	if !r.running.CompareAndSwap(false, true) {
 		close(done)
 		return done
 	}
-	r.running = true
-	r.mu.Unlock()
-
 	go func() {
 		defer close(done)
-		defer func() {
-			r.mu.Lock()
-			r.running = false
-			r.mu.Unlock()
-		}()
+		defer r.running.Store(false)
 		r.refresh(chain, owner, wallets, follows, users, streamer)
 	}()
 	return done
 }
 
 func (r *walletContactsRefresher) clearHolds() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	clear(r.unreachable)
+	r.unreachable.Purge()
 }
 
 func (r *walletContactsRefresher) skipped(peerId string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	until, ok := r.unreachable[peerId]
-	return ok && time.Now().Before(until)
+	_, held := r.unreachable.Get(peerId)
+	return held
 }
 
 func (r *walletContactsRefresher) hold(peerId string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.unreachable[peerId] = time.Now().Add(walletContactsRetry)
+	r.unreachable.Add(peerId, struct{}{})
 }
 
 func (r *walletContactsRefresher) refresh(
@@ -438,4 +420,16 @@ func fetchWalletAddress(
 		return "", false
 	}
 	return out.Address, true
+}
+
+func walletSeed(owner domain.Owner, identityKey ed25519.PrivateKey, network string) (string, error) {
+	if owner.Username == "" {
+		return "", warpnet.WarpError("wallet: no owner in session")
+	}
+	if len(identityKey) == 0 {
+		return "", warpnet.WarpError("wallet: no identity key in session")
+	}
+	raw := security.DeriveWalletSeed(identityKey, network, owner.Username)
+	defer security.Wipe(raw)
+	return hex.EncodeToString(raw), nil
 }

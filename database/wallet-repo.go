@@ -27,13 +27,6 @@ func NewWalletRepo(db WalletStorer) *WalletRepo {
 	return &WalletRepo{db: db}
 }
 
-func walletAddressKey(chain, userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(WalletRepoName).
-		AddSubPrefix(chain).
-		AddRootID(userId).
-		Build()
-}
-
 func (repo *WalletRepo) SetAddress(chain, userId, address string) error {
 	if chain == "" {
 		return local_store.DBError("empty chain")
@@ -130,4 +123,11 @@ func (repo *WalletRepo) ListAddresses(chain string, limit *uint64, cursor *strin
 		addresses = append(addresses, stored)
 	}
 	return addresses, next, nil
+}
+
+func walletAddressKey(chain, userId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(WalletRepoName).
+		AddSubPrefix(chain).
+		AddRootID(userId).
+		Build()
 }

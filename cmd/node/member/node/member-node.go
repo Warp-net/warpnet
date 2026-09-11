@@ -697,6 +697,7 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamH
 	}
 }
 
+//nolint:govet
 func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{

@@ -49,32 +49,17 @@ import (
 const (
 	requestTimeout = 90 * time.Second
 	maxLineSize    = 1 << 20
+	tokenSymbol    = "USDT"
+
+	paramNetwork    = "network"
+	paramToken      = "token"
+	paramSeed       = "seed"
+	paramPrivateKey = "private_key"
 )
 
 var ErrUnavailable = errors.New("wallet: payment engine unavailable")
 
-var sensitiveParams = map[string]bool{"seed": true, "private_key": true}
-
-func safeParams(params any) string {
-	raw, err := json.Marshal(params)
-	if err != nil {
-		return "{}"
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return "{}"
-	}
-	for name := range fields {
-		if sensitiveParams[name] {
-			delete(fields, name)
-		}
-	}
-	out, err := json.Marshal(fields)
-	if err != nil {
-		return "{}"
-	}
-	return string(out)
-}
+var sensitiveParams = map[string]bool{paramSeed: true, paramPrivateKey: true}
 
 type Account struct {
 	TokenBalance string
@@ -87,7 +72,6 @@ type Config struct {
 	BinaryPath  string
 	Network     string
 	Endpoint    string
-	Registry    string
 	APIKey      string
 	Token       string
 	Decimals    uint8
@@ -128,6 +112,7 @@ type Client struct {
 	cfg     Config
 	mu      sync.Mutex
 	cmd     *exec.Cmd
+	stop    context.CancelFunc
 	stdin   io.WriteCloser
 	pending map[string]chan response
 	seq     uint64
@@ -144,7 +129,7 @@ func DefaultConfig(network, binaryPath string) Config {
 			BinaryPath: binaryPath,
 			Network:    "mainnet",
 			Endpoint:   "https://api.trongrid.io",
-			Token:      "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			Token:      tokenSymbol,
 			Decimals:   6,
 		}
 	}
@@ -152,8 +137,7 @@ func DefaultConfig(network, binaryPath string) Config {
 		BinaryPath: binaryPath,
 		Network:    "testnet",
 		Endpoint:   "https://nile.trongrid.io",
-		Registry:   "TG2C8vi4gFqVvB8wHcodLbLekJ5VTweZAT",
-		Token:      "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf",
+		Token:      tokenSymbol,
 		Decimals:   6,
 	}
 }
@@ -172,10 +156,11 @@ func (c *Client) Close() {
 		_ = c.stdin.Close()
 		c.stdin = nil
 	}
-	if c.cmd != nil && c.cmd.Process != nil {
-		_ = c.cmd.Process.Kill()
-		c.cmd = nil
+	if c.stop != nil {
+		c.stop()
+		c.stop = nil
 	}
+	c.cmd = nil
 }
 
 func (c *Client) prefix() string {
@@ -189,7 +174,7 @@ func (c *Client) ensure() error {
 	if c.cmd != nil {
 		return nil
 	}
-	args := []string{"serve", c.prefix() + "registry", c.cfg.Registry, c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
+	args := []string{"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
 	if c.cfg.APIKey != "" {
 		args = append(args, "-api-key", c.cfg.APIKey)
 	}
@@ -201,24 +186,29 @@ func (c *Client) ensure() error {
 		log.Errorf("wallet: payment engine binary: %v", err)
 		return err
 	}
-	log.Infof("wallet: starting payment engine %q network=%s endpoint=%s registry=%s", binary, c.cfg.Network, c.cfg.Endpoint, c.cfg.Registry)
-	cmd := exec.Command(binary, args...)
+	log.Infof("wallet: starting payment engine %q network=%s endpoint=%s token=%s", binary, c.cfg.Network, c.cfg.Endpoint, c.cfg.Token)
+	ctx, stop := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, binary, args...) //nolint:gosec // the path is our own config or the unpacked embedded engine
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		stop()
 		log.Errorf("wallet: payment engine stdin: %v", err)
 		return err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		stop()
 		log.Errorf("wallet: payment engine stdout: %v", err)
 		return err
 	}
 	if err := cmd.Start(); err != nil {
+		stop()
 		log.Errorf("wallet: payment engine failed to start: %v", err)
 		return err
 	}
 	log.Infof("wallet: payment engine running pid=%d", cmd.Process.Pid)
 	c.cmd = cmd
+	c.stop = stop
 	c.stdin = stdin
 	c.failure = nil
 	go c.read(stdout)
@@ -262,7 +252,7 @@ func (c *Client) resolveBinary() (string, error) {
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
-	if err := os.Chmod(tmp.Name(), 0o700); err != nil {
+	if err := os.Chmod(tmp.Name(), 0o700); err != nil { //nolint:gosec // the engine has to stay executable
 		return "", err
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
@@ -297,6 +287,10 @@ func (c *Client) fail(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.failure = err
+	if c.stop != nil {
+		c.stop()
+		c.stop = nil
+	}
 	c.cmd = nil
 	c.stdin = nil
 	for id, ch := range c.pending {
@@ -326,7 +320,7 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 	c.mu.Lock()
 	if err := c.ensure(); err != nil {
 		c.mu.Unlock()
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	c.seq++
 	id := strconv.FormatUint(c.seq, 10)
@@ -339,7 +333,7 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 	c.mu.Unlock()
 	if err != nil {
 		c.forget(id)
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	timer := time.NewTimer(requestTimeout)
 	defer timer.Stop()
@@ -371,7 +365,7 @@ func (c *Client) Address(ctx context.Context, seed string) (string, error) {
 	var out struct {
 		Address string `json:"address"`
 	}
-	err := c.call(ctx, "wallet.address", map[string]string{"seed": seed}, &out)
+	err := c.call(ctx, "wallet.address", map[string]string{paramSeed: seed}, &out)
 	return out.Address, err
 }
 
@@ -380,7 +374,7 @@ func (c *Client) Export(ctx context.Context, seed string) (address, privateKey s
 		Address    string `json:"address"`
 		PrivateKey string `json:"private_key"`
 	}
-	if err = c.call(ctx, "wallet.export", map[string]string{"seed": seed}, &out); err != nil {
+	if err = c.call(ctx, "wallet.export", map[string]string{paramSeed: seed}, &out); err != nil {
 		return "", "", err
 	}
 	log.Warnf("wallet: private key exported for %s on %s", out.Address, c.cfg.Network)
@@ -394,7 +388,7 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 		Activated    bool   `json:"activated"`
 		CreatedAt    int64  `json:"created_at"`
 	}
-	if err := c.call(ctx, "wallet.balance", map[string]string{"network": c.cfg.Network, "address": address, "token": c.cfg.Token}, &out); err != nil {
+	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
 	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
@@ -404,7 +398,7 @@ func (c *Client) Transfer(ctx context.Context, seed, to, amount string) (string,
 	var out struct {
 		Tx string `json:"tx"`
 	}
-	params := map[string]any{"network": c.cfg.Network, "seed": seed, "token": c.cfg.Token, "to": to, "amount": amount}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: c.cfg.Token, "to": to, "amount": amount}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
 		return "", err
 	}
@@ -423,7 +417,7 @@ func (c *Client) History(ctx context.Context, address string, limit int) ([]Tran
 			Incoming  bool   `json:"incoming"`
 		} `json:"transfers"`
 	}
-	params := map[string]any{"network": c.cfg.Network, "address": address, "token": c.cfg.Token, "limit": limit}
+	params := map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token, "limit": limit}
 	if err := c.call(ctx, "wallet.history", params, &out); err != nil {
 		return nil, err
 	}
@@ -432,4 +426,25 @@ func (c *Client) History(ctx context.Context, address string, limit int) ([]Tran
 		transfers = append(transfers, Transfer(t))
 	}
 	return transfers, nil
+}
+
+func safeParams(params any) string {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return "{}"
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "{}"
+	}
+	for name := range fields {
+		if sensitiveParams[name] {
+			delete(fields, name)
+		}
+	}
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return "{}"
+	}
+	return string(out)
 }
