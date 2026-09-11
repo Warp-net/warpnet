@@ -648,7 +648,7 @@ type OffenceTally struct {
 ```
 
 - `PRIVATE_GET_RATING` → the owner's **public aggregate** for their own node,
-  read from `/RATING/record/{self}/*`, i.e. entirely from records written by others.
+  read from `/record/{self}/*`, i.e. entirely from records written by others.
   The node's subjective view of itself is empty by construction.
   `Recent` is what makes the feature useful: "37 rate-limit hits and 4 malformed
   frames in the last 6 hours" tells the user what to fix.
