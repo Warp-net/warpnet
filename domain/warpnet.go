@@ -367,3 +367,10 @@ type Alias struct {
 	Platform   string    `json:"platform"`
 	LastActive time.Time `json:"last_active"`
 }
+
+type WalletAddress struct {
+	Address   string    `json:"address"`
+	Chain     string    `json:"chain"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UserId    string    `json:"user_id"`
+}

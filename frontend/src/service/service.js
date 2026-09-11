@@ -32,6 +32,11 @@ import {isOwnTweetEcho} from "@/lib/network";
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
 export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
+export const PRIVATE_GET_WALLET = "/private/get/wallet/0.0.0"
+export const PRIVATE_GET_WALLET_CONTACTS = "/private/get/wallet/contacts/0.0.0"
+export const PRIVATE_GET_WALLET_HISTORY = "/private/get/wallet/history/0.0.0"
+export const PRIVATE_GET_WALLET_KEY = "/private/get/wallet/key/0.0.0"
+export const PRIVATE_POST_WALLET_SEND = "/private/post/wallet/send/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
@@ -1277,6 +1282,27 @@ export const warpnetService = {
         return resp;
     },
 
+    async getWallet() {
+        const request = { path: PRIVATE_GET_WALLET, body: {} }
+        return await this.sendToNode(request)
+    },
+    async sendUsdt(to, amount) {
+        const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount } }
+        return await this.sendToNode(request)
+    },
+    async getWalletHistory(limit) {
+        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25 } }
+        const resp = await this.sendToNode(request)
+        return resp?.transfers || []
+    },
+    async getWalletContacts(force) {
+        const resp = await this.sendToNode({ path: PRIVATE_GET_WALLET_CONTACTS, body: { force: !!force } })
+        return resp?.contacts || []
+    },
+    async exportWalletKey() {
+        const request = { path: PRIVATE_GET_WALLET_KEY, body: {} }
+        return await this.sendToNode(request)
+    },
     async getBookmarks(cursorReset) {
         let cursor = this.getCursor('bookmarks')
         if (cursorReset) {

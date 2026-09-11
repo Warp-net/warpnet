@@ -943,3 +943,84 @@ type GetNotificationsResponse struct {
 	UnreadCount   uint64                `json:"unread_count"`
 	Notifications []domain.Notification `json:"notifications"`
 }
+
+// WalletEvent defines model for WalletEvent.
+type WalletEvent struct {
+	Limit int `json:"limit,omitempty"`
+}
+
+// WalletResponse defines model for WalletResponse.
+type WalletResponse struct {
+	Address     string `json:"address"`
+	Token       string `json:"token"`
+	UsdtBalance string `json:"usdt_balance"`
+	TrxBalance  string `json:"trx_balance"`
+	Activated   bool   `json:"activated"`
+	CreatedAt   int64  `json:"created_at,omitempty"`
+	Derivation  string `json:"derivation"`
+	Decimals    uint8  `json:"decimals"`
+	Network     string `json:"network"`
+}
+
+// WalletAddressEvent defines model for WalletAddressEvent.
+type WalletAddressEvent struct {
+	Chain string `json:"chain"`
+}
+
+// WalletAddressResponse defines model for WalletAddressResponse.
+type WalletAddressResponse struct {
+	Address string `json:"address"`
+	Chain   string `json:"chain"`
+	UserId  string `json:"user_id"`
+}
+
+// WalletContact defines model for WalletContact.
+type WalletContact struct {
+	Address  string `json:"address"`
+	UserId   string `json:"user_id"`
+	Username string `json:"username"`
+}
+
+// WalletContactsEvent defines model for WalletContactsEvent.
+type WalletContactsEvent struct {
+	Force bool `json:"force"`
+}
+
+// WalletContactsResponse defines model for WalletContactsResponse.
+type WalletContactsResponse struct {
+	Contacts []WalletContact `json:"contacts"`
+}
+
+// WalletSendEvent defines model for WalletSendEvent.
+type WalletSendEvent struct {
+	To     string `json:"to"`
+	Amount string `json:"amount"`
+}
+
+// WalletSendResponse defines model for WalletSendResponse.
+type WalletSendResponse struct {
+	Tx     string `json:"tx"`
+	To     string `json:"to"`
+	Amount string `json:"amount"`
+}
+
+// WalletHistoryItem defines model for WalletHistoryItem.
+type WalletHistoryItem struct {
+	Tx        string `json:"tx"`
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Value     string `json:"value"`
+	Timestamp int64  `json:"timestamp"`
+	Incoming  bool   `json:"incoming"`
+}
+
+// WalletHistoryResponse defines model for WalletHistoryResponse.
+type WalletHistoryResponse struct {
+	Transfers []WalletHistoryItem `json:"transfers"`
+}
+
+// WalletKeyResponse defines model for WalletKeyResponse.
+type WalletKeyResponse struct {
+	Address    string `json:"address"`
+	PrivateKey string `json:"private_key"`
+}
