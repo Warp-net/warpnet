@@ -296,7 +296,7 @@ Only the node assembly depends on all three.
 
 | Node type | Backing datastore | Survives restart via |
 |---|---|---|
-| member | `database.NewRatingRepo(db)`, Badger-backed, prefix `/RATING`, beside the stats repo's `/CRDT` | its own disk, plus the DAG for anything it missed while down |
+| member | `database.NewRatingRepo(db)`, Badger-backed, prefix `RATING`, beside the stats repo's `CRDT` | its own disk, plus the DAG for anything it missed while down |
 | relay | a `datastore.NewMapDatastore()` of its own | the DAG only |
 | moderator | a `datastore.NewMapDatastore()` of its own | the DAG only |
 
@@ -329,10 +329,13 @@ it, so neither package imports the other.
 ### 5.2 Key layout
 
 ```
-/RATING/record/{peerID}/{observerID}/{dimension}/{bucketHour}/{generation}
+/record/{peerID}/{observerID}/{dimension}/{bucketHour}/{generation}
 ```
 
 Built and parsed only in `core/crdt/ratingstore`; the engine never sees a key.
+The repository name appears once, in `database.NewRatingRepo`, which hands the
+store a datastore already namespaced under `RATING`; repeating it in the key
+would write it into every Badger key twice.
 `List(peerID)` is one prefix query, and a value whose content disagrees with
 the key it sits under is dropped on read.
 

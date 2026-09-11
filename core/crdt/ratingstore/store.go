@@ -66,11 +66,11 @@ type Router interface {
 const GossipTopic = "/warpnet/rating/1.0.0"
 
 const (
-	repoName = "/RATING"
-
-	recordNamespace = "record"
-	recordPrefix    = repoName + "/" + recordNamespace
-	recordKeyParts  = 5
+	// recordPrefix separates the records from the datastore's own keys.
+	// It carries no repository name: the datastore this store is given is
+	// already namespaced by database.NewRatingRepo.
+	recordPrefix   = "/record"
+	recordKeyParts = 5
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -282,7 +282,7 @@ func (s *Store) Close() error {
 	return s.crdt.Close()
 }
 
-// recordKey is /RATING/record/{peerID}/{observerId}/{dimension}/{bucket}/{generation}.
+// recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.
 func recordKey(rec domain.RatingRecord) (ds.Key, error) {
 	for _, part := range []string{rec.PeerID, rec.ObserverID, rec.Dimension, rec.Generation} {
 		if part == "" || strings.Contains(part, "/") {
