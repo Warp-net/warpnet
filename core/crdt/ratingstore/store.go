@@ -42,10 +42,7 @@ import (
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/ipfs/go-cid"
 	crdt "github.com/ipfs/go-ds-crdt"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -62,7 +59,7 @@ type Datastore interface {
 
 // Router finds the peers holding a block.
 type Router interface {
-	FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo
+	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
 }
 
 const (
@@ -96,7 +93,7 @@ func New(
 	ctx context.Context,
 	broadcaster Broadcaster,
 	datastore Datastore,
-	node host.Host,
+	node warpnet.P2PNode,
 	router Router,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)

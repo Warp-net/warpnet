@@ -39,7 +39,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/libp2p/go-libp2p/core/network"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -77,7 +76,7 @@ type Storer interface {
 // ConnectionsProvider tells how long this node has been connected to a
 // peer; the node's libp2p network satisfies it.
 type ConnectionsProvider interface {
-	ConnsToPeer(id warpnet.WarpPeerID) []network.Conn
+	ConnsToPeer(id warpnet.WarpPeerID) []warpnet.WarpConn
 }
 
 // Option configures an Engine at construction.
