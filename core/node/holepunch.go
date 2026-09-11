@@ -89,7 +89,7 @@ func (connTracer) Connected(n network.Network, c network.Conn) {
 	if c == nil {
 		return
 	}
-	peer := c.RemotePeer().ShortString()
+	peer := c.RemotePeer().String()
 	addr := c.RemoteMultiaddr()
 
 	if isRelayed(c) {
