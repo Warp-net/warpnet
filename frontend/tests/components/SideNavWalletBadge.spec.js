@@ -63,10 +63,12 @@ beforeEach(() => {
 
 describe('SideNav wallet badge', () => {
   it('does not badge a wallet that was never opened, it just records where now is', async () => {
-    warpnetService.getWalletHistory.mockResolvedValue([
-      { tx: 'a', incoming: true, timestamp: 1000 },
-      { tx: 'b', incoming: true, timestamp: 900 },
-    ]);
+    warpnetService.getWalletHistory.mockImplementation(async (_l, asset) =>
+      asset === 'TRX' ? [] : [
+        { tx: 'a', incoming: true, timestamp: 1000 },
+        { tx: 'b', incoming: true, timestamp: 900 },
+      ],
+    );
     renderNav();
     await waitFor(() => expect(warpnetService.getWalletHistory).toHaveBeenCalled());
     await waitFor(() => expect(localStorage.getItem(SEEN_KEY)).toBe('1000'));
@@ -75,14 +77,25 @@ describe('SideNav wallet badge', () => {
 
   it('counts only the incoming transfers that arrived since the wallet was last opened', async () => {
     localStorage.setItem(SEEN_KEY, '500');
-    warpnetService.getWalletHistory.mockResolvedValue([
-      { tx: 'old', incoming: true, timestamp: 400 },
-      { tx: 'new1', incoming: true, timestamp: 600 },
-      { tx: 'new2', incoming: true, timestamp: 700 },
-      { tx: 'sent', incoming: false, timestamp: 800 },
-    ]);
+    warpnetService.getWalletHistory.mockImplementation(async (_l, asset) =>
+      asset === 'TRX' ? [] : [
+        { tx: 'old', incoming: true, timestamp: 400 },
+        { tx: 'new1', incoming: true, timestamp: 600 },
+        { tx: 'new2', incoming: true, timestamp: 700 },
+        { tx: 'sent', incoming: false, timestamp: 800 },
+      ],
+    );
     renderNav();
     await waitFor(() => expect(screen.getByTestId('wallet-badge').textContent.trim()).toBe('2'));
+  });
+
+  it('counts arriving TRX too, not only the token', async () => {
+    localStorage.setItem(SEEN_KEY, '500');
+    warpnetService.getWalletHistory.mockImplementation(async (_l, asset) =>
+      asset === 'TRX' ? [{ tx: 'trx1', asset: 'TRX', incoming: true, timestamp: 900 }] : [],
+    );
+    renderNav();
+    await waitFor(() => expect(screen.getByTestId('wallet-badge').textContent.trim()).toBe('1'));
   });
 
   it('clears the badge while the wallet tab is the current route', async () => {

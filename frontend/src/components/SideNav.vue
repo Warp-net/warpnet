@@ -298,6 +298,7 @@ import QRCodeModal from "@/components/QRCodeModal.vue";
 import {warpnetService} from "@/service/service";
 
 const walletPollEvery = 60000;
+const walletAssets = ["USDT", "TRX"];
 
 export default {
   name: "SideNav",
@@ -368,13 +369,12 @@ export default {
         this.markWalletSeen();
         return;
       }
-      let transfers;
-      try {
-        transfers = await warpnetService.getWalletHistory(25);
-      } catch {
-        return;
-      }
-      const incoming = (transfers || []).filter((t) => t && t.incoming);
+      const asked = await Promise.allSettled(
+        walletAssets.map((asset) => warpnetService.getWalletHistory(25, asset)),
+      );
+      const answered = asked.filter((r) => r.status === "fulfilled");
+      if (!answered.length) return;
+      const incoming = answered.flatMap((r) => r.value || []).filter((t) => t && t.incoming);
       if (!incoming.length) return;
       const seen = Number(this.readWalletSeen());
       if (!seen) {

@@ -21,11 +21,9 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
             <div>
               <p class="text-4xl font-bold">{{ loadingWallet ? '—' : format(wallet.usdt_balance, wallet.decimals) }} <span class="text-2xl text-dark">USDT</span></p>
-              <p class="text-dark text-xs mt-1">token balance</p>
             </div>
             <div>
               <p class="text-4xl font-bold">{{ loadingWallet ? '—' : format(wallet.trx_balance, 6) }} <span class="text-2xl text-dark">TRX</span></p>
-              <p class="text-dark text-xs mt-1">for network fees</p>
             </div>
           </div>
           <p v-if="!loadingWallet && wallet.address" class="text-dark text-sm mt-4 pt-3 border-t border-lighter">
@@ -55,7 +53,7 @@
           </div>
 
           <div class="bg-paper border border-lighter rounded-2xl p-5 card">
-            <p class="text-dark text-sm uppercase tracking-wide mb-3">Send USDT</p>
+            <p class="text-dark text-sm uppercase tracking-wide mb-3">Send</p>
             <div class="flex gap-4 mb-2 text-sm">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio" value="user" v-model="recipientMode" />
@@ -113,7 +111,21 @@
             <div v-else class="mb-3">
               <input v-model="sendTo" placeholder="T..." class="w-full mono text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest" />
             </div>
-            <label class="block text-sm text-dark mb-1">Amount (USDT)</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-sm text-dark">Amount</label>
+              <div class="flex gap-1" role="group" aria-label="Asset to send">
+                <button
+                  v-for="a in assets"
+                  :key="a"
+                  type="button"
+                  :aria-pressed="asset === a"
+                  @click="sendAsset = a"
+                  class="rounded-full px-3 py-0.5 text-xs"
+                  :class="asset === a ? 'bg-blue text-white' : 'text-dark border border-lighter hover:bg-lightblue'"
+                >{{ a }}</button>
+              </div>
+            </div>
+            <p class="text-dark text-xs mb-1">You hold {{ format(sendable, assetDecimals(asset)) }} {{ asset }}.</p>
             <input v-model="sendAmount" inputmode="decimal" placeholder="0.0" class="w-full mono text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest mb-3" />
             <button @click="send()" :disabled="sending || loadingWallet || !hasTrx" class="text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
               {{ sending ? 'Sending…' : 'Send' }}
@@ -132,11 +144,12 @@
         <div class="bg-paper border border-lighter rounded-2xl p-5 card">
           <p class="text-dark text-sm uppercase tracking-wide mb-3">History</p>
           <Loader :loading="loadingHistory" />
-          <p v-if="!loadingHistory && !history.length" class="text-dark">No USDT transfers yet.</p>
+          <p v-if="historyError" class="text-red-700">{{ historyError }}</p>
+          <p v-else-if="!loadingHistory && !history.length" class="text-dark">No transfers yet.</p>
           <div v-for="t in history" :key="t.tx" class="flex items-center justify-between border-b border-lighter py-2 last:border-0">
             <div class="min-w-0">
               <p :class="t.incoming ? 'text-green-700' : 'text-dark'" class="font-semibold">
-                {{ t.incoming ? '+' : '−' }}{{ format(t.value, wallet.decimals) }} USDT
+                {{ t.incoming ? '+' : '−' }}{{ format(t.value, assetDecimals(t.asset)) }} {{ t.asset || wallet.token }}
               </p>
               <p class="text-dark text-xs mono truncate">{{ t.incoming ? ('from ' + t.from) : ('to ' + t.to) }}</p>
             </div>
@@ -177,6 +190,8 @@ import {warpnetService} from "@/service/service";
 import {buildQRCode} from "@/lib/qr";
 
 const historyPollEvery = 15000;
+const historyRows = 25;
+const nativeCoin = "TRX";
 const historyPollTries = 6;
 
 const SCAN = {
@@ -205,6 +220,8 @@ export default {
       contacts: [],
       contactsTimer: null,
       historyTimer: null,
+      historyError: "",
+      sendAsset: "",
       recipientMode: "user",
       recipientUser: "",
       recipientOpen: false,
@@ -229,6 +246,15 @@ export default {
     },
     hasTrx() {
       return this.units(this.wallet.trx_balance) > 0n;
+    },
+    assets() {
+      return [this.wallet.token || "USDT", nativeCoin];
+    },
+    asset() {
+      return this.sendAsset || this.assets[0];
+    },
+    sendable() {
+      return this.asset === nativeCoin ? this.wallet.trx_balance : this.wallet.usdt_balance;
     },
     inUse() {
       return this.units(this.wallet.usdt_balance) > 0n || this.hasTrx || this.history.length > 0;
@@ -323,13 +349,18 @@ export default {
     },
     async loadHistory(quiet) {
       if (!quiet) this.loadingHistory = true;
-      try {
-        this.history = await warpnetService.getWalletHistory(25);
-      } catch {
-        if (!quiet) this.history = [];
-      } finally {
-        this.loadingHistory = false;
+      const asked = await Promise.allSettled(this.assets.map((a) => warpnetService.getWalletHistory(25, a)));
+      this.loadingHistory = false;
+      const answered = asked.filter((r) => r.status === "fulfilled");
+      if (!answered.length) {
+        if (!quiet) this.historyError = "Could not read the transfer history.";
+        return;
       }
+      this.historyError = "";
+      this.history = answered
+        .flatMap((r) => r.value || [])
+        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        .slice(0, historyRows);
     },
     watchForTransfer(tx) {
       clearTimeout(this.historyTimer);
@@ -364,6 +395,9 @@ export default {
       this.recipientUser = contact.address;
       this.recipientOpen = false;
     },
+    assetDecimals(asset) {
+      return asset === nativeCoin ? 6 : this.wallet.decimals;
+    },
     initials(contact) {
       const name = (contact && (contact.username || contact.user_id)) || "?";
       return name.trim().charAt(0).toUpperCase();
@@ -383,9 +417,13 @@ export default {
       this.sendResult = "";
       let amount;
       try {
-        amount = this.parse(this.sendAmount, this.wallet.decimals);
+        amount = this.parse(this.sendAmount, this.assetDecimals(this.asset));
       } catch (err) {
         this.sendError = err.message;
+        return;
+      }
+      if (this.units(amount) > this.units(this.sendable)) {
+        this.sendError = `That is more than this address holds in ${this.asset}.`;
         return;
       }
       const to = this.recipientMode === "user" ? this.recipientUser : this.sendTo.trim();
@@ -395,7 +433,7 @@ export default {
       }
       this.sending = true;
       try {
-        const resp = await warpnetService.sendUsdt(to, amount);
+        const resp = await warpnetService.sendFunds(to, amount, this.asset);
         this.sendResult = resp && resp.tx;
         this.sendTo = "";
         this.recipientUser = "";

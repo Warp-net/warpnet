@@ -1295,12 +1295,13 @@ export const warpnetService = {
         const request = { path: PRIVATE_GET_WALLET_ADDRESS, body: {} }
         return await this.sendToNode(request)
     },
-    async sendUsdt(to, amount) {
-        const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount } }
+    // sendFunds moves USDT by default; pass asset "TRX" for the native coin.
+    async sendFunds(to, amount, asset) {
+        const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
         return await this.sendToNode(request)
     },
-    async getWalletHistory(limit) {
-        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25 } }
+    async getWalletHistory(limit, asset) {
+        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25, asset: asset || "" } }
         const resp = await this.sendToNode(request)
         return resp?.transfers || []
     },

@@ -9,7 +9,7 @@ vi.mock('@/service/service', () => ({
     getWalletHistory: vi.fn(),
     getWalletContacts: vi.fn(),
     getImage: vi.fn(),
-    sendUsdt: vi.fn(),
+    sendFunds: vi.fn(),
     exportWalletKey: vi.fn(),
   },
 }));
@@ -65,7 +65,7 @@ beforeEach(() => {
   warpnetService.getWallet.mockResolvedValue(wallet);
   warpnetService.getWalletAddress.mockResolvedValue({
     address: wallet.address,
-    token: 'TXYZ',
+    token: 'USDT',
     decimals: 6,
     network: 'testnet',
   });
@@ -108,9 +108,9 @@ describe('Wallet.vue', () => {
   it('shows the history while the balance is still loading', async () => {
     const slow = deferred();
     warpnetService.getWallet.mockReturnValue(slow.promise);
-    warpnetService.getWalletHistory.mockResolvedValue([
-      { tx: 'abc', from: 'TFrom', to: 'TTo', value: '2000000', incoming: true },
-    ]);
+    warpnetService.getWalletHistory.mockImplementation(async (_limit, asset) =>
+      asset === 'TRX' ? [] : [{ tx: 'abc', asset: 'USDT', from: 'TFrom', to: 'TTo', value: '2000000', incoming: true }],
+    );
     renderWallet();
     await waitFor(() => expect(screen.getByText(line(/^\+2 USDT$/))).toBeTruthy());
     expect(screen.queryByText(line(/^50 USDT$/))).toBeNull();
@@ -138,7 +138,7 @@ describe('Wallet.vue', () => {
   it('keeps polling the history until the sent transfer solidifies', async () => {
     vi.useFakeTimers();
     try {
-      warpnetService.sendUsdt.mockResolvedValue({ tx: 'newtx' });
+      warpnetService.sendFunds.mockResolvedValue({ tx: 'newtx' });
       warpnetService.getWalletHistory.mockResolvedValue([]);
       warpnetService.getWalletContacts.mockResolvedValue([
         { user_id: 'u2', username: 'Vadim', address: 'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6' },
@@ -150,14 +150,15 @@ describe('Wallet.vue', () => {
       await fireEvent.click(screen.getByRole('option', { name: /Vadim/ }));
       await fireEvent.update(screen.getByPlaceholderText('0.0'), '1');
       await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-      await vi.waitFor(() => expect(warpnetService.sendUsdt).toHaveBeenCalled());
+      await vi.waitFor(() => expect(warpnetService.sendFunds).toHaveBeenCalled());
 
+      // one call per asset, so a poll costs two
       const afterSend = warpnetService.getWalletHistory.mock.calls.length;
       await vi.advanceTimersByTimeAsync(15000);
-      expect(warpnetService.getWalletHistory.mock.calls.length).toBe(afterSend + 1);
+      expect(warpnetService.getWalletHistory.mock.calls.length).toBe(afterSend + 2);
 
       warpnetService.getWalletHistory.mockResolvedValue([
-        { tx: 'newtx', from: 'TMe', to: 'TThem', value: '1000000', incoming: false },
+        { tx: 'newtx', asset: 'USDT', from: 'TMe', to: 'TThem', value: '1000000', incoming: false },
       ]);
       await vi.advanceTimersByTimeAsync(15000);
       const settled = warpnetService.getWalletHistory.mock.calls.length;
@@ -259,10 +260,65 @@ describe('Wallet.vue', () => {
     delete document.execCommand;
   });
 
+  it('sends the asset the user picked, in that asset\'s units', async () => {
+    warpnetService.sendFunds.mockResolvedValue({ tx: 'trxtx' });
+    warpnetService.getWalletContacts.mockResolvedValue([
+      { user_id: 'peer-1', username: 'Vadim', address: 'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6' },
+    ]);
+    renderWallet();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(false));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'TRX' }));
+    await fireEvent.click(screen.getByRole('combobox'));
+    await fireEvent.click(screen.getByRole('option', { name: /Vadim/ }));
+    await fireEvent.update(screen.getByPlaceholderText('0.0'), '2.5');
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(warpnetService.sendFunds).toHaveBeenCalledWith(
+      'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6', '2500000', 'TRX',
+    ));
+  });
+
+  it('refuses an amount the chosen asset cannot cover', async () => {
+    warpnetService.getWalletContacts.mockResolvedValue([
+      { user_id: 'peer-1', username: 'Vadim', address: 'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6' },
+    ]);
+    renderWallet();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(false));
+
+    await fireEvent.click(screen.getByRole('combobox'));
+    await fireEvent.click(screen.getByRole('option', { name: /Vadim/ }));
+    await fireEvent.update(screen.getByPlaceholderText('0.0'), '999');
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(screen.getByText('That is more than this address holds in USDT.')).toBeTruthy());
+    expect(warpnetService.sendFunds).not.toHaveBeenCalled();
+  });
+
+  it('shows TRX and USDT in one history, newest first', async () => {
+    warpnetService.getWalletHistory.mockImplementation(async (_limit, asset) =>
+      asset === 'TRX'
+        ? [{ tx: 'trx1', asset: 'TRX', from: 'TFaucet', to: wallet.address, value: '1000000000', timestamp: 200, incoming: true }]
+        : [{ tx: 'usdt1', asset: 'USDT', from: 'TSome', to: wallet.address, value: '2000000', timestamp: 100, incoming: true }],
+    );
+    renderWallet();
+    await waitFor(() => expect(screen.getByText(line(/^\+1000 TRX$/))).toBeTruthy());
+    expect(screen.getByText(line(/^\+2 USDT$/))).toBeTruthy();
+
+    const rows = screen.getAllByText(line(/USDT$|TRX$/)).map((el) => el.textContent.replace(/\s+/g, ' ').trim());
+    expect(rows.indexOf('+1000 TRX')).toBeLessThan(rows.indexOf('+2 USDT'));
+  });
+
+  it('says so when neither history answers', async () => {
+    warpnetService.getWalletHistory.mockRejectedValue(new Error('node unreachable'));
+    renderWallet();
+    await waitFor(() => expect(screen.getByText('Could not read the transfer history.')).toBeTruthy());
+  });
+
   it('clears every section loader once the calls answer', async () => {
     renderWallet();
     await waitFor(() => expect(screen.queryAllByTestId('loader').length).toBe(0));
     expect(screen.getByText(line(/^50 USDT$/))).toBeTruthy();
-    expect(screen.getByText('No USDT transfers yet.')).toBeTruthy();
+    expect(screen.getByText('No transfers yet.')).toBeTruthy();
   });
 });

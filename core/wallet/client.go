@@ -39,6 +39,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,7 @@ const (
 	requestTimeout = 90 * time.Second
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
+	NativeCoin     = "TRX"
 
 	paramNetwork    = "network"
 	paramToken      = "token"
@@ -81,6 +83,7 @@ type Config struct {
 
 type Transfer struct {
 	Tx        string
+	Asset     string
 	From      string
 	To        string
 	Value     string
@@ -394,22 +397,31 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
 }
 
-func (c *Client) Transfer(ctx context.Context, seed, to, amount string) (string, error) {
+func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (string, error) {
 	var out struct {
 		Tx string `json:"tx"`
 	}
-	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: c.cfg.Token, "to": to, "amount": amount}
+	asset = c.assetOr(asset)
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, "amount": amount}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
 		return "", err
 	}
-	log.Infof("wallet: sent %s of %s to %s on %s, tx %s", amount, c.cfg.Token, to, c.cfg.Network, out.Tx)
+	log.Infof("wallet: sent %s of %s to %s on %s, tx %s", amount, asset, to, c.cfg.Network, out.Tx)
 	return out.Tx, nil
 }
 
-func (c *Client) History(ctx context.Context, address string, limit int) ([]Transfer, error) {
+func (c *Client) assetOr(asset string) string {
+	if strings.EqualFold(strings.TrimSpace(asset), NativeCoin) {
+		return NativeCoin
+	}
+	return c.cfg.Token
+}
+
+func (c *Client) History(ctx context.Context, address, asset string, limit int) ([]Transfer, error) {
 	var out struct {
 		Transfers []struct {
 			Tx        string `json:"tx"`
+			Asset     string `json:"asset"`
 			From      string `json:"from"`
 			To        string `json:"to"`
 			Value     string `json:"value"`
@@ -417,7 +429,7 @@ func (c *Client) History(ctx context.Context, address string, limit int) ([]Tran
 			Incoming  bool   `json:"incoming"`
 		} `json:"transfers"`
 	}
-	params := map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token, "limit": limit}
+	params := map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.assetOr(asset), "limit": limit}
 	if err := c.call(ctx, "wallet.history", params, &out); err != nil {
 		return nil, err
 	}
