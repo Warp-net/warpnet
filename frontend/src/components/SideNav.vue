@@ -167,6 +167,14 @@ resulting from the use or misuse of this software.
             :class="$route.name === 'Wallet' ? 'text-2xl' : 'text-xl'"
             aria-hidden="true"
           ></i>
+          <span v-if="walletNew > 0" class="absolute -mt-6 ml-2" data-testid="wallet-badge">
+            <div
+              class="inline-flex items-center px-1.5 py-0.5 border-2 border-white rounded-full text-xs font-semibold leading-4 bg-blue text-white"
+              :aria-label="walletNew + ' incoming transfers'"
+            >
+              {{ walletNew }}
+            </div>
+          </span>
           <p
             class="text-lg ml-4 text-left hidden xl:block"
             :class="$route.name === 'Wallet' ? 'font-bold' : ''"
@@ -289,6 +297,8 @@ resulting from the use or misuse of this software.
 import QRCodeModal from "@/components/QRCodeModal.vue";
 import {warpnetService} from "@/service/service";
 
+const walletPollEvery = 60000;
+
 export default {
   name: "SideNav",
   components: {
@@ -300,6 +310,8 @@ export default {
       profile: {},
       newMessages: 0,
       newNotifications: 0,
+      walletNew: 0,
+      walletTimer: null,
       qrModalOpen: false,
       qrCode: "",
       qrPayload: "",
@@ -313,6 +325,14 @@ export default {
         this.newMessages = 0;
         warpnetService.markMessageNotificationsRead().catch(() => {});
       }
+      if (to && to.name === 'Wallet') {
+        this.markWalletSeen();
+      }
+    },
+  },
+  computed: {
+    walletSeenKey() {
+      return `warpnet:wallet-seen:${(this.profile && this.profile.user_id) || ""}`;
     },
   },
   mounted() {
@@ -339,6 +359,48 @@ export default {
     window.addEventListener("keyup", this._onDocKeyup);
   },
   methods: {
+    // pollWallet badges the wallet icon with the transfers that arrived since
+    // the tab was last opened. The first run only records where "now" is, so a
+    // wallet with history does not open with a badge for transfers already seen.
+    async pollWallet() {
+      if (!this.profile || this.profile.network !== "testnet") return;
+      if (this.$route && this.$route.name === "Wallet") {
+        this.markWalletSeen();
+        return;
+      }
+      let transfers;
+      try {
+        transfers = await warpnetService.getWalletHistory(25);
+      } catch {
+        return;
+      }
+      const incoming = (transfers || []).filter((t) => t && t.incoming);
+      if (!incoming.length) return;
+      const seen = Number(this.readWalletSeen());
+      if (!seen) {
+        this.storeWalletSeen(Math.max(...incoming.map((t) => t.timestamp || 0)));
+        return;
+      }
+      this.walletNew = incoming.filter((t) => (t.timestamp || 0) > seen).length;
+    },
+    markWalletSeen() {
+      this.walletNew = 0;
+      this.storeWalletSeen(Date.now());
+    },
+    readWalletSeen() {
+      try {
+        return localStorage.getItem(this.walletSeenKey) || 0;
+      } catch {
+        return 0;
+      }
+    },
+    storeWalletSeen(at) {
+      try {
+        localStorage.setItem(this.walletSeenKey, String(at));
+      } catch {
+        this.walletNew = 0;
+      }
+    },
     async open(target) {
       const current = this.$route.name;
       // Home carries no :id, so comparing params there would always look like
@@ -456,8 +518,12 @@ export default {
     });
 
     await warpnetService.getNotifications(true)
+
+    await this.pollWallet();
+    this.walletTimer = setInterval(() => this.pollWallet(), walletPollEvery);
   },
   beforeUnmount() {
+    clearInterval(this.walletTimer);
     if (this.unsubscribeNotifications) {
       this.unsubscribeNotifications();
       this.unsubscribeNotifications = null;
