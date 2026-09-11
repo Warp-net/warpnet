@@ -91,6 +91,12 @@ type RatingProvider interface {
 	datastore.Datastore
 }
 
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan domain.PeerEvent)
+	Close() error
+}
+
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
 	Put(rec domain.RatingRecord) error

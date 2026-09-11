@@ -66,6 +66,12 @@ type PubSubProvider interface {
 	OwnerID() string
 }
 
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan domain.PeerEvent)
+	Close() error
+}
+
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
 	Put(rec domain.RatingRecord) error
@@ -91,7 +97,7 @@ type RelayNode struct {
 	dHashTable        DistributedHashTableCloser
 	ratingStore       ds.Datastore
 	ratingDb          RatingStorer
-	rating            *rating.Engine
+	rating            PeerRater
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK

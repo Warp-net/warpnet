@@ -38,7 +38,6 @@ import (
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
-	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -51,6 +50,12 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	log "github.com/sirupsen/logrus"
 )
+
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan domain.PeerEvent)
+	Close() error
+}
 
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
@@ -79,7 +84,7 @@ type ModeratorNode struct {
 
 	ratingStore ds.Datastore
 	ratingDb    RatingStorer
-	rating      *rating.Engine
+	rating      PeerRater
 
 	memoryStoreCloseF func() error
 
@@ -195,7 +200,7 @@ func (mn *ModeratorNode) Start() (err error) {
 // process has a pubsub and an audit to listen to, which is why the node
 // cannot start it by itself: gossip carries the records, and the audit is
 // where a moderator's standing comes from.
-func (mn *ModeratorNode) StartRating(gossip *corePubsub.Gossip, audit <-chan domain.PeerEvent) error {
+func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-chan domain.PeerEvent) error {
 	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingstore.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)

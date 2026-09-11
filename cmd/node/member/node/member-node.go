@@ -76,7 +76,7 @@ type MemberNode struct {
 	db               Storer
 	statsDb          StatsStorer
 	ratingDb         RatingStorer
-	rating           *rating.Engine
+	rating           PeerRater
 	events           chan domain.PeerEvent
 	privKey          ed25519.PrivateKey
 	ownerId, network string
