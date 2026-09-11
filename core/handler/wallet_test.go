@@ -365,7 +365,7 @@ func TestGetWalletContactsHandler(t *testing.T) {
 		errs:      map[string]error{"peer-node-2": warpnet.ErrNodeIsOffline},
 	}
 	users := stubWalletUsers{users: map[string]domain.User{
-		"peer-1": {Id: "peer-1", NodeId: "peer-node-1", Username: "alice"},
+		"peer-1": {Id: "peer-1", NodeId: "peer-node-1", Username: "alice", AvatarKey: "avatar-1"},
 		"peer-2": {Id: "peer-2", NodeId: "peer-node-2", Username: "bob"},
 	}}
 	store := newStubWalletAddresses()
@@ -383,6 +383,9 @@ func TestGetWalletContactsHandler(t *testing.T) {
 	}
 	if resp.Contacts[0].Address != "TPeerAddress" || resp.Contacts[0].Username != "alice" {
 		t.Fatalf("contact = %+v", resp.Contacts[0])
+	}
+	if resp.Contacts[0].UserId != "peer-1" || resp.Contacts[0].AvatarKey != "avatar-1" {
+		t.Fatalf("contact = %+v, want the id and avatar key the picker renders", resp.Contacts[0])
 	}
 	stored, _, _ := store.ListAddresses("testnet", nil, nil)
 	if len(stored) != 2 {

@@ -301,6 +301,7 @@ func StreamGetWalletContactsHandler(
 			if users != nil {
 				if user, err := users.Get(item.UserId); err == nil {
 					contact.Username = user.Username
+					contact.AvatarKey = user.AvatarKey
 				}
 			}
 			contacts = append(contacts, contact)

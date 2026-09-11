@@ -62,13 +62,45 @@
                 External address
               </label>
             </div>
-            <div v-if="recipientMode === 'user'" class="mb-3">
-              <select v-model="recipientUser" class="w-full text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest">
-                <option value="">Choose a recipient…</option>
-                <option v-for="c in contacts" :key="c.user_id" :value="c.address">
-                  {{ c.username || c.user_id }}
-                </option>
-              </select>
+            <div v-if="recipientMode === 'user'" class="mb-3" ref="recipientMenu">
+              <button
+                type="button"
+                role="combobox"
+                aria-haspopup="listbox"
+                :aria-expanded="recipientOpen"
+                :disabled="!contacts.length"
+                @click="recipientOpen = !recipientOpen"
+                class="w-full text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest flex items-center gap-2 text-left disabled:opacity-60"
+              >
+                <template v-if="selectedContact">
+                  <img v-if="selectedContact.avatar" :src="selectedContact.avatar" alt="" class="w-8 h-8 rounded-full object-cover shrink-0" />
+                  <span v-else class="w-8 h-8 rounded-full bg-lighter shrink-0 flex items-center justify-center text-xs">{{ initials(selectedContact) }}</span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate">{{ selectedContact.username || selectedContact.user_id }}</span>
+                    <span class="block text-dark text-xs mono truncate">{{ selectedContact.user_id }}</span>
+                  </span>
+                </template>
+                <span v-else class="flex-1">Choose a recipient…</span>
+                <i class="fas fa-chevron-down text-xs text-dark shrink-0" aria-hidden="true"></i>
+              </button>
+              <ul v-if="recipientOpen" role="listbox" class="mt-1 max-h-56 overflow-y-auto rounded-lg border border-lighter bg-lightest">
+                <li v-for="c in contacts" :key="c.user_id">
+                  <button
+                    type="button"
+                    role="option"
+                    :aria-selected="c.address === recipientUser"
+                    @click="pickRecipient(c)"
+                    class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-lightblue"
+                  >
+                    <img v-if="c.avatar" :src="c.avatar" alt="" class="w-8 h-8 rounded-full object-cover shrink-0" />
+                    <span v-else class="w-8 h-8 rounded-full bg-lighter shrink-0 flex items-center justify-center text-xs">{{ initials(c) }}</span>
+                    <span class="min-w-0">
+                      <span class="block truncate text-sm">{{ c.username || c.user_id }}</span>
+                      <span class="block text-dark text-xs mono truncate">{{ c.user_id }}</span>
+                    </span>
+                  </button>
+                </li>
+              </ul>
               <p v-if="loadingContacts" class="text-dark text-xs mt-1">Looking for the wallets of people you follow…</p>
               <p v-else-if="!contacts.length" class="text-dark text-xs mt-1">
                 Nobody you follow has opened their wallet yet, so no addresses are known. Send to an external address meanwhile.
@@ -132,6 +164,9 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {buildQRCode} from "@/lib/qr";
 
+const historyPollEvery = 15000;
+const historyPollTries = 6;
+
 const SCAN = {
   testnet: "https://nile.tronscan.org/#",
   mainnet: "https://tronscan.org/#",
@@ -157,8 +192,10 @@ export default {
       history: [],
       contacts: [],
       contactsTimer: null,
+      historyTimer: null,
       recipientMode: "user",
       recipientUser: "",
+      recipientOpen: false,
       sendTo: "",
       sendAmount: "",
       sending: false,
@@ -171,6 +208,9 @@ export default {
     };
   },
   computed: {
+    selectedContact() {
+      return this.contacts.find((c) => c.address === this.recipientUser) || null;
+    },
     busy() {
       return this.loadingAddress || this.loadingWallet || this.loadingHistory || this.loadingContacts;
     },
@@ -245,15 +285,27 @@ export default {
       if (this.qr || !this.wallet.address) return;
       this.qr = await buildQRCode(this.wallet.address).catch(() => "");
     },
-    async loadHistory() {
-      this.loadingHistory = true;
+    async loadHistory(quiet) {
+      if (!quiet) this.loadingHistory = true;
       try {
         this.history = await warpnetService.getWalletHistory(25);
       } catch {
-        this.history = [];
+        if (!quiet) this.history = [];
       } finally {
         this.loadingHistory = false;
       }
+    },
+    watchForTransfer(tx) {
+      clearTimeout(this.historyTimer);
+      if (!tx) return;
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        await this.loadHistory(true);
+        if (this.history.some((t) => t.tx === tx) || attempts >= historyPollTries) return;
+        this.historyTimer = setTimeout(poll, historyPollEvery);
+      };
+      this.historyTimer = setTimeout(poll, historyPollEvery);
     },
     async loadContacts(force) {
       this.loadingContacts = true;
@@ -264,6 +316,21 @@ export default {
       } finally {
         this.loadingContacts = false;
       }
+      await this.loadAvatars();
+    },
+    async loadAvatars() {
+      await Promise.all(this.contacts.map(async (c) => {
+        if (!c || !c.avatar_key || c.avatar) return;
+        c.avatar = await warpnetService.getImage({userId: c.user_id, key: c.avatar_key}).catch(() => null);
+      }));
+    },
+    pickRecipient(contact) {
+      this.recipientUser = contact.address;
+      this.recipientOpen = false;
+    },
+    initials(contact) {
+      const name = (contact && (contact.username || contact.user_id)) || "?";
+      return name.trim().charAt(0).toUpperCase();
     },
     scheduleContactsRefresh() {
       clearTimeout(this.contactsTimer);
@@ -299,6 +366,7 @@ export default {
         this.sendAmount = "";
         this.loadWallet();
         this.loadHistory();
+        this.watchForTransfer(this.sendResult);
       } catch (err) {
         this.sendError = (err && err.message) || "Transfer failed";
       } finally {
@@ -329,8 +397,24 @@ export default {
     this.ownerProfile = warpnetService.getOwnerProfile();
     this.refresh();
   },
+  mounted() {
+    this.onDocClick = (e) => {
+      const menu = this.$refs.recipientMenu;
+      if (this.recipientOpen && menu && !menu.contains(e.target)) {
+        this.recipientOpen = false;
+      }
+    };
+    this.onDocKeyup = (e) => {
+      if (e.key === "Escape") this.recipientOpen = false;
+    };
+    document.addEventListener("click", this.onDocClick);
+    window.addEventListener("keyup", this.onDocKeyup);
+  },
   beforeUnmount() {
     clearTimeout(this.contactsTimer);
+    clearTimeout(this.historyTimer);
+    document.removeEventListener("click", this.onDocClick);
+    window.removeEventListener("keyup", this.onDocKeyup);
   },
 };
 </script>
