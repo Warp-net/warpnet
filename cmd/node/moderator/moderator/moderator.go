@@ -192,6 +192,15 @@ func (m *Moderator) Start() error {
 	return nil
 }
 
+// Event is what the audit saw the other moderators do, for whoever rates
+// them. The moderator node points the rating engine at it.
+func (m *Moderator) Event() <-chan domain.PeerEvent {
+	if m == nil || m.ledger == nil {
+		return nil
+	}
+	return m.ledger.Event()
+}
+
 func (m *Moderator) Close() {
 	m.isClosed.Store(true)
 	m.rounds.StopAll()

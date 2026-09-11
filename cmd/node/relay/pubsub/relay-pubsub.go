@@ -69,6 +69,14 @@ func (g *relayPubSub) Run(node PubsubServerNodeConnector) {
 	}
 }
 
+// Gossip is the pubsub a CRDT store broadcasts its deltas on.
+func (g *relayPubSub) Gossip() *pubsub.Gossip {
+	if g == nil {
+		return nil
+	}
+	return g.pubsub
+}
+
 func (g *relayPubSub) OwnerID() string {
 	return "None"
 }

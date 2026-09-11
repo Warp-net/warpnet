@@ -248,10 +248,7 @@ func (m *MemberNode) Start() (err error) {
 		m.mw.IdempotencyMiddleware,
 	)
 
-	go m.rating.Listen(m.node.Event())
-	go m.rating.Listen(m.mw.Event())
-	go m.rating.Listen(m.discService.Event())
-	go m.rating.Listen(m.events)
+	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.events)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 

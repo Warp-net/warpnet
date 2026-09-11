@@ -32,12 +32,18 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt/broadcast"
+	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
@@ -46,7 +52,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// RatingStorer is the replicated record store the rating engine writes to.
+type RatingStorer interface {
+	Put(rec domain.RatingRecord) error
+	List(peerID string) ([]domain.RatingRecord, error)
+	DeleteExpired(dimension string, beforeBucket int64) error
+	OnPut(hook func(domain.RatingRecord))
+	OnDelete(hook func(domain.RatingRecord))
+	Close() error
+}
+
 type DistributedHashTableDiscoverer interface {
+	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	ClosestPeers() []warpnet.WarpPeerID
 	Close()
 }
@@ -59,6 +76,10 @@ type ModeratorNode struct {
 	mw      *middleware.WarpMiddleware
 
 	dHashTable DistributedHashTableDiscoverer
+
+	ratingStore ds.Datastore
+	ratingDb    RatingStorer
+	rating      *rating.Engine
 
 	memoryStoreCloseF func() error
 
@@ -80,9 +101,13 @@ func NewModeratorNode(
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
 	}
 	mapStore := datastore.NewMapDatastore()
+	// The rating CRDT owns its whole namespace, so it cannot share the
+	// datastore the DHT keeps its records in.
+	ratingStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
 		_ = memoryStore.Close()
+		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -117,6 +142,7 @@ func NewModeratorNode(
 	mn := &ModeratorNode{
 		ctx:               ctx,
 		dHashTable:        dHashTable,
+		ratingStore:       ratingStore,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -165,6 +191,32 @@ func (mn *ModeratorNode) Start() (err error) {
 	return nil
 }
 
+// StartRating rates the peers this node can judge. It runs after the
+// process has a pubsub and an audit to listen to, which is why the node
+// cannot start it by itself: gossip carries the records, and the audit is
+// where a moderator's standing comes from.
+func (mn *ModeratorNode) StartRating(gossip *corePubsub.Gossip, audit <-chan domain.PeerEvent) error {
+	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingstore.GossipTopic)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
+	}
+	mn.ratingDb, err = ratingstore.New(
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to initialize rating store: %w", err)
+	}
+	mn.rating, err = rating.NewEngine(
+		mn.ctx, mn.ratingDb, mn.node.Node().Network(), mn.privKey, warpnet.ModeratorNode,
+	)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to start rating engine: %w", err)
+	}
+
+	mn.rating.Listen(mn.node.Event(), mn.mw.Event(), audit)
+	return nil
+}
+
 // SetStreamHandlers registers additional routes after the node is up. The
 // moderator uses it for routes whose handler needs the engine, which only
 // exists once the moderator itself is running.
@@ -210,6 +262,12 @@ func (mn *ModeratorNode) Stop() {
 	}
 	mn.isClosed.Store(true)
 
+	if mn.rating != nil {
+		_ = mn.rating.Close()
+	}
+	if mn.ratingDb != nil {
+		_ = mn.ratingDb.Close()
+	}
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()
 	}

@@ -79,13 +79,22 @@ func (b *burst) reached(peerID string) bool {
 	return count == b.threshold
 }
 
-// Listen charges the peers named by a module's fan-out channel until the
-// channel closes or the engine is closed. One call per module; run it in
-// a goroutine of its own.
-func (e *Engine) Listen(events <-chan domain.PeerEvent) {
-	if e == nil || events == nil {
+// Listen charges the peers named by the modules' fan-out channels. It
+// returns at once and reads each channel until the channel closes or the
+// engine does.
+func (e *Engine) Listen(sources ...<-chan domain.PeerEvent) {
+	if e == nil {
 		return
 	}
+	for _, events := range sources {
+		if events == nil {
+			continue
+		}
+		go e.listen(events)
+	}
+}
+
+func (e *Engine) listen(events <-chan domain.PeerEvent) {
 	for {
 		select {
 		case <-e.ctx.Done():
