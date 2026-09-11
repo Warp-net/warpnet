@@ -51,9 +51,9 @@ func (s stubWalletOwner) GetOwner() domain.Owner { return s.owner }
 type stubWalletBackend struct {
 	addressFn  func(string) (string, error)
 	balanceFn  func(string) (wallet.Account, error)
-	transferFn func(string, string, string) (string, error)
+	transferFn func(seed, asset, to, amount string) (string, error)
 	exportFn   func(string) (string, string, error)
-	historyFn  func(string, int) ([]wallet.Transfer, error)
+	historyFn  func(address, asset string, limit int) ([]wallet.Transfer, error)
 }
 
 func (s stubWalletBackend) Address(_ context.Context, seed string) (string, error) {
@@ -62,14 +62,14 @@ func (s stubWalletBackend) Address(_ context.Context, seed string) (string, erro
 func (s stubWalletBackend) Balance(_ context.Context, addr string) (wallet.Account, error) {
 	return s.balanceFn(addr)
 }
-func (s stubWalletBackend) Transfer(_ context.Context, seed, to, amount string) (string, error) {
-	return s.transferFn(seed, to, amount)
+func (s stubWalletBackend) Transfer(_ context.Context, seed, asset, to, amount string) (string, error) {
+	return s.transferFn(seed, asset, to, amount)
 }
 func (s stubWalletBackend) Export(_ context.Context, seed string) (string, string, error) {
 	return s.exportFn(seed)
 }
-func (s stubWalletBackend) History(_ context.Context, addr string, limit int) ([]wallet.Transfer, error) {
-	return s.historyFn(addr, limit)
+func (s stubWalletBackend) History(_ context.Context, addr, asset string, limit int) ([]wallet.Transfer, error) {
+	return s.historyFn(addr, asset, limit)
 }
 func (s stubWalletBackend) Token() string   { return "TXYZ" }
 func (s stubWalletBackend) Decimals() uint8 { return 6 }
@@ -195,7 +195,7 @@ func TestWalletSendHandler(t *testing.T) {
 	var gotTo, gotAmount string
 	backend := stubWalletBackend{
 		addressFn: func(string) (string, error) { return "TAddr", nil },
-		transferFn: func(_, to, amount string) (string, error) {
+		transferFn: func(_, _, to, amount string) (string, error) {
 			gotTo, gotAmount = to, amount
 			return "0xtx", nil
 		},
@@ -227,10 +227,85 @@ func TestWalletSendHandlerValidation(t *testing.T) {
 	}
 }
 
+func TestWalletSendHandlerPicksTheAsset(t *testing.T) {
+	cases := []struct {
+		name  string
+		asset string
+		want  string
+	}{
+		{"empty means the configured token", "", "TXYZ"},
+		{"the token by name", "TXYZ", "TXYZ"},
+		{"the native coin", "TRX", "TRX"},
+		{"the native coin in any case", "trx", "TRX"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var got string
+			backend := stubWalletBackend{
+				addressFn: func(string) (string, error) { return "TAddr", nil },
+				transferFn: func(_, asset, _, _ string) (string, error) {
+					got = asset
+					return "0xtx", nil
+				},
+			}
+			body := marshalWallet(t, event.WalletSendEvent{
+				To: "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS", Amount: "1000000", Asset: c.asset,
+			})
+			out, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Fatalf("asset sent to the backend = %q, want %q", got, c.want)
+			}
+			if resp := out.(event.WalletSendResponse); resp.Asset != c.want {
+				t.Fatalf("response asset = %q, want %q", resp.Asset, c.want)
+			}
+		})
+	}
+}
+
+func TestWalletSendHandlerRejectsAnUnknownAsset(t *testing.T) {
+	backend := stubWalletBackend{
+		addressFn:  func(string) (string, error) { return "TAddr", nil },
+		transferFn: func(_, _, _, _ string) (string, error) { t.Fatal("must not reach the backend"); return "", nil },
+	}
+	body := marshalWallet(t, event.WalletSendEvent{
+		To: "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS", Amount: "1", Asset: "DOGE",
+	})
+	if _, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil); err == nil {
+		t.Fatal("expected an error for an asset the wallet does not hold")
+	}
+}
+
+func TestWalletHistoryHandlerPassesTheAsset(t *testing.T) {
+	var got string
+	backend := stubWalletBackend{
+		addressFn: func(string) (string, error) { return "TAddr", nil },
+		historyFn: func(_, asset string, _ int) ([]wallet.Transfer, error) {
+			got = asset
+			return []wallet.Transfer{{Tx: "a", Asset: "TRX", Value: "1000000", Incoming: true}}, nil
+		},
+	}
+	out, err := StreamGetWalletHistoryHandler(ownerAuth(), walletKey(), backend)(
+		marshalWallet(t, event.WalletEvent{Limit: 10, Asset: "TRX"}), nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "TRX" {
+		t.Fatalf("asset asked of the backend = %q", got)
+	}
+	resp := out.(event.WalletHistoryResponse)
+	if len(resp.Transfers) != 1 || resp.Transfers[0].Asset != "TRX" {
+		t.Fatalf("transfers = %+v", resp.Transfers)
+	}
+}
+
 func TestWalletHistoryHandler(t *testing.T) {
 	backend := stubWalletBackend{
 		addressFn: func(string) (string, error) { return "TAddr", nil },
-		historyFn: func(addr string, limit int) ([]wallet.Transfer, error) {
+		historyFn: func(addr, _ string, limit int) ([]wallet.Transfer, error) {
 			if addr != "TAddr" {
 				t.Fatalf("history for %s", addr)
 			}
