@@ -156,6 +156,25 @@ resulting from the use or misuse of this software.
           </p>
         </button>
         <button
+          v-if="profile.network === 'testnet'"
+          @click="$router.push({ name: 'Wallet' })"
+          :class="{ 'nav-active': $route.name === 'Wallet' }"
+          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          aria-label="Wallet"
+        >
+          <i
+            class="fas fa-wallet"
+            :class="$route.name === 'Wallet' ? 'text-2xl' : 'text-xl'"
+            aria-hidden="true"
+          ></i>
+          <p
+            class="text-lg ml-4 text-left hidden xl:block"
+            :class="$route.name === 'Wallet' ? 'font-bold' : ''"
+          >
+            Wallet
+          </p>
+        </button>
+        <button
           @click="open('Profile')"
           :class="{ 'nav-active': $route.name === 'Profile' }"
           class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
