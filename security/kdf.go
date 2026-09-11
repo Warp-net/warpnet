@@ -35,6 +35,7 @@ import (
 const (
 	identityKeyContext = "warpnet/kdf/v1/identity-key"
 	databaseKeyContext = "warpnet/kdf/v1/database-key"
+	walletSeedContext  = "warpnet/kdf/v1/wallet-seed"
 )
 
 func DeriveIdentityKey(username, password, network string) (ed25519.PrivateKey, error) {
@@ -52,6 +53,10 @@ func DeriveDatabaseKey(username, password string) ([]byte, error) {
 		return nil, ErrEmptyPassword
 	}
 	return deriveKey([]byte(password), derivationSalt(databaseKeyContext, username)), nil
+}
+
+func DeriveWalletSeed(identityKey ed25519.PrivateKey, network, username string) []byte {
+	return deriveKey(identityKey, derivationSalt(walletSeedContext, network, username))
 }
 
 func derivationSalt(parts ...string) []byte {

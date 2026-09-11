@@ -136,6 +136,22 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/wallet",
+    name: "Wallet",
+    component: () =>
+      import(/* webpackChunkName: "wallet" */ "../views/Wallet.vue"),
+    meta: { protected: true },
+    // The wallet ships on testnet only; on the production network the tab is
+    // hidden, so a hand-typed /wallet must not reach it either.
+    beforeEnter: (to, from, next) => {
+      const owner = warpnetService.getOwnerProfile();
+      if (owner && owner.network === "testnet") {
+        return next();
+      }
+      return next({ name: "Root" });
+    },
+  },
+  {
     path: "/reactions",
     name: "Reactions",
     component: () =>

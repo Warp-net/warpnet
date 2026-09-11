@@ -29,7 +29,9 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"os"
 
+	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
@@ -45,6 +47,7 @@ import (
 	"github.com/Warp-net/warpnet/core/notifications"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
@@ -78,6 +81,8 @@ type MemberNode struct {
 	rating           PeerRater
 	limits           PeerLimiter
 	privKey          ed25519.PrivateKey
+	walletClient     *wallet.Client
+	walletRepo       *database.WalletRepo
 	ownerId, network string
 }
 
@@ -161,6 +166,15 @@ func NewMemberNode(
 
 	opts = append(opts, node.CommonOptions...)
 
+	walletBinary := os.Getenv("WARPNET_WALLET_BIN")
+	if walletBinary == "" {
+		walletBinary = "core/wallet/payment-engine"
+	}
+	walletConfig := wallet.DefaultConfig(warpNetwork, walletBinary)
+	walletConfig.BinaryBytes = root.GetPaymentEngine()
+	walletClient := wallet.New(walletConfig)
+	walletRepo := database.NewWalletRepo(db)
+
 	mn := &MemberNode{
 		ctx:           ctx,
 		opts:          opts,
@@ -179,6 +193,8 @@ func NewMemberNode(
 		notifier:      notifier,
 		db:            db,
 		privKey:       privKey,
+		walletClient:  walletClient,
+		walletRepo:    walletRepo,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -447,6 +463,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
+	hs = append(hs, m.walletHandlers(authRepo)...)
 
 	m.node.SetStreamHandlers(hs...)
 }
@@ -684,6 +701,39 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 		{
 			event.PRIVATE_DELETE_FILTER_KEYWORD,
 			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
+	//nolint:govet
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_WALLET,
+			handler.StreamGetWalletHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_HISTORY,
+			handler.StreamGetWalletHistoryHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_KEY,
+			handler.StreamGetWalletKeyHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_SEND,
+			handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_CONTACTS,
+			handler.StreamGetWalletContactsHandler(
+				authRepo, m.privKey, m.walletClient, m.walletRepo, m.followRepo, m.userRepo, m,
+			),
+		},
+		{
+			event.PUBLIC_GET_WALLET_ADDRESS,
+			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient),
 		},
 	}
 }
@@ -942,6 +992,9 @@ func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
 func (m *MemberNode) Stop() {
 	if m == nil {
 		return
+	}
+	if m.walletClient != nil {
+		m.walletClient.Close()
 	}
 	if m.discService != nil {
 		m.discService.Close()
