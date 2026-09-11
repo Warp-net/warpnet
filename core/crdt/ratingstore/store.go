@@ -131,7 +131,7 @@ func New(
 
 	crdtStore, err := crdt.New(
 		baseStore,
-		ds.NewKey(""), // node repo's already set the prefix
+		ds.NewKey(""), // the repo has already set the prefix
 		dagService,
 		broadcaster,
 		opts,

@@ -43,24 +43,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// GossipTopic is the pubsub topic this store's replicas converge on.
-const GossipTopic = "/warpnet/stats/1.0.0"
-
-const (
-	repoName = "/STATS"
-
-	incrNamespace = "incr"
-	decrNamespace = "decr"
-
-	// generationIDBytes is the size of the random nonce that tags
-	// every value this process writes to the CRDT. 128 bits make
-	// collisions across the lifetime of the network infeasible, so
-	// no two process lifetimes ever share a sub-counter — even after
-	// total local-data loss followed by a re-bootstrap with the same
-	// nodeID.
-	generationIDBytes = 16
-)
-
 // Broadcaster carries this store's deltas to the other replicas.
 type Broadcaster interface {
 	Broadcast(ctx context.Context, data []byte) error
@@ -77,16 +59,33 @@ type Router interface {
 	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
 }
 
+// GossipTopic is the pubsub topic this store's replicas converge on.
+const GossipTopic = "/warpnet/stats/1.0.0"
+
+const (
+	// counterPrefix separates the counters from the datastore's own keys.
+	counterPrefix = "/STATS"
+
+	incrNamespace = "incr"
+	decrNamespace = "decr"
+
+	// generationIDBytes is the size of the random nonce that tags
+	// every value this process writes to the CRDT. 128 bits make
+	// collisions across the lifetime of the network infeasible, so
+	// no two process lifetimes ever share a sub-counter — even after
+	// total local-data loss followed by a re-bootstrap with the same
+	// nodeID.
+	generationIDBytes = 16
+)
+
 // Store is a PN-counter replicated over go-ds-crdt: every process owns
 // the keys of its own generation, and a read sums them all.
 type Store struct {
-	crdt        *crdt.Datastore
-	broadcaster Broadcaster
-	ctx         context.Context
-	cancel      context.CancelFunc
-	prefix      string
-	nodeID      string
-	generation  string
+	crdt       *crdt.Datastore
+	ctx        context.Context
+	cancel     context.CancelFunc
+	nodeID     string
+	generation string
 
 	mu           sync.Mutex
 	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
@@ -117,23 +116,30 @@ func New(
 	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
 	dagService := warpnet.NewDAGService(blockService)
 
-	l := log.StandardLogger().WithContext(ctx)
+	generation, err := newGenerationID()
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
+	}
+
+	store := &Store{
+		ctx:          ctx,
+		cancel:       cancel,
+		nodeID:       node.ID().String(),
+		generation:   generation,
+		incrCounters: make(map[string]uint64),
+		decrCounters: make(map[string]uint64),
+	}
 
 	opts := crdt.DefaultOptions()
-	opts.Logger = l
-	opts.PutHook = func(k ds.Key, _ []byte) {
-		// l.Infof("crdt: item put: %s", k.String())
-	}
-	opts.DeleteHook = func(k ds.Key) {
-		// l.Infof("crdt: item deleted: %s", k.String())
-	}
+	opts.Logger = log.StandardLogger().WithContext(ctx)
 	opts.RebroadcastInterval = time.Minute
 	opts.DAGSyncerTimeout = time.Minute
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
 		baseStore,
-		ds.NewKey(""), // node repo's already set the prefix
+		ds.NewKey(""), // the repo has already set the prefix
 		dagService,
 		broadcaster,
 		opts,
@@ -142,24 +148,7 @@ func New(
 		cancel()
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
-
-	gen, err := newGenerationID()
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
-	}
-
-	store := &Store{
-		crdt:         crdtStore,
-		broadcaster:  broadcaster,
-		ctx:          ctx,
-		cancel:       cancel,
-		nodeID:       node.ID().String(),
-		prefix:       repoName,
-		generation:   gen,
-		incrCounters: make(map[string]uint64),
-		decrCounters: make(map[string]uint64),
-	}
+	store.crdt = crdtStore
 
 	return store, nil
 }
@@ -195,8 +184,8 @@ func (s *Store) bump(namespace string, dataKey ds.Key, cache map[string]uint64) 
 	newValue := cache[cacheKey] + 1
 
 	fullKey := ds.NewKey(fmt.Sprintf(
-		"/%s/%s/%s/%s/%s",
-		s.prefix, namespace, cacheKey, s.nodeID, s.generation,
+		"%s/%s/%s/%s/%s",
+		counterPrefix, namespace, cacheKey, s.nodeID, s.generation,
 	))
 	if err := s.crdt.Put(s.ctx, fullKey, encodeCounter(newValue)); err != nil {
 		return fmt.Errorf("crdt stats: write %s counter %s: %w", namespace, fullKey, err)
@@ -207,7 +196,7 @@ func (s *Store) bump(namespace string, dataKey ds.Key, cache map[string]uint64) 
 
 func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 	prefix := ds.NewKey(
-		fmt.Sprintf("/%s/%s/%s", s.prefix, namespace, key.String()),
+		fmt.Sprintf("%s/%s/%s", counterPrefix, namespace, key.String()),
 	)
 	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: prefix.String()})
 	if err != nil {
