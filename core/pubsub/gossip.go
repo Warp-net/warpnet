@@ -46,6 +46,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/google/uuid"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	log "github.com/sirupsen/logrus"
 )
@@ -81,6 +82,58 @@ type Gossip struct {
 	handlersMap      map[string]topicHandler
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
+
+	// standings is the application-specific score of a peer, as the rating
+	// last concluded it. A peer nobody has rated scores zero, the same as
+	// one in good standing.
+	standings *lru.LRU[string, float64]
+}
+
+const (
+	standingsCacheSize = 4096
+	standingsCacheTTL  = 24 * time.Hour
+
+	// graylistThreshold is the score at which gossipsub stops reading a
+	// peer at all. Only first-hand evidence takes a peer that low.
+	graylistThreshold = -100
+	gossipThreshold   = -10
+	publishThreshold  = -50
+)
+
+// Apply keeps a peer scored as the rating last concluded.
+func (g *Gossip) Apply(standing warpnet.PeerStanding) {
+	if g == nil || g.standings == nil || standing.PeerID == "" {
+		return
+	}
+	g.standings.Add(standing.PeerID, standing.GossipScore)
+}
+
+// appScore is what gossipsub asks on every scoring pass.
+func (g *Gossip) appScore(peerID warpnet.WarpPeerID) float64 {
+	if g == nil || g.standings == nil {
+		return 0
+	}
+	score, _ := g.standings.Get(peerID.String())
+	return score
+}
+
+// scoreOptions weigh a peer by its standing and nothing else: the rest of
+// gossipsub's own scoring stays at its defaults.
+func (g *Gossip) scoreOptions() []pubsub.Option {
+	params := &pubsub.PeerScoreParams{
+		AppSpecificScore:  g.appScore,
+		AppSpecificWeight: 1,
+		DecayInterval:     time.Minute,
+		DecayToZero:       0.01,
+		Topics:            map[string]*pubsub.TopicScoreParams{},
+	}
+	thresholds := &pubsub.PeerScoreThresholds{
+		GossipThreshold:   gossipThreshold,
+		PublishThreshold:  publishThreshold,
+		GraylistThreshold: graylistThreshold,
+		AcceptPXThreshold: 0,
+	}
+	return []pubsub.Option{pubsub.WithPeerScore(params, thresholds)}
 }
 
 type TopicHandler struct {
@@ -99,6 +152,7 @@ func NewGossip(
 
 	return &Gossip{
 		ctx:              ctx,
+		standings:        lru.NewLRU[string, float64](standingsCacheSize, nil, standingsCacheTTL),
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		handlersMap:      handlersMap,
@@ -218,7 +272,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
 	if err != nil {
 		return err
 	}

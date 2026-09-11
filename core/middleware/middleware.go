@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -70,7 +71,17 @@ type WarpMiddleware struct {
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
 	events warpnet.PeerEmitter
+
+	// standings is what the rating last concluded about a peer: how much
+	// of a route's allowance it may spend. A peer nobody has rated spends
+	// all of it.
+	standings *lru.LRU[string, float64]
 }
+
+const (
+	standingsCacheSize = 1024
+	standingsCacheTTL  = time.Hour
+)
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
 	wm := &WarpMiddleware{
@@ -80,8 +91,47 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
 		events:          warpnet.NewPeerEmitter(),
+		standings:       lru.NewLRU[string, float64](standingsCacheSize, nil, standingsCacheTTL),
 	}
 	return wm
+}
+
+// Apply tightens what a peer may spend as its standing changes. A peer
+// whose allowance changed loses the bucket it filled at the old one.
+func (p *WarpMiddleware) Apply(standing warpnet.PeerStanding) {
+	if p == nil || p.standings == nil || standing.PeerID == "" {
+		return
+	}
+	previous, known := p.standings.Get(standing.PeerID)
+	p.standings.Add(standing.PeerID, standing.LimitMultiplier)
+	if known && previous == standing.LimitMultiplier {
+		return
+	}
+	p.dropBuckets(standing.PeerID)
+}
+
+// dropBuckets forgets a peer's buckets, so its next request is measured
+// against the allowance it has now.
+func (p *WarpMiddleware) dropBuckets(peerID string) {
+	p.rateLimitersMx.Lock()
+	defer p.rateLimitersMx.Unlock()
+	for _, key := range p.rateLimiters.Keys() {
+		if strings.HasSuffix(key, "|"+peerID) {
+			p.rateLimiters.Remove(key)
+		}
+	}
+}
+
+// allowance is the share of a route's limit a peer may spend.
+func (p *WarpMiddleware) allowance(peerID string) float64 {
+	if p.standings == nil {
+		return 1
+	}
+	multiplier, ok := p.standings.Get(peerID)
+	if !ok {
+		return 1
+	}
+	return multiplier
 }
 
 // Event is what the middlewares saw the peers do. The channel is never closed.

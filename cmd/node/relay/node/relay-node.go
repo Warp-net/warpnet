@@ -69,6 +69,9 @@ type PubSubProvider interface {
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
+	Enforce(enforcers ...rating.Enforcer)
+	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 	Close() error
 }
 
@@ -95,6 +98,7 @@ type RatingStorer interface {
 }
 
 type DistributedHashTableCloser interface {
+	Apply(standing warpnet.PeerStanding)
 	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	Close()
 }
@@ -257,6 +261,7 @@ func (rn *RelayNode) startRating() error {
 	}
 
 	rn.rating.Listen(rn.node.Event(), rn.mw.Event(), rn.discService.Event())
+	rn.rating.Enforce(rn.node, rn.mw, rn.pubsubService.Gossip(), rn.dHashTable)
 	return nil
 }
 

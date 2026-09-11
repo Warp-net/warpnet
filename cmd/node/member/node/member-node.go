@@ -242,6 +242,7 @@ func (m *MemberNode) Start() (err error) {
 	)
 
 	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event())
+	m.rating.Enforce(m.node, m.mw, m.pubsubService.Gossip(), m.dHashTable)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -464,6 +465,14 @@ func (m *MemberNode) adminHandlers(
 		{
 			event.PRIVATE_GET_STATS,
 			handler.StreamGetStatsHandler(m, db),
+		},
+		{
+			event.PRIVATE_GET_RATING,
+			handler.StreamGetOwnRatingHandler(m.rating),
+		},
+		{
+			event.PUBLIC_GET_RATING,
+			handler.StreamGetRatingHandler(m.rating),
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,

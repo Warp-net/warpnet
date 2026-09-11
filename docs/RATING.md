@@ -1,10 +1,12 @@
 # Node rating — design and implementation plan
 
-Status: the storage layer (`core/crdt/ratingstore`, `database/rating-repo.go`,
-`domain.RatingRecord`) and the engine (`core/rating`) are implemented and
-tested; nothing is wired into the node yet. §6.4, §7, §8 and the wiring in §9
-describe the integration still to come. Where the implementation departed
-from the original plan, the section says so and why.
+Status: implemented. The storage layer (`core/crdt/ratingstore`,
+`database/rating-repo.go`, `domain.RatingRecord`), the engine
+(`core/rating`), the fan-outs that feed it, the enforcement points that act
+on what it concludes, and the routes that show it are all in the tree.
+§7 (the discovery amplification fixes) and the warpdroid side remain. Where
+the implementation departed from the original plan, the section says so and
+why.
 
 A node's rating is an inherent property of every Warpnet node, computed and
 stored **by its neighbours** — never by itself — replicated over CRDT, decaying
@@ -566,12 +568,35 @@ func (t Tier) LimitMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
 func (t Tier) AllowedInDHT() bool       // false only for TierFloor
 ```
 
+A module never reads a score, a tier or the rating at all. On the flush
+tick the engine re-reads the peers it holds evidence about and hands the
+ones whose tier moved to whoever registered:
+
+```go
+// core/rating
+type Enforcer interface{ Apply(standing warpnet.PeerStanding) }
+func (e *Engine) Enforce(enforcers ...Enforcer)
+
+// core/warpnet — the conclusion, in the terms each module acts on
+type PeerStanding struct {
+	PeerID          string
+	ConnTag         int     // core/node: what the peer is worth to the conn manager
+	GossipScore     float64 // core/pubsub: its application-specific gossipsub score
+	LimitMultiplier float64 // core/middleware: the share of a route it may spend
+	AllowedInDHT    bool    // core/dht: whether it stays in the routing table
+}
+```
+
+The pass is also what notices a standing that recovered: evidence decays,
+so a peer improves with no event to announce it. A peer nobody has rated
+is never announced, and every module treats it as being in good standing.
+
 | Surface | Change | File |
 |---|---|---|
-| ConnManager | new `SetRatingPriority(pid, score)` writing a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. Reuses the existing flap LRU. | `core/node/priority.go` |
-| gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)` with `AppSpecificScore` reading the local score; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go:221` |
-| DHT | new `dht.QueryFilter` / `dht.RoutingTableFilter` options rejecting `TierFloor` peers. | `core/dht/options.go`, `core/dht/dht.go` |
-| Rate limits | `limitForRoute(route)` → `limitForRoute(route, tier)`, multiplying `burst` and `perMinute`, floored at 1 so no peer is ever starved outright. The per-`route\|peer` LRU bucket records the tier it was built for and is rebuilt when the tier changes. | `core/middleware/rate-limiter.go` |
+| ConnManager | `SetRatingPriority(pid, tag)` writes a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. It ignores the flap window: a standing already changes slowly. | `core/node/priority.go` |
+| gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)`, with `AppSpecificScore` reading the score the last standing left in the gossip's own cache; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go` |
+| DHT | `dht.QueryFilter` and `dht.RoutingTableFilter` refuse the peers a standing put at the floor, and let them back in when it recovers. A peer nobody has rated is admitted. | `core/dht/dht.go` |
+| Rate limits | a peer's buckets are built at the allowance its standing carries, `burst` and `perMinute` floored at 1 so no peer is ever starved outright. A standing that changes drops the peer's buckets, so it is measured against the allowance it has now. | `core/middleware/rate-limiter.go`, `core/middleware/middleware.go` |
 | Moderation ballots | **Nothing.** Weighting a vote round's ballots by rating was planned and rejected: `planTally` must be a pure function of the ballots so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 

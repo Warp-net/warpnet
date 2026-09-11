@@ -62,6 +62,21 @@ type indexedPeer struct {
 	score    Score
 	scoredAt time.Time
 	scoreRev uint64
+
+	tier      Tier
+	tierKnown bool
+}
+
+// standingMoved reports a tier that differs from the one last announced,
+// and remembers it. A peer whose standing holds is announced once.
+func (p *indexedPeer) standingMoved(tier Tier) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.tierKnown && p.tier == tier {
+		return false
+	}
+	p.tier, p.tierKnown = tier, true
+	return true
 }
 
 // set replaces one record's counts.
@@ -154,6 +169,15 @@ func (i *indexer) add(peerID string) *indexedPeer {
 func (i *indexer) update(peerID string, e entry) {
 	if p, ok := i.peers.Peek(peerID); ok {
 		p.set(e.slot(), e.counts)
+	}
+}
+
+// each walks the peers the index holds.
+func (i *indexer) each(fn func(peerID string, p *indexedPeer)) {
+	for _, peerID := range i.peers.Keys() {
+		if p, ok := i.peers.Peek(peerID); ok {
+			fn(peerID, p)
+		}
 	}
 }
 

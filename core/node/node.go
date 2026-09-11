@@ -74,6 +74,7 @@ type BackoffEnabler interface {
 
 type Prioritizer interface {
 	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
+	SetRatingPriority(pid warpnet.WarpPeerID, tag int)
 	SetMinPriority(pid warpnet.WarpPeerID)
 	SetMaxPriority(pid warpnet.WarpPeerID)
 }
@@ -399,6 +400,19 @@ func (n *WarpNode) trackIncomingEvents() {
 			}
 		}
 	}
+}
+
+// Apply keeps a peer worth what the rating says it is worth, so that a
+// node under pressure drops the peers it trusts least first.
+func (n *WarpNode) Apply(standing warpnet.PeerStanding) {
+	if n == nil || n.prioritizer == nil {
+		return
+	}
+	peerID := warpnet.FromStringToPeerID(standing.PeerID)
+	if peerID == "" {
+		return
+	}
+	n.prioritizer.SetRatingPriority(peerID, standing.ConnTag)
 }
 
 // Event is what this node saw its peers do. The channel is never closed.

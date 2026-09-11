@@ -133,9 +133,21 @@ func (p *WarpMiddleware) bucket(
 	if b, ok := p.rateLimiters.Get(key); ok {
 		return b
 	}
-	b := newRateLimiter(limitForRoute(route, remotePeer))
+	b := newRateLimiter(scale(limitForRoute(route, remotePeer), p.allowance(remotePeer.String())))
 	p.rateLimiters.Add(key, b)
 	return b
+}
+
+// scale applies a peer's allowance to a route's limit, never below one:
+// a peer the rating thinks little of is slowed down, never starved.
+func scale(limit routeLimit, allowance float64) routeLimit {
+	if allowance >= 1 {
+		return limit
+	}
+	return routeLimit{
+		burst:     max(1, int64(float64(limit.burst)*allowance)),
+		perMinute: max(1, int64(float64(limit.perMinute)*allowance)),
+	}
 }
 
 type leakyBucketRateLimiter struct {

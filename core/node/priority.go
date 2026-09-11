@@ -9,8 +9,11 @@ import (
 
 const (
 	reachabilityTag = "reachability"
-	flappingPeriod  = 30 * time.Second
-	cacheSize       = 128
+	// ratingTag is kept apart from reachabilityTag so the two compose the
+	// way libp2p intends, instead of overwriting each other.
+	ratingTag      = "rating"
+	flappingPeriod = 30 * time.Second
+	cacheSize      = 128
 )
 
 type nodeReachabilityManager struct {
@@ -25,6 +28,16 @@ func newNodeReachabilityManager(cm warpnet.WarpConnManager) *nodeReachabilityMan
 		flapLRU: lru,
 		manager: cm,
 	}
+}
+
+// SetRatingPriority is what a peer is worth to the connection manager
+// when it has to choose whom to keep. Unlike reachability it ignores the
+// flap window: a standing changes slowly enough already.
+func (m *nodeReachabilityManager) SetRatingPriority(pid warpnet.WarpPeerID, tag int) {
+	if m == nil || m.manager == nil {
+		return
+	}
+	m.manager.UpsertTag(pid, ratingTag, func(int) int { return tag })
 }
 
 func (m *nodeReachabilityManager) SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {

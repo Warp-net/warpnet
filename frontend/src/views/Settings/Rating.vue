@@ -26,10 +26,10 @@
       <template v-if="!loading && !failed">
         <div class="px-5 py-6 border-b border-lighter">
           <div class="flex items-end">
-            <p class="text-5xl font-bold" :class="bandColor(rating.band)">{{ rating.overall }}</p>
+            <p class="text-5xl font-bold" :class="tierColor(rating.tier)">{{ rating.overall }}</p>
             <p class="text-dark text-lg ml-2 mb-1">/ 1000</p>
           </div>
-          <p class="mt-1 font-bold" :class="bandColor(rating.band)">{{ bandLabel(rating.band) }}</p>
+          <p class="mt-1 font-bold" :class="tierColor(rating.tier)">{{ tierLabel(rating.tier) }}</p>
           <p class="text-sm text-dark mt-3">
             Your node does not rate itself — this is what
             <span class="font-bold">{{ rating.observers }}</span>
@@ -55,14 +55,14 @@
         >
           <div class="flex items-center">
             <p class="font-bold">{{ dimensionLabel(dim.name) }}</p>
-            <p class="ml-auto font-bold" :class="bandColor(dim.band)">{{ dim.score }}</p>
+            <p class="ml-auto font-bold" :class="tierColor(dim.tier)">{{ dim.score }}</p>
           </div>
           <p class="text-sm text-dark">{{ dimensionHint(dim.name) }}</p>
 
           <div class="mt-2 h-2 w-full rounded-full bg-lighter overflow-hidden">
             <div
               class="h-full rounded-full"
-              :class="barColor(dim.band)"
+              :class="barColor(dim.tier)"
               :style="{ width: barWidth(dim.score) }"
             ></div>
           </div>
@@ -147,32 +147,32 @@ export default {
       ownerProfile: {},
       rating: {
         overall: 1000,
-        band: 'trusted',
+        tier: 'trusted',
         observers: 0,
         dimensions: [],
       },
     };
   },
   methods: {
-    bandLabel(band) {
-      switch (band) {
+    tierLabel(tier) {
+      switch (tier) {
         case 'trusted': return 'Trusted';
         case 'watched': return 'Watched';
         case 'degraded': return 'Degraded';
         case 'floor': return 'Severely degraded';
-        default: return band;
+        default: return tier;
       }
     },
-    bandColor(band) {
-      switch (band) {
+    tierColor(tier) {
+      switch (tier) {
         case 'watched': return 'text-yellow-500';
         case 'degraded': return 'text-orange-500';
         case 'floor': return 'text-red-500';
         default: return 'text-green-500';
       }
     },
-    barColor(band) {
-      switch (band) {
+    barColor(tier) {
+      switch (tier) {
         case 'watched': return 'bg-yellow-500';
         case 'degraded': return 'bg-orange-500';
         case 'floor': return 'bg-red-500';

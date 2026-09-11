@@ -86,6 +86,13 @@ const (
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
+// Enforcer acts on what the rating concluded about a peer. The modules
+// that limit, prioritise, score or route a peer implement it; none of
+// them needs to know how the standing was arrived at.
+type Enforcer interface {
+	Apply(standing warpnet.PeerStanding)
+}
+
 // Storer is the replicated record store; ratingstore.Store satisfies it.
 type Storer interface {
 	Put(rec domain.RatingRecord) error
@@ -151,6 +158,9 @@ type Engine struct {
 	writes      *burst
 
 	listeners sync.WaitGroup
+
+	enforcersMu sync.RWMutex
+	enforcers   []Enforcer
 
 	mu       sync.Mutex
 	counters map[pendingKey]counts
@@ -322,6 +332,53 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 		return e.record(peerID, kind)
 	}
 	return nil
+}
+
+// Enforce hands the standing of every peer whose rating changes to the
+// modules that act on it, for as long as the engine runs.
+func (e *Engine) Enforce(enforcers ...Enforcer) {
+	if e == nil {
+		return
+	}
+	e.enforcersMu.Lock()
+	defer e.enforcersMu.Unlock()
+	for _, enforcer := range enforcers {
+		if enforcer != nil {
+			e.enforcers = append(e.enforcers, enforcer)
+		}
+	}
+}
+
+// publishStandings announces the peers whose standing has moved. Evidence
+// decays, so a standing improves with time and no event to announce it:
+// this pass is where that is noticed.
+func (e *Engine) publishStandings() {
+	e.enforcersMu.RLock()
+	enforcers := e.enforcers
+	e.enforcersMu.RUnlock()
+	if len(enforcers) == 0 {
+		return
+	}
+
+	e.index.each(func(peerID string, p *indexedPeer) {
+		if es, _ := p.entries(); len(es) == 0 {
+			return // nothing has ever been said about this peer
+		}
+		tier := e.Score(warpnet.FromStringToPeerID(peerID)).Tier()
+		if !p.standingMoved(tier) {
+			return
+		}
+		standing := warpnet.PeerStanding{
+			PeerID:          peerID,
+			ConnTag:         tier.ConnTag(),
+			GossipScore:     tier.GossipScore(),
+			LimitMultiplier: tier.LimitMultiplier(),
+			AllowedInDHT:    tier.AllowedInDHT(),
+		}
+		for _, enforcer := range enforcers {
+			enforcer.Apply(standing)
+		}
+	})
 }
 
 // Score is this node's own view of a peer: the minimum over the
@@ -589,6 +646,7 @@ func (e *Engine) run() {
 			if err := e.flush(); err != nil {
 				log.Errorf("rating: flush: %v", err)
 			}
+			e.publishStandings()
 			if e.now().Sub(lastGC) >= gcInterval {
 				e.gc()
 				lastGC = e.now()
@@ -631,6 +689,14 @@ func (e *Engine) flush() error {
 		if err := e.store.Put(domain.RatingRecord(rec)); err != nil {
 			errs = append(errs, fmt.Errorf("write record for %s: %w", key.peerID, err))
 			continue
+		}
+		// A peer we have just written about is read into the index, so
+		// that its standing is re-evaluated and announced. The first
+		// write loads its whole history; later ones only add to it.
+		if !e.index.has(rec.PeerID) {
+			if _, err := e.peer(rec.PeerID); err != nil {
+				log.Warnf("rating: indexing %s after a write: %v", rec.PeerID, err)
+			}
 		}
 		e.index.update(rec.PeerID, rec.entry())
 		e.clearIfUnchanged(key, offences)

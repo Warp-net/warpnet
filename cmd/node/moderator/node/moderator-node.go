@@ -54,7 +54,16 @@ import (
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
+	Enforce(enforcers ...rating.Enforcer)
+	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 	Close() error
+}
+
+// GossipScorer is the pubsub the rating rides and scores its peers on.
+type GossipScorer interface {
+	broadcast.GossipPubSuber
+	Apply(standing warpnet.PeerStanding)
 }
 
 // RatingProvider is the local storage the rating replica is built on.
@@ -80,6 +89,7 @@ type RatingStorer interface {
 }
 
 type DistributedHashTableDiscoverer interface {
+	Apply(standing warpnet.PeerStanding)
 	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	ClosestPeers() []warpnet.WarpPeerID
 	Close()
@@ -211,7 +221,7 @@ func (mn *ModeratorNode) Start() (err error) {
 // StartRating rates the peers this node can judge. The process starts it:
 // the records ride the pubsub, and a moderator's standing comes from the
 // audit, neither of which the node owns.
-func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-chan warpnet.PeerEvent) error {
+func (mn *ModeratorNode) StartRating(gossip GossipScorer, audit <-chan warpnet.PeerEvent) error {
 	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingstore.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
@@ -230,6 +240,7 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 	}
 
 	mn.rating.Listen(mn.node.Event(), mn.mw.Event(), audit)
+	mn.rating.Enforce(mn.node, mn.mw, gossip, mn.dHashTable)
 	return nil
 }
 

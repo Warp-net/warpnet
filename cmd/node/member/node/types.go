@@ -33,6 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -71,6 +72,7 @@ type UserFetcher interface {
 }
 
 type DistributedHashTableCloser interface {
+	Apply(standing warpnet.PeerStanding)
 	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo)
 	BootstrapNodes() []warpnet.WarpAddrInfo
 	Close()
@@ -102,6 +104,9 @@ type RatingProvider interface {
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
+	Enforce(enforcers ...rating.Enforcer)
+	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 	Close() error
 }
 

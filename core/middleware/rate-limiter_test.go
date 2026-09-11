@@ -35,6 +35,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
@@ -43,6 +44,7 @@ func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *Wa
 		ownNodeId:    ownNodeId,
 		rateLimiters: newRateLimitersCache(),
 		events:       warpnet.NewPeerEmitter(),
+		standings:    lru.NewLRU[string, float64](standingsCacheSize, nil, standingsCacheTTL),
 	}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 	return mw
