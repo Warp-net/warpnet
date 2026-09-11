@@ -33,6 +33,7 @@ export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
 export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
 export const PRIVATE_GET_WALLET = "/private/get/wallet/0.0.0"
+export const PRIVATE_GET_WALLET_ADDRESS = "/private/get/wallet/address/0.0.0"
 export const PRIVATE_GET_WALLET_CONTACTS = "/private/get/wallet/contacts/0.0.0"
 export const PRIVATE_GET_WALLET_HISTORY = "/private/get/wallet/history/0.0.0"
 export const PRIVATE_GET_WALLET_KEY = "/private/get/wallet/key/0.0.0"
@@ -1285,6 +1286,13 @@ export const warpnetService = {
 
     async getWallet() {
         const request = { path: PRIVATE_GET_WALLET, body: {} }
+        return await this.sendToNode(request)
+    },
+
+    // getWalletAddress answers from the node alone: the TRON address is
+    // derived locally, so it arrives without waiting for the chain.
+    async getWalletAddress() {
+        const request = { path: PRIVATE_GET_WALLET_ADDRESS, body: {} }
         return await this.sendToNode(request)
     },
     async sendUsdt(to, amount) {

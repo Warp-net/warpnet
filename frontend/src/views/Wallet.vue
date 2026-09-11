@@ -8,29 +8,27 @@
         </button>
         <h1 class="text-xl font-bold ml-4">Wallet</h1>
         <span class="ml-3 text-sm text-dark capitalize">{{ wallet.network }}</span>
-        <button @click="refresh(true)" class="ml-auto rounded-full px-2 py-1 hover:bg-lightblue" aria-label="Refresh" :disabled="loading">
-          <i class="fas fa-rotate-right text-blue" :class="loading ? 'fa-spin' : ''"></i>
+        <button @click="refresh(true)" class="ml-auto rounded-full px-2 py-1 hover:bg-lightblue" aria-label="Refresh" :disabled="busy">
+          <i class="fas fa-rotate-right text-blue" :class="busy ? 'fa-spin' : ''"></i>
         </button>
       </div>
 
-      <Loader :loading="loading" />
-
-      <div v-if="!loading" class="p-5 flex flex-col gap-5">
+      <div class="p-5 flex flex-col gap-5">
         <p v-if="loadError" class="text-red-700 bg-red-100 rounded-lg px-4 py-3">{{ loadError }}</p>
 
         <div class="bg-paper border border-lighter rounded-2xl p-5 card">
           <p class="text-dark text-sm uppercase tracking-wide">Balance</p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
             <div>
-              <p class="text-4xl font-bold">{{ format(wallet.usdt_balance, wallet.decimals) }} <span class="text-2xl text-dark">USDT</span></p>
+              <p class="text-4xl font-bold">{{ loadingWallet ? '—' : format(wallet.usdt_balance, wallet.decimals) }} <span class="text-2xl text-dark">USDT</span></p>
               <p class="text-dark text-xs mt-1">token balance</p>
             </div>
             <div>
-              <p class="text-4xl font-bold">{{ format(wallet.trx_balance, 6) }} <span class="text-2xl text-dark">TRX</span></p>
+              <p class="text-4xl font-bold">{{ loadingWallet ? '—' : format(wallet.trx_balance, 6) }} <span class="text-2xl text-dark">TRX</span></p>
               <p class="text-dark text-xs mt-1">for network fees</p>
             </div>
           </div>
-          <p v-if="wallet.address" class="text-dark text-sm mt-4 pt-3 border-t border-lighter">
+          <p v-if="!loadingWallet && wallet.address" class="text-dark text-sm mt-4 pt-3 border-t border-lighter">
             <span class="font-semibold">{{ wallet.activated ? 'Existing wallet.' : 'New wallet.' }}</span>
             {{ originText }}
           </p>
@@ -39,7 +37,8 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div class="bg-paper border border-lighter rounded-2xl p-5 card">
             <p class="text-dark text-sm uppercase tracking-wide mb-2">Receive</p>
-            <div class="flex flex-col items-center gap-3">
+            <Loader :loading="loadingAddress" />
+            <div v-if="!loadingAddress" class="flex flex-col items-center gap-3">
               <img v-if="qr" :src="qr" alt="Address QR" class="w-40 h-40 rounded-lg border border-lighter bg-white" />
               <div class="min-w-0 w-full text-center">
                 <p class="mono break-all text-sm">{{ wallet.address }}</p>
@@ -70,7 +69,8 @@
                   {{ c.username || c.user_id }}
                 </option>
               </select>
-              <p v-if="!contacts.length" class="text-dark text-xs mt-1">
+              <p v-if="loadingContacts" class="text-dark text-xs mt-1">Looking for the wallets of people you follow…</p>
+              <p v-else-if="!contacts.length" class="text-dark text-xs mt-1">
                 Nobody you follow has opened their wallet yet, so no addresses are known. Send to an external address meanwhile.
               </p>
             </div>
@@ -79,7 +79,7 @@
             </div>
             <label class="block text-sm text-dark mb-1">Amount (USDT)</label>
             <input v-model="sendAmount" inputmode="decimal" placeholder="0.0" class="w-full mono text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest mb-3" />
-            <button @click="send()" :disabled="sending" class="text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
+            <button @click="send()" :disabled="sending || loadingAddress" class="text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
               {{ sending ? 'Sending…' : 'Send' }}
             </button>
             <p v-if="sendError" class="text-red-700 mt-3">{{ sendError }}</p>
@@ -91,7 +91,8 @@
 
         <div class="bg-paper border border-lighter rounded-2xl p-5 card">
           <p class="text-dark text-sm uppercase tracking-wide mb-3">History</p>
-          <p v-if="!history.length" class="text-dark">No USDT transfers yet.</p>
+          <Loader :loading="loadingHistory" />
+          <p v-if="!loadingHistory && !history.length" class="text-dark">No USDT transfers yet.</p>
           <div v-for="t in history" :key="t.tx" class="flex items-center justify-between border-b border-lighter py-2 last:border-0">
             <div class="min-w-0">
               <p :class="t.incoming ? 'text-green-700' : 'text-dark'" class="font-semibold">
@@ -145,7 +146,10 @@ export default {
   },
   data() {
     return {
-      loading: true,
+      loadingAddress: true,
+      loadingWallet: true,
+      loadingHistory: true,
+      loadingContacts: true,
       loadError: "",
       ownerProfile: {},
       wallet: {address: "", usdt_balance: "0", trx_balance: "0", decimals: 6, network: "", token: ""},
@@ -167,6 +171,9 @@ export default {
     };
   },
   computed: {
+    busy() {
+      return this.loadingAddress || this.loadingWallet || this.loadingHistory || this.loadingContacts;
+    },
     originText() {
       const net = this.wallet.network || "this network";
       if (!this.wallet.activated) {
@@ -205,34 +212,68 @@ export default {
       if (units <= 0n) throw new Error("Amount must be positive");
       return units.toString();
     },
-    async loadWallet() {
-      const w = await warpnetService.getWallet();
-      if (w && w.address) {
-        this.wallet = w;
-        this.qr = await buildQRCode(w.address).catch(() => "");
+    async loadAddress() {
+      this.loadingAddress = true;
+      try {
+        const a = await warpnetService.getWalletAddress();
+        if (a && a.address) {
+          this.wallet = {...this.wallet, ...a};
+        }
+      } catch {
+        this.wallet.address = this.wallet.address || "";
+      } finally {
+        this.loadingAddress = false;
       }
+      await this.ensureQR();
+    },
+    async loadWallet() {
+      this.loadingWallet = true;
+      this.loadError = "";
+      try {
+        const w = await warpnetService.getWallet();
+        if (w && w.address) {
+          this.wallet = {...this.wallet, ...w};
+        }
+      } catch (err) {
+        this.loadError = (err && err.message) || "Failed to load wallet";
+      } finally {
+        this.loadingWallet = false;
+      }
+      await this.ensureQR();
+    },
+    async ensureQR() {
+      if (this.qr || !this.wallet.address) return;
+      this.qr = await buildQRCode(this.wallet.address).catch(() => "");
     },
     async loadHistory() {
-      this.history = await warpnetService.getWalletHistory(25).catch(() => []);
+      this.loadingHistory = true;
+      try {
+        this.history = await warpnetService.getWalletHistory(25);
+      } catch {
+        this.history = [];
+      } finally {
+        this.loadingHistory = false;
+      }
     },
     async loadContacts(force) {
-      this.contacts = await warpnetService.getWalletContacts(force).catch(() => []);
+      this.loadingContacts = true;
+      try {
+        this.contacts = await warpnetService.getWalletContacts(force);
+      } catch {
+        this.contacts = [];
+      } finally {
+        this.loadingContacts = false;
+      }
     },
     scheduleContactsRefresh() {
       clearTimeout(this.contactsTimer);
       this.contactsTimer = setTimeout(() => this.loadContacts(), 6000);
     },
-    async refresh(force) {
-      this.loading = true;
-      this.loadError = "";
-      try {
-        await Promise.all([this.loadWallet(), this.loadHistory(), this.loadContacts(force)]);
-        this.scheduleContactsRefresh();
-      } catch (err) {
-        this.loadError = (err && err.message) || "Failed to load wallet";
-      } finally {
-        this.loading = false;
-      }
+    refresh(force) {
+      this.loadAddress();
+      this.loadWallet();
+      this.loadHistory();
+      this.loadContacts(force).then(() => this.scheduleContactsRefresh());
     },
     async send() {
       this.sendError = "";
@@ -256,8 +297,8 @@ export default {
         this.sendTo = "";
         this.recipientUser = "";
         this.sendAmount = "";
-        await this.loadWallet();
-        await this.loadHistory();
+        this.loadWallet();
+        this.loadHistory();
       } catch (err) {
         this.sendError = (err && err.message) || "Transfer failed";
       } finally {
@@ -284,9 +325,9 @@ export default {
       } catch { /* clipboard unavailable */ }
     },
   },
-  async created() {
+  created() {
     this.ownerProfile = warpnetService.getOwnerProfile();
-    await this.refresh();
+    this.refresh();
   },
   beforeUnmount() {
     clearTimeout(this.contactsTimer);

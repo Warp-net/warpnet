@@ -106,6 +106,26 @@ func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateK
 	}
 }
 
+func StreamGetOwnWalletAddressHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		address, err := backend.Address(context.Background(), seed)
+		if err != nil {
+			log.Errorf("wallet: own address: %v", err)
+			return nil, err
+		}
+		return event.WalletOwnAddressResponse{
+			Address:  address,
+			Token:    backend.Token(),
+			Decimals: backend.Decimals(),
+			Network:  backend.Network(),
+		}, nil
+	}
+}
+
 func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.WalletSendEvent

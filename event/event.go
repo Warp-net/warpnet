@@ -982,6 +982,14 @@ type WalletAddressResponse struct {
 	UserId  string `json:"user_id"`
 }
 
+// WalletOwnAddressResponse defines model for WalletOwnAddressResponse.
+type WalletOwnAddressResponse struct {
+	Address  string `json:"address"`
+	Token    string `json:"token"`
+	Decimals uint8  `json:"decimals"`
+	Network  string `json:"network"`
+}
+
 // WalletContact defines model for WalletContact.
 type WalletContact struct {
 	Address  string `json:"address"`
