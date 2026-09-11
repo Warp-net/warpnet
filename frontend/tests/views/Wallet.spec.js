@@ -221,6 +221,44 @@ describe('Wallet.vue', () => {
     await waitFor(() => expect(screen.getByText('New wallet.')).toBeTruthy());
   });
 
+  it('copies the address through the Clipboard API when the page is trusted with it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWallet();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy address' })).toBeTruthy());
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+    expect(writeText).toHaveBeenCalledWith(wallet.address);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy());
+    delete navigator.clipboard;
+  });
+
+  it('falls back to a selection copy when the page is served over plain HTTP', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const execCommand = vi.fn().mockReturnValue(true);
+    document.execCommand = execCommand;
+    renderWallet();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy address' })).toBeTruthy());
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+    expect(execCommand).toHaveBeenCalledWith('copy');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy());
+    expect(screen.queryByText(/cannot reach the clipboard/)).toBeNull();
+    delete document.execCommand;
+  });
+
+  it('says so instead of going quiet when no copy path works', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    document.execCommand = vi.fn().mockReturnValue(false);
+    renderWallet();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy address' })).toBeTruthy());
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+    await waitFor(() => expect(screen.getByText(/cannot reach the clipboard/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();
+    delete document.execCommand;
+  });
+
   it('clears every section loader once the calls answer', async () => {
     renderWallet();
     await waitFor(() => expect(screen.queryAllByTestId('loader').length).toBe(0));

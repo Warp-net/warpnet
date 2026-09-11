@@ -45,6 +45,10 @@
                 <button @click="copy(wallet.address, 'address')" class="mt-2 text-white bg-blue rounded-full px-4 py-1 hover:bg-darkblue">
                   {{ copied === 'address' ? 'Copied' : 'Copy address' }}
                 </button>
+                <p v-if="copyFailed === 'address'" class="text-red-700 text-xs mt-2">
+                  This page cannot reach the clipboard — it is served over plain HTTP, which browsers do not trust with it.
+                  Select the address above and copy it by hand.
+                </p>
                 <p class="text-dark text-xs mt-2">Send only USDT (TRC-20) and TRX on {{ wallet.network }} to this address.</p>
               </div>
             </div>
@@ -154,6 +158,10 @@
               </button>
               <button @click="privateKey = ''" class="text-dark border border-lighter rounded-full px-4 py-1 hover:bg-lightblue">Hide</button>
             </div>
+            <p v-if="copyFailed === 'key'" class="text-red-700 text-xs mt-2">
+              This page cannot reach the clipboard — it is served over plain HTTP, which browsers do not trust with it.
+              Select the key above and copy it by hand.
+            </p>
           </div>
           <p v-if="keyError" class="text-red-700 mt-3">{{ keyError }}</p>
         </div>
@@ -209,6 +217,7 @@ export default {
       privateKey: "",
       keyError: "",
       copied: "",
+      copyFailed: "",
     };
   },
   computed: {
@@ -413,11 +422,39 @@ export default {
       }
     },
     async copy(text, what) {
-      try {
-        await navigator.clipboard.writeText(text);
+      if (!text) return;
+      this.copyFailed = "";
+      if (await this.writeClipboard(text)) {
         this.copied = what;
         setTimeout(() => { this.copied = ""; }, 1500);
-      } catch { /* clipboard unavailable */ }
+        return;
+      }
+      this.copyFailed = what;
+    },
+    // The Clipboard API only exists in a secure context, and a node served over
+    // plain HTTP is not one, so fall back to the legacy selection copy.
+    async writeClipboard(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch { /* the legacy path below still has a chance */ }
+      try {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.top = "0";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        const copied = document.execCommand && document.execCommand("copy");
+        document.body.removeChild(area);
+        return Boolean(copied);
+      } catch {
+        return false;
+      }
     },
   },
   created() {
