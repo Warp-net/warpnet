@@ -130,7 +130,7 @@ func (p *WarpMiddleware) bucket(
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
 
-	allowance := p.standings.Peer(remotePeer).LimitMultiplier
+	allowance := peerRateMultiplier(p.limits, remotePeer)
 	if b, ok := p.rateLimiters.Get(key); ok && b.allowance == allowance {
 		return b
 	}
@@ -141,7 +141,16 @@ func (p *WarpMiddleware) bucket(
 	return b
 }
 
-// scaled is what a peer in this standing may spend of a route's limit,
+// peerRateMultiplier is the share of a route a peer may spend. A node with
+// no rating wired up serves every peer in full.
+func peerRateMultiplier(limits PeerLimitsProvider, peerID warpnet.WarpPeerID) float64 {
+	if limits == nil {
+		return 1
+	}
+	return limits.PeerLimits(peerID).RateMultiplier
+}
+
+// scaled is what a peer on this allowance may spend of a route's limit,
 // never below one: a peer the rating thinks little of is slowed down,
 // never starved.
 func (l routeLimit) scaled(allowance float64) routeLimit {

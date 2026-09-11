@@ -28,18 +28,24 @@ import "github.com/Warp-net/warpnet/core/warpnet"
 
 type dhtConfig struct {
 	store                         RoutingStorer
-	standings                     *warpnet.PeerStandings
+	limits                        PeerAdmissionProvider
 	addCallbacks, removeCallbacks []func(info warpnet.WarpPeerID)
 	bootstrapNodes                []warpnet.WarpAddrInfo
 	network                       string
 }
 type Option func(*dhtConfig)
 
-// Standings is where the routing table reads how far a peer is trusted.
+// PeerAdmissionProvider is what the routing table asks of a peer before
+// it holds it.
+type PeerAdmissionProvider interface {
+	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+}
+
+// PeerLimits is where the routing table reads whether it may hold a peer.
 // Without it every peer is welcome.
-func Standings(standings *warpnet.PeerStandings) Option {
+func PeerLimits(limits PeerAdmissionProvider) Option {
 	return func(c *dhtConfig) {
-		c.standings = standings
+		c.limits = limits
 	}
 }
 

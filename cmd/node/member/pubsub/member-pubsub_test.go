@@ -79,7 +79,7 @@ func newRunningPubSub(t *testing.T, ownerId string) (*MemberPubSub, *liveConnect
 	t.Cleanup(cancel)
 
 	conn := newConnector(t, ownerId)
-	ps := NewPubSub(ctx, warpnet.NewPeerStandings())
+	ps := NewPubSub(ctx, warpnet.NewPeerLimiter())
 	ps.Run(conn)
 	t.Cleanup(func() { _ = ps.Close() })
 
@@ -96,7 +96,7 @@ func TestMemberPubSub_NilAndUnstartedAreInert(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ps := NewPubSub(ctx, warpnet.NewPeerStandings())
+	ps := NewPubSub(ctx, warpnet.NewPeerLimiter())
 	require.NotNil(t, ps.Gossip())
 	assert.False(t, ps.Gossip().IsGossipRunning())
 

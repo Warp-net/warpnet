@@ -86,11 +86,11 @@ const (
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
-// Enforcer acts on what the rating concluded about a peer. The modules
-// that limit, prioritise, score or route a peer implement it; none of
-// them needs to know how the standing was arrived at.
-type Enforcer interface {
-	Apply(standing warpnet.PeerStanding)
+// PeerLimiter is where the rating puts what it decided a peer may have.
+// Whoever holds the limits implements it, and never needs to know how
+// they were arrived at.
+type PeerLimiter interface {
+	Limit(limits warpnet.PeerLimits)
 }
 
 // Storer is the replicated record store; ratingstore.Store satisfies it.
@@ -159,8 +159,8 @@ type Engine struct {
 
 	listeners sync.WaitGroup
 
-	enforcersMu sync.RWMutex
-	enforcers   []Enforcer
+	limitersMu sync.RWMutex
+	limiters   []PeerLimiter
 
 	mu       sync.Mutex
 	counters map[pendingKey]counts
@@ -334,29 +334,29 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 	return nil
 }
 
-// Enforce hands the standing of every peer whose rating changes to the
-// modules that act on it, for as long as the engine runs.
-func (e *Engine) Enforce(enforcers ...Enforcer) {
+// Enforce hands what every peer may have to whoever holds the limits, for
+// as long as the engine runs.
+func (e *Engine) Enforce(limiters ...PeerLimiter) {
 	if e == nil {
 		return
 	}
-	e.enforcersMu.Lock()
-	defer e.enforcersMu.Unlock()
-	for _, enforcer := range enforcers {
-		if enforcer != nil {
-			e.enforcers = append(e.enforcers, enforcer)
+	e.limitersMu.Lock()
+	defer e.limitersMu.Unlock()
+	for _, limiter := range limiters {
+		if limiter != nil {
+			e.limiters = append(e.limiters, limiter)
 		}
 	}
 }
 
-// publishStandings announces the peers whose standing has moved. Evidence
-// decays, so a standing improves with time and no event to announce it:
-// this pass is where that is noticed.
-func (e *Engine) publishStandings() {
-	e.enforcersMu.RLock()
-	enforcers := e.enforcers
-	e.enforcersMu.RUnlock()
-	if len(enforcers) == 0 {
+// publishLimits hands on the peers whose tier has moved. Evidence decays,
+// so a peer recovers with time and no event to report it: this pass is
+// where that is noticed.
+func (e *Engine) publishLimits() {
+	e.limitersMu.RLock()
+	limiters := e.limiters
+	e.limitersMu.RUnlock()
+	if len(limiters) == 0 {
 		return
 	}
 
@@ -365,18 +365,18 @@ func (e *Engine) publishStandings() {
 			return // nothing has ever been said about this peer
 		}
 		tier := e.Score(warpnet.FromStringToPeerID(peerID)).Tier()
-		if !p.standingMoved(tier) {
+		if !p.tierMoved(tier) {
 			return
 		}
-		standing := warpnet.PeerStanding{
-			PeerID:          peerID,
-			ConnTag:         tier.ConnTag(),
-			GossipScore:     tier.GossipScore(),
-			LimitMultiplier: tier.LimitMultiplier(),
-			AllowedInDHT:    tier.AllowedInDHT(),
+		limits := warpnet.PeerLimits{
+			PeerID:         peerID,
+			ConnTag:        tier.ConnTag(),
+			GossipScore:    tier.GossipScore(),
+			RateMultiplier: tier.RateMultiplier(),
+			InRoutingTable: tier.InRoutingTable(),
 		}
-		for _, enforcer := range enforcers {
-			enforcer.Apply(standing)
+		for _, limiter := range limiters {
+			limiter.Limit(limits)
 		}
 	})
 }
@@ -646,7 +646,7 @@ func (e *Engine) run() {
 			if err := e.flush(); err != nil {
 				log.Errorf("rating: flush: %v", err)
 			}
-			e.publishStandings()
+			e.publishLimits()
 			if e.now().Sub(lastGC) >= gcInterval {
 				e.gc()
 				lastGC = e.now()

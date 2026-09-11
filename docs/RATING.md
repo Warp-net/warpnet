@@ -562,39 +562,43 @@ own test (§10, Stage 1).
 
 ```go
 // core/rating/enforce.go — pure mappings on the tier, no dependencies
-func (t Tier) ConnTag() int             // 60 / 30 / 10 / 1
-func (t Tier) GossipScore() float64     // 0 / -10 / -60 / -200
-func (t Tier) LimitMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
-func (t Tier) AllowedInDHT() bool       // false only for TierFloor
+func (t Tier) ConnTag() int            // 60 / 30 / 10 / 1
+func (t Tier) GossipScore() float64    // 0 / -10 / -60 / -200
+func (t Tier) RateMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
+func (t Tier) InRoutingTable() bool    // false only for TierFloor
 ```
 
 A module never reads a score, a tier or the rating at all, and none of
-them keeps a copy of one. A node holds a single `warpnet.PeerStandings`,
+them keeps a copy of one. A node holds a single `warpnet.PeerLimiter`,
 written by the rating and read by everyone else:
 
 ```go
-// core/rating
-type Enforcer interface{ Apply(standing warpnet.PeerStanding) }
-func (e *Engine) Enforce(enforcers ...Enforcer)
-
-// core/warpnet — the conclusion, in the terms each module acts on
-type PeerStanding struct {
-	PeerID          string
-	ConnTag         int     // core/node: what the peer is worth to the conn manager
-	GossipScore     float64 // core/pubsub: its application-specific gossipsub score
-	LimitMultiplier float64 // core/middleware: the share of a route it may spend
-	AllowedInDHT    bool    // core/dht: whether it stays in the routing table
+// core/warpnet — what a peer may have, in the terms each module acts on
+type PeerLimits struct {
+	PeerID         string
+	ConnTag        int     // core/node: what it is worth to the conn manager
+	GossipScore    float64 // core/pubsub: its application-specific score
+	RateMultiplier float64 // core/middleware: the share of a route it may spend
+	InRoutingTable bool    // core/dht: whether the routing table keeps it
 }
 
-// one per node, handed to the modules that read it and to the engine
-type PeerStandings struct{ ... }
-func (s *PeerStandings) Apply(standing PeerStanding)      // the rating writes
-func (s *PeerStandings) Peer(peerID WarpPeerID) PeerStanding // the modules read
+// one per node: the rating writes it, the modules read it
+type PeerLimiter struct{ ... }
+func (l *PeerLimiter) Limit(limits PeerLimits)
+func (l *PeerLimiter) PeerLimits(peerID WarpPeerID) PeerLimits
+
+// core/rating — where it puts what it decided
+type PeerLimiter interface{ Limit(limits warpnet.PeerLimits) }
+func (e *Engine) Enforce(limiters ...PeerLimiter)
 ```
 
-`engine.Enforce(standings, node)` is the whole wiring: the standings are
-the read model, and the node is there because a connection tag has to be
-pushed to libp2p rather than read from anywhere.
+Each module declares the one question it asks — `middleware.PeerLimitsProvider`,
+`pubsub.PeerScoreProvider`, `dht.PeerAdmissionProvider` — and a node with no
+rating wired up serves, scores and routes every peer in full.
+
+`engine.Enforce(limits, node)` is the whole wiring: the limiter is the read
+model, and the node is there because a connection tag has to be pushed to
+libp2p rather than read from anywhere.
 
 The pass is also what notices a standing that recovered: evidence decays,
 so a peer improves with no event to announce it. A peer nobody has rated
@@ -787,7 +791,7 @@ being rated by its neighbours, and a switch for whether it acts on what
 it sees would only produce a blind free-rider — which contradicts rating
 being an inherent property of a node. The consequences are soft by
 design (§6.4), so there is nothing here that needs arming carefully.
-Every knob in `enforce.go` is a weighting, not a refusal — `LimitMultiplier`
+Every knob in `enforce.go` is a weighting, not a refusal — `RateMultiplier`
 never reaches zero, nothing blocklists — so a mis-set weight costs a peer
 latency, and the caps in §6.3 bound how far a wrong number can carry.
 

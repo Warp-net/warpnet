@@ -100,10 +100,17 @@ type RatingProvider interface {
 	Close() error
 }
 
+// PeerLimiter is what the rating decided each peer may have: the rating
+// writes it, and this node's modules read it.
+type PeerLimiter interface {
+	Limit(limits warpnet.PeerLimits)
+	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+}
+
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
-	Enforce(enforcers ...rating.Enforcer)
+	Enforce(limiters ...rating.PeerLimiter)
 	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
 	Own() (domain.NodeRating, error)
 	Close() error

@@ -67,9 +67,9 @@ type indexedPeer struct {
 	tierKnown bool
 }
 
-// standingMoved reports a tier that differs from the one last announced,
-// and remembers it. A peer whose standing holds is announced once.
-func (p *indexedPeer) standingMoved(tier Tier) bool {
+// tierMoved reports a tier that differs from the one last handed on, and
+// remembers it. A peer whose tier holds is handed on once.
+func (p *indexedPeer) tierMoved(tier Tier) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.tierKnown && p.tier == tier {

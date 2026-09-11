@@ -15,6 +15,14 @@ import (
 // pairingRoute has the tightest bucket, so an allowance shows in it soonest.
 const pairingRoute = event.PRIVATE_POST_PAIR
 
+// limiterOf is the limiter the middleware under test reads.
+func limiterOf(t *testing.T, mw *WarpMiddleware) *warpnet.PeerLimiter {
+	t.Helper()
+	limiter, ok := mw.limits.(*warpnet.PeerLimiter)
+	require.True(t, ok, "the middleware under test reads a real limiter")
+	return limiter
+}
+
 // spend counts how many requests a peer gets through before its bucket runs out.
 func spend(t *testing.T, mw *WarpMiddleware, local, remote warpnet.WarpPeerID) int {
 	t.Helper()
@@ -28,13 +36,13 @@ func spend(t *testing.T, mw *WarpMiddleware, local, remote warpnet.WarpPeerID) i
 	return allowed
 }
 
-func TestAPeerInPoorStandingSpendsLess(t *testing.T) {
+func TestATightlyLimitedPeerSpendsLess(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	trusted, _ := newRemotePeer(t)
 	degraded, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	mw.standings.Apply(warpnet.PeerStanding{PeerID: degraded.String(), LimitMultiplier: 0.25})
+	limiterOf(t, mw).Limit(warpnet.PeerLimits{PeerID: degraded.String(), RateMultiplier: 0.25})
 
 	full := spend(t, mw, ownNodeId, trusted)
 	tightened := spend(t, mw, ownNodeId, degraded)
@@ -48,13 +56,13 @@ func TestAPeerNobodyHasRatedSpendsEverything(t *testing.T) {
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	allowance := mw.standings.Peer(peer).LimitMultiplier
+	allowance := peerRateMultiplier(mw.limits, peer)
 	assert.Equal(t, float64(1), allowance)
 	assert.Equal(t, limitPairing, limitPairing.scaled(allowance))
 }
 
 // A peer that filled its bucket at the old allowance must not keep it.
-func TestANewStandingDropsTheBucketsFilledUnderTheOldOne(t *testing.T) {
+func TestNewLimitsDropTheBucketsFilledUnderTheOldOnes(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
@@ -62,25 +70,25 @@ func TestANewStandingDropsTheBucketsFilledUnderTheOldOne(t *testing.T) {
 	require.Positive(t, spend(t, mw, ownNodeId, peer), "the peer drains its bucket")
 	require.Zero(t, spend(t, mw, ownNodeId, peer), "and it stays drained")
 
-	mw.standings.Apply(warpnet.PeerStanding{PeerID: peer.String(), LimitMultiplier: 0.5})
+	limiterOf(t, mw).Limit(warpnet.PeerLimits{PeerID: peer.String(), RateMultiplier: 0.5})
 
 	assert.Positive(t, spend(t, mw, ownNodeId, peer),
-		"a peer whose standing changed is measured against the allowance it has now")
+		"a peer whose limits changed is measured against the allowance it has now")
 }
 
-func TestTheSameStandingTwiceKeepsTheBucket(t *testing.T) {
+func TestTheSameLimitsTwiceKeepTheBucket(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	standing := warpnet.PeerStanding{PeerID: peer.String(), LimitMultiplier: 0.5}
-	mw.standings.Apply(standing)
+	limits := warpnet.PeerLimits{PeerID: peer.String(), RateMultiplier: 0.5}
+	limiterOf(t, mw).Limit(limits)
 
 	require.Positive(t, spend(t, mw, ownNodeId, peer))
 
-	mw.standings.Apply(standing) // unchanged: nothing to reset
+	limiterOf(t, mw).Limit(limits) // unchanged: nothing to reset
 	assert.Zero(t, spend(t, mw, ownNodeId, peer),
-		"an unchanged standing must not hand a peer a fresh bucket")
+		"limits that did not change must not hand a peer a fresh bucket")
 }
 
 func TestScaleNeverStarvesAPeer(t *testing.T) {
@@ -89,12 +97,12 @@ func TestScaleNeverStarvesAPeer(t *testing.T) {
 	assert.EqualValues(t, 1, tightest.perMinute)
 }
 
-func TestAMiddlewareWithNoStandingsServesEveryPeerInFull(t *testing.T) {
+func TestAMiddlewareWithNoLimiterServesEveryPeerInFull(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	mw := &WarpMiddleware{ownNodeId: ownNodeId, rateLimiters: newRateLimitersCache()}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 
-	assert.Equal(t, float64(1), mw.standings.Peer(peer).LimitMultiplier)
+	assert.Equal(t, float64(1), peerRateMultiplier(mw.limits, peer))
 	assert.Positive(t, spend(t, mw, ownNodeId, peer))
 }

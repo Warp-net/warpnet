@@ -60,10 +60,10 @@ type moderatorPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSub(ctx context.Context, standings *warpnet.PeerStandings) *moderatorPubSub {
+func NewPubSub(ctx context.Context, limits pubsub.PeerScoreProvider) *moderatorPubSub {
 	mps := &moderatorPubSub{}
 
-	mps.pubsub = pubsub.NewGossip(ctx, standings, pubsub.NewDiscoveryRelayTopicHandler())
+	mps.pubsub = pubsub.NewGossip(ctx, limits, pubsub.NewDiscoveryRelayTopicHandler())
 	return mps
 }
 

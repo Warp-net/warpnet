@@ -62,13 +62,13 @@ type MemberPubSub struct {
 }
 
 func NewPubSub(
-	ctx context.Context, standings *warpnet.PeerStandings, handlers ...pubsub.TopicHandler,
+	ctx context.Context, limits pubsub.PeerScoreProvider, handlers ...pubsub.TopicHandler,
 ) *MemberPubSub {
 	mps := &MemberPubSub{
 		ctx: ctx,
 	}
 
-	mps.pubsub = pubsub.NewGossip(ctx, standings, handlers...)
+	mps.pubsub = pubsub.NewGossip(ctx, limits, handlers...)
 	return mps
 }
 

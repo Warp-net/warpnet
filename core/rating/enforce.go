@@ -62,9 +62,9 @@ func (t Tier) GossipScore() float64 {
 	}
 }
 
-// LimitMultiplier scales a route's burst and per-minute allowance. It never
+// RateMultiplier scales a route's burst and per-minute allowance. It never
 // reaches zero: a low tier slows a peer down, it does not refuse it service.
-func (t Tier) LimitMultiplier() float64 {
+func (t Tier) RateMultiplier() float64 {
 	switch t {
 	case TierTrusted:
 		return 1
@@ -79,7 +79,7 @@ func (t Tier) LimitMultiplier() float64 {
 	}
 }
 
-// AllowedInDHT reports whether peers of this tier stay in the routing table.
-func (t Tier) AllowedInDHT() bool {
+// InRoutingTable reports whether peers of this tier stay in the DHT.
+func (t Tier) InRoutingTable() bool {
 	return t != TierFloor
 }

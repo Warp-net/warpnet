@@ -82,7 +82,13 @@ type Gossip struct {
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
 
-	standings *warpnet.PeerStandings
+	limits PeerScoreProvider
+}
+
+// PeerScoreProvider is what gossipsub asks of a peer on every scoring
+// pass: the application-specific score to weigh it by.
+type PeerScoreProvider interface {
+	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
 }
 
 const (
@@ -93,13 +99,20 @@ const (
 	publishThreshold  = -50
 )
 
-// scoreOptions weigh a peer by where it stands and nothing else: the rest
-// of gossipsub's own scoring stays at its defaults.
+// peerScore is what gossipsub weighs a peer by. A node with no rating
+// wired up scores every peer the same.
+func (g *Gossip) peerScore(peerID warpnet.WarpPeerID) float64 {
+	if g == nil || g.limits == nil {
+		return 0
+	}
+	return g.limits.PeerLimits(peerID).GossipScore
+}
+
+// scoreOptions weigh a peer by what it may have and nothing else: the
+// rest of gossipsub's own scoring stays at its defaults.
 func (g *Gossip) scoreOptions() []pubsub.Option {
 	params := &pubsub.PeerScoreParams{
-		AppSpecificScore: func(p warpnet.WarpPeerID) float64 {
-			return g.standings.Peer(p).GossipScore
-		},
+		AppSpecificScore:  g.peerScore,
 		AppSpecificWeight: 1,
 		DecayInterval:     time.Minute,
 		DecayToZero:       0.01,
@@ -121,7 +134,7 @@ type TopicHandler struct {
 
 func NewGossip(
 	ctx context.Context,
-	standings *warpnet.PeerStandings,
+	limits PeerScoreProvider,
 	handlers ...TopicHandler,
 ) *Gossip {
 	handlersMap := make(map[string]topicHandler)
@@ -131,7 +144,7 @@ func NewGossip(
 
 	return &Gossip{
 		ctx:              ctx,
-		standings:        standings,
+		limits:           limits,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		handlersMap:      handlersMap,

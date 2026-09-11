@@ -51,10 +51,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// PeerLimiter is what the rating decided each peer may have: the rating
+// writes it, and this node's modules read it.
+type PeerLimiter interface {
+	Limit(limits warpnet.PeerLimits)
+	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+}
+
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
-	Enforce(enforcers ...rating.Enforcer)
+	Enforce(limiters ...rating.PeerLimiter)
 	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
 	Own() (domain.NodeRating, error)
 	Close() error
@@ -100,7 +107,7 @@ type ModeratorNode struct {
 	ratingStore RatingProvider
 	ratingDb    RatingStorer
 	rating      PeerRater
-	standings   *warpnet.PeerStandings
+	limits      PeerLimiter
 
 	memoryStoreCloseF func() error
 
@@ -116,7 +123,7 @@ func NewModeratorNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	standings *warpnet.PeerStandings,
+	limits PeerLimiter,
 ) (_ *ModeratorNode, err error) {
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
@@ -141,7 +148,7 @@ func NewModeratorNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.Standings(standings),
+		dht.PeerLimits(limits),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
 	)
@@ -166,7 +173,7 @@ func NewModeratorNode(
 		ctx:               ctx,
 		dHashTable:        dHashTable,
 		ratingStore:       ratingStore,
-		standings:         standings,
+		limits:            limits,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -188,7 +195,7 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.standings)
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.limits)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -237,7 +244,7 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 	}
 
 	mn.rating.Listen(mn.node.Event(), mn.mw.Event(), audit)
-	mn.rating.Enforce(mn.standings, mn.node)
+	mn.rating.Enforce(mn.limits, mn.node)
 	return nil
 }
 

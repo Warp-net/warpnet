@@ -66,10 +66,17 @@ type PubSubProvider interface {
 	OwnerID() string
 }
 
+// PeerLimiter is what the rating decided each peer may have: the rating
+// writes it, and this node's modules read it.
+type PeerLimiter interface {
+	Limit(limits warpnet.PeerLimits)
+	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+}
+
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
-	Enforce(enforcers ...rating.Enforcer)
+	Enforce(limiters ...rating.PeerLimiter)
 	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
 	Own() (domain.NodeRating, error)
 	Close() error
@@ -113,7 +120,7 @@ type RelayNode struct {
 	ratingStore       RatingProvider
 	ratingDb          RatingStorer
 	rating            PeerRater
-	standings         *warpnet.PeerStandings
+	limits            PeerLimiter
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -129,12 +136,12 @@ func NewRelayNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 
-	standings := warpnet.NewPeerStandings()
+	limits := warpnet.NewPeerLimiter()
 	discService := discovery.NewRelayDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
-		standings,
+		limits,
 		pubsub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 
@@ -161,7 +168,7 @@ func NewRelayNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.Standings(standings),
+		dht.PeerLimits(limits),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
@@ -194,7 +201,7 @@ func NewRelayNode(
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
 		ratingStore:       ratingStore,
-		standings:         standings,
+		limits:            limits,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -265,7 +272,7 @@ func (rn *RelayNode) startRating() error {
 	}
 
 	rn.rating.Listen(rn.node.Event(), rn.mw.Event(), rn.discService.Event())
-	rn.rating.Enforce(rn.standings, rn.node)
+	rn.rating.Enforce(rn.limits, rn.node)
 	return nil
 }
 
@@ -274,7 +281,7 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.standings)
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.limits)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

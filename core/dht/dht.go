@@ -122,6 +122,15 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 	}
 }
 
+// admits reports a peer the routing table may hold. A node with no rating
+// wired up holds every peer it finds.
+func (d *distributedHashTable) admits(peerID warpnet.WarpPeerID) bool {
+	if d == nil || d.cfg.limits == nil {
+		return true
+	}
+	return d.cfg.limits.PeerLimits(peerID).InRoutingTable
+}
+
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
 	if d.cfg.network == "" {
 		panic("no network set")
@@ -136,12 +145,8 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	d.dht, err = dht.New(
 		d.ctx, n,
-		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool {
-			return d.cfg.standings.Peer(p).AllowedInDHT
-		}),
-		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool {
-			return d.cfg.standings.Peer(ai.ID).AllowedInDHT
-		}),
+		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool { return d.admits(p) }),
+		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool { return d.admits(ai.ID) }),
 		dht.Mode(dht.ModeAuto),
 		dht.ProtocolPrefix(protocol.ID("/"+d.cfg.network)),
 		dht.Datastore(d.cfg.store),

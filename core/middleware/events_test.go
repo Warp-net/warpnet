@@ -128,7 +128,7 @@ func TestAuthMiddlewareReportsWhatItRefused(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mw := NewWarpMiddleware(ownNodeId, nil, warpnet.NewPeerStandings())
+			mw := NewWarpMiddleware(ownNodeId, nil, warpnet.NewPeerLimiter())
 			t.Cleanup(mw.Close)
 
 			callAuth(t, mw, ownNodeId, peer, tc.route, tc.payload(t))
@@ -144,7 +144,7 @@ func TestAuthMiddlewareReportsWhatItRefused(t *testing.T) {
 
 func TestAuthMiddlewareReportsNothingAboutASelfStream(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, warpnet.NewPeerStandings())
+	mw := NewWarpMiddleware(ownNodeId, nil, warpnet.NewPeerLimiter())
 	t.Cleanup(mw.Close)
 
 	callAuth(t, mw, ownNodeId, ownNodeId, "/public/post/tweet/0.0.0", []byte("{"))
