@@ -568,41 +568,42 @@ func (t Tier) RateMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
 func (t Tier) InRoutingTable() bool    // false only for TierFloor
 ```
 
-A module never reads a score, a tier or the rating at all, and none of
-them keeps a copy of one. A node holds a single `warpnet.PeerLimiter`,
-written by the rating and read by everyone else:
+A module never reads a score, and none of them keeps rating state of its
+own. The engine records each peer's tier in one `rating.PeerTiers`, and
+every module asks it the single question it acts on:
 
 ```go
-// core/warpnet — what a peer may have, in the terms each module acts on
-type PeerLimits struct {
-	PeerID         string
-	ConnTag        int     // core/node: what it is worth to the conn manager
-	GossipScore    float64 // core/pubsub: its application-specific score
-	RateMultiplier float64 // core/middleware: the share of a route it may spend
-	InRoutingTable bool    // core/dht: whether the routing table keeps it
-}
+// core/rating — the engine writes here as ratings move
+type PeerTiers struct{ ... }
+func (t *PeerTiers) Set(peerID warpnet.WarpPeerID, tier Tier)
+func (t *PeerTiers) Tier(peerID warpnet.WarpPeerID) Tier
+func (t *PeerTiers) ConnTag(peerID warpnet.WarpPeerID) int
+func (t *PeerTiers) GossipScore(peerID warpnet.WarpPeerID) float64
+func (t *PeerTiers) RateMultiplier(peerID warpnet.WarpPeerID) float64
+func (t *PeerTiers) InRoutingTable(peerID warpnet.WarpPeerID) bool
 
-// one per node: the rating writes it, the modules read it
-type PeerLimiter struct{ ... }
-func (l *PeerLimiter) Limit(limits PeerLimits)
-func (l *PeerLimiter) PeerLimits(peerID WarpPeerID) PeerLimits
-
-// core/rating — where it puts what it decided
-type PeerLimiter interface{ Limit(limits warpnet.PeerLimits) }
-func (e *Engine) Enforce(limiters ...PeerLimiter)
+type TierSetter interface{ Set(peerID warpnet.WarpPeerID, tier Tier) }
+func WithTiers(tiers TierSetter) Option   // the whole wiring
 ```
 
-Each module declares the one question it asks — `middleware.PeerLimitsProvider`,
-`pubsub.PeerScoreProvider`, `dht.PeerAdmissionProvider` — and a node with no
-rating wired up serves, scores and routes every peer in full.
+Each module declares the one question, in its own terms, and imports
+nothing of the rating to ask it:
 
-`engine.Enforce(limits, node)` is the whole wiring: the limiter is the read
-model, and the node is there because a connection tag has to be pushed to
-libp2p rather than read from anywhere.
+| module | interface | asks |
+|---|---|---|
+| `core/middleware` | `PeerRateMultiplier` | how much of a route this peer may spend |
+| `core/pubsub` | `PeerGossipScorer` | what gossipsub should weigh it by |
+| `core/dht` | `PeerAdmitter` | whether the routing table may hold it |
+| `core/node` | `PeerConnTagger` | what it is worth to the connection manager |
 
-The pass is also what notices a standing that recovered: evidence decays,
+A node with no rating wired up serves, scores, routes and keeps every peer
+in full: each of those readers answers for it. The connection tag is the
+one that is pushed rather than read, because libp2p holds it: the node
+sets it whenever a peer connects.
+
+The pass is also what notices a rating that recovered: evidence decays,
 so a peer improves with no event to announce it. A peer nobody has rated
-is never announced, and every module treats it as being in good standing.
+is never recorded, and every module treats it as trusted.
 
 | Surface | Change | File |
 |---|---|---|

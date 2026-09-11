@@ -122,17 +122,19 @@ type WalletAddressProvider interface {
 	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
 }
 
-// PeerLimiter is what the rating decided each peer may have: the rating
-// writes it, and this node's modules read it.
-type PeerLimiter interface {
-	Limit(limits warpnet.PeerLimits)
-	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+// PeerTiers is how the rating rates each peer: the engine writes it, and
+// this node's modules read what follows from it.
+type PeerTiers interface {
+	Set(peerID warpnet.WarpPeerID, tier rating.Tier)
+	ConnTag(peerID warpnet.WarpPeerID) int
+	GossipScore(peerID warpnet.WarpPeerID) float64
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	InRoutingTable(peerID warpnet.WarpPeerID) bool
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
-	Enforce(limiters ...rating.PeerLimiter)
 	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
 	Own() (domain.NodeRating, error)
 	Close() error

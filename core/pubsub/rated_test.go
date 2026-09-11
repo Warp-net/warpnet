@@ -14,6 +14,13 @@ import (
 
 const scoredPeer = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
 
+// scoring answers what it was told to score a peer.
+type scoring map[string]float64
+
+func (s scoring) GossipScore(peerID warpnet.WarpPeerID) float64 {
+	return s[peerID.String()]
+}
+
 // scoredBy is what gossipsub weighs a peer by on every scoring pass.
 func scoredBy(t *testing.T, g *Gossip, peerID warpnet.WarpPeerID) float64 {
 	t.Helper()
@@ -23,28 +30,28 @@ func scoredBy(t *testing.T, g *Gossip, peerID warpnet.WarpPeerID) float64 {
 }
 
 func TestAPeerNobodyHasRatedScoresLikeAnyOther(t *testing.T) {
-	g := NewGossip(context.Background(), warpnet.NewPeerLimiter())
+	g := NewGossip(context.Background(), scoring{})
 
 	assert.Equal(t, float64(0), scoredBy(t, g, warpnet.FromStringToPeerID(scoredPeer)))
 }
 
-func TestAPeerScoresWhatItsLimitsSay(t *testing.T) {
-	limits := warpnet.NewPeerLimiter()
-	g := NewGossip(context.Background(), limits)
+func TestAPeerScoresWhatItsRatingSays(t *testing.T) {
+	scores := scoring{}
+	g := NewGossip(context.Background(), scores)
 	peerID := warpnet.FromStringToPeerID(scoredPeer)
 
-	limits.Limit(warpnet.PeerLimits{PeerID: scoredPeer, GossipScore: -60})
+	scores[scoredPeer] = -60
 	assert.Equal(t, float64(-60), scoredBy(t, g, peerID))
 
-	limits.Limit(warpnet.PeerLimits{PeerID: scoredPeer, GossipScore: 0})
-	assert.Equal(t, float64(0), scoredBy(t, g, peerID), "a score that recovers is weighed again")
+	scores[scoredPeer] = 0
+	assert.Equal(t, float64(0), scoredBy(t, g, peerID), "a rating that recovers is weighed again")
 }
 
 // Only a peer this node witnessed misbehaving itself goes low enough to
 // be graylisted; remote evidence alone cannot take it there.
 func TestOnlyTheWorstScoreIsGraylisted(t *testing.T) {
-	limits := warpnet.NewPeerLimiter()
-	g := NewGossip(context.Background(), limits)
+	scores := scoring{}
+	g := NewGossip(context.Background(), scores)
 	peerID := warpnet.FromStringToPeerID(scoredPeer)
 
 	for _, tc := range []struct {
@@ -56,12 +63,12 @@ func TestOnlyTheWorstScoreIsGraylisted(t *testing.T) {
 		{score: -60, graylists: false},
 		{score: -200, graylists: true},
 	} {
-		limits.Limit(warpnet.PeerLimits{PeerID: scoredPeer, GossipScore: tc.score})
+		scores[scoredPeer] = tc.score
 		assert.Equal(t, tc.graylists, scoredBy(t, g, peerID) < graylistThreshold, "score %v", tc.score)
 	}
 }
 
-func TestAGossipWithNoLimiterScoresEveryPeerTheSame(t *testing.T) {
+func TestAGossipWithNoRatingScoresEveryPeerTheSame(t *testing.T) {
 	g := NewGossip(context.Background(), nil)
 
 	assert.Equal(t, float64(0), scoredBy(t, g, warpnet.FromStringToPeerID(scoredPeer)))

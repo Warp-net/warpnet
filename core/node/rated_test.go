@@ -12,6 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const taggedPeer = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
+
+// worth answers what it was told a peer is worth to the connection manager.
+type worth map[string]int
+
+func (w worth) ConnTag(peerID warpnet.WarpPeerID) int { return w[peerID.String()] }
+
 // taggingPrioritizer records what a node decided a peer is worth.
 type taggingPrioritizer struct {
 	mu   sync.Mutex
@@ -39,32 +46,36 @@ func (p *taggingPrioritizer) SetPriority(warpnet.WarpPeerID, warpnet.WarpReachab
 func (p *taggingPrioritizer) SetMinPriority(warpnet.WarpPeerID)                        {}
 func (p *taggingPrioritizer) SetMaxPriority(warpnet.WarpPeerID)                        {}
 
-func TestAStandingIsWhatAPeerIsWorthToTheConnectionManager(t *testing.T) {
+func TestAPeerIsWorthToTheConnectionManagerWhatItIsRated(t *testing.T) {
 	prioritizer := newTaggingPrioritizer()
-	n := &WarpNode{prioritizer: prioritizer}
-	peerID := warpnet.FromStringToPeerID("12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo")
+	rated := worth{taggedPeer: 10}
+	n := &WarpNode{prioritizer: prioritizer, rated: rated}
+	peerID := warpnet.FromStringToPeerID(taggedPeer)
 
-	n.Limit(warpnet.PeerLimits{PeerID: peerID.String(), ConnTag: 10})
+	n.tagByRating(peerID)
 
 	tag, ok := prioritizer.tagged(peerID)
 	require.True(t, ok)
 	assert.Equal(t, 10, tag)
 
-	n.Limit(warpnet.PeerLimits{PeerID: peerID.String(), ConnTag: 60})
+	rated[taggedPeer] = 60
+	n.tagByRating(peerID)
 	tag, _ = prioritizer.tagged(peerID)
-	assert.Equal(t, 60, tag, "a standing that recovers is worth more again")
+	assert.Equal(t, 60, tag, "a rating that recovers is worth more again")
 }
 
-func TestApplyIgnoresAStandingThatNamesNoPeer(t *testing.T) {
+func TestANodeWithNoRatingTagsNobody(t *testing.T) {
 	prioritizer := newTaggingPrioritizer()
+	peerID := warpnet.FromStringToPeerID(taggedPeer)
+
 	n := &WarpNode{prioritizer: prioritizer}
+	n.tagByRating(peerID)
+	assert.Empty(t, prioritizer.tags, "a node with no rating leaves the tag alone")
 
-	n.Limit(warpnet.PeerLimits{ConnTag: 1})
-	n.Limit(warpnet.PeerLimits{PeerID: "not-a-peer-id", ConnTag: 1})
-
-	assert.Empty(t, prioritizer.tags)
+	rated := &WarpNode{prioritizer: prioritizer, rated: worth{}}
+	rated.tagByRating("")
+	assert.Empty(t, prioritizer.tags, "and a peer with no id is nobody to tag")
 
 	var nilNode *WarpNode
-	assert.NotPanics(t, func() { nilNode.Limit(warpnet.PeerLimits{PeerID: "peer", ConnTag: 1}) })
-	assert.NotPanics(t, func() { (&WarpNode{}).Limit(warpnet.PeerLimits{PeerID: "peer"}) })
+	assert.NotPanics(t, func() { nilNode.tagByRating(peerID) })
 }

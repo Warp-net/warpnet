@@ -86,11 +86,10 @@ const (
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
-// PeerLimiter is where the rating puts what it decided a peer may have.
-// Whoever holds the limits implements it, and never needs to know how
-// they were arrived at.
-type PeerLimiter interface {
-	Limit(limits warpnet.PeerLimits)
+// TierSetter is where the engine records how it rates a peer, for the
+// modules that act on it to read.
+type TierSetter interface {
+	Set(peerID warpnet.WarpPeerID, tier Tier)
 }
 
 // Storer is the replicated record store; ratingstore.Store satisfies it.
@@ -117,6 +116,14 @@ func WithClock(now func() time.Time) Option {
 		if now != nil {
 			e.now = now
 		}
+	}
+}
+
+// WithTiers is where the engine records how it rates a peer. Without it
+// a node observes and replicates, and enforces nothing.
+func WithTiers(tiers TierSetter) Option {
+	return func(e *Engine) {
+		e.tiers = tiers
 	}
 }
 
@@ -159,8 +166,7 @@ type Engine struct {
 
 	listeners sync.WaitGroup
 
-	limitersMu sync.RWMutex
-	limiters   []PeerLimiter
+	tiers TierSetter
 
 	mu       sync.Mutex
 	counters map[pendingKey]counts
@@ -334,51 +340,31 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 	return nil
 }
 
-// Enforce hands what every peer may have to whoever holds the limits, for
-// as long as the engine runs.
-func (e *Engine) Enforce(limiters ...PeerLimiter) {
-	if e == nil {
-		return
-	}
-	e.limitersMu.Lock()
-	defer e.limitersMu.Unlock()
-	for _, limiter := range limiters {
-		if limiter != nil {
-			e.limiters = append(e.limiters, limiter)
-		}
-	}
-}
-
-// publishLimits hands on the peers whose tier has moved. Evidence decays,
-// so a peer recovers with time and no event to report it: this pass is
-// where that is noticed.
-func (e *Engine) publishLimits() {
-	e.limitersMu.RLock()
-	limiters := e.limiters
-	e.limitersMu.RUnlock()
-	if len(limiters) == 0 {
-		return
+// rateAll records the peers whose rating has moved. Evidence decays, so a
+// peer recovers with time and no event to report it: this pass is where
+// that is noticed.
+func (e *Engine) rateAll() error {
+	if e.tiers == nil {
+		return nil
 	}
 
-	e.index.each(func(peerID string, p *indexedPeer) {
-		if es, _ := p.entries(); len(es) == 0 {
-			return // nothing has ever been said about this peer
+	var errs []error
+	for _, p := range e.index.rated() {
+		peerID := warpnet.FromStringToPeerID(p.peerID)
+		if peerID == "" {
+			errs = append(errs, fmt.Errorf("%w: %s", ErrEmptyPeer, p.peerID))
+			continue
 		}
-		tier := e.Score(warpnet.FromStringToPeerID(peerID)).Tier()
-		if !p.tierMoved(tier) {
-			return
+		entries, _ := p.entries()
+		if len(entries) == 0 {
+			continue // nothing has ever been said about this peer
 		}
-		limits := warpnet.PeerLimits{
-			PeerID:         peerID,
-			ConnTag:        tier.ConnTag(),
-			GossipScore:    tier.GossipScore(),
-			RateMultiplier: tier.RateMultiplier(),
-			InRoutingTable: tier.InRoutingTable(),
+		tier := e.Score(peerID).Tier()
+		if p.tierMoved(tier) {
+			e.tiers.Set(peerID, tier)
 		}
-		for _, limiter := range limiters {
-			limiter.Limit(limits)
-		}
-	})
+	}
+	return errors.Join(errs...)
 }
 
 // Score is this node's own view of a peer: the minimum over the
@@ -646,7 +632,9 @@ func (e *Engine) run() {
 			if err := e.flush(); err != nil {
 				log.Errorf("rating: flush: %v", err)
 			}
-			e.publishLimits()
+			if err := e.rateAll(); err != nil {
+				log.Errorf("rating: rating the peers observed: %v", err)
+			}
 			if e.now().Sub(lastGC) >= gcInterval {
 				e.gc()
 				lastGC = e.now()

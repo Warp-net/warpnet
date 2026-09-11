@@ -13,26 +13,32 @@ import (
 
 const ratedPeer = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
 
+// refusing admits every peer but the ones it was told to refuse.
+type refusing map[string]bool
+
+func (r refusing) InRoutingTable(peerID warpnet.WarpPeerID) bool {
+	return !r[peerID.String()]
+}
+
 func TestAPeerNobodyHasRatedIsAdmitted(t *testing.T) {
-	d := NewDHTable(context.Background(), RoutingStore(memStore()), PeerLimits(warpnet.NewPeerLimiter()))
+	d := NewDHTable(context.Background(), RoutingStore(memStore()), Rated(refusing{}))
 
 	assert.True(t, d.admits(warpnet.FromStringToPeerID(ratedPeer)),
 		"the rating only ever takes peers out of the routing table")
 }
 
-func TestAPeerAtTheFloorIsKeptOutAndLetBackIn(t *testing.T) {
-	limiter := warpnet.NewPeerLimiter()
-	d := NewDHTable(context.Background(), RoutingStore(memStore()), PeerLimits(limiter))
+func TestAPeerAtTheFloorIsKeptOut(t *testing.T) {
+	refused := refusing{ratedPeer: true}
+	d := NewDHTable(context.Background(), RoutingStore(memStore()), Rated(refused))
 	peerID := warpnet.FromStringToPeerID(ratedPeer)
 
-	limiter.Limit(warpnet.PeerLimits{PeerID: ratedPeer, InRoutingTable: false})
 	assert.False(t, d.admits(peerID))
 
-	limiter.Limit(warpnet.PeerLimits{PeerID: ratedPeer, InRoutingTable: true})
-	assert.True(t, d.admits(peerID), "a standing that recovers lets the peer back in")
+	refused[ratedPeer] = false
+	assert.True(t, d.admits(peerID), "a rating that recovers lets the peer back in")
 }
 
-func TestATableWithNoLimiterAdmitsEveryPeer(t *testing.T) {
+func TestATableWithNoRatingAdmitsEveryPeer(t *testing.T) {
 	d := NewDHTable(context.Background(), RoutingStore(memStore()))
 
 	assert.True(t, d.admits(warpnet.FromStringToPeerID(ratedPeer)))

@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
@@ -89,8 +90,8 @@ func main() {
 		return
 	}
 
-	limits := warpnet.NewPeerLimiter()
-	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, limits)
+	rated := rating.NewPeerTiers()
+	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, rated)
 	if err != nil {
 		log.Errorf("failed to init moderator node: %v", err)
 		return
@@ -102,7 +103,7 @@ func main() {
 	}
 	defer n.Stop()
 
-	publisher := pubsub.NewPubSub(ctx, limits)
+	publisher := pubsub.NewPubSub(ctx, rated)
 	if err := publisher.Run(n); err != nil {
 		log.Errorf("failed to start moderator pubsub: %v", err)
 		return

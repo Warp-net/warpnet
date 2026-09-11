@@ -43,7 +43,6 @@ func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *Wa
 		ownNodeId:    ownNodeId,
 		rateLimiters: newRateLimitersCache(),
 		events:       warpnet.NewPeerEmitter(),
-		limits:       warpnet.NewPeerLimiter(),
 	}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 	return mw

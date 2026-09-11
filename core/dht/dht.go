@@ -125,10 +125,10 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 // admits reports a peer the routing table may hold. A node with no rating
 // wired up holds every peer it finds.
 func (d *distributedHashTable) admits(peerID warpnet.WarpPeerID) bool {
-	if d == nil || d.cfg.limits == nil {
+	if d == nil || d.cfg.rated == nil {
 		return true
 	}
-	return d.cfg.limits.PeerLimits(peerID).InRoutingTable
+	return d.cfg.rated.InRoutingTable(peerID)
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {

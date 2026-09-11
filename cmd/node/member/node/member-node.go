@@ -79,7 +79,7 @@ type MemberNode struct {
 	statsDb          StatsStorer
 	ratingDb         RatingStorer
 	rating           PeerRater
-	limits           PeerLimiter
+	rated            PeerTiers
 	privKey          ed25519.PrivateKey
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
@@ -125,7 +125,7 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
-	limits := warpnet.NewPeerLimiter()
+	rated := rating.NewPeerTiers()
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
@@ -139,14 +139,14 @@ func NewMemberNode(
 		pubSubHandlers,
 		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
-	pubsubService := memberPubSub.NewPubSub(ctx, limits, pubSubHandlers...)
+	pubsubService := memberPubSub.NewPubSub(ctx, rated, pubSubHandlers...)
 
 	warpNetwork := config.Config().Node.Network
 
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
-		dht.PeerLimits(limits),
+		dht.Rated(rated),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(bootstrapNodes...),
 		dht.Network(warpNetwork),
@@ -183,7 +183,7 @@ func NewMemberNode(
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
-		limits:        limits,
+		rated:         rated,
 		statsRepo:     statsRepo,
 		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
@@ -205,6 +205,7 @@ func NewMemberNode(
 func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
+		m.rated,
 		m.opts...,
 	)
 	if err != nil {
@@ -248,12 +249,13 @@ func (m *MemberNode) Start() (err error) {
 
 	m.rating, err = rating.NewEngine(
 		m.ctx, m.ratingDb, m.node.Node().Network(), m.privKey, warpnet.MemberNode,
+		rating.WithTiers(m.rated),
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.limits)
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.rated)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -262,7 +264,6 @@ func (m *MemberNode) Start() (err error) {
 	)
 
 	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event())
-	m.rating.Enforce(m.limits, m.node)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 

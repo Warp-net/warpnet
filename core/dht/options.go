@@ -28,24 +28,24 @@ import "github.com/Warp-net/warpnet/core/warpnet"
 
 type dhtConfig struct {
 	store                         RoutingStorer
-	limits                        PeerAdmissionProvider
+	rated                         PeerAdmitter
 	addCallbacks, removeCallbacks []func(info warpnet.WarpPeerID)
 	bootstrapNodes                []warpnet.WarpAddrInfo
 	network                       string
 }
 type Option func(*dhtConfig)
 
-// PeerAdmissionProvider is what the routing table asks of a peer before
-// it holds it.
-type PeerAdmissionProvider interface {
-	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+// PeerAdmitter answers whether the routing table may hold a peer, which
+// is the one place a rating refuses rather than slows.
+type PeerAdmitter interface {
+	InRoutingTable(peerID warpnet.WarpPeerID) bool
 }
 
-// PeerLimits is where the routing table reads whether it may hold a peer.
+// Rated is where the routing table reads whether it may hold a peer.
 // Without it every peer is welcome.
-func PeerLimits(limits PeerAdmissionProvider) Option {
+func Rated(rated PeerAdmitter) Option {
 	return func(c *dhtConfig) {
-		c.limits = limits
+		c.rated = rated
 	}
 }
 

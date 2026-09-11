@@ -130,7 +130,7 @@ func (p *WarpMiddleware) bucket(
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
 
-	allowance := peerRateMultiplier(p.limits, remotePeer)
+	allowance := p.allowance(remotePeer)
 	if b, ok := p.rateLimiters.Get(key); ok && b.allowance == allowance {
 		return b
 	}
@@ -141,13 +141,13 @@ func (p *WarpMiddleware) bucket(
 	return b
 }
 
-// peerRateMultiplier is the share of a route a peer may spend. A node with
-// no rating wired up serves every peer in full.
-func peerRateMultiplier(limits PeerLimitsProvider, peerID warpnet.WarpPeerID) float64 {
-	if limits == nil {
+// allowance is the share of a route a peer may spend. A node with no
+// rating wired up serves every peer in full.
+func (p *WarpMiddleware) allowance(peerID warpnet.WarpPeerID) float64 {
+	if p == nil || p.rated == nil {
 		return 1
 	}
-	return limits.PeerLimits(peerID).RateMultiplier
+	return p.rated.RateMultiplier(peerID)
 }
 
 // scaled is what a peer on this allowance may spend of a route's limit,

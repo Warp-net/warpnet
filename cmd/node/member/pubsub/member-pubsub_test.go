@@ -30,6 +30,7 @@ package pubsub
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/core/rating"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func newRunningPubSub(t *testing.T, ownerId string) (*MemberPubSub, *liveConnect
 	t.Cleanup(cancel)
 
 	conn := newConnector(t, ownerId)
-	ps := NewPubSub(ctx, warpnet.NewPeerLimiter())
+	ps := NewPubSub(ctx, rating.NewPeerTiers())
 	ps.Run(conn)
 	t.Cleanup(func() { _ = ps.Close() })
 
@@ -96,7 +97,7 @@ func TestMemberPubSub_NilAndUnstartedAreInert(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ps := NewPubSub(ctx, warpnet.NewPeerLimiter())
+	ps := NewPubSub(ctx, rating.NewPeerTiers())
 	require.NotNil(t, ps.Gossip())
 	assert.False(t, ps.Gossip().IsGossipRunning())
 

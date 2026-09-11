@@ -62,109 +62,105 @@ func TestLimitMultiplierNeverReachesZero(t *testing.T) {
 	}
 }
 
-// recordingLimiter is whoever holds what the rating decided a peer may have.
-type recordingLimiter struct {
-	mu     sync.Mutex
-	limits []warpnet.PeerLimits
+// recordingTiers is where the engine records how it rates a peer.
+type recordingTiers struct {
+	mu    sync.Mutex
+	rated []ratedPeer
 }
 
-func (r *recordingLimiter) Limit(limits warpnet.PeerLimits) {
+type ratedPeer struct {
+	peerID warpnet.WarpPeerID
+	tier   Tier
+}
+
+func (r *recordingTiers) Set(peerID warpnet.WarpPeerID, tier Tier) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.limits = append(r.limits, limits)
+	r.rated = append(r.rated, ratedPeer{peerID: peerID, tier: tier})
 }
 
-func (r *recordingLimiter) handed() []warpnet.PeerLimits {
+func (r *recordingTiers) recorded() []ratedPeer {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]warpnet.PeerLimits(nil), r.limits...)
+	return append([]ratedPeer(nil), r.rated...)
 }
 
-func TestLimitsAreHandedOnWhenTheyMoveAndNotBefore(t *testing.T) {
+func TestARatingIsRecordedWhenItMovesAndNotBefore(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
 	clock := newClock()
-	e := newMemberEngine(t, self, newFakeStore(self.id), clock)
-
-	limiter := &recordingLimiter{}
-	e.Enforce(limiter, nil) // a module with nothing to apply is not a panic
+	tiers := &recordingTiers{}
+	e := newRatingEngine(t, self, newFakeStore(self.id), clock, tiers)
 
 	recordN(t, e, other.id, KindBadSignature, 2) // 1000 -> 500: watched
 	flushNow(t, e)
-	e.publishLimits()
+	require.NoError(t, e.rateAll())
 
-	handed := limiter.handed()
-	require.Len(t, handed, 1)
-	assert.Equal(t, other.id.String(), handed[0].PeerID)
-	assert.Equal(t, TierWatched.RateMultiplier(), handed[0].RateMultiplier)
-	assert.Equal(t, TierWatched.ConnTag(), handed[0].ConnTag)
-	assert.Equal(t, TierWatched.GossipScore(), handed[0].GossipScore)
-	assert.True(t, handed[0].InRoutingTable)
+	recorded := tiers.recorded()
+	require.Len(t, recorded, 1)
+	assert.Equal(t, other.id.String(), recorded[0].peerID.String())
+	assert.Equal(t, TierWatched.RateMultiplier(), recorded[0].tier.RateMultiplier())
+	assert.Equal(t, TierWatched.ConnTag(), recorded[0].tier.ConnTag())
+	assert.Equal(t, TierWatched.GossipScore(), recorded[0].tier.GossipScore())
+	assert.True(t, recorded[0].tier.InRoutingTable())
 
-	e.publishLimits()
-	assert.Len(t, limiter.handed(), 1, "limits that hold are handed on once")
+	require.NoError(t, e.rateAll())
+	assert.Len(t, tiers.recorded(), 1, "limits that hold are recorded on once")
 
 	recordN(t, e, other.id, KindBadSignature, 2) // 500 -> 0: the floor
 	flushNow(t, e)
-	e.publishLimits()
+	require.NoError(t, e.rateAll())
 
-	handed = limiter.handed()
-	require.Len(t, handed, 2, "limits that move are handed on again")
-	assert.Equal(t, TierFloor.RateMultiplier(), handed[1].RateMultiplier)
-	assert.False(t, handed[1].InRoutingTable, "only the floor leaves the routing table")
+	recorded = tiers.recorded()
+	require.Len(t, recorded, 2, "limits that move are recorded on again")
+	assert.Equal(t, TierFloor.RateMultiplier(), recorded[1].tier.RateMultiplier())
+	assert.False(t, recorded[1].tier.InRoutingTable(), "only the floor leaves the routing table")
 }
 
-func TestAPeerNobodyHasObservedIsNeverHandedOn(t *testing.T) {
+func TestAPeerNobodyHasObservedIsNeverRecorded(t *testing.T) {
 	self := newIdentity(t)
 	ghost := newIdentity(t)
 	clock := newClock()
-	e := newMemberEngine(t, self, newFakeStore(self.id), clock)
-
-	limiter := &recordingLimiter{}
-	e.Enforce(limiter)
+	tiers := &recordingTiers{}
+	e := newRatingEngine(t, self, newFakeStore(self.id), clock, tiers)
 
 	require.Equal(t, MaxScore, e.Score(ghost.id)) // indexes it, empty
-	e.publishLimits()
+	require.NoError(t, e.rateAll())
 
-	assert.Empty(t, limiter.handed(), "nothing has been said about this peer, so there is nothing to hand on")
+	assert.Empty(t, tiers.recorded(), "nothing has been said about this peer, so there is nothing to record")
 }
 
 // Evidence decays, so a standing recovers with no event to announce it.
-func TestRecoveredLimitsAreHandedOn(t *testing.T) {
+func TestARecoveredRatingIsRecorded(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
 	clock := newClock()
-	e := newMemberEngine(t, self, newFakeStore(self.id), clock)
-
-	limiter := &recordingLimiter{}
-	e.Enforce(limiter)
+	tiers := &recordingTiers{}
+	e := newRatingEngine(t, self, newFakeStore(self.id), clock, tiers)
 
 	recordN(t, e, other.id, KindBadSignature, 4) // the floor
 	flushNow(t, e)
-	e.publishLimits()
-	require.Len(t, limiter.handed(), 1)
+	require.NoError(t, e.rateAll())
+	require.Len(t, tiers.recorded(), 1)
 
 	clock.advance(Network.Retention())
-	e.publishLimits()
+	require.NoError(t, e.rateAll())
 
-	handed := limiter.handed()
-	require.Len(t, handed, 2)
-	assert.Equal(t, TierTrusted.RateMultiplier(), handed[1].RateMultiplier,
+	recorded := tiers.recorded()
+	require.Len(t, recorded, 2)
+	assert.Equal(t, TierTrusted.RateMultiplier(), recorded[1].tier.RateMultiplier(),
 		"past retention the peer is trusted again")
-	assert.True(t, handed[1].InRoutingTable)
+	assert.True(t, recorded[1].tier.InRoutingTable())
 }
 
-func TestAnEngineWithNoLimiterDoesNothing(t *testing.T) {
+func TestAnEngineWithNowhereToRecordDoesNothing(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
 	clock := newClock()
-	e := newMemberEngine(t, self, newFakeStore(self.id), clock)
+	e := newMemberEngine(t, self, newFakeStore(self.id), clock) // nowhere to record
 
 	recordN(t, e, other.id, KindBadSignature, 2)
 	flushNow(t, e)
 
-	assert.NotPanics(t, func() { e.publishLimits() })
-
-	var nilEngine *Engine
-	assert.NotPanics(t, func() { nilEngine.Enforce(&recordingLimiter{}) })
+	assert.NoError(t, e.rateAll(), "a node that enforces nothing still rates its peers")
 }

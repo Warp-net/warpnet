@@ -51,17 +51,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// PeerLimiter is what the rating decided each peer may have: the rating
-// writes it, and this node's modules read it.
-type PeerLimiter interface {
-	Limit(limits warpnet.PeerLimits)
-	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+// PeerTiers is how the rating rates each peer: the engine writes it, and
+// this node's modules read what follows from it.
+type PeerTiers interface {
+	Set(peerID warpnet.WarpPeerID, tier rating.Tier)
+	ConnTag(peerID warpnet.WarpPeerID) int
+	GossipScore(peerID warpnet.WarpPeerID) float64
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	InRoutingTable(peerID warpnet.WarpPeerID) bool
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
-	Enforce(limiters ...rating.PeerLimiter)
 	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
 	Own() (domain.NodeRating, error)
 	Close() error
@@ -107,7 +109,7 @@ type ModeratorNode struct {
 	ratingStore RatingProvider
 	ratingDb    RatingStorer
 	rating      PeerRater
-	limits      PeerLimiter
+	rated       PeerTiers
 
 	memoryStoreCloseF func() error
 
@@ -123,7 +125,7 @@ func NewModeratorNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	limits PeerLimiter,
+	rated PeerTiers,
 ) (_ *ModeratorNode, err error) {
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
@@ -148,7 +150,7 @@ func NewModeratorNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.PeerLimits(limits),
+		dht.Rated(rated),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
 	)
@@ -173,7 +175,7 @@ func NewModeratorNode(
 		ctx:               ctx,
 		dHashTable:        dHashTable,
 		ratingStore:       ratingStore,
-		limits:            limits,
+		rated:             rated,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -190,12 +192,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.rated, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.limits)
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.rated)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -238,13 +240,13 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 	}
 	mn.rating, err = rating.NewEngine(
 		mn.ctx, mn.ratingDb, mn.node.Node().Network(), mn.privKey, warpnet.ModeratorNode,
+		rating.WithTiers(mn.rated),
 	)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to start rating engine: %w", err)
 	}
 
 	mn.rating.Listen(mn.node.Event(), mn.mw.Event(), audit)
-	mn.rating.Enforce(mn.limits, mn.node)
 	return nil
 }
 

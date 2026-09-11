@@ -72,6 +72,12 @@ type BackoffEnabler interface {
 	Reset(id warpnet.WarpPeerID)
 }
 
+// PeerConnTagger answers what a peer is worth to the connection manager,
+// so that a node under pressure drops the peers it trusts least first.
+type PeerConnTagger interface {
+	ConnTag(peerID warpnet.WarpPeerID) int
+}
+
 type Prioritizer interface {
 	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
 	SetRatingPriority(pid warpnet.WarpPeerID, tag int)
@@ -92,6 +98,7 @@ type WarpNode struct {
 
 	reachability atomic.Int64
 	prioritizer  Prioritizer
+	rated        PeerConnTagger
 	events       warpnet.PeerEmitter
 
 	startTime        time.Time
@@ -102,6 +109,7 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
+	rated PeerConnTagger,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -165,6 +173,7 @@ func NewWarpNode(
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		events:           warpnet.NewPeerEmitter(),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
+		rated:            rated,
 	}
 
 	go wn.trackIncomingEvents()
@@ -347,6 +356,7 @@ func (n *WarpNode) trackIncomingEvents() {
 						n.outbox.NotifyOnline(pid)
 					}
 					n.events.Emit(warpnet.PeerEvent{PeerID: pid, Type: warpnet.PeerConnected})
+					n.tagByRating(typedEvent.Peer)
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
@@ -402,17 +412,14 @@ func (n *WarpNode) trackIncomingEvents() {
 	}
 }
 
-// Limit keeps a peer worth what the rating says it is worth, so that a
-// node under pressure drops the peers it trusts least first.
-func (n *WarpNode) Limit(limits warpnet.PeerLimits) {
-	if n == nil || n.prioritizer == nil {
+// tagByRating is what a peer is worth to the connection manager. A node
+// with no rating wired up leaves the tag alone, and a peer keeps what it
+// was worth when it connected until it connects again.
+func (n *WarpNode) tagByRating(peerID warpnet.WarpPeerID) {
+	if n == nil || n.rated == nil || n.prioritizer == nil || peerID == "" {
 		return
 	}
-	peerID := warpnet.FromStringToPeerID(limits.PeerID)
-	if peerID == "" {
-		return
-	}
-	n.prioritizer.SetRatingPriority(peerID, limits.ConnTag)
+	n.prioritizer.SetRatingPriority(peerID, n.rated.ConnTag(peerID))
 }
 
 // Event is what this node saw its peers do. The channel is never closed.

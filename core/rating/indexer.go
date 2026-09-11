@@ -55,6 +55,8 @@ func (e entry) slot() slot {
 
 // indexedPeer is one peer's complete record set plus its memoised score.
 type indexedPeer struct {
+	peerID string
+
 	mu    sync.Mutex
 	slots map[slot][]kindCount
 	rev   uint64
@@ -158,7 +160,7 @@ func (i *indexer) has(peerID string) bool {
 }
 
 func (i *indexer) add(peerID string) *indexedPeer {
-	p := &indexedPeer{slots: make(map[slot][]kindCount)}
+	p := &indexedPeer{peerID: peerID, slots: make(map[slot][]kindCount)}
 	i.peers.Add(peerID, p)
 	return p
 }
@@ -172,13 +174,16 @@ func (i *indexer) update(peerID string, e entry) {
 	}
 }
 
-// each walks the peers the index holds.
-func (i *indexer) each(fn func(peerID string, p *indexedPeer)) {
-	for _, peerID := range i.peers.Keys() {
+// rated is every peer the index holds.
+func (i *indexer) rated() []*indexedPeer {
+	keys := i.peers.Keys()
+	out := make([]*indexedPeer, 0, len(keys))
+	for _, peerID := range keys {
 		if p, ok := i.peers.Peek(peerID); ok {
-			fn(peerID, p)
+			out = append(out, p)
 		}
 	}
+	return out
 }
 
 func (i *indexer) forget(peerID string) {

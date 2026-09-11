@@ -214,12 +214,16 @@ func acquainted(clock *fixedClock) fakeConns {
 	return fakeConns{opened: clock.Now().Add(-24 * time.Hour)}
 }
 
-func newTestEngine(t *testing.T, self identity, store Storer, clock *fixedClock, nodeType string) *Engine {
+func newTestEngine(
+	t *testing.T, self identity, store Storer, clock *fixedClock, nodeType string, opts ...Option,
+) *Engine {
 	t.Helper()
 	e, err := NewEngine(
 		t.Context(), store, acquainted(clock), self.priv, nodeType,
-		WithClock(clock.Now),
-		WithFlushInterval(time.Hour), // tests drive the flush by hand
+		append([]Option{
+			WithClock(clock.Now),
+			WithFlushInterval(time.Hour), // tests drive the flush by hand
+		}, opts...)...,
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = e.Close() })
@@ -229,6 +233,14 @@ func newTestEngine(t *testing.T, self identity, store Storer, clock *fixedClock,
 func newMemberEngine(t *testing.T, self identity, store Storer, clock *fixedClock) *Engine {
 	t.Helper()
 	return newTestEngine(t, self, store, clock, warpnet.MemberNode)
+}
+
+// newRatingEngine is a member engine that records how it rates its peers.
+func newRatingEngine(
+	t *testing.T, self identity, store Storer, clock *fixedClock, tiers TierSetter,
+) *Engine {
+	t.Helper()
+	return newTestEngine(t, self, store, clock, warpnet.MemberNode, WithTiers(tiers))
 }
 
 // signedRecord builds a valid record from observer about peerID.

@@ -70,17 +70,17 @@ type WarpMiddleware struct {
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
 	events warpnet.PeerEmitter
-	limits PeerLimitsProvider
+	rated  PeerRateMultiplier
 }
 
-// PeerLimitsProvider is what this middleware asks of a peer before it
-// serves it: how much of a route's allowance the peer may spend.
-type PeerLimitsProvider interface {
-	PeerLimits(peerID warpnet.WarpPeerID) warpnet.PeerLimits
+// PeerRateMultiplier answers how much of a route's allowance a peer may
+// spend, which is how a node serves a badly rated peer more slowly.
+type PeerRateMultiplier interface {
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
 }
 
 func NewWarpMiddleware(
-	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, limits PeerLimitsProvider,
+	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, rated PeerRateMultiplier,
 ) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
@@ -89,7 +89,7 @@ func NewWarpMiddleware(
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
 		events:          warpnet.NewPeerEmitter(),
-		limits:          limits,
+		rated:           rated,
 	}
 	return wm
 }

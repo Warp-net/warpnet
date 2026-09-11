@@ -4,6 +4,7 @@ package moderator
 import (
 	"context"
 	"crypto/ed25519"
+	"github.com/Warp-net/warpnet/core/rating"
 	"sync"
 	"testing"
 	"time"
@@ -101,7 +102,7 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		h := newTroikaHost(t)
 		conn := &troikaConnector{host: h}
-		ps := modpubsub.NewPubSub(ctx, warpnet.NewPeerLimiter())
+		ps := modpubsub.NewPubSub(ctx, rating.NewPeerTiers())
 		require.NoError(t, ps.Run(conn))
 		t.Cleanup(func() { _ = ps.Close() })
 
@@ -125,7 +126,7 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	memberHost := newTroikaHost(t)
 	hosts = append(hosts, memberHost)
 	memberConn := &troikaConnector{host: memberHost, ownerId: "reporter-owner"}
-	memberPS := memberpubsub.NewPubSub(ctx, warpnet.NewPeerLimiter())
+	memberPS := memberpubsub.NewPubSub(ctx, rating.NewPeerTiers())
 	memberPS.Run(memberConn)
 	t.Cleanup(func() { _ = memberPS.Close() })
 	require.True(t, memberPS.Gossip().IsGossipRunning())
