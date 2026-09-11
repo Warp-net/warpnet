@@ -3,7 +3,11 @@
 
 package audit
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/Warp-net/warpnet/domain"
+)
 
 // Outcome is the auditor's classification of one challenge exchange.
 type Outcome int
@@ -119,10 +123,35 @@ type PeerReport struct {
 type Ledger struct {
 	mu    sync.Mutex
 	peers map[string]*peerStats
+
+	events chan domain.PeerEvent
 }
 
+// eventsBuffer bounds what the fan-out holds for a rating that is not
+// reading fast enough; past it the oldest observation is simply lost.
+const eventsBuffer = 256
+
 func NewLedger() *Ledger {
-	return &Ledger{peers: make(map[string]*peerStats)}
+	return &Ledger{
+		peers:  make(map[string]*peerStats),
+		events: make(chan domain.PeerEvent, eventsBuffer),
+	}
+}
+
+// Event is what the audit saw the moderators do, for whoever rates them.
+// The channel is never closed, and a slow reader is never waited for.
+func (l *Ledger) Event() <-chan domain.PeerEvent {
+	return l.events
+}
+
+func (l *Ledger) emit(peerID string, t domain.PeerEventType) {
+	if l == nil || l.events == nil || peerID == "" {
+		return
+	}
+	select {
+	case l.events <- domain.PeerEvent{PeerID: peerID, Type: t}:
+	default: // the rating is not worth stalling an audit for
+	}
 }
 
 func (l *Ledger) Record(peerID string, o Outcome) {
@@ -130,12 +159,12 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 		return
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	s, ok := l.peers[peerID]
 	if !ok {
 		s = &peerStats{}
 		l.peers[peerID] = s
 	}
+	before := s.standing()
 	switch o {
 	case OutcomeCorrect:
 		s.correct++
@@ -145,6 +174,22 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 		s.unreachable++
 	case OutcomeInvalid:
 		s.invalid++
+	}
+	after := s.standing()
+	l.mu.Unlock()
+
+	if o == OutcomeUnreachable {
+		l.emit(peerID, domain.PeerAuditUnreachable)
+	}
+	// Only a crossing is reported: a long audit must not grind a peer
+	// down for a conclusion it had already drawn.
+	if after > before {
+		switch after {
+		case StandingSuspect:
+			l.emit(peerID, domain.PeerAuditWrong)
+		case StandingBanned:
+			l.emit(peerID, domain.PeerAuditInvalid)
+		}
 	}
 }
 

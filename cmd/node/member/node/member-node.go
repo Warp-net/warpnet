@@ -33,6 +33,7 @@ import (
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
+	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
 	"github.com/Warp-net/warpnet/core/crdt/statsstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
@@ -42,9 +43,11 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -64,6 +67,7 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
+	ratingRepo       RatingProvider
 	authRepo         AuthProvider
 	userRepo         UserProvider
 	aliasesRepo      AliasesProvider
@@ -71,9 +75,16 @@ type MemberNode struct {
 	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
+	ratingDb         RatingStorer
+	rating           *rating.Engine
+	events           chan domain.PeerEvent
 	privKey          ed25519.PrivateKey
 	ownerId, network string
 }
+
+// eventsBuffer bounds what this node's own fan-out holds for a rating that
+// is not reading fast enough; past it the oldest observation is lost.
+const eventsBuffer = 256
 
 func NewMemberNode(
 	ctx context.Context,
@@ -94,6 +105,7 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
+	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
@@ -161,6 +173,8 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
+		ratingRepo:    ratingRepo,
+		events:        make(chan domain.PeerEvent, eventsBuffer),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -208,6 +222,24 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
+	ratingBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), ratingstore.GossipTopic)
+	if err != nil {
+		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
+	}
+	m.ratingDb, err = ratingstore.New(
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to initialize rating store: %w", err)
+	}
+
+	m.rating, err = rating.NewEngine(
+		m.ctx, m.ratingDb, m.node.Node().Network(), m.privKey, warpnet.MemberNode,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to start rating engine: %w", err)
+	}
+
 	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
@@ -215,6 +247,11 @@ func (m *MemberNode) Start() (err error) {
 		m.mw.AuthMiddleware,
 		m.mw.IdempotencyMiddleware,
 	)
+
+	go m.rating.Listen(m.node.Event())
+	go m.rating.Listen(m.mw.Event())
+	go m.rating.Listen(m.discService.Event())
+	go m.rating.Listen(m.events)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -440,7 +477,9 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
-			handler.StreamModerationResultHandler(m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo),
+			handler.StreamModerationResultHandler(
+				m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo, m.events,
+			),
 		},
 		{
 			event.PUBLIC_POST_REPORT,
@@ -916,6 +955,12 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
+	}
+	if m.rating != nil {
+		_ = m.rating.Close()
+	}
+	if m.ratingDb != nil {
+		_ = m.ratingDb.Close()
 	}
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()

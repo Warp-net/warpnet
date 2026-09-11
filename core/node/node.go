@@ -43,6 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p"
@@ -78,6 +79,10 @@ type Prioritizer interface {
 	SetMaxPriority(pid warpnet.WarpPeerID)
 }
 
+// eventsBuffer bounds what the fan-out holds for a rating that is not
+// reading fast enough; past it the oldest observation is simply lost.
+const eventsBuffer = 256
+
 type WarpNode struct {
 	ctx      context.Context
 	node     warpnet.P2PNode
@@ -91,7 +96,7 @@ type WarpNode struct {
 
 	reachability atomic.Int64
 	prioritizer  Prioritizer
-	events       chan interface{}
+	events       chan domain.PeerEvent
 
 	startTime        time.Time
 	eventsSub        event.Subscription
@@ -162,6 +167,7 @@ func NewWarpNode(
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
+		events:           make(chan domain.PeerEvent, eventsBuffer),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
 	}
 
@@ -241,11 +247,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		data, err := stream.ReadRequest(s)
 		if errors.Is(err, stream.ErrPayloadTooLarge) {
 			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
+			n.emit(s, domain.PeerOversizePayload)
 			_ = s.Reset()
 			return
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
+			n.emit(s, domain.PeerMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
@@ -255,6 +263,9 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		response, err := handler(data, s)
 		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
+		}
+		if errors.Is(err, warpnet.ErrForeignAuthor) {
+			n.emit(s, domain.PeerForeignAuthorship)
 		}
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			clip := data
@@ -339,6 +350,7 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
+					n.publish(typedEvent.Peer, domain.PeerConnected, "")
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
@@ -349,7 +361,6 @@ func (n *WarpNode) trackIncomingEvents() {
 					"node: event: peer %s %v identification failed, reason: %s",
 					pid.String(), addrs, typedEvent.Reason,
 				)
-				n.events <- typedEvent // TODO example
 
 			case event.EvtPeerIdentificationCompleted:
 				pid := typedEvent.Peer.String()
@@ -395,9 +406,33 @@ func (n *WarpNode) trackIncomingEvents() {
 	}
 }
 
-// TODO get offending events from here
-func (n *WarpNode) Event() <-chan interface{} {
+// Event is what this node saw its peers do, for whoever rates them. The
+// channel is never closed, and a slow reader is never waited for.
+func (n *WarpNode) Event() <-chan domain.PeerEvent {
 	return n.events
+}
+
+// emit reports an observation about the stream's remote peer. A self-stream
+// or an unidentified connection names nobody, so it reports nothing.
+func (n *WarpNode) emit(s warpnet.WarpStream, t domain.PeerEventType) {
+	if s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == s.Conn().LocalPeer() {
+		return
+	}
+	n.publish(remote, t, string(s.Protocol()))
+}
+
+func (n *WarpNode) publish(peerID warpnet.WarpPeerID, t domain.PeerEventType, route string) {
+	if n == nil || n.events == nil || peerID == "" {
+		return
+	}
+	select {
+	case n.events <- domain.PeerEvent{PeerID: peerID.String(), Type: t, Route: route}:
+	default: // the rating is not worth stalling a stream for
+	}
 }
 
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {

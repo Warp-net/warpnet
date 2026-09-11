@@ -124,6 +124,10 @@ type Engine struct {
 	conns ConnectionsProvider
 	index *indexer
 
+	flaps       *burst
+	discoveries *burst
+	writes      *burst
+
 	mu       sync.Mutex
 	counters map[pendingKey]counts
 	dirty    map[pendingKey]struct{}
@@ -182,6 +186,9 @@ func NewEngine(
 		counters:      make(map[pendingKey]counts),
 		dirty:         make(map[pendingKey]struct{}),
 		done:          make(chan struct{}),
+		flaps:         newBurst(flapWindow, flapThreshold),
+		discoveries:   newBurst(discoveryWindow, discoveryThreshold),
+		writes:        newBurst(writeFloodWindow, writeFloodThreshold),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -194,10 +201,10 @@ func NewEngine(
 	return e, nil
 }
 
-// Record charges one offence to a peer. It never blocks on the store. A
-// kind this node's role cannot witness is a bug at the call site, not
-// misbehaviour by the peer, so it is logged and dropped.
-func (e *Engine) Record(peerID warpnet.WarpPeerID, kind Kind) {
+// record charges one offence to a peer. It never blocks on the store. A
+// kind this node's role cannot witness is not an offence it can charge:
+// a relay hears about moderation, and says nothing about it.
+func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) {
 	if e == nil {
 		return
 	}
@@ -210,7 +217,6 @@ func (e *Engine) Record(peerID warpnet.WarpPeerID, kind Kind) {
 		return
 	}
 	if !slices.Contains(e.dims, kind.Dimension()) {
-		log.Warnf("rating: this node cannot witness %s (%s dimension)", kind, kind.Dimension())
 		return
 	}
 
@@ -394,7 +400,7 @@ func (e *Engine) onPut(rec domain.RatingRecord) {
 	if err != nil {
 		if isForgery(err) {
 			log.Warnf("rating: observer %s authored an invalid record: %v", rec.ObserverID, err)
-			e.Record(warpnet.FromStringToPeerID(rec.ObserverID), KindForgedRecord)
+			e.record(warpnet.FromStringToPeerID(rec.ObserverID), KindForgedRecord)
 			return
 		}
 		log.Debugf("rating: dropping merged record about %s: %v", rec.PeerID, err)

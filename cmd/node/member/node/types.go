@@ -45,6 +45,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
+	Event() <-chan domain.PeerEvent
 	Close()
 }
 
@@ -84,6 +85,20 @@ type NodeProvider interface {
 
 type StatsProvider interface {
 	datastore.Datastore
+}
+
+type RatingProvider interface {
+	datastore.Datastore
+}
+
+// RatingStorer is the replicated record store the rating engine writes to.
+type RatingStorer interface {
+	Put(rec domain.RatingRecord) error
+	List(peerID string) ([]domain.RatingRecord, error)
+	DeleteExpired(dimension string, beforeBucket int64) error
+	OnPut(hook func(domain.RatingRecord))
+	OnDelete(hook func(domain.RatingRecord))
+	Close() error
 }
 
 type AuthProvider interface {

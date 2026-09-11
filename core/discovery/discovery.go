@@ -102,7 +102,13 @@ type discoveryService struct {
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
+
+	events chan domain.PeerEvent
 }
+
+// eventsBuffer bounds what the fan-out holds for a rating that is not
+// reading fast enough; past it the oldest observation is simply lost.
+const eventsBuffer = 256
 
 //goland:noinspection ALL
 func NewDiscoveryService(
@@ -123,6 +129,7 @@ func NewDiscoveryService(
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
+		events:          make(chan domain.PeerEvent, eventsBuffer),
 	}
 }
 
@@ -135,6 +142,25 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
+		events:          make(chan domain.PeerEvent, eventsBuffer),
+	}
+}
+
+// Event is what discovery saw the peers do, for whoever rates them. The
+// channel is never closed, and a slow reader is never waited for.
+func (s *discoveryService) Event() <-chan domain.PeerEvent {
+	return s.events
+}
+
+// emit reports one observation about a peer. How often a peer may turn up
+// before that is flooding is the rating's call, not discovery's.
+func (s *discoveryService) emit(peerID warpnet.WarpPeerID, t domain.PeerEventType) {
+	if s == nil || s.events == nil || peerID == "" || peerID == s.ownId {
+		return
+	}
+	select {
+	case s.events <- domain.PeerEvent{PeerID: peerID.String(), Type: t}:
+	default: // the rating is not worth stalling discovery for
 	}
 }
 
@@ -214,6 +240,8 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		return
 	}
 
+	s.emit(pi.ID, domain.PeerDiscovered)
+
 	if !s.limiter.Allow() {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
@@ -277,6 +305,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Warnf(
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
+		s.emitDialFailure(pi)
 		return
 	}
 
@@ -376,6 +405,7 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 			"discovery: source '%s': relay handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
+		s.emitDialFailure(pi)
 		return
 	}
 
@@ -398,6 +428,20 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
+}
+
+// emitDialFailure reports a peer that would not answer an address it is
+// known at. A peer we have no address for was never dialled, so it owes
+// nothing for the attempt.
+func (s *discoveryService) emitDialFailure(pi warpnet.WarpAddrInfo) {
+	known := len(pi.Addrs) > 0
+	if !known && s.node != nil && s.node.Peerstore() != nil {
+		known = len(s.node.Peerstore().Addrs(pi.ID)) > 0
+	}
+	if !known {
+		return
+	}
+	s.emit(pi.ID, domain.PeerDialFailure)
 }
 
 const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")
