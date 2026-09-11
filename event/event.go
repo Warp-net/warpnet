@@ -992,9 +992,10 @@ type WalletOwnAddressResponse struct {
 
 // WalletContact defines model for WalletContact.
 type WalletContact struct {
-	Address  string `json:"address"`
-	UserId   string `json:"user_id"`
-	Username string `json:"username"`
+	Address   string `json:"address"`
+	UserId    string `json:"user_id"`
+	Username  string `json:"username"`
+	AvatarKey string `json:"avatar_key,omitempty"`
 }
 
 // WalletContactsEvent defines model for WalletContactsEvent.

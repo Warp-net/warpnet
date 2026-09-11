@@ -8,6 +8,7 @@ vi.mock('@/service/service', () => ({
     getWalletAddress: vi.fn(),
     getWalletHistory: vi.fn(),
     getWalletContacts: vi.fn(),
+    getImage: vi.fn(),
     sendUsdt: vi.fn(),
     exportWalletKey: vi.fn(),
   },
@@ -70,6 +71,7 @@ beforeEach(() => {
   });
   warpnetService.getWalletHistory.mockResolvedValue([]);
   warpnetService.getWalletContacts.mockResolvedValue([]);
+  warpnetService.getImage.mockResolvedValue(null);
 });
 
 describe('Wallet.vue', () => {
@@ -144,7 +146,8 @@ describe('Wallet.vue', () => {
       renderWallet();
       await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(false));
 
-      await fireEvent.update(screen.getByRole('combobox'), 'TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6');
+      await fireEvent.click(screen.getByRole('combobox'));
+      await fireEvent.click(screen.getByRole('option', { name: /Vadim/ }));
       await fireEvent.update(screen.getByPlaceholderText('0.0'), '1');
       await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await vi.waitFor(() => expect(warpnetService.sendUsdt).toHaveBeenCalled());
@@ -163,6 +166,33 @@ describe('Wallet.vue', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('shows each recipient with an avatar and their id', async () => {
+    warpnetService.getWalletContacts.mockResolvedValue([
+      { user_id: 'peer-1', username: 'alice', address: 'TAlice', avatar_key: 'k1' },
+      { user_id: 'peer-2', username: '', address: 'TBob' },
+    ]);
+    warpnetService.getImage.mockResolvedValue('data:image/png;base64,av');
+    renderWallet();
+    await waitFor(() => expect(warpnetService.getImage).toHaveBeenCalled());
+
+    await fireEvent.click(screen.getByRole('combobox'));
+    await waitFor(() => expect(screen.getAllByRole('option')[0].querySelector('img')).toBeTruthy());
+    const options = screen.getAllByRole('option');
+    expect(options.length).toBe(2);
+    expect(options[0].textContent).toContain('alice');
+    expect(options[0].textContent).toContain('peer-1');
+    expect(options[0].querySelector('img').getAttribute('src')).toBe('data:image/png;base64,av');
+    expect(warpnetService.getImage).toHaveBeenCalledWith({ userId: 'peer-1', key: 'k1' });
+
+    expect(options[1].querySelector('img')).toBeNull();
+    expect(options[1].textContent).toContain('peer-2');
+
+    await fireEvent.click(options[0]);
+    expect(screen.queryAllByRole('option').length).toBe(0);
+    expect(screen.getByRole('combobox').textContent).toContain('alice');
+    expect(screen.getByRole('combobox').textContent).toContain('peer-1');
   });
 
   it('clears every section loader once the calls answer', async () => {
