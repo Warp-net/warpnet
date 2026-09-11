@@ -37,8 +37,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -57,8 +59,28 @@ const (
 	minAcquaintance = time.Hour
 )
 
-// Errors NewEngine returns for missing dependencies.
+// Some behaviour is an offence only in numbers: one reconnection is
+// ordinary, a burst of them is not.
 const (
+	flapWindow    = time.Minute
+	flapThreshold = 4
+
+	writeFloodWindow    = 5 * time.Minute
+	writeFloodThreshold = 20
+
+	discoveryWindow    = 10 * time.Minute
+	discoveryThreshold = 32
+
+	burstPeers = 1024
+)
+
+// Errors the engine refuses an observation or a dependency with.
+const (
+	ErrEmptyPeer          = ratingError("observation names no peer")
+	ErrSelfRated          = ratingError("a node cannot rate itself")
+	ErrUnknownKind        = ratingError("unknown offence kind")
+	ErrUnknownEvent       = ratingError("unknown observation")
+	ErrForeignDimension   = ratingError("this node cannot witness that dimension")
 	ErrNilStore           = ratingError("record store is nil")
 	ErrNilConnections     = ratingError("connections provider is nil")
 	ErrPrivateKeyRequired = ratingError("private key is required")
@@ -203,23 +225,23 @@ func NewEngine(
 	return e, nil
 }
 
-// record charges one offence to a peer. It never blocks on the store. A
-// kind this node's role cannot witness is not an offence it can charge:
-// a relay hears about moderation, and says nothing about it.
-func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) {
+// record charges one offence to a peer. It never blocks on the store, and
+// it refuses what this node may not say: a peer it cannot name, itself,
+// or an axis its role cannot witness.
+func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) error {
 	if e == nil {
-		return
+		return nil
 	}
 	id := peerID.String()
-	if id == "" || id == e.self {
-		return
-	}
-	if !kind.Valid() {
-		log.Warnf("rating: unknown offence kind %d for %s", kind, id)
-		return
-	}
-	if !slices.Contains(e.dims, kind.Dimension()) {
-		return
+	switch {
+	case id == "":
+		return ErrEmptyPeer
+	case id == e.self:
+		return ErrSelfRated
+	case !kind.Valid():
+		return fmt.Errorf("%w: %d", ErrUnknownKind, kind)
+	case !slices.Contains(e.dims, kind.Dimension()):
+		return fmt.Errorf("%w: %s", ErrForeignDimension, kind.Dimension())
 	}
 
 	key := pendingKey{peerID: id, dim: kind.Dimension(), bucket: bucketAt(e.now())}
@@ -233,6 +255,73 @@ func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) {
 	c[kind]++
 	e.dirty[key] = struct{}{}
 	e.mu.Unlock()
+	return nil
+}
+
+// Listen charges the peers the modules' fan-outs name. It returns at
+// once; each listener runs until its channel closes or the engine does,
+// and Close waits for them.
+func (e *Engine) Listen(sources ...<-chan warpnet.PeerEvent) {
+	if e == nil || e.ctx.Err() != nil {
+		return
+	}
+	for _, events := range sources {
+		if events == nil {
+			continue
+		}
+		e.listeners.Go(func() { e.listen(events) })
+	}
+}
+
+// listen is the one place an observation's fate is reported: everything
+// below returns its error instead of logging it.
+func (e *Engine) listen(events <-chan warpnet.PeerEvent) {
+	for {
+		select {
+		case <-e.ctx.Done():
+			return
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := e.observe(ev); err != nil {
+				log.Warnf("rating: observing %s of %s: %v", ev.Type, ev.PeerID, err)
+			}
+		}
+	}
+}
+
+// observe turns one observation into the offences it is worth.
+func (e *Engine) observe(ev warpnet.PeerEvent) error {
+	peerID := warpnet.FromStringToPeerID(ev.PeerID)
+	if peerID == "" {
+		return ErrEmptyPeer
+	}
+
+	switch ev.Type {
+	case warpnet.PeerConnected:
+		if e.flaps.reached(ev.PeerID) {
+			return e.record(peerID, KindConnectionFlap)
+		}
+	case warpnet.PeerDiscovered:
+		if e.discoveries.reached(ev.PeerID) {
+			return e.record(peerID, KindDiscoveryFlood)
+		}
+	case warpnet.PeerRateLimited:
+		if err := e.record(peerID, KindRateLimitHit); err != nil {
+			return err
+		}
+		if !stream.WarpRoute(ev.Route).IsGet() && e.writes.reached(ev.PeerID) {
+			return e.record(peerID, KindWriteFlood)
+		}
+	default:
+		kind, ok := ParseKind(string(ev.Type))
+		if !ok {
+			return fmt.Errorf("%w: %s", ErrUnknownEvent, ev.Type)
+		}
+		return e.record(peerID, kind)
+	}
+	return nil
 }
 
 // Score is this node's own view of a peer: the minimum over the
@@ -403,7 +492,9 @@ func (e *Engine) onPut(rec domain.RatingRecord) {
 	if err != nil {
 		if isForgery(err) {
 			log.Warnf("rating: observer %s authored an invalid record: %v", rec.ObserverID, err)
-			e.record(warpnet.FromStringToPeerID(rec.ObserverID), KindForgedRecord)
+			if err := e.record(warpnet.FromStringToPeerID(rec.ObserverID), KindForgedRecord); err != nil {
+				log.Warnf("rating: charging %s for a forged record: %v", rec.ObserverID, err)
+			}
 			return
 		}
 		log.Debugf("rating: dropping merged record about %s: %v", rec.PeerID, err)
@@ -583,4 +674,28 @@ func (e *Engine) gc() {
 			log.Warnf("rating: gc %s: %v", dim, err)
 		}
 	}
+}
+
+// burst counts one observation per peer inside a sliding window.
+type burst struct {
+	mu        sync.Mutex
+	counts    *expirable.LRU[string, int]
+	threshold int
+}
+
+func newBurst(window time.Duration, threshold int) *burst {
+	return &burst{
+		counts:    expirable.NewLRU[string, int](burstPeers, nil, window),
+		threshold: threshold,
+	}
+}
+
+// reached reports the count hitting the threshold, once per window.
+func (b *burst) reached(peerID string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	count, _ := b.counts.Get(peerID)
+	count++
+	b.counts.Add(peerID, count)
+	return count == b.threshold
 }
