@@ -195,6 +195,32 @@ describe('Wallet.vue', () => {
     expect(screen.getByRole('combobox').textContent).toContain('peer-1');
   });
 
+  it('refuses to send from an address that holds no TRX', async () => {
+    warpnetService.getWallet.mockResolvedValue({ ...wallet, trx_balance: '0', activated: false });
+    renderWallet();
+    await waitFor(() => expect(screen.getByText(/holds no TRX/)).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Send' }).disabled).toBe(true);
+  });
+
+  it('does not call a funded address new, and does not promise USDT will activate it', async () => {
+    warpnetService.getWallet.mockResolvedValue({ ...wallet, trx_balance: '0', activated: false });
+    renderWallet();
+    await waitFor(() => expect(screen.getByText('Not activated yet.')).toBeTruthy());
+    const card = screen.getByText('Not activated yet.').parentElement.textContent;
+    expect(card).toContain('activated by incoming TRX');
+    expect(card).not.toContain('no history');
+    expect(card).not.toContain('first incoming transfer');
+  });
+
+  it('still calls an empty address new', async () => {
+    warpnetService.getWallet.mockResolvedValue({
+      ...wallet, usdt_balance: '0', trx_balance: '0', activated: false,
+    });
+    warpnetService.getWalletHistory.mockResolvedValue([]);
+    renderWallet();
+    await waitFor(() => expect(screen.getByText('New wallet.')).toBeTruthy());
+  });
+
   it('clears every section loader once the calls answer', async () => {
     renderWallet();
     await waitFor(() => expect(screen.queryAllByTestId('loader').length).toBe(0));

@@ -29,7 +29,7 @@
             </div>
           </div>
           <p v-if="!loadingWallet && wallet.address" class="text-dark text-sm mt-4 pt-3 border-t border-lighter">
-            <span class="font-semibold">{{ wallet.activated ? 'Existing wallet.' : 'New wallet.' }}</span>
+            <span class="font-semibold">{{ originLead }}</span>
             {{ originText }}
           </p>
         </div>
@@ -111,9 +111,13 @@
             </div>
             <label class="block text-sm text-dark mb-1">Amount (USDT)</label>
             <input v-model="sendAmount" inputmode="decimal" placeholder="0.0" class="w-full mono text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest mb-3" />
-            <button @click="send()" :disabled="sending || loadingAddress" class="text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
+            <button @click="send()" :disabled="sending || loadingWallet || !hasTrx" class="text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
               {{ sending ? 'Sending…' : 'Send' }}
             </button>
+            <p v-if="!loadingWallet && !hasTrx" class="text-red-700 text-sm mt-3">
+              This address holds no TRX. A USDT transfer pays its network fee in TRX, so the network would refuse it.
+              Send some TRX here first.
+            </p>
             <p v-if="sendError" class="text-red-700 mt-3">{{ sendError }}</p>
             <p v-if="sendResult" class="text-green-700 mt-3 break-all">
               Sent. Tx: <a :href="scan('tx', sendResult)" target="_blank" rel="noopener" class="mono underline">{{ sendResult }}</a>
@@ -214,18 +218,34 @@ export default {
     busy() {
       return this.loadingAddress || this.loadingWallet || this.loadingHistory || this.loadingContacts;
     },
+    hasTrx() {
+      return this.units(this.wallet.trx_balance) > 0n;
+    },
+    inUse() {
+      return this.units(this.wallet.usdt_balance) > 0n || this.hasTrx || this.history.length > 0;
+    },
+    originLead() {
+      if (this.wallet.activated) return "Existing wallet.";
+      return this.inUse ? "Not activated yet." : "New wallet.";
+    },
     originText() {
       const net = this.wallet.network || "this network";
-      if (!this.wallet.activated) {
-        return "Warpnet created it automatically from your account: your login and password derive the key, "
-          + "so signing in again always restores the very same address. It has no history on " + net
-          + " yet and becomes active on the first incoming transfer.";
+      const derived = "Warpnet created it automatically from your account: your login and password derive the key, "
+        + "so signing in again always restores the very same address.";
+      if (this.wallet.activated) {
+        const when = this.wallet.created_at
+          ? new Date(this.wallet.created_at).toLocaleDateString()
+          : "";
+        return "This address already exists on " + net + (when ? ", active since " + when : "")
+          + ". Warpnet re-derived it from your account rather than creating a new one, so the funds on it are yours.";
       }
-      const when = this.wallet.created_at
-        ? new Date(this.wallet.created_at).toLocaleDateString()
-        : "";
-      return "This address already exists on " + net + (when ? ", active since " + when : "")
-        + ". Warpnet re-derived it from your account rather than creating a new one, so the funds on it are yours.";
+      if (this.inUse) {
+        return derived + " It already holds funds, but TRON has not activated the account behind it: on " + net
+          + " an address is activated by incoming TRX, and receiving USDT does not do it. Until some TRX arrives,"
+          + " this address cannot pay a network fee, so it can receive but not send.";
+      }
+      return derived + " It becomes active once it receives TRX on " + net
+        + ", which is what pays the network fee on anything it sends.";
     },
   },
   methods: {
@@ -233,6 +253,13 @@ export default {
     scan(kind, value) {
       const base = SCAN[this.wallet.network] || SCAN.testnet;
       return `${base}/${kind === 'tx' ? 'transaction' : 'address'}/${value}`;
+    },
+    units(value) {
+      try {
+        return BigInt(value || "0");
+      } catch {
+        return 0n;
+      }
     },
     format(units, decimals) {
       try {
@@ -368,7 +395,7 @@ export default {
         this.loadHistory();
         this.watchForTransfer(this.sendResult);
       } catch (err) {
-        this.sendError = (err && err.message) || "Transfer failed";
+        this.sendError = (err && (err.message || err.code)) || "Transfer failed";
       } finally {
         this.sending = false;
       }
