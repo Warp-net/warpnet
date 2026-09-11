@@ -152,6 +152,45 @@ func TestGetWalletHandlerNoKey(t *testing.T) {
 	}
 }
 
+func TestGetOwnWalletAddressHandler(t *testing.T) {
+	var balanceCalls int
+	backend := stubWalletBackend{
+		addressFn: func(string) (string, error) { return "TAddr", nil },
+		balanceFn: func(string) (wallet.Account, error) {
+			balanceCalls++
+			return wallet.Account{}, nil
+		},
+	}
+	out, err := StreamGetOwnWalletAddressHandler(ownerAuth(), walletKey(), backend)(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := out.(event.WalletOwnAddressResponse)
+	if resp.Address != "TAddr" || resp.Token != "TXYZ" || resp.Decimals != 6 || resp.Network != "testnet" {
+		t.Fatalf("resp = %+v", resp)
+	}
+	if balanceCalls != 0 {
+		t.Fatalf("balance called %d times: the address route must not touch the chain", balanceCalls)
+	}
+}
+
+func TestGetOwnWalletAddressHandlerNoOwner(t *testing.T) {
+	backend := stubWalletBackend{addressFn: func(string) (string, error) { return "TAddr", nil }}
+	auth := stubWalletOwner{owner: domain.Owner{}}
+	if _, err := StreamGetOwnWalletAddressHandler(auth, walletKey(), backend)(nil, nil); err == nil {
+		t.Fatal("expected an error without an owner")
+	}
+}
+
+func TestGetOwnWalletAddressHandlerBackendFailure(t *testing.T) {
+	backend := stubWalletBackend{
+		addressFn: func(string) (string, error) { return "", warpnet.WarpError("engine unavailable") },
+	}
+	if _, err := StreamGetOwnWalletAddressHandler(ownerAuth(), walletKey(), backend)(nil, nil); err == nil {
+		t.Fatal("expected the backend error to surface")
+	}
+}
+
 func TestWalletSendHandler(t *testing.T) {
 	var gotTo, gotAmount string
 	backend := stubWalletBackend{

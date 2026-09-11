@@ -701,6 +701,10 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamH
 			handler.StreamGetWalletHandler(authRepo, m.privKey, m.walletClient),
 		},
 		{
+			event.PRIVATE_GET_WALLET_ADDRESS,
+			handler.StreamGetOwnWalletAddressHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
 			event.PRIVATE_GET_WALLET_HISTORY,
 			handler.StreamGetWalletHistoryHandler(authRepo, m.privKey, m.walletClient),
 		},

@@ -59,6 +59,7 @@ const (
 	PRIVATE_POST_LOGOUT                = "/private/post/logout/0.0.0"
 	PRIVATE_POST_TWEET                 = "/private/post/tweet/0.0.0"
 	PRIVATE_GET_WALLET                 = "/private/get/wallet/0.0.0"
+	PRIVATE_GET_WALLET_ADDRESS         = "/private/get/wallet/address/0.0.0"
 	PRIVATE_GET_WALLET_CONTACTS        = "/private/get/wallet/contacts/0.0.0"
 	PRIVATE_GET_WALLET_HISTORY         = "/private/get/wallet/history/0.0.0"
 	PRIVATE_GET_WALLET_KEY             = "/private/get/wallet/key/0.0.0"
