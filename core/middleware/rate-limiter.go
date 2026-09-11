@@ -114,7 +114,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
-			p.emit(s, domain.PeerRateLimited)
+			p.emitStream(s, domain.PeerRateLimited)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil

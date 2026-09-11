@@ -70,12 +70,8 @@ type WarpMiddleware struct {
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
-	events chan domain.PeerEvent
+	events domain.PeerEmitter
 }
-
-// eventsBuffer bounds what the fan-out holds for a rating that is not
-// reading fast enough; past it the oldest observation is simply lost.
-const eventsBuffer = 256
 
 func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
 	wm := &WarpMiddleware{
@@ -84,35 +80,31 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
-		events:          make(chan domain.PeerEvent, eventsBuffer),
+		events:          domain.NewPeerEmitter(),
 	}
 	return wm
 }
 
-// Event is what the middlewares saw the peers do, for whoever rates them.
-// The channel is never closed, and a slow reader is never waited for.
+// Event is what the middlewares saw the peers do. The channel is never closed.
 func (p *WarpMiddleware) Event() <-chan domain.PeerEvent {
 	return p.events
 }
 
 // emit reports an observation about the stream's remote peer. A self-stream
-// or an unidentified connection names nobody, so it reports nothing.
-func (p *WarpMiddleware) emit(s warpnet.WarpStream, t domain.PeerEventType) {
-	if p == nil || p.events == nil || s == nil || s.Conn() == nil {
+// names nobody, so it reports nothing.
+func (p *WarpMiddleware) emitStream(s warpnet.WarpStream, t domain.PeerEventType) {
+	if p == nil || s == nil || s.Conn() == nil {
 		return
 	}
 	remote := s.Conn().RemotePeer()
-	if remote == "" || remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
+	if remote == s.Conn().LocalPeer() || remote == p.ownNodeId {
 		return
 	}
-	select {
-	case p.events <- domain.PeerEvent{
+	p.events.Emit(domain.PeerEvent{
 		PeerID: remote.String(),
 		Type:   t,
 		Route:  string(s.Protocol()),
-	}:
-	default: // the rating is not worth stalling a request for
-	}
+	})
 }
 
 func (p *WarpMiddleware) Close() {

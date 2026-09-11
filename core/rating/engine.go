@@ -132,7 +132,7 @@ type Engine struct {
 	counters map[pendingKey]counts
 	dirty    map[pendingKey]struct{}
 
-	loadMx sync.Mutex
+	loadMu sync.Mutex
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -341,8 +341,8 @@ func (e *Engine) peer(id string) (*indexedPeer, error) {
 		return p, nil
 	}
 
-	e.loadMx.Lock()
-	defer e.loadMx.Unlock()
+	e.loadMu.Lock()
+	defer e.loadMu.Unlock()
 	if p, ok := e.index.peer(id); ok {
 		return p, nil
 	}

@@ -87,20 +87,8 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
-	events chan<- domain.PeerEvent,
+	events domain.PeerEmitter,
 ) warpnet.WarpHandlerFunc {
-	// observe reports what this verdict said about a peer. The verdict is
-	// already signed and quorum-backed when it gets here, so both the node
-	// it names and the moderator that malformed it are attributable.
-	observe := func(peerID string, t domain.PeerEventType) {
-		if events == nil || peerID == "" {
-			return
-		}
-		select {
-		case events <- domain.PeerEvent{PeerID: peerID, Type: t}:
-		default: // the rating is not worth stalling a verdict for
-		}
-	}
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -145,16 +133,21 @@ func StreamModerationResultHandler(
 			return event.Accepted, nil
 		}
 
-		observe(nodeOf(userRepo, ev.UserID), domain.PeerModerationUpheld)
+		// A verdict arrives signed and quorum-backed, so both the node it
+		// names and the moderator that malformed it are attributable.
+		events.Emit(domain.PeerEvent{
+			PeerID: userNodeID(userRepo, ev.UserID),
+			Type:   domain.PeerModerationUpheld,
+		})
 
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
-				observe(moderatorId, domain.PeerVerdictMalformed)
+				events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
 				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
-				observe(moderatorId, domain.PeerVerdictMalformed)
+				events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
 				return nil, ErrNoUserID
 			}
 
@@ -183,7 +176,7 @@ func StreamModerationResultHandler(
 
 		case domain.ModerationUserType:
 			if ev.UserID == "" {
-				observe(moderatorId, domain.PeerVerdictMalformed)
+				events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
 				return nil, ErrNoUserID
 			}
 			if userRepo == nil {
@@ -214,7 +207,7 @@ func StreamModerationResultHandler(
 
 		default:
 			log.Errorf("moderation handler: unknown event type %s", ev.Type.String())
-			observe(moderatorId, domain.PeerVerdictMalformed)
+			events.Emit(domain.PeerEvent{PeerID: moderatorId, Type: domain.PeerVerdictMalformed})
 			return event.Accepted, nil
 		}
 
@@ -222,9 +215,9 @@ func StreamModerationResultHandler(
 	}
 }
 
-// nodeOf resolves the node a moderated user lives on. A user this node
-// has never cached names no peer, and nobody is charged for them.
-func nodeOf(userRepo ModerationUserUpdater, userID string) string {
+// userNodeID resolves the node a moderated user lives on. A user this
+// node has never cached names no peer, and nobody is charged for them.
+func userNodeID(userRepo ModerationUserUpdater, userID string) string {
 	if userRepo == nil || userID == "" {
 		return ""
 	}

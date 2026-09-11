@@ -54,13 +54,13 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.Wa
 		var msg event.Message
 		if err := json.Unmarshal(data, &msg); err != nil || msg.MessageId == "" {
 			log.Errorf("middleware: auth: unmarshaling data: %s %s %v", route, data, err)
-			p.emit(s, domain.PeerMalformedFrame)
+			p.emitStream(s, domain.PeerMalformedFrame)
 			return nil, ErrInternalNodeError
 		}
 
 		if msg.Signature == "" {
 			log.Errorf("middleware: auth: signature missing: %s", string(data))
-			p.emit(s, domain.PeerMissingSignature)
+			p.emitStream(s, domain.PeerMissingSignature)
 			return nil, ErrInternalNodeError
 		}
 		if remotePeer.Size() == 0 {
@@ -72,7 +72,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.Wa
 		if err := security.VerifySignature(pubKey, msg.SigningBytes(), msg.Signature); err != nil {
 			// Remote-side fault (foreign or outdated peer), not ours: warn, don't error.
 			log.Warnf("middleware: auth: signature invalid: %v: route %s, peer %s", err, route, remotePeer)
-			p.emit(s, domain.PeerBadSignature)
+			p.emitStream(s, domain.PeerBadSignature)
 			return nil, ErrInternalNodeError
 		}
 
@@ -80,7 +80,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.Wa
 		if remotePeer != s.Conn().LocalPeer() && !p.isFresh(msg.Timestamp) {
 			log.Errorf("middleware: auth: %s: stale/replayed message from %s ts=%s",
 				route, remotePeer, msg.Timestamp)
-			p.emit(s, domain.PeerStaleMessage)
+			p.emitStream(s, domain.PeerStaleMessage)
 			return nil, ErrStaleMessage
 		}
 
@@ -88,7 +88,7 @@ func (p *WarpMiddleware) AuthMiddleware(next warpnet.WarpHandlerFunc) warpnet.Wa
 
 		if route.IsPrivate() && !p.isPrivateRouteAllowed(route, remotePeer, s.Conn().LocalPeer(), isPairedAlias) {
 			log.Warnf("middleware: auth: %s: private route denied for peer %s", route, remotePeer)
-			p.emit(s, domain.PeerPrivateRouteDenied)
+			p.emitStream(s, domain.PeerPrivateRouteDenied)
 			return nil, ErrUnknownClientPeer
 		}
 

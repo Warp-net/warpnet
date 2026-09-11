@@ -53,7 +53,7 @@ import (
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
-	Listen(sources ...<-chan domain.PeerEvent)
+	Listen(events <-chan domain.PeerEvent)
 	Close() error
 }
 
@@ -196,10 +196,9 @@ func (mn *ModeratorNode) Start() (err error) {
 	return nil
 }
 
-// StartRating rates the peers this node can judge. It runs after the
-// process has a pubsub and an audit to listen to, which is why the node
-// cannot start it by itself: gossip carries the records, and the audit is
-// where a moderator's standing comes from.
+// StartRating rates the peers this node can judge. The process starts it:
+// the records ride the pubsub, and a moderator's standing comes from the
+// audit, neither of which the node owns.
 func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-chan domain.PeerEvent) error {
 	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingstore.GossipTopic)
 	if err != nil {
@@ -218,7 +217,9 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 		return fmt.Errorf("moderator: failed to start rating engine: %w", err)
 	}
 
-	mn.rating.Listen(mn.node.Event(), mn.mw.Event(), audit)
+	go mn.rating.Listen(mn.node.Event())
+	go mn.rating.Listen(mn.mw.Event())
+	go mn.rating.Listen(audit)
 	return nil
 }
 

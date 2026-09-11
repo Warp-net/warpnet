@@ -124,34 +124,26 @@ type Ledger struct {
 	mu    sync.Mutex
 	peers map[string]*peerStats
 
-	events chan domain.PeerEvent
+	events domain.PeerEmitter
 }
-
-// eventsBuffer bounds what the fan-out holds for a rating that is not
-// reading fast enough; past it the oldest observation is simply lost.
-const eventsBuffer = 256
 
 func NewLedger() *Ledger {
 	return &Ledger{
 		peers:  make(map[string]*peerStats),
-		events: make(chan domain.PeerEvent, eventsBuffer),
+		events: domain.NewPeerEmitter(),
 	}
 }
 
-// Event is what the audit saw the moderators do, for whoever rates them.
-// The channel is never closed, and a slow reader is never waited for.
+// Event is what the audit saw the moderators do. The channel is never closed.
 func (l *Ledger) Event() <-chan domain.PeerEvent {
 	return l.events
 }
 
 func (l *Ledger) emit(peerID string, t domain.PeerEventType) {
-	if l == nil || l.events == nil || peerID == "" {
+	if l == nil {
 		return
 	}
-	select {
-	case l.events <- domain.PeerEvent{PeerID: peerID, Type: t}:
-	default: // the rating is not worth stalling an audit for
-	}
+	l.events.Emit(domain.PeerEvent{PeerID: peerID, Type: t})
 }
 
 func (l *Ledger) Record(peerID string, o Outcome) {

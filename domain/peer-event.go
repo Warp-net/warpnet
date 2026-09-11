@@ -60,10 +60,32 @@ const (
 	PeerAuditUnreachable PeerEventType = "audit_unreachable"
 )
 
-// PeerEvent is one observation about one peer. Modules publish it on their
-// own channel and never wait for a reader; see their Event method.
+// PeerEvent is one observation about one peer.
 type PeerEvent struct {
 	PeerID string
 	Type   PeerEventType
 	Route  string // the route it happened on, where there is one
+}
+
+// peerEventsBuffer bounds a fan-out; past it an observation is dropped.
+const peerEventsBuffer = 256
+
+// PeerEmitter is a module's fan-out of what it saw its peers do. Whoever
+// rates them reads it; nobody waits for that reader.
+type PeerEmitter chan PeerEvent
+
+func NewPeerEmitter() PeerEmitter {
+	return make(PeerEmitter, peerEventsBuffer)
+}
+
+// Emit reports one observation, and drops it when the reader is behind:
+// no request, stream or audit is ever held up for a rating.
+func (e PeerEmitter) Emit(ev PeerEvent) {
+	if e == nil || ev.PeerID == "" {
+		return
+	}
+	select {
+	case e <- ev:
+	default:
+	}
 }

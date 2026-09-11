@@ -93,7 +93,7 @@ type RatingProvider interface {
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
-	Listen(sources ...<-chan domain.PeerEvent)
+	Listen(events <-chan domain.PeerEvent)
 	Close() error
 }
 

@@ -37,10 +37,8 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-// Some behaviour is an offence only in numbers: one reconnection or one
-// rate-limited write is ordinary, a burst of them is not. Modules report
-// the plain facts and these windows decide when a burst has happened, so
-// no module carries a threshold of the rating's.
+// Some behaviour is an offence only in numbers: one reconnection is
+// ordinary, a burst of them is not.
 const (
 	flapWindow    = time.Minute
 	flapThreshold = 4
@@ -54,11 +52,9 @@ const (
 	burstPeers = 1024
 )
 
-// burst counts one kind of observation per peer inside a sliding window
-// and reports the moment the count reaches the threshold — once per
-// window, so a peer that keeps going is not ground down for one burst.
+// burst counts one observation per peer inside a sliding window.
 type burst struct {
-	mx        sync.Mutex
+	mu        sync.Mutex
 	counts    *expirable.LRU[string, int]
 	threshold int
 }
@@ -70,31 +66,22 @@ func newBurst(window time.Duration, threshold int) *burst {
 	}
 }
 
+// reached reports the count hitting the threshold, once per window.
 func (b *burst) reached(peerID string) bool {
-	b.mx.Lock()
-	defer b.mx.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	count, _ := b.counts.Get(peerID)
 	count++
 	b.counts.Add(peerID, count)
 	return count == b.threshold
 }
 
-// Listen charges the peers named by the modules' fan-out channels. It
-// returns at once and reads each channel until the channel closes or the
-// engine does.
-func (e *Engine) Listen(sources ...<-chan domain.PeerEvent) {
-	if e == nil {
+// Listen charges the peers a module's fan-out names, until the channel
+// closes or the engine does. It blocks: the caller owns the goroutine.
+func (e *Engine) Listen(events <-chan domain.PeerEvent) {
+	if e == nil || events == nil {
 		return
 	}
-	for _, events := range sources {
-		if events == nil {
-			continue
-		}
-		go e.listen(events)
-	}
-}
-
-func (e *Engine) listen(events <-chan domain.PeerEvent) {
 	for {
 		select {
 		case <-e.ctx.Done():
@@ -108,9 +95,9 @@ func (e *Engine) listen(events <-chan domain.PeerEvent) {
 	}
 }
 
-// observe turns one observation into the offences it is worth. A type the
-// engine does not charge for is not an error: plain facts are counted,
-// and a node of another role reports what its own role cannot witness.
+// observe turns one observation into the offences it is worth. A type
+// this node does not charge for is not an error: it is a plain fact, or
+// an axis its role cannot witness.
 func (e *Engine) observe(ev domain.PeerEvent) {
 	peerID := warpnet.FromStringToPeerID(ev.PeerID)
 	if peerID == "" {

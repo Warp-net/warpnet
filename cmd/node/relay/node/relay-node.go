@@ -68,7 +68,7 @@ type PubSubProvider interface {
 
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
-	Listen(sources ...<-chan domain.PeerEvent)
+	Listen(events <-chan domain.PeerEvent)
 	Close() error
 }
 
@@ -244,7 +244,9 @@ func (rn *RelayNode) startRating() error {
 		return fmt.Errorf("relay: failed to start rating engine: %w", err)
 	}
 
-	rn.rating.Listen(rn.node.Event(), rn.mw.Event(), rn.discService.Event())
+	go rn.rating.Listen(rn.node.Event())
+	go rn.rating.Listen(rn.mw.Event())
+	go rn.rating.Listen(rn.discService.Event())
 	return nil
 }
 

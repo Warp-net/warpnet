@@ -77,14 +77,10 @@ type MemberNode struct {
 	statsDb          StatsStorer
 	ratingDb         RatingStorer
 	rating           PeerRater
-	events           chan domain.PeerEvent
+	events           domain.PeerEmitter
 	privKey          ed25519.PrivateKey
 	ownerId, network string
 }
-
-// eventsBuffer bounds what this node's own fan-out holds for a rating that
-// is not reading fast enough; past it the oldest observation is lost.
-const eventsBuffer = 256
 
 func NewMemberNode(
 	ctx context.Context,
@@ -174,7 +170,7 @@ func NewMemberNode(
 		nodeRepo:      nodeRepo,
 		statsRepo:     statsRepo,
 		ratingRepo:    ratingRepo,
-		events:        make(chan domain.PeerEvent, eventsBuffer),
+		events:        domain.NewPeerEmitter(),
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -248,7 +244,10 @@ func (m *MemberNode) Start() (err error) {
 		m.mw.IdempotencyMiddleware,
 	)
 
-	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.events)
+	go m.rating.Listen(m.node.Event())
+	go m.rating.Listen(m.mw.Event())
+	go m.rating.Listen(m.discService.Event())
+	go m.rating.Listen(m.events)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 

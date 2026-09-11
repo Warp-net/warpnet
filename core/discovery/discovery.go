@@ -103,12 +103,8 @@ type discoveryService struct {
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
 
-	events chan domain.PeerEvent
+	events domain.PeerEmitter
 }
-
-// eventsBuffer bounds what the fan-out holds for a rating that is not
-// reading fast enough; past it the oldest observation is simply lost.
-const eventsBuffer = 256
 
 //goland:noinspection ALL
 func NewDiscoveryService(
@@ -129,7 +125,7 @@ func NewDiscoveryService(
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		events:          make(chan domain.PeerEvent, eventsBuffer),
+		events:          domain.NewPeerEmitter(),
 	}
 }
 
@@ -142,26 +138,22 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
-		events:          make(chan domain.PeerEvent, eventsBuffer),
+		events:          domain.NewPeerEmitter(),
 	}
 }
 
-// Event is what discovery saw the peers do, for whoever rates them. The
-// channel is never closed, and a slow reader is never waited for.
+// Event is what discovery saw the peers do. The channel is never closed.
 func (s *discoveryService) Event() <-chan domain.PeerEvent {
 	return s.events
 }
 
 // emit reports one observation about a peer. How often a peer may turn up
-// before that is flooding is the rating's call, not discovery's.
+// before that is flooding is the rating's call.
 func (s *discoveryService) emit(peerID warpnet.WarpPeerID, t domain.PeerEventType) {
-	if s == nil || s.events == nil || peerID == "" || peerID == s.ownId {
+	if s == nil || peerID == s.ownId {
 		return
 	}
-	select {
-	case s.events <- domain.PeerEvent{PeerID: peerID.String(), Type: t}:
-	default: // the rating is not worth stalling discovery for
-	}
+	s.events.Emit(domain.PeerEvent{PeerID: peerID.String(), Type: t})
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
