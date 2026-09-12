@@ -196,3 +196,22 @@ func TestResolveBinaryWithoutAnythingToRun(t *testing.T) {
 		t.Fatal("expected an error with no binary path and nothing embedded")
 	}
 }
+
+func TestEngineArgumentsAreOnesTheEngineAccepts(t *testing.T) {
+	accepted := map[string]bool{
+		"-mainnet-endpoint": true, "-testnet-endpoint": true,
+		"-mainnet-registry": true, "-testnet-registry": true,
+		"-network": true, "-rps": true, "-timeout": true,
+		"-confirmations": true, "-request-timeout": true, "-contract": true,
+	}
+	client, _ := engineIn(t, Config{Network: "testnet", Endpoint: "https://nile.trongrid.io", RPS: 2})
+	args := client.engineArgs()
+	if args[0] != "serve" {
+		t.Fatalf("args = %v, want serve first", args)
+	}
+	for _, arg := range args {
+		if len(arg) > 1 && arg[0] == '-' && !accepted[arg] {
+			t.Fatalf("the engine does not define %s: it prints that on stderr and exits, and args = %v", arg, args)
+		}
+	}
+}
