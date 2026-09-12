@@ -198,6 +198,12 @@ func (c *Client) ensure() error {
 		log.Errorf("wallet: payment engine stdout: %v", err)
 		return err
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		stop()
+		log.Errorf("wallet: payment engine stderr: %v", err)
+		return err
+	}
 	if err := cmd.Start(); err != nil {
 		stop()
 		log.Errorf("wallet: payment engine failed to start: %v", err)
@@ -209,7 +215,18 @@ func (c *Client) ensure() error {
 	c.stdin = stdin
 	c.failure = nil
 	go c.read(stdout)
+	go c.readErrors(stderr)
 	return nil
+}
+
+func (c *Client) readErrors(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 4<<10), maxLineSize)
+	for scanner.Scan() {
+		if line := strings.TrimSpace(scanner.Text()); line != "" {
+			log.Errorf("wallet: payment engine: %s", line)
+		}
+	}
 }
 
 func (c *Client) engineArgs() []string {

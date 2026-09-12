@@ -29,12 +29,16 @@ resulting from the use or misuse of this software.
 package wallet
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // The three platforms disagree about where a user cache lives and about which
@@ -213,5 +217,23 @@ func TestEngineArgumentsAreOnesTheEngineAccepts(t *testing.T) {
 		if len(arg) > 1 && arg[0] == '-' && !accepted[arg] {
 			t.Fatalf("the engine does not define %s: it prints that on stderr and exits, and args = %v", arg, args)
 		}
+	}
+}
+
+func TestEngineStderrReachesTheLog(t *testing.T) {
+	var logged bytes.Buffer
+	previous := log.StandardLogger().Out
+	log.SetOutput(&logged)
+	defer log.SetOutput(previous)
+
+	client, _ := engineIn(t, Config{Network: "testnet"})
+	refusal := "flag provided but not defined: -api-key\n\nUsage of payment-engine serve:\n"
+	client.readErrors(strings.NewReader(refusal))
+
+	if !strings.Contains(logged.String(), "flag provided but not defined: -api-key") {
+		t.Fatalf("the engine's reason never reached the log: %q", logged.String())
+	}
+	if got := strings.Count(logged.String(), "payment engine:"); got != 2 {
+		t.Fatalf("logged %d lines, want the two non-empty ones: %q", got, logged.String())
 	}
 }
