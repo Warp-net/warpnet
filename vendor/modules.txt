@@ -65,6 +65,9 @@ github.com/ProtonMail/go-crypto/openpgp/x448
 # github.com/Warp-net/libp2p-camouflage-transport v0.0.3
 ## explicit; go 1.26.0
 github.com/Warp-net/libp2p-camouflage-transport
+# github.com/Warp-net/payment-engine-lib v0.0.0-20260912184042-a8b34323d55a
+## explicit; go 1.26
+github.com/Warp-net/payment-engine-lib
 # github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 ## explicit
 github.com/acarl005/stripansi

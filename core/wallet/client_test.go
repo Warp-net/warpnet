@@ -38,23 +38,30 @@ import (
 	"strings"
 	"testing"
 
+	paymentengine "github.com/Warp-net/payment-engine-lib"
 	log "github.com/sirupsen/logrus"
 )
 
 // The three platforms disagree about where a user cache lives and about which
 // environment variable moves it, so the tests hand the client a directory
 // instead of trying to redirect os.UserCacheDir.
-func engineIn(t *testing.T, cfg Config) (*Client, string) {
+func engineIn(t *testing.T, cfg Config, binary []byte) (*Client, string) {
 	t.Helper()
 	root := t.TempDir()
 	client := New(cfg)
 	client.cacheDir = func() (string, error) { return root, nil }
+	client.engine = func() ([]byte, error) {
+		if len(binary) == 0 {
+			return nil, paymentengine.ErrUnsupported
+		}
+		return binary, nil
+	}
 	return client, filepath.Join(root, "warpnet")
 }
 
 func engineClient(t *testing.T, binary []byte) (*Client, string) {
 	t.Helper()
-	return engineIn(t, Config{Network: "testnet", BinaryBytes: binary})
+	return engineIn(t, Config{Network: "testnet"}, binary)
 }
 
 func unpackedName(binary []byte) string {
@@ -176,7 +183,7 @@ func TestResolveBinaryPrefersAConfiguredRegularFile(t *testing.T) {
 	if err := os.WriteFile(own, []byte("operator build"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	client, _ := engineIn(t, Config{Network: "testnet", BinaryPath: own, BinaryBytes: []byte("embedded")})
+	client, _ := engineIn(t, Config{Network: "testnet", BinaryPath: own}, []byte("embedded"))
 	got, err := client.resolveBinary()
 	if err != nil || got != own {
 		t.Fatalf("path = %s, err = %v", got, err)
@@ -184,7 +191,7 @@ func TestResolveBinaryPrefersAConfiguredRegularFile(t *testing.T) {
 }
 
 func TestResolveBinaryIgnoresAConfiguredDirectory(t *testing.T) {
-	client, _ := engineIn(t, Config{Network: "testnet", BinaryPath: t.TempDir(), BinaryBytes: []byte("embedded")})
+	client, _ := engineIn(t, Config{Network: "testnet", BinaryPath: t.TempDir()}, []byte("embedded"))
 	got, err := client.resolveBinary()
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +202,7 @@ func TestResolveBinaryIgnoresAConfiguredDirectory(t *testing.T) {
 }
 
 func TestResolveBinaryWithoutAnythingToRun(t *testing.T) {
-	client, _ := engineIn(t, Config{Network: "testnet"})
+	client, _ := engineIn(t, Config{Network: "testnet"}, nil)
 	if _, err := client.resolveBinary(); err == nil {
 		t.Fatal("expected an error with no binary path and nothing embedded")
 	}
@@ -208,7 +215,7 @@ func TestEngineArgumentsAreOnesTheEngineAccepts(t *testing.T) {
 		"-network": true, "-rps": true, "-timeout": true,
 		"-confirmations": true, "-request-timeout": true, "-contract": true,
 	}
-	client, _ := engineIn(t, Config{Network: "testnet", Endpoint: "https://nile.trongrid.io", RPS: 2})
+	client, _ := engineIn(t, Config{Network: "testnet", Endpoint: "https://nile.trongrid.io", RPS: 2}, nil)
 	args := client.engineArgs()
 	if args[0] != "serve" {
 		t.Fatalf("args = %v, want serve first", args)
@@ -226,7 +233,7 @@ func TestEngineStderrReachesTheLog(t *testing.T) {
 	log.SetOutput(&logged)
 	defer log.SetOutput(previous)
 
-	client, _ := engineIn(t, Config{Network: "testnet"})
+	client, _ := engineIn(t, Config{Network: "testnet"}, nil)
 	refusal := "flag provided but not defined: -api-key\n\nUsage of payment-engine serve:\n"
 	client.readErrors(strings.NewReader(refusal))
 

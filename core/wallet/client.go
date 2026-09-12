@@ -43,6 +43,7 @@ import (
 	"sync"
 	"time"
 
+	paymentengine "github.com/Warp-net/payment-engine-lib"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
@@ -71,13 +72,12 @@ type Account struct {
 }
 
 type Config struct {
-	BinaryPath  string
-	Network     string
-	Endpoint    string
-	Token       string
-	Decimals    uint8
-	RPS         float64
-	BinaryBytes []byte
+	BinaryPath string
+	Network    string
+	Endpoint   string
+	Token      string
+	Decimals   uint8
+	RPS        float64
 }
 
 type Transfer struct {
@@ -113,6 +113,7 @@ type response struct {
 type Client struct {
 	cfg      Config
 	cacheDir func() (string, error)
+	engine   func() ([]byte, error)
 	mu       sync.Mutex
 	cmd      *exec.Cmd
 	stop     context.CancelFunc
@@ -123,7 +124,12 @@ type Client struct {
 }
 
 func New(cfg Config) *Client {
-	return &Client{cfg: cfg, cacheDir: os.UserCacheDir, pending: map[string]chan response{}}
+	return &Client{
+		cfg:      cfg,
+		cacheDir: os.UserCacheDir,
+		engine:   paymentengine.GetPaymentEngine,
+		pending:  map[string]chan response{},
+	}
 }
 
 func DefaultConfig(network, binaryPath string) Config {
@@ -243,11 +249,12 @@ func (c *Client) resolveBinary() (string, error) {
 			return c.cfg.BinaryPath, nil
 		}
 	}
-	if len(c.cfg.BinaryBytes) == 0 {
-		return "", fmt.Errorf("%w: no payment engine at %q and none embedded", ErrUnavailable, c.cfg.BinaryPath)
+	binary, err := c.engine()
+	if err != nil {
+		return "", fmt.Errorf("%w: no payment engine at %q: %w", ErrUnavailable, c.cfg.BinaryPath, err)
 	}
 
-	sum := sha256.Sum256(c.cfg.BinaryBytes)
+	sum := sha256.Sum256(binary)
 	name := "payment-engine-" + hex.EncodeToString(sum[:6])
 	base, err := c.cacheDir()
 	if err != nil {
@@ -270,7 +277,7 @@ func (c *Client) resolveBinary() (string, error) {
 		return "", err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
-	if _, err := tmp.Write(c.cfg.BinaryBytes); err != nil {
+	if _, err := tmp.Write(binary); err != nil {
 		_ = tmp.Close()
 		return "", err
 	}
