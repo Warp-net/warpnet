@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"os"
 
-	root "github.com/Warp-net/warpnet"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
@@ -163,12 +162,7 @@ func NewMemberNode(
 
 	opts = append(opts, node.CommonOptions...)
 
-	walletBinary := os.Getenv("WARPNET_WALLET_BIN")
-	if walletBinary == "" {
-		walletBinary = "core/wallet/payment-engine"
-	}
-	walletConfig := wallet.DefaultConfig(warpNetwork, walletBinary)
-	walletConfig.BinaryBytes = root.GetPaymentEngine()
+	walletConfig := wallet.DefaultConfig(warpNetwork, os.Getenv("WARPNET_WALLET_BIN"))
 	walletClient := wallet.New(walletConfig)
 	walletRepo := database.NewWalletRepo(db)
 
