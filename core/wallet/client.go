@@ -112,18 +112,19 @@ type response struct {
 }
 
 type Client struct {
-	cfg     Config
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stop    context.CancelFunc
-	stdin   io.WriteCloser
-	pending map[string]chan response
-	seq     uint64
-	failure error
+	cfg      Config
+	cacheDir func() (string, error)
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	stop     context.CancelFunc
+	stdin    io.WriteCloser
+	pending  map[string]chan response
+	seq      uint64
+	failure  error
 }
 
 func New(cfg Config) *Client {
-	return &Client{cfg: cfg, pending: map[string]chan response{}}
+	return &Client{cfg: cfg, cacheDir: os.UserCacheDir, pending: map[string]chan response{}}
 }
 
 func DefaultConfig(network, binaryPath string) Config {
@@ -220,7 +221,7 @@ func (c *Client) ensure() error {
 
 func (c *Client) resolveBinary() (string, error) {
 	if c.cfg.BinaryPath != "" {
-		if _, err := os.Stat(c.cfg.BinaryPath); err == nil {
+		if info, err := os.Lstat(c.cfg.BinaryPath); err == nil && info.Mode().IsRegular() {
 			return c.cfg.BinaryPath, nil
 		}
 	}
@@ -230,7 +231,7 @@ func (c *Client) resolveBinary() (string, error) {
 
 	sum := sha256.Sum256(c.cfg.BinaryBytes)
 	name := "payment-engine-" + hex.EncodeToString(sum[:6])
-	base, err := os.UserCacheDir()
+	base, err := c.cacheDir()
 	if err != nil {
 		base = os.TempDir()
 	}
@@ -239,8 +240,11 @@ func (c *Client) resolveBinary() (string, error) {
 		return "", err
 	}
 	path := filepath.Join(dir, name)
-	if info, err := os.Stat(path); err == nil && info.Size() == int64(len(c.cfg.BinaryBytes)) {
+	switch cached, err := matchesEmbedded(dir, name, sum); {
+	case cached:
 		return path, nil
+	case err != nil && !os.IsNotExist(err):
+		log.Warnf("wallet: the payment engine cached at %q is not the build we embed, unpacking it again: %v", path, err)
 	}
 
 	tmp, err := os.CreateTemp(dir, name+".*")
@@ -263,6 +267,34 @@ func (c *Client) resolveBinary() (string, error) {
 	}
 	log.Infof("wallet: unpacked the embedded payment engine to %q", path)
 	return path, nil
+}
+
+func matchesEmbedded(dir, name string, want [sha256.Size]byte) (bool, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = root.Close() }()
+	info, err := root.Lstat(name)
+	if err != nil {
+		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, fmt.Errorf("%w: %s is not a regular file", ErrUnavailable, name)
+	}
+	file, err := root.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = file.Close() }()
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return false, err
+	}
+	if [sha256.Size]byte(digest.Sum(nil)) != want {
+		return false, fmt.Errorf("%w: %s holds different bytes", ErrUnavailable, name)
+	}
+	return true, nil
 }
 
 func (c *Client) read(r io.Reader) {
