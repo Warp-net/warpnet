@@ -112,18 +112,19 @@ type response struct {
 }
 
 type Client struct {
-	cfg     Config
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stop    context.CancelFunc
-	stdin   io.WriteCloser
-	pending map[string]chan response
-	seq     uint64
-	failure error
+	cfg      Config
+	cacheDir func() (string, error)
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	stop     context.CancelFunc
+	stdin    io.WriteCloser
+	pending  map[string]chan response
+	seq      uint64
+	failure  error
 }
 
 func New(cfg Config) *Client {
-	return &Client{cfg: cfg, pending: map[string]chan response{}}
+	return &Client{cfg: cfg, cacheDir: os.UserCacheDir, pending: map[string]chan response{}}
 }
 
 func DefaultConfig(network, binaryPath string) Config {
@@ -230,7 +231,7 @@ func (c *Client) resolveBinary() (string, error) {
 
 	sum := sha256.Sum256(c.cfg.BinaryBytes)
 	name := "payment-engine-" + hex.EncodeToString(sum[:6])
-	base, err := os.UserCacheDir()
+	base, err := c.cacheDir()
 	if err != nil {
 		base = os.TempDir()
 	}

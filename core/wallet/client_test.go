@@ -33,19 +33,24 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-func cacheRoot(t *testing.T) string {
+// The three platforms disagree about where a user cache lives and about which
+// environment variable moves it, so the tests hand the client a directory
+// instead of trying to redirect os.UserCacheDir.
+func engineIn(t *testing.T, cfg Config) (*Client, string) {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", root)
-	t.Setenv("HOME", root)
-	return filepath.Join(root, "warpnet")
+	client := New(cfg)
+	client.cacheDir = func() (string, error) { return root, nil }
+	return client, filepath.Join(root, "warpnet")
 }
 
-func engineClient(binary []byte) *Client {
-	return New(Config{Network: "testnet", BinaryBytes: binary})
+func engineClient(t *testing.T, binary []byte) (*Client, string) {
+	t.Helper()
+	return engineIn(t, Config{Network: "testnet", BinaryBytes: binary})
 }
 
 func unpackedName(binary []byte) string {
@@ -54,9 +59,9 @@ func unpackedName(binary []byte) string {
 }
 
 func TestResolveBinaryUnpacksTheEmbeddedEngine(t *testing.T) {
-	dir := cacheRoot(t)
 	binary := []byte("embedded engine bytes")
-	path, err := engineClient(binary).resolveBinary()
+	client, dir := engineClient(t, binary)
+	path, err := client.resolveBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,14 +73,20 @@ func TestResolveBinaryUnpacksTheEmbeddedEngine(t *testing.T) {
 		t.Fatalf("unpacked %q, err %v", got, err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o700 {
-		t.Fatalf("mode = %v, err %v", info.Mode(), err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Mode().IsRegular() {
+		t.Fatalf("mode = %v", info.Mode())
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
+		t.Fatalf("mode = %v", info.Mode())
 	}
 }
 
 func TestResolveBinaryReusesTheSameBytes(t *testing.T) {
-	dir := cacheRoot(t)
 	binary := []byte("embedded engine bytes")
+	client, dir := engineClient(t, binary)
 	path := filepath.Join(dir, unpackedName(binary))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -87,7 +98,7 @@ func TestResolveBinaryReusesTheSameBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := engineClient(binary).resolveBinary()
+	got, err := client.resolveBinary()
 	if err != nil || got != path {
 		t.Fatalf("path = %s, err = %v", got, err)
 	}
@@ -101,9 +112,9 @@ func TestResolveBinaryReusesTheSameBytes(t *testing.T) {
 }
 
 func TestResolveBinaryReplacesTamperedBytesOfTheSameSize(t *testing.T) {
-	dir := cacheRoot(t)
 	binary := []byte("embedded engine bytes")
 	tampered := []byte("EMBEDDED ENGINE BYTES")
+	client, dir := engineClient(t, binary)
 	if len(tampered) != len(binary) {
 		t.Fatal("the point of this test is a same-size swap")
 	}
@@ -114,7 +125,7 @@ func TestResolveBinaryReplacesTamperedBytesOfTheSameSize(t *testing.T) {
 	if err := os.WriteFile(path, tampered, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	got, err := engineClient(binary).resolveBinary()
+	got, err := client.resolveBinary()
 	if err != nil || got != path {
 		t.Fatalf("path = %s, err = %v", got, err)
 	}
@@ -128,8 +139,11 @@ func TestResolveBinaryReplacesTamperedBytesOfTheSameSize(t *testing.T) {
 }
 
 func TestResolveBinaryRefusesASymlinkedCache(t *testing.T) {
-	dir := cacheRoot(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("windows symlinks need a privilege and resolve differently; the hash check is what carries there")
+	}
 	binary := []byte("embedded engine bytes")
+	client, dir := engineClient(t, binary)
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
 	if err := os.WriteFile(elsewhere, binary, 0o700); err != nil {
 		t.Fatal(err)
@@ -141,7 +155,7 @@ func TestResolveBinaryRefusesASymlinkedCache(t *testing.T) {
 	if err := os.Symlink(elsewhere, path); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
-	if _, err := engineClient(binary).resolveBinary(); err != nil {
+	if _, err := client.resolveBinary(); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Lstat(path)
@@ -154,12 +168,11 @@ func TestResolveBinaryRefusesASymlinkedCache(t *testing.T) {
 }
 
 func TestResolveBinaryPrefersAConfiguredRegularFile(t *testing.T) {
-	cacheRoot(t)
 	own := filepath.Join(t.TempDir(), "payment-engine")
 	if err := os.WriteFile(own, []byte("operator build"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	client := New(Config{Network: "testnet", BinaryPath: own, BinaryBytes: []byte("embedded")})
+	client, _ := engineIn(t, Config{Network: "testnet", BinaryPath: own, BinaryBytes: []byte("embedded")})
 	got, err := client.resolveBinary()
 	if err != nil || got != own {
 		t.Fatalf("path = %s, err = %v", got, err)
@@ -167,8 +180,7 @@ func TestResolveBinaryPrefersAConfiguredRegularFile(t *testing.T) {
 }
 
 func TestResolveBinaryIgnoresAConfiguredDirectory(t *testing.T) {
-	cacheRoot(t)
-	client := New(Config{Network: "testnet", BinaryPath: t.TempDir(), BinaryBytes: []byte("embedded")})
+	client, _ := engineIn(t, Config{Network: "testnet", BinaryPath: t.TempDir(), BinaryBytes: []byte("embedded")})
 	got, err := client.resolveBinary()
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +191,8 @@ func TestResolveBinaryIgnoresAConfiguredDirectory(t *testing.T) {
 }
 
 func TestResolveBinaryWithoutAnythingToRun(t *testing.T) {
-	cacheRoot(t)
-	if _, err := New(Config{Network: "testnet"}).resolveBinary(); err == nil {
+	client, _ := engineIn(t, Config{Network: "testnet"})
+	if _, err := client.resolveBinary(); err == nil {
 		t.Fatal("expected an error with no binary path and nothing embedded")
 	}
 }
