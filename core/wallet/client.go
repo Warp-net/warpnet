@@ -74,7 +74,6 @@ type Config struct {
 	BinaryPath  string
 	Network     string
 	Endpoint    string
-	APIKey      string
 	Token       string
 	Decimals    uint8
 	RPS         float64
@@ -178,13 +177,7 @@ func (c *Client) ensure() error {
 	if c.cmd != nil {
 		return nil
 	}
-	args := []string{"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
-	if c.cfg.APIKey != "" {
-		args = append(args, "-api-key", c.cfg.APIKey)
-	}
-	if c.cfg.RPS > 0 {
-		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
-	}
+	args := c.engineArgs()
 	binary, err := c.resolveBinary()
 	if err != nil {
 		log.Errorf("wallet: payment engine binary: %v", err)
@@ -217,6 +210,14 @@ func (c *Client) ensure() error {
 	c.failure = nil
 	go c.read(stdout)
 	return nil
+}
+
+func (c *Client) engineArgs() []string {
+	args := []string{"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
+	if c.cfg.RPS > 0 {
+		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
+	}
+	return args
 }
 
 func (c *Client) resolveBinary() (string, error) {
