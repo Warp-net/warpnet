@@ -318,6 +318,35 @@ func (s *UserRepoTestSuite) TestWhoToFollow_SurfacesBuriedNativePeer() {
 	s.True(nonNativeNoAvatar, "WhoToFollow must not gate non-native users on missing avatar/tweets")
 }
 
+func (s *UserRepoTestSuite) TestUpdateRefreshesCounts() {
+	_, err := s.repo.Create(domain.User{
+		Id: "counts@m.example", Username: "counts", NodeId: "gw",
+		FollowersCount: 7, FollowingsCount: 12, TweetsCount: 7,
+	})
+	s.Require().NoError(err)
+
+	// A refresh from the user's own node carries the current numbers.
+	_, err = s.repo.Update("counts@m.example", domain.User{
+		Id: "counts@m.example", FollowersCount: 8, FollowingsCount: 38, TweetsCount: 23,
+	})
+	s.Require().NoError(err)
+	got, err := s.repo.Get("counts@m.example")
+	s.Require().NoError(err)
+	s.Equal(int64(8), got.FollowersCount)
+	s.Equal(int64(38), got.FollowingsCount)
+	s.Equal(int64(23), got.TweetsCount)
+
+	// A partial update — a profile edit — carries no counts and must not wipe them.
+	_, err = s.repo.Update("counts@m.example", domain.User{Id: "counts@m.example", Username: "renamed"})
+	s.Require().NoError(err)
+	got, err = s.repo.Get("counts@m.example")
+	s.Require().NoError(err)
+	s.Equal("renamed", got.Username)
+	s.Equal(int64(8), got.FollowersCount)
+	s.Equal(int64(38), got.FollowingsCount)
+	s.Equal(int64(23), got.TweetsCount)
+}
+
 func TestUserRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

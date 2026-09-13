@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
@@ -157,7 +157,7 @@ func TestStreamGetGatewaySettingsHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if resp.(event.GetGatewaySettingsResponse).NodeID != mastodon.DefaultGatewayNodeID {
+		if resp.(event.GetGatewaySettingsResponse).NodeID != fediverse.DefaultGatewayNodeID {
 			t.Fatalf("expected default node id, got %+v", resp)
 		}
 	})
@@ -221,7 +221,7 @@ func TestStreamUpdateGatewaySettingsHandler(t *testing.T) {
 		if _, err := h(marshal(t, event.UpdateGatewaySettingsEvent{NodeID: ""}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if saved.NodeID != mastodon.DefaultGatewayNodeID {
+		if saved.NodeID != fediverse.DefaultGatewayNodeID {
 			t.Fatalf("expected default node id persisted, got %+v", saved)
 		}
 	})

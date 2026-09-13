@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -168,9 +168,9 @@ func TestLimitForRoute(t *testing.T) {
 }
 
 func TestLimitForRouteGivesTheGatewayItsOwnBudget(t *testing.T) {
-	gateway := warpnet.FromStringToPeerID(mastodon.GatewayNodeID())
+	gateway := warpnet.FromStringToPeerID(fediverse.GatewayNodeID())
 	if gateway == "" {
-		t.Fatalf("mastodon.GatewayNodeID() is not a valid peer id: %q", mastodon.GatewayNodeID())
+		t.Fatalf("fediverse.GatewayNodeID() is not a valid peer id: %q", fediverse.GatewayNodeID())
 	}
 	for _, route := range []string{
 		event.PUBLIC_GET_USER, event.PUBLIC_GET_IMAGE, event.PUBLIC_POST_REACT, event.PRIVATE_POST_PAIR,

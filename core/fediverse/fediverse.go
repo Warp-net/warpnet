@@ -25,11 +25,11 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package mastodon holds everything the node needs for the Mastodon bridge.
-// The node itself stays unaware of the ActivityPub gateway: this package only
-// tags bridged users with a foreign network and seeds a single entry account
-// whose home node is the gateway, so it resolves like any other remote user.
-package mastodon
+// Package fediverse holds everything the node needs for the ActivityPub bridge.
+// The node itself stays unaware of the gateway: this package only tags bridged
+// users with a foreign network and seeds a single entry account whose home node
+// is the gateway, so it resolves like any other remote user.
+package fediverse
 
 import (
 	"errors"
@@ -37,8 +37,9 @@ import (
 )
 
 const (
-	// Network is the User.Network tag for accounts bridged in from Mastodon.
-	Network = "mastodon"
+	// MastodonNetwork is the User.Network tag for accounts bridged in from
+	// Mastodon.
+	MastodonNetwork = "mastodon"
 
 	// DefaultGatewayNodeID is the libp2p peer id of the ActivityPub gateway,
 	// deterministically derived from its fixed seed. It is the home node of
@@ -46,10 +47,21 @@ const (
 	// configured a different gateway in settings.
 	DefaultGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
 
+	// ThreadsNetwork is the User.Network tag for accounts bridged in from Meta's
+	// Threads. They arrive through the same gateway and behave the same locally,
+	// so a check for "bridged in from outside" must use IsBridged.
+	ThreadsNetwork = "threads"
+
 	// EntryHandle is the single Mastodon account seeded locally as the entry
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"
 )
+
+// IsBridged reports whether a User.Network tag names a network bridged in
+// through the ActivityPub gateway rather than Warpnet itself.
+func IsBridged(network string) bool {
+	return network == MastodonNetwork || network == ThreadsNetwork
+}
 
 var ErrNotSupported = errors.New("not supported functionality")
 
@@ -84,7 +96,7 @@ func SeedEntryUser(repo UserSeeder) {
 		Id:       EntryHandle,
 		Username: "Warpnet",
 		NodeId:   gatewayNodeID,
-		Network:  Network,
+		Network:  MastodonNetwork,
 	}
 	if _, err := repo.Create(u); err != nil {
 		_, _ = repo.Update(u.Id, u)

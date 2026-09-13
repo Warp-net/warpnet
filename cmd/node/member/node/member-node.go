@@ -38,8 +38,8 @@ import (
 	"github.com/Warp-net/warpnet/core/crdt/statsstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
@@ -111,11 +111,11 @@ func NewMemberNode(
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
 	// the built-in default) before seeding the entry user and starting discovery.
 	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(owner.UserId); err == nil {
-		mastodon.SetGatewayNodeID(gw.NodeID)
+		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
-	mastodon.SeedEntryUser(database.NewUserRepo(db))
+	fediverse.SeedEntryUser(database.NewUserRepo(db))
 
 	notifier := notifications.New(
 		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),

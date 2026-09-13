@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/oklog/ulid/v2"
 	"maps"
 	"math"
@@ -171,7 +171,7 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
 		return
 	}
-	if user.Network == mastodon.Network {
+	if fediverse.IsBridged(user.Network) {
 		return
 	}
 	name := user.Username
@@ -264,6 +264,20 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 			existingUser.Metadata = make(map[string]string, len(newUser.Metadata))
 		}
 		maps.Copy(existingUser.Metadata, newUser.Metadata)
+	}
+	// Counts refreshed from the user's own node (see updateOtherUser). Only a
+	// non-zero value overwrites: a partial update — a profile edit carrying just
+	// a username and an avatar — leaves them at zero, and copying that would
+	// wipe the real numbers. A count that genuinely falls to zero therefore
+	// lingers until it rises again, which is the cheaper of the two mistakes.
+	if newUser.FollowersCount > 0 {
+		existingUser.FollowersCount = newUser.FollowersCount
+	}
+	if newUser.FollowingsCount > 0 {
+		existingUser.FollowingsCount = newUser.FollowingsCount
+	}
+	if newUser.TweetsCount > 0 {
+		existingUser.TweetsCount = newUser.TweetsCount
 	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
 	existingUser.IsOffline = newUser.IsOffline

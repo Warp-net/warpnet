@@ -1,5 +1,5 @@
 //nolint:all
-package mastodon
+package fediverse
 
 import (
 	"errors"
@@ -51,7 +51,7 @@ func TestSeedEntryUser(t *testing.T) {
 
 		u := repo.created[0]
 		require.Equal(t, EntryHandle, u.Id)
-		require.Equal(t, Network, u.Network)
+		require.Equal(t, MastodonNetwork, u.Network)
 		require.Equal(t, gatewayNodeID, u.NodeId)
 	})
 
@@ -74,4 +74,14 @@ func TestSeedEntryUser(t *testing.T) {
 
 func TestErrNotSupported(t *testing.T) {
 	require.EqualError(t, ErrNotSupported, "not supported functionality")
+}
+
+func TestIsBridged(t *testing.T) {
+	for network, want := range map[string]bool{
+		MastodonNetwork: true, ThreadsNetwork: true, "": false, "warpnet": false, "testnet": false,
+	} {
+		if got := IsBridged(network); got != want {
+			t.Errorf("IsBridged(%q) = %v, want %v", network, got, want)
+		}
+	}
 }

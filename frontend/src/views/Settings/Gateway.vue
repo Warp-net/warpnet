@@ -18,7 +18,7 @@
 
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
         <p class="text-sm text-dark">
-          Bridged Mastodon accounts resolve through the ActivityPub gateway node.
+          Bridged fediverse accounts resolve through the ActivityPub gateway node.
           Change its peer id only if you run your own gateway. Changes take effect
           after the node restarts.
         </p>
@@ -66,7 +66,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 
-// Mirror of mastodon.DefaultGatewayNodeID; used as the reset value and as a
+// Mirror of fediverse.DefaultGatewayNodeID; used as the reset value and as a
 // fallback if the node response omits node_id.
 const DEFAULT_GATEWAY_NODE_ID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK";
 

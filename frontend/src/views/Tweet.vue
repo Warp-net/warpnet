@@ -24,7 +24,12 @@
       <div v-if="!loading && tweet && !notFound">
         <TweetBlock ref="rootTweet" :tweet="tweet" :autoloadVideo="autoloadVideo" />
 
-        <div class="border-t border-lighter p-3 flex flex-col gap-2">
+        <!-- Replies are not offered for a post the target network will not take
+             one for; see acceptsReplies in lib/network.js. -->
+        <div v-if="!canReply" class="border-t border-lighter p-3 text-sm text-dark text-left">
+          {{ networkLabel }} posts cannot be replied to from Warpnet.
+        </div>
+        <div v-else class="border-t border-lighter p-3 flex flex-col gap-2">
           <textarea
             ref="replyBox"
             v-model="replyText"
@@ -72,6 +77,7 @@
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+import {acceptsReplies, tweetNetwork} from "@/lib/network";
 
 const tweetCharLimit = 280;
 
@@ -104,6 +110,13 @@ export default {
     },
   },
   computed: {
+    canReply() {
+      return acceptsReplies(this.tweet);
+    },
+    networkLabel() {
+      const n = tweetNetwork(this.tweet);
+      return n ? n.charAt(0).toUpperCase() + n.slice(1) : 'Warpnet';
+    },
     autoloadVideo() {
       return !warpnetService.isDataSaverEnabled();
     },

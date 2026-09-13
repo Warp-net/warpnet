@@ -22,79 +22,105 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div>
-    <div v-for="section in sections" :key="section.key" class="w-full rounded-lg bg-lightest my-4">
-      <div class="p-3 flex items-center">
-        <p class="text-lg font-bold">Who to follow</p>
-        <img v-if="section.key === 'warpnet'" src="@/assets/logo-transparent.png" alt="Warpnet" class="w-5 h-5 ml-2 object-contain" />
-        <i v-else class="fab fa-mastodon text-lg ml-2 text-[color:var(--gd-trim)]" role="img" aria-label="Mastodon"></i>
-      </div>
-      <!-- No v-if here: on one element Vue 3 evaluates v-if BEFORE v-for, so
-           "profile" resolved to the component prop, not the loop item — the
-           whole list was gated on an unrelated prop. -->
-      <div v-for="profile in section.profiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
-        <img
-          @click="pushToProfilePage(profile.id)"
-          :src="profile.avatar || '/default_profile.png'"
-          class="w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
-          :alt="profile.username"
-        />
-        <div class="hidden lg:block ml-4 min-w-0">
-          <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer truncate max-w-[9rem]">{{ profile.username }}</p>
-          <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]">{{ profile.id.slice(0, 8) }}...</p>
-        </div>
-        <button
-          v-if="!isFollowing(profile.id)"
-          @click="follow(profile.id)"
-          :disabled="isPending(profile.id)"
-          class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
-        >
-          Follow
-        </button>
-        <button
-            v-if="isFollowing(profile.id)"
-            @click="unfollow(profile.id)"
-            :disabled="isPending(profile.id)"
-            class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
-        >
-          <span class="group-hover:hidden">Following</span>
-          <span class="hidden group-hover:inline">Unfollow</span>
-        </button>
-      </div>
+  <div class="w-full rounded-lg bg-lightest my-4">
+    <div class="p-3 flex items-center">
+      <p class="text-lg font-bold">Who to follow</p>
+    </div>
+    <!-- One block, one tab per network: Warpnet first because it is the network
+         the user is actually on; the bridged ones are a step outside it. -->
+    <div class="flex border-t border-lighter" role="tablist">
       <button
-          @click="showMore()"
-          class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
+        v-for="tab in tabs"
+        :key="tab.key"
+        type="button"
+        role="tab"
+        :aria-selected="tab.key === activeTab"
+        :title="tab.label"
+        @click="activeTab = tab.key"
+        :class="['flex-1 flex items-center justify-center gap-2 py-2 text-sm border-b-2 transition-colors flat-btn',
+                 tab.key === activeTab
+                   ? 'border-blue text-blue font-bold'
+                   : 'border-transparent text-dark hover:bg-lighter']"
       >
-        Show More
+        <NetworkIcon :network="tab.network" size-class="w-4 h-4" />
+        <span class="hidden lg:inline">{{ tab.label }}</span>
       </button>
     </div>
+    <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
+      <img
+        @click="pushToProfilePage(profile.id)"
+        :src="profile.avatar || '/default_profile.png'"
+        class="w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
+        :alt="profile.username"
+      />
+      <div class="hidden lg:block ml-4 min-w-0">
+        <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer truncate max-w-[9rem]">{{ profile.username }}</p>
+        <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]">{{ profile.id.slice(0, 8) }}...</p>
+      </div>
+      <button
+        v-if="!isFollowing(profile.id)"
+        @click="follow(profile.id)"
+        :disabled="isPending(profile.id)"
+        class="ml-auto text-sm text-blue font-bold px-4 py-1 rounded-full border border-blue m-2 disabled:opacity-50"
+      >
+        Follow
+      </button>
+      <button
+          v-if="isFollowing(profile.id)"
+          @click="unfollow(profile.id)"
+          :disabled="isPending(profile.id)"
+          class="ml-auto text-sm font-bold px-4 py-1 rounded-full border border-blue bg-blue text-white hover:bg-red-600 hover:border-red-600 m-2 disabled:opacity-50 group"
+      >
+        <span class="group-hover:hidden">Following</span>
+        <span class="hidden group-hover:inline">Unfollow</span>
+      </button>
+    </div>
+    <p v-if="activeProfiles.length === 0" class="p-3 border-t border-lighter text-sm text-dark text-left">
+      Nobody to suggest here yet.
+    </p>
+    <button
+        @click="showMore()"
+        class="p-3 w-full hover:bg-lighter text-left text-blue border-t border-lighter"
+    >
+      Show More
+    </button>
   </div>
 </template>
 
 <script>
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {isMastodonUser} from "@/lib/network";
+import {bridgedNetwork, NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
+import NetworkIcon from "@/components/NetworkIcon.vue";
 
 const sectionLimit = 5;
 
 export default {
   name: 'WhoToFollow',
+  components: {NetworkIcon},
   props: ["profile"],
   data() {
     return {
+      activeTab: 'warpnet',
       warpnetProfiles: [],
       mastodonProfiles: [],
+      threadsProfiles: [],
       followingStatus: new Map(),
       pending: new Set(),
     };
   },
   computed: {
-    sections() {
+    // Every tab is always offered, empty or not: a tab that appears only once
+    // it has content hides the fact that the other networks exist at all.
+    tabs() {
       return [
-        {key: 'warpnet', profiles: this.warpnetProfiles},
-        {key: 'mastodon', profiles: this.mastodonProfiles},
-      ].filter(s => s.profiles.length > 0);
+        {key: 'warpnet', label: 'Warpnet', network: ''},
+        {key: 'mastodon', label: 'Mastodon', network: NETWORK_MASTODON},
+        {key: 'threads', label: 'Threads', network: NETWORK_THREADS},
+      ];
+    },
+    activeProfiles() {
+      return this.groupOf(this.activeTab);
     },
   },
   methods: {
@@ -105,6 +131,16 @@ export default {
           id: profileId
         }
       });
+    },
+    // groupOf / groupFor keep the three buckets in one place: the tab key on
+    // one side, the network tag a profile carries on the other.
+    groupOf(key) {
+      if (key === 'mastodon') return this.mastodonProfiles;
+      if (key === 'threads') return this.threadsProfiles;
+      return this.warpnetProfiles;
+    },
+    groupFor(profile) {
+      return this.groupOf(bridgedNetwork(profile) || 'warpnet');
     },
     isFollowing(profileId) {
       return this.followingStatus.get(profileId) || false
@@ -147,7 +183,7 @@ export default {
         warpnetService.getImage({userId: p.id, key: p.avatar_key})
             .then((avatar) => {
               if (!avatar) return;
-              const group = isMastodonUser(p) ? this.mastodonProfiles : this.warpnetProfiles;
+              const group = this.groupFor(p);
               const i = group.findIndex((x) => x && x.id === p.id);
               if (i !== -1) group.splice(i, 1, {...group[i], avatar});
             })
@@ -171,16 +207,18 @@ export default {
         break;
       }
       for (const p of batch) {
-        const group = isMastodonUser(p) ? this.mastodonProfiles : this.warpnetProfiles;
+        const group = this.groupFor(p);
         if (group.length < sectionLimit) {
           group.push(p);
         }
       }
-      if (this.warpnetProfiles.length >= sectionLimit && this.mastodonProfiles.length >= sectionLimit) {
+      if (this.warpnetProfiles.length >= sectionLimit
+          && this.mastodonProfiles.length >= sectionLimit
+          && this.threadsProfiles.length >= sectionLimit) {
         break;
       }
     }
-    const profiles = [...this.warpnetProfiles, ...this.mastodonProfiles];
+    const profiles = [...this.warpnetProfiles, ...this.mastodonProfiles, ...this.threadsProfiles];
     this.loadAvatars(profiles);
     for (const p of profiles) {
       const status = await warpnetService.isFollowing(p.id);

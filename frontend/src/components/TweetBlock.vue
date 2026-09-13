@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div v-if="deleted" class="hidden"></div>
-  <div v-if="!deleted && tweet.retweeted_by && tweet.retweeted_by !== '' && !tweet.quoted_tweet_id">
+  <div v-if="!deleted && label && tweet.retweeted_by && tweet.retweeted_by !== '' && !tweet.quoted_tweet_id">
     <!-- Retweet header. Quote-style retweets (those that carry
          quoted_tweet_id) render as the retweeter's own tweet with
          an embedded source preview below, so no "X Retweeted"
@@ -65,9 +65,12 @@ resulting from the use or misuse of this software.
         <p class="text-sm text-dark ml-2 flex-none whitespace-nowrap">{{ $filters.timeago(tweet.created_at) }}</p>
         <span
           v-if="isBridged"
-          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-[#5d1a98] text-white whitespace-nowrap flex-none"
-          :title="`Bridged from ${instanceLabel}`"
-        >{{ instanceLabel }}</span>
+          class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-[#5d1a98] text-white whitespace-nowrap flex-none inline-flex items-center gap-1"
+          :title="`Bridged from ${networkLabel} — ${instanceLabel}`"
+        >
+          <NetworkIcon :network="network" size-class="w-3 h-3" color-class="text-white" />
+          <span>{{ instanceLabel }}</span>
+        </span>
         <span v-if="tweet.pinned" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" title="Pinned tweet">
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
@@ -247,9 +250,11 @@ resulting from the use or misuse of this software.
           <button
             @click.stop="replyToTweet()"
             type="button"
-            class="mr-2 rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-100 transition-colors flat-btn"
+            :disabled="!canReply"
+            :class="['mr-2 rounded-full w-9 h-9 flex items-center justify-center transition-colors flat-btn',
+                     canReply ? 'hover:bg-blue-100' : 'opacity-40 cursor-not-allowed']"
             aria-label="Reply"
-            title="Reply"
+            :title="canReply ? 'Reply' : `${networkLabel} posts cannot be replied to from Warpnet`"
           >
             <i class="far fa-comment" aria-hidden="true"></i>
           </button>
@@ -371,7 +376,8 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {extractYoutubeId} from "@/lib/youtube";
 import {DEFAULT_REACTION} from "@/lib/emoji";
-import {decodeHtmlEntities, isMastodonTweet, mastodonInstance} from "@/lib/network";
+import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
+import NetworkIcon from "@/components/NetworkIcon.vue";
 
 export default {
   name: "Tweet",
@@ -380,6 +386,7 @@ export default {
     autoloadVideo: {type: Boolean, default: false},
   },
   components: {
+    NetworkIcon,
     ReactorsOverlay: defineAsyncComponent(() => import('./ReactorsOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),
@@ -407,7 +414,9 @@ export default {
       deleted: false,
       isOwner: false,
       bookmarked: false,
-      label: "You Retweeted",
+      // Resolved by loadRetweeterLabel before the header paints. It must not
+      // default to "You Retweeted": that claimed every boost as the viewer's.
+      label: "",
       myReaction: "",
       reactions: {},
       showReactionBar: false,
@@ -429,10 +438,20 @@ export default {
   },
   computed: {
     isBridged() {
-      return isMastodonTweet(this.tweet);
+      return isBridgedTweet(this.tweet);
+    },
+    network() {
+      return tweetNetwork(this.tweet);
+    },
+    networkLabel() {
+      const n = this.network;
+      return n ? n.charAt(0).toUpperCase() + n.slice(1) : 'Warpnet';
     },
     instanceLabel() {
-      return mastodonInstance(this.tweet && this.tweet.user_id) || 'Mastodon';
+      return bridgedInstance(this.tweet && this.tweet.user_id) || this.networkLabel;
+    },
+    canReply() {
+      return acceptsReplies(this.tweet);
     },
     displayText() {
       const text = (this.tweet && this.tweet.text) || '';
@@ -478,13 +497,28 @@ export default {
         console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
       }
     },
+    // The header names whoever boosted the post, and only says "You" when that
+    // is actually the signed-in user. An author boosting their own post — which
+    // is what a bridged self-boost looks like, retweeted_by equal to user_id —
+    // used to return early and leave the "You Retweeted" default standing, so a
+    // GrapheneOS boost of its own reply was shown as the viewer's retweet. A
+    // failed profile lookup did the same. The name is filled in synchronously
+    // from what the tweet already carries, then refined once the profile loads.
     async loadRetweeterLabel() {
-      if (!this.tweet.retweeted_by || this.tweet.retweeted_by === this.tweet.user_id) return;
+      const by = this.tweet.retweeted_by;
+      if (!by) return;
+      const owner = warpnetService.getOwnerProfile();
+      if (owner && by === owner.user_id) {
+        this.label = "You Retweeted";
+        return;
+      }
+      const known = by === this.tweet.user_id ? (this.tweet.username || by) : by;
+      this.label = `${known} Retweeted`;
       try {
-        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by);
+        const retweeter = await warpnetService.getProfile(by);
         if (retweeter && retweeter.username) this.label = `${retweeter.username} Retweeted`;
       } catch (err) {
-        console.warn(`failed to load retweeter profile [${this.tweet.retweeted_by}]`, err);
+        console.warn(`failed to load retweeter profile [${by}]`, err);
       }
     },
     loadImages() {
@@ -528,7 +562,7 @@ export default {
       // A bridged author (e.g. a Fediverse user who joined the thread) may be
       // unknown to the node; resolving them through the gateway first gives
       // the tweet page a routable user record.
-      if (isMastodonTweet(this.tweet)) {
+      if (isBridgedTweet(this.tweet)) {
         try {
           const gw = await warpnetService.getGatewaySettings();
           await warpnetService.getProfile(this.tweet.user_id, gw.node_id);
@@ -675,7 +709,7 @@ export default {
           this.quotedUnavailable = true;
           return;
         }
-        this.quotedSourceText = isMastodonTweet(src)
+        this.quotedSourceText = isBridgedTweet(src)
           ? decodeHtmlEntities(src.text || '')
           : (src.text || '');
         this.quotedSourceUsername = src.username || '';
@@ -799,6 +833,7 @@ export default {
       }
     },
     replyToTweet() {
+      if (!this.canReply) return;
       this.openTweetPage();
     },
     async retweet() {
