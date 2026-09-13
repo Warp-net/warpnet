@@ -37,6 +37,7 @@ import (
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
 )
@@ -347,7 +348,49 @@ func (s *UserRepoTestSuite) TestUpdateRefreshesCounts() {
 	s.Equal(int64(23), got.TweetsCount)
 }
 
+// TestWhoToFollowSpreadsAcrossNetworks pins the reason a seeded Threads account
+// never reached the client: the foreign slots were filled in keyspace order, so
+// the dozens of Mastodon accounts a node picks up from browsing follow lists
+// took all ten of them and the one Threads account never appeared.
+func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	repo := NewUserRepo(db)
+
+	// Ids that sort ahead of the Threads handle, which is what the real ones do:
+	// the scan walks the keyspace, so the Mastodon accounts a node accumulates
+	// reach the slots first.
+	for i := range 12 {
+		_, cerr := repo.Create(domain.User{
+			Id:       fmt.Sprintf("aaa%02d@mastodon.social", i),
+			Username: fmt.Sprintf("aaa%02d", i),
+			NodeId:   "gateway", Network: "mastodon",
+		})
+		require.NoError(t, cerr)
+	}
+	_, err = repo.Create(domain.User{
+		Id: "engineer_of_your_ass@threads.net", Username: "Vadim",
+		NodeId: "gateway", Network: "threads",
+	})
+	require.NoError(t, err)
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+
+	byNetwork := map[string]int{}
+	for _, u := range users {
+		byNetwork[u.Network]++
+	}
+	require.NotZero(t, byNetwork["threads"], "the only Threads account must not be crowded out: %+v", byNetwork)
+	require.NotZero(t, byNetwork["mastodon"], "Mastodon must still be represented: %+v", byNetwork)
+	require.LessOrEqual(t, len(users), int(limit))
+}
+
 func TestUserRepoTestSuite(t *testing.T) {
+
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(UserRepoTestSuite))

@@ -564,7 +564,13 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	scanPage := uint64(200)
 
 	native := make([]domain.User, 0, want)
-	other := make([]domain.User, 0, want)
+	// One bucket per foreign network, in first-seen order. The client splits the
+	// result by network into its own tabs, so a network with more records must
+	// not crowd the others out of the shared slots — a node that has browsed a
+	// few Mastodon follow lists holds dozens of those and exactly one Threads
+	// account, and a flat scan hands back ten Mastodon rows every time.
+	foreign := map[string][]domain.User{}
+	foreignOrder := make([]string, 0, 2)
 	pageCursor := ""
 	if cursor != nil {
 		pageCursor = *cursor
@@ -594,8 +600,11 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 				native = append(native, u)
 				continue
 			}
-			if uint64(len(other)) < want {
-				other = append(other, u)
+			if _, seen := foreign[u.Network]; !seen {
+				foreignOrder = append(foreignOrder, u.Network)
+			}
+			if uint64(len(foreign[u.Network])) < want {
+				foreign[u.Network] = append(foreign[u.Network], u)
 			}
 		}
 
@@ -605,13 +614,26 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 		pageCursor = next
 	}
 
-	// Native peers first, then fill remaining slots with the rest.
+	// Native peers first, then the remaining slots round-robin across the
+	// foreign networks so each gets a share rather than the first one seen
+	// taking them all.
 	recommended := native
-	for _, u := range other {
-		if uint64(len(recommended)) >= want {
+	for round := 0; uint64(len(recommended)) < want; round++ {
+		placed := false
+		for _, network := range foreignOrder {
+			bucket := foreign[network]
+			if round >= len(bucket) {
+				continue
+			}
+			recommended = append(recommended, bucket[round])
+			placed = true
+			if uint64(len(recommended)) >= want {
+				break
+			}
+		}
+		if !placed {
 			break
 		}
-		recommended = append(recommended, u)
 	}
 
 	return recommended, local_store.EndCursor, nil
