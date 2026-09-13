@@ -379,11 +379,11 @@ func seedNetwork(t *testing.T, repo *UserRepo, network, idPrefix, host string, n
 
 // networkCounts counts by the network the code groups on, not by the raw tag:
 // CreateWithTTL marshals a user before defaulting Network, so a native row is
-// stored with an empty tag and userNetwork is what resolves it.
+// stored with an empty tag and resolveNetwork is what resolves it.
 func networkCounts(users []domain.User) map[string]int {
 	out := map[string]int{}
 	for _, u := range users {
-		out[userNetwork(u)]++
+		out[resolveNetwork(u)]++
 	}
 	return out
 }

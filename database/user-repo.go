@@ -550,10 +550,10 @@ const (
 	recommendedScanPage = uint64(200)
 )
 
-// userNetwork names the network a user belongs to. The stored tag is the truth;
+// resolveNetwork names the network a user belongs to. The stored tag is the truth;
 // rows written before the tag existed carry none, and a ULID id is what those
 // had instead — every Warpnet id is one and no fediverse handle is.
-func userNetwork(u domain.User) string {
+func resolveNetwork(u domain.User) string {
 	if u.Network != "" {
 		return u.Network
 	}
@@ -588,7 +588,7 @@ func newUsersByNetwork(perNetwork uint64) *usersByNetwork {
 }
 
 func (g *usersByNetwork) add(u domain.User) {
-	network := userNetwork(u)
+	network := resolveNetwork(u)
 	if _, seen := g.users[network]; !seen {
 		g.networks = append(g.networks, network)
 	}
@@ -597,11 +597,11 @@ func (g *usersByNetwork) add(u domain.User) {
 	}
 }
 
-// evenShare hands out up to limit users, one network at a time in rotation, so
+// dealEvenly hands out up to limit users, one network at a time in rotation, so
 // each network present gets a share of the block instead of the first one down
 // the keyspace taking it all. A network that runs out simply stops being dealt
 // to, so one network on its own still fills the whole block.
-func (g *usersByNetwork) evenShare(limit uint64) []domain.User {
+func (g *usersByNetwork) dealEvenly(limit uint64) []domain.User {
 	out := make([]domain.User, 0, limit)
 	for round := 0; uint64(len(out)) < limit; round++ {
 		dealt := false
@@ -690,7 +690,7 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	if err != nil {
 		return nil, "", err
 	}
-	return groups.evenShare(want), local_store.EndCursor, nil
+	return groups.dealEvenly(want), local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
