@@ -348,16 +348,47 @@ func (s *UserRepoTestSuite) TestUpdateRefreshesCounts() {
 	s.Equal(int64(23), got.TweetsCount)
 }
 
+// newWhoToFollowRepo gives each who-to-follow test its own store: the shared
+// suite database carries users from every other test, which would decide the
+// outcome of a test about which users get picked.
+func newWhoToFollowRepo(t *testing.T) *UserRepo {
+	t.Helper()
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	require.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	return NewUserRepo(db)
+}
+
+// seedNetwork inserts n bridged accounts on one network. idPrefix decides where
+// they land in the keyspace, which is the order the scan walks.
+func seedNetwork(t *testing.T, repo *UserRepo, network, idPrefix, host string, n int) {
+	t.Helper()
+	for i := range n {
+		_, err := repo.Create(domain.User{
+			Id:       fmt.Sprintf("%s%02d@%s", idPrefix, i, host),
+			Username: fmt.Sprintf("%s%02d", idPrefix, i),
+			NodeId:   "gateway",
+			Network:  network,
+		})
+		require.NoError(t, err)
+	}
+}
+
+func networkCounts(users []domain.User) map[string]int {
+	out := map[string]int{}
+	for _, u := range users {
+		out[u.Network]++
+	}
+	return out
+}
+
 // TestWhoToFollowSpreadsAcrossNetworks pins the reason a seeded Threads account
 // never reached the client: the foreign slots were filled in keyspace order, so
 // the dozens of Mastodon accounts a node picks up from browsing follow lists
 // took all ten of them and the one Threads account never appeared.
 func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
-	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
-	require.NoError(t, err)
-	defer db.Close()
-	require.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
-	repo := NewUserRepo(db)
+	repo := newWhoToFollowRepo(t)
 
 	// Ids that sort ahead of the Threads handle, which is what the real ones do:
 	// the scan walks the keyspace, so the Mastodon accounts a node accumulates
@@ -370,7 +401,7 @@ func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
 		})
 		require.NoError(t, cerr)
 	}
-	_, err = repo.Create(domain.User{
+	_, err := repo.Create(domain.User{
 		Id: "engineer_of_your_ass@threads.net", Username: "Vadim",
 		NodeId: "gateway", Network: "threads",
 	})
@@ -387,6 +418,85 @@ func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
 	require.NotZero(t, byNetwork["threads"], "the only Threads account must not be crowded out: %+v", byNetwork)
 	require.NotZero(t, byNetwork["mastodon"], "Mastodon must still be represented: %+v", byNetwork)
 	require.LessOrEqual(t, len(users), int(limit))
+}
+
+// TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks: the fill is round-robin
+// over whatever networks the scan finds, so a network added later needs no
+// change here. The property is "every network present gets a share", not a
+// list of names — mastodon is seeded first and largest precisely because the
+// keyspace order is what used to hand it every slot.
+func TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seeded := []struct {
+		network, prefix, host string
+		n                     int
+	}{
+		{"mastodon", "aaa", "mastodon.social", 20},
+		{"threads", "bbb", "threads.net", 1},
+		{"bluesky", "ccc", "bsky.example", 7},
+		{"nostr", "ddd", "nostr.example", 3},
+	}
+	for _, sd := range seeded {
+		seedNetwork(t, repo, sd.network, sd.prefix, sd.host, sd.n)
+	}
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	require.Len(t, users, int(limit))
+
+	counts := networkCounts(users)
+	for _, sd := range seeded {
+		require.NotZerof(t, counts[sd.network], "%s got no slot: %+v", sd.network, counts)
+	}
+	// Round-robin bounds the largest share at one per round, so the network with
+	// twenty accounts cannot take more than a quarter-ish of ten.
+	require.LessOrEqualf(t, counts["mastodon"], 3, "one network took the block: %+v", counts)
+	// The network with a single account gets exactly that one.
+	require.Equal(t, 1, counts["threads"], counts)
+}
+
+// Fewer slots than networks: the first round still spends them on distinct
+// networks rather than filling from one.
+func TestWhoToFollowWithFewerSlotsThanNetworks(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 5)
+	seedNetwork(t, repo, "threads", "bbb", "threads.net", 5)
+	seedNetwork(t, repo, "bluesky", "ccc", "bsky.example", 5)
+
+	limit := uint64(2)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	require.Len(t, users, 2)
+	require.Len(t, networkCounts(users), 2, "both slots went to one network: %+v", users)
+}
+
+// Rows stored before the network tag existed carry none. They are their own
+// bucket rather than being dropped or merged into a named network.
+func TestWhoToFollowKeepsUntaggedRowsInTheirOwnBucket(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 9)
+	seedNetwork(t, repo, "", "bbb", "legacy.example", 2)
+
+	limit := uint64(4)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	counts := networkCounts(users)
+	require.NotZerof(t, counts[""], "untagged rows lost their share: %+v", counts)
+	require.NotZerof(t, counts["mastodon"], "%+v", counts)
+}
+
+// A single network must still be able to use the whole block — the spread must
+// not starve the common case of one bridged network.
+func TestWhoToFollowGivesOneNetworkTheWholeBlock(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 12)
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	require.Len(t, users, 10)
+	require.Equal(t, 10, networkCounts(users)["mastodon"])
 }
 
 func TestUserRepoTestSuite(t *testing.T) {
