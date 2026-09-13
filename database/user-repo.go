@@ -541,6 +541,128 @@ func matchesUserQuery(u domain.User, q string) bool {
 	return false
 }
 
+// recommendationLimits bound one WhoToFollow call: maxScan caps the rows read so
+// a large bridged import cannot turn a recommendation into a full table scan,
+// and scanPage is the window handed to the underlying list.
+const (
+	maxRecommendationScan = 5000
+	recommendationPage    = uint64(200)
+)
+
+// candidateBuckets sorts scanned users into the groups a recommendation block is
+// built from: Warpnet-native peers, and one bucket per bridged network.
+//
+// The split is what keeps one network from taking the whole block. The client
+// shows the result in a tab per network, and a node that has browsed a few
+// Mastodon follow lists holds dozens of those against a single Threads account —
+// filled in keyspace order, every slot went to Mastodon and the other tabs were
+// empty.
+type candidateBuckets struct {
+	native  []domain.User
+	foreign map[string][]domain.User
+	// networks in the order they were first seen, so the round-robin below is
+	// deterministic rather than map-ordered.
+	networks   []string
+	perNetwork uint64
+}
+
+func newCandidateBuckets(perNetwork uint64) *candidateBuckets {
+	return &candidateBuckets{
+		native:     make([]domain.User, 0, perNetwork),
+		foreign:    map[string][]domain.User{},
+		networks:   make([]string, 0, 2),
+		perNetwork: perNetwork,
+	}
+}
+
+// add files a user under their network. A bridged bucket stops growing past
+// perNetwork: more than that can never be shown, and holding them would make a
+// flooded network cost memory as well as slots.
+func (b *candidateBuckets) add(u domain.User) {
+	// Warpnet-native peers are the ones with a ULID id. No avatar or tweet
+	// gating — a freshly joined account is still a valid recommendation.
+	if isULID(u.Id) {
+		b.native = append(b.native, u)
+		return
+	}
+	if _, seen := b.foreign[u.Network]; !seen {
+		b.networks = append(b.networks, u.Network)
+	}
+	if uint64(len(b.foreign[u.Network])) < b.perNetwork {
+		b.foreign[u.Network] = append(b.foreign[u.Network], u)
+	}
+}
+
+// nativeFull reports whether the native peers alone can fill the block, which is
+// where the scan has nothing left to look for.
+func (b *candidateBuckets) nativeFull(want uint64) bool {
+	return uint64(len(b.native)) >= want
+}
+
+// take returns up to want users: native peers first, then the remaining slots
+// round-robin across the bridged networks, one per network per round, so each
+// gets a share instead of the first one down the keyspace taking them all.
+func (b *candidateBuckets) take(want uint64) []domain.User {
+	out := b.native
+	if uint64(len(out)) > want {
+		out = out[:want]
+	}
+	for round := 0; uint64(len(out)) < want; round++ {
+		placed := false
+		for _, network := range b.networks {
+			bucket := b.foreign[network]
+			if round >= len(bucket) {
+				continue
+			}
+			out = append(out, bucket[round])
+			placed = true
+			if uint64(len(out)) >= want {
+				return out
+			}
+		}
+		if !placed {
+			break // every bucket exhausted
+		}
+	}
+	return out
+}
+
+// scanCandidates walks the user keyspace from cursor, filing everyone it finds
+// into buckets. It stops once the native peers alone could fill the block, when
+// the keyspace ends, or at maxRecommendationScan rows.
+func scanCandidates(txn local_store.WarpTransactioner, prefix local_store.DatabaseKey, want uint64, cursor string) (*candidateBuckets, error) {
+	buckets := newCandidateBuckets(want)
+	page := recommendationPage
+	scanned := 0
+
+	for !buckets.nativeFull(want) && scanned < maxRecommendationScan {
+		from := cursor
+		items, next, err := txn.List(prefix, &page, &from)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			scanned++
+			var u domain.User
+			if err := json.Unmarshal(item.Value, &u); err != nil {
+				return nil, err
+			}
+			if u.IsOffline {
+				continue
+			}
+			buckets.add(u)
+		}
+		if len(items) == 0 || next == "" || next == local_store.EndCursor {
+			break
+		}
+		cursor = next
+	}
+	return buckets, nil
+}
+
+// WhoToFollow returns the recommendation block: Warpnet peers first, then a fair
+// share of each bridged network (see candidateBuckets). The whole block is one
+// page, so the cursor it returns is always the end.
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
@@ -558,85 +680,15 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	}
 	defer txn.Rollback()
 
-	// maxScan bounds the work under a large Mastodon flood; scanPage is the
-	// per-iteration window handed to the underlying list.
-	const maxScan = 5000
-	scanPage := uint64(200)
-
-	native := make([]domain.User, 0, want)
-	// One bucket per foreign network, in first-seen order. The client splits the
-	// result by network into its own tabs, so a network with more records must
-	// not crowd the others out of the shared slots — a node that has browsed a
-	// few Mastodon follow lists holds dozens of those and exactly one Threads
-	// account, and a flat scan hands back ten Mastodon rows every time.
-	foreign := map[string][]domain.User{}
-	foreignOrder := make([]string, 0, 2)
-	pageCursor := ""
+	from := ""
 	if cursor != nil {
-		pageCursor = *cursor
+		from = *cursor
 	}
-	scanned := 0
-
-	for uint64(len(native)) < want && scanned < maxScan {
-		c := pageCursor
-		items, next, err := txn.List(prefix, &scanPage, &c)
-		if err != nil {
-			return nil, "", err
-		}
-
-		for _, item := range items {
-			scanned++
-			var u domain.User
-			if err := json.Unmarshal(item.Value, &u); err != nil {
-				return nil, "", err
-			}
-			if u.IsOffline {
-				continue
-			}
-			// Warpnet-native peers (ULID id) come first; everyone else fills the
-			// remaining slots. No avatar or tweet gating — a freshly joined
-			// account (no picture, no posts yet) is still a valid recommendation.
-			if isULID(u.Id) {
-				native = append(native, u)
-				continue
-			}
-			if _, seen := foreign[u.Network]; !seen {
-				foreignOrder = append(foreignOrder, u.Network)
-			}
-			if uint64(len(foreign[u.Network])) < want {
-				foreign[u.Network] = append(foreign[u.Network], u)
-			}
-		}
-
-		if next == local_store.EndCursor || next == "" || len(items) == 0 {
-			break
-		}
-		pageCursor = next
+	buckets, err := scanCandidates(txn, prefix, want, from)
+	if err != nil {
+		return nil, "", err
 	}
-
-	// Native peers first, then the remaining slots round-robin across the
-	// foreign networks so each gets a share rather than the first one seen
-	// taking them all.
-	recommended := native
-	for round := 0; uint64(len(recommended)) < want; round++ {
-		placed := false
-		for _, network := range foreignOrder {
-			bucket := foreign[network]
-			if round >= len(bucket) {
-				continue
-			}
-			recommended = append(recommended, bucket[round])
-			placed = true
-			if uint64(len(recommended)) >= want {
-				break
-			}
-		}
-		if !placed {
-			break
-		}
-	}
-
-	return recommended, local_store.EndCursor, nil
+	return buckets.take(want), local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
