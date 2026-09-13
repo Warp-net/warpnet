@@ -34,9 +34,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
@@ -375,10 +377,13 @@ func seedNetwork(t *testing.T, repo *UserRepo, network, idPrefix, host string, n
 	}
 }
 
+// networkCounts counts by the network the code groups on, not by the raw tag:
+// CreateWithTTL marshals a user before defaulting Network, so a native row is
+// stored with an empty tag and userNetwork is what resolves it.
 func networkCounts(users []domain.User) map[string]int {
 	out := map[string]int{}
 	for _, u := range users {
-		out[u.Network]++
+		out[userNetwork(u)]++
 	}
 	return out
 }
@@ -497,6 +502,28 @@ func TestWhoToFollowGivesOneNetworkTheWholeBlock(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, users, 10)
 	require.Equal(t, 10, networkCounts(users)["mastodon"])
+}
+
+// Warpnet is a network like any other here: a node with plenty of its own peers
+// must still show the one bridged account it knows. Under the old native-first
+// merge the Warpnet peers took every slot and no bridged tab could ever fill.
+func TestWhoToFollowGivesWarpnetNoPriority(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	for range 12 {
+		_, err := repo.Create(domain.User{
+			Id: ulid.Make().String(), Username: "peer", NodeId: "node-" + uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+	seedNetwork(t, repo, "threads", "zzz", "threads.net", 1)
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+
+	counts := networkCounts(users)
+	require.NotZerof(t, counts["threads"], "warpnet took the whole block: %+v", counts)
+	require.NotZerof(t, counts[warpnet.WarpnetName], "warpnet peers must still be recommended: %+v", counts)
 }
 
 func TestUserRepoTestSuite(t *testing.T) {

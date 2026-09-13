@@ -29,6 +29,7 @@ package database
 
 import (
 	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/oklog/ulid/v2"
 	"maps"
 	"math"
@@ -541,101 +542,102 @@ func matchesUserQuery(u domain.User, q string) bool {
 	return false
 }
 
-// recommendationLimits bound one WhoToFollow call: maxScan caps the rows read so
-// a large bridged import cannot turn a recommendation into a full table scan,
-// and scanPage is the window handed to the underlying list.
+// A recommendation scan reads at most maxRecommendedScan rows, in pages of
+// recommendedScanPage, so a node holding a large bridged import cannot turn one
+// call into a full table scan.
 const (
-	maxRecommendationScan = 5000
-	recommendationPage    = uint64(200)
+	maxRecommendedScan  = 5000
+	recommendedScanPage = uint64(200)
 )
 
-// candidateBuckets sorts scanned users into the groups a recommendation block is
-// built from: Warpnet-native peers, and one bucket per bridged network.
+// userNetwork names the network a user belongs to. The stored tag is the truth;
+// rows written before the tag existed carry none, and a ULID id is what those
+// had instead — every Warpnet id is one and no fediverse handle is.
+func userNetwork(u domain.User) string {
+	if u.Network != "" {
+		return u.Network
+	}
+	if isULID(u.Id) {
+		return warpnet.WarpnetName
+	}
+	return ""
+}
+
+// usersByNetwork holds the users a recommendation scan found, grouped by the
+// network each belongs to, with the networks in the order they first appeared.
 //
-// The split is what keeps one network from taking the whole block. The client
-// shows the result in a tab per network, and a node that has browsed a few
-// Mastodon follow lists holds dozens of those against a single Threads account —
-// filled in keyspace order, every slot went to Mastodon and the other tabs were
-// empty.
-type candidateBuckets struct {
-	native  []domain.User
-	foreign map[string][]domain.User
-	// networks in the order they were first seen, so the round-robin below is
-	// deterministic rather than map-ordered.
-	networks   []string
+// The grouping is the whole point: the client shows one tab per network, and a
+// node that has browsed a few Mastodon follow lists holds dozens of those
+// against a single Threads account. Handed out in the order they sit in the
+// keyspace, every slot went to Mastodon and the other tabs stayed empty.
+type usersByNetwork struct {
+	users    map[string][]domain.User
+	networks []string
+	// perNetwork caps each group: more than a whole block can ever be shown
+	// from one network, and keeping them would make a flooded network cost
+	// memory as well as slots.
 	perNetwork uint64
 }
 
-func newCandidateBuckets(perNetwork uint64) *candidateBuckets {
-	return &candidateBuckets{
-		native:     make([]domain.User, 0, perNetwork),
-		foreign:    map[string][]domain.User{},
+func newUsersByNetwork(perNetwork uint64) *usersByNetwork {
+	return &usersByNetwork{
+		users:      map[string][]domain.User{},
 		networks:   make([]string, 0, 2),
 		perNetwork: perNetwork,
 	}
 }
 
-// add files a user under their network. A bridged bucket stops growing past
-// perNetwork: more than that can never be shown, and holding them would make a
-// flooded network cost memory as well as slots.
-func (b *candidateBuckets) add(u domain.User) {
-	// Warpnet-native peers are the ones with a ULID id. No avatar or tweet
-	// gating — a freshly joined account is still a valid recommendation.
-	if isULID(u.Id) {
-		b.native = append(b.native, u)
-		return
+func (g *usersByNetwork) add(u domain.User) {
+	network := userNetwork(u)
+	if _, seen := g.users[network]; !seen {
+		g.networks = append(g.networks, network)
 	}
-	if _, seen := b.foreign[u.Network]; !seen {
-		b.networks = append(b.networks, u.Network)
-	}
-	if uint64(len(b.foreign[u.Network])) < b.perNetwork {
-		b.foreign[u.Network] = append(b.foreign[u.Network], u)
+	if uint64(len(g.users[network])) < g.perNetwork {
+		g.users[network] = append(g.users[network], u)
 	}
 }
 
-// nativeFull reports whether the native peers alone can fill the block, which is
-// where the scan has nothing left to look for.
-func (b *candidateBuckets) nativeFull(want uint64) bool {
-	return uint64(len(b.native)) >= want
-}
-
-// take returns up to want users: native peers first, then the remaining slots
-// round-robin across the bridged networks, one per network per round, so each
-// gets a share instead of the first one down the keyspace taking them all.
-func (b *candidateBuckets) take(want uint64) []domain.User {
-	out := b.native
-	if uint64(len(out)) > want {
-		out = out[:want]
-	}
-	for round := 0; uint64(len(out)) < want; round++ {
-		placed := false
-		for _, network := range b.networks {
-			bucket := b.foreign[network]
-			if round >= len(bucket) {
+// evenShare hands out up to limit users, one network at a time in rotation, so
+// each network present gets a share of the block instead of the first one down
+// the keyspace taking it all. A network that runs out simply stops being dealt
+// to, so one network on its own still fills the whole block.
+func (g *usersByNetwork) evenShare(limit uint64) []domain.User {
+	out := make([]domain.User, 0, limit)
+	for round := 0; uint64(len(out)) < limit; round++ {
+		dealt := false
+		for _, network := range g.networks {
+			group := g.users[network]
+			if round >= len(group) {
 				continue
 			}
-			out = append(out, bucket[round])
-			placed = true
-			if uint64(len(out)) >= want {
+			out = append(out, group[round])
+			dealt = true
+			if uint64(len(out)) >= limit {
 				return out
 			}
 		}
-		if !placed {
-			break // every bucket exhausted
+		if !dealt {
+			return out // every network exhausted
 		}
 	}
 	return out
 }
 
-// scanCandidates walks the user keyspace from cursor, filing everyone it finds
-// into buckets. It stops once the native peers alone could fill the block, when
-// the keyspace ends, or at maxRecommendationScan rows.
-func scanCandidates(txn local_store.WarpTransactioner, prefix local_store.DatabaseKey, want uint64, cursor string) (*candidateBuckets, error) {
-	buckets := newCandidateBuckets(want)
-	page := recommendationPage
+// scanUsersByNetwork walks the user keyspace from cursor and groups everyone it
+// finds. It reads to the end of the keyspace rather than stopping once it has
+// enough users: a network's only account can sit anywhere, and the Threads one
+// sat past every Mastodon handle. maxRecommendedScan is the bound.
+func scanUsersByNetwork(
+	txn local_store.WarpTransactioner,
+	prefix local_store.DatabaseKey,
+	perNetwork uint64,
+	cursor string,
+) (*usersByNetwork, error) {
+	groups := newUsersByNetwork(perNetwork)
+	page := recommendedScanPage
 	scanned := 0
 
-	for !buckets.nativeFull(want) && scanned < maxRecommendationScan {
+	for scanned < maxRecommendedScan {
 		from := cursor
 		items, next, err := txn.List(prefix, &page, &from)
 		if err != nil {
@@ -650,19 +652,19 @@ func scanCandidates(txn local_store.WarpTransactioner, prefix local_store.Databa
 			if u.IsOffline {
 				continue
 			}
-			buckets.add(u)
+			groups.add(u)
 		}
 		if len(items) == 0 || next == "" || next == local_store.EndCursor {
 			break
 		}
 		cursor = next
 	}
-	return buckets, nil
+	return groups, nil
 }
 
-// WhoToFollow returns the recommendation block: Warpnet peers first, then a fair
-// share of each bridged network (see candidateBuckets). The whole block is one
-// page, so the cursor it returns is always the end.
+// WhoToFollow returns the recommendation block: an even share of every network
+// the node knows users on. The block is one page, so the cursor it returns is
+// always the end.
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
@@ -684,11 +686,11 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	if cursor != nil {
 		from = *cursor
 	}
-	buckets, err := scanCandidates(txn, prefix, want, from)
+	groups, err := scanUsersByNetwork(txn, prefix, want, from)
 	if err != nil {
 		return nil, "", err
 	}
-	return buckets.take(want), local_store.EndCursor, nil
+	return groups.evenShare(want), local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
