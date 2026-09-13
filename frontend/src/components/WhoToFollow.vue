@@ -27,8 +27,12 @@ resulting from the use or misuse of this software.
       <p class="text-lg font-bold">Who to follow</p>
     </div>
     <!-- One block, one tab per network: Warpnet first because it is the network
-         the user is actually on; the bridged ones are a step outside it. -->
-    <div class="flex border-t border-lighter" role="tablist">
+         the user is actually on; the bridged ones are a step outside it.
+         Separated pills rather than underlined cells — an underline alone left
+         the three labels reading as one run-on line, and a filled active pill
+         is the one state that survives both themes without a new colour, since
+         bg-lighter is what the dark theme already remaps. -->
+    <div class="flex gap-1 px-2 py-2 border-t border-lighter" role="tablist">
       <button
         v-for="tab in tabs"
         :key="tab.key"
@@ -37,13 +41,13 @@ resulting from the use or misuse of this software.
         :aria-selected="tab.key === activeTab"
         :title="tab.label"
         @click="activeTab = tab.key"
-        :class="['flex-1 flex items-center justify-center gap-2 py-2 text-sm border-b-2 transition-colors flat-btn',
+        :class="['flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-full text-xs transition-colors flat-btn',
                  tab.key === activeTab
-                   ? 'border-blue text-blue font-bold'
-                   : 'border-transparent text-dark hover:bg-lighter']"
+                   ? 'bg-lighter text-blue font-bold ring-1 ring-[color:var(--gd-trim)]'
+                   : 'text-dark hover:bg-lighter']"
       >
-        <NetworkIcon :network="tab.network" size-class="w-4 h-4" />
-        <span class="hidden lg:inline">{{ tab.label }}</span>
+        <NetworkIcon :network="tab.network" size-class="w-4 h-4 shrink-0" />
+        <span class="truncate">{{ tab.label }}</span>
       </button>
     </div>
     <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
