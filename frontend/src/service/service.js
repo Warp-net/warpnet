@@ -1517,7 +1517,7 @@ export const warpnetService = {
 
     // Explicit-cursor page fetch for one user's tweets. Unlike getTweets it
     // never touches the global 'tweets' cursor, so many per-user paginations
-    // (the unified timeline fans out per followed Mastodon handle) can run
+    // (the unified timeline fans out per followed fediverse handle) can run
     // side by side without clobbering the Profile view.
     async getUserTweetsPage({userId, cursor = '', limit = defaultLimit}) {
         if (cursor === endCursor) {

@@ -92,12 +92,47 @@ const warpnetTweet = {
 };
 
 describe('TweetBlock bridged badge', () => {
-  it('shows the instance badge on a Mastodon tweet', async () => {
-    const { getByText } = renderTweet({ ...bridgedTweet });
+  it('shows the network and the instance on a Mastodon tweet', async () => {
+    const { getByTitle, getByText, getByLabelText } = renderTweet({ ...bridgedTweet });
     await waitFor(() => {
-      const badge = getByText('mastodon.social');
-      expect(badge.getAttribute('title')).toBe('Bridged from mastodon.social');
+      expect(getByTitle('Bridged from Mastodon — mastodon.social')).toBeTruthy();
     });
+    expect(getByText('mastodon.social')).toBeTruthy();
+    expect(getByLabelText('Mastodon')).toBeTruthy();
+  });
+
+  it('shows the Threads mark on a Threads tweet', async () => {
+    const { getByTitle, getByText, getByLabelText } = renderTweet({
+      ...bridgedTweet,
+      id: 'https://threads.net/ap/users/17841452547050663/post/1/',
+      user_id: 'someone@threads.net',
+      username: 'someone@threads.net',
+      network: 'threads',
+      root_id: 'https://threads.net/ap/users/17841452547050663/post/1/',
+    });
+    await waitFor(() => {
+      expect(getByTitle('Bridged from Threads — threads.net')).toBeTruthy();
+    });
+    expect(getByText('threads.net')).toBeTruthy();
+    expect(getByLabelText('Threads')).toBeTruthy();
+  });
+
+  it('offers no reply on a Threads tweet', async () => {
+    const { getByTitle, getByLabelText } = renderTweet({
+      ...bridgedTweet,
+      user_id: 'someone@threads.net',
+      network: 'threads',
+    });
+    await waitFor(() => {
+      expect(getByTitle('Threads posts cannot be replied to from Warpnet')).toBeTruthy();
+    });
+    expect(getByLabelText('Reply').disabled).toBe(true);
+  });
+
+  it('still offers a reply on a Mastodon tweet', async () => {
+    const { getByLabelText } = renderTweet({ ...bridgedTweet });
+    await waitFor(() => expect(getByLabelText('Reply')).toBeTruthy());
+    expect(getByLabelText('Reply').disabled).toBe(false);
   });
 
   it('shows no badge on a Warpnet tweet', async () => {
