@@ -42,26 +42,33 @@ func TestSeedEntryUser(t *testing.T) {
 	original := gatewayNodeID
 	t.Cleanup(func() { gatewayNodeID = original })
 
-	t.Run("creates the entry account", func(t *testing.T) {
+	t.Run("creates one entry account per bridged network", func(t *testing.T) {
 		repo := &stubSeeder{}
 		SeedEntryUser(repo)
 
-		require.Len(t, repo.created, 1)
+		require.Len(t, repo.created, 2)
 		require.Empty(t, repo.updated)
 
-		u := repo.created[0]
-		require.Equal(t, EntryHandle, u.Id)
-		require.Equal(t, MastodonNetwork, u.Network)
-		require.Equal(t, gatewayNodeID, u.NodeId)
+		byId := map[string]domain.User{}
+		for _, u := range repo.created {
+			byId[u.Id] = u
+		}
+		require.Equal(t, MastodonNetwork, byId[EntryHandle].Network)
+		require.Equal(t, gatewayNodeID, byId[EntryHandle].NodeId)
+		// Threads serves no search and no follow graph, so without this seed the
+		// Threads tab of the recommendations can never show anything.
+		require.Equal(t, ThreadsNetwork, byId[ThreadsEntryHandle].Network)
+		require.Equal(t, gatewayNodeID, byId[ThreadsEntryHandle].NodeId)
 	})
 
-	t.Run("falls back to update when the account already exists", func(t *testing.T) {
+	t.Run("falls back to update when an account already exists", func(t *testing.T) {
 		repo := &stubSeeder{createErr: errors.New("already exists")}
 		SeedEntryUser(repo)
 
-		require.Len(t, repo.created, 1)
-		require.Len(t, repo.updated, 1)
-		require.Equal(t, EntryHandle, repo.updated[0].Id)
+		require.Len(t, repo.created, 2)
+		require.Len(t, repo.updated, 2)
+		updated := []string{repo.updated[0].Id, repo.updated[1].Id}
+		require.ElementsMatch(t, []string{EntryHandle, ThreadsEntryHandle}, updated)
 	})
 
 	t.Run("uses the configured gateway", func(t *testing.T) {

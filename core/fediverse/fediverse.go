@@ -55,6 +55,12 @@ const (
 	// EntryHandle is the single Mastodon account seeded locally as the entry
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"
+
+	// ThreadsEntryHandle is the same thing for Threads. Threads serves no
+	// account search and no browsable follow graph, so nothing discovers a
+	// Threads account on its own: without a seeded one the Threads tab of the
+	// recommendations has nothing to show and no way to ever get anything.
+	ThreadsEntryHandle = "engineer_of_your_ass@threads.net"
 )
 
 // IsBridged reports whether a User.Network tag names a network bridged in
@@ -89,16 +95,16 @@ type UserSeeder interface {
 	Update(userId string, newUser domain.User) (domain.User, error)
 }
 
-// SeedEntryUser inserts the bridged Mastodon entry account so it is
-// discoverable/searchable locally; opening it streams to the gateway node.
+// SeedEntryUser inserts one bridged entry account per bridged network so each
+// is discoverable/searchable locally; opening one streams to the gateway node,
+// which resolves the live profile.
 func SeedEntryUser(repo UserSeeder) {
-	u := domain.User{
-		Id:       EntryHandle,
-		Username: "Warpnet",
-		NodeId:   gatewayNodeID,
-		Network:  MastodonNetwork,
-	}
-	if _, err := repo.Create(u); err != nil {
-		_, _ = repo.Update(u.Id, u)
+	for _, u := range []domain.User{
+		{Id: EntryHandle, Username: "Warpnet", NodeId: gatewayNodeID, Network: MastodonNetwork},
+		{Id: ThreadsEntryHandle, Username: "Vadim", NodeId: gatewayNodeID, Network: ThreadsNetwork},
+	} {
+		if _, err := repo.Create(u); err != nil {
+			_, _ = repo.Update(u.Id, u)
+		}
 	}
 }
