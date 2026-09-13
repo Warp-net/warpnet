@@ -265,6 +265,20 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 		}
 		maps.Copy(existingUser.Metadata, newUser.Metadata)
 	}
+	// Counts refreshed from the user's own node (see updateOtherUser). Only a
+	// non-zero value overwrites: a partial update — a profile edit carrying just
+	// a username and an avatar — leaves them at zero, and copying that would
+	// wipe the real numbers. A count that genuinely falls to zero therefore
+	// lingers until it rises again, which is the cheaper of the two mistakes.
+	if newUser.FollowersCount > 0 {
+		existingUser.FollowersCount = newUser.FollowersCount
+	}
+	if newUser.FollowingsCount > 0 {
+		existingUser.FollowingsCount = newUser.FollowingsCount
+	}
+	if newUser.TweetsCount > 0 {
+		existingUser.TweetsCount = newUser.TweetsCount
+	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
 	existingUser.IsOffline = newUser.IsOffline
 	now := time.Now()

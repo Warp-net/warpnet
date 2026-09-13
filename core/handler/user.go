@@ -144,7 +144,6 @@ func StreamGetUserHandler(
 	}
 }
 
-// TODO update also tweet, followers, followings counts
 func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
 	otherUserData, err := streamer.GenericStream(
 		user.NodeId,
