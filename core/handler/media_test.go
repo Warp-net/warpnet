@@ -30,7 +30,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -185,10 +185,10 @@ func TestVerifyForeignMedia(t *testing.T) {
 	})
 
 	t.Run("bridged fediverse media is out of scope", func(t *testing.T) {
-		bridged := domain.User{Id: "warpnet@mastodon.social", Network: mastodon.Network}
+		bridged := domain.User{Id: "warpnet@mastodon.social", Network: fediverse.Network}
 		assert.NoError(t, verifyForeignImage(bridged, "https://mastodon.social/a.png", "data:image/png;base64,AAAA"))
 
-		viaGateway := domain.User{Id: "someone@mastodon.social", NodeId: mastodon.GatewayNodeID()}
+		viaGateway := domain.User{Id: "someone@mastodon.social", NodeId: fediverse.GatewayNodeID()}
 		assert.NoError(t, verifyForeignImage(viaGateway, "https://mastodon.social/b.png", "data:image/png;base64,AAAA"))
 	})
 }

@@ -30,7 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -94,8 +94,8 @@ func StreamCreateChatHandler(
 		}
 
 		otherUser, otherUserErr := userRepo.Get(ev.OtherUserId)
-		if mastodon.IsBridged(otherUser.Network) {
-			return nil, mastodon.ErrNotSupported
+		if fediverse.IsBridged(otherUser.Network) {
+			return nil, fediverse.ErrNotSupported
 		}
 
 		initiator, _ := userRepo.Get(ev.OwnerId)
@@ -354,8 +354,8 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		)
 		if !isSelfChat && !isOwnerReceiver {
 			otherUser, otherUserErr = userRepo.Get(ev.ReceiverId)
-			if mastodon.IsBridged(otherUser.Network) {
-				return nil, mastodon.ErrNotSupported
+			if fediverse.IsBridged(otherUser.Network) {
+				return nil, fediverse.ErrNotSupported
 			}
 		}
 

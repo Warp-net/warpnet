@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/oklog/ulid/v2"
 	"maps"
 	"math"
@@ -171,7 +171,7 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
 		return
 	}
-	if mastodon.IsBridged(user.Network) {
+	if fediverse.IsBridged(user.Network) {
 		return
 	}
 	name := user.Username

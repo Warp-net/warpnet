@@ -1,5 +1,5 @@
 //nolint:all
-package mastodon
+package fediverse
 
 import (
 	"errors"

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -86,7 +86,7 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if user.NodeId != "" && !mastodon.IsBridged(user.Network) {
+			if user.NodeId != "" && !fediverse.IsBridged(user.Network) {
 				if idx, ok := latestByNode[user.NodeId]; ok {
 					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 						whotofollow[idx] = user

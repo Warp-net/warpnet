@@ -31,7 +31,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -86,7 +86,7 @@ var routeLimits = map[string]routeLimit{
 }
 
 func limitForRoute(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) routeLimit {
-	if remotePeer.String() == mastodon.GatewayNodeID() {
+	if remotePeer.String() == fediverse.GatewayNodeID() {
 		return limitGateway
 	}
 	if limit, ok := routeLimits[route.String()]; ok {

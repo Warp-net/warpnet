@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -188,7 +188,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 					{Id: "already-followed", NodeId: "n2", Network: warpnet.WarpnetName},
 					{Id: "shared-node-old", NodeId: "n3", Network: warpnet.WarpnetName, CreatedAt: older},
 					{Id: "shared-node-new", NodeId: "n3", Network: warpnet.WarpnetName, CreatedAt: newer},
-					{Id: "mastodon-1", NodeId: "n4", Network: mastodon.Network},
+					{Id: "mastodon-1", NodeId: "n4", Network: fediverse.Network},
 				}, "cursor-1", nil
 			},
 		}
@@ -217,7 +217,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 	t.Run("a foreign-network profile hides other networks", func(t *testing.T) {
 		users := stubUserFetcher{
 			getFn: func(id string) (domain.User, error) {
-				return domain.User{Id: id, Network: mastodon.Network}, nil
+				return domain.User{Id: id, Network: fediverse.Network}, nil
 			},
 			whoToFollowFn: func(*uint64, *string) ([]domain.User, string, error) {
 				return []domain.User{{Id: "warp-1", NodeId: "n1", Network: warpnet.WarpnetName}}, "", nil
