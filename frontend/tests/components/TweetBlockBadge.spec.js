@@ -163,3 +163,34 @@ describe('TweetBlock bridged badge', () => {
     await waitFor(() => expect(getWarpnet(/literal &#39; stays/)).toBeTruthy());
   });
 });
+
+describe('TweetBlock retweet attribution', () => {
+  const boosted = (by, over) => ({ ...bridgedTweet, retweeted_by: by, ...over });
+
+  it('says "You" only when the signed-in user is the booster', async () => {
+    const { findByText } = renderTweet(boosted('viewer1'));
+    expect(await findByText('You Retweeted')).toBeTruthy();
+  });
+
+  it('names the author when they boosted their own post', async () => {
+    // A bridged self-boost arrives with retweeted_by equal to user_id. It used
+    // to return early and leave the "You Retweeted" default standing.
+    const { findByText, queryByText } = renderTweet(boosted('bob@mastodon.social'));
+    expect(await findByText('bob Retweeted')).toBeTruthy();
+    expect(queryByText('You Retweeted')).toBeNull();
+  });
+
+  it('names a third-party booster, and never falls back to "You"', async () => {
+    warpnetService.getProfile.mockRejectedValue(new Error('profile unavailable'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { findByText, queryByText } = renderTweet(boosted('ann@mastodon.social'));
+    expect(await findByText('ann@mastodon.social Retweeted')).toBeTruthy();
+    expect(queryByText('You Retweeted')).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  it('shows no header at all on a tweet nobody boosted', async () => {
+    const { queryByText } = renderTweet({ ...bridgedTweet });
+    expect(queryByText(/Retweeted$/)).toBeNull();
+  });
+});

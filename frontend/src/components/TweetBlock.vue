@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 -->
 <template>
   <div v-if="deleted" class="hidden"></div>
-  <div v-if="!deleted && tweet.retweeted_by && tweet.retweeted_by !== '' && !tweet.quoted_tweet_id">
+  <div v-if="!deleted && label && tweet.retweeted_by && tweet.retweeted_by !== '' && !tweet.quoted_tweet_id">
     <!-- Retweet header. Quote-style retweets (those that carry
          quoted_tweet_id) render as the retweeter's own tweet with
          an embedded source preview below, so no "X Retweeted"
@@ -414,7 +414,9 @@ export default {
       deleted: false,
       isOwner: false,
       bookmarked: false,
-      label: "You Retweeted",
+      // Resolved by loadRetweeterLabel before the header paints. It must not
+      // default to "You Retweeted": that claimed every boost as the viewer's.
+      label: "",
       myReaction: "",
       reactions: {},
       showReactionBar: false,
@@ -495,13 +497,28 @@ export default {
         console.error(`failed to load tweet author assets [${this.tweet.id}]`, err);
       }
     },
+    // The header names whoever boosted the post, and only says "You" when that
+    // is actually the signed-in user. An author boosting their own post — which
+    // is what a bridged self-boost looks like, retweeted_by equal to user_id —
+    // used to return early and leave the "You Retweeted" default standing, so a
+    // GrapheneOS boost of its own reply was shown as the viewer's retweet. A
+    // failed profile lookup did the same. The name is filled in synchronously
+    // from what the tweet already carries, then refined once the profile loads.
     async loadRetweeterLabel() {
-      if (!this.tweet.retweeted_by || this.tweet.retweeted_by === this.tweet.user_id) return;
+      const by = this.tweet.retweeted_by;
+      if (!by) return;
+      const owner = warpnetService.getOwnerProfile();
+      if (owner && by === owner.user_id) {
+        this.label = "You Retweeted";
+        return;
+      }
+      const known = by === this.tweet.user_id ? (this.tweet.username || by) : by;
+      this.label = `${known} Retweeted`;
       try {
-        const retweeter = await warpnetService.getProfile(this.tweet.retweeted_by);
+        const retweeter = await warpnetService.getProfile(by);
         if (retweeter && retweeter.username) this.label = `${retweeter.username} Retweeted`;
       } catch (err) {
-        console.warn(`failed to load retweeter profile [${this.tweet.retweeted_by}]`, err);
+        console.warn(`failed to load retweeter profile [${by}]`, err);
       }
     },
     loadImages() {
