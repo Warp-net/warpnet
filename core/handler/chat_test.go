@@ -171,7 +171,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 	t.Run("mastodon user rejected before the chat is stored", func(t *testing.T) {
 		users := stubUserRepo{getFn: func(userId string) (domain.User, error) {
 			if userId == other {
-				return domain.User{Id: userId, Network: fediverse.Network}, nil
+				return domain.User{Id: userId, Network: fediverse.MastodonNetwork}, nil
 			}
 			return domain.User{Id: userId, NodeId: "node-2"}, nil
 		}}
@@ -398,7 +398,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.ChatMessage{}, nil
 	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) {
 		if userId == receiver {
-			return domain.User{Id: userId, Network: fediverse.Network}, nil
+			return domain.User{Id: userId, Network: fediverse.MastodonNetwork}, nil
 		}
 		return domain.User{Id: userId, NodeId: senderNodeId}, nil
 	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)

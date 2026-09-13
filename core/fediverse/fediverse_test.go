@@ -51,7 +51,7 @@ func TestSeedEntryUser(t *testing.T) {
 
 		u := repo.created[0]
 		require.Equal(t, EntryHandle, u.Id)
-		require.Equal(t, Network, u.Network)
+		require.Equal(t, MastodonNetwork, u.Network)
 		require.Equal(t, gatewayNodeID, u.NodeId)
 	})
 
@@ -78,7 +78,7 @@ func TestErrNotSupported(t *testing.T) {
 
 func TestIsBridged(t *testing.T) {
 	for network, want := range map[string]bool{
-		Network: true, ThreadsNetwork: true, "": false, "warpnet": false, "testnet": false,
+		MastodonNetwork: true, ThreadsNetwork: true, "": false, "warpnet": false, "testnet": false,
 	} {
 		if got := IsBridged(network); got != want {
 			t.Errorf("IsBridged(%q) = %v, want %v", network, got, want)

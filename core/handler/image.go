@@ -279,7 +279,7 @@ func verifyForeignMedia(
 }
 
 func isForeignOriginMedia(u domain.User) bool {
-	return u.Network == fediverse.Network || u.NodeId == fediverse.GatewayNodeID()
+	return u.Network == fediverse.MastodonNetwork || u.NodeId == fediverse.GatewayNodeID()
 }
 
 func isContentKey(key string) bool {

@@ -37,8 +37,9 @@ import (
 )
 
 const (
-	// Network is the User.Network tag for accounts bridged in from Mastodon.
-	Network = "mastodon"
+	// MastodonNetwork is the User.Network tag for accounts bridged in from
+	// Mastodon.
+	MastodonNetwork = "mastodon"
 
 	// DefaultGatewayNodeID is the libp2p peer id of the ActivityPub gateway,
 	// deterministically derived from its fixed seed. It is the home node of
@@ -59,7 +60,7 @@ const (
 // IsBridged reports whether a User.Network tag names a network bridged in
 // through the ActivityPub gateway rather than Warpnet itself.
 func IsBridged(network string) bool {
-	return network == Network || network == ThreadsNetwork
+	return network == MastodonNetwork || network == ThreadsNetwork
 }
 
 var ErrNotSupported = errors.New("not supported functionality")
@@ -95,7 +96,7 @@ func SeedEntryUser(repo UserSeeder) {
 		Id:       EntryHandle,
 		Username: "Warpnet",
 		NodeId:   gatewayNodeID,
-		Network:  Network,
+		Network:  MastodonNetwork,
 	}
 	if _, err := repo.Create(u); err != nil {
 		_, _ = repo.Update(u.Id, u)
