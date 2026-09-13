@@ -350,9 +350,8 @@ func (s *UserRepoTestSuite) TestUpdateRefreshesCounts() {
 	s.Equal(int64(23), got.TweetsCount)
 }
 
-// newWhoToFollowRepo gives each who-to-follow test its own store: the shared
-// suite database carries users from every other test, which would decide the
-// outcome of a test about which users get picked.
+// Each test gets its own store: the shared suite database carries users from
+// every other test, which would decide which ones get picked.
 func newWhoToFollowRepo(t *testing.T) *UserRepo {
 	t.Helper()
 	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
@@ -362,8 +361,7 @@ func newWhoToFollowRepo(t *testing.T) *UserRepo {
 	return NewUserRepo(db)
 }
 
-// seedNetwork inserts n bridged accounts on one network. idPrefix decides where
-// they land in the keyspace, which is the order the scan walks.
+// idPrefix decides where the accounts land in the keyspace, which is scan order.
 func seedNetwork(t *testing.T, repo *UserRepo, network, idPrefix, host string, n int) {
 	t.Helper()
 	for i := range n {
@@ -377,9 +375,8 @@ func seedNetwork(t *testing.T, repo *UserRepo, network, idPrefix, host string, n
 	}
 }
 
-// networkCounts counts by the network the code groups on, not by the raw tag:
-// CreateWithTTL marshals a user before defaulting Network, so a native row is
-// stored with an empty tag and resolveNetwork is what resolves it.
+// Counts by the grouped network, not the raw tag: CreateWithTTL marshals before
+// defaulting Network, so a native row is stored with an empty one.
 func networkCounts(users []domain.User) map[string]int {
 	out := map[string]int{}
 	for _, u := range users {
@@ -388,16 +385,12 @@ func networkCounts(users []domain.User) map[string]int {
 	return out
 }
 
-// TestWhoToFollowSpreadsAcrossNetworks pins the reason a seeded Threads account
-// never reached the client: the foreign slots were filled in keyspace order, so
-// the dozens of Mastodon accounts a node picks up from browsing follow lists
-// took all ten of them and the one Threads account never appeared.
+// Filled in keyspace order, the many Mastodon accounts took every slot and the
+// single Threads one never appeared.
 func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 
-	// Ids that sort ahead of the Threads handle, which is what the real ones do:
-	// the scan walks the keyspace, so the Mastodon accounts a node accumulates
-	// reach the slots first.
+	// Ids sorting ahead of the Threads handle, as the real ones do.
 	for i := range 12 {
 		_, cerr := repo.Create(domain.User{
 			Id:       fmt.Sprintf("aaa%02d@mastodon.social", i),
@@ -425,11 +418,8 @@ func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
 	require.LessOrEqual(t, len(users), int(limit))
 }
 
-// TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks: the fill is round-robin
-// over whatever networks the scan finds, so a network added later needs no
-// change here. The property is "every network present gets a share", not a
-// list of names — mastodon is seeded first and largest precisely because the
-// keyspace order is what used to hand it every slot.
+// The property is "every network present gets a share", not a list of names, so
+// a network added later needs no change here.
 func TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seeded := []struct {
@@ -461,8 +451,7 @@ func TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks(t *testing.T) {
 	require.Equal(t, 1, counts["threads"], counts)
 }
 
-// Fewer slots than networks: the first round still spends them on distinct
-// networks rather than filling from one.
+// Fewer slots than networks: they go to distinct networks.
 func TestWhoToFollowWithFewerSlotsThanNetworks(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 5)
@@ -476,8 +465,7 @@ func TestWhoToFollowWithFewerSlotsThanNetworks(t *testing.T) {
 	require.Len(t, networkCounts(users), 2, "both slots went to one network: %+v", users)
 }
 
-// Rows stored before the network tag existed carry none. They are their own
-// bucket rather than being dropped or merged into a named network.
+// Rows stored before the network tag existed get their own group.
 func TestWhoToFollowKeepsUntaggedRowsInTheirOwnBucket(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 9)
@@ -491,8 +479,7 @@ func TestWhoToFollowKeepsUntaggedRowsInTheirOwnBucket(t *testing.T) {
 	require.NotZerof(t, counts["mastodon"], "%+v", counts)
 }
 
-// A single network must still be able to use the whole block — the spread must
-// not starve the common case of one bridged network.
+// One network alone must still fill the whole block.
 func TestWhoToFollowGivesOneNetworkTheWholeBlock(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 12)
@@ -504,9 +491,7 @@ func TestWhoToFollowGivesOneNetworkTheWholeBlock(t *testing.T) {
 	require.Equal(t, 10, networkCounts(users)["mastodon"])
 }
 
-// Warpnet is a network like any other here: a node with plenty of its own peers
-// must still show the one bridged account it knows. Under the old native-first
-// merge the Warpnet peers took every slot and no bridged tab could ever fill.
+// Warpnet is a network like any other: its peers must not take every slot.
 func TestWhoToFollowGivesWarpnetNoPriority(t *testing.T) {
 	repo := newWhoToFollowRepo(t)
 	for range 12 {

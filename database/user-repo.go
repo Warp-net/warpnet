@@ -542,17 +542,15 @@ func matchesUserQuery(u domain.User, q string) bool {
 	return false
 }
 
-// A recommendation scan reads at most maxRecommendedScan rows, in pages of
-// recommendedScanPage, so a node holding a large bridged import cannot turn one
-// call into a full table scan.
+// Bounds one recommendation scan, so a large bridged import cannot turn it into
+// a full table scan.
 const (
 	maxRecommendedScan  = 5000
 	recommendedScanPage = uint64(200)
 )
 
-// resolveNetwork names the network a user belongs to. The stored tag is the truth;
-// rows written before the tag existed carry none, and a ULID id is what those
-// had instead — every Warpnet id is one and no fediverse handle is.
+// resolveNetwork works out which network a user is on. Rows written before the
+// network tag existed carry none; a ULID id is what marks those as Warpnet.
 func resolveNetwork(u domain.User) string {
 	if u.Network != "" {
 		return u.Network
@@ -563,20 +561,12 @@ func resolveNetwork(u domain.User) string {
 	return ""
 }
 
-// usersByNetwork holds the users a recommendation scan found, grouped by the
-// network each belongs to, with the networks in the order they first appeared.
-//
-// The grouping is the whole point: the client shows one tab per network, and a
-// node that has browsed a few Mastodon follow lists holds dozens of those
-// against a single Threads account. Handed out in the order they sit in the
-// keyspace, every slot went to Mastodon and the other tabs stayed empty.
+// usersByNetwork groups scanned users by network, networks in first-seen order.
+// Without the grouping the network with the most rows takes every slot.
 type usersByNetwork struct {
-	users    map[string][]domain.User
-	networks []string
-	// perNetwork caps each group: more than a whole block can ever be shown
-	// from one network, and keeping them would make a flooded network cost
-	// memory as well as slots.
-	perNetwork uint64
+	users      map[string][]domain.User
+	networks   []string
+	perNetwork uint64 // cap per group; more than a block can never be shown
 }
 
 func newUsersByNetwork(perNetwork uint64) *usersByNetwork {
@@ -587,7 +577,7 @@ func newUsersByNetwork(perNetwork uint64) *usersByNetwork {
 	}
 }
 
-func (g *usersByNetwork) add(u domain.User) {
+func (g *usersByNetwork) append(u domain.User) {
 	network := resolveNetwork(u)
 	if _, seen := g.users[network]; !seen {
 		g.networks = append(g.networks, network)
@@ -597,36 +587,33 @@ func (g *usersByNetwork) add(u domain.User) {
 	}
 }
 
-// dealEvenly hands out up to limit users, one network at a time in rotation, so
-// each network present gets a share of the block instead of the first one down
-// the keyspace taking it all. A network that runs out simply stops being dealt
-// to, so one network on its own still fills the whole block.
-func (g *usersByNetwork) dealEvenly(limit uint64) []domain.User {
+// spreadEvenly hands out up to limit users, one network at a time in rotation.
+// A network that runs out drops out, so one network alone still fills the block.
+func (g *usersByNetwork) spreadEvenly(limit uint64) []domain.User {
 	out := make([]domain.User, 0, limit)
 	for round := 0; uint64(len(out)) < limit; round++ {
-		dealt := false
+		placed := false
 		for _, network := range g.networks {
 			group := g.users[network]
 			if round >= len(group) {
 				continue
 			}
 			out = append(out, group[round])
-			dealt = true
+			placed = true
 			if uint64(len(out)) >= limit {
 				return out
 			}
 		}
-		if !dealt {
+		if !placed {
 			return out // every network exhausted
 		}
 	}
 	return out
 }
 
-// scanUsersByNetwork walks the user keyspace from cursor and groups everyone it
-// finds. It reads to the end of the keyspace rather than stopping once it has
-// enough users: a network's only account can sit anywhere, and the Threads one
-// sat past every Mastodon handle. maxRecommendedScan is the bound.
+// scanUsersByNetwork walks the keyspace from cursor and groups what it finds. It
+// does not stop once it has enough users: a network's only account can sit
+// anywhere in the keyspace.
 func scanUsersByNetwork(
 	txn local_store.WarpTransactioner,
 	prefix local_store.DatabaseKey,
@@ -652,7 +639,7 @@ func scanUsersByNetwork(
 			if u.IsOffline {
 				continue
 			}
-			groups.add(u)
+			groups.append(u)
 		}
 		if len(items) == 0 || next == "" || next == local_store.EndCursor {
 			break
@@ -662,9 +649,8 @@ func scanUsersByNetwork(
 	return groups, nil
 }
 
-// WhoToFollow returns the recommendation block: an even share of every network
-// the node knows users on. The block is one page, so the cursor it returns is
-// always the end.
+// WhoToFollow returns an even share of every network the node knows users on.
+// It is one page, so the returned cursor is always the end.
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
@@ -690,7 +676,7 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	if err != nil {
 		return nil, "", err
 	}
-	return groups.dealEvenly(want), local_store.EndCursor, nil
+	return groups.spreadEvenly(want), local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
