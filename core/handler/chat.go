@@ -94,7 +94,7 @@ func StreamCreateChatHandler(
 		}
 
 		otherUser, otherUserErr := userRepo.Get(ev.OtherUserId)
-		if otherUser.Network == mastodon.Network {
+		if mastodon.IsBridged(otherUser.Network) {
 			return nil, mastodon.ErrNotSupported
 		}
 
@@ -354,7 +354,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 		)
 		if !isSelfChat && !isOwnerReceiver {
 			otherUser, otherUserErr = userRepo.Get(ev.ReceiverId)
-			if otherUser.Network == mastodon.Network {
+			if mastodon.IsBridged(otherUser.Network) {
 				return nil, mastodon.ErrNotSupported
 			}
 		}

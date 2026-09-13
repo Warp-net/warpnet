@@ -75,3 +75,13 @@ func TestSeedEntryUser(t *testing.T) {
 func TestErrNotSupported(t *testing.T) {
 	require.EqualError(t, ErrNotSupported, "not supported functionality")
 }
+
+func TestIsBridged(t *testing.T) {
+	for network, want := range map[string]bool{
+		Network: true, ThreadsNetwork: true, "": false, "warpnet": false, "testnet": false,
+	} {
+		if got := IsBridged(network); got != want {
+			t.Errorf("IsBridged(%q) = %v, want %v", network, got, want)
+		}
+	}
+}

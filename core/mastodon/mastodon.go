@@ -46,10 +46,21 @@ const (
 	// configured a different gateway in settings.
 	DefaultGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
 
+	// ThreadsNetwork is the User.Network tag for accounts bridged in from Meta's
+	// Threads. They arrive through the same gateway and behave the same locally,
+	// so a check for "bridged in from outside" must use IsBridged.
+	ThreadsNetwork = "threads"
+
 	// EntryHandle is the single Mastodon account seeded locally as the entry
 	// point into the Fediverse; its followings lead to other Mastodon accounts.
 	EntryHandle = "warpnet@mastodon.social"
 )
+
+// IsBridged reports whether a User.Network tag names a network bridged in
+// through the ActivityPub gateway rather than Warpnet itself.
+func IsBridged(network string) bool {
+	return network == Network || network == ThreadsNetwork
+}
 
 var ErrNotSupported = errors.New("not supported functionality")
 

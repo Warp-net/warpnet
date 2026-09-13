@@ -171,7 +171,7 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
 		return
 	}
-	if user.Network == mastodon.Network {
+	if mastodon.IsBridged(user.Network) {
 		return
 	}
 	name := user.Username

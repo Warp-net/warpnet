@@ -86,7 +86,7 @@ func StreamGetWhoToFollowHandler(
 				continue
 			}
 
-			if user.NodeId != "" && user.Network != mastodon.Network {
+			if user.NodeId != "" && !mastodon.IsBridged(user.Network) {
 				if idx, ok := latestByNode[user.NodeId]; ok {
 					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
 						whotofollow[idx] = user
