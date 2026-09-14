@@ -106,9 +106,9 @@ type RatingProvider interface {
 type WalletProvider interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Balance(ctx context.Context, address string) (wallet.Account, error)
-	Transfer(ctx context.Context, seed, to, amount string) (string, error)
+	Transfer(ctx context.Context, seed, asset, to, amount string) (string, error)
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
-	History(ctx context.Context, address string, limit int) ([]wallet.Transfer, error)
+	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
 	Token() string
 	Decimals() uint8
 	Network() string

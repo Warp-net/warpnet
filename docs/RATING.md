@@ -80,7 +80,7 @@ func ParseDimension(s string) (Dimension, bool)
 //   warpnet.MemberNode    -> {Network, Application}
 //   warpnet.ModeratorNode -> {Network, Application, Moderation}
 //   unknown               -> {Network}
-func Dimensions(nodeType string) []Dimension
+func dimensionsByNodeType(nodeType string) []Dimension
 ```
 
 A node writes only the dimensions its own role can witness, and reads only the
@@ -492,9 +492,9 @@ type indexer struct {
 // core/rating/engine.go — scoring is the engine's, because it depends on
 // who this node is, whom it trusts and whom it is connected to
 func (e *Engine) score(es entries, dim Dimension, now time.Time) Score     // local, enforced
-func (e *Engine) firstHand(es entries, dim Dimension, now time.Time) Score // own evidence only
-func (e *Engine) weight(observer string) float64                           // firstHand(observer) / MaxScore
-func (e *Engine) acquainted(observer string) bool                          // connected >= 1 h
+func (e *Engine) ownScore(es entries, dim Dimension, now time.Time) Score // own evidence only
+func (e *Engine) weight(observer string) float64                          // ownScore(observer) / MaxScore
+func (e *Engine) isOldEnough(observer string) bool                        // connected >= 1 h
 ```
 
 - **Loaded lazily, one peer at a time.** The first score of a peer is one

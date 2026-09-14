@@ -727,13 +727,13 @@ func TestRepetitionBecomesAnOffence(t *testing.T) {
 		observeN(t, e, other.id, warpnet.PeerRateLimited, event.PUBLIC_POST_NODE_CHALLENGE, writeFloodThreshold)
 		flushNow(t, e)
 
-		// The hits are wire behaviour and the burst is application
+		// The hits are wire behaviour and the flood is application
 		// behaviour, so they land on different axes.
 		hits := min(Score(KindRateLimitHit.Weight()*writeFloodThreshold), Score(KindRateLimitHit.Ceiling()))
 		assert.Equal(t, MaxScore-hits, scoreOn(t, e, other.id, Network),
 			"the hits are charged up to their ceiling")
 		assert.Equal(t, MaxScore-Score(KindWriteFlood.Weight()), scoreOn(t, e, other.id, Application),
-			"and the burst is charged once, as an application offence")
+			"and the flood is charged once, as an application offence")
 	})
 
 	t.Run("rate limited reads never flood", func(t *testing.T) {
@@ -749,11 +749,11 @@ func TestRepetitionBecomesAnOffence(t *testing.T) {
 	})
 }
 
-func TestBurstReportsOnlyTheCrossing(t *testing.T) {
-	b := newBurst(time.Minute, 3)
+func TestWindowReportsOnlyTheCrossing(t *testing.T) {
+	b := newWindow(time.Minute, 3)
 	assert.False(t, b.reached("peer"))
 	assert.False(t, b.reached("peer"))
-	assert.True(t, b.reached("peer"), "the third observation is the burst")
+	assert.True(t, b.reached("peer"), "the third observation crosses the threshold")
 	assert.False(t, b.reached("peer"), "and it is reported once, not on every one after")
 	assert.False(t, b.reached("another"), "each peer is counted on its own")
 }
