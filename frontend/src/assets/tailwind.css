@@ -325,7 +325,9 @@ i.fa-retweet.text-green-500 {
     @apply bg-paper text-black;
     border: 1px solid rgba(138, 111, 56, 0.4);
   }
-  .dark input, .dark textarea {
+  /* select belongs here too: the theme paints its background dark, and a
+     control that is left out keeps the browser's black text on it. */
+  .dark input, .dark textarea, .dark select {
     @apply bg-darktheme-input text-darktheme-text border-gray-600;
   }
 
