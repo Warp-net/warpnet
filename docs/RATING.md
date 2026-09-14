@@ -1,10 +1,12 @@
 # Node rating — design and implementation plan
 
-Status: the storage layer (`core/crdt/ratingstore`, `database/rating-repo.go`,
-`domain.RatingRecord`) and the engine (`core/rating`) are implemented and
-tested; nothing is wired into the node yet. §6.4, §7, §8 and the wiring in §9
-describe the integration still to come. Where the implementation departed
-from the original plan, the section says so and why.
+Status: implemented. The storage layer (`core/crdt/ratingstore`,
+`database/rating-repo.go`, `domain.RatingRecord`), the engine
+(`core/rating`), the fan-outs that feed it, the enforcement points that act
+on what it concludes, and the routes that show it are all in the tree.
+§7 (the discovery amplification fixes) and the warpdroid side remain. Where
+the implementation departed from the original plan, the section says so and
+why.
 
 A node's rating is an inherent property of every Warpnet node, computed and
 stored **by its neighbours** — never by itself — replicated over CRDT, decaying
@@ -78,7 +80,7 @@ func ParseDimension(s string) (Dimension, bool)
 //   warpnet.MemberNode    -> {Network, Application}
 //   warpnet.ModeratorNode -> {Network, Application, Moderation}
 //   unknown               -> {Network}
-func Dimensions(nodeType string) []Dimension
+func dimensionsByNodeType(nodeType string) []Dimension
 ```
 
 A node writes only the dimensions its own role can witness, and reads only the
@@ -490,9 +492,9 @@ type indexer struct {
 // core/rating/engine.go — scoring is the engine's, because it depends on
 // who this node is, whom it trusts and whom it is connected to
 func (e *Engine) score(es entries, dim Dimension, now time.Time) Score     // local, enforced
-func (e *Engine) firstHand(es entries, dim Dimension, now time.Time) Score // own evidence only
-func (e *Engine) weight(observer string) float64                           // firstHand(observer) / MaxScore
-func (e *Engine) acquainted(observer string) bool                          // connected >= 1 h
+func (e *Engine) ownScore(es entries, dim Dimension, now time.Time) Score // own evidence only
+func (e *Engine) weight(observer string) float64                          // ownScore(observer) / MaxScore
+func (e *Engine) isOldEnough(observer string) bool                        // connected >= 1 h
 ```
 
 - **Loaded lazily, one peer at a time.** The first score of a peer is one
@@ -560,18 +562,55 @@ own test (§10, Stage 1).
 
 ```go
 // core/rating/enforce.go — pure mappings on the tier, no dependencies
-func (t Tier) ConnTag() int             // 60 / 30 / 10 / 1
-func (t Tier) GossipScore() float64     // 0 / -10 / -60 / -200
-func (t Tier) LimitMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
-func (t Tier) AllowedInDHT() bool       // false only for TierFloor
+func (t Tier) ConnTag() int            // 60 / 30 / 10 / 1
+func (t Tier) GossipScore() float64    // 0 / -10 / -60 / -200
+func (t Tier) RateMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
+func (t Tier) IsAllowedInDHT() bool    // false only for TierFloor
 ```
+
+A module never reads a score, and none of them keeps rating state of its
+own. The engine records each peer's tier in one `rating.PeersRatings`,
+and every module asks it the single question it acts on:
+
+```go
+// core/rating — the engine writes here as ratings move
+func NewPeersRatings() *PeersRatings
+func (r *PeersRatings) Rate(peerID warpnet.WarpPeerID, tier Tier)
+func (r *PeersRatings) Tier(peerID warpnet.WarpPeerID) Tier
+func (r *PeersRatings) ConnTag(peerID warpnet.WarpPeerID) int
+func (r *PeersRatings) GossipScore(peerID warpnet.WarpPeerID) float64
+func (r *PeersRatings) RateMultiplier(peerID warpnet.WarpPeerID) float64
+func (r *PeersRatings) IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
+
+type Rater interface{ Rate(peerID warpnet.WarpPeerID, tier Tier) }
+func WithRatings(ratings Rater) Option   // the whole wiring
+```
+
+Each module declares a `PeersRatings` of its own, with the one method it
+asks, and imports nothing of the rating to ask it:
+
+| module | asks | for |
+|---|---|---|
+| `core/middleware` | `RateMultiplier` | how much of a route this peer may spend |
+| `core/pubsub` | `GossipScore` | what gossipsub should weigh it by |
+| `core/dht` | `IsAllowedInDHT` | whether the routing table may hold it |
+| `core/node` | `ConnTag` | what it is worth to the connection manager |
+
+A node with no ratings serves, scores, routes and keeps every peer in
+full: each of those readers answers for it. The connection tag is the one
+that is pushed rather than read, because libp2p holds it: the node sets
+it whenever a peer connects.
+
+The pass is also what notices a rating that recovered: evidence decays,
+so a peer improves with no event to announce it. A peer nobody has rated
+is never recorded, and every module treats it as trusted.
 
 | Surface | Change | File |
 |---|---|---|
-| ConnManager | new `SetRatingPriority(pid, score)` writing a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. Reuses the existing flap LRU. | `core/node/priority.go` |
-| gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)` with `AppSpecificScore` reading the local score; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go:221` |
-| DHT | new `dht.QueryFilter` / `dht.RoutingTableFilter` options rejecting `TierFloor` peers. | `core/dht/options.go`, `core/dht/dht.go` |
-| Rate limits | `limitForRoute(route)` → `limitForRoute(route, tier)`, multiplying `burst` and `perMinute`, floored at 1 so no peer is ever starved outright. The per-`route\|peer` LRU bucket records the tier it was built for and is rebuilt when the tier changes. | `core/middleware/rate-limiter.go` |
+| ConnManager | `SetRatingPriority(pid, tag)` writes a **separate** `rating` tag, kept distinct from the existing `reachability` tag so the two compose additively as libp2p intends rather than overwriting each other. It ignores the flap window: a standing already changes slowly. | `core/node/priority.go` |
+| gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)`, with `AppSpecificScore` reading the score the last standing left in the gossip's own cache; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go` |
+| DHT | `dht.QueryFilter` and `dht.RoutingTableFilter` refuse the peers a standing put at the floor, and let them back in when it recovers. A peer nobody has rated is admitted. | `core/dht/dht.go` |
+| Rate limits | a peer's buckets are built at the allowance its standing carries, `burst` and `perMinute` floored at 1 so no peer is ever starved outright. A standing that changes drops the peer's buckets, so it is measured against the allowance it has now. | `core/middleware/rate-limiter.go`, `core/middleware/middleware.go` |
 | Moderation ballots | **Nothing.** Weighting a vote round's ballots by rating was planned and rejected: `planTally` must be a pure function of the ballots so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
@@ -753,7 +792,7 @@ being rated by its neighbours, and a switch for whether it acts on what
 it sees would only produce a blind free-rider — which contradicts rating
 being an inherent property of a node. The consequences are soft by
 design (§6.4), so there is nothing here that needs arming carefully.
-Every knob in `enforce.go` is a weighting, not a refusal — `LimitMultiplier`
+Every knob in `enforce.go` is a weighting, not a refusal — `RateMultiplier`
 never reaches zero, nothing blocklists — so a mis-set weight costs a peer
 latency, and the caps in §6.3 bound how far a wrong number can carry.
 

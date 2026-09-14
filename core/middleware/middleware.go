@@ -69,10 +69,19 @@ type WarpMiddleware struct {
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
-	events warpnet.PeerEmitter
+	events  warpnet.PeerEmitter
+	ratings PeersRatings
 }
 
-func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpMiddleware {
+// PeersRatings answers how much of a route's allowance a peer may spend,
+// which is how a node serves a badly rated peer more slowly.
+type PeersRatings interface {
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
+}
+
+func NewWarpMiddleware(
+	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, ratings PeersRatings,
+) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
@@ -80,6 +89,7 @@ func NewWarpMiddleware(ownNodeId warpnet.WarpPeerID, aliases AliasPairer) *WarpM
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
 		events:          warpnet.NewPeerEmitter(),
+		ratings:         ratings,
 	}
 	return wm
 }
@@ -89,8 +99,8 @@ func (p *WarpMiddleware) Event() <-chan warpnet.PeerEvent {
 	return p.events
 }
 
-// emit reports an observation about the stream's remote peer. A self-stream
-// names nobody, so it reports nothing.
+// emitStream reports an observation about the stream's remote peer. A
+// self-stream names nobody, so it reports nothing.
 func (p *WarpMiddleware) emitStream(s warpnet.WarpStream, t warpnet.PeerEventType) {
 	if p == nil || s == nil || s.Conn() == nil {
 		return

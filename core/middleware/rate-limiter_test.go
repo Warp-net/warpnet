@@ -87,7 +87,7 @@ func callLimited(
 }
 
 func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
-	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000})
+	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000}, 1)
 
 	for i := range 3 {
 		if !b.Allow() {
@@ -105,7 +105,7 @@ func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
 }
 
 func TestLeakyBucket_ZeroLimitFallsBackToOne(t *testing.T) {
-	b := newRateLimiter(routeLimit{})
+	b := newRateLimiter(routeLimit{}, 1)
 	if !b.Allow() {
 		t.Fatal("expected the first request to be admitted")
 	}

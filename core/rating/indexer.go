@@ -55,6 +55,8 @@ func (e entry) slot() slot {
 
 // indexedPeer is one peer's complete record set plus its memoised score.
 type indexedPeer struct {
+	peerID string
+
 	mu    sync.Mutex
 	slots map[slot][]kindCount
 	rev   uint64
@@ -62,6 +64,21 @@ type indexedPeer struct {
 	score    Score
 	scoredAt time.Time
 	scoreRev uint64
+
+	tier      Tier
+	tierKnown bool
+}
+
+// tierMoved reports a tier that differs from the one last handed on, and
+// remembers it. A peer whose tier holds is handed on once.
+func (p *indexedPeer) tierMoved(tier Tier) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.tierKnown && p.tier == tier {
+		return false
+	}
+	p.tier, p.tierKnown = tier, true
+	return true
 }
 
 // set replaces one record's counts.
@@ -143,7 +160,7 @@ func (i *indexer) has(peerID string) bool {
 }
 
 func (i *indexer) add(peerID string) *indexedPeer {
-	p := &indexedPeer{slots: make(map[slot][]kindCount)}
+	p := &indexedPeer{peerID: peerID, slots: make(map[slot][]kindCount)}
 	i.peers.Add(peerID, p)
 	return p
 }
@@ -155,6 +172,18 @@ func (i *indexer) update(peerID string, e entry) {
 	if p, ok := i.peers.Peek(peerID); ok {
 		p.set(e.slot(), e.counts)
 	}
+}
+
+// rated is every peer the index holds.
+func (i *indexer) rated() []*indexedPeer {
+	keys := i.peers.Keys()
+	out := make([]*indexedPeer, 0, len(keys))
+	for _, peerID := range keys {
+		if p, ok := i.peers.Peek(peerID); ok {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (i *indexer) forget(peerID string) {

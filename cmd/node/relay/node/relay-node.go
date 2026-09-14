@@ -66,9 +66,21 @@ type PubSubProvider interface {
 	OwnerID() string
 }
 
+// PeersRatings is how this node rates its peers: the engine writes it,
+// and this node's modules read what follows from it.
+type PeersRatings interface {
+	Rate(peerID warpnet.WarpPeerID, tier rating.Tier)
+	ConnTag(peerID warpnet.WarpPeerID) int
+	GossipScore(peerID warpnet.WarpPeerID) float64
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
+}
+
 // PeerRater listens to what the modules saw the peers do and rates them.
 type PeerRater interface {
 	Listen(sources ...<-chan warpnet.PeerEvent)
+	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
 	Close() error
 }
 
@@ -110,6 +122,7 @@ type RelayNode struct {
 	ratingStore       RatingProvider
 	ratingDb          RatingStorer
 	rating            PeerRater
+	ratings           PeersRatings
 	memoryStoreCloseF func() error
 	privKey           ed25519.PrivateKey
 	psk               security.PSK
@@ -125,10 +138,12 @@ func NewRelayNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 
+	ratings := rating.NewPeersRatings()
 	discService := discovery.NewRelayDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
+		ratings,
 		pubsub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 
@@ -155,6 +170,7 @@ func NewRelayNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
+		dht.Ratings(ratings),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
@@ -187,6 +203,7 @@ func NewRelayNode(
 		pubsubService:     pubsubService,
 		dHashTable:        dHashTable,
 		ratingStore:       ratingStore,
+		ratings:           ratings,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -208,6 +225,7 @@ func (rn *RelayNode) Start() (err error) {
 	}
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
+		rn.ratings,
 		rn.opts...,
 	)
 	if err != nil {
@@ -251,6 +269,7 @@ func (rn *RelayNode) startRating() error {
 	}
 	rn.rating, err = rating.NewEngine(
 		rn.ctx, rn.ratingDb, rn.node.Node().Network(), rn.privKey, warpnet.RelayNode,
+		rating.WithRatings(rn.ratings),
 	)
 	if err != nil {
 		return fmt.Errorf("relay: failed to start rating engine: %w", err)
@@ -265,7 +284,7 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil)
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.ratings)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

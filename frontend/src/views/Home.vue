@@ -800,7 +800,23 @@ export default {
       this.showInfo = true;
     },
     async getInfo() {
-      return await warpnetService.getNodeInfo();
+      const info = await warpnetService.getNodeInfo();
+      return {...info, rating: await this.getRating()};
+    },
+    // A node that cannot read its rating still tells the user everything
+    // else, so the line says so instead of taking the panel down with it.
+    async getRating() {
+      try {
+        const rating = await warpnetService.getOwnRating();
+        if (!rating || rating.overall === undefined) {
+          return "unavailable";
+        }
+        const observers = rating.observers === 1 ? "1 observer" : `${rating.observers} observers`;
+        return `${rating.overall}/1000 ${rating.tier} (${observers})`;
+      } catch (e) {
+        console.error("get own rating:", e);
+        return "unavailable";
+      }
     },
     // Composer avatar / background for the right bar: they fill in whenever
     // they arrive and must not delay the timeline's first paint.

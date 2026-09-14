@@ -11,12 +11,12 @@ import (
 )
 
 func TestDimensionsPerRole(t *testing.T) {
-	assert.Equal(t, []Dimension{Network}, Dimensions(warpnet.RelayNode),
+	assert.Equal(t, []Dimension{Network}, dimensionsByNodeType(warpnet.RelayNode),
 		"a relay can only witness wire behaviour")
-	assert.Equal(t, []Dimension{Network, Application}, Dimensions(warpnet.MemberNode))
-	assert.Equal(t, []Dimension{Network, Application, Moderation}, Dimensions(warpnet.ModeratorNode),
+	assert.Equal(t, []Dimension{Network, Application}, dimensionsByNodeType(warpnet.MemberNode))
+	assert.Equal(t, []Dimension{Network, Application, Moderation}, dimensionsByNodeType(warpnet.ModeratorNode),
 		"a moderator judges content, so it witnesses the application axis too")
-	assert.Equal(t, []Dimension{Network}, Dimensions("something-new"),
+	assert.Equal(t, []Dimension{Network}, dimensionsByNodeType("something-new"),
 		"an unknown role still speaks the wire and nothing else can be assumed")
 }
 

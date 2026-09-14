@@ -60,7 +60,7 @@ const (
 )
 
 // Some behaviour is an offence only in numbers: one reconnection is
-// ordinary, a burst of them is not.
+// ordinary, a window of them is not.
 const (
 	flapWindow    = time.Minute
 	flapThreshold = 4
@@ -71,7 +71,7 @@ const (
 	discoveryWindow    = 10 * time.Minute
 	discoveryThreshold = 32
 
-	burstPeers = 1024
+	windowPeers = 1024
 )
 
 // Errors the engine refuses an observation or a dependency with.
@@ -85,6 +85,12 @@ const (
 	ErrNilConnections     = ratingError("connections provider is nil")
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
+
+// Rater is where the engine rates a peer, for the modules that act
+// on it to read; PeersRatings satisfies it.
+type Rater interface {
+	Rate(peerID warpnet.WarpPeerID, tier Tier)
+}
 
 // Storer is the replicated record store; ratingstore.Store satisfies it.
 type Storer interface {
@@ -110,6 +116,14 @@ func WithClock(now func() time.Time) Option {
 		if now != nil {
 			e.now = now
 		}
+	}
+}
+
+// WithRatings is where the engine records how it rates a peer. Without
+// it a node observes and replicates, and acts on nothing.
+func WithRatings(ratings Rater) Option {
+	return func(e *Engine) {
+		e.ratings = ratings
 	}
 }
 
@@ -146,11 +160,13 @@ type Engine struct {
 	conns ConnectionsProvider
 	index *indexer
 
-	flaps       *burst
-	discoveries *burst
-	writes      *burst
+	flaps       *window
+	discoveries *window
+	writes      *window
 
 	listeners sync.WaitGroup
+
+	ratings Rater
 
 	mu       sync.Mutex
 	counters map[pendingKey]counts
@@ -200,19 +216,19 @@ func NewEngine(
 		cancel:        cancel,
 		self:          self.String(),
 		privKey:       privKey,
-		dims:          Dimensions(nodeType),
+		dims:          dimensionsByNodeType(nodeType),
 		generation:    generation,
 		now:           time.Now,
 		flushInterval: defaultFlushInterval,
 		store:         store,
 		conns:         conns,
 		index:         index,
-		counters:      make(map[pendingKey]counts),
-		dirty:         make(map[pendingKey]struct{}),
+		counters:      make(map[pendingKey]counts, windowPeers),
+		dirty:         make(map[pendingKey]struct{}, windowPeers),
 		done:          make(chan struct{}),
-		flaps:         newBurst(flapWindow, flapThreshold),
-		discoveries:   newBurst(discoveryWindow, discoveryThreshold),
-		writes:        newBurst(writeFloodWindow, writeFloodThreshold),
+		flaps:         newWindow(flapWindow, flapThreshold),
+		discoveries:   newWindow(discoveryWindow, discoveryThreshold),
+		writes:        newWindow(writeFloodWindow, writeFloodThreshold),
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -221,41 +237,13 @@ func NewEngine(
 	store.OnPut(e.onPut)
 	store.OnDelete(e.onDelete)
 
+	log.Infof(
+		"rating: engine started: witnessing %v, rating peers every %s",
+		e.dims, e.flushInterval,
+	)
+
 	go e.run()
 	return e, nil
-}
-
-// record charges one offence to a peer. It never blocks on the store, and
-// it refuses what this node may not say: a peer it cannot name, itself,
-// or an axis its role cannot witness.
-func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) error {
-	if e == nil {
-		return nil
-	}
-	id := peerID.String()
-	switch {
-	case id == "":
-		return ErrEmptyPeer
-	case id == e.self:
-		return ErrSelfRated
-	case !kind.Valid():
-		return fmt.Errorf("%w: %d", ErrUnknownKind, kind)
-	case !slices.Contains(e.dims, kind.Dimension()):
-		return fmt.Errorf("%w: %s", ErrForeignDimension, kind.Dimension())
-	}
-
-	key := pendingKey{peerID: id, dim: kind.Dimension(), bucket: bucketAt(e.now())}
-
-	e.mu.Lock()
-	c, ok := e.counters[key]
-	if !ok {
-		c = make(counts, 1)
-		e.counters[key] = c
-	}
-	c[kind]++
-	e.dirty[key] = struct{}{}
-	e.mu.Unlock()
-	return nil
 }
 
 // Listen charges the peers the modules' fan-outs name. It returns at
@@ -425,6 +413,35 @@ func (e *Engine) Close() error {
 	return nil
 }
 
+func (e *Engine) run() {
+	defer close(e.done)
+
+	ticker := time.NewTicker(e.flushInterval)
+	defer ticker.Stop()
+	lastGC := e.now()
+
+	for {
+		select {
+		case <-e.ctx.Done():
+			if err := e.flush(); err != nil {
+				log.Errorf("rating: final flush: %v", err)
+			}
+			return
+		case <-ticker.C:
+			if err := e.flush(); err != nil {
+				log.Errorf("rating: flush: %v", err)
+			}
+			if err := e.ratePeers(); err != nil {
+				log.Errorf("rating: rating the peers observed: %v", err)
+			}
+			if e.now().Sub(lastGC) >= gcInterval {
+				e.gc()
+				lastGC = e.now()
+			}
+		}
+	}
+}
+
 // peer returns a peer's indexed record set, loading it whole from the
 // store on first use. A failed load is not remembered, so it is retried
 // on the next read instead of reading as an empty peer.
@@ -511,13 +528,13 @@ func (e *Engine) onDelete(rec domain.RatingRecord) {
 // full weight, remote observers weighted by their standing and capped, so
 // remote evidence alone never reaches TierDegraded.
 func (e *Engine) score(es entries, dim Dimension, now time.Time) Score {
-	byObserver := es.byObserver(dim)
+	dimEntries := es.byObserver(dim)
 
-	own := byObserver[e.self].penalty(dim, now)
+	own := dimEntries[e.self].penalty(dim, now)
 
 	var remote Score
-	for observer, group := range byObserver {
-		if observer == e.self || !e.acquainted(observer) {
+	for observer, group := range dimEntries {
+		if observer == e.self || !e.isOldEnough(observer) {
 			continue
 		}
 		weighted := Score(float64(group.penalty(dim, now)) * e.weight(observer))
@@ -526,11 +543,6 @@ func (e *Engine) score(es entries, dim Dimension, now time.Time) Score {
 	remote = min(remote, capRemoteTotal)
 
 	return (MaxScore - own - remote).clamp()
-}
-
-// firstHand is the score from this node's own evidence alone.
-func (e *Engine) firstHand(es entries, dim Dimension, now time.Time) Score {
-	return (MaxScore - es.byObserver(dim)[e.self].penalty(dim, now)).clamp()
 }
 
 // weight discounts an observer by its first-hand standing with us.
@@ -547,14 +559,16 @@ func (e *Engine) weight(observer string) float64 {
 	now := e.now()
 	worst := MaxScore
 	for _, dim := range es.dimensions() {
-		worst = min(worst, e.firstHand(es, dim, now))
+		worst = min(worst, e.ownScore(es, dim, now))
 	}
 	return float64(worst) / float64(MaxScore)
 }
 
-// acquainted reports whether this node has been connected to an observer
-// long enough for its records to count.
-func (e *Engine) acquainted(observer string) bool {
+func (e *Engine) ownScore(es entries, dim Dimension, now time.Time) Score {
+	return (MaxScore - es.byObserver(dim)[e.self].penalty(dim, now)).clamp()
+}
+
+func (e *Engine) isOldEnough(observer string) bool {
 	id := warpnet.FromStringToPeerID(observer)
 	if id == "" {
 		return false
@@ -571,30 +585,71 @@ func (e *Engine) acquainted(observer string) bool {
 	return e.now().Sub(oldest) >= minAcquaintance
 }
 
-func (e *Engine) run() {
-	defer close(e.done)
+// ratePeers records the peers whose rating has moved. Evidence decays, so a
+// peer recovers with time and no event to report it: this pass is where
+// that is noticed.
+func (e *Engine) ratePeers() error {
+	if e.ratings == nil {
+		return nil
+	}
 
-	ticker := time.NewTicker(e.flushInterval)
-	defer ticker.Stop()
-	lastGC := e.now()
-
-	for {
-		select {
-		case <-e.ctx.Done():
-			if err := e.flush(); err != nil {
-				log.Errorf("rating: final flush: %v", err)
-			}
-			return
-		case <-ticker.C:
-			if err := e.flush(); err != nil {
-				log.Errorf("rating: flush: %v", err)
-			}
-			if e.now().Sub(lastGC) >= gcInterval {
-				e.gc()
-				lastGC = e.now()
-			}
+	var errs []error
+	for _, p := range e.index.rated() {
+		if p.peerID == e.self {
+			continue // what others wrote about this node is not ours to act on
+		}
+		peerID := warpnet.FromStringToPeerID(p.peerID)
+		if peerID == "" {
+			errs = append(errs, fmt.Errorf("%w: %s", ErrEmptyPeer, p.peerID))
+			continue
+		}
+		entries, _ := p.entries()
+		if len(entries) == 0 {
+			continue // nothing has ever been said about this peer
+		}
+		score := e.Score(peerID)
+		tier := score.Tier()
+		if p.tierMoved(tier) {
+			e.ratings.Rate(peerID, tier)
+			log.Infof("rating: peer %s is %s now, score %d of %d", peerID, tier, score, MaxScore)
 		}
 	}
+	return errors.Join(errs...)
+}
+
+// record charges one offence to a peer. It never blocks on the store, and
+// it refuses what this node may not say: a peer it cannot name, itself,
+// or an axis its role cannot witness.
+func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) error {
+	if e == nil {
+		return nil
+	}
+	id := peerID.String()
+	switch {
+	case id == "":
+		return ErrEmptyPeer
+	case id == e.self:
+		return ErrSelfRated
+	case !kind.Valid():
+		return fmt.Errorf("%w: %d", ErrUnknownKind, kind)
+	case !slices.Contains(e.dims, kind.Dimension()):
+		return fmt.Errorf("%w: %s", ErrForeignDimension, kind.Dimension())
+	}
+
+	key := pendingKey{peerID: id, dim: kind.Dimension(), bucket: bucketAt(e.now())}
+
+	e.mu.Lock()
+	c, ok := e.counters[key]
+	if !ok {
+		c = make(counts, 1)
+		e.counters[key] = c
+	}
+	c[kind]++
+	e.dirty[key] = struct{}{}
+	e.mu.Unlock()
+
+	log.Debugf("rating: charging %s with %s", id, kind)
+	return nil
 }
 
 // flush signs and writes every bucket that changed since the last flush.
@@ -631,6 +686,14 @@ func (e *Engine) flush() error {
 		if err := e.store.Put(domain.RatingRecord(rec)); err != nil {
 			errs = append(errs, fmt.Errorf("write record for %s: %w", key.peerID, err))
 			continue
+		}
+		// A peer we have just written about is read into the index, so
+		// that its standing is re-evaluated and announced. The first
+		// write loads its whole history; later ones only add to it.
+		if !e.index.has(rec.PeerID) {
+			if _, err := e.peer(rec.PeerID); err != nil {
+				log.Warnf("rating: indexing %s after a write: %v", rec.PeerID, err)
+			}
 		}
 		e.index.update(rec.PeerID, rec.entry())
 		e.clearIfUnchanged(key, offences)
@@ -676,22 +739,22 @@ func (e *Engine) gc() {
 	}
 }
 
-// burst counts one observation per peer inside a sliding window.
-type burst struct {
+// window counts one observation per peer inside a sliding window.
+type window struct {
 	mu        sync.Mutex
 	counts    *expirable.LRU[string, int]
 	threshold int
 }
 
-func newBurst(window time.Duration, threshold int) *burst {
-	return &burst{
-		counts:    expirable.NewLRU[string, int](burstPeers, nil, window),
+func newWindow(timeWindow time.Duration, threshold int) *window {
+	return &window{
+		counts:    expirable.NewLRU[string, int](windowPeers, nil, timeWindow),
 		threshold: threshold,
 	}
 }
 
 // reached reports the count hitting the threshold, once per window.
-func (b *burst) reached(peerID string) bool {
+func (b *window) reached(peerID string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	count, _ := b.counts.Get(peerID)

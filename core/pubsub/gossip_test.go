@@ -47,7 +47,7 @@ import (
 )
 
 func TestNewGossip(t *testing.T) {
-	g := NewGossip(context.Background(), TopicHandler{
+	g := NewGossip(context.Background(), scoring{}, TopicHandler{
 		TopicName: "topic-a",
 		Handler:   func([]byte) error { return nil },
 	})
@@ -64,7 +64,7 @@ func TestGossip_NodeInfo_NilSafe(t *testing.T) {
 // TestGossip_NotInitializedGuards verifies the public API refuses to operate
 // until Run has flipped isRunning, rather than dereferencing a nil pubsub.
 func TestGossip_NotInitializedGuards(t *testing.T) {
-	g := NewGossip(context.Background())
+	g := NewGossip(context.Background(), scoring{})
 	h := TopicHandler{TopicName: "t", Handler: func([]byte) error { return nil }}
 
 	assert.ErrorIs(t, g.Subscribe(h), ErrPubsubNotInit)
@@ -75,7 +75,7 @@ func TestGossip_NotInitializedGuards(t *testing.T) {
 }
 
 func TestGossip_Subscribers_UnknownTopic(t *testing.T) {
-	g := NewGossip(context.Background())
+	g := NewGossip(context.Background(), scoring{})
 	assert.Empty(t, g.Subscribers("missing"))
 	assert.Empty(t, g.NotSubscribers("missing"))
 }
@@ -201,7 +201,7 @@ func runningGossip(t *testing.T, handlers ...TopicHandler) (*Gossip, *liveNode) 
 	t.Cleanup(cancel)
 
 	node := newLiveNode(t)
-	g := NewGossip(ctx, handlers...)
+	g := NewGossip(ctx, scoring{}, handlers...)
 	require.NoError(t, g.Run(node))
 	t.Cleanup(func() { _ = g.Close() })
 
@@ -226,7 +226,7 @@ func TestGossip_RunTwiceIsRejected(t *testing.T) {
 }
 
 func TestGossip_RunWithoutNodeIsRejected(t *testing.T) {
-	g := NewGossip(context.Background())
+	g := NewGossip(context.Background(), scoring{})
 	err := g.runGossip()
 	assert.Error(t, err, "gossip cannot start without a node")
 	assert.False(t, g.IsGossipRunning())
@@ -645,7 +645,7 @@ func TestGossip_RunPeerInfoPublishingStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	node := newLiveNode(t)
 
-	g := NewGossip(ctx)
+	g := NewGossip(ctx, scoring{})
 	require.NoError(t, g.Run(node))
 
 	done := make(chan struct{})

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"github.com/Warp-net/warpnet/core/rating"
 	"testing"
 	"time"
 
@@ -103,7 +104,7 @@ func TestModeratorPubSubBeforeRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	g := NewPubSub(ctx)
+	g := NewPubSub(ctx, rating.NewPeersRatings())
 	require.NotNil(t, g)
 
 	require.Error(t, g.PublishUpdateToFollowers("owner-1", event.PUBLIC_POST_MODERATION_RESULT, struct{}{}))
