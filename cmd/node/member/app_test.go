@@ -9,6 +9,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
@@ -25,6 +26,7 @@ type stubAuthService struct {
 	loginFn    func(event.LoginEvent, security.PSK) (event.LoginResponse, error)
 	privateKey ed25519.PrivateKey
 	loggedOut  bool
+	reset      bool
 }
 
 func (s *stubAuthService) AuthLogin(ev event.LoginEvent, psk security.PSK) (event.LoginResponse, error) {
@@ -35,6 +37,7 @@ func (s *stubAuthService) AuthLogin(ev event.LoginEvent, psk security.PSK) (even
 }
 
 func (s *stubAuthService) AuthLogout()                        { s.loggedOut = true }
+func (s *stubAuthService) Reset()                             { s.reset = true }
 func (s *stubAuthService) PrivateKey() ed25519.PrivateKey     { return s.privateKey }
 func (s *stubAuthService) Storage() auth.AuthPersistencyLayer { return nil }
 
@@ -208,6 +211,8 @@ func TestAppCall(t *testing.T) {
 		require.JSONEq(t, `["logged_out"]`, string(resp.Body))
 		require.True(t, node.stopped)
 		require.True(t, authSvc.loggedOut)
+		require.True(t, authSvc.reset, "the auth guard must be cleared for the next login")
+		require.Nil(t, a.node, "a stopped node must not stay attached")
 	})
 
 	t.Run("routed call without an attached node", func(t *testing.T) {
@@ -286,17 +291,17 @@ func TestAppClose(t *testing.T) {
 	require.NotPanics(t, func() { a.close(context.Background()) })
 }
 
-func TestRunNodeStopsWithContext(t *testing.T) {
+func TestServeLoginsStopsWithContext(t *testing.T) {
 	a := liveApp(t, &stubAuthService{}, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	a.ctx = ctx
 	cancel()
 
-	// The auth handshake never lands, so runNode must return on the context
+	// The auth handshake never lands, so serveLogins must return on the context
 	// rather than dialling a node.
 	done := make(chan struct{})
 	go func() {
-		a.runNode("testnet", nil)
+		a.serveLogins("testnet", nil)
 		close(done)
 	}()
 	<-done
@@ -312,4 +317,108 @@ func mustJSON(t *testing.T, v any) stdjson.RawMessage {
 	bt, err := json.Marshal(v)
 	require.NoError(t, err)
 	return bt
+}
+
+// fakeAuthStore stands in for the encrypted store behind AuthService:
+// Authenticate opens it and Logout closes it, as the badger-backed repo does.
+type fakeAuthStore struct {
+	key   ed25519.PrivateKey
+	owner domain.Owner
+	open  bool
+}
+
+func (f *fakeAuthStore) Authenticate(_, _ string) error { f.open = true; return nil }
+func (f *fakeAuthStore) SessionToken() string           { return "session-token" }
+func (f *fakeAuthStore) GetOwner() domain.Owner         { return f.owner }
+func (f *fakeAuthStore) PrivateKey() ed25519.PrivateKey { return f.key }
+func (f *fakeAuthStore) Logout()                        { f.open = false }
+
+func (f *fakeAuthStore) SetOwner(o domain.Owner) (domain.Owner, error) {
+	f.owner = o
+	return o, nil
+}
+
+type fakeUserStore struct{}
+
+func (fakeUserStore) Create(u domain.User) (domain.User, error)           { return u, nil }
+func (fakeUserStore) Update(_ string, u domain.User) (domain.User, error) { return u, nil }
+
+func TestAppSignsInAgainAfterLogout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	key := testKey(t)
+	id, err := warpnet.IDFromPublicKey(key.Public().(ed25519.PublicKey))
+	require.NoError(t, err)
+
+	store := &fakeAuthStore{key: key}
+	a := NewApp()
+	a.ctx = ctx
+	a.mx = new(sync.RWMutex)
+	// unbuffered: the handshake uses one channel in both directions, so a
+	// request parked in a buffer before serveLogins reaches its receive would
+	// be read straight back by the login that sent it
+	a.readyChan = make(chan domain.AuthNodeInfo)
+	a.auth = auth.NewAuthService(ctx, store, fakeUserStore{}, a.readyChan)
+
+	var raised []*stubNodeServer
+	go a.serveLogins("testnet", func() (NodeServer, error) {
+		node := &stubNodeServer{info: warpnet.NodeInfo{ID: id}}
+		raised = append(raised, node)
+		return node, nil
+	})
+
+	signIn := func() event.LoginResponse {
+		t.Helper()
+		resp := callWithin(t, a, AppMessage{
+			MessageId: "login", Path: event.PRIVATE_POST_LOGIN,
+			Body: mustJSON(t, event.LoginEvent{Username: "alice", Password: "Owner1234$"}),
+		})
+		var out event.LoginResponse
+		require.NoError(t, json.Unmarshal(resp.Body, &out))
+		return out
+	}
+
+	require.Equal(t, id.String(), signIn().ID, "the first login raises a node")
+
+	resp := callWithin(t, a, AppMessage{MessageId: "logout", Path: event.PRIVATE_POST_LOGOUT, Body: []byte("{}")})
+	require.JSONEq(t, `["logged_out"]`, string(resp.Body))
+	require.False(t, store.open, "logout closes the database")
+
+	require.Equal(t, id.String(), signIn().ID, "signing in again must not need an app restart")
+	require.True(t, store.open, "the second login reopens the database")
+	require.Len(t, raised, 2, "the stopped node must be replaced, not reused")
+	require.True(t, raised[0].stopped)
+	require.False(t, raised[1].stopped)
+}
+
+func TestServeLoginsStopsWhenTheReadyChannelCloses(t *testing.T) {
+	a := liveApp(t, &stubAuthService{}, nil)
+	a.ctx = context.Background()
+
+	done := make(chan struct{})
+	go func() {
+		a.serveLogins("testnet", nil)
+		close(done)
+	}()
+
+	close(a.readyChan) // what App.close does on shutdown
+	<-done
+}
+
+// callWithin fails instead of hanging: a login whose handshake goes unanswered
+// blocks inside AuthLogin forever.
+func callWithin(t *testing.T, a *App, msg AppMessage) AppMessage {
+	t.Helper()
+
+	done := make(chan AppMessage, 1)
+	go func() { done <- a.Call(msg) }()
+
+	select {
+	case resp := <-done:
+		return resp
+	case <-time.After(10 * time.Second):
+		t.Fatalf("app call %q hung", msg.Path)
+		return AppMessage{}
+	}
 }
