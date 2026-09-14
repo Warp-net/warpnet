@@ -115,11 +115,9 @@ func ParseDimension(s string) (Dimension, bool) {
 // Dimensions lists what a node of the given type can witness.
 func dimensionsByNodeType(nodeType string) []Dimension {
 	switch nodeType {
-	case warpnet.MemberNode:
-		return []Dimension{Network, Application}
-	case warpnet.ModeratorNode:
-		// A moderator judges content for a living, so it witnesses the
-		// application axis as well as the wire and its own peers.
+	case warpnet.MemberNode, warpnet.ModeratorNode:
+		// Both witness a moderator: one when it votes beside them, the other
+		// when a verdict reaches it signed and names nothing.
 		return []Dimension{Network, Application, Moderation}
 	default:
 		return []Dimension{Network}

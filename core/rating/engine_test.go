@@ -390,6 +390,7 @@ func TestGCExpiresOnlyOwnRecordsPerDimension(t *testing.T) {
 	assert.ElementsMatch(t, []expiry{
 		{dimension: Network.String(), beforeBucket: int64(bucketAt(now.Add(-Network.Retention())))},
 		{dimension: Application.String(), beforeBucket: int64(bucketAt(now.Add(-Application.Retention())))},
+		{dimension: Moderation.String(), beforeBucket: int64(bucketAt(now.Add(-Moderation.Retention())))},
 	}, store.expiries(), "every dimension this node witnesses is pruned at its own retention")
 
 	records := store.records()
