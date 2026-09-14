@@ -1542,8 +1542,8 @@ func TestSetPinnedFromEvent(t *testing.T) {
 		}
 		users, conn := authorStream(t)
 		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, conn, true)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "only the author can pin")
+		assert.ErrorIs(t, err, warpnet.ErrForeignAuthor,
+			"pinning someone else's tweet is an authorship offence, not a plain refusal")
 	})
 
 	t.Run("sent by another node", func(t *testing.T) {
