@@ -82,12 +82,12 @@ type Gossip struct {
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
 
-	rated PeerGossipScorer
+	ratings PeersRatings
 }
 
-// PeerGossipScorer answers what gossipsub should weigh a peer by, which
-// is how a badly rated peer is read last and, at worst, not at all.
-type PeerGossipScorer interface {
+// PeersRatings answers what gossipsub should weigh a peer by, which is
+// how a badly rated peer is read last and, at worst, not at all.
+type PeersRatings interface {
 	GossipScore(peerID warpnet.WarpPeerID) float64
 }
 
@@ -102,10 +102,10 @@ const (
 // peerScore is what gossipsub weighs a peer by. A node with no rating
 // wired up scores every peer the same.
 func (g *Gossip) peerScore(peerID warpnet.WarpPeerID) float64 {
-	if g == nil || g.rated == nil {
+	if g == nil || g.ratings == nil {
 		return 0
 	}
-	return g.rated.GossipScore(peerID)
+	return g.ratings.GossipScore(peerID)
 }
 
 // scoreOptions weigh a peer by what it may have and nothing else: the
@@ -134,7 +134,7 @@ type TopicHandler struct {
 
 func NewGossip(
 	ctx context.Context,
-	rated PeerGossipScorer,
+	ratings PeersRatings,
 	handlers ...TopicHandler,
 ) *Gossip {
 	handlersMap := make(map[string]topicHandler)
@@ -144,7 +144,7 @@ func NewGossip(
 
 	return &Gossip{
 		ctx:              ctx,
-		rated:            rated,
+		ratings:          ratings,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		handlersMap:      handlersMap,

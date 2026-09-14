@@ -51,14 +51,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// PeerTiers is how the rating rates each peer: the engine writes it, and
-// this node's modules read what follows from it.
-type PeerTiers interface {
-	Set(peerID warpnet.WarpPeerID, tier rating.Tier)
+// PeersRatings is how this node rates its peers: the engine writes it,
+// and this node's modules read what follows from it.
+type PeersRatings interface {
+	Rate(peerID warpnet.WarpPeerID, tier rating.Tier)
 	ConnTag(peerID warpnet.WarpPeerID) int
 	GossipScore(peerID warpnet.WarpPeerID) float64
 	RateMultiplier(peerID warpnet.WarpPeerID) float64
-	InRoutingTable(peerID warpnet.WarpPeerID) bool
+	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.
@@ -109,7 +109,7 @@ type ModeratorNode struct {
 	ratingStore RatingProvider
 	ratingDb    RatingStorer
 	rating      PeerRater
-	rated       PeerTiers
+	ratings     PeersRatings
 
 	memoryStoreCloseF func() error
 
@@ -125,7 +125,7 @@ func NewModeratorNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
-	rated PeerTiers,
+	ratings PeersRatings,
 ) (_ *ModeratorNode, err error) {
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
@@ -150,7 +150,7 @@ func NewModeratorNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
-		dht.Rated(rated),
+		dht.Ratings(ratings),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
 	)
@@ -175,7 +175,7 @@ func NewModeratorNode(
 		ctx:               ctx,
 		dHashTable:        dHashTable,
 		ratingStore:       ratingStore,
-		rated:             rated,
+		ratings:           ratings,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -192,12 +192,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.rated, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.ratings, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.rated)
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.ratings)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -240,7 +240,7 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 	}
 	mn.rating, err = rating.NewEngine(
 		mn.ctx, mn.ratingDb, mn.node.Node().Network(), mn.privKey, warpnet.ModeratorNode,
-		rating.WithTiers(mn.rated),
+		rating.WithRatings(mn.ratings),
 	)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to start rating engine: %w", err)

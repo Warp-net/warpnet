@@ -48,34 +48,34 @@ func (p *taggingPrioritizer) SetMaxPriority(warpnet.WarpPeerID)                 
 
 func TestAPeerIsWorthToTheConnectionManagerWhatItIsRated(t *testing.T) {
 	prioritizer := newTaggingPrioritizer()
-	rated := worth{taggedPeer: 10}
-	n := &WarpNode{prioritizer: prioritizer, rated: rated}
+	ratings := worth{taggedPeer: 10}
+	n := &WarpNode{prioritizer: prioritizer, ratings: ratings}
 	peerID := warpnet.FromStringToPeerID(taggedPeer)
 
-	n.tagByRating(peerID)
+	n.tagPeer(peerID)
 
 	tag, ok := prioritizer.tagged(peerID)
 	require.True(t, ok)
 	assert.Equal(t, 10, tag)
 
-	rated[taggedPeer] = 60
-	n.tagByRating(peerID)
+	ratings[taggedPeer] = 60
+	n.tagPeer(peerID)
 	tag, _ = prioritizer.tagged(peerID)
 	assert.Equal(t, 60, tag, "a rating that recovers is worth more again")
 }
 
-func TestANodeWithNoRatingTagsNobody(t *testing.T) {
+func TestANodeWithNoRatingsTagsNobody(t *testing.T) {
 	prioritizer := newTaggingPrioritizer()
 	peerID := warpnet.FromStringToPeerID(taggedPeer)
 
 	n := &WarpNode{prioritizer: prioritizer}
-	n.tagByRating(peerID)
-	assert.Empty(t, prioritizer.tags, "a node with no rating leaves the tag alone")
+	n.tagPeer(peerID)
+	assert.Empty(t, prioritizer.tags, "a node with no ratings leaves the tag alone")
 
-	rated := &WarpNode{prioritizer: prioritizer, rated: worth{}}
-	rated.tagByRating("")
+	rated := &WarpNode{prioritizer: prioritizer, ratings: worth{}}
+	rated.tagPeer("")
 	assert.Empty(t, prioritizer.tags, "and a peer with no id is nobody to tag")
 
 	var nilNode *WarpNode
-	assert.NotPanics(t, func() { nilNode.tagByRating(peerID) })
+	assert.NotPanics(t, func() { nilNode.tagPeer(peerID) })
 }

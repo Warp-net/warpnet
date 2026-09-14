@@ -90,8 +90,8 @@ func main() {
 		return
 	}
 
-	rated := rating.NewPeerTiers()
-	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, rated)
+	ratings := rating.CollectPeersRatings()
+	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, ratings)
 	if err != nil {
 		log.Errorf("failed to init moderator node: %v", err)
 		return
@@ -103,7 +103,7 @@ func main() {
 	}
 	defer n.Stop()
 
-	publisher := pubsub.NewPubSub(ctx, rated)
+	publisher := pubsub.NewPubSub(ctx, ratings)
 	if err := publisher.Run(n); err != nil {
 		log.Errorf("failed to start moderator pubsub: %v", err)
 		return

@@ -44,7 +44,7 @@ func TestABadlyRatedPeerSpendsLess(t *testing.T) {
 	trusted, _ := newRemotePeer(t)
 	degraded, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
-	mw.rated = allowing{degraded.String(): 0.25}
+	mw.ratings = allowing{degraded.String(): 0.25}
 
 	full := spend(t, mw, ownNodeId, trusted)
 	tightened := spend(t, mw, ownNodeId, degraded)
@@ -58,8 +58,8 @@ func TestAPeerNobodyHasRatedSpendsEverything(t *testing.T) {
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	assert.Equal(t, float64(1), mw.allowance(peer))
-	assert.Equal(t, limitPairing, limitPairing.scaled(mw.allowance(peer)))
+	assert.Equal(t, float64(1), mw.rateMultiplier(peer))
+	assert.Equal(t, limitPairing, limitPairing.multipliedBy(mw.rateMultiplier(peer)))
 }
 
 // A peer that filled its bucket at the old allowance must not keep it.
@@ -67,13 +67,13 @@ func TestANewRatingDropsTheBucketFilledUnderTheOldOne(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
-	rated := allowing{}
-	mw.rated = rated
+	ratings := allowing{}
+	mw.ratings = ratings
 
 	require.Positive(t, spend(t, mw, ownNodeId, peer), "the peer drains its bucket")
 	require.Zero(t, spend(t, mw, ownNodeId, peer), "and it stays drained")
 
-	rated[peer.String()] = 0.5
+	ratings[peer.String()] = 0.5
 
 	assert.Positive(t, spend(t, mw, ownNodeId, peer),
 		"a peer whose rating changed is measured against the allowance it has now")
@@ -83,7 +83,7 @@ func TestAnUnchangedRatingKeepsTheBucket(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
-	mw.rated = allowing{peer.String(): 0.5}
+	mw.ratings = allowing{peer.String(): 0.5}
 
 	require.Positive(t, spend(t, mw, ownNodeId, peer))
 
@@ -91,18 +91,18 @@ func TestAnUnchangedRatingKeepsTheBucket(t *testing.T) {
 		"a rating that did not change must not hand a peer a fresh bucket")
 }
 
-func TestScalingNeverStarvesAPeer(t *testing.T) {
-	tightest := routeLimit{burst: 1, perMinute: 1}.scaled(0.1)
+func TestAMultiplierNeverStarvesAPeer(t *testing.T) {
+	tightest := routeLimit{burst: 1, perMinute: 1}.multipliedBy(0.1)
 	assert.EqualValues(t, 1, tightest.burst)
 	assert.EqualValues(t, 1, tightest.perMinute)
 }
 
-func TestAMiddlewareWithNoRatingServesEveryPeerInFull(t *testing.T) {
+func TestAMiddlewareWithNoRatingsServesEveryPeerInFull(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	mw := &WarpMiddleware{ownNodeId: ownNodeId, rateLimiters: newRateLimitersCache()}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 
-	assert.Equal(t, float64(1), mw.allowance(peer))
+	assert.Equal(t, float64(1), mw.rateMultiplier(peer))
 	assert.Positive(t, spend(t, mw, ownNodeId, peer))
 }

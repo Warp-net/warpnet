@@ -30,7 +30,7 @@ func newTestModeratorNode(t *testing.T) *ModeratorNode {
 	psk, err := security.GeneratePSK("testnet", semver.MustParse("0.0.0"))
 	require.NoError(t, err)
 
-	mn, err := NewModeratorNode(context.Background(), privKey, psk, ownNodeId, rating.NewPeerTiers())
+	mn, err := NewModeratorNode(context.Background(), privKey, psk, ownNodeId, rating.CollectPeersRatings())
 	require.NoError(t, err)
 	require.NotNil(t, mn)
 	t.Cleanup(mn.Stop)

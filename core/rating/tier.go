@@ -79,7 +79,7 @@ func (t Tier) RateMultiplier() float64 {
 	}
 }
 
-// InRoutingTable reports whether peers of this tier stay in the DHT.
-func (t Tier) InRoutingTable() bool {
+// IsAllowedInDHT reports whether peers of this tier stay in the DHT.
+func (t Tier) IsAllowedInDHT() bool {
 	return t != TierFloor
 }

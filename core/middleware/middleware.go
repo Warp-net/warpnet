@@ -69,18 +69,18 @@ type WarpMiddleware struct {
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
 
-	events warpnet.PeerEmitter
-	rated  PeerRateMultiplier
+	events  warpnet.PeerEmitter
+	ratings PeersRatings
 }
 
-// PeerRateMultiplier answers how much of a route's allowance a peer may
-// spend, which is how a node serves a badly rated peer more slowly.
-type PeerRateMultiplier interface {
+// PeersRatings answers how much of a route's allowance a peer may spend,
+// which is how a node serves a badly rated peer more slowly.
+type PeersRatings interface {
 	RateMultiplier(peerID warpnet.WarpPeerID) float64
 }
 
 func NewWarpMiddleware(
-	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, rated PeerRateMultiplier,
+	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, ratings PeersRatings,
 ) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
@@ -89,7 +89,7 @@ func NewWarpMiddleware(
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
 		events:          warpnet.NewPeerEmitter(),
-		rated:           rated,
+		ratings:         ratings,
 	}
 	return wm
 }

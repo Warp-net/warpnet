@@ -122,13 +122,13 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 	}
 }
 
-// admits reports a peer the routing table may hold. A node with no rating
-// wired up holds every peer it finds.
-func (d *distributedHashTable) admits(peerID warpnet.WarpPeerID) bool {
-	if d == nil || d.cfg.rated == nil {
+// isPeerAllowed reports a peer the routing table may hold. A node with no
+// ratings holds every peer it finds.
+func (d *distributedHashTable) isPeerAllowed(peerID warpnet.WarpPeerID) bool {
+	if d == nil || d.cfg.ratings == nil {
 		return true
 	}
-	return d.cfg.rated.InRoutingTable(peerID)
+	return d.cfg.ratings.IsAllowedInDHT(peerID)
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
@@ -145,8 +145,12 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	d.dht, err = dht.New(
 		d.ctx, n,
-		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool { return d.admits(p) }),
-		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool { return d.admits(ai.ID) }),
+		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool {
+			return d.isPeerAllowed(p)
+		}),
+		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool {
+			return d.isPeerAllowed(ai.ID)
+		}),
 		dht.Mode(dht.ModeAuto),
 		dht.ProtocolPrefix(protocol.ID("/"+d.cfg.network)),
 		dht.Datastore(d.cfg.store),

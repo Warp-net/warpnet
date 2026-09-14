@@ -565,41 +565,41 @@ own test (§10, Stage 1).
 func (t Tier) ConnTag() int            // 60 / 30 / 10 / 1
 func (t Tier) GossipScore() float64    // 0 / -10 / -60 / -200
 func (t Tier) RateMultiplier() float64 // 1.0 / 0.5 / 0.25 / 0.1
-func (t Tier) InRoutingTable() bool    // false only for TierFloor
+func (t Tier) IsAllowedInDHT() bool    // false only for TierFloor
 ```
 
 A module never reads a score, and none of them keeps rating state of its
-own. The engine records each peer's tier in one `rating.PeerTiers`, and
-every module asks it the single question it acts on:
+own. The engine records each peer's tier in one `rating.PeersRatings`,
+and every module asks it the single question it acts on:
 
 ```go
 // core/rating — the engine writes here as ratings move
-type PeerTiers struct{ ... }
-func (t *PeerTiers) Set(peerID warpnet.WarpPeerID, tier Tier)
-func (t *PeerTiers) Tier(peerID warpnet.WarpPeerID) Tier
-func (t *PeerTiers) ConnTag(peerID warpnet.WarpPeerID) int
-func (t *PeerTiers) GossipScore(peerID warpnet.WarpPeerID) float64
-func (t *PeerTiers) RateMultiplier(peerID warpnet.WarpPeerID) float64
-func (t *PeerTiers) InRoutingTable(peerID warpnet.WarpPeerID) bool
+func CollectPeersRatings() *PeersRatings
+func (r *PeersRatings) Rate(peerID warpnet.WarpPeerID, tier Tier)
+func (r *PeersRatings) Tier(peerID warpnet.WarpPeerID) Tier
+func (r *PeersRatings) ConnTag(peerID warpnet.WarpPeerID) int
+func (r *PeersRatings) GossipScore(peerID warpnet.WarpPeerID) float64
+func (r *PeersRatings) RateMultiplier(peerID warpnet.WarpPeerID) float64
+func (r *PeersRatings) IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
 
-type TierSetter interface{ Set(peerID warpnet.WarpPeerID, tier Tier) }
-func WithTiers(tiers TierSetter) Option   // the whole wiring
+type RatingsCollector interface{ Rate(peerID warpnet.WarpPeerID, tier Tier) }
+func WithRatings(ratings RatingsCollector) Option   // the whole wiring
 ```
 
-Each module declares the one question, in its own terms, and imports
-nothing of the rating to ask it:
+Each module declares a `PeersRatings` of its own, with the one method it
+asks, and imports nothing of the rating to ask it:
 
-| module | interface | asks |
+| module | asks | for |
 |---|---|---|
-| `core/middleware` | `PeerRateMultiplier` | how much of a route this peer may spend |
-| `core/pubsub` | `PeerGossipScorer` | what gossipsub should weigh it by |
-| `core/dht` | `PeerAdmitter` | whether the routing table may hold it |
-| `core/node` | `PeerConnTagger` | what it is worth to the connection manager |
+| `core/middleware` | `RateMultiplier` | how much of a route this peer may spend |
+| `core/pubsub` | `GossipScore` | what gossipsub should weigh it by |
+| `core/dht` | `IsAllowedInDHT` | whether the routing table may hold it |
+| `core/node` | `ConnTag` | what it is worth to the connection manager |
 
-A node with no rating wired up serves, scores, routes and keeps every peer
-in full: each of those readers answers for it. The connection tag is the
-one that is pushed rather than read, because libp2p holds it: the node
-sets it whenever a peer connects.
+A node with no ratings serves, scores, routes and keeps every peer in
+full: each of those readers answers for it. The connection tag is the one
+that is pushed rather than read, because libp2p holds it: the node sets
+it whenever a peer connects.
 
 The pass is also what notices a rating that recovered: evidence decays,
 so a peer improves with no event to announce it. A peer nobody has rated

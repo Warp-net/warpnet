@@ -86,10 +86,10 @@ const (
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
-// TierSetter is where the engine records how it rates a peer, for the
-// modules that act on it to read.
-type TierSetter interface {
-	Set(peerID warpnet.WarpPeerID, tier Tier)
+// RatingsCollector is where the engine records how it rates a peer, for
+// the modules that act on it to read.
+type RatingsCollector interface {
+	Rate(peerID warpnet.WarpPeerID, tier Tier)
 }
 
 // Storer is the replicated record store; ratingstore.Store satisfies it.
@@ -119,11 +119,11 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
-// WithTiers is where the engine records how it rates a peer. Without it
-// a node observes and replicates, and enforces nothing.
-func WithTiers(tiers TierSetter) Option {
+// WithRatings is where the engine records how it rates a peer. Without
+// it a node observes and replicates, and acts on nothing.
+func WithRatings(ratings RatingsCollector) Option {
 	return func(e *Engine) {
-		e.tiers = tiers
+		e.ratings = ratings
 	}
 }
 
@@ -166,7 +166,7 @@ type Engine struct {
 
 	listeners sync.WaitGroup
 
-	tiers TierSetter
+	ratings RatingsCollector
 
 	mu       sync.Mutex
 	counters map[pendingKey]counts
@@ -340,11 +340,11 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 	return nil
 }
 
-// rateAll records the peers whose rating has moved. Evidence decays, so a
+// ratePeers records the peers whose rating has moved. Evidence decays, so a
 // peer recovers with time and no event to report it: this pass is where
 // that is noticed.
-func (e *Engine) rateAll() error {
-	if e.tiers == nil {
+func (e *Engine) ratePeers() error {
+	if e.ratings == nil {
 		return nil
 	}
 
@@ -361,7 +361,7 @@ func (e *Engine) rateAll() error {
 		}
 		tier := e.Score(peerID).Tier()
 		if p.tierMoved(tier) {
-			e.tiers.Set(peerID, tier)
+			e.ratings.Rate(peerID, tier)
 		}
 	}
 	return errors.Join(errs...)
@@ -632,7 +632,7 @@ func (e *Engine) run() {
 			if err := e.flush(); err != nil {
 				log.Errorf("rating: flush: %v", err)
 			}
-			if err := e.rateAll(); err != nil {
+			if err := e.ratePeers(); err != nil {
 				log.Errorf("rating: rating the peers observed: %v", err)
 			}
 			if e.now().Sub(lastGC) >= gcInterval {

@@ -1,0 +1,45 @@
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package dht
+
+import (
+	"context"
+	"testing"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/stretchr/testify/assert"
+)
+
+const ratedPeer = "12D3KooWQYhTNQdmr3ArTeUHRYzFg94BKyTkoWBDWez9kSCVe2Xo"
+
+// refusing allows every peer but the ones it was told to refuse.
+type refusing map[string]bool
+
+func (r refusing) IsAllowedInDHT(peerID warpnet.WarpPeerID) bool {
+	return !r[peerID.String()]
+}
+
+func TestAPeerNobodyHasRatedIsAllowed(t *testing.T) {
+	d := NewDHTable(context.Background(), RoutingStore(memStore()), Ratings(refusing{}))
+
+	assert.True(t, d.isPeerAllowed(warpnet.FromStringToPeerID(ratedPeer)),
+		"the rating only ever takes peers out of the routing table")
+}
+
+func TestAPeerAtTheFloorIsKeptOut(t *testing.T) {
+	refused := refusing{ratedPeer: true}
+	d := NewDHTable(context.Background(), RoutingStore(memStore()), Ratings(refused))
+	peerID := warpnet.FromStringToPeerID(ratedPeer)
+
+	assert.False(t, d.isPeerAllowed(peerID))
+
+	refused[ratedPeer] = false
+	assert.True(t, d.isPeerAllowed(peerID), "a rating that recovers lets the peer back in")
+}
+
+func TestATableWithNoRatingsAllowsEveryPeer(t *testing.T) {
+	d := NewDHTable(context.Background(), RoutingStore(memStore()))
+
+	assert.True(t, d.isPeerAllowed(warpnet.FromStringToPeerID(ratedPeer)))
+}

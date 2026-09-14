@@ -237,10 +237,10 @@ func newMemberEngine(t *testing.T, self identity, store Storer, clock *fixedCloc
 
 // newRatingEngine is a member engine that records how it rates its peers.
 func newRatingEngine(
-	t *testing.T, self identity, store Storer, clock *fixedClock, tiers TierSetter,
+	t *testing.T, self identity, store Storer, clock *fixedClock, ratings RatingsCollector,
 ) *Engine {
 	t.Helper()
-	return newTestEngine(t, self, store, clock, warpnet.MemberNode, WithTiers(tiers))
+	return newTestEngine(t, self, store, clock, warpnet.MemberNode, WithRatings(ratings))
 }
 
 // signedRecord builds a valid record from observer about peerID.

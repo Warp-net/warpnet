@@ -104,7 +104,7 @@ func TestModeratorPubSubBeforeRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	g := NewPubSub(ctx, rating.NewPeerTiers())
+	g := NewPubSub(ctx, rating.CollectPeersRatings())
 	require.NotNil(t, g)
 
 	require.Error(t, g.PublishUpdateToFollowers("owner-1", event.PUBLIC_POST_MODERATION_RESULT, struct{}{}))

@@ -51,12 +51,12 @@ type relayPubSub struct {
 }
 
 func NewPubSubRelay(
-	ctx context.Context, rated pubsub.PeerGossipScorer, handlers ...pubsub.TopicHandler,
+	ctx context.Context, ratings pubsub.PeersRatings, handlers ...pubsub.TopicHandler,
 ) *relayPubSub {
 	bps := &relayPubSub{
 		ctx: ctx,
 	}
-	bps.pubsub = pubsub.NewGossip(ctx, rated, handlers...)
+	bps.pubsub = pubsub.NewGossip(ctx, ratings, handlers...)
 	return bps
 }
 

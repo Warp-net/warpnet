@@ -130,36 +130,36 @@ func (p *WarpMiddleware) bucket(
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
 
-	allowance := p.allowance(remotePeer)
-	if b, ok := p.rateLimiters.Get(key); ok && b.allowance == allowance {
+	multiplier := p.rateMultiplier(remotePeer)
+	if b, ok := p.rateLimiters.Get(key); ok && b.multiplier == multiplier {
 		return b
 	}
 	// A peer whose standing moved does not keep the bucket it filled
 	// under the old one.
-	b := newRateLimiter(limitForRoute(route, remotePeer).scaled(allowance), allowance)
+	b := newRateLimiter(limitForRoute(route, remotePeer).multipliedBy(multiplier), multiplier)
 	p.rateLimiters.Add(key, b)
 	return b
 }
 
-// allowance is the share of a route a peer may spend. A node with no
-// rating wired up serves every peer in full.
-func (p *WarpMiddleware) allowance(peerID warpnet.WarpPeerID) float64 {
-	if p == nil || p.rated == nil {
+// rateMultiplier is the share of a route a peer may spend. A node with no
+// ratings serves every peer in full.
+func (p *WarpMiddleware) rateMultiplier(peerID warpnet.WarpPeerID) float64 {
+	if p == nil || p.ratings == nil {
 		return 1
 	}
-	return p.rated.RateMultiplier(peerID)
+	return p.ratings.RateMultiplier(peerID)
 }
 
-// scaled is what a peer on this allowance may spend of a route's limit,
-// never below one: a peer the rating thinks little of is slowed down,
-// never starved.
-func (l routeLimit) scaled(allowance float64) routeLimit {
-	if allowance >= 1 {
+// multipliedBy is what a peer on this multiplier may spend of a route's
+// limit, never below one: a peer the rating thinks little of is slowed
+// down, never starved.
+func (l routeLimit) multipliedBy(multiplier float64) routeLimit {
+	if multiplier >= 1 {
 		return l
 	}
 	return routeLimit{
-		burst:     max(1, int64(float64(l.burst)*allowance)),
-		perMinute: max(1, int64(float64(l.perMinute)*allowance)),
+		burst:     max(1, int64(float64(l.burst)*multiplier)),
+		perMinute: max(1, int64(float64(l.perMinute)*multiplier)),
 	}
 }
 
@@ -169,10 +169,10 @@ type leakyBucketRateLimiter struct {
 	filled       int64
 	lastLeak     time.Time
 	leakInterval time.Duration
-	allowance    float64
+	multiplier   float64
 }
 
-func newRateLimiter(limit routeLimit, allowance float64) *leakyBucketRateLimiter {
+func newRateLimiter(limit routeLimit, multiplier float64) *leakyBucketRateLimiter {
 	if limit.burst <= 0 {
 		limit.burst = 1
 	}
@@ -183,7 +183,7 @@ func newRateLimiter(limit routeLimit, allowance float64) *leakyBucketRateLimiter
 		capacity:     limit.burst,
 		lastLeak:     time.Now(),
 		leakInterval: time.Minute / time.Duration(limit.perMinute),
-		allowance:    allowance,
+		multiplier:   multiplier,
 	}
 }
 

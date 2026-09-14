@@ -72,9 +72,9 @@ type BackoffEnabler interface {
 	Reset(id warpnet.WarpPeerID)
 }
 
-// PeerConnTagger answers what a peer is worth to the connection manager,
+// PeersRatings answers what a peer is worth to the connection manager,
 // so that a node under pressure drops the peers it trusts least first.
-type PeerConnTagger interface {
+type PeersRatings interface {
 	ConnTag(peerID warpnet.WarpPeerID) int
 }
 
@@ -98,7 +98,7 @@ type WarpNode struct {
 
 	reachability atomic.Int64
 	prioritizer  Prioritizer
-	rated        PeerConnTagger
+	ratings      PeersRatings
 	events       warpnet.PeerEmitter
 
 	startTime        time.Time
@@ -109,7 +109,7 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
-	rated PeerConnTagger,
+	ratings PeersRatings,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -173,7 +173,7 @@ func NewWarpNode(
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
 		events:           warpnet.NewPeerEmitter(),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
-		rated:            rated,
+		ratings:          ratings,
 	}
 
 	go wn.trackIncomingEvents()
@@ -356,7 +356,7 @@ func (n *WarpNode) trackIncomingEvents() {
 						n.outbox.NotifyOnline(pid)
 					}
 					n.events.Emit(warpnet.PeerEvent{PeerID: pid, Type: warpnet.PeerConnected})
-					n.tagByRating(typedEvent.Peer)
+					n.tagPeer(typedEvent.Peer)
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
@@ -412,14 +412,14 @@ func (n *WarpNode) trackIncomingEvents() {
 	}
 }
 
-// tagByRating is what a peer is worth to the connection manager. A node
-// with no rating wired up leaves the tag alone, and a peer keeps what it
-// was worth when it connected until it connects again.
-func (n *WarpNode) tagByRating(peerID warpnet.WarpPeerID) {
-	if n == nil || n.rated == nil || n.prioritizer == nil || peerID == "" {
+// tagPeer sets what a peer is worth to the connection manager. A node
+// with no ratings leaves the tag alone, and a peer keeps what it was
+// worth when it connected until it connects again.
+func (n *WarpNode) tagPeer(peerID warpnet.WarpPeerID) {
+	if n == nil || n.ratings == nil || n.prioritizer == nil || peerID == "" {
 		return
 	}
-	n.prioritizer.SetRatingPriority(peerID, n.rated.ConnTag(peerID))
+	n.prioritizer.SetRatingPriority(peerID, n.ratings.ConnTag(peerID))
 }
 
 // Event is what this node saw its peers do. The channel is never closed.

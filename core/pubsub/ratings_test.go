@@ -68,7 +68,7 @@ func TestOnlyTheWorstScoreIsGraylisted(t *testing.T) {
 	}
 }
 
-func TestAGossipWithNoRatingScoresEveryPeerTheSame(t *testing.T) {
+func TestAGossipWithNoRatingsScoresEveryPeerTheSame(t *testing.T) {
 	g := NewGossip(context.Background(), nil)
 
 	assert.Equal(t, float64(0), scoredBy(t, g, warpnet.FromStringToPeerID(scoredPeer)))

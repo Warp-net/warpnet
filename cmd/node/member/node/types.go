@@ -122,14 +122,14 @@ type WalletAddressProvider interface {
 	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
 }
 
-// PeerTiers is how the rating rates each peer: the engine writes it, and
-// this node's modules read what follows from it.
-type PeerTiers interface {
-	Set(peerID warpnet.WarpPeerID, tier rating.Tier)
+// PeersRatings is how this node rates its peers: the engine writes it,
+// and this node's modules read what follows from it.
+type PeersRatings interface {
+	Rate(peerID warpnet.WarpPeerID, tier rating.Tier)
 	ConnTag(peerID warpnet.WarpPeerID) int
 	GossipScore(peerID warpnet.WarpPeerID) float64
 	RateMultiplier(peerID warpnet.WarpPeerID) float64
-	InRoutingTable(peerID warpnet.WarpPeerID) bool
+	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.

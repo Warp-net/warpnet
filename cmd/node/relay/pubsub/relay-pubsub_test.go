@@ -41,7 +41,7 @@ func TestRelayPubSubLifecycle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	g := NewPubSubRelay(ctx, rating.NewPeerTiers(), pubsub.NewDiscoveryRelayTopicHandler())
+	g := NewPubSubRelay(ctx, rating.CollectPeersRatings(), pubsub.NewDiscoveryRelayTopicHandler())
 	require.NotNil(t, g)
 	require.Equal(t, "None", g.OwnerID(), "a relay has no owner of its own")
 
@@ -61,7 +61,7 @@ func TestRelayPubSubRunFailureIsLogged(t *testing.T) {
 	cancel() // a cancelled context makes the gossip router refuse to start
 
 	node := newLiveNode(t)
-	g := NewPubSubRelay(ctx, rating.NewPeerTiers())
+	g := NewPubSubRelay(ctx, rating.CollectPeersRatings())
 	g.Run(node)
 
 	require.NoError(t, g.Close())
