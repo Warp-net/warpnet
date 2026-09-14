@@ -79,7 +79,7 @@ type MemberNode struct {
 	ratingDb         RatingStorer
 	rating           PeerRater
 	ratings          PeersRatings
-	verdicts         warpnet.PeerEmitter
+	events           warpnet.PeerEmitter
 	privKey          ed25519.PrivateKey
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
@@ -179,7 +179,7 @@ func NewMemberNode(
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
 		ratings:       ratings,
-		verdicts:      warpnet.NewPeerEmitter(),
+		events:        warpnet.NewPeerEmitter(),
 		statsRepo:     statsRepo,
 		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
@@ -259,7 +259,7 @@ func (m *MemberNode) Start() (err error) {
 		m.mw.IdempotencyMiddleware,
 	)
 
-	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.verdicts)
+	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event(), m.events)
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -495,7 +495,7 @@ func (m *MemberNode) adminHandlers(
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
 			handler.StreamModerationResultHandler(
-				m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo, m.verdicts,
+				m.notifier, r.tweetRepo, m.userRepo, r.timelineRepo, authRepo, m.events,
 			),
 		},
 		{

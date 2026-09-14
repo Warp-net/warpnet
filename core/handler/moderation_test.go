@@ -211,11 +211,11 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	// A verdict is the moderator's own words only once its signature
 	// verifies; what it says after that is its own to answer for.
 	t.Run("a signed verdict that names nothing charges the moderator", func(t *testing.T) {
-		verdicts := warpnet.NewPeerEmitter()
+		events := warpnet.NewPeerEmitter()
 		_, moderatorId := moderatorTestKey(t, "moderation-handler-test")
 		h := StreamModerationResultHandler(
 			stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{},
-			stubModerationTimelineDeleter{}, stubAuth{owner: domain.Owner{UserId: owner}}, verdicts,
+			stubModerationTimelineDeleter{}, stubAuth{owner: domain.Owner{UserId: owner}}, events,
 		)
 
 		_, err := h(signedResult(t, event.ModerationVerdictEvent{
@@ -226,7 +226,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 
 		select {
-		case ev := <-verdicts:
+		case ev := <-events:
 			if ev.PeerID != moderatorId {
 				t.Fatalf("charged %s, want the moderator that signed it %s", ev.PeerID, moderatorId)
 			}
@@ -241,7 +241,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	// Before the signature verifies the named moderator may have had no
 	// part in the verdict, so charging it is how anyone could frame one.
 	t.Run("a forged verdict charges nobody", func(t *testing.T) {
-		verdicts := warpnet.NewPeerEmitter()
+		events := warpnet.NewPeerEmitter()
 		impostor, err := security.GenerateKeyFromSeed([]byte("impostor"))
 		if err != nil {
 			t.Fatalf("generate key: %v", err)
@@ -249,7 +249,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		_, moderatorId := moderatorTestKey(t, "moderation-handler-test")
 		h := StreamModerationResultHandler(
 			stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{},
-			stubModerationTimelineDeleter{}, stubAuth{owner: domain.Owner{UserId: owner}}, verdicts,
+			stubModerationTimelineDeleter{}, stubAuth{owner: domain.Owner{UserId: owner}}, events,
 		)
 
 		ev := event.ModerationVerdictEvent{Type: domain.ModerationTweetType, UserID: owner}
@@ -259,7 +259,7 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		}
 
 		select {
-		case charged := <-verdicts:
+		case charged := <-events:
 			t.Fatalf("a forged verdict charged %s", charged.PeerID)
 		default:
 		}
