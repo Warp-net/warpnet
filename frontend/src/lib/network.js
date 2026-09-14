@@ -22,40 +22,75 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-// Warpnet user ids are ULIDs (26 chars, Crockford base32); bridged Mastodon
-// accounts use fediverse handles like "user@instance" instead.
+// Warpnet user ids are ULIDs (26 chars, Crockford base32); bridged accounts
+// use fediverse handles like "user@instance" instead.
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 const WARPNET_NETWORKS = ['warpnet', 'testnet', 'mainnet'];
 
-// A user belongs to the Mastodon block when the backend tagged it with a
-// foreign network, or — for older cached entries without the tag — when its
-// id is not a ULID.
-export function isMastodonUser(user) {
-    if (!user) {
-        return false;
+// The foreign networks the ActivityPub gateway bridges in. The node tags every
+// bridged account and post with one (core/fediverse), and the tag is what the
+// UI keys its icon, badge and reply policy off — never the instance host, which
+// is per-account.
+export const NETWORK_MASTODON = 'mastodon';
+export const NETWORK_THREADS = 'threads';
+
+// networkOf names the foreign network behind a tag, '' for a native Warpnet
+// one. Rows cached before the tag existed carry none, so it falls back to the
+// id: a Warpnet id is a ULID, anything else is a fediverse handle whose domain
+// says which network it is.
+function networkOf(tag, id) {
+    const tagged = (tag || '').trim().toLowerCase();
+    if (tagged) {
+        return WARPNET_NETWORKS.includes(tagged) ? '' : tagged;
     }
-    if (user.network) {
-        return !WARPNET_NETWORKS.includes(user.network);
+    if (!id || ULID_RE.test(id)) {
+        return '';
     }
-    return !ULID_RE.test(user.id || '');
+    const host = bridgedInstance(id);
+    if (!host) {
+        return '';
+    }
+    return /(^|\.)threads\.(net|com)$/.test(host) ? NETWORK_THREADS : NETWORK_MASTODON;
 }
 
-// Same discriminator for a single tweet: the gateway stamps bridged tweets
-// with a foreign network ("mastodon"); older cached rows fall back to the
-// id shape (bridged user_id is a fediverse handle, not a ULID).
-export function isMastodonTweet(tweet) {
-    if (!tweet) {
-        return false;
-    }
-    if (tweet.network) {
-        return !WARPNET_NETWORKS.includes(tweet.network);
-    }
-    return !ULID_RE.test(tweet.user_id || '');
+// bridgedNetwork / tweetNetwork name the network an account or a post came
+// from; '' means it is native Warpnet.
+export function bridgedNetwork(user) {
+    return user ? networkOf(user.network, user.id) : '';
+}
+
+export function tweetNetwork(tweet) {
+    return tweet ? networkOf(tweet.network, tweet.user_id) : '';
+}
+
+export function isBridgedUser(user) {
+    return bridgedNetwork(user) !== '';
+}
+
+export function isBridgedTweet(tweet) {
+    return tweetNetwork(tweet) !== '';
+}
+
+export function isThreadsUser(user) {
+    return bridgedNetwork(user) === NETWORK_THREADS;
+}
+
+export function isThreadsTweet(tweet) {
+    return tweetNetwork(tweet) === NETWORK_THREADS;
+}
+
+// Replies to Threads posts are disabled. Threads shows Fediverse replies only
+// under a post whose author opted into sharing, and nothing on the wire says
+// which posts those are — so a reply composed here can be federated and then
+// silently dropped, with no error to show the author. Flip this one predicate
+// to re-enable them.
+export function acceptsReplies(tweet) {
+    return !isThreadsTweet(tweet);
 }
 
 // "bob@mastodon.social" -> "mastodon.social"; '' when the id is not a handle.
-export function mastodonInstance(userId) {
+export function bridgedInstance(userId) {
     const at = (userId || '').lastIndexOf('@');
     return at > 0 ? userId.slice(at + 1) : '';
 }
@@ -83,7 +118,7 @@ export function isOwnTweetEcho(tweet, ownerId) {
     if (!tweet || !ownerId || !tweet.retweeted_by) {
         return false;
     }
-    if (!isMastodonUser({id: tweet.retweeted_by})) {
+    if (!isBridgedUser({id: tweet.retweeted_by})) {
         return false;
     }
     const author = tweet.user_id || '';

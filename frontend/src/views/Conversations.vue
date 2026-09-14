@@ -106,7 +106,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
-import {isMastodonUser} from "@/lib/network";
+import {isBridgedUser} from "@/lib/network";
 
 export default {
   name: "Chats",
@@ -129,7 +129,7 @@ export default {
     };
   },
   computed: {
-    // Only chats whose other user resolved are listed. Bridged Mastodon
+    // Only chats whose other user resolved are listed. Bridged
     // accounts never land in the map, so their legacy chats stay hidden.
     // Unread chats float to the top; within each group the freshest
     // message comes first.
@@ -167,7 +167,7 @@ export default {
         console.error("conversations: cannot select absent user", JSON.stringify(user))
         return;
       }
-      if (isMastodonUser(user)) {
+      if (isBridgedUser(user)) {
         return;
       }
       this.showNewMessageModal = false;
@@ -218,14 +218,14 @@ export default {
         }
         if (!u || !u.id) {
           console.warn('conversations: unresolved chat user, showing placeholder', userId)
-          if (!isMastodonUser({id: userId})) {
+          if (!isBridgedUser({id: userId})) {
             this.usersMap.set(userId, {id: userId})
           }
           return
         }
         // Leaving a bridged user out of the map hides the whole chat row:
         // the list only renders chats whose other user resolved.
-        if (isMastodonUser(u)) {
+        if (isBridgedUser(u)) {
           this.usersMap.delete(userId)
           return
         }
@@ -248,7 +248,7 @@ export default {
           [chat.owner_id, chat.other_user_id] = [chat.other_user_id, chat.owner_id];
         }
         const uid = chat.other_user_id;
-        if (uid && !this.usersMap.has(uid) && !isMastodonUser({id: uid})) {
+        if (uid && !this.usersMap.has(uid) && !isBridgedUser({id: uid})) {
           this.usersMap.set(uid, {id: uid});
         }
       }

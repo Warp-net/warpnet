@@ -41,7 +41,7 @@ import (
 	_ "image/png"
 	"strings"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -279,7 +279,7 @@ func verifyForeignMedia(
 }
 
 func isForeignOriginMedia(u domain.User) bool {
-	return u.Network == mastodon.Network || u.NodeId == mastodon.GatewayNodeID()
+	return u.Network == fediverse.MastodonNetwork || u.NodeId == fediverse.GatewayNodeID()
 }
 
 func isContentKey(key string) bool {

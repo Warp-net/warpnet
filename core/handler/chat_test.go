@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -171,7 +171,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 	t.Run("mastodon user rejected before the chat is stored", func(t *testing.T) {
 		users := stubUserRepo{getFn: func(userId string) (domain.User, error) {
 			if userId == other {
-				return domain.User{Id: userId, Network: mastodon.Network}, nil
+				return domain.User{Id: userId, Network: fediverse.MastodonNetwork}, nil
 			}
 			return domain.User{Id: userId, NodeId: "node-2"}, nil
 		}}
@@ -182,7 +182,7 @@ func TestStreamCreateChatHandler(t *testing.T) {
 		_, err := StreamCreateChatHandler(repo, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(
 			marshal(t, event.NewChatEvent{OwnerId: owner, OtherUserId: other, ChatId: &chatID}), nil,
 		)
-		if !errors.Is(err, mastodon.ErrNotSupported) {
+		if !errors.Is(err, fediverse.ErrNotSupported) {
 			t.Fatalf("expected ErrNotSupported, got: %v", err)
 		}
 	})
@@ -398,11 +398,11 @@ func TestStreamNewMessageHandler(t *testing.T) {
 		return domain.ChatMessage{}, nil
 	}}, stubUserRepo{getFn: func(userId string) (domain.User, error) {
 		if userId == receiver {
-			return domain.User{Id: userId, Network: mastodon.Network}, nil
+			return domain.User{Id: userId, Network: fediverse.MastodonNetwork}, nil
 		}
 		return domain.User{Id: userId, NodeId: senderNodeId}, nil
 	}}, stubStreamer{})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
-	if !errors.Is(err, mastodon.ErrNotSupported) {
+	if !errors.Is(err, fediverse.ErrNotSupported) {
 		t.Fatalf("expected ErrNotSupported, got: %v", err)
 	}
 

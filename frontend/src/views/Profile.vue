@@ -44,7 +44,7 @@ resulting from the use or misuse of this software.
           </div>
         </div>
 
-        <!-- foreign-network (bridged, e.g. Mastodon) safety warning -->
+        <!-- foreign-network (bridged) safety warning -->
         <div
           v-if="showNetworkWarning && !noUser && profile && profile.network && !['warpnet', 'testnet', 'mainnet'].includes(profile.network)"
           class="px-5 py-3 bg-yellow-100 border-b border-yellow-400 text-yellow-800 text-sm flex items-start"
@@ -398,7 +398,7 @@ import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {isMastodonUser} from "@/lib/network";
+import {isBridgedUser} from "@/lib/network";
 
 export default {
   name: "Profile",
@@ -474,10 +474,10 @@ export default {
       const m = moment(this.profile.last_seen);
       return m.isValid() ? m.fromNow() : "";
     },
-    // Bridged networks (Mastodon) have no direct messages, so the profile
+    // Bridged networks have no direct messages, so the profile
     // hides its Send message button instead of offering a dead action.
     isBridgedProfile() {
-      return isMastodonUser(this.profile);
+      return isBridgedUser(this.profile);
     },
   },
   methods: {

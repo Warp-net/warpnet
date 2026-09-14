@@ -37,7 +37,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -325,7 +325,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if info.IsRelay() {
 		return
 	}
-	if pi.ID.String() == mastodon.GatewayNodeID() {
+	if pi.ID.String() == fediverse.GatewayNodeID() {
 		return
 	}
 

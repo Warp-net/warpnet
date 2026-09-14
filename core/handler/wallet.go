@@ -32,6 +32,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,9 +57,9 @@ const walletDerivation = "warpnet-account"
 type WalletBackend interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Balance(ctx context.Context, address string) (wallet.Account, error)
-	Transfer(ctx context.Context, seed, to, amount string) (string, error)
+	Transfer(ctx context.Context, seed, asset, to, amount string) (string, error)
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
-	History(ctx context.Context, address string, limit int) ([]wallet.Transfer, error)
+	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
 	Token() string
 	Decimals() uint8
 	Network() string
@@ -106,6 +107,26 @@ func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateK
 	}
 }
 
+func StreamGetOwnWalletAddressHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		address, err := backend.Address(context.Background(), seed)
+		if err != nil {
+			log.Errorf("wallet: own address: %v", err)
+			return nil, err
+		}
+		return event.WalletOwnAddressResponse{
+			Address:  address,
+			Token:    backend.Token(),
+			Decimals: backend.Decimals(),
+			Network:  backend.Network(),
+		}, nil
+	}
+}
+
 func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.WalletSendEvent
@@ -118,16 +139,20 @@ func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.Private
 		if ev.Amount == "" {
 			return nil, warpnet.WarpError("wallet: empty amount")
 		}
+		asset, err := walletAsset(ev.Asset, backend)
+		if err != nil {
+			return nil, err
+		}
 		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
-		tx, err := backend.Transfer(context.Background(), seed, ev.To, ev.Amount)
+		tx, err := backend.Transfer(context.Background(), seed, asset, ev.To, ev.Amount)
 		if err != nil {
 			log.Errorf("wallet: transfer: %v", err)
 			return nil, warpnet.WarpError("wallet: " + err.Error())
 		}
-		return event.WalletSendResponse{Tx: tx, To: ev.To, Amount: ev.Amount}, nil
+		return event.WalletSendResponse{Tx: tx, Asset: asset, To: ev.To, Amount: ev.Amount}, nil
 	}
 }
 
@@ -147,7 +172,11 @@ func StreamGetWalletHistoryHandler(auth WalletOwnerStorer, identityKey ed25519.P
 			log.Errorf("wallet: address: %v", err)
 			return nil, err
 		}
-		transfers, err := backend.History(ctx, address, ev.Limit)
+		asset, err := walletAsset(ev.Asset, backend)
+		if err != nil {
+			return nil, err
+		}
+		transfers, err := backend.History(ctx, address, asset, ev.Limit)
 		if err != nil {
 			log.Errorf("wallet: history: %v", err)
 			return nil, err
@@ -156,6 +185,7 @@ func StreamGetWalletHistoryHandler(auth WalletOwnerStorer, identityKey ed25519.P
 		for _, t := range transfers {
 			items = append(items, event.WalletHistoryItem{
 				Tx:        t.Tx,
+				Asset:     t.Asset,
 				From:      t.From,
 				To:        t.To,
 				Value:     t.Value,
@@ -281,6 +311,7 @@ func StreamGetWalletContactsHandler(
 			if users != nil {
 				if user, err := users.Get(item.UserId); err == nil {
 					contact.Username = user.Username
+					contact.AvatarKey = user.AvatarKey
 				}
 			}
 			contacts = append(contacts, contact)
@@ -420,6 +451,19 @@ func fetchWalletAddress(
 		return "", false
 	}
 	return out.Address, true
+}
+
+func walletAsset(asset string, backend WalletBackend) (string, error) {
+	asset = strings.TrimSpace(asset)
+	if asset == "" {
+		return backend.Token(), nil
+	}
+	for _, known := range []string{backend.Token(), wallet.NativeCoin} {
+		if strings.EqualFold(asset, known) {
+			return known, nil
+		}
+	}
+	return "", warpnet.WarpError("wallet: unknown asset " + asset)
 }
 
 func walletSeed(owner domain.Owner, identityKey ed25519.PrivateKey, network string) (string, error) {

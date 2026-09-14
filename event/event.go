@@ -954,7 +954,8 @@ type GetNotificationsResponse struct {
 
 // WalletEvent defines model for WalletEvent.
 type WalletEvent struct {
-	Limit int `json:"limit,omitempty"`
+	Limit int    `json:"limit,omitempty"`
+	Asset string `json:"asset,omitempty"`
 }
 
 // WalletResponse defines model for WalletResponse.
@@ -982,11 +983,20 @@ type WalletAddressResponse struct {
 	UserId  string `json:"user_id"`
 }
 
+// WalletOwnAddressResponse defines model for WalletOwnAddressResponse.
+type WalletOwnAddressResponse struct {
+	Address  string `json:"address"`
+	Token    string `json:"token"`
+	Decimals uint8  `json:"decimals"`
+	Network  string `json:"network"`
+}
+
 // WalletContact defines model for WalletContact.
 type WalletContact struct {
-	Address  string `json:"address"`
-	UserId   string `json:"user_id"`
-	Username string `json:"username"`
+	Address   string `json:"address"`
+	UserId    string `json:"user_id"`
+	Username  string `json:"username"`
+	AvatarKey string `json:"avatar_key,omitempty"`
 }
 
 // WalletContactsEvent defines model for WalletContactsEvent.
@@ -1003,6 +1013,7 @@ type WalletContactsResponse struct {
 type WalletSendEvent struct {
 	To     string `json:"to"`
 	Amount string `json:"amount"`
+	Asset  string `json:"asset,omitempty"`
 }
 
 // WalletSendResponse defines model for WalletSendResponse.
@@ -1010,11 +1021,13 @@ type WalletSendResponse struct {
 	Tx     string `json:"tx"`
 	To     string `json:"to"`
 	Amount string `json:"amount"`
+	Asset  string `json:"asset"`
 }
 
 // WalletHistoryItem defines model for WalletHistoryItem.
 type WalletHistoryItem struct {
 	Tx        string `json:"tx"`
+	Asset     string `json:"asset"`
 	From      string `json:"from"`
 	To        string `json:"to"`
 	Value     string `json:"value"`

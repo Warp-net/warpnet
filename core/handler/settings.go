@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -97,7 +97,7 @@ func StreamGetGatewaySettingsHandler(
 			return nil, err
 		}
 		if settings.NodeID == "" {
-			settings.NodeID = mastodon.DefaultGatewayNodeID
+			settings.NodeID = fediverse.DefaultGatewayNodeID
 		}
 		return event.GetGatewaySettingsResponse(settings), nil
 	}
@@ -117,7 +117,7 @@ func StreamUpdateGatewaySettingsHandler(
 			return nil, warpnet.WarpError("update gateway settings: empty owner")
 		}
 		if ev.NodeID == "" {
-			ev.NodeID = mastodon.DefaultGatewayNodeID
+			ev.NodeID = fediverse.DefaultGatewayNodeID
 		}
 		if err := repo.SetGatewaySettings(owner.UserId, ev); err != nil {
 			return nil, err

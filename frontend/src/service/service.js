@@ -33,6 +33,7 @@ export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
 export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
 export const PRIVATE_GET_WALLET = "/private/get/wallet/0.0.0"
+export const PRIVATE_GET_WALLET_ADDRESS = "/private/get/wallet/address/0.0.0"
 export const PRIVATE_GET_WALLET_CONTACTS = "/private/get/wallet/contacts/0.0.0"
 export const PRIVATE_GET_WALLET_HISTORY = "/private/get/wallet/history/0.0.0"
 export const PRIVATE_GET_WALLET_KEY = "/private/get/wallet/key/0.0.0"
@@ -1287,12 +1288,20 @@ export const warpnetService = {
         const request = { path: PRIVATE_GET_WALLET, body: {} }
         return await this.sendToNode(request)
     },
-    async sendUsdt(to, amount) {
-        const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount } }
+
+    // getWalletAddress answers from the node alone: the TRON address is
+    // derived locally, so it arrives without waiting for the chain.
+    async getWalletAddress() {
+        const request = { path: PRIVATE_GET_WALLET_ADDRESS, body: {} }
         return await this.sendToNode(request)
     },
-    async getWalletHistory(limit) {
-        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25 } }
+    // sendFunds moves USDT by default; pass asset "TRX" for the native coin.
+    async sendFunds(to, amount, asset) {
+        const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
+        return await this.sendToNode(request)
+    },
+    async getWalletHistory(limit, asset) {
+        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25, asset: asset || "" } }
         const resp = await this.sendToNode(request)
         return resp?.transfers || []
     },
@@ -1508,7 +1517,7 @@ export const warpnetService = {
 
     // Explicit-cursor page fetch for one user's tweets. Unlike getTweets it
     // never touches the global 'tweets' cursor, so many per-user paginations
-    // (the unified timeline fans out per followed Mastodon handle) can run
+    // (the unified timeline fans out per followed fediverse handle) can run
     // side by side without clobbering the Profile view.
     async getUserTweetsPage({userId, cursor = '', limit = defaultLimit}) {
         if (cursor === endCursor) {

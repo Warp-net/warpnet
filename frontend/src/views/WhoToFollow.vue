@@ -41,17 +41,16 @@ resulting from the use or misuse of this software.
 
         <Loader :loading="loading" />
 
-        <div v-if="warpnetProfiles.length > 0">
-          <h2 class="px-5 pt-3 text-left text-lg font-bold">
-            <img src="@/assets/logo-transparent.png" alt="Warpnet" class="w-5 h-5 inline-block object-contain" />
-          </h2>
-          <Users :users="warpnetProfiles" :loading="loading" />
-        </div>
-        <div v-if="mastodonProfiles.length > 0">
-          <h2 class="px-5 pt-3 text-left text-lg font-bold">
-            <i class="fab fa-mastodon text-[color:var(--gd-trim)]" role="img" aria-label="Mastodon"></i>
-          </h2>
-          <Users :users="mastodonProfiles" :loading="loading" />
+        <!-- Same three networks the sidebar block tabs between, laid out as
+             sections because this page has the room for all of them at once. -->
+        <div v-for="section in sections" :key="section.key">
+          <div v-if="section.profiles.length > 0">
+            <h2 class="px-5 pt-3 text-left text-lg font-bold flex items-center gap-2">
+              <NetworkIcon :network="section.network" size-class="w-5 h-5" />
+              <span>{{ section.label }}</span>
+            </h2>
+            <Users :users="section.profiles" :loading="loading" />
+          </div>
         </div>
         <div v-if="!loading && profiles.length === 0" class="flex justify-center py-6">
           <span>No results</span>
@@ -82,7 +81,8 @@ import SearchBar from "../components/SearchBar.vue";
 import Users from "../components/Users.vue";
 import Loader from "../components/Loader.vue";
 import {warpnetService} from "@/service/service";
-import {isMastodonUser} from "@/lib/network";
+import {bridgedNetwork, NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
+import NetworkIcon from "@/components/NetworkIcon.vue";
 
 export default {
   name: "WhoToFollow",
@@ -91,6 +91,7 @@ export default {
     SearchBar,
     Users,
     Loader,
+    NetworkIcon,
   },
   data() {
     return {
@@ -101,11 +102,15 @@ export default {
     };
   },
   computed: {
-    warpnetProfiles() {
-      return this.profiles.filter((p) => !isMastodonUser(p));
-    },
-    mastodonProfiles() {
-      return this.profiles.filter((p) => isMastodonUser(p));
+    sections() {
+      return [
+        {key: 'warpnet', label: 'Warpnet', network: ''},
+        {key: 'mastodon', label: 'Mastodon', network: NETWORK_MASTODON},
+        {key: 'threads', label: 'Threads', network: NETWORK_THREADS},
+      ].map((s) => ({
+        ...s,
+        profiles: this.profiles.filter((p) => (bridgedNetwork(p) || 'warpnet') === s.key),
+      }));
     },
   },
   methods: {

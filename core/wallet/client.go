@@ -39,9 +39,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	paymentengine "github.com/Warp-net/payment-engine-lib"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
@@ -50,6 +52,7 @@ const (
 	requestTimeout = 90 * time.Second
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
+	NativeCoin     = "TRX"
 
 	paramNetwork    = "network"
 	paramToken      = "token"
@@ -69,18 +72,17 @@ type Account struct {
 }
 
 type Config struct {
-	BinaryPath  string
-	Network     string
-	Endpoint    string
-	APIKey      string
-	Token       string
-	Decimals    uint8
-	RPS         float64
-	BinaryBytes []byte
+	BinaryPath string
+	Network    string
+	Endpoint   string
+	Token      string
+	Decimals   uint8
+	RPS        float64
 }
 
 type Transfer struct {
 	Tx        string
+	Asset     string
 	From      string
 	To        string
 	Value     string
@@ -109,18 +111,25 @@ type response struct {
 }
 
 type Client struct {
-	cfg     Config
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stop    context.CancelFunc
-	stdin   io.WriteCloser
-	pending map[string]chan response
-	seq     uint64
-	failure error
+	cfg      Config
+	cacheDir func() (string, error)
+	engine   func() ([]byte, error)
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	stop     context.CancelFunc
+	stdin    io.WriteCloser
+	pending  map[string]chan response
+	seq      uint64
+	failure  error
 }
 
 func New(cfg Config) *Client {
-	return &Client{cfg: cfg, pending: map[string]chan response{}}
+	return &Client{
+		cfg:      cfg,
+		cacheDir: os.UserCacheDir,
+		engine:   paymentengine.GetPaymentEngine,
+		pending:  map[string]chan response{},
+	}
 }
 
 func DefaultConfig(network, binaryPath string) Config {
@@ -174,13 +183,7 @@ func (c *Client) ensure() error {
 	if c.cmd != nil {
 		return nil
 	}
-	args := []string{"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
-	if c.cfg.APIKey != "" {
-		args = append(args, "-api-key", c.cfg.APIKey)
-	}
-	if c.cfg.RPS > 0 {
-		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
-	}
+	args := c.engineArgs()
 	binary, err := c.resolveBinary()
 	if err != nil {
 		log.Errorf("wallet: payment engine binary: %v", err)
@@ -201,6 +204,12 @@ func (c *Client) ensure() error {
 		log.Errorf("wallet: payment engine stdout: %v", err)
 		return err
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		stop()
+		log.Errorf("wallet: payment engine stderr: %v", err)
+		return err
+	}
 	if err := cmd.Start(); err != nil {
 		stop()
 		log.Errorf("wallet: payment engine failed to start: %v", err)
@@ -212,22 +221,42 @@ func (c *Client) ensure() error {
 	c.stdin = stdin
 	c.failure = nil
 	go c.read(stdout)
+	go c.readErrors(stderr)
 	return nil
+}
+
+func (c *Client) readErrors(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 4<<10), maxLineSize)
+	for scanner.Scan() {
+		if line := strings.TrimSpace(scanner.Text()); line != "" {
+			log.Errorf("wallet: payment engine: %s", line)
+		}
+	}
+}
+
+func (c *Client) engineArgs() []string {
+	args := []string{"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
+	if c.cfg.RPS > 0 {
+		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
+	}
+	return args
 }
 
 func (c *Client) resolveBinary() (string, error) {
 	if c.cfg.BinaryPath != "" {
-		if _, err := os.Stat(c.cfg.BinaryPath); err == nil {
+		if info, err := os.Lstat(c.cfg.BinaryPath); err == nil && info.Mode().IsRegular() {
 			return c.cfg.BinaryPath, nil
 		}
 	}
-	if len(c.cfg.BinaryBytes) == 0 {
-		return "", fmt.Errorf("%w: no payment engine at %q and none embedded", ErrUnavailable, c.cfg.BinaryPath)
+	binary, err := c.engine()
+	if err != nil {
+		return "", fmt.Errorf("%w: no payment engine at %q: %w", ErrUnavailable, c.cfg.BinaryPath, err)
 	}
 
-	sum := sha256.Sum256(c.cfg.BinaryBytes)
+	sum := sha256.Sum256(binary)
 	name := "payment-engine-" + hex.EncodeToString(sum[:6])
-	base, err := os.UserCacheDir()
+	base, err := c.cacheDir()
 	if err != nil {
 		base = os.TempDir()
 	}
@@ -236,8 +265,11 @@ func (c *Client) resolveBinary() (string, error) {
 		return "", err
 	}
 	path := filepath.Join(dir, name)
-	if info, err := os.Stat(path); err == nil && info.Size() == int64(len(c.cfg.BinaryBytes)) {
+	switch cached, err := matchesEmbedded(dir, name, sum); {
+	case cached:
 		return path, nil
+	case err != nil && !os.IsNotExist(err):
+		log.Warnf("wallet: the payment engine cached at %q is not the build we embed, unpacking it again: %v", path, err)
 	}
 
 	tmp, err := os.CreateTemp(dir, name+".*")
@@ -245,7 +277,7 @@ func (c *Client) resolveBinary() (string, error) {
 		return "", err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
-	if _, err := tmp.Write(c.cfg.BinaryBytes); err != nil {
+	if _, err := tmp.Write(binary); err != nil {
 		_ = tmp.Close()
 		return "", err
 	}
@@ -260,6 +292,34 @@ func (c *Client) resolveBinary() (string, error) {
 	}
 	log.Infof("wallet: unpacked the embedded payment engine to %q", path)
 	return path, nil
+}
+
+func matchesEmbedded(dir, name string, want [sha256.Size]byte) (bool, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = root.Close() }()
+	info, err := root.Lstat(name)
+	if err != nil {
+		return false, err
+	}
+	if !info.Mode().IsRegular() {
+		return false, fmt.Errorf("%w: %s is not a regular file", ErrUnavailable, name)
+	}
+	file, err := root.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = file.Close() }()
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return false, err
+	}
+	if [sha256.Size]byte(digest.Sum(nil)) != want {
+		return false, fmt.Errorf("%w: %s holds different bytes", ErrUnavailable, name)
+	}
+	return true, nil
 }
 
 func (c *Client) read(r io.Reader) {
@@ -394,22 +454,31 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
 }
 
-func (c *Client) Transfer(ctx context.Context, seed, to, amount string) (string, error) {
+func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (string, error) {
 	var out struct {
 		Tx string `json:"tx"`
 	}
-	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: c.cfg.Token, "to": to, "amount": amount}
+	asset = c.assetOr(asset)
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, "amount": amount}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
 		return "", err
 	}
-	log.Infof("wallet: sent %s of %s to %s on %s, tx %s", amount, c.cfg.Token, to, c.cfg.Network, out.Tx)
+	log.Infof("wallet: sent %s of %s to %s on %s, tx %s", amount, asset, to, c.cfg.Network, out.Tx)
 	return out.Tx, nil
 }
 
-func (c *Client) History(ctx context.Context, address string, limit int) ([]Transfer, error) {
+func (c *Client) assetOr(asset string) string {
+	if strings.EqualFold(strings.TrimSpace(asset), NativeCoin) {
+		return NativeCoin
+	}
+	return c.cfg.Token
+}
+
+func (c *Client) History(ctx context.Context, address, asset string, limit int) ([]Transfer, error) {
 	var out struct {
 		Transfers []struct {
 			Tx        string `json:"tx"`
+			Asset     string `json:"asset"`
 			From      string `json:"from"`
 			To        string `json:"to"`
 			Value     string `json:"value"`
@@ -417,7 +486,7 @@ func (c *Client) History(ctx context.Context, address string, limit int) ([]Tran
 			Incoming  bool   `json:"incoming"`
 		} `json:"transfers"`
 	}
-	params := map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token, "limit": limit}
+	params := map[string]any{paramNetwork: c.cfg.Network, "address": address, paramToken: c.assetOr(asset), "limit": limit}
 	if err := c.call(ctx, "wallet.history", params, &out); err != nil {
 		return nil, err
 	}

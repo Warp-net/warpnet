@@ -28,7 +28,8 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/oklog/ulid/v2"
 	"maps"
 	"math"
@@ -171,7 +172,7 @@ func (repo *UserRepo) notifyNewUser(user domain.User) {
 	if repo.notifier == nil || user.Id == repo.ownerUserId {
 		return
 	}
-	if user.Network == mastodon.Network {
+	if fediverse.IsBridged(user.Network) {
 		return
 	}
 	name := user.Username
@@ -264,6 +265,20 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 			existingUser.Metadata = make(map[string]string, len(newUser.Metadata))
 		}
 		maps.Copy(existingUser.Metadata, newUser.Metadata)
+	}
+	// Counts refreshed from the user's own node (see updateOtherUser). Only a
+	// non-zero value overwrites: a partial update — a profile edit carrying just
+	// a username and an avatar — leaves them at zero, and copying that would
+	// wipe the real numbers. A count that genuinely falls to zero therefore
+	// lingers until it rises again, which is the cheaper of the two mistakes.
+	if newUser.FollowersCount > 0 {
+		existingUser.FollowersCount = newUser.FollowersCount
+	}
+	if newUser.FollowingsCount > 0 {
+		existingUser.FollowingsCount = newUser.FollowingsCount
+	}
+	if newUser.TweetsCount > 0 {
+		existingUser.TweetsCount = newUser.TweetsCount
 	}
 	existingUser.RoundTripTime = newUser.RoundTripTime
 	existingUser.IsOffline = newUser.IsOffline
@@ -527,6 +542,115 @@ func matchesUserQuery(u domain.User, q string) bool {
 	return false
 }
 
+// Bounds one recommendation scan, so a large bridged import cannot turn it into
+// a full table scan.
+const (
+	maxRecommendedScan  = 5000
+	recommendedScanPage = uint64(200)
+)
+
+// resolveNetwork works out which network a user is on. Rows written before the
+// network tag existed carry none; a ULID id is what marks those as Warpnet.
+func resolveNetwork(u domain.User) string {
+	if u.Network != "" {
+		return u.Network
+	}
+	if isULID(u.Id) {
+		return warpnet.WarpnetName
+	}
+	return ""
+}
+
+// usersByNetwork groups scanned users by network, networks in first-seen order.
+// Without the grouping the network with the most rows takes every slot.
+type usersByNetwork struct {
+	users      map[string][]domain.User
+	networks   []string
+	perNetwork uint64 // cap per group; more than a block can never be shown
+}
+
+func newUsersByNetwork(perNetwork uint64) *usersByNetwork {
+	return &usersByNetwork{
+		users:      map[string][]domain.User{},
+		networks:   make([]string, 0, 2),
+		perNetwork: perNetwork,
+	}
+}
+
+func (g *usersByNetwork) append(u domain.User) {
+	network := resolveNetwork(u)
+	if _, seen := g.users[network]; !seen {
+		g.networks = append(g.networks, network)
+	}
+	if uint64(len(g.users[network])) < g.perNetwork {
+		g.users[network] = append(g.users[network], u)
+	}
+}
+
+// spreadEvenly hands out up to limit users, one network at a time in rotation.
+// A network that runs out drops out, so one network alone still fills the block.
+func (g *usersByNetwork) spreadEvenly(limit uint64) []domain.User {
+	out := make([]domain.User, 0, limit)
+	for round := 0; uint64(len(out)) < limit; round++ {
+		placed := false
+		for _, network := range g.networks {
+			group := g.users[network]
+			if round >= len(group) {
+				continue
+			}
+			out = append(out, group[round])
+			placed = true
+			if uint64(len(out)) >= limit {
+				return out
+			}
+		}
+		if !placed {
+			return out // every network exhausted
+		}
+	}
+	return out
+}
+
+// scanUsersByNetwork walks the keyspace from cursor and groups what it finds. It
+// does not stop once it has enough users: a network's only account can sit
+// anywhere in the keyspace.
+func scanUsersByNetwork(
+	txn local_store.WarpTransactioner,
+	prefix local_store.DatabaseKey,
+	perNetwork uint64,
+	cursor string,
+) (*usersByNetwork, error) {
+	groups := newUsersByNetwork(perNetwork)
+	page := recommendedScanPage
+	scanned := 0
+
+	for scanned < maxRecommendedScan {
+		from := cursor
+		items, next, err := txn.List(prefix, &page, &from)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			scanned++
+			var u domain.User
+			if err := json.Unmarshal(item.Value, &u); err != nil {
+				return nil, err
+			}
+			if u.IsOffline {
+				continue
+			}
+			groups.append(u)
+		}
+		if len(items) == 0 || next == "" || next == local_store.EndCursor {
+			break
+		}
+		cursor = next
+	}
+	return groups, nil
+}
+
+// WhoToFollow returns an even share of every network the node knows users on.
+// It is one page, so the returned cursor is always the end.
 func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error) {
 	want := uint64(20)
 	if limit != nil && *limit > 0 {
@@ -544,63 +668,15 @@ func (repo *UserRepo) WhoToFollow(limit *uint64, cursor *string) ([]domain.User,
 	}
 	defer txn.Rollback()
 
-	// maxScan bounds the work under a large Mastodon flood; scanPage is the
-	// per-iteration window handed to the underlying list.
-	const maxScan = 5000
-	scanPage := uint64(200)
-
-	native := make([]domain.User, 0, want)
-	other := make([]domain.User, 0, want)
-	pageCursor := ""
+	from := ""
 	if cursor != nil {
-		pageCursor = *cursor
+		from = *cursor
 	}
-	scanned := 0
-
-	for uint64(len(native)) < want && scanned < maxScan {
-		c := pageCursor
-		items, next, err := txn.List(prefix, &scanPage, &c)
-		if err != nil {
-			return nil, "", err
-		}
-
-		for _, item := range items {
-			scanned++
-			var u domain.User
-			if err := json.Unmarshal(item.Value, &u); err != nil {
-				return nil, "", err
-			}
-			if u.IsOffline {
-				continue
-			}
-			// Warpnet-native peers (ULID id) come first; everyone else fills the
-			// remaining slots. No avatar or tweet gating — a freshly joined
-			// account (no picture, no posts yet) is still a valid recommendation.
-			if isULID(u.Id) {
-				native = append(native, u)
-				continue
-			}
-			if uint64(len(other)) < want {
-				other = append(other, u)
-			}
-		}
-
-		if next == local_store.EndCursor || next == "" || len(items) == 0 {
-			break
-		}
-		pageCursor = next
+	groups, err := scanUsersByNetwork(txn, prefix, want, from)
+	if err != nil {
+		return nil, "", err
 	}
-
-	// Native peers first, then fill remaining slots with the rest.
-	recommended := native
-	for _, u := range other {
-		if uint64(len(recommended)) >= want {
-			break
-		}
-		recommended = append(recommended, u)
-	}
-
-	return recommended, local_store.EndCursor, nil
+	return groups.spreadEvenly(want), local_store.EndCursor, nil
 }
 
 func (repo *UserRepo) GetBatch(userIDs ...string) (users []domain.User, err error) {
