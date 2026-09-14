@@ -496,7 +496,7 @@ func (m *MemberNode) adminHandlers(
 		},
 		{
 			event.PUBLIC_POST_REPORT,
-			handler.StreamReportHandler(m.pubsubService),
+			handler.StreamReportHandler(m.pubsubService, authRepo),
 		},
 	}
 }
