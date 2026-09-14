@@ -113,7 +113,7 @@ func ParseDimension(s string) (Dimension, bool) {
 }
 
 // Dimensions lists what a node of the given type can witness.
-func Dimensions(nodeType string) []Dimension {
+func dimensionsByNodeType(nodeType string) []Dimension {
 	switch nodeType {
 	case warpnet.MemberNode:
 		return []Dimension{Network, Application}
