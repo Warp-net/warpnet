@@ -284,9 +284,11 @@ resulting from the use or misuse of this software.
         </button>
         <button
           @click="signOut"
+          :disabled="signingOut"
           class="w-full text-left hover:bg-lightest border-t border-lighter p-3 text-sm text-red-600"
         >
-          Sign out
+          <i v-if="signingOut" class="fas fa-spinner fa-spin mr-2"></i>
+          {{ signingOut ? "Signing out…" : "Sign out" }}
         </button>
       </div>
     </div>
@@ -308,6 +310,7 @@ export default {
   data() {
     return {
       dropdown: false,
+      signingOut: false,
       profile: {},
       newMessages: 0,
       newNotifications: 0,
@@ -454,13 +457,18 @@ export default {
     async closeQR() {
       this.qrModalOpen = false
     },
+    // Stopping the node takes seconds, and the call is synchronous: the menu
+    // stays open with a spinner so the click does not look like it was lost.
     async signOut() {
-      this.dropdown = false;
+      if (this.signingOut) return;
+      this.signingOut = true;
       try {
         await warpnetService.logoutUser();
       } catch (err) {
         console.error('Failed to sign out:', err);
       }
+      this.signingOut = false;
+      this.dropdown = false;
       this.$router.push({ name: 'Root' });
     },
   },
