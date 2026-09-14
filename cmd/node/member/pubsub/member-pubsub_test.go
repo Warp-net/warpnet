@@ -80,7 +80,7 @@ func newRunningPubSub(t *testing.T, ownerId string) (*MemberPubSub, *liveConnect
 	t.Cleanup(cancel)
 
 	conn := newConnector(t, ownerId)
-	ps := NewPubSub(ctx, rating.CollectPeersRatings())
+	ps := NewPubSub(ctx, rating.NewPeersRatings())
 	ps.Run(conn)
 	t.Cleanup(func() { _ = ps.Close() })
 
@@ -97,7 +97,7 @@ func TestMemberPubSub_NilAndUnstartedAreInert(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ps := NewPubSub(ctx, rating.CollectPeersRatings())
+	ps := NewPubSub(ctx, rating.NewPeersRatings())
 	require.NotNil(t, ps.Gossip())
 	assert.False(t, ps.Gossip().IsGossipRunning())
 

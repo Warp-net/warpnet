@@ -90,7 +90,7 @@ func main() {
 		return
 	}
 
-	ratings := rating.CollectPeersRatings()
+	ratings := rating.NewPeersRatings()
 	n, err := node.NewModeratorNode(ctx, privKey, psk, ownNodeId, ratings)
 	if err != nil {
 		log.Errorf("failed to init moderator node: %v", err)

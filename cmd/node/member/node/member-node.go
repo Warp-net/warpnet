@@ -125,7 +125,7 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
-	ratings := rating.CollectPeersRatings()
+	ratings := rating.NewPeersRatings()
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 

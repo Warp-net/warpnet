@@ -574,7 +574,7 @@ and every module asks it the single question it acts on:
 
 ```go
 // core/rating — the engine writes here as ratings move
-func CollectPeersRatings() *PeersRatings
+func NewPeersRatings() *PeersRatings
 func (r *PeersRatings) Rate(peerID warpnet.WarpPeerID, tier Tier)
 func (r *PeersRatings) Tier(peerID warpnet.WarpPeerID) Tier
 func (r *PeersRatings) ConnTag(peerID warpnet.WarpPeerID) int

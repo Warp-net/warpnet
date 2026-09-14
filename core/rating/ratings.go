@@ -49,8 +49,8 @@ type PeersRatings struct {
 	tiers *lru.LRU[string, Tier]
 }
 
-// CollectPeersRatings starts collecting how this node rates its peers.
-func CollectPeersRatings() *PeersRatings {
+// NewPeersRatings returns the ratings the engine records peers into.
+func NewPeersRatings() *PeersRatings {
 	return &PeersRatings{
 		tiers: lru.NewLRU[string, Tier](peersRatingsCacheSize, nil, peersRatingsCacheTTL),
 	}

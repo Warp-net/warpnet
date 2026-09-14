@@ -102,7 +102,7 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		h := newTroikaHost(t)
 		conn := &troikaConnector{host: h}
-		ps := modpubsub.NewPubSub(ctx, rating.CollectPeersRatings())
+		ps := modpubsub.NewPubSub(ctx, rating.NewPeersRatings())
 		require.NoError(t, ps.Run(conn))
 		t.Cleanup(func() { _ = ps.Close() })
 
@@ -126,7 +126,7 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	memberHost := newTroikaHost(t)
 	hosts = append(hosts, memberHost)
 	memberConn := &troikaConnector{host: memberHost, ownerId: "reporter-owner"}
-	memberPS := memberpubsub.NewPubSub(ctx, rating.CollectPeersRatings())
+	memberPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings())
 	memberPS.Run(memberConn)
 	t.Cleanup(func() { _ = memberPS.Close() })
 	require.True(t, memberPS.Gossip().IsGossipRunning())

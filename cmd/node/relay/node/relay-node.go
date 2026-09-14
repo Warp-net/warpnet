@@ -138,7 +138,7 @@ func NewRelayNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 
-	ratings := rating.CollectPeersRatings()
+	ratings := rating.NewPeersRatings()
 	discService := discovery.NewRelayDiscoveryService(ctx)
 
 	pubsubService := pubsub.NewPubSubRelay(
