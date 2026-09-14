@@ -31,7 +31,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -86,7 +86,7 @@ var routeLimits = map[string]routeLimit{
 }
 
 func limitForRoute(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) routeLimit {
-	if remotePeer.String() == mastodon.GatewayNodeID() {
+	if remotePeer.String() == fediverse.GatewayNodeID() {
 		return limitGateway
 	}
 	if limit, ok := routeLimits[route.String()]; ok {
@@ -113,6 +113,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		route := stream.FromPrIDToRoute(s.Protocol())
 		if !p.bucket(route, remotePeer).Allow() {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
+			p.emitStream(s, warpnet.PeerRateLimited)
 			return event.ResponseError{
 				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
 			}, nil
@@ -129,12 +130,44 @@ func (p *WarpMiddleware) bucket(
 	p.rateLimitersMx.Lock()
 	defer p.rateLimitersMx.Unlock()
 
-	if b, ok := p.rateLimiters.Get(key); ok {
+	multiplier := p.rateMultiplier(remotePeer)
+	if b, ok := p.rateLimiters.Get(key); ok && b.multiplier == multiplier {
 		return b
 	}
-	b := newRateLimiter(limitForRoute(route, remotePeer))
+	// A peer whose standing moved does not keep the bucket it filled
+	// under the old one.
+	limit := limitForRoute(route, remotePeer).multipliedBy(multiplier)
+	if multiplier < 1 {
+		log.Infof(
+			"middleware: rate limiter: rating leaves %s %d calls per minute on %s",
+			remotePeer, limit.perMinute, route,
+		)
+	}
+	b := newRateLimiter(limit, multiplier)
 	p.rateLimiters.Add(key, b)
 	return b
+}
+
+// rateMultiplier is the share of a route a peer may spend. A node with no
+// ratings serves every peer in full.
+func (p *WarpMiddleware) rateMultiplier(peerID warpnet.WarpPeerID) float64 {
+	if p == nil || p.ratings == nil {
+		return 1
+	}
+	return p.ratings.RateMultiplier(peerID)
+}
+
+// multipliedBy is what a peer on this multiplier may spend of a route's
+// limit, never below one: a peer the rating thinks little of is slowed
+// down, never starved.
+func (l routeLimit) multipliedBy(multiplier float64) routeLimit {
+	if multiplier >= 1 {
+		return l
+	}
+	return routeLimit{
+		burst:     max(1, int64(float64(l.burst)*multiplier)),
+		perMinute: max(1, int64(float64(l.perMinute)*multiplier)),
+	}
 }
 
 type leakyBucketRateLimiter struct {
@@ -143,9 +176,10 @@ type leakyBucketRateLimiter struct {
 	filled       int64
 	lastLeak     time.Time
 	leakInterval time.Duration
+	multiplier   float64
 }
 
-func newRateLimiter(limit routeLimit) *leakyBucketRateLimiter {
+func newRateLimiter(limit routeLimit, multiplier float64) *leakyBucketRateLimiter {
 	if limit.burst <= 0 {
 		limit.burst = 1
 	}
@@ -156,6 +190,7 @@ func newRateLimiter(limit routeLimit) *leakyBucketRateLimiter {
 		capacity:     limit.burst,
 		lastLeak:     time.Now(),
 		leakInterval: time.Minute / time.Duration(limit.perMinute),
+		multiplier:   multiplier,
 	}
 }
 

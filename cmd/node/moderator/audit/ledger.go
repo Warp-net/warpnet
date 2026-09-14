@@ -3,7 +3,11 @@
 
 package audit
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+)
 
 // Outcome is the auditor's classification of one challenge exchange.
 type Outcome int
@@ -119,10 +123,24 @@ type PeerReport struct {
 type Ledger struct {
 	mu    sync.Mutex
 	peers map[string]*peerStats
+
+	events warpnet.PeerEmitter
 }
 
-func NewLedger() *Ledger {
-	return &Ledger{peers: make(map[string]*peerStats)}
+// NewLedger reports what it concludes into events, the fan-out of the
+// moderator that owns it.
+func NewLedger(events warpnet.PeerEmitter) *Ledger {
+	return &Ledger{
+		peers:  make(map[string]*peerStats),
+		events: events,
+	}
+}
+
+func (l *Ledger) emit(peerID string, t warpnet.PeerEventType) {
+	if l == nil {
+		return
+	}
+	l.events.Emit(warpnet.PeerEvent{PeerID: peerID, Type: t})
 }
 
 func (l *Ledger) Record(peerID string, o Outcome) {
@@ -130,12 +148,12 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 		return
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	s, ok := l.peers[peerID]
 	if !ok {
 		s = &peerStats{}
 		l.peers[peerID] = s
 	}
+	before := s.standing()
 	switch o {
 	case OutcomeCorrect:
 		s.correct++
@@ -145,6 +163,22 @@ func (l *Ledger) Record(peerID string, o Outcome) {
 		s.unreachable++
 	case OutcomeInvalid:
 		s.invalid++
+	}
+	after := s.standing()
+	l.mu.Unlock()
+
+	if o == OutcomeUnreachable {
+		l.emit(peerID, warpnet.PeerAuditUnreachable)
+	}
+	// Only a crossing is reported: a long audit must not grind a peer
+	// down for a conclusion it had already drawn.
+	if after > before {
+		switch after {
+		case StandingSuspect:
+			l.emit(peerID, warpnet.PeerAuditWrong)
+		case StandingBanned:
+			l.emit(peerID, warpnet.PeerAuditInvalid)
+		}
 	}
 }
 

@@ -32,12 +32,17 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/crdt/broadcast"
+	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	ds "github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/ipfs/go-datastore"
@@ -46,7 +51,48 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// PeersRatings is how this node rates its peers: the engine writes it,
+// and this node's modules read what follows from it.
+type PeersRatings interface {
+	Rate(peerID warpnet.WarpPeerID, tier rating.Tier)
+	ConnTag(peerID warpnet.WarpPeerID) int
+	GossipScore(peerID warpnet.WarpPeerID) float64
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
+}
+
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan warpnet.PeerEvent)
+	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
+	Close() error
+}
+
+// RatingProvider is the local storage the rating replica is built on.
+type RatingProvider interface {
+	Get(ctx context.Context, key ds.Key) ([]byte, error)
+	Has(ctx context.Context, key ds.Key) (bool, error)
+	GetSize(ctx context.Context, key ds.Key) (int, error)
+	Query(ctx context.Context, q ds.Query) (ds.Results, error)
+	Put(ctx context.Context, key ds.Key, value []byte) error
+	Delete(ctx context.Context, key ds.Key) error
+	Sync(ctx context.Context, prefix ds.Key) error
+	Close() error
+}
+
+// RatingStorer is the replicated record store the rating engine writes to.
+type RatingStorer interface {
+	Put(rec domain.RatingRecord) error
+	List(peerID string) ([]domain.RatingRecord, error)
+	DeleteExpired(dimension string, beforeBucket int64) error
+	OnPut(hook func(domain.RatingRecord))
+	OnDelete(hook func(domain.RatingRecord))
+	Close() error
+}
+
 type DistributedHashTableDiscoverer interface {
+	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	ClosestPeers() []warpnet.WarpPeerID
 	Close()
 }
@@ -59,6 +105,11 @@ type ModeratorNode struct {
 	mw      *middleware.WarpMiddleware
 
 	dHashTable DistributedHashTableDiscoverer
+
+	ratingStore RatingProvider
+	ratingDb    RatingStorer
+	rating      PeerRater
+	ratings     PeersRatings
 
 	memoryStoreCloseF func() error
 
@@ -74,15 +125,20 @@ func NewModeratorNode(
 	privKey ed25519.PrivateKey,
 	psk security.PSK,
 	ownNodeId warpnet.WarpPeerID,
+	ratings PeersRatings,
 ) (_ *ModeratorNode, err error) {
 	memoryStore, err := pstoremem.NewPeerstore()
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
 	}
 	mapStore := datastore.NewMapDatastore()
+	// The rating CRDT owns its whole namespace, so it cannot share the
+	// datastore the DHT keeps its records in.
+	ratingStore := datastore.NewMapDatastore()
 
 	closeF := func() error {
 		_ = memoryStore.Close()
+		_ = ratingStore.Close()
 		return mapStore.Close()
 	}
 
@@ -94,6 +150,7 @@ func NewModeratorNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(mapStore),
+		dht.Ratings(ratings),
 		dht.BootstrapNodes(infos...),
 		dht.Network(config.Config().Node.Network),
 	)
@@ -117,6 +174,8 @@ func NewModeratorNode(
 	mn := &ModeratorNode{
 		ctx:               ctx,
 		dHashTable:        dHashTable,
+		ratingStore:       ratingStore,
+		ratings:           ratings,
 		memoryStoreCloseF: closeF,
 		psk:               psk,
 		privKey:           privKey,
@@ -133,12 +192,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.ratings, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil)
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.ratings)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -162,6 +221,32 @@ func (mn *ModeratorNode) Start() (err error) {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+	return nil
+}
+
+// StartRating rates the peers this node can judge. The process starts it:
+// the records ride the pubsub, and a moderator's standing comes from the
+// audit, neither of which the node owns.
+func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-chan warpnet.PeerEvent) error {
+	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingstore.GossipTopic)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
+	}
+	mn.ratingDb, err = ratingstore.New(
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to initialize rating store: %w", err)
+	}
+	mn.rating, err = rating.NewEngine(
+		mn.ctx, mn.ratingDb, mn.node.Node().Network(), mn.privKey, warpnet.ModeratorNode,
+		rating.WithRatings(mn.ratings),
+	)
+	if err != nil {
+		return fmt.Errorf("moderator: failed to start rating engine: %w", err)
+	}
+
+	mn.rating.Listen(mn.node.Event(), mn.mw.Event(), audit)
 	return nil
 }
 
@@ -210,6 +295,12 @@ func (mn *ModeratorNode) Stop() {
 	}
 	mn.isClosed.Store(true)
 
+	if mn.rating != nil {
+		_ = mn.rating.Close()
+	}
+	if mn.ratingDb != nil {
+		_ = mn.ratingDb.Close()
+	}
 	if mn.dHashTable != nil {
 		mn.dHashTable.Close()
 	}

@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -39,7 +39,11 @@ import (
 
 func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	t.Helper()
-	mw := &WarpMiddleware{ownNodeId: ownNodeId, rateLimiters: newRateLimitersCache()}
+	mw := &WarpMiddleware{
+		ownNodeId:    ownNodeId,
+		rateLimiters: newRateLimitersCache(),
+		events:       warpnet.NewPeerEmitter(),
+	}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 	return mw
 }
@@ -83,7 +87,7 @@ func callLimited(
 }
 
 func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
-	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000})
+	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000}, 1)
 
 	for i := range 3 {
 		if !b.Allow() {
@@ -101,7 +105,7 @@ func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
 }
 
 func TestLeakyBucket_ZeroLimitFallsBackToOne(t *testing.T) {
-	b := newRateLimiter(routeLimit{})
+	b := newRateLimiter(routeLimit{}, 1)
 	if !b.Allow() {
 		t.Fatal("expected the first request to be admitted")
 	}
@@ -164,9 +168,9 @@ func TestLimitForRoute(t *testing.T) {
 }
 
 func TestLimitForRouteGivesTheGatewayItsOwnBudget(t *testing.T) {
-	gateway := warpnet.FromStringToPeerID(mastodon.GatewayNodeID())
+	gateway := warpnet.FromStringToPeerID(fediverse.GatewayNodeID())
 	if gateway == "" {
-		t.Fatalf("mastodon.GatewayNodeID() is not a valid peer id: %q", mastodon.GatewayNodeID())
+		t.Fatalf("fediverse.GatewayNodeID() is not a valid peer id: %q", fediverse.GatewayNodeID())
 	}
 	for _, route := range []string{
 		event.PUBLIC_GET_USER, event.PUBLIC_GET_IMAGE, event.PUBLIC_POST_REACT, event.PRIVATE_POST_PAIR,

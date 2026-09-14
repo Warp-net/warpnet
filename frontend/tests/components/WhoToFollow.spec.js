@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { fireEvent, render, screen, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
@@ -19,6 +19,11 @@ const wid = (n) => '01ARZ3NDEKTSV4RRFFQ69G5F' + String(n).padStart(2, '0');
 const mid = (n) => `user${n}@mastodon.social`;
 const warpnetUser = (n) => ({ id: wid(n), username: `warp${n}` });
 const mastodonUser = (n) => ({ id: mid(n), username: `masto${n}` });
+const threadsUser = (n) => ({ id: `user${n}@threads.net`, username: `thr${n}`, network: 'threads' });
+
+// The tabs carry their label as the button title; the icon inside carries the
+// aria-label, so the title is what addresses the tab itself.
+const openTab = (label) => fireEvent.click(screen.getByTitle(label));
 
 const renderComponent = () =>
   render(WhoToFollow, {
@@ -45,47 +50,63 @@ beforeEach(() => {
 });
 
 describe('WhoToFollow.vue (sidebar)', () => {
-  it('splits a mixed batch into Warpnet and Mastodon blocks', async () => {
+  it('puts each network behind its own tab in one block', async () => {
     warpnetService.getWhoToFollow
-      .mockResolvedValueOnce([warpnetUser(1), mastodonUser(1), warpnetUser(2)])
+      .mockResolvedValueOnce([warpnetUser(1), mastodonUser(1), threadsUser(1), warpnetUser(2)])
       .mockResolvedValueOnce([]);
 
     renderComponent();
 
-    expect(await screen.findByAltText('Warpnet')).toBeInTheDocument();
-    expect(screen.getByLabelText('Mastodon')).toBeInTheDocument();
-    expect(screen.getAllByText('Who to follow')).toHaveLength(2);
-    expect(screen.getByText('warp1')).toBeInTheDocument();
+    // One block, three tabs, Warpnet showing by default.
+    expect(await screen.findByText('warp1')).toBeInTheDocument();
+    expect(screen.getAllByText('Who to follow')).toHaveLength(1);
+    expect(screen.getByTitle('Warpnet')).toBeInTheDocument();
+    expect(screen.getByTitle('Mastodon')).toBeInTheDocument();
+    expect(screen.getByTitle('Threads')).toBeInTheDocument();
     expect(screen.getByText('warp2')).toBeInTheDocument();
-    expect(screen.getByText('masto1')).toBeInTheDocument();
+    expect(screen.queryByText('masto1')).not.toBeInTheDocument();
+    expect(screen.queryByText('thr1')).not.toBeInTheDocument();
+
+    await openTab('Mastodon');
+    expect(await screen.findByText('masto1')).toBeInTheDocument();
+    expect(screen.queryByText('warp1')).not.toBeInTheDocument();
+
+    await openTab('Threads');
+    expect(await screen.findByText('thr1')).toBeInTheDocument();
+
     await waitFor(() => {
       expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(2, false, 10);
     });
     expect(warpnetService.getWhoToFollow).toHaveBeenNthCalledWith(1, true, 10);
   });
 
-  it('keeps paging until both blocks are filled, capping each at 5', async () => {
+  it('keeps paging until each tab is filled, capping each at 5', async () => {
     warpnetService.getWhoToFollow
       .mockResolvedValueOnce([1, 2, 3, 4, 5, 6].map(warpnetUser))
-      .mockResolvedValueOnce([1, 2, 3, 4, 5].map(mastodonUser));
+      .mockResolvedValueOnce([1, 2, 3, 4, 5].map(mastodonUser))
+      .mockResolvedValueOnce([]);
 
     renderComponent();
 
     expect(await screen.findByText('warp5')).toBeInTheDocument();
-    expect(await screen.findByText('masto5')).toBeInTheDocument();
     expect(screen.queryByText('warp6')).not.toBeInTheDocument(); // capped
-    expect(warpnetService.getWhoToFollow).toHaveBeenCalledTimes(2);
+    await openTab('Mastodon');
+    expect(await screen.findByText('masto5')).toBeInTheDocument();
   });
 
-  it('hides the Mastodon block when the feed has no mastodon users', async () => {
+  it('keeps every tab even when a network has nobody to suggest', async () => {
     warpnetService.getWhoToFollow
       .mockResolvedValueOnce([warpnetUser(1)])
       .mockResolvedValueOnce([]);
 
     renderComponent();
 
-    expect(await screen.findByAltText('Warpnet')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Mastodon')).not.toBeInTheDocument();
+    expect(await screen.findByText('warp1')).toBeInTheDocument();
+    // A tab that appeared only once it had content would hide the fact that the
+    // other networks exist at all, so it stays and says it is empty.
+    expect(screen.getByTitle('Threads')).toBeInTheDocument();
+    await openTab('Threads');
+    expect(await screen.findByText('Nobody to suggest here yet.')).toBeInTheDocument();
   });
 
   it('renders the rows without waiting for hanging avatar blobs', async () => {

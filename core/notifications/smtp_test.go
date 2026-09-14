@@ -85,7 +85,15 @@ func (s *fakeSMTP) serve(conn net.Conn, failAt string) {
 			continue
 		}
 
-		verb := strings.ToUpper(strings.Fields(strings.TrimSpace(line) + " ")[0])
+		// A line with no verb: a bare CRLF, or a chunk of the TLS
+		// handshake a client opened with. strings.Fields ignores
+		// whitespace, so it returns nothing to index here.
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+
+		verb := strings.ToUpper(fields[0])
 		if verb == failAt {
 			_ = say("550 rejected")
 			continue

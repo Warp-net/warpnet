@@ -1,5 +1,8 @@
 # Development Guidelines
 
+## Semantic compression
+Use semantic compression skill all the time .claude/skills/semantic-compression/SKILL.md
+
 ## Documentation
 First find and read the relevant codebase, then act.
 
@@ -28,3 +31,8 @@ Prefer Serena's symbolic tools (`find_symbol`, `find_referencing_symbols`, `repl
     - Ensure correctness.
     - Ensure relevance.
     - Discard low-value or incorrect suggestions.
+
+## AI Attribution Ban
+- NEVER mention "Claude" or any AI assistant anywhere in this repository: no `claude/` branch prefixes, no AI co-author or session trailers in commit messages, no AI references in code, comments, or docs.
+- Commits are authored under the repository owner's identity only.
+- If tooling auto-creates a `claude/...` working branch, rename it (e.g. `feature/<topic>`) before pushing and delete the prefixed branch.

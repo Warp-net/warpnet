@@ -60,10 +60,10 @@ type moderatorPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSub(ctx context.Context) *moderatorPubSub {
+func NewPubSub(ctx context.Context, ratings pubsub.PeersRatings) *moderatorPubSub {
 	mps := &moderatorPubSub{}
 
-	mps.pubsub = pubsub.NewGossip(ctx, pubsub.NewDiscoveryRelayTopicHandler())
+	mps.pubsub = pubsub.NewGossip(ctx, ratings, pubsub.NewDiscoveryRelayTopicHandler())
 	return mps
 }
 
@@ -73,6 +73,14 @@ func (g *moderatorPubSub) Run(node PubsubServerNodeConnector) error {
 	}
 
 	return g.pubsub.Run(node)
+}
+
+// Gossip is the pubsub a CRDT store broadcasts its deltas on.
+func (g *moderatorPubSub) Gossip() *pubsub.Gossip {
+	if g == nil {
+		return nil
+	}
+	return g.pubsub
 }
 
 func (g *moderatorPubSub) PublishUpdateToFollowers(ownerId, dest string, body any) (err error) {

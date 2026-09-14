@@ -37,7 +37,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -102,6 +102,8 @@ type discoveryService struct {
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
+
+	events warpnet.PeerEmitter
 }
 
 //goland:noinspection ALL
@@ -123,6 +125,7 @@ func NewDiscoveryService(
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
+		events:          warpnet.NewPeerEmitter(),
 	}
 }
 
@@ -135,7 +138,22 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
+		events:          warpnet.NewPeerEmitter(),
 	}
+}
+
+// Event is what discovery saw the peers do. The channel is never closed.
+func (s *discoveryService) Event() <-chan warpnet.PeerEvent {
+	return s.events
+}
+
+// emit reports one observation about a peer. How often a peer may turn up
+// before that is flooding is the rating's call.
+func (s *discoveryService) emit(peerID warpnet.WarpPeerID, t warpnet.PeerEventType) {
+	if s == nil || peerID == s.ownId {
+		return
+	}
+	s.events.Emit(warpnet.PeerEvent{PeerID: peerID.String(), Type: t})
 }
 
 func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
@@ -214,6 +232,8 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 		return
 	}
 
+	s.emit(pi.ID, warpnet.PeerDiscovered)
+
 	if !s.limiter.Allow() {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
@@ -277,6 +297,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		log.Warnf(
 			"discovery: source '%s': failed to connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err)
+		s.emitDialFailure(pi)
 		return
 	}
 
@@ -304,7 +325,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 	if info.IsRelay() {
 		return
 	}
-	if pi.ID.String() == mastodon.GatewayNodeID() {
+	if pi.ID.String() == fediverse.GatewayNodeID() {
 		return
 	}
 
@@ -376,6 +397,7 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 			"discovery: source '%s': relay handle: connect to new peer %s: %v",
 			peer.Source, pi.ID.String(), err,
 		)
+		s.emitDialFailure(pi)
 		return
 	}
 
@@ -398,6 +420,20 @@ func (s *discoveryService) handleAsRelay(peer discoveredPeer) {
 
 func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
+}
+
+// emitDialFailure reports a peer that would not answer an address it is
+// known at. A peer we have no address for was never dialled, so it owes
+// nothing for the attempt.
+func (s *discoveryService) emitDialFailure(pi warpnet.WarpAddrInfo) {
+	known := len(pi.Addrs) > 0
+	if !known && s.node != nil && s.node.Peerstore() != nil {
+		known = len(s.node.Peerstore().Addrs(pi.ID)) > 0
+	}
+	if !known {
+		return
+	}
+	s.emit(pi.ID, warpnet.PeerDialFailure)
 }
 
 const errPeerRejectedInfo = warpnet.WarpError("peer rejected info request")

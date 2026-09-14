@@ -50,11 +50,13 @@ type relayPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
-func NewPubSubRelay(ctx context.Context, handlers ...pubsub.TopicHandler) *relayPubSub {
+func NewPubSubRelay(
+	ctx context.Context, ratings pubsub.PeersRatings, handlers ...pubsub.TopicHandler,
+) *relayPubSub {
 	bps := &relayPubSub{
 		ctx: ctx,
 	}
-	bps.pubsub = pubsub.NewGossip(ctx, handlers...)
+	bps.pubsub = pubsub.NewGossip(ctx, ratings, handlers...)
 	return bps
 }
 
@@ -67,6 +69,14 @@ func (g *relayPubSub) Run(node PubsubServerNodeConnector) {
 		log.Errorf("pubsub: failed to run: %v", err)
 		return
 	}
+}
+
+// Gossip is the pubsub a CRDT store broadcasts its deltas on.
+func (g *relayPubSub) Gossip() *pubsub.Gossip {
+	if g == nil {
+		return nil
+	}
+	return g.pubsub
 }
 
 func (g *relayPubSub) OwnerID() string {

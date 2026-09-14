@@ -281,12 +281,12 @@ import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
 import {createTimelineMerger} from "@/lib/unified-timeline";
-import {isMastodonTweet, isMastodonUser, isOwnTweetEcho} from "@/lib/network";
+import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
 
 const tweetCharLimit = 280;
-// Mastodon sources are polled much slower than the 10s local-timeline poll:
+// Bridged sources are polled much slower than the 10s local-timeline poll:
 // every page is a per-handle fan-out through the gateway.
-const mastodonRefreshMs = 75000;
+const bridgedRefreshMs = 75000;
 // Mirrors domain.PollMinOptions / PollMaxOptions / PollOptionRuneLimit — the
 // node rejects a poll outside these bounds.
 const pollMinOptions = 2;
@@ -661,17 +661,17 @@ export default {
         const known = new Set(this.timeline.map((t) => t && t.id));
         let fresh = page.filter((t) => t && t.id && !known.has(t.id));
         if (this._merger) {
-          // In merged mode "unseen" no longer implies "new": Mastodon rows
+          // In merged mode "unseen" no longer implies "new": bridged rows
           // displace older Warpnet tweets off the merged first page, and the
           // poll would dump those stale tweets on top of the feed. Prepend
           // only what is newer than the newest Warpnet tweet the merger has
           // ever fetched (the visible feed may hold no Warpnet rows at all
-          // when followed Mastodon accounts out-post it) — the scroll path
+          // when followed bridged accounts out-post it) — the scroll path
           // emits the rest in order.
           const newest = Math.max(
             this._merger.sourceNewestTs('warpnet'),
             ...this.timeline
-              .filter((t) => t && !isMastodonTweet(t))
+              .filter((t) => t && !isBridgedTweet(t))
               .map((t) => new Date(t.created_at).getTime() || 0),
           );
           fresh = fresh.filter((t) => (new Date(t.created_at).getTime() || 0) > newest);
@@ -687,11 +687,11 @@ export default {
     },
     // (Re)build the feed. With no bridged followees this is exactly the old
     // single-source path; otherwise a merger interleaves the local timeline
-    // with one source per followed Mastodon handle.
+    // with one source per followed fediverse handle.
     async loadInitial() {
-      if (this._mastodonTimer) {
-        clearInterval(this._mastodonTimer);
-        this._mastodonTimer = null;
+      if (this._bridgedTimer) {
+        clearInterval(this._bridgedTimer);
+        this._bridgedTimer = null;
       }
       this._merger = null;
       this._mergerFirstPage = null;
@@ -745,7 +745,7 @@ export default {
         this._mergerFirstPage,
         new Promise((resolve) => setTimeout(resolve, 1000)),
       ]);
-      this._mastodonTimer = setInterval(() => this.refreshMastodon(), mastodonRefreshMs);
+      this._bridgedTimer = setInterval(() => this.refreshBridged(), bridgedRefreshMs);
     },
     // The owner's followed fediverse handles, minus blocked/muted ones. Any
     // failure degrades to a plain Warpnet-only home feed.
@@ -754,7 +754,7 @@ export default {
         const owner = warpnetService.getOwnerProfile();
         if (!owner || !owner.user_id) return [];
         const ids = await warpnetService.listFollowingIds(owner.user_id);
-        const handles = ids.filter((id) => isMastodonUser({id}));
+        const handles = ids.filter((id) => isBridgedUser({id}));
         const visible = [];
         for (const handle of handles) {
           if (await warpnetService.isUserBlocked(handle)) continue;
@@ -767,9 +767,9 @@ export default {
         return [];
       }
     },
-    async refreshMastodon() {
-      if (!this._merger || this._mastodonRefreshing || this.loading) return;
-      this._mastodonRefreshing = true;
+    async refreshBridged() {
+      if (!this._merger || this._bridgedRefreshing || this.loading) return;
+      this._bridgedRefreshing = true;
       try {
         const fresh = await this._merger.refreshNewest();
         const known = new Set(this.timeline.map((t) => t && t.id));
@@ -778,9 +778,9 @@ export default {
           this.timeline = [...add, ...this.timeline];
         }
       } catch (err) {
-        console.warn('mastodon refresh failed:', err);
+        console.warn('bridged refresh failed:', err);
       } finally {
-        this._mastodonRefreshing = false;
+        this._bridgedRefreshing = false;
       }
     },
     async toggleInfo(event) {
@@ -800,7 +800,23 @@ export default {
       this.showInfo = true;
     },
     async getInfo() {
-      return await warpnetService.getNodeInfo();
+      const info = await warpnetService.getNodeInfo();
+      return {...info, rating: await this.getRating()};
+    },
+    // A node that cannot read its rating still tells the user everything
+    // else, so the line says so instead of taking the panel down with it.
+    async getRating() {
+      try {
+        const rating = await warpnetService.getOwnRating();
+        if (!rating || rating.overall === undefined) {
+          return "unavailable";
+        }
+        const observers = rating.observers === 1 ? "1 observer" : `${rating.observers} observers`;
+        return `${rating.overall}/1000 ${rating.tier} (${observers})`;
+      } catch (e) {
+        console.error("get own rating:", e);
+        return "unavailable";
+      }
     },
     // Composer avatar / background for the right bar: they fill in whenever
     // they arrive and must not delay the timeline's first paint.
@@ -865,9 +881,9 @@ export default {
       clearInterval(this._timelineTimer);
       this._timelineTimer = null;
     }
-    if (this._mastodonTimer) {
-      clearInterval(this._mastodonTimer);
-      this._mastodonTimer = null;
+    if (this._bridgedTimer) {
+      clearInterval(this._bridgedTimer);
+      this._bridgedTimer = null;
     }
     if (this._deepLinkFocusHandler) {
       window.removeEventListener("focus", this._deepLinkFocusHandler);

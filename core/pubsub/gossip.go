@@ -81,6 +81,50 @@ type Gossip struct {
 	handlersMap      map[string]topicHandler
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
+
+	ratings PeersRatings
+}
+
+// PeersRatings answers what gossipsub should weigh a peer by, which is
+// how a badly rated peer is read last and, at worst, not at all.
+type PeersRatings interface {
+	GossipScore(peerID warpnet.WarpPeerID) float64
+}
+
+const (
+	// graylistThreshold is the score at which gossipsub stops reading a
+	// peer at all. Only first-hand evidence takes a peer that low.
+	graylistThreshold = -100
+	gossipThreshold   = -10
+	publishThreshold  = -50
+)
+
+// peerScore is what gossipsub weighs a peer by. A node with no rating
+// wired up scores every peer the same.
+func (g *Gossip) peerScore(peerID warpnet.WarpPeerID) float64 {
+	if g == nil || g.ratings == nil {
+		return 0
+	}
+	return g.ratings.GossipScore(peerID)
+}
+
+// scoreOptions weigh a peer by what it may have and nothing else: the
+// rest of gossipsub's own scoring stays at its defaults.
+func (g *Gossip) scoreOptions() []pubsub.Option {
+	params := &pubsub.PeerScoreParams{
+		AppSpecificScore:  g.peerScore,
+		AppSpecificWeight: 1,
+		DecayInterval:     time.Minute,
+		DecayToZero:       0.01,
+		Topics:            map[string]*pubsub.TopicScoreParams{},
+	}
+	thresholds := &pubsub.PeerScoreThresholds{
+		GossipThreshold:   gossipThreshold,
+		PublishThreshold:  publishThreshold,
+		GraylistThreshold: graylistThreshold,
+		AcceptPXThreshold: 0,
+	}
+	return []pubsub.Option{pubsub.WithPeerScore(params, thresholds)}
 }
 
 type TopicHandler struct {
@@ -90,6 +134,7 @@ type TopicHandler struct {
 
 func NewGossip(
 	ctx context.Context,
+	ratings PeersRatings,
 	handlers ...TopicHandler,
 ) *Gossip {
 	handlersMap := make(map[string]topicHandler)
@@ -99,6 +144,7 @@ func NewGossip(
 
 	return &Gossip{
 		ctx:              ctx,
+		ratings:          ratings,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
 		handlersMap:      handlersMap,
@@ -218,7 +264,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node())
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
 	if err != nil {
 		return err
 	}

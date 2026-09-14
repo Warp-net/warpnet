@@ -23,9 +23,9 @@ resulting from the use or misuse of this software.
 */
 
 // K-way merge over heterogeneous timeline sources (the local Warpnet
-// timeline plus one source per followed Mastodon handle). Each source keeps
+// timeline plus one source per followed fediverse handle). Each source keeps
 // its own opaque cursor — a Badger key on the Warpnet side, a gateway URL on
-// the Mastodon side — so cursors are never combined into one token.
+// the fediverse side — so cursors are never combined into one token.
 //
 // Ordering contract: emission pops the newest `created_at` among the heads
 // of the sources' buffers, and the fetch order inside a source is never

@@ -32,6 +32,12 @@ import {isOwnTweetEcho} from "@/lib/network";
 export const PUBLIC_GET_TWEET = "/public/get/tweet/0.0.0"
 export const PUBLIC_GET_TWEET_STATS   = "/public/get/tweetstats/0.0.0"
 export const PRIVATE_GET_TIMELINE = "/private/get/timeline/0.0.0"
+export const PRIVATE_GET_WALLET = "/private/get/wallet/0.0.0"
+export const PRIVATE_GET_WALLET_ADDRESS = "/private/get/wallet/address/0.0.0"
+export const PRIVATE_GET_WALLET_CONTACTS = "/private/get/wallet/contacts/0.0.0"
+export const PRIVATE_GET_WALLET_HISTORY = "/private/get/wallet/history/0.0.0"
+export const PRIVATE_GET_WALLET_KEY = "/private/get/wallet/key/0.0.0"
+export const PRIVATE_POST_WALLET_SEND = "/private/post/wallet/send/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
@@ -75,6 +81,7 @@ export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
+export const PRIVATE_GET_RATING = "/private/get/admin/rating/0.0.0"
 export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
 export const PRIVATE_POST_USER = "/private/post/user/0.0.0"
 export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
@@ -1277,6 +1284,35 @@ export const warpnetService = {
         return resp;
     },
 
+    async getWallet() {
+        const request = { path: PRIVATE_GET_WALLET, body: {} }
+        return await this.sendToNode(request)
+    },
+
+    // getWalletAddress answers from the node alone: the TRON address is
+    // derived locally, so it arrives without waiting for the chain.
+    async getWalletAddress() {
+        const request = { path: PRIVATE_GET_WALLET_ADDRESS, body: {} }
+        return await this.sendToNode(request)
+    },
+    // sendFunds moves USDT by default; pass asset "TRX" for the native coin.
+    async sendFunds(to, amount, asset) {
+        const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
+        return await this.sendToNode(request)
+    },
+    async getWalletHistory(limit, asset) {
+        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25, asset: asset || "" } }
+        const resp = await this.sendToNode(request)
+        return resp?.transfers || []
+    },
+    async getWalletContacts(force) {
+        const resp = await this.sendToNode({ path: PRIVATE_GET_WALLET_CONTACTS, body: { force: !!force } })
+        return resp?.contacts || []
+    },
+    async exportWalletKey() {
+        const request = { path: PRIVATE_GET_WALLET_KEY, body: {} }
+        return await this.sendToNode(request)
+    },
     async getBookmarks(cursorReset) {
         let cursor = this.getCursor('bookmarks')
         if (cursorReset) {
@@ -1481,7 +1517,7 @@ export const warpnetService = {
 
     // Explicit-cursor page fetch for one user's tweets. Unlike getTweets it
     // never touches the global 'tweets' cursor, so many per-user paginations
-    // (the unified timeline fans out per followed Mastodon handle) can run
+    // (the unified timeline fans out per followed fediverse handle) can run
     // side by side without clobbering the Profile view.
     async getUserTweetsPage({userId, cursor = '', limit = defaultLimit}) {
         if (cursor === endCursor) {
@@ -2250,6 +2286,16 @@ export const warpnetService = {
         }
 
         return await this.sendToNode(request);
+    },
+
+    // getOwnRating returns how the network rates this node. The node
+    // holds no opinion of itself, so everything here was written by
+    // other nodes.
+    async getOwnRating(){
+        return await this.sendToNode({
+            path: PRIVATE_GET_RATING,
+            body: {},
+        });
     },
 
     async sendToNode(request) {

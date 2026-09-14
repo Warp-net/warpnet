@@ -72,8 +72,15 @@ type BackoffEnabler interface {
 	Reset(id warpnet.WarpPeerID)
 }
 
+// PeersRatings answers what a peer is worth to the connection manager,
+// so that a node under pressure drops the peers it trusts least first.
+type PeersRatings interface {
+	ConnTag(peerID warpnet.WarpPeerID) int
+}
+
 type Prioritizer interface {
 	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
+	SetRatingPriority(pid warpnet.WarpPeerID, tag int)
 	SetMinPriority(pid warpnet.WarpPeerID)
 	SetMaxPriority(pid warpnet.WarpPeerID)
 }
@@ -91,6 +98,8 @@ type WarpNode struct {
 
 	reachability atomic.Int64
 	prioritizer  Prioritizer
+	ratings      PeersRatings
+	events       warpnet.PeerEmitter
 
 	startTime        time.Time
 	eventsSub        event.Subscription
@@ -100,6 +109,7 @@ type WarpNode struct {
 
 func NewWarpNode(
 	ctx context.Context,
+	ratings PeersRatings,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
@@ -161,7 +171,9 @@ func NewWarpNode(
 		backoff:          backoff.NewSimpleBackoff(ctx, time.Minute, 5),
 		eventsSub:        sub,
 		internalHandlers: make(map[warpnet.WarpProtocolID]warpnet.StreamHandler),
+		events:           warpnet.NewPeerEmitter(),
 		prioritizer:      newNodeReachabilityManager(node.ConnManager()),
+		ratings:          ratings,
 	}
 
 	go wn.trackIncomingEvents()
@@ -240,11 +252,13 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		data, err := stream.ReadRequest(s)
 		if errors.Is(err, stream.ErrPayloadTooLarge) {
 			log.Errorf("node: unwrap: %s: %v", s.Protocol(), err)
+			n.emitStream(s, warpnet.PeerOversizePayload)
 			_ = s.Reset()
 			return
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
+			n.emitStream(s, warpnet.PeerMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
@@ -254,6 +268,9 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		response, err := handler(data, s)
 		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
 			log.Debugf("node: unwrap: paired alias: %s", s.Conn().RemotePeer())
+		}
+		if errors.Is(err, warpnet.ErrForeignAuthor) {
+			n.emitStream(s, warpnet.PeerForeignAuthorship)
 		}
 		if err != nil && !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			clip := data
@@ -338,6 +355,8 @@ func (n *WarpNode) trackIncomingEvents() {
 					if n.outbox != nil {
 						n.outbox.NotifyOnline(pid)
 					}
+					n.events.Emit(warpnet.PeerEvent{PeerID: pid, Type: warpnet.PeerConnected})
+					n.tagPeer(typedEvent.Peer)
 				}
 			case event.EvtPeerIdentificationFailed:
 				pid := typedEvent.Peer
@@ -391,6 +410,40 @@ func (n *WarpNode) trackIncomingEvents() {
 			}
 		}
 	}
+}
+
+// tagPeer sets what a peer is worth to the connection manager. A node
+// with no ratings leaves the tag alone, and a peer keeps what it was
+// worth when it connected until it connects again.
+func (n *WarpNode) tagPeer(peerID warpnet.WarpPeerID) {
+	if n == nil || n.ratings == nil || n.prioritizer == nil || peerID == "" {
+		return
+	}
+	tag := n.ratings.ConnTag(peerID)
+	log.Debugf("node: rating makes peer %s worth %d to the connection manager", peerID, tag)
+	n.prioritizer.SetRatingPriority(peerID, tag)
+}
+
+// Event is what this node saw its peers do. The channel is never closed.
+func (n *WarpNode) Event() <-chan warpnet.PeerEvent {
+	return n.events
+}
+
+// emitStream reports an observation about the stream's remote peer. A
+// self-stream names nobody, so it reports nothing.
+func (n *WarpNode) emitStream(s warpnet.WarpStream, t warpnet.PeerEventType) {
+	if n == nil || s == nil || s.Conn() == nil {
+		return
+	}
+	remote := s.Conn().RemotePeer()
+	if remote == s.Conn().LocalPeer() {
+		return
+	}
+	n.events.Emit(warpnet.PeerEvent{
+		PeerID: remote.String(),
+		Type:   t,
+		Route:  string(s.Protocol()),
+	})
 }
 
 func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {

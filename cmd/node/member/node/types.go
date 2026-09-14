@@ -33,6 +33,8 @@ import (
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -45,6 +47,7 @@ import (
 type DiscoveryHandler interface {
 	DiscoveryHandlerStream(pi warpnet.WarpAddrInfo)
 	Run(n discovery.DiscoveryInfoStorer) error
+	Event() <-chan warpnet.PeerEvent
 	Close()
 }
 
@@ -84,6 +87,67 @@ type NodeProvider interface {
 
 type StatsProvider interface {
 	datastore.Datastore
+}
+
+// RatingProvider is the local storage the rating replica is built on.
+type RatingProvider interface {
+	Get(ctx context.Context, key datastore.Key) ([]byte, error)
+	Has(ctx context.Context, key datastore.Key) (bool, error)
+	GetSize(ctx context.Context, key datastore.Key) (int, error)
+	Query(ctx context.Context, q datastore.Query) (datastore.Results, error)
+	Put(ctx context.Context, key datastore.Key, value []byte) error
+	Delete(ctx context.Context, key datastore.Key) error
+	Sync(ctx context.Context, prefix datastore.Key) error
+	Close() error
+}
+
+// WalletProvider is the payment engine as this node holds it: what the
+// wallet handlers ask of it, and the process it has to stop.
+type WalletProvider interface {
+	Address(ctx context.Context, seed string) (string, error)
+	Balance(ctx context.Context, address string) (wallet.Account, error)
+	Transfer(ctx context.Context, seed, asset, to, amount string) (string, error)
+	Export(ctx context.Context, seed string) (address, privateKey string, err error)
+	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
+	Token() string
+	Decimals() uint8
+	Network() string
+	Close()
+}
+
+// WalletAddressProvider is what this node keeps of the wallet addresses
+// its peers published.
+type WalletAddressProvider interface {
+	SetAddress(chain, userId, address string) error
+	ListAddresses(chain string, limit *uint64, cursor *string) ([]domain.WalletAddress, string, error)
+}
+
+// PeersRatings is how this node rates its peers: the engine writes it,
+// and this node's modules read what follows from it.
+type PeersRatings interface {
+	Rate(peerID warpnet.WarpPeerID, tier rating.Tier)
+	ConnTag(peerID warpnet.WarpPeerID) int
+	GossipScore(peerID warpnet.WarpPeerID) float64
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
+}
+
+// PeerRater listens to what the modules saw the peers do and rates them.
+type PeerRater interface {
+	Listen(sources ...<-chan warpnet.PeerEvent)
+	View(peerID warpnet.WarpPeerID) (domain.NodeRating, error)
+	Own() (domain.NodeRating, error)
+	Close() error
+}
+
+// RatingStorer is the replicated record store the rating engine writes to.
+type RatingStorer interface {
+	Put(rec domain.RatingRecord) error
+	List(peerID string) ([]domain.RatingRecord, error)
+	DeleteExpired(dimension string, beforeBucket int64) error
+	OnPut(hook func(domain.RatingRecord))
+	OnDelete(hook func(domain.RatingRecord))
+	Close() error
 }
 
 type AuthProvider interface {

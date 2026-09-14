@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/mastodon"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -121,7 +121,7 @@ func TestEnqueueIgnoresSelfAndEmptyIds(t *testing.T) {
 func TestHandleAsMemberSkipsTheMastodonGateway(t *testing.T) {
 	s, node, users, _ := newService(t)
 
-	gateway := warpnet.FromStringToPeerID(mastodon.GatewayNodeID())
+	gateway := warpnet.FromStringToPeerID(fediverse.GatewayNodeID())
 	node.infoResp = infoJSON(t, warpnet.NodeInfo{ID: gateway, OwnerId: "gateway-owner"})
 
 	s.handleAsMember(discoveredPeer{ID: gateway, Source: sourceGossip})

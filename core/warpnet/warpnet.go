@@ -49,6 +49,7 @@ import (
 	"github.com/ipfs/boxo/blockstore"
 	"github.com/ipfs/boxo/exchange"
 	"github.com/ipfs/boxo/ipld/merkledag"
+	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -171,6 +172,9 @@ type (
 	WarpBatching       = datastore.Batching
 	WarpProviderStore  = records.ProviderStore
 	WarpAddrInfo       = peer.AddrInfo
+	WarpConn           = network.Conn
+	WarpConnStats      = network.ConnStats
+	WarpCID            = cid.Cid
 	WarpStreamStats    = network.Stats
 	WarpPeerRouting    = routing.PeerRouting
 	WarpPeerstore      = peerstore.Peerstore

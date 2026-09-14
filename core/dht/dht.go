@@ -122,6 +122,19 @@ func NewDHTable(ctx context.Context, opts ...Option) *distributedHashTable {
 	}
 }
 
+// isPeerAllowed reports a peer the routing table may hold. A node with no
+// ratings holds every peer it finds.
+func (d *distributedHashTable) isPeerAllowed(peerID warpnet.WarpPeerID) bool {
+	if d == nil || d.cfg.ratings == nil {
+		return true
+	}
+	if !d.cfg.ratings.IsAllowedInDHT(peerID) {
+		log.Infof("dht: rating keeps peer %s out of the routing table", peerID)
+		return false
+	}
+	return true
+}
+
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {
 	if d.cfg.network == "" {
 		panic("no network set")
@@ -136,6 +149,12 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 
 	d.dht, err = dht.New(
 		d.ctx, n,
+		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool {
+			return d.isPeerAllowed(p)
+		}),
+		dht.QueryFilter(func(_ any, ai warpnet.WarpAddrInfo) bool {
+			return d.isPeerAllowed(ai.ID)
+		}),
 		dht.Mode(dht.ModeAuto),
 		dht.ProtocolPrefix(protocol.ID("/"+d.cfg.network)),
 		dht.Datastore(d.cfg.store),
@@ -155,8 +174,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	d.dht.RoutingTable().PeerAdded = defaultNodeAddedCallback
 	if d.cfg.addCallbacks != nil {
 		d.dht.RoutingTable().PeerAdded = func(id peer.ID) {
-			addrInfo, _ := d.dht.FindPeer(d.ctx, id)
-			log.Infof("dht: peer added: %s", addrInfo)
+			log.Infof("dht: peer added: %s", id.String())
 			for _, addF := range d.cfg.addCallbacks {
 				if addF == nil {
 					continue

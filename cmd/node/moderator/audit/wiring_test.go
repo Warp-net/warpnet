@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	mrand "math/rand"
 	"testing"
 
@@ -146,13 +147,13 @@ func TestStandingString(t *testing.T) {
 }
 
 func TestLedgerIgnoresAnEmptyPeer(t *testing.T) {
-	l := NewLedger()
+	l := NewLedger(warpnet.NewPeerEmitter())
 	l.Record("", OutcomeCorrect)
 	require.Empty(t, l.Snapshot())
 }
 
 func TestLedgerUnknownPeerIsOnProbation(t *testing.T) {
-	require.Equal(t, StandingProbation, NewLedger().StandingOf("never-seen"))
+	require.Equal(t, StandingProbation, NewLedger(warpnet.NewPeerEmitter()).StandingOf("never-seen"))
 }
 
 func TestCorpusIgnoresEmptyText(t *testing.T) {
@@ -164,7 +165,7 @@ func TestCorpusIgnoresEmptyText(t *testing.T) {
 }
 
 func TestChallengeRandomPeerNeedsACorpus(t *testing.T) {
-	a := NewAuditor("self", nil, NewLedger(), NewCorpus(), mrand.New(mrand.NewSource(1)))
+	a := NewAuditor("self", nil, NewLedger(warpnet.NewPeerEmitter()), NewCorpus(), mrand.New(mrand.NewSource(1)))
 	require.Nil(t, a.ChallengeRandomPeer([]string{"peer-1"}),
 		"an empty corpus has nothing to ask about")
 }

@@ -34,9 +34,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
 )
@@ -318,7 +321,198 @@ func (s *UserRepoTestSuite) TestWhoToFollow_SurfacesBuriedNativePeer() {
 	s.True(nonNativeNoAvatar, "WhoToFollow must not gate non-native users on missing avatar/tweets")
 }
 
+func (s *UserRepoTestSuite) TestUpdateRefreshesCounts() {
+	_, err := s.repo.Create(domain.User{
+		Id: "counts@m.example", Username: "counts", NodeId: "gw",
+		FollowersCount: 7, FollowingsCount: 12, TweetsCount: 7,
+	})
+	s.Require().NoError(err)
+
+	// A refresh from the user's own node carries the current numbers.
+	_, err = s.repo.Update("counts@m.example", domain.User{
+		Id: "counts@m.example", FollowersCount: 8, FollowingsCount: 38, TweetsCount: 23,
+	})
+	s.Require().NoError(err)
+	got, err := s.repo.Get("counts@m.example")
+	s.Require().NoError(err)
+	s.Equal(int64(8), got.FollowersCount)
+	s.Equal(int64(38), got.FollowingsCount)
+	s.Equal(int64(23), got.TweetsCount)
+
+	// A partial update — a profile edit — carries no counts and must not wipe them.
+	_, err = s.repo.Update("counts@m.example", domain.User{Id: "counts@m.example", Username: "renamed"})
+	s.Require().NoError(err)
+	got, err = s.repo.Get("counts@m.example")
+	s.Require().NoError(err)
+	s.Equal("renamed", got.Username)
+	s.Equal(int64(8), got.FollowersCount)
+	s.Equal(int64(38), got.FollowingsCount)
+	s.Equal(int64(23), got.TweetsCount)
+}
+
+// Each test gets its own store: the shared suite database carries users from
+// every other test, which would decide which ones get picked.
+func newWhoToFollowRepo(t *testing.T) *UserRepo {
+	t.Helper()
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	require.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	return NewUserRepo(db)
+}
+
+// idPrefix decides where the accounts land in the keyspace, which is scan order.
+func seedNetwork(t *testing.T, repo *UserRepo, network, idPrefix, host string, n int) {
+	t.Helper()
+	for i := range n {
+		_, err := repo.Create(domain.User{
+			Id:       fmt.Sprintf("%s%02d@%s", idPrefix, i, host),
+			Username: fmt.Sprintf("%s%02d", idPrefix, i),
+			NodeId:   "gateway",
+			Network:  network,
+		})
+		require.NoError(t, err)
+	}
+}
+
+// Counts by the grouped network, not the raw tag: CreateWithTTL marshals before
+// defaulting Network, so a native row is stored with an empty one.
+func networkCounts(users []domain.User) map[string]int {
+	out := map[string]int{}
+	for _, u := range users {
+		out[resolveNetwork(u)]++
+	}
+	return out
+}
+
+// Filled in keyspace order, the many Mastodon accounts took every slot and the
+// single Threads one never appeared.
+func TestWhoToFollowSpreadsAcrossNetworks(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+
+	// Ids sorting ahead of the Threads handle, as the real ones do.
+	for i := range 12 {
+		_, cerr := repo.Create(domain.User{
+			Id:       fmt.Sprintf("aaa%02d@mastodon.social", i),
+			Username: fmt.Sprintf("aaa%02d", i),
+			NodeId:   "gateway", Network: "mastodon",
+		})
+		require.NoError(t, cerr)
+	}
+	_, err := repo.Create(domain.User{
+		Id: "engineer_of_your_ass@threads.net", Username: "Vadim",
+		NodeId: "gateway", Network: "threads",
+	})
+	require.NoError(t, err)
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+
+	byNetwork := map[string]int{}
+	for _, u := range users {
+		byNetwork[u.Network]++
+	}
+	require.NotZero(t, byNetwork["threads"], "the only Threads account must not be crowded out: %+v", byNetwork)
+	require.NotZero(t, byNetwork["mastodon"], "Mastodon must still be represented: %+v", byNetwork)
+	require.LessOrEqual(t, len(users), int(limit))
+}
+
+// The property is "every network present gets a share", not a list of names, so
+// a network added later needs no change here.
+func TestWhoToFollowSharesSlotsAmongAnyNumberOfNetworks(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seeded := []struct {
+		network, prefix, host string
+		n                     int
+	}{
+		{"mastodon", "aaa", "mastodon.social", 20},
+		{"threads", "bbb", "threads.net", 1},
+		{"bluesky", "ccc", "bsky.example", 7},
+		{"nostr", "ddd", "nostr.example", 3},
+	}
+	for _, sd := range seeded {
+		seedNetwork(t, repo, sd.network, sd.prefix, sd.host, sd.n)
+	}
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	require.Len(t, users, int(limit))
+
+	counts := networkCounts(users)
+	for _, sd := range seeded {
+		require.NotZerof(t, counts[sd.network], "%s got no slot: %+v", sd.network, counts)
+	}
+	// Round-robin bounds the largest share at one per round, so the network with
+	// twenty accounts cannot take more than a quarter-ish of ten.
+	require.LessOrEqualf(t, counts["mastodon"], 3, "one network took the block: %+v", counts)
+	// The network with a single account gets exactly that one.
+	require.Equal(t, 1, counts["threads"], counts)
+}
+
+// Fewer slots than networks: they go to distinct networks.
+func TestWhoToFollowWithFewerSlotsThanNetworks(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 5)
+	seedNetwork(t, repo, "threads", "bbb", "threads.net", 5)
+	seedNetwork(t, repo, "bluesky", "ccc", "bsky.example", 5)
+
+	limit := uint64(2)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	require.Len(t, users, 2)
+	require.Len(t, networkCounts(users), 2, "both slots went to one network: %+v", users)
+}
+
+// Rows stored before the network tag existed get their own group.
+func TestWhoToFollowKeepsUntaggedRowsInTheirOwnBucket(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 9)
+	seedNetwork(t, repo, "", "bbb", "legacy.example", 2)
+
+	limit := uint64(4)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	counts := networkCounts(users)
+	require.NotZerof(t, counts[""], "untagged rows lost their share: %+v", counts)
+	require.NotZerof(t, counts["mastodon"], "%+v", counts)
+}
+
+// One network alone must still fill the whole block.
+func TestWhoToFollowGivesOneNetworkTheWholeBlock(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	seedNetwork(t, repo, "mastodon", "aaa", "mastodon.social", 12)
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+	require.Len(t, users, 10)
+	require.Equal(t, 10, networkCounts(users)["mastodon"])
+}
+
+// Warpnet is a network like any other: its peers must not take every slot.
+func TestWhoToFollowGivesWarpnetNoPriority(t *testing.T) {
+	repo := newWhoToFollowRepo(t)
+	for range 12 {
+		_, err := repo.Create(domain.User{
+			Id: ulid.Make().String(), Username: "peer", NodeId: "node-" + uuid.NewString(),
+		})
+		require.NoError(t, err)
+	}
+	seedNetwork(t, repo, "threads", "zzz", "threads.net", 1)
+
+	limit := uint64(10)
+	users, _, err := repo.WhoToFollow(&limit, nil)
+	require.NoError(t, err)
+
+	counts := networkCounts(users)
+	require.NotZerof(t, counts["threads"], "warpnet took the whole block: %+v", counts)
+	require.NotZerof(t, counts[warpnet.WarpnetName], "warpnet peers must still be recommended: %+v", counts)
+}
+
 func TestUserRepoTestSuite(t *testing.T) {
+
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(UserRepoTestSuite))

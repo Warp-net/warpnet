@@ -29,19 +29,24 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"os"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/crdt"
+	"github.com/Warp-net/warpnet/core/crdt/broadcast"
+	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
+	"github.com/Warp-net/warpnet/core/crdt/statsstore"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/handler"
-	"github.com/Warp-net/warpnet/core/mastodon"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/event"
@@ -63,6 +68,7 @@ type MemberNode struct {
 	dHashTable       DistributedHashTableCloser
 	nodeRepo         NodeProvider
 	statsRepo        StatsProvider
+	ratingRepo       RatingProvider
 	authRepo         AuthProvider
 	userRepo         UserProvider
 	aliasesRepo      AliasesProvider
@@ -70,7 +76,12 @@ type MemberNode struct {
 	notifier         notifications.Notifier
 	db               Storer
 	statsDb          StatsStorer
+	ratingDb         RatingStorer
+	rating           PeerRater
+	ratings          PeersRatings
 	privKey          ed25519.PrivateKey
+	walletClient     WalletProvider
+	walletRepo       WalletAddressProvider
 	ownerId, network string
 }
 
@@ -93,6 +104,7 @@ func NewMemberNode(
 	}
 
 	statsRepo := database.NewStatsRepo(db)
+	ratingRepo := database.NewRatingRepo(db)
 	followRepo := database.NewFollowRepo(db)
 	aliasesRepo := database.NewAliasesRepo(db)
 	owner := authRepo.GetOwner()
@@ -100,11 +112,11 @@ func NewMemberNode(
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
 	// the built-in default) before seeding the entry user and starting discovery.
 	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(owner.UserId); err == nil {
-		mastodon.SetGatewayNodeID(gw.NodeID)
+		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
-	mastodon.SeedEntryUser(database.NewUserRepo(db))
+	fediverse.SeedEntryUser(database.NewUserRepo(db))
 
 	notifier := notifications.New(
 		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
@@ -112,6 +124,7 @@ func NewMemberNode(
 	)
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
+	ratings := rating.NewPeersRatings()
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
@@ -125,13 +138,14 @@ func NewMemberNode(
 		pubSubHandlers,
 		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
-	pubsubService := memberPubSub.NewPubSub(ctx, pubSubHandlers...)
+	pubsubService := memberPubSub.NewPubSub(ctx, ratings, pubSubHandlers...)
 
 	warpNetwork := config.Config().Node.Network
 
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
+		dht.Ratings(ratings),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(bootstrapNodes...),
 		dht.Network(warpNetwork),
@@ -151,6 +165,10 @@ func NewMemberNode(
 
 	opts = append(opts, node.CommonOptions...)
 
+	walletConfig := wallet.DefaultConfig(warpNetwork, os.Getenv("WARPNET_WALLET_BIN"))
+	walletClient := wallet.New(walletConfig)
+	walletRepo := database.NewWalletRepo(db)
+
 	mn := &MemberNode{
 		ctx:           ctx,
 		opts:          opts,
@@ -159,7 +177,9 @@ func NewMemberNode(
 		pubsubService: pubsubService,
 		dHashTable:    dHashTable,
 		nodeRepo:      nodeRepo,
+		ratings:       ratings,
 		statsRepo:     statsRepo,
+		ratingRepo:    ratingRepo,
 		userRepo:      userRepo,
 		followRepo:    followRepo,
 		aliasesRepo:   aliasesRepo,
@@ -167,6 +187,8 @@ func NewMemberNode(
 		notifier:      notifier,
 		db:            db,
 		privKey:       privKey,
+		walletClient:  walletClient,
+		walletRepo:    walletRepo,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 	}
@@ -177,6 +199,7 @@ func NewMemberNode(
 func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
+		m.ratings,
 		m.opts...,
 	)
 	if err != nil {
@@ -196,24 +219,45 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	crdtBroadcaster, err := crdt.NewGossipBroadcaster(m.ctx, m.pubsubService.Gossip())
+	crdtBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), statsstore.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.statsDb, err = crdt.NewCRDTStatsStore(
+	m.statsDb, err = statsstore.New(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo)
+	ratingBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), ratingstore.GossipTopic)
+	if err != nil {
+		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
+	}
+	m.ratingDb, err = ratingstore.New(
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to initialize rating store: %w", err)
+	}
+
+	m.rating, err = rating.NewEngine(
+		m.ctx, m.ratingDb, m.node.Node().Network(), m.privKey, warpnet.MemberNode,
+		rating.WithRatings(m.ratings),
+	)
+	if err != nil {
+		return fmt.Errorf("member: failed to start rating engine: %w", err)
+	}
+
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
 		m.mw.AuthMiddleware,
 		m.mw.IdempotencyMiddleware,
 	)
+
+	m.rating.Listen(m.node.Event(), m.mw.Event(), m.discService.Event())
 
 	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
 
@@ -414,6 +458,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
+	hs = append(hs, m.walletHandlers(authRepo)...)
 
 	m.node.SetStreamHandlers(hs...)
 }
@@ -436,6 +481,14 @@ func (m *MemberNode) adminHandlers(
 		{
 			event.PRIVATE_GET_STATS,
 			handler.StreamGetStatsHandler(m, db),
+		},
+		{
+			event.PRIVATE_GET_RATING,
+			handler.StreamGetOwnRatingHandler(m.rating),
+		},
+		{
+			event.PUBLIC_GET_RATING,
+			handler.StreamGetRatingHandler(m.rating),
 		},
 		{
 			event.PUBLIC_POST_MODERATION_RESULT,
@@ -643,6 +696,43 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 		{
 			event.PRIVATE_DELETE_FILTER_KEYWORD,
 			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
+		},
+	}
+}
+
+//nolint:govet
+func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
+	//nolint:govet
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_GET_WALLET,
+			handler.StreamGetWalletHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_ADDRESS,
+			handler.StreamGetOwnWalletAddressHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_HISTORY,
+			handler.StreamGetWalletHistoryHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_KEY,
+			handler.StreamGetWalletKeyHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_SEND,
+			handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_GET_WALLET_CONTACTS,
+			handler.StreamGetWalletContactsHandler(
+				authRepo, m.privKey, m.walletClient, m.walletRepo, m.followRepo, m.userRepo, m,
+			),
+		},
+		{
+			event.PUBLIC_GET_WALLET_ADDRESS,
+			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient),
 		},
 	}
 }
@@ -902,6 +992,9 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
+	if m.walletClient != nil {
+		m.walletClient.Close()
+	}
 	if m.discService != nil {
 		m.discService.Close()
 	}
@@ -915,6 +1008,12 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
+	}
+	if m.rating != nil {
+		_ = m.rating.Close()
+	}
+	if m.ratingDb != nil {
+		_ = m.ratingDb.Close()
 	}
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()
