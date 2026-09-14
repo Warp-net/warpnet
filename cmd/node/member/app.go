@@ -52,6 +52,7 @@ type AppStorer interface {
 type AppAuthServicer interface {
 	AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error)
 	AuthLogout()
+	Reset()
 	PrivateKey() ed25519.PrivateKey
 	Storage() auth.AuthPersistencyLayer
 }
@@ -191,64 +192,73 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.psk = psk
-	go a.runNode(network, psk)
+	go a.serveLogins(network, a.startMemberNode)
 }
 
-func (a *App) runNode(network string, psk security.PSK) {
-	var (
-		err                error
-		serverNodeAuthInfo domain.AuthNodeInfo
-	)
+// serveLogins answers the login handshake for as long as the app lives: logout
+// stops the node and closes the database, so the next login raises a new one.
+// startNode is a parameter so a test can stand in for libp2p.
+func (a *App) serveLogins(network string, startNode func() (NodeServer, error)) {
+	for {
+		select {
+		case <-a.ctx.Done():
+			log.Infoln("interrupted...")
+			return
+		case info, ok := <-a.readyChan: // wait DB auth
+			if !ok { // the app is closing
+				return
+			}
+			log.Infoln("database authentication passed")
 
-	// wait DB auth
-	select {
-	case <-a.ctx.Done():
-		log.Infoln("interrupted...")
-		return
-	case serverNodeAuthInfo = <-a.readyChan:
-		log.Infoln("database authentication passed")
+			node, err := startNode()
+			if err != nil {
+				log.Errorf("failed to start member node: %v \n", err)
+				continue
+			}
+
+			// attach only a node that really started: a dead one panics in Call
+			a.mx.Lock()
+			a.node = node
+			a.mx.Unlock()
+
+			// report to auth handler - Node set up and running
+			nodeInfo := node.NodeInfo()
+			info.ID = nodeInfo.ID.String()
+			info.Network = network
+			info.Addresses = nodeInfo.Addresses
+			info.BootstrapPeers = config.Config().Node.Bootstrap
+			a.readyChan <- info
+		}
 	}
+}
 
+func (a *App) startMemberNode() (NodeServer, error) {
 	ownNodeId, err := warpnet.IDFromPublicKey(a.auth.PrivateKey().Public().(ed25519.PublicKey))
 	if err != nil {
-		log.Fatalf("failed to get current node ID: %v", err)
+		return nil, fmt.Errorf("current node ID: %w", err)
 	}
 
 	infos, err := config.Config().Node.AddrInfos()
 	if err != nil {
-		log.Fatalf("failed to get bootstrap nodes infos: %v", err)
+		return nil, fmt.Errorf("bootstrap nodes infos: %w", err)
 	}
 
 	node, err := member.NewMemberNode(
 		a.ctx,
 		a.auth.PrivateKey(),
-		psk,
+		a.psk,
 		ownNodeId,
 		a.auth.Storage(),
 		a.db,
 		infos,
 	)
 	if err != nil {
-		log.Errorf("failed to init node: %v \n", err)
-		return
+		return nil, err
 	}
-
-	if err = node.Start(); err != nil {
-		log.Errorf("failed to start member node: %v \n", err)
-		return
+	if err := node.Start(); err != nil {
+		return nil, err
 	}
-
-	// attach only a node that really started: a dead one panics in Call
-	a.mx.Lock()
-	a.node = node
-	a.mx.Unlock()
-
-	// report to auth handler - Node set up and running
-	serverNodeAuthInfo.ID = ownNodeId.String()
-	serverNodeAuthInfo.Network = network
-	serverNodeAuthInfo.Addresses = node.NodeInfo().Addresses
-	serverNodeAuthInfo.BootstrapPeers = config.Config().Node.Bootstrap
-	a.readyChan <- serverNodeAuthInfo
+	return node, nil
 }
 
 type AppMessage struct {
@@ -316,10 +326,15 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		if a.node != nil {
-			a.node.Stop() // close node first
+		a.mx.Lock()
+		node := a.node
+		a.node = nil
+		a.mx.Unlock()
+		if node != nil {
+			node.Stop() // close node first
 		}
-		a.auth.AuthLogout()
+		a.auth.AuthLogout() // closes the database
+		a.auth.Reset()      // the next login raises a new node
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	default:

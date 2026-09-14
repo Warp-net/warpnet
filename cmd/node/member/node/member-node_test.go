@@ -74,6 +74,13 @@ func newTestMemberNode(t *testing.T) (*MemberNode, *local_store.DB, *database.Au
 	_, err := authRepo.SetOwner(domain.Owner{UserId: "owner-1", Username: "owner"})
 	require.NoError(t, err)
 
+	return newMemberNodeOn(t, db, authRepo), db, authRepo
+}
+
+// newMemberNodeOn raises a node over a store that is already unlocked.
+func newMemberNodeOn(t *testing.T, db *local_store.DB, authRepo *database.AuthRepo) *MemberNode {
+	t.Helper()
+
 	privKey, ownNodeId := testKeyAndID(t)
 	psk, err := security.GeneratePSK("testnet", semver.MustParse("0.0.0"))
 	require.NoError(t, err)
@@ -82,7 +89,7 @@ func newTestMemberNode(t *testing.T) (*MemberNode, *local_store.DB, *database.Au
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	t.Cleanup(m.Stop)
-	return m, db, authRepo
+	return m
 }
 
 func TestNewMemberNodeRequiresPrivateKey(t *testing.T) {
@@ -334,6 +341,28 @@ func TestStartBringsUpTheNode(t *testing.T) {
 	// a stream to an unknown peer fails rather than hanging
 	_, err := m.GenericStream(otherID.String(), "/public/get/info", nil)
 	require.Error(t, err)
+}
+
+// TestASecondNodeCanBeRaisedAfterAStop walks the desktop logout/login cycle:
+// the node goes down and the database closes, then the store reopens and a
+// fresh node comes up in the same process. Like TestStartBringsUpTheNode it
+// binds the configured port, so it skips when something else holds it - but
+// once the first node is up, the second one failing is the bug.
+func TestASecondNodeCanBeRaisedAfterAStop(t *testing.T) {
+	first, db, authRepo := newTestMemberNode(t)
+	if err := first.Start(); err != nil {
+		t.Skipf("cannot bind the configured node port: %v", err)
+	}
+
+	first.Stop() // logout
+	db.Close()
+
+	require.NoError(t, db.Run("test", "test")) // login again
+	require.NoError(t, authRepo.Authenticate("test", "test"))
+
+	second := newMemberNodeOn(t, db, authRepo)
+	require.NoError(t, second.Start(), "signing in again must raise a node in the same process")
+	require.NotEmpty(t, second.NodeInfo().Addresses)
 }
 
 // The desktop app stops the node twice: logout (PRIVATE_POST_LOGOUT) stops it,
