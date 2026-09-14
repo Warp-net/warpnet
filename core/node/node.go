@@ -419,7 +419,9 @@ func (n *WarpNode) tagPeer(peerID warpnet.WarpPeerID) {
 	if n == nil || n.ratings == nil || n.prioritizer == nil || peerID == "" {
 		return
 	}
-	n.prioritizer.SetRatingPriority(peerID, n.ratings.ConnTag(peerID))
+	tag := n.ratings.ConnTag(peerID)
+	log.Debugf("node: rating makes peer %s worth %d to the connection manager", peerID, tag)
+	n.prioritizer.SetRatingPriority(peerID, tag)
 }
 
 // Event is what this node saw its peers do. The channel is never closed.

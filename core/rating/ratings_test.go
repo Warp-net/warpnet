@@ -153,6 +153,24 @@ func TestARecoveredRatingIsRecorded(t *testing.T) {
 	assert.True(t, recorded[1].tier.IsAllowedInDHT())
 }
 
+// What the network wrote about this node is replicated to it like any
+// other record, and it is still not a rating this node acts on.
+func TestANodeNeverRatesItself(t *testing.T) {
+	self := newIdentity(t)
+	observer := newIdentity(t)
+	clock := newClock()
+	ratings := &recordingRatings{}
+	store := newFakeStore(self.id)
+	e := newRatingEngine(t, self, store, clock, ratings)
+
+	store.merge(signedRecord(
+		observer, self.id, Network, bucketAt(clock.Now()), genA, kindCount{KindBadSignature, 2},
+	))
+	require.NoError(t, e.ratePeers())
+
+	assert.Empty(t, ratings.recorded(), "a node holds no rating of itself")
+}
+
 func TestAnEngineWithNowhereToRecordDoesNothing(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)

@@ -128,7 +128,11 @@ func (d *distributedHashTable) isPeerAllowed(peerID warpnet.WarpPeerID) bool {
 	if d == nil || d.cfg.ratings == nil {
 		return true
 	}
-	return d.cfg.ratings.IsAllowedInDHT(peerID)
+	if !d.cfg.ratings.IsAllowedInDHT(peerID) {
+		log.Infof("dht: rating keeps peer %s out of the routing table", peerID)
+		return false
+	}
+	return true
 }
 
 func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPeerRouting, err error) {

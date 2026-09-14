@@ -136,7 +136,14 @@ func (p *WarpMiddleware) bucket(
 	}
 	// A peer whose standing moved does not keep the bucket it filled
 	// under the old one.
-	b := newRateLimiter(limitForRoute(route, remotePeer).multipliedBy(multiplier), multiplier)
+	limit := limitForRoute(route, remotePeer).multipliedBy(multiplier)
+	if multiplier < 1 {
+		log.Infof(
+			"middleware: rate limiter: rating leaves %s %d calls per minute on %s",
+			remotePeer, limit.perMinute, route,
+		)
+	}
+	b := newRateLimiter(limit, multiplier)
 	p.rateLimiters.Add(key, b)
 	return b
 }

@@ -237,6 +237,11 @@ func NewEngine(
 	store.OnPut(e.onPut)
 	store.OnDelete(e.onDelete)
 
+	log.Infof(
+		"rating: engine started: witnessing %v, rating peers every %s",
+		e.dims, e.flushInterval,
+	)
+
 	go e.run()
 	return e, nil
 }
@@ -590,6 +595,9 @@ func (e *Engine) ratePeers() error {
 
 	var errs []error
 	for _, p := range e.index.rated() {
+		if p.peerID == e.self {
+			continue // what others wrote about this node is not ours to act on
+		}
 		peerID := warpnet.FromStringToPeerID(p.peerID)
 		if peerID == "" {
 			errs = append(errs, fmt.Errorf("%w: %s", ErrEmptyPeer, p.peerID))
@@ -599,9 +607,11 @@ func (e *Engine) ratePeers() error {
 		if len(entries) == 0 {
 			continue // nothing has ever been said about this peer
 		}
-		tier := e.Score(peerID).Tier()
+		score := e.Score(peerID)
+		tier := score.Tier()
 		if p.tierMoved(tier) {
 			e.ratings.Rate(peerID, tier)
+			log.Infof("rating: peer %s is %s now, score %d of %d", peerID, tier, score, MaxScore)
 		}
 	}
 	return errors.Join(errs...)
@@ -637,6 +647,8 @@ func (e *Engine) record(peerID warpnet.WarpPeerID, kind Kind) error {
 	c[kind]++
 	e.dirty[key] = struct{}{}
 	e.mu.Unlock()
+
+	log.Debugf("rating: charging %s with %s", id, kind)
 	return nil
 }
 
