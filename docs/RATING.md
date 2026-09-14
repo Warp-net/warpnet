@@ -582,8 +582,8 @@ func (r *PeersRatings) GossipScore(peerID warpnet.WarpPeerID) float64
 func (r *PeersRatings) RateMultiplier(peerID warpnet.WarpPeerID) float64
 func (r *PeersRatings) IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
 
-type RatingsCollector interface{ Rate(peerID warpnet.WarpPeerID, tier Tier) }
-func WithRatings(ratings RatingsCollector) Option   // the whole wiring
+type Rater interface{ Rate(peerID warpnet.WarpPeerID, tier Tier) }
+func WithRatings(ratings Rater) Option   // the whole wiring
 ```
 
 Each module declares a `PeersRatings` of its own, with the one method it

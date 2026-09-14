@@ -237,7 +237,7 @@ func newMemberEngine(t *testing.T, self identity, store Storer, clock *fixedCloc
 
 // newRatingEngine is a member engine that records how it rates its peers.
 func newRatingEngine(
-	t *testing.T, self identity, store Storer, clock *fixedClock, ratings RatingsCollector,
+	t *testing.T, self identity, store Storer, clock *fixedClock, ratings Rater,
 ) *Engine {
 	t.Helper()
 	return newTestEngine(t, self, store, clock, warpnet.MemberNode, WithRatings(ratings))

@@ -86,9 +86,9 @@ const (
 	ErrPrivateKeyRequired = ratingError("private key is required")
 )
 
-// RatingsCollector is where the engine records how it rates a peer, for
-// the modules that act on it to read.
-type RatingsCollector interface {
+// Rater is where the engine rates a peer, for the modules that act
+// on it to read; PeersRatings satisfies it.
+type Rater interface {
 	Rate(peerID warpnet.WarpPeerID, tier Tier)
 }
 
@@ -121,7 +121,7 @@ func WithClock(now func() time.Time) Option {
 
 // WithRatings is where the engine records how it rates a peer. Without
 // it a node observes and replicates, and acts on nothing.
-func WithRatings(ratings RatingsCollector) Option {
+func WithRatings(ratings Rater) Option {
 	return func(e *Engine) {
 		e.ratings = ratings
 	}
@@ -166,7 +166,7 @@ type Engine struct {
 
 	listeners sync.WaitGroup
 
-	ratings RatingsCollector
+	ratings Rater
 
 	mu       sync.Mutex
 	counters map[pendingKey]counts
