@@ -10,3 +10,9 @@ docs/** linguist-detectable=false
 *.kt linguist-detectable=false
 Makefile linguist-detectable=false
 CMakeLists.txt linguist-detectable=false
+
+vendor/** linguist-generated=true
+*_test.go linguist-generated=true
+frontend/tests/** linguist-generated=true
+**/src/test/** linguist-generated=true
+**/src/androidTest/** linguist-generated=true
