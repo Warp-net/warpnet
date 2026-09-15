@@ -332,6 +332,14 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 	return bi
 }
 
+func (m *MemberNode) Event() <-chan warpnet.PeerEvent {
+	if m.events == nil {
+		m.events = warpnet.NewPeerEmitter()
+		return m.events
+	}
+	return m.events
+}
+
 func (m *MemberNode) SetNodePriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability) {
 	m.node.Prioritizer().SetPriority(pid, r)
 }
