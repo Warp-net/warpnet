@@ -54,7 +54,7 @@ resulting from the use or misuse of this software.
   </nav>
 
   <nav
-    class="w-1/6 md:w-1/12 xl:w-1/6 border-r border-lighter lg:px-6 py-2 flex-col justify-between hidden sm:flex"
+    class="w-1/6 md:w-1/12 xl:w-1/4 2xl:w-1/5 shrink-0 overflow-hidden border-r border-lighter lg:px-6 py-2 flex-col justify-between hidden sm:flex"
     role="navigation"
     aria-label="Main navigation"
   >
@@ -70,7 +70,7 @@ resulting from the use or misuse of this software.
         <button
           @click="open('Home')"
           :class="{ 'nav-active': $route.name === 'Home' }"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Home"
         >
           <i
@@ -79,7 +79,7 @@ resulting from the use or misuse of this software.
             aria-hidden="true"
           ></i>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name === 'Home' ? 'font-bold' : ''"
           >
             Home
@@ -88,7 +88,7 @@ resulting from the use or misuse of this software.
         <button
           @click="open('Notifications')"
           :class="{ 'nav-active': $route.name === 'Notifications' }"
-          class="relative hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="relative max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Notifications"
         >
           <i
@@ -106,7 +106,7 @@ resulting from the use or misuse of this software.
             </div>
           </span>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name === 'Notifications' ? 'font-bold' : ''"
           >
             Notifications
@@ -115,7 +115,7 @@ resulting from the use or misuse of this software.
         <button
           @click="open('Chats')"
           :class="{ 'nav-active': $route.name === 'Chats' || $route.name === 'Messages' }"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Messages"
         >
           <i
@@ -131,7 +131,7 @@ resulting from the use or misuse of this software.
             </div>
           </span>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name === 'Chats' ? 'font-bold' : ''"
           >
             Messages
@@ -140,7 +140,7 @@ resulting from the use or misuse of this software.
         <button
           @click="$router.push({ name: 'Bookmarks' })"
           :class="{ 'nav-active': $route.name === 'Bookmarks' }"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Bookmarks"
         >
           <i
@@ -149,7 +149,7 @@ resulting from the use or misuse of this software.
             aria-hidden="true"
           ></i>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name === 'Bookmarks' ? 'font-bold' : ''"
           >
             Bookmarks
@@ -159,7 +159,7 @@ resulting from the use or misuse of this software.
           v-if="profile.network === 'testnet'"
           @click="$router.push({ name: 'Wallet' })"
           :class="{ 'nav-active': $route.name === 'Wallet' }"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Wallet"
         >
           <i
@@ -176,7 +176,7 @@ resulting from the use or misuse of this software.
             </div>
           </span>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name === 'Wallet' ? 'font-bold' : ''"
           >
             Wallet
@@ -185,7 +185,7 @@ resulting from the use or misuse of this software.
         <button
           @click="open('Profile')"
           :class="{ 'nav-active': $route.name === 'Profile' }"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Profile"
         >
           <i
@@ -194,7 +194,7 @@ resulting from the use or misuse of this software.
             aria-hidden="true"
           ></i>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name === 'Profile' ? 'font-bold' : ''"
           >
             Profile
@@ -203,7 +203,7 @@ resulting from the use or misuse of this software.
         <button
           @click="$router.push({ name: 'Settings' })"
           :class="{ 'nav-active': $route.name && $route.name.startsWith('Settings') }"
-          class="hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
+          class="max-w-full hover:text-blue flex items-center px-4 py-2 hover:bg-transparent md:hover:bg-lightblue rounded-full mr-auto mb-1"
           aria-label="Settings"
         >
           <i
@@ -212,7 +212,7 @@ resulting from the use or misuse of this software.
             aria-hidden="true"
           ></i>
           <p
-            class="text-lg ml-4 text-left hidden xl:block"
+            class="text-lg ml-4 text-left truncate hidden xl:block"
             :class="$route.name && $route.name.startsWith('Settings') ? 'font-bold' : ''"
           >
             Settings

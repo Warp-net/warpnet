@@ -102,7 +102,9 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		users stubModerationUserUpdater,
 		timeline stubModerationTimelineDeleter,
 	) func([]byte, interface{}) (any, error) {
-		h := StreamModerationResultHandler(notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}})
+		h := StreamModerationResultHandler(
+			notifier, tweets, users, timeline, stubAuth{owner: domain.Owner{UserId: owner}}, nil,
+		)
 		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
 	}
 
@@ -203,6 +205,63 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		_, err := h(marshal(t, ev), nil)
 		if !errors.Is(err, ErrBadModeratorSignature) {
 			t.Fatalf("expected ErrBadModeratorSignature, got: %v", err)
+		}
+	})
+
+	// A verdict is the moderator's own words only once its signature
+	// verifies; what it says after that is its own to answer for.
+	t.Run("a signed verdict that names nothing charges the moderator", func(t *testing.T) {
+		events := warpnet.NewPeerEmitter()
+		_, moderatorId := moderatorTestKey(t, "moderation-handler-test")
+		h := StreamModerationResultHandler(
+			stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{}, stubAuth{owner: domain.Owner{UserId: owner}}, events,
+		)
+
+		_, err := h(signedResult(t, event.ModerationVerdictEvent{
+			Type: domain.ModerationTweetType, UserID: owner,
+		}), s{})
+		if !errors.Is(err, ErrNoObjectID) {
+			t.Fatalf("expected ErrNoObjectID, got: %v", err)
+		}
+
+		select {
+		case ev := <-events:
+			if ev.PeerID != moderatorId {
+				t.Fatalf("charged %s, want the moderator that signed it %s", ev.PeerID, moderatorId)
+			}
+			if ev.Type != warpnet.PeerVerdictMalformed {
+				t.Fatalf("charged %s, want %s", ev.Type, warpnet.PeerVerdictMalformed)
+			}
+		default:
+			t.Fatal("a malformed verdict must cost its moderator something")
+		}
+	})
+
+	// Before the signature verifies the named moderator may have had no
+	// part in the verdict, so charging it is how anyone could frame one.
+	t.Run("a forged verdict charges nobody", func(t *testing.T) {
+		events := warpnet.NewPeerEmitter()
+		impostor, err := security.GenerateKeyFromSeed([]byte("impostor"))
+		if err != nil {
+			t.Fatalf("generate key: %v", err)
+		}
+		_, moderatorId := moderatorTestKey(t, "moderation-handler-test")
+		h := StreamModerationResultHandler(
+			stubModerationNotifier{}, stubModerationTweetUpdater{}, stubModerationUserUpdater{},
+			stubModerationTimelineDeleter{}, stubAuth{owner: domain.Owner{UserId: owner}}, events,
+		)
+
+		ev := event.ModerationVerdictEvent{Type: domain.ModerationTweetType, UserID: owner}
+		ev.ModeratorID = moderatorId
+		if _, err := h(marshal(t, ev.Signed(impostor)), s{}); !errors.Is(err, ErrBadModeratorSignature) {
+			t.Fatalf("expected ErrBadModeratorSignature, got: %v", err)
+		}
+
+		select {
+		case charged := <-events:
+			t.Fatalf("a forged verdict charged %s", charged.PeerID)
+		default:
 		}
 	})
 

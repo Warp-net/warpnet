@@ -24,11 +24,12 @@ object WarpnetTransport {
     )
 
     /**
-     * Build an [Ed25519IdentityStore]. The identity is derived deterministically
-     * from [android.os.Build] info plus the paired member node's peer ID, so
-     * the store needs no persistence handle.
+     * Build an [Ed25519IdentityStore] over the app's seed storage. The
+     * identity is random per pairing, so it only exists as long as [seeds]
+     * keeps it.
      */
-    fun createIdentityStore(): Ed25519IdentityStore = Ed25519IdentityStore()
+    fun createIdentityStore(seeds: IdentitySeedStore): Ed25519IdentityStore =
+        Ed25519IdentityStore(seeds)
 
     /**
      * Build the connection monitor that polls the live link state and

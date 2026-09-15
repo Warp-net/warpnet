@@ -29,6 +29,16 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 )
 
+const (
+	// readIdleTimeout is how long the paired node may stay silent
+	// mid-response before the request is given up on.
+	readIdleTimeout = 30 * time.Second
+
+	// maxResponseSize caps a single response. The largest legitimate one
+	// is a 36 MiB video, which arrives base64-encoded.
+	maxResponseSize = 64 << 20
+)
+
 type clientNode struct {
 	host          host.Host
 	ctx           context.Context
@@ -333,15 +343,47 @@ func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("stream: writing: %w", err)
 	}
 
-	buf := bytes.NewBuffer(nil)
-	_, err = buf.ReadFrom(rw)
-	if err != nil && !errors.Is(err, io.EOF) {
+	resp, err := readResponse(rw, stream)
+	if err != nil {
 		return nil, fmt.Errorf(
 			"stream: reading response from %s: %w", desktopPeerID.String(), err,
 		)
 	}
 
-	return buf.Bytes(), nil
+	return resp, nil
+}
+
+type readDeadliner interface {
+	SetReadDeadline(time.Time) error
+}
+
+// readResponse reads the whole response, bounded both ways: the peer gets
+// readIdleTimeout to produce the next bytes, and maxResponseSize in total.
+// A video comes back base64-encoded inside JSON, which is what sets the
+// size ceiling.
+func readResponse(rw io.Reader, s readDeadliner) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	chunk := make([]byte, 32<<10)
+
+	for {
+		if err := s.SetReadDeadline(time.Now().Add(readIdleTimeout)); err != nil {
+			return nil, err
+		}
+
+		n, err := rw.Read(chunk)
+		if n > 0 {
+			if buf.Len()+n > maxResponseSize {
+				return nil, fmt.Errorf("response exceeds %d bytes", maxResponseSize)
+			}
+			buf.Write(chunk[:n])
+		}
+		if errors.Is(err, io.EOF) {
+			return buf.Bytes(), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 }
 
 func flush(rw *bufio.ReadWriter) {

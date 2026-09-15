@@ -170,6 +170,7 @@ type UserProvider interface {
 type AliasesProvider interface {
 	GetAliases() (aliases []domain.Alias, err error)
 	SetAlias(alias domain.Alias) error
+	DeleteAlias(nodeId string) error
 	GetNodeIDs() (ids []string, err error)
 }
 

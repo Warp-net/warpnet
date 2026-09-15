@@ -28,7 +28,7 @@ func newPSKHex() string {
 }
 
 func TestInitializeRejectsInvalidPrivKey(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	result := Initialize("not-hex!", "testnet", newPSKHex(), "addr")
 	if result == "" || !strings.Contains(result, "invalid PK") {
@@ -37,7 +37,7 @@ func TestInitializeRejectsInvalidPrivKey(t *testing.T) {
 }
 
 func TestInitializeRejectsInvalidPSK(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	result := Initialize(newKeyHex(t), "testnet", "not-hex!", "addr")
 	if result == "" || !strings.Contains(result, "invalid PSK") {
@@ -48,8 +48,8 @@ func TestInitializeRejectsInvalidPSK(t *testing.T) {
 func TestInitializeRejectsWhenAlreadyInitialized(t *testing.T) {
 	// Simulate an already-initialized client so we hit the guard without
 	// needing a live network.
-	clientInstance = &clientNode{}
-	defer func() { clientInstance = nil }()
+	clientInstance.Store(&clientNode{})
+	defer clientInstance.Store(nil)
 
 	result := Initialize(newKeyHex(t), "testnet", newPSKHex(), "addr")
 	if result != "already initialized" {
@@ -58,7 +58,7 @@ func TestInitializeRejectsWhenAlreadyInitialized(t *testing.T) {
 }
 
 func TestConnectFailsWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	result := Connect("/ip4/127.0.0.1/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 	if result != "client not initialized" {
@@ -67,7 +67,7 @@ func TestConnectFailsWhenNotInitialized(t *testing.T) {
 }
 
 func TestStreamFailsWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	result := Stream("/test/protocol", "{}")
 	if result != "client not initialized" {
@@ -76,7 +76,7 @@ func TestStreamFailsWhenNotInitialized(t *testing.T) {
 }
 
 func TestPeerIDEmptyWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	if got := PeerID(); got != "" {
 		t.Fatalf("expected empty peer id, got: %q", got)
@@ -84,7 +84,7 @@ func TestPeerIDEmptyWhenNotInitialized(t *testing.T) {
 }
 
 func TestIsConnectedFalseWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	if got := IsConnected(); got != "false" {
 		t.Fatalf("expected \"false\", got: %q", got)
@@ -92,7 +92,7 @@ func TestIsConnectedFalseWhenNotInitialized(t *testing.T) {
 }
 
 func TestDisconnectNoopWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	if got := Disconnect(); got != "" {
 		t.Fatalf("expected empty disconnect result, got: %q", got)
@@ -100,7 +100,7 @@ func TestDisconnectNoopWhenNotInitialized(t *testing.T) {
 }
 
 func TestShutdownNoopWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	if got := Shutdown(); got != "" {
 		t.Fatalf("expected empty shutdown result, got: %q", got)
@@ -108,7 +108,7 @@ func TestShutdownNoopWhenNotInitialized(t *testing.T) {
 }
 
 func TestPauseResumeNoopWhenNotInitialized(t *testing.T) {
-	clientInstance = nil
+	clientInstance.Store(nil)
 
 	// Must not panic when there's nothing to pause/resume.
 	Pause()

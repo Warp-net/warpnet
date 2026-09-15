@@ -34,7 +34,12 @@ sealed class PairingOutcome {
 
 internal fun WarpnetException.ProtocolError.isDurablePairRejection(): Boolean =
     serverMessage.contains("token mismatch", ignoreCase = true) ||
-        serverMessage.contains("empty token", ignoreCase = true)
+        serverMessage.contains("empty token", ignoreCase = true) ||
+        // The node owner unpaired this device, or it already has as many
+        // devices as it accepts. Retrying cannot help in either case — the
+        // owner has to act in the node's Settings first.
+        serverMessage.contains("pairing revoked", ignoreCase = true) ||
+        serverMessage.contains("too many aliases", ignoreCase = true)
 
 @Singleton
 class PairingCoordinator @Inject constructor(
@@ -51,12 +56,16 @@ class PairingCoordinator @Inject constructor(
         val candidates = paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
         val bootstrap = paired.bootstrapAddrs.ifEmpty { candidates }
 
+        // Reading the identity seed touches the Keystore-backed store and
+        // expanding it costs real CPU, neither of which belongs on the main
+        // thread this runs on. Pairing with a different node draws its own
+        // identity; the same node keeps the one it already authorized.
+        val privKeyHex = withContext(Dispatchers.IO) {
+            identityStore.deriveHex(paired.pinnedPeerId)
+        }
+
         val config = WarpnetConfig(
-            // Derive the libp2p identity from android.os.Build info plus the
-            // pinned member peer ID, so the same device always pairs to the
-            // same fat node with the same key, and re-pairing against a
-            // different node rotates the identity.
-            privKeyHex = identityStore.deriveHex(paired.pinnedPeerId),
+            privKeyHex = privKeyHex,
             pskHex = paired.psk,
             bootstrapAddrs = bootstrap,
             desktopPeerAddr = candidates.first(),

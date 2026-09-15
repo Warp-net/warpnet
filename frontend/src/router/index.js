@@ -173,6 +173,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/devices",
+    name: "SettingsDevices",
+    component: () =>
+      import(/* webpackChunkName: "settings-devices" */ "../views/Settings/Devices.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/settings/blocks",
     name: "SettingsBlocks",
     component: () =>

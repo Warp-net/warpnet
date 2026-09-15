@@ -30,6 +30,8 @@ package event
 const (
 	// admin
 	PRIVATE_POST_PAIR          = "/private/post/admin/pair/0.0.0"
+	PRIVATE_GET_DEVICES        = "/private/get/admin/devices/0.0.0"
+	PRIVATE_DELETE_DEVICE      = "/private/delete/admin/device/0.0.0"
 	PUBLIC_POST_NODE_CHALLENGE = "/public/post/admin/challenge/0.0.0"
 	PRIVATE_GET_STATS          = "/private/get/admin/stats/0.0.0"
 	PRIVATE_GET_RATING         = "/private/get/admin/rating/0.0.0"
