@@ -80,6 +80,16 @@ type DeleteChatEvent struct {
 	ChatId domain.ID `json:"chat_id"`
 }
 
+// DeleteDeviceEvent defines model for DeleteDeviceEvent.
+type DeleteDeviceEvent struct {
+	NodeId domain.ID `json:"node_id"`
+}
+
+// GetDevicesResponse defines model for GetDevicesResponse.
+type GetDevicesResponse struct {
+	Devices []domain.Alias `json:"devices"`
+}
+
 // DeleteMessageEvent defines model for DeleteMessageEvent.
 type DeleteMessageEvent = GetMessageEvent
 

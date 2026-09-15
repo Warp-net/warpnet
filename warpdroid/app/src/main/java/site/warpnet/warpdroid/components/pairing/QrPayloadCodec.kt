@@ -6,6 +6,8 @@
 package site.warpnet.warpdroid.components.pairing
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.zip.GZIPInputStream
 
 /**
@@ -33,9 +35,30 @@ object QrPayloadCodec {
         if (trimmed.startsWith("{")) return trimmed
         val compressed = Base45.decode(trimmed)
         GZIPInputStream(ByteArrayInputStream(compressed)).use { input ->
-            return String(input.readBytes(), Charsets.UTF_8)
+            return String(input.readCapped(MAX_DECODED_BYTES), Charsets.UTF_8)
         }
     }
+
+    /**
+     * A pairing envelope is a few kilobytes of JSON, while a crafted
+     * payload can inflate without bound, so decompression stops at
+     * [MAX_DECODED_BYTES]. The caller reads the failure as a malformed
+     * payload.
+     */
+    private fun InputStream.readCapped(max: Int): ByteArray {
+        val decoded = ByteArrayOutputStream()
+        val chunk = ByteArray(CHUNK_BYTES)
+        while (true) {
+            val read = read(chunk)
+            if (read < 0) break
+            require(decoded.size() + read <= max) { "pairing payload over $max bytes" }
+            decoded.write(chunk, 0, read)
+        }
+        return decoded.toByteArray()
+    }
+
+    private const val MAX_DECODED_BYTES = 64 * 1024
+    private const val CHUNK_BYTES = 4096
 }
 
 /**

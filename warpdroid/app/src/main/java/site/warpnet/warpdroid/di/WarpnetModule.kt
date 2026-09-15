@@ -68,8 +68,9 @@ object WarpnetModule {
 
     @Provides
     @Singleton
-    fun providesWarpnetIdentityStore(): Ed25519IdentityStore =
-        WarpnetTransport.createIdentityStore()
+    fun providesWarpnetIdentityStore(
+        pairedNodeStore: PairedNodeStore,
+    ): Ed25519IdentityStore = WarpnetTransport.createIdentityStore(pairedNodeStore)
 
     @Provides
     @Singleton

@@ -6,7 +6,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 )
@@ -88,5 +90,36 @@ func TestClientNodeSign_NoKey(t *testing.T) {
 	cn := &clientNode{}
 	if _, err := cn.sign([]byte("body")); err == nil {
 		t.Fatal("expected error when private key not set")
+	}
+}
+
+type stubDeadliner struct{ deadlines int }
+
+func (s *stubDeadliner) SetReadDeadline(time.Time) error {
+	s.deadlines++
+	return nil
+}
+
+func TestReadResponse_ReadsWholeBody(t *testing.T) {
+	deadliner := &stubDeadliner{}
+
+	got, err := readResponse(strings.NewReader(`{"ok":true}`), deadliner)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if string(got) != `{"ok":true}` {
+		t.Fatalf("unexpected response: %q", got)
+	}
+	if deadliner.deadlines == 0 {
+		t.Fatal("expected a read deadline to be set")
+	}
+}
+
+func TestReadResponse_StopsAtMaxSize(t *testing.T) {
+	oversized := strings.NewReader(strings.Repeat("a", maxResponseSize+1))
+
+	_, err := readResponse(oversized, &stubDeadliner{})
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected an oversize error, got: %v", err)
 	}
 }

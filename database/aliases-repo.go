@@ -38,12 +38,26 @@ import (
 
 const (
 	AliasesRepoName = "/ALIASES"
+
+	// MaxAliases is how many devices may stay paired to a node at once.
+	MaxAliases = 10
+
+	// aliasScanLimit bounds the scan that folds stale records away:
+	// devices used to be stored under a random ULID, which gave one
+	// device a record per pair refresh.
+	aliasScanLimit = 100
+
+	aliasTTL = time.Hour * 72
 )
 
-var ErrNilAliasesRepo = local_store.DBError("aliases repo is nil")
+var (
+	ErrNilAliasesRepo = local_store.DBError("aliases repo is nil")
+	ErrTooManyAliases = local_store.DBError("too many aliases")
+	ErrAliasNotFound  = local_store.DBError("alias not found")
+	ErrAliasRevoked   = local_store.DBError("pairing revoked")
+)
 
 type AliasesStorer interface {
-	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
@@ -60,33 +74,37 @@ func (repo *AliasesRepo) GetAliases() (aliases []domain.Alias, err error) {
 		return nil, ErrNilAliasesRepo
 	}
 
-	aliassPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
+	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
 		AddRootID("None").
 		AddRange(local_store.NoneRangeKey).
 		Build()
 
-	tx, err := repo.db.NewTxn()
+	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return aliases, err
 	}
-	defer tx.Rollback()
+	defer txn.Rollback()
 
-	limit := uint64(10)
-	items, _, err := tx.List(aliassPrefix, &limit, nil)
+	limit := uint64(aliasScanLimit)
+	items, _, err := txn.List(aliasesPrefix, &limit, nil)
 	if err != nil {
 		return aliases, err
 	}
-	if len(items) == 0 {
-		return aliases, nil
-	}
 
+	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
-		var a domain.Alias
-		err = json.Unmarshal(item.Value, &a)
-		if err != nil {
+		var alias domain.Alias
+		if err := json.Unmarshal(item.Value, &alias); err != nil {
 			return aliases, err
 		}
-		aliases = append(aliases, a)
+		if alias.IsRevoked() {
+			continue
+		}
+		if _, ok := seen[alias.NodeId]; ok {
+			continue
+		}
+		seen[alias.NodeId] = struct{}{}
+		aliases = append(aliases, alias)
 	}
 	return aliases, nil
 }
@@ -102,9 +120,86 @@ func (repo *AliasesRepo) GetNodeIDs() (ids []string, err error) {
 	return ids, nil
 }
 
+// SetAlias pairs a device or refreshes the one already paired under the
+// same node id. A device owns a single record, so a pair refresh renews
+// its TTL instead of claiming another slot.
 func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	if repo.db == nil {
 		return ErrNilAliasesRepo
+	}
+	if alias.NodeId == "" {
+		return local_store.DBError("empty alias node id")
+	}
+
+	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
+		AddRange(local_store.NoneRangeKey).
+		Build()
+	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(alias.NodeId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	limit := uint64(aliasScanLimit)
+	items, _, err := txn.List(aliasesPrefix, &limit, nil)
+	if err != nil {
+		return err
+	}
+
+	var (
+		others   = make(map[string]struct{}, len(items))
+		previous domain.Alias
+		isPaired bool
+	)
+
+	for _, item := range items {
+		var stored domain.Alias
+		if err := json.Unmarshal(item.Value, &stored); err != nil {
+			return err
+		}
+		if stored.NodeId != alias.NodeId {
+			if !stored.IsRevoked() {
+				others[stored.NodeId] = struct{}{}
+			}
+			continue
+		}
+		if stored.IsRevoked() {
+			// The owner unpaired this device while it still held a
+			// working pairing payload, so the payload itself no longer
+			// counts. Only one the owner has shown since — carrying a
+			// session token this node did not issue before — pairs it
+			// back.
+			if stored.Token == alias.Token {
+				return ErrAliasRevoked
+			}
+			continue
+		}
+		if !isPaired {
+			previous, isPaired = stored, true
+		}
+		// Devices used to be stored under a random ULID, which gave one
+		// device a record per pair refresh. Fold those away.
+		if local_store.DatabaseKey(item.Key) == aliasKey {
+			continue
+		}
+		if err := txn.Delete(local_store.DatabaseKey(item.Key)); err != nil {
+			return err
+		}
+	}
+
+	if !isPaired && len(others) >= MaxAliases {
+		return ErrTooManyAliases
+	}
+	if isPaired {
+		alias.ID = previous.ID
+		alias.CreatedAt = previous.CreatedAt
 	}
 	if alias.ID == "" {
 		alias.ID = ulid.Make().String()
@@ -112,16 +207,87 @@ func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	if alias.CreatedAt.IsZero() {
 		alias.CreatedAt = time.Now()
 	}
-	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
-		AddRootID("None").
-		AddRange(local_store.NoneRangeKey).
-		AddParentId(alias.ID).
-		Build()
+	alias.LastActive = time.Now()
 
 	data, err := json.Marshal(alias)
 	if err != nil {
 		return err
 	}
+	if err := txn.SetWithTTL(aliasKey, data, aliasTTL); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
 
-	return repo.db.SetWithTTL(aliasKey, data, time.Hour*72)
+// DeleteAlias unpairs a device. Authorization ends with the record — the
+// middleware reads the alias set on every private request — but the device
+// keeps a usable pairing payload and re-pairs on its own schedule, so the
+// record is kept as revoked for the rest of its TTL instead of being
+// dropped outright.
+func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
+	if repo.db == nil {
+		return ErrNilAliasesRepo
+	}
+	if nodeId == "" {
+		return local_store.DBError("empty alias node id")
+	}
+
+	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
+		AddRange(local_store.NoneRangeKey).
+		Build()
+	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(nodeId).
+		Build()
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	limit := uint64(aliasScanLimit)
+	items, _, err := txn.List(aliasesPrefix, &limit, nil)
+	if err != nil {
+		return err
+	}
+
+	var (
+		revoked  domain.Alias
+		isPaired bool
+	)
+
+	for _, item := range items {
+		var stored domain.Alias
+		if err := json.Unmarshal(item.Value, &stored); err != nil {
+			return err
+		}
+		if stored.NodeId != nodeId || stored.IsRevoked() {
+			continue
+		}
+		if !isPaired {
+			revoked, isPaired = stored, true
+		}
+		if local_store.DatabaseKey(item.Key) == aliasKey {
+			continue
+		}
+		if err := txn.Delete(local_store.DatabaseKey(item.Key)); err != nil {
+			return err
+		}
+	}
+	if !isPaired {
+		return ErrAliasNotFound
+	}
+
+	revoked.RevokedAt = time.Now()
+	data, err := json.Marshal(revoked)
+	if err != nil {
+		return err
+	}
+	if err := txn.SetWithTTL(aliasKey, data, aliasTTL); err != nil {
+		return err
+	}
+	return txn.Commit()
 }

@@ -82,6 +82,8 @@ export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/t
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
 export const PRIVATE_GET_RATING = "/private/get/admin/rating/0.0.0"
+export const PRIVATE_GET_DEVICES = "/private/get/admin/devices/0.0.0"
+export const PRIVATE_DELETE_DEVICE = "/private/delete/admin/device/0.0.0"
 export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
 export const PRIVATE_POST_USER = "/private/post/user/0.0.0"
 export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
@@ -2296,6 +2298,35 @@ export const warpnetService = {
             path: PRIVATE_GET_RATING,
             body: {},
         });
+    },
+
+    // getDevices returns the mobile devices paired with this node. The
+    // node answers with a devices key even when nothing is paired, so a
+    // response without one is a failed request.
+    async getDevices(){
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_DEVICES,
+            body: {},
+        });
+        if (!resp || resp.devices === undefined) {
+            throw new Error("Unable to read paired devices");
+        }
+        return resp.devices || [];
+    },
+
+    // deleteDevice unpairs a device and returns the ones left. The device
+    // loses access as soon as the node forgets it.
+    async deleteDevice(nodeId){
+        const resp = await this.sendToNode({
+            path: PRIVATE_DELETE_DEVICE,
+            body: {
+                node_id: nodeId,
+            },
+        });
+        if (!resp || resp.devices === undefined) {
+            throw new Error("Unable to unpair the device");
+        }
+        return resp.devices || [];
     },
 
     async sendToNode(request) {

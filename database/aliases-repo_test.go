@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -104,6 +105,136 @@ func (s *AliasesRepoTestSuite) TestGetNodeIDs() {
 	ids, err := s.repo.GetNodeIDs()
 	s.Require().NoError(err)
 	assert.ElementsMatch(s.T(), peers, ids)
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_RefreshKeepsOneRecord() {
+	const (
+		phoneA = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+		phoneB = "12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ"
+	)
+
+	for range MaxAliases + 2 {
+		s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phoneA, Token: "tok"}))
+	}
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phoneB, Token: "tok"}))
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.ElementsMatch(s.T(), []string{phoneA, phoneB}, ids)
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_RefreshKeepsPairingTime() {
+	const phone = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}))
+	first, err := s.repo.GetAliases()
+	s.Require().NoError(err)
+	s.Require().Len(first, 1)
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}))
+	second, err := s.repo.GetAliases()
+	s.Require().NoError(err)
+	s.Require().Len(second, 1)
+
+	assert.Equal(s.T(), first[0].ID, second[0].ID)
+	assert.True(s.T(), first[0].CreatedAt.Equal(second[0].CreatedAt))
+	assert.False(s.T(), second[0].LastActive.Before(first[0].LastActive))
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_LimitReached() {
+	for i := range MaxAliases {
+		s.Require().NoError(s.repo.SetAlias(domain.Alias{
+			NodeId: fmt.Sprintf("12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8Cn%03d", i),
+			Token:  "tok",
+		}))
+	}
+
+	err := s.repo.SetAlias(domain.Alias{NodeId: "12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ", Token: "tok"})
+	assert.ErrorIs(s.T(), err, ErrTooManyAliases)
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.Len(s.T(), ids, MaxAliases)
+}
+
+func (s *AliasesRepoTestSuite) TestSetAlias_EmptyNodeId() {
+	assert.Error(s.T(), s.repo.SetAlias(domain.Alias{Token: "tok"}))
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias() {
+	const (
+		phoneA = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+		phoneB = "12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ"
+	)
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phoneA, Token: "tok"}))
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phoneB, Token: "tok"}))
+
+	s.Require().NoError(s.repo.DeleteAlias(phoneA))
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.Equal(s.T(), []string{phoneB}, ids)
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias_KeepsTheDeviceOut() {
+	const phone = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}))
+	s.Require().NoError(s.repo.DeleteAlias(phone))
+
+	// The device still holds the pairing payload and refreshes on a timer.
+	assert.ErrorIs(s.T(), s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}), ErrAliasRevoked)
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.Empty(s.T(), ids)
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias_ANewQrPairsTheDeviceBack() {
+	const phone = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}))
+	s.Require().NoError(s.repo.DeleteAlias(phone))
+
+	// The owner logged in again, so the node issued another session token.
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok-2"}))
+
+	ids, err := s.repo.GetNodeIDs()
+	s.Require().NoError(err)
+	assert.Equal(s.T(), []string{phone}, ids)
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias_RevokedDeviceFreesItsSlot() {
+	for i := range MaxAliases {
+		s.Require().NoError(s.repo.SetAlias(domain.Alias{
+			NodeId: fmt.Sprintf("12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8Cn%03d", i),
+			Token:  "tok",
+		}))
+	}
+	s.Require().NoError(s.repo.DeleteAlias("12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8Cn000"))
+
+	err := s.repo.SetAlias(domain.Alias{NodeId: "12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ", Token: "tok"})
+	assert.NoError(s.T(), err)
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias_AlreadyRevoked() {
+	const phone = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}))
+	s.Require().NoError(s.repo.DeleteAlias(phone))
+	assert.ErrorIs(s.T(), s.repo.DeleteAlias(phone), ErrAliasNotFound)
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias_Unknown() {
+	err := s.repo.DeleteAlias("12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ")
+	assert.ErrorIs(s.T(), err, ErrAliasNotFound)
+}
+
+func (s *AliasesRepoTestSuite) TestDeleteAlias_NilRepo() {
+	repo := &AliasesRepo{}
+	err := repo.DeleteAlias("12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ")
+	assert.ErrorIs(s.T(), err, ErrNilAliasesRepo)
 }
 
 func (s *AliasesRepoTestSuite) TestGetAliases_NilRepo() {
