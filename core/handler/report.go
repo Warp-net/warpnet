@@ -53,10 +53,23 @@ type ReportPublisher interface {
 	PublishReport(ev event.ReportEvent) error
 }
 
-func StreamReportHandler(publisher ReportPublisher) warpnet.WarpHandlerFunc {
-	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+// ReportOwnerStorer is whose report this node files. Publishing stamps the
+// node's own owner on it, so only this node's own client may file one.
+type ReportOwnerStorer interface {
+	GetOwner() domain.Owner
+}
+
+func StreamReportHandler(publisher ReportPublisher, authRepo ReportOwnerStorer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.ReportEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+
+		if authRepo == nil {
+			return nil, warpnet.ErrForeignAuthor
+		}
+		if err := warpnet.VerifyAuthorship(s, authRepo.GetOwner().NodeId); err != nil {
 			return nil, err
 		}
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
@@ -24,9 +25,12 @@ func (s stubReportPublisher) PublishReport(ev event.ReportEvent) error {
 func TestStreamReportHandler(t *testing.T) {
 	tweetID := "tweet-1"
 
+	nodeId, ownStream := nodeIdentity(t)
+	owner := stubAuth{owner: domain.Owner{NodeId: nodeId.String()}}
+
 	mkHandler := func(pub stubReportPublisher) func([]byte, interface{}) (any, error) {
-		h := StreamReportHandler(pub)
-		return func(buf []byte, _ interface{}) (any, error) { return h(buf, s{}) }
+		h := StreamReportHandler(pub, owner)
+		return func(buf []byte, _ interface{}) (any, error) { return h(buf, ownStream) }
 	}
 
 	t.Run("invalid json", func(t *testing.T) {
@@ -121,6 +125,33 @@ func TestStreamReportHandler(t *testing.T) {
 		}), nil)
 		if !errors.Is(err, ErrReportReasonLong) {
 			t.Fatalf("expected ErrReportReasonLong, got: %v", err)
+		}
+	})
+
+	// The node stamps its own owner on a report when it publishes it, so a
+	// report reaching it from anywhere but its own client is somebody else
+	// filing under this node's name.
+	t.Run("report from another node is refused", func(t *testing.T) {
+		strangerId, strangerStream := nodeIdentity(t)
+		if strangerId.String() == nodeId.String() {
+			t.Fatal("the stranger must be another node")
+		}
+		published := false
+		h := StreamReportHandler(stubReportPublisher{publishFn: func(event.ReportEvent) error {
+			published = true
+			return nil
+		}}, owner)
+		_, err := h(marshal(t, event.ReportEvent{
+			TargetUserID: "user",
+			TargetNodeID: "node",
+			Reason:       "spam",
+			Type:         domain.ModerationUserType,
+		}), strangerStream)
+		if !errors.Is(err, warpnet.ErrForeignAuthor) {
+			t.Fatalf("expected ErrForeignAuthor, got: %v", err)
+		}
+		if published {
+			t.Fatal("a report this node did not file must never reach the moderators")
 		}
 	})
 

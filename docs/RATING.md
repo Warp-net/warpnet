@@ -67,7 +67,7 @@ type Dimension uint8
 const (
     Network     Dimension = iota // every node type
     Application                  // member nodes
-    Moderation                   // moderator nodes
+    Moderation                   // moderator nodes, and members judging a verdict
 )
 
 func (d Dimension) String() string
@@ -77,7 +77,7 @@ func ParseDimension(s string) (Dimension, bool)
 
 // Dimensions maps warpnet.NodeInfo.Type to the axes that node tracks.
 //   warpnet.RelayNode     -> {Network}
-//   warpnet.MemberNode    -> {Network, Application}
+//   warpnet.MemberNode    -> {Network, Application, Moderation}
 //   warpnet.ModeratorNode -> {Network, Application, Moderation}
 //   unknown               -> {Network}
 func dimensionsByNodeType(nodeType string) []Dimension
@@ -243,11 +243,11 @@ that reach `TierFloor` quickly, and only from first-hand evidence.
 | `KindWriteFlood` | 20 | 300 | sustained rate-limit hits on write routes |
 | `KindFalseReportBurst` | 60 | 300 | reports from this node the quorum cleared, counted only above a per-window threshold |
 
-### 4.3 Moderation — moderator nodes
+### 4.3 Moderation — moderator nodes, and members judging a verdict
 
 | Kind | Weight | Ceiling | Source |
 |---|---|---|---|
-| `KindVerdictMalformed` | 200 | — | missing object/user id, or an unknown type, on a verdict whose signature already verified |
+| `KindVerdictMalformed` | 200 | — | missing object or user id on a verdict whose signature already verified, charged by whichever node the verdict reached — `core/handler/moderation.go` emits it on the member too, which is why a member witnesses this axis. An unknown type is *not* charged: a moderator on a newer build is entitled to a type this node has not heard of yet |
 | `KindVerdictOutlier` | 60 | 400 | ballot disagreeing with the round's own outcome |
 | `KindAuditWrong` | 60 | 400 | the audit ledger's standing worsening to Suspect |
 | `KindAuditInvalid` | 500 | — | the audit ledger's standing worsening to Banned |
@@ -773,7 +773,7 @@ and the node type:
 
 | Node | Dimensions | Backing datastore | Gossip source |
 |---|---|---|---|
-| **member** (`cmd/node/member/node/member-node.go`) | `Network`, `Application` | `database.NewRatingRepo(db)` | `m.pubsubService.Gossip()` |
+| **member** (`cmd/node/member/node/member-node.go`) | `Network`, `Application`, `Moderation` | `database.NewRatingRepo(db)` | `m.pubsubService.Gossip()` |
 | **relay** (`cmd/node/relay/node/relay-node.go`) | `Network` | a `datastore.NewMapDatastore()` of its own | needs a `Gossip()` accessor on `cmd/node/relay/pubsub` |
 | **moderator** (`cmd/node/moderator/node/moderator-node.go`) | `Network`, `Application`, `Moderation` | a `datastore.NewMapDatastore()` of its own | `cmd/node/moderator/pubsub/publisher.go` wraps a `*pubsub.Gossip`; add a `Gossip()` accessor |
 

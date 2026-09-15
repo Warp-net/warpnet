@@ -909,7 +909,7 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 			return nil, err
 		}
 		if existing.UserId != ev.UserId {
-			return nil, warpnet.WarpError("edit tweet: only the author can edit their own tweet")
+			return nil, warpnet.ErrForeignAuthor
 		}
 		if existing.Text == ev.Text {
 			// No-op edit — return the existing tweet without recording a revision.
@@ -1014,7 +1014,7 @@ func setPinnedFromEvent(buf []byte, repo TweetsStorer, userRepo TweetUserFetcher
 		return nil, err
 	}
 	if tw.UserId != ev.UserId {
-		return nil, warpnet.WarpError(op + ": only the author can " + op + " their own tweet")
+		return nil, warpnet.ErrForeignAuthor
 	}
 	if pin {
 		return repo.Pin(ev.UserId, ev.TweetId)

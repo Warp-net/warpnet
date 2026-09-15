@@ -87,6 +87,7 @@ func StreamModerationResultHandler(
 	userRepo ModerationUserUpdater,
 	timelineRepo ModerationTimelelineDeleter,
 	authRepo ModerationAuthStorer,
+	events warpnet.PeerEmitter,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.ModerationVerdictEvent
@@ -135,9 +136,11 @@ func StreamModerationResultHandler(
 		switch ev.Type {
 		case domain.ModerationTweetType:
 			if ev.ObjectID == nil {
+				reportMalformedVerdict(events, moderatorId)
 				return nil, ErrNoObjectID
 			}
 			if ev.UserID == "" {
+				reportMalformedVerdict(events, moderatorId)
 				return nil, ErrNoUserID
 			}
 
@@ -166,6 +169,7 @@ func StreamModerationResultHandler(
 
 		case domain.ModerationUserType:
 			if ev.UserID == "" {
+				reportMalformedVerdict(events, moderatorId)
 				return nil, ErrNoUserID
 			}
 			if userRepo == nil {
@@ -201,6 +205,18 @@ func StreamModerationResultHandler(
 
 		return event.Accepted, nil
 	}
+}
+
+// reportMalformedVerdict charges a moderator for a verdict that names
+// nothing. Only a verdict whose signature verified gets here: before that
+// the named moderator may have had no part in it, and charging then is how
+// anyone could frame one.
+func reportMalformedVerdict(events warpnet.PeerEmitter, moderatorId string) {
+	events.Emit(warpnet.PeerEvent{
+		PeerID: moderatorId,
+		Type:   warpnet.PeerVerdictMalformed,
+		Route:  event.PUBLIC_POST_MODERATION_RESULT,
+	})
 }
 
 // notifyReporter notifies the reporter, addressed by ReporterID which the
