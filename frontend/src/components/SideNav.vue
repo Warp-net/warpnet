@@ -54,7 +54,7 @@ resulting from the use or misuse of this software.
   </nav>
 
   <nav
-    class="w-1/6 md:w-1/12 xl:w-1/6 border-r border-lighter lg:px-6 py-2 flex-col justify-between hidden sm:flex"
+    class="w-1/6 md:w-1/12 xl:w-1/5 2xl:w-1/6 border-r border-lighter lg:px-6 py-2 flex-col justify-between hidden sm:flex"
     role="navigation"
     aria-label="Main navigation"
   >
