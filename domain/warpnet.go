@@ -366,7 +366,12 @@ type Alias struct {
 	Token      string    `json:"token"`
 	Platform   string    `json:"platform"`
 	LastActive time.Time `json:"last_active"`
+	// RevokedAt marks a device the owner unpaired. The record outlives the
+	// device so the pairing payload it still holds cannot pair it back.
+	RevokedAt time.Time `json:"revoked_at"`
 }
+
+func (a Alias) IsRevoked() bool { return !a.RevokedAt.IsZero() }
 
 type WalletAddress struct {
 	Address   string    `json:"address"`

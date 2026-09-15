@@ -6,12 +6,16 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
 
 // Mobile-friendly wrapper types for gomobile compatibility
 // gomobile bind has limitations on complex types
 
-var clientInstance *clientNode
+// The Kotlin side runs requests concurrently and may shut the node down
+// from another thread while they are in flight, so the instance is only
+// ever read into a local and swapped atomically.
+var clientInstance atomic.Pointer[clientNode]
 
 // Initialize method creates a new WarpNet client with optional PSK
 // Returns error message or empty string on success
@@ -21,7 +25,7 @@ func Initialize(privKeyHex, warpNetwork, pskHex, bootstrapNodes string) string {
 		err          error
 	)
 
-	if clientInstance != nil {
+	if clientInstance.Load() != nil {
 		return "already initialized"
 	}
 
@@ -43,16 +47,20 @@ func Initialize(privKeyHex, warpNetwork, pskHex, bootstrapNodes string) string {
 		return fmt.Sprintf("failed to create client: %v", err)
 	}
 
-	clientInstance = client
+	if !clientInstance.CompareAndSwap(nil, client) {
+		_ = client.close()
+		return "already initialized"
+	}
 	return ""
 }
 
 func Connect(addrInfo string) string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return "client not initialized"
 	}
 
-	err := clientInstance.connect(addrInfo)
+	err := c.connect(addrInfo)
 	if err != nil {
 		return fmt.Sprintf("connection failed: %v", err)
 	}
@@ -61,11 +69,12 @@ func Connect(addrInfo string) string {
 }
 
 func Stream(protocolID string, data string) string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return "client not initialized"
 	}
 
-	response, err := clientInstance.stream(protocolID, []byte(data))
+	response, err := c.stream(protocolID, []byte(data))
 	if err != nil {
 		return err.Error()
 	}
@@ -78,10 +87,11 @@ func Stream(protocolID string, data string) string {
 // the libp2p identity key from Initialize. Returns "" if uninitialized, or an
 // "error: "-prefixed string on failure, to keep the gomobile signature simple.
 func Sign(body string) string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return ""
 	}
-	sig, err := clientInstance.sign([]byte(body))
+	sig, err := c.sign([]byte(body))
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -89,17 +99,19 @@ func Sign(body string) string {
 }
 
 func PeerID() string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return ""
 	}
-	return clientInstance.getPeerID()
+	return c.getPeerID()
 }
 
 func IsConnected() string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return "false"
 	}
-	if clientInstance.isConnected() {
+	if c.isConnected() {
 		return "true"
 	}
 	return "false"
@@ -113,18 +125,20 @@ func IsConnected() string {
 // of seconds and drives reconnect / UI state from the result; Go owns
 // only the snapshot, never the lifecycle.
 func Connectedness() string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return "Uninitialised"
 	}
-	return clientInstance.connectedness()
+	return c.connectedness()
 }
 
 func Disconnect() string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return ""
 	}
 
-	err := clientInstance.disconnect()
+	err := c.disconnect()
 	if err != nil {
 		return fmt.Sprintf("disconnect failed: %v", err)
 	}
@@ -134,18 +148,20 @@ func Disconnect() string {
 
 // Pause background transition
 func Pause() {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return
 	}
-	clientInstance.pause()
+	c.pause()
 }
 
 // Resume foreground transition
 func Resume() {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return
 	}
-	clientInstance.resume()
+	c.resume()
 }
 
 // RefreshPeerAddrs merges the supplied newline-separated multiaddrs into
@@ -153,25 +169,25 @@ func Resume() {
 // side after parsing a /private/post/pair response, which now carries
 // the fat node's current public addresses on every successful pair.
 func RefreshPeerAddrs(addrs string) string {
-	if clientInstance == nil {
+	c := clientInstance.Load()
+	if c == nil {
 		return "client not initialized"
 	}
-	if err := clientInstance.refreshPeerAddrs(addrs); err != nil {
+	if err := c.refreshPeerAddrs(addrs); err != nil {
 		return err.Error()
 	}
 	return ""
 }
 
 func Shutdown() string {
-	if clientInstance == nil {
+	c := clientInstance.Swap(nil)
+	if c == nil {
 		return ""
 	}
 
-	err := clientInstance.close()
-	if err != nil {
+	if err := c.close(); err != nil {
 		return fmt.Sprintf("shutdown failed: %v", err)
 	}
 
-	clientInstance = nil
 	return ""
 }

@@ -7,16 +7,20 @@ package site.warpnet.warpdroid.components.pairing
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
+import site.warpnet.transport.IdentitySeedStore
 import timber.log.Timber
 
 /**
- * Persists the raw QR pairing payload in Android Keystore-backed
+ * Persists the pairing material — the raw QR payload and the seed of the
+ * libp2p identity the paired node authorizes — in Android Keystore-backed
  * EncryptedSharedPreferences so the app can re-authenticate after a
  * cold start without forcing the user to re-scan. The parsed
  * [PairedNode] itself is held in memory for the lifetime of the
@@ -27,13 +31,15 @@ import timber.log.Timber
  * an unreadable keyset (KeyStore key invalidated, prefs file corrupted)
  * triggers a one-shot delete-and-reopen so the user lands on a clean
  * scanner instead of a crash loop. If even the retry fails the store
- * degrades to in-memory only — auto re-auth on cold start is lost,
- * but the app stays usable.
+ * degrades to plain app-private prefs for the identity seed — a private
+ * file still beats an identity anyone could recompute — and to in-memory
+ * only for the QR: auto re-auth on cold start is lost, but the app stays
+ * usable.
  */
 @Singleton
 class PairedNodeStore @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
+) : IdentitySeedStore {
     private val ref = AtomicReference<PairedNode?>(null)
 
     private val prefs: SharedPreferences? by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
@@ -91,16 +97,83 @@ class PairedNodeStore @Inject constructor(
             .getOrNull()
     }
 
-    /** "Forget this node" — invoked from Settings and on failed re-auth. */
+    /**
+     * The identity seed for the pairing with [memberPeerId], drawn from
+     * [SecureRandom] the first time that node is paired with. Reading or
+     * creating it touches disk, so callers stay off the main thread.
+     *
+     * The seed is scoped to one member node: pairing with a different one
+     * retires the previous identity instead of letting a single key follow
+     * the device between nodes.
+     */
+    @Synchronized
+    override fun seed(memberPeerId: String): ByteArray {
+        val handle = seedPrefs
+        val stored = runCatching {
+            if (handle.getString(KEY_IDENTITY_NODE, null) != memberPeerId) {
+                null
+            } else {
+                handle.getString(KEY_IDENTITY_SEED, null)
+            }
+        }.getOrNull()
+
+        if (stored != null) {
+            val decoded = runCatching { Base64.decode(stored, Base64.NO_WRAP) }.getOrNull()
+            if (decoded != null && decoded.size == SEED_SIZE) return decoded
+            Timber.tag(TAG).w("stored identity seed is unusable; generating a new one")
+        }
+
+        val seed = ByteArray(SEED_SIZE).also(SecureRandom()::nextBytes)
+        runCatching {
+            handle.edit()
+                .putString(KEY_IDENTITY_NODE, memberPeerId)
+                .putString(KEY_IDENTITY_SEED, Base64.encodeToString(seed, Base64.NO_WRAP))
+                .commit()
+        }.onFailure {
+            // An identity that cannot be stored still pairs, but the next
+            // cold start draws another one and has to pair again.
+            Timber.tag(TAG).w(it, "identity seed not persisted")
+        }
+        return seed
+    }
+
+    /**
+     * "Forget this node" — invoked from Settings and on failed re-auth.
+     * Drops the identity along with the QR: the seed is what the paired
+     * node authorizes, so leaving it behind would keep the device's key
+     * alive after the user asked for it to be forgotten.
+     */
     fun clear() {
         ref.set(null)
         prefs?.edit()?.remove(KEY_RAW_QR)?.apply()
+        // Both stores: a degraded session may have left a seed in the plain
+        // file even if the encrypted one opens today.
+        runCatching {
+            prefs?.edit()?.remove(KEY_IDENTITY_NODE)?.remove(KEY_IDENTITY_SEED)?.apply()
+        }
+        runCatching {
+            fallbackSeedPrefs.edit().remove(KEY_IDENTITY_NODE).remove(KEY_IDENTITY_SEED).apply()
+        }
+    }
+
+    // The encrypted store when it opens, a plain app-private file when it
+    // does not. Both are readable only by this app; neither is reproducible
+    // from outside it.
+    private val seedPrefs: SharedPreferences
+        get() = prefs ?: fallbackSeedPrefs
+
+    private val fallbackSeedPrefs: SharedPreferences by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        context.getSharedPreferences(SEED_FALLBACK_PREFS_FILE, Context.MODE_PRIVATE)
     }
 
     private companion object {
         const val PREFS_FILE = "warpnet_pairing_v2"
         const val LEGACY_PREFS_FILE = "warpnet_pairing"
+        const val SEED_FALLBACK_PREFS_FILE = "warpnet_identity"
         const val KEY_RAW_QR = "paired_fat_node_qr"
+        const val KEY_IDENTITY_NODE = "identity_member_node"
+        const val KEY_IDENTITY_SEED = "identity_seed"
+        const val SEED_SIZE = 32
         const val TAG = "PairedNodeStore"
     }
 }

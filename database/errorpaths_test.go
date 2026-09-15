@@ -447,11 +447,6 @@ func TestAliasesRepoErrorPaths(t *testing.T) {
 		require.ErrorIs(t, err, ErrNilAliasesRepo)
 	})
 
-	t.Run("SetAliasStoreFails", func(t *testing.T) {
-		s := newFaultStore(t).arm("db.SetWithTTL", 1)
-		require.ErrorIs(t, NewAliasesRepo(s).SetAlias(alias), errFault)
-	})
-
 	runFaultCases(t, []faultCase{
 		{
 			name: "GetAliases",
@@ -468,6 +463,11 @@ func TestAliasesRepoErrorPaths(t *testing.T) {
 				return err
 			},
 			ops: []faultOp{op("List")},
+		},
+		{
+			name: "SetAlias",
+			run:  func(s *faultStore) error { return NewAliasesRepo(s).SetAlias(alias) },
+			ops:  []faultOp{op("List"), op("SetWithTTL"), op("Commit")},
 		},
 	})
 

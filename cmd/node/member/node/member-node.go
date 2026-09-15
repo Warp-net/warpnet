@@ -485,6 +485,14 @@ func (m *MemberNode) adminHandlers(
 			handler.StreamNodesPairingHandler(authRepo, m.aliasesRepo, m),
 		},
 		{
+			event.PRIVATE_GET_DEVICES,
+			handler.StreamGetDevicesHandler(m.aliasesRepo),
+		},
+		{
+			event.PRIVATE_DELETE_DEVICE,
+			handler.StreamDeleteDeviceHandler(m.aliasesRepo),
+		},
+		{
 			event.PUBLIC_GET_INFO,
 			handler.StreamGetInfoHandler(m, m.discService.DiscoveryHandlerStream),
 		},

@@ -55,6 +55,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.shareIn
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
+import okio.Buffer
+import okio.Source
 import okio.buffer
 import okio.sink
 import okio.source
@@ -99,6 +101,7 @@ class MediaUploader @Inject constructor(
 
     private companion object {
         private const val TAG = "MediaUploader"
+        private const val COPY_CHUNK_BYTES = 8192L
         private val uploads = mutableMapOf<Int, UploadData>()
         private var mostRecentId: Int = 0
     }
@@ -170,9 +173,7 @@ class MediaUploader @Inject constructor(
                             return@use
                         }
                         val file = File.createTempFile("randomTemp1", suffix, context.cacheDir)
-                        file.absoluteFile.sink().buffer().use { out ->
-                            out.writeAll(input)
-                        }
+                        copyCapped(input, file, copyLimit(instanceInfo))
                         uri = FileProvider.getUriForFile(
                             context,
                             BuildConfig.APPLICATION_ID + ".fileprovider",
@@ -193,9 +194,7 @@ class MediaUploader @Inject constructor(
                     val file = File.createTempFile("randomTemp1", ".$suffix", context.cacheDir)
 
                     inputFile.source().use { input ->
-                        file.absoluteFile.sink().buffer().use { out ->
-                            out.writeAll(input)
-                        }
+                        copyCapped(input, file, copyLimit(instanceInfo))
                     }
                     uri = FileProvider.getUriForFile(
                         context,
@@ -241,6 +240,36 @@ class MediaUploader @Inject constructor(
         } else {
             Timber.tag(TAG).w("Could not determine mime type of upload")
             throw MediaTypeException()
+        }
+    }
+
+    // The largest upload any media type allows. Per-type limits still apply
+    // once the real size is known; this only bounds what the app writes to
+    // disk on the way there.
+    private fun copyLimit(instanceInfo: InstanceInfo): Int =
+        maxOf(instanceInfo.videoSizeLimit, instanceInfo.imageSizeLimit)
+
+    // A content provider is free to advertise one size and then stream
+    // another, so the cap is enforced while copying and a partial file is
+    // deleted instead of being left behind in the cache.
+    private fun copyCapped(input: Source, file: File, limit: Int) {
+        try {
+            val buffer = Buffer()
+            var copied = 0L
+            file.absoluteFile.sink().buffer().use { out ->
+                while (true) {
+                    val read = input.read(buffer, COPY_CHUNK_BYTES)
+                    if (read == -1L) break
+                    copied += read
+                    if (copied > limit) {
+                        throw FileSizeException(limit)
+                    }
+                    out.write(buffer, read)
+                }
+            }
+        } catch (e: Exception) {
+            file.delete()
+            throw e
         }
     }
 
