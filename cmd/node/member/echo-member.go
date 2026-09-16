@@ -46,6 +46,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/metrics"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -96,6 +97,12 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if port := config.Config().Node.Metrics.Port; port != "" {
+		if err := metrics.Serve(ctx, config.Config().Node.Metrics.Host, port); err != nil {
+			log.Fatalf("failed to serve metrics: %v", err)
+		}
+	}
 
 	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {

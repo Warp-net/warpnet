@@ -73,6 +73,9 @@ func init() {
 	pflag.String("node.server.host", "0.0.0.0", "Dashboard HTTP/WS bind address. Set '127.0.0.1' to serve the dashboard to this host only")
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")
 
+	pflag.String("node.metrics.host", "127.0.0.1", "Prometheus /metrics bind address")
+	pflag.String("node.metrics.port", "", "Prometheus /metrics port. Empty keeps the endpoint and libp2p's own metrics off")
+
 	pflag.String("logging.level", "info", "Logging level")
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
@@ -134,6 +137,10 @@ func init() {
 				Host: strings.TrimSpace(viper.GetString("node.server.host")),
 				Port: strings.TrimSpace(viper.GetString("node.server.port")),
 			},
+			Metrics: server{
+				Host: strings.TrimSpace(viper.GetString("node.metrics.host")),
+				Port: strings.TrimSpace(viper.GetString("node.metrics.port")),
+			},
 		},
 		Database: database{
 			Path: dbPath,
@@ -185,6 +192,7 @@ type node struct {
 	IsPskPrinted bool
 	IsSelfUpdate bool
 	Server       server
+	Metrics      server
 	Seed         string
 }
 
