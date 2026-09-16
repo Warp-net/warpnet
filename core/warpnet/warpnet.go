@@ -498,6 +498,14 @@ func NewBitswapNetwork(host host.Host, opts ...bsnet.NetOpt) bitswapNetwork.BitS
 	return bsnet.NewFromIpfsHost(host, opts...)
 }
 
+// BitswapPrefix scopes a bitswap stack to protocol IDs of its own. Starting a
+// stack registers the bitswap protocols with host.SetStreamHandler, so two
+// stacks sharing a host take the handlers from each other and the one that
+// registered first stops answering block requests.
+func BitswapPrefix(prefix string) bsnet.NetOpt {
+	return bsnet.Prefix(protocol.ID(prefix))
+}
+
 // NewBitswapExchange returns the concrete *bitswap.Bitswap (which
 // also satisfies exchange.Interface) so callers can invoke
 // bitswap-only methods such as PeerConnected/PeerDisconnected.
