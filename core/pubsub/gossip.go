@@ -248,7 +248,7 @@ func (g *Gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
-	go g.runPeerInfoPublishing(time.Minute * 5)
+	go g.runPeerInfoPublishing(time.Minute * 30)
 	log.Infoln("gossip: started")
 
 	return
