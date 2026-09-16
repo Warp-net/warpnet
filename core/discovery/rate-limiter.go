@@ -28,9 +28,60 @@ resulting from the use or misuse of this software.
 package discovery
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
+
+const (
+	maxIPBuckets = 4096
+	ipBucketTTL  = time.Minute * 5
+)
+
+// ipRateLimiter keeps a leaky bucket per remote IP, so that a peer flooding
+// discoveries cannot shed the peers everyone else announces.
+type ipRateLimiter struct {
+	buckets      *expirable.LRU[string, *leakyBucketRateLimiter]
+	capacity     int
+	leakPer10Sec int
+	mx           sync.Mutex
+}
+
+func newIPRateLimiter(capacity int, leakPer10Sec int) *ipRateLimiter {
+	return &ipRateLimiter{
+		buckets:      expirable.NewLRU[string, *leakyBucketRateLimiter](maxIPBuckets, nil, ipBucketTTL),
+		capacity:     capacity,
+		leakPer10Sec: leakPer10Sec,
+	}
+}
+
+// allow charges the bucket of the IP the peer is reachable at. Peers announced
+// without an address share a single bucket.
+func (l *ipRateLimiter) allow(addrs []warpnet.WarpAddress) bool {
+	var ip string
+	for _, addr := range addrs {
+		if parsed := warpnet.MultiAddressIP(addr); parsed != nil {
+			ip = parsed.String()
+			break
+		}
+	}
+	return l.bucket(ip).allow()
+}
+
+func (l *ipRateLimiter) bucket(ip string) *leakyBucketRateLimiter {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	bucket, ok := l.buckets.Get(ip)
+	if !ok {
+		bucket = newRateLimiter(l.capacity, l.leakPer10Sec)
+		l.buckets.Add(ip, bucket)
+	}
+	return bucket
+}
 
 type leakyBucketRateLimiter struct {
 	capacity     *atomic.Int64
@@ -57,7 +108,7 @@ func newRateLimiter(capacity int, leakPer10Sec int) *leakyBucketRateLimiter {
 	}
 }
 
-func (b *leakyBucketRateLimiter) Allow() bool {
+func (b *leakyBucketRateLimiter) allow() bool {
 	now := time.Now().UnixMilli()
 	elapsed := now - b.lastLeak.Load()
 	leaks := elapsed / b.leakInterval.Milliseconds()

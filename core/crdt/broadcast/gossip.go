@@ -31,6 +31,7 @@ package broadcast
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/metrics"
 )
@@ -53,6 +54,8 @@ type Gossip struct {
 
 	mx     sync.Mutex
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
+
+	lastNext time.Time // TEMPORARY: touched only by the single consumer goroutine in Next.
 }
 
 // NewGossip subscribes to topic and broadcasts on it.
@@ -76,8 +79,18 @@ func (gb *Gossip) Broadcast(_ context.Context, data []byte) error {
 
 // Next receives broadcasted data
 func (gb *Gossip) Next(ctx context.Context) ([]byte, error) {
+	// TEMPORARY: Next is called from the datastore's single consumer loop, so
+	// the gap since the last return is exactly its processing time.
+	if !gb.lastNext.IsZero() {
+		metrics.CRDTConsumerBusySeconds.WithLabelValues(gb.topic).Add(time.Since(gb.lastNext).Seconds())
+	}
+	waitStart := time.Now()
+
 	select {
 	case data := <-gb.dataChan:
+		metrics.CRDTConsumerWaitSeconds.WithLabelValues(gb.topic).Add(time.Since(waitStart).Seconds())
+		metrics.CRDTConsumed.WithLabelValues(gb.topic).Inc()
+		gb.lastNext = time.Now()
 		return data, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -96,6 +109,7 @@ func (gb *Gossip) Receive(data []byte) {
 	}
 
 	metrics.CRDTDeltasReceived.Inc()
+	metrics.CRDTReceivedByTopic.WithLabelValues(gb.topic).Inc()
 
 	select {
 	case <-gb.ctx.Done():
@@ -112,12 +126,14 @@ func (gb *Gossip) Receive(data []byte) {
 	select {
 	case <-gb.dataChan:
 		metrics.CRDTDeltasDropped.Inc()
+		metrics.CRDTDroppedByTopic.WithLabelValues(gb.topic).Inc()
 	default:
 	}
 	select {
 	case gb.dataChan <- data:
 	default:
 		metrics.CRDTDeltasDropped.Inc()
+		metrics.CRDTDroppedByTopic.WithLabelValues(gb.topic).Inc()
 	}
 	metrics.CRDTQueueDepth.Set(float64(len(gb.dataChan)))
 }

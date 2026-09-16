@@ -455,15 +455,24 @@ func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	return WarpPeerstore(store), err
 }
 
-func IsPublicMultiAddress(maddr WarpAddress) bool {
+// MultiAddressIP is the IP a multiaddress points at: the peer's own for a direct
+// address, the relay's for a circuit one. Nil when the address carries no IP.
+func MultiAddressIP(maddr WarpAddress) gonet.IP {
 	ipStr, err := maddr.ValueForProtocol(P_IP4)
 	if err != nil {
 		ipStr, err = maddr.ValueForProtocol(P_IP6)
 		if err != nil {
-			return false
+			return nil
 		}
 	}
-	ip := gonet.ParseIP(ipStr)
+	return gonet.ParseIP(ipStr)
+}
+
+func IsPublicMultiAddress(maddr WarpAddress) bool {
+	ip := MultiAddressIP(maddr)
+	if ip == nil {
+		return false
+	}
 	if ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
@@ -496,6 +505,14 @@ func IsNoAddressesError(err error) bool {
 
 func NewBitswapNetwork(host host.Host, opts ...bsnet.NetOpt) bitswapNetwork.BitSwapNetwork {
 	return bsnet.NewFromIpfsHost(host, opts...)
+}
+
+// BitswapPrefix scopes a bitswap stack to protocol IDs of its own. Starting a
+// stack registers the bitswap protocols with host.SetStreamHandler, so two
+// stacks sharing a host take the handlers from each other and the one that
+// registered first stops answering block requests.
+func BitswapPrefix(prefix string) bsnet.NetOpt {
+	return bsnet.Prefix(protocol.ID(prefix))
 }
 
 // NewBitswapExchange returns the concrete *bitswap.Bitswap (which
