@@ -26,6 +26,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"time"
@@ -111,7 +112,8 @@ func Serve(ctx context.Context, host, port string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", handle)
 
-	listener, err := net.Listen("tcp", net.JoinHostPort(host, port))
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return err
 	}
@@ -123,13 +125,14 @@ func Serve(ctx context.Context, host, port string) error {
 
 	go func() {
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// WithoutCancel: ctx is already done here, and Shutdown needs a live one.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
 	go func() {
-		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Errorf("metrics: server stopped: %v", err)
 		}
 	}()
