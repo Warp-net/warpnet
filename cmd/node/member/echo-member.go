@@ -32,11 +32,11 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
+	"math/rand/v2"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -60,9 +60,10 @@ import (
 )
 
 const (
-	username     = "Echo"
-	echoPassword = `\@4o97Z7<Cfu`
-	echoOwnerID  = "01KSGHBHKG0N77T6A3RZV8WSH5"
+	usernamePrefix = "Echo"
+	echoPassword   = `\@4o97Z7<Cfu`
+	// 23 chars: ECHO_INDEX fills the remaining three of the 26-char ULID.
+	echoOwnerPrefix = "01KSGHBHKG0N77T6A3RZV8W"
 
 	echoReplyPrefix   = "echo: "
 	echoChatReply     = "echo: received message"
@@ -74,6 +75,80 @@ const (
 	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
 	ownTweetCharLimit = 4096
 )
+
+// The node key comes from the account, not from NODE_SEED: DeriveIdentityKey
+// hashes username, password and network, so echo nodes sharing a username also
+// share a peer ID. ECHO_INDEX is what keeps a group of them apart.
+var (
+	echoIndex   = echoIndexFromEnv()
+	username    = fmt.Sprintf("%s%d", usernamePrefix, echoIndex)
+	echoOwnerID = fmt.Sprintf("%s%03d", echoOwnerPrefix, echoIndex)
+)
+
+// Auto-interaction stays off unless WARP_LOADTEST is set, so an echo node that
+// is not part of a run keeps answering PRIVATE_POST_TWEET with Accepted alone.
+var (
+	isLoadTest     = os.Getenv("WARP_LOADTEST") == "1"
+	ownTweetEvery  = envDuration("ECHO_TWEET_INTERVAL", ownTweetInterval)
+	reactPercent   = envPercent("ECHO_REACT_PERCENT", 100)
+	retweetPercent = envPercent("ECHO_RETWEET_PERCENT", 25)
+	replyPercent   = envPercent("ECHO_REPLY_PERCENT", 25)
+	followCount    = envCount("ECHO_FOLLOW_COUNT", 5)
+	followDelay    = envDuration("ECHO_FOLLOW_DELAY", 90*time.Second)
+	reactEvery     = envDuration("ECHO_REACT_INTERVAL", 30*time.Second)
+	reactBatch     = envCount("ECHO_REACT_BATCH", 2000)
+	timelinePage   = envCount("ECHO_TIMELINE_PAGE", 100)
+)
+
+func envCount(name string, fallback int) int {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	count, err := strconv.Atoi(raw)
+	if err != nil || count < 0 {
+		log.Fatalf("%s must be a non-negative number, got %q", name, raw)
+	}
+	return count
+}
+
+func envDuration(name string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		log.Fatalf("%s must be a positive duration, got %q", name, raw)
+	}
+	return d
+}
+
+func envPercent(name string, fallback int) int {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	percent, err := strconv.Atoi(raw)
+	if err != nil || percent < 0 || percent > 100 {
+		log.Fatalf("%s must be a number between 0 and 100, got %q", name, raw)
+	}
+	return percent
+}
+
+func rolled(percent int) bool { return percent > 0 && rand.IntN(100) < percent }
+
+func echoIndexFromEnv() int {
+	raw := os.Getenv("ECHO_INDEX")
+	if raw == "" {
+		return 0
+	}
+	index, err := strconv.Atoi(raw)
+	if err != nil || index < 0 || index > 999 {
+		log.Fatalf("ECHO_INDEX must be a number between 0 and 999, got %q", raw)
+	}
+	return index
+}
 
 // run node without GUI
 func main() {
@@ -181,8 +256,15 @@ func main() {
 	readyChan <- authInfo
 	echoFollowRepo := database.NewFollowRepo(db)
 	echoTweetRepo := database.NewTweetRepo(db, nil)
-	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo)
+	echoTimelineRepo := database.NewTimelineRepo(db)
+	eBot := newEchoBot(
+		echoNode, db, echoFollowRepo, echoTweetRepo,
+		echoTimelineRepo, userRepo, authRepo.PrivateKey(),
+	)
 	go runOwnTweets(ctx, eBot, echoNode)
+	if isLoadTest {
+		go runReactions(ctx, eBot, echoNode)
+	}
 	setupHandlers(eBot, echoNode)
 
 	log.Infoln("WARPNET STARTED")
@@ -192,6 +274,7 @@ func main() {
 
 type echoStreamClient interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -208,6 +291,14 @@ type echoTweetStorer interface {
 	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
 }
 
+type echoTimelineReader interface {
+	GetTimeline(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+}
+
+type echoUserFetcher interface {
+	Get(userId string) (domain.User, error)
+}
+
 const echoSeenNamespace = "/ECHO_SEEN/"
 
 type echoBot struct {
@@ -215,20 +306,51 @@ type echoBot struct {
 	db           echoPersister
 	followRepo   echoFollowStorer
 	tweetRepo    echoTweetStorer
+	timelineRepo echoTimelineReader
+	userRepo     echoUserFetcher
+	privKey      ed25519.PrivateKey
 	mu           sync.Mutex
 	seen         map[string]time.Time
 	lastPruneRun time.Time
 }
 
-func newEchoBot(node echoStreamClient, db echoPersister, followRepo echoFollowStorer, tweetRepo echoTweetStorer) *echoBot {
+func newEchoBot(
+	node echoStreamClient, db echoPersister,
+	followRepo echoFollowStorer, tweetRepo echoTweetStorer,
+	timelineRepo echoTimelineReader, userRepo echoUserFetcher,
+	privKey ed25519.PrivateKey,
+) *echoBot {
 	return &echoBot{
 		node:         node,
 		db:           db,
 		followRepo:   followRepo,
 		tweetRepo:    tweetRepo,
+		timelineRepo: timelineRepo,
+		userRepo:     userRepo,
+		privKey:      privKey,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
 	}
+}
+
+// Routes behind the auth middleware take a signed event.Message, not the bare
+// payload — the same envelope the dashboard builds when it calls its own node.
+// A fresh MessageId per call keeps the idempotency cache from replaying a reply.
+func (e *echoBot) selfEnvelope(selfID warpnet.WarpPeerID, route stream.WarpRoute, body any) (event.Message, error) {
+	bt, err := json.Marshal(body)
+	if err != nil {
+		return event.Message{}, err
+	}
+	msg := event.Message{
+		Body:        bt,
+		MessageId:   ulid.Make().String(),
+		NodeId:      selfID.String(),
+		Destination: string(route),
+		Timestamp:   time.Now().UTC(),
+		Version:     config.Config().Version.String(),
+	}
+	msg.Signature = security.Sign(e.privKey, msg.SigningBytes())
+	return msg, nil
 }
 
 func (e *echoBot) wasSeen(action, id string) bool {
@@ -361,7 +483,7 @@ func (e *echoBot) handleMessage(msg []byte, requesterNodeID string) {
 		return
 	}
 	echoText := e.buildMessageReplyText(m.Text)
-	quote, err := getChuckQuote()
+	quote, err := randomEchoText()
 	if err == nil {
 		echoText = quote
 	}
@@ -397,6 +519,92 @@ func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	return prefix + incomingText
 }
 
+// Reactions run off the timeline rather than off the delivery handler: the real
+// PUBLIC_POST_TIMELINE handler owns the CRDT-backed tweet repo, and a bot that
+// replaced it would silence the very counters the run is there to watch.
+func (e *echoBot) reactToTimeline(selfID warpnet.WarpPeerID) {
+	// GetTimeline sorts by time only *within* the page it fetched, and the page
+	// itself comes back in key order — so a single unpaged call returns the same
+	// oldest entries forever once the timeline outgrows it. Walk the cursor.
+	var (
+		tweets []domain.Tweet
+		cursor *string
+		page   = uint64(timelinePage)
+	)
+	for len(tweets) < reactBatch {
+		batch, next, err := e.timelineRepo.GetTimeline(e.ownerID(), &page, cursor)
+		if err != nil {
+			log.Warnf("echo: read timeline: %v", err)
+			break
+		}
+		tweets = append(tweets, batch...)
+		if len(batch) == 0 || next == "" {
+			break
+		}
+		cursor = &next
+	}
+
+	var fresh, roots, reacted, retweeted, replied, unresolved int
+	for _, tw := range tweets {
+		if tw.Id == "" || tw.UserId == e.ownerID() || e.wasSeen("reacted", tw.Id) {
+			continue
+		}
+		fresh++
+		if tw.ParentId == nil {
+			roots++
+		}
+
+		// The author's node is what the reaction routes address, and it is only
+		// known once their user record has been stored locally.
+		author, err := e.userRepo.Get(tw.UserId)
+		if err != nil || author.NodeId == "" {
+			unresolved++
+			continue
+		}
+
+		if rolled(reactPercent) {
+			if err := e.reactToTweet(tw, author.NodeId); err != nil {
+				log.Warnf("echo: react id=%s: %v", tw.Id, err)
+			} else {
+				reacted++
+			}
+		}
+		if rolled(retweetPercent) {
+			if err := e.retweet(tw, author.NodeId); err != nil {
+				log.Warnf("echo: retweet id=%s: %v", tw.Id, err)
+			} else {
+				retweeted++
+			}
+		}
+		// Only roots get replies: a reply federates as a tweet of its own, and
+		// replying to replies would let one tweet amplify without bound.
+		if tw.ParentId == nil && rolled(replyPercent) {
+			if err := e.replyToTweet(tw, selfID); err != nil {
+				log.Warnf("echo: reply id=%s: %v", tw.Id, err)
+			} else {
+				replied++
+			}
+		}
+	}
+
+	log.Infof("echo: timeline pass size=%d fresh=%d roots=%d reacted=%d retweeted=%d replied=%d unresolved=%d",
+		len(tweets), fresh, roots, reacted, retweeted, replied, unresolved)
+}
+
+func runReactions(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	ticker := time.NewTicker(reactEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			echo.reactToTimeline(node.NodeInfo().ID)
+		}
+	}
+}
+
 func (e *echoBot) reactToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	_, err := e.node.GenericStream(
 		requesterNodeID,
@@ -425,86 +633,70 @@ func (e *echoBot) retweet(tw event.NewTweetEvent, requesterNodeID string) error 
 	return err
 }
 
-func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+// A reply is composed on our own node like any other tweet; ParentUserId is what
+// makes it federate to the parent's author instead of staying local.
+func (e *echoBot) replyToTweet(tw event.NewTweetEvent, selfID warpnet.WarpPeerID) error {
 	parentID := tw.Id
 	parentUserID := tw.UserId
 	text := echoReplyPrefix + tw.Text
-	quote, err := getChuckQuote()
-	if err == nil {
+	if quote, err := randomEchoText(); err == nil {
 		text = quote
 	}
-	_, err = e.node.GenericStream(
-		requesterNodeID,
-		event.PRIVATE_POST_TWEET,
-		event.NewTweetEvent{
-			CreatedAt:    time.Now(),
-			Id:           ulid.Make().String(),
-			ParentId:     &parentID,
-			ParentUserId: &parentUserID,
-			RootId:       tw.Id,
-			Text:         text,
-			UserId:       e.ownerID(),
-			Username:     username,
-		},
-	)
-	return err
-}
-
-func (e *echoBot) replyToReply(rp event.NewTweetEvent, requesterNodeID string) error {
-	parentID := rp.Id
-	parentUserID := rp.UserId
-	text := echoReplyPrefix + rp.Text
-	quote, err := getChuckQuote()
-	if err == nil {
-		text = quote
+	rootID := tw.RootId
+	if rootID == "" {
+		rootID = tw.Id
 	}
-	_, err = e.node.GenericStream(
-		requesterNodeID,
-		event.PRIVATE_POST_TWEET,
-		event.NewTweetEvent{
-			CreatedAt:    time.Now(),
-			Id:           ulid.Make().String(),
-			ParentId:     &parentID,
-			ParentUserId: &parentUserID,
-			RootId:       rp.RootId,
-			Text:         text,
-			UserId:       e.ownerID(),
-			Username:     username,
-		},
-	)
+	reply := event.NewTweetEvent{
+		CreatedAt:    time.Now(),
+		Id:           ulid.Make().String(),
+		ParentId:     &parentID,
+		ParentUserId: &parentUserID,
+		RootId:       rootID,
+		Text:         text,
+		UserId:       e.ownerID(),
+		Username:     username,
+	}
+	envelope, err := e.selfEnvelope(selfID, event.PRIVATE_POST_TWEET, reply)
+	if err != nil {
+		return err
+	}
+	_, err = e.node.SelfStream(selfID, selfID, event.PRIVATE_POST_TWEET, envelope)
 	return err
 }
 
 func setupHandlers(echo *echoBot, node *member.MemberNode) {
-	node.Node().RemoveStreamHandler(event.PRIVATE_POST_TWEET)
-	node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
+	// PRIVATE_POST_TWEET keeps its real handler: it is the compose route this
+	// node calls on itself, and the auth middleware denies it to other peers
+	// anyway, so there is nothing for the bot to answer there.
 	node.Node().RemoveStreamHandler(event.PUBLIC_POST_MESSAGE)
 
 	//nolint:govet
-	node.SetStreamHandlers(
-		[]warpnet.WarpStreamHandler{
-			{
-				event.PRIVATE_POST_TWEET,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					return event.Accepted, nil
-				},
+	handlers := []warpnet.WarpStreamHandler{
+		{
+			event.PUBLIC_POST_MESSAGE,
+			func(msg []byte, s warpnet.WarpStream) (any, error) {
+				echo.handleMessage(msg, requesterNodeID(s))
+				return event.Accepted, nil
 			},
-			{
-				event.PUBLIC_POST_FOLLOW,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleFollow(msg, requesterNodeID(s))
-					return event.Accepted, nil
-				},
+		},
+	}
+
+	// Under load the real StreamFollowHandler has to stay: it is the only thing
+	// that subscribes this node to a followee's gossip topic. The bot's
+	// follow-back replaces it only when the node is answering people, not a run.
+	if !isLoadTest {
+		node.Node().RemoveStreamHandler(event.PUBLIC_POST_FOLLOW)
+		//nolint:govet
+		handlers = append(handlers, warpnet.WarpStreamHandler{
+			event.PUBLIC_POST_FOLLOW,
+			func(msg []byte, s warpnet.WarpStream) (any, error) {
+				echo.handleFollow(msg, requesterNodeID(s))
+				return event.Accepted, nil
 			},
-			{
-				event.PUBLIC_POST_MESSAGE,
-				func(msg []byte, s warpnet.WarpStream) (any, error) {
-					echo.handleMessage(msg, requesterNodeID(s))
-					return event.Accepted, nil
-				},
-			},
-		}...,
-	)
+		})
+	}
+
+	node.SetStreamHandlers(handlers...)
 }
 
 func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
@@ -512,7 +704,17 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 		log.Fatalf("echo: nil node")
 	}
 
-	ticker := time.NewTicker(ownTweetInterval)
+	if isLoadTest {
+		// Give discovery time to fill the peerstore before asking who to follow.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(followDelay):
+		}
+		echo.followPeers(node.Node().Peerstore().PeersWithAddrs(), node.NodeInfo().ID, followCount)
+	}
+
+	ticker := time.NewTicker(ownTweetEvery)
 	defer ticker.Stop()
 
 	for {
@@ -527,7 +729,7 @@ func runOwnTweets(ctx context.Context, echo *echoBot, node *member.MemberNode) {
 }
 
 func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID) string {
-	text, err := getChuckQuote()
+	text, err := randomEchoText()
 	if err != nil || strings.TrimSpace(text) == "" {
 		text = ownTweetFallback
 	}
@@ -545,34 +747,69 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 		CreatedAt: time.Now(),
 	}
 
-	if e.tweetRepo != nil {
-		if _, err := e.tweetRepo.Create(e.ownerID(), tweet); err != nil {
-			log.Warnf("echo: store own tweet locally id=%s: %v", tweetID, err)
-		}
-	}
-
-	if len(peers) == 0 {
-		log.Warnf("echo: own tweet id=%s broadcast skipped — no peers", tweetID)
+	// Compose against our own node. PRIVATE_POST_TWEET is owner-only — the auth
+	// middleware denies it to any other peer — and it is the compose route that
+	// stores the tweet and hands it to the follower fan-out. GenericStream
+	// refuses to dial ourselves, so this has to go through SelfStream.
+	envelope, err := e.selfEnvelope(selfID, event.PRIVATE_POST_TWEET, tweet)
+	if err != nil {
+		log.Warnf("echo: own tweet id=%s envelope: %v", tweetID, err)
 		return tweetID
 	}
+	if _, err := e.node.SelfStream(selfID, selfID, event.PRIVATE_POST_TWEET, envelope); err != nil {
+		log.Warnf("echo: own tweet id=%s compose failed: %v", tweetID, err)
+		return tweetID
+	}
+	log.Infof("echo: own tweet id=%s composed", tweetID)
+	return tweetID
+}
 
-	var sent, skipped int
+// A tweet only reaches other nodes through the author's followers, so the graph
+// has to exist before any of this measures a fan-out. The peer's owner comes
+// from its own node info; follow-back is what makes the pair mutual.
+func (e *echoBot) followPeers(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID, k int) int {
+	var followed int
+	var targets []string
 	for _, peer := range peers {
+		if followed >= k {
+			break
+		}
 		if peer == selfID {
 			continue
 		}
-		if _, err := e.node.GenericStream(peer.String(), event.PRIVATE_POST_TWEET, tweet); err != nil {
-			if strings.Contains(err.Error(), "protocols not supported") {
-				skipped++
-				continue
-			}
-			log.Warnf("echo: publish own tweet to %s: %v", peer.String(), err)
+		raw, err := e.node.GenericStream(peer.String(), event.PUBLIC_GET_INFO, nil)
+		if err != nil {
 			continue
 		}
-		sent++
+		var info warpnet.NodeInfo
+		if err := json.Unmarshal(raw, &info); err != nil {
+			continue
+		}
+		if info.OwnerId == "" || info.IsRelay() || info.OwnerId == e.ownerID() {
+			continue
+		}
+		if e.wasSeen("following", info.OwnerId) {
+			continue
+		}
+		// Against our own node: StreamFollowHandler is what subscribes us to the
+		// followee's gossip topic, and without that subscription their fan-out
+		// never reaches us. Storing the follow directly would skip it.
+		envelope, err := e.selfEnvelope(selfID, event.PUBLIC_POST_FOLLOW,
+			event.NewFollowEvent{FollowerId: e.ownerID(), FollowingId: info.OwnerId})
+		if err != nil {
+			log.Warnf("echo: follow %s envelope: %v", info.OwnerId, err)
+			continue
+		}
+		if _, err := e.node.SelfStream(selfID, selfID, event.PUBLIC_POST_FOLLOW, envelope); err != nil {
+			log.Warnf("echo: follow %s: %v", info.OwnerId, err)
+			continue
+		}
+		followed++
+		targets = append(targets, info.OwnerId)
 	}
-	log.Infof("echo: own tweet id=%s peers=%d sent=%d skipped=%d", tweetID, len(peers), sent, skipped)
-	return tweetID
+	log.Infof("echo: follow graph: self=%s following=%d of k=%d peers=%d targets=[%s]",
+		e.ownerID(), followed, k, len(peers), strings.Join(targets, " "))
+	return followed
 }
 
 func requesterNodeID(s warpnet.WarpStream) string {
@@ -582,25 +819,18 @@ func requesterNodeID(s warpnet.WarpStream) string {
 	return s.Conn().RemotePeer().String()
 }
 
-func getChuckQuote() (string, error) {
-	time.Sleep(time.Millisecond * 100)
-	type quote struct {
-		Value string `json:"value"`
+// A group of echo nodes polling an external quote API would measure that API,
+// not Warpnet. The suffix keeps every text distinct.
+func randomEchoText() (string, error) {
+	corpus := []string{
+		"peers found is not peers reachable",
+		"a counter that never converges is only a rumour",
+		"gossip costs whatever the round-robin charges it",
+		"every restart mints a generation that never leaves",
+		"a dropped delta stays invisible until something counts it",
+		"the limiter does not care which peer you needed",
+		"back pressure is the message you never see",
+		"convergence is a claim until two nodes agree on a number",
 	}
-
-	resp, err := http.Get("https://api.chucknorris.io/jokes/random")
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	var quoteResp quote
-	if err := json.Unmarshal(body, &quoteResp); err != nil {
-		return "", err
-	}
-	return quoteResp.Value, nil
+	return fmt.Sprintf("%s #%d", corpus[rand.IntN(len(corpus))], rand.IntN(1_000_000)), nil
 }
