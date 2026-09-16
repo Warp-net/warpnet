@@ -94,6 +94,9 @@ var (
 	replyPercent   = envPercent("ECHO_REPLY_PERCENT", 25)
 	followCount    = envCount("ECHO_FOLLOW_COUNT", 5)
 	followDelay    = envDuration("ECHO_FOLLOW_DELAY", 90*time.Second)
+	reactEvery     = envDuration("ECHO_REACT_INTERVAL", 30*time.Second)
+	reactBatch     = envCount("ECHO_REACT_BATCH", 2000)
+	timelinePage   = envCount("ECHO_TIMELINE_PAGE", 100)
 )
 
 func envCount(name string, fallback int) int {
@@ -246,8 +249,15 @@ func main() {
 	readyChan <- authInfo
 	echoFollowRepo := database.NewFollowRepo(db)
 	echoTweetRepo := database.NewTweetRepo(db, nil)
-	eBot := newEchoBot(echoNode, db, echoFollowRepo, echoTweetRepo, authRepo.PrivateKey())
+	echoTimelineRepo := database.NewTimelineRepo(db)
+	eBot := newEchoBot(
+		echoNode, db, echoFollowRepo, echoTweetRepo,
+		echoTimelineRepo, userRepo, authRepo.PrivateKey(),
+	)
 	go runOwnTweets(ctx, eBot, echoNode)
+	if isLoadTest {
+		go runReactions(ctx, eBot, echoNode)
+	}
 	setupHandlers(eBot, echoNode)
 
 	log.Infoln("WARPNET STARTED")
@@ -274,6 +284,14 @@ type echoTweetStorer interface {
 	Create(userId string, tweet domain.Tweet) (domain.Tweet, error)
 }
 
+type echoTimelineReader interface {
+	GetTimeline(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
+}
+
+type echoUserFetcher interface {
+	Get(userId string) (domain.User, error)
+}
+
 const echoSeenNamespace = "/ECHO_SEEN/"
 
 type echoBot struct {
@@ -281,6 +299,8 @@ type echoBot struct {
 	db           echoPersister
 	followRepo   echoFollowStorer
 	tweetRepo    echoTweetStorer
+	timelineRepo echoTimelineReader
+	userRepo     echoUserFetcher
 	privKey      ed25519.PrivateKey
 	mu           sync.Mutex
 	seen         map[string]time.Time
@@ -290,6 +310,7 @@ type echoBot struct {
 func newEchoBot(
 	node echoStreamClient, db echoPersister,
 	followRepo echoFollowStorer, tweetRepo echoTweetStorer,
+	timelineRepo echoTimelineReader, userRepo echoUserFetcher,
 	privKey ed25519.PrivateKey,
 ) *echoBot {
 	return &echoBot{
@@ -297,6 +318,8 @@ func newEchoBot(
 		db:           db,
 		followRepo:   followRepo,
 		tweetRepo:    tweetRepo,
+		timelineRepo: timelineRepo,
+		userRepo:     userRepo,
 		privKey:      privKey,
 		seen:         make(map[string]time.Time),
 		lastPruneRun: time.Now(),
@@ -489,6 +512,92 @@ func (e *echoBot) buildMessageReplyText(incomingText string) string {
 	return prefix + incomingText
 }
 
+// Reactions run off the timeline rather than off the delivery handler: the real
+// PUBLIC_POST_TIMELINE handler owns the CRDT-backed tweet repo, and a bot that
+// replaced it would silence the very counters the run is there to watch.
+func (e *echoBot) reactToTimeline(selfID warpnet.WarpPeerID) {
+	// GetTimeline sorts by time only *within* the page it fetched, and the page
+	// itself comes back in key order — so a single unpaged call returns the same
+	// oldest entries forever once the timeline outgrows it. Walk the cursor.
+	var (
+		tweets []domain.Tweet
+		cursor *string
+		page   = uint64(timelinePage)
+	)
+	for len(tweets) < reactBatch {
+		batch, next, err := e.timelineRepo.GetTimeline(e.ownerID(), &page, cursor)
+		if err != nil {
+			log.Warnf("echo: read timeline: %v", err)
+			break
+		}
+		tweets = append(tweets, batch...)
+		if len(batch) == 0 || next == "" {
+			break
+		}
+		cursor = &next
+	}
+
+	var fresh, roots, reacted, retweeted, replied, unresolved int
+	for _, tw := range tweets {
+		if tw.Id == "" || tw.UserId == e.ownerID() || e.wasSeen("reacted", tw.Id) {
+			continue
+		}
+		fresh++
+		if tw.ParentId == nil {
+			roots++
+		}
+
+		// The author's node is what the reaction routes address, and it is only
+		// known once their user record has been stored locally.
+		author, err := e.userRepo.Get(tw.UserId)
+		if err != nil || author.NodeId == "" {
+			unresolved++
+			continue
+		}
+
+		if rolled(reactPercent) {
+			if err := e.reactToTweet(tw, author.NodeId); err != nil {
+				log.Warnf("echo: react id=%s: %v", tw.Id, err)
+			} else {
+				reacted++
+			}
+		}
+		if rolled(retweetPercent) {
+			if err := e.retweet(tw, author.NodeId); err != nil {
+				log.Warnf("echo: retweet id=%s: %v", tw.Id, err)
+			} else {
+				retweeted++
+			}
+		}
+		// Only roots get replies: a reply federates as a tweet of its own, and
+		// replying to replies would let one tweet amplify without bound.
+		if tw.ParentId == nil && rolled(replyPercent) {
+			if err := e.replyToTweet(tw, selfID); err != nil {
+				log.Warnf("echo: reply id=%s: %v", tw.Id, err)
+			} else {
+				replied++
+			}
+		}
+	}
+
+	log.Infof("echo: timeline pass size=%d fresh=%d roots=%d reacted=%d retweeted=%d replied=%d unresolved=%d",
+		len(tweets), fresh, roots, reacted, retweeted, replied, unresolved)
+}
+
+func runReactions(ctx context.Context, echo *echoBot, node *member.MemberNode) {
+	ticker := time.NewTicker(reactEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			echo.reactToTimeline(node.NodeInfo().ID)
+		}
+	}
+}
+
 func (e *echoBot) reactToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
 	_, err := e.node.GenericStream(
 		requesterNodeID,
@@ -517,53 +626,34 @@ func (e *echoBot) retweet(tw event.NewTweetEvent, requesterNodeID string) error 
 	return err
 }
 
-func (e *echoBot) replyToTweet(tw event.NewTweetEvent, requesterNodeID string) error {
+// A reply is composed on our own node like any other tweet; ParentUserId is what
+// makes it federate to the parent's author instead of staying local.
+func (e *echoBot) replyToTweet(tw event.NewTweetEvent, selfID warpnet.WarpPeerID) error {
 	parentID := tw.Id
 	parentUserID := tw.UserId
 	text := echoReplyPrefix + tw.Text
-	quote, err := randomEchoText()
-	if err == nil {
+	if quote, err := randomEchoText(); err == nil {
 		text = quote
 	}
-	_, err = e.node.GenericStream(
-		requesterNodeID,
-		event.PRIVATE_POST_TWEET,
-		event.NewTweetEvent{
-			CreatedAt:    time.Now(),
-			Id:           ulid.Make().String(),
-			ParentId:     &parentID,
-			ParentUserId: &parentUserID,
-			RootId:       tw.Id,
-			Text:         text,
-			UserId:       e.ownerID(),
-			Username:     username,
-		},
-	)
-	return err
-}
-
-func (e *echoBot) replyToReply(rp event.NewTweetEvent, requesterNodeID string) error {
-	parentID := rp.Id
-	parentUserID := rp.UserId
-	text := echoReplyPrefix + rp.Text
-	quote, err := randomEchoText()
-	if err == nil {
-		text = quote
+	rootID := tw.RootId
+	if rootID == "" {
+		rootID = tw.Id
 	}
-	_, err = e.node.GenericStream(
-		requesterNodeID,
-		event.PRIVATE_POST_TWEET,
-		event.NewTweetEvent{
-			CreatedAt:    time.Now(),
-			Id:           ulid.Make().String(),
-			ParentId:     &parentID,
-			ParentUserId: &parentUserID,
-			RootId:       rp.RootId,
-			Text:         text,
-			UserId:       e.ownerID(),
-			Username:     username,
-		},
-	)
+	reply := event.NewTweetEvent{
+		CreatedAt:    time.Now(),
+		Id:           ulid.Make().String(),
+		ParentId:     &parentID,
+		ParentUserId: &parentUserID,
+		RootId:       rootID,
+		Text:         text,
+		UserId:       e.ownerID(),
+		Username:     username,
+	}
+	envelope, err := e.selfEnvelope(selfID, event.PRIVATE_POST_TWEET, reply)
+	if err != nil {
+		return err
+	}
+	_, err = e.node.SelfStream(selfID, selfID, event.PRIVATE_POST_TWEET, envelope)
 	return err
 }
 
@@ -672,6 +762,7 @@ func (e *echoBot) postOwnTweet(peers []warpnet.WarpPeerID, selfID warpnet.WarpPe
 // from its own node info; follow-back is what makes the pair mutual.
 func (e *echoBot) followPeers(peers []warpnet.WarpPeerID, selfID warpnet.WarpPeerID, k int) int {
 	var followed int
+	var targets []string
 	for _, peer := range peers {
 		if followed >= k {
 			break
@@ -707,8 +798,10 @@ func (e *echoBot) followPeers(peers []warpnet.WarpPeerID, selfID warpnet.WarpPee
 			continue
 		}
 		followed++
+		targets = append(targets, info.OwnerId)
 	}
-	log.Infof("echo: follow graph: following=%d of k=%d peers=%d", followed, k, len(peers))
+	log.Infof("echo: follow graph: self=%s following=%d of k=%d peers=%d targets=[%s]",
+		e.ownerID(), followed, k, len(peers), strings.Join(targets, " "))
 	return followed
 }
 

@@ -156,6 +156,8 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
       ECHO_REPLY_PERCENT="${ECHO_REPLY_PERCENT:-25}" \
       ECHO_FOLLOW_COUNT="${ECHO_FOLLOW_COUNT:-5}" \
       ECHO_FOLLOW_DELAY="${ECHO_FOLLOW_DELAY:-90s}" \
+      ECHO_REACT_INTERVAL="${ECHO_REACT_INTERVAL:-30s}" \
+      ECHO_REACT_BATCH="${ECHO_REACT_BATCH:-2000}" \
       "$BIN" >"$LOG_DIR/$name.log" 2>&1 &
 
     echo $! > "$pidfile"
