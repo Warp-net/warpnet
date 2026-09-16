@@ -95,9 +95,14 @@ inhibit_sleep() {
   info "sleep inhibited (pid $(cat "$pidfile"))"
 }
 
+# The binary comes from whatever $REPO is checked out at, and a stale checkout
+# will hand you someone else's already-fixed bug. Measuring on a pre-#502 tree
+# put two CRDT stores on the same bitswap protocol IDs and read the resulting
+# broadcaster evictions as a queue that needed fixing; it did not. Check out the
+# branch you are actually testing before building.
 cmd_build() {
   mkdir -p "$(dirname "$BIN")"
-  info "building echo node from $REPO"
+  info "building echo node from $REPO ($(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown rev'))"
   ( cd "$REPO" && CGO_ENABLED=0 go build -tags echo -mod=vendor \
       -o "$BIN" ./cmd/node/member/echo-member.go )
   info "built $BIN"

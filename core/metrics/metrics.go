@@ -52,6 +52,11 @@ var (
 	PubSubDelivered = counter("pubsub_delivered_total",
 		"Messages delivered to subscribers.")
 
+	// A reading here means only what the build under it means. These counters
+	// were once read as the broadcaster queue being the network's next limit;
+	// the stand was built from a51ee1d1, where both CRDT stores still shared
+	// bitswap protocol IDs, and #502 was the actual cause. Build the stand from
+	// the branch under test.
 	CRDTDeltasReceived = counter("crdt_deltas_received_total",
 		"CRDT deltas handed to the broadcaster.")
 	CRDTDeltasDropped = counter("crdt_deltas_dropped_total",
@@ -59,7 +64,9 @@ var (
 	CRDTQueueDepth = gauge("crdt_queue_depth",
 		"CRDT deltas waiting in the broadcaster queue.")
 
-	// TEMPORARY measurement scaffolding: where the consumer's wall clock goes.
+	// Where the consumer's wall clock goes, which is what separates a queue
+	// that fills because the producer is fast from one that fills because the
+	// datastore is stuck fetching a DAG.
 	CRDTConsumed = counterVec("crdt_consumed_total",
 		"Broadcasts the CRDT datastore took off the queue.", "topic")
 	CRDTConsumerBusySeconds = counterVec("crdt_consumer_busy_seconds_total",

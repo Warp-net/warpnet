@@ -31,6 +31,7 @@ package broadcast
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/metrics"
@@ -55,7 +56,7 @@ type Gossip struct {
 	mx     sync.Mutex
 	closed bool // guarded by mx; once true, dataChan is closed and no more sends are allowed.
 
-	lastNext time.Time // TEMPORARY: touched only by the single consumer goroutine in Next.
+	lastNext atomic.Int64 // unix nanos of the last Next return, for the consumer accounting
 }
 
 // NewGossip subscribes to topic and broadcasts on it.
@@ -79,10 +80,10 @@ func (gb *Gossip) Broadcast(_ context.Context, data []byte) error {
 
 // Next receives broadcasted data
 func (gb *Gossip) Next(ctx context.Context) ([]byte, error) {
-	// TEMPORARY: Next is called from the datastore's single consumer loop, so
-	// the gap since the last return is exactly its processing time.
-	if !gb.lastNext.IsZero() {
-		metrics.CRDTConsumerBusySeconds.WithLabelValues(gb.topic).Add(time.Since(gb.lastNext).Seconds())
+	// The gap since the last return is what the datastore spent on the previous
+	// broadcast instead of reading the queue.
+	if last := gb.lastNext.Load(); last != 0 {
+		metrics.CRDTConsumerBusySeconds.WithLabelValues(gb.topic).Add(time.Since(time.Unix(0, last)).Seconds())
 	}
 	waitStart := time.Now()
 
@@ -90,7 +91,7 @@ func (gb *Gossip) Next(ctx context.Context) ([]byte, error) {
 	case data := <-gb.dataChan:
 		metrics.CRDTConsumerWaitSeconds.WithLabelValues(gb.topic).Add(time.Since(waitStart).Seconds())
 		metrics.CRDTConsumed.WithLabelValues(gb.topic).Inc()
-		gb.lastNext = time.Now()
+		gb.lastNext.Store(time.Now().UnixNano())
 		return data, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -123,6 +124,11 @@ func (gb *Gossip) Receive(data []byte) {
 	// The queue is full, so the oldest delta gives way to the newest. What is
 	// evicted here is only recoverable through a rebroadcast round a minute
 	// later, which is why the loss is worth a number of its own.
+	//
+	// Measured on a stand predating #502 this fired on two deltas in three, and
+	// was read as the queue being the next thing to fix. It was the two stores
+	// fighting over shared bitswap protocol IDs: with #502 in, 25 nodes at K=20
+	// evict nothing and the consumer spends microseconds per broadcast.
 	select {
 	case <-gb.dataChan:
 		metrics.CRDTDeltasDropped.Inc()
