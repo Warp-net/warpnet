@@ -37,6 +37,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -59,9 +60,10 @@ import (
 )
 
 const (
-	username     = "Echo"
-	echoPassword = `\@4o97Z7<Cfu`
-	echoOwnerID  = "01KSGHBHKG0N77T6A3RZV8WSH5"
+	usernamePrefix = "Echo"
+	echoPassword   = `\@4o97Z7<Cfu`
+	// 23 chars: ECHO_INDEX fills the remaining three of the 26-char ULID.
+	echoOwnerPrefix = "01KSGHBHKG0N77T6A3RZV8W"
 
 	echoReplyPrefix   = "echo: "
 	echoChatReply     = "echo: received message"
@@ -73,6 +75,27 @@ const (
 	ownTweetFallback  = "echo: hello from the warpnet — random Chuck quote API was unavailable"
 	ownTweetCharLimit = 4096
 )
+
+// The node key comes from the account, not from NODE_SEED: DeriveIdentityKey
+// hashes username, password and network, so echo nodes sharing a username also
+// share a peer ID. ECHO_INDEX is what keeps a group of them apart.
+var (
+	echoIndex   = echoIndexFromEnv()
+	username    = fmt.Sprintf("%s%d", usernamePrefix, echoIndex)
+	echoOwnerID = fmt.Sprintf("%s%03d", echoOwnerPrefix, echoIndex)
+)
+
+func echoIndexFromEnv() int {
+	raw := os.Getenv("ECHO_INDEX")
+	if raw == "" {
+		return 0
+	}
+	index, err := strconv.Atoi(raw)
+	if err != nil || index < 0 || index > 999 {
+		log.Fatalf("ECHO_INDEX must be a number between 0 and 999, got %q", raw)
+	}
+	return index
+}
 
 // run node without GUI
 func main() {

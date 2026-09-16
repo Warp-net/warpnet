@@ -61,13 +61,38 @@ node_name()   { echo "echo-$(node_index "$1")"; }
 
 detect_lan_ip() {
   [ -n "$LAN_IP" ] && { echo "$LAN_IP"; return; }
-  local iface
-  iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}') || true
-  [ -n "$iface" ] && ipconfig getifaddr "$iface" 2>/dev/null && return
-  for i in en0 en1; do
-    ipconfig getifaddr "$i" 2>/dev/null && return
-  done
+  local iface addr
+  if command -v ipconfig >/dev/null 2>&1; then
+    iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}') || true
+    [ -n "$iface" ] && ipconfig getifaddr "$iface" 2>/dev/null && return
+    for i in en0 en1; do
+      ipconfig getifaddr "$i" 2>/dev/null && return
+    done
+  elif command -v ip >/dev/null 2>&1; then
+    addr=$(ip -4 route get 1.1.1.1 2>/dev/null \
+      | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}') || true
+    [ -n "$addr" ] && { echo "$addr"; return; }
+  fi
   die "could not detect the LAN address; set LAN_IP=<addr>"
+}
+
+# macOS keeps the machine awake with caffeinate, systemd with an inhibitor lock.
+# Neither is fatal: a desktop that never sleeps simply has nothing to inhibit.
+inhibit_sleep() {
+  local pidfile="$RUN_DIR/caffeinate.pid"
+  [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && return 0
+  # The inhibitor outlives this script, so it must not keep the script's stdout
+  # open: a caller that pipes us (./run-nodes.sh start | tail) would hang on it.
+  if command -v caffeinate >/dev/null 2>&1; then
+    caffeinate -dimsu </dev/null >/dev/null 2>&1 & echo $! > "$pidfile"
+  elif command -v systemd-inhibit >/dev/null 2>&1; then
+    systemd-inhibit --what=idle:sleep --who=warpnet-loadtest \
+      --why="load test in progress" sleep infinity </dev/null >/dev/null 2>&1 & echo $! > "$pidfile"
+  else
+    info "no sleep inhibitor available — keep the machine awake yourself"
+    return 0
+  fi
+  info "sleep inhibited (pid $(cat "$pidfile"))"
 }
 
 cmd_build() {
@@ -88,10 +113,7 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
   ulimit -n "$FD_LIMIT" || die "could not raise the fd limit to $FD_LIMIT"
 
   # A laptop that falls asleep mid-run takes its half of the network with it.
-  if [ ! -f "$RUN_DIR/caffeinate.pid" ] || ! kill -0 "$(cat "$RUN_DIR/caffeinate.pid")" 2>/dev/null; then
-    caffeinate -dimsu & echo $! > "$RUN_DIR/caffeinate.pid"
-    info "sleep inhibited (caffeinate pid $(cat "$RUN_DIR/caffeinate.pid"))"
-  fi
+  inhibit_sleep
 
   local lan; lan=$(detect_lan_ip)
   info "starting $COUNT nodes on $lan, indices $(node_index 0)..$(node_index $((COUNT - 1)))"
