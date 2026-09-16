@@ -287,7 +287,7 @@ func TestEnqueue_RateLimiterShedsFloods(t *testing.T) {
 
 func TestEnqueue_AfterCloseNeverSendsOnAClosedQueue(t *testing.T) {
 	s, _, _, _ := newService(t)
-	s.limiter = newRateLimiter(1<<20, 1) // the rate limiter must not hide the race
+	s.limiter = newIPRateLimiter(1<<20, 1) // the rate limiter must not hide the race
 
 	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
 	s.Close()
