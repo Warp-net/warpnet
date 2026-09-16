@@ -94,7 +94,7 @@ type discoveryService struct {
 	nodeRepo NodeStorer
 
 	ownId   warpnet.WarpPeerID
-	limiter *leakyBucketRateLimiter
+	limiter *ipRateLimiter
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -120,7 +120,7 @@ func NewDiscoveryService(
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newRateLimiter(capacity, leakPerTenSec),
+		limiter:         newIPRateLimiter(capacity, leakPerTenSec),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -133,7 +133,7 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
-		limiter:         newRateLimiter(32, 2),
+		limiter:         newIPRateLimiter(32, 2),
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -234,7 +234,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 
 	s.emit(pi.ID, warpnet.PeerDiscovered)
 
-	if !s.limiter.Allow() {
+	if !s.limiter.allow(pi.Addrs) {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
 	}

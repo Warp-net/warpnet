@@ -455,15 +455,24 @@ func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	return WarpPeerstore(store), err
 }
 
-func IsPublicMultiAddress(maddr WarpAddress) bool {
+// MultiAddressIP is the IP a multiaddress points at: the peer's own for a direct
+// address, the relay's for a circuit one. Nil when the address carries no IP.
+func MultiAddressIP(maddr WarpAddress) gonet.IP {
 	ipStr, err := maddr.ValueForProtocol(P_IP4)
 	if err != nil {
 		ipStr, err = maddr.ValueForProtocol(P_IP6)
 		if err != nil {
-			return false
+			return nil
 		}
 	}
-	ip := gonet.ParseIP(ipStr)
+	return gonet.ParseIP(ipStr)
+}
+
+func IsPublicMultiAddress(maddr WarpAddress) bool {
+	ip := MultiAddressIP(maddr)
+	if ip == nil {
+		return false
+	}
 	if ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
