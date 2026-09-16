@@ -58,12 +58,32 @@ var (
 		"CRDT deltas discarded because the broadcaster queue was full.")
 	CRDTQueueDepth = gauge("crdt_queue_depth",
 		"CRDT deltas waiting in the broadcaster queue.")
+
+	// TEMPORARY measurement scaffolding: where the consumer's wall clock goes.
+	CRDTConsumed = counterVec("crdt_consumed_total",
+		"Broadcasts the CRDT datastore took off the queue.", "topic")
+	CRDTConsumerBusySeconds = counterVec("crdt_consumer_busy_seconds_total",
+		"Seconds the CRDT datastore spent processing a broadcast instead of reading the queue.", "topic")
+	CRDTConsumerWaitSeconds = counterVec("crdt_consumer_wait_seconds_total",
+		"Seconds the CRDT datastore spent blocked on an empty queue.", "topic")
+	CRDTReceivedByTopic = counterVec("crdt_received_by_topic_total",
+		"CRDT broadcasts handed to the broadcaster, per store.", "topic")
+	CRDTDroppedByTopic = counterVec("crdt_dropped_by_topic_total",
+		"CRDT broadcasts evicted from a full queue, per store.", "topic")
 )
 
 func counter(name, help string) prometheus.Counter {
 	c := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: namespace, Name: name, Help: help,
 	})
+	prometheus.DefaultRegisterer.MustRegister(c)
+	return c
+}
+
+func counterVec(name, help string, labels ...string) *prometheus.CounterVec {
+	c := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace, Name: name, Help: help,
+	}, labels)
 	prometheus.DefaultRegisterer.MustRegister(c)
 	return c
 }
