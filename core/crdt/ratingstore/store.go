@@ -72,6 +72,10 @@ type Router interface {
 // GossipTopic is the pubsub topic this store's replicas converge on.
 const GossipTopic = "/warpnet/rating/1.0.0"
 
+// bitswapPrefix keeps this store's block exchange off the protocols the
+// stats store's own bitswap registers on the same host.
+const bitswapPrefix = "/warpnet/rating"
+
 const (
 	// recordPrefix separates the records from the datastore's own keys.
 	// It carries no repository name: the datastore this store is given is
@@ -112,7 +116,7 @@ func New(
 
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
-	bitswapNetwork := warpnet.NewBitswapNetwork(node)
+	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
 	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
 
 	for _, p := range node.Network().Peers() {
