@@ -182,73 +182,49 @@ func (g *Gossip) Run(node GossipNodeConnector) (err error) {
 		return fmt.Errorf("gossip: presubscribe: %w", err)
 	}
 
-	go func() {
-		if err := g.runListener(); err != nil {
-			log.Errorf("gossip: listener: %v", err)
-			return
-		}
-		log.Infoln("gossip: listener stopped")
-	}()
-
 	return nil
 }
 
-func (g *Gossip) runListener() error {
-	if g == nil {
+// runListener drains one subscription for as long as that subscription lives.
+// A goroutine per subscription is what keeps a topic's intake independent of
+// how many other topics the node holds: one shared round-robin let an idle
+// subscription hold the turn for its whole timeout and capped every topic at a
+// message per pass, so gossipsub shed everything that did not fit the
+// subscription buffer meanwhile.
+func (g *Gossip) runListener(sub *pubsub.Subscription) error {
+	if g == nil || sub == nil {
 		return ErrListenerMalformed
 	}
+	topicName := strings.TrimSpace(sub.Topic())
+
 	for {
-		if !g.isRunning.Load() {
+		msg, err := sub.Next(g.ctx)
+		if err != nil { // a cancelled subscription and a dead context are both final
+			log.Debugf("gossip: listener stopped for topic %s: %v", topicName, err)
 			return nil
 		}
-
-		if err := g.ctx.Err(); err != nil {
-			return err
+		if msg == nil {
+			continue
 		}
 
+		log.Debugf("gossip: received message: %s", string(msg.Data))
+
 		g.mx.RLock()
-		subs := make([]*pubsub.Subscription, len(g.subs))
-		copy(subs, g.subs)
+		handlerF, ok := g.handlersMap[topicName]
 		g.mx.RUnlock()
-
-		for _, sub := range subs { // TODO scale this!
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-
-			msg, err := sub.Next(ctx)
-			cancel()
-			if errors.Is(err, pubsub.ErrSubscriptionCancelled) {
-				continue
+		if !ok || handlerF == nil {
+			// default behavior
+			if err := g.SelfPublish(msg.Data); err != nil {
+				log.Errorf("gossip: self stream: %v", err)
 			}
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-				continue
-			}
-			if err != nil {
-				log.Errorf("gossip: failed to listen subscription to topic: %v", err)
-				continue
-			}
-			if msg == nil || msg.Topic == nil {
-				continue
-			}
-
-			log.Debugf("gossip: received message: %s", string(msg.Data))
-
-			g.mx.RLock()
-			handlerF, ok := g.handlersMap[strings.TrimSpace(*msg.Topic)]
-			g.mx.RUnlock()
-			if !ok || handlerF == nil {
-				// default behavior
-				if err := g.SelfPublish(msg.Data); err != nil {
-					log.Errorf("gossip: self stream: %v", err)
-				}
-				continue
-			}
-			if err := handlerF(msg.Data); err != nil {
-				log.Errorf(
-					"gossip: failed to handle peer %s message from topic %s: %v",
-					msg.ReceivedFrom.String(), *msg.Topic, err,
-				)
-				continue
-			}
+			continue
+		}
+		if err := handlerF(msg.Data); err != nil {
+			log.Errorf(
+				"gossip: failed to handle peer %s message from topic %s: %v",
+				msg.ReceivedFrom.String(), topicName, err,
+			)
+			continue
 		}
 	}
 }
@@ -270,7 +246,7 @@ func (g *Gossip) runGossip() (err error) {
 	}
 	g.isRunning.Store(true)
 
-	go g.runPeerInfoPublishing(time.Minute * 5)
+	go g.runPeerInfoPublishing(time.Minute * 30)
 	log.Infoln("gossip: started")
 
 	return
@@ -332,6 +308,15 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 	g.relayCancelFuncs[topicName] = relayCancel
 	g.subs = append(g.subs, sub)
 	g.handlersMap[topicName] = h
+
+	// The goroutine owns this subscription and nothing else, so it never reads
+	// g.subs. Unsubscribe and Close both cancel the subscription, which is what
+	// ends it.
+	go func() {
+		if err := g.runListener(sub); err != nil {
+			log.Errorf("gossip: listener: %v", err)
+		}
+	}()
 
 	return nil
 }
@@ -415,26 +400,37 @@ func (g *Gossip) NotSubscribers(topicName string) []warpnet.WarpAddrInfo {
 	return infos
 }
 
+// joinTopic returns the topic, joining it on first use. Publishing happens
+// outside the lock it takes: topic.Publish reaches the network, and holding a
+// write lock across it puts every listener looking up its handler in the queue
+// behind a publish.
+func (g *Gossip) joinTopic(topicName string) (*pubsub.Topic, error) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	if g.pubsub == nil {
+		return nil, ErrPubsubNotInit
+	}
+	if topic, ok := g.topics[topicName]; ok {
+		return topic, nil
+	}
+	topic, err := g.pubsub.Join(topicName)
+	if err != nil {
+		return nil, err
+	}
+	g.topics[topicName] = topic
+	return topic, nil
+}
+
 func (g *Gossip) Publish(msg event.Message, topics ...string) (err error) {
 	if g == nil || !g.isRunning.Load() {
 		return ErrPubsubNotInit
 	}
 
-	g.mx.Lock()
-	defer g.mx.Unlock()
-
-	if g.pubsub == nil {
-		return ErrPubsubNotInit
-	}
-
 	for _, topicName := range topics {
-		topic, ok := g.topics[topicName]
-		if !ok {
-			topic, err = g.pubsub.Join(topicName)
-			if err != nil {
-				return err
-			}
-			g.topics[topicName] = topic
+		topic, err := g.joinTopic(topicName)
+		if err != nil {
+			return err
 		}
 
 		if msg.MessageId == "" {
@@ -474,20 +470,9 @@ func (g *Gossip) PublishRaw(topicName string, data []byte) (err error) {
 		return ErrPubsubNotInit
 	}
 
-	g.mx.Lock()
-	defer g.mx.Unlock()
-
-	if g.pubsub == nil {
-		return ErrPubsubNotInit
-	}
-
-	topic, ok := g.topics[topicName]
-	if !ok {
-		topic, err = g.pubsub.Join(topicName)
-		if err != nil {
-			return err
-		}
-		g.topics[topicName] = topic
+	topic, err := g.joinTopic(topicName)
+	if err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)

@@ -32,6 +32,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -664,21 +665,83 @@ func TestGossip_RunPeerInfoPublishingStopsWithContext(t *testing.T) {
 	_ = g.Close()
 }
 
-func TestGossip_RunListenerStopsWhenNotRunning(t *testing.T) {
+func TestGossip_RunListenerStopsWhenSubscriptionCancelled(t *testing.T) {
 	g, _ := runningGossip(t)
-	require.NoError(t, g.Close())
+	require.NoError(t, g.SubscribeRaw("listener-stop", func([]byte) error { return nil }))
+
+	g.mx.RLock()
+	sub := g.subs[len(g.subs)-1]
+	g.mx.RUnlock()
 
 	done := make(chan error, 1)
-	go func() { done <- g.runListener() }()
+	go func() { done <- g.runListener(sub) }()
+
+	sub.Cancel()
 
 	select {
 	case err := <-done:
-		assert.NoError(t, err, "a closed gossip must let its listener exit cleanly")
+		assert.NoError(t, err, "a cancelled subscription must let its listener exit cleanly")
+	case <-time.After(10 * time.Second):
+		t.Fatal("listener did not stop after the subscription was cancelled")
+	}
+}
+
+func TestGossip_RunListenerStopsOnClose(t *testing.T) {
+	g, _ := runningGossip(t)
+	require.NoError(t, g.SubscribeRaw("listener-close", func([]byte) error { return nil }))
+
+	g.mx.RLock()
+	sub := g.subs[len(g.subs)-1]
+	g.mx.RUnlock()
+
+	done := make(chan error, 1)
+	go func() { done <- g.runListener(sub) }()
+
+	require.NoError(t, g.Close())
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "a closed gossip must let its listeners exit cleanly")
 	case <-time.After(10 * time.Second):
 		t.Fatal("listener did not stop after Close")
 	}
 }
 
 func TestGossip_RunListenerNilReceiver(t *testing.T) {
-	assert.ErrorIs(t, (*Gossip)(nil).runListener(), ErrListenerMalformed)
+	assert.ErrorIs(t, (*Gossip)(nil).runListener(nil), ErrListenerMalformed)
+
+	g, _ := runningGossip(t)
+	assert.ErrorIs(t, g.runListener(nil), ErrListenerMalformed)
+}
+
+// A node subscribes to a topic per followed user on top of discovery and the
+// CRDT stores, and all but one of them are idle at any moment. Reading them in
+// one round-robin made an idle topic cost the busy one a full turn, so this
+// pins the intake of one topic as independent of how many others exist.
+func TestGossip_IdleTopicsDoNotDelayABusyOne(t *testing.T) {
+	g, _ := runningGossip(t)
+
+	for i := range 8 {
+		require.NoError(t, g.SubscribeRaw(fmt.Sprintf("idle-%d", i), func([]byte) error { return nil }))
+	}
+
+	const burst = 40 // deeper than the default subscription buffer
+	got := make(chan []byte, burst)
+	require.NoError(t, g.SubscribeRaw("busy", func(data []byte) error {
+		got <- data
+		return nil
+	}))
+
+	for i := range burst {
+		require.NoError(t, g.PublishRaw("busy", fmt.Appendf(nil, "message-%d", i)))
+	}
+
+	deadline := time.After(10 * time.Second)
+	for i := range burst {
+		select {
+		case <-got:
+		case <-deadline:
+			t.Fatalf("only %d of %d messages reached the handler: an idle topic is holding the listener", i, burst)
+		}
+	}
 }
