@@ -131,9 +131,9 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
       continue
     fi
 
-    # ECHO_INDEX, NODE_METRICS_*, NODE_MDNS and WARP_LOADTEST are passed already
-    # but stay inert until phase 0 tasks 0.2, 0.6, 0.4 and 0.1 land. Everything
-    # above them is read by viper today (config.go: AutomaticEnv, "." -> "_").
+    # NODE_METRICS_* and NODE_MDNS are passed already but stay inert until phase
+    # 0 tasks 0.6 and 0.4 land. Everything above them is read by viper today
+    # (config.go: AutomaticEnv, "." -> "_").
     env \
       NODE_NETWORK="$NETWORK" \
       NODE_PORT="$port" \
@@ -150,6 +150,12 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
       NODE_METRICS_PORT="$mport" \
       NODE_MDNS="${NODE_MDNS:-on}" \
       WARP_LOADTEST="${WARP_LOADTEST:-0}" \
+      ECHO_TWEET_INTERVAL="${ECHO_TWEET_INTERVAL:-24h}" \
+      ECHO_REACT_PERCENT="${ECHO_REACT_PERCENT:-100}" \
+      ECHO_RETWEET_PERCENT="${ECHO_RETWEET_PERCENT:-25}" \
+      ECHO_REPLY_PERCENT="${ECHO_REPLY_PERCENT:-25}" \
+      ECHO_FOLLOW_COUNT="${ECHO_FOLLOW_COUNT:-5}" \
+      ECHO_FOLLOW_DELAY="${ECHO_FOLLOW_DELAY:-90s}" \
       "$BIN" >"$LOG_DIR/$name.log" 2>&1 &
 
     echo $! > "$pidfile"
