@@ -28,7 +28,6 @@ data class PairedNode(
     val network: String,
     val bootstrapAddrs: List<String>,
 ) {
-    /** The addresses worth dialling to reach this node, LAN ones included. */
     val dialCandidates: List<String> get() = dialAddrs(addresses, pinnedPeerId)
 
     companion object {

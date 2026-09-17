@@ -40,8 +40,6 @@ const (
 	// is a 36 MiB video, which arrives base64-encoded.
 	maxResponseSize = 64 << 20
 
-	// lanHeadStart is how long a local-network dial gets to itself before
-	// the public and relay addresses are tried.
 	lanHeadStart = 250 * time.Millisecond
 )
 
@@ -241,12 +239,6 @@ func newClient(
 	return cn, nil
 }
 
-// lanFirstDialRanker dials the paired node over the local network before
-// trying anything else. The default ranker races private addresses against
-// public ones from 0ms and leaves a relay address undelayed altogether when
-// the peer has no public address — which is exactly what a fat node behind
-// a home NAT looks like, so the phone could settle for a relayed link with
-// the desktop sitting one hop away on the same Wi-Fi.
 func lanFirstDialRanker(addrs []multiaddr.Multiaddr) []network.AddrDelay {
 	var private, rest []multiaddr.Multiaddr
 	for _, addr := range addrs {

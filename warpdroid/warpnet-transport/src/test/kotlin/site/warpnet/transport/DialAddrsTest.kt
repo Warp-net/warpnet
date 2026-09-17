@@ -33,9 +33,6 @@ class DialAddrsTest {
         )
     }
 
-    // A container bridge cannot be told apart from a real LAN by its address,
-    // so it stays in: the dial ranker gives every private address the same
-    // head start anyway.
     @Test
     fun `keeps every private range`() {
         val announced = listOf(
@@ -52,7 +49,6 @@ class DialAddrsTest {
         assertTrue(dialAddrs(listOf("/ip4/127.0.0.1/tcp/4001"), peerId).isEmpty())
     }
 
-    // "::1" must not swallow a real address that merely starts the same way.
     @Test
     fun `matches loopback on the whole address component`() {
         assertEquals(

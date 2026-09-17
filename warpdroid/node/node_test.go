@@ -155,8 +155,6 @@ func TestLanFirstDialRanker(t *testing.T) {
 	}
 }
 
-// Without a local-network address there is nothing to give a head start to,
-// so the default ranking stands.
 func TestLanFirstDialRankerFallsBackToDefault(t *testing.T) {
 	addr, err := multiaddr.NewMultiaddr("/ip4/95.164.7.11/tcp/4001")
 	if err != nil {
