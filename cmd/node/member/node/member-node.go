@@ -794,11 +794,11 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_GET_RATELIMIT_SETTINGS,
+			event.PRIVATE_GET_SETTINGS_RATELIMIT,
 			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_POST_RATELIMIT_SETTINGS,
+			event.PRIVATE_POST_SETTINGS_RATELIMIT,
 			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo, authRepo),
 		},
 	}

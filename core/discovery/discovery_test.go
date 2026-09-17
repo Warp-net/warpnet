@@ -697,3 +697,19 @@ func TestRelayDiscoveryService_HasNoUserRepositories(t *testing.T) {
 	assert.Nil(t, s.nodeRepo)
 	assert.NotNil(t, s.discoveryChan)
 }
+
+func TestSetIPRateLimits(t *testing.T) {
+	burst, leak := ipBurst, ipLeakPer10Sec
+	t.Cleanup(func() { ipBurst, ipLeakPer10Sec = burst, leak })
+
+	SetIPRateLimits(0, 5)
+	SetIPRateLimits(10, 0)
+	if ipBurst != burst || ipLeakPer10Sec != leak {
+		t.Fatalf("expected built-in limits to stand, got %d/%d", ipBurst, ipLeakPer10Sec)
+	}
+
+	SetIPRateLimits(10, 5)
+	if ipBurst != 10 || ipLeakPer10Sec != 5 {
+		t.Fatalf("expected the owner's limits, got %d/%d", ipBurst, ipLeakPer10Sec)
+	}
+}

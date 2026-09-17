@@ -47,8 +47,8 @@ export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/sett
 export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
 export const PRIVATE_GET_GATEWAY_SETTINGS = "/private/get/gateway/settings/0.0.0"
 export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0.0"
-export const PRIVATE_GET_RATELIMIT_SETTINGS = "/private/get/ratelimit/settings/0.0.0"
-export const PRIVATE_POST_RATELIMIT_SETTINGS = "/private/post/ratelimit/settings/0.0.0"
+export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0.0.0"
+export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -1079,7 +1079,7 @@ export const warpnetService = {
     // limits; the node fills every limit left unset with its built-in default.
     async getRateLimitSettings() {
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_RATELIMIT_SETTINGS,
+            path: PRIVATE_GET_SETTINGS_RATELIMIT,
             body: {},
         });
         return resp || {};
@@ -1089,7 +1089,7 @@ export const warpnetService = {
     // them back. A limit left at zero makes the node fall back to its default.
     async updateRateLimitSettings(settings) {
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_RATELIMIT_SETTINGS,
+            path: PRIVATE_POST_SETTINGS_RATELIMIT,
             body: {
                 network_low_water: Number(settings.network_low_water) || 0,
                 network_high_water: Number(settings.network_high_water) || 0,
