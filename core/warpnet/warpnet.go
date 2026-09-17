@@ -41,6 +41,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
 	"github.com/ipfs/boxo/bitswap"
 	bitswapNetwork "github.com/ipfs/boxo/bitswap/network"
@@ -249,11 +250,34 @@ func VerifyAuthorship(s WarpStream, actorNodeId string) error {
 	return ErrForeignAuthor
 }
 
+// AliasIDs lists the devices paired to a node. An id that does not parse is
+// dropped rather than failing the whole NodeInfo: back compat, older nodes
+// sent every alias base58-encoded twice and discovery dropped such a peer.
+type AliasIDs []WarpPeerID
+
+func (a *AliasIDs) UnmarshalJSON(data []byte) error {
+	var raw []string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	var ids AliasIDs
+	for _, s := range raw {
+		id := FromStringToPeerID(s)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	*a = ids
+	return nil
+}
+
 type NodeInfo struct {
 	Type           string           `json:"type"`
 	OwnerId        string           `json:"owner_id"`
 	ID             WarpPeerID       `json:"node_id"`
-	Aliases        []WarpPeerID     `json:"aliases"`
+	Aliases        AliasIDs         `json:"aliases"`
 	Version        *semver.Version  `json:"version"`
 	Addresses      []string         `json:"addresses"`
 	StartTime      time.Time        `json:"start_time"`
