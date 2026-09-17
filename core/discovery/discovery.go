@@ -106,6 +106,8 @@ type discoveryService struct {
 	events warpnet.PeerEmitter
 }
 
+const stallTimeout = time.Minute*30 + time.Second // one sec more than gossip discovery
+
 //goland:noinspection ALL
 func NewDiscoveryService(
 	ctx context.Context,
@@ -121,8 +123,8 @@ func NewDiscoveryService(
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
 		limiter:         newIPRateLimiter(capacity, leakPerTenSec),
-		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
-		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
+		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
+		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
 		events:          warpnet.NewPeerEmitter(),
