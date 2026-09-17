@@ -49,7 +49,6 @@ import (
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -85,7 +84,6 @@ type MemberNode struct {
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
 	ownerId, network string
-	rateLimits       domain.RateLimitSettings
 }
 
 func NewMemberNode(
@@ -119,7 +117,6 @@ func NewMemberNode(
 	}
 
 	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
-	rateLimits = rateLimits.WithDefaults()
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
@@ -198,17 +195,18 @@ func NewMemberNode(
 		walletRepo:    walletRepo,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
-		rateLimits:    rateLimits,
 	}
 
 	return mn, nil
 }
 
 func (m *MemberNode) Start() (err error) {
+	rateLimits, _ := database.NewSettingsRepo(m.db).GetRateLimitSettings(m.ownerId)
+
 	m.node, err = node.NewWarpNode(
 		m.ctx,
 		m.ratings,
-		m.rateLimits,
+		rateLimits,
 		m.opts...,
 	)
 	if err != nil {
@@ -258,7 +256,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings, m.rateLimits)
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings, rateLimits)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
