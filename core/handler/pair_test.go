@@ -64,7 +64,7 @@ type stubNodeAddresser struct {
 	addrs []warpnet.WarpAddress
 }
 
-func (s stubNodeAddresser) PublicAddrs() []warpnet.WarpAddress { return s.addrs }
+func (s stubNodeAddresser) Addrs() []warpnet.WarpAddress { return s.addrs }
 
 // stubPairConn embeds network.Conn so only the methods the handler calls
 // (LocalPeer/RemotePeer) need to be implemented.

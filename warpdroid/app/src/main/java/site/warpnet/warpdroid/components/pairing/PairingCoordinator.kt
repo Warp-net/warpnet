@@ -53,7 +53,7 @@ class PairingCoordinator @Inject constructor(
         // Noise handshake verifies the remote peer ID matches what the QR
         // advertised. If they don't match, the dial fails before we open any
         // stream.
-        val candidates = paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
+        val candidates = paired.dialCandidates
         val bootstrap = paired.bootstrapAddrs.ifEmpty { candidates }
 
         // Reading the identity seed touches the Keystore-backed store and
@@ -68,7 +68,7 @@ class PairingCoordinator @Inject constructor(
             privKeyHex = privKeyHex,
             pskHex = paired.psk,
             bootstrapAddrs = bootstrap,
-            desktopPeerAddr = candidates.first(),
+            desktopPeerAddr = candidates.firstOrNull().orEmpty(),
             network = paired.network,
         )
 

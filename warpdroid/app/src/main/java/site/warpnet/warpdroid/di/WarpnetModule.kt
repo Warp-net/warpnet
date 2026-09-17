@@ -98,9 +98,7 @@ object WarpnetModule {
         client = client,
         scope = scope,
         dialAddresses = {
-            val candidates = pairedNodeStore.load()?.let { paired ->
-                paired.addresses.map { "$it/p2p/${paired.pinnedPeerId}" }
-            } ?: emptyList()
+            val candidates = pairedNodeStore.load()?.dialCandidates ?: emptyList()
             Timber.tag("warpnet-dial").i("dial candidates (n=${candidates.size}): $candidates")
             candidates
         },

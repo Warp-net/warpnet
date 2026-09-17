@@ -61,38 +61,13 @@ node_name()   { echo "echo-$(node_index "$1")"; }
 
 detect_lan_ip() {
   [ -n "$LAN_IP" ] && { echo "$LAN_IP"; return; }
-  local iface addr
-  if command -v ipconfig >/dev/null 2>&1; then
-    iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}') || true
-    [ -n "$iface" ] && ipconfig getifaddr "$iface" 2>/dev/null && return
-    for i in en0 en1; do
-      ipconfig getifaddr "$i" 2>/dev/null && return
-    done
-  elif command -v ip >/dev/null 2>&1; then
-    addr=$(ip -4 route get 1.1.1.1 2>/dev/null \
-      | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}') || true
-    [ -n "$addr" ] && { echo "$addr"; return; }
-  fi
+  local iface
+  iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}') || true
+  [ -n "$iface" ] && ipconfig getifaddr "$iface" 2>/dev/null && return
+  for i in en0 en1; do
+    ipconfig getifaddr "$i" 2>/dev/null && return
+  done
   die "could not detect the LAN address; set LAN_IP=<addr>"
-}
-
-# macOS keeps the machine awake with caffeinate, systemd with an inhibitor lock.
-# Neither is fatal: a desktop that never sleeps simply has nothing to inhibit.
-inhibit_sleep() {
-  local pidfile="$RUN_DIR/caffeinate.pid"
-  [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null && return 0
-  # The inhibitor outlives this script, so it must not keep the script's stdout
-  # open: a caller that pipes us (./run-nodes.sh start | tail) would hang on it.
-  if command -v caffeinate >/dev/null 2>&1; then
-    caffeinate -dimsu </dev/null >/dev/null 2>&1 & echo $! > "$pidfile"
-  elif command -v systemd-inhibit >/dev/null 2>&1; then
-    systemd-inhibit --what=idle:sleep --who=warpnet-loadtest \
-      --why="load test in progress" sleep infinity </dev/null >/dev/null 2>&1 & echo $! > "$pidfile"
-  else
-    info "no sleep inhibitor available — keep the machine awake yourself"
-    return 0
-  fi
-  info "sleep inhibited (pid $(cat "$pidfile"))"
 }
 
 cmd_build() {
@@ -113,7 +88,10 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
   ulimit -n "$FD_LIMIT" || die "could not raise the fd limit to $FD_LIMIT"
 
   # A laptop that falls asleep mid-run takes its half of the network with it.
-  inhibit_sleep
+  if [ ! -f "$RUN_DIR/caffeinate.pid" ] || ! kill -0 "$(cat "$RUN_DIR/caffeinate.pid")" 2>/dev/null; then
+    caffeinate -dimsu & echo $! > "$RUN_DIR/caffeinate.pid"
+    info "sleep inhibited (caffeinate pid $(cat "$RUN_DIR/caffeinate.pid"))"
+  fi
 
   local lan; lan=$(detect_lan_ip)
   info "starting $COUNT nodes on $lan, indices $(node_index 0)..$(node_index $((COUNT - 1)))"
@@ -131,9 +109,9 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
       continue
     fi
 
-    # NODE_METRICS_* and NODE_MDNS are passed already but stay inert until phase
-    # 0 tasks 0.6 and 0.4 land. Everything above them is read by viper today
-    # (config.go: AutomaticEnv, "." -> "_").
+    # ECHO_INDEX, NODE_METRICS_*, NODE_MDNS and WARP_LOADTEST are passed already
+    # but stay inert until phase 0 tasks 0.2, 0.6, 0.4 and 0.1 land. Everything
+    # above them is read by viper today (config.go: AutomaticEnv, "." -> "_").
     env \
       NODE_NETWORK="$NETWORK" \
       NODE_PORT="$port" \
@@ -150,14 +128,6 @@ pass the relay multiaddrs of BOTH hosts, comma separated"
       NODE_METRICS_PORT="$mport" \
       NODE_MDNS="${NODE_MDNS:-on}" \
       WARP_LOADTEST="${WARP_LOADTEST:-0}" \
-      ECHO_TWEET_INTERVAL="${ECHO_TWEET_INTERVAL:-24h}" \
-      ECHO_REACT_PERCENT="${ECHO_REACT_PERCENT:-100}" \
-      ECHO_RETWEET_PERCENT="${ECHO_RETWEET_PERCENT:-25}" \
-      ECHO_REPLY_PERCENT="${ECHO_REPLY_PERCENT:-25}" \
-      ECHO_FOLLOW_COUNT="${ECHO_FOLLOW_COUNT:-5}" \
-      ECHO_FOLLOW_DELAY="${ECHO_FOLLOW_DELAY:-90s}" \
-      ECHO_REACT_INTERVAL="${ECHO_REACT_INTERVAL:-30s}" \
-      ECHO_REACT_BATCH="${ECHO_REACT_BATCH:-2000}" \
       "$BIN" >"$LOG_DIR/$name.log" 2>&1 &
 
     echo $! > "$pidfile"

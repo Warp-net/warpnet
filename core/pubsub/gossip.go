@@ -240,9 +240,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	opts := append(g.scoreOptions(), pubsub.WithRawTracer(metricsTracer{}))
-
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), opts...)
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
 	if err != nil {
 		return err
 	}

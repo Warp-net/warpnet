@@ -31,8 +31,6 @@ package broadcast
 import (
 	"context"
 	"sync"
-
-	"github.com/Warp-net/warpnet/core/metrics"
 )
 
 // GossipPubSuber is the pubsub this broadcaster rides.
@@ -95,31 +93,22 @@ func (gb *Gossip) Receive(data []byte) {
 		return
 	}
 
-	metrics.CRDTDeltasReceived.Inc()
-
 	select {
 	case <-gb.ctx.Done():
 		return
 	case gb.dataChan <- data:
-		metrics.CRDTQueueDepth.Set(float64(len(gb.dataChan)))
 		return
 	default:
 	}
 
-	// The queue is full, so the oldest delta gives way to the newest. What is
-	// evicted here is only recoverable through a rebroadcast round a minute
-	// later, which is why the loss is worth a number of its own.
 	select {
 	case <-gb.dataChan:
-		metrics.CRDTDeltasDropped.Inc()
 	default:
 	}
 	select {
 	case gb.dataChan <- data:
 	default:
-		metrics.CRDTDeltasDropped.Inc()
 	}
-	metrics.CRDTQueueDepth.Set(float64(len(gb.dataChan)))
 }
 
 func (gb *Gossip) close() {

@@ -132,13 +132,8 @@ func NewWarpNode(
 	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
+		libp2p.DisableMetrics(), // TODO move to settings
 		libp2p.Muxer(yamux.ID, &ya),
-	}
-	// Swarm, resource manager, identify and autonat report themselves onto the
-	// default registry once this is off, which is everything /metrics needs from
-	// libp2p. It costs, so it follows the metrics port rather than being free.
-	if config.Config().Node.Metrics.Port == "" {
-		managersOpts = append(managersOpts, libp2p.DisableMetrics())
 	}
 
 	opts = append(opts, managersOpts...)

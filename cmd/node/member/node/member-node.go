@@ -997,18 +997,11 @@ func (m *MemberNode) Network() warpnet.WarpNetwork {
 	return m.node.Node().Network()
 }
 
-func (m *MemberNode) PublicAddrs() []warpnet.WarpAddress {
+func (m *MemberNode) Addrs() []warpnet.WarpAddress {
 	if m == nil || m.node == nil {
 		return nil
 	}
-
-	publicAddrs := make([]warpnet.WarpAddress, 0, len(m.node.Node().Addrs()))
-	for _, ma := range m.node.Node().Addrs() {
-		if warpnet.IsPublicMultiAddress(ma) || warpnet.IsRelayMultiaddress(ma) {
-			publicAddrs = append(publicAddrs, ma)
-		}
-	}
-	return publicAddrs
+	return m.node.Node().Addrs()
 }
 
 func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {

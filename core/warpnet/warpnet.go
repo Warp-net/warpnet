@@ -366,14 +366,8 @@ const minConnsPerSubnet = 64
 
 func subnetConnLimit(limiter rcmgr.Limiter) int {
 	inbound := limiter.GetSystemLimits().GetConnLimit(network.DirInbound)
-	limit := inbound / 4
-	if limit < minConnsPerSubnet {
-		limit = minConnsPerSubnet
-	}
-	if limit > inbound {
-		limit = inbound
-	}
-	return limit
+	limit := max(inbound/4, minConnsPerSubnet)
+	return min(limit, inbound)
 }
 
 func newSubnetRateLimiter(perSubnet int) *rate.Limiter {
