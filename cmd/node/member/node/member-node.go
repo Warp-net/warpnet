@@ -116,15 +116,14 @@ func NewMemberNode(
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
-	// Apply the owner's rate limits before the limiters that read them are
-	// built: discovery below, the connection manager and the stream middleware
-	// in Start.
-	if rl, err := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId); err == nil {
-		warpnet.SetConnLimits(rl.NetworkLowWater, rl.NetworkHighWater)
-		discovery.SetIPRateLimits(rl.DiscoveryBurst, rl.DiscoveryPerTenSec)
-		middleware.SetReadLimits(rl.StreamReadBurst, rl.StreamReadPerMinute)
-		middleware.SetWriteLimits(rl.StreamWriteBurst, rl.StreamWritePerMinute)
-	}
+	// Apply the owner's rate limits before what reads them is built: the
+	// connection manager and the stream middleware come up in Start, discovery
+	// takes its own below. A store that cannot answer leaves them all on their
+	// defaults, since every limiter keeps what it holds on a non-positive one.
+	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
+	warpnet.SetConnLimits(rateLimits.NetworkLowWater, rateLimits.NetworkHighWater)
+	middleware.SetReadLimits(rateLimits.StreamReadBurst, rateLimits.StreamReadPerMinute)
+	middleware.SetWriteLimits(rateLimits.StreamWriteBurst, rateLimits.StreamWritePerMinute)
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
@@ -137,6 +136,7 @@ func NewMemberNode(
 
 	ratings := rating.NewPeersRatings()
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
+	discService.SetIPRateLimits(rateLimits.DiscoveryBurst, rateLimits.DiscoveryPerTenSec)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -778,19 +778,19 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamH
 func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PRIVATE_GET_NOTIFICATION_SETTINGS,
+			event.PRIVATE_GET_SETTINGS_NOTIFICATION,
 			handler.StreamGetNotificationSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
+			event.PRIVATE_POST_SETTINGS_NOTIFICATION,
 			handler.StreamUpdateNotificationSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_GET_GATEWAY_SETTINGS,
+			event.PRIVATE_GET_SETTINGS_GATEWAY,
 			handler.StreamGetGatewaySettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_POST_GATEWAY_SETTINGS,
+			event.PRIVATE_POST_SETTINGS_GATEWAY,
 			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
 		},
 		{

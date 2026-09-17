@@ -108,32 +108,21 @@ type discoveryService struct {
 
 const stallTimeout = time.Minute*30 + time.Second // one sec more than gossip discovery
 
-// ipBurst and ipLeakPer10Sec are how many discoveries one IP may fire at once
-// and how fast its bucket drains. They hold the defaults until the owner's
-// settings override them at startup (see SetIPRateLimits).
-var ipBurst, ipLeakPer10Sec = 32, 2
-
-// SetIPRateLimits overrides what one IP may spend on discovery. Non-positive
-// values are ignored, so the defaults stand.
-func SetIPRateLimits(burst, leakPer10Sec int) {
-	if burst <= 0 || leakPer10Sec <= 0 {
-		return
-	}
-	ipBurst, ipLeakPer10Sec = burst, leakPer10Sec
-}
-
 //goland:noinspection ALL
 func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
 ) *discoveryService {
+	capacity := 32
+	leakPerTenSec := 2
+
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newIPRateLimiter(ipBurst, ipLeakPer10Sec),
+		limiter:         newIPRateLimiter(capacity, leakPerTenSec),
 		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
 		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -153,6 +142,15 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 		aliasCache:      lru,
 		events:          warpnet.NewPeerEmitter(),
 	}
+}
+
+// SetIPRateLimits is what one IP may spend announcing peers. Non-positive
+// values leave the service on what it was built with.
+func (s *discoveryService) SetIPRateLimits(burst, leakPer10Sec int) {
+	if s == nil || burst <= 0 || leakPer10Sec <= 0 {
+		return
+	}
+	s.limiter.setLimits(burst, leakPer10Sec)
 }
 
 // Event is what discovery saw the peers do. The channel is never closed.

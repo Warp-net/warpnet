@@ -43,10 +43,10 @@ export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
 export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
-export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
-export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
-export const PRIVATE_GET_GATEWAY_SETTINGS = "/private/get/gateway/settings/0.0.0"
-export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0.0"
+export const PRIVATE_GET_SETTINGS_NOTIFICATION = "/private/get/settings/notification/0.0.0"
+export const PRIVATE_POST_SETTINGS_NOTIFICATION = "/private/post/settings/notification/0.0.0"
+export const PRIVATE_GET_SETTINGS_GATEWAY = "/private/get/settings/gateway/0.0.0"
+export const PRIVATE_POST_SETTINGS_GATEWAY = "/private/post/settings/gateway/0.0.0"
 export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
@@ -1019,7 +1019,7 @@ export const warpnetService = {
 
     async getNotificationSettings() {
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_NOTIFICATION_SETTINGS,
+            path: PRIVATE_GET_SETTINGS_NOTIFICATION,
             body: {},
         });
         return resp || {};
@@ -1043,7 +1043,7 @@ export const warpnetService = {
     // the saved settings back, so the caller can report real success/failure.
     async updateNotificationSettings(settings) {
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_NOTIFICATION_SETTINGS,
+            path: PRIVATE_POST_SETTINGS_NOTIFICATION,
             body: this.notificationSettingsBody(settings),
         });
         if (!resp || resp.code || !('email_enabled' in resp)) {
@@ -1056,7 +1056,7 @@ export const warpnetService = {
     // node fills node_id with the built-in default when nothing is stored yet.
     async getGatewaySettings() {
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_GATEWAY_SETTINGS,
+            path: PRIVATE_GET_SETTINGS_GATEWAY,
             body: {},
         });
         return resp || {};
@@ -1066,7 +1066,7 @@ export const warpnetService = {
     // echoed it back. An empty id makes the node fall back to its default.
     async updateGatewaySettings(nodeId) {
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_GATEWAY_SETTINGS,
+            path: PRIVATE_POST_SETTINGS_GATEWAY,
             body: { node_id: (nodeId || '').trim() },
         });
         if (!resp || resp.code || !('node_id' in resp)) {

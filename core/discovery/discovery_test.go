@@ -699,17 +699,15 @@ func TestRelayDiscoveryService_HasNoUserRepositories(t *testing.T) {
 }
 
 func TestSetIPRateLimits(t *testing.T) {
-	burst, leak := ipBurst, ipLeakPer10Sec
-	t.Cleanup(func() { ipBurst, ipLeakPer10Sec = burst, leak })
+	s := NewDiscoveryService(context.Background(), nil, nil)
+	capacity, leak := s.limiter.capacity, s.limiter.leakPer10Sec
 
-	SetIPRateLimits(0, 5)
-	SetIPRateLimits(10, 0)
-	if ipBurst != burst || ipLeakPer10Sec != leak {
-		t.Fatalf("expected built-in limits to stand, got %d/%d", ipBurst, ipLeakPer10Sec)
-	}
+	s.SetIPRateLimits(0, 5)
+	s.SetIPRateLimits(10, 0)
+	assert.Equal(t, capacity, s.limiter.capacity, "a non-positive limit must leave the service as built")
+	assert.Equal(t, leak, s.limiter.leakPer10Sec)
 
-	SetIPRateLimits(10, 5)
-	if ipBurst != 10 || ipLeakPer10Sec != 5 {
-		t.Fatalf("expected the owner's limits, got %d/%d", ipBurst, ipLeakPer10Sec)
-	}
+	s.SetIPRateLimits(10, 5)
+	assert.Equal(t, 10, s.limiter.capacity)
+	assert.Equal(t, 5, s.limiter.leakPer10Sec)
 }
