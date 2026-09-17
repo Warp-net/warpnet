@@ -32,8 +32,10 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/x/rate"
 	"io"
 	gonet "net"
+	"net/netip"
 	"runtime"
 	"strconv"
 	"strings"
@@ -72,17 +74,13 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" //nolint:staticcheck
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
-	"github.com/libp2p/go-libp2p/core/transport"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
-	"github.com/libp2p/go-libp2p/p2p/net/swarm"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
-	"github.com/libp2p/go-libp2p/p2p/transport/websocket"
-
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
@@ -327,19 +325,6 @@ func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*no
 	return noise.New(id, pk, mxs)
 }
 
-func NewTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreuse.ConnMgr, o ...tcp.Option) (*tcp.TcpTransport, error) {
-	return tcp.NewTCPTransport(u, r, s, o...)
-}
-
-func NewWebsocketTransport(
-	u transport.Upgrader,
-	r network.ResourceManager,
-	s *tcpreuse.ConnMgr,
-	o ...websocket.Option,
-) (*websocket.WebsocketTransport, error) {
-	return websocket.New(u, r, s, o...)
-}
-
 func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
 	_ = limiter.GetConnLimits().GetConnTotalLimit() // TODO move to settings
 	return connmgr.NewConnManager(
@@ -347,10 +332,6 @@ func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
 		50,
 		connmgr.WithGracePeriod(time.Hour),
 	)
-}
-
-func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {
-	return rcmgr.NewResourceManager(limiter)
 }
 
 func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
@@ -364,6 +345,53 @@ func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
 		return rcmgr.NewFixedLimiter(defaults)
 	}
 	return limiter
+}
+
+func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {
+	perSubnet := subnetConnLimit(limiter)
+	return rcmgr.NewResourceManager(
+		limiter,
+		rcmgr.WithLimitPerSubnet(
+			[]rcmgr.ConnLimitPerSubnet{{PrefixLength: 32, ConnCount: perSubnet}},
+			[]rcmgr.ConnLimitPerSubnet{
+				{PrefixLength: 56, ConnCount: perSubnet},
+				{PrefixLength: 48, ConnCount: perSubnet * 8},
+			},
+		),
+		rcmgr.WithConnRateLimiters(newSubnetRateLimiter(perSubnet)),
+	)
+}
+
+const minConnsPerSubnet = 64
+
+func subnetConnLimit(limiter rcmgr.Limiter) int {
+	inbound := limiter.GetSystemLimits().GetConnLimit(network.DirInbound)
+	limit := inbound / 4
+	if limit < minConnsPerSubnet {
+		limit = minConnsPerSubnet
+	}
+	if limit > inbound {
+		limit = inbound
+	}
+	return limit
+}
+
+func newSubnetRateLimiter(perSubnet int) *rate.Limiter {
+	subnet := rate.Limit{RPS: 1, Burst: perSubnet}
+	return &rate.Limiter{
+		NetworkPrefixLimits: []rate.PrefixLimit{
+			{Prefix: netip.MustParsePrefix("127.0.0.0/8")},
+			{Prefix: netip.MustParsePrefix("::1/128")},
+		},
+		SubnetRateLimiter: rate.SubnetLimiter{
+			IPv4SubnetLimits: []rate.SubnetLimit{{PrefixLength: 32, Limit: subnet}},
+			IPv6SubnetLimits: []rate.SubnetLimit{
+				{PrefixLength: 56, Limit: subnet},
+				{PrefixLength: 48, Limit: rate.Limit{RPS: 1, Burst: perSubnet * 8}},
+			},
+			GracePeriod: time.Minute,
+		},
+	}
 }
 
 func GetMacAddr() string {
