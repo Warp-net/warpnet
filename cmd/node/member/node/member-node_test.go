@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/database"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/require"
 )
@@ -308,6 +309,50 @@ func TestSetUserOffline(t *testing.T) {
 
 	// already offline: the second call is a no-op
 	require.NotPanics(t, func() { m.setUserOffline("12D3KooWOfflineNode") })
+}
+
+// TestNodeInfoAliasesAreDecodablePeerIDs pins the wire form of a paired
+// device. A peer ID holds the binary multihash, so the stored text has to be
+// decoded: converted, it reaches peers base58-encoded twice and every one of
+// them drops the whole NodeInfo.
+func TestNodeInfoAliasesAreDecodablePeerIDs(t *testing.T) {
+	m, db, _ := newTestMemberNode(t)
+	aliases := database.NewAliasesRepo(db)
+
+	_, phone := testKeyAndID(t)
+	_, tablet := testKeyAndID(t)
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: phone.String(), Token: "phone-token"}))
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: tablet.String(), Token: "tablet-token"}))
+	// a record that is no peer id at all has no business on the wire
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: "not-a-peer-id", Token: "junk-token"}))
+
+	info := m.NodeInfo()
+	require.ElementsMatch(t, warpnet.AliasIDs{phone, tablet}, info.Aliases)
+
+	// the node is not started, so it carries no id of its own yet
+	_, info.ID = testKeyAndID(t)
+
+	data, err := json.Marshal(info)
+	require.NoError(t, err)
+	require.Contains(t, string(data), phone.String(), "a device goes out as its own peer id text")
+
+	var decoded warpnet.NodeInfo
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.ElementsMatch(t, warpnet.AliasIDs{phone, tablet}, decoded.Aliases)
+}
+
+func TestNodeInfoAdvertisesOnlyPairedDevices(t *testing.T) {
+	m, db, _ := newTestMemberNode(t)
+	aliases := database.NewAliasesRepo(db)
+
+	require.Empty(t, m.NodeInfo().Aliases, "a node with no device paired advertises none")
+
+	_, phone := testKeyAndID(t)
+	require.NoError(t, aliases.SetAlias(domain.Alias{NodeId: phone.String(), Token: "phone-token"}))
+	require.Equal(t, warpnet.AliasIDs{phone}, m.NodeInfo().Aliases)
+
+	require.NoError(t, aliases.DeleteAlias(phone.String()))
+	require.Empty(t, m.NodeInfo().Aliases, "an unpaired device stops being advertised")
 }
 
 // TestStartBringsUpTheNode exercises the full startup path: libp2p host,
