@@ -327,7 +327,14 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 		log.Infof("member: failed to get devices for owner %s: %s", ownerPeerId, err)
 	}
 	for _, alias := range aliases {
-		bi.Aliases = append(bi.Aliases, warpnet.WarpPeerID(alias.NodeId))
+		// A peer ID holds the binary multihash, so the stored text has to be
+		// decoded: converting it encodes the text a second time on the wire.
+		id := warpnet.FromStringToPeerID(alias.NodeId)
+		if id == "" {
+			log.Infof("member: device %s has no valid node id", alias.ID)
+			continue
+		}
+		bi.Aliases = append(bi.Aliases, id)
 	}
 	return bi
 }

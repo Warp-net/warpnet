@@ -35,6 +35,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,6 +95,22 @@ func TestNodeInfo_RoleDetection(t *testing.T) {
 	assert.True(t, NodeInfo{Type: ModeratorNode}.IsModerator())
 	assert.False(t, NodeInfo{}.IsModerator())
 	assert.False(t, NodeInfo{Type: RelayNode}.IsModerator())
+}
+
+func TestNodeInfo_AliasesSurviveAnUnparseableEntry(t *testing.T) {
+	// back compat: older nodes base58-encoded every alias twice. Dropping
+	// the entry keeps the peer discoverable; failing the info did not.
+	const doubleEncoded = "CovLVG4fQcqQqkmbD2mETbwwXsgJLFKafSwpsRDdiwiWzfRaxRboq3J4o45SDjA7zeTqhYb"
+
+	var info NodeInfo
+	err := json.Unmarshal(
+		[]byte(`{"owner_id":"owner-1","aliases":["`+doubleEncoded+`","`+knownPeerID+`"]}`),
+		&info,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "owner-1", info.OwnerId)
+	assert.Equal(t, AliasIDs{FromStringToPeerID(knownPeerID)}, info.Aliases)
 }
 
 func TestFromStringToPeerID_RejectsGarbageWithoutPanicking(t *testing.T) {

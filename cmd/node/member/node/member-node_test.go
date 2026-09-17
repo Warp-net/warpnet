@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/database"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/require"
 )
@@ -308,6 +309,33 @@ func TestSetUserOffline(t *testing.T) {
 
 	// already offline: the second call is a no-op
 	require.NotPanics(t, func() { m.setUserOffline("12D3KooWOfflineNode") })
+}
+
+// TestNodeInfoAliasesAreDecodablePeerIDs pins the wire form of a paired
+// device. A peer ID holds the binary multihash, so the stored text has to be
+// decoded: converted, it reaches peers base58-encoded twice and every one of
+// them drops the whole NodeInfo.
+func TestNodeInfoAliasesAreDecodablePeerIDs(t *testing.T) {
+	m, db, _ := newTestMemberNode(t)
+
+	_, deviceId := testKeyAndID(t)
+	require.NoError(t, database.NewAliasesRepo(db).SetAlias(domain.Alias{
+		NodeId: deviceId.String(),
+		Token:  "session-token",
+	}))
+
+	info := m.NodeInfo()
+	require.Equal(t, warpnet.AliasIDs{deviceId}, info.Aliases)
+
+	// the node is not started, so it carries no id of its own yet
+	_, info.ID = testKeyAndID(t)
+
+	data, err := json.Marshal(info)
+	require.NoError(t, err)
+
+	var decoded warpnet.NodeInfo
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.Equal(t, warpnet.AliasIDs{deviceId}, decoded.Aliases)
 }
 
 // TestStartBringsUpTheNode exercises the full startup path: libp2p host,
