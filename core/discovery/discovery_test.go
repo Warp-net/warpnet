@@ -470,6 +470,28 @@ func TestHandleAsMember_RegistersGenuinelyNewUser(t *testing.T) {
 	assert.True(t, s.aliasCache.Contains(warpnet.FromStringToPeerID(peerID2)))
 }
 
+// TestHandleAsMember_ADeviceIdWeCannotReadKeepsThePeer covers what a v0.8
+// node still puts on the wire: every paired device base58-encoded twice. The
+// peer used to lose its whole info over it, and with it its place in
+// discovery, so a node with a device paired went unseen.
+func TestHandleAsMember_ADeviceIdWeCannotReadKeepsThePeer(t *testing.T) {
+	const doubleEncoded = "CovLVG4fQcqQqkmbD2mETbwwXsgJLFKafSwpsRDdiwiWzfRaxRboq3J4o45SDjA7zeTqhYb"
+
+	s, node, users, _ := newService(t)
+	node.infoResp = []byte(
+		`{"owner_id":"remote-owner","node_id":"` + peerID + `",` +
+			`"aliases":["` + doubleEncoded + `","` + peerID2 + `"]}`,
+	)
+	node.userResp = []byte(`{"id":"remote-owner","username":"remote"}`)
+
+	s.handleAsMember(discovered(peerID))
+
+	created, _ := users.counts()
+	require.Equal(t, 1, created, "an unreadable device id must not cost the peer its info")
+	assert.True(t, s.aliasCache.Contains(warpnet.FromStringToPeerID(peerID2)),
+		"the devices that do parse are still pinned to their node")
+}
+
 func TestHandleAsMember_KnownOnlineUserIsNotRefetched(t *testing.T) {
 	s, node, users, _ := newService(t)
 
