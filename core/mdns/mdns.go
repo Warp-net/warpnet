@@ -77,6 +77,7 @@ type MulticastDNS struct {
 	mdns      warpnet.WarpMDNS
 	service   *mdnsDiscoveryService
 	isRunning *atomic.Bool
+	mx        *sync.Mutex
 }
 
 type mdnsDiscoveryService struct {
@@ -125,13 +126,20 @@ func NewMulticastDNS(ctx context.Context, discoveryHandler discovery.DiscoveryHa
 		mx:               new(sync.Mutex),
 	}
 
-	return &MulticastDNS{nil, service, new(atomic.Bool)}
+	return &MulticastDNS{nil, service, new(atomic.Bool), new(sync.Mutex)}
 }
 
+// Start brings the service up. Starting it on a goroutine of its own used to
+// race Close: libp2p sets the socket up inside Start and closing reads what it
+// writes, so a node stopped right after it came up hit a start still running.
 func (m *MulticastDNS) Start(n NodeConnector) {
 	if m == nil {
 		return
 	}
+
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
 	if m.isRunning.Load() {
 		return
 	}
@@ -143,20 +151,22 @@ func (m *MulticastDNS) Start(n NodeConnector) {
 
 	m.mdns = mdns.NewMdnsService(n.Node(), warpnet.WarpnetName, m.service)
 
-	go func() {
-		if err := m.mdns.Start(); err != nil {
-			log.Errorf("mdns: failed to start: %v", err)
-			return
-		}
-		log.Infoln("mdns: service started")
-	}()
+	if err := m.mdns.Start(); err != nil {
+		log.Errorf("mdns: failed to start: %v", err)
+		return
+	}
+	log.Infoln("mdns: service started")
 }
 
 func (m *MulticastDNS) Close() {
-	if m == nil || m.mdns == nil {
+	if m == nil {
 		return
 	}
-	if !m.isRunning.Load() {
+
+	m.mx.Lock()
+	defer m.mx.Unlock()
+
+	if m.mdns == nil || !m.isRunning.Load() {
 		return
 	}
 	if err := m.mdns.Close(); err != nil {
