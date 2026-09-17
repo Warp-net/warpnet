@@ -706,7 +706,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getFilter(userId: String, filterId: String): site.warpnet.transport.dto.WarpnetFilter? {
         val raw = client.request(
-            ProtocolIds.PRIVATE_GET_FILTER,
+            ProtocolIds.PRIVATE_GET_SETTINGS_FILTER,
             getFilterAdapter.toJson(
                 site.warpnet.transport.dto.GetFilterEvent(userId = userId, filterId = filterId),
             ),
@@ -716,7 +716,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getFilters(userId: String, cursor: String = "", limit: Int = 40): Pair<List<site.warpnet.transport.dto.WarpnetFilter>, String> {
         val raw = client.request(
-            ProtocolIds.PRIVATE_GET_FILTERS,
+            ProtocolIds.PRIVATE_GET_SETTINGS_FILTERS,
             getFiltersAdapter.toJson(
                 site.warpnet.transport.dto.GetFiltersEvent(userId = userId, cursor = cursor, limit = limit),
             ),
@@ -728,7 +728,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun createFilter(filter: site.warpnet.transport.dto.WarpnetFilter): site.warpnet.transport.dto.WarpnetFilter {
         val raw = client.request(
-            ProtocolIds.PRIVATE_POST_FILTER,
+            ProtocolIds.PRIVATE_POST_SETTINGS_FILTER,
             filterAdapter.toJson(filter),
         )
         return filterAdapter.fromJson(raw)
@@ -737,7 +737,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun updateFilter(filter: site.warpnet.transport.dto.WarpnetFilter): site.warpnet.transport.dto.WarpnetFilter {
         val raw = client.request(
-            ProtocolIds.PRIVATE_POST_FILTER_UPDATE,
+            ProtocolIds.PRIVATE_POST_SETTINGS_FILTER_UPDATE,
             filterAdapter.toJson(filter),
         )
         return filterAdapter.fromJson(raw)
@@ -746,7 +746,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun deleteFilter(userId: String, filterId: String) {
         client.request(
-            ProtocolIds.PRIVATE_DELETE_FILTER,
+            ProtocolIds.PRIVATE_DELETE_SETTINGS_FILTER,
             deleteFilterAdapter.toJson(
                 site.warpnet.transport.dto.DeleteFilterEvent(userId = userId, filterId = filterId),
             ),
@@ -755,7 +755,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun addFilterKeyword(userId: String, filterId: String, keyword: String, wholeWord: Boolean): site.warpnet.transport.dto.WarpnetFilterKeyword {
         val raw = client.request(
-            ProtocolIds.PRIVATE_POST_FILTER_KEYWORD,
+            ProtocolIds.PRIVATE_POST_SETTINGS_FILTER_KEYWORD,
             addFilterKwAdapter.toJson(
                 site.warpnet.transport.dto.AddFilterKeywordEvent(
                     userId = userId, filterId = filterId, keyword = keyword, wholeWord = wholeWord,
@@ -768,7 +768,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun updateFilterKeyword(userId: String, keywordId: String, keyword: String, wholeWord: Boolean): site.warpnet.transport.dto.WarpnetFilterKeyword {
         val raw = client.request(
-            ProtocolIds.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            ProtocolIds.PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE,
             updateFilterKwAdapter.toJson(
                 site.warpnet.transport.dto.UpdateFilterKeywordEvent(
                     userId = userId, keywordId = keywordId, keyword = keyword, wholeWord = wholeWord,
@@ -781,7 +781,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun deleteFilterKeyword(userId: String, keywordId: String) {
         client.request(
-            ProtocolIds.PRIVATE_DELETE_FILTER_KEYWORD,
+            ProtocolIds.PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD,
             deleteFilterKwAdapter.toJson(
                 site.warpnet.transport.dto.DeleteFilterKeywordEvent(userId = userId, keywordId = keywordId),
             ),
@@ -932,7 +932,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun blockUser(blockerId: String, blockeeId: String) {
         client.request(
-            ProtocolIds.PRIVATE_POST_BLOCK,
+            ProtocolIds.PRIVATE_POST_SETTINGS_BLOCK,
             blockEventAdapter.toJson(
                 site.warpnet.transport.dto.BlockEvent(blockerId = blockerId, blockeeId = blockeeId),
             ),
@@ -941,7 +941,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun unblockUser(blockerId: String, blockeeId: String) {
         client.request(
-            ProtocolIds.PRIVATE_POST_UNBLOCK,
+            ProtocolIds.PRIVATE_POST_SETTINGS_UNBLOCK,
             blockEventAdapter.toJson(
                 site.warpnet.transport.dto.BlockEvent(blockerId = blockerId, blockeeId = blockeeId),
             ),
@@ -950,7 +950,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getBlocks(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
         val raw = client.request(
-            ProtocolIds.PRIVATE_GET_BLOCKS,
+            ProtocolIds.PRIVATE_GET_SETTINGS_BLOCKS,
             getBlocksEventAdapter.toJson(
                 site.warpnet.transport.dto.GetBlocksEvent(userId = userId, cursor = cursor, limit = limit),
             ),
@@ -961,7 +961,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun muteUser(muterId: String, muteeId: String) {
         client.request(
-            ProtocolIds.PRIVATE_POST_MUTE,
+            ProtocolIds.PRIVATE_POST_SETTINGS_MUTE,
             muteEventAdapter.toJson(
                 site.warpnet.transport.dto.MuteEvent(muterId = muterId, muteeId = muteeId),
             ),
@@ -970,7 +970,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun unmuteUser(muterId: String, muteeId: String) {
         client.request(
-            ProtocolIds.PRIVATE_POST_UNMUTE,
+            ProtocolIds.PRIVATE_POST_SETTINGS_UNMUTE,
             muteEventAdapter.toJson(
                 site.warpnet.transport.dto.MuteEvent(muterId = muterId, muteeId = muteeId),
             ),
@@ -979,7 +979,7 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getMutes(userId: String, cursor: String = "", limit: Int = 40): Pair<List<String>, String> {
         val raw = client.request(
-            ProtocolIds.PRIVATE_GET_MUTES,
+            ProtocolIds.PRIVATE_GET_SETTINGS_MUTES,
             getBlocksEventAdapter.toJson(
                 site.warpnet.transport.dto.GetBlocksEvent(userId = userId, cursor = cursor, limit = limit),
             ),

@@ -41,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/middleware"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -111,11 +112,13 @@ type WarpNode struct {
 func NewWarpNode(
 	ctx context.Context,
 	ratings PeersRatings,
+	limits ratelimit.Settings,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
-	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
+	limits = limits.WithDefaults()
+	limiter := warpnet.NewConfigurableLimiter(nil)
 
-	manager, err := warpnet.NewConnManager(limiter)
+	manager, err := warpnet.NewConnManager(limiter, limits.NetworkLowWater, limits.NetworkHighWater)
 	if err != nil {
 		return nil, err
 	}

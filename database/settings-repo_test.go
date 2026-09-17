@@ -4,6 +4,7 @@ package database
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/google/uuid"
@@ -98,6 +99,34 @@ func (s *SettingsRepoTestSuite) TestGatewayEmptyUserId() {
 	_, err := s.repo.GetGatewaySettings("")
 	s.Error(err)
 	s.Error(s.repo.SetGatewaySettings("", domain.GatewaySettings{}))
+}
+
+func (s *SettingsRepoTestSuite) TestRateLimitDefaultsWhenUnset() {
+	user := uuid.New().String()
+	got, err := s.repo.GetRateLimitSettings(user)
+	s.Require().NoError(err)
+	s.Equal(ratelimit.Settings{}, got)
+}
+
+func (s *SettingsRepoTestSuite) TestRateLimitSetGet() {
+	user := uuid.New().String()
+	want := ratelimit.Defaults
+	want.NetworkHighWater = 500
+	s.Require().NoError(s.repo.SetRateLimitSettings(user, want))
+
+	got, err := s.repo.GetRateLimitSettings(user)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+
+	gs, err := s.repo.GetGatewaySettings(user)
+	s.Require().NoError(err)
+	s.Empty(gs.NodeID)
+}
+
+func (s *SettingsRepoTestSuite) TestRateLimitEmptyUserId() {
+	_, err := s.repo.GetRateLimitSettings("")
+	s.Error(err)
+	s.Error(s.repo.SetRateLimitSettings("", ratelimit.Settings{}))
 }
 
 func TestSettingsRepoTestSuite(t *testing.T) {

@@ -26,6 +26,7 @@ package node
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/domain"
 	"time"
 
@@ -296,8 +297,10 @@ type PollProvider interface {
 type SettingsProvider interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
+	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
+	SetRateLimitSettings(userId string, s ratelimit.Settings) error
 }
 
 type SubscriptionProvider interface {

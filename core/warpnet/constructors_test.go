@@ -47,7 +47,7 @@ func TestNewLimiterAndManagers(t *testing.T) {
 	fallback := NewConfigurableLimiter(strings.NewReader(`{`))
 	require.NotNil(t, fallback)
 
-	cm, err := NewConnManager(limiter)
+	cm, err := NewConnManager(limiter, 20, 50)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = cm.Close() })
 
@@ -56,6 +56,22 @@ func TestNewLimiterAndManagers(t *testing.T) {
 	t.Cleanup(func() { _ = rm.Close() })
 
 	require.NotNil(t, rm)
+}
+
+func TestNewConnManagerTakesTheOwnersWaterMarks(t *testing.T) {
+	limiter := NewConfigurableLimiter(nil)
+
+	cm, err := NewConnManager(limiter, 30, 80)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cm.Close() })
+	require.Equal(t, 30, cm.GetInfo().LowWater)
+	require.Equal(t, 80, cm.GetInfo().HighWater)
+
+	clamped, err := NewConnManager(limiter, 30, 1_000_000)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = clamped.Close() })
+	require.Equal(t, limiter.GetSystemLimits().GetConnTotalLimit(), clamped.GetInfo().HighWater)
+	require.Less(t, clamped.GetInfo().LowWater, clamped.GetInfo().HighWater)
 }
 
 func TestNewPeerstore(t *testing.T) {

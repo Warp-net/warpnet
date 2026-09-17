@@ -325,11 +325,11 @@ func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*no
 	return noise.New(id, pk, mxs)
 }
 
-func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
-	_ = limiter.GetConnLimits().GetConnTotalLimit() // TODO move to settings
+func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.BasicConnMgr, error) {
+	high := min(highWater, limiter.GetSystemLimits().GetConnTotalLimit())
 	return connmgr.NewConnManager(
-		20,
-		50,
+		min(lowWater, high/2),
+		high,
 		connmgr.WithGracePeriod(time.Hour),
 	)
 }

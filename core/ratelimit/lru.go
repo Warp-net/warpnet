@@ -25,41 +25,34 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package middleware
+package ratelimit
 
 import (
-	"github.com/Warp-net/warpnet/core/stream"
-	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/event"
+	"reflect"
+	"unsafe"
+
 	log "github.com/sirupsen/logrus"
 )
 
-// StreamLimiter answers whether a peer may still call a route.
-type StreamLimiter interface {
-	Allow(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) bool
-	Close()
-}
-
-func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
-	return func(data []byte, s warpnet.WarpStream) (any, error) {
-		conn := s.Conn()
-		if p.limiter == nil || conn == nil {
-			return next(data, s)
+func CloseExpirableLRU(cache any) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Debugf("ratelimit: CloseExpirableLRU recovered: %v", r)
 		}
-
-		remotePeer := conn.RemotePeer()
-		if remotePeer == conn.LocalPeer() || remotePeer == p.ownNodeId {
-			return next(data, s)
-		}
-
-		route := stream.FromPrIDToRoute(s.Protocol())
-		if !p.limiter.Allow(route, remotePeer) {
-			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
-			p.emitStream(s, warpnet.PeerRateLimited)
-			return event.ResponseError{
-				Code: event.RateLimitErrorCode, Message: ErrRateLimited.Error(),
-			}, nil
-		}
-		return next(data, s)
+	}()
+	v := reflect.ValueOf(cache)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return
 	}
+	field := v.Elem().FieldByName("done")
+	if !field.IsValid() || field.Kind() != reflect.Chan {
+		return
+	}
+	// FieldByName on an unexported field returns a Value flagged as
+	// read-only, so reflect.Value.Close() would panic. Rebuild a settable
+	// Value pointing at the same memory to bypass the export check.
+	//#nosec G103 // intentional: bypass reflect's exported-field check to close the library's `done` chan
+	settable := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	// Closing an already-closed channel panics; rely on the recover above.
+	settable.Close()
 }

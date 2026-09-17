@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
@@ -47,19 +48,6 @@ func NewSettingsRepo(db SettingsStorer) *SettingsRepo {
 	return &SettingsRepo{db: db}
 }
 
-func settingsKey(userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		Build()
-}
-
-func gatewaySettingsKey(userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("gateway").
-		Build()
-}
-
 // GetNotificationSettings returns the user's notification settings, or a
 // zero-value (email disabled) record when none has been saved yet.
 func (repo *SettingsRepo) GetNotificationSettings(userId string) (domain.NotificationSettings, error) {
@@ -71,7 +59,9 @@ func (repo *SettingsRepo) GetNotificationSettings(userId string) (domain.Notific
 		return domain.NotificationSettings{}, err
 	}
 	defer txn.Rollback()
-	bt, err := txn.Get(settingsKey(userId))
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		Build())
 	if local_store.IsNotFoundError(err) {
 		return domain.NotificationSettings{}, nil
 	}
@@ -102,7 +92,9 @@ func (repo *SettingsRepo) SetNotificationSettings(userId string, s domain.Notifi
 		return err
 	}
 	defer txn.Rollback()
-	if err := txn.Set(settingsKey(userId), bt); err != nil {
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		Build(), bt); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -119,7 +111,10 @@ func (repo *SettingsRepo) GetGatewaySettings(userId string) (domain.GatewaySetti
 		return domain.GatewaySettings{}, err
 	}
 	defer txn.Rollback()
-	bt, err := txn.Get(gatewaySettingsKey(userId))
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("gateway").
+		Build())
 	if local_store.IsNotFoundError(err) {
 		return domain.GatewaySettings{}, nil
 	}
@@ -150,7 +145,61 @@ func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySett
 		return err
 	}
 	defer txn.Rollback()
-	if err := txn.Set(gatewaySettingsKey(userId), bt); err != nil {
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("gateway").
+		Build(), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *SettingsRepo) GetRateLimitSettings(userId string) (ratelimit.Settings, error) {
+	if userId == "" {
+		return ratelimit.Settings{}, local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return ratelimit.Settings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("ratelimit").
+		Build())
+	if local_store.IsNotFoundError(err) {
+		return ratelimit.Settings{}, nil
+	}
+	if err != nil {
+		return ratelimit.Settings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return ratelimit.Settings{}, err
+	}
+	var s ratelimit.Settings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return ratelimit.Settings{}, err
+	}
+	return s, nil
+}
+
+func (repo *SettingsRepo) SetRateLimitSettings(userId string, s ratelimit.Settings) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("ratelimit").
+		Build(), bt); err != nil {
 		return err
 	}
 	return txn.Commit()

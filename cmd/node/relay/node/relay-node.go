@@ -39,6 +39,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -139,7 +140,7 @@ func NewRelayNode(
 	}
 
 	ratings := rating.NewPeersRatings()
-	discService := discovery.NewRelayDiscoveryService(ctx)
+	discService := discovery.NewRelayDiscoveryService(ctx, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -226,6 +227,7 @@ func (rn *RelayNode) Start() (err error) {
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
 		rn.ratings,
+		ratelimit.Settings{},
 		rn.opts...,
 	)
 	if err != nil {
@@ -284,7 +286,9 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.ratings)
+	rn.mw = middleware.NewWarpMiddleware(
+		rn.node.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, rn.ratings),
+	)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

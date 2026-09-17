@@ -43,22 +43,24 @@ export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
 export const PRIVATE_POST_NOTIFICATION_READ = "/private/post/notification/read/0.0.0"
 export const PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
-export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/settings/0.0.0"
-export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
-export const PRIVATE_GET_GATEWAY_SETTINGS = "/private/get/gateway/settings/0.0.0"
-export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0.0"
+export const PRIVATE_GET_SETTINGS_NOTIFICATION = "/private/get/settings/notification/0.0.0"
+export const PRIVATE_POST_SETTINGS_NOTIFICATION = "/private/post/settings/notification/0.0.0"
+export const PRIVATE_GET_SETTINGS_GATEWAY = "/private/get/settings/gateway/0.0.0"
+export const PRIVATE_POST_SETTINGS_GATEWAY = "/private/post/settings/gateway/0.0.0"
+export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0.0.0"
+export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
 export const PRIVATE_GET_REACTIONS = "/private/get/reactions/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
-export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
-export const PRIVATE_POST_UNBLOCK = "/private/post/unblock/0.0.0"
-export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
-export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
-export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
-export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
+export const PRIVATE_POST_SETTINGS_BLOCK = "/private/post/settings/block/0.0.0"
+export const PRIVATE_POST_SETTINGS_UNBLOCK = "/private/post/settings/unblock/0.0.0"
+export const PRIVATE_GET_SETTINGS_BLOCKS = "/private/get/settings/blocks/0.0.0"
+export const PRIVATE_POST_SETTINGS_MUTE = "/private/post/settings/mute/0.0.0"
+export const PRIVATE_POST_SETTINGS_UNMUTE = "/private/post/settings/unmute/0.0.0"
+export const PRIVATE_GET_SETTINGS_MUTES = "/private/get/settings/mutes/0.0.0"
 export const PUBLIC_GET_TWEET_REACTORS = "/public/get/tweet/reactors/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
@@ -68,14 +70,14 @@ export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
 export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
-export const PRIVATE_GET_FILTER = "/private/get/filter/0.0.0"
-export const PRIVATE_GET_FILTERS = "/private/get/filters/0.0.0"
-export const PRIVATE_POST_FILTER = "/private/post/filter/0.0.0"
-export const PRIVATE_POST_FILTER_UPDATE = "/private/post/filter/update/0.0.0"
-export const PRIVATE_DELETE_FILTER = "/private/delete/filter/0.0.0"
-export const PRIVATE_POST_FILTER_KEYWORD = "/private/post/filter/keyword/0.0.0"
-export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
-export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
+export const PRIVATE_GET_SETTINGS_FILTER = "/private/get/settings/filter/0.0.0"
+export const PRIVATE_GET_SETTINGS_FILTERS = "/private/get/settings/filters/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER = "/private/post/settings/filter/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER_UPDATE = "/private/post/settings/filter/update/0.0.0"
+export const PRIVATE_DELETE_SETTINGS_FILTER = "/private/delete/settings/filter/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER_KEYWORD = "/private/post/settings/filter/keyword/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE = "/private/post/settings/filter/keyword/update/0.0.0"
+export const PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD = "/private/delete/settings/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
@@ -761,7 +763,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_BLOCK,
+            path: PRIVATE_POST_SETTINGS_BLOCK,
             body: {
                 blocker_id: owner.user_id,
                 blockee_id: targetUserId,
@@ -778,7 +780,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_UNBLOCK,
+            path: PRIVATE_POST_SETTINGS_UNBLOCK,
             body: {
                 blocker_id: owner.user_id,
                 blockee_id: targetUserId,
@@ -806,7 +808,7 @@ export const warpnetService = {
         try {
             while (true) {
                 const resp = await this.sendToNode({
-                    path: PRIVATE_GET_BLOCKS,
+                    path: PRIVATE_GET_SETTINGS_BLOCKS,
                     body: { user_id: owner.user_id, limit: defaultLimit, cursor },
                 });
                 const ids = resp?.ids || [];
@@ -834,7 +836,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { ids: [], cursor: endCursor };
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_BLOCKS,
+            path: PRIVATE_GET_SETTINGS_BLOCKS,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -861,7 +863,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_MUTE,
+            path: PRIVATE_POST_SETTINGS_MUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
@@ -876,7 +878,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_UNMUTE,
+            path: PRIVATE_POST_SETTINGS_UNMUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
@@ -903,7 +905,7 @@ export const warpnetService = {
         try {
             while (true) {
                 const resp = await this.sendToNode({
-                    path: PRIVATE_GET_MUTES,
+                    path: PRIVATE_GET_SETTINGS_MUTES,
                     body: { user_id: owner.user_id, limit: defaultLimit, cursor },
                 });
                 const ids = resp?.ids || [];
@@ -929,7 +931,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { ids: [], cursor: endCursor };
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_MUTES,
+            path: PRIVATE_GET_SETTINGS_MUTES,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -948,7 +950,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_GET_FILTER,
+            path: PRIVATE_GET_SETTINGS_FILTER,
             body: {
                 user_id: owner.user_id,
                 filter_id: filterId,
@@ -960,7 +962,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { filters: [], cursor: 'end' };
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_FILTERS,
+            path: PRIVATE_GET_SETTINGS_FILTERS,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -974,7 +976,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER,
+            path: PRIVATE_POST_SETTINGS_FILTER,
             body: {
                 user_id: owner.user_id,
                 title: filter.title || '',
@@ -990,7 +992,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER_UPDATE,
+            path: PRIVATE_POST_SETTINGS_FILTER_UPDATE,
             body: {
                 user_id: owner.user_id,
                 id: filter.id,
@@ -1007,7 +1009,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_DELETE_FILTER,
+            path: PRIVATE_DELETE_SETTINGS_FILTER,
             body: {
                 user_id: owner.user_id,
                 filter_id: filterId,
@@ -1017,7 +1019,7 @@ export const warpnetService = {
 
     async getNotificationSettings() {
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_NOTIFICATION_SETTINGS,
+            path: PRIVATE_GET_SETTINGS_NOTIFICATION,
             body: {},
         });
         return resp || {};
@@ -1041,7 +1043,7 @@ export const warpnetService = {
     // the saved settings back, so the caller can report real success/failure.
     async updateNotificationSettings(settings) {
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_NOTIFICATION_SETTINGS,
+            path: PRIVATE_POST_SETTINGS_NOTIFICATION,
             body: this.notificationSettingsBody(settings),
         });
         if (!resp || resp.code || !('email_enabled' in resp)) {
@@ -1054,7 +1056,7 @@ export const warpnetService = {
     // node fills node_id with the built-in default when nothing is stored yet.
     async getGatewaySettings() {
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_GATEWAY_SETTINGS,
+            path: PRIVATE_GET_SETTINGS_GATEWAY,
             body: {},
         });
         return resp || {};
@@ -1064,7 +1066,7 @@ export const warpnetService = {
     // echoed it back. An empty id makes the node fall back to its default.
     async updateGatewaySettings(nodeId) {
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_GATEWAY_SETTINGS,
+            path: PRIVATE_POST_SETTINGS_GATEWAY,
             body: { node_id: (nodeId || '').trim() },
         });
         if (!resp || resp.code || !('node_id' in resp)) {
@@ -1073,11 +1075,39 @@ export const warpnetService = {
         return resp;
     },
 
+    async getRateLimitSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SETTINGS_RATELIMIT,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    async updateRateLimitSettings(settings) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SETTINGS_RATELIMIT,
+            body: {
+                network_low_water: Number(settings.network_low_water) || 0,
+                network_high_water: Number(settings.network_high_water) || 0,
+                discovery_burst: Number(settings.discovery_burst) || 0,
+                discovery_per_ten_sec: Number(settings.discovery_per_ten_sec) || 0,
+                stream_read_burst: Number(settings.stream_read_burst) || 0,
+                stream_read_per_minute: Number(settings.stream_read_per_minute) || 0,
+                stream_write_burst: Number(settings.stream_write_burst) || 0,
+                stream_write_per_minute: Number(settings.stream_write_per_minute) || 0,
+            },
+        });
+        if (!resp || resp.code || !('network_low_water' in resp)) {
+            throw new Error(resp?.message || 'Failed to save rate limit settings');
+        }
+        return resp;
+    },
+
     async addFilterKeyword(filterId, keyword, wholeWord) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER_KEYWORD,
+            path: PRIVATE_POST_SETTINGS_FILTER_KEYWORD,
             body: {
                 user_id: owner.user_id,
                 filter_id: filterId,
@@ -1091,7 +1121,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            path: PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE,
             body: {
                 user_id: owner.user_id,
                 keyword_id: keywordId,
@@ -1105,7 +1135,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_DELETE_FILTER_KEYWORD,
+            path: PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD,
             body: {
                 user_id: owner.user_id,
                 keyword_id: keywordId,
