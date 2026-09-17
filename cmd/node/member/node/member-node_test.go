@@ -280,14 +280,14 @@ func TestAccessorsAreNilSafeBeforeStart(t *testing.T) {
 	require.Nil(t, m.Node())
 	require.Nil(t, m.Peerstore())
 	require.Nil(t, m.Network())
-	require.Nil(t, m.PublicAddrs())
+	require.Nil(t, m.Addrs())
 	require.NoError(t, m.Connect(warpnet.WarpAddrInfo{}))
 
 	var nilNode *MemberNode
 	require.Nil(t, nilNode.Node())
 	require.Nil(t, nilNode.Peerstore())
 	require.Nil(t, nilNode.Network())
-	require.Nil(t, nilNode.PublicAddrs())
+	require.Nil(t, nilNode.Addrs())
 	require.NoError(t, nilNode.Connect(warpnet.WarpAddrInfo{}))
 	require.NotPanics(t, nilNode.Stop)
 }
@@ -373,7 +373,7 @@ func TestStartBringsUpTheNode(t *testing.T) {
 	require.NotNil(t, m.Node())
 	require.NotNil(t, m.Peerstore())
 	require.NotNil(t, m.Network())
-	require.NotNil(t, m.PublicAddrs())
+	require.NotNil(t, m.Addrs())
 
 	// priority tuning is a no-op on an unknown peer but must not panic
 	_, otherID := testKeyAndID(t)

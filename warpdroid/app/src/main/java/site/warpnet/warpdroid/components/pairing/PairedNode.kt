@@ -6,6 +6,7 @@
 package site.warpnet.warpdroid.components.pairing
 
 import com.squareup.moshi.JsonClass
+import site.warpnet.transport.dialAddrs
 import site.warpnet.transport.dto.AuthNodeInfo
 
 /**
@@ -27,6 +28,9 @@ data class PairedNode(
     val network: String,
     val bootstrapAddrs: List<String>,
 ) {
+    /** The addresses worth dialling to reach this node, LAN ones included. */
+    val dialCandidates: List<String> get() = dialAddrs(addresses, pinnedPeerId)
+
     companion object {
         fun from(info: AuthNodeInfo): PairedNode = PairedNode(
             token = info.token,

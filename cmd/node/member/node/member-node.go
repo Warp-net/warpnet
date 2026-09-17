@@ -997,18 +997,15 @@ func (m *MemberNode) Network() warpnet.WarpNetwork {
 	return m.node.Node().Network()
 }
 
-func (m *MemberNode) PublicAddrs() []warpnet.WarpAddress {
+// Addrs is every address the node listens on, LAN ones included: a paired
+// device on the same network reaches the node fastest over its 192.168.*
+// address, and filtering those out left a device that changed networks no
+// way to find it again short of re-scanning the QR.
+func (m *MemberNode) Addrs() []warpnet.WarpAddress {
 	if m == nil || m.node == nil {
 		return nil
 	}
-
-	publicAddrs := make([]warpnet.WarpAddress, 0, len(m.node.Node().Addrs()))
-	for _, ma := range m.node.Node().Addrs() {
-		if warpnet.IsPublicMultiAddress(ma) || warpnet.IsRelayMultiaddress(ma) {
-			publicAddrs = append(publicAddrs, ma)
-		}
-	}
-	return publicAddrs
+	return m.node.Node().Addrs()
 }
 
 func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
