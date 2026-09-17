@@ -38,7 +38,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/fediverse"
-	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -65,6 +64,12 @@ type NodeStorer interface {
 	IsBlocklisted(peerId string) bool
 	BlocklistExponential(peerId string) error
 	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
+}
+
+// IPLimiter answers whether the IP a peer is announced at may still be heard.
+type IPLimiter interface {
+	Allow(addrs []warpnet.WarpAddress) bool
+	Close()
 }
 
 type UserStorer interface {
@@ -95,7 +100,7 @@ type discoveryService struct {
 	nodeRepo NodeStorer
 
 	ownId   warpnet.WarpPeerID
-	limiter *ipRateLimiter
+	limiter IPLimiter
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -114,16 +119,14 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
-	limits ratelimit.Settings,
+	limiter IPLimiter,
 ) *discoveryService {
-	limits = limits.WithDefaults()
-
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newIPRateLimiter(limits.DiscoveryBurst, limits.DiscoveryPerTenSec),
+		limiter:         limiter,
 		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
 		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -132,11 +135,11 @@ func NewDiscoveryService(
 	}
 }
 
-func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
+func NewRelayDiscoveryService(ctx context.Context, limiter IPLimiter) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
-		limiter:         newIPRateLimiter(32, 2),
+		limiter:         limiter,
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -237,7 +240,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 
 	s.emit(pi.ID, warpnet.PeerDiscovered)
 
-	if !s.limiter.allow(pi.Addrs) {
+	if !s.limiter.Allow(pi.Addrs) {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
 	}
@@ -516,6 +519,7 @@ func (s *discoveryService) Close() {
 		return
 	}
 	s.discoveryTicker.Stop()
+	s.limiter.Close()
 	// discoveryChan is left open on purpose: senders outlive Close and a send on
 	// a closed channel panics. The reader exits on stopChan alone.
 	close(s.stopChan)

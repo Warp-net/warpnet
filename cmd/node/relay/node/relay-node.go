@@ -140,7 +140,7 @@ func NewRelayNode(
 	}
 
 	ratings := rating.NewPeersRatings()
-	discService := discovery.NewRelayDiscoveryService(ctx)
+	discService := discovery.NewRelayDiscoveryService(ctx, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -286,7 +286,9 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.ratings, ratelimit.Settings{})
+	rn.mw = middleware.NewWarpMiddleware(
+		rn.node.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, rn.ratings),
+	)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

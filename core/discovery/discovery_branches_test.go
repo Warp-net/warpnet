@@ -32,7 +32,7 @@ func TestRunRoutesByNodeRole(t *testing.T) {
 			node.info = tt.info
 			node.infoResp = infoJSON(t, warpnet.NodeInfo{ID: warpnet.FromStringToPeerID(peerID)})
 
-			s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.Settings{})
+			s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.NewIPLimiter(ratelimit.Settings{}))
 			t.Cleanup(s.Close)
 			require.NoError(t, s.Run(node))
 
@@ -51,7 +51,7 @@ func TestRunRefusesWithoutAChannel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.Settings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	s.discoveryChan = nil
 	require.Error(t, s.Run(newFakeNode()))
 }
@@ -60,7 +60,7 @@ func TestRunLoopStopsOnClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.Settings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	require.NoError(t, s.Run(newFakeNode()))
 	s.Close()
 	// closing twice must stay safe
@@ -70,7 +70,7 @@ func TestRunLoopStopsOnClose(t *testing.T) {
 func TestRunLoopStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.Settings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	t.Cleanup(s.Close)
 	require.NoError(t, s.Run(newFakeNode()))
 
@@ -98,7 +98,7 @@ func TestEnqueueDropsOldestOnOverflow(t *testing.T) {
 
 	// The limiter allows a burst; fill the channel past its capacity so the
 	// overflow branch has to make room.
-	s.limiter = newIPRateLimiter(10_000, 10_000)
+	s.limiter = ratelimit.NewIPLimiter(ratelimit.Settings{DiscoveryBurst: 10_000, DiscoveryPerTenSec: 10_000})
 	peer := warpnet.FromStringToPeerID(peerID)
 	for range cap(s.discoveryChan) + 5 {
 		s.enqueue(warpnet.WarpAddrInfo{ID: peer}, sourceGossip)

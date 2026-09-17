@@ -27,7 +27,21 @@ resulting from the use or misuse of this software.
 
 package ratelimit
 
-import "github.com/Warp-net/warpnet/event"
+import (
+	"strconv"
+	"time"
+
+	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/event"
+	log "github.com/sirupsen/logrus"
+)
+
+const (
+	streamBucketsSize = 4096
+	streamBucketsTTL  = 10 * time.Minute
+)
 
 var (
 	delivery  = PerMinute(200, 1200)
@@ -39,19 +53,28 @@ var (
 	gateway   = PerMinute(600, 6000)
 )
 
-// StreamLimits is what a peer may spend on a node's routes: the budgets the
-// owner sets for reads and writes, and the ones a route carries of its own.
-type StreamLimits struct {
-	read, write Limit
-	routes      map[string]Limit
+// PeersRatings answers how much of a route a peer may spend, which is how a
+// node serves a badly rated peer more slowly.
+type PeersRatings interface {
+	RateMultiplier(peerID warpnet.WarpPeerID) float64
 }
 
-func NewStreamLimits(s Settings) StreamLimits {
+// StreamLimiter is what a peer may spend on a node's routes: the budgets the
+// owner set for reads and writes, the ones a route carries of its own, and
+// what its rating leaves it of either.
+type StreamLimiter struct {
+	read, write Limit
+	routes      map[string]Limit
+	buckets     *Buckets
+	ratings     PeersRatings
+}
+
+func NewStreamLimiter(s Settings, ratings PeersRatings) *StreamLimiter {
 	s = s.WithDefaults()
 	read := PerMinute(int64(s.StreamReadBurst), int64(s.StreamReadPerMinute))
 	write := PerMinute(int64(s.StreamWriteBurst), int64(s.StreamWritePerMinute))
 
-	return StreamLimits{
+	return &StreamLimiter{
 		read:  read,
 		write: write,
 		routes: map[string]Limit{
@@ -77,14 +100,55 @@ func NewStreamLimits(s Settings) StreamLimits {
 			event.PRIVATE_POST_PAIR:          pairing,
 			event.PUBLIC_POST_NODE_CHALLENGE: pairing,
 		},
+		buckets: NewBuckets(streamBucketsSize, streamBucketsTTL),
+		ratings: ratings,
 	}
 }
 
-func (l StreamLimits) Route(path string) (Limit, bool) {
-	limit, ok := l.routes[path]
-	return limit, ok
+func (l *StreamLimiter) Allow(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) bool {
+	if l == nil {
+		return true
+	}
+
+	multiplier := l.multiplier(remotePeer)
+	limit := l.route(route, remotePeer).MultipliedBy(multiplier)
+	if multiplier < 1 {
+		log.Infof(
+			"ratelimit: rating leaves %s %d calls per minute on %s",
+			remotePeer, limit.PerMinute(), route,
+		)
+	}
+	// A peer whose standing moved does not keep the bucket it filled under
+	// the old one.
+	key := route.String() + "|" + remotePeer.String() + "|" + strconv.FormatFloat(multiplier, 'f', 2, 64)
+	return l.buckets.Allow(key, limit)
 }
 
-func (l StreamLimits) Read() Limit    { return l.read }
-func (l StreamLimits) Write() Limit   { return l.write }
-func (l StreamLimits) Gateway() Limit { return gateway }
+func (l *StreamLimiter) Close() {
+	if l == nil {
+		return
+	}
+	l.buckets.Close()
+}
+
+func (l *StreamLimiter) route(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) Limit {
+	if remotePeer.String() == fediverse.GatewayNodeID() {
+		return gateway
+	}
+	if limit, ok := l.routes[route.String()]; ok {
+		return limit
+	}
+	if route.IsGet() {
+		return l.read
+	}
+	return l.write
+}
+
+// multiplier is the share of a route a peer may spend. A node with no ratings
+// serves every peer in full.
+func (l *StreamLimiter) multiplier(peerID warpnet.WarpPeerID) float64 {
+	if l.ratings == nil {
+		return 1
+	}
+	return l.ratings.RateMultiplier(peerID)
+}

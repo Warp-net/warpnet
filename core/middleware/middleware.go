@@ -30,7 +30,6 @@ package middleware
 import (
 	"time"
 
-	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
 )
 
@@ -65,34 +64,23 @@ type WarpMiddleware struct {
 	ownNodeId       warpnet.WarpPeerID
 	aliases         AliasPairer
 
-	buckets *ratelimit.Buckets
-	limits  ratelimit.StreamLimits
+	limiter StreamLimiter
 
-	events  warpnet.PeerEmitter
-	ratings PeersRatings
-}
-
-// PeersRatings answers how much of a route's allowance a peer may spend,
-// which is how a node serves a badly rated peer more slowly.
-type PeersRatings interface {
-	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	events warpnet.PeerEmitter
 }
 
 func NewWarpMiddleware(
 	ownNodeId warpnet.WarpPeerID,
 	aliases AliasPairer,
-	ratings PeersRatings,
-	limits ratelimit.Settings,
+	limiter StreamLimiter,
 ) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
-		buckets:         ratelimit.NewBuckets(bucketsCacheSize, bucketsCacheTTL),
-		limits:          ratelimit.NewStreamLimits(limits),
+		limiter:         limiter,
 		events:          warpnet.NewPeerEmitter(),
-		ratings:         ratings,
 	}
 	return wm
 }
@@ -123,5 +111,7 @@ func (p *WarpMiddleware) Close() {
 	if p.idempotency != nil {
 		p.idempotency.Close()
 	}
-	p.buckets.Close()
+	if p.limiter != nil {
+		p.limiter.Close()
+	}
 }

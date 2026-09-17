@@ -223,7 +223,7 @@ func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fak
 	users := newFakeUserRepo()
 	nodes := newFakeNodeRepo()
 
-	s := NewDiscoveryService(ctx, users, nodes, ratelimit.Settings{})
+	s := NewDiscoveryService(ctx, users, nodes, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	t.Cleanup(s.Close)
 
 	s.node = node
@@ -288,7 +288,7 @@ func TestEnqueue_RateLimiterShedsFloods(t *testing.T) {
 
 func TestEnqueue_AfterCloseNeverSendsOnAClosedQueue(t *testing.T) {
 	s, _, _, _ := newService(t)
-	s.limiter = newIPRateLimiter(1<<20, 1) // the rate limiter must not hide the race
+	s.limiter = ratelimit.NewIPLimiter(ratelimit.Settings{DiscoveryBurst: 1 << 20, DiscoveryPerTenSec: 1}) // the rate limiter must not hide the race
 
 	pi := warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)}
 	s.Close()
@@ -321,7 +321,7 @@ func TestClose_KeepsTheQueueOpenForLateSenders(t *testing.T) {
 	node := newFakeNode()
 	node.info.Type = warpnet.RelayNode
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.Settings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	require.NoError(t, s.Run(node))
 
 	s.Close()
@@ -555,7 +555,7 @@ func TestHandleAsMember_NilDependenciesAreInert(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	bare := NewDiscoveryService(ctx, nil, nil, ratelimit.Settings{})
+	bare := NewDiscoveryService(ctx, nil, nil, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	defer bare.Close()
 	assert.NotPanics(t, func() { bare.handleAsMember(discovered(peerID)) })
 }
@@ -668,7 +668,7 @@ func TestRun_RoutesByNodeRoleAndStopsCleanly(t *testing.T) {
 	users := newFakeUserRepo()
 	nodes := newFakeNodeRepo()
 
-	s := NewDiscoveryService(ctx, users, nodes, ratelimit.Settings{})
+	s := NewDiscoveryService(ctx, users, nodes, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	require.NoError(t, s.Run(node))
 
 	s.DiscoveryHandlerPubSub(warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)})
@@ -691,22 +691,10 @@ func TestRelayDiscoveryService_HasNoUserRepositories(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := NewRelayDiscoveryService(ctx)
+	s := NewRelayDiscoveryService(ctx, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 	defer s.Close()
 
 	assert.Nil(t, s.userRepo, "a relay stores no users")
 	assert.Nil(t, s.nodeRepo)
 	assert.NotNil(t, s.discoveryChan)
-}
-
-func TestDiscoveryServiceTakesTheOwnersIPRateLimits(t *testing.T) {
-	s := NewDiscoveryService(context.Background(), nil, nil, ratelimit.Settings{
-		DiscoveryBurst: 10, DiscoveryPerTenSec: 5,
-	})
-	assert.Equal(t, ratelimit.PerTenSeconds(10, 5), s.limiter.limit)
-
-	byDefault := NewDiscoveryService(context.Background(), nil, nil, ratelimit.Settings{})
-	assert.Equal(t, ratelimit.PerTenSeconds(
-		int64(ratelimit.Defaults.DiscoveryBurst), int64(ratelimit.Defaults.DiscoveryPerTenSec),
-	), byDefault.limiter.limit)
 }

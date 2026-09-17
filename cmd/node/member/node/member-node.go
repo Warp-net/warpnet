@@ -44,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/wallet"
@@ -84,6 +85,7 @@ type MemberNode struct {
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
 	ownerId, network string
+	rateLimits       ratelimit.Settings
 }
 
 func NewMemberNode(
@@ -128,7 +130,7 @@ func NewMemberNode(
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
 	ratings := rating.NewPeersRatings()
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, rateLimits)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, ratelimit.NewIPLimiter(rateLimits))
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -195,18 +197,17 @@ func NewMemberNode(
 		walletRepo:    walletRepo,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
+		rateLimits:    rateLimits,
 	}
 
 	return mn, nil
 }
 
 func (m *MemberNode) Start() (err error) {
-	rateLimits, _ := database.NewSettingsRepo(m.db).GetRateLimitSettings(m.ownerId)
-
 	m.node, err = node.NewWarpNode(
 		m.ctx,
 		m.ratings,
-		rateLimits,
+		m.rateLimits,
 		m.opts...,
 	)
 	if err != nil {
@@ -256,7 +257,9 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings, rateLimits)
+	m.mw = middleware.NewWarpMiddleware(
+		m.node.Node().ID(), m.aliasesRepo, ratelimit.NewStreamLimiter(m.rateLimits, m.ratings),
+	)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,

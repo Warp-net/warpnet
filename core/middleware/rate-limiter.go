@@ -28,26 +28,22 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"strconv"
-	"time"
-
-	"github.com/Warp-net/warpnet/core/fediverse"
-	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	bucketsCacheSize = 4096
-	bucketsCacheTTL  = 10 * time.Minute
-)
+// StreamLimiter answers whether a peer may still call a route.
+type StreamLimiter interface {
+	Allow(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) bool
+	Close()
+}
 
 func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
 		conn := s.Conn()
-		if p.buckets == nil || conn == nil {
+		if p.limiter == nil || conn == nil {
 			return next(data, s)
 		}
 
@@ -57,7 +53,7 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		}
 
 		route := stream.FromPrIDToRoute(s.Protocol())
-		if !p.allow(route, remotePeer) {
+		if !p.limiter.Allow(route, remotePeer) {
 			log.Infof("middleware: rate limiter: %s: limited peer %s", route, remotePeer)
 			p.emitStream(s, warpnet.PeerRateLimited)
 			return event.ResponseError{
@@ -66,41 +62,4 @@ func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) war
 		}
 		return next(data, s)
 	}
-}
-
-func (p *WarpMiddleware) allow(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) bool {
-	multiplier := p.rateMultiplier(remotePeer)
-	limit := p.limitForRoute(route, remotePeer).MultipliedBy(multiplier)
-	if multiplier < 1 {
-		log.Infof(
-			"middleware: rate limiter: rating leaves %s %d calls per minute on %s",
-			remotePeer, limit.PerMinute(), route,
-		)
-	}
-	// A peer whose standing moved does not keep the bucket it filled under
-	// the old one.
-	key := route.String() + "|" + remotePeer.String() + "|" + strconv.FormatFloat(multiplier, 'f', 2, 64)
-	return p.buckets.Allow(key, limit)
-}
-
-func (p *WarpMiddleware) limitForRoute(
-	route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
-) ratelimit.Limit {
-	if remotePeer.String() == fediverse.GatewayNodeID() {
-		return p.limits.Gateway()
-	}
-	if limit, ok := p.limits.Route(route.String()); ok {
-		return limit
-	}
-	if route.IsGet() {
-		return p.limits.Read()
-	}
-	return p.limits.Write()
-}
-
-func (p *WarpMiddleware) rateMultiplier(peerID warpnet.WarpPeerID) float64 {
-	if p == nil || p.ratings == nil {
-		return 1
-	}
-	return p.ratings.RateMultiplier(peerID)
 }

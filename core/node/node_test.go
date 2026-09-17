@@ -82,7 +82,7 @@ func newTestNode(t *testing.T) *WarpNode {
 
 	n, err := NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
-	mw := middleware.NewWarpMiddleware(n.Node().ID(), nil, rating.NewPeersRatings(), ratelimit.Settings{})
+	mw := middleware.NewWarpMiddleware(n.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, rating.NewPeersRatings()))
 	t.Cleanup(mw.Close)
 	n.SetStreamMiddlewares(mw.LoggingMiddleware, mw.AuthMiddleware, mw.IdempotencyMiddleware)
 	t.Cleanup(func() {

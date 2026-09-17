@@ -198,7 +198,9 @@ func (mn *ModeratorNode) Start() (err error) {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.ratings, ratelimit.Settings{})
+	mn.mw = middleware.NewWarpMiddleware(
+		mn.node.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, mn.ratings),
+	)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
