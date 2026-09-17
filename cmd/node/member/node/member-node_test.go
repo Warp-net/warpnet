@@ -96,11 +96,6 @@ func newMemberNodeOn(t *testing.T, db *local_store.DB, authRepo *database.AuthRe
 	return m
 }
 
-// noopMDNS stands in for multicast discovery. These tests stop a node the
-// moment it is up, which no desktop does - a logout follows a login by a
-// human - and libp2p's service sets its socket up inside Start while Close
-// reads what that writes, so the real one would be closed mid-start. What it
-// does on its own is core/mdns's to cover.
 type noopMDNS struct{}
 
 func (noopMDNS) Start(mdns.NodeConnector) {}

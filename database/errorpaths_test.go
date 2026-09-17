@@ -256,8 +256,8 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 
 	t.Run("CorruptPayload", func(t *testing.T) {
 		s := newFaultStore(t)
-		require.NoError(t, s.db.Set(settingsKey(userId), []byte("{not-json")))
-		require.NoError(t, s.db.Set(gatewaySettingsKey(userId), []byte("{not-json")))
+		require.NoError(t, s.db.Set(settingsKey(userId, ""), []byte("{not-json")))
+		require.NoError(t, s.db.Set(settingsKey(userId, "gateway"), []byte("{not-json")))
 
 		repo := NewSettingsRepo(s)
 		_, err := repo.GetNotificationSettings(userId)

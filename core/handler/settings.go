@@ -47,7 +47,6 @@ type GatewaySettingsStorer interface {
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 }
 
-// RateLimitSettingsStorer is the narrow surface the rate-limit handlers need.
 type RateLimitSettingsStorer interface {
 	GetRateLimitSettings(userId string) (domain.RateLimitSettings, error)
 	SetRateLimitSettings(userId string, s domain.RateLimitSettings) error
@@ -159,8 +158,6 @@ func StreamUpdateRateLimitSettingsHandler(
 		if owner.UserId == "" {
 			return nil, warpnet.WarpError("update rate limit settings: empty owner")
 		}
-		// A limit left out keeps its default, so the node never runs on a
-		// zero budget because the client omitted a field.
 		settings := ev.WithDefaults()
 		if settings.NetworkLowWater >= settings.NetworkHighWater {
 			return nil, warpnet.WarpError("update rate limit settings: network low water must be below high water")

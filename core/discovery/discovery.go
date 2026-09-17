@@ -113,16 +113,16 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
+	limits domain.RateLimitSettings,
 ) *discoveryService {
-	capacity := 32
-	leakPerTenSec := 2
+	limits = limits.WithDefaults()
 
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newIPRateLimiter(capacity, leakPerTenSec),
+		limiter:         newIPRateLimiter(limits.DiscoveryBurst, limits.DiscoveryPerTenSec),
 		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
 		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -142,15 +142,6 @@ func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
 		aliasCache:      lru,
 		events:          warpnet.NewPeerEmitter(),
 	}
-}
-
-// SetIPRateLimits is what one IP may spend announcing peers. Non-positive
-// values leave the service on what it was built with.
-func (s *discoveryService) SetIPRateLimits(burst, leakPer10Sec int) {
-	if s == nil || burst <= 0 || leakPer10Sec <= 0 {
-		return
-	}
-	s.limiter.setLimits(burst, leakPer10Sec)
 }
 
 // Event is what discovery saw the peers do. The channel is never closed.

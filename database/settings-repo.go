@@ -47,24 +47,12 @@ func NewSettingsRepo(db SettingsStorer) *SettingsRepo {
 	return &SettingsRepo{db: db}
 }
 
-func settingsKey(userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		Build()
-}
-
-func gatewaySettingsKey(userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("gateway").
-		Build()
-}
-
-func rateLimitSettingsKey(userId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("ratelimit").
-		Build()
+func settingsKey(userId, kind string) local_store.DatabaseKey {
+	root := local_store.NewPrefixBuilder(SettingsRepoName).AddRootID(userId)
+	if kind == "" {
+		return root.Build()
+	}
+	return root.AddParentId(kind).Build()
 }
 
 // GetNotificationSettings returns the user's notification settings, or a
@@ -78,7 +66,7 @@ func (repo *SettingsRepo) GetNotificationSettings(userId string) (domain.Notific
 		return domain.NotificationSettings{}, err
 	}
 	defer txn.Rollback()
-	bt, err := txn.Get(settingsKey(userId))
+	bt, err := txn.Get(settingsKey(userId, ""))
 	if local_store.IsNotFoundError(err) {
 		return domain.NotificationSettings{}, nil
 	}
@@ -109,7 +97,7 @@ func (repo *SettingsRepo) SetNotificationSettings(userId string, s domain.Notifi
 		return err
 	}
 	defer txn.Rollback()
-	if err := txn.Set(settingsKey(userId), bt); err != nil {
+	if err := txn.Set(settingsKey(userId, ""), bt); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -126,7 +114,7 @@ func (repo *SettingsRepo) GetGatewaySettings(userId string) (domain.GatewaySetti
 		return domain.GatewaySettings{}, err
 	}
 	defer txn.Rollback()
-	bt, err := txn.Get(gatewaySettingsKey(userId))
+	bt, err := txn.Get(settingsKey(userId, "gateway"))
 	if local_store.IsNotFoundError(err) {
 		return domain.GatewaySettings{}, nil
 	}
@@ -157,14 +145,12 @@ func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySett
 		return err
 	}
 	defer txn.Rollback()
-	if err := txn.Set(gatewaySettingsKey(userId), bt); err != nil {
+	if err := txn.Set(settingsKey(userId, "gateway"), bt); err != nil {
 		return err
 	}
 	return txn.Commit()
 }
 
-// GetRateLimitSettings returns the user's rate limits, or a zero-value record
-// (every limit left at its built-in default) when none has been saved yet.
 func (repo *SettingsRepo) GetRateLimitSettings(userId string) (domain.RateLimitSettings, error) {
 	if userId == "" {
 		return domain.RateLimitSettings{}, local_store.DBError("empty user id")
@@ -174,7 +160,7 @@ func (repo *SettingsRepo) GetRateLimitSettings(userId string) (domain.RateLimitS
 		return domain.RateLimitSettings{}, err
 	}
 	defer txn.Rollback()
-	bt, err := txn.Get(rateLimitSettingsKey(userId))
+	bt, err := txn.Get(settingsKey(userId, "ratelimit"))
 	if local_store.IsNotFoundError(err) {
 		return domain.RateLimitSettings{}, nil
 	}
@@ -191,7 +177,6 @@ func (repo *SettingsRepo) GetRateLimitSettings(userId string) (domain.RateLimitS
 	return s, nil
 }
 
-// SetRateLimitSettings persists the user's rate limits.
 func (repo *SettingsRepo) SetRateLimitSettings(userId string, s domain.RateLimitSettings) error {
 	if userId == "" {
 		return local_store.DBError("empty user id")
@@ -205,7 +190,7 @@ func (repo *SettingsRepo) SetRateLimitSettings(userId string, s domain.RateLimit
 		return err
 	}
 	defer txn.Rollback()
-	if err := txn.Set(rateLimitSettingsKey(userId), bt); err != nil {
+	if err := txn.Set(settingsKey(userId, "ratelimit"), bt); err != nil {
 		return err
 	}
 	return txn.Commit()

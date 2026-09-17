@@ -32,6 +32,7 @@ import (
 	"bytes"
 	"errors"
 	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/domain"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -200,7 +201,7 @@ func injectBody(messageID string) StreamMiddleware {
 
 func idempotentChain(t *testing.T, messageID string, handler warpnet.WarpHandlerFunc) warpnet.StreamHandler {
 	t.Helper()
-	mw := middleware.NewWarpMiddleware("peer1", nil, rating.NewPeersRatings())
+	mw := middleware.NewWarpMiddleware("peer1", nil, rating.NewPeersRatings(), domain.RateLimitSettings{})
 	t.Cleanup(mw.Close)
 	return unwrapHandler(injectBody(messageID)(mw.IdempotencyMiddleware(handler)))
 }

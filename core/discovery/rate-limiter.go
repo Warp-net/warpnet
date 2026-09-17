@@ -58,15 +58,6 @@ func newIPRateLimiter(capacity int, leakPer10Sec int) *ipRateLimiter {
 	}
 }
 
-// setLimits is what an IP may spend from here on. Buckets already handed out
-// keep what they were built with, and at startup there are none.
-func (l *ipRateLimiter) setLimits(capacity, leakPer10Sec int) {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-
-	l.capacity, l.leakPer10Sec = capacity, leakPer10Sec
-}
-
 // allow charges the bucket of the IP the peer is reachable at. Peers announced
 // without an address share a single bucket.
 func (l *ipRateLimiter) allow(addrs []warpnet.WarpAddress) bool {

@@ -49,6 +49,7 @@ import (
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -84,6 +85,7 @@ type MemberNode struct {
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
 	ownerId, network string
+	rateLimits       domain.RateLimitSettings
 }
 
 func NewMemberNode(
@@ -116,14 +118,8 @@ func NewMemberNode(
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
-	// Apply the owner's rate limits before what reads them is built: the
-	// connection manager and the stream middleware come up in Start, discovery
-	// takes its own below. A store that cannot answer leaves them all on their
-	// defaults, since every limiter keeps what it holds on a non-positive one.
 	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
-	warpnet.SetConnLimits(rateLimits.NetworkLowWater, rateLimits.NetworkHighWater)
-	middleware.SetReadLimits(rateLimits.StreamReadBurst, rateLimits.StreamReadPerMinute)
-	middleware.SetWriteLimits(rateLimits.StreamWriteBurst, rateLimits.StreamWritePerMinute)
+	rateLimits = rateLimits.WithDefaults()
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
@@ -135,8 +131,7 @@ func NewMemberNode(
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
 	ratings := rating.NewPeersRatings()
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
-	discService.SetIPRateLimits(rateLimits.DiscoveryBurst, rateLimits.DiscoveryPerTenSec)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, rateLimits)
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -203,6 +198,7 @@ func NewMemberNode(
 		walletRepo:    walletRepo,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
+		rateLimits:    rateLimits,
 	}
 
 	return mn, nil
@@ -212,6 +208,7 @@ func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
 		m.ratings,
+		m.rateLimits,
 		m.opts...,
 	)
 	if err != nil {
@@ -261,7 +258,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings)
+	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings, m.rateLimits)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -703,35 +700,35 @@ func (m *MemberNode) followRequestHandlers(
 func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PRIVATE_GET_FILTER,
+			event.PRIVATE_GET_SETTINGS_FILTER,
 			handler.StreamGetFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_GET_FILTERS,
+			event.PRIVATE_GET_SETTINGS_FILTERS,
 			handler.StreamGetFiltersHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER,
+			event.PRIVATE_POST_SETTINGS_FILTER,
 			handler.StreamNewFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER_UPDATE,
+			event.PRIVATE_POST_SETTINGS_FILTER_UPDATE,
 			handler.StreamUpdateFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_DELETE_FILTER,
+			event.PRIVATE_DELETE_SETTINGS_FILTER,
 			handler.StreamDeleteFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER_KEYWORD,
+			event.PRIVATE_POST_SETTINGS_FILTER_KEYWORD,
 			handler.StreamAddFilterKeywordHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+			event.PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE,
 			handler.StreamUpdateFilterKeywordHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_DELETE_FILTER_KEYWORD,
+			event.PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD,
 			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
 		},
 	}
@@ -946,27 +943,27 @@ func (m *MemberNode) socialFilterHandlers(
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PRIVATE_POST_BLOCK,
+			event.PRIVATE_POST_SETTINGS_BLOCK,
 			handler.StreamBlockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
-			event.PRIVATE_POST_UNBLOCK,
+			event.PRIVATE_POST_SETTINGS_UNBLOCK,
 			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
-			event.PRIVATE_GET_BLOCKS,
+			event.PRIVATE_GET_SETTINGS_BLOCKS,
 			handler.StreamGetBlocksHandler(r.blocksRepo),
 		},
 		{
-			event.PRIVATE_POST_MUTE,
+			event.PRIVATE_POST_SETTINGS_MUTE,
 			handler.StreamMuteHandler(r.mutesRepo),
 		},
 		{
-			event.PRIVATE_POST_UNMUTE,
+			event.PRIVATE_POST_SETTINGS_UNMUTE,
 			handler.StreamUnmuteHandler(r.mutesRepo),
 		},
 		{
-			event.PRIVATE_GET_MUTES,
+			event.PRIVATE_GET_SETTINGS_MUTES,
 			handler.StreamGetMutesHandler(r.mutesRepo),
 		},
 	}

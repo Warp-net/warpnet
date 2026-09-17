@@ -55,12 +55,12 @@ export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
 export const PRIVATE_GET_REACTIONS = "/private/get/reactions/0.0.0"
 export const PUBLIC_POST_PIN = "/public/post/pin/0.0.0"
 export const PUBLIC_POST_UNPIN = "/public/post/unpin/0.0.0"
-export const PRIVATE_POST_BLOCK = "/private/post/block/0.0.0"
-export const PRIVATE_POST_UNBLOCK = "/private/post/unblock/0.0.0"
-export const PRIVATE_GET_BLOCKS = "/private/get/blocks/0.0.0"
-export const PRIVATE_POST_MUTE = "/private/post/mute/0.0.0"
-export const PRIVATE_POST_UNMUTE = "/private/post/unmute/0.0.0"
-export const PRIVATE_GET_MUTES = "/private/get/mutes/0.0.0"
+export const PRIVATE_POST_SETTINGS_BLOCK = "/private/post/settings/block/0.0.0"
+export const PRIVATE_POST_SETTINGS_UNBLOCK = "/private/post/settings/unblock/0.0.0"
+export const PRIVATE_GET_SETTINGS_BLOCKS = "/private/get/settings/blocks/0.0.0"
+export const PRIVATE_POST_SETTINGS_MUTE = "/private/post/settings/mute/0.0.0"
+export const PRIVATE_POST_SETTINGS_UNMUTE = "/private/post/settings/unmute/0.0.0"
+export const PRIVATE_GET_SETTINGS_MUTES = "/private/get/settings/mutes/0.0.0"
 export const PUBLIC_GET_TWEET_REACTORS = "/public/get/tweet/reactors/0.0.0"
 export const PUBLIC_GET_TWEET_RETWEETERS = "/public/get/tweet/retweeters/0.0.0"
 export const PRIVATE_POST_SUBSCRIBE_USER = "/private/post/subscribe/user/0.0.0"
@@ -70,14 +70,14 @@ export const PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
 export const PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
 export const PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
-export const PRIVATE_GET_FILTER = "/private/get/filter/0.0.0"
-export const PRIVATE_GET_FILTERS = "/private/get/filters/0.0.0"
-export const PRIVATE_POST_FILTER = "/private/post/filter/0.0.0"
-export const PRIVATE_POST_FILTER_UPDATE = "/private/post/filter/update/0.0.0"
-export const PRIVATE_DELETE_FILTER = "/private/delete/filter/0.0.0"
-export const PRIVATE_POST_FILTER_KEYWORD = "/private/post/filter/keyword/0.0.0"
-export const PRIVATE_POST_FILTER_KEYWORD_UPDATE = "/private/post/filter/keyword/update/0.0.0"
-export const PRIVATE_DELETE_FILTER_KEYWORD = "/private/delete/filter/keyword/0.0.0"
+export const PRIVATE_GET_SETTINGS_FILTER = "/private/get/settings/filter/0.0.0"
+export const PRIVATE_GET_SETTINGS_FILTERS = "/private/get/settings/filters/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER = "/private/post/settings/filter/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER_UPDATE = "/private/post/settings/filter/update/0.0.0"
+export const PRIVATE_DELETE_SETTINGS_FILTER = "/private/delete/settings/filter/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER_KEYWORD = "/private/post/settings/filter/keyword/0.0.0"
+export const PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE = "/private/post/settings/filter/keyword/update/0.0.0"
+export const PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD = "/private/delete/settings/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
@@ -763,7 +763,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_BLOCK,
+            path: PRIVATE_POST_SETTINGS_BLOCK,
             body: {
                 blocker_id: owner.user_id,
                 blockee_id: targetUserId,
@@ -780,7 +780,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_UNBLOCK,
+            path: PRIVATE_POST_SETTINGS_UNBLOCK,
             body: {
                 blocker_id: owner.user_id,
                 blockee_id: targetUserId,
@@ -808,7 +808,7 @@ export const warpnetService = {
         try {
             while (true) {
                 const resp = await this.sendToNode({
-                    path: PRIVATE_GET_BLOCKS,
+                    path: PRIVATE_GET_SETTINGS_BLOCKS,
                     body: { user_id: owner.user_id, limit: defaultLimit, cursor },
                 });
                 const ids = resp?.ids || [];
@@ -836,7 +836,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { ids: [], cursor: endCursor };
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_BLOCKS,
+            path: PRIVATE_GET_SETTINGS_BLOCKS,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -863,7 +863,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_MUTE,
+            path: PRIVATE_POST_SETTINGS_MUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
@@ -878,7 +878,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_UNMUTE,
+            path: PRIVATE_POST_SETTINGS_UNMUTE,
             body: {
                 muter_id: owner.user_id,
                 mutee_id: targetUserId,
@@ -905,7 +905,7 @@ export const warpnetService = {
         try {
             while (true) {
                 const resp = await this.sendToNode({
-                    path: PRIVATE_GET_MUTES,
+                    path: PRIVATE_GET_SETTINGS_MUTES,
                     body: { user_id: owner.user_id, limit: defaultLimit, cursor },
                 });
                 const ids = resp?.ids || [];
@@ -931,7 +931,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { ids: [], cursor: endCursor };
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_MUTES,
+            path: PRIVATE_GET_SETTINGS_MUTES,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -950,7 +950,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_GET_FILTER,
+            path: PRIVATE_GET_SETTINGS_FILTER,
             body: {
                 user_id: owner.user_id,
                 filter_id: filterId,
@@ -962,7 +962,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return { filters: [], cursor: 'end' };
         const resp = await this.sendToNode({
-            path: PRIVATE_GET_FILTERS,
+            path: PRIVATE_GET_SETTINGS_FILTERS,
             body: {
                 user_id: owner.user_id,
                 limit: defaultLimit,
@@ -976,7 +976,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER,
+            path: PRIVATE_POST_SETTINGS_FILTER,
             body: {
                 user_id: owner.user_id,
                 title: filter.title || '',
@@ -992,7 +992,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER_UPDATE,
+            path: PRIVATE_POST_SETTINGS_FILTER_UPDATE,
             body: {
                 user_id: owner.user_id,
                 id: filter.id,
@@ -1009,7 +1009,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_DELETE_FILTER,
+            path: PRIVATE_DELETE_SETTINGS_FILTER,
             body: {
                 user_id: owner.user_id,
                 filter_id: filterId,
@@ -1075,8 +1075,6 @@ export const warpnetService = {
         return resp;
     },
 
-    // getRateLimitSettings returns the node's network, discovery and stream
-    // limits; the node fills every limit left unset with its built-in default.
     async getRateLimitSettings() {
         const resp = await this.sendToNode({
             path: PRIVATE_GET_SETTINGS_RATELIMIT,
@@ -1085,8 +1083,6 @@ export const warpnetService = {
         return resp || {};
     },
 
-    // updateRateLimitSettings persists the limits and confirms the node echoed
-    // them back. A limit left at zero makes the node fall back to its default.
     async updateRateLimitSettings(settings) {
         const resp = await this.sendToNode({
             path: PRIVATE_POST_SETTINGS_RATELIMIT,
@@ -1111,7 +1107,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER_KEYWORD,
+            path: PRIVATE_POST_SETTINGS_FILTER_KEYWORD,
             body: {
                 user_id: owner.user_id,
                 filter_id: filterId,
@@ -1125,7 +1121,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+            path: PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE,
             body: {
                 user_id: owner.user_id,
                 keyword_id: keywordId,
@@ -1139,7 +1135,7 @@ export const warpnetService = {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
         return await this.sendToNode({
-            path: PRIVATE_DELETE_FILTER_KEYWORD,
+            path: PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD,
             body: {
                 user_id: owner.user_id,
                 keyword_id: keywordId,

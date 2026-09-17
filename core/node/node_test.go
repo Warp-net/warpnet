@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -79,9 +80,9 @@ func newTestNode(t *testing.T) *WarpNode {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	n, err := NewWarpNode(ctx, nil, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
-	mw := middleware.NewWarpMiddleware(n.Node().ID(), nil, rating.NewPeersRatings())
+	mw := middleware.NewWarpMiddleware(n.Node().ID(), nil, rating.NewPeersRatings(), domain.RateLimitSettings{})
 	t.Cleanup(mw.Close)
 	n.SetStreamMiddlewares(mw.LoggingMiddleware, mw.AuthMiddleware, mw.IdempotencyMiddleware)
 	t.Cleanup(func() {
@@ -145,18 +146,18 @@ func TestWarpIdentity_IsDeterministicAndSingular(t *testing.T) {
 
 	ctx := t.Context()
 
-	first, err := NewWarpNode(ctx, nil, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	first, err := NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	id := first.Node().ID()
 	first.StopNode()
 
-	second, err := NewWarpNode(ctx, nil, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	second, err := NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer second.StopNode()
 
 	assert.Equal(t, id, second.Node().ID(), "the same key must yield the same peer id")
 
-	_, err = NewWarpNode(ctx, nil, nil, WarpIdentity(priv), WarpIdentity(priv))
+	_, err = NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, WarpIdentity(priv), WarpIdentity(priv))
 	assert.ErrorIs(t, err, ErrMultipleIdentities)
 }
 
@@ -331,7 +332,7 @@ func TestConnect_IsIdempotentAndIgnoresEmptyPeer(t *testing.T) {
 }
 
 func TestStopNode_IsSafeToCallTwice(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 
 	n.StopNode()
@@ -425,7 +426,7 @@ func TestEnableAutoRelayWithStaticRelays_DropsSelf(t *testing.T) {
 	opt := EnableAutoRelayWithStaticRelays(
 		[]warpnet.WarpAddrInfo{{ID: self}, {ID: other}}, self,
 	)
-	n, err := NewWarpNode(t.Context(), nil, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 
@@ -436,20 +437,20 @@ func TestEnableAutoRelayWithStaticRelays_EmptyListIsInert(t *testing.T) {
 	self := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 
 	opt := EnableAutoRelayWithStaticRelays([]warpnet.WarpAddrInfo{{ID: self}}, self)
-	n, err := NewWarpNode(t.Context(), nil, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 }
 
 func TestEmptyOption_IsANoOp(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, EmptyOption()(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, EmptyOption()(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 	assert.NotNil(t, n.Node())
 }
 
 func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, libp2p.SwarmOpts(WithDialTimeout(3*time.Second), WithDialTimeoutLocal(2*time.Second)),
+	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, libp2p.SwarmOpts(WithDialTimeout(3*time.Second), WithDialTimeoutLocal(2*time.Second)),
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
 	)
 	require.NoError(t, err, "a renamed libp2p field must not break node startup")
@@ -463,7 +464,7 @@ func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
 }
 
 func TestSetPrivateDurationField_ReportsMissingField(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 
@@ -521,7 +522,7 @@ func TestSelfStream_RelayedEnvelopeIsNotPrivileged(t *testing.T) {
 	n := newTestNode(t)
 
 	reached := map[string]int{}
-	for _, route := range []string{warpevent.PRIVATE_POST_BLOCK, warpevent.PUBLIC_POST_TIMELINE} {
+	for _, route := range []string{warpevent.PRIVATE_POST_SETTINGS_BLOCK, warpevent.PUBLIC_POST_TIMELINE} {
 		n.SetStreamHandlers(warpnet.WarpStreamHandler{
 			Path: warpnet.WarpProtocolID(route),
 			Handler: func([]byte, warpnet.WarpStream) (any, error) {
@@ -552,10 +553,10 @@ func TestSelfStream_RelayedEnvelopeIsNotPrivileged(t *testing.T) {
 	authorId, err := warpnet.IDFromPublicKey(pub)
 	require.NoError(t, err)
 
-	_, err = n.SelfStream(authorId, n.Node().ID(), stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK),
-		signedBy(t, authorPriv, authorId.String(), warpevent.PRIVATE_POST_BLOCK))
+	_, err = n.SelfStream(authorId, n.Node().ID(), stream.WarpRoute(warpevent.PRIVATE_POST_SETTINGS_BLOCK),
+		signedBy(t, authorPriv, authorId.String(), warpevent.PRIVATE_POST_SETTINGS_BLOCK))
 	require.NoError(t, err)
-	assert.Zero(t, reached[warpevent.PRIVATE_POST_BLOCK],
+	assert.Zero(t, reached[warpevent.PRIVATE_POST_SETTINGS_BLOCK],
 		"a relayed envelope must not reach a privileged handler")
 
 	_, err = n.SelfStream(authorId, n.Node().ID(), stream.WarpRoute(warpevent.PUBLIC_POST_TIMELINE),
@@ -572,7 +573,7 @@ func TestSelfStream_RejectsARewrittenDestination(t *testing.T) {
 
 	var reached int
 	n.SetStreamHandlers(warpnet.WarpStreamHandler{
-		Path: warpnet.WarpProtocolID(warpevent.PRIVATE_POST_BLOCK),
+		Path: warpnet.WarpProtocolID(warpevent.PRIVATE_POST_SETTINGS_BLOCK),
 		Handler: func([]byte, warpnet.WarpStream) (any, error) {
 			reached++
 			return []byte(`{"ok":true}`), nil
@@ -592,12 +593,12 @@ func TestSelfStream_RejectsARewrittenDestination(t *testing.T) {
 	}
 	msg.Signature = security.Sign(priv, msg.SigningBytes())
 
-	msg.Destination = warpevent.PRIVATE_POST_BLOCK
+	msg.Destination = warpevent.PRIVATE_POST_SETTINGS_BLOCK
 
 	bt, err := json.Marshal(msg)
 	require.NoError(t, err)
 
-	_, err = n.SelfStream(n.Node().ID(), n.Node().ID(), stream.WarpRoute(warpevent.PRIVATE_POST_BLOCK), bt)
+	_, err = n.SelfStream(n.Node().ID(), n.Node().ID(), stream.WarpRoute(warpevent.PRIVATE_POST_SETTINGS_BLOCK), bt)
 	require.NoError(t, err)
 
 	assert.Zero(t, reached, "a rewritten destination reached a privileged handler")

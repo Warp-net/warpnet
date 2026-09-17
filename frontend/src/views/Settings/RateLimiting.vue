@@ -100,8 +100,6 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 
-// Mirror of domain.DefaultRateLimits; used as the reset value and until the
-// node answers with what it actually runs on.
 const DEFAULT_RATE_LIMITS = {
   network_low_water: 20,
   network_high_water: 50,
@@ -156,7 +154,6 @@ export default {
       }
       this.saving = true;
       try {
-        // the node answers with what it stored, defaults filled in
         const saved = await warpnetService.updateRateLimitSettings(this.settings);
         this.settings = { ...this.settings, ...saved };
         this.savedMessage = 'Settings saved';

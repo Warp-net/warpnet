@@ -735,7 +735,6 @@ type MarkNotificationReadEvent struct {
 }
 
 // GetNotificationSettingsEvent defines model for GetNotificationSettingsEvent.
-// The owner is resolved server-side, so the request carries no fields.
 type GetNotificationSettingsEvent struct{}
 
 // GetNotificationSettingsResponse defines model for GetNotificationSettingsResponse.
@@ -745,7 +744,6 @@ type GetNotificationSettingsResponse = domain.NotificationSettings
 type UpdateNotificationSettingsEvent = domain.NotificationSettings
 
 // GetGatewaySettingsEvent defines model for GetGatewaySettingsEvent.
-// The owner is resolved server-side, so the request carries no fields.
 type GetGatewaySettingsEvent struct{}
 
 // GetGatewaySettingsResponse defines model for GetGatewaySettingsResponse.
@@ -755,7 +753,6 @@ type GetGatewaySettingsResponse = domain.GatewaySettings
 type UpdateGatewaySettingsEvent = domain.GatewaySettings
 
 // GetRateLimitSettingsEvent defines model for GetRateLimitSettingsEvent.
-// The owner is resolved server-side, so the request carries no fields.
 type GetRateLimitSettingsEvent struct{}
 
 // GetRateLimitSettingsResponse defines model for GetRateLimitSettingsResponse.

@@ -226,6 +226,7 @@ func (rn *RelayNode) Start() (err error) {
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
 		rn.ratings,
+		domain.RateLimitSettings{},
 		rn.opts...,
 	)
 	if err != nil {
@@ -284,7 +285,7 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.ratings)
+	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.ratings, domain.RateLimitSettings{})
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

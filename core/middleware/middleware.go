@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -68,6 +69,7 @@ type WarpMiddleware struct {
 
 	rateLimitersMx sync.Mutex
 	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
+	limits         streamLimits
 
 	events  warpnet.PeerEmitter
 	ratings PeersRatings
@@ -80,7 +82,10 @@ type PeersRatings interface {
 }
 
 func NewWarpMiddleware(
-	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, ratings PeersRatings,
+	ownNodeId warpnet.WarpPeerID,
+	aliases AliasPairer,
+	ratings PeersRatings,
+	limits domain.RateLimitSettings,
 ) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
@@ -88,6 +93,7 @@ func NewWarpMiddleware(
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
 		rateLimiters:    newRateLimitersCache(),
+		limits:          newStreamLimits(limits),
 		events:          warpnet.NewPeerEmitter(),
 		ratings:         ratings,
 	}

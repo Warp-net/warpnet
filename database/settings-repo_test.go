@@ -117,7 +117,6 @@ func (s *SettingsRepoTestSuite) TestRateLimitSetGet() {
 	s.Require().NoError(err)
 	s.Equal(want, got)
 
-	// Rate limits must not collide with the other settings of the same user.
 	gs, err := s.repo.GetGatewaySettings(user)
 	s.Require().NoError(err)
 	s.Empty(gs.NodeID)

@@ -34,6 +34,7 @@ import (
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
@@ -52,75 +53,65 @@ type routeLimit struct {
 var (
 	limitDelivery  = routeLimit{burst: 200, perMinute: 1200}
 	limitMedia     = routeLimit{burst: 150, perMinute: 600}
-	limitRead      = routeLimit{burst: 60, perMinute: 300}
 	limitMessaging = routeLimit{burst: 60, perMinute: 300}
-	limitWrite     = routeLimit{burst: 30, perMinute: 120}
 	limitUpload    = routeLimit{burst: 10, perMinute: 30}
 	limitReport    = routeLimit{burst: 10, perMinute: 30}
 	limitPairing   = routeLimit{burst: 5, perMinute: 15}
 	limitGateway   = routeLimit{burst: 600, perMinute: 6000}
 )
 
-// routeLimits is rebuilt whenever a limit it copies changes.
-var routeLimits = newRouteLimits()
+type streamLimits struct {
+	read, write routeLimit
+	routes      map[string]routeLimit
+}
 
-func newRouteLimits() map[string]routeLimit {
-	return map[string]routeLimit{
-		event.PUBLIC_GET_IMAGE: limitMedia,
-		event.PUBLIC_GET_VIDEO: limitMedia,
+func newStreamLimits(s domain.RateLimitSettings) streamLimits {
+	s = s.WithDefaults()
+	read := routeLimit{burst: int64(s.StreamReadBurst), perMinute: int64(s.StreamReadPerMinute)}
+	write := routeLimit{burst: int64(s.StreamWriteBurst), perMinute: int64(s.StreamWritePerMinute)}
 
-		event.PRIVATE_POST_UPLOAD_IMAGE: limitUpload,
-		event.PRIVATE_POST_UPLOAD_VIDEO: limitUpload,
+	return streamLimits{
+		read:  read,
+		write: write,
+		routes: map[string]routeLimit{
+			event.PUBLIC_GET_IMAGE: limitMedia,
+			event.PUBLIC_GET_VIDEO: limitMedia,
 
-		event.PUBLIC_POST_TIMELINE:          limitDelivery,
-		event.PUBLIC_POST_MODERATION_RESULT: limitDelivery,
+			event.PRIVATE_POST_UPLOAD_IMAGE: limitUpload,
+			event.PRIVATE_POST_UPLOAD_VIDEO: limitUpload,
 
-		event.PUBLIC_POST_CHAT:    limitMessaging,
-		event.PUBLIC_POST_MESSAGE: limitMessaging,
+			event.PUBLIC_POST_TIMELINE:          limitDelivery,
+			event.PUBLIC_POST_MODERATION_RESULT: limitDelivery,
 
-		event.PUBLIC_POST_IS_FOLLOWING:       limitRead,
-		event.PUBLIC_POST_IS_FOLLOWER:        limitRead,
-		event.PUBLIC_POST_VIEW:               limitRead,
-		event.PRIVATE_POST_NOTIFICATION_READ: limitRead,
+			event.PUBLIC_POST_CHAT:    limitMessaging,
+			event.PUBLIC_POST_MESSAGE: limitMessaging,
 
-		event.PUBLIC_POST_REPORT: limitReport,
+			event.PUBLIC_POST_IS_FOLLOWING:       read,
+			event.PUBLIC_POST_IS_FOLLOWER:        read,
+			event.PUBLIC_POST_VIEW:               read,
+			event.PRIVATE_POST_NOTIFICATION_READ: read,
 
-		event.PRIVATE_POST_PAIR:          limitPairing,
-		event.PUBLIC_POST_NODE_CHALLENGE: limitPairing,
+			event.PUBLIC_POST_REPORT: limitReport,
+
+			event.PRIVATE_POST_PAIR:          limitPairing,
+			event.PUBLIC_POST_NODE_CHALLENGE: limitPairing,
+		},
 	}
 }
 
-// SetReadLimits overrides what a peer may spend on reads. Non-positive values
-// are ignored, so the defaults stand.
-func SetReadLimits(burst, perMinute int) {
-	if burst <= 0 || perMinute <= 0 {
-		return
-	}
-	limitRead = routeLimit{burst: int64(burst), perMinute: int64(perMinute)}
-	routeLimits = newRouteLimits()
-}
-
-// SetWriteLimits overrides what a peer may spend on writes. Non-positive
-// values are ignored, so the defaults stand.
-func SetWriteLimits(burst, perMinute int) {
-	if burst <= 0 || perMinute <= 0 {
-		return
-	}
-	limitWrite = routeLimit{burst: int64(burst), perMinute: int64(perMinute)}
-	routeLimits = newRouteLimits()
-}
-
-func limitForRoute(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) routeLimit {
+func (p *WarpMiddleware) limitForRoute(
+	route stream.WarpRoute, remotePeer warpnet.WarpPeerID,
+) routeLimit {
 	if remotePeer.String() == fediverse.GatewayNodeID() {
 		return limitGateway
 	}
-	if limit, ok := routeLimits[route.String()]; ok {
+	if limit, ok := p.limits.routes[route.String()]; ok {
 		return limit
 	}
 	if route.IsGet() {
-		return limitRead
+		return p.limits.read
 	}
-	return limitWrite
+	return p.limits.write
 }
 
 func (p *WarpMiddleware) RateLimiterMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
@@ -159,9 +150,7 @@ func (p *WarpMiddleware) bucket(
 	if b, ok := p.rateLimiters.Get(key); ok && b.multiplier == multiplier {
 		return b
 	}
-	// A peer whose standing moved does not keep the bucket it filled
-	// under the old one.
-	limit := limitForRoute(route, remotePeer).multipliedBy(multiplier)
+	limit := p.limitForRoute(route, remotePeer).multipliedBy(multiplier)
 	if multiplier < 1 {
 		log.Infof(
 			"middleware: rate limiter: rating leaves %s %d calls per minute on %s",
@@ -173,8 +162,6 @@ func (p *WarpMiddleware) bucket(
 	return b
 }
 
-// rateMultiplier is the share of a route a peer may spend. A node with no
-// ratings serves every peer in full.
 func (p *WarpMiddleware) rateMultiplier(peerID warpnet.WarpPeerID) float64 {
 	if p == nil || p.ratings == nil {
 		return 1
@@ -182,9 +169,6 @@ func (p *WarpMiddleware) rateMultiplier(peerID warpnet.WarpPeerID) float64 {
 	return p.ratings.RateMultiplier(peerID)
 }
 
-// multipliedBy is what a peer on this multiplier may spend of a route's
-// limit, never below one: a peer the rating thinks little of is slowed
-// down, never starved.
 func (l routeLimit) multipliedBy(multiplier float64) routeLimit {
 	if multiplier >= 1 {
 		return l

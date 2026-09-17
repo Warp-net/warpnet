@@ -321,9 +321,6 @@ type GatewaySettings struct {
 	NodeID string `json:"node_id"`
 }
 
-// RateLimitSettings is how much traffic the owner lets in: how many peers the
-// connection manager keeps, how often one IP may announce itself to discovery,
-// and what a peer may spend on stream routes that carry no limit of their own.
 type RateLimitSettings struct {
 	NetworkLowWater      int `json:"network_low_water"`
 	NetworkHighWater     int `json:"network_high_water"`
@@ -335,9 +332,6 @@ type RateLimitSettings struct {
 	StreamWritePerMinute int `json:"stream_write_per_minute"`
 }
 
-// DefaultRateLimits mirrors what the limiters run on until the owner tunes
-// them: warpnet.NewConnManager, discovery.NewDiscoveryService and the
-// middleware's read and write route limits.
 var DefaultRateLimits = RateLimitSettings{
 	NetworkLowWater:      20,
 	NetworkHighWater:     50,
@@ -349,7 +343,6 @@ var DefaultRateLimits = RateLimitSettings{
 	StreamWritePerMinute: 120,
 }
 
-// WithDefaults fills in the limits the owner left unset.
 func (s RateLimitSettings) WithDefaults() RateLimitSettings {
 	if s.NetworkLowWater <= 0 {
 		s.NetworkLowWater = DefaultRateLimits.NetworkLowWater
