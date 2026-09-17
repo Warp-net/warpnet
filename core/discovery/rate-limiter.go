@@ -41,6 +41,20 @@ const (
 	ipBucketTTL  = time.Minute * 5
 )
 
+// ipBurst and ipLeakPer10Sec are how many discoveries one IP may fire at once
+// and how fast its bucket drains. They hold the defaults until the owner's
+// settings override them at startup (see SetIPRateLimits).
+var ipBurst, ipLeakPer10Sec = 32, 2
+
+// SetIPRateLimits overrides what one IP may spend on discovery. Non-positive
+// values are ignored, so the defaults stand.
+func SetIPRateLimits(burst, leakPer10Sec int) {
+	if burst <= 0 || leakPer10Sec <= 0 {
+		return
+	}
+	ipBurst, ipLeakPer10Sec = burst, leakPer10Sec
+}
+
 // ipRateLimiter keeps a leaky bucket per remote IP, so that a peer flooding
 // discoveries cannot shed the peers everyone else announces.
 type ipRateLimiter struct {

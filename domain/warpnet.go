@@ -321,6 +321,63 @@ type GatewaySettings struct {
 	NodeID string `json:"node_id"`
 }
 
+// RateLimitSettings is how much traffic the owner lets in: how many peers the
+// connection manager keeps, how often one IP may announce itself to discovery,
+// and what a peer may spend on stream routes that carry no limit of their own.
+type RateLimitSettings struct {
+	NetworkLowWater      int `json:"network_low_water"`
+	NetworkHighWater     int `json:"network_high_water"`
+	DiscoveryBurst       int `json:"discovery_burst"`
+	DiscoveryPerTenSec   int `json:"discovery_per_ten_sec"`
+	StreamReadBurst      int `json:"stream_read_burst"`
+	StreamReadPerMinute  int `json:"stream_read_per_minute"`
+	StreamWriteBurst     int `json:"stream_write_burst"`
+	StreamWritePerMinute int `json:"stream_write_per_minute"`
+}
+
+// DefaultRateLimits mirrors what the limiters run on until the owner tunes
+// them: warpnet.NewConnManager, discovery.NewDiscoveryService and the
+// middleware's read and write route limits.
+var DefaultRateLimits = RateLimitSettings{
+	NetworkLowWater:      20,
+	NetworkHighWater:     50,
+	DiscoveryBurst:       32,
+	DiscoveryPerTenSec:   2,
+	StreamReadBurst:      60,
+	StreamReadPerMinute:  300,
+	StreamWriteBurst:     30,
+	StreamWritePerMinute: 120,
+}
+
+// WithDefaults fills in the limits the owner left unset.
+func (s RateLimitSettings) WithDefaults() RateLimitSettings {
+	if s.NetworkLowWater <= 0 {
+		s.NetworkLowWater = DefaultRateLimits.NetworkLowWater
+	}
+	if s.NetworkHighWater <= 0 {
+		s.NetworkHighWater = DefaultRateLimits.NetworkHighWater
+	}
+	if s.DiscoveryBurst <= 0 {
+		s.DiscoveryBurst = DefaultRateLimits.DiscoveryBurst
+	}
+	if s.DiscoveryPerTenSec <= 0 {
+		s.DiscoveryPerTenSec = DefaultRateLimits.DiscoveryPerTenSec
+	}
+	if s.StreamReadBurst <= 0 {
+		s.StreamReadBurst = DefaultRateLimits.StreamReadBurst
+	}
+	if s.StreamReadPerMinute <= 0 {
+		s.StreamReadPerMinute = DefaultRateLimits.StreamReadPerMinute
+	}
+	if s.StreamWriteBurst <= 0 {
+		s.StreamWriteBurst = DefaultRateLimits.StreamWriteBurst
+	}
+	if s.StreamWritePerMinute <= 0 {
+		s.StreamWritePerMinute = DefaultRateLimits.StreamWritePerMinute
+	}
+	return s
+}
+
 type ModerationResult bool
 
 const (

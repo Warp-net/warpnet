@@ -61,28 +61,53 @@ var (
 	limitGateway   = routeLimit{burst: 600, perMinute: 6000}
 )
 
-var routeLimits = map[string]routeLimit{
-	event.PUBLIC_GET_IMAGE: limitMedia,
-	event.PUBLIC_GET_VIDEO: limitMedia,
+// routeLimits is rebuilt whenever a limit it copies changes.
+var routeLimits = newRouteLimits()
 
-	event.PRIVATE_POST_UPLOAD_IMAGE: limitUpload,
-	event.PRIVATE_POST_UPLOAD_VIDEO: limitUpload,
+func newRouteLimits() map[string]routeLimit {
+	return map[string]routeLimit{
+		event.PUBLIC_GET_IMAGE: limitMedia,
+		event.PUBLIC_GET_VIDEO: limitMedia,
 
-	event.PUBLIC_POST_TIMELINE:          limitDelivery,
-	event.PUBLIC_POST_MODERATION_RESULT: limitDelivery,
+		event.PRIVATE_POST_UPLOAD_IMAGE: limitUpload,
+		event.PRIVATE_POST_UPLOAD_VIDEO: limitUpload,
 
-	event.PUBLIC_POST_CHAT:    limitMessaging,
-	event.PUBLIC_POST_MESSAGE: limitMessaging,
+		event.PUBLIC_POST_TIMELINE:          limitDelivery,
+		event.PUBLIC_POST_MODERATION_RESULT: limitDelivery,
 
-	event.PUBLIC_POST_IS_FOLLOWING:       limitRead,
-	event.PUBLIC_POST_IS_FOLLOWER:        limitRead,
-	event.PUBLIC_POST_VIEW:               limitRead,
-	event.PRIVATE_POST_NOTIFICATION_READ: limitRead,
+		event.PUBLIC_POST_CHAT:    limitMessaging,
+		event.PUBLIC_POST_MESSAGE: limitMessaging,
 
-	event.PUBLIC_POST_REPORT: limitReport,
+		event.PUBLIC_POST_IS_FOLLOWING:       limitRead,
+		event.PUBLIC_POST_IS_FOLLOWER:        limitRead,
+		event.PUBLIC_POST_VIEW:               limitRead,
+		event.PRIVATE_POST_NOTIFICATION_READ: limitRead,
 
-	event.PRIVATE_POST_PAIR:          limitPairing,
-	event.PUBLIC_POST_NODE_CHALLENGE: limitPairing,
+		event.PUBLIC_POST_REPORT: limitReport,
+
+		event.PRIVATE_POST_PAIR:          limitPairing,
+		event.PUBLIC_POST_NODE_CHALLENGE: limitPairing,
+	}
+}
+
+// SetReadLimits overrides what a peer may spend on reads. Non-positive values
+// are ignored, so the defaults stand.
+func SetReadLimits(burst, perMinute int) {
+	if burst <= 0 || perMinute <= 0 {
+		return
+	}
+	limitRead = routeLimit{burst: int64(burst), perMinute: int64(perMinute)}
+	routeLimits = newRouteLimits()
+}
+
+// SetWriteLimits overrides what a peer may spend on writes. Non-positive
+// values are ignored, so the defaults stand.
+func SetWriteLimits(burst, perMinute int) {
+	if burst <= 0 || perMinute <= 0 {
+		return
+	}
+	limitWrite = routeLimit{burst: int64(burst), perMinute: int64(perMinute)}
+	routeLimits = newRouteLimits()
 }
 
 func limitForRoute(route stream.WarpRoute, remotePeer warpnet.WarpPeerID) routeLimit {

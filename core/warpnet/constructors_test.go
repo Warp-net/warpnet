@@ -58,6 +58,34 @@ func TestNewLimiterAndManagers(t *testing.T) {
 	require.NotNil(t, rm)
 }
 
+func TestSetConnLimits(t *testing.T) {
+	low, high := connLowWater, connHighWater
+	t.Cleanup(func() { connLowWater, connHighWater = low, high })
+
+	SetConnLimits(0, 100)
+	SetConnLimits(100, 0)
+	SetConnLimits(100, 100)
+	require.Equal(t, low, connLowWater, "a limit the manager cannot trim towards must be ignored")
+	require.Equal(t, high, connHighWater)
+
+	limiter := NewConfigurableLimiter(nil)
+
+	SetConnLimits(30, 80)
+	cm, err := NewConnManager(limiter)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cm.Close() })
+	require.Equal(t, 30, cm.GetInfo().LowWater)
+	require.Equal(t, 80, cm.GetInfo().HighWater)
+
+	// more connections than the resource manager admits are trimmed back to it
+	SetConnLimits(30, 1_000_000)
+	clamped, err := NewConnManager(limiter)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = clamped.Close() })
+	require.Equal(t, limiter.GetSystemLimits().GetConnTotalLimit(), clamped.GetInfo().HighWater)
+	require.Less(t, clamped.GetInfo().LowWater, clamped.GetInfo().HighWater)
+}
+
 func TestNewPeerstore(t *testing.T) {
 	store, err := NewPeerstore(context.Background(), dssync.MutexWrap(ds.NewMapDatastore()))
 	require.NoError(t, err)

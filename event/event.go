@@ -754,6 +754,16 @@ type GetGatewaySettingsResponse = domain.GatewaySettings
 // UpdateGatewaySettingsEvent defines model for UpdateGatewaySettingsEvent.
 type UpdateGatewaySettingsEvent = domain.GatewaySettings
 
+// GetRateLimitSettingsEvent defines model for GetRateLimitSettingsEvent.
+// The owner is resolved server-side, so the request carries no fields.
+type GetRateLimitSettingsEvent struct{}
+
+// GetRateLimitSettingsResponse defines model for GetRateLimitSettingsResponse.
+type GetRateLimitSettingsResponse = domain.RateLimitSettings
+
+// UpdateRateLimitSettingsEvent defines model for UpdateRateLimitSettingsEvent.
+type UpdateRateLimitSettingsEvent = domain.RateLimitSettings
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`

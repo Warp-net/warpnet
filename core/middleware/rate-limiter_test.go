@@ -186,3 +186,39 @@ func TestLimitForRouteKeepsOtherPeersOnTheirBudget(t *testing.T) {
 		t.Fatalf("expected %+v, got %+v", limitRead, got)
 	}
 }
+
+func TestSetStreamLimitsReachesMappedAndFallbackRoutes(t *testing.T) {
+	read, write, limits := limitRead, limitWrite, routeLimits
+	t.Cleanup(func() { limitRead, limitWrite, routeLimits = read, write, limits })
+
+	SetReadLimits(7, 70)
+	SetWriteLimits(3, 30)
+
+	peer := warpnet.WarpPeerID("member-peer")
+	cases := map[string]routeLimit{
+		// a route mapped to the read limit, and one falling back to it
+		event.PUBLIC_POST_VIEW:  {burst: 7, perMinute: 70},
+		event.PUBLIC_GET_TWEETS: {burst: 7, perMinute: 70},
+		// a route falling back to the write limit
+		event.PUBLIC_POST_REACT: {burst: 3, perMinute: 30},
+		// a route with a limit of its own keeps it
+		event.PUBLIC_GET_IMAGE: limitMedia,
+	}
+	for route, want := range cases {
+		if got := limitForRoute(stream.WarpRoute(route), peer); got != want {
+			t.Fatalf("%s: expected %+v, got %+v", route, want, got)
+		}
+	}
+}
+
+func TestSetStreamLimitsIgnoresNonPositive(t *testing.T) {
+	read, write, limits := limitRead, limitWrite, routeLimits
+	t.Cleanup(func() { limitRead, limitWrite, routeLimits = read, write, limits })
+
+	SetReadLimits(0, 70)
+	SetWriteLimits(3, -1)
+
+	if limitRead != read || limitWrite != write {
+		t.Fatalf("expected built-in limits to stand, got read %+v write %+v", limitRead, limitWrite)
+	}
+}

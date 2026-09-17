@@ -100,6 +100,35 @@ func (s *SettingsRepoTestSuite) TestGatewayEmptyUserId() {
 	s.Error(s.repo.SetGatewaySettings("", domain.GatewaySettings{}))
 }
 
+func (s *SettingsRepoTestSuite) TestRateLimitDefaultsWhenUnset() {
+	user := uuid.New().String()
+	got, err := s.repo.GetRateLimitSettings(user)
+	s.Require().NoError(err)
+	s.Equal(domain.RateLimitSettings{}, got)
+}
+
+func (s *SettingsRepoTestSuite) TestRateLimitSetGet() {
+	user := uuid.New().String()
+	want := domain.DefaultRateLimits
+	want.NetworkHighWater = 500
+	s.Require().NoError(s.repo.SetRateLimitSettings(user, want))
+
+	got, err := s.repo.GetRateLimitSettings(user)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+
+	// Rate limits must not collide with the other settings of the same user.
+	gs, err := s.repo.GetGatewaySettings(user)
+	s.Require().NoError(err)
+	s.Empty(gs.NodeID)
+}
+
+func (s *SettingsRepoTestSuite) TestRateLimitEmptyUserId() {
+	_, err := s.repo.GetRateLimitSettings("")
+	s.Error(err)
+	s.Error(s.repo.SetRateLimitSettings("", domain.RateLimitSettings{}))
+}
+
 func TestSettingsRepoTestSuite(t *testing.T) {
 	suite.Run(t, new(SettingsRepoTestSuite))
 }

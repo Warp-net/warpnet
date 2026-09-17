@@ -222,6 +222,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/rate-limiting",
+    name: "SettingsRateLimiting",
+    component: () =>
+      import(/* webpackChunkName: "settings-ratelimit" */ "../views/Settings/RateLimiting.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/who-to-follow",
     name: "WhoToFollow",
     component: () =>

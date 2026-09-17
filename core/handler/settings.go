@@ -47,6 +47,12 @@ type GatewaySettingsStorer interface {
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 }
 
+// RateLimitSettingsStorer is the narrow surface the rate-limit handlers need.
+type RateLimitSettingsStorer interface {
+	GetRateLimitSettings(userId string) (domain.RateLimitSettings, error)
+	SetRateLimitSettings(userId string, s domain.RateLimitSettings) error
+}
+
 // SettingsAuthStorer resolves the local node owner.
 type SettingsAuthStorer interface {
 	GetOwner() domain.Owner
@@ -123,5 +129,45 @@ func StreamUpdateGatewaySettingsHandler(
 			return nil, err
 		}
 		return event.GetGatewaySettingsResponse(ev), nil
+	}
+}
+
+func StreamGetRateLimitSettingsHandler(
+	repo RateLimitSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		owner := authRepo.GetOwner()
+		settings, err := repo.GetRateLimitSettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		return event.GetRateLimitSettingsResponse(settings.WithDefaults()), nil
+	}
+}
+
+func StreamUpdateRateLimitSettingsHandler(
+	repo RateLimitSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.UpdateRateLimitSettingsEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		owner := authRepo.GetOwner()
+		if owner.UserId == "" {
+			return nil, warpnet.WarpError("update rate limit settings: empty owner")
+		}
+		// A limit left out keeps its default, so the node never runs on a
+		// zero budget because the client omitted a field.
+		settings := ev.WithDefaults()
+		if settings.NetworkLowWater >= settings.NetworkHighWater {
+			return nil, warpnet.WarpError("update rate limit settings: network low water must be below high water")
+		}
+		if err := repo.SetRateLimitSettings(owner.UserId, settings); err != nil {
+			return nil, err
+		}
+		return event.GetRateLimitSettingsResponse(settings), nil
 	}
 }

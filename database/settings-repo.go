@@ -60,6 +60,13 @@ func gatewaySettingsKey(userId string) local_store.DatabaseKey {
 		Build()
 }
 
+func rateLimitSettingsKey(userId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("ratelimit").
+		Build()
+}
+
 // GetNotificationSettings returns the user's notification settings, or a
 // zero-value (email disabled) record when none has been saved yet.
 func (repo *SettingsRepo) GetNotificationSettings(userId string) (domain.NotificationSettings, error) {
@@ -151,6 +158,54 @@ func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySett
 	}
 	defer txn.Rollback()
 	if err := txn.Set(gatewaySettingsKey(userId), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+// GetRateLimitSettings returns the user's rate limits, or a zero-value record
+// (every limit left at its built-in default) when none has been saved yet.
+func (repo *SettingsRepo) GetRateLimitSettings(userId string) (domain.RateLimitSettings, error) {
+	if userId == "" {
+		return domain.RateLimitSettings{}, local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.RateLimitSettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(rateLimitSettingsKey(userId))
+	if local_store.IsNotFoundError(err) {
+		return domain.RateLimitSettings{}, nil
+	}
+	if err != nil {
+		return domain.RateLimitSettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.RateLimitSettings{}, err
+	}
+	var s domain.RateLimitSettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.RateLimitSettings{}, err
+	}
+	return s, nil
+}
+
+// SetRateLimitSettings persists the user's rate limits.
+func (repo *SettingsRepo) SetRateLimitSettings(userId string, s domain.RateLimitSettings) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(rateLimitSettingsKey(userId), bt); err != nil {
 		return err
 	}
 	return txn.Commit()

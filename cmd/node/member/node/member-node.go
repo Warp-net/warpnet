@@ -116,6 +116,16 @@ func NewMemberNode(
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
+	// Apply the owner's rate limits before the limiters that read them are
+	// built: discovery below, the connection manager and the stream middleware
+	// in Start.
+	if rl, err := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId); err == nil {
+		warpnet.SetConnLimits(rl.NetworkLowWater, rl.NetworkHighWater)
+		discovery.SetIPRateLimits(rl.DiscoveryBurst, rl.DiscoveryPerTenSec)
+		middleware.SetReadLimits(rl.StreamReadBurst, rl.StreamReadPerMinute)
+		middleware.SetWriteLimits(rl.StreamWriteBurst, rl.StreamWritePerMinute)
+	}
+
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
 
@@ -782,6 +792,14 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		{
 			event.PRIVATE_POST_GATEWAY_SETTINGS,
 			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_RATELIMIT_SETTINGS,
+			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_RATELIMIT_SETTINGS,
+			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo, authRepo),
 		},
 	}
 }

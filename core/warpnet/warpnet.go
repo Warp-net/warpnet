@@ -325,11 +325,27 @@ func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*no
 	return noise.New(id, pk, mxs)
 }
 
+// connLowWater and connHighWater are how many peers the connection manager
+// keeps before it starts trimming. They hold the defaults until the owner's
+// settings override them at startup (see SetConnLimits).
+var connLowWater, connHighWater = 20, 50
+
+// SetConnLimits overrides how many connections the node keeps. Values that
+// would leave the manager nothing to trim towards are ignored, so the
+// defaults stand.
+func SetConnLimits(low, high int) {
+	if low <= 0 || high <= 0 || low >= high {
+		return
+	}
+	connLowWater, connHighWater = low, high
+}
+
 func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
-	_ = limiter.GetConnLimits().GetConnTotalLimit() // TODO move to settings
+	// The owner cannot ask for more connections than the resource manager admits.
+	high := min(connHighWater, limiter.GetSystemLimits().GetConnTotalLimit())
 	return connmgr.NewConnManager(
-		20,
-		50,
+		min(connLowWater, high/2),
+		high,
 		connmgr.WithGracePeriod(time.Hour),
 	)
 }

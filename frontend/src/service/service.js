@@ -47,6 +47,8 @@ export const PRIVATE_GET_NOTIFICATION_SETTINGS = "/private/get/notification/sett
 export const PRIVATE_POST_NOTIFICATION_SETTINGS = "/private/post/notification/settings/0.0.0"
 export const PRIVATE_GET_GATEWAY_SETTINGS = "/private/get/gateway/settings/0.0.0"
 export const PRIVATE_POST_GATEWAY_SETTINGS = "/private/post/gateway/settings/0.0.0"
+export const PRIVATE_GET_RATELIMIT_SETTINGS = "/private/get/ratelimit/settings/0.0.0"
+export const PRIVATE_POST_RATELIMIT_SETTINGS = "/private/post/ratelimit/settings/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -1069,6 +1071,38 @@ export const warpnetService = {
         });
         if (!resp || resp.code || !('node_id' in resp)) {
             throw new Error(resp?.message || 'Failed to save gateway settings');
+        }
+        return resp;
+    },
+
+    // getRateLimitSettings returns the node's network, discovery and stream
+    // limits; the node fills every limit left unset with its built-in default.
+    async getRateLimitSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_RATELIMIT_SETTINGS,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    // updateRateLimitSettings persists the limits and confirms the node echoed
+    // them back. A limit left at zero makes the node fall back to its default.
+    async updateRateLimitSettings(settings) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_RATELIMIT_SETTINGS,
+            body: {
+                network_low_water: Number(settings.network_low_water) || 0,
+                network_high_water: Number(settings.network_high_water) || 0,
+                discovery_burst: Number(settings.discovery_burst) || 0,
+                discovery_per_ten_sec: Number(settings.discovery_per_ten_sec) || 0,
+                stream_read_burst: Number(settings.stream_read_burst) || 0,
+                stream_read_per_minute: Number(settings.stream_read_per_minute) || 0,
+                stream_write_burst: Number(settings.stream_write_burst) || 0,
+                stream_write_per_minute: Number(settings.stream_write_per_minute) || 0,
+            },
+        });
+        if (!resp || resp.code || !('network_low_water' in resp)) {
+            throw new Error(resp?.message || 'Failed to save rate limit settings');
         }
         return resp;
     },

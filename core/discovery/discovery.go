@@ -114,15 +114,12 @@ func NewDiscoveryService(
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
 ) *discoveryService {
-	capacity := 32
-	leakPerTenSec := 2
-
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newIPRateLimiter(capacity, leakPerTenSec),
+		limiter:         newIPRateLimiter(ipBurst, ipLeakPer10Sec),
 		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
 		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
 		stopChan:        make(chan struct{}),
