@@ -48,8 +48,8 @@ type GatewaySettingsStorer interface {
 }
 
 type RateLimitSettingsStorer interface {
-	GetRateLimitSettings(userId string) (domain.RateLimitSettings, error)
-	SetRateLimitSettings(userId string, s domain.RateLimitSettings) error
+	GetRateLimitSettings(userId string) (event.RateLimitSettings, error)
+	SetRateLimitSettings(userId string, s event.RateLimitSettings) error
 }
 
 // SettingsAuthStorer resolves the local node owner.

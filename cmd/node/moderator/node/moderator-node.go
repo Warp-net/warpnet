@@ -192,12 +192,12 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.ratings, domain.RateLimitSettings{}, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.ratings, event.RateLimitSettings{}, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.ratings, domain.RateLimitSettings{})
+	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.ratings, event.RateLimitSettings{})
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,

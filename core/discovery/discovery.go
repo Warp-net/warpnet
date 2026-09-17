@@ -113,7 +113,7 @@ func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
-	limits domain.RateLimitSettings,
+	limits event.RateLimitSettings,
 ) *discoveryService {
 	limits = limits.WithDefaults()
 

@@ -44,7 +44,6 @@ import (
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p"
@@ -112,7 +111,7 @@ type WarpNode struct {
 func NewWarpNode(
 	ctx context.Context,
 	ratings PeersRatings,
-	limits domain.RateLimitSettings,
+	limits warpevent.RateLimitSettings,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limits = limits.WithDefaults()

@@ -34,7 +34,6 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	warpevent "github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -80,9 +79,9 @@ func newTestNode(t *testing.T) *WarpNode {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	n, err := NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(ctx, nil, warpevent.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
-	mw := middleware.NewWarpMiddleware(n.Node().ID(), nil, rating.NewPeersRatings(), domain.RateLimitSettings{})
+	mw := middleware.NewWarpMiddleware(n.Node().ID(), nil, rating.NewPeersRatings(), warpevent.RateLimitSettings{})
 	t.Cleanup(mw.Close)
 	n.SetStreamMiddlewares(mw.LoggingMiddleware, mw.AuthMiddleware, mw.IdempotencyMiddleware)
 	t.Cleanup(func() {
@@ -146,18 +145,18 @@ func TestWarpIdentity_IsDeterministicAndSingular(t *testing.T) {
 
 	ctx := t.Context()
 
-	first, err := NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	first, err := NewWarpNode(ctx, nil, warpevent.RateLimitSettings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	id := first.Node().ID()
 	first.StopNode()
 
-	second, err := NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	second, err := NewWarpNode(ctx, nil, warpevent.RateLimitSettings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer second.StopNode()
 
 	assert.Equal(t, id, second.Node().ID(), "the same key must yield the same peer id")
 
-	_, err = NewWarpNode(ctx, nil, domain.RateLimitSettings{}, nil, WarpIdentity(priv), WarpIdentity(priv))
+	_, err = NewWarpNode(ctx, nil, warpevent.RateLimitSettings{}, nil, WarpIdentity(priv), WarpIdentity(priv))
 	assert.ErrorIs(t, err, ErrMultipleIdentities)
 }
 
@@ -332,7 +331,7 @@ func TestConnect_IsIdempotentAndIgnoresEmptyPeer(t *testing.T) {
 }
 
 func TestStopNode_IsSafeToCallTwice(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, warpevent.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 
 	n.StopNode()
@@ -426,7 +425,7 @@ func TestEnableAutoRelayWithStaticRelays_DropsSelf(t *testing.T) {
 	opt := EnableAutoRelayWithStaticRelays(
 		[]warpnet.WarpAddrInfo{{ID: self}, {ID: other}}, self,
 	)
-	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, warpevent.RateLimitSettings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 
@@ -437,20 +436,20 @@ func TestEnableAutoRelayWithStaticRelays_EmptyListIsInert(t *testing.T) {
 	self := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 
 	opt := EnableAutoRelayWithStaticRelays([]warpnet.WarpAddrInfo{{ID: self}}, self)
-	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, warpevent.RateLimitSettings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 }
 
 func TestEmptyOption_IsANoOp(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, EmptyOption()(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, warpevent.RateLimitSettings{}, EmptyOption()(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 	assert.NotNil(t, n.Node())
 }
 
 func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, libp2p.SwarmOpts(WithDialTimeout(3*time.Second), WithDialTimeoutLocal(2*time.Second)),
+	n, err := NewWarpNode(t.Context(), nil, warpevent.RateLimitSettings{}, libp2p.SwarmOpts(WithDialTimeout(3*time.Second), WithDialTimeoutLocal(2*time.Second)),
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
 	)
 	require.NoError(t, err, "a renamed libp2p field must not break node startup")
@@ -464,7 +463,7 @@ func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
 }
 
 func TestSetPrivateDurationField_ReportsMissingField(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, domain.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, warpevent.RateLimitSettings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 

@@ -30,6 +30,7 @@ package database
 import (
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 )
 
@@ -151,33 +152,33 @@ func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySett
 	return txn.Commit()
 }
 
-func (repo *SettingsRepo) GetRateLimitSettings(userId string) (domain.RateLimitSettings, error) {
+func (repo *SettingsRepo) GetRateLimitSettings(userId string) (event.RateLimitSettings, error) {
 	if userId == "" {
-		return domain.RateLimitSettings{}, local_store.DBError("empty user id")
+		return event.RateLimitSettings{}, local_store.DBError("empty user id")
 	}
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return domain.RateLimitSettings{}, err
+		return event.RateLimitSettings{}, err
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(settingsKey(userId, "ratelimit"))
 	if local_store.IsNotFoundError(err) {
-		return domain.RateLimitSettings{}, nil
+		return event.RateLimitSettings{}, nil
 	}
 	if err != nil {
-		return domain.RateLimitSettings{}, err
+		return event.RateLimitSettings{}, err
 	}
 	if err := txn.Commit(); err != nil {
-		return domain.RateLimitSettings{}, err
+		return event.RateLimitSettings{}, err
 	}
-	var s domain.RateLimitSettings
+	var s event.RateLimitSettings
 	if err := json.Unmarshal(bt, &s); err != nil {
-		return domain.RateLimitSettings{}, err
+		return event.RateLimitSettings{}, err
 	}
 	return s, nil
 }
 
-func (repo *SettingsRepo) SetRateLimitSettings(userId string, s domain.RateLimitSettings) error {
+func (repo *SettingsRepo) SetRateLimitSettings(userId string, s event.RateLimitSettings) error {
 	if userId == "" {
 		return local_store.DBError("empty user id")
 	}

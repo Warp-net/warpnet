@@ -9,7 +9,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -129,7 +128,7 @@ func TestAuthMiddlewareReportsWhatItRefused(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+			mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 			t.Cleanup(mw.Close)
 
 			callAuth(t, mw, ownNodeId, peer, tc.route, tc.payload(t))
@@ -145,7 +144,7 @@ func TestAuthMiddlewareReportsWhatItRefused(t *testing.T) {
 
 func TestAuthMiddlewareReportsNothingAboutASelfStream(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	t.Cleanup(mw.Close)
 
 	callAuth(t, mw, ownNodeId, ownNodeId, "/public/post/tweet/0.0.0", []byte("{"))

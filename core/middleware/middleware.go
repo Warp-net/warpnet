@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -85,7 +85,7 @@ func NewWarpMiddleware(
 	ownNodeId warpnet.WarpPeerID,
 	aliases AliasPairer,
 	ratings PeersRatings,
-	limits domain.RateLimitSettings,
+	limits event.RateLimitSettings,
 ) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),

@@ -12,7 +12,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -123,7 +122,7 @@ func TestAuthMiddleware_PrivateRouteDeniedForForeignPeer(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	attacker, attackerKey := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	for _, route := range []string{
@@ -155,13 +154,13 @@ func TestAuthMiddleware_PrivateRouteAllowedForPairedDevice(t *testing.T) {
 
 	route := "/private/get/notifications/0.0.0"
 
-	unpaired := NewWarpMiddleware(ownNodeId, stubAliases{}, allowing{}, domain.RateLimitSettings{})
+	unpaired := NewWarpMiddleware(ownNodeId, stubAliases{}, allowing{}, event.RateLimitSettings{})
 	defer unpaired.Close()
 	if reached, _ := callAsRemotePeer(t, unpaired, ownNodeId, device, deviceKey, route); reached {
 		t.Error("an unpaired device must not reach private routes")
 	}
 
-	paired := NewWarpMiddleware(ownNodeId, stubAliases{ids: []string{device.String()}}, allowing{}, domain.RateLimitSettings{})
+	paired := NewWarpMiddleware(ownNodeId, stubAliases{ids: []string{device.String()}}, allowing{}, event.RateLimitSettings{})
 	defer paired.Close()
 	if reached, _ := callAsRemotePeer(t, paired, ownNodeId, device, deviceKey, route); !reached {
 		t.Error("a paired device must reach private routes")
@@ -173,7 +172,7 @@ func TestAuthMiddleware_UnknownDeviceStaysLockedOut(t *testing.T) {
 	paired, _ := newRemotePeer(t)
 	other, otherKey := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, stubAliases{ids: []string{paired.String()}}, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, stubAliases{ids: []string{paired.String()}}, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, "/private/get/notifications/0.0.0")
@@ -186,7 +185,7 @@ func TestAuthMiddleware_DeviceLookupFailureDenies(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	device, deviceKey := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, stubAliases{err: errors.New("db is closed")}, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, stubAliases{err: errors.New("db is closed")}, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	reached, _ := callAsRemotePeer(t, mw, ownNodeId, device, deviceKey, "/private/get/notifications/0.0.0")
@@ -199,7 +198,7 @@ func TestAuthMiddleware_PublicRouteAllowedForForeignPeer(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	other, otherKey := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, "/public/get/tweets/0.0.0")
@@ -212,7 +211,7 @@ func TestAuthMiddleware_PairingStaysOpen(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	other, otherKey := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	if reached, _ := callAsRemotePeer(t, mw, ownNodeId, other, otherKey, event.PRIVATE_POST_PAIR); !reached {
@@ -224,7 +223,7 @@ func TestAuthMiddleware_LegacyReplyRoutesDenied(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	other, otherKey := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	for _, route := range []string{
@@ -241,7 +240,7 @@ func TestAuthMiddleware_TamperedBodyIsRejected(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, key := newRemotePeer(t)
 
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	route := "/public/get/tweets/0.0.0"
@@ -278,7 +277,7 @@ func TestAuthMiddleware_TamperedBodyIsRejected(t *testing.T) {
 
 func TestIsPrivateRouteAllowed_SelfStream(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
 	defer mw.Close()
 
 	route := stream.WarpRoute("/private/get/messages/0.0.0")

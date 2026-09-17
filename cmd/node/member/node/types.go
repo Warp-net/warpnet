@@ -296,10 +296,10 @@ type PollProvider interface {
 type SettingsProvider interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
-	GetRateLimitSettings(userId string) (domain.RateLimitSettings, error)
+	GetRateLimitSettings(userId string) (event.RateLimitSettings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
-	SetRateLimitSettings(userId string, s domain.RateLimitSettings) error
+	SetRateLimitSettings(userId string, s event.RateLimitSettings) error
 }
 
 type SubscriptionProvider interface {

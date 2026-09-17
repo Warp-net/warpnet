@@ -34,7 +34,6 @@ import (
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
@@ -65,7 +64,7 @@ type streamLimits struct {
 	routes      map[string]routeLimit
 }
 
-func newStreamLimits(s domain.RateLimitSettings) streamLimits {
+func newStreamLimits(s event.RateLimitSettings) streamLimits {
 	s = s.WithDefaults()
 	read := routeLimit{burst: int64(s.StreamReadBurst), perMinute: int64(s.StreamReadPerMinute)}
 	write := routeLimit{burst: int64(s.StreamWriteBurst), perMinute: int64(s.StreamWritePerMinute)}

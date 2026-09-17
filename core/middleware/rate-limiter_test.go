@@ -34,7 +34,6 @@ import (
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
 
@@ -44,7 +43,7 @@ func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *Wa
 		ownNodeId:    ownNodeId,
 		rateLimiters: newRateLimitersCache(),
 		events:       warpnet.NewPeerEmitter(),
-		limits:       newStreamLimits(domain.RateLimitSettings{}),
+		limits:       newStreamLimits(event.RateLimitSettings{}),
 	}
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 	return mw
@@ -199,7 +198,7 @@ func TestLimitForRouteKeepsOtherPeersOnTheirBudget(t *testing.T) {
 }
 
 func TestOwnerLimitsReachMappedAndFallbackRoutes(t *testing.T) {
-	mw := NewWarpMiddleware("own-node", nil, nil, domain.RateLimitSettings{
+	mw := NewWarpMiddleware("own-node", nil, nil, event.RateLimitSettings{
 		StreamReadBurst: 7, StreamReadPerMinute: 70,
 		StreamWriteBurst: 3, StreamWritePerMinute: 30,
 	})
@@ -220,12 +219,12 @@ func TestOwnerLimitsReachMappedAndFallbackRoutes(t *testing.T) {
 }
 
 func TestUnsetOwnerLimitsFallBackToTheDefaults(t *testing.T) {
-	mw := NewWarpMiddleware("own-node", nil, nil, domain.RateLimitSettings{})
+	mw := NewWarpMiddleware("own-node", nil, nil, event.RateLimitSettings{})
 	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
 
 	want := routeLimit{
-		burst:     int64(domain.DefaultRateLimits.StreamReadBurst),
-		perMinute: int64(domain.DefaultRateLimits.StreamReadPerMinute),
+		burst:     int64(event.DefaultRateLimits.StreamReadBurst),
+		perMinute: int64(event.DefaultRateLimits.StreamReadPerMinute),
 	}
 	if mw.limits.read != want {
 		t.Fatalf("expected %+v, got %+v", want, mw.limits.read)

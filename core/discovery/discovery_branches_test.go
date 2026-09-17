@@ -8,7 +8,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/multiformats/go-multiaddr"
@@ -32,7 +31,7 @@ func TestRunRoutesByNodeRole(t *testing.T) {
 			node.info = tt.info
 			node.infoResp = infoJSON(t, warpnet.NodeInfo{ID: warpnet.FromStringToPeerID(peerID)})
 
-			s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), domain.RateLimitSettings{})
+			s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), event.RateLimitSettings{})
 			t.Cleanup(s.Close)
 			require.NoError(t, s.Run(node))
 
@@ -51,7 +50,7 @@ func TestRunRefusesWithoutAChannel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), domain.RateLimitSettings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), event.RateLimitSettings{})
 	s.discoveryChan = nil
 	require.Error(t, s.Run(newFakeNode()))
 }
@@ -60,7 +59,7 @@ func TestRunLoopStopsOnClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), domain.RateLimitSettings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), event.RateLimitSettings{})
 	require.NoError(t, s.Run(newFakeNode()))
 	s.Close()
 	// closing twice must stay safe
@@ -70,7 +69,7 @@ func TestRunLoopStopsOnClose(t *testing.T) {
 func TestRunLoopStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), domain.RateLimitSettings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), event.RateLimitSettings{})
 	t.Cleanup(s.Close)
 	require.NoError(t, s.Run(newFakeNode()))
 
