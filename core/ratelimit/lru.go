@@ -25,43 +25,34 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package discovery
+package ratelimit
 
 import (
-	"time"
+	"reflect"
+	"unsafe"
 
-	"github.com/Warp-net/warpnet/core/ratelimit"
-	"github.com/Warp-net/warpnet/core/warpnet"
+	log "github.com/sirupsen/logrus"
 )
 
-const (
-	maxIPBuckets = 4096
-	ipBucketTTL  = time.Minute * 5
-)
-
-// ipRateLimiter keeps a leaky bucket per remote IP, so that a peer flooding
-// discoveries cannot shed the peers everyone else announces.
-type ipRateLimiter struct {
-	buckets *ratelimit.Buckets
-	limit   ratelimit.Limit
-}
-
-func newIPRateLimiter(burst, perTenSec int) *ipRateLimiter {
-	return &ipRateLimiter{
-		buckets: ratelimit.NewBuckets(maxIPBuckets, ipBucketTTL),
-		limit:   ratelimit.PerTenSeconds(int64(burst), int64(perTenSec)),
-	}
-}
-
-// allow charges the bucket of the IP the peer is reachable at. Peers announced
-// without an address share a single bucket.
-func (l *ipRateLimiter) allow(addrs []warpnet.WarpAddress) bool {
-	var ip string
-	for _, addr := range addrs {
-		if parsed := warpnet.MultiAddressIP(addr); parsed != nil {
-			ip = parsed.String()
-			break
+func CloseExpirableLRU(cache any) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Debugf("ratelimit: CloseExpirableLRU recovered: %v", r)
 		}
+	}()
+	v := reflect.ValueOf(cache)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return
 	}
-	return l.buckets.Allow(ip, l.limit)
+	field := v.Elem().FieldByName("done")
+	if !field.IsValid() || field.Kind() != reflect.Chan {
+		return
+	}
+	// FieldByName on an unexported field returns a Value flagged as
+	// read-only, so reflect.Value.Close() would panic. Rebuild a settable
+	// Value pointing at the same memory to bypass the export check.
+	//#nosec G103 // intentional: bypass reflect's exported-field check to close the library's `done` chan
+	settable := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	// Closing an already-closed channel panics; rely on the recover above.
+	settable.Close()
 }

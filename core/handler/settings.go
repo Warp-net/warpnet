@@ -29,6 +29,7 @@ package handler
 
 import (
 	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -48,8 +49,8 @@ type GatewaySettingsStorer interface {
 }
 
 type RateLimitSettingsStorer interface {
-	GetRateLimitSettings(userId string) (event.RateLimitSettings, error)
-	SetRateLimitSettings(userId string, s event.RateLimitSettings) error
+	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
+	SetRateLimitSettings(userId string, s ratelimit.Settings) error
 }
 
 // SettingsAuthStorer resolves the local node owner.
@@ -141,7 +142,7 @@ func StreamGetRateLimitSettingsHandler(
 		if err != nil {
 			return nil, err
 		}
-		return event.GetRateLimitSettingsResponse(settings.WithDefaults()), nil
+		return settings.WithDefaults(), nil
 	}
 }
 
@@ -150,7 +151,7 @@ func StreamUpdateRateLimitSettingsHandler(
 	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.UpdateRateLimitSettingsEvent
+		var ev ratelimit.Settings
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
@@ -165,6 +166,6 @@ func StreamUpdateRateLimitSettingsHandler(
 		if err := repo.SetRateLimitSettings(owner.UserId, settings); err != nil {
 			return nil, err
 		}
-		return event.GetRateLimitSettingsResponse(settings), nil
+		return settings, nil
 	}
 }

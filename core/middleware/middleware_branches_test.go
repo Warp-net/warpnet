@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -17,7 +18,7 @@ import (
 
 func TestLoggingMiddleware(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 	t.Cleanup(mw.Close)
 
 	client, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, "/public/get/info/0.0.0")
@@ -72,7 +73,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 
 	t.Run("a plain stream bypasses the cache", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		client, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, "/private/post/tweet/0.0.0")
@@ -94,7 +95,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	})
 
 	t.Run("a missing message id bypasses the cache", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		calls := 0
@@ -111,7 +112,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	})
 
 	t.Run("a non-post route bypasses the cache", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		calls := 0
@@ -128,7 +129,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	})
 
 	t.Run("a replayed post is answered from the cache", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		calls := 0
@@ -147,7 +148,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	})
 
 	t.Run("a failed post is not cached", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		calls := 0
@@ -164,7 +165,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	})
 
 	t.Run("an error response is not cached", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		calls := 0
@@ -181,7 +182,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 	})
 
 	t.Run("concurrent replays share one execution", func(t *testing.T) {
-		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+		mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 		t.Cleanup(mw.Close)
 
 		var (
@@ -220,7 +221,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 
 func TestAuthMiddlewareRejectsMalformedInput(t *testing.T) {
 	ownNodeId, key := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 	t.Cleanup(mw.Close)
 
 	const route = "/public/post/tweet/0.0.0"
@@ -287,7 +288,7 @@ func TestAuthMiddlewareRejectsMalformedInput(t *testing.T) {
 
 func TestAuthMiddlewareRejectsAnUnreadyConnection(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 	t.Cleanup(mw.Close)
 
 	client, server := stream.NewLoopbackStream(ownNodeId, ownNodeId, "/public/post/tweet/0.0.0")
@@ -304,14 +305,14 @@ func TestAuthMiddlewareRejectsAnUnreadyConnection(t *testing.T) {
 
 func TestCloseIsIdempotent(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
-	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, event.RateLimitSettings{})
+	mw := NewWarpMiddleware(ownNodeId, nil, allowing{}, ratelimit.Settings{})
 	require.NotPanics(t, mw.Close)
 	require.NotPanics(t, mw.Close)
 }
 
 func TestCloseExpirableLRUIgnoresForeignValues(t *testing.T) {
-	require.NotPanics(t, func() { closeExpirableLRU(nil) })
-	require.NotPanics(t, func() { closeExpirableLRU("not a cache") })
-	require.NotPanics(t, func() { closeExpirableLRU((*idempotencyCache)(nil)) })
-	require.NotPanics(t, func() { closeExpirableLRU(&struct{ done int }{}) })
+	require.NotPanics(t, func() { ratelimit.CloseExpirableLRU(nil) })
+	require.NotPanics(t, func() { ratelimit.CloseExpirableLRU("not a cache") })
+	require.NotPanics(t, func() { ratelimit.CloseExpirableLRU((*idempotencyCache)(nil)) })
+	require.NotPanics(t, func() { ratelimit.CloseExpirableLRU(&struct{ done int }{}) })
 }

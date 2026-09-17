@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/backoff"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -222,7 +223,7 @@ func newService(t *testing.T) (*discoveryService, *fakeNode, *fakeUserRepo, *fak
 	users := newFakeUserRepo()
 	nodes := newFakeNodeRepo()
 
-	s := NewDiscoveryService(ctx, users, nodes, event.RateLimitSettings{})
+	s := NewDiscoveryService(ctx, users, nodes, ratelimit.Settings{})
 	t.Cleanup(s.Close)
 
 	s.node = node
@@ -320,7 +321,7 @@ func TestClose_KeepsTheQueueOpenForLateSenders(t *testing.T) {
 	node := newFakeNode()
 	node.info.Type = warpnet.RelayNode
 
-	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), event.RateLimitSettings{})
+	s := NewDiscoveryService(ctx, newFakeUserRepo(), newFakeNodeRepo(), ratelimit.Settings{})
 	require.NoError(t, s.Run(node))
 
 	s.Close()
@@ -554,7 +555,7 @@ func TestHandleAsMember_NilDependenciesAreInert(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	bare := NewDiscoveryService(ctx, nil, nil, event.RateLimitSettings{})
+	bare := NewDiscoveryService(ctx, nil, nil, ratelimit.Settings{})
 	defer bare.Close()
 	assert.NotPanics(t, func() { bare.handleAsMember(discovered(peerID)) })
 }
@@ -667,7 +668,7 @@ func TestRun_RoutesByNodeRoleAndStopsCleanly(t *testing.T) {
 	users := newFakeUserRepo()
 	nodes := newFakeNodeRepo()
 
-	s := NewDiscoveryService(ctx, users, nodes, event.RateLimitSettings{})
+	s := NewDiscoveryService(ctx, users, nodes, ratelimit.Settings{})
 	require.NoError(t, s.Run(node))
 
 	s.DiscoveryHandlerPubSub(warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)})
@@ -699,13 +700,13 @@ func TestRelayDiscoveryService_HasNoUserRepositories(t *testing.T) {
 }
 
 func TestDiscoveryServiceTakesTheOwnersIPRateLimits(t *testing.T) {
-	s := NewDiscoveryService(context.Background(), nil, nil, event.RateLimitSettings{
+	s := NewDiscoveryService(context.Background(), nil, nil, ratelimit.Settings{
 		DiscoveryBurst: 10, DiscoveryPerTenSec: 5,
 	})
-	assert.Equal(t, 10, s.limiter.capacity)
-	assert.Equal(t, 5, s.limiter.leakPer10Sec)
+	assert.Equal(t, ratelimit.PerTenSeconds(10, 5), s.limiter.limit)
 
-	byDefault := NewDiscoveryService(context.Background(), nil, nil, event.RateLimitSettings{})
-	assert.Equal(t, event.DefaultRateLimits.DiscoveryBurst, byDefault.limiter.capacity)
-	assert.Equal(t, event.DefaultRateLimits.DiscoveryPerTenSec, byDefault.limiter.leakPer10Sec)
+	byDefault := NewDiscoveryService(context.Background(), nil, nil, ratelimit.Settings{})
+	assert.Equal(t, ratelimit.PerTenSeconds(
+		int64(ratelimit.Defaults.DiscoveryBurst), int64(ratelimit.Defaults.DiscoveryPerTenSec),
+	), byDefault.limiter.limit)
 }

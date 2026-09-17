@@ -6,6 +6,8 @@ package middleware
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/ratelimit"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/stretchr/testify/assert"
@@ -58,8 +60,9 @@ func TestAPeerNobodyHasRatedSpendsEverything(t *testing.T) {
 	peer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
+	pairing := mw.limitForRoute(stream.WarpRoute(pairingRoute), peer)
 	assert.Equal(t, float64(1), mw.rateMultiplier(peer))
-	assert.Equal(t, limitPairing, limitPairing.multipliedBy(mw.rateMultiplier(peer)))
+	assert.Equal(t, pairing, pairing.MultipliedBy(mw.rateMultiplier(peer)))
 }
 
 // A peer that filled its bucket at the old allowance must not keep it.
@@ -91,17 +94,11 @@ func TestAnUnchangedRatingKeepsTheBucket(t *testing.T) {
 		"a rating that did not change must not hand a peer a fresh bucket")
 }
 
-func TestAMultiplierNeverStarvesAPeer(t *testing.T) {
-	tightest := routeLimit{burst: 1, perMinute: 1}.multipliedBy(0.1)
-	assert.EqualValues(t, 1, tightest.burst)
-	assert.EqualValues(t, 1, tightest.perMinute)
-}
-
 func TestAMiddlewareWithNoRatingsServesEveryPeerInFull(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
-	mw := &WarpMiddleware{ownNodeId: ownNodeId, rateLimiters: newRateLimitersCache()}
-	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
+	mw := NewWarpMiddleware(ownNodeId, nil, nil, ratelimit.Settings{})
+	t.Cleanup(mw.Close)
 
 	assert.Equal(t, float64(1), mw.rateMultiplier(peer))
 	assert.Positive(t, spend(t, mw, ownNodeId, peer))

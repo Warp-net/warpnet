@@ -29,9 +29,9 @@ package middleware
 
 import (
 	"testing"
-	"time"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -39,13 +39,8 @@ import (
 
 func newLimiterMiddlewareForTest(t *testing.T, ownNodeId warpnet.WarpPeerID) *WarpMiddleware {
 	t.Helper()
-	mw := &WarpMiddleware{
-		ownNodeId:    ownNodeId,
-		rateLimiters: newRateLimitersCache(),
-		events:       warpnet.NewPeerEmitter(),
-		limits:       newStreamLimits(event.RateLimitSettings{}),
-	}
-	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
+	mw := NewWarpMiddleware(ownNodeId, nil, nil, ratelimit.Settings{})
+	t.Cleanup(mw.Close)
 	return mw
 }
 
@@ -87,41 +82,13 @@ func callLimited(
 	return false
 }
 
-func TestLeakyBucket_AdmitsBurstThenLeaks(t *testing.T) {
-	b := newRateLimiter(routeLimit{burst: 3, perMinute: 60_000}, 1)
-
-	for i := range 3 {
-		if !b.Allow() {
-			t.Fatalf("request %d of the burst must be admitted", i+1)
-		}
-	}
-	if b.Allow() {
-		t.Fatal("expected the request past the burst to be refused")
-	}
-
-	time.Sleep(5 * time.Millisecond)
-	if !b.Allow() {
-		t.Fatal("expected the bucket to admit again after leaking")
-	}
-}
-
-func TestLeakyBucket_ZeroLimitFallsBackToOne(t *testing.T) {
-	b := newRateLimiter(routeLimit{}, 1)
-	if !b.Allow() {
-		t.Fatal("expected the first request to be admitted")
-	}
-	if b.Allow() {
-		t.Fatal("expected the second request to be refused")
-	}
-}
-
 func TestRateLimiterMiddleware_LimitsPerRouteAndPeer(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	peer, _ := newRemotePeer(t)
 	otherPeer, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	burst := int(limitPairing.burst)
+	burst := int(mw.limitForRoute(stream.WarpRoute(event.PRIVATE_POST_PAIR), peer).Burst)
 	for i := range burst {
 		if !callLimited(t, mw, ownNodeId, peer, event.PRIVATE_POST_PAIR) {
 			t.Fatalf("pairing request %d of the burst must be admitted", i+1)
@@ -143,7 +110,8 @@ func TestRateLimiterMiddleware_SelfStreamsExempt(t *testing.T) {
 	ownNodeId, _ := newRemotePeer(t)
 	mw := newLimiterMiddlewareForTest(t, ownNodeId)
 
-	for i := range int(limitPairing.burst) + 5 {
+	pairing := mw.limitForRoute(stream.WarpRoute(event.PRIVATE_POST_PAIR), ownNodeId)
+	for i := range int(pairing.Burst) + 5 {
 		if !callLimited(t, mw, ownNodeId, ownNodeId, event.PRIVATE_POST_PAIR) {
 			t.Fatalf("self stream %d must not be limited", i+1)
 		}
@@ -152,21 +120,29 @@ func TestRateLimiterMiddleware_SelfStreamsExempt(t *testing.T) {
 
 func TestLimitForRoute(t *testing.T) {
 	mw := newLimiterMiddlewareForTest(t, "own-node")
-	limitRead := mw.limits.read
-	limitWrite := mw.limits.write
+	peer := warpnet.WarpPeerID("member-peer")
 
-	cases := map[string]routeLimit{
-		event.PUBLIC_GET_IMAGE:     limitMedia,
-		event.PUBLIC_POST_TIMELINE: limitDelivery,
-		event.PUBLIC_POST_VIEW:     limitRead,
-		event.PRIVATE_POST_PAIR:    limitPairing,
-		event.PUBLIC_GET_TWEETS:    limitRead,
-		event.PRIVATE_GET_TIMELINE: limitRead,
-		event.PUBLIC_POST_REACT:    limitWrite,
-		event.PRIVATE_DELETE_TWEET: limitWrite,
+	reads := []string{event.PUBLIC_GET_TWEETS, event.PRIVATE_GET_TIMELINE}
+	for _, route := range reads {
+		if got := mw.limitForRoute(stream.WarpRoute(route), peer); got != mw.limits.Read() {
+			t.Fatalf("%s: expected the read budget %+v, got %+v", route, mw.limits.Read(), got)
+		}
 	}
-	for route, want := range cases {
-		if got := mw.limitForRoute(stream.WarpRoute(route), warpnet.WarpPeerID("member-peer")); got != want {
+
+	writes := []string{event.PUBLIC_POST_REACT, event.PRIVATE_DELETE_TWEET}
+	for _, route := range writes {
+		if got := mw.limitForRoute(stream.WarpRoute(route), peer); got != mw.limits.Write() {
+			t.Fatalf("%s: expected the write budget %+v, got %+v", route, mw.limits.Write(), got)
+		}
+	}
+
+	own := []string{event.PUBLIC_GET_IMAGE, event.PUBLIC_POST_TIMELINE, event.PRIVATE_POST_PAIR}
+	for _, route := range own {
+		want, ok := mw.limits.Route(route)
+		if !ok {
+			t.Fatalf("%s: expected a budget of its own", route)
+		}
+		if got := mw.limitForRoute(stream.WarpRoute(route), peer); got != want {
 			t.Fatalf("%s: expected %+v, got %+v", route, want, got)
 		}
 	}
@@ -182,8 +158,8 @@ func TestLimitForRouteGivesTheGatewayItsOwnBudget(t *testing.T) {
 	for _, route := range []string{
 		event.PUBLIC_GET_USER, event.PUBLIC_GET_IMAGE, event.PUBLIC_POST_REACT, event.PRIVATE_POST_PAIR,
 	} {
-		if got := mw.limitForRoute(stream.WarpRoute(route), gateway); got != limitGateway {
-			t.Fatalf("%s: expected the gateway budget %+v, got %+v", route, limitGateway, got)
+		if got := mw.limitForRoute(stream.WarpRoute(route), gateway); got != mw.limits.Gateway() {
+			t.Fatalf("%s: expected the gateway budget %+v, got %+v", route, mw.limits.Gateway(), got)
 		}
 	}
 }
@@ -192,41 +168,28 @@ func TestLimitForRouteKeepsOtherPeersOnTheirBudget(t *testing.T) {
 	mw := newLimiterMiddlewareForTest(t, "own-node")
 
 	got := mw.limitForRoute(stream.WarpRoute(event.PUBLIC_GET_USER), warpnet.WarpPeerID("someone-else"))
-	if got != mw.limits.read {
-		t.Fatalf("expected %+v, got %+v", mw.limits.read, got)
+	if got != mw.limits.Read() {
+		t.Fatalf("expected %+v, got %+v", mw.limits.Read(), got)
 	}
 }
 
 func TestOwnerLimitsReachMappedAndFallbackRoutes(t *testing.T) {
-	mw := NewWarpMiddleware("own-node", nil, nil, event.RateLimitSettings{
+	mw := NewWarpMiddleware("own-node", nil, nil, ratelimit.Settings{
 		StreamReadBurst: 7, StreamReadPerMinute: 70,
 		StreamWriteBurst: 3, StreamWritePerMinute: 30,
 	})
-	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
+	t.Cleanup(mw.Close)
 
 	peer := warpnet.WarpPeerID("member-peer")
-	cases := map[string]routeLimit{
-		event.PUBLIC_POST_VIEW:  {burst: 7, perMinute: 70},
-		event.PUBLIC_GET_TWEETS: {burst: 7, perMinute: 70},
-		event.PUBLIC_POST_REACT: {burst: 3, perMinute: 30},
-		event.PUBLIC_GET_IMAGE:  limitMedia,
+	cases := map[string]ratelimit.Limit{
+		event.PUBLIC_POST_VIEW:  ratelimit.PerMinute(7, 70),
+		event.PUBLIC_GET_TWEETS: ratelimit.PerMinute(7, 70),
+		event.PUBLIC_POST_REACT: ratelimit.PerMinute(3, 30),
+		event.PUBLIC_GET_IMAGE:  ratelimit.PerMinute(150, 600),
 	}
 	for route, want := range cases {
 		if got := mw.limitForRoute(stream.WarpRoute(route), peer); got != want {
 			t.Fatalf("%s: expected %+v, got %+v", route, want, got)
 		}
-	}
-}
-
-func TestUnsetOwnerLimitsFallBackToTheDefaults(t *testing.T) {
-	mw := NewWarpMiddleware("own-node", nil, nil, event.RateLimitSettings{})
-	t.Cleanup(func() { closeExpirableLRU(mw.rateLimiters) })
-
-	want := routeLimit{
-		burst:     int64(event.DefaultRateLimits.StreamReadBurst),
-		perMinute: int64(event.DefaultRateLimits.StreamReadPerMinute),
-	}
-	if mw.limits.read != want {
-		t.Fatalf("expected %+v, got %+v", want, mw.limits.read)
 	}
 }

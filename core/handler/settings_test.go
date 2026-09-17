@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 )
@@ -238,18 +239,18 @@ func TestStreamUpdateGatewaySettingsHandler(t *testing.T) {
 }
 
 type stubRateLimitRepo struct {
-	getFn func(userId string) (event.RateLimitSettings, error)
-	setFn func(userId string, s event.RateLimitSettings) error
+	getFn func(userId string) (ratelimit.Settings, error)
+	setFn func(userId string, s ratelimit.Settings) error
 }
 
-func (s stubRateLimitRepo) GetRateLimitSettings(userId string) (event.RateLimitSettings, error) {
+func (s stubRateLimitRepo) GetRateLimitSettings(userId string) (ratelimit.Settings, error) {
 	if s.getFn != nil {
 		return s.getFn(userId)
 	}
-	return event.RateLimitSettings{}, nil
+	return ratelimit.Settings{}, nil
 }
 
-func (s stubRateLimitRepo) SetRateLimitSettings(userId string, rs event.RateLimitSettings) error {
+func (s stubRateLimitRepo) SetRateLimitSettings(userId string, rs ratelimit.Settings) error {
 	if s.setFn != nil {
 		return s.setFn(userId, rs)
 	}
@@ -261,18 +262,18 @@ func TestStreamGetRateLimitSettingsHandler(t *testing.T) {
 
 	t.Run("returns saved limits", func(t *testing.T) {
 		h := StreamGetRateLimitSettingsHandler(stubRateLimitRepo{
-			getFn: func(userId string) (event.RateLimitSettings, error) {
+			getFn: func(userId string) (ratelimit.Settings, error) {
 				if userId != owner {
 					t.Fatalf("expected owner id %q, got %q", owner, userId)
 				}
-				return event.RateLimitSettings{NetworkLowWater: 10, NetworkHighWater: 100}, nil
+				return ratelimit.Settings{NetworkLowWater: 10, NetworkHighWater: 100}, nil
 			},
 		}, stubAuth{owner: domain.Owner{UserId: owner}})
 		resp, err := h([]byte("{}"), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		s := resp.(event.GetRateLimitSettingsResponse)
+		s := resp.(ratelimit.Settings)
 		if s.NetworkLowWater != 10 || s.NetworkHighWater != 100 {
 			t.Fatalf("unexpected settings: %+v", s)
 		}
@@ -284,7 +285,7 @@ func TestStreamGetRateLimitSettingsHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if resp.(event.GetRateLimitSettingsResponse) != event.DefaultRateLimits {
+		if resp.(ratelimit.Settings) != ratelimit.Defaults {
 			t.Fatalf("expected default limits, got %+v", resp)
 		}
 	})
@@ -292,7 +293,7 @@ func TestStreamGetRateLimitSettingsHandler(t *testing.T) {
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db failed")
 		h := StreamGetRateLimitSettingsHandler(stubRateLimitRepo{
-			getFn: func(string) (event.RateLimitSettings, error) { return event.RateLimitSettings{}, repoErr },
+			getFn: func(string) (ratelimit.Settings, error) { return ratelimit.Settings{}, repoErr },
 		}, stubAuth{owner: domain.Owner{UserId: owner}})
 		if _, err := h([]byte("{}"), nil); !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got %v", err)
@@ -312,15 +313,15 @@ func TestStreamUpdateRateLimitSettingsHandler(t *testing.T) {
 
 	t.Run("empty owner", func(t *testing.T) {
 		h := StreamUpdateRateLimitSettingsHandler(stubRateLimitRepo{}, stubAuth{owner: domain.Owner{}})
-		if _, err := h(marshal(t, event.UpdateRateLimitSettingsEvent{}), nil); err == nil {
+		if _, err := h(marshal(t, ratelimit.Settings{}), nil); err == nil {
 			t.Fatal("expected empty-owner error")
 		}
 	})
 
 	t.Run("persists and echoes limits", func(t *testing.T) {
-		var saved event.RateLimitSettings
+		var saved ratelimit.Settings
 		h := StreamUpdateRateLimitSettingsHandler(stubRateLimitRepo{
-			setFn: func(userId string, rs event.RateLimitSettings) error {
+			setFn: func(userId string, rs ratelimit.Settings) error {
 				if userId != owner {
 					t.Fatalf("expected owner id %q, got %q", owner, userId)
 				}
@@ -328,43 +329,43 @@ func TestStreamUpdateRateLimitSettingsHandler(t *testing.T) {
 				return nil
 			},
 		}, stubAuth{owner: domain.Owner{UserId: owner}})
-		in := event.DefaultRateLimits
+		in := ratelimit.Defaults
 		in.StreamWritePerMinute = 600
-		resp, err := h(marshal(t, event.UpdateRateLimitSettingsEvent(in)), nil)
+		resp, err := h(marshal(t, in), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if saved.StreamWritePerMinute != 600 {
 			t.Fatalf("unexpected saved: %+v", saved)
 		}
-		if resp.(event.GetRateLimitSettingsResponse).StreamWritePerMinute != 600 {
+		if resp.(ratelimit.Settings).StreamWritePerMinute != 600 {
 			t.Fatalf("expected echoed settings, got %+v", resp)
 		}
 	})
 
 	t.Run("unset limits fall back to defaults", func(t *testing.T) {
-		var saved event.RateLimitSettings
+		var saved ratelimit.Settings
 		h := StreamUpdateRateLimitSettingsHandler(stubRateLimitRepo{
-			setFn: func(_ string, rs event.RateLimitSettings) error { saved = rs; return nil },
+			setFn: func(_ string, rs ratelimit.Settings) error { saved = rs; return nil },
 		}, stubAuth{owner: domain.Owner{UserId: owner}})
-		if _, err := h(marshal(t, event.UpdateRateLimitSettingsEvent{DiscoveryBurst: 64}), nil); err != nil {
+		if _, err := h(marshal(t, ratelimit.Settings{DiscoveryBurst: 64}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if saved.DiscoveryBurst != 64 || saved.StreamReadBurst != event.DefaultRateLimits.StreamReadBurst {
+		if saved.DiscoveryBurst != 64 || saved.StreamReadBurst != ratelimit.Defaults.StreamReadBurst {
 			t.Fatalf("expected defaults for unset limits, got %+v", saved)
 		}
 	})
 
 	t.Run("high water below low water", func(t *testing.T) {
 		h := StreamUpdateRateLimitSettingsHandler(stubRateLimitRepo{
-			setFn: func(string, event.RateLimitSettings) error {
+			setFn: func(string, ratelimit.Settings) error {
 				t.Fatal("must not persist invalid limits")
 				return nil
 			},
 		}, stubAuth{owner: domain.Owner{UserId: owner}})
-		in := event.DefaultRateLimits
+		in := ratelimit.Defaults
 		in.NetworkLowWater, in.NetworkHighWater = 100, 10
-		if _, err := h(marshal(t, event.UpdateRateLimitSettingsEvent(in)), nil); err == nil {
+		if _, err := h(marshal(t, in), nil); err == nil {
 			t.Fatal("expected water mark error")
 		}
 	})
@@ -372,9 +373,9 @@ func TestStreamUpdateRateLimitSettingsHandler(t *testing.T) {
 	t.Run("repo error surfaces", func(t *testing.T) {
 		repoErr := errors.New("db failed")
 		h := StreamUpdateRateLimitSettingsHandler(stubRateLimitRepo{
-			setFn: func(string, event.RateLimitSettings) error { return repoErr },
+			setFn: func(string, ratelimit.Settings) error { return repoErr },
 		}, stubAuth{owner: domain.Owner{UserId: owner}})
-		if _, err := h(marshal(t, event.UpdateRateLimitSettingsEvent{}), nil); !errors.Is(err, repoErr) {
+		if _, err := h(marshal(t, ratelimit.Settings{}), nil); !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got %v", err)
 		}
 	})

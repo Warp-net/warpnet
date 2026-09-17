@@ -4,9 +4,9 @@ package database
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 )
@@ -105,12 +105,12 @@ func (s *SettingsRepoTestSuite) TestRateLimitDefaultsWhenUnset() {
 	user := uuid.New().String()
 	got, err := s.repo.GetRateLimitSettings(user)
 	s.Require().NoError(err)
-	s.Equal(event.RateLimitSettings{}, got)
+	s.Equal(ratelimit.Settings{}, got)
 }
 
 func (s *SettingsRepoTestSuite) TestRateLimitSetGet() {
 	user := uuid.New().String()
-	want := event.DefaultRateLimits
+	want := ratelimit.Defaults
 	want.NetworkHighWater = 500
 	s.Require().NoError(s.repo.SetRateLimitSettings(user, want))
 
@@ -126,7 +126,7 @@ func (s *SettingsRepoTestSuite) TestRateLimitSetGet() {
 func (s *SettingsRepoTestSuite) TestRateLimitEmptyUserId() {
 	_, err := s.repo.GetRateLimitSettings("")
 	s.Error(err)
-	s.Error(s.repo.SetRateLimitSettings("", event.RateLimitSettings{}))
+	s.Error(s.repo.SetRateLimitSettings("", ratelimit.Settings{}))
 }
 
 func TestSettingsRepoTestSuite(t *testing.T) {
