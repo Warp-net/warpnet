@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
 	"runtime/debug"
@@ -149,7 +150,8 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
+	sub, err := node.EventBus().Subscribe(event.WildcardSubscription, eventbus.BufSize(128)) //nolint:mnd
+
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to subscribe: %w", err)
 	}
