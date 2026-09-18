@@ -368,6 +368,39 @@ func TestCRDTStats_CloseStopsTheFlushWorker(t *testing.T) {
 	assert.Equal(t, 1, bc.count(), "Close flushes what is buffered before it stops")
 }
 
+func TestCRDTStats_DirtyStoreIsRepairedOnOpen(t *testing.T) {
+	base := dssync.MutexWrap(datastore.NewMapDatastore())
+	host := newStatsHost(t)
+	key := datastore.NewKey("/TWEETS/LIKES/tweet-after-crash")
+
+	crashedCtx, killed := context.WithCancel(context.Background())
+	crashed, err := New(crashedCtx, &silentBroadcaster{}, base, host)
+	require.NoError(t, err)
+	require.NoError(t, crashed.Increment(key))
+	require.NoError(t, crashed.flush())
+	killed() // no Close: the bad-shutdown marker survives, as after a kill
+
+	marked, err := base.Has(context.Background(), datastore.NewKey("/bs"))
+	require.NoError(t, err)
+	require.True(t, marked, "the killed store must leave the marker that makes the next open dirty")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	reopened, err := New(ctx, &silentBroadcaster{}, base, host)
+	require.NoError(t, err)
+	defer func() { _ = reopened.Close() }()
+
+	require.Eventually(t, func() bool {
+		return !reopened.crdt.IsDirty(ctx)
+	}, 10*time.Second, 50*time.Millisecond,
+		"the repair must clear the dirty bit a crash left behind, nothing else ever does")
+
+	got, err := reopened.GetAggregatedStat(key)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), got, "the repaired store still reads what the killed one flushed")
+}
+
 func TestCRDTStats_CounterCodecRoundTrip(t *testing.T) {
 	for _, v := range []uint64{0, 1, 42, 1 << 32, ^uint64(0)} {
 		assert.Equal(t, v, decodeCounter(encodeCounter(v)))

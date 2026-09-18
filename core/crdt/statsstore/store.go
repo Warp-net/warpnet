@@ -155,6 +155,9 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
+	// The periodic repair is off: it re-walks the whole DAG, which only grows,
+	// and a walk that fails to fetch one block leaves the store dirty and is
+	// retried every interval. New below repairs once instead, when dirty.
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
@@ -171,10 +174,31 @@ func New(
 	}
 	store.crdt = crdtStore
 
+	if crdtStore.IsDirty(ctx) {
+		store.wg.Add(1)
+		go store.repair()
+	}
+
 	store.wg.Add(1)
 	go store.run()
 
 	return store, nil
+}
+
+// repair re-walks the DAG once when a previous run left the store dirty.
+// Nothing else clears the dirty bit, so unprocessed branches would stay
+// missing from the counters for the lifetime of the database.
+func (s *Store) repair() {
+	defer s.wg.Done()
+
+	log.Infoln("crdt stats: store is dirty, repairing the DAG")
+	if err := s.crdt.Repair(s.ctx); err != nil {
+		if s.ctx.Err() == nil {
+			log.Warnf("crdt stats: DAG repair: %v", err)
+		}
+		return
+	}
+	log.Infoln("crdt stats: DAG repair complete")
 }
 
 func (s *Store) run() {
@@ -329,8 +353,8 @@ func (s *Store) Close() error {
 		log.Warnf("crdt stats: final flush: %v", err)
 	}
 	s.stopOnce.Do(func() { close(s.stopChan) })
+	s.cancel() // before the wait: a running DAG repair stops on the context
 	s.wg.Wait()
-	s.cancel()
 	return s.crdt.Close()
 }
 
