@@ -98,6 +98,38 @@ func (s *ChatRepoSuite) TestDeleteChat() {
 	s.Empty(deleted.Id)
 }
 
+func (s *ChatRepoSuite) TestIsParticipants() {
+	ownerID := testUserID
+	otherID := ulid.Make().String()
+
+	s.False(s.repo.IsParticipants(ownerID, otherID))
+	s.False(s.repo.IsParticipants("", otherID))
+	s.False(s.repo.IsParticipants("short", otherID))
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	defer s.repo.DeleteChat(chat.Id)
+
+	s.True(s.repo.IsParticipants(ownerID, otherID))
+	s.True(s.repo.IsParticipants(otherID, ownerID))
+	s.False(s.repo.IsParticipants(ownerID, ulid.Make().String()))
+}
+
+// The composed chat ID keeps only the random tail of each ULID, so a foreign
+// pair can land on an existing key. The stored participants have to be checked.
+func (s *ChatRepoSuite) TestIsParticipantsRejectsIdCollision() {
+	ownerID := testUserID
+	otherID := ulid.Make().String()
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	defer s.repo.DeleteChat(chat.Id)
+
+	intruder := "0000000000000" + ownerID[ulidRandomPartOffset-1:]
+	s.Equal(chat.Id, s.repo.composeChatId(intruder, otherID))
+	s.False(s.repo.IsParticipants(intruder, otherID))
+}
+
 func (s *ChatRepoSuite) TestGetUserChats() {
 	userID := testUserID
 

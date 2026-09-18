@@ -47,10 +47,8 @@ type ChatMediaStorer interface {
 	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
 
-const chatMediaPageLimit = 100
-
 type ChatMediaChatFetcher interface {
-	GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error)
+	IsParticipants(ownerId, otherUserId string) bool
 }
 
 type ChatMediaUserFetcher interface {
@@ -243,27 +241,7 @@ func isChatMediaAllowed(
 	if err != nil || requester.Id == "" {
 		return false
 	}
-
-	var (
-		limit  = uint64(chatMediaPageLimit)
-		cursor string
-	)
-	for {
-		chats, next, err := chatRepo.GetUserChats(ownNodeInfo.OwnerId, &limit, &cursor)
-		if err != nil {
-			log.Errorf("chat media: listing chats: %v", err)
-			return false
-		}
-		for _, chat := range chats {
-			if chat.OwnerId == requester.Id || chat.OtherUserId == requester.Id {
-				return true
-			}
-		}
-		if uint64(len(chats)) < limit || next == "" || next == event.EndCursor {
-			return false
-		}
-		cursor = next
-	}
+	return chatRepo.IsParticipants(ownNodeInfo.OwnerId, requester.Id)
 }
 
 func isOwnRequest(s warpnet.WarpStream, ownNodeInfo warpnet.NodeInfo) bool {

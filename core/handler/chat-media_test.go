@@ -86,21 +86,15 @@ func (r *chatMediaRepoDouble) SetForeignVideoWithTTL(userId, key string, video d
 }
 
 type chatFetcherDouble struct {
-	chats []domain.Chat
-	err   error
+	partners map[string]bool
 }
 
-func (d chatFetcherDouble) GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error) {
-	if d.err != nil {
-		return nil, "", d.err
-	}
-	return d.chats, event.EndCursor, nil
+func (d chatFetcherDouble) IsParticipants(ownerId, otherUserId string) bool {
+	return d.partners[ownerId+"/"+otherUserId]
 }
 
 func ownChat() chatFetcherDouble {
-	return chatFetcherDouble{chats: []domain.Chat{
-		{Id: "aaa:bbb", OwnerId: ownerID, OtherUserId: testPartnerID},
-	}}
+	return chatFetcherDouble{partners: map[string]bool{ownerID + "/" + testPartnerID: true}}
 }
 
 type chatUserDouble struct {
