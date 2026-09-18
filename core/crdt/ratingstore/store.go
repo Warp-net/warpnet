@@ -64,13 +64,12 @@ type Datastore interface {
 	Close() error
 }
 
-// Router finds the peers holding a block.
-type Router interface {
-	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
-}
-
 // GossipTopic is the pubsub topic this store's replicas converge on.
 const GossipTopic = "/warpnet/rating/1.0.0"
+
+// bitswapPrefix keeps this store's block exchange off the protocols the
+// stats store's own bitswap registers on the same host.
+const bitswapPrefix = "/warpnet/rating"
 
 const (
 	// recordPrefix separates the records from the datastore's own keys.
@@ -78,6 +77,10 @@ const (
 	// already namespaced by database.NewRatingRepo.
 	recordPrefix   = "/record"
 	recordKeyParts = 5
+
+	rebroadcastInterval = 5 * time.Minute
+	dagSyncerTimeout    = 15 * time.Second
+	numWorkers          = 16
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -104,7 +107,6 @@ func New(
 	broadcaster Broadcaster,
 	datastore Datastore,
 	node warpnet.P2PNode,
-	router Router,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -112,8 +114,8 @@ func New(
 
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
-	bitswapNetwork := warpnet.NewBitswapNetwork(node)
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
+	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
+	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, nil, blockstore)
 
 	for _, p := range node.Network().Peers() {
 		bitswapExchange.PeerConnected(p)
@@ -132,8 +134,10 @@ func New(
 	opts.Logger = log.StandardLogger().WithContext(ctx)
 	opts.PutHook = store.onPut
 	opts.DeleteHook = store.onDelete
-	opts.RebroadcastInterval = time.Minute
-	opts.DAGSyncerTimeout = time.Minute
+	opts.RebroadcastInterval = rebroadcastInterval
+	opts.DAGSyncerTimeout = dagSyncerTimeout
+	opts.NumWorkers = numWorkers
+	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(

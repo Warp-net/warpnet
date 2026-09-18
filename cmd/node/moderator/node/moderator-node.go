@@ -38,6 +38,7 @@ import (
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -192,12 +193,14 @@ func (mn *ModeratorNode) Start() (err error) {
 		panic("moderator: nil node")
 	}
 
-	mn.node, err = node.NewWarpNode(mn.ctx, mn.ratings, mn.options...)
+	mn.node, err = node.NewWarpNode(mn.ctx, mn.ratings, ratelimit.Settings{}, mn.options...)
 	if err != nil {
 		return fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	mn.mw = middleware.NewWarpMiddleware(mn.node.Node().ID(), nil, mn.ratings)
+	mn.mw = middleware.NewWarpMiddleware(
+		mn.node.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, mn.ratings),
+	)
 	mn.node.SetStreamMiddlewares(
 		mn.mw.LoggingMiddleware,
 		mn.mw.RateLimiterMiddleware,
@@ -233,7 +236,7 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
 	}
 	mn.ratingDb, err = ratingstore.New(
-		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(),
 	)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to initialize rating store: %w", err)

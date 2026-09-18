@@ -26,7 +26,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 const (
@@ -37,6 +39,8 @@ const (
 	// maxResponseSize caps a single response. The largest legitimate one
 	// is a 36 MiB video, which arrives base64-encoded.
 	maxResponseSize = 64 << 20
+
+	lanHeadStart = 250 * time.Millisecond
 )
 
 type clientNode struct {
@@ -178,6 +182,7 @@ func newClient(
 		libp2p.Muxer(yamux.ID, ya),
 		libp2p.ConnectionManager(connManager),
 		libp2p.ResourceManager(rm),
+		libp2p.SwarmOpts(swarm.WithDialRanker(lanFirstDialRanker)),
 	}
 
 	// Create the libp2p host
@@ -198,7 +203,7 @@ func newClient(
 	}
 
 	hashTable, err := dht.New(
-		ctx, h,
+		h,
 		dht.Mode(dht.ModeClient),
 		dht.ProtocolPrefix(protocol.ID("/"+warpNetwork)),
 		dht.Concurrency(3),
@@ -234,9 +239,38 @@ func newClient(
 	return cn, nil
 }
 
+func lanFirstDialRanker(addrs []multiaddr.Multiaddr) []network.AddrDelay {
+	var private, rest []multiaddr.Multiaddr
+	for _, addr := range addrs {
+		if manet.IsPrivateAddr(addr) && !isRelayAddr(addr) {
+			private = append(private, addr)
+			continue
+		}
+		rest = append(rest, addr)
+	}
+	if len(private) == 0 {
+		return swarm.DefaultDialRanker(addrs)
+	}
+
+	ranked := make([]network.AddrDelay, 0, len(addrs))
+	for _, addr := range private {
+		ranked = append(ranked, network.AddrDelay{Addr: addr})
+	}
+	for _, delayed := range swarm.DefaultDialRanker(rest) {
+		delayed.Delay += lanHeadStart
+		ranked = append(ranked, delayed)
+	}
+	return ranked
+}
+
+func isRelayAddr(addr multiaddr.Multiaddr) bool {
+	_, err := addr.ValueForProtocol(multiaddr.P_CIRCUIT)
+	return err == nil
+}
+
 // connect accepts one or more newline-separated multiaddrs for a single
-// peer and hands them all to host.Connect in one call so libp2p's
-// swarm.DefaultDialRanker can rank and dial them in parallel.
+// peer and hands them all to host.Connect in one call so the dial ranker
+// can rank and dial them in parallel.
 func (c *clientNode) connect(peerInfo string) error {
 	c.flushEvents()
 	go func() {

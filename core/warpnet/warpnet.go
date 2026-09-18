@@ -32,8 +32,10 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/x/rate"
 	"io"
 	gonet "net"
+	"net/netip"
 	"runtime"
 	"strconv"
 	"strings"
@@ -41,6 +43,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/database/datastore"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/docker/go-units"
 	"github.com/ipfs/boxo/bitswap"
 	bitswapNetwork "github.com/ipfs/boxo/bitswap/network"
@@ -71,17 +74,13 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" //nolint:staticcheck
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
-	"github.com/libp2p/go-libp2p/core/transport"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
-	"github.com/libp2p/go-libp2p/p2p/net/swarm"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
-	"github.com/libp2p/go-libp2p/p2p/transport/tcpreuse"
-	"github.com/libp2p/go-libp2p/p2p/transport/websocket"
-
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
@@ -249,11 +248,34 @@ func VerifyAuthorship(s WarpStream, actorNodeId string) error {
 	return ErrForeignAuthor
 }
 
+// AliasIDs lists the devices paired to a node. An id that does not parse is
+// dropped rather than failing the whole NodeInfo: back compat, older nodes
+// sent every alias base58-encoded twice and discovery dropped such a peer.
+type AliasIDs []WarpPeerID
+
+func (a *AliasIDs) UnmarshalJSON(data []byte) error {
+	var raw []string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	var ids AliasIDs
+	for _, s := range raw {
+		id := FromStringToPeerID(s)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	*a = ids
+	return nil
+}
+
 type NodeInfo struct {
 	Type           string           `json:"type"`
 	OwnerId        string           `json:"owner_id"`
 	ID             WarpPeerID       `json:"node_id"`
-	Aliases        []WarpPeerID     `json:"aliases"`
+	Aliases        AliasIDs         `json:"aliases"`
 	Version        *semver.Version  `json:"version"`
 	Addresses      []string         `json:"addresses"`
 	StartTime      time.Time        `json:"start_time"`
@@ -303,30 +325,13 @@ func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*no
 	return noise.New(id, pk, mxs)
 }
 
-func NewTCPTransport(u transport.Upgrader, r network.ResourceManager, s *tcpreuse.ConnMgr, o ...tcp.Option) (*tcp.TcpTransport, error) {
-	return tcp.NewTCPTransport(u, r, s, o...)
-}
-
-func NewWebsocketTransport(
-	u transport.Upgrader,
-	r network.ResourceManager,
-	s *tcpreuse.ConnMgr,
-	o ...websocket.Option,
-) (*websocket.WebsocketTransport, error) {
-	return websocket.New(u, r, s, o...)
-}
-
-func NewConnManager(limiter rcmgr.Limiter) (*connmgr.BasicConnMgr, error) {
-	_ = limiter.GetConnLimits().GetConnTotalLimit() // TODO move to settings
+func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.BasicConnMgr, error) {
+	high := min(highWater, limiter.GetSystemLimits().GetConnTotalLimit())
 	return connmgr.NewConnManager(
-		20,
-		50,
+		min(lowWater, high/2),
+		high,
 		connmgr.WithGracePeriod(time.Hour),
 	)
-}
-
-func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {
-	return rcmgr.NewResourceManager(limiter)
 }
 
 func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
@@ -340,6 +345,47 @@ func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
 		return rcmgr.NewFixedLimiter(defaults)
 	}
 	return limiter
+}
+
+func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {
+	perSubnet := subnetConnLimit(limiter)
+	return rcmgr.NewResourceManager(
+		limiter,
+		rcmgr.WithLimitPerSubnet(
+			[]rcmgr.ConnLimitPerSubnet{{PrefixLength: 32, ConnCount: perSubnet}},
+			[]rcmgr.ConnLimitPerSubnet{
+				{PrefixLength: 56, ConnCount: perSubnet},
+				{PrefixLength: 48, ConnCount: perSubnet * 8},
+			},
+		),
+		rcmgr.WithConnRateLimiters(newSubnetRateLimiter(perSubnet)),
+	)
+}
+
+const minConnsPerSubnet = 64
+
+func subnetConnLimit(limiter rcmgr.Limiter) int {
+	inbound := limiter.GetSystemLimits().GetConnLimit(network.DirInbound)
+	limit := max(inbound/4, minConnsPerSubnet)
+	return min(limit, inbound)
+}
+
+func newSubnetRateLimiter(perSubnet int) *rate.Limiter {
+	subnet := rate.Limit{RPS: 1, Burst: perSubnet}
+	return &rate.Limiter{
+		NetworkPrefixLimits: []rate.PrefixLimit{
+			{Prefix: netip.MustParsePrefix("127.0.0.0/8")},
+			{Prefix: netip.MustParsePrefix("::1/128")},
+		},
+		SubnetRateLimiter: rate.SubnetLimiter{
+			IPv4SubnetLimits: []rate.SubnetLimit{{PrefixLength: 32, Limit: subnet}},
+			IPv6SubnetLimits: []rate.SubnetLimit{
+				{PrefixLength: 56, Limit: subnet},
+				{PrefixLength: 48, Limit: rate.Limit{RPS: 1, Burst: perSubnet * 8}},
+			},
+			GracePeriod: time.Minute,
+		},
+	}
 }
 
 func GetMacAddr() string {
@@ -455,15 +501,24 @@ func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	return WarpPeerstore(store), err
 }
 
-func IsPublicMultiAddress(maddr WarpAddress) bool {
+// MultiAddressIP is the IP a multiaddress points at: the peer's own for a direct
+// address, the relay's for a circuit one. Nil when the address carries no IP.
+func MultiAddressIP(maddr WarpAddress) gonet.IP {
 	ipStr, err := maddr.ValueForProtocol(P_IP4)
 	if err != nil {
 		ipStr, err = maddr.ValueForProtocol(P_IP6)
 		if err != nil {
-			return false
+			return nil
 		}
 	}
-	ip := gonet.ParseIP(ipStr)
+	return gonet.ParseIP(ipStr)
+}
+
+func IsPublicMultiAddress(maddr WarpAddress) bool {
+	ip := MultiAddressIP(maddr)
+	if ip == nil {
+		return false
+	}
 	if ip.IsLoopback() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
@@ -496,6 +551,14 @@ func IsNoAddressesError(err error) bool {
 
 func NewBitswapNetwork(host host.Host, opts ...bsnet.NetOpt) bitswapNetwork.BitSwapNetwork {
 	return bsnet.NewFromIpfsHost(host, opts...)
+}
+
+// BitswapPrefix scopes a bitswap stack to protocol IDs of its own. Starting a
+// stack registers the bitswap protocols with host.SetStreamHandler, so two
+// stacks sharing a host take the handlers from each other and the one that
+// registered first stops answering block requests.
+func BitswapPrefix(prefix string) bsnet.NetOpt {
+	return bsnet.Prefix(protocol.ID(prefix))
 }
 
 // NewBitswapExchange returns the concrete *bitswap.Bitswap (which

@@ -36,7 +36,7 @@ import (
 )
 
 type NodeAddresser interface {
-	PublicAddrs() []warpnet.WarpAddress
+	Addrs() []warpnet.WarpAddress
 }
 
 type AliasStorer interface {
@@ -77,8 +77,9 @@ func StreamNodesPairingHandler(authRepo PairAuthStorer, aliasesRepo AliasStorer,
 		)
 		println()
 
-		addrs := make([]string, 0, len(n.PublicAddrs()))
-		for _, addr := range n.PublicAddrs() {
+		nodeAddrs := n.Addrs()
+		addrs := make([]string, 0, len(nodeAddrs))
+		for _, addr := range nodeAddrs {
 			addrs = append(addrs, addr.String())
 		}
 

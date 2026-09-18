@@ -39,6 +39,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -139,7 +140,7 @@ func NewRelayNode(
 	}
 
 	ratings := rating.NewPeersRatings()
-	discService := discovery.NewRelayDiscoveryService(ctx)
+	discService := discovery.NewRelayDiscoveryService(ctx, ratelimit.NewIPLimiter(ratelimit.Settings{}))
 
 	pubsubService := pubsub.NewPubSubRelay(
 		ctx,
@@ -226,6 +227,7 @@ func (rn *RelayNode) Start() (err error) {
 	rn.node, err = node.NewWarpNode(
 		rn.ctx,
 		rn.ratings,
+		ratelimit.Settings{},
 		rn.opts...,
 	)
 	if err != nil {
@@ -262,7 +264,7 @@ func (rn *RelayNode) startRating() error {
 		return fmt.Errorf("relay: failed to start rating gossip broadcaster: %w", err)
 	}
 	rn.ratingDb, err = ratingstore.New(
-		rn.ctx, broadcaster, rn.ratingStore, rn.node.Node(), rn.dHashTable,
+		rn.ctx, broadcaster, rn.ratingStore, rn.node.Node(),
 	)
 	if err != nil {
 		return fmt.Errorf("relay: failed to initialize rating store: %w", err)
@@ -284,7 +286,9 @@ func (rn *RelayNode) setupHandlers() {
 		panic("relay: nil relay node")
 	}
 
-	rn.mw = middleware.NewWarpMiddleware(rn.node.Node().ID(), nil, rn.ratings)
+	rn.mw = middleware.NewWarpMiddleware(
+		rn.node.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, rn.ratings),
+	)
 	rn.node.SetStreamMiddlewares(
 		rn.mw.LoggingMiddleware,
 		rn.mw.RateLimiterMiddleware,

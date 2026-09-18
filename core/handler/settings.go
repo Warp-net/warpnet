@@ -29,6 +29,7 @@ package handler
 
 import (
 	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -45,6 +46,11 @@ type SettingsStorer interface {
 type GatewaySettingsStorer interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
+}
+
+type RateLimitSettingsStorer interface {
+	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
+	SetRateLimitSettings(userId string, s ratelimit.Settings) error
 }
 
 // SettingsAuthStorer resolves the local node owner.
@@ -123,5 +129,43 @@ func StreamUpdateGatewaySettingsHandler(
 			return nil, err
 		}
 		return event.GetGatewaySettingsResponse(ev), nil
+	}
+}
+
+func StreamGetRateLimitSettingsHandler(
+	repo RateLimitSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		owner := authRepo.GetOwner()
+		settings, err := repo.GetRateLimitSettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		return settings.WithDefaults(), nil
+	}
+}
+
+func StreamUpdateRateLimitSettingsHandler(
+	repo RateLimitSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev ratelimit.Settings
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		owner := authRepo.GetOwner()
+		if owner.UserId == "" {
+			return nil, warpnet.WarpError("update rate limit settings: empty owner")
+		}
+		settings := ev.WithDefaults()
+		if settings.NetworkLowWater >= settings.NetworkHighWater {
+			return nil, warpnet.WarpError("update rate limit settings: network low water must be below high water")
+		}
+		if err := repo.SetRateLimitSettings(owner.UserId, settings); err != nil {
+			return nil, err
+		}
+		return settings, nil
 	}
 }

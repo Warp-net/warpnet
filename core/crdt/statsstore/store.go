@@ -61,13 +61,12 @@ type Datastore interface {
 	Close() error
 }
 
-// Router finds the peers holding a block.
-type Router interface {
-	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
-}
-
 // GossipTopic is the pubsub topic this store's replicas converge on.
 const GossipTopic = "/warpnet/stats/1.0.0"
+
+// bitswapPrefix keeps this store's block exchange off the protocols the
+// rating store's own bitswap registers on the same host.
+const bitswapPrefix = "/warpnet/stats"
 
 const (
 	// counterPrefix separates the counters from the datastore's own keys.
@@ -83,7 +82,17 @@ const (
 	// total local-data loss followed by a re-bootstrap with the same
 	// nodeID.
 	generationIDBytes = 16
+
+	flushInterval       = 30 * time.Second
+	rebroadcastInterval = 5 * time.Minute
+	dagSyncerTimeout    = 15 * time.Second
+	numWorkers          = 16
 )
+
+type counter struct {
+	total   uint64
+	flushed uint64
+}
 
 // Store is a PN-counter replicated over go-ds-crdt: every process owns
 // the keys of its own generation, and a read sums them all.
@@ -93,10 +102,14 @@ type Store struct {
 	cancel     context.CancelFunc
 	nodeID     string
 	generation string
+	stopChan   chan struct{}
+	stopOnce   sync.Once
+	wg         sync.WaitGroup
 
-	mu           sync.Mutex
-	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
-	decrCounters map[string]uint64
+	flushMu sync.Mutex
+
+	mu       sync.Mutex
+	counters map[string]*counter
 }
 
 // New creates a new CRDT-based statistics store
@@ -105,7 +118,6 @@ func New(
 	broadcaster Broadcaster,
 	datastore Datastore,
 	node warpnet.P2PNode,
-	router Router,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -113,8 +125,8 @@ func New(
 
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
-	bitswapNetwork := warpnet.NewBitswapNetwork(node)
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
+	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
+	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, nil, blockstore)
 
 	for _, p := range node.Network().Peers() {
 		bitswapExchange.PeerConnected(p)
@@ -130,18 +142,20 @@ func New(
 	}
 
 	store := &Store{
-		ctx:          ctx,
-		cancel:       cancel,
-		nodeID:       node.ID().String(),
-		generation:   generation,
-		incrCounters: make(map[string]uint64),
-		decrCounters: make(map[string]uint64),
+		ctx:        ctx,
+		cancel:     cancel,
+		nodeID:     node.ID().String(),
+		generation: generation,
+		stopChan:   make(chan struct{}),
+		counters:   make(map[string]*counter),
 	}
 
 	opts := crdt.DefaultOptions()
 	opts.Logger = log.StandardLogger().WithContext(ctx)
-	opts.RebroadcastInterval = time.Minute
-	opts.DAGSyncerTimeout = time.Minute
+	opts.RebroadcastInterval = rebroadcastInterval
+	opts.DAGSyncerTimeout = dagSyncerTimeout
+	opts.NumWorkers = numWorkers
+	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
@@ -157,7 +171,30 @@ func New(
 	}
 	store.crdt = crdtStore
 
+	store.wg.Add(1)
+	go store.run()
+
 	return store, nil
+}
+
+func (s *Store) run() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.flush(); err != nil {
+				log.Warnf("crdt stats: %v", err)
+			}
+		}
+	}
 }
 
 func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
@@ -176,29 +213,71 @@ func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
 }
 
 func (s *Store) Increment(key ds.Key) error {
-	return s.bump(incrNamespace, key, s.incrCounters)
+	s.bump(incrNamespace, key)
+	return nil
 }
 
 func (s *Store) Decrement(key ds.Key) error {
-	return s.bump(decrNamespace, key, s.decrCounters)
+	s.bump(decrNamespace, key)
+	return nil
 }
 
-func (s *Store) bump(namespace string, dataKey ds.Key, cache map[string]uint64) error {
+func (s *Store) bump(namespace string, dataKey ds.Key) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cacheKey := dataKey.String()
-	newValue := cache[cacheKey] + 1
-
-	fullKey := ds.NewKey(fmt.Sprintf(
-		"%s/%s/%s/%s/%s",
-		counterPrefix, namespace, cacheKey, s.nodeID, s.generation,
-	))
-	if err := s.crdt.Put(s.ctx, fullKey, encodeCounter(newValue)); err != nil {
-		return fmt.Errorf("crdt stats: write %s counter %s: %w", namespace, fullKey, err)
+	cacheKey := s.counterKey(namespace, dataKey).String()
+	c := s.counters[cacheKey]
+	if c == nil {
+		c = &counter{}
+		s.counters[cacheKey] = c
 	}
-	cache[cacheKey] = newValue
+	c.total++
+}
+
+func (s *Store) flush() error {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+
+	s.mu.Lock()
+	pending := make(map[string]uint64, len(s.counters))
+	for key, c := range s.counters {
+		if c.total != c.flushed {
+			pending[key] = c.total
+		}
+	}
+	s.mu.Unlock()
+
+	if len(pending) == 0 {
+		return nil
+	}
+
+	batch, err := s.crdt.Batch(s.ctx)
+	if err != nil {
+		return fmt.Errorf("open counter batch: %w", err)
+	}
+	for key, value := range pending {
+		if err := batch.Put(s.ctx, ds.NewKey(key), encodeCounter(value)); err != nil {
+			return fmt.Errorf("write counter %s: %w", key, err)
+		}
+	}
+	if err := batch.Commit(s.ctx); err != nil {
+		return fmt.Errorf("commit %d counters: %w", len(pending), err)
+	}
+
+	s.mu.Lock()
+	for key, value := range pending {
+		s.counters[key].flushed = value
+	}
+	s.mu.Unlock()
 	return nil
+}
+
+func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {
+	return ds.NewKey(fmt.Sprintf(
+		"%s/%s/%s/%s/%s",
+		counterPrefix, namespace, dataKey.String(), s.nodeID, s.generation,
+	))
 }
 
 func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
@@ -218,6 +297,13 @@ func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 		}
 		total += decodeCounter(r.Value)
 	}
+
+	s.mu.Lock()
+	if c := s.counters[s.counterKey(namespace, key).String()]; c != nil {
+		total += c.total - c.flushed
+	}
+	s.mu.Unlock()
+
 	return total, nil
 }
 
@@ -239,6 +325,11 @@ func (s *Store) Close() error {
 	if s == nil {
 		return nil
 	}
+	if err := s.flush(); err != nil {
+		log.Warnf("crdt stats: final flush: %v", err)
+	}
+	s.stopOnce.Do(func() { close(s.stopChan) })
+	s.wg.Wait()
 	s.cancel()
 	return s.crdt.Close()
 }

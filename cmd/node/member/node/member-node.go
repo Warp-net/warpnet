@@ -44,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/notifications"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/wallet"
@@ -84,6 +85,7 @@ type MemberNode struct {
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
 	ownerId, network string
+	rateLimits       ratelimit.Settings
 }
 
 func NewMemberNode(
@@ -116,6 +118,8 @@ func NewMemberNode(
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
+	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
+
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
 
@@ -126,7 +130,7 @@ func NewMemberNode(
 	userRepo := database.NewUserRepoNotifying(db, notifier, owner.UserId)
 
 	ratings := rating.NewPeersRatings()
-	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo)
+	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, ratelimit.NewIPLimiter(rateLimits))
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
 	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
@@ -193,6 +197,7 @@ func NewMemberNode(
 		walletRepo:    walletRepo,
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
+		rateLimits:    rateLimits,
 	}
 
 	return mn, nil
@@ -202,6 +207,7 @@ func (m *MemberNode) Start() (err error) {
 	m.node, err = node.NewWarpNode(
 		m.ctx,
 		m.ratings,
+		m.rateLimits,
 		m.opts...,
 	)
 	if err != nil {
@@ -226,7 +232,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
 	m.statsDb, err = statsstore.New(
-		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
+		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(),
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
@@ -237,7 +243,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
 	}
 	m.ratingDb, err = ratingstore.New(
-		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(),
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize rating store: %w", err)
@@ -251,7 +257,9 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating engine: %w", err)
 	}
 
-	m.mw = middleware.NewWarpMiddleware(m.node.Node().ID(), m.aliasesRepo, m.ratings)
+	m.mw = middleware.NewWarpMiddleware(
+		m.node.Node().ID(), m.aliasesRepo, ratelimit.NewStreamLimiter(m.rateLimits, m.ratings),
+	)
 	m.node.SetStreamMiddlewares(
 		m.mw.LoggingMiddleware,
 		m.mw.RateLimiterMiddleware,
@@ -327,7 +335,14 @@ func (m *MemberNode) NodeInfo() warpnet.NodeInfo {
 		log.Infof("member: failed to get devices for owner %s: %s", ownerPeerId, err)
 	}
 	for _, alias := range aliases {
-		bi.Aliases = append(bi.Aliases, warpnet.WarpPeerID(alias.NodeId))
+		// A peer ID holds the binary multihash, so the stored text has to be
+		// decoded: converting it encodes the text a second time on the wire.
+		id := warpnet.FromStringToPeerID(alias.NodeId)
+		if id == "" {
+			log.Infof("member: device %s has no valid node id", alias.ID)
+			continue
+		}
+		bi.Aliases = append(bi.Aliases, id)
 	}
 	return bi
 }
@@ -418,6 +433,7 @@ type memberRepos struct {
 	pollRepo         PollProvider
 	chatRepo         ChatProvider
 	mediaRepo        MediaProvider
+	chatMediaRepo    MediaProvider
 	notificationRepo NotificationProvider
 	settingsRepo     SettingsProvider
 	bookmarkRepo     BookmarkProvider
@@ -445,6 +461,7 @@ func (m *MemberNode) setupHandlers(
 		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
+		chatMediaRepo:    database.NewChatMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
 		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
@@ -686,35 +703,35 @@ func (m *MemberNode) followRequestHandlers(
 func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PRIVATE_GET_FILTER,
+			event.PRIVATE_GET_SETTINGS_FILTER,
 			handler.StreamGetFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_GET_FILTERS,
+			event.PRIVATE_GET_SETTINGS_FILTERS,
 			handler.StreamGetFiltersHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER,
+			event.PRIVATE_POST_SETTINGS_FILTER,
 			handler.StreamNewFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER_UPDATE,
+			event.PRIVATE_POST_SETTINGS_FILTER_UPDATE,
 			handler.StreamUpdateFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_DELETE_FILTER,
+			event.PRIVATE_DELETE_SETTINGS_FILTER,
 			handler.StreamDeleteFilterHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER_KEYWORD,
+			event.PRIVATE_POST_SETTINGS_FILTER_KEYWORD,
 			handler.StreamAddFilterKeywordHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_POST_FILTER_KEYWORD_UPDATE,
+			event.PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE,
 			handler.StreamUpdateFilterKeywordHandler(r.filterRepo),
 		},
 		{
-			event.PRIVATE_DELETE_FILTER_KEYWORD,
+			event.PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD,
 			handler.StreamDeleteFilterKeywordHandler(r.filterRepo),
 		},
 	}
@@ -761,20 +778,28 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamH
 func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PRIVATE_GET_NOTIFICATION_SETTINGS,
+			event.PRIVATE_GET_SETTINGS_NOTIFICATION,
 			handler.StreamGetNotificationSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_POST_NOTIFICATION_SETTINGS,
+			event.PRIVATE_POST_SETTINGS_NOTIFICATION,
 			handler.StreamUpdateNotificationSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_GET_GATEWAY_SETTINGS,
+			event.PRIVATE_GET_SETTINGS_GATEWAY,
 			handler.StreamGetGatewaySettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
-			event.PRIVATE_POST_GATEWAY_SETTINGS,
+			event.PRIVATE_POST_SETTINGS_GATEWAY,
 			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_SETTINGS_RATELIMIT,
+			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_SETTINGS_RATELIMIT,
+			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo, authRepo),
 		},
 	}
 }
@@ -882,6 +907,22 @@ func (m *MemberNode) mediaHandlers(
 			event.PUBLIC_GET_VIDEO,
 			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
 		},
+		{
+			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
+			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_CHAT_IMAGE,
+			handler.StreamGetChatImageHandler(m, r.chatMediaRepo, r.chatRepo, userRepo),
+		},
+		{
+			event.PRIVATE_POST_UPLOAD_CHAT_VIDEO,
+			handler.StreamUploadVideoHandler(m, m.privKey, r.chatMediaRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_CHAT_VIDEO,
+			handler.StreamGetChatVideoHandler(m, r.chatMediaRepo, r.chatRepo, userRepo),
+		},
 	}
 }
 
@@ -921,27 +962,27 @@ func (m *MemberNode) socialFilterHandlers(
 ) []warpnet.WarpStreamHandler {
 	return []warpnet.WarpStreamHandler{
 		{
-			event.PRIVATE_POST_BLOCK,
+			event.PRIVATE_POST_SETTINGS_BLOCK,
 			handler.StreamBlockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
-			event.PRIVATE_POST_UNBLOCK,
+			event.PRIVATE_POST_SETTINGS_UNBLOCK,
 			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
-			event.PRIVATE_GET_BLOCKS,
+			event.PRIVATE_GET_SETTINGS_BLOCKS,
 			handler.StreamGetBlocksHandler(r.blocksRepo),
 		},
 		{
-			event.PRIVATE_POST_MUTE,
+			event.PRIVATE_POST_SETTINGS_MUTE,
 			handler.StreamMuteHandler(r.mutesRepo),
 		},
 		{
-			event.PRIVATE_POST_UNMUTE,
+			event.PRIVATE_POST_SETTINGS_UNMUTE,
 			handler.StreamUnmuteHandler(r.mutesRepo),
 		},
 		{
-			event.PRIVATE_GET_MUTES,
+			event.PRIVATE_GET_SETTINGS_MUTES,
 			handler.StreamGetMutesHandler(r.mutesRepo),
 		},
 	}
@@ -990,18 +1031,11 @@ func (m *MemberNode) Network() warpnet.WarpNetwork {
 	return m.node.Node().Network()
 }
 
-func (m *MemberNode) PublicAddrs() []warpnet.WarpAddress {
+func (m *MemberNode) Addrs() []warpnet.WarpAddress {
 	if m == nil || m.node == nil {
 		return nil
 	}
-
-	publicAddrs := make([]warpnet.WarpAddress, 0, len(m.node.Node().Addrs()))
-	for _, ma := range m.node.Node().Addrs() {
-		if warpnet.IsPublicMultiAddress(ma) || warpnet.IsRelayMultiaddress(ma) {
-			publicAddrs = append(publicAddrs, ma)
-		}
-	}
-	return publicAddrs
+	return m.node.Node().Addrs()
 }
 
 func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {

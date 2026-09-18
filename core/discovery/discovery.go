@@ -66,6 +66,12 @@ type NodeStorer interface {
 	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
 }
 
+// IPLimiter answers whether the IP a peer is announced at may still be heard.
+type IPLimiter interface {
+	Allow(addrs []warpnet.WarpAddress) bool
+	Close()
+}
+
 type UserStorer interface {
 	Create(user domain.User) (domain.User, error)
 	Update(userId string, newUser domain.User) (domain.User, error)
@@ -94,7 +100,7 @@ type discoveryService struct {
 	nodeRepo NodeStorer
 
 	ownId   warpnet.WarpPeerID
-	limiter *leakyBucketRateLimiter
+	limiter IPLimiter
 
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
@@ -106,34 +112,34 @@ type discoveryService struct {
 	events warpnet.PeerEmitter
 }
 
+const stallTimeout = time.Minute*30 + time.Second // one sec more than gossip discovery
+
 //goland:noinspection ALL
 func NewDiscoveryService(
 	ctx context.Context,
 	userRepo UserStorer,
 	nodeRepo NodeStorer,
+	limiter IPLimiter,
 ) *discoveryService {
-	capacity := 32
-	leakPerTenSec := 2
-
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](10, nil, time.Hour*24)
 	return &discoveryService{
 		ctx:             ctx,
 		userRepo:        userRepo,
 		nodeRepo:        nodeRepo,
-		limiter:         newRateLimiter(capacity, leakPerTenSec),
-		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
-		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
+		limiter:         limiter,
+		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
+		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
 		events:          warpnet.NewPeerEmitter(),
 	}
 }
 
-func NewRelayDiscoveryService(ctx context.Context) *discoveryService {
+func NewRelayDiscoveryService(ctx context.Context, limiter IPLimiter) *discoveryService {
 	lru := expirable.NewLRU[warpnet.WarpPeerID, warpnet.WarpPeerID](4096, nil, time.Hour*72)
 	return &discoveryService{
 		ctx:             ctx,
-		limiter:         newRateLimiter(32, 2),
+		limiter:         limiter,
 		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
 		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
 		stopChan:        make(chan struct{}),
@@ -234,7 +240,7 @@ func (s *discoveryService) enqueue(pi warpnet.WarpAddrInfo, source discoverySour
 
 	s.emit(pi.ID, warpnet.PeerDiscovered)
 
-	if !s.limiter.Allow() {
+	if !s.limiter.Allow(pi.Addrs) {
 		log.Infof("discovery: source '%s': limited by rate limiter: %s", source, pi.ID.String())
 		return
 	}
@@ -513,6 +519,7 @@ func (s *discoveryService) Close() {
 		return
 	}
 	s.discoveryTicker.Stop()
+	s.limiter.Close()
 	// discoveryChan is left open on purpose: senders outlive Close and a send on
 	// a closed channel panics. The reader exits on stopChan alone.
 	close(s.stopChan)

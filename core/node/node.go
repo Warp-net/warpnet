@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
 	"runtime/debug"
@@ -40,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/middleware"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -110,11 +112,13 @@ type WarpNode struct {
 func NewWarpNode(
 	ctx context.Context,
 	ratings PeersRatings,
+	limits ratelimit.Settings,
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
-	limiter := warpnet.NewConfigurableLimiter(nil) // TODO
+	limits = limits.WithDefaults()
+	limiter := warpnet.NewConfigurableLimiter(nil)
 
-	manager, err := warpnet.NewConnManager(limiter)
+	manager, err := warpnet.NewConnManager(limiter, limits.NetworkLowWater, limits.NetworkHighWater)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +153,8 @@ func NewWarpNode(
 		return nil, err
 	}
 
-	sub, err := node.EventBus().Subscribe(event.WildcardSubscription)
+	sub, err := node.EventBus().Subscribe(event.WildcardSubscription, eventbus.BufSize(128)) //nolint:mnd
+
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to subscribe: %w", err)
 	}

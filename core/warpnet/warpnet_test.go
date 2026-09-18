@@ -35,12 +35,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const knownPeerID = "12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
+
+// doubleEncodedPeerID is a paired device as a v0.8 node put it on the wire:
+// the peer id text base58-encoded a second time, taken from a node log.
+const doubleEncodedPeerID = "CovLVG4fQcqQqkmbD2mETbwwXsgJLFKafSwpsRDdiwiWzfRaxRboq3J4o45SDjA7zeTqhYb"
 
 func TestWarpError_IsComparable(t *testing.T) {
 	const sentinel WarpError = "boom"
@@ -94,6 +99,70 @@ func TestNodeInfo_RoleDetection(t *testing.T) {
 	assert.True(t, NodeInfo{Type: ModeratorNode}.IsModerator())
 	assert.False(t, NodeInfo{}.IsModerator())
 	assert.False(t, NodeInfo{Type: RelayNode}.IsModerator())
+}
+
+func TestNodeInfo_AliasesSurviveAnUnparseableEntry(t *testing.T) {
+	// A device this node cannot address is worth less than the peer itself:
+	// failing the whole info cost the peer its place in discovery.
+	var info NodeInfo
+	err := json.Unmarshal(
+		[]byte(`{"owner_id":"owner-1","node_id":"`+knownPeerID+`",`+
+			`"aliases":["`+doubleEncodedPeerID+`","`+knownPeerID+`"]}`),
+		&info,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "owner-1", info.OwnerId)
+	assert.Equal(t, FromStringToPeerID(knownPeerID), info.ID)
+	assert.Equal(t, AliasIDs{FromStringToPeerID(knownPeerID)}, info.Aliases)
+}
+
+func TestAliasIDs_UnmarshalDropsWhatItCannotAddress(t *testing.T) {
+	known := FromStringToPeerID(knownPeerID)
+
+	for _, c := range []struct {
+		name string
+		raw  string
+		want AliasIDs
+	}{
+		{"a paired device", `["` + knownPeerID + `"]`, AliasIDs{known}},
+		{"the same device twice", `["` + knownPeerID + `","` + knownPeerID + `"]`, AliasIDs{known, known}},
+		{"a double-encoded device", `["` + doubleEncodedPeerID + `"]`, nil},
+		{"garbage", `["","not-a-peer-id","12D3KooW","../../etc/passwd"]`, nil},
+		{"no devices", `[]`, nil},
+		{"no list at all", `null`, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var ids AliasIDs
+			require.NoError(t, json.Unmarshal([]byte(c.raw), &ids))
+			assert.Equal(t, c.want, ids)
+		})
+	}
+
+	t.Run("a list of something else is still an error", func(t *testing.T) {
+		for _, raw := range []string{`"` + knownPeerID + `"`, `{"id":"` + knownPeerID + `"}`, `[1,2]`, `[`} {
+			var ids AliasIDs
+			assert.Errorf(t, json.Unmarshal([]byte(raw), &ids), "%s must not decode", raw)
+		}
+	})
+}
+
+func TestAliasIDs_MarshalWritesThePeerIDText(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	second, err := IDFromPublicKey(pub)
+	require.NoError(t, err)
+
+	ids := AliasIDs{FromStringToPeerID(knownPeerID), second}
+
+	data, err := json.Marshal(ids)
+	require.NoError(t, err)
+	assert.JSONEq(t, `["`+knownPeerID+`","`+second.String()+`"]`, string(data),
+		"an alias goes on the wire as its peer id text, encoded exactly once")
+
+	var decoded AliasIDs
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, ids, decoded)
 }
 
 func TestFromStringToPeerID_RejectsGarbageWithoutPanicking(t *testing.T) {

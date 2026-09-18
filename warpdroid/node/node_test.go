@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 // freshKey returns a 64-byte libp2p Ed25519 private key (seed || pub).
@@ -121,5 +123,45 @@ func TestReadResponse_StopsAtMaxSize(t *testing.T) {
 	_, err := readResponse(oversized, &stubDeadliner{})
 	if err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("expected an oversize error, got: %v", err)
+	}
+}
+
+func TestLanFirstDialRanker(t *testing.T) {
+	raw := []string{
+		"/ip4/172.17.0.1/tcp/4001",
+		"/ip4/192.168.1.138/tcp/4001",
+		"/ip6/::1/tcp/4001",
+		"/ip4/127.0.0.1/tcp/4001",
+		"/ip4/95.164.7.11/tcp/4001",
+		"/ip4/207.154.221.44/tcp/4001/p2p-circuit",
+	}
+	addrs := make([]multiaddr.Multiaddr, 0, len(raw))
+	for _, s := range raw {
+		addr, err := multiaddr.NewMultiaddr(s)
+		if err != nil {
+			t.Fatalf("multiaddr %q: %v", s, err)
+		}
+		addrs = append(addrs, addr)
+	}
+
+	for _, ranked := range lanFirstDialRanker(addrs) {
+		isPrivate := manet.IsPrivateAddr(ranked.Addr) && !isRelayAddr(ranked.Addr)
+		if isPrivate && ranked.Delay != 0 {
+			t.Fatalf("%s is on the local network and must be dialled first, got %s", ranked.Addr, ranked.Delay)
+		}
+		if !isPrivate && ranked.Delay < lanHeadStart {
+			t.Fatalf("%s must not outrun the local network, got %s", ranked.Addr, ranked.Delay)
+		}
+	}
+}
+
+func TestLanFirstDialRankerFallsBackToDefault(t *testing.T) {
+	addr, err := multiaddr.NewMultiaddr("/ip4/95.164.7.11/tcp/4001")
+	if err != nil {
+		t.Fatalf("multiaddr: %v", err)
+	}
+	ranked := lanFirstDialRanker([]multiaddr.Multiaddr{addr})
+	if len(ranked) != 1 || ranked[0].Delay != 0 {
+		t.Fatalf("expected the only address dialled immediately, got %v", ranked)
 	}
 }

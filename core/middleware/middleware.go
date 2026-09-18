@@ -28,11 +28,9 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 type middlewareError string
@@ -66,30 +64,23 @@ type WarpMiddleware struct {
 	ownNodeId       warpnet.WarpPeerID
 	aliases         AliasPairer
 
-	rateLimitersMx sync.Mutex
-	rateLimiters   *lru.LRU[string, *leakyBucketRateLimiter]
+	limiter StreamLimiter
 
-	events  warpnet.PeerEmitter
-	ratings PeersRatings
-}
-
-// PeersRatings answers how much of a route's allowance a peer may spend,
-// which is how a node serves a badly rated peer more slowly.
-type PeersRatings interface {
-	RateMultiplier(peerID warpnet.WarpPeerID) float64
+	events warpnet.PeerEmitter
 }
 
 func NewWarpMiddleware(
-	ownNodeId warpnet.WarpPeerID, aliases AliasPairer, ratings PeersRatings,
+	ownNodeId warpnet.WarpPeerID,
+	aliases AliasPairer,
+	limiter StreamLimiter,
 ) *WarpMiddleware {
 	wm := &WarpMiddleware{
 		idempotency:     newIdempotencyCache(idempotencyTTL),
 		freshnessWindow: messageFreshnessWindow,
 		ownNodeId:       ownNodeId,
 		aliases:         aliases,
-		rateLimiters:    newRateLimitersCache(),
+		limiter:         limiter,
 		events:          warpnet.NewPeerEmitter(),
-		ratings:         ratings,
 	}
 	return wm
 }
@@ -120,7 +111,7 @@ func (p *WarpMiddleware) Close() {
 	if p.idempotency != nil {
 		p.idempotency.Close()
 	}
-	if p.rateLimiters != nil {
-		closeExpirableLRU(p.rateLimiters)
+	if p.limiter != nil {
+		p.limiter.Close()
 	}
 }

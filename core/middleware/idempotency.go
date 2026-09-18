@@ -28,13 +28,12 @@ resulting from the use or misuse of this software.
 package middleware
 
 import (
-	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
@@ -195,31 +194,8 @@ func (c *idempotencyCache) do(
 // times. No-op if the library's internal layout changes.
 func (c *idempotencyCache) Close() {
 	c.closed.Do(func() {
-		closeExpirableLRU(c.cache)
+		ratelimit.CloseExpirableLRU(c.cache)
 	})
-}
-
-func closeExpirableLRU(cache any) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Debugf("middleware: idempotency: closeExpirableLRU recovered: %v", r)
-		}
-	}()
-	v := reflect.ValueOf(cache)
-	if v.Kind() != reflect.Pointer || v.IsNil() {
-		return
-	}
-	field := v.Elem().FieldByName("done")
-	if !field.IsValid() || field.Kind() != reflect.Chan {
-		return
-	}
-	// FieldByName on an unexported field returns a Value flagged as
-	// read-only, so reflect.Value.Close() would panic. Rebuild a settable
-	// Value pointing at the same memory to bypass the export check.
-	//#nosec G103 // intentional: bypass reflect's exported-field check to close the library's `done` chan
-	settable := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
-	// Closing an already-closed channel panics; rely on the recover above.
-	settable.Close()
 }
 
 // isIdempotencyApplicable reports whether the given protocol path is a POST

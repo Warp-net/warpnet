@@ -26,6 +26,7 @@ package node
 
 import (
 	"context"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/domain"
 	"time"
 
@@ -238,6 +239,7 @@ type ChatProvider interface {
 	GetMessage(chatId string, id string) (domain.ChatMessage, error)
 	GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error)
 	ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error)
+	IsParticipants(ownerId string, otherUserId string) bool
 }
 
 type FilterProvider interface {
@@ -296,8 +298,10 @@ type PollProvider interface {
 type SettingsProvider interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
+	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
+	SetRateLimitSettings(userId string, s ratelimit.Settings) error
 }
 
 type SubscriptionProvider interface {
