@@ -43,14 +43,6 @@ func (b *silentBroadcaster) count() int {
 	return len(b.published)
 }
 
-type noProviderRouter struct{}
-
-func (noProviderRouter) FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo {
-	ch := make(chan warpnet.WarpAddrInfo)
-	close(ch)
-	return ch
-}
-
 func newHost(t *testing.T) warpnet.P2PNode {
 	t.Helper()
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -71,7 +63,6 @@ func newLiveStore(t *testing.T) (*Store, *silentBroadcaster) {
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newHost(t),
-		noProviderRouter{},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })

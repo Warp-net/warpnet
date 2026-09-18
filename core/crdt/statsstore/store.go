@@ -61,11 +61,6 @@ type Datastore interface {
 	Close() error
 }
 
-// Router finds the peers holding a block.
-type Router interface {
-	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
-}
-
 // GossipTopic is the pubsub topic this store's replicas converge on.
 const GossipTopic = "/warpnet/stats/1.0.0"
 
@@ -87,7 +82,35 @@ const (
 	// total local-data loss followed by a re-bootstrap with the same
 	// nodeID.
 	generationIDBytes = 16
+
+	// flushInterval is how often buffered bumps reach the CRDT. A
+	// counter key holds this generation's running total, so one write
+	// carries every bump since the last flush and the bumps in between
+	// never become DAG nodes the whole network has to fetch.
+	flushInterval = 30 * time.Second
+
+	// rebroadcastInterval is how often the node re-offers its heads. A
+	// head no one can fetch is retried by every receiver on every round,
+	// so the round is what sets the cost of an unreachable author.
+	rebroadcastInterval = 5 * time.Minute
+
+	// dagSyncerTimeout bounds one block fetch. A worker and a bitswap
+	// session are held for its whole length, so the store absorbs
+	// numWorkers/dagSyncerTimeout failed fetches per second before the
+	// job queue backs up and the rest time out waiting in it.
+	dagSyncerTimeout = 15 * time.Second
+
+	// numWorkers is how many DAG jobs run at once; it is also the depth
+	// of the queue feeding them.
+	numWorkers = 16
 )
+
+// counter is one sub-counter of this generation: what the node has
+// counted, and what the CRDT already holds of it.
+type counter struct {
+	total   uint64
+	flushed uint64
+}
 
 // Store is a PN-counter replicated over go-ds-crdt: every process owns
 // the keys of its own generation, and a read sums them all.
@@ -97,10 +120,12 @@ type Store struct {
 	cancel     context.CancelFunc
 	nodeID     string
 	generation string
+	wg         sync.WaitGroup
 
-	mu           sync.Mutex
-	incrCounters map[string]uint64 // dataKey.String() -> this generation's running incr count
-	decrCounters map[string]uint64
+	flushMu sync.Mutex // one writer at a time: the CRDT merges batches into a single delta
+
+	mu       sync.Mutex
+	counters map[string]*counter // counter key -> this generation's counts
 }
 
 // New creates a new CRDT-based statistics store
@@ -109,7 +134,6 @@ func New(
 	broadcaster Broadcaster,
 	datastore Datastore,
 	node warpnet.P2PNode,
-	router Router,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -118,7 +142,10 @@ func New(
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
 	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
+	// No provider finder: nothing announces these blocks to the DHT, so a
+	// lookup can only walk the routing table and come back empty. Without
+	// one, bitswap asks the peers it is already connected to and stops.
+	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, nil, blockstore)
 
 	for _, p := range node.Network().Peers() {
 		bitswapExchange.PeerConnected(p)
@@ -134,18 +161,22 @@ func New(
 	}
 
 	store := &Store{
-		ctx:          ctx,
-		cancel:       cancel,
-		nodeID:       node.ID().String(),
-		generation:   generation,
-		incrCounters: make(map[string]uint64),
-		decrCounters: make(map[string]uint64),
+		ctx:        ctx,
+		cancel:     cancel,
+		nodeID:     node.ID().String(),
+		generation: generation,
+		counters:   make(map[string]*counter),
 	}
 
 	opts := crdt.DefaultOptions()
 	opts.Logger = log.StandardLogger().WithContext(ctx)
-	opts.RebroadcastInterval = time.Minute
-	opts.DAGSyncerTimeout = time.Minute
+	// Counters are advisory: a head that cannot be fetched is worth far
+	// less than the workers, bitswap sessions and retries that chasing it
+	// costs. Fail fast, retry rarely, and never walk the whole DAG.
+	opts.RebroadcastInterval = rebroadcastInterval
+	opts.DAGSyncerTimeout = dagSyncerTimeout
+	opts.NumWorkers = numWorkers
+	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
@@ -161,7 +192,29 @@ func New(
 	}
 	store.crdt = crdtStore
 
+	store.wg.Add(1)
+	go store.run()
+
 	return store, nil
+}
+
+// run flushes the buffered counters until the store is closed.
+func (s *Store) run() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(flushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.flush(); err != nil {
+				log.Warnf("crdt stats: %v", err)
+			}
+		}
+	}
 }
 
 func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
@@ -180,29 +233,75 @@ func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
 }
 
 func (s *Store) Increment(key ds.Key) error {
-	return s.bump(incrNamespace, key, s.incrCounters)
+	s.bump(incrNamespace, key)
+	return nil
 }
 
 func (s *Store) Decrement(key ds.Key) error {
-	return s.bump(decrNamespace, key, s.decrCounters)
+	s.bump(decrNamespace, key)
+	return nil
 }
 
-func (s *Store) bump(namespace string, dataKey ds.Key, cache map[string]uint64) error {
+// bump counts one event. The write itself waits for the next flush.
+func (s *Store) bump(namespace string, dataKey ds.Key) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cacheKey := dataKey.String()
-	newValue := cache[cacheKey] + 1
-
-	fullKey := ds.NewKey(fmt.Sprintf(
-		"%s/%s/%s/%s/%s",
-		counterPrefix, namespace, cacheKey, s.nodeID, s.generation,
-	))
-	if err := s.crdt.Put(s.ctx, fullKey, encodeCounter(newValue)); err != nil {
-		return fmt.Errorf("crdt stats: write %s counter %s: %w", namespace, fullKey, err)
+	cacheKey := s.counterKey(namespace, dataKey).String()
+	c := s.counters[cacheKey]
+	if c == nil {
+		c = &counter{}
+		s.counters[cacheKey] = c
 	}
-	cache[cacheKey] = newValue
+	c.total++
+}
+
+// flush writes every counter that has moved since the last flush as one
+// delta, so a flush costs the network a single DAG node.
+func (s *Store) flush() error {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+
+	s.mu.Lock()
+	pending := make(map[string]uint64, len(s.counters))
+	for key, c := range s.counters {
+		if c.total != c.flushed {
+			pending[key] = c.total
+		}
+	}
+	s.mu.Unlock()
+
+	if len(pending) == 0 {
+		return nil
+	}
+
+	batch, err := s.crdt.Batch(s.ctx)
+	if err != nil {
+		return fmt.Errorf("open counter batch: %w", err)
+	}
+	for key, value := range pending {
+		if err := batch.Put(s.ctx, ds.NewKey(key), encodeCounter(value)); err != nil {
+			return fmt.Errorf("write counter %s: %w", key, err)
+		}
+	}
+	if err := batch.Commit(s.ctx); err != nil {
+		return fmt.Errorf("commit %d counters: %w", len(pending), err)
+	}
+
+	s.mu.Lock()
+	for key, value := range pending {
+		s.counters[key].flushed = value
+	}
+	s.mu.Unlock()
 	return nil
+}
+
+// counterKey is where this generation keeps its own sub-counter of dataKey.
+func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {
+	return ds.NewKey(fmt.Sprintf(
+		"%s/%s/%s/%s/%s",
+		counterPrefix, namespace, dataKey.String(), s.nodeID, s.generation,
+	))
 }
 
 func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
@@ -222,6 +321,15 @@ func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 		}
 		total += decodeCounter(r.Value)
 	}
+
+	// The query saw this generation's key as the last flush left it; the
+	// bumps buffered since then are only here.
+	s.mu.Lock()
+	if c := s.counters[s.counterKey(namespace, key).String()]; c != nil {
+		total += c.total - c.flushed
+	}
+	s.mu.Unlock()
+
 	return total, nil
 }
 
@@ -243,7 +351,11 @@ func (s *Store) Close() error {
 	if s == nil {
 		return nil
 	}
+	if err := s.flush(); err != nil {
+		log.Warnf("crdt stats: final flush: %v", err)
+	}
 	s.cancel()
+	s.wg.Wait()
 	return s.crdt.Close()
 }
 
