@@ -38,16 +38,19 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 )
 
-var _ ds.Datastore = (*Datastore)(nil)
-var _ ds.Batching = (*Datastore)(nil)
+var (
+	_ ds.Datastore = (*Datastore)(nil)
+	_ ds.Batching  = (*Datastore)(nil)
+)
 
 // datastore namespace keys. Short keys save space and memory.
 const (
-	headsNs           = "h" // heads
-	dagHeadsNs        = "a" // dagHeads - heads for named dags.
-	setNs             = "s" // set
-	processedBlocksNs = "b" // blocks
-	dirtyBitKey       = "d" // dirty
+	headsNs           = "h"  // heads
+	dagHeadsNs        = "a"  // dagHeads - heads for named dags.
+	setNs             = "s"  // set
+	processedBlocksNs = "b"  // blocks
+	dirtyBitKey       = "d"  // dirty
+	badShutdownKey    = "bs" // bad-shutdown: set on New, cleared on clean Close
 	versionKey        = "crdt_version"
 )
 
@@ -171,6 +174,7 @@ func (opts *Options) verify() error {
 		opts.crdtOpts.Namespaces.Set == "",
 		opts.crdtOpts.Namespaces.ProcessedBlocks == "",
 		opts.crdtOpts.Namespaces.DirtyBitKey == "",
+		opts.crdtOpts.Namespaces.BadShutdownKey == "",
 		opts.crdtOpts.Namespaces.VersionKey == "":
 		panic("one or several InternalNamespaces are unset, and this should never happen")
 	}
@@ -203,6 +207,7 @@ func DefaultOptions() *Options {
 				Set:             setNs,
 				ProcessedBlocks: processedBlocksNs,
 				DirtyBitKey:     dirtyBitKey,
+				BadShutdownKey:  badShutdownKey,
 				VersionKey:      versionKey,
 			},
 		},
@@ -250,7 +255,6 @@ type dagJob struct {
 	root       Head            // the root of the branch we are walking down
 	delta      Delta           // the current delta
 	node       ipld.Node       // the current ipld Node
-
 }
 
 type broadcastBatchHead struct {
@@ -351,6 +355,33 @@ func New(
 		return nil, err
 	}
 
+	// Detect whether the previous run ended with a clean Close(). If the
+	// bad-shutdown key is present at startup, the process died without clearing
+	// it (crash, kill, OOM, power loss); mark the store dirty so the repair loop
+	// walks the DAG and recovers any partially-processed branches.
+	hadBadShutdown, err := dstore.store.Has(ctx, dstore.badShutdownKey())
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("error checking bad-shutdown key: %w", err)
+	}
+	if hadBadShutdown {
+		dstore.logger.Warn("previous shutdown was not clean; marking datastore as dirty to trigger repair")
+		dstore.MarkDirty(ctx)
+	}
+	// Set the bad-shutdown key so that if we crash before the next clean
+	// Close(), we will know on the next startup and trigger a repair. Sync it to
+	// disk immediately, otherwise a crash before the next flush would leave the
+	// marker only in memory and the crash would go undetected on the next
+	// startup.
+	if err := dstore.store.Put(ctx, dstore.badShutdownKey(), nil); err != nil {
+		cancel()
+		return nil, fmt.Errorf("error writing bad-shutdown key: %w", err)
+	}
+	if err := dstore.store.Sync(ctx, dstore.badShutdownKey()); err != nil {
+		cancel()
+		return nil, fmt.Errorf("error syncing bad-shutdown key: %w", err)
+	}
+
 	headList, maxHeight, err := dstore.heads.List(ctx)
 	if err != nil {
 		cancel()
@@ -444,7 +475,7 @@ func (store *Datastore) handleNext(ctx context.Context) {
 		}
 
 		processHead := func(ctx context.Context, h Head) {
-			err := store.handleBlock(ctx, h) //handleBlock blocks
+			err := store.handleBlock(ctx, h) // handleBlock blocks
 			if err != nil {
 				store.logger.Errorf("error processing new head: %s", err)
 				// For posterity: do not mark the store as
@@ -494,7 +525,9 @@ func (store *Datastore) handleNext(ctx context.Context) {
 					dg := &crdtNodeGetter{NodeGetter: store.dagService}
 					for _, head := range heads {
 						// getPriority fetches the delta.
-						prio, err := store.getPriority(ctx, dg, head.Cid)
+						cctx, cancel := context.WithTimeout(ctx, store.opts.DAGSyncerTimeout)
+						prio, err := store.getPriority(cctx, dg, head.Cid)
+						cancel()
 						if err != nil {
 							store.logger.Error(err)
 							continue
@@ -667,7 +700,7 @@ func (store *Datastore) broadcastBatchWorker(ctx context.Context) {
 		case <-t.C:
 			err := store.broadcastHeads(ctx, heads)
 			if err != nil {
-				store.logger.Errorf("error broadcasting heads batch %s: %w", heads, err)
+				store.logger.Errorf("error broadcasting heads batch %s: %s", heads, err)
 			}
 			heads = nil
 			t.Reset(store.opts.BroadcastBatchDelay)
@@ -820,7 +853,6 @@ func (store *Datastore) dagWorker() {
 			job.delta,
 			job.node,
 		)
-
 		if err != nil {
 			store.logger.Error(err)
 			store.MarkDirty(ctx)
@@ -946,6 +978,13 @@ func (store *Datastore) markProcessed(ctx context.Context, c cid.Cid) error {
 
 func (store *Datastore) dirtyKey() ds.Key {
 	return store.namespace.ChildString(store.opts.crdtOpts.Namespaces.DirtyBitKey)
+}
+
+// badShutdownKey is written on New and removed on a clean Close. Its presence
+// at startup indicates the previous run did not Close() cleanly, so the store
+// should be treated as dirty and repaired.
+func (store *Datastore) badShutdownKey() ds.Key {
+	return store.namespace.ChildString(store.opts.crdtOpts.Namespaces.BadShutdownKey)
 }
 
 // MarkDirty marks the Datastore as dirty.
@@ -1328,10 +1367,19 @@ func (store *Datastore) Sync(ctx context.Context, prefix ds.Key) error {
 
 // Close shuts down the CRDT datastore. It should not be used afterwards.
 func (store *Datastore) Close() error {
+	closeCtx := context.Background()
 	store.cancel()
 	store.wg.Wait()
-	if store.IsDirty(store.ctx) {
+	if store.IsDirty(closeCtx) {
 		store.logger.Warn("datastore is being closed marked as dirty")
+	}
+	// Clear the bad-shutdown key last, after all workers have exited, so
+	// any dirty marks they still needed to write have had a chance to
+	// land. Use a background context — store.ctx was cancelled above.
+	if err := store.store.Delete(closeCtx, store.badShutdownKey()); err != nil {
+		store.logger.Errorf("error clearing bad-shutdown key: %s", err)
+	} else if err := store.store.Sync(closeCtx, store.badShutdownKey()); err != nil {
+		store.logger.Errorf("error syncing bad-shutdown key deletion: %s", err)
 	}
 	return nil
 }
@@ -1391,7 +1439,6 @@ func (store *Datastore) addToDelta(ctx context.Context, key string, value []byte
 		return 0, err
 	}
 	return store.updateDelta(delta)
-
 }
 
 // returns delta size and error
@@ -1671,7 +1718,7 @@ func (store *Datastore) PrintDAG(ctx context.Context) error {
 
 func (store *Datastore) printDAGRec(ctx context.Context, from cid.Cid, depth uint64, ng *crdtNodeGetter, set *cid.Set) error {
 	line := ""
-	for i := uint64(0); i < depth; i++ {
+	for range depth {
 		line += " "
 	}
 
