@@ -349,7 +349,7 @@ export default {
     },
     async loadHistory(quiet) {
       if (!quiet) this.loadingHistory = true;
-      const asked = await Promise.allSettled(this.assets.map((a) => warpnetService.getWalletHistory(25, a)));
+      const asked = await Promise.allSettled(this.assets.map((a) => warpnetService.getWalletHistory(25, a, true)));
       this.loadingHistory = false;
       const answered = asked.filter((r) => r.status === "fulfilled");
       if (!answered.length) {

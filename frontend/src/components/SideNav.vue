@@ -372,6 +372,7 @@ export default {
         this.markWalletSeen();
         return;
       }
+      if (typeof document !== "undefined" && document.hidden) return;
       const asked = await Promise.allSettled(
         walletAssets.map((asset) => warpnetService.getWalletHistory(25, asset)),
       );
@@ -479,6 +480,8 @@ export default {
     // touch that object bypass this component's reactivity.
     this.profile = { ...warpnetService.getOwnerProfile() };
 
+    this.walletTimer = setInterval(() => this.pollWallet(), walletPollEvery);
+
     // Re-render on profile edits (username/avatar). setOwnerProfile notifies
     // subscribers; without this the sidebar keeps the pre-edit name/avatar
     // until the next route change.
@@ -528,7 +531,6 @@ export default {
     await warpnetService.getNotifications(true)
 
     await this.pollWallet();
-    this.walletTimer = setInterval(() => this.pollWallet(), walletPollEvery);
   },
   beforeUnmount() {
     clearInterval(this.walletTimer);

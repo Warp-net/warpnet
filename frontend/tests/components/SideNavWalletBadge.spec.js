@@ -108,6 +108,23 @@ describe('SideNav wallet badge', () => {
     expect(screen.queryByTestId('wallet-badge')).toBeNull();
   });
 
+  it('leaves no poll behind when the route changes before the sidebar finished loading', async () => {
+    vi.useFakeTimers();
+    let profileArrives;
+    warpnetService.getProfile.mockReturnValue(new Promise((resolve) => { profileArrives = resolve; }));
+
+    const { unmount } = renderNav();
+    unmount();
+    profileArrives({ id: OWNER_ID, username: 'Owner' });
+    await vi.advanceTimersByTimeAsync(0);
+    const mounting = warpnetService.getWalletHistory.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+    expect(warpnetService.getWalletHistory.mock.calls.length).toBe(mounting);
+    vi.useRealTimers();
+  });
+
   it('never asks for wallet history when the wallet is not offered', async () => {
     warpnetService.getOwnerProfile.mockReturnValue({ user_id: OWNER_ID, username: 'Owner', network: 'mainnet' });
     renderNav();

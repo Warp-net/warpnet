@@ -173,6 +173,9 @@ const dedupSkipPaths = new Set([
     PRIVATE_POST_IMPORT_TWITTER_TWEET,
 ]);
 
+const walletHistoryWindow = 60000
+const walletHistoryReads = new Map()
+
 function isPostPath(path) {
     return typeof path === "string" && path.includes("/post/");
 }
@@ -398,6 +401,7 @@ export const warpnetService = {
         }
         stopRefreshNotifications()
         stateMap.clear()
+        walletHistoryReads.clear()
         // The owner is dropped here rather than through setOwnerProfile, so
         // subscribers have to be told explicitly or they keep rendering the
         // signed-out owner.
@@ -1332,10 +1336,20 @@ export const warpnetService = {
         const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
         return await this.sendToNode(request)
     },
-    async getWalletHistory(limit, asset) {
-        const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25, asset: asset || "" } }
-        const resp = await this.sendToNode(request)
-        return resp?.transfers || []
+    async getWalletHistory(limit, asset, force) {
+        const key = `${limit || 25}|${asset || ""}`
+        const held = walletHistoryReads.get(key)
+        if (!force && held && Date.now() - held.at < walletHistoryWindow) {
+            return held.read
+        }
+        const read = (async () => {
+            const request = { path: PRIVATE_GET_WALLET_HISTORY, body: { limit: limit || 25, asset: asset || "" } }
+            const resp = await this.sendToNode(request)
+            return resp?.transfers || []
+        })()
+        walletHistoryReads.set(key, { at: Date.now(), read })
+        read.catch(() => walletHistoryReads.delete(key))
+        return read
     },
     async getWalletContacts(force) {
         const resp = await this.sendToNode({ path: PRIVATE_GET_WALLET_CONTACTS, body: { force: !!force } })
