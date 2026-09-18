@@ -433,7 +433,7 @@ type memberRepos struct {
 	pollRepo         PollProvider
 	chatRepo         ChatProvider
 	mediaRepo        MediaProvider
-	chatMediaRepo    ChatMediaProvider
+	chatMediaRepo    MediaProvider
 	notificationRepo NotificationProvider
 	settingsRepo     SettingsProvider
 	bookmarkRepo     BookmarkProvider

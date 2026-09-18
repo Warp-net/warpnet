@@ -60,7 +60,7 @@ func newChatMediaRepoDouble() *chatMediaRepoDouble {
 	}
 }
 
-func (r *chatMediaRepoDouble) GetChatImage(chatId, key string) (domain.Base64Image, error) {
+func (r *chatMediaRepoDouble) GetImage(chatId, key string) (domain.Base64Image, error) {
 	img, ok := r.images[chatId+"/"+key]
 	if !ok {
 		return "", database.ErrMediaNotFound
@@ -68,17 +68,17 @@ func (r *chatMediaRepoDouble) GetChatImage(chatId, key string) (domain.Base64Ima
 	return img, nil
 }
 
-func (r *chatMediaRepoDouble) SetChatImage(chatId string, img domain.Base64Image) (domain.ImageKey, error) {
+func (r *chatMediaRepoDouble) SetImage(chatId string, img domain.Base64Image) (domain.ImageKey, error) {
 	r.images[chatId+"/key"] = img
 	return "key", nil
 }
 
-func (r *chatMediaRepoDouble) SetForeignChatImageWithTTL(chatId, key string, img domain.Base64Image) error {
+func (r *chatMediaRepoDouble) SetForeignImageWithTTL(chatId, key string, img domain.Base64Image) error {
 	r.stored[chatId+"/"+key] = img
 	return nil
 }
 
-func (r *chatMediaRepoDouble) GetChatVideo(chatId, key string) (domain.Base64Video, error) {
+func (r *chatMediaRepoDouble) GetVideo(chatId, key string) (domain.Base64Video, error) {
 	v, ok := r.videos[chatId+"/"+key]
 	if !ok {
 		return "", database.ErrMediaNotFound
@@ -86,12 +86,12 @@ func (r *chatMediaRepoDouble) GetChatVideo(chatId, key string) (domain.Base64Vid
 	return v, nil
 }
 
-func (r *chatMediaRepoDouble) SetChatVideo(chatId string, video domain.Base64Video) (domain.VideoKey, error) {
+func (r *chatMediaRepoDouble) SetVideo(chatId string, video domain.Base64Video) (domain.VideoKey, error) {
 	r.videos[chatId+"/key"] = video
 	return "key", nil
 }
 
-func (r *chatMediaRepoDouble) SetForeignChatVideoWithTTL(chatId, key string, video domain.Base64Video) error {
+func (r *chatMediaRepoDouble) SetForeignVideoWithTTL(chatId, key string, video domain.Base64Video) error {
 	r.videos[chatId+"/"+key] = video
 	return nil
 }

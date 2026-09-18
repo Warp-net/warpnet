@@ -59,13 +59,16 @@ const (
 	ErrNoChatMediaTarget warpnet.WarpError = "chat has no reachable counterpart"
 )
 
+// ChatMediaStorer is the media store scoped to /CHATMEDIA, where the root ID
+// is a chat. It is the same storage as the public one, wired with the other
+// prefix — see database.NewChatMediaRepo.
 type ChatMediaStorer interface {
-	GetChatImage(chatId, key string) (domain.Base64Image, error)
-	SetChatImage(chatId string, img domain.Base64Image) (_ domain.ImageKey, err error)
-	SetForeignChatImageWithTTL(chatId, key string, img domain.Base64Image) error
-	GetChatVideo(chatId, key string) (domain.Base64Video, error)
-	SetChatVideo(chatId string, video domain.Base64Video) (_ domain.VideoKey, err error)
-	SetForeignChatVideoWithTTL(chatId, key string, video domain.Base64Video) error
+	GetImage(chatId, key string) (domain.Base64Image, error)
+	SetImage(chatId string, img domain.Base64Image) (_ domain.ImageKey, err error)
+	SetForeignImageWithTTL(chatId, key string, img domain.Base64Image) error
+	GetVideo(chatId, key string) (domain.Base64Video, error)
+	SetVideo(chatId string, video domain.Base64Video) (_ domain.VideoKey, err error)
+	SetForeignVideoWithTTL(chatId, key string, video domain.Base64Video) error
 }
 
 type ChatMediaChatFetcher interface {
@@ -188,7 +191,7 @@ func StreamUploadChatImageHandler(
 				return nil, fmt.Errorf("upload chat image%d: %w", i+1, err)
 			}
 
-			key, err := mediaRepo.SetChatImage(string(ev.ChatId), img)
+			key, err := mediaRepo.SetImage(string(ev.ChatId), img)
 			if err != nil {
 				return nil, fmt.Errorf("upload chat image%d: storing media: %w", i+1, err)
 			}
@@ -229,7 +232,7 @@ func StreamGetChatImageHandler(
 			return event.GetImageResponse{File: ""}, nil
 		}
 
-		img, err := mediaRepo.GetChatImage(string(ev.ChatId), ev.Key)
+		img, err := mediaRepo.GetImage(string(ev.ChatId), ev.Key)
 		if err != nil && !errors.Is(err, database.ErrMediaNotFound) {
 			return nil, fmt.Errorf("get chat image: fetching media: %w", err)
 		}
@@ -263,7 +266,7 @@ func StreamGetChatImageHandler(
 		}
 
 		if imgResp.File != "" {
-			if err := mediaRepo.SetForeignChatImageWithTTL(
+			if err := mediaRepo.SetForeignImageWithTTL(
 				string(ev.ChatId), ev.Key, domain.Base64Image(imgResp.File),
 			); err != nil {
 				log.Errorf("get chat image: storing peer image: %v", err)
@@ -314,7 +317,7 @@ func StreamUploadChatVideoHandler(
 			return nil, fmt.Errorf("upload chat video: %w", err)
 		}
 
-		key, err := mediaRepo.SetChatVideo(string(ev.ChatId), video)
+		key, err := mediaRepo.SetVideo(string(ev.ChatId), video)
 		if err != nil {
 			return nil, fmt.Errorf("upload chat video: storing media: %w", err)
 		}
@@ -348,7 +351,7 @@ func StreamGetChatVideoHandler(
 			return event.GetVideoResponse{File: ""}, nil
 		}
 
-		video, err := mediaRepo.GetChatVideo(string(ev.ChatId), ev.Key)
+		video, err := mediaRepo.GetVideo(string(ev.ChatId), ev.Key)
 		if err != nil && !errors.Is(err, database.ErrMediaNotFound) {
 			return nil, fmt.Errorf("get chat video: fetching media: %w", err)
 		}
@@ -385,7 +388,7 @@ func StreamGetChatVideoHandler(
 		}
 
 		if videoResp.File != "" {
-			if err := mediaRepo.SetForeignChatVideoWithTTL(
+			if err := mediaRepo.SetForeignVideoWithTTL(
 				string(ev.ChatId), ev.Key, domain.Base64Video(videoResp.File),
 			); err != nil {
 				log.Errorf("get chat video: storing peer video: %v", err)

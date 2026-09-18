@@ -38,6 +38,7 @@ import (
 
 const (
 	MediaRepoName     = "/MEDIA"
+	ChatMediaRepoName = "/CHATMEDIA"
 	ImageSubNamespace = "IMAGES"
 	VideoSubNamespace = "VIDEOS"
 )
@@ -54,24 +55,33 @@ type MediaStorer interface {
 }
 
 type MediaRepo struct {
-	db MediaStorer
+	db     MediaStorer
+	prefix string
 }
 
 func NewMediaRepo(db MediaStorer) *MediaRepo {
-	return &MediaRepo{db: db}
+	return &MediaRepo{db: db, prefix: MediaRepoName}
 }
 
-func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
+// NewChatMediaRepo scopes the same storage to /CHATMEDIA, where the root ID is
+// a chat rather than a user. Chat attachments therefore sit outside every key
+// the public media routes can build, and are unreachable through them by
+// layout rather than by a permission check.
+func NewChatMediaRepo(db MediaStorer) *MediaRepo {
+	return &MediaRepo{db: db, prefix: ChatMediaRepoName}
+}
+
+func (repo *MediaRepo) GetImage(rootId, key string) (domain.Base64Image, error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
 	}
-	if key == "" || userId == "" {
+	if key == "" || rootId == "" {
 		return "", ErrMediaNotFound
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(ImageSubNamespace).
-		AddParentId(userId).
+		AddParentId(rootId).
 		AddId(key).
 		Build()
 
@@ -83,39 +93,39 @@ func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) 
 	return domain.Base64Image(data), err
 }
 
-func (repo *MediaRepo) SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error) {
+func (repo *MediaRepo) SetImage(rootId string, img domain.Base64Image) (_ domain.ImageKey, err error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
 	}
-	if len(img) == 0 || len(userId) == 0 {
+	if len(img) == 0 || len(rootId) == 0 {
 		return "", local_store.DBError("no data for image set")
 	}
 	h := security.ConvertToSHA256([]byte(img))
 	key := hex.EncodeToString(h)
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(ImageSubNamespace).
-		AddParentId(userId).
+		AddParentId(rootId).
 		AddId(key).
 		Build()
 
 	return domain.ImageKey(key), repo.db.Set(mediaKey, []byte(img))
 }
 
-func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
+func (repo *MediaRepo) SetForeignImageWithTTL(rootId, key string, img domain.Base64Image) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
-	if len(img) == 0 || len(userId) == 0 {
+	if len(img) == 0 || len(rootId) == 0 {
 		return local_store.DBError("no data for image set provided")
 	}
 	if key == "" {
 		return local_store.DBError("no key for image set provided")
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(ImageSubNamespace).
-		AddParentId(userId).
+		AddParentId(rootId).
 		AddId(key).
 		Build()
 
@@ -123,17 +133,17 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Bas
 	return repo.db.SetWithTTL(mediaKey, []byte(img), week)
 }
 
-func (repo *MediaRepo) GetVideo(userId, key string) (domain.Base64Video, error) {
+func (repo *MediaRepo) GetVideo(rootId, key string) (domain.Base64Video, error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
 	}
-	if key == "" || userId == "" {
+	if key == "" || rootId == "" {
 		return "", ErrMediaNotFound
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(VideoSubNamespace).
-		AddParentId(userId).
+		AddParentId(rootId).
 		AddId(key).
 		Build()
 
@@ -145,39 +155,39 @@ func (repo *MediaRepo) GetVideo(userId, key string) (domain.Base64Video, error) 
 	return domain.Base64Video(data), err
 }
 
-func (repo *MediaRepo) SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error) {
+func (repo *MediaRepo) SetVideo(rootId string, video domain.Base64Video) (_ domain.VideoKey, err error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
 	}
-	if len(video) == 0 || len(userId) == 0 {
+	if len(video) == 0 || len(rootId) == 0 {
 		return "", local_store.DBError("no data for video set")
 	}
 	h := security.ConvertToSHA256([]byte(video))
 	key := hex.EncodeToString(h)
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(VideoSubNamespace).
-		AddParentId(userId).
+		AddParentId(rootId).
 		AddId(key).
 		Build()
 
 	return domain.VideoKey(key), repo.db.Set(mediaKey, []byte(video))
 }
 
-func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
+func (repo *MediaRepo) SetForeignVideoWithTTL(rootId, key string, video domain.Base64Video) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
-	if len(video) == 0 || len(userId) == 0 {
+	if len(video) == 0 || len(rootId) == 0 {
 		return local_store.DBError("no data for video set provided")
 	}
 	if key == "" {
 		return local_store.DBError("no key for video set provided")
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(VideoSubNamespace).
-		AddParentId(userId).
+		AddParentId(rootId).
 		AddId(key).
 		Build()
 
