@@ -106,6 +106,52 @@ type MediaStorer interface {
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
 }
 
+type ChatMediaFetcher interface {
+	MediaChatId(mediaKey string) (string, error)
+	GetChat(chatId string) (domain.Chat, error)
+}
+
+// isChatMediaAllowed reports whether the peer on s may read key. A key no chat
+// message references is public media and always passes; a chat attachment is
+// served to that chat's own participants only, so knowing the key is no longer
+// enough to pull someone's private picture off their node.
+func isChatMediaAllowed(
+	s warpnet.WarpStream,
+	chatRepo ChatMediaFetcher,
+	userRepo MediaUserFetcher,
+	ownNodeId, key string,
+) bool {
+	chatId, err := chatRepo.MediaChatId(key)
+	if errors.Is(err, database.ErrMediaNotAttached) {
+		return true
+	}
+	if err != nil {
+		log.Errorf("chat media: resolving chat of key %s: %v", key, err)
+		return false
+	}
+
+	if warpnet.VerifyAuthorship(s, ownNodeId) == nil {
+		return true
+	}
+
+	chat, err := chatRepo.GetChat(chatId)
+	if err != nil {
+		log.Errorf("chat media: fetching chat %s: %v", chatId, err)
+		return false
+	}
+
+	for _, userId := range []string{chat.OwnerId, chat.OtherUserId} {
+		participant, err := userRepo.Get(userId)
+		if err != nil {
+			continue
+		}
+		if warpnet.VerifyAuthorship(s, participant.NodeId) == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func StreamUploadImageHandler(
 	info MediaNodeInformer,
 	privKey ed25519.PrivateKey,
@@ -174,6 +220,7 @@ func StreamGetImageHandler(
 	streamer MediaStreamer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
+	chatRepo ChatMediaFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
@@ -188,6 +235,11 @@ func StreamGetImageHandler(
 		ownerId := ownNodeInfo.OwnerId
 		if ev.UserId == "" {
 			ev.UserId = ownerId
+		}
+
+		if !isChatMediaAllowed(s, chatRepo, userRepo, ownNodeInfo.ID.String(), ev.Key) {
+			log.Warnf("get image: refused chat attachment: %s", ev.Key)
+			return event.GetImageResponse{File: ""}, nil
 		}
 
 		isOwnImageRequest := ownerId == ev.UserId

@@ -121,6 +121,7 @@ func StreamGetVideoHandler(
 	streamer VideoStreamer,
 	mediaRepo VideoStorer,
 	userRepo VideoUserFetcher,
+	chatRepo ChatMediaFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetVideoEvent
@@ -135,6 +136,11 @@ func StreamGetVideoHandler(
 		ownerId := ownNodeInfo.OwnerId
 		if ev.UserId == "" {
 			ev.UserId = ownerId
+		}
+
+		if !isChatMediaAllowed(s, chatRepo, userRepo, ownNodeInfo.ID.String(), ev.Key) {
+			log.Warnf("get video: refused chat attachment: %s", ev.Key)
+			return event.GetVideoResponse{File: ""}, nil
 		}
 
 		isOwnVideoRequest := ownerId == ev.UserId

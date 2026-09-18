@@ -39,14 +39,16 @@ import (
 )
 
 var (
-	ErrChatNotFound    = local_store.DBError("chat not found")
-	ErrMessageNotFound = local_store.DBError("message not found")
+	ErrChatNotFound     = local_store.DBError("chat not found")
+	ErrMessageNotFound  = local_store.DBError("message not found")
+	ErrMediaNotAttached = local_store.DBError("media key is not attached to a chat")
 )
 
 const (
 	ChatNamespace     = "/CHATS"
 	MessageNamespace  = "/MESSAGES"
 	NonceSubNamespace = "NONCE"
+	MediaSubNamespace = "MEDIA"
 )
 
 type ChatStorer interface {
@@ -305,10 +307,60 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 	if err != nil {
 		return msg, err
 	}
+	for _, mediaKey := range messageMediaKeys(msg) {
+		if err = txn.Set(repo.mediaChatKey(mediaKey), []byte(msg.ChatId)); err != nil {
+			return msg, err
+		}
+	}
 	if err = repo.bumpChatPreview(txn, msg); err != nil {
 		return msg, err
 	}
 	return msg, txn.Commit()
+}
+
+// messageMediaKeys lists the attachment keys a message carries, so each can be
+// bound to its chat and refused to peers outside it.
+func messageMediaKeys(msg domain.ChatMessage) []string {
+	keys := make([]string, 0, len(msg.ImageKeys)+1)
+	for _, key := range msg.ImageKeys {
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	if msg.VideoKey != nil && *msg.VideoKey != "" {
+		keys = append(keys, *msg.VideoKey)
+	}
+	return keys
+}
+
+func (repo *ChatRepo) mediaChatKey(mediaKey string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(MessageNamespace).
+		AddSubPrefix(MediaSubNamespace).
+		AddRootID(mediaKey).
+		Build()
+}
+
+// MediaChatId returns the chat an attachment belongs to. ErrMediaNotAttached
+// means no message references the key, so it is ordinary public media.
+func (repo *ChatRepo) MediaChatId(mediaKey string) (string, error) {
+	if mediaKey == "" {
+		return "", local_store.DBError("media key is empty")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return "", err
+	}
+	defer txn.Rollback()
+
+	chatId, err := txn.Get(repo.mediaChatKey(mediaKey))
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return "", err
+	}
+	if len(chatId) == 0 {
+		return "", ErrMediaNotAttached
+	}
+	return string(chatId), txn.Commit()
 }
 
 const lastMessagePreviewLimit = 128

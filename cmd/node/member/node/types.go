@@ -239,6 +239,7 @@ type ChatProvider interface {
 	GetMessage(chatId string, id string) (domain.ChatMessage, error)
 	GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error)
 	ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error)
+	MediaChatId(mediaKey string) (string, error)
 }
 
 type FilterProvider interface {
