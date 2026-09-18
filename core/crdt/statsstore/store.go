@@ -155,7 +155,9 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
-	opts.RepairInterval = 0
+	// RepairInterval stays at the library's default hour: nothing but a walk
+	// that reaches the roots clears the dirty bit a crash, or a block job the
+	// DAG workers could not finish, leaves behind.
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(

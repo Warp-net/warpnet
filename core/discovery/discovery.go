@@ -105,6 +105,7 @@ type discoveryService struct {
 	// channel is needed to collect discoveries while node is setting up
 	discoveryChan   chan discoveredPeer
 	discoveryTicker *time.Ticker
+	stallTimeout    time.Duration
 	stopChan        chan struct{}
 
 	aliasCache *expirable.LRU[warpnet.WarpPeerID, warpnet.WarpPeerID]
@@ -113,6 +114,10 @@ type discoveryService struct {
 }
 
 const stallTimeout = time.Minute*30 + time.Second // one sec more than gossip discovery
+
+// relayStallTimeout is shorter: a relay is a discovery crossroads and hears
+// from members far more often than one gossip round.
+const relayStallTimeout = time.Minute * 5
 
 //goland:noinspection ALL
 func NewDiscoveryService(
@@ -128,7 +133,8 @@ func NewDiscoveryService(
 		nodeRepo:        nodeRepo,
 		limiter:         limiter,
 		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
-		discoveryTicker: time.NewTicker(stallTimeout),   //nolint:mnd
+		discoveryTicker: time.NewTicker(stallTimeout),
+		stallTimeout:    stallTimeout,
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
 		events:          warpnet.NewPeerEmitter(),
@@ -140,8 +146,9 @@ func NewRelayDiscoveryService(ctx context.Context, limiter IPLimiter) *discovery
 	return &discoveryService{
 		ctx:             ctx,
 		limiter:         limiter,
-		discoveryChan:   make(chan discoveredPeer, 128),  //nolint:mnd
-		discoveryTicker: time.NewTicker(time.Minute * 5), //nolint:mnd
+		discoveryChan:   make(chan discoveredPeer, 128), //nolint:mnd
+		discoveryTicker: time.NewTicker(relayStallTimeout),
+		stallTimeout:    relayStallTimeout,
 		stopChan:        make(chan struct{}),
 		aliasCache:      lru,
 		events:          warpnet.NewPeerEmitter(),
@@ -182,13 +189,13 @@ func (s *discoveryService) Run(n DiscoveryInfoStorer) error {
 			case <-s.stopChan:
 				return
 			case <-s.discoveryTicker.C:
-				log.Warnf("discovery: stalled")
+				log.Warnf("discovery: stalled: no peer discovered in %s", s.stallTimeout)
 			case info, ok := <-s.discoveryChan:
 				if !ok {
 					log.Infoln("discovery: service closed")
 					return
 				}
-				s.discoveryTicker.Reset(time.Minute * 5) //nolint:mnd
+				s.discoveryTicker.Reset(s.stallTimeout)
 
 				switch {
 				case asRelay:
