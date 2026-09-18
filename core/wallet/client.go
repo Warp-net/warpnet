@@ -62,8 +62,6 @@ const (
 
 var ErrUnavailable = errors.New("wallet: payment engine unavailable")
 
-var sensitiveParams = map[string]bool{paramSeed: true, paramPrivateKey: true}
-
 type Account struct {
 	TokenBalance string
 	TRX          string
@@ -189,7 +187,7 @@ func (c *Client) ensure() error {
 		log.Errorf("wallet: payment engine binary: %v", err)
 		return err
 	}
-	log.Infof("wallet: starting payment engine %q network=%s endpoint=%s token=%s", binary, c.cfg.Network, c.cfg.Endpoint, c.cfg.Token)
+	log.Infof("wallet: starting payment engine %s network=%s endpoint=%s token=%s", binary, c.cfg.Network, c.cfg.Endpoint, c.cfg.Token)
 	ctx, stop := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, binary, args...) //nolint:gosec // the path is our own config or the unpacked embedded engine
 	stdin, err := cmd.StdinPipe()
@@ -269,7 +267,7 @@ func (c *Client) resolveBinary() (string, error) {
 	case cached:
 		return path, nil
 	case err != nil && !os.IsNotExist(err):
-		log.Warnf("wallet: the payment engine cached at %q is not the build we embed, unpacking it again: %v", path, err)
+		log.Warnf("wallet: the payment engine cached at %s is not the build we embed, unpacking it again: %v", path, err)
 	}
 
 	tmp, err := os.CreateTemp(dir, name+".*")
@@ -290,7 +288,6 @@ func (c *Client) resolveBinary() (string, error) {
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return "", err
 	}
-	log.Infof("wallet: unpacked the embedded payment engine to %q", path)
 	return path, nil
 }
 
@@ -360,15 +357,10 @@ func (c *Client) fail(err error) {
 }
 
 func (c *Client) call(ctx context.Context, method string, params, out any) error {
-	started := time.Now()
-	log.Infof("wallet: engine request %s %s", method, safeParams(params))
 	err := c.invoke(ctx, method, params, out)
-	elapsed := time.Since(started).Round(time.Millisecond)
 	if err != nil {
-		log.Errorf("wallet: engine request %s failed in %s: %v", method, elapsed, err)
 		return err
 	}
-	log.Infof("wallet: engine request %s succeeded in %s", method, elapsed)
 	return nil
 }
 
@@ -495,25 +487,4 @@ func (c *Client) History(ctx context.Context, address, asset string, limit int) 
 		transfers = append(transfers, Transfer(t))
 	}
 	return transfers, nil
-}
-
-func safeParams(params any) string {
-	raw, err := json.Marshal(params)
-	if err != nil {
-		return "{}"
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return "{}"
-	}
-	for name := range fields {
-		if sensitiveParams[name] {
-			delete(fields, name)
-		}
-	}
-	out, err := json.Marshal(fields)
-	if err != nil {
-		return "{}"
-	}
-	return string(out)
 }

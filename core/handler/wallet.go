@@ -316,7 +316,6 @@ func StreamGetWalletContactsHandler(
 			}
 			contacts = append(contacts, contact)
 		}
-		log.Infof("wallet: contacts: %d known %s addresses offered as recipients", len(contacts), chain)
 		return event.WalletContactsResponse{Contacts: contacts}, nil
 	}
 }
