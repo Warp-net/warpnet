@@ -232,7 +232,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
 	m.statsDb, err = statsstore.New(
-		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(),
+		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
@@ -243,7 +243,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
 	}
 	m.ratingDb, err = ratingstore.New(
-		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(),
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize rating store: %w", err)

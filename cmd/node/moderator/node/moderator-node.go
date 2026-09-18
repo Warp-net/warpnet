@@ -236,7 +236,7 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
 	}
 	mn.ratingDb, err = ratingstore.New(
-		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(),
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to initialize rating store: %w", err)
