@@ -71,10 +71,11 @@ type addrsManager struct {
 	addrsMx      sync.RWMutex
 	currentAddrs hostAddrs
 
-	signKey           crypto.PrivKey
-	addrStore         addrStore
-	signedRecordStore peerstore.CertifiedAddrBook
-	hostID            peer.ID
+	signKey                        crypto.PrivKey
+	addrStore                      addrStore
+	signedRecordStore              peerstore.CertifiedAddrBook
+	hostID                         peer.ID
+	disableNonPublicAddrPublishing bool
 
 	wg        sync.WaitGroup
 	ctx       context.Context
@@ -92,26 +93,28 @@ func newAddrsManager(
 	enableMetrics bool,
 	registerer prometheus.Registerer,
 	disableSignedPeerRecord bool,
+	disableNonPublicAddrPublishing bool,
 	signKey crypto.PrivKey,
 	addrStore addrStore,
 	hostID peer.ID,
 ) (*addrsManager, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	as := &addrsManager{
-		bus:                       bus,
-		listenAddrs:               listenAddrs,
-		addCertHashes:             addCertHashes,
-		observedAddrsManager:      observedAddrsManager,
-		natManager:                natmgr,
-		addrsFactory:              addrsFactory,
-		triggerAddrsUpdateChan:    make(chan chan struct{}, 1),
-		triggerReachabilityUpdate: make(chan struct{}, 1),
-		interfaceAddrs:            &interfaceAddrsCache{},
-		signKey:                   signKey,
-		addrStore:                 addrStore,
-		hostID:                    hostID,
-		ctx:                       ctx,
-		ctxCancel:                 cancel,
+		bus:                            bus,
+		listenAddrs:                    listenAddrs,
+		addCertHashes:                  addCertHashes,
+		observedAddrsManager:           observedAddrsManager,
+		natManager:                     natmgr,
+		addrsFactory:                   addrsFactory,
+		triggerAddrsUpdateChan:         make(chan chan struct{}, 1),
+		triggerReachabilityUpdate:      make(chan struct{}, 1),
+		interfaceAddrs:                 &interfaceAddrsCache{},
+		signKey:                        signKey,
+		addrStore:                      addrStore,
+		hostID:                         hostID,
+		disableNonPublicAddrPublishing: disableNonPublicAddrPublishing,
+		ctx:                            ctx,
+		ctxCancel:                      cancel,
 	}
 	unknownReachability := network.ReachabilityUnknown
 	as.hostReachability.Store(&unknownReachability)
@@ -343,8 +346,11 @@ func (a *addrsManager) updateAddrs(prevHostAddrs hostAddrs, relayAddrs []ma.Mult
 
 // updatePeerStore updates the peer store for the host
 func (a *addrsManager) updatePeerStore(currentAddrs []ma.Multiaddr, removedAddrs []ma.Multiaddr) {
-	// update host addresses in the peer store
-	a.addrStore.SetAddrs(a.hostID, currentAddrs, peerstore.PermanentAddrTTL)
+	publishedAddrs := currentAddrs
+	if a.disableNonPublicAddrPublishing {
+		publishedAddrs = filterPublicAddrs(currentAddrs)
+	}
+	a.addrStore.SetAddrs(a.hostID, publishedAddrs, peerstore.PermanentAddrTTL)
 	a.addrStore.SetAddrs(a.hostID, removedAddrs, 0)
 
 	var sr *record.Envelope
@@ -354,7 +360,7 @@ func (a *addrsManager) updatePeerStore(currentAddrs []ma.Multiaddr, removedAddrs
 		var err error
 		// add signed peer record to the event
 		// in case of an error drop this event.
-		sr, err = a.makeSignedPeerRecord(currentAddrs)
+		sr, err = a.makeSignedPeerRecord(publishedAddrs)
 		if err != nil {
 			log.Error("error creating a signed peer record from the set of current addresses", "err", err)
 			return
@@ -366,6 +372,39 @@ func (a *addrsManager) updatePeerStore(currentAddrs []ma.Multiaddr, removedAddrs
 	}
 }
 
+// filterPublicAddrs drops IP-based multiaddrs that are not in a globally
+// routable range. Addrs without an IP or DNS component (e.g. /p2p-circuit)
+// are kept as-is because manet.IsPublicAddr returns false for them.
+// DNS components are evaluated by manet.IsPublicAddr (special-use names
+// like .local, .invalid, .localhost are non-public).
+func filterPublicAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
+	filtered := make([]ma.Multiaddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if hasIPOrDNSComponent(addr) && !manet.IsPublicAddr(addr) {
+			continue
+		}
+		filtered = append(filtered, addr)
+	}
+	return filtered
+}
+
+// hasIPOrDNSComponent reports whether addr's leading component is an IP,
+// DNS, or IP6ZONE wrapper. Transport multiaddrs encode their network layer
+// at the front, so the leading component is sufficient to tell whether
+// manet.IsPublicAddr can meaningfully evaluate the addr. Without this
+// guard, filterPublicAddrs would also drop multiaddrs that have no
+// network-layer address, such as /p2p-circuit/p2p/<id>.
+func hasIPOrDNSComponent(addr ma.Multiaddr) bool {
+	if len(addr) == 0 {
+		return false
+	}
+	switch addr[0].Protocol().Code {
+	case ma.P_IP4, ma.P_IP6, ma.P_IP6ZONE, ma.P_DNS, ma.P_DNS4, ma.P_DNS6, ma.P_DNSADDR:
+		return true
+	}
+	return false
+}
+
 func (a *addrsManager) notifyAddrsUpdated(emitter event.Emitter, localAddrsEmitter event.Emitter, previous, current hostAddrs) {
 	if areAddrsDifferent(previous.localAddrs, current.localAddrs) {
 		log.Debug("host local addresses updated", "addrs", current.localAddrs)
@@ -374,7 +413,7 @@ func (a *addrsManager) notifyAddrsUpdated(emitter event.Emitter, localAddrsEmitt
 		}
 	}
 	if areAddrsDifferent(previous.addrs, current.addrs) {
-		log.Debug("host addresses updated", "addrs", current.localAddrs)
+		log.Debug("host addresses updated", "addrs", current.addrs)
 		a.emitLocalAddrsUpdated(localAddrsEmitter, current.addrs, previous.addrs)
 	}
 
@@ -440,7 +479,7 @@ func (a *addrsManager) applyAddrsFactory(addrs []ma.Multiaddr) []ma.Multiaddr {
 	addrs = append(addrs[:0], af...)
 	// Add certhashes for the addresses provided by the user via address factory.
 	addrs = a.addCertHashes(ma.Unique(addrs))
-	slices.SortFunc(addrs, func(a, b ma.Multiaddr) int { return a.Compare(b) })
+	slices.SortFunc(addrs, ma.Multiaddr.Compare)
 	return addrs
 }
 
@@ -475,6 +514,12 @@ func (a *addrsManager) ConfirmedAddrs() (reachable []ma.Multiaddr, unreachable [
 
 func (a *addrsManager) getConfirmedAddrs(localAddrs []ma.Multiaddr) (reachableAddrs, unreachableAddrs, unknownAddrs []ma.Multiaddr) {
 	reachableAddrs, unreachableAddrs, unknownAddrs = a.addrsReachabilityTracker.ConfirmedAddrs()
+	// Don't rely on tracker's ordering. removeNotInSource here and removeInSource in
+	// getDialableAddrs require sorted input; unsorted input silently drops
+	// confirmed addrs.
+	slices.SortFunc(reachableAddrs, ma.Multiaddr.Compare)
+	slices.SortFunc(unreachableAddrs, ma.Multiaddr.Compare)
+	slices.SortFunc(unknownAddrs, ma.Multiaddr.Compare)
 	return removeNotInSource(reachableAddrs, localAddrs), removeNotInSource(unreachableAddrs, localAddrs), removeNotInSource(unknownAddrs, localAddrs)
 }
 
@@ -512,7 +557,7 @@ func (a *addrsManager) getLocalAddrs() []ma.Multiaddr {
 	// using identify.
 	finalAddrs = a.addCertHashes(finalAddrs)
 	finalAddrs = ma.Unique(finalAddrs)
-	slices.SortFunc(finalAddrs, func(a, b ma.Multiaddr) int { return a.Compare(b) })
+	slices.SortFunc(finalAddrs, ma.Multiaddr.Compare)
 	return finalAddrs
 }
 
@@ -573,6 +618,13 @@ func (a *addrsManager) makeSignedPeerRecord(addrs []ma.Multiaddr) (*record.Envel
 	if a.signKey == nil {
 		return nil, errors.New("signKey is nil")
 	}
+	// Drop empty multiaddrs before sealing. A zero-component Multiaddr
+	// would otherwise enter the signed envelope and reach peers as "/"
+	// when they decode the wire bytes.
+	// See https://github.com/libp2p/js-libp2p/issues/3478#issuecomment-4322093929
+	addrs = slices.DeleteFunc(slices.Clone(addrs), func(m ma.Multiaddr) bool {
+		return len(m) == 0
+	})
 	// Limit the length of currentAddrs to ensure that our signed peer records aren't rejected
 	peerRecordSize := 64 // HostID
 	k, err := a.signKey.Raw()
@@ -645,8 +697,8 @@ func areAddrsDifferent(prev, current []ma.Multiaddr) bool {
 	if len(prev) != len(current) {
 		return true
 	}
-	slices.SortFunc(prev, func(a, b ma.Multiaddr) int { return a.Compare(b) })
-	slices.SortFunc(current, func(a, b ma.Multiaddr) int { return a.Compare(b) })
+	slices.SortFunc(prev, ma.Multiaddr.Compare)
+	slices.SortFunc(current, ma.Multiaddr.Compare)
 	for i := range prev {
 		if !prev[i].Equal(current[i]) {
 			return true

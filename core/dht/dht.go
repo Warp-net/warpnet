@@ -139,16 +139,8 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	if d.cfg.network == "" {
 		panic("no network set")
 	}
-	cacheOption := records.Cache(newLRU())
-	providerStore, err := records.NewProviderManager(
-		d.ctx, n.ID(), n.Peerstore(), d.cfg.store, cacheOption,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	d.dht, err = dht.New(
-		d.ctx, n,
+		n,
 		dht.RoutingTableFilter(func(_ any, p warpnet.WarpPeerID) bool {
 			return d.isPeerAllowed(p)
 		}),
@@ -162,7 +154,8 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.RoutingTableRefreshPeriod(time.Hour),
 		dht.RoutingTableRefreshQueryTimeout(time.Minute*5), //nolint:mnd
 		dht.BootstrapPeers(d.cfg.bootstrapNodes...),
-		dht.ProviderStore(providerStore),
+		dht.ProviderDatastore(d.cfg.store),
+		dht.ProviderManagerOpts(records.Cache(newLRU())),
 		dht.RoutingTableLatencyTolerance(time.Minute),
 		dht.BucketSize(50), //nolint:mnd
 	)

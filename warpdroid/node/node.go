@@ -203,7 +203,7 @@ func newClient(
 	}
 
 	hashTable, err := dht.New(
-		ctx, h,
+		h,
 		dht.Mode(dht.ModeClient),
 		dht.ProtocolPrefix(protocol.ID("/"+warpNetwork)),
 		dht.Concurrency(3),

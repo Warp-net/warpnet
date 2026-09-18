@@ -32,8 +32,8 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/ipfs/go-cid"
 	datastore "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
@@ -66,14 +66,6 @@ func (b *silentBroadcaster) count() int {
 	return len(b.published)
 }
 
-type noProviderRouter struct{}
-
-func (noProviderRouter) FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo {
-	ch := make(chan peer.AddrInfo)
-	close(ch)
-	return ch
-}
-
 func newStatsHost(t *testing.T) host.Host {
 	t.Helper()
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -94,7 +86,6 @@ func newLiveStatsStore(t *testing.T) (*Store, *silentBroadcaster) {
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newStatsHost(t),
-		noProviderRouter{},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
@@ -214,15 +205,109 @@ func TestCRDTStats_ConcurrentBumpsAreNotLost(t *testing.T) {
 		"a viral tweet must not lose views to a read-modify-write race")
 }
 
-func TestCRDTStats_EveryWriteIsBroadcast(t *testing.T) {
+func TestCRDTStats_AFlushIsBroadcastOnce(t *testing.T) {
 	store, bc := newLiveStatsStore(t)
-	key := datastore.NewKey("/TWEETS/LIKES/broadcast")
+	likes := datastore.NewKey("/TWEETS/LIKES/broadcast")
+	views := datastore.NewKey("/TWEETS/VIEWS/broadcast")
+
+	for i := 0; i < 5; i++ {
+		require.NoError(t, store.Increment(likes))
+	}
+	require.NoError(t, store.Increment(views))
+
+	assert.Zero(t, bc.count(), "a bump on its own must not reach the network")
+
+	require.NoError(t, store.flush())
+	assert.Equal(t, 1, bc.count(),
+		"every buffered counter goes out as one delta, not one per bump")
+
+	require.NoError(t, store.flush())
+	assert.Equal(t, 1, bc.count(), "a flush with nothing new must stay quiet")
+}
+
+func TestCRDTStats_FlushedCountersSurviveTheBuffer(t *testing.T) {
+	store, _ := newLiveStatsStore(t)
+	key := datastore.NewKey("/TWEETS/LIKES/flushed")
 
 	require.NoError(t, store.Increment(key))
 	require.NoError(t, store.Increment(key))
+	require.NoError(t, store.flush())
+	require.NoError(t, store.Increment(key))
 
-	assert.Positive(t, bc.count(),
-		"local-only counters would never converge across the network")
+	got, err := store.GetAggregatedStat(key)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(3), got,
+		"a read must sum what the CRDT holds and what is still buffered")
+}
+
+type pairBroadcaster struct {
+	inbox chan []byte
+	peer  *pairBroadcaster
+}
+
+func newBroadcasterPair() (*pairBroadcaster, *pairBroadcaster) {
+	a := &pairBroadcaster{inbox: make(chan []byte, 64)}
+	b := &pairBroadcaster{inbox: make(chan []byte, 64)}
+	a.peer, b.peer = b, a
+	return a, b
+}
+
+func (p *pairBroadcaster) Broadcast(_ context.Context, data []byte) error {
+	select {
+	case p.peer.inbox <- append([]byte(nil), data...):
+	default:
+	}
+	return nil
+}
+
+func (p *pairBroadcaster) Next(ctx context.Context) ([]byte, error) {
+	select {
+	case data := <-p.inbox:
+		return data, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestCRDTStats_AFlushReachesTheOtherReplica(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	author, reader := newStatsHost(t), newStatsHost(t)
+	require.NoError(t, author.Connect(ctx, peer.AddrInfo{
+		ID: reader.ID(), Addrs: reader.Addrs(),
+	}))
+
+	authorBc, readerBc := newBroadcasterPair()
+	authorStore, err := New(
+		ctx, authorBc, dssync.MutexWrap(datastore.NewMapDatastore()), author,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = authorStore.Close() })
+
+	readerStore, err := New(
+		ctx, readerBc, dssync.MutexWrap(datastore.NewMapDatastore()), reader,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = readerStore.Close() })
+
+	likes := datastore.NewKey("/TWEETS/LIKES/converge")
+	views := datastore.NewKey("/TWEETS/VIEWS/converge")
+	for i := 0; i < 3; i++ {
+		require.NoError(t, authorStore.Increment(likes))
+	}
+	require.NoError(t, authorStore.Increment(views))
+	require.NoError(t, authorStore.flush())
+
+	require.Eventually(t, func() bool {
+		gotLikes, err := readerStore.GetAggregatedStat(likes)
+		if err != nil || gotLikes != 3 {
+			return false
+		}
+		gotViews, err := readerStore.GetAggregatedStat(views)
+		return err == nil && gotViews == 1
+	}, 20*time.Second, 100*time.Millisecond,
+		"counters batched into one delta must still arrive at their own keys")
 }
 
 func TestCRDTStats_GenerationIsUniquePerProcess(t *testing.T) {
@@ -249,10 +334,38 @@ func TestCRDTStats_CloseIsSafeOnNilAndStopsTheStore(t *testing.T) {
 		&silentBroadcaster{},
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newStatsHost(t),
-		noProviderRouter{},
 	)
 	require.NoError(t, err)
 	assert.NoError(t, store.Close())
+	assert.NotPanics(t, func() { _ = store.Close() },
+		"a second Close must not close the stop channel twice")
+}
+
+func TestCRDTStats_CloseStopsTheFlushWorker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bc := &silentBroadcaster{}
+	store, err := New(
+		ctx,
+		bc,
+		dssync.MutexWrap(datastore.NewMapDatastore()),
+		newStatsHost(t),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, store.Increment(datastore.NewKey("/TWEETS/LIKES/closing")))
+
+	closed := make(chan error, 1)
+	go func() { closed <- store.Close() }()
+	select {
+	case err := <-closed:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close waits on a flush worker that only its context can stop")
+	}
+
+	assert.Equal(t, 1, bc.count(), "Close flushes what is buffered before it stops")
 }
 
 func TestCRDTStats_CounterCodecRoundTrip(t *testing.T) {
