@@ -669,6 +669,10 @@ data class WarpnetMessage(
     val text: String = "",
     @Json(name = "created_at") val createdAt: String = "",
     val status: String = "",
+    // A video message carries its still frame as its only image key, the same
+    // convention tweets use (domain.ChatMessage).
+    @Json(name = "image_keys") val imageKeys: List<String>? = null,
+    @Json(name = "video_key") val videoKey: String? = null,
 )
 
 // Send-only body for PUBLIC_POST_MESSAGE: just the fields the node reads. The
