@@ -143,7 +143,6 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
-	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
