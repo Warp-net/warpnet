@@ -466,7 +466,7 @@ export default {
           this.imageAttachments.push(reader.result);
           this.imageKeys.push('');
           try {
-            const key = await warpnetService.uploadImage(reader.result);
+            const key = await this.uploadAttachment(reader.result);
             if (key) this.imageKeys[slot] = key;
           } catch (err) {
             console.error('Failed to upload image:', err);
@@ -476,6 +476,10 @@ export default {
         reader.onerror = (error) => console.error("Error reading file", error);
         reader.readAsDataURL(file);
       }
+    },
+    async uploadAttachment(dataUrl) {
+      const keys = await warpnetService.uploadChatImages([dataUrl]);
+      return keys.length > 0 ? keys[0] : '';
     },
     removeImageAttachment(index) {
       this.imageAttachments.splice(index, 1);
@@ -530,7 +534,7 @@ export default {
 
       try {
         const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
-        const key = await warpnetService.uploadVideo(dataUrl);
+        const key = await warpnetService.uploadChatVideo(dataUrl);
         if (!isCurrent()) return;
         if (!key) {
           throw new Error('node returned an empty video key');
@@ -553,7 +557,7 @@ export default {
       try {
         const dataUrl = await captureVideoPoster(file);
         if (!dataUrl) return {dataUrl: '', key: ''};
-        return {dataUrl, key: await warpnetService.uploadImage(dataUrl) || ''};
+        return {dataUrl, key: await this.uploadAttachment(dataUrl) || ''};
       } catch (err) {
         console.error('Failed to upload video poster:', err);
         return {dataUrl: '', key: ''};
@@ -668,7 +672,7 @@ export default {
         // Slots whose eager upload failed (offline, retried) go up now.
         const missing = sentImages.filter((_, i) => !sentImageKeys[i]);
         if (missing.length > 0) {
-          imageKeys = imageKeys.concat(await warpnetService.uploadImages(missing));
+          imageKeys = imageKeys.concat(await warpnetService.uploadChatImages(missing));
         }
       }
 
@@ -720,7 +724,7 @@ export default {
         const keys = msg.image_keys || [];
         if (keys.length === 0) return;
         const images = await Promise.all(keys.map(
-            (key) => warpnetService.getImage({userId: msg.sender_id, key})
+            (key) => warpnetService.getChatImage({userId: msg.sender_id, key})
                 .catch(() => ''),
         ));
         msg.images = images.filter(Boolean);

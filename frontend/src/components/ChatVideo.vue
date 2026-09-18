@@ -89,7 +89,7 @@ export default {
       this.error = '';
       this.loading = true;
       try {
-        const video = await warpnetService.getVideo({
+        const video = await warpnetService.getChatVideo({
           userId: this.senderId,
           key: this.videoKey,
         });

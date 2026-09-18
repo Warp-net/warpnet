@@ -109,6 +109,10 @@ export const PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 export const PRIVATE_POST_UPLOAD_VIDEO = "/private/post/video/0.0.0"
 export const PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
+export const PRIVATE_POST_UPLOAD_CHAT_IMAGE = "/private/post/chat/image/0.0.0"
+export const PUBLIC_GET_CHAT_IMAGE = "/public/get/chat/image/0.0.0"
+export const PRIVATE_POST_UPLOAD_CHAT_VIDEO = "/private/post/chat/video/0.0.0"
+export const PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
@@ -574,6 +578,99 @@ export const warpnetService = {
         }
         stateMap.set(cacheKey, result.file);
         return result.file;
+    },
+
+    async uploadChatImages(imgFiles) {
+        if (!imgFiles || imgFiles.length === 0) {
+            return []
+        }
+
+        const request = {
+            path: PRIVATE_POST_UPLOAD_CHAT_IMAGE,
+            timestamp: new Date().toISOString(),
+            body: {
+                image1: imgFiles[0] || "",
+                image2: imgFiles[1] || "",
+                image3: imgFiles[2] || "",
+                image4: imgFiles[3] || "",
+            },
+        }
+
+        const result = await this.sendToNode(request);
+        return [result.key1, result.key2, result.key3, result.key4]
+            .filter(key => key && key.length > 0);
+    },
+
+    async getChatImage({userId, key}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const cacheKey = `chat-image::${key}`;
+        const cached = stateMap.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const request = {
+            path: PUBLIC_GET_CHAT_IMAGE,
+            body: {
+                user_id: userId,
+                key: key,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result || !result.file) {
+            return null
+        }
+        stateMap.set(cacheKey, result.file);
+        return result.file;
+    },
+
+    async uploadChatVideo(videoFile) {
+        if (!videoFile) {
+            return ''
+        }
+
+        const request = {
+            path: PRIVATE_POST_UPLOAD_CHAT_VIDEO,
+            timestamp: new Date().toISOString(),
+            body: {
+                video: videoFile,
+            },
+        }
+
+        const result = await this.sendToNode(request);
+        if (result && !result.key && result.message) {
+            throw new Error(result.message);
+        }
+        return result && result.key ? result.key : '';
+    },
+
+    async getChatVideo({userId, key, deferred = false}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const request = {
+            path: PUBLIC_GET_CHAT_VIDEO,
+            body: {
+                user_id: userId,
+                key: key,
+                deferred: deferred,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result) {
+            return null
+        }
+        return {
+            file: result.file || '',
+            size: result.size || 0,
+            deferred: !!result.deferred,
+        };
     },
 
     async uploadVideo(videoFile) {

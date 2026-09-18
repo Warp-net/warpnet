@@ -38,6 +38,7 @@ import (
 
 const (
 	MediaRepoName     = "/MEDIA"
+	ChatMediaRepoName = "/CHATMEDIA"
 	ImageSubNamespace = "IMAGES"
 	VideoSubNamespace = "VIDEOS"
 )
@@ -54,11 +55,16 @@ type MediaStorer interface {
 }
 
 type MediaRepo struct {
-	db MediaStorer
+	db     MediaStorer
+	prefix string
 }
 
 func NewMediaRepo(db MediaStorer) *MediaRepo {
-	return &MediaRepo{db: db}
+	return &MediaRepo{db: db, prefix: MediaRepoName}
+}
+
+func NewChatMediaRepo(db MediaStorer) *MediaRepo {
+	return &MediaRepo{db: db, prefix: ChatMediaRepoName}
 }
 
 func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
@@ -69,7 +75,7 @@ func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) 
 		return "", ErrMediaNotFound
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(ImageSubNamespace).
 		AddParentId(userId).
 		AddId(key).
@@ -93,7 +99,7 @@ func (repo *MediaRepo) SetImage(userId string, img domain.Base64Image) (_ domain
 	h := security.ConvertToSHA256([]byte(img))
 	key := hex.EncodeToString(h)
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(ImageSubNamespace).
 		AddParentId(userId).
 		AddId(key).
@@ -113,7 +119,7 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Bas
 		return local_store.DBError("no key for image set provided")
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(ImageSubNamespace).
 		AddParentId(userId).
 		AddId(key).
@@ -131,7 +137,7 @@ func (repo *MediaRepo) GetVideo(userId, key string) (domain.Base64Video, error) 
 		return "", ErrMediaNotFound
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(VideoSubNamespace).
 		AddParentId(userId).
 		AddId(key).
@@ -155,7 +161,7 @@ func (repo *MediaRepo) SetVideo(userId string, video domain.Base64Video) (_ doma
 	h := security.ConvertToSHA256([]byte(video))
 	key := hex.EncodeToString(h)
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(VideoSubNamespace).
 		AddParentId(userId).
 		AddId(key).
@@ -175,7 +181,7 @@ func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video domain.B
 		return local_store.DBError("no key for video set provided")
 	}
 
-	mediaKey := local_store.NewPrefixBuilder(MediaRepoName).
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
 		AddRootID(VideoSubNamespace).
 		AddParentId(userId).
 		AddId(key).
