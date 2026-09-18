@@ -65,11 +65,11 @@ import (
 */
 
 var DefaultResources = relayv2.Resources{
-	Limit: &relayv2.RelayLimit{
-		Duration: DefaultRelayDurationLimit,
-		Data:     DefaultRelayDataLimit,
-	},
-
+	// Limit stays nil. A relay that advertises one marks every circuit through
+	// it limited, and libp2p then treats that circuit as no connection at all:
+	// it refuses to open a stream on it, and bitswap drops the peer before its
+	// peer manager ever hears of it. The reservation counts below are what
+	// bounds a relay's load.
 	ReservationTTL: time.Hour,
 
 	MaxReservations: 128,
@@ -79,11 +79,6 @@ var DefaultResources = relayv2.Resources{
 	MaxReservationsPerIP:  8,
 	MaxReservationsPerASN: 32,
 }
-
-const (
-	DefaultRelayDataLimit     = 1 << 30 // 1 GiB
-	DefaultRelayDurationLimit = time.Hour
-)
 
 func NewRelay(node warpnet.P2PNode) (*relayv2.Relay, error) {
 	relay, err := relayv2.New(
