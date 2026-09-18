@@ -156,9 +156,14 @@ func New(
 		cancel()
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
+	go func() {
+		if err := crdtStore.Repair(ctx); err != nil {
+			log.Errorf("failed to repair store: %v", err)
+		}
+	}()
 	store.crdt = crdtStore
 
-	return store, crdtStore.Repair(ctx)
+	return store, nil
 
 }
 
