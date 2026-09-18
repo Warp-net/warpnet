@@ -102,6 +102,8 @@ type Store struct {
 	cancel     context.CancelFunc
 	nodeID     string
 	generation string
+	stopChan   chan struct{}
+	stopOnce   sync.Once
 	wg         sync.WaitGroup
 
 	flushMu sync.Mutex
@@ -144,6 +146,7 @@ func New(
 		cancel:     cancel,
 		nodeID:     node.ID().String(),
 		generation: generation,
+		stopChan:   make(chan struct{}),
 		counters:   make(map[string]*counter),
 	}
 
@@ -182,6 +185,8 @@ func (s *Store) run() {
 
 	for {
 		select {
+		case <-s.stopChan:
+			return
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
@@ -323,8 +328,9 @@ func (s *Store) Close() error {
 	if err := s.flush(); err != nil {
 		log.Warnf("crdt stats: final flush: %v", err)
 	}
-	s.cancel()
+	s.stopOnce.Do(func() { close(s.stopChan) })
 	s.wg.Wait()
+	s.cancel()
 	return s.crdt.Close()
 }
 

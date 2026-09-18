@@ -337,6 +337,35 @@ func TestCRDTStats_CloseIsSafeOnNilAndStopsTheStore(t *testing.T) {
 	)
 	require.NoError(t, err)
 	assert.NoError(t, store.Close())
+	assert.NotPanics(t, func() { _ = store.Close() },
+		"a second Close must not close the stop channel twice")
+}
+
+func TestCRDTStats_CloseStopsTheFlushWorker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bc := &silentBroadcaster{}
+	store, err := New(
+		ctx,
+		bc,
+		dssync.MutexWrap(datastore.NewMapDatastore()),
+		newStatsHost(t),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, store.Increment(datastore.NewKey("/TWEETS/LIKES/closing")))
+
+	closed := make(chan error, 1)
+	go func() { closed <- store.Close() }()
+	select {
+	case err := <-closed:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close waits on a flush worker that only its context can stop")
+	}
+
+	assert.Equal(t, 1, bc.count(), "Close flushes what is buffered before it stops")
 }
 
 func TestCRDTStats_CounterCodecRoundTrip(t *testing.T) {
