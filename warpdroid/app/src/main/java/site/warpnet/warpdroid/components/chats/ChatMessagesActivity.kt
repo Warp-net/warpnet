@@ -15,6 +15,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,12 +26,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +55,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -61,7 +66,12 @@ import dagger.hilt.android.AndroidEntryPoint
 import site.warpnet.transport.dto.WarpnetMessage
 import site.warpnet.warpdroid.BaseActivity
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.ViewMediaActivity
+import site.warpnet.warpdroid.entity.Attachment
+import site.warpnet.warpdroid.ui.WarpdroidAsyncImage
 import site.warpnet.warpdroid.ui.WarpdroidTheme
+import site.warpnet.warpdroid.viewdata.AttachmentViewData
+import site.warpnet.warpdroid.warpnet.WarpnetMapper
 
 @AndroidEntryPoint
 class ChatMessagesActivity : BaseActivity() {
@@ -214,11 +224,79 @@ class ChatMessagesActivity : BaseActivity() {
                     .then(longPressModifier)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Text(
-                    text = msg.text,
-                    color = if (isOwn) colorScheme.onPrimary else colorScheme.onSurface,
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (msg.text.isNotEmpty()) {
+                        Text(
+                            text = msg.text,
+                            color = if (isOwn) colorScheme.onPrimary else colorScheme.onSurface,
+                        )
+                    }
+                    Attachments(msg)
+                }
+            }
+        }
+    }
+
+    /**
+     * Chat attachments resolve through the chat media routes, so the thumbnail
+     * URL carries the chat-image scheme rather than the public one. A video
+     * message carries its still frame as its only image key, so the frame is
+     * what the bubble shows; tapping hands the clip to the media viewer.
+     */
+    @Composable
+    private fun Attachments(msg: WarpnetMessage) {
+        val views = remember(msg.id, msg.imageKeys, msg.videoKey) { msg.toAttachmentViews() }
+        if (views.isEmpty()) return
+
+        val context = LocalContext.current
+        views.forEachIndexed { index, view ->
+            val thumb = view.attachment.previewUrl.orEmpty().ifEmpty { view.attachment.url }
+            WarpdroidAsyncImage(
+                model = thumb,
+                contentDescription = stringResource(R.string.action_open_media_n, index + 1),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 220.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        context.startActivity(ViewMediaActivity.newIntent(context, views, index))
+                    },
+            )
+        }
+    }
+
+    private fun WarpnetMessage.toAttachmentViews(): List<AttachmentViewData> {
+        val imageKeys = imageKeys.orEmpty().filter { it.isNotBlank() }
+        val clip = videoKey?.takeIf { it.isNotBlank() }
+        val attachments = if (clip != null) {
+            listOf(
+                Attachment(
+                    id = clip,
+                    url = WarpnetMapper.warpnetChatVideoUrl(senderId, clip),
+                    previewUrl = WarpnetMapper.warpnetChatImageUrl(senderId, imageKeys.firstOrNull()),
+                    type = Attachment.Type.VIDEO,
+                ),
+            )
+        } else {
+            imageKeys.map { key ->
+                Attachment(
+                    id = key,
+                    url = WarpnetMapper.warpnetChatImageUrl(senderId, key),
+                    previewUrl = WarpnetMapper.warpnetChatImageUrl(senderId, key),
+                    type = Attachment.Type.IMAGE,
                 )
             }
+        }
+        return attachments.map {
+            AttachmentViewData(
+                attachment = it,
+                statusId = null,
+                statusUrl = null,
+                statusAuthorId = null,
+                sensitive = false,
+                isRevealed = true,
+            )
         }
     }
 

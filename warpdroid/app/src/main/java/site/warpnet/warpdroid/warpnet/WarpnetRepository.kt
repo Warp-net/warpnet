@@ -467,15 +467,36 @@ class WarpnetRepository @Inject constructor(
         return uploadVideoRespAdapter.fromJson(raw)?.key.orEmpty()
     }
 
-    suspend fun getVideoBytes(userId: String, key: String): ByteArray? {
+    suspend fun getVideoBytes(userId: String, key: String): ByteArray? =
+        fetchVideoBytes(ProtocolIds.PUBLIC_GET_VIDEO, userId, key)
+
+    /**
+     * Same blob fetch as [getVideoBytes], but over the chat route. A clip sent
+     * in a private chat is stored apart from public media and the node serves
+     * it only to that chat's participants, so the public route returns nothing
+     * for it.
+     */
+    suspend fun getChatVideoBytes(userId: String, key: String): ByteArray? =
+        fetchVideoBytes(ProtocolIds.PUBLIC_GET_CHAT_VIDEO, userId, key)
+
+    private suspend fun fetchVideoBytes(protocolId: String, userId: String, key: String): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_VIDEO,
+            protocolId,
             getVideoEventAdapter.toJson(
                 site.warpnet.transport.dto.GetVideoEvent(userId = userId, key = key),
             ),
         )
         val file = getVideoRespAdapter.fromJson(raw)?.file.orEmpty()
+        return decodeMediaFile(file)
+    }
+
+    /**
+     * The node returns a blob as `"<mime>,<base64>"` because the Vue UI inlines
+     * it straight into a data URL. If no comma is present the whole payload is
+     * treated as base64 to stay forward-compatible.
+     */
+    private fun decodeMediaFile(file: String): ByteArray? {
         if (file.isEmpty()) return null
         val comma = file.indexOf(',')
         val b64 = if (comma >= 0) file.substring(comma + 1) else file
@@ -1210,24 +1231,32 @@ class WarpnetRepository @Inject constructor(
      * bytes to Glide. Returns null on empty key or decode failure; the
      * Glide pipeline falls back to the placeholder drawable.
      */
-    suspend fun getImageBytes(userId: String, key: String): ByteArray? {
+    suspend fun getImageBytes(userId: String, key: String): ByteArray? =
+        fetchImageBytes(ProtocolIds.PUBLIC_GET_IMAGE, userId, key)
+
+    /**
+     * Same blob fetch as [getImageBytes], but over the chat route. A picture
+     * sent in a private chat is stored apart from public media and the node
+     * serves it only to that chat's participants, so the public route returns
+     * nothing for it.
+     */
+    suspend fun getChatImageBytes(userId: String, key: String): ByteArray? =
+        fetchImageBytes(ProtocolIds.PUBLIC_GET_CHAT_IMAGE, userId, key)
+
+    private suspend fun fetchImageBytes(protocolId: String, userId: String, key: String): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
+        // The key is a content hash, so one cache covers both routes without
+        // letting a chat blob be reached through the public one.
         val cacheKey = "$userId/$key"
         imageCache.get(cacheKey)?.let { return it }
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_IMAGE,
+            protocolId,
             getImageEventAdapter.toJson(
                 site.warpnet.transport.dto.GetImageEvent(userId = userId, key = key),
             ),
         )
-        val file = getImageRespAdapter.fromJson(raw)?.file.orEmpty()
-        if (file.isEmpty()) return null
-        // "<mime>,<base64>" — drop the prefix; if no comma is present the
-        // whole payload is treated as base64 to stay forward-compatible.
-        val comma = file.indexOf(',')
-        val b64 = if (comma >= 0) file.substring(comma + 1) else file
-        val bytes = runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }.getOrNull()
-        if (bytes != null && bytes.isNotEmpty()) imageCache.put(cacheKey, bytes)
+        val bytes = decodeMediaFile(getImageRespAdapter.fromJson(raw)?.file.orEmpty())
+        if (bytes != null) imageCache.put(cacheKey, bytes)
         return bytes
     }
 
