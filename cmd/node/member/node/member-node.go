@@ -433,6 +433,7 @@ type memberRepos struct {
 	pollRepo         PollProvider
 	chatRepo         ChatProvider
 	mediaRepo        MediaProvider
+	chatMediaRepo    ChatMediaProvider
 	notificationRepo NotificationProvider
 	settingsRepo     SettingsProvider
 	bookmarkRepo     BookmarkProvider
@@ -460,6 +461,7 @@ func (m *MemberNode) setupHandlers(
 		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
+		chatMediaRepo:    database.NewChatMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
 		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
@@ -904,6 +906,22 @@ func (m *MemberNode) mediaHandlers(
 		{
 			event.PUBLIC_GET_VIDEO,
 			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
+		},
+		{
+			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
+			handler.StreamUploadChatImageHandler(m, m.privKey, r.chatMediaRepo, r.chatRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_CHAT_IMAGE,
+			handler.StreamGetChatImageHandler(m, r.chatMediaRepo, r.chatRepo, userRepo),
+		},
+		{
+			event.PRIVATE_POST_UPLOAD_CHAT_VIDEO,
+			handler.StreamUploadChatVideoHandler(m, m.privKey, r.chatMediaRepo, r.chatRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_CHAT_VIDEO,
+			handler.StreamGetChatVideoHandler(m, r.chatMediaRepo, r.chatRepo, userRepo),
 		},
 	}
 }

@@ -78,11 +78,15 @@ func NewStreamLimiter(s Settings, ratings PeersRatings) *StreamLimiter {
 		read:  read,
 		write: write,
 		routes: map[string]Limit{
-			event.PUBLIC_GET_IMAGE: media,
-			event.PUBLIC_GET_VIDEO: media,
+			event.PUBLIC_GET_IMAGE:      media,
+			event.PUBLIC_GET_VIDEO:      media,
+			event.PUBLIC_GET_CHAT_IMAGE: media,
+			event.PUBLIC_GET_CHAT_VIDEO: media,
 
-			event.PRIVATE_POST_UPLOAD_IMAGE: upload,
-			event.PRIVATE_POST_UPLOAD_VIDEO: upload,
+			event.PRIVATE_POST_UPLOAD_IMAGE:      upload,
+			event.PRIVATE_POST_UPLOAD_VIDEO:      upload,
+			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE: upload,
+			event.PRIVATE_POST_UPLOAD_CHAT_VIDEO: upload,
 
 			event.PUBLIC_POST_TIMELINE:          delivery,
 			event.PUBLIC_POST_MODERATION_RESULT: delivery,

@@ -3,7 +3,7 @@ import { render, waitFor, fireEvent } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
-    getVideo: vi.fn(),
+    getChatVideo: vi.fn(),
   },
 }));
 
@@ -20,7 +20,7 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  warpnetService.getVideo.mockResolvedValue({
+  warpnetService.getChatVideo.mockResolvedValue({
     file: 'data:video/mp4;base64,AAAA',
     size: 1234,
     deferred: false,
@@ -29,26 +29,26 @@ beforeEach(() => {
 
 const renderVideo = (props = {}) =>
   render(ChatVideo, {
-    props: {videoKey: 'vkey1', senderId: 'sender1', ...props},
+    props: {videoKey: 'vkey1', chatId: 'chat-1', ...props},
   });
 
 describe('ChatVideo', () => {
   it('does not fetch the clip until the user presses play', async () => {
     const {getByLabelText, container} = renderVideo();
 
-    expect(warpnetService.getVideo).not.toHaveBeenCalled();
+    expect(warpnetService.getChatVideo).not.toHaveBeenCalled();
     expect(container.querySelector('video')).toBeNull();
     expect(getByLabelText('Play video')).toBeTruthy();
   });
 
-  it('fetches from the sender node and shows the player on play', async () => {
+  it('fetches through the chat and shows the player on play', async () => {
     const {getByLabelText, container} = renderVideo();
 
     await fireEvent.click(getByLabelText('Play video'));
 
     await waitFor(() => expect(container.querySelector('video')).not.toBeNull());
-    expect(warpnetService.getVideo).toHaveBeenCalledWith({
-      userId: 'sender1',
+    expect(warpnetService.getChatVideo).toHaveBeenCalledWith({
+      chatId: 'chat-1',
       key: 'vkey1',
     });
     expect(container.querySelector('video').getAttribute('src'))
@@ -64,7 +64,7 @@ describe('ChatVideo', () => {
   });
 
   it('reports an unreachable sender instead of an empty player', async () => {
-    warpnetService.getVideo.mockResolvedValue({file: '', size: 0, deferred: false});
+    warpnetService.getChatVideo.mockResolvedValue({file: '', size: 0, deferred: false});
     const {getByLabelText, getByText, container} = renderVideo();
 
     await fireEvent.click(getByLabelText('Play video'));
@@ -74,16 +74,16 @@ describe('ChatVideo', () => {
   });
 
   it('recovers the play button after a failed fetch', async () => {
-    warpnetService.getVideo.mockRejectedValue(new Error('stream failed'));
+    warpnetService.getChatVideo.mockRejectedValue(new Error('stream failed'));
     const {getByLabelText, getByText} = renderVideo();
 
     await fireEvent.click(getByLabelText('Play video'));
 
     await waitFor(() => expect(getByText('Failed to load the video.')).toBeTruthy());
 
-    warpnetService.getVideo.mockResolvedValue({file: 'data:video/mp4;base64,AAAA'});
+    warpnetService.getChatVideo.mockResolvedValue({file: 'data:video/mp4;base64,AAAA'});
     await fireEvent.click(getByText('Try again'));
 
-    await waitFor(() => expect(warpnetService.getVideo).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(warpnetService.getChatVideo).toHaveBeenCalledTimes(2));
   });
 });

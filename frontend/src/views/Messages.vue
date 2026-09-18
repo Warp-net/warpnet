@@ -147,7 +147,7 @@ resulting from the use or misuse of this software.
                 <ChatVideo
                     v-if="message.video_key"
                     :videoKey="message.video_key"
-                    :senderId="message.sender_id"
+                    :chatId="message.chat_id"
                     :poster="(message.images && message.images[0]) || ''"
                 />
                 <img
@@ -186,7 +186,7 @@ resulting from the use or misuse of this software.
                 <ChatVideo
                     v-if="message.video_key"
                     :videoKey="message.video_key"
-                    :senderId="message.sender_id"
+                    :chatId="message.chat_id"
                     :poster="(message.images && message.images[0]) || ''"
                 />
                 <img
@@ -466,7 +466,7 @@ export default {
           this.imageAttachments.push(reader.result);
           this.imageKeys.push('');
           try {
-            const key = await warpnetService.uploadImage(reader.result);
+            const key = await this.uploadAttachment(reader.result);
             if (key) this.imageKeys[slot] = key;
           } catch (err) {
             console.error('Failed to upload image:', err);
@@ -476,6 +476,13 @@ export default {
         reader.onerror = (error) => console.error("Error reading file", error);
         reader.readAsDataURL(file);
       }
+    },
+    // Chat attachments go up through the chat's own route, so the bytes land
+    // in a store only this conversation's two participants can read.
+    async uploadAttachment(dataUrl) {
+      if (!this.active?.id) return '';
+      const keys = await warpnetService.uploadChatImages(this.active.id, [dataUrl]);
+      return keys.length > 0 ? keys[0] : '';
     },
     removeImageAttachment(index) {
       this.imageAttachments.splice(index, 1);
@@ -530,7 +537,7 @@ export default {
 
       try {
         const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
-        const key = await warpnetService.uploadVideo(dataUrl);
+        const key = await warpnetService.uploadChatVideo(this.active?.id, dataUrl);
         if (!isCurrent()) return;
         if (!key) {
           throw new Error('node returned an empty video key');
@@ -553,7 +560,7 @@ export default {
       try {
         const dataUrl = await captureVideoPoster(file);
         if (!dataUrl) return {dataUrl: '', key: ''};
-        return {dataUrl, key: await warpnetService.uploadImage(dataUrl) || ''};
+        return {dataUrl, key: await this.uploadAttachment(dataUrl) || ''};
       } catch (err) {
         console.error('Failed to upload video poster:', err);
         return {dataUrl: '', key: ''};
@@ -668,7 +675,7 @@ export default {
         // Slots whose eager upload failed (offline, retried) go up now.
         const missing = sentImages.filter((_, i) => !sentImageKeys[i]);
         if (missing.length > 0) {
-          imageKeys = imageKeys.concat(await warpnetService.uploadImages(missing));
+          imageKeys = imageKeys.concat(await warpnetService.uploadChatImages(this.active.id, missing));
         }
       }
 
@@ -720,7 +727,7 @@ export default {
         const keys = msg.image_keys || [];
         if (keys.length === 0) return;
         const images = await Promise.all(keys.map(
-            (key) => warpnetService.getImage({userId: msg.sender_id, key})
+            (key) => warpnetService.getChatImage({chatId: msg.chat_id, key})
                 .catch(() => ''),
         ));
         msg.images = images.filter(Boolean);

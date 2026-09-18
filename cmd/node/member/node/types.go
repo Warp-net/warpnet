@@ -264,6 +264,15 @@ type ReactionsProvider interface {
 	Unreact(tweetId string, userId string, isTransitive bool) (reactionsNum uint64, err error)
 }
 
+type ChatMediaProvider interface {
+	GetChatImage(chatId string, key string) (domain.Base64Image, error)
+	GetChatVideo(chatId string, key string) (domain.Base64Video, error)
+	SetChatImage(chatId string, img domain.Base64Image) (_ domain.ImageKey, err error)
+	SetChatVideo(chatId string, video domain.Base64Video) (_ domain.VideoKey, err error)
+	SetForeignChatImageWithTTL(chatId string, key string, img domain.Base64Image) error
+	SetForeignChatVideoWithTTL(chatId string, key string, video domain.Base64Video) error
+}
+
 type MediaProvider interface {
 	GetImage(userId string, key string) (domain.Base64Image, error)
 	GetVideo(userId string, key string) (domain.Base64Video, error)

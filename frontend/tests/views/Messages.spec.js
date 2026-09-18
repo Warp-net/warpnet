@@ -6,6 +6,7 @@ vi.mock('@/service/service', () => ({
     getOwnerProfile: vi.fn(),
     getProfile: vi.fn(),
     getImage: vi.fn(),
+    getChatImage: vi.fn(),
     getChats: vi.fn(),
     getDirectMessages: vi.fn(),
     getCursor: vi.fn(),
@@ -71,6 +72,7 @@ beforeEach(() => {
   warpnetService.getOwnerProfile.mockReturnValue({ user_id: ALICE, username: 'alice' });
   warpnetService.getProfile.mockImplementation(async (id) => ({ id, username: id }));
   warpnetService.getImage.mockResolvedValue(null);
+  warpnetService.getChatImage.mockResolvedValue(null);
   warpnetService.getChats.mockResolvedValue([]);
   warpnetService.getDirectMessages.mockResolvedValue([]);
   warpnetService.getCursor.mockReturnValue('');
@@ -121,7 +123,7 @@ describe('Messages.vue', () => {
         created_at: '2026-01-01T10:00:00Z',
       },
     ]);
-    warpnetService.getImage.mockImplementation(() => new Promise(() => {}));
+    warpnetService.getChatImage.mockImplementation(() => new Promise(() => {}));
 
     renderMessages({ chatId: 'chat-1' });
 
