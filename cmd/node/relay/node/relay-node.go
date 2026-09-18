@@ -264,7 +264,7 @@ func (rn *RelayNode) startRating() error {
 		return fmt.Errorf("relay: failed to start rating gossip broadcaster: %w", err)
 	}
 	rn.ratingDb, err = ratingstore.New(
-		rn.ctx, broadcaster, rn.ratingStore, rn.node.Node(),
+		rn.ctx, broadcaster, rn.ratingStore, rn.node.Node(), rn.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("relay: failed to initialize rating store: %w", err)
