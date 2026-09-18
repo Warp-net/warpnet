@@ -201,21 +201,6 @@ func (repo *ChatRepo) GetChat(chatId string) (chat domain.Chat, err error) {
 	return chat, txn.Commit()
 }
 
-func (repo *ChatRepo) IsChatting(ownerId, otherUserId string) bool {
-	if ownerId == "" || otherUserId == "" {
-		return false
-	}
-	if len(ownerId) <= ulidRandomPartOffset || len(otherUserId) <= ulidRandomPartOffset {
-		return false
-	}
-
-	chat, err := repo.GetChat(repo.composeChatId(ownerId, otherUserId))
-	if err != nil {
-		return false
-	}
-	return chat.Id != ""
-}
-
 func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error) {
 	if userId == "" {
 		return []domain.Chat{}, "", local_store.DBError("ID cannot be blank")
@@ -479,13 +464,11 @@ func (repo *ChatRepo) DeleteMessage(chatId, id string) error {
 	return txn.Commit()
 }
 
-const ulidRandomPartOffset = 14
-
 // TODO access this approach
 // ULID consist of 26 symbols: first 10 symbols contain timestamp, last ones - random
 func (repo *ChatRepo) composeChatId(ownerId, otherUserId string) string {
-	randomPartOwnerId := ownerId[ulidRandomPartOffset:]
-	randomPartOtherId := otherUserId[ulidRandomPartOffset:]
+	randomPartOwnerId := ownerId[14:]
+	randomPartOtherId := otherUserId[14:]
 	if randomPartOwnerId > randomPartOtherId {
 		randomPartOwnerId, randomPartOtherId = randomPartOtherId, randomPartOwnerId
 	}

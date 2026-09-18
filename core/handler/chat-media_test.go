@@ -86,15 +86,21 @@ func (r *chatMediaRepoDouble) SetForeignVideoWithTTL(userId, key string, video d
 }
 
 type chatFetcherDouble struct {
-	partners map[string]bool
+	chats []domain.Chat
+	err   error
 }
 
-func (d chatFetcherDouble) IsChatting(ownerId, otherUserId string) bool {
-	return d.partners[ownerId+"/"+otherUserId]
+func (d chatFetcherDouble) GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error) {
+	if d.err != nil {
+		return nil, "", d.err
+	}
+	return d.chats, event.EndCursor, nil
 }
 
 func ownChat() chatFetcherDouble {
-	return chatFetcherDouble{partners: map[string]bool{ownerID + "/" + testPartnerID: true}}
+	return chatFetcherDouble{chats: []domain.Chat{
+		{Id: "aaa:bbb", OwnerId: ownerID, OtherUserId: testPartnerID},
+	}}
 }
 
 type chatUserDouble struct {
@@ -169,7 +175,7 @@ func TestGetChatImage_ChatPartnersOnly(t *testing.T) {
 
 	t.Run("a peer with no chat gets nothing", func(t *testing.T) {
 		bare := StreamGetChatImageHandler(
-			&mediaStreamerDouble{}, repo, chatFetcherDouble{partners: map[string]bool{}}, chatUsers(),
+			&mediaStreamerDouble{}, repo, chatFetcherDouble{}, chatUsers(),
 		)
 		assert.Empty(t, getChatImage(t, bare, ownerID, warpnet.FromStringToPeerID(remoteNodeID)))
 	})
