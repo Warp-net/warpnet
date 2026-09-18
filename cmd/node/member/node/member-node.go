@@ -895,7 +895,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
-			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.chatRepo),
+			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
@@ -903,7 +903,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_VIDEO,
-			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo, r.chatRepo),
+			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
 		},
 	}
 }

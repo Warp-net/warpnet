@@ -153,33 +153,6 @@ func (s *ChatRepoSuite) TestCreateMessageBumpsChatPreview() {
 	s.Equal(created.CreatedAt.Unix(), bumped.UpdatedAt.Unix())
 }
 
-func (s *ChatRepoSuite) TestCreateMessageBindsAttachmentsToChat() {
-	ownerID := testUserID
-	otherID := ulid.Make().String()
-
-	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
-	s.NoError(err)
-	defer s.repo.DeleteChat(chat.Id)
-
-	videoKey := "video-key"
-	_, err = s.repo.CreateMessage(domain.ChatMessage{
-		ChatId:    chat.Id,
-		Text:      "look",
-		ImageKeys: []string{"image-key", ""},
-		VideoKey:  &videoKey,
-	})
-	s.NoError(err)
-
-	for _, key := range []string{"image-key", videoKey} {
-		boundChatId, err := s.repo.MediaChatId(key)
-		s.NoError(err)
-		s.Equal(chat.Id, boundChatId)
-	}
-
-	_, err = s.repo.MediaChatId("never-attached-key")
-	s.ErrorIs(err, ErrMediaNotAttached)
-}
-
 func (s *ChatRepoSuite) TestCreateMessageIdempotent() {
 	ownerID := testUserID
 	otherID := ulid.Make().String()
