@@ -161,7 +161,6 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
-	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
@@ -180,7 +179,7 @@ func New(
 	store.wg.Add(1)
 	go store.run()
 
-	return store, nil
+	return store, crdtStore.Repair(ctx)
 }
 
 func (s *Store) run() {

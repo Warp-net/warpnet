@@ -143,7 +143,6 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
-	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
@@ -159,7 +158,8 @@ func New(
 	}
 	store.crdt = crdtStore
 
-	return store, nil
+	return store, crdtStore.Repair(ctx)
+
 }
 
 // Put writes one of this node's own records; the key is derived from the record.
