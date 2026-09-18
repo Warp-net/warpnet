@@ -580,10 +580,8 @@ export const warpnetService = {
         return result.file;
     },
 
-    // Chat attachments travel their own routes: they are addressed by chat, kept
-    // in their own store, and served to that chat's two participants only.
-    async uploadChatImages(chatId, imgFiles) {
-        if (!chatId || !imgFiles || imgFiles.length === 0) {
+    async uploadChatImages(imgFiles) {
+        if (!imgFiles || imgFiles.length === 0) {
             return []
         }
 
@@ -591,7 +589,6 @@ export const warpnetService = {
             path: PRIVATE_POST_UPLOAD_CHAT_IMAGE,
             timestamp: new Date().toISOString(),
             body: {
-                chat_id: chatId,
                 image1: imgFiles[0] || "",
                 image2: imgFiles[1] || "",
                 image3: imgFiles[2] || "",
@@ -604,12 +601,12 @@ export const warpnetService = {
             .filter(key => key && key.length > 0);
     },
 
-    async getChatImage({chatId, key}) {
-        if (!chatId || !key || key.length === 0) {
+    async getChatImage({userId, key}) {
+        if (!key || key.length === 0) {
             return null
         }
 
-        const cacheKey = `chat-image::${chatId}::${key}`;
+        const cacheKey = `chat-image::${key}`;
         const cached = stateMap.get(cacheKey);
         if (cached) {
             return cached;
@@ -618,7 +615,7 @@ export const warpnetService = {
         const request = {
             path: PUBLIC_GET_CHAT_IMAGE,
             body: {
-                chat_id: chatId,
+                user_id: userId,
                 key: key,
             }
         }
@@ -631,8 +628,8 @@ export const warpnetService = {
         return result.file;
     },
 
-    async uploadChatVideo(chatId, videoFile) {
-        if (!chatId || !videoFile) {
+    async uploadChatVideo(videoFile) {
+        if (!videoFile) {
             return ''
         }
 
@@ -640,7 +637,6 @@ export const warpnetService = {
             path: PRIVATE_POST_UPLOAD_CHAT_VIDEO,
             timestamp: new Date().toISOString(),
             body: {
-                chat_id: chatId,
                 video: videoFile,
             },
         }
@@ -652,15 +648,15 @@ export const warpnetService = {
         return result && result.key ? result.key : '';
     },
 
-    async getChatVideo({chatId, key, deferred = false}) {
-        if (!chatId || !key || key.length === 0) {
+    async getChatVideo({userId, key, deferred = false}) {
+        if (!key || key.length === 0) {
             return null
         }
 
         const request = {
             path: PUBLIC_GET_CHAT_VIDEO,
             body: {
-                chat_id: chatId,
+                user_id: userId,
                 key: key,
                 deferred: deferred,
             }

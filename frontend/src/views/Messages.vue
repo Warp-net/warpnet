@@ -147,7 +147,7 @@ resulting from the use or misuse of this software.
                 <ChatVideo
                     v-if="message.video_key"
                     :videoKey="message.video_key"
-                    :chatId="message.chat_id"
+                    :senderId="message.sender_id"
                     :poster="(message.images && message.images[0]) || ''"
                 />
                 <img
@@ -186,7 +186,7 @@ resulting from the use or misuse of this software.
                 <ChatVideo
                     v-if="message.video_key"
                     :videoKey="message.video_key"
-                    :chatId="message.chat_id"
+                    :senderId="message.sender_id"
                     :poster="(message.images && message.images[0]) || ''"
                 />
                 <img
@@ -477,11 +477,8 @@ export default {
         reader.readAsDataURL(file);
       }
     },
-    // Chat attachments go up through the chat's own route, so the bytes land
-    // in a store only this conversation's two participants can read.
     async uploadAttachment(dataUrl) {
-      if (!this.active?.id) return '';
-      const keys = await warpnetService.uploadChatImages(this.active.id, [dataUrl]);
+      const keys = await warpnetService.uploadChatImages([dataUrl]);
       return keys.length > 0 ? keys[0] : '';
     },
     removeImageAttachment(index) {
@@ -537,7 +534,7 @@ export default {
 
       try {
         const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
-        const key = await warpnetService.uploadChatVideo(this.active?.id, dataUrl);
+        const key = await warpnetService.uploadChatVideo(dataUrl);
         if (!isCurrent()) return;
         if (!key) {
           throw new Error('node returned an empty video key');
@@ -675,7 +672,7 @@ export default {
         // Slots whose eager upload failed (offline, retried) go up now.
         const missing = sentImages.filter((_, i) => !sentImageKeys[i]);
         if (missing.length > 0) {
-          imageKeys = imageKeys.concat(await warpnetService.uploadChatImages(this.active.id, missing));
+          imageKeys = imageKeys.concat(await warpnetService.uploadChatImages(missing));
         }
       }
 
@@ -727,7 +724,7 @@ export default {
         const keys = msg.image_keys || [];
         if (keys.length === 0) return;
         const images = await Promise.all(keys.map(
-            (key) => warpnetService.getChatImage({chatId: msg.chat_id, key})
+            (key) => warpnetService.getChatImage({userId: msg.sender_id, key})
                 .catch(() => ''),
         ));
         msg.images = images.filter(Boolean);

@@ -200,19 +200,6 @@ type GetChatEvent struct {
 	ChatId domain.ID `json:"chat_id"`
 }
 
-// GetChatImageEvent defines model for GetChatImageEvent.
-type GetChatImageEvent struct {
-	ChatId domain.ID `json:"chat_id"`
-	Key    string    `json:"key"`
-}
-
-// GetChatVideoEvent defines model for GetChatVideoEvent.
-type GetChatVideoEvent struct {
-	ChatId   domain.ID `json:"chat_id"`
-	Key      string    `json:"key"`
-	Deferred bool      `json:"deferred,omitempty"`
-}
-
 // GetFollowingsEvent defines model for GetFollowingsEvent.
 type GetFollowingsEvent = GetFollowersEvent
 
@@ -480,22 +467,6 @@ type UnretweetEvent struct {
 type UsersResponse struct {
 	Cursor string        `json:"cursor"`
 	Users  []domain.User `json:"users"`
-}
-
-// UploadChatImageEvent defines model for UploadChatImageEvent.
-type UploadChatImageEvent struct {
-	ChatId domain.ID `json:"chat_id"`
-	// Image mime type + "," + base64
-	Image1 string `json:"image1"`
-	Image2 string `json:"image2"`
-	Image3 string `json:"image3"`
-	Image4 string `json:"image4"`
-}
-
-// UploadChatVideoEvent defines model for UploadChatVideoEvent.
-type UploadChatVideoEvent struct {
-	ChatId domain.ID `json:"chat_id"`
-	Video  string    `json:"video"`
 }
 
 type UploadImageEvent struct {

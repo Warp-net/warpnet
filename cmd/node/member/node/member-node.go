@@ -909,7 +909,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
-			handler.StreamUploadChatImageHandler(m, m.privKey, r.chatMediaRepo, r.chatRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_CHAT_IMAGE,
@@ -917,7 +917,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_VIDEO,
-			handler.StreamUploadChatVideoHandler(m, m.privKey, r.chatMediaRepo, r.chatRepo, userRepo),
+			handler.StreamUploadVideoHandler(m, m.privKey, r.chatMediaRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_CHAT_VIDEO,

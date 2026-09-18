@@ -73,7 +73,7 @@ export default {
   name: "ChatVideo",
   props: {
     videoKey: {type: String, default: ''},
-    chatId: {type: String, default: ''},
+    senderId: {type: String, default: ''},
     poster: {type: String, default: ''},
   },
   data() {
@@ -85,12 +85,12 @@ export default {
   },
   methods: {
     async loadVideo() {
-      if (this.loading || this.fetched || !this.videoKey || !this.chatId) return;
+      if (this.loading || this.fetched || !this.videoKey) return;
       this.error = '';
       this.loading = true;
       try {
         const video = await warpnetService.getChatVideo({
-          chatId: this.chatId,
+          userId: this.senderId,
           key: this.videoKey,
         });
         if (!video || !video.file) {

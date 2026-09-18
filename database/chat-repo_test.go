@@ -98,6 +98,23 @@ func (s *ChatRepoSuite) TestDeleteChat() {
 	s.Empty(deleted.Id)
 }
 
+func (s *ChatRepoSuite) TestIsChatting() {
+	ownerID := testUserID
+	otherID := ulid.Make().String()
+
+	s.False(s.repo.IsChatting(ownerID, otherID))
+	s.False(s.repo.IsChatting("", otherID))
+	s.False(s.repo.IsChatting("short", otherID))
+
+	chat, err := s.repo.CreateChat(nil, ownerID, otherID)
+	s.NoError(err)
+	defer s.repo.DeleteChat(chat.Id)
+
+	s.True(s.repo.IsChatting(ownerID, otherID))
+	s.True(s.repo.IsChatting(otherID, ownerID))
+	s.False(s.repo.IsChatting(ownerID, ulid.Make().String()))
+}
+
 func (s *ChatRepoSuite) TestGetUserChats() {
 	userID := testUserID
 

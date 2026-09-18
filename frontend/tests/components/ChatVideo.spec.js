@@ -29,7 +29,7 @@ beforeEach(() => {
 
 const renderVideo = (props = {}) =>
   render(ChatVideo, {
-    props: {videoKey: 'vkey1', chatId: 'chat-1', ...props},
+    props: {videoKey: 'vkey1', senderId: 'sender1', ...props},
   });
 
 describe('ChatVideo', () => {
@@ -41,14 +41,14 @@ describe('ChatVideo', () => {
     expect(getByLabelText('Play video')).toBeTruthy();
   });
 
-  it('fetches through the chat and shows the player on play', async () => {
+  it('fetches from the sender node and shows the player on play', async () => {
     const {getByLabelText, container} = renderVideo();
 
     await fireEvent.click(getByLabelText('Play video'));
 
     await waitFor(() => expect(container.querySelector('video')).not.toBeNull());
     expect(warpnetService.getChatVideo).toHaveBeenCalledWith({
-      chatId: 'chat-1',
+      userId: 'sender1',
       key: 'vkey1',
     });
     expect(container.querySelector('video').getAttribute('src'))
