@@ -84,7 +84,7 @@ const (
 	recordKeyParts = 5
 
 	rebroadcastInterval = 5 * time.Minute
-	dagSyncerTimeout    = 15 * time.Second
+	dagSyncerTimeout    = 1 * time.Minute
 	numWorkers          = 16
 
 	// Errors a record is refused for.
@@ -143,6 +143,7 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
+	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(

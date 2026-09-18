@@ -90,7 +90,7 @@ const (
 
 	flushInterval       = 30 * time.Second
 	rebroadcastInterval = 5 * time.Minute
-	dagSyncerTimeout    = 15 * time.Second
+	dagSyncerTimeout    = 1 * time.Minute
 	numWorkers          = 16
 )
 
@@ -161,6 +161,7 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
+	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
