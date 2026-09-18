@@ -95,7 +95,6 @@ type Store struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	nodeID string
-	wg     sync.WaitGroup
 
 	mu          sync.RWMutex
 	putHooks    []func(domain.RatingRecord)
@@ -138,10 +137,9 @@ func New(
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
-	// The periodic repair is off: it re-walks the whole DAG, which only grows,
-	// and a walk that fails to fetch one block leaves the store dirty and is
-	// retried every interval. New below repairs once instead, when dirty.
-	opts.RepairInterval = 0
+	// RepairInterval stays at the library's default hour: nothing but a walk
+	// that reaches the roots clears the dirty bit a crash, or a block job the
+	// DAG workers could not finish, leaves behind.
 	opts.MultiHeadProcessing = true
 
 	crdtStore, err := crdt.New(
@@ -157,28 +155,7 @@ func New(
 	}
 	store.crdt = crdtStore
 
-	if crdtStore.IsDirty(ctx) {
-		store.wg.Add(1)
-		go store.repair()
-	}
-
 	return store, nil
-}
-
-// repair re-walks the DAG once when a previous run left the store dirty.
-// Nothing else clears the dirty bit, so unprocessed branches would stay
-// missing from the records for the lifetime of the database.
-func (s *Store) repair() {
-	defer s.wg.Done()
-
-	log.Infoln("rating store: store is dirty, repairing the DAG")
-	if err := s.crdt.Repair(s.ctx); err != nil {
-		if s.ctx.Err() == nil {
-			log.Warnf("rating store: DAG repair: %v", err)
-		}
-		return
-	}
-	log.Infoln("rating store: DAG repair complete")
 }
 
 // Put writes one of this node's own records; the key is derived from the record.
@@ -315,7 +292,6 @@ func (s *Store) Close() error {
 		return nil
 	}
 	s.cancel()
-	s.wg.Wait() // a running DAG repair stops on the cancelled context
 	return s.crdt.Close()
 }
 
