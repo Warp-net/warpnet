@@ -78,20 +78,9 @@ const (
 	recordPrefix   = "/record"
 	recordKeyParts = 5
 
-	// rebroadcastInterval is how often the node re-offers its heads. A
-	// head no one can fetch is retried by every receiver on every round,
-	// so the round is what sets the cost of an unreachable author.
 	rebroadcastInterval = 5 * time.Minute
-
-	// dagSyncerTimeout bounds one block fetch. A worker and a bitswap
-	// session are held for its whole length, so the store absorbs
-	// numWorkers/dagSyncerTimeout failed fetches per second before the
-	// job queue backs up and the rest time out waiting in it.
-	dagSyncerTimeout = 15 * time.Second
-
-	// numWorkers is how many DAG jobs run at once; it is also the depth
-	// of the queue feeding them.
-	numWorkers = 16
+	dagSyncerTimeout    = 15 * time.Second
+	numWorkers          = 16
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -126,9 +115,6 @@ func New(
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
 	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
-	// No provider finder: nothing announces these blocks to the DHT, so a
-	// lookup can only walk the routing table and come back empty. Without
-	// one, bitswap asks the peers it is already connected to and stops.
 	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, nil, blockstore)
 
 	for _, p := range node.Network().Peers() {
@@ -148,9 +134,6 @@ func New(
 	opts.Logger = log.StandardLogger().WithContext(ctx)
 	opts.PutHook = store.onPut
 	opts.DeleteHook = store.onDelete
-	// A record that cannot be fetched is worth far less than the workers,
-	// bitswap sessions and retries that chasing it costs: its author
-	// re-signs and rewrites the same bucket on its next flush anyway.
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers

@@ -240,7 +240,6 @@ func TestCRDTStats_FlushedCountersSurviveTheBuffer(t *testing.T) {
 		"a read must sum what the CRDT holds and what is still buffered")
 }
 
-// pairBroadcaster hands what one replica publishes to the other.
 type pairBroadcaster struct {
 	inbox chan []byte
 	peer  *pairBroadcaster

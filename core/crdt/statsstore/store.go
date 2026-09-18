@@ -83,30 +83,12 @@ const (
 	// nodeID.
 	generationIDBytes = 16
 
-	// flushInterval is how often buffered bumps reach the CRDT. A
-	// counter key holds this generation's running total, so one write
-	// carries every bump since the last flush and the bumps in between
-	// never become DAG nodes the whole network has to fetch.
-	flushInterval = 30 * time.Second
-
-	// rebroadcastInterval is how often the node re-offers its heads. A
-	// head no one can fetch is retried by every receiver on every round,
-	// so the round is what sets the cost of an unreachable author.
+	flushInterval       = 30 * time.Second
 	rebroadcastInterval = 5 * time.Minute
-
-	// dagSyncerTimeout bounds one block fetch. A worker and a bitswap
-	// session are held for its whole length, so the store absorbs
-	// numWorkers/dagSyncerTimeout failed fetches per second before the
-	// job queue backs up and the rest time out waiting in it.
-	dagSyncerTimeout = 15 * time.Second
-
-	// numWorkers is how many DAG jobs run at once; it is also the depth
-	// of the queue feeding them.
-	numWorkers = 16
+	dagSyncerTimeout    = 15 * time.Second
+	numWorkers          = 16
 )
 
-// counter is one sub-counter of this generation: what the node has
-// counted, and what the CRDT already holds of it.
 type counter struct {
 	total   uint64
 	flushed uint64
@@ -122,10 +104,10 @@ type Store struct {
 	generation string
 	wg         sync.WaitGroup
 
-	flushMu sync.Mutex // one writer at a time: the CRDT merges batches into a single delta
+	flushMu sync.Mutex
 
 	mu       sync.Mutex
-	counters map[string]*counter // counter key -> this generation's counts
+	counters map[string]*counter
 }
 
 // New creates a new CRDT-based statistics store
@@ -142,9 +124,6 @@ func New(
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
 	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
-	// No provider finder: nothing announces these blocks to the DHT, so a
-	// lookup can only walk the routing table and come back empty. Without
-	// one, bitswap asks the peers it is already connected to and stops.
 	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, nil, blockstore)
 
 	for _, p := range node.Network().Peers() {
@@ -170,9 +149,6 @@ func New(
 
 	opts := crdt.DefaultOptions()
 	opts.Logger = log.StandardLogger().WithContext(ctx)
-	// Counters are advisory: a head that cannot be fetched is worth far
-	// less than the workers, bitswap sessions and retries that chasing it
-	// costs. Fail fast, retry rarely, and never walk the whole DAG.
 	opts.RebroadcastInterval = rebroadcastInterval
 	opts.DAGSyncerTimeout = dagSyncerTimeout
 	opts.NumWorkers = numWorkers
@@ -198,7 +174,6 @@ func New(
 	return store, nil
 }
 
-// run flushes the buffered counters until the store is closed.
 func (s *Store) run() {
 	defer s.wg.Done()
 
@@ -242,7 +217,6 @@ func (s *Store) Decrement(key ds.Key) error {
 	return nil
 }
 
-// bump counts one event. The write itself waits for the next flush.
 func (s *Store) bump(namespace string, dataKey ds.Key) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -256,8 +230,6 @@ func (s *Store) bump(namespace string, dataKey ds.Key) {
 	c.total++
 }
 
-// flush writes every counter that has moved since the last flush as one
-// delta, so a flush costs the network a single DAG node.
 func (s *Store) flush() error {
 	s.flushMu.Lock()
 	defer s.flushMu.Unlock()
@@ -296,7 +268,6 @@ func (s *Store) flush() error {
 	return nil
 }
 
-// counterKey is where this generation keeps its own sub-counter of dataKey.
 func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {
 	return ds.NewKey(fmt.Sprintf(
 		"%s/%s/%s/%s/%s",
@@ -322,8 +293,6 @@ func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
 		total += decodeCounter(r.Value)
 	}
 
-	// The query saw this generation's key as the last flush left it; the
-	// bumps buffered since then are only here.
 	s.mu.Lock()
 	if c := s.counters[s.counterKey(namespace, key).String()]; c != nil {
 		total += c.total - c.flushed
