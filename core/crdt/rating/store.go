@@ -25,8 +25,8 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package ratingstore replicates the signed rating records of every node.
-package ratingstore
+// Package rating replicates the signed rating records of every node.
+package rating
 
 import (
 	"context"
@@ -36,8 +36,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/Warp-net/warpnet/core/crdt/store"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/domain"
@@ -46,34 +46,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Broadcaster carries this store's deltas to the other replicas.
-type Broadcaster interface {
-	Broadcast(ctx context.Context, data []byte) error
-	Next(ctx context.Context) ([]byte, error)
-}
-
-// Datastore is the local storage the replica is built on.
-type Datastore interface {
-	Get(ctx context.Context, key ds.Key) ([]byte, error)
-	Has(ctx context.Context, key ds.Key) (bool, error)
-	GetSize(ctx context.Context, key ds.Key) (int, error)
-	Query(ctx context.Context, q ds.Query) (ds.Results, error)
-	Put(ctx context.Context, key ds.Key, value []byte) error
-	Delete(ctx context.Context, key ds.Key) error
-	Sync(ctx context.Context, prefix ds.Key) error
-	Close() error
-}
-
-// Router finds the peers holding a block.
-type Router interface {
-	FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo
-}
-
 // GossipTopic is the pubsub topic this store's replicas converge on.
 const GossipTopic = "/warpnet/rating/1.0.0"
 
-// bitswapPrefix keeps this store's block exchange off the protocols the
-// stats store's own bitswap registers on the same host.
+// bitswapPrefix keeps this store's block exchange off the stats store's.
 const bitswapPrefix = "/warpnet/rating"
 
 const (
@@ -82,10 +58,6 @@ const (
 	// already namespaced by database.NewRatingRepo.
 	recordPrefix   = "/record"
 	recordKeyParts = 5
-
-	rebroadcastInterval = 5 * time.Minute
-	dagSyncerTimeout    = 1 * time.Minute
-	numWorkers          = 16
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -109,65 +81,37 @@ type Store struct {
 // New creates a new CRDT-based rating records store
 func New(
 	ctx context.Context,
-	broadcaster Broadcaster,
-	datastore Datastore,
+	broadcaster store.Broadcaster,
+	datastore store.Datastore,
 	node warpnet.P2PNode,
-	router Router,
+	router store.Router,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	baseStore := ds.MutexWrap(datastore)
-
-	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
-
-	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, router, blockstore)
-
-	for _, p := range node.Network().Peers() {
-		bitswapExchange.PeerConnected(p)
-	}
-
-	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
-	dagService := warpnet.NewDAGService(blockService)
-
-	store := &Store{
+	s := &Store{
 		ctx:    ctx,
 		cancel: cancel,
 		nodeID: node.ID().String(),
 	}
 
-	opts := crdt.DefaultOptions()
-	opts.Logger = log.StandardLogger().WithContext(ctx)
-	opts.PutHook = store.onPut
-	opts.DeleteHook = store.onDelete
-	opts.RebroadcastInterval = rebroadcastInterval
-	opts.DAGSyncerTimeout = dagSyncerTimeout
-	opts.NumWorkers = numWorkers
-	opts.RepairInterval = 0
-	opts.MultiHeadProcessing = true
-
-	crdtStore, err := crdt.New(
-		baseStore,
-		ds.NewKey(""), // the repo has already set the prefix
-		dagService,
-		broadcaster,
-		opts,
-	)
+	crdtStore, err := store.New(ctx, store.Config{
+		Broadcaster: broadcaster,
+		Datastore:   datastore,
+		Node:        node,
+		Router:      router,
+		Prefix:      bitswapPrefix,
+		PutHook:     s.onPut,
+		DeleteHook:  s.onDelete,
+	})
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
+		return nil, err
 	}
-	go func() {
-		if err := crdtStore.Repair(ctx); err != nil {
-			log.Errorf("failed to repair store: %v", err)
-		}
-	}()
-	store.crdt = crdtStore
+	s.crdt = crdtStore
 
-	return store, nil
+	return s, nil
 }
 
-// Put writes one of this node's own records; the key is derived from the record.
 func (s *Store) Put(rec domain.RatingRecord) error {
 	if rec.ObserverID != s.nodeID {
 		return ErrForeignRecord
