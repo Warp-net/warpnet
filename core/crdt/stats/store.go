@@ -25,8 +25,8 @@
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package statsstore replicates network-wide counters over a CRDT.
-package statsstore
+// Package stats replicates network-wide counters over a CRDT.
+package stats
 
 import (
 	"context"
@@ -37,35 +37,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/crdt/store"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
 	log "github.com/sirupsen/logrus"
 )
 
-// Broadcaster carries this store's deltas to the other replicas.
-type Broadcaster interface {
-	Broadcast(ctx context.Context, data []byte) error
-	Next(ctx context.Context) ([]byte, error)
-}
-
-// Datastore is the local storage the replica is built on.
-type Datastore interface {
-	Get(ctx context.Context, key ds.Key) ([]byte, error)
-	Has(ctx context.Context, key ds.Key) (bool, error)
-	GetSize(ctx context.Context, key ds.Key) (int, error)
-	Query(ctx context.Context, q ds.Query) (ds.Results, error)
-	Put(ctx context.Context, key ds.Key, value []byte) error
-	Delete(ctx context.Context, key ds.Key) error
-	Sync(ctx context.Context, prefix ds.Key) error
-	Close() error
-}
-
 // GossipTopic is the pubsub topic this store's replicas converge on.
 const GossipTopic = "/warpnet/stats/1.0.0"
 
-// bitswapPrefix keeps this store's block exchange off the protocols the
-// rating store's own bitswap registers on the same host.
+// bitswapPrefix keeps this store's block exchange off the rating store's.
 const bitswapPrefix = "/warpnet/stats"
 
 const (
@@ -83,10 +65,7 @@ const (
 	// nodeID.
 	generationIDBytes = 16
 
-	flushInterval       = 30 * time.Second
-	rebroadcastInterval = 5 * time.Minute
-	dagSyncerTimeout    = 15 * time.Second
-	numWorkers          = 16
+	flushInterval = 30 * time.Second
 )
 
 type counter struct {
@@ -115,25 +94,12 @@ type Store struct {
 // New creates a new CRDT-based statistics store
 func New(
 	ctx context.Context,
-	broadcaster Broadcaster,
-	datastore Datastore,
+	broadcaster store.Broadcaster,
+	datastore store.Datastore,
 	node warpnet.P2PNode,
+	router store.Router,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
-
-	baseStore := ds.MutexWrap(datastore)
-
-	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
-
-	bitswapNetwork := warpnet.NewBitswapNetwork(node, warpnet.BitswapPrefix(bitswapPrefix))
-	bitswapExchange := warpnet.NewBitswapExchange(ctx, bitswapNetwork, nil, blockstore)
-
-	for _, p := range node.Network().Peers() {
-		bitswapExchange.PeerConnected(p)
-	}
-
-	blockService := warpnet.NewBlockService(blockstore, bitswapExchange)
-	dagService := warpnet.NewDAGService(blockService)
 
 	generation, err := newGenerationID()
 	if err != nil {
@@ -141,7 +107,20 @@ func New(
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
-	store := &Store{
+	crdtStore, err := store.New(ctx, store.Config{
+		Broadcaster: broadcaster,
+		Datastore:   datastore,
+		Node:        node,
+		Router:      router,
+		Prefix:      bitswapPrefix,
+	})
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	s := &Store{
+		crdt:       crdtStore,
 		ctx:        ctx,
 		cancel:     cancel,
 		nodeID:     node.ID().String(),
@@ -150,31 +129,10 @@ func New(
 		counters:   make(map[string]*counter),
 	}
 
-	opts := crdt.DefaultOptions()
-	opts.Logger = log.StandardLogger().WithContext(ctx)
-	opts.RebroadcastInterval = rebroadcastInterval
-	opts.DAGSyncerTimeout = dagSyncerTimeout
-	opts.NumWorkers = numWorkers
-	opts.RepairInterval = 0
-	opts.MultiHeadProcessing = true
+	s.wg.Add(1)
+	go s.run()
 
-	crdtStore, err := crdt.New(
-		baseStore,
-		ds.NewKey(""), // the repo has already set the prefix
-		dagService,
-		broadcaster,
-		opts,
-	)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
-	}
-	store.crdt = crdtStore
-
-	store.wg.Add(1)
-	go store.run()
-
-	return store, nil
+	return s, nil
 }
 
 func (s *Store) run() {

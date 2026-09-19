@@ -75,6 +75,19 @@ func (es entries) byObserver(dim Dimension) map[string]entries {
 	return out
 }
 
+// isFresh reports whether this observer still has something to say. Its
+// records all ageing out is not the same as it looking and finding nothing:
+// an observer that left the network goes on holding its silence forever, and
+// silence counts towards a clean score.
+func (es entries) isFresh(dim Dimension, now time.Time) bool {
+	for _, e := range es {
+		if now.Sub(e.bucket.start()) <= dim.Retention() {
+			return true
+		}
+	}
+	return false
+}
+
 // penalty is the decayed weight of these entries on one dimension, with
 // every kind capped at its ceiling.
 func (es entries) penalty(dim Dimension, now time.Time) Score {
@@ -83,10 +96,11 @@ func (es entries) penalty(dim Dimension, now time.Time) Score {
 	}
 	perKind := make(map[Kind]float64, len(es))
 	for _, e := range es {
-		factor := dim.decay(now.Sub(e.bucket.start()))
-		if factor == 0 {
-			continue
+		age := now.Sub(e.bucket.start())
+		if age > dim.Retention() {
+			continue // the horizon gc deletes own records at, applied to every record
 		}
+		factor := dim.decay(age)
 		for _, c := range e.counts {
 			perKind[c.kind] += float64(c.kind.Weight()) * float64(c.count) * factor
 		}
@@ -124,12 +138,15 @@ func (es entries) dimensions() []Dimension {
 // display only, never enforced.
 func (es entries) median(dim Dimension, now time.Time) (Score, int) {
 	byObserver := es.byObserver(dim)
-	if len(byObserver) == 0 {
-		return MaxScore, 0
-	}
 	scores := make([]Score, 0, len(byObserver))
 	for _, group := range byObserver {
+		if !group.isFresh(dim, now) {
+			continue
+		}
 		scores = append(scores, (MaxScore - group.penalty(dim, now)).clamp())
+	}
+	if len(scores) == 0 {
+		return MaxScore, 0
 	}
 	slices.Sort(scores)
 	mid := len(scores) / 2
@@ -140,7 +157,7 @@ func (es entries) median(dim Dimension, now time.Time) (Score, int) {
 }
 
 // tallies are raw, undecayed counts per kind, busiest first.
-func (es entries) tallies(dim Dimension) []domain.OffenceTally {
+func (es entries) tallies(dim Dimension, now time.Time) []domain.OffenceTally {
 	type tally struct {
 		kind   Kind
 		count  uint32
@@ -152,6 +169,9 @@ func (es entries) tallies(dim Dimension) []domain.OffenceTally {
 			continue
 		}
 		at := e.bucket.start()
+		if now.Sub(at) > dim.Retention() {
+			continue // past the horizon the node deletes its own records at
+		}
 		for _, c := range e.counts {
 			t, ok := agg[c.kind]
 			if !ok {

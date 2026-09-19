@@ -32,5 +32,6 @@ func NewStatsRepo(db StatsStorer) ds.Datastore {
 		prefix:   prefix,
 		stopChan: make(chan struct{}),
 	}
+
 	return nr
 }

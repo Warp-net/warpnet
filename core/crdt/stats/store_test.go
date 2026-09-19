@@ -26,7 +26,7 @@ resulting from the use or misuse of this software.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //nolint:all
-package statsstore
+package stats
 
 import (
 	"context"
@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	datastore "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
@@ -66,6 +67,14 @@ func (b *silentBroadcaster) count() int {
 	return len(b.published)
 }
 
+type idleRouter struct{}
+
+func (idleRouter) FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo {
+	ch := make(chan warpnet.WarpAddrInfo)
+	close(ch)
+	return ch
+}
+
 func newStatsHost(t *testing.T) host.Host {
 	t.Helper()
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -86,6 +95,7 @@ func newLiveStatsStore(t *testing.T) (*Store, *silentBroadcaster) {
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newStatsHost(t),
+		idleRouter{},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
@@ -280,13 +290,13 @@ func TestCRDTStats_AFlushReachesTheOtherReplica(t *testing.T) {
 
 	authorBc, readerBc := newBroadcasterPair()
 	authorStore, err := New(
-		ctx, authorBc, dssync.MutexWrap(datastore.NewMapDatastore()), author,
+		ctx, authorBc, dssync.MutexWrap(datastore.NewMapDatastore()), author, idleRouter{},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = authorStore.Close() })
 
 	readerStore, err := New(
-		ctx, readerBc, dssync.MutexWrap(datastore.NewMapDatastore()), reader,
+		ctx, readerBc, dssync.MutexWrap(datastore.NewMapDatastore()), reader, idleRouter{},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = readerStore.Close() })
@@ -334,6 +344,7 @@ func TestCRDTStats_CloseIsSafeOnNilAndStopsTheStore(t *testing.T) {
 		&silentBroadcaster{},
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newStatsHost(t),
+		idleRouter{},
 	)
 	require.NoError(t, err)
 	assert.NoError(t, store.Close())
@@ -351,6 +362,7 @@ func TestCRDTStats_CloseStopsTheFlushWorker(t *testing.T) {
 		bc,
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newStatsHost(t),
+		idleRouter{},
 	)
 	require.NoError(t, err)
 

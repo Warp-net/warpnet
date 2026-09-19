@@ -92,7 +92,7 @@ type Rater interface {
 	Rate(peerID warpnet.WarpPeerID, tier Tier)
 }
 
-// Storer is the replicated record store; ratingstore.Store satisfies it.
+// Storer is the replicated record store; the crdt rating store satisfies it.
 type Storer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
@@ -373,10 +373,13 @@ func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 			Name:   dim.String(),
 			Score:  int32(score),
 			Tier:   score.Tier().String(),
-			Recent: es.tallies(dim),
+			Recent: es.tallies(dim, now),
 		})
 	}
 	for _, en := range es {
+		if now.Sub(en.bucket.start()) > en.dim.Retention() {
+			continue
+		}
 		observers[en.observer] = struct{}{}
 	}
 

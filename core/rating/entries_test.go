@@ -89,12 +89,54 @@ func TestTalliesAreUndecayedAndSortedByCount(t *testing.T) {
 		testEntry("b", Network, bucketAt(now), genA, kindCount{KindRateLimitHit, 7}, kindCount{KindMalformedFrame, 4}),
 		testEntry("b", Application, bucketAt(now), genA, kindCount{KindWriteFlood, 9}),
 	}
-	got := es.tallies(Network)
+	got := es.tallies(Network, now)
 	require.Len(t, got, 2, "another dimension's offences stay out")
 	assert.Equal(t, domain.OffenceTally{Kind: KindRateLimitHit.String(), Count: 37, LastAt: bucketAt(now).start()}, got[0],
 		"counts are raw, not decayed, and the last sighting is the newest bucket")
 	assert.Equal(t, KindMalformedFrame.String(), got[1].Kind)
 	assert.EqualValues(t, 4, got[1].Count)
+}
+
+// An observation past the retention horizon is gone from the history as well
+// as from the score: it is the same horizon gc deletes this node's own records
+// at, so a foreign record nobody is left to delete cannot outlive it either.
+// An observer whose records have all aged out has stopped observing, and a
+// node that left the network keeps that silence forever. Counting it as a
+// clean vote lets the departed outvote everyone still watching.
+func TestMedianIgnoresObserversThatHaveNothingFreshToSay(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Hour)
+	stale := bucketAt(now.Add(-Network.Retention() - time.Hour))
+
+	es := entries{
+		testEntry("live", Network, bucketAt(now), genA, kindCount{KindRateLimitHit, 20}),
+		testEntry("gone1", Network, stale, genA, kindCount{KindRateLimitHit, 1}),
+		testEntry("gone2", Network, stale, genA, kindCount{KindRateLimitHit, 1}),
+		testEntry("gone3", Network, stale, genA, kindCount{KindRateLimitHit, 1}),
+	}
+
+	score, observers := es.median(Network, now)
+	assert.Equal(t, 1, observers, "only the observer still watching votes")
+	assert.Less(t, score, MaxScore, "and what it saw decides the score")
+
+	onlyGone := es[1:]
+	score, observers = onlyGone.median(Network, now)
+	assert.Equal(t, MaxScore, score, "with nobody left watching the peer owes nothing")
+	assert.Zero(t, observers)
+}
+
+func TestTalliesDropObservationsPastTheRetentionHorizon(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Hour)
+	es := entries{
+		testEntry("a", Network, bucketAt(now.Add(-Network.Retention()-time.Hour)), genA, kindCount{KindRateLimitHit, 500}),
+		testEntry("b", Network, bucketAt(now), genA, kindCount{KindRateLimitHit, 3}),
+	}
+
+	got := es.tallies(Network, now)
+	require.Len(t, got, 1)
+	assert.EqualValues(t, 3, got[0].Count, "only what still counts is shown")
+
+	assert.Zero(t, entries{es[0]}.penalty(Network, now),
+		"and it weighs nothing in the score either")
 }
 
 func TestDimensionsAreListedInCanonicalOrder(t *testing.T) {

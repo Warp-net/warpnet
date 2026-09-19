@@ -33,7 +33,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
-	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
+	ratingdb "github.com/Warp-net/warpnet/core/crdt/rating"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
@@ -231,12 +231,12 @@ func (mn *ModeratorNode) Start() (err error) {
 // the records ride the pubsub, and a moderator's standing comes from the
 // audit, neither of which the node owns.
 func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-chan warpnet.PeerEvent) error {
-	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingstore.GossipTopic)
+	broadcaster, err := broadcast.NewGossip(mn.ctx, gossip, ratingdb.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
 	}
-	mn.ratingDb, err = ratingstore.New(
-		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(),
+	mn.ratingDb, err = ratingdb.New(
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to initialize rating store: %w", err)

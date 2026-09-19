@@ -34,8 +34,8 @@ import (
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
-	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
-	"github.com/Warp-net/warpnet/core/crdt/statsstore"
+	ratingdb "github.com/Warp-net/warpnet/core/crdt/rating"
+	"github.com/Warp-net/warpnet/core/crdt/stats"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/fediverse"
@@ -227,23 +227,23 @@ func (m *MemberNode) Start() (err error) {
 
 	nodeInfo := m.NodeInfo()
 
-	crdtBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), statsstore.GossipTopic)
+	crdtBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), stats.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	m.statsDb, err = statsstore.New(
-		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(),
+	m.statsDb, err = stats.New(
+		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize stats store: %w", err)
 	}
 
-	ratingBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), ratingstore.GossipTopic)
+	ratingBroadcaster, err := broadcast.NewGossip(m.ctx, m.pubsubService.Gossip(), ratingdb.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
 	}
-	m.ratingDb, err = ratingstore.New(
-		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(),
+	m.ratingDb, err = ratingdb.New(
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize rating store: %w", err)
