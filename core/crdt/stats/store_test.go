@@ -26,7 +26,7 @@ resulting from the use or misuse of this software.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //nolint:all
-package statsstore
+package stats
 
 import (
 	"context"

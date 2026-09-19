@@ -92,7 +92,7 @@ type Rater interface {
 	Rate(peerID warpnet.WarpPeerID, tier Tier)
 }
 
-// Storer is the replicated record store; ratingstore.Store satisfies it.
+// Storer is the replicated record store; the crdt rating store satisfies it.
 type Storer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)

@@ -32,7 +32,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
-	"github.com/Warp-net/warpnet/core/crdt/ratingstore"
+	ratingdb "github.com/Warp-net/warpnet/core/crdt/rating"
 	"github.com/Warp-net/warpnet/core/dht"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/handler"
@@ -259,11 +259,11 @@ func (rn *RelayNode) Start() (err error) {
 // startRating rates the peers a relay can judge: it sees the wire and
 // nothing else, so its observations are the network ones.
 func (rn *RelayNode) startRating() error {
-	broadcaster, err := broadcast.NewGossip(rn.ctx, rn.pubsubService.Gossip(), ratingstore.GossipTopic)
+	broadcaster, err := broadcast.NewGossip(rn.ctx, rn.pubsubService.Gossip(), ratingdb.GossipTopic)
 	if err != nil {
 		return fmt.Errorf("relay: failed to start rating gossip broadcaster: %w", err)
 	}
-	rn.ratingDb, err = ratingstore.New(
+	rn.ratingDb, err = ratingdb.New(
 		rn.ctx, broadcaster, rn.ratingStore, rn.node.Node(), rn.dHashTable,
 	)
 	if err != nil {
