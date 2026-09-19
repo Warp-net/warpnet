@@ -1,6 +1,6 @@
 {
   "name": "warpnet-frontend",
-  "version": "0.8.36",
+  "version": "0.8.37",
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",
