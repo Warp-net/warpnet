@@ -75,6 +75,19 @@ func (es entries) byObserver(dim Dimension) map[string]entries {
 	return out
 }
 
+// isFresh reports whether this observer still has something to say. Its
+// records all ageing out is not the same as it looking and finding nothing:
+// an observer that left the network goes on holding its silence forever, and
+// silence counts towards a clean score.
+func (es entries) isFresh(dim Dimension, now time.Time) bool {
+	for _, e := range es {
+		if now.Sub(e.bucket.start()) <= dim.Retention() {
+			return true
+		}
+	}
+	return false
+}
+
 // penalty is the decayed weight of these entries on one dimension, with
 // every kind capped at its ceiling.
 func (es entries) penalty(dim Dimension, now time.Time) Score {
@@ -125,12 +138,15 @@ func (es entries) dimensions() []Dimension {
 // display only, never enforced.
 func (es entries) median(dim Dimension, now time.Time) (Score, int) {
 	byObserver := es.byObserver(dim)
-	if len(byObserver) == 0 {
-		return MaxScore, 0
-	}
 	scores := make([]Score, 0, len(byObserver))
 	for _, group := range byObserver {
+		if !group.isFresh(dim, now) {
+			continue
+		}
 		scores = append(scores, (MaxScore - group.penalty(dim, now)).clamp())
+	}
+	if len(scores) == 0 {
+		return MaxScore, 0
 	}
 	slices.Sort(scores)
 	mid := len(scores) / 2

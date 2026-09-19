@@ -377,6 +377,9 @@ func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 		})
 	}
 	for _, en := range es {
+		if now.Sub(en.bucket.start()) > en.dim.Retention() {
+			continue
+		}
 		observers[en.observer] = struct{}{}
 	}
 
