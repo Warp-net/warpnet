@@ -100,6 +100,30 @@ func TestTalliesAreUndecayedAndSortedByCount(t *testing.T) {
 // An observation past the retention horizon is gone from the history as well
 // as from the score: it is the same horizon gc deletes this node's own records
 // at, so a foreign record nobody is left to delete cannot outlive it either.
+// An observer whose records have all aged out has stopped observing, and a
+// node that left the network keeps that silence forever. Counting it as a
+// clean vote lets the departed outvote everyone still watching.
+func TestMedianIgnoresObserversThatHaveNothingFreshToSay(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Hour)
+	stale := bucketAt(now.Add(-Network.Retention() - time.Hour))
+
+	es := entries{
+		testEntry("live", Network, bucketAt(now), genA, kindCount{KindRateLimitHit, 20}),
+		testEntry("gone1", Network, stale, genA, kindCount{KindRateLimitHit, 1}),
+		testEntry("gone2", Network, stale, genA, kindCount{KindRateLimitHit, 1}),
+		testEntry("gone3", Network, stale, genA, kindCount{KindRateLimitHit, 1}),
+	}
+
+	score, observers := es.median(Network, now)
+	assert.Equal(t, 1, observers, "only the observer still watching votes")
+	assert.Less(t, score, MaxScore, "and what it saw decides the score")
+
+	onlyGone := es[1:]
+	score, observers = onlyGone.median(Network, now)
+	assert.Equal(t, MaxScore, score, "with nobody left watching the peer owes nothing")
+	assert.Zero(t, observers)
+}
+
 func TestTalliesDropObservationsPastTheRetentionHorizon(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	es := entries{
