@@ -39,6 +39,8 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
+	"github.com/ipfs/boxo/blockstore"
+	"github.com/ipfs/boxo/ipld/merkledag"
 	crdt "github.com/ipfs/go-ds-crdt"
 	log "github.com/sirupsen/logrus"
 )
@@ -181,10 +183,55 @@ func New(
 	}()
 	store.crdt = crdtStore
 
+	for _, head := range crdtStore.InternalStats(ctx).Heads {
+		held, missing, depth := walkLocal(ctx, blockstore, head.Cid)
+		log.Infof(
+			"crdt stats: head %s height %d: %d blocks held locally, walk stops at depth %d on %s",
+			head.Cid, head.Height, held, depth, missing,
+		)
+	}
+
 	store.wg.Add(1)
 	go store.run()
 
 	return store, nil
+}
+
+// walkLocal follows the DAG from a head using only what this node already
+// stores, and reports how far it gets. It names the first block the node does
+// not hold, which is where a sync or a repair will stall.
+func walkLocal(
+	ctx context.Context, blocks blockstore.Blockstore, head warpnet.WarpCID,
+) (held int, missing warpnet.WarpCID, depth int) {
+	seen := make(map[string]struct{})
+	level := []warpnet.WarpCID{head}
+
+	for len(level) > 0 {
+		var next []warpnet.WarpCID
+		for _, c := range level {
+			if _, ok := seen[c.String()]; ok {
+				continue
+			}
+			seen[c.String()] = struct{}{}
+
+			block, err := blocks.Get(ctx, c)
+			if err != nil {
+				return held, c, depth
+			}
+			held++
+
+			node, err := merkledag.DecodeProtobufBlock(block)
+			if err != nil {
+				continue
+			}
+			for _, l := range node.Links() {
+				next = append(next, l.Cid)
+			}
+		}
+		level = next
+		depth++
+	}
+	return held, warpnet.WarpCID{}, depth
 }
 
 func (s *Store) run() {
