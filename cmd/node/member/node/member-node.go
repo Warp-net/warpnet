@@ -50,6 +50,7 @@ import (
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -231,6 +232,12 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
+	if os.Getenv("NODE_STATS_RESET") != "" {
+		if err := dropNamespace(m.ctx, m.statsRepo); err != nil {
+			return fmt.Errorf("member: failed to reset stats store: %w", err)
+		}
+	}
+
 	m.statsDb, err = statsstore.New(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
 	)
@@ -281,6 +288,30 @@ func (m *MemberNode) Start() (err error) {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+	return nil
+}
+
+// dropNamespace empties a CRDT repo - heads, blocks and set alike - so the
+// store starts its next DAG from nothing. A DAG severed at a block no peer
+// holds cannot be repaired, and this is how the network leaves it behind.
+func dropNamespace(ctx context.Context, repo datastore.Datastore) error {
+	results, err := repo.Query(ctx, datastore.Query{KeysOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = results.Close() }()
+
+	var dropped int
+	for r := range results.Next() {
+		if r.Error != nil {
+			return r.Error
+		}
+		if err := repo.Delete(ctx, datastore.NewKey(r.Key)); err != nil {
+			return err
+		}
+		dropped++
+	}
+	log.Infof("member: stats store reset: %d keys dropped", dropped)
 	return nil
 }
 
