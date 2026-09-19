@@ -150,17 +150,6 @@ services:
     volumes:
       - /root/.warpdata-vadim:/root/.warpdata:rw
 
-  push-gateway:
-    container_name: push-gateway-testnet
-    image: prom/pushgateway:latest
-    network_mode: host
-    command:
-      - "--web.listen-address=:4091"
-    restart: unless-stopped
-    mem_limit: 64m
-    mem_reservation: 24m
-    oom_score_adj: 800
-
   echo:
     container_name: echo-testnet
     image: ghcr.io/warp-net/warpnet-echo:latest
