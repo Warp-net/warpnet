@@ -232,11 +232,10 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to start crdt gossip broadcaster: %w", err)
 	}
-	if os.Getenv("NODE_STATS_RESET") != "" {
-		if err := dropNamespace(m.ctx, m.statsRepo); err != nil {
-			return fmt.Errorf("member: failed to reset stats store: %w", err)
-		}
+	if err := dropNamespace(m.ctx, m.statsRepo); err != nil {
+		return fmt.Errorf("member: failed to reset stats store: %w", err)
 	}
+	
 
 	m.statsDb, err = statsstore.New(
 		m.ctx, crdtBroadcaster, m.statsRepo, m.node.Node(), m.dHashTable,
