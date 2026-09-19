@@ -296,6 +296,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	err := s.node.SimpleConnect(pi)
 	if errors.Is(err, backoff.ErrBackoffEnabled) {
+		s.emitDialFailure(pi)
 		log.Debugf("discovery: source '%s': connecting is backoffed: %s", peer.Source, pi.ID)
 		return
 	}
@@ -435,17 +436,7 @@ func (s *discoveryService) handleAsModerator(pi discoveredPeer) {
 	log.Infof("discovery: id %s, addrs %v, source '%s'", pi.ID.String(), pi.Addrs, pi.Source)
 }
 
-// emitDialFailure reports a peer that would not answer an address it is
-// known at. A peer we have no address for was never dialled, so it owes
-// nothing for the attempt.
 func (s *discoveryService) emitDialFailure(pi warpnet.WarpAddrInfo) {
-	known := len(pi.Addrs) > 0
-	if !known && s.node != nil && s.node.Peerstore() != nil {
-		known = len(s.node.Peerstore().Addrs(pi.ID)) > 0
-	}
-	if !known {
-		return
-	}
 	s.emit(pi.ID, warpnet.PeerDialFailure)
 }
 

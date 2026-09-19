@@ -83,10 +83,11 @@ func (es entries) penalty(dim Dimension, now time.Time) Score {
 	}
 	perKind := make(map[Kind]float64, len(es))
 	for _, e := range es {
-		factor := dim.decay(now.Sub(e.bucket.start()))
-		if factor == 0 {
-			continue
+		age := now.Sub(e.bucket.start())
+		if age > dim.Retention() {
+			continue // the horizon gc deletes own records at, applied to every record
 		}
+		factor := dim.decay(age)
 		for _, c := range e.counts {
 			perKind[c.kind] += float64(c.kind.Weight()) * float64(c.count) * factor
 		}
@@ -140,7 +141,7 @@ func (es entries) median(dim Dimension, now time.Time) (Score, int) {
 }
 
 // tallies are raw, undecayed counts per kind, busiest first.
-func (es entries) tallies(dim Dimension) []domain.OffenceTally {
+func (es entries) tallies(dim Dimension, now time.Time) []domain.OffenceTally {
 	type tally struct {
 		kind   Kind
 		count  uint32
@@ -152,6 +153,9 @@ func (es entries) tallies(dim Dimension) []domain.OffenceTally {
 			continue
 		}
 		at := e.bucket.start()
+		if now.Sub(at) > dim.Retention() {
+			continue // past the horizon the node deletes its own records at
+		}
 		for _, c := range e.counts {
 			t, ok := agg[c.kind]
 			if !ok {

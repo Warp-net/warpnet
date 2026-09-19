@@ -165,7 +165,6 @@ func New(
 	store.crdt = crdtStore
 
 	return store, nil
-
 }
 
 // Put writes one of this node's own records; the key is derived from the record.

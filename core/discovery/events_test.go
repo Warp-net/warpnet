@@ -6,6 +6,7 @@ package discovery
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/backoff"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,14 +75,30 @@ func TestAPeerThatWillNotAnswerAKnownAddressIsReported(t *testing.T) {
 	assert.Equal(t, peerID, last.PeerID)
 }
 
-// A peer we hold no address for was never dialled, so it owes nothing.
-func TestAPeerWithNoAddressIsNotReportedForADialFailure(t *testing.T) {
-	s, node, _, _ := newService(t)
-	node.connectErr = warpnet.ErrAllDialsFailed
+// A peer nobody holds an address for is unreachable all the same, and that is
+// how every DHT discovery arrives - an ID and nothing else. Charging only the
+// failures that came with an address hid the commonest one of all.
+func TestAPeerWithNoAddressIsReportedForADialFailure(t *testing.T) {
+	s, _, _, _ := newService(t)
 
 	s.emitDialFailure(warpnet.WarpAddrInfo{ID: warpnet.FromStringToPeerID(peerID)})
 
-	assert.Empty(t, reported(t, s))
+	events := reported(t, s)
+	require.NotEmpty(t, events)
+	assert.Equal(t, warpnet.PeerDialFailure, events[len(events)-1].Type)
+}
+
+// Backoff is this node holding off its next dial, not the peer earning a
+// pardon: a peer that keeps failing must keep answering for it.
+func TestABackoffedPeerIsStillReportedForADialFailure(t *testing.T) {
+	s, node, _, _ := newService(t)
+	node.connectErr = backoff.ErrBackoffEnabled
+
+	s.handleAsMember(dialled(t, peerID))
+
+	events := reported(t, s)
+	require.NotEmpty(t, events)
+	assert.Equal(t, warpnet.PeerDialFailure, events[len(events)-1].Type)
 }
 
 func TestARelayReportsItsPeersToo(t *testing.T) {
