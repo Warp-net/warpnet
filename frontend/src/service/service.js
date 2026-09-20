@@ -333,9 +333,6 @@ export const warpnetService = {
         }
     },
 
-    // getPendingUpdate returns the release the node is holding back until the
-    // user answers for it, or null when nothing is waiting. The node blocks its
-    // update service on the answer, so the pending release does not expire.
     async getPendingUpdate() {
         try {
             const resp = await this.sendToNode({path: PRIVATE_GET_UPDATE, body: {}})
@@ -344,13 +341,10 @@ export const warpnetService = {
             }
             return resp
         } catch (e) {
-            // a node that can't be reached simply has nothing to offer
             return null
         }
     },
 
-    // answerUpdate releases the node's update service: on true it downloads the
-    // release, replaces its own binary and restarts into it.
     async answerUpdate(isAllowed) {
         return this.sendToNode({
             path: PRIVATE_POST_UPDATE,

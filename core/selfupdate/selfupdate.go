@@ -57,7 +57,6 @@ const (
 	initialDelay  = time.Minute
 )
 
-// architectures a release publishes an asset for
 const (
 	archAMD64 = "amd64"
 	archARM64 = "arm64"
@@ -95,9 +94,6 @@ type FailureRegistry interface {
 	Clear()
 }
 
-// UpdateApprover asks the owner of the node whether a release may replace the
-// running binary. An unattended node - a relay - has no approver and installs
-// every release on its own.
 type UpdateApprover interface {
 	IsUpdateAllowed(info domain.UpdateInfo) bool
 }
@@ -128,10 +124,6 @@ func RelayArtifact() Artifact {
 	}
 }
 
-// MemberArtifact returns the member asset for the running platform. Self-update
-// covers linux (amd64 and arm64) and windows/amd64. macOS is deliberately left
-// out: its signed build is published by a separate pipeline, and replacing the
-// binary underneath it invalidates the signature.
 func MemberArtifact() Artifact {
 	switch runtime.GOOS {
 	case "linux":
@@ -171,8 +163,6 @@ type SelfUpdater struct {
 	stopChan chan struct{}
 }
 
-// NewSelfUpdater builds the update service. approver may be nil: the release is
-// then installed without asking anyone.
 func NewSelfUpdater(
 	ctx context.Context,
 	current *semver.Version,
@@ -309,9 +299,6 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 	return nil
 }
 
-// isAllowed asks the owner of the node to allow the release. A release turned
-// down is not offered again until the process restarts, so a declined update
-// doesn't ask again on every check.
 func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 	if u.approver == nil {
 		return true

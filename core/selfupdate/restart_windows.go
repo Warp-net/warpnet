@@ -34,16 +34,10 @@ import (
 	"os/exec"
 )
 
-// Restart releases node resources and hands the run over to the installed
-// binary. Windows has no exec(2), so the installed binary is started as a child
-// and this process leaves at once: the single-instance lock of a desktop app is
-// held until then, and the child claims it right after. On success it does not
-// return.
 func (e *executable) Restart(shutdownF func()) error {
 	if shutdownF != nil {
 		shutdownF()
 	}
-	// context.Background: the child must outlive this process.
 	//#nosec
 	cmd := exec.CommandContext(context.Background(), e.path, os.Args[1:]...)
 	cmd.Env = os.Environ()

@@ -73,7 +73,7 @@ type App struct {
 	db        AppStorer
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
-	update    *selfupdate.UpdateGate
+	approver  *selfupdate.UserApprover
 	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
@@ -199,27 +199,20 @@ func (a *App) startup(ctx context.Context) {
 	a.startSelfUpdate(version)
 }
 
-// startSelfUpdate keeps the app on the newest release. The user is asked before
-// every replacement: the release waits in the gate until the frontend answers
-// through PRIVATE_POST_UPDATE, and an allowed one takes the process over - it
-// stops the node, closes the database and restarts into the new binary.
 func (a *App) startSelfUpdate(version *semver.Version) {
 	if !config.Config().Node.IsSelfUpdate {
 		return
 	}
 	if os.Getenv("SNAP") != "" {
-		// the snap is updated by snapd, and its binary sits on a read-only mount
 		log.Infoln("app: snap package, self-update is disabled")
 		return
 	}
 
-	a.update = selfupdate.NewUpdateGate(a.ctx)
-	updater := selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), a.update)
+	a.approver = selfupdate.NewUserApprover(a.ctx)
+	updater := selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), a.approver)
 	updater.Run(a.shutdown)
 }
 
-// shutdown releases everything this process holds, in the order close does:
-// the node first, then the database.
 func (a *App) shutdown() {
 	a.mx.Lock()
 	node := a.node
@@ -363,12 +356,12 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.shutdown()   // node first, then the database
+		a.shutdown()
 		a.auth.Reset() // the next login raises a new node
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	case event.PRIVATE_GET_UPDATE:
-		bt, err := json.Marshal(a.update.Pending())
+		bt, err := json.Marshal(a.approver.GetPendingUpdate())
 		if err != nil {
 			log.Errorf("pending update marshal: %v \n", err)
 			response.Body = newErrorResp(err.Error())
@@ -382,7 +375,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
-		a.update.Answer(ev.IsAllowed)
+		a.approver.AnswerUpdate(ev.IsAllowed)
 		response.Body = []byte(`["update_answered"]`)
 		return response
 	default:

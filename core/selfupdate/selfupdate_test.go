@@ -258,7 +258,6 @@ func TestSelfUpdaterIgnoresMalformedMarker(t *testing.T) {
 	assert.NoFileExists(t, binary.path+failedSuffix)
 }
 
-// stubApprover answers every release the same way and counts the questions.
 type stubApprover struct {
 	isAllowed bool
 	asked     []domain.UpdateInfo
@@ -296,7 +295,6 @@ func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	assert.False(t, binary.restarted)
 	assert.NoFileExists(t, binary.path+oldSuffix)
 
-	// A declined release must not be offered again on every check.
 	require.NoError(t, u.checkAndUpdate(nil))
 	assert.Len(t, approver.asked, 1, "the same release was offered twice")
 }

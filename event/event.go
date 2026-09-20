@@ -307,8 +307,7 @@ type LogoutEvent struct {
 	Token string `json:"token"`
 }
 
-// UpdateEvent defines model for UpdateEvent: the user's answer to the release
-// the node is holding back.
+// UpdateEvent defines model for UpdateEvent.
 type UpdateEvent struct {
 	IsAllowed bool `json:"is_allowed"`
 }

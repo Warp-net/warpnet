@@ -270,7 +270,7 @@ func TestAppCall(t *testing.T) {
 
 	t.Run("a pending release is reported and answered", func(t *testing.T) {
 		a := liveApp(t, &stubAuthService{}, nil)
-		a.update = selfupdate.NewUpdateGate(context.Background())
+		a.approver = selfupdate.NewUserApprover(context.Background())
 
 		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
 		var empty domain.UpdateInfo
@@ -279,7 +279,7 @@ func TestAppCall(t *testing.T) {
 
 		verdicts := make(chan bool, 1)
 		go func() {
-			verdicts <- a.update.IsUpdateAllowed(domain.UpdateInfo{
+			verdicts <- a.approver.IsUpdateAllowed(domain.UpdateInfo{
 				CurrentVersion: "0.7.1", NewVersion: "0.7.2",
 			})
 		}()
@@ -308,7 +308,7 @@ func TestAppCall(t *testing.T) {
 	})
 
 	t.Run("update routes survive a disabled self-update", func(t *testing.T) {
-		a := liveApp(t, &stubAuthService{}, nil) // a.update stays nil
+		a := liveApp(t, &stubAuthService{}, nil)
 
 		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
 		var info domain.UpdateInfo

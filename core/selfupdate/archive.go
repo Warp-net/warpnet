@@ -60,8 +60,6 @@ func checksumOf(listing []byte, assetName string) (string, error) {
 	return "", fmt.Errorf("selfupdate: %w: %s", ErrChecksumNotFound, assetName)
 }
 
-// extractBinary writes the binaryName entry of a release archive to dstPath.
-// Releases ship a .tar.gz everywhere but Windows, which gets a .zip.
 func extractBinary(archivePath, binaryName, dstPath string) error {
 	if strings.HasSuffix(archivePath, ".zip") {
 		return extractFromZip(archivePath, binaryName, dstPath)
@@ -69,6 +67,7 @@ func extractBinary(archivePath, binaryName, dstPath string) error {
 	return extractFromTarGz(archivePath, binaryName, dstPath)
 }
 
+// extractFromTarGz writes the binaryName entry of a .tar.gz archive to dstPath.
 func extractFromTarGz(archivePath, binaryName, dstPath string) error {
 	archive, err := os.Open(archivePath) //nolint:gosec // archive was just downloaded to this path
 	if err != nil {

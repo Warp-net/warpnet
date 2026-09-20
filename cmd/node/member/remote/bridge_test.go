@@ -123,13 +123,11 @@ func (n *fakeNode) callCount() int {
 
 func newTestBridge(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode) {
 	t.Helper()
-	srv, auth, node, _ := newTestBridgeWithGate(t)
+	srv, auth, node, _ := newTestBridgeWithApprover(t)
 	return srv, auth, node
 }
 
-// newTestBridgeWithGate also hands back the gate a release waits in, so the
-// dashboard's half of the update handshake can be driven from a test.
-func newTestBridgeWithGate(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode, *selfupdate.UpdateGate) {
+func newTestBridgeWithApprover(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode, *selfupdate.UserApprover) {
 	t.Helper()
 
 	staticKey, err := noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256).
@@ -148,12 +146,12 @@ func newTestBridgeWithGate(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode
 	)
 	handler.AttachNode(node)
 
-	gate := selfupdate.NewUpdateGate(t.Context())
-	handler.AttachUpdateGate(gate)
+	approver := selfupdate.NewUserApprover(t.Context())
+	handler.AttachUpdater(approver)
 
 	srv := httptest.NewServer(handler.Handle())
 	t.Cleanup(srv.Close)
-	return srv, auth, node, gate
+	return srv, auth, node, approver
 }
 
 func clientKey(t *testing.T) noise.DHKey {
@@ -292,14 +290,14 @@ func TestBridge_FailedLoginEnrollsNothing(t *testing.T) {
 }
 
 func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
-	srv, _, node, gate := newTestBridgeWithGate(t)
+	srv, _, node, approver := newTestBridgeWithApprover(t)
 
 	owner := dial(t, srv, clientKey(t))
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 
 	verdicts := make(chan bool, 1)
 	go func() {
-		verdicts <- gate.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
 	}()
 
 	var pending domain.UpdateInfo
@@ -323,14 +321,14 @@ func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
 }
 
 func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
-	srv, _, _, gate := newTestBridgeWithGate(t)
+	srv, _, _, approver := newTestBridgeWithApprover(t)
 
 	verdicts := make(chan bool, 1)
 	go func() {
-		verdicts <- gate.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
 	}()
 	require.Eventually(t, func() bool {
-		return gate.Pending().NewVersion != ""
+		return approver.GetPendingUpdate().NewVersion != ""
 	}, 5*time.Second, 10*time.Millisecond)
 
 	attacker := dial(t, srv, clientKey(t))

@@ -94,10 +94,9 @@ type Authenticator interface {
 	IsAuthenticated() bool
 }
 
-// UpdateGater holds a release back until the dashboard answers for it.
-type UpdateGater interface {
-	Pending() domain.UpdateInfo
-	Answer(isAllowed bool)
+type Updater interface {
+	GetPendingUpdate() domain.UpdateInfo
+	AnswerUpdate(isAllowed bool)
 }
 
 type BridgeHandler struct {
@@ -108,7 +107,7 @@ type BridgeHandler struct {
 
 	mx      sync.RWMutex
 	node    Node
-	update  UpdateGater
+	updater Updater
 	clients map[string]struct{}
 }
 
@@ -252,9 +251,9 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Unlock()
 }
 
-func (b *BridgeHandler) AttachUpdateGate(g UpdateGater) {
+func (b *BridgeHandler) AttachUpdater(u Updater) {
 	b.mx.Lock()
-	b.update = g
+	b.updater = u
 	b.mx.Unlock()
 }
 
@@ -290,7 +289,7 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 			resp.Body = newUnauthorizedResp()
 			break
 		}
-		resp.Body = b.pendingUpdate()
+		resp.Body = b.getPendingUpdate()
 	case event.PRIVATE_POST_UPDATE:
 		if !b.isAuthorized(c) {
 			resp.Body = newUnauthorizedResp()
@@ -334,16 +333,14 @@ func (b *BridgeHandler) login(body json.RawMessage, c *clientConn) json.RawMessa
 	return bt
 }
 
-// pendingUpdate reports the release the update service is holding back. A node
-// with self-update switched off has no gate and never holds anything back.
-func (b *BridgeHandler) pendingUpdate() json.RawMessage {
+func (b *BridgeHandler) getPendingUpdate() json.RawMessage {
 	b.mx.RLock()
-	g := b.update
+	u := b.updater
 	b.mx.RUnlock()
 
 	var info domain.UpdateInfo
-	if g != nil {
-		info = g.Pending()
+	if u != nil {
+		info = u.GetPendingUpdate()
 	}
 	bt, err := json.Marshal(info)
 	if err != nil {
@@ -354,9 +351,9 @@ func (b *BridgeHandler) pendingUpdate() json.RawMessage {
 
 func (b *BridgeHandler) answerUpdate(body json.RawMessage) json.RawMessage {
 	b.mx.RLock()
-	g := b.update
+	u := b.updater
 	b.mx.RUnlock()
-	if g == nil {
+	if u == nil {
 		return newErrorResp("self-update is disabled on this node")
 	}
 
@@ -364,7 +361,7 @@ func (b *BridgeHandler) answerUpdate(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	g.Answer(ev.IsAllowed)
+	u.AnswerUpdate(ev.IsAllowed)
 	return json.RawMessage(`["update_answered"]`)
 }
 

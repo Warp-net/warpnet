@@ -84,8 +84,6 @@ func TestExtractBinary(t *testing.T) {
 	assert.Equal(t, os.FileMode(binaryMode), info.Mode().Perm(), "installed binary must be executable")
 }
 
-// The Windows release is the only one shipped as a .zip, and it is picked by
-// the asset name rather than by the platform the check runs on.
 func TestExtractBinaryFromZip(t *testing.T) {
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "warpnet_windows_amd64.zip")

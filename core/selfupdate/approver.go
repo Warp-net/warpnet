@@ -35,74 +35,60 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// UpdateGate holds a release back until the owner of the node allows it. The
-// verdict travels through a channel, the way the login handshake reports a
-// started node: the update service blocks on the channel while the frontend is
-// asked, and resumes with whatever comes back.
-type UpdateGate struct {
+type UserApprover struct {
 	ctx      context.Context
 	verdicts chan domain.UpdateInfo
 	mx       *sync.RWMutex
 	pending  domain.UpdateInfo
 }
 
-func NewUpdateGate(ctx context.Context) *UpdateGate {
-	return &UpdateGate{
-		ctx: ctx,
-		// unbuffered: an answer nobody waits for is dropped instead of being
-		// kept for the next release
+func NewUserApprover(ctx context.Context) *UserApprover {
+	return &UserApprover{
+		ctx:      ctx,
 		verdicts: make(chan domain.UpdateInfo),
 		mx:       new(sync.RWMutex),
 	}
 }
 
-// IsUpdateAllowed publishes the release for the frontend to ask about and blocks
-// until the user answers it. A node shutting down leaves the release unanswered,
-// which reads as a refusal.
-func (g *UpdateGate) IsUpdateAllowed(info domain.UpdateInfo) bool {
-	if g == nil {
+func (a *UserApprover) IsUpdateAllowed(info domain.UpdateInfo) bool {
+	if a == nil {
 		return false
 	}
-	g.mx.Lock()
-	g.pending = info
-	g.mx.Unlock()
+	a.mx.Lock()
+	a.pending = info
+	a.mx.Unlock()
 
 	defer func() {
-		g.mx.Lock()
-		g.pending = domain.UpdateInfo{}
-		g.mx.Unlock()
+		a.mx.Lock()
+		a.pending = domain.UpdateInfo{}
+		a.mx.Unlock()
 	}()
 
 	log.Infof("selfupdate: waiting for permission to update %s -> %s", info.CurrentVersion, info.NewVersion)
 
 	select {
-	case <-g.ctx.Done():
+	case <-a.ctx.Done():
 		return false
-	case verdict := <-g.verdicts:
+	case verdict := <-a.verdicts:
 		return verdict.IsAllowed
 	}
 }
 
-// Pending returns the release waiting for an answer. A zero value means nothing
-// is waiting.
-func (g *UpdateGate) Pending() domain.UpdateInfo {
-	if g == nil {
+func (a *UserApprover) GetPendingUpdate() domain.UpdateInfo {
+	if a == nil {
 		return domain.UpdateInfo{}
 	}
-	g.mx.RLock()
-	defer g.mx.RUnlock()
-	return g.pending
+	a.mx.RLock()
+	defer a.mx.RUnlock()
+	return a.pending
 }
 
-// Answer hands the user's verdict to the waiting update service. An answer to a
-// release nobody is waiting for - a second click, a stale dashboard tab - is
-// dropped.
-func (g *UpdateGate) Answer(isAllowed bool) {
-	if g == nil {
+func (a *UserApprover) AnswerUpdate(isAllowed bool) {
+	if a == nil {
 		return
 	}
 	select {
-	case g.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
+	case a.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
 	default:
 		log.Warnln("selfupdate: no release is waiting for an answer")
 	}

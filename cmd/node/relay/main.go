@@ -107,7 +107,6 @@ func main() {
 	}
 
 	if config.Config().Node.IsSelfUpdate {
-		// no approver: a relay is unattended and installs a release on its own
 		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.RelayArtifact(), nil)
 		defer updater.Close()
 		updater.Run(n.Stop)

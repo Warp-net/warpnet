@@ -30,7 +30,6 @@ const mountApp = () =>
     },
   });
 
-// jsdom has no ResizeObserver, and App.vue measures its banner stack with one.
 class NoopResizeObserver {
   observe() {}
   disconnect() {}
