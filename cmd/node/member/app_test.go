@@ -61,15 +61,19 @@ func (s *stubNodeServer) Stop()                      { s.stopped = true }
 func (s *stubNodeServer) Start() error               { s.startCalls++; return nil }
 
 type stubNodeUpdater struct {
-	pending   event.UpdateResponse
-	answers   chan bool
-	answerErr error
-	closed    bool
+	currentVersion string
+	newVersion     string
+	answers        chan bool
+	answerErr      error
+	closed         bool
 }
 
-func (s *stubNodeUpdater) Run(func())                             {}
-func (s *stubNodeUpdater) GetPendingUpdate() event.UpdateResponse { return s.pending }
-func (s *stubNodeUpdater) Close()                                 { s.closed = true }
+func (s *stubNodeUpdater) Run(func()) {}
+func (s *stubNodeUpdater) Close()     { s.closed = true }
+
+func (s *stubNodeUpdater) GetPendingUpdate() (string, string) {
+	return s.currentVersion, s.newVersion
+}
 
 func (s *stubNodeUpdater) AnswerUpdate(isAllowed bool) error {
 	if s.answerErr != nil {
@@ -297,7 +301,7 @@ func TestAppCall(t *testing.T) {
 		require.NoError(t, json.Unmarshal(resp.Body, &info))
 		require.Empty(t, info.NewVersion, "nothing is waiting before a release is found")
 
-		updater.pending = event.UpdateResponse{CurrentVersion: "0.7.1", NewVersion: "0.7.2"}
+		updater.currentVersion, updater.newVersion = "0.7.1", "0.7.2"
 		resp = a.Call(AppMessage{MessageId: "2", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
 		require.NoError(t, json.Unmarshal(resp.Body, &info))
 		require.Equal(t, "0.7.2", info.NewVersion)

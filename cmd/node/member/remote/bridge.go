@@ -94,7 +94,7 @@ type Authenticator interface {
 }
 
 type Updater interface {
-	GetPendingUpdate() event.UpdateResponse
+	GetPendingUpdate() (currentVersion, newVersion string)
 	AnswerUpdate(isAllowed bool) error
 }
 
@@ -339,7 +339,7 @@ func (b *BridgeHandler) getPendingUpdate() json.RawMessage {
 
 	var info event.UpdateResponse
 	if u != nil {
-		info = u.GetPendingUpdate()
+		info.CurrentVersion, info.NewVersion = u.GetPendingUpdate()
 	}
 	bt, err := json.Marshal(info)
 	if err != nil {

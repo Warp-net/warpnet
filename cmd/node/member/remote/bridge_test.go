@@ -120,15 +120,16 @@ func (n *fakeNode) callCount() int {
 }
 
 type fakeUpdater struct {
-	mx      sync.Mutex
-	pending event.UpdateResponse
-	answers chan bool
+	mx             sync.Mutex
+	currentVersion string
+	newVersion     string
+	answers        chan bool
 }
 
-func (f *fakeUpdater) GetPendingUpdate() event.UpdateResponse {
+func (f *fakeUpdater) GetPendingUpdate() (string, string) {
 	f.mx.Lock()
 	defer f.mx.Unlock()
-	return f.pending
+	return f.currentVersion, f.newVersion
 }
 
 func (f *fakeUpdater) AnswerUpdate(isAllowed bool) error {
@@ -136,9 +137,9 @@ func (f *fakeUpdater) AnswerUpdate(isAllowed bool) error {
 	return nil
 }
 
-func (f *fakeUpdater) holdRelease(info event.UpdateResponse) {
+func (f *fakeUpdater) holdRelease(currentVersion, newVersion string) {
 	f.mx.Lock()
-	f.pending = info
+	f.currentVersion, f.newVersion = currentVersion, newVersion
 	f.mx.Unlock()
 }
 
@@ -312,7 +313,7 @@ func TestBridge_FailedLoginEnrollsNothing(t *testing.T) {
 
 func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
 	srv, _, node, updater := newTestBridgeWithUpdater(t)
-	updater.holdRelease(event.UpdateResponse{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+	updater.holdRelease("0.7.1", "0.7.2")
 
 	owner := dial(t, srv, clientKey(t))
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
@@ -336,7 +337,7 @@ func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
 
 func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
 	srv, _, _, updater := newTestBridgeWithUpdater(t)
-	updater.holdRelease(event.UpdateResponse{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+	updater.holdRelease("0.7.1", "0.7.2")
 
 	attacker := dial(t, srv, clientKey(t))
 	assert.Equal(t, http.StatusUnauthorized,

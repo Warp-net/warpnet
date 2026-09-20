@@ -68,7 +68,7 @@ type NodeServer interface {
 
 type NodeUpdater interface {
 	Run(shutdownF func())
-	GetPendingUpdate() event.UpdateResponse
+	GetPendingUpdate() (currentVersion, newVersion string)
 	AnswerUpdate(isAllowed bool) error
 	Close()
 }
@@ -369,7 +369,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 	case event.PRIVATE_GET_UPDATE:
 		var pending event.UpdateResponse
 		if a.updater != nil {
-			pending = a.updater.GetPendingUpdate()
+			pending.CurrentVersion, pending.NewVersion = a.updater.GetPendingUpdate()
 		}
 		bt, err := json.Marshal(pending)
 		if err != nil {

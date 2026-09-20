@@ -47,7 +47,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -269,9 +268,9 @@ func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
 	errs := make(chan error, 1)
 	go func() { errs <- u.checkAndUpdate(nil) }()
 
-	pending := waitPendingUpdate(t, u)
-	assert.Equal(t, testVersion, pending.CurrentVersion)
-	assert.Equal(t, "0.7.548", pending.NewVersion)
+	current, next := waitPendingUpdate(t, u)
+	assert.Equal(t, testVersion, current)
+	assert.Equal(t, "0.7.548", next)
 	assert.Equal(t, "current binary", read(t, binary.path), "nothing is installed while the answer is out")
 
 	u.AnswerUpdate(true)
@@ -279,7 +278,8 @@ func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
 
 	assert.Equal(t, "new binary", read(t, binary.path))
 	assert.True(t, binary.restarted)
-	assert.Empty(t, u.GetPendingUpdate().NewVersion, "an answered release must stop waiting")
+	_, next = u.GetPendingUpdate()
+	assert.Empty(t, next, "an answered release must stop waiting")
 }
 
 func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
@@ -299,7 +299,8 @@ func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	assert.NoFileExists(t, binary.path+oldSuffix)
 
 	require.NoError(t, u.checkAndUpdate(nil))
-	assert.Empty(t, u.GetPendingUpdate().NewVersion, "the same release was offered twice")
+	_, next := u.GetPendingUpdate()
+	assert.Empty(t, next, "the same release was offered twice")
 	assert.Equal(t, "current binary", read(t, binary.path))
 }
 
@@ -363,17 +364,17 @@ func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
 	}
 }
 
-func waitPendingUpdate(t *testing.T, u *SelfUpdater) domain.UpdateInfo {
+func waitPendingUpdate(t *testing.T, u *SelfUpdater) (currentVersion, newVersion string) {
 	t.Helper()
 	deadline := time.Now().Add(approverWait)
 	for time.Now().Before(deadline) {
-		if info := u.GetPendingUpdate(); info.NewVersion != "" {
-			return info
+		if currentVersion, newVersion = u.GetPendingUpdate(); newVersion != "" {
+			return currentVersion, newVersion
 		}
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("no release is waiting for an answer")
-	return domain.UpdateInfo{}
+	return "", ""
 }
 
 func TestMemberArtifact(t *testing.T) {

@@ -38,7 +38,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -161,8 +160,8 @@ type SelfUpdater struct {
 	stopChan           chan struct{}
 	isApprovalRequired bool
 	mx                 sync.RWMutex
-	verdicts           chan domain.UpdateInfo
-	pending            domain.UpdateInfo
+	verdicts           chan bool
+	pending            string
 	declined           string
 }
 
@@ -183,7 +182,7 @@ func NewSelfUpdater(
 		interval:           checkInterval,
 		stopChan:           make(chan struct{}),
 		isApprovalRequired: isApprovalRequired,
-		verdicts:           make(chan domain.UpdateInfo),
+		verdicts:           make(chan bool),
 	}
 
 	binary, err := currentExecutable()
@@ -303,18 +302,22 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 	return nil
 }
 
-// GetPendingUpdate returns the release waiting for the owner of the node to
-// allow it. A zero value means nothing is waiting.
-func (u *SelfUpdater) GetPendingUpdate() domain.UpdateInfo {
+// GetPendingUpdate returns the version waiting for the owner of the node to
+// allow it, alongside the one it replaces. An empty newVersion means nothing is
+// waiting.
+func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
 	u.mx.RLock()
 	defer u.mx.RUnlock()
-	return u.pending
+	if u.pending == "" {
+		return "", ""
+	}
+	return u.current.String(), u.pending
 }
 
 // AnswerUpdate hands the owner's verdict to the waiting check.
 func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
 	select {
-	case u.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
+	case u.verdicts <- isAllowed:
 		return nil
 	default:
 		return ErrNoPendingUpdate
@@ -335,8 +338,7 @@ func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 	var isAllowed bool
 	select {
 	case <-u.ctx.Done():
-	case verdict := <-u.verdicts:
-		isAllowed = verdict.IsAllowed
+	case isAllowed = <-u.verdicts:
 	}
 
 	u.stopAsking(isAllowed)
@@ -349,10 +351,7 @@ func (u *SelfUpdater) startAsking(next *semver.Version) bool {
 	if u.declined == next.String() {
 		return false
 	}
-	u.pending = domain.UpdateInfo{
-		CurrentVersion: u.current.String(),
-		NewVersion:     next.String(),
-	}
+	u.pending = next.String()
 	return true
 }
 
@@ -360,9 +359,9 @@ func (u *SelfUpdater) stopAsking(isAllowed bool) {
 	u.mx.Lock()
 	defer u.mx.Unlock()
 	if !isAllowed {
-		u.declined = u.pending.NewVersion
+		u.declined = u.pending
 	}
-	u.pending = domain.UpdateInfo{}
+	u.pending = ""
 }
 
 // install puts the released binary in place of the running one and returns a
