@@ -358,17 +358,18 @@ func TestAppCall(t *testing.T) {
 	})
 }
 
-func TestAppClose(t *testing.T) {
+func TestAppShutdown(t *testing.T) {
 	authSvc := &stubAuthService{}
 	node := &stubNodeServer{}
 	a := liveApp(t, authSvc, node)
 
-	a.close(context.Background())
+	a.shutdown()
 	require.True(t, node.stopped)
 	require.True(t, authSvc.loggedOut)
+	require.Nil(t, a.node, "a stopped node must not stay attached")
 
-	// a second close panics on the already-closed channel and is recovered
-	require.NotPanics(t, func() { a.close(context.Background()) })
+	// wails calls it on exit over a logout that already ran
+	require.NotPanics(t, func() { a.shutdown() })
 }
 
 func TestServeLoginsStopsWithContext(t *testing.T) {
@@ -482,7 +483,7 @@ func TestServeLoginsStopsWhenTheReadyChannelCloses(t *testing.T) {
 		close(done)
 	}()
 
-	close(a.readyChan) // what App.close does on shutdown
+	close(a.readyChan)
 	<-done
 }
 

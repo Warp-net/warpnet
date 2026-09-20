@@ -220,13 +220,21 @@ func (a *App) startSelfUpdate(version *semver.Version) {
 }
 
 func (a *App) shutdown() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("app: shutdown panic: %v", r)
+		}
+	}()
+
+	log.Infoln("app: shutting down...")
+
 	a.mx.Lock()
 	node := a.node
 	a.node = nil
 	a.mx.Unlock()
 
 	if node != nil {
-		node.Stop()
+		node.Stop() // close node first
 	}
 	a.auth.AuthLogout()
 }
@@ -459,24 +467,6 @@ func newErrorResp(msg string) stdjson.RawMessage {
 
 	bt, _ := json.Marshal(errResp)
 	return bt
-}
-
-func (a *App) close(_ context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Errorf("app: close panic: %v", r)
-		}
-	}()
-
-	log.Infoln("app: closing...")
-
-	if a.updater != nil {
-		a.updater.Close()
-	}
-
-	a.shutdown()
-
-	close(a.readyChan)
 }
 
 // setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).
