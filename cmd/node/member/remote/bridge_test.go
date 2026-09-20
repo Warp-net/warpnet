@@ -34,7 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -121,13 +120,33 @@ func (n *fakeNode) callCount() int {
 	return len(n.calls)
 }
 
+type fakeUpdater struct {
+	mx      sync.Mutex
+	pending domain.UpdateInfo
+	answers chan bool
+}
+
+func (f *fakeUpdater) GetPendingUpdate() domain.UpdateInfo {
+	f.mx.Lock()
+	defer f.mx.Unlock()
+	return f.pending
+}
+
+func (f *fakeUpdater) AnswerUpdate(isAllowed bool) { f.answers <- isAllowed }
+
+func (f *fakeUpdater) holdRelease(info domain.UpdateInfo) {
+	f.mx.Lock()
+	f.pending = info
+	f.mx.Unlock()
+}
+
 func newTestBridge(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode) {
 	t.Helper()
-	srv, auth, node, _ := newTestBridgeWithApprover(t)
+	srv, auth, node, _ := newTestBridgeWithUpdater(t)
 	return srv, auth, node
 }
 
-func newTestBridgeWithApprover(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode, *selfupdate.UserApprover) {
+func newTestBridgeWithUpdater(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode, *fakeUpdater) {
 	t.Helper()
 
 	staticKey, err := noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256).
@@ -146,12 +165,12 @@ func newTestBridgeWithApprover(t *testing.T) (*httptest.Server, *fakeAuth, *fake
 	)
 	handler.AttachNode(node)
 
-	approver := selfupdate.NewUserApprover(t.Context())
-	handler.AttachUpdater(approver)
+	updater := &fakeUpdater{answers: make(chan bool, 1)}
+	handler.AttachUpdater(updater)
 
 	srv := httptest.NewServer(handler.Handle())
 	t.Cleanup(srv.Close)
-	return srv, auth, node, approver
+	return srv, auth, node, updater
 }
 
 func clientKey(t *testing.T) noise.DHKey {
@@ -290,30 +309,23 @@ func TestBridge_FailedLoginEnrollsNothing(t *testing.T) {
 }
 
 func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
-	srv, _, node, approver := newTestBridgeWithApprover(t)
+	srv, _, node, updater := newTestBridgeWithUpdater(t)
+	updater.holdRelease(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
 
 	owner := dial(t, srv, clientKey(t))
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 
-	verdicts := make(chan bool, 1)
-	go func() {
-		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
-	}()
-
 	var pending domain.UpdateInfo
-	require.Eventually(t, func() bool {
-		resp := owner.send(t, event.PRIVATE_GET_UPDATE, struct{}{})
-		require.NoError(t, json.Unmarshal(resp.Body, &pending))
-		return pending.NewVersion != ""
-	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, json.Unmarshal(owner.send(t, event.PRIVATE_GET_UPDATE, struct{}{}).Body, &pending))
 	assert.Equal(t, "0.7.2", pending.NewVersion)
+	assert.Equal(t, "0.7.1", pending.CurrentVersion)
 
 	resp := owner.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})
 	assert.Equal(t, json.RawMessage(`["update_answered"]`), resp.Body)
 
 	select {
-	case allowed := <-verdicts:
-		assert.True(t, allowed)
+	case isAllowed := <-updater.answers:
+		assert.True(t, isAllowed)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the answer never reached the update service")
 	}
@@ -321,15 +333,8 @@ func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
 }
 
 func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
-	srv, _, _, approver := newTestBridgeWithApprover(t)
-
-	verdicts := make(chan bool, 1)
-	go func() {
-		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
-	}()
-	require.Eventually(t, func() bool {
-		return approver.GetPendingUpdate().NewVersion != ""
-	}, 5*time.Second, 10*time.Millisecond)
+	srv, _, _, updater := newTestBridgeWithUpdater(t)
+	updater.holdRelease(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
 
 	attacker := dial(t, srv, clientKey(t))
 	assert.Equal(t, http.StatusUnauthorized,
@@ -338,7 +343,7 @@ func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
 		responseError(t, attacker.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})).Code)
 
 	select {
-	case <-verdicts:
+	case <-updater.answers:
 		t.Fatal("an unauthenticated client replaced the node's binary")
 	case <-time.After(100 * time.Millisecond):
 	}

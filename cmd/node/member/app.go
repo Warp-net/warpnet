@@ -68,13 +68,9 @@ type NodeServer interface {
 
 type NodeUpdater interface {
 	Run(shutdownF func())
-	Close()
-}
-
-type UpdateApprover interface {
-	IsUpdateAllowed(info domain.UpdateInfo) bool
 	GetPendingUpdate() domain.UpdateInfo
 	AnswerUpdate(isAllowed bool)
+	Close()
 }
 
 type App struct {
@@ -84,7 +80,6 @@ type App struct {
 	db        AppStorer
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
-	approver  UpdateApprover
 	updater   NodeUpdater
 	mx        *sync.RWMutex
 
@@ -220,8 +215,7 @@ func (a *App) startSelfUpdate(version *semver.Version) {
 		return
 	}
 
-	a.approver = selfupdate.NewUserApprover(a.ctx)
-	a.updater = selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), a.approver)
+	a.updater = selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), true)
 	a.updater.Run(a.shutdown)
 }
 
@@ -374,8 +368,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		return response
 	case event.PRIVATE_GET_UPDATE:
 		var pending domain.UpdateInfo
-		if a.approver != nil {
-			pending = a.approver.GetPendingUpdate()
+		if a.updater != nil {
+			pending = a.updater.GetPendingUpdate()
 		}
 		bt, err := json.Marshal(pending)
 		if err != nil {
@@ -391,8 +385,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
-		if a.approver != nil {
-			a.approver.AnswerUpdate(ev.IsAllowed)
+		if a.updater != nil {
+			a.updater.AnswerUpdate(ev.IsAllowed)
 		}
 		response.Body = []byte(`["update_answered"]`)
 		return response

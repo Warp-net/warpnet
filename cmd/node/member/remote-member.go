@@ -155,9 +155,8 @@ func main() {
 
 	var updater NodeUpdater
 	if config.Config().Node.IsSelfUpdate {
-		approver := selfupdate.NewUserApprover(ctx)
-		bridgeHandler.AttachUpdater(approver)
-		updater = selfupdate.NewSelfUpdater(ctx, version, selfupdate.MemberArtifact(), approver)
+		updater = selfupdate.NewSelfUpdater(ctx, version, selfupdate.MemberArtifact(), true)
+		bridgeHandler.AttachUpdater(updater)
 		defer updater.Close()
 	}
 

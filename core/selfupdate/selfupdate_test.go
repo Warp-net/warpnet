@@ -146,7 +146,7 @@ func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpd
 		context.Background(),
 		semver.MustParse(testVersion),
 		Artifact{AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary},
-		nil,
+		false,
 	)
 	u.releases, u.assets = gh, gh
 	u.binary = binary
@@ -261,156 +261,119 @@ func TestSelfUpdaterIgnoresMalformedMarker(t *testing.T) {
 	assert.NoFileExists(t, binary.path+failedSuffix)
 }
 
-type stubApprover struct {
-	isAllowed bool
-	asked     []domain.UpdateInfo
-}
-
-func (s *stubApprover) IsUpdateAllowed(info domain.UpdateInfo) bool {
-	s.asked = append(s.asked, info)
-	return s.isAllowed
-}
-
 func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
 	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
-	approver := &stubApprover{isAllowed: true}
-	u.approver = approver
+	u.isApprovalRequired = true
 
-	require.NoError(t, u.checkAndUpdate(nil))
+	errs := make(chan error, 1)
+	go func() { errs <- u.checkAndUpdate(nil) }()
 
-	require.Len(t, approver.asked, 1)
-	assert.Equal(t, testVersion, approver.asked[0].CurrentVersion)
-	assert.Equal(t, "0.7.548", approver.asked[0].NewVersion)
+	pending := waitPendingUpdate(t, u)
+	assert.Equal(t, testVersion, pending.CurrentVersion)
+	assert.Equal(t, "0.7.548", pending.NewVersion)
+	assert.Equal(t, "current binary", read(t, binary.path), "nothing is installed while the answer is out")
+
+	u.AnswerUpdate(true)
+	require.NoError(t, <-errs)
+
 	assert.Equal(t, "new binary", read(t, binary.path))
 	assert.True(t, binary.restarted)
+	assert.Empty(t, u.GetPendingUpdate().NewVersion, "an answered release must stop waiting")
 }
 
 func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
 	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
-	approver := &stubApprover{isAllowed: false}
-	u.approver = approver
+	u.isApprovalRequired = true
 
-	require.NoError(t, u.checkAndUpdate(nil))
+	errs := make(chan error, 1)
+	go func() { errs <- u.checkAndUpdate(nil) }()
+
+	waitPendingUpdate(t, u)
+	u.AnswerUpdate(false)
+	require.NoError(t, <-errs)
 
 	assert.Equal(t, "current binary", read(t, binary.path))
 	assert.False(t, binary.restarted)
 	assert.NoFileExists(t, binary.path+oldSuffix)
-	require.Len(t, approver.asked, 1)
+
+	require.NoError(t, u.checkAndUpdate(nil))
+	assert.Empty(t, u.GetPendingUpdate().NewVersion, "the same release was offered twice")
+	assert.Equal(t, "current binary", read(t, binary.path))
 }
 
-func waitPendingUpdate(t *testing.T, a *UserApprover) domain.UpdateInfo {
-	t.Helper()
-	deadline := time.Now().Add(approverWait)
-	for time.Now().Before(deadline) {
-		if info := a.GetPendingUpdate(); info.NewVersion != "" {
-			return info
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("no release is waiting for an answer")
-	return domain.UpdateInfo{}
-}
-
-func TestUserApproverRoundTrip(t *testing.T) {
-	for _, isAllowed := range []bool{true, false} {
-		approver := NewUserApprover(context.Background())
-
-		verdicts := make(chan bool, 1)
-		go func() {
-			verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{
-				CurrentVersion: testVersion,
-				NewVersion:     "0.7.548",
-			})
-		}()
-
-		pending := waitPendingUpdate(t, approver)
-		assert.Equal(t, testVersion, pending.CurrentVersion)
-		assert.Equal(t, "0.7.548", pending.NewVersion)
-
-		approver.AnswerUpdate(isAllowed)
-
-		select {
-		case got := <-verdicts:
-			assert.Equal(t, isAllowed, got)
-		case <-time.After(approverWait):
-			t.Fatal("the answer never reached the update service")
-		}
-
-		assert.Empty(t, approver.GetPendingUpdate().NewVersion, "an answered release must stop waiting")
-	}
-}
-
-func TestUserApproverAsksAboutADeclinedVersionOnce(t *testing.T) {
-	approver := NewUserApprover(context.Background())
-	declined := domain.UpdateInfo{CurrentVersion: testVersion, NewVersion: "0.7.548"}
+func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.isApprovalRequired = true
 
 	verdicts := make(chan bool, 1)
-	go func() {
-		verdicts <- approver.IsUpdateAllowed(declined)
-	}()
-	waitPendingUpdate(t, approver)
-	approver.AnswerUpdate(false)
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	waitPendingUpdate(t, u)
+	u.AnswerUpdate(false)
 	require.False(t, <-verdicts)
 
-	assert.False(t, approver.IsUpdateAllowed(declined), "the same release was offered twice")
-	assert.Empty(t, approver.GetPendingUpdate().NewVersion, "a declined release must not reach the frontend")
-
-	go func() {
-		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{
-			CurrentVersion: testVersion,
-			NewVersion:     "0.7.549",
-		})
-	}()
-	waitPendingUpdate(t, approver)
-	approver.AnswerUpdate(true)
-	assert.True(t, <-verdicts, "a newer release must be offered")
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.549")) }()
+	waitPendingUpdate(t, u)
+	u.AnswerUpdate(true)
+	assert.True(t, <-verdicts)
 }
 
-func TestUserApproverRefusesOnShutdown(t *testing.T) {
+func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	approver := NewUserApprover(ctx)
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.ctx = ctx
+	u.isApprovalRequired = true
 
 	verdicts := make(chan bool, 1)
-	go func() {
-		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{NewVersion: "0.7.548"})
-	}()
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
 
-	waitPendingUpdate(t, approver)
+	waitPendingUpdate(t, u)
 	cancel()
 
 	select {
-	case got := <-verdicts:
-		assert.False(t, got, "a node shutting down must not install anything")
+	case isAllowed := <-verdicts:
+		assert.False(t, isAllowed, "a node shutting down must not install anything")
 	case <-time.After(approverWait):
-		t.Fatal("shutdown left the update service waiting")
+		t.Fatal("shutdown left the check waiting")
 	}
 }
 
-func TestUserApproverDropsUnexpectedAnswer(t *testing.T) {
-	approver := NewUserApprover(context.Background())
-	require.NotPanics(t, func() { approver.AnswerUpdate(true) })
+func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.isApprovalRequired = true
+	require.NotPanics(t, func() { u.AnswerUpdate(true) })
 
 	verdicts := make(chan bool, 1)
-	go func() {
-		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{NewVersion: "0.7.548"})
-	}()
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
 
-	waitPendingUpdate(t, approver)
+	waitPendingUpdate(t, u)
 	select {
 	case <-verdicts:
 		t.Fatal("the dropped answer was served to the next release")
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	approver.AnswerUpdate(false)
+	u.AnswerUpdate(false)
 	select {
-	case got := <-verdicts:
-		assert.False(t, got)
+	case isAllowed := <-verdicts:
+		assert.False(t, isAllowed)
 	case <-time.After(approverWait):
-		t.Fatal("the answer never reached the update service")
+		t.Fatal("the answer never reached the check")
 	}
+}
+
+func waitPendingUpdate(t *testing.T, u *SelfUpdater) domain.UpdateInfo {
+	t.Helper()
+	deadline := time.Now().Add(approverWait)
+	for time.Now().Before(deadline) {
+		if info := u.GetPendingUpdate(); info.NewVersion != "" {
+			return info
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("no release is waiting for an answer")
+	return domain.UpdateInfo{}
 }
 
 func TestMemberArtifact(t *testing.T) {

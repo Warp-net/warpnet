@@ -13,7 +13,6 @@ import (
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -59,6 +58,17 @@ func (s *stubNodeServer) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRou
 func (s *stubNodeServer) NodeInfo() warpnet.NodeInfo { return s.info }
 func (s *stubNodeServer) Stop()                      { s.stopped = true }
 func (s *stubNodeServer) Start() error               { s.startCalls++; return nil }
+
+type stubNodeUpdater struct {
+	pending domain.UpdateInfo
+	answers chan bool
+	closed  bool
+}
+
+func (s *stubNodeUpdater) Run(func())                          {}
+func (s *stubNodeUpdater) GetPendingUpdate() domain.UpdateInfo { return s.pending }
+func (s *stubNodeUpdater) AnswerUpdate(isAllowed bool)         { s.answers <- isAllowed }
+func (s *stubNodeUpdater) Close()                              { s.closed = true }
 
 func testKey(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
@@ -269,42 +279,27 @@ func TestAppCall(t *testing.T) {
 	})
 
 	t.Run("a pending release is reported and answered", func(t *testing.T) {
+		updater := &stubNodeUpdater{answers: make(chan bool, 1)}
 		a := liveApp(t, &stubAuthService{}, nil)
-		a.approver = selfupdate.NewUserApprover(context.Background())
+		a.updater = updater
 
 		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
-		var empty domain.UpdateInfo
-		require.NoError(t, json.Unmarshal(resp.Body, &empty))
-		require.Empty(t, empty.NewVersion, "nothing is waiting before a release is found")
+		var info domain.UpdateInfo
+		require.NoError(t, json.Unmarshal(resp.Body, &info))
+		require.Empty(t, info.NewVersion, "nothing is waiting before a release is found")
 
-		verdicts := make(chan bool, 1)
-		go func() {
-			verdicts <- a.approver.IsUpdateAllowed(domain.UpdateInfo{
-				CurrentVersion: "0.7.1", NewVersion: "0.7.2",
-			})
-		}()
-
-		var pending domain.UpdateInfo
-		require.Eventually(t, func() bool {
-			resp = a.Call(AppMessage{MessageId: "2", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
-			require.NoError(t, json.Unmarshal(resp.Body, &pending))
-			return pending.NewVersion != ""
-		}, time.Second, time.Millisecond)
-		require.Equal(t, "0.7.2", pending.NewVersion)
-		require.Equal(t, "0.7.1", pending.CurrentVersion)
+		updater.pending = domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"}
+		resp = a.Call(AppMessage{MessageId: "2", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+		require.NoError(t, json.Unmarshal(resp.Body, &info))
+		require.Equal(t, "0.7.2", info.NewVersion)
+		require.Equal(t, "0.7.1", info.CurrentVersion)
 
 		resp = a.Call(AppMessage{
 			MessageId: "3", Path: event.PRIVATE_POST_UPDATE,
 			Body: mustJSON(t, event.UpdateEvent{IsAllowed: true}),
 		})
 		require.JSONEq(t, `["update_answered"]`, string(resp.Body))
-
-		select {
-		case allowed := <-verdicts:
-			require.True(t, allowed)
-		case <-time.After(time.Second):
-			t.Fatal("the answer never reached the update service")
-		}
+		require.True(t, <-updater.answers)
 	})
 
 	t.Run("update routes survive a disabled self-update", func(t *testing.T) {

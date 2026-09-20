@@ -95,77 +95,6 @@ type FailureRegistry interface {
 	Clear()
 }
 
-type UpdateApprover interface {
-	IsUpdateAllowed(info domain.UpdateInfo) bool
-}
-
-type UserApprover struct {
-	ctx      context.Context
-	verdicts chan domain.UpdateInfo
-	mx       *sync.RWMutex
-	pending  domain.UpdateInfo
-	declined string
-}
-
-func NewUserApprover(ctx context.Context) *UserApprover {
-	return &UserApprover{
-		ctx:      ctx,
-		verdicts: make(chan domain.UpdateInfo),
-		mx:       new(sync.RWMutex),
-	}
-}
-
-func (a *UserApprover) IsUpdateAllowed(info domain.UpdateInfo) bool {
-	if !a.startAsking(info) {
-		return false
-	}
-
-	log.Infof("selfupdate: waiting for permission to update %s -> %s", info.CurrentVersion, info.NewVersion)
-
-	var isAllowed bool
-	select {
-	case <-a.ctx.Done():
-	case verdict := <-a.verdicts:
-		isAllowed = verdict.IsAllowed
-	}
-
-	a.stopAsking(isAllowed)
-	return isAllowed
-}
-
-func (a *UserApprover) GetPendingUpdate() domain.UpdateInfo {
-	a.mx.RLock()
-	defer a.mx.RUnlock()
-	return a.pending
-}
-
-func (a *UserApprover) AnswerUpdate(isAllowed bool) {
-	select {
-	case a.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
-	default:
-		log.Warnln("selfupdate: no release is waiting for an answer")
-	}
-}
-
-func (a *UserApprover) startAsking(info domain.UpdateInfo) bool {
-	a.mx.Lock()
-	defer a.mx.Unlock()
-	if a.declined == info.NewVersion {
-		return false
-	}
-	a.pending = info
-	return true
-}
-
-func (a *UserApprover) stopAsking(isAllowed bool) {
-	a.mx.Lock()
-	defer a.mx.Unlock()
-	if !isAllowed {
-		a.declined = a.pending.NewVersion
-	}
-	a.pending = domain.UpdateInfo{}
-}
-
 // Artifact points at the release asset carrying a replacement for the running
 // binary. A zero Artifact means the running platform has no published asset and
 // self-update stays off.
@@ -216,37 +145,44 @@ func MemberArtifact() Artifact {
 	return Artifact{}
 }
 
-// SelfUpdater keeps the running binary in sync with the newest release.
+// SelfUpdater keeps the running binary in sync with the newest release. A node
+// with an owner to ask - a member node - holds every release until the frontend
+// answers for it; an unattended one installs it right away.
 type SelfUpdater struct {
-	ctx      context.Context
-	current  *semver.Version
-	artifact Artifact
-	releases ReleaseSource
-	assets   AssetFetcher
-	binary   BinaryReplacer
-	failures FailureRegistry
-	approver UpdateApprover
-	interval time.Duration
-	stopChan chan struct{}
+	ctx                context.Context
+	current            *semver.Version
+	artifact           Artifact
+	releases           ReleaseSource
+	assets             AssetFetcher
+	binary             BinaryReplacer
+	failures           FailureRegistry
+	interval           time.Duration
+	stopChan           chan struct{}
+	isApprovalRequired bool
+	mx                 sync.RWMutex
+	verdicts           chan domain.UpdateInfo
+	pending            domain.UpdateInfo
+	declined           string
 }
 
 func NewSelfUpdater(
 	ctx context.Context,
 	current *semver.Version,
 	a Artifact,
-	approver UpdateApprover,
+	isApprovalRequired bool,
 ) *SelfUpdater {
 	gh := newGitHubReleases(ctx, current)
 
 	u := &SelfUpdater{
-		ctx:      ctx,
-		current:  current,
-		artifact: a,
-		releases: gh,
-		assets:   gh,
-		approver: approver,
-		interval: checkInterval,
-		stopChan: make(chan struct{}),
+		ctx:                ctx,
+		current:            current,
+		artifact:           a,
+		releases:           gh,
+		assets:             gh,
+		interval:           checkInterval,
+		stopChan:           make(chan struct{}),
+		isApprovalRequired: isApprovalRequired,
+		verdicts:           make(chan domain.UpdateInfo),
 	}
 
 	binary, err := currentExecutable()
@@ -366,18 +302,66 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 	return nil
 }
 
+// GetPendingUpdate returns the release waiting for the owner of the node to
+// allow it. A zero value means nothing is waiting.
+func (u *SelfUpdater) GetPendingUpdate() domain.UpdateInfo {
+	u.mx.RLock()
+	defer u.mx.RUnlock()
+	return u.pending
+}
+
+// AnswerUpdate hands the owner's verdict to the waiting check. An answer to a
+// release nobody is waiting for is dropped.
+func (u *SelfUpdater) AnswerUpdate(isAllowed bool) {
+	select {
+	case u.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
+	default:
+		log.Warnln("selfupdate: no release is waiting for an answer")
+	}
+}
+
 func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
-	if u.approver == nil {
+	if !u.isApprovalRequired {
 		return true
 	}
-	isAllowed := u.approver.IsUpdateAllowed(domain.UpdateInfo{
+	if !u.startAsking(next) {
+		log.Debugf("selfupdate: version %s is declined, skipping", next)
+		return false
+	}
+
+	log.Infof("selfupdate: waiting for permission to update %s -> %s", u.current, next)
+
+	var isAllowed bool
+	select {
+	case <-u.ctx.Done():
+	case verdict := <-u.verdicts:
+		isAllowed = verdict.IsAllowed
+	}
+
+	u.stopAsking(isAllowed)
+	return isAllowed
+}
+
+func (u *SelfUpdater) startAsking(next *semver.Version) bool {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+	if u.declined == next.String() {
+		return false
+	}
+	u.pending = domain.UpdateInfo{
 		CurrentVersion: u.current.String(),
 		NewVersion:     next.String(),
-	})
-	if !isAllowed {
-		log.Infof("selfupdate: version %s is not allowed", next)
 	}
-	return isAllowed
+	return true
+}
+
+func (u *SelfUpdater) stopAsking(isAllowed bool) {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+	if !isAllowed {
+		u.declined = u.pending.NewVersion
+	}
+	u.pending = domain.UpdateInfo{}
 }
 
 // install puts the released binary in place of the running one and returns a

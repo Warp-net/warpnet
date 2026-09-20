@@ -105,7 +105,7 @@ func TestTickLogsOrdinaryFailures(t *testing.T) {
 }
 
 func TestNewSelfUpdaterResolvesItsOwnBinary(t *testing.T) {
-	u := NewSelfUpdater(context.Background(), semver.MustParse("1.0.0"), RelayArtifact(), nil)
+	u := NewSelfUpdater(context.Background(), semver.MustParse("1.0.0"), RelayArtifact(), false)
 	require.NotNil(t, u)
 	require.NotNil(t, u.binary)
 	require.NotNil(t, u.failures)
