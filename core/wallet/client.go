@@ -88,6 +88,25 @@ type Transfer struct {
 	Incoming  bool
 }
 
+type Sponsorship struct {
+	Splitter      string
+	OrderId       string
+	Author        string
+	Amount        string
+	MaxFeePercent uint64
+}
+
+type Payment struct {
+	Payer      string
+	Token      string
+	FeePercent uint64
+	Fee        string
+	Total      string
+	ResetTx    string
+	ApproveTx  string
+	PayTx      string
+}
+
 type request struct {
 	ID     string          `json:"id"`
 	Method string          `json:"method"`
@@ -487,4 +506,50 @@ func (c *Client) History(ctx context.Context, address, asset string, limit int) 
 		transfers = append(transfers, Transfer(t))
 	}
 	return transfers, nil
+}
+
+// Pay settles sponsored content and nothing else. It sends the money through
+// one of the project's splitter contracts, which adds the fee on top of the
+// amount, routes that fee to a project wallet and emits the Paid event that
+// verification later reads to prove this transaction paid for this order.
+//
+// Paying a person rather than a sponsorship is Transfer: it moves the whole
+// amount to the recipient, takes no fee and leaves no receipt to check. Do not
+// reach for Pay to send someone money.
+//
+// Nothing calls this yet, because nothing in warpnet carries a price.
+func (c *Client) Pay(ctx context.Context, seed string, s Sponsorship) (Payment, error) {
+	var out struct {
+		Payer      string `json:"payer"`
+		Token      string `json:"token"`
+		FeePercent uint64 `json:"fee_percent"`
+		Fee        string `json:"fee"`
+		Total      string `json:"total"`
+		ResetTx    string `json:"reset_tx"`
+		ApproveTx  string `json:"approve_tx"`
+		PayTx      string `json:"pay_tx"`
+	}
+	if err := c.call(ctx, "wallet.pay", payParams(c.cfg.Network, seed, s), &out); err != nil {
+		return Payment{}, err
+	}
+	log.Infof(
+		"wallet: sponsored %s with %s of %s on %s, fee %s at %d percent, tx %s",
+		s.Author, s.Amount, out.Token, c.cfg.Network, out.Fee, out.FeePercent, out.PayTx,
+	)
+	return Payment(out), nil
+}
+
+func payParams(network, seed string, s Sponsorship) map[string]any {
+	params := map[string]any{
+		paramNetwork: network,
+		paramSeed:    seed,
+		"splitter":   s.Splitter,
+		"order_id":   s.OrderId,
+		"author":     s.Author,
+		"amount":     s.Amount,
+	}
+	if s.MaxFeePercent > 0 {
+		params["max_fee_percent"] = s.MaxFeePercent
+	}
+	return params
 }
