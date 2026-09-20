@@ -15,9 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -64,6 +66,13 @@ type NodeServer interface {
 	Start() error
 }
 
+type NodeUpdater interface {
+	Run(shutdownF func())
+	GetPendingUpdate() (currentVersion, newVersion string)
+	AnswerUpdate(isAllowed bool) error
+	Close()
+}
+
 type App struct {
 	ctx       context.Context
 	auth      AppAuthServicer
@@ -71,6 +80,7 @@ type App struct {
 	db        AppStorer
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
+	updater   NodeUpdater
 	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
@@ -193,6 +203,40 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.psk = psk
 	go a.serveLogins(network, a.startMemberNode)
+	a.startSelfUpdate(version)
+}
+
+func (a *App) startSelfUpdate(version *semver.Version) {
+	if !config.Config().Node.IsSelfUpdate {
+		return
+	}
+	if os.Getenv("SNAP") != "" {
+		log.Infoln("app: snap package, self-update is disabled")
+		return
+	}
+
+	a.updater = selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), true)
+	a.updater.Run(a.shutdown)
+}
+
+func (a *App) shutdown() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("app: shutdown panic: %v", r)
+		}
+	}()
+
+	log.Infoln("app: shutting down...")
+
+	a.mx.Lock()
+	node := a.node
+	a.node = nil
+	a.mx.Unlock()
+
+	if node != nil {
+		node.Stop() // close node first
+	}
+	a.auth.AuthLogout()
 }
 
 // serveLogins answers the login handshake for as long as the app lives: logout
@@ -326,16 +370,40 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.mx.Lock()
-		node := a.node
-		a.node = nil
-		a.mx.Unlock()
-		if node != nil {
-			node.Stop() // close node first
-		}
-		a.auth.AuthLogout() // closes the database
-		a.auth.Reset()      // the next login raises a new node
+		a.shutdown()
+		a.auth.Reset() // the next login raises a new node
 		response.Body = []byte(`["logged_out"]`)
+		return response
+	case event.PRIVATE_GET_UPDATE:
+		var pending event.UpdateResponse
+		if a.updater != nil {
+			pending.CurrentVersion, pending.NewVersion = a.updater.GetPendingUpdate()
+		}
+		bt, err := json.Marshal(pending)
+		if err != nil {
+			log.Errorf("pending update marshal: %v \n", err)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		response.Body = bt
+	case event.PRIVATE_POST_UPDATE:
+		var ev event.UpdateEvent
+		if err := json.Unmarshal(request.Body, &ev); err != nil {
+			log.Errorf("message body as update event: %v %s \n", err, request.Body)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		if a.updater == nil {
+			log.Errorln("app: self-update is disabled")
+			response.Body = newErrorResp("self-update is disabled on this node")
+			return response
+		}
+		if err := a.updater.AnswerUpdate(ev.IsAllowed); err != nil {
+			log.Errorf("update answer: %v \n", err)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		response.Body = []byte(event.Accepted)
 		return response
 	default:
 		a.mx.RLock()
@@ -399,24 +467,6 @@ func newErrorResp(msg string) stdjson.RawMessage {
 
 	bt, _ := json.Marshal(errResp)
 	return bt
-}
-
-func (a *App) close(_ context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Errorf("app: close panic: %v", r)
-		}
-	}()
-
-	log.Infoln("app: closing...")
-
-	if a.node != nil {
-		a.node.Stop() // close node first
-	}
-
-	a.auth.AuthLogout()
-
-	close(a.readyChan)
 }
 
 // setLinuxDesktopIcon writes the PNG referenced by Icon=warpnet (the .desktop file is owned by deeplink.Register).

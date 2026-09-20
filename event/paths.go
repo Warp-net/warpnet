@@ -61,6 +61,8 @@ const (
 	PRIVATE_GET_TIMELINE               = "/private/get/timeline/0.0.0"
 	PRIVATE_POST_LOGIN                 = "/private/post/login/0.0.0"
 	PRIVATE_POST_LOGOUT                = "/private/post/logout/0.0.0"
+	PRIVATE_GET_UPDATE                 = "/private/get/update/0.0.0"
+	PRIVATE_POST_UPDATE                = "/private/post/update/0.0.0"
 	PRIVATE_POST_TWEET                 = "/private/post/tweet/0.0.0"
 	PRIVATE_GET_WALLET                 = "/private/get/wallet/0.0.0"
 	PRIVATE_GET_WALLET_ADDRESS         = "/private/get/wallet/address/0.0.0"

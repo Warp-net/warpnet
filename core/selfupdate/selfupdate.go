@@ -1,5 +1,3 @@
-//go:build !windows
-
 /*
 
 Warpnet - Decentralized Social Network
@@ -35,6 +33,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -51,11 +50,17 @@ const (
 	ErrTooLarge         warpnet.WarpError = "downloaded data too large"
 	ErrNoReleaseTag     warpnet.WarpError = "release has no tag"
 	ErrRestartFailed    warpnet.WarpError = "fail restarting"
+	ErrNoPendingUpdate  warpnet.WarpError = "no release is waiting for an answer"
 )
 
 const (
 	checkInterval = time.Hour
 	initialDelay  = time.Minute
+)
+
+const (
+	archAMD64 = "amd64"
+	archARM64 = "arm64"
 )
 
 // ReleaseSource resolves the newest published release.
@@ -106,7 +111,7 @@ func (a Artifact) isSupported() bool {
 // RelayArtifact returns the relay asset for the running platform. Releases
 // publish the relay for linux/amd64 only.
 func RelayArtifact() Artifact {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+	if runtime.GOOS != "linux" || runtime.GOARCH != archAMD64 {
 		return Artifact{}
 	}
 	return Artifact{
@@ -116,30 +121,68 @@ func RelayArtifact() Artifact {
 	}
 }
 
-// SelfUpdater keeps the running binary in sync with the newest release.
-type SelfUpdater struct {
-	ctx      context.Context
-	current  *semver.Version
-	artifact Artifact
-	releases ReleaseSource
-	assets   AssetFetcher
-	binary   BinaryReplacer
-	failures FailureRegistry
-	interval time.Duration
-	stopChan chan struct{}
+func MemberArtifact() Artifact {
+	switch runtime.GOOS {
+	case "linux":
+		if runtime.GOARCH != archAMD64 && runtime.GOARCH != archARM64 {
+			return Artifact{}
+		}
+		return Artifact{
+			AssetName:    "warpnet_linux_" + runtime.GOARCH + ".tar.gz",
+			ChecksumName: "warpnet_linux_" + runtime.GOARCH + "_checksums.txt",
+			BinaryName:   warpnet.WarpnetName,
+		}
+	case "windows":
+		if runtime.GOARCH != archAMD64 {
+			return Artifact{}
+		}
+		return Artifact{
+			AssetName:    "warpnet_windows_amd64.zip",
+			ChecksumName: "warpnet_windows_amd64_checksums.txt",
+			BinaryName:   warpnet.WarpnetName + ".exe",
+		}
+	}
+	return Artifact{}
 }
 
-func NewSelfUpdater(ctx context.Context, current *semver.Version, a Artifact) *SelfUpdater {
+// SelfUpdater keeps the running binary in sync with the newest release. A node
+// with an owner to ask - a member node - holds every release until the frontend
+// answers for it; an unattended one installs it right away.
+type SelfUpdater struct {
+	ctx                context.Context
+	current            *semver.Version
+	artifact           Artifact
+	releases           ReleaseSource
+	assets             AssetFetcher
+	binary             BinaryReplacer
+	failures           FailureRegistry
+	interval           time.Duration
+	stopChan           chan struct{}
+	isApprovalRequired bool
+	mx                 sync.RWMutex
+	verdicts           chan bool
+	pending            string
+	declined           string
+}
+
+func NewSelfUpdater(
+	ctx context.Context,
+	current *semver.Version,
+	a Artifact,
+	isApprovalRequired bool,
+) *SelfUpdater {
 	gh := newGitHubReleases(ctx, current)
 
 	u := &SelfUpdater{
-		ctx:      ctx,
-		current:  current,
-		artifact: a,
-		releases: gh,
-		assets:   gh,
-		interval: checkInterval,
-		stopChan: make(chan struct{}),
+		ctx:                ctx,
+		current:            current,
+		artifact:           a,
+		releases:           gh,
+		assets:             gh,
+		interval:           checkInterval,
+		stopChan:           make(chan struct{}),
+		isApprovalRequired: isApprovalRequired,
+		verdicts:           make(chan bool),
 	}
 
 	binary, err := currentExecutable()
@@ -231,6 +274,9 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		log.Warnf("selfupdate: version %s failed to start before, skipping", rel.Version)
 		return nil
 	}
+	if !u.isAllowed(rel.Version) {
+		return nil
+	}
 	if u.current.Major() != rel.Version.Major() {
 		// PSK is derived from the major version: after the restart this node
 		// shares a network only with peers running the new major.
@@ -254,6 +300,71 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		return fmt.Errorf("%w, previous binary restored: %w", ErrRestartFailed, err)
 	}
 	return nil
+}
+
+// GetPendingUpdate returns the version waiting for the owner of the node to
+// allow it, alongside the one it replaces. An empty newVersion means nothing is
+// waiting.
+func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
+	u.mx.RLock()
+	defer u.mx.RUnlock()
+	if u.pending == "" {
+		return "", ""
+	}
+	return u.current.String(), u.pending
+}
+
+// AnswerUpdate hands the owner's verdict to the waiting check.
+func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
+	select {
+	case u.verdicts <- isAllowed:
+		return nil
+	default:
+		return ErrNoPendingUpdate
+	}
+}
+
+func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
+	if !u.isApprovalRequired {
+		return true
+	}
+	if !u.startAsking(next) {
+		log.Debugf("selfupdate: version %s is declined, skipping", next)
+		return false
+	}
+
+	log.Infof("selfupdate: waiting for permission to update %s -> %s", u.current, next)
+
+	var isAllowed bool
+	select {
+	case <-u.ctx.Done():
+	case isAllowed = <-u.verdicts:
+	}
+
+	u.stopAsking(isAllowed)
+	if !isAllowed {
+		log.Infof("selfupdate: version %s is not allowed", next)
+	}
+	return isAllowed
+}
+
+func (u *SelfUpdater) startAsking(next *semver.Version) bool {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+	if u.declined == next.String() {
+		return false
+	}
+	u.pending = next.String()
+	return true
+}
+
+func (u *SelfUpdater) stopAsking(isAllowed bool) {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+	if !isAllowed {
+		u.declined = u.pending
+	}
+	u.pending = ""
 }
 
 // install puts the released binary in place of the running one and returns a
