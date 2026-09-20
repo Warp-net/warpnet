@@ -474,11 +474,7 @@ func (a *App) close(_ context.Context) {
 		a.updater.Close()
 	}
 
-	if a.node != nil {
-		a.node.Stop() // close node first
-	}
-
-	a.auth.AuthLogout()
+	a.shutdown()
 
 	close(a.readyChan)
 }
