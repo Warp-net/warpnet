@@ -36,7 +36,6 @@ import (
 
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -122,19 +121,22 @@ func (n *fakeNode) callCount() int {
 
 type fakeUpdater struct {
 	mx      sync.Mutex
-	pending domain.UpdateInfo
+	pending event.UpdateResponse
 	answers chan bool
 }
 
-func (f *fakeUpdater) GetPendingUpdate() domain.UpdateInfo {
+func (f *fakeUpdater) GetPendingUpdate() event.UpdateResponse {
 	f.mx.Lock()
 	defer f.mx.Unlock()
 	return f.pending
 }
 
-func (f *fakeUpdater) AnswerUpdate(isAllowed bool) { f.answers <- isAllowed }
+func (f *fakeUpdater) AnswerUpdate(isAllowed bool) error {
+	f.answers <- isAllowed
+	return nil
+}
 
-func (f *fakeUpdater) holdRelease(info domain.UpdateInfo) {
+func (f *fakeUpdater) holdRelease(info event.UpdateResponse) {
 	f.mx.Lock()
 	f.pending = info
 	f.mx.Unlock()
@@ -310,18 +312,18 @@ func TestBridge_FailedLoginEnrollsNothing(t *testing.T) {
 
 func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
 	srv, _, node, updater := newTestBridgeWithUpdater(t)
-	updater.holdRelease(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+	updater.holdRelease(event.UpdateResponse{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
 
 	owner := dial(t, srv, clientKey(t))
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 
-	var pending domain.UpdateInfo
+	var pending event.UpdateResponse
 	require.NoError(t, json.Unmarshal(owner.send(t, event.PRIVATE_GET_UPDATE, struct{}{}).Body, &pending))
 	assert.Equal(t, "0.7.2", pending.NewVersion)
 	assert.Equal(t, "0.7.1", pending.CurrentVersion)
 
 	resp := owner.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})
-	assert.Equal(t, json.RawMessage(`["update_answered"]`), resp.Body)
+	assert.Equal(t, json.RawMessage(event.Accepted), resp.Body)
 
 	select {
 	case isAllowed := <-updater.answers:
@@ -334,7 +336,7 @@ func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
 
 func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
 	srv, _, _, updater := newTestBridgeWithUpdater(t)
-	updater.holdRelease(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+	updater.holdRelease(event.UpdateResponse{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
 
 	attacker := dial(t, srv, clientKey(t))
 	assert.Equal(t, http.StatusUnauthorized,

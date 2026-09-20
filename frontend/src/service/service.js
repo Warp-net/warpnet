@@ -346,10 +346,14 @@ export const warpnetService = {
     },
 
     async answerUpdate(isAllowed) {
-        return this.sendToNode({
+        const resp = await this.sendToNode({
             path: PRIVATE_POST_UPDATE,
             body: {is_allowed: Boolean(isAllowed)},
         })
+        if (resp && resp.code) {
+            throw new Error(resp.message)
+        }
+        return resp
     },
 
     async signInUser(form) {

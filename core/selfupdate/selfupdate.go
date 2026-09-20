@@ -51,6 +51,7 @@ const (
 	ErrTooLarge         warpnet.WarpError = "downloaded data too large"
 	ErrNoReleaseTag     warpnet.WarpError = "release has no tag"
 	ErrRestartFailed    warpnet.WarpError = "fail restarting"
+	ErrNoPendingUpdate  warpnet.WarpError = "no release is waiting for an answer"
 )
 
 const (
@@ -310,13 +311,13 @@ func (u *SelfUpdater) GetPendingUpdate() domain.UpdateInfo {
 	return u.pending
 }
 
-// AnswerUpdate hands the owner's verdict to the waiting check. An answer to a
-// release nobody is waiting for is dropped.
-func (u *SelfUpdater) AnswerUpdate(isAllowed bool) {
+// AnswerUpdate hands the owner's verdict to the waiting check.
+func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
 	select {
 	case u.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
+		return nil
 	default:
-		log.Warnln("selfupdate: no release is waiting for an answer")
+		return ErrNoPendingUpdate
 	}
 }
 

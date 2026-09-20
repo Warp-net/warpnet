@@ -35,7 +35,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/gorilla/websocket"
@@ -95,8 +94,8 @@ type Authenticator interface {
 }
 
 type Updater interface {
-	GetPendingUpdate() domain.UpdateInfo
-	AnswerUpdate(isAllowed bool)
+	GetPendingUpdate() event.UpdateResponse
+	AnswerUpdate(isAllowed bool) error
 }
 
 type BridgeHandler struct {
@@ -338,7 +337,7 @@ func (b *BridgeHandler) getPendingUpdate() json.RawMessage {
 	u := b.updater
 	b.mx.RUnlock()
 
-	var info domain.UpdateInfo
+	var info event.UpdateResponse
 	if u != nil {
 		info = u.GetPendingUpdate()
 	}
@@ -361,8 +360,11 @@ func (b *BridgeHandler) answerUpdate(body json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
-	u.AnswerUpdate(ev.IsAllowed)
-	return json.RawMessage(`["update_answered"]`)
+	if err := u.AnswerUpdate(ev.IsAllowed); err != nil {
+		log.Errorf("remote: update answer: %v", err)
+		return newErrorResp(err.Error())
+	}
+	return json.RawMessage(event.Accepted)
 }
 
 func (b *BridgeHandler) call(req event.Message) json.RawMessage {

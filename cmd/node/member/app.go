@@ -68,8 +68,8 @@ type NodeServer interface {
 
 type NodeUpdater interface {
 	Run(shutdownF func())
-	GetPendingUpdate() domain.UpdateInfo
-	AnswerUpdate(isAllowed bool)
+	GetPendingUpdate() event.UpdateResponse
+	AnswerUpdate(isAllowed bool) error
 	Close()
 }
 
@@ -367,7 +367,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	case event.PRIVATE_GET_UPDATE:
-		var pending domain.UpdateInfo
+		var pending event.UpdateResponse
 		if a.updater != nil {
 			pending = a.updater.GetPendingUpdate()
 		}
@@ -385,10 +385,17 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
-		if a.updater != nil {
-			a.updater.AnswerUpdate(ev.IsAllowed)
+		if a.updater == nil {
+			log.Errorln("app: self-update is disabled")
+			response.Body = newErrorResp("self-update is disabled on this node")
+			return response
 		}
-		response.Body = []byte(`["update_answered"]`)
+		if err := a.updater.AnswerUpdate(ev.IsAllowed); err != nil {
+			log.Errorf("update answer: %v \n", err)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		response.Body = []byte(event.Accepted)
 		return response
 	default:
 		a.mx.RLock()
