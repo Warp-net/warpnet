@@ -57,6 +57,7 @@ const (
 	ErrNoPendingUpdate  warpnet.WarpError = "no release is waiting for an answer"
 	ErrReleaseUnsigned  warpnet.WarpError = "release carries no signature"
 	ErrMalformedKey     warpnet.WarpError = "malformed release signing key"
+	ErrNoReleaseSource  warpnet.WarpError = "no forge to read releases from"
 )
 
 // releaseSigningKey is the hex-encoded ed25519 public key whose private half
@@ -188,14 +189,17 @@ func NewSelfUpdater(
 	a Artifact,
 	isApprovalRequired bool,
 ) *SelfUpdater {
-	gh := newGitHubReleases(ctx, current)
+	assets := newAssetClient(ctx, current)
 
 	u := &SelfUpdater{
-		ctx:                ctx,
-		current:            current,
-		artifact:           a,
-		releases:           gh,
-		assets:             gh,
+		ctx:      ctx,
+		current:  current,
+		artifact: a,
+		releases: forgeSources{
+			newForgeReleases(assets, codebergReleaseAPI),
+			newForgeReleases(assets, githubReleaseAPI),
+		},
+		assets:             assets,
 		interval:           checkInterval,
 		stopChan:           make(chan struct{}),
 		isApprovalRequired: isApprovalRequired,

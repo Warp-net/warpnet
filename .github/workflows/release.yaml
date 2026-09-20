@@ -315,3 +315,65 @@ jobs:
           done
 
           gh release upload "$RELEASE_TAG" sums/*.sig --repo "$GITHUB_REPOSITORY" --clobber
+
+
+  # Publishes the same release on Codeberg, so a node updating itself never has
+  # to reach a proprietary forge. Only what self-update fetches is mirrored:
+  # Codeberg is donation funded and its attachment quota is ~1.5 GiB, while a
+  # full release is 148 MB against the 71 MiB these four platforms need. The
+  # node takes the newest release either forge offers, so a failure here costs
+  # the mirror, not the update.
+  mirror-codeberg:
+    needs: [release, release-warpdroid, sign]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mirror the release to Codeberg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          CODEBERG_REPO: Warpnet/warpnet # the owner differs from the GitHub one
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CODEBERG_TOKEN:-}" ]; then
+            echo "::warning::CODEBERG_TOKEN is not set, the release stays on GitHub only"
+            exit 0
+          fi
+
+          api="https://codeberg.org/api/v1/repos/$CODEBERG_REPO"
+          auth="Authorization: token $CODEBERG_TOKEN"
+
+          for asset in relay_linux_amd64.tar.gz \
+                       warpnet_linux_amd64.tar.gz \
+                       warpnet_linux_arm64.tar.gz \
+                       warpnet_windows_amd64.zip; do
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$asset" --dir assets
+          done
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*_checksums.txt*' --dir assets
+
+          # a re-run reuses the release rather than failing on the existing tag
+          id=$(curl -sf -H "$auth" "$api/releases/tags/$RELEASE_TAG" | jq -r '.id // empty' || true)
+          if [ -z "$id" ]; then
+            id=$(curl -sf -X POST -H "$auth" -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"$RELEASE_TAG\",\"name\":\"$RELEASE_TAG\"}" \
+              "$api/releases" | jq -r '.id')
+          fi
+          test -n "$id"
+
+          for file in assets/*; do
+            name=$(basename "$file")
+            curl -sf -X POST -H "$auth" \
+              -F "attachment=@$file" \
+              "$api/releases/$id/assets?name=$name" > /dev/null
+            echo "mirrored $name"
+          done
+
+          published=$(curl -sf "$api/releases/latest" | jq -r .tag_name)
+          if [ "$published" != "$RELEASE_TAG" ]; then
+            echo "::error::Codeberg still serves $published as the latest release" >&2
+            exit 1
+          fi
+          echo "Codeberg now serves $published"

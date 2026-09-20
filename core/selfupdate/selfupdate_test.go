@@ -173,8 +173,8 @@ func signedUpdaterFixture(t *testing.T, latest string, archive, sums, signature 
 	path := filepath.Join(t.TempDir(), testBinary)
 	require.NoError(t, os.WriteFile(path, []byte("current binary"), 0o755))
 
-	gh := newGitHubReleases(context.Background(), semver.MustParse(testVersion))
-	gh.apiURL = releaseServer(t, latest, archive, sums, signature).URL + "/latest"
+	assets := newAssetClient(context.Background(), semver.MustParse(testVersion))
+	forge := newForgeReleases(assets, releaseServer(t, latest, archive, sums, signature).URL+"/latest")
 
 	binary := &fakeBinary{executable: &executable{path: path}}
 	u := NewSelfUpdater(
@@ -188,7 +188,7 @@ func signedUpdaterFixture(t *testing.T, latest string, archive, sums, signature 
 		},
 		false,
 	)
-	u.releases, u.assets = gh, gh
+	u.releases, u.assets = forgeSources{forge}, assets
 	u.binary = binary
 	u.failures = newFailureMarker(path)
 
@@ -485,6 +485,59 @@ func TestReleaseKey(t *testing.T) {
 	key, err = releaseKey()
 	require.NoError(t, err)
 	assert.Equal(t, ed25519.PublicKey(pub), key)
+}
+
+// stubSource stands in for one forge.
+type stubSource struct {
+	tag string
+	err error
+}
+
+func (s stubSource) Latest() (Release, error) {
+	if s.err != nil {
+		return Release{}, s.err
+	}
+	return Release{Version: semver.MustParse(s.tag)}, nil
+}
+
+func TestForgeSourcesTakeTheNewestRelease(t *testing.T) {
+	lagging := stubSource{tag: "0.7.547"}
+	ahead := stubSource{tag: "0.7.548"}
+
+	for _, sources := range []forgeSources{{lagging, ahead}, {ahead, lagging}} {
+		release, err := sources.Latest()
+		require.NoError(t, err)
+		assert.Equal(t, "0.7.548", release.Version.String(), "a forge left behind must not pin the node")
+	}
+}
+
+func TestForgeSourcesSurviveOneForgeBeingDown(t *testing.T) {
+	down := stubSource{err: errors.New("codeberg is unreachable")}
+	sources := forgeSources{down, stubSource{tag: "0.7.548"}}
+
+	release, err := sources.Latest()
+	require.NoError(t, err)
+	assert.Equal(t, "0.7.548", release.Version.String())
+}
+
+func TestForgeSourcesReportEveryForgeFailing(t *testing.T) {
+	unreachable := errors.New("both forges are unreachable")
+	_, err := (forgeSources{stubSource{err: unreachable}, stubSource{err: unreachable}}).Latest()
+	require.ErrorIs(t, err, unreachable)
+
+	_, err = (forgeSources{}).Latest()
+	require.ErrorIs(t, err, ErrNoReleaseSource)
+}
+
+func TestNewSelfUpdaterReadsBothForges(t *testing.T) {
+	u := NewSelfUpdater(context.Background(), semver.MustParse(testVersion), RelayArtifact(), false)
+
+	sources, ok := u.releases.(forgeSources)
+	require.True(t, ok)
+	require.Len(t, sources, 2)
+
+	assert.Equal(t, codebergReleaseAPI, sources[0].(*forgeReleases).apiURL)
+	assert.Equal(t, githubReleaseAPI, sources[1].(*forgeReleases).apiURL)
 }
 
 func TestMemberArtifact(t *testing.T) {

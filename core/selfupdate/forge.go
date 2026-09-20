@@ -41,11 +41,15 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
-	// latestReleaseAPI resolves to the newest published Warpnet release.
-	latestReleaseAPI = "https://api.github.com/repos/Warp-net/warpnet/releases/latest"
+	// Forges the release is published to, asked in this order. Codeberg runs
+	// Forgejo, whose release JSON is the same shape as the GitHub one, so both
+	// are read by the same client. Note the owner differs between them.
+	codebergReleaseAPI = "https://codeberg.org/api/v1/repos/Warpnet/warpnet/releases/latest"
+	githubReleaseAPI   = "https://api.github.com/repos/Warp-net/warpnet/releases/latest"
 
 	downloadTimeout = 10 * time.Minute
 
@@ -68,28 +72,70 @@ func (r Release) AssetURL(name string) (string, error) {
 	return url, nil
 }
 
-// githubReleases reads releases and their assets from the GitHub API.
-type githubReleases struct {
+// assetClient fetches whatever a release points at. Asset URLs are absolute, so
+// one client serves every forge.
+type assetClient struct {
 	ctx       context.Context
 	client    *http.Client
-	apiURL    string
 	userAgent string
 }
 
-func newGitHubReleases(ctx context.Context, current *semver.Version) *githubReleases {
+func newAssetClient(ctx context.Context, current *semver.Version) *assetClient {
 	userAgent := warpnet.WarpnetName
 	if current != nil {
 		userAgent += "/" + current.String()
 	}
-	return &githubReleases{
+	return &assetClient{
 		ctx:       ctx,
 		client:    &http.Client{Timeout: downloadTimeout},
-		apiURL:    latestReleaseAPI,
 		userAgent: userAgent,
 	}
 }
 
-func (g *githubReleases) Latest() (Release, error) {
+// forgeReleases reads the newest release of one forge.
+type forgeReleases struct {
+	*assetClient
+
+	apiURL string
+}
+
+func newForgeReleases(assets *assetClient, apiURL string) *forgeReleases {
+	return &forgeReleases{assetClient: assets, apiURL: apiURL}
+}
+
+// forgeSources takes the newest release any forge publishes, so one of them
+// lagging behind cannot hold a node on an old version. The release carries the
+// asset URLs of the forge that published it, so the two are never mixed.
+type forgeSources []ReleaseSource
+
+func (f forgeSources) Latest() (Release, error) {
+	var newest Release
+	var lastErr error
+
+	for _, source := range f {
+		release, err := source.Latest()
+		if err != nil {
+			// one forge being unreachable is what the other one is for; only
+			// losing all of them is worth telling the owner about
+			log.Debugf("selfupdate: %v", err)
+			lastErr = err
+			continue
+		}
+		if newest.Version == nil || release.Version.GreaterThan(newest.Version) {
+			newest = release
+		}
+	}
+
+	if newest.Version == nil {
+		if lastErr == nil {
+			return Release{}, ErrNoReleaseSource
+		}
+		return Release{}, lastErr
+	}
+	return newest, nil
+}
+
+func (g *forgeReleases) Latest() (Release, error) {
 	body, err := g.Read(g.apiURL)
 	if err != nil {
 		return Release{}, err
@@ -121,7 +167,7 @@ func (g *githubReleases) Latest() (Release, error) {
 	return Release{Version: version, assets: assets}, nil
 }
 
-func (g *githubReleases) Read(url string) ([]byte, error) {
+func (g *assetClient) Read(url string) ([]byte, error) {
 	resp, err := g.get(url)
 	if err != nil {
 		return nil, err
@@ -138,7 +184,7 @@ func (g *githubReleases) Read(url string) ([]byte, error) {
 	return data, nil
 }
 
-func (g *githubReleases) Download(url, dstPath string) (_ string, err error) {
+func (g *assetClient) Download(url, dstPath string) (_ string, err error) {
 	resp, err := g.get(url)
 	if err != nil {
 		return "", err
@@ -166,7 +212,7 @@ func (g *githubReleases) Download(url, dstPath string) (_ string, err error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (g *githubReleases) get(url string) (*http.Response, error) {
+func (g *assetClient) get(url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(g.ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("selfupdate: building request %s: %w", url, err)
