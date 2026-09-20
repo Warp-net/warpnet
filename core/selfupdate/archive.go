@@ -1,5 +1,3 @@
-//go:build !windows
-
 /*
 
 Warpnet - Decentralized Social Network
@@ -31,6 +29,7 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -61,8 +60,16 @@ func checksumOf(listing []byte, assetName string) (string, error) {
 	return "", fmt.Errorf("selfupdate: %w: %s", ErrChecksumNotFound, assetName)
 }
 
-// extractBinary writes the binaryName entry of a .tar.gz archive to dstPath.
+// extractBinary writes the binaryName entry of a release archive to dstPath.
+// Releases ship a .tar.gz everywhere but Windows, which gets a .zip.
 func extractBinary(archivePath, binaryName, dstPath string) error {
+	if strings.HasSuffix(archivePath, ".zip") {
+		return extractFromZip(archivePath, binaryName, dstPath)
+	}
+	return extractFromTarGz(archivePath, binaryName, dstPath)
+}
+
+func extractFromTarGz(archivePath, binaryName, dstPath string) error {
 	archive, err := os.Open(archivePath) //nolint:gosec // archive was just downloaded to this path
 	if err != nil {
 		return fmt.Errorf("selfupdate: opening %s: %w", archivePath, err)
@@ -89,6 +96,28 @@ func extractBinary(archivePath, binaryName, dstPath string) error {
 		}
 		return writeBinary(tr, dstPath)
 	}
+}
+
+func extractFromZip(archivePath, binaryName, dstPath string) error {
+	archive, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return fmt.Errorf("selfupdate: reading %s: %w", archivePath, err)
+	}
+	defer func() { _ = archive.Close() }()
+
+	for _, f := range archive.File {
+		if f.FileInfo().IsDir() || filepath.Base(f.Name) != binaryName {
+			continue
+		}
+		entry, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("selfupdate: reading %s: %w", archivePath, err)
+		}
+		err = writeBinary(entry, dstPath)
+		_ = entry.Close()
+		return err
+	}
+	return fmt.Errorf("selfupdate: %w: %s", ErrBinaryNotFound, binaryName)
 }
 
 func writeBinary(src io.Reader, dstPath string) (err error) {

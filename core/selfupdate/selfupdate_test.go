@@ -42,9 +42,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -141,6 +143,7 @@ func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpd
 		context.Background(),
 		semver.MustParse(testVersion),
 		Artifact{AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary},
+		nil,
 	)
 	u.releases, u.assets = gh, gh
 	u.binary = binary
@@ -253,6 +256,69 @@ func TestSelfUpdaterIgnoresMalformedMarker(t *testing.T) {
 	assert.Equal(t, "new binary", read(t, binary.path))
 	assert.True(t, binary.restarted)
 	assert.NoFileExists(t, binary.path+failedSuffix)
+}
+
+// stubApprover answers every release the same way and counts the questions.
+type stubApprover struct {
+	isAllowed bool
+	asked     []domain.UpdateInfo
+}
+
+func (s *stubApprover) IsUpdateAllowed(info domain.UpdateInfo) bool {
+	s.asked = append(s.asked, info)
+	return s.isAllowed
+}
+
+func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	approver := &stubApprover{isAllowed: true}
+	u.approver = approver
+
+	require.NoError(t, u.checkAndUpdate(nil))
+
+	require.Len(t, approver.asked, 1)
+	assert.Equal(t, testVersion, approver.asked[0].CurrentVersion)
+	assert.Equal(t, "0.7.548", approver.asked[0].NewVersion)
+	assert.Equal(t, "new binary", read(t, binary.path))
+	assert.True(t, binary.restarted)
+}
+
+func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	approver := &stubApprover{isAllowed: false}
+	u.approver = approver
+
+	require.NoError(t, u.checkAndUpdate(nil))
+
+	assert.Equal(t, "current binary", read(t, binary.path))
+	assert.False(t, binary.restarted)
+	assert.NoFileExists(t, binary.path+oldSuffix)
+
+	// A declined release must not be offered again on every check.
+	require.NoError(t, u.checkAndUpdate(nil))
+	assert.Len(t, approver.asked, 1, "the same release was offered twice")
+}
+
+func TestMemberArtifact(t *testing.T) {
+	a := MemberArtifact()
+	switch runtime.GOOS {
+	case "linux":
+		require.True(t, a.isSupported())
+		assert.Equal(t, "warpnet_linux_"+runtime.GOARCH+".tar.gz", a.AssetName)
+		assert.Equal(t, "warpnet_linux_"+runtime.GOARCH+"_checksums.txt", a.ChecksumName)
+		assert.Equal(t, "warpnet", a.BinaryName)
+	case "darwin":
+		assert.False(t, a.isSupported(), "the signed macOS build is not replaced in place")
+	case "windows":
+		require.True(t, a.isSupported())
+		assert.Equal(t, "warpnet_windows_amd64.zip", a.AssetName)
+		assert.Equal(t, "warpnet_windows_amd64_checksums.txt", a.ChecksumName)
+		assert.Equal(t, "warpnet.exe", a.BinaryName)
+	default:
+		assert.False(t, a.isSupported(), "no release publishes a member asset for %s", runtime.GOOS)
+	}
 }
 
 func TestArtifactSupport(t *testing.T) {

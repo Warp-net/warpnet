@@ -34,8 +34,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -121,6 +123,14 @@ func (n *fakeNode) callCount() int {
 
 func newTestBridge(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode) {
 	t.Helper()
+	srv, auth, node, _ := newTestBridgeWithGate(t)
+	return srv, auth, node
+}
+
+// newTestBridgeWithGate also hands back the gate a release waits in, so the
+// dashboard's half of the update handshake can be driven from a test.
+func newTestBridgeWithGate(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode, *selfupdate.UpdateGate) {
+	t.Helper()
 
 	staticKey, err := noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256).
 		GenerateKeypair(nil)
@@ -138,9 +148,12 @@ func newTestBridge(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode) {
 	)
 	handler.AttachNode(node)
 
+	gate := selfupdate.NewUpdateGate(t.Context())
+	handler.AttachUpdateGate(gate)
+
 	srv := httptest.NewServer(handler.Handle())
 	t.Cleanup(srv.Close)
-	return srv, auth, node
+	return srv, auth, node, gate
 }
 
 func clientKey(t *testing.T) noise.DHKey {
@@ -276,6 +289,61 @@ func TestBridge_FailedLoginEnrollsNothing(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized,
 		responseError(t, reconnected.send(t, event.PRIVATE_POST_TWEET, struct{}{})).Code)
 	assert.Zero(t, node.callCount())
+}
+
+func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
+	srv, _, node, gate := newTestBridgeWithGate(t)
+
+	owner := dial(t, srv, clientKey(t))
+	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
+
+	verdicts := make(chan bool, 1)
+	go func() {
+		verdicts <- gate.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+	}()
+
+	var pending domain.UpdateInfo
+	require.Eventually(t, func() bool {
+		resp := owner.send(t, event.PRIVATE_GET_UPDATE, struct{}{})
+		require.NoError(t, json.Unmarshal(resp.Body, &pending))
+		return pending.NewVersion != ""
+	}, 5*time.Second, 10*time.Millisecond)
+	assert.Equal(t, "0.7.2", pending.NewVersion)
+
+	resp := owner.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})
+	assert.Equal(t, json.RawMessage(`["update_answered"]`), resp.Body)
+
+	select {
+	case allowed := <-verdicts:
+		assert.True(t, allowed)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the answer never reached the update service")
+	}
+	assert.Zero(t, node.callCount(), "the update handshake never reaches the node")
+}
+
+func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
+	srv, _, _, gate := newTestBridgeWithGate(t)
+
+	verdicts := make(chan bool, 1)
+	go func() {
+		verdicts <- gate.IsUpdateAllowed(domain.UpdateInfo{CurrentVersion: "0.7.1", NewVersion: "0.7.2"})
+	}()
+	require.Eventually(t, func() bool {
+		return gate.Pending().NewVersion != ""
+	}, 5*time.Second, 10*time.Millisecond)
+
+	attacker := dial(t, srv, clientKey(t))
+	assert.Equal(t, http.StatusUnauthorized,
+		responseError(t, attacker.send(t, event.PRIVATE_GET_UPDATE, struct{}{})).Code)
+	assert.Equal(t, http.StatusUnauthorized,
+		responseError(t, attacker.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})).Code)
+
+	select {
+	case <-verdicts:
+		t.Fatal("an unauthenticated client replaced the node's binary")
+	case <-time.After(100 * time.Millisecond):
+	}
 }
 
 func TestBridge_LogoutRevokesAuthorityUntilNextLogin(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -265,6 +266,66 @@ func TestAppCall(t *testing.T) {
 
 		resp := a.Call(AppMessage{MessageId: "1", Path: "/private/get/info", Body: []byte("{}")})
 		require.Contains(t, errBody(t, resp.Body), "stream closed")
+	})
+
+	t.Run("a pending release is reported and answered", func(t *testing.T) {
+		a := liveApp(t, &stubAuthService{}, nil)
+		a.update = selfupdate.NewUpdateGate(context.Background())
+
+		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+		var empty domain.UpdateInfo
+		require.NoError(t, json.Unmarshal(resp.Body, &empty))
+		require.Empty(t, empty.NewVersion, "nothing is waiting before a release is found")
+
+		verdicts := make(chan bool, 1)
+		go func() {
+			verdicts <- a.update.IsUpdateAllowed(domain.UpdateInfo{
+				CurrentVersion: "0.7.1", NewVersion: "0.7.2",
+			})
+		}()
+
+		var pending domain.UpdateInfo
+		require.Eventually(t, func() bool {
+			resp = a.Call(AppMessage{MessageId: "2", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+			require.NoError(t, json.Unmarshal(resp.Body, &pending))
+			return pending.NewVersion != ""
+		}, time.Second, time.Millisecond)
+		require.Equal(t, "0.7.2", pending.NewVersion)
+		require.Equal(t, "0.7.1", pending.CurrentVersion)
+
+		resp = a.Call(AppMessage{
+			MessageId: "3", Path: event.PRIVATE_POST_UPDATE,
+			Body: mustJSON(t, event.UpdateEvent{IsAllowed: true}),
+		})
+		require.JSONEq(t, `["update_answered"]`, string(resp.Body))
+
+		select {
+		case allowed := <-verdicts:
+			require.True(t, allowed)
+		case <-time.After(time.Second):
+			t.Fatal("the answer never reached the update service")
+		}
+	})
+
+	t.Run("update routes survive a disabled self-update", func(t *testing.T) {
+		a := liveApp(t, &stubAuthService{}, nil) // a.update stays nil
+
+		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+		var info domain.UpdateInfo
+		require.NoError(t, json.Unmarshal(resp.Body, &info))
+		require.Empty(t, info.NewVersion)
+
+		resp = a.Call(AppMessage{
+			MessageId: "2", Path: event.PRIVATE_POST_UPDATE,
+			Body: mustJSON(t, event.UpdateEvent{IsAllowed: true}),
+		})
+		require.JSONEq(t, `["update_answered"]`, string(resp.Body))
+	})
+
+	t.Run("a malformed update answer is reported", func(t *testing.T) {
+		a := liveApp(t, &stubAuthService{}, nil)
+		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_POST_UPDATE, Body: []byte("not json")})
+		require.NotEmpty(t, errBody(t, resp.Body))
 	})
 
 	t.Run("an empty response body is reported", func(t *testing.T) {

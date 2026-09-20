@@ -59,6 +59,18 @@ resulting from the use or misuse of this software.
     </div>
 
     <router-view :key="$route.fullPath" />
+
+    <!-- The node holds the release back until this is answered, so the dialog
+         is the only way an update ever happens. -->
+    <ConfirmDialog
+      :show="pendingUpdate !== null"
+      title="Update available"
+      :message="updateMessage"
+      confirm-label="Update now"
+      cancel-label="Later"
+      @confirm="answerUpdate(true)"
+      @cancel="answerUpdate(false)"
+    />
     <ToastHost />
   </div>
 </template>
@@ -69,20 +81,27 @@ import {parseDeepLink} from "@/lib/deeplink";
 import {warpnetService} from "@/service/service";
 import {connection} from "@/lib/connection";
 import {isExperimentalNetwork} from "@/lib/network";
+import {toast} from "@/lib/toast";
 import ToastHost from "@/components/ToastHost.vue";
+import ConfirmDialog from "@/components/ConfirmDialog.vue";
 
 const DEEP_LINK_EVENT = "deeplink:open";
 const LOG = "[warpnet-deeplink]";
+// The node checks GitHub once an hour, so the poll only has to be frequent
+// enough that a waiting release is noticed while the user is still around.
+const UPDATE_POLL_MS = 60000;
 
 export default {
   name: "App",
-  components: { ToastHost },
+  components: { ToastHost, ConfirmDialog },
   data() {
     return {
       connection,
       owner: warpnetService.getOwnerProfile(),
       unsubscribeOwner: null,
       bannerObserver: null,
+      pendingUpdate: null,
+      updateInterval: null,
     };
   },
   computed: {
@@ -104,6 +123,16 @@ export default {
       }
       return network.charAt(0).toUpperCase() + network.slice(1);
     },
+    updateMessage() {
+      if (!this.pendingUpdate) {
+        return "";
+      }
+      return (
+        `Warpnet ${this.pendingUpdate.new_version} is out ` +
+        `(you are on ${this.pendingUpdate.current_version}).\n\n` +
+        "Your node will restart into the new version, so you will have to sign in again."
+      );
+    },
   },
   methods: {
     // A dropped WebSocket may leave the transport singleton (socket, aesKey,
@@ -116,6 +145,25 @@ export default {
     syncBannerHeight() {
       const height = this.$refs.banners?.offsetHeight || 0;
       document.documentElement.style.setProperty("--top-banner-h", `${height}px`);
+    },
+    async pollUpdate() {
+      if (this.pendingUpdate) {
+        return; // the dialog is already up, asking again would replace it mid-answer
+      }
+      this.pendingUpdate = await warpnetService.getPendingUpdate();
+    },
+    async answerUpdate(isAllowed) {
+      const update = this.pendingUpdate;
+      this.pendingUpdate = null;
+      try {
+        await warpnetService.answerUpdate(isAllowed);
+      } catch (e) {
+        console.warn("update answer failed", e);
+        return;
+      }
+      if (isAllowed) {
+        toast.info(`Downloading Warpnet ${update?.new_version} — the app restarts when it's ready`);
+      }
     },
   },
   mounted() {
@@ -130,6 +178,11 @@ export default {
       this.bannerObserver.observe(this.$refs.banners);
     }
     this.syncBannerHeight();
+
+    // A release found by the node waits for this answer and nothing else, so
+    // the poll runs signed in or not.
+    this.pollUpdate();
+    this.updateInterval = setInterval(() => this.pollUpdate(), UPDATE_POLL_MS);
 
     // Hot-path: Go side fires "deeplink:open" when a second
     // process or macOS OnUrlOpen hands a warpnet:// URL to the
@@ -166,6 +219,7 @@ export default {
     EventsOff(DEEP_LINK_EVENT);
     this.unsubscribeOwner?.();
     this.bannerObserver?.disconnect();
+    clearInterval(this.updateInterval);
     document.documentElement.style.removeProperty("--top-banner-h");
   },
 };

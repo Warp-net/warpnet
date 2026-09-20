@@ -15,9 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -71,6 +73,7 @@ type App struct {
 	db        AppStorer
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
+	update    *selfupdate.UpdateGate
 	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
@@ -193,6 +196,40 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.psk = psk
 	go a.serveLogins(network, a.startMemberNode)
+	a.startSelfUpdate(version)
+}
+
+// startSelfUpdate keeps the app on the newest release. The user is asked before
+// every replacement: the release waits in the gate until the frontend answers
+// through PRIVATE_POST_UPDATE, and an allowed one takes the process over - it
+// stops the node, closes the database and restarts into the new binary.
+func (a *App) startSelfUpdate(version *semver.Version) {
+	if !config.Config().Node.IsSelfUpdate {
+		return
+	}
+	if os.Getenv("SNAP") != "" {
+		// the snap is updated by snapd, and its binary sits on a read-only mount
+		log.Infoln("app: snap package, self-update is disabled")
+		return
+	}
+
+	a.update = selfupdate.NewUpdateGate(a.ctx)
+	updater := selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), a.update)
+	updater.Run(a.shutdown)
+}
+
+// shutdown releases everything this process holds, in the order close does:
+// the node first, then the database.
+func (a *App) shutdown() {
+	a.mx.Lock()
+	node := a.node
+	a.node = nil
+	a.mx.Unlock()
+
+	if node != nil {
+		node.Stop()
+	}
+	a.auth.AuthLogout()
 }
 
 // serveLogins answers the login handshake for as long as the app lives: logout
@@ -326,16 +363,27 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = bt
 	case event.PRIVATE_POST_LOGOUT:
-		a.mx.Lock()
-		node := a.node
-		a.node = nil
-		a.mx.Unlock()
-		if node != nil {
-			node.Stop() // close node first
-		}
-		a.auth.AuthLogout() // closes the database
-		a.auth.Reset()      // the next login raises a new node
+		a.shutdown()   // node first, then the database
+		a.auth.Reset() // the next login raises a new node
 		response.Body = []byte(`["logged_out"]`)
+		return response
+	case event.PRIVATE_GET_UPDATE:
+		bt, err := json.Marshal(a.update.Pending())
+		if err != nil {
+			log.Errorf("pending update marshal: %v \n", err)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		response.Body = bt
+	case event.PRIVATE_POST_UPDATE:
+		var ev event.UpdateEvent
+		if err := json.Unmarshal(request.Body, &ev); err != nil {
+			log.Errorf("message body as update event: %v %s \n", err, request.Body)
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		a.update.Answer(ev.IsAllowed)
+		response.Body = []byte(`["update_answered"]`)
 		return response
 	default:
 		a.mx.RLock()

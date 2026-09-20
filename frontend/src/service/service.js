@@ -115,6 +115,8 @@ export const PRIVATE_POST_UPLOAD_CHAT_VIDEO = "/private/post/chat/video/0.0.0"
 export const PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
+export const PRIVATE_GET_UPDATE = "/private/get/update/0.0.0"
+export const PRIVATE_POST_UPDATE = "/private/post/update/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWING  = "/public/post/isfollowing/0.0.0"
 export const PUBLIC_POST_IS_FOLLOWER   = "/public/post/isfollower/0.0.0"
 export const PUBLIC_POST_VIEW          = "/public/post/view/0.0.0"
@@ -329,6 +331,31 @@ export const warpnetService = {
             console.warn("consumePendingDeepLink failed:", e);
             return "";
         }
+    },
+
+    // getPendingUpdate returns the release the node is holding back until the
+    // user answers for it, or null when nothing is waiting. The node blocks its
+    // update service on the answer, so the pending release does not expire.
+    async getPendingUpdate() {
+        try {
+            const resp = await this.sendToNode({path: PRIVATE_GET_UPDATE, body: {}})
+            if (!resp || resp.code || !resp.new_version) {
+                return null
+            }
+            return resp
+        } catch (e) {
+            // a node that can't be reached simply has nothing to offer
+            return null
+        }
+    },
+
+    // answerUpdate releases the node's update service: on true it downloads the
+    // release, replaces its own binary and restarts into it.
+    async answerUpdate(isAllowed) {
+        return this.sendToNode({
+            path: PRIVATE_POST_UPDATE,
+            body: {is_allowed: Boolean(isAllowed)},
+        })
     },
 
     async signInUser(form) {

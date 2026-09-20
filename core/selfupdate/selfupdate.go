@@ -1,5 +1,3 @@
-//go:build !windows
-
 /*
 
 Warpnet - Decentralized Social Network
@@ -39,6 +37,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -56,6 +55,12 @@ const (
 const (
 	checkInterval = time.Hour
 	initialDelay  = time.Minute
+)
+
+// architectures a release publishes an asset for
+const (
+	archAMD64 = "amd64"
+	archARM64 = "arm64"
 )
 
 // ReleaseSource resolves the newest published release.
@@ -90,6 +95,13 @@ type FailureRegistry interface {
 	Clear()
 }
 
+// UpdateApprover asks the owner of the node whether a release may replace the
+// running binary. An unattended node - a relay - has no approver and installs
+// every release on its own.
+type UpdateApprover interface {
+	IsUpdateAllowed(info domain.UpdateInfo) bool
+}
+
 // Artifact points at the release asset carrying a replacement for the running
 // binary. A zero Artifact means the running platform has no published asset and
 // self-update stays off.
@@ -106,7 +118,7 @@ func (a Artifact) isSupported() bool {
 // RelayArtifact returns the relay asset for the running platform. Releases
 // publish the relay for linux/amd64 only.
 func RelayArtifact() Artifact {
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+	if runtime.GOOS != "linux" || runtime.GOARCH != archAMD64 {
 		return Artifact{}
 	}
 	return Artifact{
@@ -114,6 +126,34 @@ func RelayArtifact() Artifact {
 		ChecksumName: "relay_linux_amd64_checksums.txt",
 		BinaryName:   "relay",
 	}
+}
+
+// MemberArtifact returns the member asset for the running platform. Self-update
+// covers linux (amd64 and arm64) and windows/amd64. macOS is deliberately left
+// out: its signed build is published by a separate pipeline, and replacing the
+// binary underneath it invalidates the signature.
+func MemberArtifact() Artifact {
+	switch runtime.GOOS {
+	case "linux":
+		if runtime.GOARCH != archAMD64 && runtime.GOARCH != archARM64 {
+			return Artifact{}
+		}
+		return Artifact{
+			AssetName:    "warpnet_linux_" + runtime.GOARCH + ".tar.gz",
+			ChecksumName: "warpnet_linux_" + runtime.GOARCH + "_checksums.txt",
+			BinaryName:   warpnet.WarpnetName,
+		}
+	case "windows":
+		if runtime.GOARCH != archAMD64 {
+			return Artifact{}
+		}
+		return Artifact{
+			AssetName:    "warpnet_windows_amd64.zip",
+			ChecksumName: "warpnet_windows_amd64_checksums.txt",
+			BinaryName:   warpnet.WarpnetName + ".exe",
+		}
+	}
+	return Artifact{}
 }
 
 // SelfUpdater keeps the running binary in sync with the newest release.
@@ -125,11 +165,20 @@ type SelfUpdater struct {
 	assets   AssetFetcher
 	binary   BinaryReplacer
 	failures FailureRegistry
+	approver UpdateApprover
+	declined *semver.Version
 	interval time.Duration
 	stopChan chan struct{}
 }
 
-func NewSelfUpdater(ctx context.Context, current *semver.Version, a Artifact) *SelfUpdater {
+// NewSelfUpdater builds the update service. approver may be nil: the release is
+// then installed without asking anyone.
+func NewSelfUpdater(
+	ctx context.Context,
+	current *semver.Version,
+	a Artifact,
+	approver UpdateApprover,
+) *SelfUpdater {
 	gh := newGitHubReleases(ctx, current)
 
 	u := &SelfUpdater{
@@ -138,6 +187,7 @@ func NewSelfUpdater(ctx context.Context, current *semver.Version, a Artifact) *S
 		artifact: a,
 		releases: gh,
 		assets:   gh,
+		approver: approver,
 		interval: checkInterval,
 		stopChan: make(chan struct{}),
 	}
@@ -231,6 +281,9 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		log.Warnf("selfupdate: version %s failed to start before, skipping", rel.Version)
 		return nil
 	}
+	if !u.isAllowed(rel.Version) {
+		return nil
+	}
 	if u.current.Major() != rel.Version.Major() {
 		// PSK is derived from the major version: after the restart this node
 		// shares a network only with peers running the new major.
@@ -254,6 +307,29 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		return fmt.Errorf("%w, previous binary restored: %w", ErrRestartFailed, err)
 	}
 	return nil
+}
+
+// isAllowed asks the owner of the node to allow the release. A release turned
+// down is not offered again until the process restarts, so a declined update
+// doesn't ask again on every check.
+func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
+	if u.approver == nil {
+		return true
+	}
+	if u.declined != nil && u.declined.Equal(next) {
+		log.Debugf("selfupdate: version %s is declined, skipping", next)
+		return false
+	}
+
+	isAllowed := u.approver.IsUpdateAllowed(domain.UpdateInfo{
+		CurrentVersion: u.current.String(),
+		NewVersion:     next.String(),
+	})
+	if !isAllowed {
+		u.declined = next
+		log.Infof("selfupdate: version %s is declined by the user", next)
+	}
+	return isAllowed
 }
 
 // install puts the released binary in place of the running one and returns a

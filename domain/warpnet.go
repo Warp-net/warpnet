@@ -49,6 +49,15 @@ type AuthNodeInfo struct {
 	Network        string   `json:"network,omitempty"`
 }
 
+// UpdateInfo defines model for UpdateInfo: a release waiting for the owner of
+// the node to allow it to replace the running binary. An empty NewVersion means
+// no release is waiting.
+type UpdateInfo struct {
+	CurrentVersion string `json:"current_version"`
+	NewVersion     string `json:"new_version"`
+	IsAllowed      bool   `json:"is_allowed"`
+}
+
 func (a AuthNodeInfo) LogSize() {
 	data, err := json.Marshal(a)
 	if err != nil {

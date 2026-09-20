@@ -68,7 +68,7 @@ func init() {
 	pflag.String("node.network", "warpnet", "Private network. Use 'testnet' for testing env")
 	pflag.String("node.bootstrap", "", "Bootstrap nodes multiaddr list, comma separated")
 	pflag.Bool("node.print-psk", false, "Print current node PSK")
-	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release automatically")
+	pflag.Bool("node.self-update", true, "Replace the node binary with the latest GitHub release. A member node asks before it does")
 
 	pflag.String("node.server.host", "0.0.0.0", "Dashboard HTTP/WS bind address. Set '127.0.0.1' to serve the dashboard to this host only")
 	pflag.String("node.server.port", "4999", "Dashboard HTTP/WS port")

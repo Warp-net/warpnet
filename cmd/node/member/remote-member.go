@@ -43,6 +43,7 @@ import (
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	localstore "github.com/Warp-net/warpnet/database/local-store"
@@ -152,6 +153,16 @@ func main() {
 		security.NoiseFingerprint(staticKey.Public),
 	)
 
+	// A release may only be answered by a signed-in dashboard, so the gate is
+	// attached here and the update service starts with the node below.
+	var updater *selfupdate.SelfUpdater
+	if config.Config().Node.IsSelfUpdate {
+		gate := selfupdate.NewUpdateGate(ctx)
+		bridgeHandler.AttachUpdateGate(gate)
+		updater = selfupdate.NewSelfUpdater(ctx, version, selfupdate.MemberArtifact(), gate)
+		defer updater.Close()
+	}
+
 	var n *node.MemberNode
 	defer func() {
 		if n != nil {
@@ -199,6 +210,15 @@ func main() {
 			}
 
 			bridgeHandler.AttachNode(n)
+
+			// started once, with the node it has to release before the updated
+			// binary takes the process over
+			started := n
+			updater.Run(func() {
+				_ = srv.Shutdown(ctx)
+				started.Stop()
+				db.Close()
+			})
 		}
 
 		ni := n.NodeInfo()

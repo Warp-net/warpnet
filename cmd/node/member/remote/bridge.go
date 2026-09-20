@@ -35,6 +35,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/gorilla/websocket"
@@ -93,6 +94,12 @@ type Authenticator interface {
 	IsAuthenticated() bool
 }
 
+// UpdateGater holds a release back until the dashboard answers for it.
+type UpdateGater interface {
+	Pending() domain.UpdateInfo
+	Answer(isAllowed bool)
+}
+
 type BridgeHandler struct {
 	handshake HandshakeFunc
 	auth      Authenticator
@@ -101,6 +108,7 @@ type BridgeHandler struct {
 
 	mx      sync.RWMutex
 	node    Node
+	update  UpdateGater
 	clients map[string]struct{}
 }
 
@@ -244,6 +252,12 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Unlock()
 }
 
+func (b *BridgeHandler) AttachUpdateGate(g UpdateGater) {
+	b.mx.Lock()
+	b.update = g
+	b.mx.Unlock()
+}
+
 func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message {
 	defer func() {
 		if r := recover(); r != nil {
@@ -271,6 +285,18 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 		resp.Body = json.RawMessage(`["logged_out"]`)
+	case event.PRIVATE_GET_UPDATE:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
+		resp.Body = b.pendingUpdate()
+	case event.PRIVATE_POST_UPDATE:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
+		resp.Body = b.answerUpdate(req.Body)
 	default:
 		if !b.isAuthorized(c) {
 			resp.Body = newUnauthorizedResp()
@@ -306,6 +332,40 @@ func (b *BridgeHandler) login(body json.RawMessage, c *clientConn) json.RawMessa
 	b.enroll(c.static)
 	c.authorized.Store(true)
 	return bt
+}
+
+// pendingUpdate reports the release the update service is holding back. A node
+// with self-update switched off has no gate and never holds anything back.
+func (b *BridgeHandler) pendingUpdate() json.RawMessage {
+	b.mx.RLock()
+	g := b.update
+	b.mx.RUnlock()
+
+	var info domain.UpdateInfo
+	if g != nil {
+		info = g.Pending()
+	}
+	bt, err := json.Marshal(info)
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	return bt
+}
+
+func (b *BridgeHandler) answerUpdate(body json.RawMessage) json.RawMessage {
+	b.mx.RLock()
+	g := b.update
+	b.mx.RUnlock()
+	if g == nil {
+		return newErrorResp("self-update is disabled on this node")
+	}
+
+	var ev event.UpdateEvent
+	if err := json.Unmarshal(body, &ev); err != nil {
+		return newErrorResp(err.Error())
+	}
+	g.Answer(ev.IsAllowed)
+	return json.RawMessage(`["update_answered"]`)
 }
 
 func (b *BridgeHandler) call(req event.Message) json.RawMessage {

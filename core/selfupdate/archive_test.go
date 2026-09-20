@@ -30,6 +30,8 @@ resulting from the use or misuse of this software.
 package selfupdate
 
 import (
+	"archive/zip"
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,6 +39,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func zipped(t *testing.T, name string, content []byte) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	_, err := zw.Create("empty-dir/")
+	require.NoError(t, err)
+	entry, err := zw.Create(name)
+	require.NoError(t, err)
+	_, err = entry.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+
+	return buf.Bytes()
+}
 
 func TestChecksumOf(t *testing.T) {
 	listing := []byte(
@@ -64,6 +82,31 @@ func TestExtractBinary(t *testing.T) {
 	info, err := os.Stat(dstPath)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(binaryMode), info.Mode().Perm(), "installed binary must be executable")
+}
+
+// The Windows release is the only one shipped as a .zip, and it is picked by
+// the asset name rather than by the platform the check runs on.
+func TestExtractBinaryFromZip(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "warpnet_windows_amd64.zip")
+	dstPath := filepath.Join(dir, "warpnet.exe")
+	require.NoError(t, os.WriteFile(archivePath, zipped(t, "warpnet.exe", []byte("payload")), 0o644))
+
+	require.NoError(t, extractBinary(archivePath, "warpnet.exe", dstPath))
+	assert.Equal(t, "payload", read(t, dstPath))
+
+	err := extractBinary(archivePath, "relay.exe", filepath.Join(dir, "relay.exe"))
+	require.ErrorIs(t, err, ErrBinaryNotFound)
+}
+
+func TestExtractBinaryFromCorruptedZip(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "warpnet_windows_amd64.zip")
+	require.NoError(t, os.WriteFile(archivePath, []byte("not a zip archive"), 0o644))
+
+	err := extractBinary(archivePath, "warpnet.exe", filepath.Join(dir, "warpnet.exe"))
+	require.Error(t, err)
+	assert.NoFileExists(t, filepath.Join(dir, "warpnet.exe"))
 }
 
 func TestExtractBinaryWithoutMatchingEntry(t *testing.T) {

@@ -307,6 +307,15 @@ type LogoutEvent struct {
 	Token string `json:"token"`
 }
 
+// UpdateEvent defines model for UpdateEvent: the user's answer to the release
+// the node is holding back.
+type UpdateEvent struct {
+	IsAllowed bool `json:"is_allowed"`
+}
+
+// UpdateResponse defines model for UpdateResponse.
+type UpdateResponse = domain.UpdateInfo
+
 // Message defines model for Message.
 type Message struct {
 	Body        json.RawMessage `json:"body"`
