@@ -52,6 +52,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type RemoteNodeUpdater interface {
+	Run(shutdownF func())
+	GetPendingUpdate() (currentVersion, newVersion string)
+	AnswerUpdate(isAllowed bool) error
+	Close()
+}
+
 func main() {
 	port := config.Config().Node.Server.Port
 	network := config.Config().Node.Network
@@ -153,7 +160,7 @@ func main() {
 		security.NoiseFingerprint(staticKey.Public),
 	)
 
-	var updater NodeUpdater
+	var updater RemoteNodeUpdater
 	if config.Config().Node.IsSelfUpdate {
 		updater = selfupdate.NewSelfUpdater(ctx, version, selfupdate.MemberArtifact(), true)
 		bridgeHandler.AttachUpdater(updater)
