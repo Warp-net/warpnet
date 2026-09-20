@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -98,6 +99,73 @@ type UpdateApprover interface {
 	IsUpdateAllowed(info domain.UpdateInfo) bool
 }
 
+type UserApprover struct {
+	ctx      context.Context
+	verdicts chan domain.UpdateInfo
+	mx       *sync.RWMutex
+	pending  domain.UpdateInfo
+	declined string
+}
+
+func NewUserApprover(ctx context.Context) *UserApprover {
+	return &UserApprover{
+		ctx:      ctx,
+		verdicts: make(chan domain.UpdateInfo),
+		mx:       new(sync.RWMutex),
+	}
+}
+
+func (a *UserApprover) IsUpdateAllowed(info domain.UpdateInfo) bool {
+	if !a.startAsking(info) {
+		return false
+	}
+
+	log.Infof("selfupdate: waiting for permission to update %s -> %s", info.CurrentVersion, info.NewVersion)
+
+	var isAllowed bool
+	select {
+	case <-a.ctx.Done():
+	case verdict := <-a.verdicts:
+		isAllowed = verdict.IsAllowed
+	}
+
+	a.stopAsking(isAllowed)
+	return isAllowed
+}
+
+func (a *UserApprover) GetPendingUpdate() domain.UpdateInfo {
+	a.mx.RLock()
+	defer a.mx.RUnlock()
+	return a.pending
+}
+
+func (a *UserApprover) AnswerUpdate(isAllowed bool) {
+	select {
+	case a.verdicts <- domain.UpdateInfo{IsAllowed: isAllowed}:
+	default:
+		log.Warnln("selfupdate: no release is waiting for an answer")
+	}
+}
+
+func (a *UserApprover) startAsking(info domain.UpdateInfo) bool {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	if a.declined == info.NewVersion {
+		return false
+	}
+	a.pending = info
+	return true
+}
+
+func (a *UserApprover) stopAsking(isAllowed bool) {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	if !isAllowed {
+		a.declined = a.pending.NewVersion
+	}
+	a.pending = domain.UpdateInfo{}
+}
+
 // Artifact points at the release asset carrying a replacement for the running
 // binary. A zero Artifact means the running platform has no published asset and
 // self-update stays off.
@@ -158,7 +226,6 @@ type SelfUpdater struct {
 	binary   BinaryReplacer
 	failures FailureRegistry
 	approver UpdateApprover
-	declined *semver.Version
 	interval time.Duration
 	stopChan chan struct{}
 }
@@ -303,18 +370,12 @@ func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 	if u.approver == nil {
 		return true
 	}
-	if u.declined != nil && u.declined.Equal(next) {
-		log.Debugf("selfupdate: version %s is declined, skipping", next)
-		return false
-	}
-
 	isAllowed := u.approver.IsUpdateAllowed(domain.UpdateInfo{
 		CurrentVersion: u.current.String(),
 		NewVersion:     next.String(),
 	})
 	if !isAllowed {
-		u.declined = next
-		log.Infof("selfupdate: version %s is declined by the user", next)
+		log.Infof("selfupdate: version %s is not allowed", next)
 	}
 	return isAllowed
 }

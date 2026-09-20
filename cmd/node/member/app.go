@@ -66,6 +66,17 @@ type NodeServer interface {
 	Start() error
 }
 
+type NodeUpdater interface {
+	Run(shutdownF func())
+	Close()
+}
+
+type UpdateApprover interface {
+	IsUpdateAllowed(info domain.UpdateInfo) bool
+	GetPendingUpdate() domain.UpdateInfo
+	AnswerUpdate(isAllowed bool)
+}
+
 type App struct {
 	ctx       context.Context
 	auth      AppAuthServicer
@@ -73,7 +84,8 @@ type App struct {
 	db        AppStorer
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
-	approver  *selfupdate.UserApprover
+	approver  UpdateApprover
+	updater   NodeUpdater
 	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
@@ -209,8 +221,8 @@ func (a *App) startSelfUpdate(version *semver.Version) {
 	}
 
 	a.approver = selfupdate.NewUserApprover(a.ctx)
-	updater := selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), a.approver)
-	updater.Run(a.shutdown)
+	a.updater = selfupdate.NewSelfUpdater(a.ctx, version, selfupdate.MemberArtifact(), a.approver)
+	a.updater.Run(a.shutdown)
 }
 
 func (a *App) shutdown() {
@@ -361,7 +373,11 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		response.Body = []byte(`["logged_out"]`)
 		return response
 	case event.PRIVATE_GET_UPDATE:
-		bt, err := json.Marshal(a.approver.GetPendingUpdate())
+		var pending domain.UpdateInfo
+		if a.approver != nil {
+			pending = a.approver.GetPendingUpdate()
+		}
+		bt, err := json.Marshal(pending)
 		if err != nil {
 			log.Errorf("pending update marshal: %v \n", err)
 			response.Body = newErrorResp(err.Error())
@@ -375,7 +391,9 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
-		a.approver.AnswerUpdate(ev.IsAllowed)
+		if a.approver != nil {
+			a.approver.AnswerUpdate(ev.IsAllowed)
+		}
 		response.Body = []byte(`["update_answered"]`)
 		return response
 	default:
@@ -450,6 +468,10 @@ func (a *App) close(_ context.Context) {
 	}()
 
 	log.Infoln("app: closing...")
+
+	if a.updater != nil {
+		a.updater.Close()
+	}
 
 	if a.node != nil {
 		a.node.Stop() // close node first

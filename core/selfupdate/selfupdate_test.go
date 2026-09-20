@@ -44,6 +44,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/domain"
@@ -56,6 +57,8 @@ const (
 	testChecksum = "relay_test_checksums.txt"
 	testBinary   = "relay"
 	testVersion  = "0.7.547"
+
+	approverWait = 2 * time.Second
 )
 
 var errRestartFailed = errors.New("exec: no such file or directory")
@@ -294,9 +297,120 @@ func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	assert.Equal(t, "current binary", read(t, binary.path))
 	assert.False(t, binary.restarted)
 	assert.NoFileExists(t, binary.path+oldSuffix)
+	require.Len(t, approver.asked, 1)
+}
 
-	require.NoError(t, u.checkAndUpdate(nil))
-	assert.Len(t, approver.asked, 1, "the same release was offered twice")
+func waitPendingUpdate(t *testing.T, a *UserApprover) domain.UpdateInfo {
+	t.Helper()
+	deadline := time.Now().Add(approverWait)
+	for time.Now().Before(deadline) {
+		if info := a.GetPendingUpdate(); info.NewVersion != "" {
+			return info
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("no release is waiting for an answer")
+	return domain.UpdateInfo{}
+}
+
+func TestUserApproverRoundTrip(t *testing.T) {
+	for _, isAllowed := range []bool{true, false} {
+		approver := NewUserApprover(context.Background())
+
+		verdicts := make(chan bool, 1)
+		go func() {
+			verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{
+				CurrentVersion: testVersion,
+				NewVersion:     "0.7.548",
+			})
+		}()
+
+		pending := waitPendingUpdate(t, approver)
+		assert.Equal(t, testVersion, pending.CurrentVersion)
+		assert.Equal(t, "0.7.548", pending.NewVersion)
+
+		approver.AnswerUpdate(isAllowed)
+
+		select {
+		case got := <-verdicts:
+			assert.Equal(t, isAllowed, got)
+		case <-time.After(approverWait):
+			t.Fatal("the answer never reached the update service")
+		}
+
+		assert.Empty(t, approver.GetPendingUpdate().NewVersion, "an answered release must stop waiting")
+	}
+}
+
+func TestUserApproverAsksAboutADeclinedVersionOnce(t *testing.T) {
+	approver := NewUserApprover(context.Background())
+	declined := domain.UpdateInfo{CurrentVersion: testVersion, NewVersion: "0.7.548"}
+
+	verdicts := make(chan bool, 1)
+	go func() {
+		verdicts <- approver.IsUpdateAllowed(declined)
+	}()
+	waitPendingUpdate(t, approver)
+	approver.AnswerUpdate(false)
+	require.False(t, <-verdicts)
+
+	assert.False(t, approver.IsUpdateAllowed(declined), "the same release was offered twice")
+	assert.Empty(t, approver.GetPendingUpdate().NewVersion, "a declined release must not reach the frontend")
+
+	go func() {
+		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{
+			CurrentVersion: testVersion,
+			NewVersion:     "0.7.549",
+		})
+	}()
+	waitPendingUpdate(t, approver)
+	approver.AnswerUpdate(true)
+	assert.True(t, <-verdicts, "a newer release must be offered")
+}
+
+func TestUserApproverRefusesOnShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	approver := NewUserApprover(ctx)
+
+	verdicts := make(chan bool, 1)
+	go func() {
+		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{NewVersion: "0.7.548"})
+	}()
+
+	waitPendingUpdate(t, approver)
+	cancel()
+
+	select {
+	case got := <-verdicts:
+		assert.False(t, got, "a node shutting down must not install anything")
+	case <-time.After(approverWait):
+		t.Fatal("shutdown left the update service waiting")
+	}
+}
+
+func TestUserApproverDropsUnexpectedAnswer(t *testing.T) {
+	approver := NewUserApprover(context.Background())
+	require.NotPanics(t, func() { approver.AnswerUpdate(true) })
+
+	verdicts := make(chan bool, 1)
+	go func() {
+		verdicts <- approver.IsUpdateAllowed(domain.UpdateInfo{NewVersion: "0.7.548"})
+	}()
+
+	waitPendingUpdate(t, approver)
+	select {
+	case <-verdicts:
+		t.Fatal("the dropped answer was served to the next release")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	approver.AnswerUpdate(false)
+	select {
+	case got := <-verdicts:
+		assert.False(t, got)
+	case <-time.After(approverWait):
+		t.Fatal("the answer never reached the update service")
+	}
 }
 
 func TestMemberArtifact(t *testing.T) {

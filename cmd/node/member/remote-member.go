@@ -153,7 +153,7 @@ func main() {
 		security.NoiseFingerprint(staticKey.Public),
 	)
 
-	var updater *selfupdate.SelfUpdater
+	var updater NodeUpdater
 	if config.Config().Node.IsSelfUpdate {
 		approver := selfupdate.NewUserApprover(ctx)
 		bridgeHandler.AttachUpdater(approver)
@@ -209,12 +209,14 @@ func main() {
 
 			bridgeHandler.AttachNode(n)
 
-			started := n
-			updater.Run(func() {
-				_ = srv.Shutdown(ctx)
-				started.Stop()
-				db.Close()
-			})
+			if updater != nil {
+				started := n
+				updater.Run(func() {
+					_ = srv.Shutdown(ctx)
+					started.Stop()
+					db.Close()
+				})
+			}
 		}
 
 		ni := n.NodeInfo()
