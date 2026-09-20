@@ -267,3 +267,51 @@ jobs:
           files: |
             warpdroid/warpdroid.apk
             warpdroid/warpdroid_checksums.txt
+
+
+  # Signs every checksum listing of the release with the ed25519 release key.
+  # A node verifies that signature against the public half compiled into its
+  # binary before it believes a single checksum, so the release host stops being
+  # something it has to trust. Runs once, after every artifact is attached, and
+  # on linux only: the private key then touches one runner instead of four.
+  sign:
+    needs: [release, release-warpdroid]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Sign the checksum listings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "::error::RELEASE_SIGNING_KEY is not set: the release would ship unsigned" >&2
+            echo "Generate it with: openssl genpkey -algorithm ed25519 -out release.key" >&2
+            exit 1
+          fi
+
+          umask 077
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > release.key
+          trap 'rm -f release.key release.pub' EXIT
+          openssl pkey -in release.key -pubout -out release.pub
+
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*_checksums.txt' --dir sums
+
+          for listing in sums/*_checksums.txt; do
+            openssl pkeyutl -sign -inkey release.key -rawin -in "$listing" | base64 -w0 > "$listing.sig"
+
+            # a mangled secret must fail here rather than on the users' nodes
+            base64 -d "$listing.sig" > "$listing.raw"
+            openssl pkeyutl -verify -pubin -inkey release.pub -rawin \
+              -in "$listing" -sigfile "$listing.raw"
+            rm -f "$listing.raw"
+
+            echo "signed $(basename "$listing")"
+          done
+
+          gh release upload "$RELEASE_TAG" sums/*.sig --repo "$GITHUB_REPOSITORY" --clobber
