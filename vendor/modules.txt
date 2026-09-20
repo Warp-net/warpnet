@@ -65,7 +65,7 @@ github.com/ProtonMail/go-crypto/openpgp/x448
 # github.com/Warp-net/libp2p-camouflage-transport v0.0.3
 ## explicit; go 1.26.0
 github.com/Warp-net/libp2p-camouflage-transport
-# github.com/Warp-net/payment-engine-lib v0.0.0-20260912184042-a8b34323d55a
+# github.com/Warp-net/payment-engine-lib v0.0.2
 ## explicit; go 1.26
 github.com/Warp-net/payment-engine-lib
 # github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
@@ -335,8 +335,6 @@ github.com/go-xmlfmt/xmlfmt
 # github.com/godbus/dbus/v5 v5.2.2
 ## explicit; go 1.20
 github.com/godbus/dbus/v5
-# github.com/gogo/protobuf v1.3.2
-## explicit; go 1.15
 # github.com/golang/geo v0.0.0-20260706204034-7a8d33c78269
 ## explicit; go 1.23.0
 github.com/golang/geo/r1

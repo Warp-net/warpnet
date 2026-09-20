@@ -11,7 +11,7 @@ tool (
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Warp-net/libp2p-camouflage-transport v0.0.3
-	github.com/Warp-net/payment-engine-lib v0.0.0-20260912184042-a8b34323d55a
+	github.com/Warp-net/payment-engine-lib v0.0.2
 	github.com/dgraph-io/badger/v4 v4.9.3
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
@@ -108,7 +108,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/go-xmlfmt/xmlfmt v1.1.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/geo v0.0.0-20260706204034-7a8d33c78269 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
