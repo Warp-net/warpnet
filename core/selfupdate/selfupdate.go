@@ -29,15 +29,19 @@ package selfupdate
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,7 +55,16 @@ const (
 	ErrNoReleaseTag     warpnet.WarpError = "release has no tag"
 	ErrRestartFailed    warpnet.WarpError = "fail restarting"
 	ErrNoPendingUpdate  warpnet.WarpError = "no release is waiting for an answer"
+	ErrReleaseUnsigned  warpnet.WarpError = "release carries no signature"
+	ErrMalformedKey     warpnet.WarpError = "malformed release signing key"
 )
+
+// releaseSigningKey is the hex-encoded ed25519 public key whose private half
+// signs the checksum listing of every published release. Empty turns the check
+// off: the binary then trusts whatever the release host serves it. A build can
+// also carry its own key with
+// -ldflags "-X github.com/Warp-net/warpnet/core/selfupdate.releaseSigningKey=<hex>".
+var releaseSigningKey = ""
 
 const (
 	checkInterval = time.Hour
@@ -99,9 +112,10 @@ type FailureRegistry interface {
 // binary. A zero Artifact means the running platform has no published asset and
 // self-update stays off.
 type Artifact struct {
-	AssetName    string // archive attached to the release
-	ChecksumName string // SHA-256 listing of AssetName
-	BinaryName   string // executable inside the archive
+	AssetName     string // archive attached to the release
+	ChecksumName  string // SHA-256 listing of AssetName
+	SignatureName string // ed25519 signature of ChecksumName
+	BinaryName    string // executable inside the archive
 }
 
 func (a Artifact) isSupported() bool {
@@ -115,9 +129,10 @@ func RelayArtifact() Artifact {
 		return Artifact{}
 	}
 	return Artifact{
-		AssetName:    "relay_linux_amd64.tar.gz",
-		ChecksumName: "relay_linux_amd64_checksums.txt",
-		BinaryName:   "relay",
+		AssetName:     "relay_linux_amd64.tar.gz",
+		ChecksumName:  "relay_linux_amd64_checksums.txt",
+		SignatureName: "relay_linux_amd64_checksums.txt.sig",
+		BinaryName:    "relay",
 	}
 }
 
@@ -128,18 +143,20 @@ func MemberArtifact() Artifact {
 			return Artifact{}
 		}
 		return Artifact{
-			AssetName:    "warpnet_linux_" + runtime.GOARCH + ".tar.gz",
-			ChecksumName: "warpnet_linux_" + runtime.GOARCH + "_checksums.txt",
-			BinaryName:   warpnet.WarpnetName,
+			AssetName:     "warpnet_linux_" + runtime.GOARCH + ".tar.gz",
+			ChecksumName:  "warpnet_linux_" + runtime.GOARCH + "_checksums.txt",
+			SignatureName: "warpnet_linux_" + runtime.GOARCH + "_checksums.txt.sig",
+			BinaryName:    warpnet.WarpnetName,
 		}
 	case "windows":
 		if runtime.GOARCH != archAMD64 {
 			return Artifact{}
 		}
 		return Artifact{
-			AssetName:    "warpnet_windows_amd64.zip",
-			ChecksumName: "warpnet_windows_amd64_checksums.txt",
-			BinaryName:   warpnet.WarpnetName + ".exe",
+			AssetName:     "warpnet_windows_amd64.zip",
+			ChecksumName:  "warpnet_windows_amd64_checksums.txt",
+			SignatureName: "warpnet_windows_amd64_checksums.txt.sig",
+			BinaryName:    warpnet.WarpnetName + ".exe",
 		}
 	}
 	return Artifact{}
@@ -213,6 +230,14 @@ func (u *SelfUpdater) Run(shutdownF func()) {
 	if u.binary == nil {
 		log.Errorln("selfupdate: no binary to replace, service disabled")
 		return
+	}
+	key, err := releaseKey()
+	if err != nil {
+		log.Errorf("selfupdate: %v, service disabled", err)
+		return
+	}
+	if key == nil {
+		log.Warnln("selfupdate: releases are not signed, the release host is trusted as it is")
 	}
 
 	log.Infof("selfupdate: service started, current version %s", u.current)
@@ -379,6 +404,47 @@ func (u *SelfUpdater) install(rel Release) (func(), error) {
 	return u.binary.Install(path)
 }
 
+// verifyListing proves the checksum listing was published by whoever holds the
+// release signing key. The checksums bind the archive, so a listing that is
+// signed makes the release host untrusted plumbing; without a key nothing is
+// proved and the host is trusted as before.
+func (u *SelfUpdater) verifyListing(rel Release, listing []byte) error {
+	key, err := releaseKey()
+	if err != nil {
+		return err
+	}
+	if key == nil {
+		return nil
+	}
+
+	signatureURL, err := rel.AssetURL(u.artifact.SignatureName)
+	if err != nil {
+		return fmt.Errorf("selfupdate: %w: %w", ErrReleaseUnsigned, err)
+	}
+	signature, err := u.assets.Read(signatureURL)
+	if err != nil {
+		return err
+	}
+	if err := security.VerifySignature(key, listing, strings.TrimSpace(string(signature))); err != nil {
+		return fmt.Errorf("selfupdate: %s: %w", u.artifact.ChecksumName, err)
+	}
+	return nil
+}
+
+func releaseKey() (ed25519.PublicKey, error) {
+	if releaseSigningKey == "" {
+		return nil, nil
+	}
+	key, err := hex.DecodeString(releaseSigningKey)
+	if err != nil {
+		return nil, fmt.Errorf("selfupdate: %w: %w", ErrMalformedKey, err)
+	}
+	if len(key) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("selfupdate: %w: %d bytes", ErrMalformedKey, len(key))
+	}
+	return key, nil
+}
+
 // stage downloads the release archive onto the filesystem of the running binary,
 // checks it against the published SHA-256 and extracts the new binary from it.
 func (u *SelfUpdater) stage(rel Release) (string, error) {
@@ -393,6 +459,9 @@ func (u *SelfUpdater) stage(rel Release) (string, error) {
 
 	listing, err := u.assets.Read(checksumURL)
 	if err != nil {
+		return "", err
+	}
+	if err := u.verifyListing(rel, listing); err != nil {
 		return "", err
 	}
 	want, err := checksumOf(listing, u.artifact.AssetName)
