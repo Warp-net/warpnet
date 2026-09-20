@@ -342,6 +342,9 @@ func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 	}
 
 	u.stopAsking(isAllowed)
+	if !isAllowed {
+		log.Infof("selfupdate: version %s is not allowed", next)
+	}
 	return isAllowed
 }
 

@@ -155,6 +155,7 @@ export default {
         await warpnetService.answerUpdate(isAllowed);
       } catch (e) {
         console.warn("update answer failed", e);
+        toast.error(e.message || "Could not reach your node with the answer");
         return;
       }
       if (isAllowed) {
