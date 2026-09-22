@@ -362,7 +362,11 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 
 	newUser, err := s.userRepo.Create(user)
 	if errors.Is(err, database.ErrUserAlreadyExists) {
-		newUser, _ = s.userRepo.Update(user.Id, user) //nolint:wastedassign
+		if _, err := s.userRepo.Update(user.Id, user); err != nil {
+			log.Warnf(
+				"discovery: source '%s': update user %s of known peer: %v",
+				peer.Source, user.Id, err)
+		}
 		return
 	}
 	if err != nil {
