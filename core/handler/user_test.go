@@ -209,6 +209,25 @@ func TestStreamGetUserHandler(t *testing.T) {
 			t.Fatal("expected error")
 		}
 	})
+
+	t.Run("other user profile - unknown user without a node id asks nobody", func(t *testing.T) {
+		var asked bool
+		h := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, stubUserFetcher{getFn: func(userId string) (domain.User, error) {
+			return domain.User{}, database.ErrUserNotFound
+		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubUserStreamer{
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				asked = true
+				return nil, nil
+			},
+		})
+		_, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if asked {
+			t.Fatal("a request carrying no node id leaves nobody to ask")
+		}
+	})
 }
 
 func TestStreamGetUsersHandler(t *testing.T) {

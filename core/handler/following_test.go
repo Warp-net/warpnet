@@ -749,14 +749,20 @@ func TestStreamGetFollowersHandler(t *testing.T) {
 		_ = resp.(event.FollowersResponse)
 	})
 
-	t.Run("other user followers - stream error", func(t *testing.T) {
+	t.Run("other user followers - stream error fallback", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
-		h := StreamGetFollowersHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+		h := StreamGetFollowersHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubFollowUserRepo{}, stubFollowRepo{getFollowersFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
+			return []string{"cached-f1"}, "end", nil
+		}}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			return nil, streamErr
 		}})
-		_, err := h(marshal(t, event.GetFollowersEvent{UserId: other}), nil)
-		if !errors.Is(err, streamErr) {
-			t.Fatalf("expected stream error: %v", err)
+		resp, err := h(marshal(t, event.GetFollowersEvent{UserId: other}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.FollowersResponse)
+		if len(r.Followers) != 1 || r.Followers[0] != "cached-f1" {
+			t.Fatalf("expected cached followers fallback: %v", r)
 		}
 	})
 

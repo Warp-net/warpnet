@@ -196,6 +196,32 @@ func TestStreamPool_RetryReusesMessageID(t *testing.T) {
 	}
 }
 
+func TestStreamPool_LostResponseIsRetried(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+
+	var attempts atomic.Int64
+	server.SetStreamHandler(testRoute.ProtocolID(), func(s warpnet.WarpStream) {
+		_, _ = io.ReadAll(s)
+		if attempts.Add(1) == 1 {
+			_ = s.Reset()
+			return
+		}
+		_, _ = s.Write([]byte(`{"ok":true}`))
+		_ = s.CloseWrite()
+		_ = s.Close()
+	})
+	t.Cleanup(func() { server.RemoveStreamHandler(testRoute.ProtocolID()) })
+
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+
+	resp, err := pool.Send(addrOf(server), testRoute, []byte(`{"tweet":"hi"}`))
+	assert.NoError(t, err)
+	assert.Equal(t, `{"ok":true}`, string(resp))
+	assert.Equal(t, int64(2), attempts.Load(), "a lost response is worth exactly one more attempt")
+}
+
 func TestStreamPool_CachedOfflinePeerShortCircuits(t *testing.T) {
 	client := newStreamHost(t)
 	server := newStreamHost(t)
