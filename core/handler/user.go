@@ -122,7 +122,7 @@ func StreamGetUserHandler(
 
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
-			log.Warnf("get other user from db: %v - %s", err, ev.UserId)
+			log.Warnf("get user handler: %s asked for user %s: %v", requesterID(s), ev.UserId, err)
 			otherUser = updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
 			if otherUser.Username == "" {
 				return nil, fmt.Errorf("get user: other user %w", err)
@@ -144,6 +144,13 @@ func StreamGetUserHandler(
 	}
 }
 
+func requesterID(s warpnet.WarpStream) string {
+	if s == nil || s.Conn() == nil {
+		return "unknown peer"
+	}
+	return s.Conn().RemotePeer().String()
+}
+
 func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
 	if user.NodeId == "" {
 		return user
@@ -158,7 +165,7 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		return user
 	}
 	if err != nil {
-		log.Errorf("get other user from stream: %v %s %s", err, user.Id, user.Username)
+		log.Errorf("get user handler: asking node %s for user %s: %v", user.NodeId, user.Id, err)
 		return user
 	}
 
@@ -168,15 +175,18 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 			user.IsOffline = true
 		} else {
 			log.Errorf(
-				"stream: unmarshal other user error response: %v %s %s",
-				possibleError, user.Id, user.Username,
+				"get user handler: node %s refused user %s: %v",
+				user.NodeId, user.Id, possibleError,
 			)
 		}
 		return user
 	}
 
 	if err = json.Unmarshal(otherUserData, &user); err != nil {
-		log.Errorf("stream: get other user: response unmarshal: %v %s", err, otherUserData)
+		log.Errorf(
+			"get user handler: unmarshal user %s from node %s: %v %s",
+			user.Id, user.NodeId, err, otherUserData,
+		)
 	}
 	now := time.Now().UTC()
 	user.LastSeen = &now
