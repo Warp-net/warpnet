@@ -42,6 +42,13 @@ class PairedNodeStore @Inject constructor(
 ) : IdentitySeedStore {
     private val ref = AtomicReference<PairedNode?>(null)
 
+    // A seed drawn for a candidate that isn't the currently persisted
+    // pairing, held only in memory until `save` commits it. Pairing with a
+    // node while a different one is already saved must not cost that saved
+    // node its identity the moment the candidate is dialled — only a
+    // successful pair may retire the old seed.
+    private val pendingSeed = AtomicReference<Pair<String, ByteArray>?>(null)
+
     private val prefs: SharedPreferences? by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         // The previous on-disk pairing schema lived in `warpnet_pairing`
         // and used a different value layout. Wipe it on first access of
@@ -73,10 +80,27 @@ class PairedNodeStore @Inject constructor(
 
     fun load(): PairedNode? = ref.get()
 
+    @Synchronized
     fun save(node: PairedNode, rawQrJson: String) {
         Timber.tag(TAG).i("save: pinnedPeer=${node.pinnedPeerId} userId=${node.userId} " +
                 "addresses (n=${node.addresses.size}): ${node.addresses}")
         ref.set(node)
+
+        // Commit the candidate's seed now that its pairing actually
+        // succeeded. A pending seed for some other, abandoned candidate is
+        // simply dropped — it was never written anywhere.
+        val pending = pendingSeed.getAndSet(null)
+        if (pending != null && pending.first == node.pinnedPeerId) {
+            runCatching {
+                seedPrefs.edit()
+                    .putString(KEY_IDENTITY_NODE, pending.first)
+                    .putString(KEY_IDENTITY_SEED, Base64.encodeToString(pending.second, Base64.NO_WRAP))
+                    .commit()
+            }.onFailure {
+                Timber.tag(TAG).w(it, "identity seed not persisted")
+            }
+        }
+
         prefs?.edit()?.putString(KEY_RAW_QR, rawQrJson)?.apply()
     }
 
@@ -98,13 +122,18 @@ class PairedNodeStore @Inject constructor(
     }
 
     /**
-     * The identity seed for the pairing with [memberPeerId], drawn from
-     * [SecureRandom] the first time that node is paired with. Reading or
-     * creating it touches disk, so callers stay off the main thread.
+     * The identity seed for the pairing with [memberPeerId]. If that node is
+     * the currently persisted pairing, returns its committed seed straight
+     * from disk. Otherwise this is a candidate — a switch, or a first-ever
+     * pair — and the seed is drawn from [SecureRandom] and held only in
+     * memory (see [pendingSeed]) until [save] commits it on success, so a
+     * failed or abandoned attempt never costs the persisted pairing its
+     * identity. Reading or creating it touches disk, so callers stay off
+     * the main thread.
      *
-     * The seed is scoped to one member node: pairing with a different one
-     * retires the previous identity instead of letting a single key follow
-     * the device between nodes.
+     * The seed is scoped to one member node: a successful pair with a
+     * different one retires the previous identity instead of letting a
+     * single key follow the device between nodes.
      */
     @Synchronized
     override fun seed(memberPeerId: String): ByteArray {
@@ -123,17 +152,10 @@ class PairedNodeStore @Inject constructor(
             Timber.tag(TAG).w("stored identity seed is unusable; generating a new one")
         }
 
+        pendingSeed.get()?.let { (peerId, seed) -> if (peerId == memberPeerId) return seed }
+
         val seed = ByteArray(SEED_SIZE).also(SecureRandom()::nextBytes)
-        runCatching {
-            handle.edit()
-                .putString(KEY_IDENTITY_NODE, memberPeerId)
-                .putString(KEY_IDENTITY_SEED, Base64.encodeToString(seed, Base64.NO_WRAP))
-                .commit()
-        }.onFailure {
-            // An identity that cannot be stored still pairs, but the next
-            // cold start draws another one and has to pair again.
-            Timber.tag(TAG).w(it, "identity seed not persisted")
-        }
+        pendingSeed.set(memberPeerId to seed)
         return seed
     }
 
@@ -145,6 +167,7 @@ class PairedNodeStore @Inject constructor(
      */
     fun clear() {
         ref.set(null)
+        pendingSeed.set(null)
         prefs?.edit()?.remove(KEY_RAW_QR)?.apply()
         // Both stores: a degraded session may have left a seed in the plain
         // file even if the encrypted one opens today.
