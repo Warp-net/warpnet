@@ -191,6 +191,37 @@ func (s *AliasesRepoTestSuite) TestDeleteAlias_KeepsTheDeviceOut() {
 	assert.Empty(s.T(), ids)
 }
 
+// TestDeleteAlias_TombstoneOutlivesAliasTTL guards against the revocation
+// tombstone expiring before the pairing token it blocks does: the session
+// token behind a QR lives for as long as the node process runs, which can
+// easily exceed a fixed TTL, so the tombstone itself must carry none.
+func (s *AliasesRepoTestSuite) TestDeleteAlias_TombstoneOutlivesAliasTTL() {
+	const phone = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
+
+	s.Require().NoError(s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}))
+
+	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
+		AddRootID("None").
+		AddRange(local_store.NoneRangeKey).
+		AddParentId(phone).
+		Build()
+
+	// Sanity check: a live pairing does carry the 72h TTL.
+	liveExpiry, err := s.db.GetExpiration(aliasKey)
+	s.Require().NoError(err)
+	assert.NotZero(s.T(), liveExpiry, "a live alias should carry the alias TTL")
+
+	s.Require().NoError(s.repo.DeleteAlias(phone))
+
+	revokedExpiry, err := s.db.GetExpiration(aliasKey)
+	s.Require().NoError(err)
+	assert.Zero(s.T(), revokedExpiry, "a revoked tombstone must never expire on its own")
+
+	// The same stale QR must still be rejected however long the device
+	// stayed offline — nothing here can make the tombstone disappear.
+	assert.ErrorIs(s.T(), s.repo.SetAlias(domain.Alias{NodeId: phone, Token: "tok"}), ErrAliasRevoked)
+}
+
 func (s *AliasesRepoTestSuite) TestDeleteAlias_ANewQrPairsTheDeviceBack() {
 	const phone = "12D3KooWQ3umNTQweTREML1gqyag4T2Ps82wLnHV7fUNQA8CnMa9"
 

@@ -50,8 +50,23 @@ func StreamGetDevicesHandler(aliasesRepo DeviceStorer) warpnet.WarpHandlerFunc {
 			log.Errorf("devices: listing: %v", err)
 			return nil, err
 		}
-		return event.GetDevicesResponse{Devices: aliases}, nil
+		return event.GetDevicesResponse{Devices: toDeviceInfos(aliases)}, nil
 	}
+}
+
+// toDeviceInfos strips each alias down to its wire-safe fields — a paired
+// device reaching this route must never learn another device's token.
+func toDeviceInfos(aliases []domain.Alias) []event.DeviceInfo {
+	infos := make([]event.DeviceInfo, 0, len(aliases))
+	for _, a := range aliases {
+		infos = append(infos, event.DeviceInfo{
+			NodeId:     a.NodeId,
+			Platform:   a.Platform,
+			CreatedAt:  a.CreatedAt,
+			LastActive: a.LastActive,
+		})
+	}
+	return infos
 }
 
 // StreamDeleteDeviceHandler unpairs a device. The device keeps its copy of
@@ -85,6 +100,6 @@ func StreamDeleteDeviceHandler(aliasesRepo DeviceStorer) warpnet.WarpHandlerFunc
 			log.Errorf("devices: listing: %v", err)
 			return nil, err
 		}
-		return event.GetDevicesResponse{Devices: aliases}, nil
+		return event.GetDevicesResponse{Devices: toDeviceInfos(aliases)}, nil
 	}
 }
