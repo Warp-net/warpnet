@@ -30,6 +30,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -87,8 +89,12 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 
 	dagService := warpnet.NewDAGService(warpnet.NewBlockService(blockstore, bitswapExchange))
 
+	hook := newDedupHook(time.Minute * 10) //nolint:mnd
+	stdLog := log.StandardLogger()
+	stdLog.AddHook(hook)
+
 	opts := crdt.DefaultOptions()
-	opts.Logger = log.StandardLogger().WithContext(ctx)
+	opts.Logger = stdLog.WithContext(ctx)
 	opts.PutHook = cfg.PutHook
 	opts.DeleteHook = cfg.DeleteHook
 	opts.RebroadcastInterval = rebroadcastInterval
@@ -115,4 +121,54 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 	}()
 
 	return crdtStore, nil
+}
+
+type dedupHook struct {
+	mu     sync.RWMutex
+	seen   map[string]time.Time
+	window time.Duration // дедупликация на это время
+}
+
+func newDedupHook(window time.Duration) *dedupHook {
+	return &dedupHook{
+		seen:   make(map[string]time.Time),
+		window: window,
+	}
+}
+
+func (h *dedupHook) Fire(entry *log.Entry) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	var parts []string
+	parts = append(parts, entry.Message)
+
+	for k, v := range entry.Data {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+	}
+
+	key := strings.Join(parts, "|")
+
+	now := entry.Time
+	if lastTime, exists := h.seen[key]; exists {
+		if now.Sub(lastTime) < h.window {
+			return nil
+		}
+	}
+
+	h.seen[key] = now
+
+	if len(h.seen) > 100 {
+		for k, v := range h.seen {
+			if now.Sub(v) > h.window*2 {
+				delete(h.seen, k)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *dedupHook) Levels() []log.Level {
+	return []log.Level{log.InfoLevel}
 }
