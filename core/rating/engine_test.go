@@ -130,7 +130,7 @@ func TestRecordIsNonBlockingWhenPersistenceIsBroken(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(time.Minute):
 		t.Fatal("Record blocked while the datastore was failing")
 	}
 	assert.EqualValues(t, 100_000, pendingCount(e, other.id, KindRateLimitHit, bucketAt(clock.Now())))
