@@ -1,5 +1,3 @@
-//go:build !windows
-
 /*
 
 Warpnet - Decentralized Social Network
@@ -34,7 +32,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/Masterminds/semver/v3"
 	log "github.com/sirupsen/logrus"
@@ -92,19 +89,6 @@ func (e *executable) Install(path string) (func(), error) {
 			log.Errorf("selfupdate: fail restoring previous binary: %v", err)
 		}
 	}, nil
-}
-
-// Restart releases node resources and replaces the process image with the
-// installed binary. The PID survives, so a containerized node stays PID 1 and no
-// supervisor has to be involved. On success it does not return.
-func (e *executable) Restart(shutdownF func()) error {
-	if shutdownF != nil {
-		shutdownF()
-	}
-	if err := syscall.Exec(e.path, os.Args, os.Environ()); err != nil { //nolint:gosec // this node's own binary
-		return fmt.Errorf("selfupdate: exec %s: %w", e.path, err)
-	}
-	return nil
 }
 
 // failureMarker records, next to the binary, the release that could not replace

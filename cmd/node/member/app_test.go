@@ -13,6 +13,7 @@ import (
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -58,6 +59,29 @@ func (s *stubNodeServer) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRou
 func (s *stubNodeServer) NodeInfo() warpnet.NodeInfo { return s.info }
 func (s *stubNodeServer) Stop()                      { s.stopped = true }
 func (s *stubNodeServer) Start() error               { s.startCalls++; return nil }
+
+type stubNodeUpdater struct {
+	currentVersion string
+	newVersion     string
+	answers        chan bool
+	answerErr      error
+	closed         bool
+}
+
+func (s *stubNodeUpdater) Run(func()) {}
+func (s *stubNodeUpdater) Close()     { s.closed = true }
+
+func (s *stubNodeUpdater) GetPendingUpdate() (string, string) {
+	return s.currentVersion, s.newVersion
+}
+
+func (s *stubNodeUpdater) AnswerUpdate(isAllowed bool) error {
+	if s.answerErr != nil {
+		return s.answerErr
+	}
+	s.answers <- isAllowed
+	return nil
+}
 
 func testKey(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
@@ -267,6 +291,62 @@ func TestAppCall(t *testing.T) {
 		require.Contains(t, errBody(t, resp.Body), "stream closed")
 	})
 
+	t.Run("a pending release is reported and answered", func(t *testing.T) {
+		updater := &stubNodeUpdater{answers: make(chan bool, 1)}
+		a := liveApp(t, &stubAuthService{}, nil)
+		a.updater = updater
+
+		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+		var info event.UpdateResponse
+		require.NoError(t, json.Unmarshal(resp.Body, &info))
+		require.Empty(t, info.NewVersion, "nothing is waiting before a release is found")
+
+		updater.currentVersion, updater.newVersion = "0.7.1", "0.7.2"
+		resp = a.Call(AppMessage{MessageId: "2", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+		require.NoError(t, json.Unmarshal(resp.Body, &info))
+		require.Equal(t, "0.7.2", info.NewVersion)
+		require.Equal(t, "0.7.1", info.CurrentVersion)
+
+		resp = a.Call(AppMessage{
+			MessageId: "3", Path: event.PRIVATE_POST_UPDATE,
+			Body: mustJSON(t, event.UpdateEvent{IsAllowed: true}),
+		})
+		require.JSONEq(t, event.Accepted, string(resp.Body))
+		require.True(t, <-updater.answers)
+	})
+
+	t.Run("an answer nobody is waiting for is reported", func(t *testing.T) {
+		a := liveApp(t, &stubAuthService{}, nil)
+		a.updater = &stubNodeUpdater{answerErr: selfupdate.ErrNoPendingUpdate}
+
+		resp := a.Call(AppMessage{
+			MessageId: "1", Path: event.PRIVATE_POST_UPDATE,
+			Body: mustJSON(t, event.UpdateEvent{IsAllowed: true}),
+		})
+		require.Contains(t, errBody(t, resp.Body), selfupdate.ErrNoPendingUpdate.Error())
+	})
+
+	t.Run("update routes survive a disabled self-update", func(t *testing.T) {
+		a := liveApp(t, &stubAuthService{}, nil)
+
+		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_GET_UPDATE, Body: []byte("{}")})
+		var info event.UpdateResponse
+		require.NoError(t, json.Unmarshal(resp.Body, &info))
+		require.Empty(t, info.NewVersion)
+
+		resp = a.Call(AppMessage{
+			MessageId: "2", Path: event.PRIVATE_POST_UPDATE,
+			Body: mustJSON(t, event.UpdateEvent{IsAllowed: true}),
+		})
+		require.Contains(t, errBody(t, resp.Body), "self-update is disabled")
+	})
+
+	t.Run("a malformed update answer is reported", func(t *testing.T) {
+		a := liveApp(t, &stubAuthService{}, nil)
+		resp := a.Call(AppMessage{MessageId: "1", Path: event.PRIVATE_POST_UPDATE, Body: []byte("not json")})
+		require.NotEmpty(t, errBody(t, resp.Body))
+	})
+
 	t.Run("an empty response body is reported", func(t *testing.T) {
 		node := &stubNodeServer{streamFn: func(stream.WarpRoute, any) ([]byte, error) {
 			return nil, nil
@@ -278,17 +358,18 @@ func TestAppCall(t *testing.T) {
 	})
 }
 
-func TestAppClose(t *testing.T) {
+func TestAppShutdown(t *testing.T) {
 	authSvc := &stubAuthService{}
 	node := &stubNodeServer{}
 	a := liveApp(t, authSvc, node)
 
-	a.close(context.Background())
+	a.shutdown()
 	require.True(t, node.stopped)
 	require.True(t, authSvc.loggedOut)
+	require.Nil(t, a.node, "a stopped node must not stay attached")
 
-	// a second close panics on the already-closed channel and is recovered
-	require.NotPanics(t, func() { a.close(context.Background()) })
+	// wails calls it on exit over a logout that already ran
+	require.NotPanics(t, func() { a.shutdown() })
 }
 
 func TestServeLoginsStopsWithContext(t *testing.T) {
@@ -402,7 +483,7 @@ func TestServeLoginsStopsWhenTheReadyChannelCloses(t *testing.T) {
 		close(done)
 	}()
 
-	close(a.readyChan) // what App.close does on shutdown
+	close(a.readyChan)
 	<-done
 }
 

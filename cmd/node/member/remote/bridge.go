@@ -93,6 +93,11 @@ type Authenticator interface {
 	IsAuthenticated() bool
 }
 
+type Updater interface {
+	GetPendingUpdate() (currentVersion, newVersion string)
+	AnswerUpdate(isAllowed bool) error
+}
+
 type BridgeHandler struct {
 	handshake HandshakeFunc
 	auth      Authenticator
@@ -101,6 +106,7 @@ type BridgeHandler struct {
 
 	mx      sync.RWMutex
 	node    Node
+	updater Updater
 	clients map[string]struct{}
 }
 
@@ -244,6 +250,12 @@ func (b *BridgeHandler) AttachNode(n Node) {
 	b.mx.Unlock()
 }
 
+func (b *BridgeHandler) AttachUpdater(u Updater) {
+	b.mx.Lock()
+	b.updater = u
+	b.mx.Unlock()
+}
+
 func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message {
 	defer func() {
 		if r := recover(); r != nil {
@@ -271,6 +283,18 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 		b.auth.AuthLogout() // closes the database; the node keeps running
 		b.auth.Reset()      // clear the auth guard so the next login can re-authenticate
 		resp.Body = json.RawMessage(`["logged_out"]`)
+	case event.PRIVATE_GET_UPDATE:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
+		resp.Body = b.getPendingUpdate()
+	case event.PRIVATE_POST_UPDATE:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
+		resp.Body = b.answerUpdate(req.Body)
 	default:
 		if !b.isAuthorized(c) {
 			resp.Body = newUnauthorizedResp()
@@ -306,6 +330,41 @@ func (b *BridgeHandler) login(body json.RawMessage, c *clientConn) json.RawMessa
 	b.enroll(c.static)
 	c.authorized.Store(true)
 	return bt
+}
+
+func (b *BridgeHandler) getPendingUpdate() json.RawMessage {
+	b.mx.RLock()
+	u := b.updater
+	b.mx.RUnlock()
+
+	var info event.UpdateResponse
+	if u != nil {
+		info.CurrentVersion, info.NewVersion = u.GetPendingUpdate()
+	}
+	bt, err := json.Marshal(info)
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	return bt
+}
+
+func (b *BridgeHandler) answerUpdate(body json.RawMessage) json.RawMessage {
+	b.mx.RLock()
+	u := b.updater
+	b.mx.RUnlock()
+	if u == nil {
+		return newErrorResp("self-update is disabled on this node")
+	}
+
+	var ev event.UpdateEvent
+	if err := json.Unmarshal(body, &ev); err != nil {
+		return newErrorResp(err.Error())
+	}
+	if err := u.AnswerUpdate(ev.IsAllowed); err != nil {
+		log.Errorf("remote: update answer: %v", err)
+		return newErrorResp(err.Error())
+	}
+	return json.RawMessage(event.Accepted)
 }
 
 func (b *BridgeHandler) call(req event.Message) json.RawMessage {

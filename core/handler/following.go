@@ -374,16 +374,16 @@ func StreamGetFollowersHandler(
 
 		// get someone's followers
 		followersData, err := streamer.GenericStream(user.NodeId, event.PUBLIC_GET_FOLLOWERS, buf)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if err != nil {
+			if !errors.Is(err, warpnet.ErrNodeIsOffline) {
+				log.Warnf("followers: stream to node %s: %v", user.NodeId, err)
+			}
 			followers, cursor, _ := followRepo.GetFollowers(ev.UserId, ev.Limit, ev.Cursor)
 			return event.FollowersResponse{
 				Cursor:      cursor,
 				FollowingId: ev.UserId,
 				Followers:   followers,
 			}, nil
-		}
-		if err != nil {
-			return nil, err
 		}
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(followersData, &possibleError); possibleError.Message != "" {
@@ -450,16 +450,16 @@ func StreamGetFollowingsHandler(
 
 		// get someone's followings
 		followingsData, err := streamer.GenericStream(user.NodeId, event.PUBLIC_GET_FOLLOWINGS, buf)
-		if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		if err != nil {
+			if !errors.Is(err, warpnet.ErrNodeIsOffline) {
+				log.Warnf("followings: stream to node %s: %v", user.NodeId, err)
+			}
 			followings, cursor, _ := followRepo.GetFollowings(ev.UserId, ev.Limit, ev.Cursor)
 			return event.FollowingsResponse{
 				Cursor:     cursor,
 				FollowerId: ev.UserId,
 				Followings: followings,
 			}, nil
-		}
-		if err != nil {
-			return nil, err
 		}
 		var possibleError event.ResponseError
 		if _ = json.Unmarshal(followingsData, &possibleError); possibleError.Message != "" {

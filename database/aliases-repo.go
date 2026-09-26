@@ -221,9 +221,11 @@ func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 
 // DeleteAlias unpairs a device. Authorization ends with the record — the
 // middleware reads the alias set on every private request — but the device
-// keeps a usable pairing payload and re-pairs on its own schedule, so the
-// record is kept as revoked for the rest of its TTL instead of being
-// dropped outright.
+// keeps a usable pairing payload, and the session token that payload
+// carries stays valid for as long as this node process runs. So the
+// tombstone is kept without a TTL: it outlives an active alias's 72h
+// window on purpose, and only a later SetAlias for the same node id with a
+// different token (a fresh login's session token) ever overwrites it.
 func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
 	if repo.db == nil {
 		return ErrNilAliasesRepo
@@ -286,7 +288,7 @@ func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
 	if err != nil {
 		return err
 	}
-	if err := txn.SetWithTTL(aliasKey, data, aliasTTL); err != nil {
+	if err := txn.Set(aliasKey, data); err != nil {
 		return err
 	}
 	return txn.Commit()

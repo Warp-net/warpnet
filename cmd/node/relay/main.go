@@ -107,7 +107,7 @@ func main() {
 	}
 
 	if config.Config().Node.IsSelfUpdate {
-		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.RelayArtifact())
+		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.RelayArtifact(), false)
 		defer updater.Close()
 		updater.Run(n.Stop)
 	}

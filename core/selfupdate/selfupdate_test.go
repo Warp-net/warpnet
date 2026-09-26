@@ -42,7 +42,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/assert"
@@ -54,6 +56,8 @@ const (
 	testChecksum = "relay_test_checksums.txt"
 	testBinary   = "relay"
 	testVersion  = "0.7.547"
+
+	approverWait = 2 * time.Second
 )
 
 var errRestartFailed = errors.New("exec: no such file or directory")
@@ -141,6 +145,7 @@ func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpd
 		context.Background(),
 		semver.MustParse(testVersion),
 		Artifact{AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary},
+		false,
 	)
 	u.releases, u.assets = gh, gh
 	u.binary = binary
@@ -253,6 +258,143 @@ func TestSelfUpdaterIgnoresMalformedMarker(t *testing.T) {
 	assert.Equal(t, "new binary", read(t, binary.path))
 	assert.True(t, binary.restarted)
 	assert.NoFileExists(t, binary.path+failedSuffix)
+}
+
+func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	u.isApprovalRequired = true
+
+	errs := make(chan error, 1)
+	go func() { errs <- u.checkAndUpdate(nil) }()
+
+	current, next := waitPendingUpdate(t, u)
+	assert.Equal(t, testVersion, current)
+	assert.Equal(t, "0.7.548", next)
+	assert.Equal(t, "current binary", read(t, binary.path), "nothing is installed while the answer is out")
+
+	u.AnswerUpdate(true)
+	require.NoError(t, <-errs)
+
+	assert.Equal(t, "new binary", read(t, binary.path))
+	assert.True(t, binary.restarted)
+	_, next = u.GetPendingUpdate()
+	assert.Empty(t, next, "an answered release must stop waiting")
+}
+
+func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	u.isApprovalRequired = true
+
+	errs := make(chan error, 1)
+	go func() { errs <- u.checkAndUpdate(nil) }()
+
+	waitPendingUpdate(t, u)
+	u.AnswerUpdate(false)
+	require.NoError(t, <-errs)
+
+	assert.Equal(t, "current binary", read(t, binary.path))
+	assert.False(t, binary.restarted)
+	assert.NoFileExists(t, binary.path+oldSuffix)
+
+	require.NoError(t, u.checkAndUpdate(nil))
+	_, next := u.GetPendingUpdate()
+	assert.Empty(t, next, "the same release was offered twice")
+	assert.Equal(t, "current binary", read(t, binary.path))
+}
+
+func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.isApprovalRequired = true
+
+	verdicts := make(chan bool, 1)
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	waitPendingUpdate(t, u)
+	u.AnswerUpdate(false)
+	require.False(t, <-verdicts)
+
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.549")) }()
+	waitPendingUpdate(t, u)
+	u.AnswerUpdate(true)
+	assert.True(t, <-verdicts)
+}
+
+func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.ctx = ctx
+	u.isApprovalRequired = true
+
+	verdicts := make(chan bool, 1)
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+
+	waitPendingUpdate(t, u)
+	cancel()
+
+	select {
+	case isAllowed := <-verdicts:
+		assert.False(t, isAllowed, "a node shutting down must not install anything")
+	case <-time.After(approverWait):
+		t.Fatal("shutdown left the check waiting")
+	}
+}
+
+func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.isApprovalRequired = true
+	require.NotPanics(t, func() { u.AnswerUpdate(true) })
+
+	verdicts := make(chan bool, 1)
+	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+
+	waitPendingUpdate(t, u)
+	select {
+	case <-verdicts:
+		t.Fatal("the dropped answer was served to the next release")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	u.AnswerUpdate(false)
+	select {
+	case isAllowed := <-verdicts:
+		assert.False(t, isAllowed)
+	case <-time.After(approverWait):
+		t.Fatal("the answer never reached the check")
+	}
+}
+
+func waitPendingUpdate(t *testing.T, u *SelfUpdater) (currentVersion, newVersion string) {
+	t.Helper()
+	deadline := time.Now().Add(approverWait)
+	for time.Now().Before(deadline) {
+		if currentVersion, newVersion = u.GetPendingUpdate(); newVersion != "" {
+			return currentVersion, newVersion
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("no release is waiting for an answer")
+	return "", ""
+}
+
+func TestMemberArtifact(t *testing.T) {
+	a := MemberArtifact()
+	switch runtime.GOOS {
+	case "linux":
+		require.True(t, a.isSupported())
+		assert.Equal(t, "warpnet_linux_"+runtime.GOARCH+".tar.gz", a.AssetName)
+		assert.Equal(t, "warpnet_linux_"+runtime.GOARCH+"_checksums.txt", a.ChecksumName)
+		assert.Equal(t, "warpnet", a.BinaryName)
+	case "darwin":
+		assert.False(t, a.isSupported(), "the signed macOS build is not replaced in place")
+	case "windows":
+		require.True(t, a.isSupported())
+		assert.Equal(t, "warpnet_windows_amd64.zip", a.AssetName)
+		assert.Equal(t, "warpnet_windows_amd64_checksums.txt", a.ChecksumName)
+		assert.Equal(t, "warpnet.exe", a.BinaryName)
+	default:
+		assert.False(t, a.isSupported(), "no release publishes a member asset for %s", runtime.GOOS)
+	}
 }
 
 func TestArtifactSupport(t *testing.T) {

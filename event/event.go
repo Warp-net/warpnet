@@ -85,9 +85,19 @@ type DeleteDeviceEvent struct {
 	NodeId domain.ID `json:"node_id"`
 }
 
+// DeviceInfo is the wire-safe view of a paired device for the Settings
+// screen: no pairing token, so an already-paired device reading its
+// sibling list cannot learn another device's credential.
+type DeviceInfo struct {
+	NodeId     string    `json:"node_id"`
+	Platform   string    `json:"platform"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastActive time.Time `json:"last_active"`
+}
+
 // GetDevicesResponse defines model for GetDevicesResponse.
 type GetDevicesResponse struct {
-	Devices []domain.Alias `json:"devices"`
+	Devices []DeviceInfo `json:"devices"`
 }
 
 // DeleteMessageEvent defines model for DeleteMessageEvent.
@@ -306,6 +316,14 @@ type LoginResponse = domain.AuthNodeInfo
 type LogoutEvent struct {
 	Token string `json:"token"`
 }
+
+// UpdateEvent defines model for UpdateEvent.
+type UpdateEvent struct {
+	IsAllowed bool `json:"is_allowed"`
+}
+
+// UpdateResponse defines model for UpdateResponse.
+type UpdateResponse = domain.UpdateInfo
 
 // Message defines model for Message.
 type Message struct {

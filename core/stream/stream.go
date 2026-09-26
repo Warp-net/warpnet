@@ -166,6 +166,10 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 	msgID := ulid.Make().String()
 
 	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
+	if errors.Is(err, ErrResponseRead) {
+		log.Debugf("stream: peer %s: %s: retrying after a lost response", serverInfo.ID, r)
+		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
+	}
 	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
 		return bt, err
 	}

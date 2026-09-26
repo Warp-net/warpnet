@@ -145,6 +145,9 @@ func StreamGetUserHandler(
 }
 
 func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
+	if user.NodeId == "" {
+		return user
+	}
 	otherUserData, err := streamer.GenericStream(
 		user.NodeId,
 		event.PUBLIC_GET_USER,

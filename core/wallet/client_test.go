@@ -244,3 +244,27 @@ func TestEngineStderrReachesTheLog(t *testing.T) {
 		t.Fatalf("logged %d lines, want the two non-empty ones: %q", got, logged.String())
 	}
 }
+
+func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
+	sponsorship := Sponsorship{
+		Splitter:      "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy",
+		OrderId:       "0x0000000000000000000000000000000000000000000000000000000000000001",
+		Author:        "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143",
+		Amount:        "1000000",
+		MaxFeePercent: 5,
+	}
+	params := payParams("testnet", "abcdef", sponsorship)
+	for _, key := range []string{"splitter", "order_id", "author", "amount", "network", "seed", "max_fee_percent"} {
+		if _, ok := params[key]; !ok {
+			t.Fatalf("wallet.pay needs %q, got %v", key, params)
+		}
+	}
+	if len(params) != 7 {
+		t.Fatalf("wallet.pay was sent something it does not define: %v", params)
+	}
+
+	sponsorship.MaxFeePercent = 0
+	if _, ok := payParams("testnet", "abcdef", sponsorship)["max_fee_percent"]; ok {
+		t.Fatal("a sponsorship that agreed no ceiling must not send one")
+	}
+}

@@ -119,7 +119,37 @@ func (n *fakeNode) callCount() int {
 	return len(n.calls)
 }
 
+type fakeUpdater struct {
+	mx             sync.Mutex
+	currentVersion string
+	newVersion     string
+	answers        chan bool
+}
+
+func (f *fakeUpdater) GetPendingUpdate() (string, string) {
+	f.mx.Lock()
+	defer f.mx.Unlock()
+	return f.currentVersion, f.newVersion
+}
+
+func (f *fakeUpdater) AnswerUpdate(isAllowed bool) error {
+	f.answers <- isAllowed
+	return nil
+}
+
+func (f *fakeUpdater) holdRelease(currentVersion, newVersion string) {
+	f.mx.Lock()
+	f.currentVersion, f.newVersion = currentVersion, newVersion
+	f.mx.Unlock()
+}
+
 func newTestBridge(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode) {
+	t.Helper()
+	srv, auth, node, _ := newTestBridgeWithUpdater(t)
+	return srv, auth, node
+}
+
+func newTestBridgeWithUpdater(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode, *fakeUpdater) {
 	t.Helper()
 
 	staticKey, err := noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256).
@@ -138,9 +168,12 @@ func newTestBridge(t *testing.T) (*httptest.Server, *fakeAuth, *fakeNode) {
 	)
 	handler.AttachNode(node)
 
+	updater := &fakeUpdater{answers: make(chan bool, 1)}
+	handler.AttachUpdater(updater)
+
 	srv := httptest.NewServer(handler.Handle())
 	t.Cleanup(srv.Close)
-	return srv, auth, node
+	return srv, auth, node, updater
 }
 
 func clientKey(t *testing.T) noise.DHKey {
@@ -276,6 +309,47 @@ func TestBridge_FailedLoginEnrollsNothing(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized,
 		responseError(t, reconnected.send(t, event.PRIVATE_POST_TWEET, struct{}{})).Code)
 	assert.Zero(t, node.callCount())
+}
+
+func TestBridge_SignedInDashboardAnswersForTheWaitingRelease(t *testing.T) {
+	srv, _, node, updater := newTestBridgeWithUpdater(t)
+	updater.holdRelease("0.7.1", "0.7.2")
+
+	owner := dial(t, srv, clientKey(t))
+	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
+
+	var pending event.UpdateResponse
+	require.NoError(t, json.Unmarshal(owner.send(t, event.PRIVATE_GET_UPDATE, struct{}{}).Body, &pending))
+	assert.Equal(t, "0.7.2", pending.NewVersion)
+	assert.Equal(t, "0.7.1", pending.CurrentVersion)
+
+	resp := owner.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})
+	assert.Equal(t, json.RawMessage(event.Accepted), resp.Body)
+
+	select {
+	case isAllowed := <-updater.answers:
+		assert.True(t, isAllowed)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the answer never reached the update service")
+	}
+	assert.Zero(t, node.callCount(), "the update handshake never reaches the node")
+}
+
+func TestBridge_UnknownClientCannotAnswerForTheRelease(t *testing.T) {
+	srv, _, _, updater := newTestBridgeWithUpdater(t)
+	updater.holdRelease("0.7.1", "0.7.2")
+
+	attacker := dial(t, srv, clientKey(t))
+	assert.Equal(t, http.StatusUnauthorized,
+		responseError(t, attacker.send(t, event.PRIVATE_GET_UPDATE, struct{}{})).Code)
+	assert.Equal(t, http.StatusUnauthorized,
+		responseError(t, attacker.send(t, event.PRIVATE_POST_UPDATE, event.UpdateEvent{IsAllowed: true})).Code)
+
+	select {
+	case <-updater.answers:
+		t.Fatal("an unauthenticated client replaced the node's binary")
+	case <-time.After(100 * time.Millisecond):
+	}
 }
 
 func TestBridge_LogoutRevokesAuthorityUntilNextLogin(t *testing.T) {

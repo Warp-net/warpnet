@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"time"
@@ -65,7 +66,7 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
-		OnShutdown:       app.close,
+		OnShutdown:       func(context.Context) { app.shutdown() },
 		SingleInstanceLock: &options.SingleInstanceLock{
 			// Must be stable across launches — a fresh value per
 			// start defeats the lock and lets every xdg-open spawn
