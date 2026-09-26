@@ -189,7 +189,7 @@ resulting from the use or misuse of this software.
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
               >Follows you</span>
             </p>
-            <p :key="profile.bio || ''" class="my-2" v-linkify>{{ profile.bio || '' }}</p>
+            <p :key="bio" class="my-2" v-linkify>{{ bio }}</p>
             <div class="flex flex-col md:flex-row mt-1 mb-2">
               <div v-if="profile.website" class="flex flex-row mr-4">
                 <i
@@ -398,7 +398,7 @@ import moment from "moment";
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
-import {isBridgedUser} from "@/lib/network";
+import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
 
 export default {
   name: "Profile",
@@ -478,6 +478,10 @@ export default {
     // hides its Send message button instead of offering a dead action.
     isBridgedProfile() {
       return isBridgedUser(this.profile);
+    },
+    bio() {
+      const bio = this.profile?.bio || '';
+      return this.isBridgedProfile ? decodeHtmlEntities(bio) : bio;
     },
   },
   methods: {

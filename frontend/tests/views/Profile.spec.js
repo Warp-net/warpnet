@@ -21,6 +21,7 @@ vi.mock('@/service/service', () => ({
 }));
 
 import Profile from '@/views/Profile.vue';
+import linkify from '@/directives/linkify.directive';
 import { warpnetService } from '@/service/service';
 
 const scrollDirective = { mounted() {}, updated() {}, unmounted() {} };
@@ -31,14 +32,14 @@ const tweetsStub = {
   template: '<div><article v-for="t in tweets" :key="t.id">{{ t.text }}</article></div>',
 };
 
-const renderProfile = (id = 'alice') =>
+const renderProfile = (id = 'alice', directive = linkifyDirective) =>
   render(Profile, {
     global: {
       mocks: {
         $router: { push: vi.fn() },
         $route: { params: { id } },
       },
-      directives: { scroll: scrollDirective, linkify: linkifyDirective },
+      directives: { scroll: scrollDirective, linkify: directive },
       stubs: {
         SideNav: true,
         DefaultRightBar: true,
@@ -83,6 +84,7 @@ beforeEach(() => {
     created_at: '2025-12-01T10:00:00Z',
   });
   warpnetService.getImage.mockResolvedValue('');
+  warpnetService.getGatewaySettings.mockResolvedValue({ node_id: 'GW' });
   warpnetService.getUsers.mockResolvedValue([]);
   warpnetService.getFollowers.mockResolvedValue([]);
   warpnetService.getFollowings.mockResolvedValue([]);
@@ -152,6 +154,48 @@ describe('Profile.vue resolution hint', () => {
     expect(await screen.findByRole('heading', { name: 'Alice' })).toBeInTheDocument();
     expect(warpnetService.getGatewaySettings).not.toHaveBeenCalled();
     expect(warpnetService.getProfile).toHaveBeenCalledWith('alice', undefined);
+  });
+});
+
+describe('Profile.vue bio', () => {
+  const bridged = (bio) => ({
+    id: 'eff@mastodon.social',
+    username: 'EFF',
+    network: 'mastodon',
+    bio,
+    created_at: '2025-12-01T10:00:00Z',
+  });
+
+  it('decodes the entities a bridged bio arrives with', async () => {
+    warpnetService.getProfile.mockResolvedValue(bridged('We&#39;re the Electronic Frontier Foundation'));
+
+    renderProfile('eff@mastodon.social');
+
+    expect(
+      await screen.findByText("We're the Electronic Frontier Foundation")
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a decoded tag as text through v-linkify', async () => {
+    warpnetService.getProfile.mockResolvedValue(bridged('&lt;img src=x onerror=alert(1)&gt; hi'));
+
+    const { container } = renderProfile('eff@mastodon.social', linkify);
+
+    expect(await screen.findByText('<img src=x onerror=alert(1)> hi')).toBeInTheDocument();
+    expect(container.querySelector('img[src="x"]')).toBeNull();
+  });
+
+  it('leaves a native bio exactly as typed', async () => {
+    warpnetService.getProfile.mockResolvedValue({
+      id: 'alice',
+      username: 'Alice',
+      bio: 'Tom &amp; Jerry',
+      created_at: '2025-12-01T10:00:00Z',
+    });
+
+    renderProfile();
+
+    expect(await screen.findByText('Tom &amp; Jerry')).toBeInTheDocument();
   });
 });
 

@@ -82,7 +82,7 @@ resulting from the use or misuse of this software.
       </div>
       <div>
         <p v-if="!user.moderation || user.moderation.is_ok">
-          {{ user.bio }}
+          {{ bio }}
         </p>
         <p v-else class="pb-2 bg-red-300">
           Moderated: {{ user.moderation.reason }}
@@ -106,6 +106,7 @@ resulting from the use or misuse of this software.
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
+import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
 
 export default {
   name: "User",
@@ -132,6 +133,12 @@ export default {
       isMuted: false,
       showBlockConfirm: false,
     };
+  },
+  computed: {
+    bio() {
+      const bio = this.user.bio || '';
+      return isBridgedUser(this.user) ? decodeHtmlEntities(bio) : bio;
+    },
   },
   methods: {
     isFollowing() {
