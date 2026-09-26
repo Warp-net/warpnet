@@ -60,11 +60,6 @@ const (
 	ErrNoReleaseSource  warpnet.WarpError = "no forge to read releases from"
 )
 
-// releaseSigningKey is the hex-encoded ed25519 public key whose private half
-// signs the checksum listing of every published release. Empty turns the check
-// off: the binary then trusts whatever the release host serves it. A build can
-// also carry its own key with
-// -ldflags "-X github.com/Warp-net/warpnet/core/selfupdate.releaseSigningKey=<hex>".
 var releaseSigningKey = ""
 
 const (
@@ -408,10 +403,6 @@ func (u *SelfUpdater) install(rel Release) (func(), error) {
 	return u.binary.Install(path)
 }
 
-// verifyListing proves the checksum listing was published by whoever holds the
-// release signing key. The checksums bind the archive, so a listing that is
-// signed makes the release host untrusted plumbing; without a key nothing is
-// proved and the host is trusted as before.
 func (u *SelfUpdater) verifyListing(rel Release, listing []byte) error {
 	key, err := releaseKey()
 	if err != nil {

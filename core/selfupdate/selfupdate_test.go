@@ -64,8 +64,6 @@ const (
 	approverWait = 2 * time.Second
 )
 
-// signRelease signs the checksum listing the way the release pipeline does and
-// puts the matching public key in front of the updater.
 func signRelease(t *testing.T, listing []byte) []byte {
 	t.Helper()
 
@@ -125,7 +123,6 @@ func sumsFor(archive []byte) []byte {
 }
 
 // releaseServer serves a GitHub-shaped release with the given tag and archive.
-// A nil signature stands for a release published without one.
 func releaseServer(t *testing.T, tag string, archive, sums, signature []byte) *httptest.Server {
 	t.Helper()
 
@@ -165,8 +162,6 @@ func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpd
 	return signedUpdaterFixture(t, latest, archive, sums, nil)
 }
 
-// signedUpdaterFixture serves the release with a signature attached to it. The
-// key it is verified against is the caller's to set.
 func signedUpdaterFixture(t *testing.T, latest string, archive, sums, signature []byte) (*SelfUpdater, *fakeBinary) {
 	t.Helper()
 
@@ -432,7 +427,7 @@ func TestSelfUpdaterInstallsSignedRelease(t *testing.T) {
 func TestSelfUpdaterRejectsUnsignedRelease(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
 	sums := sumsFor(archive)
-	signRelease(t, sums) // the key is in place, the release carries nothing
+	signRelease(t, sums)
 	u, binary := signedUpdaterFixture(t, "v0.7.548", archive, sums, nil)
 
 	require.ErrorIs(t, u.checkAndUpdate(nil), ErrReleaseUnsigned)
@@ -442,17 +437,14 @@ func TestSelfUpdaterRejectsUnsignedRelease(t *testing.T) {
 	assert.NoFileExists(t, binary.StagePath(testAsset), "an unsigned release must not even be downloaded")
 }
 
-// A checksum listing is only as good as the host that served it: a release host
-// that swaps both the archive and its checksums is undetectable without the
-// signature.
 func TestSelfUpdaterRejectsForgedListing(t *testing.T) {
 	forged := tarGz(t, testBinary, []byte("forged binary"))
 	sums := sumsFor(forged)
-	signRelease(t, sums) // signed by the release key...
+	signRelease(t, sums)
 
 	_, strangerPriv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	signature := []byte(security.Sign(strangerPriv, sums)) // ...but signed here by someone else
+	signature := []byte(security.Sign(strangerPriv, sums))
 
 	u, binary := signedUpdaterFixture(t, "v0.7.548", forged, sums, signature)
 
@@ -487,7 +479,6 @@ func TestReleaseKey(t *testing.T) {
 	assert.Equal(t, ed25519.PublicKey(pub), key)
 }
 
-// stubSource stands in for one forge.
 type stubSource struct {
 	tag string
 	err error

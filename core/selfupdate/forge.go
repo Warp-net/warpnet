@@ -45,9 +45,6 @@ import (
 )
 
 const (
-	// Forges the release is published to, asked in this order. Codeberg runs
-	// Forgejo, whose release JSON is the same shape as the GitHub one, so both
-	// are read by the same client. Note the owner differs between them.
 	codebergReleaseAPI = "https://codeberg.org/api/v1/repos/Warpnet/warpnet/releases/latest"
 	githubReleaseAPI   = "https://api.github.com/repos/Warp-net/warpnet/releases/latest"
 
@@ -72,8 +69,6 @@ func (r Release) AssetURL(name string) (string, error) {
 	return url, nil
 }
 
-// assetClient fetches whatever a release points at. Asset URLs are absolute, so
-// one client serves every forge.
 type assetClient struct {
 	ctx       context.Context
 	client    *http.Client
@@ -92,7 +87,6 @@ func newAssetClient(ctx context.Context, current *semver.Version) *assetClient {
 	}
 }
 
-// forgeReleases reads the newest release of one forge.
 type forgeReleases struct {
 	*assetClient
 
@@ -103,9 +97,6 @@ func newForgeReleases(assets *assetClient, apiURL string) *forgeReleases {
 	return &forgeReleases{assetClient: assets, apiURL: apiURL}
 }
 
-// forgeSources takes the newest release any forge publishes, so one of them
-// lagging behind cannot hold a node on an old version. The release carries the
-// asset URLs of the forge that published it, so the two are never mixed.
 type forgeSources []ReleaseSource
 
 func (f forgeSources) Latest() (Release, error) {
@@ -115,8 +106,6 @@ func (f forgeSources) Latest() (Release, error) {
 	for _, source := range f {
 		release, err := source.Latest()
 		if err != nil {
-			// one forge being unreachable is what the other one is for; only
-			// losing all of them is worth telling the owner about
 			log.Debugf("selfupdate: %v", err)
 			lastErr = err
 			continue

@@ -269,11 +269,6 @@ jobs:
             warpdroid/warpdroid_checksums.txt
 
 
-  # Signs every checksum listing of the release with the ed25519 release key.
-  # A node verifies that signature against the public half compiled into its
-  # binary before it believes a single checksum, so the release host stops being
-  # something it has to trust. Runs once, after every artifact is attached, and
-  # on linux only: the private key then touches one runner instead of four.
   sign:
     needs: [release, release-warpdroid]
     runs-on: ubuntu-latest
@@ -305,7 +300,6 @@ jobs:
           for listing in sums/*_checksums.txt; do
             openssl pkeyutl -sign -inkey release.key -rawin -in "$listing" | base64 -w0 > "$listing.sig"
 
-            # a mangled secret must fail here rather than on the users' nodes
             base64 -d "$listing.sig" > "$listing.raw"
             openssl pkeyutl -verify -pubin -inkey release.pub -rawin \
               -in "$listing" -sigfile "$listing.raw"
@@ -317,12 +311,6 @@ jobs:
           gh release upload "$RELEASE_TAG" sums/*.sig --repo "$GITHUB_REPOSITORY" --clobber
 
 
-  # Publishes the same release on Codeberg, so a node updating itself never has
-  # to reach a proprietary forge. Only what self-update fetches is mirrored:
-  # Codeberg is donation funded and its attachment quota is ~1.5 GiB, while a
-  # full release is 148 MB against the 71 MiB these four platforms need. The
-  # node takes the newest release either forge offers, so a failure here costs
-  # the mirror, not the update.
   mirror-codeberg:
     needs: [release, release-warpdroid, sign]
     runs-on: ubuntu-latest
@@ -332,7 +320,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
-          CODEBERG_REPO: Warpnet/warpnet # the owner differs from the GitHub one
+          CODEBERG_REPO: Warpnet/warpnet
         run: |
           set -euo pipefail
 
@@ -354,7 +342,6 @@ jobs:
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern '*_checksums.txt*' --dir assets
 
-          # a re-run reuses the release rather than failing on the existing tag
           id=$(curl -sf -H "$auth" "$api/releases/tags/$RELEASE_TAG" | jq -r '.id // empty' || true)
           if [ -z "$id" ]; then
             id=$(curl -sf -X POST -H "$auth" -H "Content-Type: application/json" \
