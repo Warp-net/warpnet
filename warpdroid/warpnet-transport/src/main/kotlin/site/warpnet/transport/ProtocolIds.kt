@@ -38,6 +38,12 @@ object ProtocolIds {
     const val PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
     const val PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
     const val PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
+
+    // Chat attachments live in their own store and are served only to the
+    // participants of that chat; the public media routes above cannot reach
+    // them at all (core/handler/chat-media.go).
+    const val PUBLIC_GET_CHAT_IMAGE = "/public/get/chat/image/0.0.0"
+    const val PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
     const val PUBLIC_GET_POLL = "/public/get/poll/0.0.0"
 
     // public writes
