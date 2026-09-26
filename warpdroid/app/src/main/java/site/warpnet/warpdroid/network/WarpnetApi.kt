@@ -945,7 +945,13 @@ class WarpnetApi @Inject constructor(
                 query = trimmed,
                 limit = (limit ?: 40).coerceAtLeast(1),
             )
-            SearchResult(accounts = hits, statuses = emptyList(), hashtags = emptyList())
+            val found = if (resolve == true && type == "accounts") {
+                runCatching { warpnet.lookupFediverseUser(trimmed) }.getOrNull()
+            } else {
+                null
+            }
+            val accounts = if (found == null) hits else listOf(found) + hits.filterNot { it.id == found.id }
+            SearchResult(accounts = accounts, statuses = emptyList(), hashtags = emptyList())
         }
     }
 

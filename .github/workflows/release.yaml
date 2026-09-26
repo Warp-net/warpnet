@@ -267,3 +267,100 @@ jobs:
           files: |
             warpdroid/warpdroid.apk
             warpdroid/warpdroid_checksums.txt
+
+
+  sign:
+    needs: [release, release-warpdroid]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Sign the checksum listings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RELEASE_SIGNING_KEY:-}" ]; then
+            echo "::error::RELEASE_SIGNING_KEY is not set: the release would ship unsigned" >&2
+            echo "Generate it with: openssl genpkey -algorithm ed25519 -out release.key" >&2
+            exit 1
+          fi
+
+          umask 077
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > release.key
+          trap 'rm -f release.key release.pub' EXIT
+          openssl pkey -in release.key -pubout -out release.pub
+
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*_checksums.txt' --dir sums
+
+          for listing in sums/*_checksums.txt; do
+            openssl pkeyutl -sign -inkey release.key -rawin -in "$listing" | base64 -w0 > "$listing.sig"
+
+            base64 -d "$listing.sig" > "$listing.raw"
+            openssl pkeyutl -verify -pubin -inkey release.pub -rawin \
+              -in "$listing" -sigfile "$listing.raw"
+            rm -f "$listing.raw"
+
+            echo "signed $(basename "$listing")"
+          done
+
+          gh release upload "$RELEASE_TAG" sums/*.sig --repo "$GITHUB_REPOSITORY" --clobber
+
+
+  mirror-codeberg:
+    needs: [release, release-warpdroid, sign]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mirror the release to Codeberg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          CODEBERG_REPO: Warpnet/warpnet
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CODEBERG_TOKEN:-}" ]; then
+            echo "::warning::CODEBERG_TOKEN is not set, the release stays on GitHub only"
+            exit 0
+          fi
+
+          api="https://codeberg.org/api/v1/repos/$CODEBERG_REPO"
+          auth="Authorization: token $CODEBERG_TOKEN"
+
+          for asset in relay_linux_amd64.tar.gz \
+                       warpnet_linux_amd64.tar.gz \
+                       warpnet_linux_arm64.tar.gz \
+                       warpnet_windows_amd64.zip; do
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$asset" --dir assets
+          done
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*_checksums.txt*' --dir assets
+
+          id=$(curl -sf -H "$auth" "$api/releases/tags/$RELEASE_TAG" | jq -r '.id // empty' || true)
+          if [ -z "$id" ]; then
+            id=$(curl -sf -X POST -H "$auth" -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"$RELEASE_TAG\",\"name\":\"$RELEASE_TAG\"}" \
+              "$api/releases" | jq -r '.id')
+          fi
+          test -n "$id"
+
+          for file in assets/*; do
+            name=$(basename "$file")
+            curl -sf -X POST -H "$auth" \
+              -F "attachment=@$file" \
+              "$api/releases/$id/assets?name=$name" > /dev/null
+            echo "mirrored $name"
+          done
+
+          published=$(curl -sf "$api/releases/latest" | jq -r .tag_name)
+          if [ "$published" != "$RELEASE_TAG" ]; then
+            echo "::error::Codeberg still serves $published as the latest release" >&2
+            exit 1
+          fi
+          echo "Codeberg now serves $published"

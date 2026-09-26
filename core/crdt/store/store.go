@@ -160,7 +160,7 @@ func (l *dedupLogger) isDup(key string) bool {
 	return false
 }
 
-func (l *dedupLogger) Info(args ...interface{}) {
+func (l *dedupLogger) Info(args ...any) {
 	if !l.base.Logger.IsLevelEnabled(log.InfoLevel) {
 		return
 	}
@@ -169,7 +169,7 @@ func (l *dedupLogger) Info(args ...interface{}) {
 	}
 }
 
-func (l *dedupLogger) Infof(format string, args ...interface{}) {
+func (l *dedupLogger) Infof(format string, args ...any) {
 	if !l.base.Logger.IsLevelEnabled(log.InfoLevel) {
 		return
 	}
@@ -178,13 +178,13 @@ func (l *dedupLogger) Infof(format string, args ...interface{}) {
 	}
 }
 
-func (l *dedupLogger) Debug(args ...interface{})                 { l.base.Debug(args...) }
-func (l *dedupLogger) Debugf(format string, args ...interface{}) { l.base.Debugf(format, args...) }
-func (l *dedupLogger) Warn(args ...interface{})                  { l.base.Warn(args...) }
-func (l *dedupLogger) Warnf(format string, args ...interface{})  { l.base.Warnf(format, args...) }
-func (l *dedupLogger) Error(args ...interface{})                 { l.base.Error(args...) }
-func (l *dedupLogger) Errorf(format string, args ...interface{}) { l.base.Errorf(format, args...) }
-func (l *dedupLogger) Fatal(args ...interface{})                 { l.base.Fatal(args...) }
-func (l *dedupLogger) Fatalf(format string, args ...interface{}) { l.base.Fatalf(format, args...) }
-func (l *dedupLogger) Panic(args ...interface{})                 { l.base.Panic(args...) }
-func (l *dedupLogger) Panicf(format string, args ...interface{}) { l.base.Panicf(format, args...) }
+func (l *dedupLogger) Debug(args ...any)                 { l.base.Debug(args...) }
+func (l *dedupLogger) Debugf(format string, args ...any) { l.base.Debugf(format, args...) }
+func (l *dedupLogger) Warn(args ...any)                  { l.base.Warn(args...) }
+func (l *dedupLogger) Warnf(format string, args ...any)  { l.base.Warnf(format, args...) }
+func (l *dedupLogger) Error(args ...any)                 { l.base.Error(args...) }
+func (l *dedupLogger) Errorf(format string, args ...any) { l.base.Errorf(format, args...) }
+func (l *dedupLogger) Fatal(args ...any)                 { l.base.Fatal(args...) }
+func (l *dedupLogger) Fatalf(format string, args ...any) { l.base.Fatalf(format, args...) }
+func (l *dedupLogger) Panic(args ...any)                 { l.base.Panic(args...) }
+func (l *dedupLogger) Panicf(format string, args ...any) { l.base.Panicf(format, args...) }

@@ -65,6 +65,7 @@ object ProtocolIds {
     const val PRIVATE_POST_NOTIFICATIONS_READ = "/private/post/notifications/read/0.0.0"
     const val PRIVATE_GET_SETTINGS_NOTIFICATION = "/private/get/settings/notification/0.0.0"
     const val PRIVATE_POST_SETTINGS_NOTIFICATION = "/private/post/settings/notification/0.0.0"
+    const val PRIVATE_GET_SETTINGS_GATEWAY = "/private/get/settings/gateway/0.0.0"
     const val PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
     const val PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
     const val PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"

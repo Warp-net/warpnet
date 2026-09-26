@@ -5,6 +5,8 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     searchUsers: vi.fn(),
     getImage: vi.fn(),
+    getGatewaySettings: vi.fn(),
+    getProfile: vi.fn(),
   },
 }));
 
@@ -53,7 +55,12 @@ beforeEach(() => {
   routerPush.mockClear();
   warpnetService.searchUsers.mockResolvedValue({ users: [], cursor: 'end' });
   warpnetService.getImage.mockResolvedValue(null);
+  warpnetService.getGatewaySettings.mockResolvedValue({ node_id: 'GW' });
+  warpnetService.getProfile.mockResolvedValue({});
 });
+
+const listed = () =>
+  Array.from(screen.getByTestId('user-list').querySelectorAll('li')).map((li) => li.textContent);
 
 describe('Search.vue', () => {
   it('renders the search input and the People tab', () => {
@@ -126,5 +133,101 @@ describe('Search.vue', () => {
     renderSearch();
 
     expect(screen.getByPlaceholderText(/Search Warpnet/i)).toHaveValue('');
+  });
+});
+
+describe('Search.vue fediverse lookup', () => {
+  it('resolves a handle through the gateway and lists it first', async () => {
+    warpnetService.searchUsers.mockResolvedValue({
+      users: [{ id: 'carol', username: 'Caroline' }],
+      cursor: 'end',
+    });
+    warpnetService.getProfile.mockResolvedValue({ id: 'bob@mastodon.social', username: 'Bob' });
+
+    renderSearch({ query: { q: '@bob@mastodon.social' } });
+
+    await screen.findByText('Bob');
+    expect(warpnetService.getProfile).toHaveBeenCalledWith('bob@mastodon.social', 'GW');
+    expect(listed()).toEqual(['Bob', 'Caroline']);
+  });
+
+  it('resolves on Enter and keeps the result when the pending debounce would fire', async () => {
+    warpnetService.getProfile.mockResolvedValue({ id: 'mosseri@threads.net', username: 'Adam' });
+    renderSearch();
+
+    const input = screen.getByPlaceholderText(/Search Warpnet/i);
+    await fireEvent.update(input, 'https://www.threads.net/@mosseri');
+    await fireEvent.keyUp(input, { key: 'Enter' });
+
+    await screen.findByText('Adam');
+    expect(warpnetService.getProfile).toHaveBeenCalledWith('mosseri@threads.net', 'GW');
+    await new Promise((r) => setTimeout(r, 500));
+    expect(listed()).toEqual(['Adam']);
+    expect(warpnetService.searchUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the gateway when typing finds nothing locally', async () => {
+    warpnetService.getProfile.mockResolvedValue({ id: 'zuck@threads.net', username: 'Mark' });
+    renderSearch();
+
+    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'zuck@threads.net');
+
+    expect(await screen.findByText('Mark', undefined, { timeout: 2000 })).toBeInTheDocument();
+    expect(warpnetService.getProfile).toHaveBeenCalledWith('zuck@threads.net', 'GW');
+  });
+
+  it('keeps typing local when the node already has a match', async () => {
+    warpnetService.searchUsers.mockResolvedValue({
+      users: [{ id: 'zuck@threads.net', username: 'Mark' }],
+      cursor: 'end',
+    });
+    renderSearch();
+
+    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'zuck@threads.net');
+
+    await screen.findByText('Mark', undefined, { timeout: 2000 });
+    expect(warpnetService.getProfile).not.toHaveBeenCalled();
+  });
+
+  it('keeps typing a plain name local', async () => {
+    renderSearch();
+
+    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'zuck');
+
+    await waitFor(() => expect(warpnetService.searchUsers).toHaveBeenCalled(), { timeout: 2000 });
+    expect(warpnetService.getProfile).not.toHaveBeenCalled();
+  });
+
+  it('shows only the local results when the handle does not resolve', async () => {
+    warpnetService.searchUsers.mockResolvedValue({
+      users: [{ id: 'carol', username: 'Caroline' }],
+      cursor: 'end',
+    });
+
+    renderSearch({ query: { q: 'ghost@mastodon.social' } });
+
+    await waitFor(() => expect(warpnetService.getProfile).toHaveBeenCalled());
+    await screen.findByText('Caroline');
+    expect(listed()).toEqual(['Caroline']);
+  });
+
+  it('drops a lookup that resolves after a newer search', async () => {
+    let resolveLookup;
+    warpnetService.getProfile.mockImplementation(() => new Promise((r) => { resolveLookup = r; }));
+    warpnetService.searchUsers.mockImplementation((q) =>
+      Promise.resolve({ users: q === 'carol' ? [{ id: 'carol', username: 'Caroline' }] : [], cursor: 'end' })
+    );
+
+    renderSearch({ query: { q: 'bob@mastodon.social' } });
+    await waitFor(() => expect(warpnetService.getProfile).toHaveBeenCalled());
+
+    const input = screen.getByPlaceholderText(/Search Warpnet/i);
+    await fireEvent.update(input, 'carol');
+    await fireEvent.keyUp(input, { key: 'Enter' });
+    await screen.findByText('Caroline');
+
+    resolveLookup({ id: 'bob@mastodon.social', username: 'Bob' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listed()).toEqual(['Caroline']);
   });
 });

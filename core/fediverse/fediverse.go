@@ -60,7 +60,7 @@ const (
 	// account search and no browsable follow graph, so nothing discovers a
 	// Threads account on its own: without a seeded one the Threads tab of the
 	// recommendations has nothing to show and no way to ever get anything.
-	ThreadsEntryHandle = "engineer_of_your_ass@threads.net"
+	ThreadsEntryHandle = "zuck@threads.net"
 )
 
 // IsBridged reports whether a User.Network tag names a network bridged in
@@ -101,7 +101,7 @@ type UserSeeder interface {
 func SeedEntryUser(repo UserSeeder) {
 	for _, u := range []domain.User{
 		{Id: EntryHandle, Username: "Warpnet", NodeId: gatewayNodeID, Network: MastodonNetwork},
-		{Id: ThreadsEntryHandle, Username: "Vadim", NodeId: gatewayNodeID, Network: ThreadsNetwork},
+		{Id: ThreadsEntryHandle, Username: "Mark Zuckerberg", NodeId: gatewayNodeID, Network: ThreadsNetwork},
 	} {
 		if _, err := repo.Create(u); err != nil {
 			_, _ = repo.Update(u.Id, u)
