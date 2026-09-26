@@ -30,7 +30,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -89,12 +88,10 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 
 	dagService := warpnet.NewDAGService(warpnet.NewBlockService(blockstore, bitswapExchange))
 
-	hook := newDedupHook(time.Minute * 10) //nolint:mnd
-	stdLog := log.StandardLogger()
-	stdLog.AddHook(hook)
+	stdLog := log.WithContext(ctx)
 
 	opts := crdt.DefaultOptions()
-	opts.Logger = stdLog.WithContext(ctx)
+	opts.Logger = newDedupLogger(stdLog.WithField("store", cfg.Datastore), time.Minute*10) // nolint:mnd
 	opts.PutHook = cfg.PutHook
 	opts.DeleteHook = cfg.DeleteHook
 	opts.RebroadcastInterval = rebroadcastInterval
@@ -123,52 +120,71 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 	return crdtStore, nil
 }
 
-type dedupHook struct {
-	mu     sync.RWMutex
-	seen   map[string]time.Time
-	window time.Duration // дедупликация на это время
+type dedupLogger struct {
+	base      *log.Entry
+	window    time.Duration
+	mu        sync.Mutex
+	seen      map[string]time.Time
+	lastSweep time.Time
 }
 
-func newDedupHook(window time.Duration) *dedupHook {
-	return &dedupHook{
-		seen:   make(map[string]time.Time),
-		window: window,
+func newDedupLogger(base *log.Entry, window time.Duration) *dedupLogger {
+	return &dedupLogger{
+		base:      base,
+		window:    window,
+		seen:      make(map[string]time.Time),
+		lastSweep: time.Now(),
 	}
 }
 
-func (h *dedupHook) Fire(entry *log.Entry) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+func (l *dedupLogger) isDup(key string) bool {
+	now := time.Now()
 
-	var parts []string
-	parts = append(parts, entry.Message)
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	for k, v := range entry.Data {
-		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+	if last, ok := l.seen[key]; ok && now.Sub(last) < l.window {
+		return true
 	}
+	l.seen[key] = now
 
-	key := strings.Join(parts, "|")
-
-	now := entry.Time
-	if lastTime, exists := h.seen[key]; exists {
-		if now.Sub(lastTime) < h.window {
-			return nil
-		}
-	}
-
-	h.seen[key] = now
-
-	if len(h.seen) > 100 {
-		for k, v := range h.seen {
-			if now.Sub(v) > h.window*2 {
-				delete(h.seen, k)
+	if now.Sub(l.lastSweep) >= l.window {
+		for k, t := range l.seen {
+			if now.Sub(t) >= l.window {
+				delete(l.seen, k)
 			}
 		}
+		l.lastSweep = now
 	}
 
-	return nil
+	return false
 }
 
-func (h *dedupHook) Levels() []log.Level {
-	return []log.Level{log.InfoLevel}
+func (l *dedupLogger) Info(args ...interface{}) {
+	if !l.base.Logger.IsLevelEnabled(log.InfoLevel) {
+		return
+	}
+	if !l.isDup(fmt.Sprint(args...)) {
+		l.base.Info(args...)
+	}
 }
+
+func (l *dedupLogger) Infof(format string, args ...interface{}) {
+	if !l.base.Logger.IsLevelEnabled(log.InfoLevel) {
+		return
+	}
+	if !l.isDup(format) {
+		l.base.Infof(format, args...)
+	}
+}
+
+func (l *dedupLogger) Debug(args ...interface{})                 { l.base.Debug(args...) }
+func (l *dedupLogger) Debugf(format string, args ...interface{}) { l.base.Debugf(format, args...) }
+func (l *dedupLogger) Warn(args ...interface{})                  { l.base.Warn(args...) }
+func (l *dedupLogger) Warnf(format string, args ...interface{})  { l.base.Warnf(format, args...) }
+func (l *dedupLogger) Error(args ...interface{})                 { l.base.Error(args...) }
+func (l *dedupLogger) Errorf(format string, args ...interface{}) { l.base.Errorf(format, args...) }
+func (l *dedupLogger) Fatal(args ...interface{})                 { l.base.Fatal(args...) }
+func (l *dedupLogger) Fatalf(format string, args ...interface{}) { l.base.Fatalf(format, args...) }
+func (l *dedupLogger) Panic(args ...interface{})                 { l.base.Panic(args...) }
+func (l *dedupLogger) Panicf(format string, args ...interface{}) { l.base.Panicf(format, args...) }
