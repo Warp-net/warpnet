@@ -349,16 +349,16 @@ func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
 	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
 	u.isApprovalRequired = true
 
-	verdicts := make(chan bool, 1)
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	answers := make(chan bool, 1)
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
 	waitPendingUpdate(t, u)
 	require.NoError(t, u.AnswerUpdate(false))
-	require.False(t, <-verdicts)
+	require.False(t, <-answers)
 
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.549")) }()
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.549")) }()
 	waitPendingUpdate(t, u)
 	require.NoError(t, u.AnswerUpdate(true))
-	assert.True(t, <-verdicts)
+	assert.True(t, <-answers)
 }
 
 func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
@@ -367,14 +367,14 @@ func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
 	u.ctx = ctx
 	u.isApprovalRequired = true
 
-	verdicts := make(chan bool, 1)
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	answers := make(chan bool, 1)
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
 
 	waitPendingUpdate(t, u)
 	cancel()
 
 	select {
-	case isAllowed := <-verdicts:
+	case isAllowed := <-answers:
 		assert.False(t, isAllowed, "a node shutting down must not install anything")
 	case <-time.After(approverWait):
 		t.Fatal("shutdown left the check waiting")
@@ -395,7 +395,7 @@ func TestSelfUpdaterAcceptsAnAnswerBeforeTheCheckWaits(t *testing.T) {
 	require.NoError(t, u.AnswerUpdate(true))
 
 	select {
-	case isAllowed := <-u.verdicts:
+	case isAllowed := <-u.answers:
 		assert.True(t, isAllowed)
 	default:
 		t.Fatal("the answer was dropped before the check reached the channel")
@@ -407,19 +407,19 @@ func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
 	u.isApprovalRequired = true
 	require.ErrorIs(t, u.AnswerUpdate(true), ErrNoPendingUpdate)
 
-	verdicts := make(chan bool, 1)
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	answers := make(chan bool, 1)
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
 
 	waitPendingUpdate(t, u)
 	select {
-	case <-verdicts:
+	case <-answers:
 		t.Fatal("the dropped answer was served to the next release")
 	case <-time.After(100 * time.Millisecond):
 	}
 
 	require.NoError(t, u.AnswerUpdate(false))
 	select {
-	case isAllowed := <-verdicts:
+	case isAllowed := <-answers:
 		assert.False(t, isAllowed)
 	case <-time.After(approverWait):
 		t.Fatal("the answer never reached the check")

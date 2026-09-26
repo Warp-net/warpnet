@@ -173,7 +173,7 @@ type SelfUpdater struct {
 	stopChan           chan struct{}
 	isApprovalRequired bool
 	mx                 sync.RWMutex
-	verdicts           chan bool
+	answers            chan bool
 	pending            string
 	declined           string
 }
@@ -198,7 +198,7 @@ func NewSelfUpdater(
 		interval:           checkInterval,
 		stopChan:           make(chan struct{}),
 		isApprovalRequired: isApprovalRequired,
-		verdicts:           make(chan bool, 1),
+		answers:            make(chan bool, 1),
 	}
 
 	binary, err := currentExecutable()
@@ -326,9 +326,6 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 	return nil
 }
 
-// GetPendingUpdate returns the version waiting for the owner of the node to
-// allow it, alongside the one it replaces. An empty newVersion means nothing is
-// waiting.
 func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
 	u.mx.RLock()
 	defer u.mx.RUnlock()
@@ -338,7 +335,6 @@ func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
 	return u.current.String(), u.pending
 }
 
-// AnswerUpdate hands the owner's verdict to the waiting check.
 func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
 	u.mx.RLock()
 	isAsked := u.pending != ""
@@ -348,7 +344,7 @@ func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
 		return ErrNoPendingUpdate
 	}
 	select {
-	case u.verdicts <- isAllowed:
+	case u.answers <- isAllowed:
 		return nil
 	default:
 		return ErrNoPendingUpdate
@@ -369,7 +365,7 @@ func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 	var isAllowed bool
 	select {
 	case <-u.ctx.Done():
-	case isAllowed = <-u.verdicts:
+	case isAllowed = <-u.answers:
 	}
 
 	u.stopAsking(isAllowed)
@@ -385,8 +381,8 @@ func (u *SelfUpdater) startAsking(next *semver.Version) bool {
 	if u.declined == next.String() {
 		return false
 	}
-	select { // an answer left over from a release nobody installed decides nothing
-	case <-u.verdicts:
+	select {
+	case <-u.answers:
 	default:
 	}
 	u.pending = next.String()
