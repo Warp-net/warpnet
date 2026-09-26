@@ -159,6 +159,11 @@ func releaseServer(t *testing.T, tag string, archive, sums, signature []byte) *h
 // local release server.
 func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpdater, *fakeBinary) {
 	t.Helper()
+
+	previous := releaseSigningKey
+	releaseSigningKey = ""
+	t.Cleanup(func() { releaseSigningKey = previous })
+
 	return signedUpdaterFixture(t, latest, archive, sums, nil)
 }
 
@@ -309,7 +314,7 @@ func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
 	assert.Equal(t, "0.7.548", next)
 	assert.Equal(t, "current binary", read(t, binary.path), "nothing is installed while the answer is out")
 
-	u.AnswerUpdate(true)
+	require.NoError(t, u.AnswerUpdate(true))
 	require.NoError(t, <-errs)
 
 	assert.Equal(t, "new binary", read(t, binary.path))
@@ -327,7 +332,7 @@ func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	go func() { errs <- u.checkAndUpdate(nil) }()
 
 	waitPendingUpdate(t, u)
-	u.AnswerUpdate(false)
+	require.NoError(t, u.AnswerUpdate(false))
 	require.NoError(t, <-errs)
 
 	assert.Equal(t, "current binary", read(t, binary.path))
@@ -344,16 +349,16 @@ func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
 	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
 	u.isApprovalRequired = true
 
-	verdicts := make(chan bool, 1)
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	answers := make(chan bool, 1)
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
 	waitPendingUpdate(t, u)
-	u.AnswerUpdate(false)
-	require.False(t, <-verdicts)
+	require.NoError(t, u.AnswerUpdate(false))
+	require.False(t, <-answers)
 
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.549")) }()
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.549")) }()
 	waitPendingUpdate(t, u)
-	u.AnswerUpdate(true)
-	assert.True(t, <-verdicts)
+	require.NoError(t, u.AnswerUpdate(true))
+	assert.True(t, <-answers)
 }
 
 func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
@@ -362,38 +367,59 @@ func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
 	u.ctx = ctx
 	u.isApprovalRequired = true
 
-	verdicts := make(chan bool, 1)
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	answers := make(chan bool, 1)
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
 
 	waitPendingUpdate(t, u)
 	cancel()
 
 	select {
-	case isAllowed := <-verdicts:
+	case isAllowed := <-answers:
 		assert.False(t, isAllowed, "a node shutting down must not install anything")
 	case <-time.After(approverWait):
 		t.Fatal("shutdown left the check waiting")
 	}
 }
 
+// The release becomes visible to the frontend the moment it is asked about,
+// which is before the check gets as far as waiting for the answer. An answer
+// landing in that window is the user's only one.
+func TestSelfUpdaterAcceptsAnAnswerBeforeTheCheckWaits(t *testing.T) {
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.isApprovalRequired = true
+
+	require.True(t, u.startAsking(semver.MustParse("0.7.548")))
+	_, newVersion := u.GetPendingUpdate()
+	require.Equal(t, "0.7.548", newVersion)
+
+	require.NoError(t, u.AnswerUpdate(true))
+
+	select {
+	case isAllowed := <-u.answers:
+		assert.True(t, isAllowed)
+	default:
+		t.Fatal("the answer was dropped before the check reached the channel")
+	}
+}
+
 func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
 	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
 	u.isApprovalRequired = true
-	require.NotPanics(t, func() { u.AnswerUpdate(true) })
+	require.ErrorIs(t, u.AnswerUpdate(true), ErrNoPendingUpdate)
 
-	verdicts := make(chan bool, 1)
-	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	answers := make(chan bool, 1)
+	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
 
 	waitPendingUpdate(t, u)
 	select {
-	case <-verdicts:
+	case <-answers:
 		t.Fatal("the dropped answer was served to the next release")
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	u.AnswerUpdate(false)
+	require.NoError(t, u.AnswerUpdate(false))
 	select {
-	case isAllowed := <-verdicts:
+	case isAllowed := <-answers:
 		assert.False(t, isAllowed)
 	case <-time.After(approverWait):
 		t.Fatal("the answer never reached the check")

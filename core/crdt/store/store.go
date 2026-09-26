@@ -91,7 +91,7 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 	stdLog := log.WithContext(ctx)
 
 	opts := crdt.DefaultOptions()
-	opts.Logger = newDedupLogger(stdLog.WithField("store", cfg.Prefix), time.Minute*10) // nolint:mnd
+	opts.Logger = newDedupLogger(stdLog.WithField("store", cfg.Prefix))
 	opts.PutHook = cfg.PutHook
 	opts.DeleteHook = cfg.DeleteHook
 	opts.RebroadcastInterval = rebroadcastInterval
@@ -121,41 +121,29 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 }
 
 type dedupLogger struct {
-	base      *log.Entry
-	window    time.Duration
-	mu        sync.Mutex
-	seen      map[string]time.Time
-	lastSweep time.Time
+	base *log.Entry
+	mu   sync.Mutex
+	seen map[string]bool
 }
 
-func newDedupLogger(base *log.Entry, window time.Duration) *dedupLogger {
+func newDedupLogger(base *log.Entry) *dedupLogger {
 	return &dedupLogger{
-		base:      base,
-		window:    window,
-		seen:      make(map[string]time.Time),
-		lastSweep: time.Now(),
+		base: base,
+		seen: make(map[string]bool),
 	}
 }
 
 func (l *dedupLogger) isDup(key string) bool {
-	now := time.Now()
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if last, ok := l.seen[key]; ok && now.Sub(last) < l.window {
+	if ok := l.seen[key]; ok {
 		return true
 	}
-	l.seen[key] = now
-
-	if now.Sub(l.lastSweep) >= l.window {
-		for k, t := range l.seen {
-			if now.Sub(t) >= l.window {
-				delete(l.seen, k)
-			}
-		}
-		l.lastSweep = now
+	for k := range l.seen {
+		delete(l.seen, k)
 	}
+	l.seen[key] = true
 
 	return false
 }
