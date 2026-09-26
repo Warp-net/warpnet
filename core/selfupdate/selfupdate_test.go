@@ -34,6 +34,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -47,18 +49,33 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	testAsset    = "relay_test.tar.gz"
-	testChecksum = "relay_test_checksums.txt"
-	testBinary   = "relay"
-	testVersion  = "0.7.547"
+	testAsset     = "relay_test.tar.gz"
+	testChecksum  = "relay_test_checksums.txt"
+	testSignature = "relay_test_checksums.txt.sig"
+	testBinary    = "relay"
+	testVersion   = "0.7.547"
 
 	approverWait = 2 * time.Second
 )
+
+func signRelease(t *testing.T, listing []byte) []byte {
+	t.Helper()
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	previous := releaseSigningKey
+	releaseSigningKey = hex.EncodeToString(pub)
+	t.Cleanup(func() { releaseSigningKey = previous })
+
+	return []byte(security.Sign(priv, listing))
+}
 
 var errRestartFailed = errors.New("exec: no such file or directory")
 
@@ -106,7 +123,7 @@ func sumsFor(archive []byte) []byte {
 }
 
 // releaseServer serves a GitHub-shaped release with the given tag and archive.
-func releaseServer(t *testing.T, tag string, archive, sums []byte) *httptest.Server {
+func releaseServer(t *testing.T, tag string, archive, sums, signature []byte) *httptest.Server {
 	t.Helper()
 
 	mux := http.NewServeMux()
@@ -114,10 +131,19 @@ func releaseServer(t *testing.T, tag string, archive, sums []byte) *httptest.Ser
 	t.Cleanup(srv.Close)
 
 	mux.HandleFunc("/latest", func(w http.ResponseWriter, _ *http.Request) {
+		signatureAsset := ""
+		if signature != nil {
+			signatureAsset = fmt.Sprintf(
+				`,{"name":%q,"browser_download_url":%q}`, testSignature, srv.URL+"/"+testSignature,
+			)
+		}
 		_, _ = fmt.Fprintf(w, `{"tag_name":%q,"assets":[
 			{"name":%q,"browser_download_url":%q},
-			{"name":%q,"browser_download_url":%q}
-		]}`, tag, testAsset, srv.URL+"/"+testAsset, testChecksum, srv.URL+"/"+testChecksum)
+			{"name":%q,"browser_download_url":%q}%s
+		]}`, tag, testAsset, srv.URL+"/"+testAsset, testChecksum, srv.URL+"/"+testChecksum, signatureAsset)
+	})
+	mux.HandleFunc("/"+testSignature, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(signature)
 	})
 	mux.HandleFunc("/"+testAsset, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(archive)
@@ -133,21 +159,31 @@ func releaseServer(t *testing.T, tag string, archive, sums []byte) *httptest.Ser
 // local release server.
 func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpdater, *fakeBinary) {
 	t.Helper()
+	return signedUpdaterFixture(t, latest, archive, sums, nil)
+}
+
+func signedUpdaterFixture(t *testing.T, latest string, archive, sums, signature []byte) (*SelfUpdater, *fakeBinary) {
+	t.Helper()
 
 	path := filepath.Join(t.TempDir(), testBinary)
 	require.NoError(t, os.WriteFile(path, []byte("current binary"), 0o755))
 
-	gh := newGitHubReleases(context.Background(), semver.MustParse(testVersion))
-	gh.apiURL = releaseServer(t, latest, archive, sums).URL + "/latest"
+	assets := newAssetClient(context.Background(), semver.MustParse(testVersion))
+	forge := newForgeReleases(assets, releaseServer(t, latest, archive, sums, signature).URL+"/latest")
 
 	binary := &fakeBinary{executable: &executable{path: path}}
 	u := NewSelfUpdater(
 		context.Background(),
 		semver.MustParse(testVersion),
-		Artifact{AssetName: testAsset, ChecksumName: testChecksum, BinaryName: testBinary},
+		Artifact{
+			AssetName:     testAsset,
+			ChecksumName:  testChecksum,
+			SignatureName: testSignature,
+			BinaryName:    testBinary,
+		},
 		false,
 	)
-	u.releases, u.assets = gh, gh
+	u.releases, u.assets = forgeSources{forge}, assets
 	u.binary = binary
 	u.failures = newFailureMarker(path)
 
@@ -375,6 +411,124 @@ func waitPendingUpdate(t *testing.T, u *SelfUpdater) (currentVersion, newVersion
 	}
 	t.Fatal("no release is waiting for an answer")
 	return "", ""
+}
+
+func TestSelfUpdaterInstallsSignedRelease(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	sums := sumsFor(archive)
+	u, binary := signedUpdaterFixture(t, "v0.7.548", archive, sums, signRelease(t, sums))
+
+	require.NoError(t, u.checkAndUpdate(nil))
+
+	assert.Equal(t, "new binary", read(t, binary.path))
+	assert.True(t, binary.restarted)
+}
+
+func TestSelfUpdaterRejectsUnsignedRelease(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	sums := sumsFor(archive)
+	signRelease(t, sums)
+	u, binary := signedUpdaterFixture(t, "v0.7.548", archive, sums, nil)
+
+	require.ErrorIs(t, u.checkAndUpdate(nil), ErrReleaseUnsigned)
+
+	assert.Equal(t, "current binary", read(t, binary.path))
+	assert.False(t, binary.restarted)
+	assert.NoFileExists(t, binary.StagePath(testAsset), "an unsigned release must not even be downloaded")
+}
+
+func TestSelfUpdaterRejectsForgedListing(t *testing.T) {
+	forged := tarGz(t, testBinary, []byte("forged binary"))
+	sums := sumsFor(forged)
+	signRelease(t, sums)
+
+	_, strangerPriv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	signature := []byte(security.Sign(strangerPriv, sums))
+
+	u, binary := signedUpdaterFixture(t, "v0.7.548", forged, sums, signature)
+
+	require.ErrorIs(t, u.checkAndUpdate(nil), security.ErrSignatureVerificationFailed)
+
+	assert.Equal(t, "current binary", read(t, binary.path))
+	assert.False(t, binary.restarted)
+}
+
+func TestReleaseKey(t *testing.T) {
+	previous := releaseSigningKey
+	t.Cleanup(func() { releaseSigningKey = previous })
+
+	releaseSigningKey = ""
+	key, err := releaseKey()
+	require.NoError(t, err)
+	assert.Nil(t, key, "an empty key leaves the check off")
+
+	releaseSigningKey = "not hex"
+	_, err = releaseKey()
+	require.ErrorIs(t, err, ErrMalformedKey)
+
+	releaseSigningKey = hex.EncodeToString([]byte("too short"))
+	_, err = releaseKey()
+	require.ErrorIs(t, err, ErrMalformedKey)
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	releaseSigningKey = hex.EncodeToString(pub)
+	key, err = releaseKey()
+	require.NoError(t, err)
+	assert.Equal(t, ed25519.PublicKey(pub), key)
+}
+
+type stubSource struct {
+	tag string
+	err error
+}
+
+func (s stubSource) Latest() (Release, error) {
+	if s.err != nil {
+		return Release{}, s.err
+	}
+	return Release{Version: semver.MustParse(s.tag)}, nil
+}
+
+func TestForgeSourcesTakeTheNewestRelease(t *testing.T) {
+	lagging := stubSource{tag: "0.7.547"}
+	ahead := stubSource{tag: "0.7.548"}
+
+	for _, sources := range []forgeSources{{lagging, ahead}, {ahead, lagging}} {
+		release, err := sources.Latest()
+		require.NoError(t, err)
+		assert.Equal(t, "0.7.548", release.Version.String(), "a forge left behind must not pin the node")
+	}
+}
+
+func TestForgeSourcesSurviveOneForgeBeingDown(t *testing.T) {
+	down := stubSource{err: errors.New("codeberg is unreachable")}
+	sources := forgeSources{down, stubSource{tag: "0.7.548"}}
+
+	release, err := sources.Latest()
+	require.NoError(t, err)
+	assert.Equal(t, "0.7.548", release.Version.String())
+}
+
+func TestForgeSourcesReportEveryForgeFailing(t *testing.T) {
+	unreachable := errors.New("both forges are unreachable")
+	_, err := (forgeSources{stubSource{err: unreachable}, stubSource{err: unreachable}}).Latest()
+	require.ErrorIs(t, err, unreachable)
+
+	_, err = (forgeSources{}).Latest()
+	require.ErrorIs(t, err, ErrNoReleaseSource)
+}
+
+func TestNewSelfUpdaterReadsBothForges(t *testing.T) {
+	u := NewSelfUpdater(context.Background(), semver.MustParse(testVersion), RelayArtifact(), false)
+
+	sources, ok := u.releases.(forgeSources)
+	require.True(t, ok)
+	require.Len(t, sources, 2)
+
+	assert.Equal(t, codebergReleaseAPI, sources[0].(*forgeReleases).apiURL)
+	assert.Equal(t, githubReleaseAPI, sources[1].(*forgeReleases).apiURL)
 }
 
 func TestMemberArtifact(t *testing.T) {
