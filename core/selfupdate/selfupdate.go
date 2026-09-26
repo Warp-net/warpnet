@@ -60,7 +60,7 @@ const (
 	ErrNoReleaseSource  warpnet.WarpError = "no forge to read releases from"
 )
 
-var releaseSigningKey = ""
+var releaseSigningKey = "f8f26d9f337e0bffe8d5455d51695092130fad3d104d97c1facf3bacb420bd49"
 
 const (
 	checkInterval = time.Hour

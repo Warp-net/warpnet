@@ -159,6 +159,11 @@ func releaseServer(t *testing.T, tag string, archive, sums, signature []byte) *h
 // local release server.
 func updaterFixture(t *testing.T, latest string, archive, sums []byte) (*SelfUpdater, *fakeBinary) {
 	t.Helper()
+
+	previous := releaseSigningKey
+	releaseSigningKey = ""
+	t.Cleanup(func() { releaseSigningKey = previous })
+
 	return signedUpdaterFixture(t, latest, archive, sums, nil)
 }
 
