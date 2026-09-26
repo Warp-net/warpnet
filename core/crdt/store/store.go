@@ -91,7 +91,7 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 	stdLog := log.WithContext(ctx)
 
 	opts := crdt.DefaultOptions()
-	opts.Logger = newDedupLogger(stdLog.WithField("store", cfg.Prefix), time.Minute*10) // nolint:mnd
+	opts.Logger = newDedupLogger(stdLog.WithField("store", cfg.Prefix))
 	opts.PutHook = cfg.PutHook
 	opts.DeleteHook = cfg.DeleteHook
 	opts.RebroadcastInterval = rebroadcastInterval
