@@ -314,7 +314,7 @@ func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
 	assert.Equal(t, "0.7.548", next)
 	assert.Equal(t, "current binary", read(t, binary.path), "nothing is installed while the answer is out")
 
-	u.AnswerUpdate(true)
+	require.NoError(t, u.AnswerUpdate(true))
 	require.NoError(t, <-errs)
 
 	assert.Equal(t, "new binary", read(t, binary.path))
@@ -332,7 +332,7 @@ func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	go func() { errs <- u.checkAndUpdate(nil) }()
 
 	waitPendingUpdate(t, u)
-	u.AnswerUpdate(false)
+	require.NoError(t, u.AnswerUpdate(false))
 	require.NoError(t, <-errs)
 
 	assert.Equal(t, "current binary", read(t, binary.path))
@@ -352,12 +352,12 @@ func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
 	verdicts := make(chan bool, 1)
 	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
 	waitPendingUpdate(t, u)
-	u.AnswerUpdate(false)
+	require.NoError(t, u.AnswerUpdate(false))
 	require.False(t, <-verdicts)
 
 	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.549")) }()
 	waitPendingUpdate(t, u)
-	u.AnswerUpdate(true)
+	require.NoError(t, u.AnswerUpdate(true))
 	assert.True(t, <-verdicts)
 }
 
@@ -381,10 +381,31 @@ func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
 	}
 }
 
+// The release becomes visible to the frontend the moment it is asked about,
+// which is before the check gets as far as waiting for the answer. An answer
+// landing in that window is the user's only one.
+func TestSelfUpdaterAcceptsAnAnswerBeforeTheCheckWaits(t *testing.T) {
+	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
+	u.isApprovalRequired = true
+
+	require.True(t, u.startAsking(semver.MustParse("0.7.548")))
+	_, newVersion := u.GetPendingUpdate()
+	require.Equal(t, "0.7.548", newVersion)
+
+	require.NoError(t, u.AnswerUpdate(true))
+
+	select {
+	case isAllowed := <-u.verdicts:
+		assert.True(t, isAllowed)
+	default:
+		t.Fatal("the answer was dropped before the check reached the channel")
+	}
+}
+
 func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
 	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
 	u.isApprovalRequired = true
-	require.NotPanics(t, func() { u.AnswerUpdate(true) })
+	require.ErrorIs(t, u.AnswerUpdate(true), ErrNoPendingUpdate)
 
 	verdicts := make(chan bool, 1)
 	go func() { verdicts <- u.isAllowed(semver.MustParse("0.7.548")) }()
@@ -396,7 +417,7 @@ func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	u.AnswerUpdate(false)
+	require.NoError(t, u.AnswerUpdate(false))
 	select {
 	case isAllowed := <-verdicts:
 		assert.False(t, isAllowed)

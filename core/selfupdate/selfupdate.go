@@ -198,7 +198,7 @@ func NewSelfUpdater(
 		interval:           checkInterval,
 		stopChan:           make(chan struct{}),
 		isApprovalRequired: isApprovalRequired,
-		verdicts:           make(chan bool),
+		verdicts:           make(chan bool, 1),
 	}
 
 	binary, err := currentExecutable()
@@ -340,6 +340,13 @@ func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
 
 // AnswerUpdate hands the owner's verdict to the waiting check.
 func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
+	u.mx.RLock()
+	isAsked := u.pending != ""
+	u.mx.RUnlock()
+
+	if !isAsked {
+		return ErrNoPendingUpdate
+	}
 	select {
 	case u.verdicts <- isAllowed:
 		return nil
@@ -377,6 +384,10 @@ func (u *SelfUpdater) startAsking(next *semver.Version) bool {
 	defer u.mx.Unlock()
 	if u.declined == next.String() {
 		return false
+	}
+	select { // an answer left over from a release nobody installed decides nothing
+	case <-u.verdicts:
+	default:
 	}
 	u.pending = next.String()
 	return true
