@@ -854,7 +854,10 @@ export default {
 
     try {
       this.loading = true;
-      this.profile = await warpnetService.getProfile(profileId);
+      const hint = isBridgedUser({id: profileId})
+          ? (await warpnetService.getGatewaySettings()).node_id
+          : undefined;
+      this.profile = await warpnetService.getProfile(profileId, hint);
       if (!this.profile) {
         this.noUser = true;
         return;

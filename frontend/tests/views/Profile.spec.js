@@ -5,6 +5,7 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     getOwnerProfile: vi.fn(),
     getProfile: vi.fn(),
+    getGatewaySettings: vi.fn(),
     getImage: vi.fn(),
     getUsers: vi.fn(),
     getTweets: vi.fn(),
@@ -30,12 +31,12 @@ const tweetsStub = {
   template: '<div><article v-for="t in tweets" :key="t.id">{{ t.text }}</article></div>',
 };
 
-const renderProfile = () =>
+const renderProfile = (id = 'alice') =>
   render(Profile, {
     global: {
       mocks: {
         $router: { push: vi.fn() },
-        $route: { params: { id: 'alice' } },
+        $route: { params: { id } },
       },
       directives: { scroll: scrollDirective, linkify: linkifyDirective },
       stubs: {
@@ -126,6 +127,31 @@ describe('Profile.vue first paint under hanging elements', () => {
     expect(
       await screen.findByRole('heading', { name: 'Alice' })
     ).toBeInTheDocument();
+  });
+});
+
+describe('Profile.vue resolution hint', () => {
+  it('resolves a bridged profile through the gateway', async () => {
+    warpnetService.getGatewaySettings.mockResolvedValue({ node_id: 'GW' });
+    warpnetService.getProfile.mockResolvedValue({
+      id: 'bob@mastodon.social',
+      username: 'Bob',
+      network: 'mastodon',
+      created_at: '2025-12-01T10:00:00Z',
+    });
+
+    renderProfile('bob@mastodon.social');
+
+    expect(await screen.findByRole('heading', { name: 'Bob' })).toBeInTheDocument();
+    expect(warpnetService.getProfile).toHaveBeenCalledWith('bob@mastodon.social', 'GW');
+  });
+
+  it('asks nothing of the gateway for a native profile', async () => {
+    renderProfile();
+
+    expect(await screen.findByRole('heading', { name: 'Alice' })).toBeInTheDocument();
+    expect(warpnetService.getGatewaySettings).not.toHaveBeenCalled();
+    expect(warpnetService.getProfile).toHaveBeenCalledWith('alice', undefined);
   });
 });
 
