@@ -140,7 +140,7 @@ func (l *dedupLogger) isDup(key string) bool {
 	if ok := l.seen[key]; ok {
 		return true
 	}
-	for k, _ := range l.seen {
+	for k := range l.seen {
 		delete(l.seen, k)
 	}
 	l.seen[key] = true
