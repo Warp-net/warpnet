@@ -95,6 +95,19 @@ export function bridgedInstance(userId) {
     return at > 0 ? userId.slice(at + 1) : '';
 }
 
+const FEDI_HANDLE_RE = /^@?([\w.-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i;
+const FEDI_PROFILE_RE = /^https?:\/\/(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)\/@([\w.-]+)\/?$/i;
+
+export function fediverseHandle(query) {
+    const q = (query || '').trim();
+    const handle = q.match(FEDI_HANDLE_RE);
+    if (handle) {
+        return `${handle[1]}@${handle[2].toLowerCase()}`;
+    }
+    const profile = q.match(FEDI_PROFILE_RE);
+    return profile ? `${profile[2]}@${profile[1].toLowerCase()}` : '';
+}
+
 // The gateway's HTML-to-text pass strips tags but leaves character entities
 // (&#39;, &amp;, …) encoded, so bridged text needs a decode before display.
 // Parsing happens inside a detached <textarea>, which never executes markup,

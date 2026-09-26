@@ -101,6 +101,7 @@ import SideNav from "../components/SideNav.vue";
 import Users from "../components/Users.vue";
 import Loader from "../components/Loader.vue";
 import {warpnetService} from "@/service/service";
+import {fediverseHandle} from "@/lib/network";
 
 export default {
   name: "Search",
@@ -131,34 +132,53 @@ export default {
         this.$router.push({ name: "Home" });
       }
     },
-    async submit(m = this.mode) {
+    async submit(m = this.mode, lookup = true) {
+      if (this._debounce) clearTimeout(this._debounce);
       this.mode = m;
       this.submitted = true;
       this.cursor = '';
       this.results = [];
       this.noResults = this.query;
-      await this.runSearch(true);
+      await this.runSearch(true, lookup);
     },
-    async runSearch(reset) {
+    async runSearch(reset, lookup = false) {
       if (!this.query) {
         this.results = [];
         return;
       }
+      const seq = (this._seq = (this._seq || 0) + 1);
+      const handle = lookup ? fediverseHandle(this.query) : '';
+      const found = handle ? this.lookupFediverse(handle) : null;
       this.loading = true;
       this.searchError = false;
       try {
         const resp = await warpnetService.searchUsers(this.query, reset ? '' : this.cursor);
+        if (seq !== this._seq) return;
         const users = resp?.users || [];
         // Results render immediately; each row's avatar is loaded by the
         // User component itself, so one hanging blob can't hold the list.
         this.results = reset ? users : this.results.concat(users);
         this.cursor = resp?.cursor || 'end';
+        const user = await found;
+        if (user && seq === this._seq) {
+          this.results = [user, ...this.results.filter((u) => u.id !== user.id)];
+        }
       } catch (err) {
         console.error('Search failed:', err);
         // Distinguish a failed request from a genuine empty result.
         this.searchError = true;
       } finally {
-        this.loading = false;
+        if (seq === this._seq) this.loading = false;
+      }
+    },
+    async lookupFediverse(handle) {
+      try {
+        const gw = await warpnetService.getGatewaySettings();
+        const user = await warpnetService.getProfile(handle, gw.node_id);
+        return user?.id && user?.username ? user : null;
+      } catch (err) {
+        console.warn('Fediverse lookup failed:', err);
+        return null;
       }
     },
     async loadMore() {
@@ -173,7 +193,7 @@ export default {
       if (this._debounce) clearTimeout(this._debounce);
       const q = (this.query || '').trim();
       if (q.length < 2) return;
-      this._debounce = setTimeout(() => this.submit(), 400);
+      this._debounce = setTimeout(() => this.submit(this.mode, false), 400);
     },
   },
   async created() {

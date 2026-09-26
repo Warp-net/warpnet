@@ -4,6 +4,7 @@ import {
   isExperimentalNetwork,
   isBridgedTweet,
   bridgedInstance,
+  fediverseHandle,
   isOwnTweetEcho,
   decodeHtmlEntities,
 } from '@/lib/network';
@@ -66,6 +67,29 @@ describe('bridgedInstance', () => {
     expect(bridgedInstance('')).toBe('');
     expect(bridgedInstance(undefined)).toBe('');
     expect(bridgedInstance('@leading-only')).toBe('');
+  });
+});
+
+describe('fediverseHandle', () => {
+  it('normalizes a handle with or without the leading @', () => {
+    expect(fediverseHandle('@bob@mastodon.social')).toBe('bob@mastodon.social');
+    expect(fediverseHandle('  bob@Mastodon.Social ')).toBe('bob@mastodon.social');
+    expect(fediverseHandle('engineer_of_your_ass@threads.net')).toBe('engineer_of_your_ass@threads.net');
+  });
+
+  it('reads the handle off a profile url', () => {
+    expect(fediverseHandle('https://mastodon.social/@Gargron')).toBe('Gargron@mastodon.social');
+    expect(fediverseHandle('https://www.threads.com/@mosseri/')).toBe('mosseri@threads.com');
+  });
+
+  it('returns empty for anything else', () => {
+    expect(fediverseHandle('bob')).toBe('');
+    expect(fediverseHandle('bob@localhost')).toBe('');
+    expect(fediverseHandle('@mastodon.social')).toBe('');
+    expect(fediverseHandle('https://mastodon.social/@Gargron/113')).toBe('');
+    expect(fediverseHandle(ULID)).toBe('');
+    expect(fediverseHandle('')).toBe('');
+    expect(fediverseHandle(undefined)).toBe('');
   });
 });
 

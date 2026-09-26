@@ -91,6 +91,11 @@ data class WarpnetNotification(
     @Json(name = "is_read") val isRead: Boolean = false,
 )
 
+@JsonClass(generateAdapter = true)
+data class GatewaySettings(
+    @Json(name = "node_id") val nodeId: String = "",
+)
+
 // -----------------------------------------------------------------------------
 // Request payloads (event.go)
 // -----------------------------------------------------------------------------

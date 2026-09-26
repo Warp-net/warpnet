@@ -124,6 +124,7 @@ class WarpnetRepository @Inject constructor(
     private val pollResultsAdapter = moshi.adapter<site.warpnet.transport.dto.PollResultsResponse>()
     private val getImageRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetImageResponse>()
     private val searchUsersAdapter = moshi.adapter<site.warpnet.transport.dto.SearchUsersEvent>()
+    private val gatewaySettingsAdapter = moshi.adapter<site.warpnet.transport.dto.GatewaySettings>()
     private val editTweetAdapter = moshi.adapter<site.warpnet.transport.dto.EditTweetEvent>()
     private val getFollowReqsAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsEvent>()
     private val getFollowReqsRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetFollowRequestsResponse>()
@@ -865,6 +866,21 @@ class WarpnetRepository @Inject constructor(
         return page.users.map { it.toTimelineUser() } to page.cursor
     }
 
+    suspend fun lookupFediverseUser(query: String): TimelineUser? {
+        val handle = fediverseHandle(query) ?: return null
+        val raw = client.request(ProtocolIds.PRIVATE_GET_SETTINGS_GATEWAY, "{}")
+        val gatewayId = gatewaySettingsAdapter.fromJson(raw)?.nodeId.orEmpty()
+        if (gatewayId.isEmpty()) return null
+        val user = getUser(handle, gatewayId)
+        return if (user.username.isEmpty()) null else user.toTimelineUser()
+    }
+
+    private fun fediverseHandle(query: String): String? {
+        val q = query.trim()
+        FEDI_HANDLE_RE.matchEntire(q)?.let { return "${it.groupValues[1]}@${it.groupValues[2].lowercase()}" }
+        return FEDI_PROFILE_RE.matchEntire(q)?.let { "${it.groupValues[2]}@${it.groupValues[1].lowercase()}" }
+    }
+
     // -----------------------------------------------------------------
     // Subscribe / Unsubscribe to a user's posts (local watchlist)
     // -----------------------------------------------------------------
@@ -1563,5 +1579,7 @@ class WarpnetRepository @Inject constructor(
         const val TWEET_CACHE_TTL_MILLIS = 6L * 60L * 60L * 1000L
         // Total image-blob bytes kept in memory before LRU eviction.
         const val IMAGE_CACHE_MAX_BYTES = 8 * 1024 * 1024
+        val FEDI_HANDLE_RE = Regex("""@?([\w.-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+)""", RegexOption.IGNORE_CASE)
+        val FEDI_PROFILE_RE = Regex("""https?://(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)/@([\w.-]+)/?""", RegexOption.IGNORE_CASE)
     }
 }
