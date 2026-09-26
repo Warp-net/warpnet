@@ -166,10 +166,33 @@ describe('Search.vue fediverse lookup', () => {
     expect(warpnetService.searchUsers).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps debounced typing local', async () => {
+  it('falls back to the gateway when typing finds nothing locally', async () => {
+    warpnetService.getProfile.mockResolvedValue({ id: 'zuck@threads.net', username: 'Mark' });
     renderSearch();
 
-    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'bob@mastodon.social');
+    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'zuck@threads.net');
+
+    expect(await screen.findByText('Mark', undefined, { timeout: 2000 })).toBeInTheDocument();
+    expect(warpnetService.getProfile).toHaveBeenCalledWith('zuck@threads.net', 'GW');
+  });
+
+  it('keeps typing local when the node already has a match', async () => {
+    warpnetService.searchUsers.mockResolvedValue({
+      users: [{ id: 'zuck@threads.net', username: 'Mark' }],
+      cursor: 'end',
+    });
+    renderSearch();
+
+    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'zuck@threads.net');
+
+    await screen.findByText('Mark', undefined, { timeout: 2000 });
+    expect(warpnetService.getProfile).not.toHaveBeenCalled();
+  });
+
+  it('keeps typing a plain name local', async () => {
+    renderSearch();
+
+    await fireEvent.update(screen.getByPlaceholderText(/Search Warpnet/i), 'zuck');
 
     await waitFor(() => expect(warpnetService.searchUsers).toHaveBeenCalled(), { timeout: 2000 });
     expect(warpnetService.getProfile).not.toHaveBeenCalled();

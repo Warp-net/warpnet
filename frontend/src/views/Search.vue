@@ -147,8 +147,8 @@ export default {
         return;
       }
       const seq = (this._seq = (this._seq || 0) + 1);
-      const handle = lookup ? fediverseHandle(this.query) : '';
-      const found = handle ? this.lookupFediverse(handle) : null;
+      const handle = reset ? fediverseHandle(this.query) : '';
+      let found = lookup && handle ? this.lookupFediverse(handle) : null;
       this.loading = true;
       this.searchError = false;
       try {
@@ -159,6 +159,9 @@ export default {
         // User component itself, so one hanging blob can't hold the list.
         this.results = reset ? users : this.results.concat(users);
         this.cursor = resp?.cursor || 'end';
+        if (!found && handle && users.length === 0) {
+          found = this.lookupFediverse(handle);
+        }
         const user = await found;
         if (user && seq === this._seq) {
           this.results = [user, ...this.results.filter((u) => u.id !== user.id)];
