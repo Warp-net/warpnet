@@ -60,7 +60,7 @@ const (
 	ErrNoReleaseSource  warpnet.WarpError = "no forge to read releases from"
 )
 
-var releaseSigningKey = ""
+var releaseSigningKey = "f8f26d9f337e0bffe8d5455d51695092130fad3d104d97c1facf3bacb420bd49"
 
 const (
 	checkInterval = time.Hour
@@ -173,7 +173,7 @@ type SelfUpdater struct {
 	stopChan           chan struct{}
 	isApprovalRequired bool
 	mx                 sync.RWMutex
-	verdicts           chan bool
+	answers            chan bool
 	pending            string
 	declined           string
 }
@@ -198,7 +198,7 @@ func NewSelfUpdater(
 		interval:           checkInterval,
 		stopChan:           make(chan struct{}),
 		isApprovalRequired: isApprovalRequired,
-		verdicts:           make(chan bool),
+		answers:            make(chan bool, 1),
 	}
 
 	binary, err := currentExecutable()
@@ -326,9 +326,6 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 	return nil
 }
 
-// GetPendingUpdate returns the version waiting for the owner of the node to
-// allow it, alongside the one it replaces. An empty newVersion means nothing is
-// waiting.
 func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
 	u.mx.RLock()
 	defer u.mx.RUnlock()
@@ -338,10 +335,16 @@ func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
 	return u.current.String(), u.pending
 }
 
-// AnswerUpdate hands the owner's verdict to the waiting check.
 func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
+	u.mx.RLock()
+	isAsked := u.pending != ""
+	u.mx.RUnlock()
+
+	if !isAsked {
+		return ErrNoPendingUpdate
+	}
 	select {
-	case u.verdicts <- isAllowed:
+	case u.answers <- isAllowed:
 		return nil
 	default:
 		return ErrNoPendingUpdate
@@ -362,7 +365,7 @@ func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 	var isAllowed bool
 	select {
 	case <-u.ctx.Done():
-	case isAllowed = <-u.verdicts:
+	case isAllowed = <-u.answers:
 	}
 
 	u.stopAsking(isAllowed)
@@ -377,6 +380,10 @@ func (u *SelfUpdater) startAsking(next *semver.Version) bool {
 	defer u.mx.Unlock()
 	if u.declined == next.String() {
 		return false
+	}
+	select {
+	case <-u.answers:
+	default:
 	}
 	u.pending = next.String()
 	return true
