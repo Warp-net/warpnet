@@ -80,6 +80,8 @@ export const PRIVATE_POST_SETTINGS_FILTER_KEYWORD_UPDATE = "/private/post/settin
 export const PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD = "/private/delete/settings/filter/keyword/0.0.0"
 export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
+// Not served by any node yet.
+export const PRIVATE_POST_TWEET_SPONSORED = "/private/post/tweet/sponsored/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
@@ -1704,11 +1706,14 @@ export const warpnetService = {
         return {tweets: resp.tweets || [], cursor: resp.cursor || endCursor};
     },
 
-    async createTweet({text, imageKeys, videoKey, poll}) {
+    // price is in the wallet token's base units; a priced tweet goes to its
+    // own route, since the plain one would silently drop the field and
+    // publish the tweet for free.
+    async createTweet({text, imageKeys, videoKey, poll, price}) {
         const owner = this.getOwnerProfile()
 
         const request ={
-            path: PRIVATE_POST_TWEET,
+            path: price ? PRIVATE_POST_TWEET_SPONSORED : PRIVATE_POST_TWEET,
             body: {
                 user_id: owner.user_id,
                 username: owner.username,
@@ -1726,8 +1731,17 @@ export const warpnetService = {
                 expires_at: poll.expiresAt,
             };
         }
+        if (price) {
+            request.body.price = price;
+        }
 
-        return await this.sendToNode(request);
+        const resp = await this.sendToNode(request);
+        // sendToNode resolves on a node error too, and the composer would
+        // then drop a draft that was never posted.
+        if (price && (!resp || resp.code || !resp.id)) {
+            throw new Error("Your node can't publish sponsored tweets yet.");
+        }
+        return resp;
     },
 
     isDesktopNode() {

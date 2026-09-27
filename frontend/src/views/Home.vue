@@ -145,6 +145,30 @@ resulting from the use or misuse of this software.
               </div>
             </div>
           </div>
+          <div v-if="sponsored" class="mt-2 mb-2 border border-lighter rounded p-3">
+            <div class="flex items-center text-sm">
+              <label for="sponsored-price" class="text-dark mr-2">Price</label>
+              <input
+                  id="sponsored-price"
+                  v-model="sponsored.price"
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="2.5"
+                  :aria-invalid="priceInvalid"
+                  class="w-32 px-3 py-2 border border-lighter rounded focus:outline-none"
+              />
+              <span class="text-dark ml-2">USDT</span>
+            </div>
+            <p v-if="priceInvalid" class="text-xs text-red-600 mt-1">Enter an amount above zero with at most {{ priceDecimals }} decimals.</p>
+            <p class="text-xs text-dark mt-2">Readers pay once to unlock the tweet. Until then they see:</p>
+            <div
+                class="mt-1 h-32 rounded border border-lighter bg-lighter text-dark flex items-center justify-center"
+                role="img"
+                aria-label="Locked tweet"
+            >
+              <i class="fas fa-lock text-3xl" aria-hidden="true"></i>
+            </div>
+          </div>
           <div class="flex items-center justify-between border-t border-lighter pt-2">
             <div class="flex items-center">
               <button
@@ -195,6 +219,17 @@ resulting from the use or misuse of this software.
               >
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
+              <button
+                  @click="toggleSponsored"
+                  class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
+                  :class="sponsored ? 'text-white bg-blue' : 'text-blue'"
+                  type="button"
+                  aria-label="Sponsored tweet"
+                  :aria-pressed="!!sponsored"
+                  :title="sponsored ? 'Make it free' : 'Make it sponsored'"
+              >
+                <i class="fas fa-lock" aria-hidden="true"></i>
+              </button>
               <div class="relative mr-3" data-emoji-anchor>
                 <button
                     type="button"
@@ -217,9 +252,9 @@ resulting from the use or misuse of this software.
               @click="addNewTweet"
               type="button"
               class="h-10 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
-              :class="(tweet.text.trim() && pendingReads === 0 && !posting && !videoUploading && pollReady) ? '' : 'opacity-50 cursor-not-allowed'"
-              :disabled="!tweet.text.trim() || pendingReads > 0 || posting || videoUploading || !pollReady"
-              :title="videoUploading ? 'Uploading video…' : (pendingReads > 0 ? 'Uploading image…' : (!pollReady ? 'Fill in every poll choice' : ''))"
+              :class="(tweet.text.trim() && pendingReads === 0 && !posting && !videoUploading && pollReady && sponsoredReady) ? '' : 'opacity-50 cursor-not-allowed'"
+              :disabled="!tweet.text.trim() || pendingReads > 0 || posting || videoUploading || !pollReady || !sponsoredReady"
+              :title="videoUploading ? 'Uploading video…' : (pendingReads > 0 ? 'Uploading image…' : (!pollReady ? 'Fill in every poll choice' : (!sponsoredReady ? 'Set a price for the sponsored tweet' : '')))"
             >
               <span v-if="!posting">Tweet</span>
               <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Posting…</span>
@@ -299,6 +334,20 @@ const pollDurations = [
   {hours: 72, label: '3 days'},
   {hours: 168, label: '7 days'},
 ];
+// Mirrors the wallet token (USDT, 6 decimals): a price travels in its base
+// units, like a wallet transfer amount.
+const priceDecimals = 6;
+
+// Same rules as a wallet transfer amount; '' for anything the wallet could
+// not charge.
+function toPriceUnits(value) {
+  const s = String(value).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return '';
+  const [whole, frac = ''] = s.split('.');
+  if (frac.length > priceDecimals) return '';
+  const units = BigInt(whole) * 10n ** BigInt(priceDecimals) + BigInt(frac.padEnd(priceDecimals, '0'));
+  return units > 0n ? units.toString() : '';
+}
 
 export default {
   name: "Home",
@@ -336,6 +385,7 @@ export default {
       endOfFeed: false,
       showEmojiPicker: false,
       poll: null,
+      sponsored: null,
     };
   },
   watch: {
@@ -405,6 +455,16 @@ export default {
     pollReady() {
       if (!this.poll) return true;
       return this.poll.options.every(o => o.trim());
+    },
+    priceDecimals() {
+      return priceDecimals;
+    },
+    // Without a price the wallet can charge, the tweet would go out free.
+    sponsoredReady() {
+      return !this.sponsored || !!toPriceUnits(this.sponsored.price);
+    },
+    priceInvalid() {
+      return !!this.sponsored && this.sponsored.price.trim() !== '' && !this.sponsoredReady;
     },
   },
   methods: {
@@ -562,6 +622,9 @@ export default {
       if (this.poll.options.length <= pollMinOptions) return;
       this.poll.options.splice(index, 1);
     },
+    toggleSponsored() {
+      this.sponsored = this.sponsored ? null : {price: ''};
+    },
     // The wire carries an absolute deadline, not a duration, so every node
     // reading the tweet closes the poll at the same moment.
     pollPayload() {
@@ -573,9 +636,10 @@ export default {
       };
     },
     async addNewTweet() {
-      if (this.posting || !this.tweet.text.trim() || !this.pollReady) return;
+      if (this.posting || !this.tweet.text.trim() || !this.pollReady || !this.sponsoredReady) return;
       const draftText = this.tweet.text;
       const draftImages = this.imageAttachments;
+      const price = this.sponsored ? toPriceUnits(this.sponsored.price) : '';
       this.posting = true;
       try {
         // Use pre-uploaded keys when available (fresh attachments). Fall
@@ -594,20 +658,22 @@ export default {
           imageKeys = [this.videoPosterKey, ...imageKeys];
         }
         await warpnetService.createTweet({
-          text: draftText, imageKeys, videoKey: this.videoKey, poll: this.pollPayload(),
+          text: draftText, imageKeys, videoKey: this.videoKey, poll: this.pollPayload(), price,
         });
 
         this.tweet.text = "";
         this.imageAttachments = [];
         this.imageKeys = [];
         this.poll = null;
+        this.sponsored = null;
         this.removeVideoAttachment();
         this.endOfFeed = false;
 
         await this.loadInitial();
       } catch (err) {
         console.error('Failed to post tweet:', err);
-        toast.error('Failed to post tweet. Please try again.');
+        // A node without sponsored tweets says so; a retry would not help.
+        toast.error((price && err?.message) || 'Failed to post tweet. Please try again.');
       } finally {
         this.posting = false;
       }
