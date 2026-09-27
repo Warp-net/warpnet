@@ -123,11 +123,11 @@ func (connTracer) Disconnected(n network.Network, c network.Conn) {
 	// empty connection set says nothing about traversal.
 	for _, other := range n.ConnsToPeer(c.RemotePeer()) {
 		if other != c && !isRelayed(other) {
-			log.Infof("holepunch: relayed connection closed, staying direct: peer %s", c.RemotePeer().ShortString())
+			log.Infof("holepunch: relayed connection closed, staying direct: peer %s", c.RemotePeer().String())
 			return
 		}
 	}
-	log.Debugf("holepunch: relayed connection closed: peer %s", c.RemotePeer().ShortString())
+	log.Debugf("holepunch: relayed connection closed: peer %s", c.RemotePeer().String())
 }
 
 func isRelayed(c network.Conn) bool {
