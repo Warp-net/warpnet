@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/Warp-net/warpnet"
@@ -45,6 +46,10 @@ func main() {
 	app := NewApp()
 	icon := warpnet.GetLogo()
 	setLinuxDesktopIcon(icon)
+
+	if err := setLinuxFontConfig(filepath.Dir(filepath.Dir(config.Config().Database.Path))); err != nil {
+		log.Warnf("fontconfig: %v", err)
+	}
 
 	// Best-effort: failure just means deep links don't work.
 	if err := deeplink.Register(); err != nil {
@@ -142,4 +147,31 @@ func preferExistingTestnet(dbPath string) {
 	if _, err := os.Stat(lock); err == nil {
 		config.SetNetwork(testNetwork)
 	}
+}
+
+const fontConfig = `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <include>fonts.conf</include>
+  <selectfont>
+    <rejectfont>
+      <pattern><patelt name="fontwrapper"><string>WOFF</string></patelt></pattern>
+      <pattern><patelt name="fontwrapper"><string>WOFF2</string></patelt></pattern>
+    </rejectfont>
+  </selectfont>
+</fontconfig>
+`
+
+func setLinuxFontConfig(dir string) error {
+	if runtime.GOOS != "linux" || os.Getenv("SNAP") != "" {
+		return nil
+	}
+	path := filepath.Join(dir, "fontconfig.conf")
+	if current := os.Getenv("FONTCONFIG_FILE"); current != "" && current != path {
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(fontConfig), 0o600); err != nil {
+		return err
+	}
+	return os.Setenv("FONTCONFIG_FILE", path)
 }
