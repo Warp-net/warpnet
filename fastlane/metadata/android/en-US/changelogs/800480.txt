@@ -1,0 +1,3 @@
+Your paired phone can finally write: follows, replies, reactions, poll votes, chats — every one was being rejected by the node.
+
+Also: polls and media attachments in the Android app, and the desktop stops dead-ending on the login form after a reload.
