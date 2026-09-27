@@ -43,7 +43,6 @@ import (
 
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	localstore "github.com/Warp-net/warpnet/database/local-store"
@@ -51,13 +50,6 @@ import (
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
-
-type RemoteNodeUpdater interface {
-	Run(shutdownF func())
-	GetPendingUpdate() (currentVersion, newVersion string)
-	AnswerUpdate(isAllowed bool) error
-	Close()
-}
 
 func main() {
 	port := config.Config().Node.Server.Port
@@ -160,13 +152,6 @@ func main() {
 		security.NoiseFingerprint(staticKey.Public),
 	)
 
-	var updater RemoteNodeUpdater
-	if config.Config().Node.IsSelfUpdate {
-		updater = selfupdate.NewSelfUpdater(ctx, version, selfupdate.MemberArtifact(), true)
-		bridgeHandler.AttachUpdater(updater)
-		defer updater.Close()
-	}
-
 	var n *node.MemberNode
 	defer func() {
 		if n != nil {
@@ -214,15 +199,6 @@ func main() {
 			}
 
 			bridgeHandler.AttachNode(n)
-
-			if updater != nil {
-				started := n
-				updater.Run(func() {
-					_ = srv.Shutdown(ctx)
-					started.Stop()
-					db.Close()
-				})
-			}
 		}
 
 		ni := n.NodeInfo()

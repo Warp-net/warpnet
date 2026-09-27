@@ -32,7 +32,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -242,6 +244,52 @@ func TestEngineStderrReachesTheLog(t *testing.T) {
 	}
 	if got := strings.Count(logged.String(), "payment engine:"); got != 2 {
 		t.Fatalf("logged %d lines, want the two non-empty ones: %q", got, logged.String())
+	}
+}
+
+func TestEngineStoppedOnPurposeIsNotReported(t *testing.T) {
+	var logged bytes.Buffer
+	previous := log.StandardLogger().Out
+	log.SetOutput(&logged)
+	defer log.SetOutput(previous)
+
+	client, _ := engineClient(t, nil)
+	waiting := make(chan response, 1)
+	client.pending["1"] = waiting
+
+	client.read(&exec.Cmd{}, strings.NewReader(""))
+
+	if logged.Len() != 0 {
+		t.Fatalf("a closed engine was reported as gone: %q", logged.String())
+	}
+	select {
+	case resp := <-waiting:
+		if resp.Error == nil {
+			t.Fatal("a request waiting on a closed engine was answered without an error")
+		}
+	default:
+		t.Fatal("a request waiting on a closed engine was never answered")
+	}
+}
+
+func TestEngineThatDiesIsReportedOnce(t *testing.T) {
+	var logged bytes.Buffer
+	previous := log.StandardLogger().Out
+	log.SetOutput(&logged)
+	defer log.SetOutput(previous)
+
+	client, _ := engineClient(t, nil)
+	engine := &exec.Cmd{}
+	isStopped := false
+	client.cmd, client.stop = engine, func() { isStopped = true }
+
+	client.read(engine, strings.NewReader(""))
+
+	if got := strings.Count(logged.String(), "payment engine unavailable"); got != 1 {
+		t.Fatalf("logged the failure %d times, want once: %q", got, logged.String())
+	}
+	if !isStopped || client.cmd != nil || !errors.Is(client.failure, ErrUnavailable) {
+		t.Fatalf("the dead engine is still held: stopped=%v cmd=%v failure=%v", isStopped, client.cmd, client.failure)
 	}
 }
 
