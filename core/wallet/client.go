@@ -237,7 +237,7 @@ func (c *Client) ensure() error {
 	c.stop = stop
 	c.stdin = stdin
 	c.failure = nil
-	go c.read(stdout)
+	go c.read(cmd, stdout)
 	go c.readErrors(stderr)
 	return nil
 }
@@ -338,7 +338,7 @@ func matchesEmbedded(dir, name string, want [sha256.Size]byte) (bool, error) {
 	return true, nil
 }
 
-func (c *Client) read(r io.Reader) {
+func (c *Client) read(cmd *exec.Cmd, r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLineSize)
 	for scanner.Scan() {
@@ -354,21 +354,23 @@ func (c *Client) read(r io.Reader) {
 			ch <- resp
 		}
 	}
-	log.Warnf("wallet: payment engine output closed, process gone")
-	c.fail(fmt.Errorf("%w: connection closed", ErrUnavailable))
+	c.fail(cmd, fmt.Errorf("%w: connection closed", ErrUnavailable))
 }
 
-func (c *Client) fail(err error) {
-	log.Errorf("wallet: payment engine unavailable: %v", err)
+func (c *Client) fail(cmd *exec.Cmd, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.failure = err
-	if c.stop != nil {
-		c.stop()
-		c.stop = nil
+	if c.cmd == cmd {
+		log.Warnf("wallet: payment engine output closed, process gone")
+		log.Errorln(err)
+		c.failure = err
+		if c.stop != nil {
+			c.stop()
+			c.stop = nil
+		}
+		c.cmd = nil
+		c.stdin = nil
 	}
-	c.cmd = nil
-	c.stdin = nil
 	for id, ch := range c.pending {
 		delete(c.pending, id)
 		ch <- response{Error: &responseError{Code: "unavailable", Message: err.Error()}}
