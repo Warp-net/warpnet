@@ -46,6 +46,10 @@ func main() {
 	icon := warpnet.GetLogo()
 	setLinuxDesktopIcon(icon)
 
+	if err := setLinuxFontConfig(filepath.Dir(filepath.Dir(config.Config().Database.Path))); err != nil {
+		log.Warnf("fontconfig: %v", err)
+	}
+
 	// Best-effort: failure just means deep links don't work.
 	if err := deeplink.Register(); err != nil {
 		log.Warnf("deeplink: scheme registration failed: %v", err)

@@ -107,7 +107,7 @@ export default {
     // no value at all - that is a client-side gap rather than a signal from
     // the node, so it stays quiet until the next login fills it in.
     showNetworkBanner() {
-      if (!this.owner?.user_id || typeof this.owner.network !== "string") {
+      if (!this.$route.meta?.protected || !this.owner?.user_id || typeof this.owner.network !== "string") {
         return false;
       }
       return isExperimentalNetwork(this.owner.network);
