@@ -372,6 +372,25 @@ func TestAppShutdown(t *testing.T) {
 	require.NotPanics(t, func() { a.shutdown() })
 }
 
+func TestAppCallAnswersWhileShuttingDown(t *testing.T) {
+	a := liveApp(t, &stubAuthService{privateKey: testKey(t)}, &stubNodeServer{})
+
+	responses := make(chan AppMessage, 100)
+	var calls sync.WaitGroup
+	for range cap(responses) {
+		calls.Go(func() {
+			responses <- a.Call(AppMessage{MessageId: "1", Path: "/private/get/info", Body: []byte("{}")})
+		})
+	}
+	a.shutdown()
+	calls.Wait()
+	close(responses)
+
+	for resp := range responses {
+		require.NotEmpty(t, resp.Body, "a call racing the shutdown was answered with nothing")
+	}
+}
+
 func TestServeLoginsStopsWithContext(t *testing.T) {
 	a := liveApp(t, &stubAuthService{}, nil)
 	ctx, cancel := context.WithCancel(context.Background())

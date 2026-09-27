@@ -407,7 +407,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		return response
 	default:
 		a.mx.RLock()
-		if a.node == nil {
+		node := a.node
+		if node == nil {
 			a.mx.RUnlock()
 			log.Errorf("app: node is not attached, event: %s %s", request.Path, string(request.Body))
 			response.Body = newErrorResp("not attached server node")
@@ -421,7 +422,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
-		ownNodeId := a.node.NodeInfo().ID
+		ownNodeId := node.NodeInfo().ID
 		nodeId := ownNodeId.String()
 		response.NodeId = nodeId
 		ts, _ := time.Parse(time.RFC3339, request.Timestamp)
@@ -439,7 +440,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		msg.Signature = security.Sign(a.auth.PrivateKey(), msg.SigningBytes())
 
-		respData, err := a.node.SelfStream(
+		respData, err := node.SelfStream(
 			ownNodeId, ownNodeId,
 			stream.WarpRoute(request.Path),
 			msg,
