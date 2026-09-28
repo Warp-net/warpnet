@@ -34,6 +34,7 @@ import {
     PRIVATE_GET_TIMELINE,
     PRIVATE_POST_LOGIN,
     PRIVATE_POST_TWEET,
+    PRIVATE_POST_TWEET_SPONSORED,
     PRIVATE_POST_UPLOAD_IMAGE,
     PRIVATE_POST_UPLOAD_VIDEO,
     PRIVATE_POST_USER,
@@ -102,6 +103,7 @@ function generateResponse(arg) {
                 network: "testnet",
             }
 
+        case PRIVATE_POST_TWEET_SPONSORED:
         case PRIVATE_POST_TWEET:
             // A reply is a tweet with a parent: store it in the thread, bump
             // the parent's reply count, and keep it out of the timeline.
@@ -136,6 +138,7 @@ function generateResponse(arg) {
                 image_keys : arg.body.image_keys || [],
                 video_key : arg.body.video_key || undefined,
                 poll : arg.body.poll || undefined,
+                price : arg.body.price || undefined,
                 created_at : arg.body.created_at || Date.now().toString(),
                 parent_id: null,
                 retweeted_by: null,

@@ -17,11 +17,13 @@ vi.mock('@/service/service', () => ({
     isUserMuted: vi.fn(),
     consumePendingDeepLink: vi.fn(),
     getNodeInfo: vi.fn(),
+    createTweet: vi.fn(),
   },
 }));
 
 import Home from '@/views/Home.vue';
 import { warpnetService } from '@/service/service';
+import { toastState } from '@/lib/toast';
 
 const scrollDirective = { mounted() {}, updated() {}, unmounted() {} };
 
@@ -303,6 +305,55 @@ describe('Home composer watchers', () => {
     const box = await screen.findByLabelText('Compose a tweet');
 
     await waitFor(() => expect(document.activeElement).toBe(box));
+  });
+});
+
+describe('Home sponsored composer', () => {
+  const composeSponsored = async (price) => {
+    renderHome();
+    const box = await screen.findByLabelText('Compose a tweet');
+    await fireEvent.update(box, 'members only');
+    await fireEvent.click(screen.getByRole('button', { name: 'Sponsored tweet' }));
+    await fireEvent.update(screen.getByLabelText('Price'), price);
+    return box;
+  };
+
+  it('holds the post until the price is one the wallet can charge', async () => {
+    await composeSponsored('0');
+    const post = screen.getByRole('button', { name: 'Tweet' });
+    expect(screen.getByRole('img', { name: 'Locked tweet' })).toBeInTheDocument();
+    expect(post).toBeDisabled();
+
+    await fireEvent.update(screen.getByLabelText('Price'), '1.1234567');
+    expect(post).toBeDisabled();
+
+    await fireEvent.update(screen.getByLabelText('Price'), '1.5');
+    expect(post).toBeEnabled();
+  });
+
+  it('sends the price in token base units and clears the draft once posted', async () => {
+    warpnetService.createTweet.mockResolvedValue({ id: 't1' });
+    const box = await composeSponsored('1.5');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
+
+    await waitFor(() => expect(box.value).toBe(''));
+    expect(warpnetService.createTweet).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'members only', price: '1500000' }),
+    );
+    expect(screen.queryByLabelText('Price')).not.toBeInTheDocument();
+  });
+
+  it('keeps the draft and says why when the node cannot take it', async () => {
+    const reason = "Your node can't publish sponsored tweets yet.";
+    warpnetService.createTweet.mockRejectedValue(new Error(reason));
+    const box = await composeSponsored('2');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
+
+    await waitFor(() => expect(toastState.items.map((t) => t.message)).toContain(reason));
+    expect(box.value).toBe('members only');
+    expect(screen.getByLabelText('Price').value).toBe('2');
   });
 });
 
