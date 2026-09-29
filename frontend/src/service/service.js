@@ -81,6 +81,8 @@ export const PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD = "/private/delete/settings/
 export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
+export const PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
+export const PRIVATE_POST_SPONSORED_PURCHASE = "/private/post/sponsored/purchase/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
@@ -1738,6 +1740,26 @@ export const warpnetService = {
         if (price && (!resp || resp.code || !resp.id)) {
             throw new Error("Your node can't publish sponsored tweets yet.");
         }
+        return resp;
+    },
+
+    async purchaseSponsoredTweet({tweetId, userId}) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SPONSORED_PURCHASE,
+            body: {tweet_id: tweetId, user_id: userId},
+        });
+        if (!resp || resp.code || !resp.tx_id) {
+            throw new Error(resp?.message || "Couldn't pay for the tweet.");
+        }
+        return resp;
+    },
+
+    async getSponsoredTweet({tweetId, userId}) {
+        const resp = await this.sendToNode({
+            path: PUBLIC_GET_SPONSORED_TWEET,
+            body: {tweet_id: tweetId, user_id: userId},
+        });
+        if (!resp || resp.code || !resp.id) return null;
         return resp;
     },
 
