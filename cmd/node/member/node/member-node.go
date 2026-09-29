@@ -554,6 +554,10 @@ func (m *MemberNode) tweetHandlers(
 			handler.StreamNewTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.notifier, m),
 		},
 		{
+			event.PRIVATE_POST_SPONSORED_TWEET,
+			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
+		},
+		{
 			event.PUBLIC_POST_REPLY,
 			handler.StreamNewReplyHandler(r.tweetRepo, userRepo, m.notifier, m),
 		},

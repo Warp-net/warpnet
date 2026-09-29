@@ -344,6 +344,20 @@ describe('Home sponsored composer', () => {
     expect(screen.queryByLabelText('Price')).not.toBeInTheDocument();
   });
 
+  it('keeps polls and sponsorship apart, since the node refuses a priced poll', async () => {
+    renderHome();
+    await screen.findByLabelText('Compose a tweet');
+    const lock = screen.getByRole('button', { name: 'Sponsored tweet' });
+    const poll = screen.getByRole('button', { name: 'Add poll' });
+
+    await fireEvent.click(lock);
+    expect(poll).toBeDisabled();
+
+    await fireEvent.click(lock);
+    await fireEvent.click(poll);
+    expect(lock).toBeDisabled();
+  });
+
   it('keeps the draft and says why when the node cannot take it', async () => {
     const reason = "Your node can't publish sponsored tweets yet.";
     warpnetService.createTweet.mockRejectedValue(new Error(reason));

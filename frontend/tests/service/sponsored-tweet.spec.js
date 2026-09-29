@@ -8,7 +8,7 @@ vi.mock('@/lib/transport', () => ({
   IsDesktop: vi.fn(() => false),
 }));
 
-import { warpnetService, PRIVATE_POST_TWEET, PRIVATE_POST_TWEET_SPONSORED } from '@/service/service';
+import { warpnetService, PRIVATE_POST_TWEET, PRIVATE_POST_SPONSORED_TWEET } from '@/service/service';
 import { Call } from '@/lib/transport';
 
 beforeEach(() => {
@@ -23,8 +23,8 @@ describe('createTweet with a price', () => {
     await warpnetService.createTweet({ text: 'members only', price: '1500000' });
 
     const sent = Call.mock.calls[0][0];
-    expect(sent.path).toBe(PRIVATE_POST_TWEET_SPONSORED);
-    expect(sent.body.price).toBe('1500000');
+    expect(sent.path).toBe(PRIVATE_POST_SPONSORED_TWEET);
+    expect(sent.body.price).toEqual({ units: 1500000 });
   });
 
   it('leaves a free tweet on the plain route', async () => {

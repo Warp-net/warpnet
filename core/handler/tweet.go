@@ -126,6 +126,10 @@ func StreamNewTweetHandler(
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
 
+		if ev.IsSponsored() {
+			return nil, warpnet.WarpError("tweet: a priced tweet goes through the sponsored route")
+		}
+
 		if err := validateTweetEvent(ev); err != nil {
 			return nil, err
 		}
@@ -149,51 +153,105 @@ func StreamNewTweetHandler(
 			return event.Accepted, nil
 		}
 
-		tweet, err := tweetRepo.Create(ev.UserId, ev)
-		if err != nil {
+		return addTweet(broadcaster, tweetRepo, timelineRepo, owner, ev)
+	}
+}
+
+func StreamNewSponsoredTweetHandler(
+	broadcaster TweetBroadcaster,
+	authRepo OwnerTweetStorer,
+	tweetRepo TweetsStorer,
+	timelineRepo TimelineUpdater,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.NewTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
+		if err := validateTweetEvent(ev); err != nil {
+			return nil, err
+		}
+		if !ev.IsSponsored() {
+			return nil, warpnet.WarpError("sponsored tweet: empty price")
+		}
+		if ev.Text == "" {
+			return nil, warpnet.WarpError("empty tweet text")
+		}
+		if ev.IsReply() {
+			return nil, warpnet.WarpError("sponsored tweet: a reply cannot be sponsored")
+		}
 
-		if tweet.Id == "" {
-			return tweet, warpnet.WarpError("tweet handler: empty tweet id")
+		owner := authRepo.GetOwner()
+		if ev.UserId != owner.UserId {
+			return nil, warpnet.WarpError("sponsored tweet: only the owner publishes one")
 		}
-		if err = timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
-			log.Infof("fail adding tweet to timeline: %v", err)
-		}
+		return addTweet(broadcaster, tweetRepo, timelineRepo, owner, ev)
+	}
+}
 
-		if isMyOwnTweet { // publish to friends timelines
-			respTweetEvent := event.NewTweetEvent{
-				CreatedAt: tweet.CreatedAt,
-				Id:        tweet.Id,
-				ParentId:  tweet.ParentId,
-				RootId:    tweet.RootId,
-				Text:      tweet.Text,
-				UserId:    tweet.UserId,
-				Username:  tweet.Username,
-				ImageKeys: tweet.ImageKeys,
-				VideoKey:  tweet.VideoKey,
-				Poll:      tweet.Poll,
-			}
-			bt, _ := json.Marshal(respTweetEvent)
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TIMELINE, bt); err != nil {
-				log.Errorf("broadcaster publish owner tweet update: %v", err)
-			}
-		}
+func addTweet(
+	broadcaster TweetBroadcaster,
+	tweetRepo TweetsStorer,
+	timelineRepo TimelineUpdater,
+	owner domain.Owner,
+	ev domain.Tweet,
+) (domain.Tweet, error) {
+	tweet, err := tweetRepo.Create(ev.UserId, ev)
+	if err != nil {
+		return tweet, err
+	}
+
+	if tweet.Id == "" {
+		return tweet, warpnet.WarpError("tweet handler: empty tweet id")
+	}
+	if err = timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
+		log.Infof("fail adding tweet to timeline: %v", err)
+	}
+
+	if owner.UserId != tweet.UserId {
 		return tweet, nil
 	}
+
+	teaser := tweet.Teaser()
+	respTweetEvent := event.NewTweetEvent{
+		CreatedAt: teaser.CreatedAt,
+		Id:        teaser.Id,
+		ParentId:  teaser.ParentId,
+		RootId:    teaser.RootId,
+		Text:      teaser.Text,
+		UserId:    teaser.UserId,
+		Username:  teaser.Username,
+		ImageKeys: teaser.ImageKeys,
+		VideoKey:  teaser.VideoKey,
+		Poll:      teaser.Poll,
+		Price:     teaser.Price,
+	}
+	bt, _ := json.Marshal(respTweetEvent)
+	if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TIMELINE, bt); err != nil {
+		log.Errorf("broadcaster publish owner tweet update: %v", err)
+	}
+	return tweet, nil
 }
 
 func validateTweetEvent(ev event.NewTweetEvent) error {
 	if ev.UserId == "" {
 		return warpnet.WarpError("empty user id")
 	}
-	if ev.Text == "" {
+	if ev.Text == "" && !ev.IsSponsored() {
 		return warpnet.WarpError("empty tweet text")
 	}
 	// Runes, not bytes: 280 means 280 user-visible characters
 	// regardless of script (the UI counters count characters too).
 	if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
 		return warpnet.WarpError("tweet text is too long")
+	}
+	if ev.IsSponsored() {
+		if !ev.Price.IsPositive() {
+			return warpnet.WarpError("sponsored tweet: price must be positive")
+		}
+		if ev.Poll != nil {
+			return warpnet.WarpError("sponsored tweet: poll is not allowed")
+		}
 	}
 	return validatePoll(ev.Poll)
 }
@@ -290,6 +348,14 @@ func handleNewReply(
 	rootId := strings.TrimPrefix(ev.RootId, domain.RetweetPrefix)
 	parentId := strings.TrimPrefix(*ev.ParentId, domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.Id, domain.RetweetPrefix)
+
+	hasMedia := len(ev.ImageKeys) > 0 || (ev.VideoKey != nil && *ev.VideoKey != "")
+	if hasMedia && ev.ParentUserId != nil {
+		parent, err := replyRepo.Get(*ev.ParentUserId, parentId)
+		if err == nil && parent.IsSponsored() {
+			return nil, warpnet.WarpError("reply: a sponsored tweet takes text-only replies")
+		}
+	}
 
 	ownNodeInfo := streamer.NodeInfo()
 	// The network-wide (CRDT) reply counter is bumped only on the replier's
@@ -406,7 +472,14 @@ func StreamGetTweetHandler(
 
 		isMyOwnTweet := ev.UserId == owner.UserId
 		if isMyOwnTweet {
-			return localTweet(repo, ev)
+			tweet, err := localTweet(repo, ev)
+			if err != nil {
+				return nil, err
+			}
+			if isOwnRequest(s, streamer.NodeInfo()) {
+				return tweet, nil
+			}
+			return tweet.Teaser(), nil
 		}
 
 		otherUser, err := userRepo.Get(ev.UserId)
@@ -500,19 +573,19 @@ func StreamGetTweetsHandler(
 
 		if len(tweets) != 0 {
 			go tweetsRefreshBackground(repo, userRepo, ev, streamer)
+		} else {
+			tweetsRefreshBackground(repo, userRepo, ev, streamer)
 
-			return event.TweetsResponse{
-				Cursor: cursor,
-				Tweets: tweets,
-				UserId: ev.UserId,
-			}, nil
+			tweets, cursor, _ = repo.List(
+				ev.UserId, ev.Limit, ev.Cursor,
+			)
 		}
 
-		tweetsRefreshBackground(repo, userRepo, ev, streamer)
-
-		tweets, cursor, _ = repo.List(
-			ev.UserId, ev.Limit, ev.Cursor,
-		)
+		if !isOwnRequest(s, streamer.NodeInfo()) {
+			for i := range tweets {
+				tweets[i] = tweets[i].Teaser()
+			}
+		}
 
 		return event.TweetsResponse{
 			Cursor: cursor,

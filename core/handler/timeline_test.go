@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"math/big"
 	"testing"
 
 	"github.com/Warp-net/warpnet/domain"
@@ -108,4 +109,26 @@ func TestStreamTimelineHandler(t *testing.T) {
 			t.Fatalf("expected cursor 'some-cursor', got %v", capturedCursor)
 		}
 	})
+}
+
+func TestStreamTimelineNewTweetHandler_AcceptsTeaser(t *testing.T) {
+	userRepo, s := authorStream(t)
+	var stored domain.Tweet
+	h := StreamTimelineNewTweetHandler(
+		stubAuth{owner: domain.Owner{UserId: "owner-1"}},
+		stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+			stored = tweet
+			return tweet, nil
+		}},
+		stubTimelineRepo{},
+		stubFollowChecker{following: true},
+		userRepo,
+	)
+	_, err := h(marshal(t, event.NewTweetEvent{Id: "t1", UserId: "author-1", Price: domain.NewPrice(big.NewInt(1500000))}), s)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if stored.Id != "t1" || !stored.IsSponsored() {
+		t.Fatalf("the teaser must be stored, got %+v", stored)
+	}
 }

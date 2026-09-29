@@ -34,7 +34,7 @@ import {
     PRIVATE_GET_TIMELINE,
     PRIVATE_POST_LOGIN,
     PRIVATE_POST_TWEET,
-    PRIVATE_POST_TWEET_SPONSORED,
+    PRIVATE_POST_SPONSORED_TWEET,
     PRIVATE_POST_UPLOAD_IMAGE,
     PRIVATE_POST_UPLOAD_VIDEO,
     PRIVATE_POST_USER,
@@ -103,7 +103,7 @@ function generateResponse(arg) {
                 network: "testnet",
             }
 
-        case PRIVATE_POST_TWEET_SPONSORED:
+        case PRIVATE_POST_SPONSORED_TWEET:
         case PRIVATE_POST_TWEET:
             // A reply is a tweet with a parent: store it in the thread, bump
             // the parent's reply count, and keep it out of the timeline.
