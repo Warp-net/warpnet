@@ -757,6 +757,10 @@ func (m *MemberNode) sponsoredHandlers(
 			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
 		},
 		{
+			event.PUBLIC_GET_SPONSORED_TWEET,
+			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.purchaseRepo, userRepo, m),
+		},
+		{
 			event.PRIVATE_POST_SPONSORED_PURCHASE,
 			handler.StreamNewPurchaseHandler(authRepo, m.privKey, m.walletClient, r.purchaseRepo, userRepo, m),
 		},

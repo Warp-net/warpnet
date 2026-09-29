@@ -49,6 +49,8 @@ import (
 
 const purchaseNonceSize = 16
 
+const ErrSponsoredNotPaid = warpnet.WarpError("sponsored tweet: not paid for")
+
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
@@ -338,4 +340,83 @@ func StreamVerifyPurchaseHandler(
 		}
 		return event.PurchaseResponse{TweetId: ev.TweetId, TxId: ev.TxId, Confirmed: paid}, nil
 	}
+}
+
+func StreamGetSponsoredTweetHandler(
+	auth OwnerTweetStorer,
+	tweetRepo SponsoredTweetFetcher,
+	purchases PurchaseStorer,
+	userRepo SponsoredUserFetcher,
+	streamer SponsoredStreamer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("sponsored tweet: empty user id")
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("sponsored tweet: empty tweet id")
+		}
+
+		owner := auth.GetOwner()
+		isOwn := isOwnRequest(s, streamer.NodeInfo())
+		if ev.UserId == owner.UserId {
+			tweet, err := tweetRepo.Get(owner.UserId, ev.TweetId)
+			if err != nil {
+				return nil, err
+			}
+			if !isOwn && !isPaidByPeer(s, userRepo, purchases, ev.TweetId) {
+				return nil, ErrSponsoredNotPaid
+			}
+			return tweet, nil
+		}
+		if !isOwn {
+			return nil, ErrSponsoredNotPaid
+		}
+
+		purchase, err := purchases.Get(ev.TweetId, owner.UserId)
+		if err != nil || !purchase.Confirmed {
+			return nil, ErrSponsoredNotPaid
+		}
+		if purchase.Tweet != nil {
+			return *purchase.Tweet, nil
+		}
+
+		author, err := userRepo.Get(ev.UserId)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_SPONSORED_TWEET, ev)
+		if err != nil {
+			return nil, err
+		}
+		var possibleError event.ResponseError
+		if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+			return nil, warpnet.WarpError(possibleError.Message)
+		}
+		var tweet domain.Tweet
+		if err := json.Unmarshal(resp, &tweet); err != nil {
+			return nil, err
+		}
+		purchase.Tweet = &tweet
+		if err := purchases.Save(purchase); err != nil {
+			log.Warnf("sponsored tweet: caching %s: %v", ev.TweetId, err)
+		}
+		return tweet, nil
+	}
+}
+
+func isPaidByPeer(s warpnet.WarpStream, userRepo SponsoredUserFetcher, purchases PurchaseStorer, tweetId string) bool {
+	if s == nil || s.Conn() == nil {
+		return false
+	}
+	buyer, err := userRepo.GetByNodeID(s.Conn().RemotePeer().String())
+	if err != nil {
+		return false
+	}
+	purchase, err := purchases.Get(tweetId, buyer.Id)
+	return err == nil && purchase.Confirmed
 }
