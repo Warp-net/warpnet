@@ -1556,7 +1556,7 @@ func TestSetPinnedFromEvent(t *testing.T) {
 }
 
 func sponsoredPrice() *domain.Price {
-	return domain.NewPrice(big.NewInt(1500000))
+	return &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}
 }
 
 func newTestPeerID(t *testing.T) warpnet.WarpPeerID {
@@ -1593,7 +1593,7 @@ func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 		want string
 	}{
 		{"no price", event.NewTweetEvent{UserId: owner, Text: "paid"}, "sponsored tweet: empty price"},
-		{"zero price", event.NewTweetEvent{UserId: owner, Text: "paid", Price: domain.NewPrice(big.NewInt(0))}, "sponsored tweet: price must be positive"},
+		{"zero price", event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Amount: "0", Units: big.NewInt(0)}}, "sponsored tweet: price must be positive"},
 		{"empty text", event.NewTweetEvent{UserId: owner, Price: sponsoredPrice()}, "empty tweet text"},
 		{"poll", event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice(), Poll: &domain.Poll{Options: []string{"a", "b"}, ExpiresAt: time.Now().Add(time.Hour)}}, "sponsored tweet: poll is not allowed"},
 		{"reply", event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice(), ParentId: &parentId}, "sponsored tweet: a reply cannot be sponsored"},

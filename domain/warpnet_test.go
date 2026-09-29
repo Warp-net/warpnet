@@ -49,14 +49,16 @@ func TestModerationObjectType_String(t *testing.T) {
 	assert.Equal(t, "unknown", ModerationObjectType(99).String())
 }
 
-func TestNewPrice(t *testing.T) {
-	for units, amount := range map[int64]string{
-		1:         "0.000001",
-		1500000:   "1.5",
-		10000000:  "10",
-		123456789: "123.456789",
+func TestPrice_AmountFollowsUnits(t *testing.T) {
+	for units, amount := range map[string]string{
+		"1":         "0.000001",
+		"1500000":   "1.5",
+		"10000000":  "10",
+		"123456789": "123.456789",
 	} {
-		assert.Equal(t, amount, NewPrice(big.NewInt(units)).Amount)
+		var p Price
+		require.NoError(t, json.Unmarshal([]byte(`{"units":`+units+`}`), &p))
+		assert.Equal(t, amount, p.Amount)
 	}
 }
 
@@ -77,7 +79,7 @@ func TestPrice_UnmarshalJSON(t *testing.T) {
 }
 
 func TestPrice_MarshalJSON(t *testing.T) {
-	bt, err := json.Marshal(Tweet{Id: "t1", Price: NewPrice(big.NewInt(1500000))})
+	bt, err := json.Marshal(Tweet{Id: "t1", Price: &Price{Amount: "1.5", Units: big.NewInt(1500000)}})
 	require.NoError(t, err)
 	assert.Contains(t, string(bt), `"price":{"amount":"1.5","units":1500000}`)
 }
@@ -90,7 +92,7 @@ func TestTweet_Teaser(t *testing.T) {
 		ImageKeys: []string{"i1"},
 		VideoKey:  &video,
 		Poll:      &Poll{Options: []string{"a", "b"}},
-		Price:     NewPrice(big.NewInt(1500000)),
+		Price:     &Price{Amount: "1.5", Units: big.NewInt(1500000)},
 	}
 	teaser := paid.Teaser()
 	assert.Empty(t, teaser.Text)

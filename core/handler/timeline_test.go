@@ -124,7 +124,7 @@ func TestStreamTimelineNewTweetHandler_AcceptsTeaser(t *testing.T) {
 		stubFollowChecker{following: true},
 		userRepo,
 	)
-	_, err := h(marshal(t, event.NewTweetEvent{Id: "t1", UserId: "author-1", Price: domain.NewPrice(big.NewInt(1500000))}), s)
+	_, err := h(marshal(t, event.NewTweetEvent{Id: "t1", UserId: "author-1", Price: &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}}), s)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

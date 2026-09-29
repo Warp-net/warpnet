@@ -209,15 +209,6 @@ type Price struct {
 	Units  *big.Int `json:"units"`
 }
 
-func NewPrice(units *big.Int) *Price {
-	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(PriceDecimals), nil)
-	amount := new(big.Rat).SetFrac(units, scale).FloatString(PriceDecimals)
-	return &Price{
-		Amount: strings.TrimRight(strings.TrimRight(amount, "0"), "."),
-		Units:  new(big.Int).Set(units),
-	}
-}
-
 func (p *Price) IsPositive() bool {
 	return p != nil && p.Units != nil && p.Units.Sign() > 0
 }
@@ -229,12 +220,17 @@ func (p *Price) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	if wire.Units == nil {
-		*p = Price{}
-		return nil
+	*p = Price{Units: wire.Units}
+	if wire.Units != nil {
+		p.Amount = p.decimal()
 	}
-	*p = *NewPrice(wire.Units)
 	return nil
+}
+
+func (p *Price) decimal() string {
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(PriceDecimals), nil)
+	amount := new(big.Rat).SetFrac(p.Units, scale).FloatString(PriceDecimals)
+	return strings.TrimRight(strings.TrimRight(amount, "0"), ".")
 }
 
 type Order struct {

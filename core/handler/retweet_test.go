@@ -419,7 +419,7 @@ func TestStreamNewReTweetHandler_SponsoredSourceKeepsOnlyTheTeaser(t *testing.T)
 	var stored domain.Tweet
 	repo := stubReTweetRepo{
 		getFn: func(userID, tweetID string) (domain.Tweet, error) {
-			return domain.Tweet{Id: tweetID, UserId: userID, Price: domain.NewPrice(big.NewInt(1500000))}, nil
+			return domain.Tweet{Id: tweetID, UserId: userID, Price: &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}}, nil
 		},
 		newRetweetFn: func(tweet domain.Tweet) (domain.Tweet, error) {
 			stored = tweet
