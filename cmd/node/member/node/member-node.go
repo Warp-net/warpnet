@@ -441,7 +441,7 @@ type memberRepos struct {
 	mutesRepo        MutesProvider
 	subsRepo         SubscriptionProvider
 	filterRepo       FilterProvider
-	purchaseRepo     PurchaseProvider
+	orderRepo        OrderProvider
 }
 
 func (m *MemberNode) setupHandlers(
@@ -470,7 +470,7 @@ func (m *MemberNode) setupHandlers(
 		mutesRepo:        database.NewMutesRepo(db),
 		subsRepo:         database.NewSubscriptionsRepo(db),
 		filterRepo:       database.NewFilterRepo(db),
-		purchaseRepo:     database.NewPurchaseRepo(db),
+		orderRepo:        database.NewOrderRepo(db),
 	}
 
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
@@ -758,15 +758,15 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
-			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.purchaseRepo, userRepo, m),
+			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.orderRepo, userRepo, m),
 		},
 		{
-			event.PRIVATE_POST_SPONSORED_PURCHASE,
-			handler.StreamNewPurchaseHandler(authRepo, m.privKey, m.walletClient, r.purchaseRepo, userRepo, m),
+			event.PRIVATE_POST_SPONSORED_ORDER,
+			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
 		},
 		{
-			event.PUBLIC_POST_SPONSORED_PURCHASE,
-			handler.StreamVerifyPurchaseHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.purchaseRepo, userRepo, m),
+			event.PUBLIC_POST_SPONSORED_ORDER,
+			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m),
 		},
 	}
 }

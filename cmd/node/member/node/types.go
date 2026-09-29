@@ -160,9 +160,9 @@ type AuthProvider interface {
 	SessionToken() string
 }
 
-type PurchaseProvider interface {
-	Get(tweetId, buyerId string) (domain.Purchase, error)
-	Save(p domain.Purchase) error
+type OrderProvider interface {
+	Get(tweetId, buyerId string) (domain.Order, error)
+	Save(o domain.Order) error
 }
 
 type UserProvider interface {

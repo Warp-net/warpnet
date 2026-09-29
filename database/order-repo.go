@@ -33,31 +33,31 @@ import (
 	"github.com/Warp-net/warpnet/json"
 )
 
-const PurchaseRepoName = "/PURCHASES"
+const OrderRepoName = "/ORDERS"
 
-var ErrPurchaseNotFound = local_store.DBError("purchase not found")
+var ErrOrderNotFound = local_store.DBError("order not found")
 
-type PurchaseStorer interface {
+type OrderStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
-type PurchaseRepo struct {
-	db PurchaseStorer
+type OrderRepo struct {
+	db OrderStorer
 }
 
-func NewPurchaseRepo(db PurchaseStorer) *PurchaseRepo {
-	return &PurchaseRepo{db: db}
+func NewOrderRepo(db OrderStorer) *OrderRepo {
+	return &OrderRepo{db: db}
 }
 
-func (repo *PurchaseRepo) Save(p domain.Purchase) error {
-	if p.TweetId == "" {
+func (repo *OrderRepo) Save(o domain.Order) error {
+	if o.TweetId == "" {
 		return local_store.DBError("empty tweet id")
 	}
-	if p.BuyerId == "" {
+	if o.BuyerId == "" {
 		return local_store.DBError("empty buyer id")
 	}
 
-	value, err := json.Marshal(p)
+	value, err := json.Marshal(o)
 	if err != nil {
 		return err
 	}
@@ -68,46 +68,46 @@ func (repo *PurchaseRepo) Save(p domain.Purchase) error {
 	}
 	defer txn.Rollback()
 
-	if err := txn.Set(purchaseKey(p.TweetId, p.BuyerId), value); err != nil {
+	if err := txn.Set(orderKey(o.TweetId, o.BuyerId), value); err != nil {
 		return err
 	}
 	return txn.Commit()
 }
 
-func (repo *PurchaseRepo) Get(tweetId, buyerId string) (domain.Purchase, error) {
+func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 	if tweetId == "" {
-		return domain.Purchase{}, local_store.DBError("empty tweet id")
+		return domain.Order{}, local_store.DBError("empty tweet id")
 	}
 	if buyerId == "" {
-		return domain.Purchase{}, local_store.DBError("empty buyer id")
+		return domain.Order{}, local_store.DBError("empty buyer id")
 	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return domain.Purchase{}, err
+		return domain.Order{}, err
 	}
 	defer txn.Rollback()
 
-	value, err := txn.Get(purchaseKey(tweetId, buyerId))
+	value, err := txn.Get(orderKey(tweetId, buyerId))
 	if local_store.IsNotFoundError(err) {
-		return domain.Purchase{}, ErrPurchaseNotFound
+		return domain.Order{}, ErrOrderNotFound
 	}
 	if err != nil {
-		return domain.Purchase{}, err
+		return domain.Order{}, err
 	}
 
-	var p domain.Purchase
-	if err := json.Unmarshal(value, &p); err != nil {
-		return domain.Purchase{}, err
+	var o domain.Order
+	if err := json.Unmarshal(value, &o); err != nil {
+		return domain.Order{}, err
 	}
 	if err := txn.Commit(); err != nil {
-		return domain.Purchase{}, err
+		return domain.Order{}, err
 	}
-	return p, nil
+	return o, nil
 }
 
-func purchaseKey(tweetId, buyerId string) local_store.DatabaseKey {
-	return local_store.NewPrefixBuilder(PurchaseRepoName).
+func orderKey(tweetId, buyerId string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(OrderRepoName).
 		AddRootID(tweetId).
 		AddParentId(buyerId).
 		Build()

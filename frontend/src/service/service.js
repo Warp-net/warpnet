@@ -82,7 +82,7 @@ export const PUBLIC_POST_UNREACT = "/public/post/unreact/0.0.0"
 export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
 export const PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
-export const PRIVATE_POST_SPONSORED_PURCHASE = "/private/post/sponsored/purchase/0.0.0"
+export const PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
 const SPONSORED_PAYMENT_CONFIRMING = "sponsored tweet: payment is confirming"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
@@ -1744,9 +1744,9 @@ export const warpnetService = {
         return resp;
     },
 
-    async purchaseSponsoredTweet({tweetId, userId}) {
+    async orderSponsoredTweet({tweetId, userId}) {
         const resp = await this.sendToNode({
-            path: PRIVATE_POST_SPONSORED_PURCHASE,
+            path: PRIVATE_POST_SPONSORED_ORDER,
             body: {tweet_id: tweetId, user_id: userId},
         });
         if (!resp || resp.code || !resp.tx_id) {

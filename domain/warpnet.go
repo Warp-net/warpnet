@@ -237,7 +237,7 @@ func (p *Price) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type Purchase struct {
+type Order struct {
 	TweetId   string    `json:"tweet_id"`
 	AuthorId  string    `json:"author_id"`
 	BuyerId   string    `json:"buyer_id"`
@@ -248,8 +248,8 @@ type Purchase struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func (p *Purchase) OrderId() string {
-	sum := sha256.Sum256([]byte(p.TweetId + "/" + p.BuyerId + "/" + p.Nonce))
+func (o *Order) ID() string {
+	sum := sha256.Sum256([]byte(o.TweetId + "/" + o.BuyerId + "/" + o.Nonce))
 	return hex.EncodeToString(sum[:])
 }
 

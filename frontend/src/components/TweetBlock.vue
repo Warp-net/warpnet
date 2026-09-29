@@ -567,8 +567,8 @@ export default {
       if (this.unlocking) return;
       this.unlocking = true;
       try {
-        const purchase = await warpnetService.purchaseSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
-        this.unlockPending = !purchase.confirmed;
+        const order = await warpnetService.orderSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+        this.unlockPending = !order.confirmed;
         if (this.unlockPending) return;
         await this.loadSponsoredContent();
       } catch (err) {

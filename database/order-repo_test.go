@@ -38,14 +38,14 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type PurchaseRepoTestSuite struct {
+type OrderRepoTestSuite struct {
 	suite.Suite
 
 	db   *local_store.DB
-	repo *PurchaseRepo
+	repo *OrderRepo
 }
 
-func (s *PurchaseRepoTestSuite) SetupSuite() {
+func (s *OrderRepoTestSuite) SetupSuite() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
@@ -54,15 +54,15 @@ func (s *PurchaseRepoTestSuite) SetupSuite() {
 	err = authRepo.Authenticate("test", "test")
 	s.Require().NoError(err)
 
-	s.repo = NewPurchaseRepo(s.db)
+	s.repo = NewOrderRepo(s.db)
 }
 
-func (s *PurchaseRepoTestSuite) TearDownSuite() {
+func (s *OrderRepoTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
-func (s *PurchaseRepoTestSuite) TestSaveAndGet() {
-	p := domain.Purchase{TweetId: "t1", AuthorId: "a1", BuyerId: "b1", Nonce: "n1", TxId: "tx1"}
+func (s *OrderRepoTestSuite) TestSaveAndGet() {
+	p := domain.Order{TweetId: "t1", AuthorId: "a1", BuyerId: "b1", Nonce: "n1", TxId: "tx1"}
 	s.Require().NoError(s.repo.Save(p))
 
 	got, err := s.repo.Get("t1", "b1")
@@ -80,23 +80,23 @@ func (s *PurchaseRepoTestSuite) TestSaveAndGet() {
 	s.Equal("paid", got.Tweet.Text)
 }
 
-func (s *PurchaseRepoTestSuite) TestGetIsPerBuyer() {
-	s.Require().NoError(s.repo.Save(domain.Purchase{TweetId: "t2", BuyerId: "b1"}))
+func (s *OrderRepoTestSuite) TestGetIsPerBuyer() {
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t2", BuyerId: "b1"}))
 
 	_, err := s.repo.Get("t2", "b2")
-	s.ErrorIs(err, ErrPurchaseNotFound)
+	s.ErrorIs(err, ErrOrderNotFound)
 }
 
-func (s *PurchaseRepoTestSuite) TestEmptyValidation() {
-	s.Error(s.repo.Save(domain.Purchase{BuyerId: "b1"}))
-	s.Error(s.repo.Save(domain.Purchase{TweetId: "t1"}))
+func (s *OrderRepoTestSuite) TestEmptyValidation() {
+	s.Error(s.repo.Save(domain.Order{BuyerId: "b1"}))
+	s.Error(s.repo.Save(domain.Order{TweetId: "t1"}))
 	_, err := s.repo.Get("", "b1")
 	s.Error(err)
 	_, err = s.repo.Get("t1", "")
 	s.Error(err)
 }
 
-func TestPurchaseRepoTestSuite(t *testing.T) {
+func TestOrderRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
-	suite.Run(t, new(PurchaseRepoTestSuite))
+	suite.Run(t, new(OrderRepoTestSuite))
 }

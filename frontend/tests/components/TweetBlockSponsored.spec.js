@@ -12,7 +12,7 @@ vi.mock('@/service/service', () => ({
     hasRetweeter: vi.fn(),
     viewTweet: vi.fn(),
     isBookmarked: vi.fn(),
-    purchaseSponsoredTweet: vi.fn(),
+    orderSponsoredTweet: vi.fn(),
     getSponsoredTweet: vi.fn(),
   },
 }));
@@ -84,22 +84,22 @@ describe('TweetBlock sponsored tweet', () => {
   });
 
   it('pays after the confirmation and shows what was bought', async () => {
-    warpnetService.purchaseSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: true });
+    warpnetService.orderSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: true });
     renderTweet(teaser());
     await waitFor(() => expect(warpnetService.getSponsoredTweet).toHaveBeenCalledTimes(1));
     warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'the paid words' });
 
     await fireEvent.click(screen.getByRole('button', { name: 'Unlock for 1.5 USDT' }));
-    expect(warpnetService.purchaseSponsoredTweet).not.toHaveBeenCalled();
+    expect(warpnetService.orderSponsoredTweet).not.toHaveBeenCalled();
     await fireEvent.click(await screen.findByRole('button', { name: 'Pay' }));
 
     await waitFor(() => expect(screen.getByText('the paid words')).toBeInTheDocument());
-    expect(warpnetService.purchaseSponsoredTweet).toHaveBeenCalledWith({ tweetId: 't1', userId: 'author1' });
+    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledWith({ tweetId: 't1', userId: 'author1' });
     expect(screen.queryByRole('img', { name: 'Locked tweet' })).not.toBeInTheDocument();
   });
 
   it('says so when the network has not confirmed the payment yet', async () => {
-    warpnetService.purchaseSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: false });
+    warpnetService.orderSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: false });
     renderTweet(teaser());
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
@@ -108,13 +108,13 @@ describe('TweetBlock sponsored tweet', () => {
     expect(await screen.findByText(/still confirming/)).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Locked tweet' })).toBeInTheDocument();
 
-    warpnetService.purchaseSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: true });
+    warpnetService.orderSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: true });
     warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'confirmed at last' });
     await fireEvent.click(screen.getByRole('button', { name: 'Check payment' }));
 
     expect(await screen.findByText('confirmed at last')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument();
-    expect(warpnetService.purchaseSponsoredTweet).toHaveBeenCalledTimes(2);
+    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledTimes(2);
   });
 
   it('comes back to a confirming payment without offering to pay again', async () => {
@@ -130,7 +130,7 @@ describe('TweetBlock sponsored tweet', () => {
     renderTweet(teaser());
 
     expect(await screen.findByText('bought before')).toBeInTheDocument();
-    expect(warpnetService.purchaseSponsoredTweet).not.toHaveBeenCalled();
+    expect(warpnetService.orderSponsoredTweet).not.toHaveBeenCalled();
   });
 
   it("shows the author's own sponsored tweet in full, with its price", async () => {
