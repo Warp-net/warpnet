@@ -4,6 +4,7 @@
 package handler
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -80,5 +81,78 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, event.Accepted, resp)
 		assert.False(t, created, "an unsolicited tweet must not enter the timeline")
+	})
+}
+
+func TestStreamTimelineDeleteTweetHandler(t *testing.T) {
+	t.Parallel()
+
+	const owner = "owner-1"
+	ev := event.DeleteTweetEvent{UserId: "friend-1", TweetId: "t1"}
+
+	newHandler := func(users TweetUserFetcher, deleteErr error, deleted, untimelined *string) warpnet.WarpHandlerFunc {
+		return StreamTimelineDeleteTweetHandler(
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetRepo{deleteFn: func(userId, tweetId string) error {
+				*deleted = userId + "/" + tweetId
+				return deleteErr
+			}},
+			stubTimelineRepo{deleteFn: func(userId, tweetId string) error {
+				*untimelined = userId + "/" + tweetId
+				return nil
+			}},
+			users)
+	}
+
+	t.Run("sent by its author's node", func(t *testing.T) {
+		t.Parallel()
+		users, conn := authorStream(t)
+
+		var deleted, untimelined string
+		resp, err := newHandler(users, nil, &deleted, &untimelined)(marshal(t, ev), conn)
+
+		require.NoError(t, err)
+		assert.Equal(t, event.Accepted, resp)
+		assert.Equal(t, "friend-1/t1", deleted)
+		assert.Equal(t, owner+"/t1", untimelined, "the tweet leaves the owner's timeline, not the author's")
+	})
+
+	t.Run("sent by another node", func(t *testing.T) {
+		t.Parallel()
+		users, _ := authorStream(t)
+		_, attacker := authorStream(t)
+
+		var deleted, untimelined string
+		_, err := newHandler(users, nil, &deleted, &untimelined)(marshal(t, ev), attacker)
+
+		require.ErrorIs(t, err, warpnet.ErrForeignAuthor)
+		assert.Empty(t, deleted)
+		assert.Empty(t, untimelined)
+	})
+
+	t.Run("the owner's own tweet", func(t *testing.T) {
+		t.Parallel()
+		users, conn := authorStream(t)
+
+		var deleted, untimelined string
+		resp, err := newHandler(users, nil, &deleted, &untimelined)(
+			marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: "t1"}), conn)
+
+		require.NoError(t, err)
+		assert.Equal(t, event.Accepted, resp)
+		assert.Empty(t, deleted)
+		assert.Empty(t, untimelined)
+	})
+
+	t.Run("a tweet this node does not hold", func(t *testing.T) {
+		t.Parallel()
+		users, conn := authorStream(t)
+		missing := errors.New("tweet not found")
+
+		var deleted, untimelined string
+		_, err := newHandler(users, missing, &deleted, &untimelined)(marshal(t, ev), conn)
+
+		require.ErrorIs(t, err, missing)
+		assert.Empty(t, untimelined, "a tweet the author does not own here must stay in the timeline")
 	})
 }

@@ -112,3 +112,34 @@ func StreamTimelineNewTweetHandler(
 		return tweet, nil
 	}
 }
+
+func StreamTimelineDeleteTweetHandler(
+	authRepo OwnerTweetStorer,
+	tweetRepo TweetsStorer,
+	timelineRepo TimelineUpdater,
+	userRepo TweetUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.DeleteTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+
+		author, _ := userRepo.Get(ev.UserId)
+		if err := warpnet.VerifyAuthorship(s, author.NodeId); err != nil {
+			return nil, err
+		}
+
+		owner := authRepo.GetOwner()
+		if owner.UserId == ev.UserId {
+			return event.Accepted, nil
+		}
+		if err := tweetRepo.Delete(ev.UserId, ev.TweetId); err != nil {
+			return nil, err
+		}
+		if err := timelineRepo.DeleteTweetFromTimeline(owner.UserId, ev.TweetId); err != nil {
+			log.Errorf("timeline: delete tweet: %v", err)
+		}
+		return event.Accepted, nil
+	}
+}

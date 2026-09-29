@@ -570,6 +570,10 @@ func (m *MemberNode) tweetHandlers(
 			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo),
 		},
 		{
+			event.PUBLIC_DELETE_TIMELINE,
+			handler.StreamTimelineDeleteTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, userRepo),
+		},
+		{
 			event.PUBLIC_GET_TWEETS,
 			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m),
 		},
