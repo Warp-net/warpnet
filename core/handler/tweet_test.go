@@ -757,9 +757,9 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 	})
 
 	t.Run("own tweet delete - broadcasts", func(t *testing.T) {
-		published := false
+		var route string
 		h := StreamDeleteTweetHandler(stubTweetBroadcaster{publishFn: func(ownerId, dest string, bt []byte) error {
-			published = true
+			route = dest
 			return nil
 		}}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{})
 		resp, err := h(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
@@ -769,8 +769,8 @@ func TestStreamDeleteTweetHandler(t *testing.T) {
 		if resp != event.Accepted {
 			t.Fatalf("expected accepted, got: %v", resp)
 		}
-		if !published {
-			t.Fatal("expected broadcast to be called")
+		if route != event.PUBLIC_DELETE_TIMELINE {
+			t.Fatalf("expected a broadcast on %s, got %q", event.PUBLIC_DELETE_TIMELINE, route)
 		}
 	})
 

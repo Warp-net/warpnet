@@ -691,7 +691,7 @@ func StreamDeleteTweetHandler(
 				TweetId: ev.TweetId,
 			}
 			bt, _ := json.Marshal(respTweetEvent)
-			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PRIVATE_DELETE_TWEET, bt); err != nil {
+			if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_DELETE_TIMELINE, bt); err != nil {
 				log.Infoln("broadcaster publish owner tweet update:", err)
 			}
 		}
