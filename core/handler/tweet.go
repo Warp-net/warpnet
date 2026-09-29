@@ -984,6 +984,9 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		if existing.UserId != ev.UserId {
 			return nil, warpnet.ErrForeignAuthor
 		}
+		if existing.IsSponsored() {
+			return nil, warpnet.WarpError("edit tweet: a sponsored tweet cannot be edited")
+		}
 		if existing.Text == ev.Text {
 			// No-op edit — return the existing tweet without recording a revision.
 			return event.EditTweetResponse(existing), nil

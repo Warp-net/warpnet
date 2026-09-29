@@ -1720,3 +1720,11 @@ func TestStreamNewTweetHandler_TextOnlyRepliesToSponsoredTweet(t *testing.T) {
 	_, err = h(marshal(t, reply), nil)
 	assert.NoError(t, err)
 }
+
+func TestStreamEditTweetHandler_SponsoredTweetIsFrozen(t *testing.T) {
+	repo := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
+		return domain.Tweet{Id: tweetID, UserId: userID, Text: "paid", Price: sponsoredPrice()}, nil
+	}}
+	_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(marshal(t, event.EditTweetEvent{UserId: "owner-1", TweetId: "tweet-1", Text: "cheaper"}), nil)
+	assert.EqualError(t, err, "edit tweet: a sponsored tweet cannot be edited")
+}
