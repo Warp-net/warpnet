@@ -211,22 +211,24 @@ resulting from the use or misuse of this software.
               <button
                   @click="togglePoll"
                   class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
-                  :class="poll ? 'text-white bg-blue' : 'text-blue'"
+                  :class="[poll ? 'text-white bg-blue' : 'text-blue', {'opacity-50 cursor-not-allowed': !!sponsored}]"
                   type="button"
+                  :disabled="!!sponsored"
                   aria-label="Add poll"
                   :aria-pressed="!!poll"
-                  :title="poll ? 'Remove poll' : 'Add poll'"
+                  :title="sponsored ? 'Sponsored tweets have no polls' : (poll ? 'Remove poll' : 'Add poll')"
               >
                 <i class="far fa-chart-bar" aria-hidden="true"></i>
               </button>
               <button
                   @click="toggleSponsored"
                   class="text-lg mr-3 rounded-full w-9 h-9 flex items-center justify-center hover:bg-lightblue"
-                  :class="sponsored ? 'text-white bg-blue' : 'text-blue'"
+                  :class="[sponsored ? 'text-white bg-blue' : 'text-blue', {'opacity-50 cursor-not-allowed': !!poll}]"
                   type="button"
+                  :disabled="!!poll"
                   aria-label="Sponsored tweet"
                   :aria-pressed="!!sponsored"
-                  :title="sponsored ? 'Make it free' : 'Make it sponsored'"
+                  :title="poll ? 'Remove the poll to make it sponsored' : (sponsored ? 'Make it free' : 'Make it sponsored')"
               >
                 <i class="fas fa-lock" aria-hidden="true"></i>
               </button>

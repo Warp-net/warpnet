@@ -54,6 +54,10 @@ const (
 	tokenSymbol    = "USDT"
 	NativeCoin     = "TRX"
 
+	testnetSplitter = "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy"
+	maxFeePercent   = 5
+	txNotFound      = "tx_not_found"
+
 	paramNetwork    = "network"
 	paramToken      = "token"
 	paramSeed       = "seed"
@@ -70,12 +74,14 @@ type Account struct {
 }
 
 type Config struct {
-	BinaryPath string
-	Network    string
-	Endpoint   string
-	Token      string
-	Decimals   uint8
-	RPS        float64
+	BinaryPath    string
+	Network       string
+	Endpoint      string
+	Token         string
+	Decimals      uint8
+	RPS           float64
+	Splitter      string
+	MaxFeePercent uint64
 }
 
 type Transfer struct {
@@ -152,25 +158,30 @@ func New(cfg Config) *Client {
 func DefaultConfig(network, binaryPath string) Config {
 	if network != "testnet" {
 		return Config{
-			BinaryPath: binaryPath,
-			Network:    "mainnet",
-			Endpoint:   "https://api.trongrid.io",
-			Token:      tokenSymbol,
-			Decimals:   6,
+			BinaryPath:    binaryPath,
+			Network:       "mainnet",
+			Endpoint:      "https://api.trongrid.io",
+			Token:         tokenSymbol,
+			Decimals:      6,
+			MaxFeePercent: maxFeePercent,
 		}
 	}
 	return Config{
-		BinaryPath: binaryPath,
-		Network:    "testnet",
-		Endpoint:   "https://nile.trongrid.io",
-		Token:      tokenSymbol,
-		Decimals:   6,
+		BinaryPath:    binaryPath,
+		Network:       "testnet",
+		Endpoint:      "https://nile.trongrid.io",
+		Token:         tokenSymbol,
+		Decimals:      6,
+		Splitter:      testnetSplitter,
+		MaxFeePercent: maxFeePercent,
 	}
 }
 
-func (c *Client) Token() string   { return c.cfg.Token }
-func (c *Client) Decimals() uint8 { return c.cfg.Decimals }
-func (c *Client) Network() string { return c.cfg.Network }
+func (c *Client) Token() string         { return c.cfg.Token }
+func (c *Client) Decimals() uint8       { return c.cfg.Decimals }
+func (c *Client) Network() string       { return c.cfg.Network }
+func (c *Client) Splitter() string      { return c.cfg.Splitter }
+func (c *Client) MaxFeePercent() uint64 { return c.cfg.MaxFeePercent }
 
 func (c *Client) Close() {
 	c.mu.Lock()
@@ -518,8 +529,6 @@ func (c *Client) History(ctx context.Context, address, asset string, limit int) 
 // Paying a person rather than a sponsorship is Transfer: it moves the whole
 // amount to the recipient, takes no fee and leaves no receipt to check. Do not
 // reach for Pay to send someone money.
-//
-// Nothing calls this yet, because nothing in warpnet carries a price.
 func (c *Client) Pay(ctx context.Context, seed string, s Sponsorship) (Payment, error) {
 	var out struct {
 		Payer      string `json:"payer"`
@@ -539,6 +548,47 @@ func (c *Client) Pay(ctx context.Context, seed string, s Sponsorship) (Payment, 
 		s.Author, s.Amount, out.Token, c.cfg.Network, out.Fee, out.FeePercent, out.PayTx,
 	)
 	return Payment(out), nil
+}
+
+func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, error) {
+	var out struct {
+		Confirmed     bool   `json:"confirmed"`
+		Buyer         string `json:"buyer"`
+		AuthorAmount  string `json:"author_amount"`
+		FeeAmount     string `json:"fee_amount"`
+		Confirmations uint64 `json:"confirmations"`
+	}
+	err := c.call(ctx, "verify", verifyParams(c.cfg, txId, s), &out)
+	var engineErr *responseError
+	if errors.As(err, &engineErr) && engineErr.Code == txNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if out.Confirmed {
+		log.Infof(
+			"wallet: %s paid %s of %s to %s on %s, fee %s, %d confirmations, tx %s",
+			out.Buyer, out.AuthorAmount, c.cfg.Token, s.Author, c.cfg.Network, out.FeeAmount, out.Confirmations, txId,
+		)
+	}
+	return out.Confirmed, nil
+}
+
+func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
+	return map[string]any{
+		"chain":           "tron",
+		paramNetwork:      cfg.Network,
+		"tx_id":           txId,
+		"order_id":        s.OrderId,
+		"expected_author": s.Author,
+		"min_amount":      s.Amount,
+		"allowed_assets": []map[string]any{{
+			paramToken: cfg.Token,
+			"contract": s.Splitter,
+			"decimals": cfg.Decimals,
+		}},
+	}
 }
 
 func payParams(network, seed string, s Sponsorship) map[string]any {

@@ -229,6 +229,16 @@ function onMessage(data) {
   p.resolve(msg);
 }
 
+// Archive import processes thousands of tweets server-side and can run
+// well past the default budget; an order waits on the chain (approve, pay,
+// verify), paced by TronGrid at a request a second.
+function requestTimeout(path) {
+  if (typeof path !== "string") return REQUEST_TIMEOUT_MS;
+  if (path.includes("/import/")) return 10 * 60 * 1000;
+  if (path.includes("/sponsored/order/")) return 3 * 60 * 1000;
+  return REQUEST_TIMEOUT_MS;
+}
+
 async function send(request) {
   await connect();
   if (!request.message_id) {
@@ -238,11 +248,7 @@ async function send(request) {
 
   const payload = session.encrypt(new TextEncoder().encode(JSON.stringify(request)));
 
-  // Archive import processes thousands of tweets server-side and can run
-  // well past the default budget; give /import/ routes a long window.
-  const timeoutMs = (typeof request.path === "string" && request.path.includes("/import/"))
-    ? 10 * 60 * 1000
-    : REQUEST_TIMEOUT_MS;
+  const timeoutMs = requestTimeout(request.path);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);

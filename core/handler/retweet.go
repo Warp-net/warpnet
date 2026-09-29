@@ -97,6 +97,12 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
+		source, err := tweetRepo.Get(retweetEvent.UserId, strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix))
+		if err == nil && source.IsSponsored() {
+			retweetEvent.Price = source.Price
+		}
+		retweetEvent = retweetEvent.Teaser()
+
 		ownNodeInfo := streamer.NodeInfo()
 		ownerId := ownNodeInfo.OwnerId
 		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy

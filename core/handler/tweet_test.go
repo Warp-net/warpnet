@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -1552,4 +1553,178 @@ func TestSetPinnedFromEvent(t *testing.T) {
 		_, err := setPinnedFromEvent([]byte(`{"user_id":"u1","tweet_id":"t1"}`), repo, users, attacker, true)
 		assert.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 	})
+}
+
+func sponsoredPrice() *domain.Price {
+	return &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}
+}
+
+func newTestPeerID(t *testing.T) warpnet.WarpPeerID {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	id, err := warpnet.IDFromPublicKey(pub)
+	require.NoError(t, err)
+	return id
+}
+
+func TestStreamNewTweetHandler_RejectsPrice(t *testing.T) {
+	owner := "owner-1"
+	h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
+	_, err := h(marshal(t, event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice()}), nil)
+	assert.EqualError(t, err, "tweet: a priced tweet goes through the sponsored route")
+}
+
+func TestStreamNewSponsoredTweetHandler(t *testing.T) {
+	owner := "owner-1"
+	newHandler := func(b TweetBroadcaster, repo TweetsStorer, timeline TimelineUpdater) warpnet.WarpHandlerFunc {
+		return StreamNewSponsoredTweetHandler(b, stubAuth{owner: domain.Owner{UserId: owner}}, repo, timeline)
+	}
+
+	t.Run("invalid payload", func(t *testing.T) {
+		_, err := newHandler(stubTweetBroadcaster{}, stubTweetRepo{}, stubTimelineRepo{})([]byte("{"), nil)
+		assert.Error(t, err)
+	})
+
+	parentId := "tweet-0"
+	for _, tt := range []struct {
+		name string
+		ev   event.NewTweetEvent
+		want string
+	}{
+		{"no price", event.NewTweetEvent{UserId: owner, Text: "paid"}, "sponsored tweet: empty price"},
+		{"zero price", event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Amount: "0", Units: big.NewInt(0)}}, "sponsored tweet: price must be positive"},
+		{"empty text", event.NewTweetEvent{UserId: owner, Price: sponsoredPrice()}, "empty tweet text"},
+		{"poll", event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice(), Poll: &domain.Poll{Options: []string{"a", "b"}, ExpiresAt: time.Now().Add(time.Hour)}}, "sponsored tweet: poll is not allowed"},
+		{"reply", event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice(), ParentId: &parentId}, "sponsored tweet: a reply cannot be sponsored"},
+		{"foreign author", event.NewTweetEvent{UserId: "other-1", Text: "paid", Price: sponsoredPrice()}, "sponsored tweet: only the owner publishes one"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			created := false
+			repo := stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+				created = true
+				return tweet, nil
+			}}
+			_, err := newHandler(stubTweetBroadcaster{}, repo, stubTimelineRepo{})(marshal(t, tt.ev), nil)
+			assert.EqualError(t, err, tt.want)
+			assert.False(t, created)
+		})
+	}
+
+	t.Run("stores the full tweet and broadcasts the teaser", func(t *testing.T) {
+		var stored, timelined domain.Tweet
+		var published []byte
+		repo := stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+			tweet.Id = "tweet-1"
+			stored = tweet
+			return tweet, nil
+		}}
+		timeline := stubTimelineRepo{addFn: func(_ string, tweet domain.Tweet) error {
+			timelined = tweet
+			return nil
+		}}
+		broadcaster := stubTweetBroadcaster{publishFn: func(_, dest string, bt []byte) error {
+			assert.Equal(t, event.PUBLIC_POST_TIMELINE, dest)
+			published = bt
+			return nil
+		}}
+		video := "video-1"
+		resp, err := newHandler(broadcaster, repo, timeline)(marshal(t, event.NewTweetEvent{
+			UserId:    owner,
+			Text:      "paid",
+			ImageKeys: []string{"img-1"},
+			VideoKey:  &video,
+			Price:     &domain.Price{Units: big.NewInt(1500000)},
+		}), nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, "paid", resp.(domain.Tweet).Text)
+		assert.Equal(t, []string{"img-1"}, stored.ImageKeys)
+		assert.Equal(t, "1.5", stored.Price.Amount)
+		assert.Equal(t, "paid", timelined.Text)
+
+		var teaser domain.Tweet
+		require.NoError(t, json.Unmarshal(published, &teaser))
+		assert.Equal(t, "tweet-1", teaser.Id)
+		assert.Empty(t, teaser.Text)
+		assert.Empty(t, teaser.ImageKeys)
+		assert.Nil(t, teaser.VideoKey)
+		require.NotNil(t, teaser.Price)
+		assert.Equal(t, "1.5", teaser.Price.Amount)
+	})
+}
+
+func TestStreamGetTweetHandler_SponsoredTeaser(t *testing.T) {
+	owner := "owner-1"
+	own, other := newTestPeerID(t), newTestPeerID(t)
+	repo := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
+		return domain.Tweet{Id: tweetID, UserId: userID, Text: "paid", ImageKeys: []string{"img-1"}, Price: sponsoredPrice()}, nil
+	}}
+	h := StreamGetTweetHandler(repo, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: owner}})
+	req := marshal(t, event.GetTweetEvent{UserId: owner, TweetId: "tweet-1"})
+
+	_, ownUI := stream.NewLoopbackStream(own, own, event.PUBLIC_GET_TWEET)
+	resp, err := h(req, ownUI)
+	require.NoError(t, err)
+	assert.Equal(t, "paid", resp.(domain.Tweet).Text)
+
+	_, peer := stream.NewLoopbackStream(own, other, event.PUBLIC_GET_TWEET)
+	resp, err = h(req, peer)
+	require.NoError(t, err)
+	teaser := resp.(domain.Tweet)
+	assert.Empty(t, teaser.Text)
+	assert.Empty(t, teaser.ImageKeys)
+	assert.True(t, teaser.IsSponsored())
+}
+
+func TestStreamGetTweetsHandler_SponsoredTeaser(t *testing.T) {
+	owner := "owner-1"
+	own, other := newTestPeerID(t), newTestPeerID(t)
+	repo := stubTweetRepo{listFn: func(userId string, _ *uint64, _ *string) ([]domain.Tweet, string, error) {
+		return []domain.Tweet{
+			{Id: "t1", UserId: userId, Text: "paid", ImageKeys: []string{"img-1"}, Price: sponsoredPrice()},
+			{Id: "t2", UserId: userId, Text: "free"},
+		}, "end", nil
+	}}
+	h := StreamGetTweetsHandler(repo, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: owner}})
+	req := marshal(t, event.GetAllTweetsEvent{UserId: owner})
+
+	_, ownUI := stream.NewLoopbackStream(own, own, event.PUBLIC_GET_TWEETS)
+	resp, err := h(req, ownUI)
+	require.NoError(t, err)
+	assert.Equal(t, "paid", resp.(event.TweetsResponse).Tweets[0].Text)
+
+	_, peer := stream.NewLoopbackStream(own, other, event.PUBLIC_GET_TWEETS)
+	resp, err = h(req, peer)
+	require.NoError(t, err)
+	tweets := resp.(event.TweetsResponse).Tweets
+	assert.Empty(t, tweets[0].Text)
+	assert.Empty(t, tweets[0].ImageKeys)
+	assert.Equal(t, "free", tweets[1].Text)
+}
+
+func TestStreamNewTweetHandler_TextOnlyRepliesToSponsoredTweet(t *testing.T) {
+	owner := "owner-1"
+	parentId := "tweet-1"
+	parentUserId := "author-1"
+	repo := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
+		return domain.Tweet{Id: tweetID, UserId: userID, Price: sponsoredPrice()}, nil
+	}}
+	h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, repo, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+	reply := event.NewTweetEvent{UserId: owner, Text: "nice", ParentId: &parentId, ParentUserId: &parentUserId, RootId: parentId, ImageKeys: []string{"img-1"}}
+
+	_, err := h(marshal(t, reply), nil)
+	assert.EqualError(t, err, "reply: a sponsored tweet takes text-only replies")
+
+	reply.ImageKeys = nil
+	_, err = h(marshal(t, reply), nil)
+	assert.NoError(t, err)
+}
+
+func TestStreamEditTweetHandler_SponsoredTweetIsFrozen(t *testing.T) {
+	repo := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
+		return domain.Tweet{Id: tweetID, UserId: userID, Text: "paid", Price: sponsoredPrice()}, nil
+	}}
+	_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(marshal(t, event.EditTweetEvent{UserId: "owner-1", TweetId: "tweet-1", Text: "cheaper"}), nil)
+	assert.EqualError(t, err, "edit tweet: a sponsored tweet cannot be edited")
 }
