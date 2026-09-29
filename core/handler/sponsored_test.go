@@ -285,44 +285,59 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, full, resp, "a confirmed buyer gets the full tweet")
 
-		_, err = h(req, streamFrom(strangerNode))
-		assert.ErrorIs(t, err, ErrSponsoredNotPaid, "someone who did not pay gets nothing")
+		resp, err = h(req, streamFrom(strangerNode))
+		require.NoError(t, err)
+		assert.Equal(t, domain.Tweet{}, resp, "someone who did not pay gets nothing")
 
-		_, err = h(req, streamFrom(newTestPeerID(t)))
-		assert.ErrorIs(t, err, ErrSponsoredNotPaid, "an unknown node gets nothing")
+		resp, err = h(req, streamFrom(newTestPeerID(t)))
+		require.NoError(t, err)
+		assert.Equal(t, domain.Tweet{}, resp, "an unknown node gets nothing")
 	})
 
 	t.Run("on the buyer's node", func(t *testing.T) {
 		users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
-		streams := 0
+		auth := stubAuth{owner: domain.Owner{UserId: "buyer-1"}}
+		var paths []stream.WarpRoute
+		confirmed := true
 		streamer := stubStreamer{
 			nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "buyer-1"},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				streams++
 				assert.Equal(t, "author-node", nodeId)
-				assert.Equal(t, stream.WarpRoute(event.PUBLIC_GET_SPONSORED_TWEET), path)
+				paths = append(paths, path)
+				if path == event.PUBLIC_POST_SPONSORED_PURCHASE {
+					return json.Marshal(event.PurchaseResponse{TweetId: "tweet-1", TxId: "tx-1", Confirmed: confirmed})
+				}
 				return json.Marshal(full)
 			},
 		}
-		auth := stubAuth{owner: domain.Owner{UserId: "buyer-1"}}
 
-		_, err := StreamGetSponsoredTweetHandler(auth, tweets, stubPurchases{}, users, streamer)(req, streamFrom(own))
-		assert.ErrorIs(t, err, ErrSponsoredNotPaid, "nothing bought, nothing asked")
-		assert.Zero(t, streams)
-
-		purchases := stubPurchases{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Confirmed: true}}
-		h := StreamGetSponsoredTweetHandler(auth, tweets, purchases, users, streamer)
-		resp, err := h(req, streamFrom(own))
+		resp, err := StreamGetSponsoredTweetHandler(auth, tweets, stubPurchases{}, users, streamer)(req, streamFrom(own))
 		require.NoError(t, err)
-		assert.Equal(t, "paid", resp.(domain.Tweet).Text)
-		assert.Equal(t, 1, streams)
+		assert.Equal(t, domain.Tweet{}, resp, "nothing bought, nothing shown")
+		assert.Empty(t, paths, "nothing bought, nothing asked")
+
+		purchases := stubPurchases{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Nonce: "n1"}}
+		h := StreamGetSponsoredTweetHandler(auth, tweets, purchases, users, streamer)
+
+		confirmed = false
+		_, err = h(req, streamFrom(own))
+		assert.ErrorIs(t, err, ErrSponsoredPending, "a receipt the author has not confirmed yet is still pending")
+
+		confirmed = true
+		paths = nil
+		resp, err = h(req, streamFrom(own))
+		require.NoError(t, err)
+		assert.Equal(t, "paid", resp.(domain.Tweet).Text, "opening the tweet claims the receipt again")
+		assert.Equal(t, []stream.WarpRoute{event.PUBLIC_POST_SPONSORED_PURCHASE, event.PUBLIC_GET_SPONSORED_TWEET}, paths)
 		assert.Equal(t, "paid", purchases["tweet-1/buyer-1"].Tweet.Text, "the bought tweet is kept with the purchase")
 
+		paths = nil
 		_, err = h(req, streamFrom(own))
 		require.NoError(t, err)
-		assert.Equal(t, 1, streams, "a kept tweet needs no author")
+		assert.Empty(t, paths, "a kept tweet needs no author")
 
-		_, err = h(req, streamFrom(strangerNode))
-		assert.ErrorIs(t, err, ErrSponsoredNotPaid, "a buyer never passes the tweet on")
+		resp, err = h(req, streamFrom(strangerNode))
+		require.NoError(t, err)
+		assert.Equal(t, domain.Tweet{}, resp, "a buyer never passes the tweet on")
 	})
 }

@@ -49,7 +49,7 @@ import (
 
 const purchaseNonceSize = 16
 
-const ErrSponsoredNotPaid = warpnet.WarpError("sponsored tweet: not paid for")
+const ErrSponsoredPending = warpnet.WarpError("sponsored tweet: payment is confirming")
 
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
@@ -369,17 +369,20 @@ func StreamGetSponsoredTweetHandler(
 				return nil, err
 			}
 			if !isOwn && !isPaidByPeer(s, userRepo, purchases, ev.TweetId) {
-				return nil, ErrSponsoredNotPaid
+				return domain.Tweet{}, nil
 			}
 			return tweet, nil
 		}
 		if !isOwn {
-			return nil, ErrSponsoredNotPaid
+			return domain.Tweet{}, nil
 		}
 
 		purchase, err := purchases.Get(ev.TweetId, owner.UserId)
-		if err != nil || !purchase.Confirmed {
-			return nil, ErrSponsoredNotPaid
+		if errors.Is(err, database.ErrPurchaseNotFound) {
+			return domain.Tweet{}, nil
+		}
+		if err != nil {
+			return nil, err
 		}
 		if purchase.Tweet != nil {
 			return *purchase.Tweet, nil
@@ -388,6 +391,15 @@ func StreamGetSponsoredTweetHandler(
 		author, err := userRepo.Get(ev.UserId)
 		if err != nil {
 			return nil, err
+		}
+		if !purchase.Confirmed {
+			purchase, err = claimPurchase(purchases, streamer, author, purchase)
+			if err != nil {
+				return nil, err
+			}
+			if !purchase.Confirmed {
+				return nil, ErrSponsoredPending
+			}
 		}
 		resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_SPONSORED_TWEET, ev)
 		if err != nil {
@@ -400,6 +412,9 @@ func StreamGetSponsoredTweetHandler(
 		var tweet domain.Tweet
 		if err := json.Unmarshal(resp, &tweet); err != nil {
 			return nil, err
+		}
+		if tweet.Id == "" {
+			return domain.Tweet{}, nil
 		}
 		purchase.Tweet = &tweet
 		if err := purchases.Save(purchase); err != nil {

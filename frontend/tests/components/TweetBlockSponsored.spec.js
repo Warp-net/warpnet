@@ -107,6 +107,22 @@ describe('TweetBlock sponsored tweet', () => {
 
     expect(await screen.findByText(/still confirming/)).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Locked tweet' })).toBeInTheDocument();
+
+    warpnetService.purchaseSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: true });
+    warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'confirmed at last' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Check payment' }));
+
+    expect(await screen.findByText('confirmed at last')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument();
+    expect(warpnetService.purchaseSponsoredTweet).toHaveBeenCalledTimes(2);
+  });
+
+  it('comes back to a confirming payment without offering to pay again', async () => {
+    warpnetService.getSponsoredTweet.mockResolvedValue({ pending: true });
+    renderTweet(teaser());
+
+    expect(await screen.findByRole('button', { name: 'Check payment' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Unlock for/ })).not.toBeInTheDocument();
   });
 
   it('opens a tweet bought earlier without asking again', async () => {

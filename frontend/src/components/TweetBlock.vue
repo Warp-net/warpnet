@@ -123,13 +123,14 @@ resulting from the use or misuse of this software.
         <div class="flex flex-wrap items-center gap-2 mb-2">
           <button
               type="button"
-              @click.stop="showUnlockConfirm = true"
+              @click.stop="unlockPending ? unlock() : (showUnlockConfirm = true)"
               :disabled="unlocking"
               class="h-9 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
               :class="{'opacity-50 cursor-not-allowed': unlocking}"
           >
-            <span v-if="!unlocking">Unlock for {{ tweet.price.amount }} USDT</span>
-            <span v-else><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paying…</span>
+            <span v-if="unlocking"><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>{{ unlockPending ? 'Checking…' : 'Paying…' }}</span>
+            <span v-else-if="unlockPending">Check payment</span>
+            <span v-else>Unlock for {{ tweet.price.amount }} USDT</span>
           </button>
           <span v-if="unlockPending" class="text-xs text-dark">Paid. The network is still confirming it, try again in a minute.</span>
         </div>
@@ -565,13 +566,10 @@ export default {
       this.showUnlockConfirm = false;
       if (this.unlocking) return;
       this.unlocking = true;
-      this.unlockPending = false;
       try {
         const purchase = await warpnetService.purchaseSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
-        if (!purchase.confirmed) {
-          this.unlockPending = true;
-          return;
-        }
+        this.unlockPending = !purchase.confirmed;
+        if (this.unlockPending) return;
         await this.loadSponsoredContent();
       } catch (err) {
         console.error(`failed to unlock tweet [${this.tweet.id}]`, err);
@@ -583,6 +581,10 @@ export default {
     async loadSponsoredContent() {
       const full = await warpnetService.getSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
       if (!full) return;
+      if (full.pending) {
+        this.unlockPending = true;
+        return;
+      }
       this.tweet.text = full.text;
       this.tweet.image_keys = full.image_keys || [];
       this.tweet.video_key = full.video_key;
