@@ -997,6 +997,27 @@ type WalletResponse struct {
 	Network     string `json:"network"`
 }
 
+// NewPurchaseEvent defines model for NewPurchaseEvent.
+type NewPurchaseEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+}
+
+// VerifyPurchaseEvent defines model for VerifyPurchaseEvent.
+type VerifyPurchaseEvent struct {
+	TweetId domain.ID `json:"tweet_id"`
+	UserId  domain.ID `json:"user_id"`
+	TxId    string    `json:"tx_id"`
+	Nonce   string    `json:"nonce"`
+}
+
+// PurchaseResponse defines model for PurchaseResponse.
+type PurchaseResponse struct {
+	TweetId   domain.ID `json:"tweet_id"`
+	TxId      string    `json:"tx_id"`
+	Confirmed bool      `json:"confirmed"`
+}
+
 // WalletAddressEvent defines model for WalletAddressEvent.
 type WalletAddressEvent struct {
 	Chain string `json:"chain"`

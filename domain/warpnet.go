@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"math/big"
 	"strings"
 	"time"
@@ -233,6 +235,22 @@ func (p *Price) UnmarshalJSON(data []byte) error {
 	}
 	*p = *NewPrice(wire.Units)
 	return nil
+}
+
+type Purchase struct {
+	TweetId   string    `json:"tweet_id"`
+	AuthorId  string    `json:"author_id"`
+	BuyerId   string    `json:"buyer_id"`
+	Nonce     string    `json:"nonce"`
+	TxId      string    `json:"tx_id"`
+	Confirmed bool      `json:"confirmed"`
+	Tweet     *Tweet    `json:"tweet,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (p *Purchase) OrderId() string {
+	sum := sha256.Sum256([]byte(p.TweetId + "/" + p.BuyerId + "/" + p.Nonce))
+	return hex.EncodeToString(sum[:])
 }
 
 type Poll struct {
