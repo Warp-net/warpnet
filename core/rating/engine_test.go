@@ -6,6 +6,7 @@ package rating
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -533,6 +534,72 @@ func TestSettledBucketsAreFreed(t *testing.T) {
 	for key := range e.counters {
 		assert.Equal(t, bucketAt(clock.Now()), key.bucket)
 	}
+}
+
+// hookedClock runs a hook, once, inside the next reading of the time and
+// then hands back the time as it was before the hook ran.
+type hookedClock struct {
+	*fixedClock
+
+	mu   sync.Mutex
+	hook func()
+}
+
+func (c *hookedClock) Now() time.Time {
+	now := c.fixedClock.Now()
+	c.mu.Lock()
+	hook := c.hook
+	c.hook = nil
+	c.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return now
+}
+
+func (c *hookedClock) once(hook func()) {
+	c.mu.Lock()
+	c.hook = hook
+	c.mu.Unlock()
+}
+
+// A count that lands on the hour boundary must add to the hour it was
+// charged in, not replace what that hour had already written.
+func TestACountOnTheHourBoundaryKeepsTheHoursTotal(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	clock := &hookedClock{fixedClock: newClock()}
+	store := newFakeStore(self.id)
+	e, err := NewEngine(t.Context(), store, fakeConns{opened: clock.fixedClock.Now().Add(-24 * time.Hour)},
+		self.priv, warpnet.MemberNode, WithClock(clock.Now), WithFlushInterval(time.Hour))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	recordN(t, e, peer.id, KindBadSignature, 10)
+	flushNow(t, e)
+
+	// The next charge reads the clock in the old hour; before it takes the
+	// lock the hour turns and the flush loop, busy with another peer,
+	// settles the old hour.
+	other := newIdentity(t)
+	clock.once(func() {
+		clock.advance(time.Hour)
+		require.NoError(t, e.record(other.id, KindDialFailure))
+		require.NoError(t, e.flush())
+	})
+	require.NoError(t, e.record(peer.id, KindBadSignature))
+	flushNow(t, e)
+
+	var total uint32
+	for _, rec := range store.records() {
+		if rec.PeerID != peer.id.String() {
+			continue
+		}
+		for _, o := range rec.Offences {
+			total += o.Count
+		}
+	}
+	assert.EqualValues(t, 11, total, "the hour's ten earlier charges must survive the late one")
 }
 
 func TestScoreFailsOpenWhenTheStoreCannotBeRead(t *testing.T) {

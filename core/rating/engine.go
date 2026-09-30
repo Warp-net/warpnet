@@ -760,14 +760,15 @@ func (e *Engine) clearIfUnchanged(key pendingKey, written []domain.OffenceCount)
 	}
 }
 
-// dropSettledBuckets frees the counters of past hours: Record only ever
-// writes the current bucket, so a flushed past bucket never changes again.
+// dropSettledBuckets frees the counters of hours before the last one: a
+// charge that read the clock as the hour turned still lands in the hour
+// just past, and must add to its total rather than start it over.
 func (e *Engine) dropSettledBuckets() {
 	current := bucketAt(e.now())
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for key := range e.counters {
-		if key.bucket >= current {
+		if key.bucket >= current-1 {
 			continue
 		}
 		if _, dirty := e.dirty[key]; dirty {
