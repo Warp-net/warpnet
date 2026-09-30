@@ -99,6 +99,23 @@ func (s *fakeStore) List(peerID string) ([]domain.RatingRecord, error) {
 	return out, nil
 }
 
+func (s *fakeStore) PeerIDs() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, rec := range s.data {
+		if _, ok := seen[rec.PeerID]; !ok {
+			seen[rec.PeerID] = struct{}{}
+			out = append(out, rec.PeerID)
+		}
+	}
+	return out, nil
+}
+
 func (s *fakeStore) DeleteExpired(dimension string, beforeBucket int64) error {
 	s.mu.Lock()
 	s.expired = append(s.expired, expiry{dimension: dimension, beforeBucket: beforeBucket})

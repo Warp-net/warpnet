@@ -96,6 +96,7 @@ type Rater interface {
 type Storer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
+	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
 	OnPut(hook func(domain.RatingRecord))
 	OnDelete(hook func(domain.RatingRecord))
@@ -168,9 +169,10 @@ type Engine struct {
 
 	ratings Rater
 
-	mu       sync.Mutex
-	counters map[pendingKey]counts
-	dirty    map[pendingKey]struct{}
+	mu        sync.Mutex
+	counters  map[pendingKey]counts
+	dirty     map[pendingKey]struct{}
+	unindexed map[string]struct{}
 
 	loadMu sync.Mutex
 
@@ -225,6 +227,7 @@ func NewEngine(
 		index:         index,
 		counters:      make(map[pendingKey]counts, windowPeers),
 		dirty:         make(map[pendingKey]struct{}, windowPeers),
+		unindexed:     make(map[string]struct{}),
 		done:          make(chan struct{}),
 		flaps:         newWindow(flapWindow, flapThreshold),
 		discoveries:   newWindow(discoveryWindow, discoveryThreshold),
@@ -236,6 +239,12 @@ func NewEngine(
 
 	store.OnPut(e.onPut)
 	store.OnDelete(e.onDelete)
+
+	peerIDs, err := store.PeerIDs()
+	if err != nil {
+		log.Warnf("rating: listing the peers on record: %v", err)
+	}
+	e.indexLater(peerIDs...)
 
 	log.Infof(
 		"rating: engine started: witnessing %v, rating peers every %s",
@@ -521,11 +530,35 @@ func (e *Engine) onPut(rec domain.RatingRecord) {
 		log.Debugf("rating: dropping merged record about %s: %v", rec.PeerID, err)
 		return
 	}
+	if !e.index.has(rec.PeerID) {
+		e.indexLater(rec.PeerID)
+		return
+	}
 	e.index.update(rec.PeerID, en)
 }
 
 func (e *Engine) onDelete(rec domain.RatingRecord) {
-	e.index.forget(rec.PeerID)
+	dim, ok := ParseDimension(rec.Dimension)
+	if !ok {
+		return
+	}
+	e.index.remove(rec.PeerID, slot{
+		observer: rec.ObserverID, dim: dim, bucket: bucket(rec.Bucket), generation: rec.Generation,
+	})
+}
+
+// indexLater has the next rating pass read these peers whole: a merged
+// record alone would shadow a peer's history, and the hook it arrives in
+// runs before the store has committed it.
+func (e *Engine) indexLater(peerIDs ...string) {
+	if e.ratings == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, peerID := range peerIDs {
+		e.unindexed[peerID] = struct{}{}
+	}
 }
 
 // score is this node's own view of one dimension: first-hand evidence at
@@ -589,16 +622,28 @@ func (e *Engine) isOldEnough(observer string) bool {
 	return e.now().Sub(oldest) >= minAcquaintance
 }
 
-// ratePeers records how every indexed peer is rated now, on every pass,
+// ratePeers records how every peer on record is rated now, on every pass,
 // so a rating that holds does not lapse from what the modules read.
-// Evidence decays, so a peer recovers with time and no event to report it:
-// this pass is where that is noticed.
+// Evidence decays, so a peer recovers with time and no event to report it,
+// and neither is there one for a peer known only from a merged record or
+// from before a restart: this pass is where all of that is noticed.
 func (e *Engine) ratePeers() error {
 	if e.ratings == nil {
 		return nil
 	}
 
+	e.mu.Lock()
+	unindexed := e.unindexed
+	e.unindexed = make(map[string]struct{})
+	e.mu.Unlock()
+
 	var errs []error
+	for peerID := range unindexed {
+		e.index.forget(peerID)
+		if _, err := e.peer(peerID); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	for _, p := range e.index.rated() {
 		if p.peerID == e.self {
 			continue // what others wrote about this node is not ours to act on

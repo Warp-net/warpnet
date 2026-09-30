@@ -195,6 +195,73 @@ func TestARecoveredRatingIsRecorded(t *testing.T) {
 	assert.True(t, recorded[1].tier.IsAllowedInDHT())
 }
 
+// Remote evidence alone may take a peer down to watched. It has to reach
+// the modules to do that, even about a peer this node never charged.
+func TestRemoteEvidenceAloneReachesTheModules(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	ratings := NewPeersRatings()
+	e := newRatingEngine(t, self, store, clock, ratings)
+
+	for range 3 {
+		observer := newIdentity(t)
+		store.merge(signedRecord(observer, peer.id, Network, bucketAt(clock.Now()), genA,
+			kindCount{KindBadSignature, 4}))
+	}
+	require.NoError(t, e.ratePeers())
+
+	require.Equal(t, TierWatched, e.Score(peer.id).Tier(), "three acquainted accusers take the peer to watched")
+	assert.Equal(t, TierWatched, ratings.Tier(peer.id), "and the modules must see it")
+}
+
+// A peer that recovered must be seen to recover, even when a record about
+// it is deleted in between.
+func TestAPeerRecoversAfterARecordAboutItIsDeleted(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	remote := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	ratings := NewPeersRatings()
+	e := newRatingEngine(t, self, store, clock, ratings)
+
+	recordN(t, e, peer.id, KindBadSignature, 5)
+	flushNow(t, e)
+	require.NoError(t, e.ratePeers())
+	require.Equal(t, TierFloor, ratings.Tier(peer.id))
+
+	// Another observer's GC tombstones its own record about the peer.
+	e.onDelete(signedRecord(remote, peer.id, Network, bucketAt(clock.Now()), genB, kindCount{KindDialFailure, 1}))
+
+	clock.advance(4 * Network.HalfLife()) // 1250 decays to 78: trusted again
+	require.NoError(t, e.ratePeers())
+
+	require.Equal(t, TierTrusted, e.Score(peer.id).Tier(), "the evidence has decayed")
+	assert.Equal(t, TierTrusted, ratings.Tier(peer.id), "and the modules must stop holding the peer back")
+}
+
+// A restart must not amnesty every offender: the flush loop rates what the
+// records already say, without waiting for the peer to offend again.
+func TestARestartDoesNotAmnestyTheFloored(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+
+	first := newRatingEngine(t, self, store, clock, NewPeersRatings())
+	recordN(t, first, peer.id, KindBadSignature, 5)
+	flushNow(t, first)
+	require.NoError(t, first.Close())
+
+	ratings := NewPeersRatings()
+	restarted := newRatingEngine(t, self, store, clock, ratings)
+	require.NoError(t, restarted.ratePeers())
+
+	assert.Equal(t, TierFloor, ratings.Tier(peer.id), "the records on disk still floor the peer")
+}
+
 // What the network wrote about this node is replicated to it like any
 // other record, and it is still not a rating this node acts on.
 func TestANodeNeverRatesItself(t *testing.T) {

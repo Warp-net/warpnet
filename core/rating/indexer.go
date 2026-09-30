@@ -89,6 +89,14 @@ func (p *indexedPeer) set(s slot, cs []kindCount) {
 	p.mu.Unlock()
 }
 
+// remove drops one record's counts.
+func (p *indexedPeer) remove(s slot) {
+	p.mu.Lock()
+	delete(p.slots, s)
+	p.rev++
+	p.mu.Unlock()
+}
+
 // fill adds a loaded record unless a merge already delivered a newer one.
 func (p *indexedPeer) fill(e entry) {
 	p.mu.Lock()
@@ -171,6 +179,13 @@ func (i *indexer) add(peerID string) *indexedPeer {
 func (i *indexer) update(peerID string, e entry) {
 	if p, ok := i.peers.Peek(peerID); ok {
 		p.set(e.slot(), e.counts)
+	}
+}
+
+// remove drops one record of a peer the index holds.
+func (i *indexer) remove(peerID string, s slot) {
+	if p, ok := i.peers.Peek(peerID); ok {
+		p.remove(s)
 	}
 }
 

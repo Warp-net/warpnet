@@ -157,6 +157,33 @@ func (s *Store) List(peerID string) ([]domain.RatingRecord, error) {
 	return records, nil
 }
 
+// PeerIDs lists every peer the store holds a record about, own or foreign.
+func (s *Store) PeerIDs() ([]string, error) {
+	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: recordPrefix, KeysOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("rating store: query records: %w", err)
+	}
+	defer func() { _ = results.Close() }()
+
+	seen := make(map[string]struct{})
+	var peerIDs []string
+	for r := range results.Next() {
+		if r.Error != nil {
+			return nil, fmt.Errorf("rating store: iterate records: %w", r.Error)
+		}
+		rec, ok := parseRecordKey(r.Key)
+		if !ok {
+			continue
+		}
+		if _, ok := seen[rec.PeerID]; ok {
+			continue
+		}
+		seen[rec.PeerID] = struct{}{}
+		peerIDs = append(peerIDs, rec.PeerID)
+	}
+	return peerIDs, nil
+}
+
 // DeleteExpired removes this node's own records of one dimension with a
 // bucket before beforeBucket. Foreign records are never deleted: a CRDT
 // delete is a tombstone that propagates to every replica.
