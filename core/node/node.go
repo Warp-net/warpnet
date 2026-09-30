@@ -263,7 +263,6 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 		}
 		if err != nil {
 			log.Errorf("node: unwrap: reading from stream: %v", err)
-			n.emitStream(s, warpnet.PeerMalformedFrame)
 			_ = json.NewEncoder(s).Encode(warpevent.ResponseError{Message: middleware.ErrStreamReadError.Error()})
 			return
 		}
