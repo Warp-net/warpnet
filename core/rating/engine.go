@@ -288,18 +288,18 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 
 	switch ev.Type {
 	case warpnet.PeerConnected:
-		if e.flaps.reached(ev.PeerID) {
+		if e.flaps.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindConnectionFlap)
 		}
 	case warpnet.PeerDiscovered:
-		if e.discoveries.reached(ev.PeerID) {
+		if e.discoveries.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindDiscoveryFlood)
 		}
 	case warpnet.PeerRateLimited:
 		if err := e.record(peerID, KindRateLimitHit); err != nil {
 			return err
 		}
-		if !stream.WarpRoute(ev.Route).IsGet() && e.writes.reached(ev.PeerID) {
+		if !stream.WarpRoute(ev.Route).IsGet() && e.writes.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindWriteFlood)
 		}
 	default:
@@ -743,26 +743,37 @@ func (e *Engine) gc() {
 	}
 }
 
-// window counts one observation per peer inside a sliding window.
+// window counts one observation per peer inside a span that opens with
+// the peer's first observation and closes a span later.
 type window struct {
 	mu        sync.Mutex
-	counts    *expirable.LRU[string, int]
+	counts    *expirable.LRU[string, windowCount]
+	span      time.Duration
 	threshold int
 }
 
-func newWindow(timeWindow time.Duration, threshold int) *window {
+type windowCount struct {
+	opened time.Time
+	count  int
+}
+
+func newWindow(span time.Duration, threshold int) *window {
 	return &window{
-		counts:    expirable.NewLRU[string, int](windowPeers, nil, timeWindow),
+		counts:    expirable.NewLRU[string, windowCount](windowPeers, nil, span),
+		span:      span,
 		threshold: threshold,
 	}
 }
 
-// reached reports the count hitting the threshold, once per window.
-func (b *window) reached(peerID string) bool {
+// reached reports the count hitting the threshold, once per span.
+func (b *window) reached(peerID string, now time.Time) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	count, _ := b.counts.Get(peerID)
-	count++
-	b.counts.Add(peerID, count)
-	return count == b.threshold
+	c, ok := b.counts.Get(peerID)
+	if !ok || now.Sub(c.opened) >= b.span {
+		c = windowCount{opened: now}
+	}
+	c.count++
+	b.counts.Add(peerID, c)
+	return c.count == b.threshold
 }

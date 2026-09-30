@@ -783,11 +783,29 @@ func TestRepetitionBecomesAnOffence(t *testing.T) {
 
 func TestWindowReportsOnlyTheCrossing(t *testing.T) {
 	b := newWindow(time.Minute, 3)
-	assert.False(t, b.reached("peer"))
-	assert.False(t, b.reached("peer"))
-	assert.True(t, b.reached("peer"), "the third observation crosses the threshold")
-	assert.False(t, b.reached("peer"), "and it is reported once, not on every one after")
-	assert.False(t, b.reached("another"), "each peer is counted on its own")
+	now := time.Now()
+	assert.False(t, b.reached("peer", now))
+	assert.False(t, b.reached("peer", now))
+	assert.True(t, b.reached("peer", now), "the third observation crosses the threshold")
+	assert.False(t, b.reached("peer", now), "and it is reported once, not on every one after")
+	assert.False(t, b.reached("another", now), "each peer is counted on its own")
+}
+
+// A peer that keeps offending keeps paying: every span it crosses the
+// threshold in is charged, however closely the next span follows.
+func TestAPersistentOffenderIsChargedInEverySpan(t *testing.T) {
+	b := newWindow(time.Minute, 3)
+	now := time.Now()
+
+	crossings := 0
+	for range 120 {
+		if b.reached("peer", now) {
+			crossings++
+		}
+		now = now.Add(6 * time.Second)
+	}
+
+	assert.Equal(t, 12, crossings, "ten observations a minute for twelve minutes cross the threshold every minute")
 }
 
 func TestListenChargesFromEveryFanOutAndStopsWithTheEngine(t *testing.T) {
