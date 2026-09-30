@@ -491,11 +491,12 @@ func (e *Engine) authenticate(rec domain.RatingRecord) (entry, error) {
 
 // isForgery reports a record that verifies but breaks the structural
 // rules: its observer really authored it. An unverifiable record names
-// an observer that may be innocent, and a record outside the time window
-// is merely late, so neither is anyone's fault.
+// an observer that may be innocent, a record outside the time window is
+// merely late, and a dimension or kinds this build does not know may be a
+// newer build's, so none of those is anyone's fault.
 func isForgery(err error) bool {
 	for _, structural := range []error{
-		ErrRecordSelfRated, ErrRecordBadPeerID, ErrRecordBadDimension,
+		ErrRecordSelfRated, ErrRecordBadPeerID,
 		ErrRecordBadGeneration, ErrRecordEmptyOffences, ErrRecordBadKind,
 	} {
 		if errors.Is(err, structural) {

@@ -55,7 +55,8 @@ const (
 	ErrRecordBadDimension  = ratingError("record dimension unknown")
 	ErrRecordBadGeneration = ratingError("record generation malformed")
 	ErrRecordEmptyOffences = ratingError("record carries no offences")
-	ErrRecordBadKind       = ratingError("record kind unknown or foreign to its dimension")
+	ErrRecordBadKind       = ratingError("record kind foreign to its dimension")
+	ErrRecordUnknownKinds  = ratingError("record names no kind this build knows")
 	ErrRecordBucketFuture  = ratingError("record bucket is in the future")
 	ErrRecordBucketStale   = ratingError("record bucket is past retention")
 	ErrRecordNoSignature   = ratingError("record is unsigned")
@@ -121,8 +122,8 @@ func (r record) verify() error {
 }
 
 // validate enforces the structural rules a signature cannot: no self-rating,
-// kinds of the record's own dimension, a bucket inside the retention window
-// with one bucket of clock skew.
+// kinds of the record's own dimension and at least one this build knows, a
+// bucket inside the retention window with one bucket of clock skew.
 func (r record) validate(now time.Time) error {
 	if warpnet.FromStringToPeerID(r.PeerID) == "" {
 		return ErrRecordBadPeerID
@@ -146,11 +147,19 @@ func (r record) validate(now time.Time) error {
 	if len(r.Offences) == 0 {
 		return ErrRecordEmptyOffences
 	}
+	known := false
 	for _, o := range r.Offences {
 		kind, ok := ParseKind(o.Kind)
-		if !ok || kind.Dimension() != dim {
+		if !ok {
+			continue
+		}
+		if kind.Dimension() != dim {
 			return ErrRecordBadKind
 		}
+		known = true
+	}
+	if !known {
+		return ErrRecordUnknownKinds
 	}
 	b := bucket(r.Bucket)
 	if b > bucketAt(now)+1 {
@@ -167,7 +176,10 @@ func (r record) entry() entry {
 	dim, _ := ParseDimension(r.Dimension)
 	cs := make([]kindCount, 0, len(r.Offences))
 	for _, o := range r.Offences {
-		kind, _ := ParseKind(o.Kind)
+		kind, ok := ParseKind(o.Kind)
+		if !ok {
+			continue
+		}
 		cs = append(cs, kindCount{kind: kind, count: o.Count})
 	}
 	return entry{

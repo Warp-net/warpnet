@@ -352,6 +352,37 @@ func TestSignedButIllegalRecordChargesItsAuthorOnce(t *testing.T) {
 	assert.Equal(t, charged, e.Score(liar.id), "one forgery is one charge, however often it is reloaded")
 }
 
+// A newer build may name a kind or a dimension this build does not know.
+// Its author is no forger for that: charging it would floor every upgraded
+// node in the eyes of every node not upgraded yet.
+func TestAKindFromANewerBuildIsNotAForgery(t *testing.T) {
+	self := newIdentity(t)
+	newer := newIdentity(t)
+	peer := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e := newMemberEngine(t, self, store, clock)
+
+	for i, dim := range []string{Network.String(), Network.String(), "reputation"} {
+		r := record{
+			PeerID:     peer.id.String(),
+			ObserverID: newer.id.String(),
+			Dimension:  dim,
+			Bucket:     int64(bucketAt(clock.Now())) - int64(i),
+			Generation: genA,
+			Offences:   []domain.OffenceCount{{Kind: "offence_from_the_future", Count: 1}},
+			UpdatedAt:  clock.Now(),
+		}
+		signed, err := r.signed(newer.priv)
+		require.NoError(t, err)
+		store.merge(domain.RatingRecord(signed))
+	}
+	flushNow(t, e)
+
+	assert.Equal(t, MaxScore, e.Score(newer.id), "the author of a newer catalogue is not charged")
+	assert.Equal(t, MaxScore, e.Score(peer.id), "and what this build cannot read costs its peer nothing")
+}
+
 func TestLateRecordIsDroppedWithoutBlame(t *testing.T) {
 	self := newIdentity(t)
 	peer := newIdentity(t)
