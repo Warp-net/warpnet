@@ -75,7 +75,7 @@ resulting from the use or misuse of this software.
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
         <span v-if="tweet.price" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" :title="`Sponsored tweet, ${tweet.price.amount} USDT`">
-          <i class="fas fa-lock" aria-hidden="true"></i> {{ tweet.price.amount }} USDT
+          <i class="fas fa-pepper-hot" aria-hidden="true"></i> {{ tweet.price.amount }} USDT
         </span>
         <div class="relative ml-auto flex-none">
           <button type="button" @click.stop="toggleDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
@@ -118,7 +118,7 @@ resulting from the use or misuse of this software.
             role="img"
             aria-label="Locked tweet"
         >
-          <i class="fas fa-lock text-3xl" aria-hidden="true"></i>
+          <i class="fas fa-pepper-hot text-3xl" aria-hidden="true"></i>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-2">
           <button
