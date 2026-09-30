@@ -166,7 +166,7 @@ resulting from the use or misuse of this software.
                 role="img"
                 aria-label="Locked tweet"
             >
-              <i class="fas fa-lock text-3xl" aria-hidden="true"></i>
+              <i class="fas fa-pepper-hot text-3xl" aria-hidden="true"></i>
             </div>
           </div>
           <div class="flex items-center justify-between border-t border-lighter pt-2">
@@ -230,7 +230,7 @@ resulting from the use or misuse of this software.
                   :aria-pressed="!!sponsored"
                   :title="poll ? 'Remove the poll to make it sponsored' : (sponsored ? 'Make it free' : 'Make it sponsored')"
               >
-                <i class="fas fa-lock" aria-hidden="true"></i>
+                <i class="fas fa-pepper-hot" aria-hidden="true"></i>
               </button>
               <div class="relative mr-3" data-emoji-anchor>
                 <button
