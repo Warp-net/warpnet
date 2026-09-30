@@ -34,6 +34,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -58,6 +59,7 @@ const (
 	ErrReleaseUnsigned  warpnet.WarpError = "release carries no signature"
 	ErrMalformedKey     warpnet.WarpError = "malformed release signing key"
 	ErrNoReleaseSource  warpnet.WarpError = "no forge to read releases from"
+	ErrReadOnlyInstall  warpnet.WarpError = "the binary cannot be replaced where it is installed"
 )
 
 var releaseSigningKey = "f8f26d9f337e0bffe8d5455d51695092130fad3d104d97c1facf3bacb420bd49"
@@ -228,6 +230,10 @@ func (u *SelfUpdater) Run(shutdownF func()) {
 	}
 	if u.binary == nil {
 		log.Errorln("selfupdate: no binary to replace, service disabled")
+		return
+	}
+	if err := u.verifyInstallPath(); err != nil {
+		log.Warnf("selfupdate: %v, service disabled", err)
 		return
 	}
 	key, err := releaseKey()
@@ -430,6 +436,20 @@ func (u *SelfUpdater) verifyListing(rel Release, listing []byte) error {
 	if err := security.VerifySignature(key, listing, strings.TrimSpace(string(signature))); err != nil {
 		return fmt.Errorf("selfupdate: %s: %w", u.artifact.ChecksumName, err)
 	}
+	return nil
+}
+
+// verifyInstallPath writes next to the running binary the way staging and both
+// of Install's renames do, so a release is never offered where it cannot land.
+func (u *SelfUpdater) verifyInstallPath() error {
+	dir := filepath.Dir(u.binary.StagePath(u.artifact.AssetName))
+
+	probe, err := os.CreateTemp(dir, ".update-probe-*")
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrReadOnlyInstall, err)
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
 	return nil
 }
 

@@ -65,6 +65,44 @@ func TestRunIsDisabledWithoutPrerequisites(t *testing.T) {
 		u.Run(nil)
 		u.Close()
 	})
+
+	t.Run("binary installed where it cannot be replaced", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root writes into a read-only directory anyway")
+		}
+		u := &SelfUpdater{
+			ctx: context.Background(), current: semver.MustParse("1.0.0"),
+			artifact: supported, stopChan: make(chan struct{}),
+			binary: &executable{path: filepath.Join(readOnlyDir(t), "warpnet")},
+		}
+		u.Run(nil)
+		u.Close()
+	})
+}
+
+// readOnlyDir returns a directory nothing may be written into, the way a
+// desktop app installed under /usr/bin sees its own.
+func readOnlyDir(t *testing.T) string {
+	t.Helper()
+
+	dir := filepath.Join(t.TempDir(), "bin")
+	require.NoError(t, os.Mkdir(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	return dir
+}
+
+func TestVerifyInstallPath(t *testing.T) {
+	u := &SelfUpdater{
+		artifact: Artifact{AssetName: "warpnet_linux_amd64.tar.gz"},
+		binary:   &executable{path: filepath.Join(t.TempDir(), "warpnet")},
+	}
+	require.NoError(t, u.verifyInstallPath())
+
+	if os.Geteuid() == 0 {
+		t.Skip("root writes into a read-only directory anyway")
+	}
+	u.binary = &executable{path: filepath.Join(readOnlyDir(t), "warpnet")}
+	require.ErrorIs(t, u.verifyInstallPath(), ErrReadOnlyInstall)
 }
 
 func TestRunTicksAndStops(t *testing.T) {
