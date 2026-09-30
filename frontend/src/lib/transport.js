@@ -76,6 +76,16 @@ export function EventsOn(eventName, callback) {
   return () => {};
 }
 
+// OpenURL hands a link to the system browser. Under Wails a plain href would
+// navigate the app's own webview away from the dashboard.
+export function OpenURL(url) {
+  if (hasWailsRuntime()) {
+    WailsRuntime.BrowserOpenURL(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+
 export function EventsOff(eventName, ...additional) {
   if (hasWailsRuntime()) {
     WailsRuntime.EventsOff(eventName, ...additional);

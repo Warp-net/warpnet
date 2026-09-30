@@ -89,6 +89,8 @@ type AssetFetcher interface {
 
 // BinaryReplacer owns the binary of the running process.
 type BinaryReplacer interface {
+	// Path returns where the running binary lives.
+	Path() string
 	// StagePath returns a scratch path on the filesystem holding the binary.
 	StagePath(name string) string
 	// Install puts the binary at path in place of the running one and returns a
@@ -174,9 +176,11 @@ type SelfUpdater struct {
 	interval           time.Duration
 	stopChan           chan struct{}
 	isApprovalRequired bool
+	isInstallable      bool
 	mx                 sync.RWMutex
 	answers            chan bool
 	pending            string
+	pendingURL         string
 	declined           string
 }
 
@@ -211,6 +215,12 @@ func NewSelfUpdater(
 	u.binary = binary
 	u.failures = newFailureMarker(binary.Path())
 
+	if err := u.verifyInstallPath(); err != nil {
+		log.Warnf("selfupdate: %v", err)
+	} else {
+		u.isInstallable = true
+	}
+
 	return u
 }
 
@@ -232,10 +242,6 @@ func (u *SelfUpdater) Run(shutdownF func()) {
 		log.Errorln("selfupdate: no binary to replace, service disabled")
 		return
 	}
-	if err := u.verifyInstallPath(); err != nil {
-		log.Warnf("selfupdate: %v, service disabled", err)
-		return
-	}
 	key, err := releaseKey()
 	if err != nil {
 		log.Errorf("selfupdate: %v, service disabled", err)
@@ -245,7 +251,14 @@ func (u *SelfUpdater) Run(shutdownF func()) {
 		log.Warnln("selfupdate: releases are not signed, the release host is trusted as it is")
 	}
 
-	log.Infof("selfupdate: service started, current version %s", u.current)
+	if u.isInstallable {
+		log.Infof("selfupdate: service started, current version %s", u.current)
+	} else {
+		log.Warnf(
+			"selfupdate: %s cannot be replaced, a new release will only be reported",
+			u.binary.Path(),
+		)
+	}
 
 	go func() {
 		timer := time.NewTimer(initialDelay)
@@ -304,7 +317,11 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		log.Warnf("selfupdate: version %s failed to start before, skipping", rel.Version)
 		return nil
 	}
-	if !u.isAllowed(rel.Version) {
+	if !u.isInstallable {
+		u.announce(rel)
+		return nil
+	}
+	if !u.isAllowed(rel) {
 		return nil
 	}
 	if u.current.Major() != rel.Version.Major() {
@@ -332,18 +349,38 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 	return nil
 }
 
-func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion string) {
+func (u *SelfUpdater) GetPendingUpdate() (currentVersion, newVersion, releaseURL string) {
 	u.mx.RLock()
 	defer u.mx.RUnlock()
 	if u.pending == "" {
-		return "", ""
+		return "", "", ""
 	}
-	return u.current.String(), u.pending
+	return u.current.String(), u.pending, u.pendingURL
+}
+
+// IsInstallable reports whether this copy can replace its own binary. One that
+// cannot - a build owned by the system package manager - still reports a
+// release, so its owner learns of it and installs it the way it was installed.
+func (u *SelfUpdater) IsInstallable() bool {
+	return u.isInstallable
+}
+
+// announce publishes a release the node cannot install itself, once per
+// version: nobody is going to answer for it.
+func (u *SelfUpdater) announce(rel Release) {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+	if u.pending == rel.Version.String() {
+		return
+	}
+	u.pending = rel.Version.String()
+	u.pendingURL = rel.URL
+	log.Warnf("selfupdate: version %s is out and has to be installed by hand", rel.Version)
 }
 
 func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
 	u.mx.RLock()
-	isAsked := u.pending != ""
+	isAsked := u.isInstallable && u.pending != ""
 	u.mx.RUnlock()
 
 	if !isAsked {
@@ -357,16 +394,16 @@ func (u *SelfUpdater) AnswerUpdate(isAllowed bool) error {
 	}
 }
 
-func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
+func (u *SelfUpdater) isAllowed(rel Release) bool {
 	if !u.isApprovalRequired {
 		return true
 	}
-	if !u.startAsking(next) {
-		log.Debugf("selfupdate: version %s is declined, skipping", next)
+	if !u.startAsking(rel) {
+		log.Debugf("selfupdate: version %s is declined, skipping", rel.Version)
 		return false
 	}
 
-	log.Infof("selfupdate: waiting for permission to update %s -> %s", u.current, next)
+	log.Infof("selfupdate: waiting for permission to update %s -> %s", u.current, rel.Version)
 
 	var isAllowed bool
 	select {
@@ -376,22 +413,23 @@ func (u *SelfUpdater) isAllowed(next *semver.Version) bool {
 
 	u.stopAsking(isAllowed)
 	if !isAllowed {
-		log.Infof("selfupdate: version %s is not allowed", next)
+		log.Infof("selfupdate: version %s is not allowed", rel.Version)
 	}
 	return isAllowed
 }
 
-func (u *SelfUpdater) startAsking(next *semver.Version) bool {
+func (u *SelfUpdater) startAsking(rel Release) bool {
 	u.mx.Lock()
 	defer u.mx.Unlock()
-	if u.declined == next.String() {
+	if u.declined == rel.Version.String() {
 		return false
 	}
 	select {
 	case <-u.answers:
 	default:
 	}
-	u.pending = next.String()
+	u.pending = rel.Version.String()
+	u.pendingURL = rel.URL
 	return true
 }
 
@@ -402,6 +440,7 @@ func (u *SelfUpdater) stopAsking(isAllowed bool) {
 		u.declined = u.pending
 	}
 	u.pending = ""
+	u.pendingURL = ""
 }
 
 // install puts the released binary in place of the running one and returns a

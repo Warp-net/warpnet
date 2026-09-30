@@ -68,7 +68,8 @@ type NodeServer interface {
 
 type NodeUpdater interface {
 	Run(shutdownF func())
-	GetPendingUpdate() (currentVersion, newVersion string)
+	GetPendingUpdate() (currentVersion, newVersion, releaseURL string)
+	IsInstallable() bool
 	AnswerUpdate(isAllowed bool) error
 	Close()
 }
@@ -377,7 +378,8 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 	case event.PRIVATE_GET_UPDATE:
 		var pending event.UpdateResponse
 		if a.updater != nil {
-			pending.CurrentVersion, pending.NewVersion = a.updater.GetPendingUpdate()
+			pending.CurrentVersion, pending.NewVersion, pending.ReleaseURL = a.updater.GetPendingUpdate()
+			pending.IsInstallable = a.updater.IsInstallable()
 		}
 		bt, err := json.Marshal(pending)
 		if err != nil {

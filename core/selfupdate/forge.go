@@ -57,6 +57,7 @@ const (
 // Release is a published release with the assets attached to it.
 type Release struct {
 	Version *semver.Version
+	URL     string            // page a human downloads it from
 	assets  map[string]string // asset name -> download URL
 }
 
@@ -132,6 +133,7 @@ func (g *forgeReleases) Latest() (Release, error) {
 
 	var payload struct {
 		TagName string `json:"tag_name"`
+		HTMLURL string `json:"html_url"`
 		Assets  []struct {
 			Name string `json:"name"`
 			URL  string `json:"browser_download_url"`
@@ -153,7 +155,7 @@ func (g *forgeReleases) Latest() (Release, error) {
 	for _, a := range payload.Assets {
 		assets[a.Name] = a.URL
 	}
-	return Release{Version: version, assets: assets}, nil
+	return Release{Version: version, URL: payload.HTMLURL, assets: assets}, nil
 }
 
 func (g *assetClient) Read(url string) ([]byte, error) {

@@ -137,10 +137,10 @@ func releaseServer(t *testing.T, tag string, archive, sums, signature []byte) *h
 				`,{"name":%q,"browser_download_url":%q}`, testSignature, srv.URL+"/"+testSignature,
 			)
 		}
-		_, _ = fmt.Fprintf(w, `{"tag_name":%q,"assets":[
+		_, _ = fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://example.test/releases/%s","assets":[
 			{"name":%q,"browser_download_url":%q},
 			{"name":%q,"browser_download_url":%q}%s
-		]}`, tag, testAsset, srv.URL+"/"+testAsset, testChecksum, srv.URL+"/"+testChecksum, signatureAsset)
+		]}`, tag, tag, testAsset, srv.URL+"/"+testAsset, testChecksum, srv.URL+"/"+testChecksum, signatureAsset)
 	})
 	mux.HandleFunc("/"+testSignature, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(signature)
@@ -319,7 +319,7 @@ func TestSelfUpdaterAsksBeforeInstalling(t *testing.T) {
 
 	assert.Equal(t, "new binary", read(t, binary.path))
 	assert.True(t, binary.restarted)
-	_, next = u.GetPendingUpdate()
+	_, next, _ = u.GetPendingUpdate()
 	assert.Empty(t, next, "an answered release must stop waiting")
 }
 
@@ -340,9 +340,35 @@ func TestSelfUpdaterKeepsBinaryWhenDeclined(t *testing.T) {
 	assert.NoFileExists(t, binary.path+oldSuffix)
 
 	require.NoError(t, u.checkAndUpdate(nil))
-	_, next := u.GetPendingUpdate()
+	_, next, _ := u.GetPendingUpdate()
 	assert.Empty(t, next, "the same release was offered twice")
 	assert.Equal(t, "current binary", read(t, binary.path))
+}
+
+func TestSelfUpdaterOnlyReportsWhatItCannotInstall(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	u, binary := updaterFixture(t, "v0.7.548", archive, sumsFor(archive))
+	u.isApprovalRequired = true
+	u.isInstallable = false
+
+	require.NoError(t, u.checkAndUpdate(nil))
+
+	assert.Equal(t, "current binary", read(t, binary.path))
+	assert.False(t, binary.restarted)
+	assert.NoFileExists(t, binary.StagePath(testAsset), "nothing is downloaded that cannot be installed")
+
+	current, next, url := u.GetPendingUpdate()
+	assert.Equal(t, testVersion, current)
+	assert.Equal(t, "0.7.548", next, "the release has to reach the owner some other way")
+	assert.Equal(t, "https://example.test/releases/v0.7.548", url)
+	assert.False(t, u.IsInstallable())
+
+	require.ErrorIs(t, u.AnswerUpdate(true), ErrNoPendingUpdate, "nobody is waiting for an answer")
+
+	// the report stands until a newer release replaces it, and says so once
+	require.NoError(t, u.checkAndUpdate(nil))
+	_, next, _ = u.GetPendingUpdate()
+	assert.Equal(t, "0.7.548", next)
 }
 
 func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
@@ -350,12 +376,12 @@ func TestSelfUpdaterAsksAgainAboutANewerRelease(t *testing.T) {
 	u.isApprovalRequired = true
 
 	answers := make(chan bool, 1)
-	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	go func() { answers <- u.isAllowed(Release{Version: semver.MustParse("0.7.548")}) }()
 	waitPendingUpdate(t, u)
 	require.NoError(t, u.AnswerUpdate(false))
 	require.False(t, <-answers)
 
-	go func() { answers <- u.isAllowed(semver.MustParse("0.7.549")) }()
+	go func() { answers <- u.isAllowed(Release{Version: semver.MustParse("0.7.549")}) }()
 	waitPendingUpdate(t, u)
 	require.NoError(t, u.AnswerUpdate(true))
 	assert.True(t, <-answers)
@@ -368,7 +394,7 @@ func TestSelfUpdaterRefusesWhenShuttingDown(t *testing.T) {
 	u.isApprovalRequired = true
 
 	answers := make(chan bool, 1)
-	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	go func() { answers <- u.isAllowed(Release{Version: semver.MustParse("0.7.548")}) }()
 
 	waitPendingUpdate(t, u)
 	cancel()
@@ -388,8 +414,8 @@ func TestSelfUpdaterAcceptsAnAnswerBeforeTheCheckWaits(t *testing.T) {
 	u, _ := updaterFixture(t, "v0.7.548", nil, nil)
 	u.isApprovalRequired = true
 
-	require.True(t, u.startAsking(semver.MustParse("0.7.548")))
-	_, newVersion := u.GetPendingUpdate()
+	require.True(t, u.startAsking(Release{Version: semver.MustParse("0.7.548")}))
+	_, newVersion, _ := u.GetPendingUpdate()
 	require.Equal(t, "0.7.548", newVersion)
 
 	require.NoError(t, u.AnswerUpdate(true))
@@ -408,7 +434,7 @@ func TestSelfUpdaterDropsUnexpectedAnswer(t *testing.T) {
 	require.ErrorIs(t, u.AnswerUpdate(true), ErrNoPendingUpdate)
 
 	answers := make(chan bool, 1)
-	go func() { answers <- u.isAllowed(semver.MustParse("0.7.548")) }()
+	go func() { answers <- u.isAllowed(Release{Version: semver.MustParse("0.7.548")}) }()
 
 	waitPendingUpdate(t, u)
 	select {
@@ -430,7 +456,7 @@ func waitPendingUpdate(t *testing.T, u *SelfUpdater) (currentVersion, newVersion
 	t.Helper()
 	deadline := time.Now().Add(approverWait)
 	for time.Now().Before(deadline) {
-		if currentVersion, newVersion = u.GetPendingUpdate(); newVersion != "" {
+		if currentVersion, newVersion, _ = u.GetPendingUpdate(); newVersion != "" {
 			return currentVersion, newVersion
 		}
 		time.Sleep(time.Millisecond)
