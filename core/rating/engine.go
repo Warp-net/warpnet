@@ -589,9 +589,10 @@ func (e *Engine) isOldEnough(observer string) bool {
 	return e.now().Sub(oldest) >= minAcquaintance
 }
 
-// ratePeers records the peers whose rating has moved. Evidence decays, so a
-// peer recovers with time and no event to report it: this pass is where
-// that is noticed.
+// ratePeers records how every indexed peer is rated now, on every pass,
+// so a rating that holds does not lapse from what the modules read.
+// Evidence decays, so a peer recovers with time and no event to report it:
+// this pass is where that is noticed.
 func (e *Engine) ratePeers() error {
 	if e.ratings == nil {
 		return nil
@@ -613,8 +614,8 @@ func (e *Engine) ratePeers() error {
 		}
 		score := e.Score(peerID)
 		tier := score.Tier()
+		e.ratings.Rate(peerID, tier)
 		if p.tierMoved(tier) {
-			e.ratings.Rate(peerID, tier)
 			log.Infof("rating: peer %s is %s now, score %d of %d", peerID, tier, score, MaxScore)
 		}
 	}

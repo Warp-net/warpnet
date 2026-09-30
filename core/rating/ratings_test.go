@@ -4,10 +4,13 @@
 package rating
 
 import (
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +88,7 @@ func (r *recordingRatings) recorded() []ratedPeer {
 	return append([]ratedPeer(nil), r.rated...)
 }
 
-func TestARatingIsRecordedWhenItMovesAndNotBefore(t *testing.T) {
+func TestARatingIsRecordedOnEveryPass(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
 	clock := newClock()
@@ -105,16 +108,55 @@ func TestARatingIsRecordedWhenItMovesAndNotBefore(t *testing.T) {
 	assert.True(t, recorded[0].tier.IsAllowedInDHT())
 
 	require.NoError(t, e.ratePeers())
-	assert.Len(t, ratings.recorded(), 1, "limits that hold are recorded on once")
+	recorded = ratings.recorded()
+	require.Len(t, recorded, 2, "limits that hold are recorded again, so they never lapse")
+	assert.Equal(t, TierWatched, recorded[1].tier)
 
 	recordN(t, e, other.id, KindBadSignature, 2) // 500 -> 0: the floor
 	flushNow(t, e)
 	require.NoError(t, e.ratePeers())
 
 	recorded = ratings.recorded()
-	require.Len(t, recorded, 2, "limits that move are recorded on again")
-	assert.Equal(t, TierFloor.RateMultiplier(), recorded[1].tier.RateMultiplier())
-	assert.False(t, recorded[1].tier.IsAllowedInDHT(), "only the floor leaves the routing table")
+	require.Len(t, recorded, 3, "limits that move are recorded as they move")
+	assert.Equal(t, TierFloor.RateMultiplier(), recorded[2].tier.RateMultiplier())
+	assert.False(t, recorded[2].tier.IsAllowedInDHT(), "only the floor leaves the routing table")
+}
+
+// A rating that holds is still a rating: the entry the modules read must
+// not lapse into trusted while the engine goes on scoring the peer low.
+func TestARatingThatHoldsDoesNotLapse(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	clock := newClock()
+
+	const ttl = 100 * time.Millisecond
+	ratings := &PeersRatings{tiers: lru.NewLRU[string, Tier](peersRatingsCacheSize, nil, ttl)}
+	e := newRatingEngine(t, self, newFakeStore(self.id), clock, ratings)
+
+	recordN(t, e, peer.id, KindBadSignature, 20)
+	flushNow(t, e)
+	require.NoError(t, e.ratePeers())
+	require.Equal(t, TierFloor, ratings.Tier(peer.id))
+
+	time.Sleep(2 * ttl)
+	require.NoError(t, e.ratePeers())
+
+	assert.Equal(t, TierFloor, ratings.Tier(peer.id), "the pass records the floor again before it can lapse")
+}
+
+// The modules read a bounded cache. A floored peer must not fall out of it
+// because many ordinary peers were rated after it.
+func TestAFlooredPeerIsNotEvictedByTrustedOnes(t *testing.T) {
+	r := NewPeersRatings()
+	floored := newIdentity(t).id
+	r.Rate(floored, TierFloor)
+
+	for i := range peersRatingsCacheSize {
+		r.Rate(warpnet.WarpPeerID(fmt.Sprintf("trusted-%d", i)), TierTrusted)
+	}
+
+	assert.Equal(t, TierFloor, r.Tier(floored))
+	assert.Equal(t, 1, r.tiers.Len(), "a trusted peer reads as trusted without an entry")
 }
 
 func TestAPeerNobodyHasObservedIsNeverRecorded(t *testing.T) {

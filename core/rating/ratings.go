@@ -56,9 +56,14 @@ func NewPeersRatings() *PeersRatings {
 	}
 }
 
-// Rate records how the engine now rates a peer.
+// Rate records how the engine now rates a peer. A trusted peer is what a
+// peer the engine has said nothing about reads as, so it holds no entry.
 func (r *PeersRatings) Rate(peerID warpnet.WarpPeerID, tier Tier) {
 	if r == nil || r.tiers == nil || peerID == "" {
+		return
+	}
+	if tier == TierTrusted {
+		r.tiers.Remove(peerID.String())
 		return
 	}
 	r.tiers.Add(peerID.String(), tier)
