@@ -31,6 +31,7 @@ package rating
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
@@ -40,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
@@ -57,6 +59,8 @@ const (
 	// minAcquaintance is how long this node must have been connected to an
 	// observer before its records count. A drive-by accuser has no voice.
 	minAcquaintance = time.Hour
+
+	maxVerifiedRecords = 1 << 16
 )
 
 // Some behaviour is an offence only in numbers: one reconnection is
@@ -96,6 +100,7 @@ type Rater interface {
 type Storer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
+	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
 	OnPut(hook func(domain.RatingRecord))
 	OnDelete(hook func(domain.RatingRecord))
@@ -156,9 +161,10 @@ type Engine struct {
 	now           func() time.Time
 	flushInterval time.Duration
 
-	store Storer
-	conns ConnectionsProvider
-	index *indexer
+	store    Storer
+	conns    ConnectionsProvider
+	index    *indexer
+	verified *lru.Cache[[sha256.Size]byte, struct{}]
 
 	flaps       *window
 	discoveries *window
@@ -168,9 +174,10 @@ type Engine struct {
 
 	ratings Rater
 
-	mu       sync.Mutex
-	counters map[pendingKey]counts
-	dirty    map[pendingKey]struct{}
+	mu        sync.Mutex
+	counters  map[pendingKey]counts
+	dirty     map[pendingKey]struct{}
+	unindexed map[string]struct{}
 
 	loadMu sync.Mutex
 
@@ -209,6 +216,10 @@ func NewEngine(
 	if err != nil {
 		return nil, fmt.Errorf("rating: index: %w", err)
 	}
+	verified, err := lru.New[[sha256.Size]byte, struct{}](maxVerifiedRecords)
+	if err != nil {
+		return nil, fmt.Errorf("rating: verified records: %w", err)
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	e := &Engine{
@@ -223,8 +234,10 @@ func NewEngine(
 		store:         store,
 		conns:         conns,
 		index:         index,
+		verified:      verified,
 		counters:      make(map[pendingKey]counts, windowPeers),
 		dirty:         make(map[pendingKey]struct{}, windowPeers),
+		unindexed:     make(map[string]struct{}),
 		done:          make(chan struct{}),
 		flaps:         newWindow(flapWindow, flapThreshold),
 		discoveries:   newWindow(discoveryWindow, discoveryThreshold),
@@ -236,6 +249,12 @@ func NewEngine(
 
 	store.OnPut(e.onPut)
 	store.OnDelete(e.onDelete)
+
+	peerIDs, err := store.PeerIDs()
+	if err != nil {
+		log.Warnf("rating: listing the peers on record: %v", err)
+	}
+	e.indexLater(peerIDs...)
 
 	log.Infof(
 		"rating: engine started: witnessing %v, rating peers every %s",
@@ -288,18 +307,18 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 
 	switch ev.Type {
 	case warpnet.PeerConnected:
-		if e.flaps.reached(ev.PeerID) {
+		if e.flaps.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindConnectionFlap)
 		}
 	case warpnet.PeerDiscovered:
-		if e.discoveries.reached(ev.PeerID) {
+		if e.discoveries.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindDiscoveryFlood)
 		}
 	case warpnet.PeerRateLimited:
 		if err := e.record(peerID, KindRateLimitHit); err != nil {
 			return err
 		}
-		if !stream.WarpRoute(ev.Route).IsGet() && e.writes.reached(ev.PeerID) {
+		if !stream.WarpRoute(ev.Route).IsGet() && e.writes.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindWriteFlood)
 		}
 	default:
@@ -344,7 +363,8 @@ func (e *Engine) Score(peerID warpnet.WarpPeerID) Score {
 }
 
 // View is the public aggregate of a peer, for display: the unweighted
-// median over observers per dimension, with raw recent counts.
+// median per dimension over the observers this node hears, with their raw
+// recent counts.
 func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 	id := peerID.String()
 	result := domain.NodeRating{
@@ -362,6 +382,15 @@ func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 		return result, err
 	}
 	es, _ := p.entries()
+	heard := make(map[string]bool)
+	es = slices.DeleteFunc(es, func(en entry) bool {
+		voiced, ok := heard[en.observer]
+		if !ok {
+			voiced = e.isHeard(en.observer)
+			heard[en.observer] = voiced
+		}
+		return !voiced
+	})
 	now := e.now()
 	overall := MaxScore
 	observers := make(map[string]struct{}, len(es))
@@ -477,11 +506,17 @@ func (e *Engine) peer(id string) (*indexedPeer, error) {
 }
 
 // authenticate checks one replicated record: its signature against the
-// observer's peer id, then the structural rules.
+// observer's peer id, then the structural rules. A signature is checked
+// once: reloading a peer's history hashes a record it already verified
+// instead of verifying it again.
 func (e *Engine) authenticate(rec domain.RatingRecord) (entry, error) {
 	r := record(rec)
-	if err := r.verify(); err != nil {
-		return entry{}, err
+	digest := r.digest()
+	if !e.verified.Contains(digest) {
+		if err := r.verify(); err != nil {
+			return entry{}, err
+		}
+		e.verified.Add(digest, struct{}{})
 	}
 	if err := r.validate(e.now()); err != nil {
 		return entry{}, err
@@ -491,11 +526,12 @@ func (e *Engine) authenticate(rec domain.RatingRecord) (entry, error) {
 
 // isForgery reports a record that verifies but breaks the structural
 // rules: its observer really authored it. An unverifiable record names
-// an observer that may be innocent, and a record outside the time window
-// is merely late, so neither is anyone's fault.
+// an observer that may be innocent, a record outside the time window is
+// merely late, and a dimension or kinds this build does not know may be a
+// newer build's, so none of those is anyone's fault.
 func isForgery(err error) bool {
 	for _, structural := range []error{
-		ErrRecordSelfRated, ErrRecordBadPeerID, ErrRecordBadDimension,
+		ErrRecordSelfRated, ErrRecordBadPeerID,
 		ErrRecordBadGeneration, ErrRecordEmptyOffences, ErrRecordBadKind,
 	} {
 		if errors.Is(err, structural) {
@@ -520,11 +556,35 @@ func (e *Engine) onPut(rec domain.RatingRecord) {
 		log.Debugf("rating: dropping merged record about %s: %v", rec.PeerID, err)
 		return
 	}
+	if !e.index.has(rec.PeerID) {
+		e.indexLater(rec.PeerID)
+		return
+	}
 	e.index.update(rec.PeerID, en)
 }
 
 func (e *Engine) onDelete(rec domain.RatingRecord) {
-	e.index.forget(rec.PeerID)
+	dim, ok := ParseDimension(rec.Dimension)
+	if !ok {
+		return
+	}
+	e.index.remove(rec.PeerID, slot{
+		observer: rec.ObserverID, dim: dim, bucket: bucket(rec.Bucket), generation: rec.Generation,
+	})
+}
+
+// indexLater has the next rating pass read these peers whole: a merged
+// record alone would shadow a peer's history, and the hook it arrives in
+// runs before the store has committed it.
+func (e *Engine) indexLater(peerIDs ...string) {
+	if e.ratings == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, peerID := range peerIDs {
+		e.unindexed[peerID] = struct{}{}
+	}
 }
 
 // score is this node's own view of one dimension: first-hand evidence at
@@ -571,6 +631,13 @@ func (e *Engine) ownScore(es entries, dim Dimension, now time.Time) Score {
 	return (MaxScore - es.byObserver(dim)[e.self].penalty(dim, now)).clamp()
 }
 
+// isHeard reports an observer this node gives a voice, in the view as in
+// the score: itself, and one it has known long enough, so a key minted a
+// moment ago cannot write a peer's public standing.
+func (e *Engine) isHeard(observer string) bool {
+	return observer == e.self || e.isOldEnough(observer)
+}
+
 func (e *Engine) isOldEnough(observer string) bool {
 	id := warpnet.FromStringToPeerID(observer)
 	if id == "" {
@@ -588,15 +655,28 @@ func (e *Engine) isOldEnough(observer string) bool {
 	return e.now().Sub(oldest) >= minAcquaintance
 }
 
-// ratePeers records the peers whose rating has moved. Evidence decays, so a
-// peer recovers with time and no event to report it: this pass is where
-// that is noticed.
+// ratePeers records how every peer on record is rated now, on every pass,
+// so a rating that holds does not lapse from what the modules read.
+// Evidence decays, so a peer recovers with time and no event to report it,
+// and neither is there one for a peer known only from a merged record or
+// from before a restart: this pass is where all of that is noticed.
 func (e *Engine) ratePeers() error {
 	if e.ratings == nil {
 		return nil
 	}
 
+	e.mu.Lock()
+	unindexed := e.unindexed
+	e.unindexed = make(map[string]struct{})
+	e.mu.Unlock()
+
 	var errs []error
+	for peerID := range unindexed {
+		e.index.forget(peerID)
+		if _, err := e.peer(peerID); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	for _, p := range e.index.rated() {
 		if p.peerID == e.self {
 			continue // what others wrote about this node is not ours to act on
@@ -606,14 +686,13 @@ func (e *Engine) ratePeers() error {
 			errs = append(errs, fmt.Errorf("%w: %s", ErrEmptyPeer, p.peerID))
 			continue
 		}
-		entries, _ := p.entries()
-		if len(entries) == 0 {
+		if p.isEmpty() {
 			continue // nothing has ever been said about this peer
 		}
 		score := e.Score(peerID)
 		tier := score.Tier()
+		e.ratings.Rate(peerID, tier)
 		if p.tierMoved(tier) {
-			e.ratings.Rate(peerID, tier)
 			log.Infof("rating: peer %s is %s now, score %d of %d", peerID, tier, score, MaxScore)
 		}
 	}
@@ -713,14 +792,15 @@ func (e *Engine) clearIfUnchanged(key pendingKey, written []domain.OffenceCount)
 	}
 }
 
-// dropSettledBuckets frees the counters of past hours: Record only ever
-// writes the current bucket, so a flushed past bucket never changes again.
+// dropSettledBuckets frees the counters of hours before the last one: a
+// charge that read the clock as the hour turned still lands in the hour
+// just past, and must add to its total rather than start it over.
 func (e *Engine) dropSettledBuckets() {
 	current := bucketAt(e.now())
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for key := range e.counters {
-		if key.bucket >= current {
+		if key.bucket >= current-1 {
 			continue
 		}
 		if _, dirty := e.dirty[key]; dirty {
@@ -742,26 +822,37 @@ func (e *Engine) gc() {
 	}
 }
 
-// window counts one observation per peer inside a sliding window.
+// window counts one observation per peer inside a span that opens with
+// the peer's first observation and closes a span later.
 type window struct {
 	mu        sync.Mutex
-	counts    *expirable.LRU[string, int]
+	counts    *expirable.LRU[string, windowCount]
+	span      time.Duration
 	threshold int
 }
 
-func newWindow(timeWindow time.Duration, threshold int) *window {
+type windowCount struct {
+	opened time.Time
+	count  int
+}
+
+func newWindow(span time.Duration, threshold int) *window {
 	return &window{
-		counts:    expirable.NewLRU[string, int](windowPeers, nil, timeWindow),
+		counts:    expirable.NewLRU[string, windowCount](windowPeers, nil, span),
+		span:      span,
 		threshold: threshold,
 	}
 }
 
-// reached reports the count hitting the threshold, once per window.
-func (b *window) reached(peerID string) bool {
+// reached reports the count hitting the threshold, once per span.
+func (b *window) reached(peerID string, now time.Time) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	count, _ := b.counts.Get(peerID)
-	count++
-	b.counts.Add(peerID, count)
-	return count == b.threshold
+	c, ok := b.counts.Get(peerID)
+	if !ok || now.Sub(c.opened) >= b.span {
+		c = windowCount{opened: now}
+	}
+	c.count++
+	b.counts.Add(peerID, c)
+	return c.count == b.threshold
 }

@@ -301,3 +301,20 @@ func TestStore_CloseIsSafeOnNil(t *testing.T) {
 	store, _ := newLiveStore(t)
 	assert.NoError(t, store.Close())
 }
+
+func TestStore_PeerIDsListsEveryPeerOnRecordOnce(t *testing.T) {
+	store, _ := newLiveStore(t)
+
+	for _, rec := range []domain.RatingRecord{
+		ratingRecord(store.nodeID, "peer-a", "net", 10),
+		ratingRecord(store.nodeID, "peer-a", "app", 10),
+		ratingRecord(store.nodeID, "peer-b", "net", 11),
+	} {
+		require.NoError(t, store.Put(rec))
+	}
+	putReplicated(t, store, ratingRecord("observer-c", "peer-c", "net", 10))
+
+	got, err := store.PeerIDs()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"peer-a", "peer-b", "peer-c"}, got, "own and foreign records alike, each peer once")
+}

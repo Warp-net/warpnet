@@ -1088,6 +1088,9 @@ func (m *MemberNode) Stop() {
 	if m.mdnsService != nil {
 		m.mdnsService.Close()
 	}
+	if m.rating != nil {
+		_ = m.rating.Close()
+	}
 	if m.pubsubService != nil {
 		if err := m.pubsubService.Close(); err != nil {
 			log.Errorf("member: failed to close pubsub: %v", err)
@@ -1095,9 +1098,6 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
-	}
-	if m.rating != nil {
-		_ = m.rating.Close()
 	}
 	if m.ratingDb != nil {
 		_ = m.ratingDb.Close()

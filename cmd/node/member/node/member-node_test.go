@@ -33,6 +33,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -578,4 +579,49 @@ func TestADeletedTweetLeavesTheFollowersTimeline(t *testing.T) {
 	require.Empty(t, left, "the tweet must leave the follower's timeline")
 	_, err = database.NewTweetRepo(followerDb, nil).Get("author-1", tweet.Id)
 	require.ErrorIs(t, err, database.ErrTweetNotFound, "the follower must not keep the tweet")
+}
+
+// closeOrder is the order Stop closes the services a node holds in.
+type closeOrder struct {
+	mu     sync.Mutex
+	closed []string
+}
+
+func (o *closeOrder) add(name string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.closed = append(o.closed, name)
+}
+
+type closingPubSub struct {
+	PubSubProvider
+
+	order *closeOrder
+}
+
+func (p closingPubSub) Close() error {
+	p.order.add("pubsub")
+	return nil
+}
+
+type closingRater struct {
+	PeerRater
+
+	order *closeOrder
+}
+
+func (r closingRater) Close() error {
+	r.order.add("rating")
+	return nil
+}
+
+// The rating's final flush writes what it still holds into a store that
+// broadcasts through the gossip, so the gossip has to outlive it.
+func TestStopClosesTheRatingBeforeTheGossip(t *testing.T) {
+	order := &closeOrder{}
+	m := &MemberNode{pubsubService: closingPubSub{order: order}, rating: closingRater{order: order}}
+
+	m.Stop()
+
+	require.Equal(t, []string{"rating", "pubsub"}, order.closed)
 }

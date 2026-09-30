@@ -101,6 +101,7 @@ type RatingProvider interface {
 type RatingStorer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
+	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
 	OnPut(hook func(domain.RatingRecord))
 	OnDelete(hook func(domain.RatingRecord))
@@ -373,14 +374,14 @@ func (rn *RelayNode) Stop() {
 	if rn.discService != nil {
 		rn.discService.Close()
 	}
+	if rn.rating != nil {
+		_ = rn.rating.Close()
+	}
 
 	if rn.pubsubService != nil {
 		if err := rn.pubsubService.Close(); err != nil {
 			log.Errorf("relay: failed to close pubsub: %v", err)
 		}
-	}
-	if rn.rating != nil {
-		_ = rn.rating.Close()
 	}
 	if rn.ratingDb != nil {
 		_ = rn.ratingDb.Close()

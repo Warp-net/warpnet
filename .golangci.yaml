@@ -2,7 +2,7 @@ version: "2"
 
 run:
   concurrency: 4
-  modules-download-mode: readonly
+  modules-download-mode: vendor
   issues-exit-code: 1
   tests: true
 
