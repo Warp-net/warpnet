@@ -200,10 +200,10 @@ func TestOnlyAFlooredPeerIsGraylisted(t *testing.T) {
 	}
 }
 
-// Gossipsub weighs the hop a message comes from, never its author, so the
-// reader checks the author itself: a floored author is not read through
-// another follower either, while that follower's own posts are.
-func TestAFlooredAuthorIsNotReadThroughAnotherPeer(t *testing.T) {
+// The rating weighs peers, not what they post: gossipsub graylists the hop a
+// message comes from, so a floored author is still read through another
+// follower that relays for it.
+func TestAFlooredAuthorIsStillReadThroughAnotherPeer(t *testing.T) {
 	skipWithoutHosts(t)
 
 	reader, readerNode, ratings := ratedGossip(t)
@@ -219,8 +219,7 @@ func TestAFlooredAuthorIsNotReadThroughAnotherPeer(t *testing.T) {
 	require.NoError(t, relay.SubscribeRaw(timelineTopic, func([]byte) error { return nil }))
 	connect(t, relayNode, readerNode)
 	connect(t, flooredNode, relayNode)
-	requireRead(t, timeline, relay, timelineTopic, "relay", "the follower in between is read")
-	requireNotRead(t, timeline, floored, timelineTopic, "relayed", "the floored author is not read through it")
+	requireRead(t, timeline, floored, timelineTopic, "relayed", "a follower in between hands the reader its posts")
 }
 
 // pruneWatch records the peers that turned this router's GRAFT down.

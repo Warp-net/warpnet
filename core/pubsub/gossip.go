@@ -101,29 +101,6 @@ const (
 	publishThreshold  = graylistThreshold + 1
 )
 
-// validateAuthor ignores a message whose author this node would graylist,
-// whichever peer relayed it: gossipsub scores only the hop it came from.
-func (g *Gossip) validateAuthor(_ context.Context, _ warpnet.WarpPeerID, msg *pubsub.Message) pubsub.ValidationResult {
-	if g.peerScore(msg.GetFrom()) < graylistThreshold {
-		return pubsub.ValidationIgnore
-	}
-	return pubsub.ValidationAccept
-}
-
-// join joins a topic read only from authors this node does not graylist.
-// The caller holds g.mx.
-func (g *Gossip) join(topicName string) (*pubsub.Topic, error) {
-	if err := g.pubsub.RegisterTopicValidator(topicName, g.validateAuthor); err != nil {
-		return nil, err
-	}
-	topic, err := g.pubsub.Join(topicName)
-	if err != nil {
-		_ = g.pubsub.UnregisterTopicValidator(topicName)
-		return nil, err
-	}
-	return topic, nil
-}
-
 // peerScore is what gossipsub weighs a peer by. A node with no rating
 // wired up scores every peer the same.
 func (g *Gossip) peerScore(peerID warpnet.WarpPeerID) float64 {
@@ -306,7 +283,7 @@ func (g *Gossip) SubscribeRaw(topicName string, h func([]byte) error) (err error
 
 	topic, ok := g.topics[topicName]
 	if !ok {
-		topic, err = g.join(topicName)
+		topic, err = g.pubsub.Join(topicName)
 		if err != nil {
 			return err
 		}
@@ -375,9 +352,6 @@ func (g *Gossip) Unsubscribe(topics ...string) (err error) {
 		if err = topic.Close(); err != nil {
 			return err
 		}
-		if err = g.pubsub.UnregisterTopicValidator(topicName); err != nil {
-			return err
-		}
 		delete(g.topics, topicName)
 		delete(g.handlersMap, topicName)
 	}
@@ -442,7 +416,7 @@ func (g *Gossip) joinTopic(topicName string) (*pubsub.Topic, error) {
 	if topic, ok := g.topics[topicName]; ok {
 		return topic, nil
 	}
-	topic, err := g.join(topicName)
+	topic, err := g.pubsub.Join(topicName)
 	if err != nil {
 		return nil, err
 	}
