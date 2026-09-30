@@ -333,6 +333,16 @@ func TestGossip_RouterTornDownWhileWaitingForTheLock(t *testing.T) {
 	assert.ErrorIs(t, g.PublishRaw("after", []byte(`{}`)), ErrPubsubNotInit)
 }
 
+// Leaving a topic takes its author check with it, so the topic can be
+// joined again.
+func TestGossip_ATopicLeftCanBeJoinedAgain(t *testing.T) {
+	g, _ := runningGossip(t)
+
+	require.NoError(t, g.SubscribeRaw("again", func([]byte) error { return nil }))
+	require.NoError(t, g.Unsubscribe("again"))
+	assert.NoError(t, g.SubscribeRaw("again", func([]byte) error { return nil }))
+}
+
 func TestGossip_UnsubscribeReportsATopicItCannotClose(t *testing.T) {
 	g, _ := runningGossip(t)
 
