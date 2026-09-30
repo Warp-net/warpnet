@@ -323,10 +323,15 @@ var localAddrActions = map[int]string{
 }
 
 func (n *WarpNode) trackIncomingEvents() {
+	retag := time.NewTicker(ratingTagInterval)
+	defer retag.Stop()
+
 	for {
 		select {
 		case <-n.ctx.Done():
 			return
+		case <-retag.C:
+			n.tagPeers()
 		case ev, ok := <-n.eventsSub.Out():
 			if !ok {
 				return
@@ -416,9 +421,20 @@ func (n *WarpNode) trackIncomingEvents() {
 	}
 }
 
+// tagPeers sets what every connected peer is worth to the connection
+// manager, so a rating that moves while a peer stays connected is applied
+// without waiting for the peer to connect again.
+func (n *WarpNode) tagPeers() {
+	if n == nil || n.node == nil {
+		return
+	}
+	for _, peerID := range n.node.Network().Peers() {
+		n.tagPeer(peerID)
+	}
+}
+
 // tagPeer sets what a peer is worth to the connection manager. A node
-// with no ratings leaves the tag alone, and a peer keeps what it was
-// worth when it connected until it connects again.
+// with no ratings leaves the tag alone.
 func (n *WarpNode) tagPeer(peerID warpnet.WarpPeerID) {
 	if n == nil || n.ratings == nil || n.prioritizer == nil || peerID == "" {
 		return
