@@ -99,7 +99,10 @@ type distributedHashTable struct {
 
 // bootstrapDrainTimeout bounds how long Close waits for the bootstrap
 // goroutine. A wedged refresh must not hang shutdown.
-const bootstrapDrainTimeout = 5 * time.Second
+const (
+	bootstrapDrainTimeout = 5 * time.Second
+	ratingSweepInterval   = 30 * time.Second
+)
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
 	log.Debugln("dht: node removed", id)
@@ -167,6 +170,9 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	d.dht.RoutingTable().PeerAdded = defaultNodeAddedCallback
 	if d.cfg.addCallbacks != nil {
 		d.dht.RoutingTable().PeerAdded = func(id peer.ID) {
+			if !d.isPeerAllowed(id) {
+				return
+			}
 			log.Infof("dht: peer added: %s", id.String())
 			for _, addF := range d.cfg.addCallbacks {
 				if addF == nil {
@@ -195,8 +201,40 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		defer close(d.bootstrapped)
 		d.bootstrapDHT()
 	}()
+	if d.cfg.ratings != nil {
+		go d.sweepRatedPeers()
+	}
 	log.Infoln("dht: routing started")
 	return d.dht, nil
+}
+
+// sweepRatedPeers takes out of the routing table, every sweep, the peers
+// the rating no longer allows in it: the table's filter is asked only when
+// a peer is identified, and a lookup lets in every peer that answers it.
+func (d *distributedHashTable) sweepRatedPeers() {
+	ticker := time.NewTicker(ratingSweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-d.stopChan:
+			return
+		case <-ticker.C:
+			d.removeDisallowedPeers()
+		}
+	}
+}
+
+// removeDisallowedPeers removes from the routing table every peer the
+// rating does not allow in it.
+func (d *distributedHashTable) removeDisallowedPeers() {
+	table := d.dht.RoutingTable()
+	for _, id := range table.ListPeers() {
+		if !d.isPeerAllowed(id) {
+			table.RemovePeer(id)
+		}
+	}
 }
 
 func (d *distributedHashTable) bootstrapDHT() {
