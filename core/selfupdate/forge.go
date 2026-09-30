@@ -64,7 +64,7 @@ type Release struct {
 func (r Release) AssetURL(name string) (string, error) {
 	url, ok := r.assets[name]
 	if !ok {
-		return "", fmt.Errorf("selfupdate: %w: %s", ErrAssetNotFound, name)
+		return "", fmt.Errorf("%w: %s", ErrAssetNotFound, name)
 	}
 	return url, nil
 }
@@ -138,15 +138,15 @@ func (g *forgeReleases) Latest() (Release, error) {
 		} `json:"assets"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return Release{}, fmt.Errorf("selfupdate: decoding release: %w", err)
+		return Release{}, fmt.Errorf("decoding release: %w", err)
 	}
 	if strings.TrimSpace(payload.TagName) == "" {
-		return Release{}, fmt.Errorf("selfupdate: %w: %s", ErrNoReleaseTag, g.apiURL)
+		return Release{}, fmt.Errorf("%w: %s", ErrNoReleaseTag, g.apiURL)
 	}
 
 	version, err := semver.NewVersion(strings.TrimSpace(payload.TagName))
 	if err != nil {
-		return Release{}, fmt.Errorf("selfupdate: parsing release tag %s: %w", payload.TagName, err)
+		return Release{}, fmt.Errorf("parsing release tag %s: %w", payload.TagName, err)
 	}
 
 	assets := make(map[string]string, len(payload.Assets))
@@ -165,10 +165,10 @@ func (g *assetClient) Read(url string) ([]byte, error) {
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxMetadataSize))
 	if err != nil {
-		return nil, fmt.Errorf("selfupdate: reading %s: %w", url, err)
+		return nil, fmt.Errorf("reading %s: %w", url, err)
 	}
 	if int64(len(data)) == maxMetadataSize {
-		return nil, fmt.Errorf("selfupdate: %w: %s", ErrTooLarge, url)
+		return nil, fmt.Errorf("%w: %s", ErrTooLarge, url)
 	}
 	return data, nil
 }
@@ -182,21 +182,21 @@ func (g *assetClient) Download(url, dstPath string) (_ string, err error) {
 
 	dst, err := os.Create(dstPath) //nolint:gosec // path sits next to the running executable
 	if err != nil {
-		return "", fmt.Errorf("selfupdate: creating %s: %w", dstPath, err)
+		return "", fmt.Errorf("creating %s: %w", dstPath, err)
 	}
 	defer func() {
 		if closeErr := dst.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("selfupdate: closing %s: %w", dstPath, closeErr)
+			err = fmt.Errorf("closing %s: %w", dstPath, closeErr)
 		}
 	}()
 
 	h := sha256.New()
 	written, err := io.Copy(io.MultiWriter(dst, h), io.LimitReader(resp.Body, maxArchiveSize))
 	if err != nil {
-		return "", fmt.Errorf("selfupdate: downloading %s: %w", url, err)
+		return "", fmt.Errorf("downloading %s: %w", url, err)
 	}
 	if written == maxArchiveSize {
-		return "", fmt.Errorf("selfupdate: %w: %s", ErrTooLarge, url)
+		return "", fmt.Errorf("%w: %s", ErrTooLarge, url)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
@@ -204,18 +204,18 @@ func (g *assetClient) Download(url, dstPath string) (_ string, err error) {
 func (g *assetClient) get(url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(g.ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("selfupdate: building request %s: %w", url, err)
+		return nil, fmt.Errorf("building request %s: %w", url, err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", g.userAgent)
 
 	resp, err := g.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("selfupdate: requesting %s: %w", url, err)
+		return nil, fmt.Errorf("requesting %s: %w", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("selfupdate: %w: %s: %s", ErrUnexpectedStatus, url, resp.Status)
+		return nil, fmt.Errorf("%w: %s: %s", ErrUnexpectedStatus, url, resp.Status)
 	}
 	return resp, nil
 }

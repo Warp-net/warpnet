@@ -427,14 +427,14 @@ func (u *SelfUpdater) verifyListing(rel Release, listing []byte) error {
 
 	signatureURL, err := rel.AssetURL(u.artifact.SignatureName)
 	if err != nil {
-		return fmt.Errorf("selfupdate: %w: %w", ErrReleaseUnsigned, err)
+		return fmt.Errorf("%w: %w", ErrReleaseUnsigned, err)
 	}
 	signature, err := u.assets.Read(signatureURL)
 	if err != nil {
 		return err
 	}
 	if err := security.VerifySignature(key, listing, strings.TrimSpace(string(signature))); err != nil {
-		return fmt.Errorf("selfupdate: %s: %w", u.artifact.ChecksumName, err)
+		return fmt.Errorf("%s: %w", u.artifact.ChecksumName, err)
 	}
 	return nil
 }
@@ -459,10 +459,10 @@ func releaseKey() (ed25519.PublicKey, error) {
 	}
 	key, err := hex.DecodeString(releaseSigningKey)
 	if err != nil {
-		return nil, fmt.Errorf("selfupdate: %w: %w", ErrMalformedKey, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformedKey, err)
 	}
 	if len(key) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("selfupdate: %w: %d bytes", ErrMalformedKey, len(key))
+		return nil, fmt.Errorf("%w: %d bytes", ErrMalformedKey, len(key))
 	}
 	return key, nil
 }

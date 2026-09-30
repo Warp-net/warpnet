@@ -53,7 +53,7 @@ type executable struct {
 func currentExecutable() (*executable, error) {
 	path, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf("selfupdate: resolving own executable: %w", err)
+		return nil, fmt.Errorf("resolving own executable: %w", err)
 	}
 	return &executable{path: path}, nil
 }
@@ -77,11 +77,11 @@ func (e *executable) Install(path string) (func(), error) {
 	_ = os.Remove(previous)
 
 	if err := os.Rename(e.path, previous); err != nil {
-		return nil, fmt.Errorf("selfupdate: moving current binary aside: %w", err)
+		return nil, fmt.Errorf("moving current binary aside: %w", err)
 	}
 	if err := os.Rename(path, e.path); err != nil {
 		_ = os.Rename(previous, e.path)
-		return nil, fmt.Errorf("selfupdate: installing new binary: %w", err)
+		return nil, fmt.Errorf("installing new binary: %w", err)
 	}
 
 	return func() {

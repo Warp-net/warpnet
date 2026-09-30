@@ -57,7 +57,7 @@ func checksumOf(listing []byte, assetName string) (string, error) {
 		}
 		return strings.ToLower(fields[0]), nil
 	}
-	return "", fmt.Errorf("selfupdate: %w: %s", ErrChecksumNotFound, assetName)
+	return "", fmt.Errorf("%w: %s", ErrChecksumNotFound, assetName)
 }
 
 func extractBinary(archivePath, binaryName, dstPath string) error {
@@ -71,13 +71,13 @@ func extractBinary(archivePath, binaryName, dstPath string) error {
 func extractFromTarGz(archivePath, binaryName, dstPath string) error {
 	archive, err := os.Open(archivePath) //nolint:gosec // archive was just downloaded to this path
 	if err != nil {
-		return fmt.Errorf("selfupdate: opening %s: %w", archivePath, err)
+		return fmt.Errorf("opening %s: %w", archivePath, err)
 	}
 	defer func() { _ = archive.Close() }()
 
 	gz, err := gzip.NewReader(archive)
 	if err != nil {
-		return fmt.Errorf("selfupdate: reading %s: %w", archivePath, err)
+		return fmt.Errorf("reading %s: %w", archivePath, err)
 	}
 	defer func() { _ = gz.Close() }()
 
@@ -85,10 +85,10 @@ func extractFromTarGz(archivePath, binaryName, dstPath string) error {
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return fmt.Errorf("selfupdate: %w: %s", ErrBinaryNotFound, binaryName)
+			return fmt.Errorf("%w: %s", ErrBinaryNotFound, binaryName)
 		}
 		if err != nil {
-			return fmt.Errorf("selfupdate: reading %s: %w", archivePath, err)
+			return fmt.Errorf("reading %s: %w", archivePath, err)
 		}
 		if hdr.Typeflag != tar.TypeReg || filepath.Base(hdr.Name) != binaryName {
 			continue
@@ -100,7 +100,7 @@ func extractFromTarGz(archivePath, binaryName, dstPath string) error {
 func extractFromZip(archivePath, binaryName, dstPath string) error {
 	archive, err := zip.OpenReader(archivePath)
 	if err != nil {
-		return fmt.Errorf("selfupdate: reading %s: %w", archivePath, err)
+		return fmt.Errorf("reading %s: %w", archivePath, err)
 	}
 	defer func() { _ = archive.Close() }()
 
@@ -110,36 +110,36 @@ func extractFromZip(archivePath, binaryName, dstPath string) error {
 		}
 		entry, err := f.Open()
 		if err != nil {
-			return fmt.Errorf("selfupdate: reading %s: %w", archivePath, err)
+			return fmt.Errorf("reading %s: %w", archivePath, err)
 		}
 		err = writeBinary(entry, dstPath)
 		_ = entry.Close()
 		return err
 	}
-	return fmt.Errorf("selfupdate: %w: %s", ErrBinaryNotFound, binaryName)
+	return fmt.Errorf("%w: %s", ErrBinaryNotFound, binaryName)
 }
 
 func writeBinary(src io.Reader, dstPath string) (err error) {
 	dst, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, binaryMode) //nolint:gosec // executable bit is required
 	if err != nil {
-		return fmt.Errorf("selfupdate: creating %s: %w", dstPath, err)
+		return fmt.Errorf("creating %s: %w", dstPath, err)
 	}
 	defer func() {
 		if closeErr := dst.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("selfupdate: closing %s: %w", dstPath, closeErr)
+			err = fmt.Errorf("closing %s: %w", dstPath, closeErr)
 		}
 	}()
 
 	written, err := io.Copy(dst, io.LimitReader(src, maxBinarySize))
 	if err != nil {
-		return fmt.Errorf("selfupdate: writing %s: %w", dstPath, err)
+		return fmt.Errorf("writing %s: %w", dstPath, err)
 	}
 	if written == maxBinarySize {
-		return fmt.Errorf("selfupdate: %w: %s", ErrTooLarge, dstPath)
+		return fmt.Errorf("%w: %s", ErrTooLarge, dstPath)
 	}
 	// O_CREATE keeps the mode of an already existing file.
 	if err := os.Chmod(dstPath, binaryMode); err != nil { //nolint:gosec // executable bit is required
-		return fmt.Errorf("selfupdate: chmod %s: %w", dstPath, err)
+		return fmt.Errorf("chmod %s: %w", dstPath, err)
 	}
 	return nil
 }
