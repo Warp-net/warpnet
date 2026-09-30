@@ -42,7 +42,7 @@ func (e *executable) Restart(shutdownF func()) error {
 	cmd := exec.CommandContext(context.Background(), e.path, os.Args[1:]...)
 	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("selfupdate: starting %s: %w", e.path, err)
+		return fmt.Errorf("starting %s: %w", e.path, err)
 	}
 	os.Exit(0)
 	return nil

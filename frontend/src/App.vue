@@ -64,17 +64,17 @@ resulting from the use or misuse of this software.
       :show="pendingUpdate !== null"
       title="Update available"
       :message="updateMessage"
-      confirm-label="Update now"
-      cancel-label="Later"
-      @confirm="answerUpdate(true)"
-      @cancel="answerUpdate(false)"
+      :confirm-label="isUpdateInstallable ? 'Update now' : 'Download'"
+      :cancel-label="isUpdateInstallable ? 'Later' : 'Dismiss'"
+      @confirm="isUpdateInstallable ? answerUpdate(true) : downloadUpdate()"
+      @cancel="isUpdateInstallable ? answerUpdate(false) : dismissUpdate()"
     />
     <ToastHost />
   </div>
 </template>
 
 <script>
-import {EventsOff, EventsOn} from "@/lib/transport";
+import {EventsOff, EventsOn, OpenURL} from "@/lib/transport";
 import {parseDeepLink} from "@/lib/deeplink";
 import {warpnetService} from "@/service/service";
 import {connection} from "@/lib/connection";
@@ -86,6 +86,15 @@ import ConfirmDialog from "@/components/ConfirmDialog.vue";
 const DEEP_LINK_EVENT = "deeplink:open";
 const LOG = "[warpnet-deeplink]";
 const UPDATE_POLL_MS = 60000;
+const DISMISSED_UPDATE_STORAGE = "warpnet.update.dismissed";
+
+function dismissedUpdate() {
+  try {
+    return localStorage.getItem(DISMISSED_UPDATE_STORAGE) || "";
+  } catch (e) {
+    return "";
+  }
+}
 
 export default {
   name: "App",
@@ -119,15 +128,24 @@ export default {
       }
       return network.charAt(0).toUpperCase() + network.slice(1);
     },
+    isUpdateInstallable() {
+      return this.pendingUpdate?.is_installable === true;
+    },
     updateMessage() {
       if (!this.pendingUpdate) {
         return "";
       }
-      return (
+      const out =
         `Warpnet ${this.pendingUpdate.new_version} is out ` +
-        `(you are on ${this.pendingUpdate.current_version}).\n\n` +
-        "Your node will restart into the new version, so you will have to sign in again."
-      );
+        `(you are on ${this.pendingUpdate.current_version}).\n\n`;
+      if (!this.isUpdateInstallable) {
+        return (
+          out +
+          "This copy cannot replace itself: it is installed where only the system can " +
+          "write. Download the new version and install it the way this one was installed."
+        );
+      }
+      return out + "Your node will restart into the new version, so you will have to sign in again.";
     },
   },
   methods: {
@@ -146,7 +164,29 @@ export default {
       if (this.pendingUpdate) {
         return;
       }
-      this.pendingUpdate = await warpnetService.getPendingUpdate();
+      const update = await warpnetService.getPendingUpdate();
+      if (update && update.is_installable === false && update.new_version === dismissedUpdate()) {
+        return;
+      }
+      this.pendingUpdate = update;
+    },
+    // A release the node cannot install stays pending for good, so dismissing
+    // it has to be remembered here rather than answered to the node.
+    dismissUpdate() {
+      const update = this.pendingUpdate;
+      this.pendingUpdate = null;
+      try {
+        localStorage.setItem(DISMISSED_UPDATE_STORAGE, update?.new_version || "");
+      } catch (e) {}
+    },
+    downloadUpdate() {
+      const update = this.pendingUpdate;
+      this.dismissUpdate();
+      if (update?.release_url) {
+        OpenURL(update.release_url);
+        return;
+      }
+      toast.info(`Warpnet ${update?.new_version} is out — download it from the project's releases`);
     },
     async answerUpdate(isAllowed) {
       const update = this.pendingUpdate;

@@ -63,6 +63,8 @@ func (s *stubNodeServer) Start() error               { s.startCalls++; return ni
 type stubNodeUpdater struct {
 	currentVersion string
 	newVersion     string
+	releaseURL     string
+	isInstallable  bool
 	answers        chan bool
 	answerErr      error
 	closed         bool
@@ -71,9 +73,11 @@ type stubNodeUpdater struct {
 func (s *stubNodeUpdater) Run(func()) {}
 func (s *stubNodeUpdater) Close()     { s.closed = true }
 
-func (s *stubNodeUpdater) GetPendingUpdate() (string, string) {
-	return s.currentVersion, s.newVersion
+func (s *stubNodeUpdater) GetPendingUpdate() (string, string, string) {
+	return s.currentVersion, s.newVersion, s.releaseURL
 }
+
+func (s *stubNodeUpdater) IsInstallable() bool { return s.isInstallable }
 
 func (s *stubNodeUpdater) AnswerUpdate(isAllowed bool) error {
 	if s.answerErr != nil {

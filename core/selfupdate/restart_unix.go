@@ -43,7 +43,7 @@ func (e *executable) Restart(shutdownF func()) error {
 		shutdownF()
 	}
 	if err := syscall.Exec(e.path, os.Args, os.Environ()); err != nil { //nolint:gosec // this node's own binary
-		return fmt.Errorf("selfupdate: exec %s: %w", e.path, err)
+		return fmt.Errorf("exec %s: %w", e.path, err)
 	}
 	return nil
 }
