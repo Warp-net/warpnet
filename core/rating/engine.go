@@ -31,6 +31,7 @@ package rating
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
@@ -40,6 +41,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
@@ -57,6 +59,8 @@ const (
 	// minAcquaintance is how long this node must have been connected to an
 	// observer before its records count. A drive-by accuser has no voice.
 	minAcquaintance = time.Hour
+
+	maxVerifiedRecords = 1 << 16
 )
 
 // Some behaviour is an offence only in numbers: one reconnection is
@@ -157,9 +161,10 @@ type Engine struct {
 	now           func() time.Time
 	flushInterval time.Duration
 
-	store Storer
-	conns ConnectionsProvider
-	index *indexer
+	store    Storer
+	conns    ConnectionsProvider
+	index    *indexer
+	verified *lru.Cache[[sha256.Size]byte, struct{}]
 
 	flaps       *window
 	discoveries *window
@@ -211,6 +216,10 @@ func NewEngine(
 	if err != nil {
 		return nil, fmt.Errorf("rating: index: %w", err)
 	}
+	verified, err := lru.New[[sha256.Size]byte, struct{}](maxVerifiedRecords)
+	if err != nil {
+		return nil, fmt.Errorf("rating: verified records: %w", err)
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	e := &Engine{
@@ -225,6 +234,7 @@ func NewEngine(
 		store:         store,
 		conns:         conns,
 		index:         index,
+		verified:      verified,
 		counters:      make(map[pendingKey]counts, windowPeers),
 		dirty:         make(map[pendingKey]struct{}, windowPeers),
 		unindexed:     make(map[string]struct{}),
@@ -372,7 +382,15 @@ func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 		return result, err
 	}
 	es, _ := p.entries()
-	es = slices.DeleteFunc(es, func(en entry) bool { return !e.isHeard(en.observer) })
+	heard := make(map[string]bool)
+	es = slices.DeleteFunc(es, func(en entry) bool {
+		voiced, ok := heard[en.observer]
+		if !ok {
+			voiced = e.isHeard(en.observer)
+			heard[en.observer] = voiced
+		}
+		return !voiced
+	})
 	now := e.now()
 	overall := MaxScore
 	observers := make(map[string]struct{}, len(es))
@@ -488,11 +506,17 @@ func (e *Engine) peer(id string) (*indexedPeer, error) {
 }
 
 // authenticate checks one replicated record: its signature against the
-// observer's peer id, then the structural rules.
+// observer's peer id, then the structural rules. A signature is checked
+// once: reloading a peer's history hashes a record it already verified
+// instead of verifying it again.
 func (e *Engine) authenticate(rec domain.RatingRecord) (entry, error) {
 	r := record(rec)
-	if err := r.verify(); err != nil {
-		return entry{}, err
+	digest := r.digest()
+	if !e.verified.Contains(digest) {
+		if err := r.verify(); err != nil {
+			return entry{}, err
+		}
+		e.verified.Add(digest, struct{}{})
 	}
 	if err := r.validate(e.now()); err != nil {
 		return entry{}, err
@@ -662,8 +686,7 @@ func (e *Engine) ratePeers() error {
 			errs = append(errs, fmt.Errorf("%w: %s", ErrEmptyPeer, p.peerID))
 			continue
 		}
-		entries, _ := p.entries()
-		if len(entries) == 0 {
+		if p.isEmpty() {
 			continue // nothing has ever been said about this peer
 		}
 		score := e.Score(peerID)

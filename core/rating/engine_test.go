@@ -515,6 +515,61 @@ func TestMergedRecordForUnindexedPeerDoesNotShadowHistory(t *testing.T) {
 		"the score must come from the full stored history, not the last delta")
 }
 
+// A rating pass reuses the score of a peer nothing new was written about,
+// and scores again one something was.
+func TestAPassReusesTheScoresOfPeersNothingNewWasWrittenAbout(t *testing.T) {
+	self, quiet, busy := newIdentity(t), newIdentity(t), newIdentity(t)
+	clock := newClock()
+	e := newRatingEngine(t, self, newFakeStore(self.id), clock, NewPeersRatings())
+	scoredAt := func(id warpnet.WarpPeerID) time.Time {
+		p, ok := e.index.peer(id.String())
+		require.True(t, ok)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.scoredAt
+	}
+
+	recordN(t, e, quiet.id, KindBadSignature, 1)
+	recordN(t, e, busy.id, KindBadSignature, 1)
+	flushNow(t, e)
+	require.NoError(t, e.ratePeers())
+	quietAt, busyAt := scoredAt(quiet.id), scoredAt(busy.id)
+
+	clock.advance(defaultFlushInterval)
+	require.NoError(t, e.record(busy.id, KindBadSignature))
+	flushNow(t, e)
+	require.NoError(t, e.ratePeers())
+
+	assert.Equal(t, quietAt, scoredAt(quiet.id), "a peer nothing new was said about keeps its score")
+	assert.NotEqual(t, busyAt, scoredAt(busy.id), "one with new evidence is scored again")
+}
+
+// A signature is checked once, and vouches only for the exact bytes it was
+// checked over.
+func TestASignatureIsCheckedOnceAndVouchesForNothingElse(t *testing.T) {
+	self, observer, peer := newIdentity(t), newIdentity(t), newIdentity(t)
+	clock := newClock()
+	e := newMemberEngine(t, self, newFakeStore(self.id), clock)
+
+	rec := signedRecord(observer, peer.id, Network, bucketAt(clock.Now()), genA, kindCount{KindBadSignature, 1})
+	_, err := e.authenticate(rec)
+	require.NoError(t, err)
+	require.True(t, e.verified.Contains(record(rec).digest()), "a verified record is remembered")
+
+	for name, tamper := range map[string]func(*domain.RatingRecord){
+		"counts": func(r *domain.RatingRecord) {
+			r.Offences = []domain.OffenceCount{{Kind: KindBadSignature.String(), Count: 9}}
+		},
+		"observer": func(r *domain.RatingRecord) { r.ObserverID = self.id.String() },
+		"time":     func(r *domain.RatingRecord) { r.UpdatedAt = r.UpdatedAt.Add(time.Millisecond) },
+	} {
+		forged := rec
+		tamper(&forged)
+		_, err := e.authenticate(forged)
+		assert.Error(t, err, "a remembered signature must not vouch for other %s", name)
+	}
+}
+
 func TestSettledBucketsAreFreed(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)

@@ -38,8 +38,10 @@ const (
 	maxIndexedPeers = 16384
 
 	// scoreTTL bounds how stale a memoised score may be while a peer's
-	// records are unchanged; half-lives are measured in hours and days.
-	scoreTTL = 15 * time.Second
+	// records are unchanged: longer than a rating pass, so a pass reuses
+	// what nothing new was written about, and short beside half-lives
+	// measured in hours and days.
+	scoreTTL = 5 * time.Minute
 )
 
 type slot struct {
@@ -107,6 +109,13 @@ func (p *indexedPeer) fill(e entry) {
 	}
 	p.slots[s] = e.counts
 	p.rev++
+}
+
+// isEmpty reports a peer nothing has been said about.
+func (p *indexedPeer) isEmpty() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.slots) == 0
 }
 
 func (p *indexedPeer) entries() (entries, uint64) {

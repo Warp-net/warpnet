@@ -30,6 +30,8 @@ package rating
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"slices"
 	"strconv"
@@ -93,6 +95,20 @@ func (r record) signingBytes() []byte {
 	b.WriteByte('|')
 	b.WriteString(strconv.FormatInt(r.UpdatedAt.UnixMilli(), 10))
 	return []byte(b.String())
+}
+
+// digest identifies what a signature is checked over: the signed bytes,
+// length-prefixed so no other split of them could hash the same, and the
+// signature itself.
+func (r record) digest() [sha256.Size]byte {
+	signed := r.signingBytes()
+	h := sha256.New()
+	h.Write(binary.BigEndian.AppendUint64(nil, uint64(len(signed))))
+	h.Write(signed)
+	h.Write([]byte(r.Signature))
+	var d [sha256.Size]byte
+	h.Sum(d[:0])
+	return d
 }
 
 // signed is the record with canonical offences and the observer's signature.
