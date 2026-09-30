@@ -289,7 +289,7 @@ func TestStreamFollowHandler(t *testing.T) {
 			return nil, warpnet.ErrNodeIsOffline
 		}})
 		_, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
-		if !errors.Is(err, warpnet.ErrUserIsOffline) {
+		if !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			t.Fatalf("expected user offline error: %v", err)
 		}
 	})
@@ -562,7 +562,7 @@ func TestStreamUnfollowHandler(t *testing.T) {
 			return nil, warpnet.ErrNodeIsOffline
 		}})
 		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
-		if !errors.Is(err, warpnet.ErrUserIsOffline) {
+		if !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			t.Fatalf("expected user offline error: %v", err)
 		}
 	})

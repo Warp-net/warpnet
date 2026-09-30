@@ -157,7 +157,7 @@ func StreamFollowHandler(
 				},
 			)
 			if errors.Is(err, warpnet.ErrNodeIsOffline) {
-				return nil, warpnet.ErrUserIsOffline
+				return nil, warpnet.ErrNodeIsOffline
 			}
 			if err != nil {
 				log.Errorf("follow: stream: %s", err.Error())
@@ -285,7 +285,7 @@ func StreamUnfollowHandler(
 				},
 			)
 			if errors.Is(err, warpnet.ErrNodeIsOffline) {
-				return nil, warpnet.ErrUserIsOffline
+				return nil, warpnet.ErrNodeIsOffline
 			}
 			if err != nil {
 				log.Errorf("unfollow: stream: %s", err.Error())
