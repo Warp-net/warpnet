@@ -11,9 +11,10 @@ const (
 	reachabilityTag = "reachability"
 	// ratingTag is kept apart from reachabilityTag so the two compose the
 	// way libp2p intends, instead of overwriting each other.
-	ratingTag      = "rating"
-	flappingPeriod = 30 * time.Second
-	cacheSize      = 128
+	ratingTag         = "rating"
+	ratingTagInterval = 30 * time.Second
+	flappingPeriod    = 30 * time.Second
+	cacheSize         = 128
 )
 
 type nodeReachabilityManager struct {

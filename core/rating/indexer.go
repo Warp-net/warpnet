@@ -38,8 +38,10 @@ const (
 	maxIndexedPeers = 16384
 
 	// scoreTTL bounds how stale a memoised score may be while a peer's
-	// records are unchanged; half-lives are measured in hours and days.
-	scoreTTL = 15 * time.Second
+	// records are unchanged: longer than a rating pass, so a pass reuses
+	// what nothing new was written about, and short beside half-lives
+	// measured in hours and days.
+	scoreTTL = 5 * time.Minute
 )
 
 type slot struct {
@@ -69,8 +71,8 @@ type indexedPeer struct {
 	tierKnown bool
 }
 
-// tierMoved reports a tier that differs from the one last handed on, and
-// remembers it. A peer whose tier holds is handed on once.
+// tierMoved reports a tier that differs from the one last seen, and
+// remembers it. A peer whose tier holds is reported once.
 func (p *indexedPeer) tierMoved(tier Tier) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -89,6 +91,14 @@ func (p *indexedPeer) set(s slot, cs []kindCount) {
 	p.mu.Unlock()
 }
 
+// remove drops one record's counts.
+func (p *indexedPeer) remove(s slot) {
+	p.mu.Lock()
+	delete(p.slots, s)
+	p.rev++
+	p.mu.Unlock()
+}
+
 // fill adds a loaded record unless a merge already delivered a newer one.
 func (p *indexedPeer) fill(e entry) {
 	p.mu.Lock()
@@ -99,6 +109,13 @@ func (p *indexedPeer) fill(e entry) {
 	}
 	p.slots[s] = e.counts
 	p.rev++
+}
+
+// isEmpty reports a peer nothing has been said about.
+func (p *indexedPeer) isEmpty() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.slots) == 0
 }
 
 func (p *indexedPeer) entries() (entries, uint64) {
@@ -171,6 +188,13 @@ func (i *indexer) add(peerID string) *indexedPeer {
 func (i *indexer) update(peerID string, e entry) {
 	if p, ok := i.peers.Peek(peerID); ok {
 		p.set(e.slot(), e.counts)
+	}
+}
+
+// remove drops one record of a peer the index holds.
+func (i *indexer) remove(peerID string, s slot) {
+	if p, ok := i.peers.Peek(peerID); ok {
+		p.remove(s)
 	}
 }
 

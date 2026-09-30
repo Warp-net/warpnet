@@ -73,10 +73,17 @@ func TestValidate(t *testing.T) {
 		assert.ErrorIs(t, r.validate(now), ErrRecordBadKind)
 	})
 
-	t.Run("unknown kind is refused", func(t *testing.T) {
+	t.Run("a record of kinds this build does not know is refused", func(t *testing.T) {
 		r := valid
 		r.Offences = []domain.OffenceCount{{Kind: "made_up", Count: 1}}
-		assert.ErrorIs(t, r.validate(now), ErrRecordBadKind)
+		assert.ErrorIs(t, r.validate(now), ErrRecordUnknownKinds)
+	})
+
+	t.Run("a kind this build does not know is skipped beside one it does", func(t *testing.T) {
+		r := valid
+		r.Offences = []domain.OffenceCount{{Kind: "made_up", Count: 7}, {Kind: KindRateLimitHit.String(), Count: 1}}
+		require.NoError(t, r.validate(now))
+		assert.Equal(t, []kindCount{{KindRateLimitHit, 1}}, r.entry().counts)
 	})
 
 	t.Run("unknown dimension is refused", func(t *testing.T) {
@@ -121,13 +128,16 @@ func TestValidate(t *testing.T) {
 
 func TestOnlyStructuralFailuresAreForgery(t *testing.T) {
 	for _, err := range []error{
-		ErrRecordSelfRated, ErrRecordBadPeerID, ErrRecordBadDimension,
+		ErrRecordSelfRated, ErrRecordBadPeerID,
 		ErrRecordBadGeneration, ErrRecordEmptyOffences, ErrRecordBadKind,
 	} {
 		assert.True(t, isForgery(err), "%v proves its author wrote nonsense", err)
 	}
 	for _, err := range []error{ErrRecordBucketStale, ErrRecordBucketFuture, ErrRecordNoSignature, ErrRecordNoPubKey} {
 		assert.False(t, isForgery(err), "%v is not attributable to the named observer", err)
+	}
+	for _, err := range []error{ErrRecordBadDimension, ErrRecordUnknownKinds} {
+		assert.False(t, isForgery(err), "%v may be a newer build's record, not a forgery", err)
 	}
 }
 

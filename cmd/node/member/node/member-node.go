@@ -441,6 +441,7 @@ type memberRepos struct {
 	mutesRepo        MutesProvider
 	subsRepo         SubscriptionProvider
 	filterRepo       FilterProvider
+	orderRepo        OrderProvider
 }
 
 func (m *MemberNode) setupHandlers(
@@ -469,6 +470,7 @@ func (m *MemberNode) setupHandlers(
 		mutesRepo:        database.NewMutesRepo(db),
 		subsRepo:         database.NewSubscriptionsRepo(db),
 		filterRepo:       database.NewFilterRepo(db),
+		orderRepo:        database.NewOrderRepo(db),
 	}
 
 	hs := make([]warpnet.WarpStreamHandler, 0, 80)
@@ -486,6 +488,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
 	hs = append(hs, m.walletHandlers(authRepo)...)
+	hs = append(hs, m.sponsoredHandlers(authRepo, userRepo, r)...)
 
 	m.node.SetStreamHandlers(hs...)
 }
@@ -568,6 +571,10 @@ func (m *MemberNode) tweetHandlers(
 		{
 			event.PUBLIC_POST_TIMELINE,
 			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo),
+		},
+		{
+			event.PUBLIC_DELETE_TIMELINE,
+			handler.StreamTimelineDeleteTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
@@ -738,6 +745,32 @@ func (m *MemberNode) filterHandlers(r *memberRepos) []warpnet.WarpStreamHandler 
 }
 
 //nolint:govet
+func (m *MemberNode) sponsoredHandlers(
+	authRepo AuthProvider,
+	userRepo UserProvider,
+	r *memberRepos,
+) []warpnet.WarpStreamHandler {
+	//nolint:govet
+	return []warpnet.WarpStreamHandler{
+		{
+			event.PRIVATE_POST_SPONSORED_TWEET,
+			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
+		},
+		{
+			event.PUBLIC_GET_SPONSORED_TWEET,
+			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.orderRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_POST_SPONSORED_ORDER,
+			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_POST_SPONSORED_ORDER,
+			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m),
+		},
+	}
+}
+
 func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
 	//nolint:govet
 	return []warpnet.WarpStreamHandler{
@@ -1055,6 +1088,9 @@ func (m *MemberNode) Stop() {
 	if m.mdnsService != nil {
 		m.mdnsService.Close()
 	}
+	if m.rating != nil {
+		_ = m.rating.Close()
+	}
 	if m.pubsubService != nil {
 		if err := m.pubsubService.Close(); err != nil {
 			log.Errorf("member: failed to close pubsub: %v", err)
@@ -1062,9 +1098,6 @@ func (m *MemberNode) Stop() {
 	}
 	if m.dHashTable != nil {
 		m.dHashTable.Close()
-	}
-	if m.rating != nil {
-		_ = m.rating.Close()
 	}
 	if m.ratingDb != nil {
 		_ = m.ratingDb.Close()

@@ -110,9 +110,13 @@ type WalletProvider interface {
 	Transfer(ctx context.Context, seed, asset, to, amount string) (string, error)
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
 	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
+	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
+	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
 	Token() string
 	Decimals() uint8
 	Network() string
+	Splitter() string
+	MaxFeePercent() uint64
 	Close()
 }
 
@@ -145,6 +149,7 @@ type PeerRater interface {
 type RatingStorer interface {
 	Put(rec domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
+	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
 	OnPut(hook func(domain.RatingRecord))
 	OnDelete(hook func(domain.RatingRecord))
@@ -154,6 +159,11 @@ type RatingStorer interface {
 type AuthProvider interface {
 	GetOwner() domain.Owner
 	SessionToken() string
+}
+
+type OrderProvider interface {
+	Get(tweetId, buyerId string) (domain.Order, error)
+	Save(o domain.Order) error
 }
 
 type UserProvider interface {

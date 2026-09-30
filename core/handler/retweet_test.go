@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"math/big"
 	"testing"
 	"time"
 
@@ -407,4 +408,35 @@ func TestStreamUnretweetHandler(t *testing.T) {
 			t.Fatalf("expected stream error: %v", err)
 		}
 	})
+}
+
+func TestStreamNewReTweetHandler_SponsoredSourceKeepsOnlyTheTeaser(t *testing.T) {
+	retweeter := "owner-1"
+	_, actorConn := authorStream(t)
+	users := stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: actorConn.Conn().RemotePeer().String()}, nil
+	}}
+	var stored domain.Tweet
+	repo := stubReTweetRepo{
+		getFn: func(userID, tweetID string) (domain.Tweet, error) {
+			return domain.Tweet{Id: tweetID, UserId: userID, Price: &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}}, nil
+		},
+		newRetweetFn: func(tweet domain.Tweet) (domain.Tweet, error) {
+			stored = tweet
+			return tweet, nil
+		},
+	}
+	h := StreamNewReTweetHandler(users, repo, stubTimelineRepo{}, stubModerationNotifier{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: retweeter}})
+
+	video := "video-1"
+	_, err := h(marshal(t, event.NewRetweetEvent{
+		Id: "tweet-1", UserId: "author-1", Text: "unlocked text", ImageKeys: []string{"img-1"}, VideoKey: &video,
+		RetweetedBy: &retweeter, CreatedAt: time.Now(),
+	}), actorConn)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if stored.Text != "" || len(stored.ImageKeys) != 0 || stored.VideoKey != nil || !stored.IsSponsored() {
+		t.Fatalf("a retweet of a sponsored tweet must carry only the teaser, got %+v", stored)
+	}
 }

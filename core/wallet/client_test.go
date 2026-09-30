@@ -32,7 +32,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -245,6 +247,52 @@ func TestEngineStderrReachesTheLog(t *testing.T) {
 	}
 }
 
+func TestEngineStoppedOnPurposeIsNotReported(t *testing.T) {
+	var logged bytes.Buffer
+	previous := log.StandardLogger().Out
+	log.SetOutput(&logged)
+	defer log.SetOutput(previous)
+
+	client, _ := engineClient(t, nil)
+	waiting := make(chan response, 1)
+	client.pending["1"] = waiting
+
+	client.read(&exec.Cmd{}, strings.NewReader(""))
+
+	if logged.Len() != 0 {
+		t.Fatalf("a closed engine was reported as gone: %q", logged.String())
+	}
+	select {
+	case resp := <-waiting:
+		if resp.Error == nil {
+			t.Fatal("a request waiting on a closed engine was answered without an error")
+		}
+	default:
+		t.Fatal("a request waiting on a closed engine was never answered")
+	}
+}
+
+func TestEngineThatDiesIsReportedOnce(t *testing.T) {
+	var logged bytes.Buffer
+	previous := log.StandardLogger().Out
+	log.SetOutput(&logged)
+	defer log.SetOutput(previous)
+
+	client, _ := engineClient(t, nil)
+	engine := &exec.Cmd{}
+	isStopped := false
+	client.cmd, client.stop = engine, func() { isStopped = true }
+
+	client.read(engine, strings.NewReader(""))
+
+	if got := strings.Count(logged.String(), "payment engine unavailable"); got != 1 {
+		t.Fatalf("logged the failure %d times, want once: %q", got, logged.String())
+	}
+	if !isStopped || client.cmd != nil || !errors.Is(client.failure, ErrUnavailable) {
+		t.Fatalf("the dead engine is still held: stopped=%v cmd=%v failure=%v", isStopped, client.cmd, client.failure)
+	}
+}
+
 func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	sponsorship := Sponsorship{
 		Splitter:      "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy",
@@ -266,5 +314,36 @@ func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	sponsorship.MaxFeePercent = 0
 	if _, ok := payParams("testnet", "abcdef", sponsorship)["max_fee_percent"]; ok {
 		t.Fatal("a sponsorship that agreed no ceiling must not send one")
+	}
+}
+
+func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
+	cfg := DefaultConfig("testnet", "")
+	params := verifyParams(cfg, "ab12", Sponsorship{
+		Splitter: cfg.Splitter,
+		OrderId:  "0000000000000000000000000000000000000000000000000000000000000001",
+		Author:   "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143",
+		Amount:   "1500000",
+	})
+	for _, key := range []string{"chain", "network", "tx_id", "order_id", "expected_author", "min_amount", "allowed_assets"} {
+		if _, ok := params[key]; !ok {
+			t.Fatalf("verify needs %q, got %v", key, params)
+		}
+	}
+	assets, ok := params["allowed_assets"].([]map[string]any)
+	if !ok || len(assets) != 1 {
+		t.Fatalf("verify must allow exactly the configured splitter, got %v", params["allowed_assets"])
+	}
+	if assets[0]["contract"] != "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy" || assets[0]["token"] != "USDT" || assets[0]["decimals"] != uint8(6) {
+		t.Fatalf("verify was pointed at another asset: %v", assets[0])
+	}
+}
+
+func TestOnlyTestnetHasASplitter(t *testing.T) {
+	if DefaultConfig("testnet", "").Splitter == "" {
+		t.Fatal("testnet must pay through the Nile USDT splitter")
+	}
+	if DefaultConfig("warpnet", "").Splitter != "" {
+		t.Fatal("mainnet has no deployed splitter yet")
 	}
 }

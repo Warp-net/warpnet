@@ -39,6 +39,11 @@ const (
 	// moderation
 	PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
 	PUBLIC_POST_REPORT            = "/public/post/report/0.0.0"
+	// sponsored
+	PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
+	PUBLIC_GET_SPONSORED_TWEET   = "/public/get/sponsored/tweet/0.0.0"
+	PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
+	PUBLIC_POST_SPONSORED_ORDER  = "/public/post/sponsored/order/0.0.0"
 	// application
 	PRIVATE_DELETE_CHAT                = "/private/delete/chat/0.0.0"
 	PRIVATE_DELETE_MESSAGE             = "/private/delete/message/0.0.0"
@@ -71,6 +76,7 @@ const (
 	PRIVATE_GET_WALLET_KEY             = "/private/get/wallet/key/0.0.0"
 	PRIVATE_POST_WALLET_SEND           = "/private/post/wallet/send/0.0.0"
 	PUBLIC_POST_TIMELINE               = "/public/post/timeline/0.0.0"
+	PUBLIC_DELETE_TIMELINE             = "/public/delete/timeline/0.0.0"
 	PUBLIC_POST_REPLY                  = "/public/post/reply/0.0.0"
 	PRIVATE_POST_IMPORT_TWITTER_TWEET  = "/private/post/import/twitter/tweet/0.0.0"
 	PRIVATE_POST_USER                  = "/private/post/user/0.0.0"

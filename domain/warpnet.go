@@ -28,6 +28,10 @@ resulting from the use or misuse of this software.
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"math/big"
+	"strings"
 	"time"
 
 	"github.com/Warp-net/warpnet/json"
@@ -171,6 +175,7 @@ type Tweet struct {
 	QuotedTweetId *string          `json:"quoted_tweet_id,omitempty"`
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
 	Poll          *Poll            `json:"poll,omitempty"`
+	Price         *Price           `json:"price,omitempty"`
 }
 
 func (t *Tweet) IsReply() bool {
@@ -179,6 +184,69 @@ func (t *Tweet) IsReply() bool {
 
 func (t *Tweet) IsModerated() bool {
 	return t.Moderation != nil
+}
+
+func (t *Tweet) IsSponsored() bool {
+	return t.Price != nil
+}
+
+func (t *Tweet) Teaser() Tweet {
+	teaser := *t
+	if !t.IsSponsored() {
+		return teaser
+	}
+	teaser.Text = ""
+	teaser.ImageKeys = nil
+	teaser.VideoKey = nil
+	teaser.Poll = nil
+	return teaser
+}
+
+const PriceDecimals = 6
+
+type Price struct {
+	Amount string   `json:"amount"`
+	Units  *big.Int `json:"units"`
+}
+
+func (p *Price) IsPositive() bool {
+	return p != nil && p.Units != nil && p.Units.Sign() > 0
+}
+
+func (p *Price) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Units *big.Int `json:"units"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*p = Price{Units: wire.Units}
+	if wire.Units != nil {
+		p.Amount = p.decimal()
+	}
+	return nil
+}
+
+func (p *Price) decimal() string {
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(PriceDecimals), nil)
+	amount := new(big.Rat).SetFrac(p.Units, scale).FloatString(PriceDecimals)
+	return strings.TrimRight(strings.TrimRight(amount, "0"), ".")
+}
+
+type Order struct {
+	TweetId   string    `json:"tweet_id"`
+	AuthorId  string    `json:"author_id"`
+	BuyerId   string    `json:"buyer_id"`
+	Nonce     string    `json:"nonce"`
+	TxId      string    `json:"tx_id"`
+	Confirmed bool      `json:"confirmed"`
+	Tweet     *Tweet    `json:"tweet,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (o *Order) ID() string {
+	sum := sha256.Sum256([]byte(o.TweetId + "/" + o.BuyerId + "/" + o.Nonce))
+	return hex.EncodeToString(sum[:])
 }
 
 type Poll struct {

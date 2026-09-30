@@ -33,17 +33,26 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/core/mdns"
+	"github.com/Warp-net/warpnet/core/middleware"
 	corenode "github.com/Warp-net/warpnet/core/node"
+	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/ratelimit"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
+	"github.com/google/uuid"
+	"github.com/libp2p/go-libp2p"
 	"github.com/stretchr/testify/require"
 )
 
@@ -449,4 +458,170 @@ func TestStopIsIdempotent(t *testing.T) {
 
 	n.Stop()
 	n.Stop()
+}
+
+type followerGossip struct {
+	PubSubProvider
+
+	authorKey ed25519.PrivateKey
+	follower  *corePubsub.Gossip
+}
+
+func (g followerGossip) PublishUpdateToFollowers(_, dest string, bt []byte) error {
+	authorId, err := warpnet.IDFromPublicKey(g.authorKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		return err
+	}
+	msg := event.Message{
+		Body:        json.RawMessage(bt),
+		MessageId:   uuid.New().String(),
+		NodeId:      authorId.String(),
+		Destination: dest,
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	msg.Signature = security.Sign(g.authorKey, msg.SigningBytes())
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return g.follower.SelfPublish(data)
+}
+
+func newOwnedMemberNode(t *testing.T, ownerId string) (*MemberNode, *local_store.DB) {
+	t.Helper()
+
+	db := testDB(t)
+	authRepo := database.NewAuthRepo(db, "testnet")
+	require.NoError(t, authRepo.Authenticate("test", "test"))
+	_, err := authRepo.SetOwner(domain.Owner{UserId: ownerId, Username: ownerId})
+	require.NoError(t, err)
+	return newMemberNodeOn(t, db, authRepo), db
+}
+
+func serveStreams(t *testing.T, m *MemberNode) {
+	t.Helper()
+
+	n, err := corenode.NewWarpNode(
+		m.ctx, m.ratings, m.rateLimits,
+		corenode.WarpIdentity(m.privKey), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+	)
+	require.NoError(t, err)
+	m.node = n
+	m.mw = middleware.NewWarpMiddleware(
+		n.Node().ID(), m.aliasesRepo, ratelimit.NewStreamLimiter(m.rateLimits, m.ratings),
+	)
+	n.SetStreamMiddlewares(
+		m.mw.LoggingMiddleware,
+		m.mw.RateLimiterMiddleware,
+		m.mw.AuthMiddleware,
+		m.mw.IdempotencyMiddleware,
+	)
+	m.setupHandlers(m.authRepo, m.userRepo, m.followRepo, m.db, m.statsDb)
+}
+
+func ownerStream(t *testing.T, m *MemberNode, route string, body any) []byte {
+	t.Helper()
+
+	bt, err := json.Marshal(body)
+	require.NoError(t, err)
+	id := m.node.Node().ID()
+	msg := event.Message{
+		Body:        json.RawMessage(bt),
+		MessageId:   uuid.New().String(),
+		NodeId:      id.String(),
+		Destination: route,
+		Timestamp:   time.Now().UTC(),
+		Version:     "0.0.0",
+	}
+	msg.Signature = security.Sign(m.privKey, msg.SigningBytes())
+	resp, err := m.SelfStream(id, id, stream.WarpRoute(route), msg)
+	require.NoError(t, err)
+	return resp
+}
+
+func TestADeletedTweetLeavesTheFollowersTimeline(t *testing.T) {
+	follower, followerDb := newOwnedMemberNode(t, "follower-1")
+	serveStreams(t, follower)
+	gossip := corePubsub.NewGossip(follower.ctx, nil)
+	require.NoError(t, gossip.Run(follower))
+	t.Cleanup(func() { _ = gossip.Close() })
+
+	author, _ := newOwnedMemberNode(t, "author-1")
+	author.pubsubService = followerGossip{
+		PubSubProvider: author.pubsubService, authorKey: author.privKey, follower: gossip,
+	}
+	serveStreams(t, author)
+
+	_, err := database.NewUserRepo(followerDb).Create(domain.User{
+		Id: "author-1", NodeId: author.node.Node().ID().String(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, follower.followRepo.Follow("follower-1", "author-1"))
+
+	var tweet domain.Tweet
+	require.NoError(t, json.Unmarshal(ownerStream(t, author, event.PRIVATE_POST_TWEET, event.NewTweetEvent{
+		UserId: "author-1", Username: "author-1", Text: "soon deleted",
+	}), &tweet))
+
+	timeline := database.NewTimelineRepo(followerDb)
+	delivered, _, err := timeline.GetTimeline("follower-1", nil, nil)
+	require.NoError(t, err)
+	require.Len(t, delivered, 1)
+	require.Equal(t, tweet.Id, delivered[0].Id)
+
+	ownerStream(t, author, event.PRIVATE_DELETE_TWEET, event.DeleteTweetEvent{
+		UserId: "author-1", TweetId: tweet.Id,
+	})
+
+	left, _, err := timeline.GetTimeline("follower-1", nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, left, "the tweet must leave the follower's timeline")
+	_, err = database.NewTweetRepo(followerDb, nil).Get("author-1", tweet.Id)
+	require.ErrorIs(t, err, database.ErrTweetNotFound, "the follower must not keep the tweet")
+}
+
+// closeOrder is the order Stop closes the services a node holds in.
+type closeOrder struct {
+	mu     sync.Mutex
+	closed []string
+}
+
+func (o *closeOrder) add(name string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.closed = append(o.closed, name)
+}
+
+type closingPubSub struct {
+	PubSubProvider
+
+	order *closeOrder
+}
+
+func (p closingPubSub) Close() error {
+	p.order.add("pubsub")
+	return nil
+}
+
+type closingRater struct {
+	PeerRater
+
+	order *closeOrder
+}
+
+func (r closingRater) Close() error {
+	r.order.add("rating")
+	return nil
+}
+
+// The rating's final flush writes what it still holds into a store that
+// broadcasts through the gossip, so the gossip has to outlive it.
+func TestStopClosesTheRatingBeforeTheGossip(t *testing.T) {
+	order := &closeOrder{}
+	m := &MemberNode{pubsubService: closingPubSub{order: order}, rating: closingRater{order: order}}
+
+	m.Stop()
+
+	require.Equal(t, []string{"rating", "pubsub"}, order.closed)
 }

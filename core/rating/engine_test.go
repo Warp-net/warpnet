@@ -6,6 +6,7 @@ package rating
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -352,6 +353,37 @@ func TestSignedButIllegalRecordChargesItsAuthorOnce(t *testing.T) {
 	assert.Equal(t, charged, e.Score(liar.id), "one forgery is one charge, however often it is reloaded")
 }
 
+// A newer build may name a kind or a dimension this build does not know.
+// Its author is no forger for that: charging it would floor every upgraded
+// node in the eyes of every node not upgraded yet.
+func TestAKindFromANewerBuildIsNotAForgery(t *testing.T) {
+	self := newIdentity(t)
+	newer := newIdentity(t)
+	peer := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e := newMemberEngine(t, self, store, clock)
+
+	for i, dim := range []string{Network.String(), Network.String(), "reputation"} {
+		r := record{
+			PeerID:     peer.id.String(),
+			ObserverID: newer.id.String(),
+			Dimension:  dim,
+			Bucket:     int64(bucketAt(clock.Now())) - int64(i),
+			Generation: genA,
+			Offences:   []domain.OffenceCount{{Kind: "offence_from_the_future", Count: 1}},
+			UpdatedAt:  clock.Now(),
+		}
+		signed, err := r.signed(newer.priv)
+		require.NoError(t, err)
+		store.merge(domain.RatingRecord(signed))
+	}
+	flushNow(t, e)
+
+	assert.Equal(t, MaxScore, e.Score(newer.id), "the author of a newer catalogue is not charged")
+	assert.Equal(t, MaxScore, e.Score(peer.id), "and what this build cannot read costs its peer nothing")
+}
+
 func TestLateRecordIsDroppedWithoutBlame(t *testing.T) {
 	self := newIdentity(t)
 	peer := newIdentity(t)
@@ -483,6 +515,61 @@ func TestMergedRecordForUnindexedPeerDoesNotShadowHistory(t *testing.T) {
 		"the score must come from the full stored history, not the last delta")
 }
 
+// A rating pass reuses the score of a peer nothing new was written about,
+// and scores again one something was.
+func TestAPassReusesTheScoresOfPeersNothingNewWasWrittenAbout(t *testing.T) {
+	self, quiet, busy := newIdentity(t), newIdentity(t), newIdentity(t)
+	clock := newClock()
+	e := newRatingEngine(t, self, newFakeStore(self.id), clock, NewPeersRatings())
+	scoredAt := func(id warpnet.WarpPeerID) time.Time {
+		p, ok := e.index.peer(id.String())
+		require.True(t, ok)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.scoredAt
+	}
+
+	recordN(t, e, quiet.id, KindBadSignature, 1)
+	recordN(t, e, busy.id, KindBadSignature, 1)
+	flushNow(t, e)
+	require.NoError(t, e.ratePeers())
+	quietAt, busyAt := scoredAt(quiet.id), scoredAt(busy.id)
+
+	clock.advance(defaultFlushInterval)
+	require.NoError(t, e.record(busy.id, KindBadSignature))
+	flushNow(t, e)
+	require.NoError(t, e.ratePeers())
+
+	assert.Equal(t, quietAt, scoredAt(quiet.id), "a peer nothing new was said about keeps its score")
+	assert.NotEqual(t, busyAt, scoredAt(busy.id), "one with new evidence is scored again")
+}
+
+// A signature is checked once, and vouches only for the exact bytes it was
+// checked over.
+func TestASignatureIsCheckedOnceAndVouchesForNothingElse(t *testing.T) {
+	self, observer, peer := newIdentity(t), newIdentity(t), newIdentity(t)
+	clock := newClock()
+	e := newMemberEngine(t, self, newFakeStore(self.id), clock)
+
+	rec := signedRecord(observer, peer.id, Network, bucketAt(clock.Now()), genA, kindCount{KindBadSignature, 1})
+	_, err := e.authenticate(rec)
+	require.NoError(t, err)
+	require.True(t, e.verified.Contains(record(rec).digest()), "a verified record is remembered")
+
+	for name, tamper := range map[string]func(*domain.RatingRecord){
+		"counts": func(r *domain.RatingRecord) {
+			r.Offences = []domain.OffenceCount{{Kind: KindBadSignature.String(), Count: 9}}
+		},
+		"observer": func(r *domain.RatingRecord) { r.ObserverID = self.id.String() },
+		"time":     func(r *domain.RatingRecord) { r.UpdatedAt = r.UpdatedAt.Add(time.Millisecond) },
+	} {
+		forged := rec
+		tamper(&forged)
+		_, err := e.authenticate(forged)
+		assert.Error(t, err, "a remembered signature must not vouch for other %s", name)
+	}
+}
+
 func TestSettledBucketsAreFreed(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
@@ -502,6 +589,72 @@ func TestSettledBucketsAreFreed(t *testing.T) {
 	for key := range e.counters {
 		assert.Equal(t, bucketAt(clock.Now()), key.bucket)
 	}
+}
+
+// hookedClock runs a hook, once, inside the next reading of the time and
+// then hands back the time as it was before the hook ran.
+type hookedClock struct {
+	*fixedClock
+
+	mu   sync.Mutex
+	hook func()
+}
+
+func (c *hookedClock) Now() time.Time {
+	now := c.fixedClock.Now()
+	c.mu.Lock()
+	hook := c.hook
+	c.hook = nil
+	c.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return now
+}
+
+func (c *hookedClock) once(hook func()) {
+	c.mu.Lock()
+	c.hook = hook
+	c.mu.Unlock()
+}
+
+// A count that lands on the hour boundary must add to the hour it was
+// charged in, not replace what that hour had already written.
+func TestACountOnTheHourBoundaryKeepsTheHoursTotal(t *testing.T) {
+	self := newIdentity(t)
+	peer := newIdentity(t)
+	clock := &hookedClock{fixedClock: newClock()}
+	store := newFakeStore(self.id)
+	e, err := NewEngine(t.Context(), store, fakeConns{opened: clock.fixedClock.Now().Add(-24 * time.Hour)},
+		self.priv, warpnet.MemberNode, WithClock(clock.Now), WithFlushInterval(time.Hour))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	recordN(t, e, peer.id, KindBadSignature, 10)
+	flushNow(t, e)
+
+	// The next charge reads the clock in the old hour; before it takes the
+	// lock the hour turns and the flush loop, busy with another peer,
+	// settles the old hour.
+	other := newIdentity(t)
+	clock.once(func() {
+		clock.advance(time.Hour)
+		require.NoError(t, e.record(other.id, KindDialFailure))
+		require.NoError(t, e.flush())
+	})
+	require.NoError(t, e.record(peer.id, KindBadSignature))
+	flushNow(t, e)
+
+	var total uint32
+	for _, rec := range store.records() {
+		if rec.PeerID != peer.id.String() {
+			continue
+		}
+		for _, o := range rec.Offences {
+			total += o.Count
+		}
+	}
+	assert.EqualValues(t, 11, total, "the hour's ten earlier charges must survive the late one")
 }
 
 func TestScoreFailsOpenWhenTheStoreCannotBeRead(t *testing.T) {
@@ -567,6 +720,34 @@ func TestViewIsThePublicMedianWithRecentTallies(t *testing.T) {
 		{Kind: KindRateLimitHit.String(), Count: 3, LastAt: hour.start()},
 		{Kind: KindBadSignature.String(), Count: 1, LastAt: hour.start()},
 	}, view.Dimensions[0].Recent, "raw counts, busiest first")
+}
+
+// The public view is what a node's owner reads about it. A key minted a
+// moment ago has no voice there, as it has none in the score; one this
+// node has known for an hour does.
+func TestAStrangerCannotWriteAPublicView(t *testing.T) {
+	self, victim, stranger := newIdentity(t), newIdentity(t), newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e, err := NewEngine(t.Context(), store, fakeConns{}, self.priv, warpnet.MemberNode,
+		WithClock(clock.Now), WithFlushInterval(time.Hour))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	store.merge(signedRecord(stranger, victim.id, Network, bucketAt(clock.Now()), genA,
+		kindCount{KindBadSignature, 4}))
+
+	view, err := e.View(victim.id)
+	require.NoError(t, err)
+	assert.Equal(t, TierTrusted.String(), view.Tier)
+	assert.Zero(t, view.Observers)
+	assert.Empty(t, view.Dimensions, "nor are the stranger's counts shown")
+
+	known := newMemberEngine(t, self, store, clock)
+	view, err = known.View(victim.id)
+	require.NoError(t, err)
+	assert.Equal(t, TierFloor.String(), view.Tier, "the same record counts once the observer is known")
+	assert.Equal(t, 1, view.Observers)
 }
 
 func TestOwnIsWhatOthersWroteAboutThisNode(t *testing.T) {
@@ -752,11 +933,29 @@ func TestRepetitionBecomesAnOffence(t *testing.T) {
 
 func TestWindowReportsOnlyTheCrossing(t *testing.T) {
 	b := newWindow(time.Minute, 3)
-	assert.False(t, b.reached("peer"))
-	assert.False(t, b.reached("peer"))
-	assert.True(t, b.reached("peer"), "the third observation crosses the threshold")
-	assert.False(t, b.reached("peer"), "and it is reported once, not on every one after")
-	assert.False(t, b.reached("another"), "each peer is counted on its own")
+	now := time.Now()
+	assert.False(t, b.reached("peer", now))
+	assert.False(t, b.reached("peer", now))
+	assert.True(t, b.reached("peer", now), "the third observation crosses the threshold")
+	assert.False(t, b.reached("peer", now), "and it is reported once, not on every one after")
+	assert.False(t, b.reached("another", now), "each peer is counted on its own")
+}
+
+// A peer that keeps offending keeps paying: every span it crosses the
+// threshold in is charged, however closely the next span follows.
+func TestAPersistentOffenderIsChargedInEverySpan(t *testing.T) {
+	b := newWindow(time.Minute, 3)
+	now := time.Now()
+
+	crossings := 0
+	for range 120 {
+		if b.reached("peer", now) {
+			crossings++
+		}
+		now = now.Add(6 * time.Second)
+	}
+
+	assert.Equal(t, 12, crossings, "ten observations a minute for twelve minutes cross the threshold every minute")
 }
 
 func TestListenChargesFromEveryFanOutAndStopsWithTheEngine(t *testing.T) {

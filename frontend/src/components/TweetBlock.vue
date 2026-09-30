@@ -74,6 +74,9 @@ resulting from the use or misuse of this software.
         <span v-if="tweet.pinned" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" title="Pinned tweet">
           <i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned
         </span>
+        <span v-if="tweet.price" class="ml-2 text-xs text-blue flex-none whitespace-nowrap" :title="`Sponsored tweet, ${tweet.price.amount} USDT`">
+          <i class="fas fa-pepper-hot" aria-hidden="true"></i> {{ tweet.price.amount }} USDT
+        </span>
         <div class="relative ml-auto flex-none">
           <button type="button" @click.stop="toggleDropdown" class="rounded-full w-7 h-7 flex items-center justify-center hover:bg-lighter flat-btn" aria-label="Tweet options" :aria-expanded="showDropdown">
             <i class="fas fa-angle-down text-sm text-dark" aria-hidden="true"></i>
@@ -109,7 +112,39 @@ resulting from the use or misuse of this software.
           @cancel="showDeleteConfirm = false"
         />
       </div>
-      <p v-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2 break-words" v-linkify>
+      <template v-if="isLocked">
+        <div
+            class="mt-1 mb-2 h-32 rounded border border-lighter bg-lighter text-dark flex items-center justify-center"
+            role="img"
+            aria-label="Locked tweet"
+        >
+          <i class="fas fa-pepper-hot text-3xl" aria-hidden="true"></i>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <button
+              type="button"
+              @click.stop="unlockPending ? unlock() : (showUnlockConfirm = true)"
+              :disabled="unlocking"
+              class="h-9 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
+              :class="{'opacity-50 cursor-not-allowed': unlocking}"
+          >
+            <span v-if="unlocking"><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>{{ unlockPending ? 'Checking…' : 'Paying…' }}</span>
+            <span v-else-if="unlockPending">Check payment</span>
+            <span v-else>Unlock for {{ tweet.price.amount }} USDT</span>
+          </button>
+          <span v-if="unlockPending" class="text-xs text-dark">Paid. The network is still confirming it, try again in a minute.</span>
+        </div>
+        <ConfirmDialog
+          :show="showUnlockConfirm"
+          title="Unlock this tweet?"
+          :message="`You pay ${tweet.price.amount} USDT to ${tweet.username || 'the author'}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`"
+          confirm-label="Pay"
+          cancel-label="Cancel"
+          @confirm="unlock"
+          @cancel="showUnlockConfirm = false"
+        />
+      </template>
+      <p v-else-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2 break-words" v-linkify>
         {{ displayText }}
       </p>
       <p v-else class="pb-2 bg-red-300">
@@ -407,6 +442,9 @@ export default {
       showDropdown: false,
       showReportDialog: false,
       showDeleteConfirm: false,
+      showUnlockConfirm: false,
+      unlocking: false,
+      unlockPending: false,
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -452,6 +490,9 @@ export default {
     },
     canReply() {
       return acceptsReplies(this.tweet);
+    },
+    isLocked() {
+      return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
     },
     displayText() {
       const text = (this.tweet && this.tweet.text) || '';
@@ -520,6 +561,34 @@ export default {
       } catch (err) {
         console.warn(`failed to load retweeter profile [${by}]`, err);
       }
+    },
+    async unlock() {
+      this.showUnlockConfirm = false;
+      if (this.unlocking) return;
+      this.unlocking = true;
+      try {
+        const order = await warpnetService.orderSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+        this.unlockPending = !order.confirmed;
+        if (this.unlockPending) return;
+        await this.loadSponsoredContent();
+      } catch (err) {
+        console.error(`failed to unlock tweet [${this.tweet.id}]`, err);
+        toast.error(err?.message || "Couldn't unlock the tweet.");
+      } finally {
+        this.unlocking = false;
+      }
+    },
+    async loadSponsoredContent() {
+      const full = await warpnetService.getSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+      if (!full) return;
+      if (full.pending) {
+        this.unlockPending = true;
+        return;
+      }
+      this.tweet.text = full.text;
+      this.tweet.image_keys = full.image_keys || [];
+      this.tweet.video_key = full.video_key;
+      this.loadImages();
     },
     loadImages() {
       const imageKeys = this.tweet.image_keys || [];
@@ -1152,6 +1221,10 @@ export default {
     this.loadAuthor();
     this.loadRetweeterLabel();
     this.loadImages();
+    if (this.isLocked) {
+      this.loadSponsoredContent()
+          .catch(err => console.warn(`failed to load sponsored tweet [${this.tweet.id}]`, err));
+    }
     if (this.tweet.video_key && this.autoloadVideo) {
       this.loadVideo();
     }
