@@ -333,6 +333,50 @@ func TestGossip_RouterTornDownWhileWaitingForTheLock(t *testing.T) {
 	assert.ErrorIs(t, g.PublishRaw("after", []byte(`{}`)), ErrPubsubNotInit)
 }
 
+// slowNode holds the first read of its node info until released, the way a
+// peer-info publish still reading the node looks to whoever closes the gossip.
+type slowNode struct {
+	*liveNode
+
+	entered, release chan struct{}
+	once             sync.Once
+}
+
+func (n *slowNode) NodeInfo() warpnet.NodeInfo {
+	n.once.Do(func() {
+		close(n.entered)
+		<-n.release
+	})
+	return n.liveNode.NodeInfo()
+}
+
+// The gossip's owner stops the node right after closing the gossip, so Close
+// must not return while the peer-info publisher it started still reads it.
+func TestGossip_CloseWaitsForItsPeerInfoPublisher(t *testing.T) {
+	node := &slowNode{liveNode: newLiveNode(t), entered: make(chan struct{}), release: make(chan struct{})}
+	g := NewGossip(context.Background(), nil)
+	require.NoError(t, g.Run(node))
+	<-node.entered
+
+	closed := make(chan struct{})
+	go func() {
+		_ = g.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+		t.Fatal("Close returned while its publisher was still reading the node")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(node.release)
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close did not return once the publisher let go of the node")
+	}
+}
+
 func TestGossip_UnsubscribeReportsATopicItCannotClose(t *testing.T) {
 	g, _ := runningGossip(t)
 

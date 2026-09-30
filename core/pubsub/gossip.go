@@ -82,6 +82,9 @@ type Gossip struct {
 	isRunning        *atomic.Bool
 	privKey          ed25519.PrivateKey
 
+	stop       chan struct{}
+	publishing sync.WaitGroup
+
 	ratings PeersRatings
 }
 
@@ -246,9 +249,10 @@ func (g *Gossip) runGossip() (err error) {
 	if err != nil {
 		return err
 	}
+	g.stop = make(chan struct{})
 	g.isRunning.Store(true)
 
-	go g.runPeerInfoPublishing(time.Minute * 30)
+	g.publishing.Go(func() { g.runPeerInfoPublishing(time.Minute * 30) })
 	log.Infoln("gossip: started")
 
 	return
@@ -547,6 +551,8 @@ func (g *Gossip) runPeerInfoPublishing(duration time.Duration) {
 		select {
 		case <-g.ctx.Done():
 			return
+		case <-g.stop:
+			return
 		case <-ticker.C:
 			jitter := time.Second * time.Duration(rand.IntN(60)) //#nosec
 			ticker.Reset(duration + jitter)
@@ -614,9 +620,11 @@ func (g *Gossip) Close() (err error) {
 			err = fmt.Errorf("%w", warpErr)
 		}
 	}()
-	if !g.isRunning.Load() {
+	if !g.isRunning.CompareAndSwap(true, false) {
 		return nil
 	}
+	close(g.stop)
+	g.publishing.Wait()
 
 	g.mx.Lock()
 	defer g.mx.Unlock()
@@ -632,8 +640,6 @@ func (g *Gossip) Close() (err error) {
 	for _, topic := range g.topics {
 		_ = topic.Close()
 	}
-
-	g.isRunning.Store(false)
 
 	g.pubsub = nil
 	g.relayCancelFuncs = nil
