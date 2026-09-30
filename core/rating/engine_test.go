@@ -667,6 +667,34 @@ func TestViewIsThePublicMedianWithRecentTallies(t *testing.T) {
 	}, view.Dimensions[0].Recent, "raw counts, busiest first")
 }
 
+// The public view is what a node's owner reads about it. A key minted a
+// moment ago has no voice there, as it has none in the score; one this
+// node has known for an hour does.
+func TestAStrangerCannotWriteAPublicView(t *testing.T) {
+	self, victim, stranger := newIdentity(t), newIdentity(t), newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e, err := NewEngine(t.Context(), store, fakeConns{}, self.priv, warpnet.MemberNode,
+		WithClock(clock.Now), WithFlushInterval(time.Hour))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.Close() })
+
+	store.merge(signedRecord(stranger, victim.id, Network, bucketAt(clock.Now()), genA,
+		kindCount{KindBadSignature, 4}))
+
+	view, err := e.View(victim.id)
+	require.NoError(t, err)
+	assert.Equal(t, TierTrusted.String(), view.Tier)
+	assert.Zero(t, view.Observers)
+	assert.Empty(t, view.Dimensions, "nor are the stranger's counts shown")
+
+	known := newMemberEngine(t, self, store, clock)
+	view, err = known.View(victim.id)
+	require.NoError(t, err)
+	assert.Equal(t, TierFloor.String(), view.Tier, "the same record counts once the observer is known")
+	assert.Equal(t, 1, view.Observers)
+}
+
 func TestOwnIsWhatOthersWroteAboutThisNode(t *testing.T) {
 	self := newIdentity(t)
 	peer := newIdentity(t)

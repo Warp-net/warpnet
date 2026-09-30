@@ -353,7 +353,8 @@ func (e *Engine) Score(peerID warpnet.WarpPeerID) Score {
 }
 
 // View is the public aggregate of a peer, for display: the unweighted
-// median over observers per dimension, with raw recent counts.
+// median per dimension over the observers this node hears, with their raw
+// recent counts.
 func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 	id := peerID.String()
 	result := domain.NodeRating{
@@ -371,6 +372,7 @@ func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 		return result, err
 	}
 	es, _ := p.entries()
+	es = slices.DeleteFunc(es, func(en entry) bool { return !e.isHeard(en.observer) })
 	now := e.now()
 	overall := MaxScore
 	observers := make(map[string]struct{}, len(es))
@@ -603,6 +605,13 @@ func (e *Engine) weight(observer string) float64 {
 
 func (e *Engine) ownScore(es entries, dim Dimension, now time.Time) Score {
 	return (MaxScore - es.byObserver(dim)[e.self].penalty(dim, now)).clamp()
+}
+
+// isHeard reports an observer this node gives a voice, in the view as in
+// the score: itself, and one it has known long enough, so a key minted a
+// moment ago cannot write a peer's public standing.
+func (e *Engine) isHeard(observer string) bool {
+	return observer == e.self || e.isOldEnough(observer)
 }
 
 func (e *Engine) isOldEnough(observer string) bool {
