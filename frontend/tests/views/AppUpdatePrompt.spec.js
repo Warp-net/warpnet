@@ -15,12 +15,20 @@ vi.mock('@/service/service', () => ({
 vi.mock('@/lib/transport', () => ({
   EventsOn: vi.fn(),
   EventsOff: vi.fn(),
+  OpenURL: vi.fn(),
 }));
 
 import App from '@/App.vue';
 import { warpnetService } from '@/service/service';
+import { OpenURL } from '@/lib/transport';
 
-const pending = { current_version: '0.7.1', new_version: '0.7.2' };
+const pending = { current_version: '0.7.1', new_version: '0.7.2', is_installable: true };
+const manual = {
+  current_version: '0.7.1',
+  new_version: '0.7.2',
+  is_installable: false,
+  release_url: 'https://example.test/releases/v0.7.2',
+};
 
 const mountApp = () =>
   render(App, {
@@ -37,6 +45,7 @@ class NoopResizeObserver {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   global.ResizeObserver = NoopResizeObserver;
   warpnetService.getOwnerProfile.mockReturnValue(undefined);
   warpnetService.subscribeOwner.mockReturnValue(() => {});
@@ -73,5 +82,34 @@ describe('update prompt', () => {
 
     expect(warpnetService.answerUpdate).toHaveBeenCalledWith(false);
     await waitFor(() => expect(screen.queryByText('Update available')).toBeNull());
+  });
+});
+
+describe('update the node cannot install', () => {
+  it('offers the download instead of an answer', async () => {
+    warpnetService.getPendingUpdate.mockResolvedValue(manual);
+    mountApp();
+
+    await screen.findByText('Update available');
+    expect(screen.getByText(/cannot replace itself/)).toBeTruthy();
+
+    await fireEvent.click(screen.getByText('Download'));
+    expect(OpenURL).toHaveBeenCalledWith(manual.release_url);
+    expect(warpnetService.answerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('stays dismissed while the node keeps reporting it', async () => {
+    warpnetService.getPendingUpdate.mockResolvedValue(manual);
+    const { unmount } = mountApp();
+
+    await screen.findByText('Update available');
+    await fireEvent.click(screen.getByText('Dismiss'));
+    expect(warpnetService.answerUpdate).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('Update available')).toBeNull());
+
+    unmount();
+    mountApp();
+    await waitFor(() => expect(warpnetService.getPendingUpdate).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('Update available')).toBeNull();
   });
 });

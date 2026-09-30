@@ -57,6 +57,8 @@ type AuthNodeInfo struct {
 type UpdateInfo struct {
 	CurrentVersion string `json:"current_version"`
 	NewVersion     string `json:"new_version"`
+	ReleaseURL     string `json:"release_url,omitempty"`
+	IsInstallable  bool   `json:"is_installable"`
 	IsAllowed      bool   `json:"is_allowed"`
 }
 
