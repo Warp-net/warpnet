@@ -60,28 +60,30 @@ resulting from the use or misuse of this software.
             Dive deep into the Warp and see what happens...
           </p>
           <p>Join Warpnet today.</p>
-          <button v-if="isFirstRun === true"
-            @click.prevent="setSignUpStep('step1')"
-            class="rounded-full bg-blue font-bold text-lg text-white mt-4 p-3 hover:bg-darkblue"
-          >
-            Sign up
-          </button>
-          <!-- First-launch network choice; picking one relaunches the app on it. -->
-          <div
-            v-if="isFirstRun === true && isDesktop"
-            class="mt-3 text-sm font-normal text-dark"
-          >
-            <label for="network-select" class="mr-2">Network</label>
-            <select
-              id="network-select"
-              v-model="network"
-              @change="switchNetwork"
-              class="bg-lightblue border-b-2 border-dark rounded p-1"
+          <template v-if="isFirstRun === true">
+            <button
+              @click.prevent="setSignUpStep('step1')"
+              class="rounded-full bg-blue font-bold text-lg text-white mt-4 p-3 hover:bg-darkblue"
             >
-              <option value="warpnet">Warpnet (main)</option>
-              <option value="testnet">Testnet</option>
-            </select>
-          </div>
+              Sign up
+            </button>
+            <!-- First-launch network choice; picking one relaunches the app on it. -->
+            <div
+              v-if="isDesktop"
+              class="mt-3 text-sm font-normal text-dark"
+            >
+              <label for="network-select" class="mr-2">Network</label>
+              <select
+                id="network-select"
+                v-model="network"
+                @change="switchNetwork"
+                class="bg-lightblue border-b-2 border-dark rounded p-1"
+              >
+                <option value="warpnet">Warpnet (main)</option>
+                <option value="testnet">Testnet</option>
+              </select>
+            </div>
+          </template>
           <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
           <!-- first-run probe failed (node unreachable): offer a retry rather
                than silently showing login with no sign-up path -->

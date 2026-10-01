@@ -93,6 +93,18 @@ describe('Root.vue', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('shows the loader while the first-run probe is pending', async () => {
+    // A probe that never settles keeps isFirstRun unresolved.
+    renderRoot({ firstRun: new Promise(() => {}) });
+
+    await waitFor(() => expect(warpnetService.isFirstRun).toHaveBeenCalled());
+    expect(screen.getByText(/Loading/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Sign up$/ })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('login-stub')).not.toBeInTheDocument();
+  });
+
   it('opens step 1 of the sign-up modal when Sign up is clicked', async () => {
     renderRoot({ firstRun: true });
 
@@ -176,12 +188,13 @@ describe('Root.vue', () => {
     expect(warpnetService.selectNetwork).not.toHaveBeenCalled();
   });
 
-  it('hides the network selector on the browser dashboard (remote node)', async () => {
+  it('hides the network selector and the loader on the browser dashboard (remote node)', async () => {
     warpnetService.isDesktopNode.mockReturnValue(false);
     renderRoot({ firstRun: true });
 
     await screen.findByRole('button', { name: /^Sign up$/ });
     expect(screen.queryByLabelText(/Network/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
   });
 
   it('shows a sign-up error when signInUser rejects (error state)', async () => {
