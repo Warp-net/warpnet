@@ -17,8 +17,11 @@ vi.mock('@/service/service', () => ({
   },
 }));
 
+vi.mock('@/lib/order-worker', () => ({ watchOrder: vi.fn() }));
+
 import TweetBlock from '@/components/TweetBlock.vue';
 import { warpnetService } from '@/service/service';
+import { watchOrder } from '@/lib/order-worker';
 
 class FakeIntersectionObserver {
   observe() {}
@@ -98,31 +101,41 @@ describe('TweetBlock sponsored tweet', () => {
     expect(screen.queryByRole('img', { name: 'Locked tweet' })).not.toBeInTheDocument();
   });
 
-  it('says so when the network has not confirmed the payment yet', async () => {
+  it('leaves an unconfirmed payment to the order worker and opens once it confirms', async () => {
     warpnetService.orderSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: false });
+    let unlocked;
+    watchOrder.mockImplementation((_tweetId, _userId, onUnlocked) => {
+      unlocked = onUnlocked;
+      return vi.fn();
+    });
     renderTweet(teaser());
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
     await fireEvent.click(await screen.findByRole('button', { name: 'Pay' }));
 
-    expect(await screen.findByText(/still confirming/)).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Locked tweet' })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent(/confirming it, the tweet opens by itself/);
+    expect(screen.queryByRole('button', { name: /Unlock for/ })).not.toBeInTheDocument();
+    expect(watchOrder).toHaveBeenCalledWith('t1', 'author1', expect.any(Function));
 
-    warpnetService.orderSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: true });
-    warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'confirmed at last' });
-    await fireEvent.click(screen.getByRole('button', { name: 'Check payment' }));
+    unlocked({ ...teaser(), text: 'confirmed at last' });
 
     expect(await screen.findByText('confirmed at last')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pay' })).not.toBeInTheDocument();
-    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledTimes(1);
   });
 
   it('comes back to a confirming payment without offering to pay again', async () => {
     warpnetService.getSponsoredTweet.mockResolvedValue({ pending: true });
-    renderTweet(teaser());
+    const unwatch = vi.fn();
+    watchOrder.mockReturnValue(unwatch);
+    const { unmount } = renderTweet(teaser());
 
-    expect(await screen.findByRole('button', { name: 'Check payment' })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Unlock for/ })).not.toBeInTheDocument();
+    expect(watchOrder).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(unwatch).toHaveBeenCalled();
   });
 
   it('opens a tweet bought earlier without asking again', async () => {

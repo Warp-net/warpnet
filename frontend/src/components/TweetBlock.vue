@@ -121,18 +121,20 @@ resulting from the use or misuse of this software.
           <i class="fas fa-pepper-hot text-3xl" aria-hidden="true"></i>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span v-if="unlockPending" class="text-xs text-dark" role="status">
+            <i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paid. The network is confirming it, the tweet opens by itself.
+          </span>
           <button
+              v-else
               type="button"
-              @click.stop="unlockPending ? unlock() : (showUnlockConfirm = true)"
+              @click.stop="showUnlockConfirm = true"
               :disabled="unlocking"
               class="h-9 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
               :class="{'opacity-50 cursor-not-allowed': unlocking}"
           >
-            <span v-if="unlocking"><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>{{ unlockPending ? 'Checking…' : 'Paying…' }}</span>
-            <span v-else-if="unlockPending">Check payment</span>
+            <span v-if="unlocking"><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paying…</span>
             <span v-else>Unlock for {{ tweet.price.amount }} USDT</span>
           </button>
-          <span v-if="unlockPending" class="text-xs text-dark">Paid. The network is still confirming it, try again in a minute.</span>
         </div>
         <ConfirmDialog
           :show="showUnlockConfirm"
@@ -409,6 +411,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {watchOrder} from "@/lib/order-worker";
 import {extractYoutubeId} from "@/lib/youtube";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
@@ -568,8 +571,10 @@ export default {
       this.unlocking = true;
       try {
         const order = await warpnetService.orderSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
-        this.unlockPending = !order.confirmed;
-        if (this.unlockPending) return;
+        if (!order.confirmed) {
+          this.awaitConfirmation();
+          return;
+        }
         await this.loadSponsoredContent();
       } catch (err) {
         console.error(`failed to unlock tweet [${this.tweet.id}]`, err);
@@ -582,9 +587,21 @@ export default {
       const full = await warpnetService.getSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
       if (!full) return;
       if (full.pending) {
-        this.unlockPending = true;
+        this.awaitConfirmation();
         return;
       }
+      this.showSponsoredContent(full);
+    },
+    awaitConfirmation() {
+      this.unlockPending = true;
+      if (this._unwatchOrder) return;
+      this._unwatchOrder = watchOrder(this.tweet.id, this.tweet.user_id, (full) => {
+        this._unwatchOrder = null;
+        this.unlockPending = false;
+        this.showSponsoredContent(full);
+      });
+    },
+    showSponsoredContent(full) {
       this.tweet.text = full.text;
       this.tweet.image_keys = full.image_keys || [];
       this.tweet.video_key = full.video_key;
@@ -1252,6 +1269,10 @@ export default {
     if (this._statsRetryTimer) {
       clearTimeout(this._statsRetryTimer);
       this._statsRetryTimer = null;
+    }
+    if (this._unwatchOrder) {
+      this._unwatchOrder();
+      this._unwatchOrder = null;
     }
     this.cancelLongPress();
     this.cancelReactionBar();
