@@ -48,3 +48,18 @@ describe('createTweet with a price', () => {
       .rejects.toThrow("can't publish sponsored tweets");
   });
 });
+
+describe('getSponsoredTweet', () => {
+  it('reads an order the network has not confirmed yet as pending', async () => {
+    Call.mockResolvedValue({ body: { tweet_id: 't1', tx_id: 'tx1', confirmed: false } });
+
+    expect(await warpnetService.getSponsoredTweet({ tweetId: 't1', userId: 'author1' })).toEqual({ pending: true });
+  });
+
+  it('hands over a bought tweet and nothing for an unbought one', async () => {
+    Call.mockResolvedValueOnce({ body: { id: 't1', text: 'paid words' } }).mockResolvedValueOnce({ body: { id: '' } });
+
+    expect(await warpnetService.getSponsoredTweet({ tweetId: 't1', userId: 'author1' })).toEqual({ id: 't1', text: 'paid words' });
+    expect(await warpnetService.getSponsoredTweet({ tweetId: 't1', userId: 'author1' })).toBeNull();
+  });
+});
