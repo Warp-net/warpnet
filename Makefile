@@ -45,12 +45,6 @@ snapcraft:
 	sudo snapcraft clean
 	sudo rm -rf parts/ stage/ prime/ overlay/ .craft/
 
-prometheus:
-	xdg-open http://localhost:9090/targets
-
-grafana:
-	xdg-open http://localhost:3000
-
 snap-status:
 	snapcraft status warpnet
 
