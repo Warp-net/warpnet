@@ -127,7 +127,7 @@ resulting from the use or misuse of this software.
           <button
               v-else
               type="button"
-              @click.stop="showUnlockConfirm = true"
+              @click.stop="openUnlock()"
               :disabled="unlocking"
               class="h-9 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
               :class="{'opacity-50 cursor-not-allowed': unlocking}"
@@ -139,12 +139,50 @@ resulting from the use or misuse of this software.
         <ConfirmDialog
           :show="showUnlockConfirm"
           title="Unlock this tweet?"
-          :message="`You pay ${tweet.price.amount} USDT to ${tweet.username || 'the author'}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`"
+          :message="unlockMessage"
           confirm-label="Pay"
           cancel-label="Cancel"
+          :confirm-disabled="quoting || isShortOfTokens"
           @confirm="unlock"
           @cancel="showUnlockConfirm = false"
-        />
+        >
+          <p v-if="quoting" class="mt-3 text-sm text-dark" role="status">
+            <i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Working out the costs…
+          </p>
+          <p v-else-if="quoteError" class="mt-3 text-sm text-red-700">{{ quoteError }}</p>
+          <template v-else-if="quote">
+            <table class="mt-3 w-full text-sm text-dark" aria-label="What the tweet costs">
+              <tbody>
+                <tr>
+                  <td class="py-0.5">To {{ tweet.username || 'the author' }}</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">{{ tweet.price.amount }} USDT</td>
+                </tr>
+                <tr>
+                  <td class="py-0.5">Service fee, {{ quote.fee_percent }}%</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">{{ decimal(quote.fee) }} USDT</td>
+                </tr>
+                <tr class="font-semibold">
+                  <td class="py-0.5">Total</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">{{ decimal(quote.total) }} USDT</td>
+                </tr>
+                <tr v-for="step in quote.steps" :key="step.kind">
+                  <td class="pt-2">
+                    {{ stepLabel(step) }}
+                    <span class="block text-xs">{{ step.approximate ? '≈ ' : '' }}{{ step.energy.toLocaleString() }} energy, {{ step.bandwidth }} bytes</span>
+                  </td>
+                  <td class="pt-2 text-right align-top whitespace-nowrap">{{ step.approximate ? '≈ ' : '' }}{{ decimal(step.burn) }} TRX</td>
+                </tr>
+                <tr class="font-semibold">
+                  <td class="py-0.5">Network fee</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">≈ {{ decimal(quote.network_fee) }} TRX</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="mt-2 text-xs text-dark">The network burns TRX for what your staked energy and bandwidth and the free daily bandwidth don't cover. ≈ marks an estimate.</p>
+            <p v-if="isShortOfTokens" class="mt-2 text-sm text-red-700">You have {{ decimal(quote.balance) }} USDT, not enough to pay.</p>
+            <p v-if="isShortOfTrx" class="mt-2 text-sm text-red-700">You have {{ decimal(quote.trx) }} TRX, less than the network fee.</p>
+          </template>
+        </ConfirmDialog>
       </template>
       <p v-else-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2 break-words" v-linkify>
         {{ displayText }}
@@ -417,6 +455,18 @@ import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
 
+// USDT on TRON and TRX in sun both count in millionths.
+const unitDecimals = 6;
+const orderSteps = { reset: "Clearing an old approval", approve: "Approving the payment", pay: "Payment" };
+
+function bigUnits(value) {
+  try {
+    return BigInt(value || "0");
+  } catch {
+    return 0n;
+  }
+}
+
 export default {
   name: "Tweet",
   props: {
@@ -448,6 +498,9 @@ export default {
       showUnlockConfirm: false,
       unlocking: false,
       unlockPending: false,
+      quote: null,
+      quoting: false,
+      quoteError: "",
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -496,6 +549,19 @@ export default {
     },
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
+    },
+    unlockMessage() {
+      const author = this.tweet.username || "the author";
+      if (this.quoteError) {
+        return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`;
+      }
+      return `The payment goes to ${author} and can't be undone.`;
+    },
+    isShortOfTokens() {
+      return !!this.quote && bigUnits(this.quote.balance) < bigUnits(this.quote.total);
+    },
+    isShortOfTrx() {
+      return !!this.quote && bigUnits(this.quote.trx) < bigUnits(this.quote.network_fee);
     },
     displayText() {
       const text = (this.tweet && this.tweet.text) || '';
@@ -564,6 +630,29 @@ export default {
       } catch (err) {
         console.warn(`failed to load retweeter profile [${by}]`, err);
       }
+    },
+    async openUnlock() {
+      this.showUnlockConfirm = true;
+      this.quote = null;
+      this.quoteError = "";
+      this.quoting = true;
+      try {
+        this.quote = await warpnetService.quoteSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+      } catch (err) {
+        console.warn(`failed to quote tweet [${this.tweet.id}]`, err);
+        this.quoteError = `Couldn't work out the network fee: ${err?.message || err}`;
+      } finally {
+        this.quoting = false;
+      }
+    },
+    decimal(units) {
+      const value = bigUnits(units);
+      const base = 10n ** BigInt(unitDecimals);
+      const frac = (value % base).toString().padStart(unitDecimals, "0").replace(/0+$/, "");
+      return frac ? `${value / base}.${frac}` : `${value / base}`;
+    },
+    stepLabel(step) {
+      return orderSteps[step.kind] || step.kind;
     },
     async unlock() {
       this.showUnlockConfirm = false;

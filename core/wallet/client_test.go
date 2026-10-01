@@ -317,6 +317,24 @@ func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	}
 }
 
+func TestQuoteParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
+	sponsorship := Sponsorship{
+		Splitter:      "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy",
+		Author:        "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143",
+		Amount:        "1000000",
+		MaxFeePercent: 5,
+	}
+	params := quoteParams("testnet", "TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6", sponsorship)
+	for _, key := range []string{"network", "payer", "splitter", "author", "amount", "max_fee_percent"} {
+		if _, ok := params[key]; !ok {
+			t.Fatalf("wallet.quote needs %q, got %v", key, params)
+		}
+	}
+	if len(params) != 6 {
+		t.Fatalf("wallet.quote was sent something it does not define: %v", params)
+	}
+}
+
 func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	cfg := DefaultConfig("testnet", "")
 	params := verifyParams(cfg, "ab12", Sponsorship{

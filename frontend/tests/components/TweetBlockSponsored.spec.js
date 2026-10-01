@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
@@ -14,6 +14,7 @@ vi.mock('@/service/service', () => ({
     isBookmarked: vi.fn(),
     orderSponsoredTweet: vi.fn(),
     getSponsoredTweet: vi.fn(),
+    quoteSponsoredTweet: vi.fn(),
   },
 }));
 
@@ -37,6 +38,28 @@ const teaser = () => ({
   created_at: '2026-09-29T10:00:00Z',
   price: { amount: '1.5', units: 1500000 },
 });
+
+const quote = (over = {}) => ({
+  token: 'TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf',
+  fee_percent: 5,
+  fee: '75000',
+  total: '1575000',
+  balance: '3000000',
+  trx: '25000000',
+  energy_price: 100,
+  bandwidth_price: 1000,
+  network_fee: '6726600',
+  steps: [
+    { kind: 'approve', energy: 0, bandwidth: 345, burn: '0', approximate: false },
+    { kind: 'pay', energy: 63156, bandwidth: 411, burn: '6726600', approximate: true },
+  ],
+  ...over,
+});
+
+const openBill = async () => {
+  await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
+  return screen.findByRole('table', { name: 'What the tweet costs' });
+};
 
 const renderTweet = (tweet) =>
   render(TweetBlock, {
@@ -75,6 +98,7 @@ beforeEach(() => {
   warpnetService.hasRetweeter.mockResolvedValue(false);
   warpnetService.isBookmarked?.mockResolvedValue?.(false);
   warpnetService.getSponsoredTweet.mockResolvedValue(null);
+  warpnetService.quoteSponsoredTweet.mockResolvedValue(quote());
 });
 
 describe('TweetBlock sponsored tweet', () => {
@@ -92,9 +116,9 @@ describe('TweetBlock sponsored tweet', () => {
     await waitFor(() => expect(warpnetService.getSponsoredTweet).toHaveBeenCalledTimes(1));
     warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'the paid words' });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Unlock for 1.5 USDT' }));
+    await openBill();
     expect(warpnetService.orderSponsoredTweet).not.toHaveBeenCalled();
-    await fireEvent.click(await screen.findByRole('button', { name: 'Pay' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Pay' }));
 
     await waitFor(() => expect(screen.getByText('the paid words')).toBeInTheDocument());
     expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledWith({ tweetId: 't1', userId: 'author1' });
@@ -110,8 +134,8 @@ describe('TweetBlock sponsored tweet', () => {
     });
     renderTweet(teaser());
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
-    await fireEvent.click(await screen.findByRole('button', { name: 'Pay' }));
+    await openBill();
+    await fireEvent.click(screen.getByRole('button', { name: 'Pay' }));
 
     expect(await screen.findByRole('status')).toHaveTextContent(/confirming it, the tweet opens by itself/);
     expect(screen.queryByRole('button', { name: /Unlock for/ })).not.toBeInTheDocument();
@@ -121,6 +145,56 @@ describe('TweetBlock sponsored tweet', () => {
 
     expect(await screen.findByText('confirmed at last')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the whole bill before paying', async () => {
+    renderTweet(teaser());
+    const bill = within(await openBill());
+
+    expect(warpnetService.quoteSponsoredTweet).toHaveBeenCalledWith({ tweetId: 't1', userId: 'author1' });
+    expect(bill.getByText('To author')).toBeInTheDocument();
+    expect(bill.getByText('1.5 USDT')).toBeInTheDocument();
+    expect(bill.getByText('Service fee, 5%')).toBeInTheDocument();
+    expect(bill.getByText('0.075 USDT')).toBeInTheDocument();
+    expect(bill.getByText('1.575 USDT')).toBeInTheDocument();
+    expect(bill.getByText(/Approving the payment/)).toBeInTheDocument();
+    expect(bill.getByText('0 energy, 345 bytes')).toBeInTheDocument();
+    expect(bill.getByText('0 TRX')).toBeInTheDocument();
+    expect(bill.getByText(`≈ ${(63156).toLocaleString()} energy, 411 bytes`)).toBeInTheDocument();
+    expect(bill.getAllByText('≈ 6.7266 TRX')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeEnabled();
+    expect(screen.queryByText(/not enough|less than the network fee/)).not.toBeInTheDocument();
+  });
+
+  it('will not pay without enough USDT', async () => {
+    warpnetService.quoteSponsoredTweet.mockResolvedValue(quote({ balance: '1000000' }));
+    renderTweet(teaser());
+    await openBill();
+
+    expect(screen.getByText('You have 1 USDT, not enough to pay.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeDisabled();
+  });
+
+  it('warns when the TRX may not cover the network fee', async () => {
+    warpnetService.quoteSponsoredTweet.mockResolvedValue(quote({ trx: '2000000' }));
+    renderTweet(teaser());
+    await openBill();
+
+    expect(screen.getByText('You have 2 TRX, less than the network fee.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeEnabled();
+  });
+
+  it('still lets the reader pay when the cost cannot be worked out', async () => {
+    warpnetService.quoteSponsoredTweet.mockRejectedValue(new Error('wallet: payment engine unavailable'));
+    warpnetService.orderSponsoredTweet.mockResolvedValue({ tweet_id: 't1', tx_id: 'tx1', confirmed: false });
+    watchOrder.mockReturnValue(vi.fn());
+    renderTweet(teaser());
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
+
+    expect(await screen.findByText("Couldn't work out the network fee: wallet: payment engine unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/plus a service fee of up to 5% and a TRX network fee/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Pay' }));
     expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledTimes(1);
   });
 

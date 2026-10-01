@@ -113,6 +113,27 @@ type Payment struct {
 	PayTx      string
 }
 
+type Quote struct {
+	Token          string      `json:"token"`
+	FeePercent     uint64      `json:"fee_percent"`
+	Fee            string      `json:"fee"`
+	Total          string      `json:"total"`
+	Balance        string      `json:"balance"`
+	TRX            string      `json:"trx"`
+	EnergyPrice    int64       `json:"energy_price"`
+	BandwidthPrice int64       `json:"bandwidth_price"`
+	NetworkFee     string      `json:"network_fee"`
+	Steps          []QuoteStep `json:"steps"`
+}
+
+type QuoteStep struct {
+	Kind        string `json:"kind"`
+	Energy      int64  `json:"energy"`
+	Bandwidth   int64  `json:"bandwidth"`
+	Burn        string `json:"burn"`
+	Approximate bool   `json:"approximate"`
+}
+
 type request struct {
 	ID     string          `json:"id"`
 	Method string          `json:"method"`
@@ -550,6 +571,18 @@ func (c *Client) Pay(ctx context.Context, seed string, s Sponsorship) (Payment, 
 	return Payment(out), nil
 }
 
+// Quote asks what Pay would cost the wallet of seed for s, without signing
+// anything: the token amounts exactly and the TRX the network would burn.
+func (c *Client) Quote(ctx context.Context, seed string, s Sponsorship) (Quote, error) {
+	payer, err := c.Address(ctx, seed)
+	if err != nil {
+		return Quote{}, err
+	}
+	var out Quote
+	err = c.call(ctx, "wallet.quote", quoteParams(c.cfg.Network, payer, s), &out)
+	return out, err
+}
+
 func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, error) {
 	var out struct {
 		Confirmed     bool   `json:"confirmed"`
@@ -573,6 +606,20 @@ func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, 
 		)
 	}
 	return out.Confirmed, nil
+}
+
+func quoteParams(network, payer string, s Sponsorship) map[string]any {
+	params := map[string]any{
+		paramNetwork: network,
+		"payer":      payer,
+		"splitter":   s.Splitter,
+		"author":     s.Author,
+		"amount":     s.Amount,
+	}
+	if s.MaxFeePercent > 0 {
+		params["max_fee_percent"] = s.MaxFeePercent
+	}
+	return params
 }
 
 func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
