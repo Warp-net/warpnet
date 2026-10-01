@@ -49,8 +49,6 @@ import (
 
 const orderNonceSize = 16
 
-const ErrSponsoredPending = warpnet.WarpError("sponsored tweet: payment is confirming")
-
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
@@ -398,7 +396,7 @@ func StreamGetSponsoredTweetHandler(
 				return nil, err
 			}
 			if !order.Confirmed {
-				return nil, ErrSponsoredPending
+				return event.OrderResponse{TweetId: ev.TweetId, TxId: order.TxId}, nil
 			}
 		}
 		resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_SPONSORED_TWEET, ev)

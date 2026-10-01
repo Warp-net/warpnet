@@ -320,8 +320,9 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		h := StreamGetSponsoredTweetHandler(auth, tweets, orders, users, streamer)
 
 		confirmed = false
-		_, err = h(req, streamFrom(own))
-		assert.ErrorIs(t, err, ErrSponsoredPending, "a receipt the author has not confirmed yet is still pending")
+		resp, err = h(req, streamFrom(own))
+		require.NoError(t, err, "a pending receipt is a state, not a failure the node logs")
+		assert.Equal(t, event.OrderResponse{TweetId: "tweet-1", TxId: "tx-1"}, resp, "a receipt the author has not confirmed yet is still pending")
 
 		confirmed = true
 		paths = nil
