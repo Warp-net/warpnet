@@ -62,6 +62,7 @@ const (
 	paramToken      = "token"
 	paramSeed       = "seed"
 	paramPrivateKey = "private_key"
+	paramAmount     = "amount"
 )
 
 var ErrUnavailable = errors.New("wallet: payment engine unavailable")
@@ -504,7 +505,7 @@ func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (
 		Tx string `json:"tx"`
 	}
 	asset = c.assetOr(asset)
-	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, "amount": amount}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, paramAmount: amount}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
 		return "", err
 	}
@@ -614,7 +615,7 @@ func quoteParams(network, payer string, s Sponsorship) map[string]any {
 		"payer":      payer,
 		"splitter":   s.Splitter,
 		"author":     s.Author,
-		"amount":     s.Amount,
+		paramAmount:  s.Amount,
 	}
 	if s.MaxFeePercent > 0 {
 		params["max_fee_percent"] = s.MaxFeePercent
@@ -645,7 +646,7 @@ func payParams(network, seed string, s Sponsorship) map[string]any {
 		"splitter":   s.Splitter,
 		"order_id":   s.OrderId,
 		"author":     s.Author,
-		"amount":     s.Amount,
+		paramAmount:  s.Amount,
 	}
 	if s.MaxFeePercent > 0 {
 		params["max_fee_percent"] = s.MaxFeePercent
