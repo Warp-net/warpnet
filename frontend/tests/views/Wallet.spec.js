@@ -309,6 +309,19 @@ describe('Wallet.vue', () => {
     expect(rows.indexOf('+1000 TRX')).toBeLessThan(rows.indexOf('+2 USDT'));
   });
 
+  it('dates every transfer', async () => {
+    const at = Date.UTC(2026, 9, 1, 15, 55);
+    warpnetService.getWalletHistory.mockImplementation(async (_limit, asset) =>
+      asset === 'TRX'
+        ? []
+        : [{ tx: 'usdt1', asset: 'USDT', from: 'TSome', to: wallet.address, value: '2000000', timestamp: at, incoming: true }],
+    );
+    renderWallet();
+    const when = new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    expect(await screen.findByText(when)).toBeTruthy();
+    expect(when).toMatch(/2026/);
+  });
+
   it('says so when neither history answers', async () => {
     warpnetService.getWalletHistory.mockRejectedValue(new Error('node unreachable'));
     renderWallet();

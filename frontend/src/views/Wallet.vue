@@ -152,6 +152,7 @@
                 {{ t.incoming ? '+' : '−' }}{{ format(t.value, assetDecimals(t.asset)) }} {{ t.asset || wallet.token }}
               </p>
               <p class="text-dark text-xs mono truncate">{{ t.incoming ? ('from ' + t.from) : ('to ' + t.to) }}</p>
+              <p v-if="t.timestamp" class="text-dark text-xs">{{ when(t.timestamp) }}</p>
             </div>
             <a :href="scan('tx', t.tx)" target="_blank" rel="noopener" class="text-blue text-sm ml-3 shrink-0">view</a>
           </div>
@@ -288,6 +289,9 @@ export default {
     scan(kind, value) {
       const base = SCAN[this.wallet.network] || SCAN.testnet;
       return `${base}/${kind === 'tx' ? 'transaction' : 'address'}/${value}`;
+    },
+    when(ms) {
+      return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
     },
     units(value) {
       try {
