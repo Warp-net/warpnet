@@ -43,6 +43,7 @@ const (
 	PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
 	PUBLIC_GET_SPONSORED_TWEET   = "/public/get/sponsored/tweet/0.0.0"
 	PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
+	PRIVATE_GET_SPONSORED_QUOTE  = "/private/get/sponsored/quote/0.0.0"
 	PUBLIC_POST_SPONSORED_ORDER  = "/public/post/sponsored/order/0.0.0"
 	// application
 	PRIVATE_DELETE_CHAT                = "/private/delete/chat/0.0.0"

@@ -1018,6 +1018,32 @@ type OrderResponse struct {
 	Confirmed bool      `json:"confirmed"`
 }
 
+// GetOrderQuoteEvent defines model for GetOrderQuoteEvent.
+type GetOrderQuoteEvent = NewOrderEvent
+
+// OrderQuoteResponse defines model for OrderQuoteResponse.
+type OrderQuoteResponse struct {
+	Token          string           `json:"token"`
+	FeePercent     uint64           `json:"fee_percent"`
+	Fee            string           `json:"fee"`
+	Total          string           `json:"total"`
+	Balance        string           `json:"balance"`
+	TRX            string           `json:"trx"`
+	EnergyPrice    int64            `json:"energy_price"`
+	BandwidthPrice int64            `json:"bandwidth_price"`
+	NetworkFee     string           `json:"network_fee"`
+	Steps          []OrderQuoteStep `json:"steps"`
+}
+
+// OrderQuoteStep defines model for OrderQuoteStep.
+type OrderQuoteStep struct {
+	Kind        string `json:"kind"`
+	Energy      int64  `json:"energy"`
+	Bandwidth   int64  `json:"bandwidth"`
+	Burn        string `json:"burn"`
+	Approximate bool   `json:"approximate"`
+}
+
 // WalletAddressEvent defines model for WalletAddressEvent.
 type WalletAddressEvent struct {
 	Chain string `json:"chain"`

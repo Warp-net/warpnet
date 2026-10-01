@@ -765,6 +765,10 @@ func (m *MemberNode) sponsoredHandlers(
 			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
 		},
 		{
+			event.PRIVATE_GET_SPONSORED_QUOTE,
+			handler.StreamGetOrderQuoteHandler(authRepo, m.privKey, m.walletClient, userRepo, m),
+		},
+		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
 			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m),
 		},

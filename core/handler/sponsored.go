@@ -52,6 +52,7 @@ const orderNonceSize = 16
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
+	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
 	Splitter() string
 	MaxFeePercent() uint64
@@ -138,19 +139,7 @@ func payAuthor(
 	author domain.User,
 	tweetId string,
 ) (domain.Order, error) {
-	if backend.Splitter() == "" {
-		return domain.Order{}, warpnet.WarpError("order: sponsored payments are not open on " + backend.Network())
-	}
-
-	teaser, err := streamedTweet(streamer, author, tweetId)
-	if err != nil {
-		return domain.Order{}, err
-	}
-	if !teaser.Price.IsPositive() {
-		return domain.Order{}, warpnet.WarpError("order: tweet has no price")
-	}
-
-	address, err := authorAddress(streamer, author, backend.Network())
+	sponsorship, err := tweetSponsorship(backend, streamer, author, tweetId)
 	if err != nil {
 		return domain.Order{}, err
 	}
@@ -171,13 +160,8 @@ func payAuthor(
 	if err != nil {
 		return domain.Order{}, err
 	}
-	payment, err := backend.Pay(context.Background(), seed, wallet.Sponsorship{
-		Splitter:      backend.Splitter(),
-		OrderId:       order.ID(),
-		Author:        address,
-		Amount:        teaser.Price.Units.String(),
-		MaxFeePercent: backend.MaxFeePercent(),
-	})
+	sponsorship.OrderId = order.ID()
+	payment, err := backend.Pay(context.Background(), seed, sponsorship)
 	if err != nil {
 		log.Errorf("order: pay for %s: %v", tweetId, err)
 		return domain.Order{}, err
@@ -187,6 +171,96 @@ func payAuthor(
 		log.Errorf("order: %s paid in tx %s but the receipt was not saved: %v", tweetId, payment.PayTx, err)
 	}
 	return order, nil
+}
+
+func tweetSponsorship(
+	backend SponsoredWallet,
+	streamer SponsoredStreamer,
+	author domain.User,
+	tweetId string,
+) (wallet.Sponsorship, error) {
+	if backend.Splitter() == "" {
+		return wallet.Sponsorship{}, warpnet.WarpError("order: sponsored payments are not open on " + backend.Network())
+	}
+
+	teaser, err := streamedTweet(streamer, author, tweetId)
+	if err != nil {
+		return wallet.Sponsorship{}, err
+	}
+	if !teaser.Price.IsPositive() {
+		return wallet.Sponsorship{}, warpnet.WarpError("order: tweet has no price")
+	}
+
+	address, err := authorAddress(streamer, author, backend.Network())
+	if err != nil {
+		return wallet.Sponsorship{}, err
+	}
+	return wallet.Sponsorship{
+		Splitter:      backend.Splitter(),
+		Author:        address,
+		Amount:        teaser.Price.Units.String(),
+		MaxFeePercent: backend.MaxFeePercent(),
+	}, nil
+}
+
+func StreamGetOrderQuoteHandler(
+	auth WalletOwnerStorer,
+	identityKey ed25519.PrivateKey,
+	backend SponsoredWallet,
+	userRepo SponsoredUserFetcher,
+	streamer SponsoredStreamer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.GetOrderQuoteEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("order quote: empty tweet id")
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("order quote: empty user id")
+		}
+		owner := auth.GetOwner()
+		if ev.UserId == owner.UserId {
+			return nil, warpnet.WarpError("order quote: an own tweet is not for sale")
+		}
+
+		author, err := userRepo.Get(ev.UserId)
+		if err != nil {
+			return nil, err
+		}
+		sponsorship, err := tweetSponsorship(backend, streamer, author, ev.TweetId)
+		if err != nil {
+			return nil, err
+		}
+		seed, err := walletSeed(owner, identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		quote, err := backend.Quote(context.Background(), seed, sponsorship)
+		if err != nil {
+			log.Warnf("order quote: %s: %v", ev.TweetId, err)
+			return nil, err
+		}
+
+		steps := make([]event.OrderQuoteStep, 0, len(quote.Steps))
+		for _, step := range quote.Steps {
+			steps = append(steps, event.OrderQuoteStep(step))
+		}
+		return event.OrderQuoteResponse{
+			Token:          quote.Token,
+			FeePercent:     quote.FeePercent,
+			Fee:            quote.Fee,
+			Total:          quote.Total,
+			Balance:        quote.Balance,
+			TRX:            quote.TRX,
+			EnergyPrice:    quote.EnergyPrice,
+			BandwidthPrice: quote.BandwidthPrice,
+			NetworkFee:     quote.NetworkFee,
+			Steps:          steps,
+		}, nil
+	}
 }
 
 func streamedTweet(streamer SponsoredStreamer, author domain.User, tweetId string) (domain.Tweet, error) {

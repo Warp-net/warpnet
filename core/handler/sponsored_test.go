@@ -25,6 +25,13 @@ type stubSponsoredWallet struct {
 	payErr   error
 	checks   []wallet.Sponsorship
 	isPaid   bool
+	quotes   []wallet.Sponsorship
+	quote    wallet.Quote
+}
+
+func (w *stubSponsoredWallet) Quote(_ context.Context, _ string, s wallet.Sponsorship) (wallet.Quote, error) {
+	w.quotes = append(w.quotes, s)
+	return w.quote, nil
 }
 
 func (w *stubSponsoredWallet) Address(_ context.Context, _ string) (string, error) {
@@ -179,6 +186,65 @@ func TestStreamNewOrderHandler(t *testing.T) {
 		_, err := newHandler(w, stubOrders{}, authorNode(t, confirm))(marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
 		assert.EqualError(t, err, "order: sponsored payments are not open on testnet")
 		assert.Empty(t, w.pays)
+	})
+}
+
+func TestStreamGetOrderQuoteHandler(t *testing.T) {
+	owner := domain.Owner{UserId: "buyer-1", Username: "bob"}
+	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
+	newHandler := func(w SponsoredWallet, streamer SponsoredStreamer) warpnet.WarpHandlerFunc {
+		return StreamGetOrderQuoteHandler(stubAuth{owner: owner}, testIdentityKey(t), w, users, streamer)
+	}
+	noVerify := func(event.VerifyOrderEvent) ([]byte, error) {
+		t.Fatal("a quote must not claim anything")
+		return nil, nil
+	}
+
+	for _, tt := range []struct {
+		name string
+		ev   event.GetOrderQuoteEvent
+		want string
+	}{
+		{"empty tweet id", event.GetOrderQuoteEvent{UserId: "author-1"}, "order quote: empty tweet id"},
+		{"empty user id", event.GetOrderQuoteEvent{TweetId: "tweet-1"}, "order quote: empty user id"},
+		{"own tweet", event.GetOrderQuoteEvent{TweetId: "tweet-1", UserId: "buyer-1"}, "order quote: an own tweet is not for sale"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := newHandler(&stubSponsoredWallet{}, stubStreamer{})(marshal(t, tt.ev), nil)
+			assert.EqualError(t, err, tt.want)
+		})
+	}
+
+	t.Run("quotes the author's price without paying", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", quote: wallet.Quote{
+			Token: "TToken", FeePercent: 5, Fee: "75000", Total: "1575000", Balance: "3000000", TRX: "25000000",
+			EnergyPrice: 100, BandwidthPrice: 1000, NetworkFee: "6726600",
+			Steps: []wallet.QuoteStep{
+				{Kind: "approve", Bandwidth: 345, Burn: "0"},
+				{Kind: "pay", Energy: 63156, Bandwidth: 411, Burn: "6726600", Approximate: true},
+			},
+		}}
+		resp, err := newHandler(w, authorNode(t, noVerify))(marshal(t, event.GetOrderQuoteEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
+		require.NoError(t, err)
+
+		require.Len(t, w.quotes, 1)
+		assert.Equal(t, wallet.Sponsorship{Splitter: "TSplitter", Author: "TAuthorAddress", Amount: "1500000", MaxFeePercent: 5}, w.quotes[0])
+		assert.Empty(t, w.pays)
+		assert.Equal(t, event.OrderQuoteResponse{
+			Token: "TToken", FeePercent: 5, Fee: "75000", Total: "1575000", Balance: "3000000", TRX: "25000000",
+			EnergyPrice: 100, BandwidthPrice: 1000, NetworkFee: "6726600",
+			Steps: []event.OrderQuoteStep{
+				{Kind: "approve", Bandwidth: 345, Burn: "0"},
+				{Kind: "pay", Energy: 63156, Bandwidth: 411, Burn: "6726600", Approximate: true},
+			},
+		}, resp)
+	})
+
+	t.Run("a network without a splitter has nothing to quote", func(t *testing.T) {
+		w := &stubSponsoredWallet{}
+		_, err := newHandler(w, authorNode(t, noVerify))(marshal(t, event.GetOrderQuoteEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
+		assert.EqualError(t, err, "order: sponsored payments are not open on testnet")
+		assert.Empty(t, w.quotes)
 	})
 }
 

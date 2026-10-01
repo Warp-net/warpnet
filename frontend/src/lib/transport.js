@@ -241,11 +241,13 @@ function onMessage(data) {
 
 // Archive import processes thousands of tweets server-side and can run
 // well past the default budget; an order waits on the chain (approve, pay,
-// verify), paced by TronGrid at a request a second.
+// verify), and its quote on a dozen reads, both paced by TronGrid at a
+// request a second.
 function requestTimeout(path) {
   if (typeof path !== "string") return REQUEST_TIMEOUT_MS;
   if (path.includes("/import/")) return 10 * 60 * 1000;
   if (path.includes("/sponsored/order/")) return 3 * 60 * 1000;
+  if (path.includes("/sponsored/quote/")) return 60 * 1000;
   return REQUEST_TIMEOUT_MS;
 }
 

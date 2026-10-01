@@ -83,6 +83,7 @@ export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
 export const PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
+export const PRIVATE_GET_SPONSORED_QUOTE = "/private/get/sponsored/quote/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
@@ -1750,6 +1751,17 @@ export const warpnetService = {
         });
         if (!resp || resp.code || !resp.tx_id) {
             throw new Error(resp?.message || "Couldn't pay for the tweet.");
+        }
+        return resp;
+    },
+
+    async quoteSponsoredTweet({tweetId, userId}) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SPONSORED_QUOTE,
+            body: {tweet_id: tweetId, user_id: userId},
+        });
+        if (!resp || resp.code || !resp.total) {
+            throw new Error(resp?.message || "Couldn't work out what the tweet costs.");
         }
         return resp;
     },

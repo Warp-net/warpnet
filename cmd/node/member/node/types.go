@@ -111,6 +111,7 @@ type WalletProvider interface {
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
 	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
+	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
 	Token() string
 	Decimals() uint8
