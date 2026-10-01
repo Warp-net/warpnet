@@ -89,6 +89,18 @@ object WarpnetMapper {
         if (userId.isBlank() || key.isNullOrBlank()) ""
         else "warpnet://video/$userId/$key"
 
+    /**
+     * Chat attachments get their own schemes so the loaders route them through
+     * the chat media routes. The public ones cannot serve these blobs.
+     */
+    fun warpnetChatImageUrl(userId: String, key: String?): String =
+        if (userId.isBlank() || key.isNullOrBlank()) ""
+        else "warpnet://chat-image/$userId/$key"
+
+    fun warpnetChatVideoUrl(userId: String, key: String?): String =
+        if (userId.isBlank() || key.isNullOrBlank()) ""
+        else "warpnet://chat-video/$userId/$key"
+
     private fun WarpnetTweet.toAttachments(): List<Attachment> {
         val images = imageKeys.orEmpty().filter { it.isNotBlank() }.map { key ->
             Attachment(

@@ -18,18 +18,24 @@ import kotlinx.coroutines.runBlocking
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 private const val WARPNET_VIDEO_PREFIX = "warpnet://video/"
+private const val WARPNET_CHAT_VIDEO_PREFIX = "warpnet://chat-video/"
 
-internal data class WarpnetVideoRef(val userId: String, val key: String) {
+internal data class WarpnetVideoRef(val userId: String, val key: String, val isChat: Boolean = false) {
     companion object {
         fun parse(model: String): WarpnetVideoRef? {
-            if (!model.startsWith(WARPNET_VIDEO_PREFIX)) return null
-            val tail = model.removePrefix(WARPNET_VIDEO_PREFIX)
+            val isChat = model.startsWith(WARPNET_CHAT_VIDEO_PREFIX)
+            val prefix = when {
+                isChat -> WARPNET_CHAT_VIDEO_PREFIX
+                model.startsWith(WARPNET_VIDEO_PREFIX) -> WARPNET_VIDEO_PREFIX
+                else -> return null
+            }
+            val tail = model.removePrefix(prefix)
             val slash = tail.indexOf('/')
             if (slash <= 0 || slash >= tail.length - 1) return null
             val userId = tail.substring(0, slash)
             val key = tail.substring(slash + 1)
             if (userId.isBlank() || key.isBlank()) return null
-            return WarpnetVideoRef(userId, key)
+            return WarpnetVideoRef(userId, key, isChat)
         }
     }
 }
@@ -51,7 +57,13 @@ class WarpnetVideoDataSource(
             ?: throw IOException("not a warpnet video uri: ${dataSpec.uri}")
 
         val bytes = try {
-            runBlocking { repo.getVideoBytes(ref.userId, ref.key) }
+            runBlocking {
+                if (ref.isChat) {
+                    repo.getChatVideoBytes(ref.userId, ref.key)
+                } else {
+                    repo.getVideoBytes(ref.userId, ref.key)
+                }
+            }
         } catch (e: Exception) {
             throw IOException("warpnet video ${ref.key} could not be fetched", e)
         } ?: throw IOException("warpnet video not found: ${ref.key}")

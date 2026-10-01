@@ -30,8 +30,9 @@ import java.nio.ByteBuffer
 import kotlinx.coroutines.runBlocking
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
-/** Marker prefix the mapper emits; [WarpnetMapper.warpnetImageUrl]. */
+/** Marker prefixes the mapper emits; [WarpnetMapper.warpnetImageUrl]. */
 private const val WARPNET_AVATAR_PREFIX = "warpnet://avatar/"
+private const val WARPNET_CHAT_IMAGE_PREFIX = "warpnet://chat-image/"
 
 @EntryPoint
 @InstallIn(SingletonComponent::class)
@@ -39,18 +40,28 @@ interface WarpnetGlideEntryPoint {
     fun warpnetRepository(): WarpnetRepository
 }
 
-/** Pulled out so [WarpnetAvatarLoader] and tests can share the same parser. */
-internal data class WarpnetAvatarRef(val userId: String, val key: String) {
+/**
+ * Pulled out so [WarpnetAvatarLoader] and tests can share the same parser.
+ * [isChat] records which prefix the URL carried, and therefore which route the
+ * blob has to be fetched over — a chat attachment is not reachable through the
+ * public media route.
+ */
+internal data class WarpnetAvatarRef(val userId: String, val key: String, val isChat: Boolean = false) {
     companion object {
         fun parse(model: String): WarpnetAvatarRef? {
-            if (!model.startsWith(WARPNET_AVATAR_PREFIX)) return null
-            val tail = model.removePrefix(WARPNET_AVATAR_PREFIX)
+            val isChat = model.startsWith(WARPNET_CHAT_IMAGE_PREFIX)
+            val prefix = when {
+                isChat -> WARPNET_CHAT_IMAGE_PREFIX
+                model.startsWith(WARPNET_AVATAR_PREFIX) -> WARPNET_AVATAR_PREFIX
+                else -> return null
+            }
+            val tail = model.removePrefix(prefix)
             val slash = tail.indexOf('/')
             if (slash <= 0 || slash >= tail.length - 1) return null
             val userId = tail.substring(0, slash)
             val key = tail.substring(slash + 1)
             if (userId.isBlank() || key.isBlank()) return null
-            return WarpnetAvatarRef(userId, key)
+            return WarpnetAvatarRef(userId, key, isChat)
         }
     }
 }
@@ -59,7 +70,8 @@ class WarpnetAvatarLoader(
     private val repo: WarpnetRepository,
 ) : ModelLoader<String, ByteBuffer> {
 
-    override fun handles(model: String): Boolean = model.startsWith(WARPNET_AVATAR_PREFIX)
+    override fun handles(model: String): Boolean =
+        model.startsWith(WARPNET_AVATAR_PREFIX) || model.startsWith(WARPNET_CHAT_IMAGE_PREFIX)
 
     override fun buildLoadData(
         model: String,
@@ -82,7 +94,13 @@ class WarpnetAvatarLoader(
             // simplest bridge from Glide's callback API to the
             // coroutine-based repository.
             try {
-                val bytes = runBlocking { repo.getImageBytes(ref.userId, ref.key) }
+                val bytes = runBlocking {
+                    if (ref.isChat) {
+                        repo.getChatImageBytes(ref.userId, ref.key)
+                    } else {
+                        repo.getImageBytes(ref.userId, ref.key)
+                    }
+                }
                 if (bytes == null || bytes.isEmpty()) {
                     callback.onLoadFailed(NoSuchElementException("warpnet image not found: ${ref.key}"))
                 } else {
