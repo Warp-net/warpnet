@@ -158,11 +158,9 @@ describe('TweetBlock sponsored tweet', () => {
     expect(bill.getByText('Service fee, 5%')).toBeInTheDocument();
     expect(bill.getByText('0.075 USDT')).toBeInTheDocument();
     expect(bill.getByText('1.575 USDT')).toBeInTheDocument();
-    expect(bill.getByText(/Approving the payment/)).toBeInTheDocument();
-    expect(bill.getByText('0 energy, 345 bytes')).toBeInTheDocument();
-    expect(bill.getByText('0 TRX')).toBeInTheDocument();
-    expect(bill.getByText(`≈ ${(63156).toLocaleString()} energy, 411 bytes`)).toBeInTheDocument();
-    expect(bill.getAllByText('≈ 6.7266 TRX')).toHaveLength(2);
+    expect(bill.getByText('Network fee')).toBeInTheDocument();
+    expect(bill.getByText('≈ 6.7266 TRX')).toBeInTheDocument();
+    expect(bill.queryByText(/Approving|Payment|energy|bytes/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pay' })).toBeEnabled();
     expect(screen.queryByText(/not enough|less than the network fee/)).not.toBeInTheDocument();
   });

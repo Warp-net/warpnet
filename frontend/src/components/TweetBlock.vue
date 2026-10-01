@@ -165,13 +165,6 @@ resulting from the use or misuse of this software.
                   <td class="py-0.5">Total</td>
                   <td class="py-0.5 text-right whitespace-nowrap">{{ decimal(quote.total) }} USDT</td>
                 </tr>
-                <tr v-for="step in quote.steps" :key="step.kind">
-                  <td class="pt-2">
-                    {{ stepLabel(step) }}
-                    <span class="block text-xs">{{ step.approximate ? '≈ ' : '' }}{{ step.energy.toLocaleString() }} energy, {{ step.bandwidth }} bytes</span>
-                  </td>
-                  <td class="pt-2 text-right align-top whitespace-nowrap">{{ step.approximate ? '≈ ' : '' }}{{ decimal(step.burn) }} TRX</td>
-                </tr>
                 <tr class="font-semibold">
                   <td class="py-0.5">Network fee</td>
                   <td class="py-0.5 text-right whitespace-nowrap">≈ {{ decimal(quote.network_fee) }} TRX</td>
@@ -457,7 +450,6 @@ import NetworkIcon from "@/components/NetworkIcon.vue";
 
 // USDT on TRON and TRX in sun both count in millionths.
 const unitDecimals = 6;
-const orderSteps = { reset: "Clearing an old approval", approve: "Approving the payment", pay: "Payment" };
 
 function bigUnits(value) {
   try {
@@ -650,9 +642,6 @@ export default {
       const base = 10n ** BigInt(unitDecimals);
       const frac = (value % base).toString().padStart(unitDecimals, "0").replace(/0+$/, "");
       return frac ? `${value / base}.${frac}` : `${value / base}`;
-    },
-    stepLabel(step) {
-      return orderSteps[step.kind] || step.kind;
     },
     async unlock() {
       this.showUnlockConfirm = false;
