@@ -159,7 +159,7 @@ resulting from the use or misuse of this software.
               />
               <span class="text-dark ml-2">USDT</span>
             </div>
-            <p v-if="priceInvalid" class="text-xs text-red-600 mt-1">Enter an amount above zero with at most {{ priceDecimals }} decimals.</p>
+            <p v-if="priceInvalid" class="text-xs text-red-600 mt-1">Enter an amount above zero and up to {{ maxPrice }} USDT, with at most {{ priceDecimals }} decimals.</p>
             <p class="text-xs text-dark mt-2">Readers pay once to unlock the tweet. Until then they see:</p>
             <div
                 class="mt-1 h-32 rounded border border-lighter bg-lighter text-dark flex items-center justify-center"
@@ -339,6 +339,8 @@ const pollDurations = [
 // Mirrors the wallet token (USDT, 6 decimals): a price travels in its base
 // units, like a wallet transfer amount.
 const priceDecimals = 6;
+// The node refuses a sponsored tweet priced above 1 000 000 USDT.
+const maxPriceUnits = 1_000_000n * 10n ** BigInt(priceDecimals);
 
 // Same rules as a wallet transfer amount; '' for anything the wallet could
 // not charge.
@@ -348,7 +350,7 @@ function toPriceUnits(value) {
   const [whole, frac = ''] = s.split('.');
   if (frac.length > priceDecimals) return '';
   const units = BigInt(whole) * 10n ** BigInt(priceDecimals) + BigInt(frac.padEnd(priceDecimals, '0'));
-  return units > 0n ? units.toString() : '';
+  return units > 0n && units <= maxPriceUnits ? units.toString() : '';
 }
 
 export default {
@@ -457,6 +459,9 @@ export default {
     pollReady() {
       if (!this.poll) return true;
       return this.poll.options.every(o => o.trim());
+    },
+    maxPrice() {
+      return (maxPriceUnits / 10n ** BigInt(priceDecimals)).toLocaleString('en-US');
     },
     priceDecimals() {
       return priceDecimals;

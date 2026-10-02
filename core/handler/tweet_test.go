@@ -1594,6 +1594,9 @@ func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 	}{
 		{"no price", event.NewTweetEvent{UserId: owner, Text: "paid"}, "sponsored tweet: empty price"},
 		{"zero price", event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Amount: "0", Units: big.NewInt(0)}}, "sponsored tweet: price must be positive"},
+		{"negative price", event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Units: big.NewInt(-5)}}, "sponsored tweet: price must be positive"},
+		{"price above the limit", event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Units: big.NewInt(sponsoredPriceLimit + 1)}}, "sponsored tweet: price is above 1000000 USDT"},
+		{"price past int64", event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Units: new(big.Int).Lsh(big.NewInt(1), 300)}}, "sponsored tweet: price is above 1000000 USDT"},
 		{"empty text", event.NewTweetEvent{UserId: owner, Price: sponsoredPrice()}, "empty tweet text"},
 		{"poll", event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice(), Poll: &domain.Poll{Options: []string{"a", "b"}, ExpiresAt: time.Now().Add(time.Hour)}}, "sponsored tweet: poll is not allowed"},
 		{"reply", event.NewTweetEvent{UserId: owner, Text: "paid", Price: sponsoredPrice(), ParentId: &parentId}, "sponsored tweet: a reply cannot be sponsored"},
@@ -1610,6 +1613,27 @@ func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 			assert.False(t, created)
 		})
 	}
+
+	for _, price := range []string{`1.5`, `"100"`, `1e3`, `0012`, `0x10`, `1_000`, `{"units":5}`} {
+		t.Run("price units of "+price, func(t *testing.T) {
+			body := `{"user_id":"` + owner + `","text":"paid","price":{"units":` + price + `}}`
+			_, err := newHandler(stubTweetBroadcaster{}, stubTweetRepo{}, stubTimelineRepo{})([]byte(body), nil)
+			assert.Error(t, err, "only a whole number of base units is a price")
+		})
+	}
+
+	t.Run("the limit itself is a price", func(t *testing.T) {
+		created := false
+		repo := stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+			created = true
+			tweet.Id = "tweet-1"
+			return tweet, nil
+		}}
+		ev := event.NewTweetEvent{UserId: owner, Text: "paid", Price: &domain.Price{Units: big.NewInt(sponsoredPriceLimit)}}
+		_, err := newHandler(stubTweetBroadcaster{}, repo, stubTimelineRepo{})(marshal(t, ev), nil)
+		require.NoError(t, err)
+		assert.True(t, created)
+	})
 
 	t.Run("stores the full tweet and broadcasts the teaser", func(t *testing.T) {
 		var stored, timelined domain.Tweet

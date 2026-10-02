@@ -63,3 +63,14 @@ describe('getSponsoredTweet', () => {
     expect(await warpnetService.getSponsoredTweet({ tweetId: 't1', userId: 'author1' })).toBeNull();
   });
 });
+
+describe('createTweet at the price ceiling', () => {
+  it('sends 1 000 000 USDT as exact base units', async () => {
+    Call.mockResolvedValue({ body: { id: 't1' } });
+
+    await warpnetService.createTweet({ text: 'members only', price: '1000000000000' });
+
+    expect(Call.mock.calls[0][0].body.price).toEqual({ units: 1000000000000 });
+    expect(JSON.stringify(Call.mock.calls[0][0].body.price)).toBe('{"units":1000000000000}');
+  });
+});
