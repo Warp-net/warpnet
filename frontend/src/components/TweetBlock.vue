@@ -46,7 +46,7 @@ resulting from the use or misuse of this software.
         <img
           :src="profile.avatar || '/default_profile.png'"
           class="h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
-          :alt="`${tweet.username || 'User'} avatar`"
+          :alt="`${authorName || 'User'} avatar`"
         />
       </button>
     </div>
@@ -56,7 +56,7 @@ resulting from the use or misuse of this software.
     <div class="w-full min-w-0">
       <div class="flex items-center w-full min-w-0">
         <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn truncate min-w-0 text-left">
-          {{ tweet.username || 'Anonymous' }}
+          {{ authorName || 'Anonymous' }}
         </button>
         <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
           @{{ tweet.user_id }}
@@ -154,7 +154,7 @@ resulting from the use or misuse of this software.
             <table class="mt-3 w-full text-sm text-dark" aria-label="What the tweet costs">
               <tbody>
                 <tr>
-                  <td class="py-0.5">To {{ tweet.username || 'the author' }}</td>
+                  <td class="py-0.5">To {{ authorName || 'the author' }}</td>
                   <td class="py-0.5 text-right whitespace-nowrap">{{ tweet.price.amount }} USDT</td>
                 </tr>
                 <tr>
@@ -539,11 +539,16 @@ export default {
     canReply() {
       return acceptsReplies(this.tweet);
     },
+    // The tweet keeps the name its author had when posting; the loaded
+    // profile carries the current one, so a rename shows on old tweets too.
+    authorName() {
+      return (this.profile && this.profile.username) || this.tweet.username;
+    },
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
     },
     unlockMessage() {
-      const author = this.tweet.username || "the author";
+      const author = this.authorName || "the author";
       if (this.quoteError) {
         return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`;
       }
