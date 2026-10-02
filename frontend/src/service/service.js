@@ -84,6 +84,7 @@ export const PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0
 export const PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
 export const PRIVATE_GET_SPONSORED_QUOTE = "/private/get/sponsored/quote/0.0.0"
+export const PRIVATE_GET_SPONSORED_BUYER = "/private/get/sponsored/buyer/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
@@ -1774,6 +1775,17 @@ export const warpnetService = {
         if (resp && resp.confirmed === false) return {pending: true};
         if (!resp || resp.code || !resp.id) return null;
         return resp;
+    },
+
+    async getSponsoredBuyer(file) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SPONSORED_BUYER,
+            body: {file: file},
+        });
+        if (!resp || resp.code) {
+            throw new Error(resp?.message || "Couldn't read the file.");
+        }
+        return resp.buyer_id ? resp : null;
     },
 
     isDesktopNode() {

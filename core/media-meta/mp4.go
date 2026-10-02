@@ -101,6 +101,18 @@ func SplitVideo(b []byte) (raw, watermarkBytes []byte, err error) {
 	return raw, watermarkBytes, nil
 }
 
+func AddRecipientToVideo(videoBytes, recipient []byte) ([]byte, error) {
+	raw, watermarkBytes, err := SplitVideo(videoBytes)
+	if err != nil {
+		return nil, err
+	}
+	marked, err := withRecipient(watermarkBytes, recipient)
+	if err != nil {
+		return nil, err
+	}
+	return EmbedInVideo(raw, marked)
+}
+
 func CloseOpenEndedBox(b []byte) ([]byte, error) {
 	boxes, err := walkBoxes(b)
 	if err != nil {

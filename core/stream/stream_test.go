@@ -376,6 +376,7 @@ func TestMaxRequestSize(t *testing.T) {
 		event.PRIVATE_POST_UPLOAD_IMAGE:         MaxMediaSize,
 		event.PRIVATE_POST_UPLOAD_VIDEO:         MaxMediaSize,
 		event.PRIVATE_POST_IMPORT_TWITTER_TWEET: MaxMediaSize,
+		event.PRIVATE_GET_SPONSORED_BUYER:       MaxMediaSize,
 		event.PUBLIC_GET_IMAGE:                  MaxControlSize,
 		event.PRIVATE_POST_TWEET:                MaxControlSize,
 		event.PUBLIC_GET_TWEETS:                 MaxControlSize,

@@ -61,6 +61,7 @@ type VideoStorer interface {
 	GetVideo(userId, key string) (domain.Base64Video, error)
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+	GetCopy(userId, key string) (domain.MediaCopy, error)
 }
 
 type VideoNodeInformer interface {
@@ -141,6 +142,9 @@ func StreamGetVideoHandler(
 
 		if isOwnVideoRequest {
 			video, err := mediaRepo.GetVideo(ev.UserId, ev.Key)
+			if errors.Is(err, database.ErrMediaNotFound) {
+				video, err = videoCopy(mediaRepo, ev.UserId, ev.Key)
+			}
 			if errors.Is(err, database.ErrMediaNotFound) || video == "" {
 				log.Warnf("get video: key not found: %s", ev.Key)
 				return event.GetVideoResponse{File: ""}, nil
@@ -226,6 +230,19 @@ func videoDataPrefix(header string) (string, bool) {
 
 func verifyForeignVideo(u domain.User, key, file string) error {
 	return verifyForeignMedia(u, key, file, media_meta.VerifyVideo)
+}
+
+func videoCopy(mediaRepo VideoStorer, userId, key string) (domain.Base64Video, error) {
+	c, err := mediaRepo.GetCopy(userId, key)
+	if err != nil {
+		return "", err
+	}
+	original, err := mediaRepo.GetVideo(userId, c.Original)
+	if err != nil {
+		return "", err
+	}
+	video, err := addRecipient(string(original), c.Recipient, media_meta.AddRecipientToVideo)
+	return domain.Base64Video(video), err
 }
 
 func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {

@@ -104,6 +104,7 @@ type MediaStorer interface {
 	GetImage(userId, key string) (domain.Base64Image, error)
 	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
+	GetCopy(userId, key string) (domain.MediaCopy, error)
 }
 
 func StreamUploadImageHandler(
@@ -194,6 +195,9 @@ func StreamGetImageHandler(
 
 		if isOwnImageRequest {
 			img, err := mediaRepo.GetImage(ev.UserId, ev.Key)
+			if errors.Is(err, database.ErrMediaNotFound) {
+				img, err = imageCopy(mediaRepo, ev.UserId, ev.Key)
+			}
 			if errors.Is(err, database.ErrMediaNotFound) || img == "" {
 				log.Warnf("get image: key not found: %s", ev.Key)
 				return event.GetImageResponse{File: ""}, nil
@@ -294,10 +298,43 @@ func verifyContentKey(key, file string) error {
 	if !isContentKey(key) {
 		return nil
 	}
-	if hex.EncodeToString(security.ConvertToSHA256([]byte(file))) != key {
+	if contentKey(file) != key {
 		return ErrMediaKeyMismatch
 	}
 	return nil
+}
+
+func contentKey(file string) string {
+	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
+}
+
+func imageCopy(mediaRepo MediaStorer, userId, key string) (domain.Base64Image, error) {
+	c, err := mediaRepo.GetCopy(userId, key)
+	if err != nil {
+		return "", err
+	}
+	original, err := mediaRepo.GetImage(userId, c.Original)
+	if err != nil {
+		return "", err
+	}
+	img, err := addRecipient(string(original), c.Recipient, media_meta.AddRecipientToJPEG)
+	return domain.Base64Image(img), err
+}
+
+func addRecipient(
+	file string,
+	recipient []byte,
+	embed func(raw, recipient []byte) ([]byte, error),
+) (string, error) {
+	header, raw, err := splitDataURI(file)
+	if err != nil {
+		return "", err
+	}
+	marked, err := embed(raw, recipient)
+	if err != nil {
+		return "", err
+	}
+	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
 
 func splitDataURI(file string) (header string, data []byte, err error) {

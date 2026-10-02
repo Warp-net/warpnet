@@ -1035,6 +1035,20 @@ type OrderQuoteResponse struct {
 	Steps          []OrderQuoteStep `json:"steps"`
 }
 
+// GetSponsoredBuyerEvent defines model for GetSponsoredBuyerEvent.
+type GetSponsoredBuyerEvent struct {
+	File string `json:"file"`
+}
+
+// SponsoredBuyerResponse defines model for SponsoredBuyerResponse.
+type SponsoredBuyerResponse struct {
+	TweetId   domain.ID `json:"tweet_id"`
+	BuyerId   domain.ID `json:"buyer_id"`
+	OrderId   string    `json:"order_id"`
+	TxId      string    `json:"tx_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // OrderQuoteStep defines model for OrderQuoteStep.
 type OrderQuoteStep struct {
 	Kind        string `json:"kind"`

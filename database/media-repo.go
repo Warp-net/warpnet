@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 )
 
@@ -41,6 +42,7 @@ const (
 	ChatMediaRepoName = "/CHATMEDIA"
 	ImageSubNamespace = "IMAGES"
 	VideoSubNamespace = "VIDEOS"
+	CopySubNamespace  = "COPIES"
 )
 
 var (
@@ -189,4 +191,55 @@ func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video domain.B
 
 	week := time.Hour * 24 * 7
 	return repo.db.SetWithTTL(mediaKey, []byte(video), week)
+}
+
+func (repo *MediaRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
+	if repo == nil {
+		return domain.MediaCopy{}, ErrMediaRepoNotInit
+	}
+	if key == "" || userId == "" {
+		return domain.MediaCopy{}, ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(CopySubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	data, err := repo.db.Get(mediaKey)
+	if local_store.IsNotFoundError(err) {
+		return domain.MediaCopy{}, ErrMediaNotFound
+	}
+	if err != nil {
+		return domain.MediaCopy{}, err
+	}
+
+	var c domain.MediaCopy
+	if err := json.Unmarshal(data, &c); err != nil {
+		return domain.MediaCopy{}, err
+	}
+	return c, nil
+}
+
+func (repo *MediaRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if userId == "" || key == "" || c.Original == "" {
+		return local_store.DBError("no data for copy set")
+	}
+
+	data, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(CopySubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	return repo.db.Set(mediaKey, data)
 }

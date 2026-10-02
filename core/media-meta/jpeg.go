@@ -80,6 +80,18 @@ func EmbedInJPEG(imageBytes, watermarkBytes []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func AddRecipientToJPEG(jpegBytes, recipient []byte) ([]byte, error) {
+	watermarkBytes, err := extractFromJPEG(jpegBytes)
+	if err != nil {
+		return nil, err
+	}
+	marked, err := withRecipient(watermarkBytes, recipient)
+	if err != nil {
+		return nil, err
+	}
+	return EmbedInJPEG(jpegBytes, marked)
+}
+
 func VerifyImage(jpegBytes []byte, nodeId, ownerId string) error {
 	watermarkBytes, err := extractFromJPEG(jpegBytes)
 	if err != nil {

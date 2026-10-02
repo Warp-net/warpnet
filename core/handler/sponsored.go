@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/authorship"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -44,6 +45,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -77,6 +79,12 @@ type SponsoredUserFetcher interface {
 type SponsoredStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
+}
+
+type SponsoredMediaStorer interface {
+	GetImage(userId, key string) (domain.Base64Image, error)
+	GetVideo(userId, key string) (domain.Base64Video, error)
+	SetCopy(userId, key string, c domain.MediaCopy) error
 }
 
 func StreamNewOrderHandler(
@@ -416,8 +424,10 @@ func StreamVerifyOrderHandler(
 
 func StreamGetSponsoredTweetHandler(
 	auth OwnerTweetStorer,
+	identityKey ed25519.PrivateKey,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
+	mediaRepo SponsoredMediaStorer,
 	userRepo SponsoredUserFetcher,
 	streamer SponsoredStreamer,
 ) warpnet.WarpHandlerFunc {
@@ -440,10 +450,14 @@ func StreamGetSponsoredTweetHandler(
 			if err != nil {
 				return nil, err
 			}
-			if !isOwn && !isPaidByPeer(s, userRepo, orders, ev.TweetId) {
+			if isOwn {
+				return tweet, nil
+			}
+			order, isPaid := paidOrder(s, userRepo, orders, ev.TweetId)
+			if !isPaid {
 				return domain.Tweet{}, nil
 			}
-			return tweet, nil
+			return issueCopies(identityKey, mediaRepo, tweet, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -496,14 +510,109 @@ func StreamGetSponsoredTweetHandler(
 	}
 }
 
-func isPaidByPeer(s warpnet.WarpStream, userRepo SponsoredUserFetcher, orders OrderStorer, tweetId string) bool {
+func paidOrder(s warpnet.WarpStream, userRepo SponsoredUserFetcher, orders OrderStorer, tweetId string) (domain.Order, bool) {
 	if s == nil || s.Conn() == nil {
-		return false
+		return domain.Order{}, false
 	}
 	buyer, err := userRepo.GetByNodeID(s.Conn().RemotePeer().String())
 	if err != nil {
-		return false
+		return domain.Order{}, false
 	}
 	order, err := orders.Get(tweetId, buyer.Id)
-	return err == nil && order.Confirmed
+	return order, err == nil && order.Confirmed
+}
+
+func issueCopies(
+	identityKey ed25519.PrivateKey,
+	mediaRepo SponsoredMediaStorer,
+	tweet domain.Tweet,
+	order domain.Order,
+) (domain.Tweet, error) {
+	plain, err := json.Marshal(order)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	recipient, err := security.EncryptAES(plain, identityKey)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+
+	imageKeys := make([]string, 0, len(tweet.ImageKeys))
+	for _, key := range tweet.ImageKeys {
+		img, err := mediaRepo.GetImage(tweet.UserId, key)
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		copyKey, err := issueCopy(mediaRepo, tweet.UserId, key, string(img), recipient, media_meta.AddRecipientToJPEG)
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		imageKeys = append(imageKeys, copyKey)
+	}
+	tweet.ImageKeys = imageKeys
+
+	if tweet.VideoKey == nil {
+		return tweet, nil
+	}
+	video, err := mediaRepo.GetVideo(tweet.UserId, *tweet.VideoKey)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	copyKey, err := issueCopy(mediaRepo, tweet.UserId, *tweet.VideoKey, string(video), recipient, media_meta.AddRecipientToVideo)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	tweet.VideoKey = &copyKey
+	return tweet, nil
+}
+
+func issueCopy(
+	mediaRepo SponsoredMediaStorer,
+	userId, key, file string,
+	recipient []byte,
+	embed func(raw, recipient []byte) ([]byte, error),
+) (string, error) {
+	marked, err := addRecipient(file, recipient, embed)
+	if err != nil {
+		return "", err
+	}
+	copyKey := contentKey(marked)
+	return copyKey, mediaRepo.SetCopy(userId, copyKey, domain.MediaCopy{Original: key, Recipient: recipient})
+}
+
+func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.GetSponsoredBuyerEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		_, raw, err := splitDataURI(ev.File)
+		if err != nil {
+			return nil, err
+		}
+
+		recipient, err := media_meta.Recipient(raw)
+		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoRecipient) {
+			return event.SponsoredBuyerResponse{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		plain, err := security.DecryptAES(recipient, identityKey)
+		if err != nil {
+			return nil, warpnet.WarpError("sponsored buyer: this node did not sell the copy")
+		}
+
+		var order domain.Order
+		if err := json.Unmarshal(plain, &order); err != nil {
+			return nil, err
+		}
+		return event.SponsoredBuyerResponse{
+			TweetId:   order.TweetId,
+			BuyerId:   order.BuyerId,
+			OrderId:   order.ID(),
+			TxId:      order.TxId,
+			CreatedAt: order.CreatedAt,
+		}, nil
+	}
 }

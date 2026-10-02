@@ -45,6 +45,7 @@ const (
 	ErrAmbiguousMetadata warpnet.WarpError = "media carries more than one warpnet metadata block"
 	ErrNoSigningKey      warpnet.WarpError = "media meta: no signing key"
 	ErrNoSigningIdentity warpnet.WarpError = "media meta: no signing identity"
+	ErrNoRecipient       warpnet.WarpError = "media carries no recipient mark"
 )
 
 type signedWatermark struct {
@@ -52,6 +53,7 @@ type signedWatermark struct {
 	CreatedAt     time.Time `json:"created_at"`
 	EncryptedMeta []byte    `json:"encrypted_meta"`
 	Signature     string    `json:"signature"`
+	Recipient     []byte    `json:"recipient,omitempty"`
 }
 
 type Watermark struct {
@@ -97,6 +99,38 @@ func verify(watermarkBytes, rawHash []byte, nodeId, ownerId string) error {
 		return ErrForgedMetadata
 	}
 	return nil
+}
+
+func Recipient(b []byte) ([]byte, error) {
+	watermarkBytes, err := extractWatermark(b)
+	if err != nil {
+		return nil, err
+	}
+	signed, err := parseSignedWatermark(watermarkBytes)
+	if err != nil {
+		return nil, err
+	}
+	if len(signed.Recipient) == 0 {
+		return nil, ErrNoRecipient
+	}
+	return signed.Recipient, nil
+}
+
+func extractWatermark(b []byte) ([]byte, error) {
+	if !IsISOBaseMediaFile(b) {
+		return extractFromJPEG(b)
+	}
+	_, watermarkBytes, err := SplitVideo(b)
+	return watermarkBytes, err
+}
+
+func withRecipient(watermarkBytes, recipient []byte) ([]byte, error) {
+	signed, err := parseSignedWatermark(watermarkBytes)
+	if err != nil {
+		return nil, err
+	}
+	signed.Recipient = recipient
+	return json.Marshal(signed)
 }
 
 func parseSignedWatermark(b []byte) (signedWatermark, error) {

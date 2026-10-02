@@ -431,3 +431,66 @@ func TestVerifyImage_GarbageInDescriptionTagIsRefused(t *testing.T) {
 		})
 	}
 }
+
+func TestAddRecipientToJPEG_KeepsTheOwnersClaim(t *testing.T) {
+	watermarked := watermarkedJPEG(t, "alice", 0x40)
+
+	copied, err := AddRecipientToJPEG(watermarked, []byte("sealed for bob"))
+	require.NoError(t, err)
+
+	assert.NoError(t, VerifyImage(copied, signerID.String(), "alice"), "a node that knows nothing of recipients still accepts the copy")
+	recipient, err := Recipient(copied)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sealed for bob"), recipient)
+}
+
+func TestAddRecipientToVideo_KeepsTheOwnersClaim(t *testing.T) {
+	watermarked := watermarkedMP4(t, "alice")
+
+	copied, err := AddRecipientToVideo(watermarked, []byte("sealed for bob"))
+	require.NoError(t, err)
+
+	assert.NoError(t, VerifyVideo(copied, signerID.String(), "alice"), "a node that knows nothing of recipients still accepts the copy")
+	assert.True(t, bytes.HasPrefix(copied, minimalMP4()), "the video itself is untouched")
+	recipient, err := Recipient(copied)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sealed for bob"), recipient)
+}
+
+func TestAddRecipient_RebuildsTheSameCopy(t *testing.T) {
+	image := watermarkedJPEG(t, "alice", 0x40)
+	first, err := AddRecipientToJPEG(image, []byte("bob"))
+	require.NoError(t, err)
+	second, err := AddRecipientToJPEG(image, []byte("bob"))
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+
+	video := watermarkedMP4(t, "alice")
+	first, err = AddRecipientToVideo(video, []byte("bob"))
+	require.NoError(t, err)
+	second, err = AddRecipientToVideo(video, []byte("bob"))
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+}
+
+func TestAddRecipient_RefusesUnstampedFile(t *testing.T) {
+	_, err := AddRecipientToJPEG(testJPEG(t, 0x40), []byte("bob"))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = AddRecipientToVideo(minimalMP4(), []byte("bob"))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestRecipient_OnlyACopyCarriesOne(t *testing.T) {
+	_, err := Recipient(watermarkedJPEG(t, "alice", 0x40))
+	assert.ErrorIs(t, err, ErrNoRecipient)
+
+	_, err = Recipient(watermarkedMP4(t, "alice"))
+	assert.ErrorIs(t, err, ErrNoRecipient)
+
+	_, err = Recipient(testJPEG(t, 0x40))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = Recipient(minimalMP4())
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}

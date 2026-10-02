@@ -90,6 +90,7 @@ resulting from the use or misuse of this software.
                 {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
               </button>
               <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
+              <button v-if="tweet.price" type="button" @click.stop="pickCopy" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Check a copy</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
             <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
@@ -110,6 +111,26 @@ resulting from the use or misuse of this software.
           :destructive="true"
           @confirm="doDelete"
           @cancel="showDeleteConfirm = false"
+        />
+        <input
+          v-if="isOwner && tweet.price"
+          ref="copyInput"
+          type="file"
+          accept="image/*,video/*"
+          class="hidden"
+          aria-label="Copy to check"
+          @click.stop
+          @change="checkCopy"
+        />
+        <ConfirmDialog
+          :show="!!copyCheck"
+          title="Who bought this copy?"
+          :message="copyCheckMessage"
+          confirm-label="Check another"
+          cancel-label="Close"
+          :confirm-disabled="!!copyCheck?.checking"
+          @confirm="pickCopy"
+          @cancel="copyCheck = null"
         />
       </div>
       <template v-if="isLocked">
@@ -459,6 +480,15 @@ function bigUnits(value) {
   }
 }
 
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("Couldn't read the file."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default {
   name: "Tweet",
   props: {
@@ -493,6 +523,7 @@ export default {
       quote: null,
       quoting: false,
       quoteError: "",
+      copyCheck: null,
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -553,6 +584,17 @@ export default {
         return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`;
       }
       return `The payment goes to ${author} and can't be undone.`;
+    },
+    copyCheckMessage() {
+      const check = this.copyCheck;
+      if (!check) return "";
+      if (check.checking) return "Reading the file…";
+      if (check.error) return check.error;
+      if (!check.sale) {
+        return "This file names no buyer. It is your original, or the mark is gone: a screenshot or a re-encoded copy loses it.";
+      }
+      const soldAt = new Date(check.sale.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}`;
     },
     isShortOfTokens() {
       return !!this.quote && bigUnits(this.quote.balance) < bigUnits(this.quote.total);
@@ -977,6 +1019,28 @@ export default {
     deleteTweet() {
       this.showDropdown = false;
       this.showDeleteConfirm = true;
+    },
+    pickCopy() {
+      this.showDropdown = false;
+      this.$refs.copyInput.click();
+    },
+    async checkCopy(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      this.copyCheck = {checking: true};
+      try {
+        const sale = await warpnetService.getSponsoredBuyer(await readAsDataURL(file));
+        if (!sale) {
+          this.copyCheck = {sale: null};
+          return;
+        }
+        const buyer = await warpnetService.getProfile(sale.buyer_id).catch(() => null);
+        this.copyCheck = {sale, buyerName: (buyer && buyer.username) || sale.buyer_id};
+      } catch (err) {
+        console.warn(`failed to check a copy of tweet [${this.tweet.id}]`, err);
+        this.copyCheck = {error: err?.message || "Couldn't read the file."};
+      }
     },
     async doDelete() {
       this.showDeleteConfirm = false;

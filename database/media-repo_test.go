@@ -249,3 +249,28 @@ func (s *MediaRepoTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
 	_, err = s.repo.GetImage(other, string(imgKey))
 	s.ErrorIs(err, ErrMediaNotFound)
 }
+
+func (s *MediaRepoTestSuite) TestCopyRoundTripAndIsolation() {
+	alice := uuid.New().String()
+	bob := uuid.New().String()
+	sold := domain.MediaCopy{Original: "original-key", Recipient: []byte("sealed")}
+
+	s.Require().NoError(s.repo.SetCopy(alice, "copy-key", sold))
+
+	got, err := s.repo.GetCopy(alice, "copy-key")
+	s.Require().NoError(err)
+	s.Equal(sold, got)
+
+	_, err = s.repo.GetCopy(bob, "copy-key")
+	s.ErrorIs(err, ErrMediaNotFound)
+	_, err = s.repo.GetImage(alice, "copy-key")
+	s.ErrorIs(err, ErrMediaNotFound, "a copy is a record, not a file")
+
+	s.Error(s.repo.SetCopy(alice, "", sold))
+	s.Error(s.repo.SetCopy(alice, "copy-key", domain.MediaCopy{}))
+
+	var repo *MediaRepo
+	s.ErrorIs(repo.SetCopy(alice, "copy-key", sold), ErrMediaRepoNotInit)
+	_, err = repo.GetCopy(alice, "copy-key")
+	s.ErrorIs(err, ErrMediaRepoNotInit)
+}

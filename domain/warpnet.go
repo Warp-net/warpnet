@@ -436,6 +436,11 @@ type (
 	VideoKey    string
 )
 
+type MediaCopy struct {
+	Original  string `json:"original"`
+	Recipient []byte `json:"recipient"`
+}
+
 type Alias struct {
 	ID         ID        `json:"id"`
 	CreatedAt  time.Time `json:"created_at"`

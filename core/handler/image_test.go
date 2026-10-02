@@ -78,6 +78,10 @@ func (m m) SetImage(userId string, img domain.Base64Image) (key domain.ImageKey,
 	return "", nil
 }
 
+func (m m) GetCopy(userId, key string) (domain.MediaCopy, error) {
+	return domain.MediaCopy{}, database.ErrMediaNotFound
+}
+
 var testSignerKey, testSignerID = mustTestSigner()
 
 func mustTestSigner() (ed25519.PrivateKey, warpnet.WarpPeerID) {
@@ -178,6 +182,10 @@ func (c cachedMediaRepo) SetImage(userId string, img domain.Base64Image) (domain
 
 func (c cachedMediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	return nil
+}
+
+func (c cachedMediaRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
+	return domain.MediaCopy{}, database.ErrMediaNotFound
 }
 
 type recordingStreamer struct {
@@ -426,6 +434,10 @@ func (r *imageRepoDouble) SetForeignImageWithTTL(userId, key string, img domain.
 	return nil
 }
 
+func (r *imageRepoDouble) GetCopy(userId, key string) (domain.MediaCopy, error) {
+	return domain.MediaCopy{}, database.ErrMediaNotFound
+}
+
 type videoRepoDouble struct {
 	videos     map[string]domain.Base64Video
 	getErr     error
@@ -460,6 +472,10 @@ func (r *videoRepoDouble) SetVideo(userId string, video domain.Base64Video) (dom
 func (r *videoRepoDouble) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
 	r.foreignStored[userId+"/"+key] = video
 	return nil
+}
+
+func (r *videoRepoDouble) GetCopy(userId, key string) (domain.MediaCopy, error) {
+	return domain.MediaCopy{}, database.ErrMediaNotFound
 }
 
 type mediaUserDouble struct {

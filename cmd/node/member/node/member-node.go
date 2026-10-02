@@ -758,7 +758,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
-			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.orderRepo, userRepo, m),
+			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
@@ -771,6 +771,10 @@ func (m *MemberNode) sponsoredHandlers(
 		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
 			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_GET_SPONSORED_BUYER,
+			handler.StreamGetSponsoredBuyerHandler(m.privKey),
 		},
 	}
 }
