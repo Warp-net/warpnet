@@ -9,7 +9,7 @@
     <div class="bg-white dark:bg-darktheme-card rounded-lg w-full max-w-sm flex flex-col shadow-lg" @click.stop>
       <div class="px-5 py-4">
         <h2 v-if="title" class="font-bold text-lg mb-2">{{ title }}</h2>
-        <p class="text-sm text-dark whitespace-pre-line">{{ message }}</p>
+        <p class="text-sm text-dark whitespace-pre-line break-words">{{ message }}</p>
         <slot />
       </div>
       <div class="flex justify-end gap-2 px-5 py-3 border-t border-lighter">
