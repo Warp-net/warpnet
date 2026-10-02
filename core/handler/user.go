@@ -300,7 +300,11 @@ func refreshUsers(
 			continue
 		}
 		_, _ = userRepo.Create(user)
-		_, _ = userRepo.Update(user.Id, user)
+		// Only the node's own owner is first-hand; its copies of others may be
+		// stale and would roll back a profile this node already refreshed.
+		if user.NodeId == otherUser.NodeId {
+			_, _ = userRepo.Update(user.Id, user)
+		}
 	}
 }
 

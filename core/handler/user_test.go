@@ -317,6 +317,36 @@ func TestStreamGetUsersHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("a remote list updates only the remote node's owner", func(t *testing.T) {
+		var updated []string
+		h := StreamGetUsersHandler(
+			stubUserFetcher{
+				getFn: func(userId string) (domain.User, error) {
+					return domain.User{Id: userId, NodeId: "node-2"}, nil
+				},
+				updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+					updated = append(updated, userId)
+					return newUser, nil
+				},
+			},
+			stubUserStreamer{
+				nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+				genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+					return json.Marshal(event.UsersResponse{Users: []domain.User{
+						{Id: "remote-owner", NodeId: "node-2", Username: "fresh"},
+						{Id: "someone-else", NodeId: "node-3", Username: "stale"},
+					}})
+				},
+			},
+		)
+		if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: "remote-owner"}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(updated) != 1 || updated[0] != "remote-owner" {
+			t.Fatalf("a second-hand copy overwrote a local record: %v", updated)
+		}
+	})
+
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetUsersHandler(stubUserFetcher{listFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
