@@ -252,7 +252,7 @@ func (g *Gossip) runGossip() (err error) {
 	g.stop = make(chan struct{})
 	g.isRunning.Store(true)
 
-	g.publishing.Go(func() { g.runPeerInfoPublishing(time.Minute * 30) })
+	g.publishing.Go(func() { g.runPeerInfoPublishing(time.Minute) })
 	log.Infoln("gossip: started")
 
 	return
