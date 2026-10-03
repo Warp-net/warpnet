@@ -34,6 +34,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/media-meta"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -41,12 +42,35 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type SponsoredMediaStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
+type SponsoredMediaFetcher interface {
+	GetImage(userId, key string) (domain.Base64Image, error)
+	GetVideo(userId, key string) (domain.Base64Video, error)
+}
+
+type SponsoredMediaCopyStorer interface {
+	GetCopy(userId, key string) (domain.MediaCopy, error)
+	GetImage(userId, key string) (domain.Base64Image, error)
+	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
+	GetVideo(userId, key string) (domain.Base64Video, error)
+	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+}
+
+type SponsoredMediaUserFetcher interface {
+	Get(userId string) (domain.User, error)
+	Create(user domain.User) (domain.User, error)
+}
+
 func StreamGetSponsoredImageHandler(
-	streamer SponsoredStreamer,
+	streamer SponsoredMediaStreamer,
 	identityKey ed25519.PrivateKey,
-	mediaRepo SponsoredMediaStorer,
-	copyRepo SponsoredCopyStorer,
-	userRepo SponsoredUserFetcher,
+	mediaRepo SponsoredMediaFetcher,
+	copyRepo SponsoredMediaCopyStorer,
+	userRepo SponsoredMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
@@ -131,10 +155,10 @@ func StreamGetSponsoredImageHandler(
 }
 
 func StreamGetSponsoredVideoHandler(
-	streamer SponsoredStreamer,
-	mediaRepo SponsoredMediaStorer,
-	copyRepo SponsoredCopyStorer,
-	userRepo SponsoredUserFetcher,
+	streamer SponsoredMediaStreamer,
+	mediaRepo SponsoredMediaFetcher,
+	copyRepo SponsoredMediaCopyStorer,
+	userRepo SponsoredMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetVideoEvent

@@ -39,6 +39,29 @@ type TimelineFetcher interface {
 	GetTimeline(string, *uint64, *string) ([]domain.Tweet, string, error)
 }
 
+type TimelineAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
+type TimelineTweetStorer interface {
+	Blocklist(tweetId string) error
+	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
+	Delete(userID, tweetID string) error
+}
+
+type TimelineStorer interface {
+	AddTweetToTimeline(userId string, tweet domain.Tweet) error
+	DeleteTweetFromTimeline(userID, tweetID string) error
+}
+
+type TimelineFollowChecker interface {
+	IsFollowing(ownerId, authorId string) bool
+}
+
+type TimelineUserFetcher interface {
+	Get(userId string) (user domain.User, err error)
+}
+
 func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTimelineEvent
@@ -67,11 +90,11 @@ func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 }
 
 func StreamTimelineNewTweetHandler(
-	authRepo OwnerTweetStorer,
-	tweetRepo TweetsStorer,
-	timelineRepo TimelineUpdater,
-	followRepo TweetFollowChecker,
-	userRepo TweetUserFetcher,
+	authRepo TimelineAuthStorer,
+	tweetRepo TimelineTweetStorer,
+	timelineRepo TimelineStorer,
+	followRepo TimelineFollowChecker,
+	userRepo TimelineUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -114,10 +137,10 @@ func StreamTimelineNewTweetHandler(
 }
 
 func StreamTimelineDeleteTweetHandler(
-	authRepo OwnerTweetStorer,
-	tweetRepo TweetsStorer,
-	timelineRepo TimelineUpdater,
-	userRepo TweetUserFetcher,
+	authRepo TimelineAuthStorer,
+	tweetRepo TimelineTweetStorer,
+	timelineRepo TimelineStorer,
+	userRepo TimelineUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteTweetEvent

@@ -55,6 +55,10 @@ const (
 	dailyOrdersWindow = 24 * time.Hour
 )
 
+type SponsoredAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
@@ -100,16 +104,11 @@ type SponsoredMediaStorer interface {
 }
 
 type SponsoredCopyStorer interface {
-	GetCopy(userId, key string) (domain.MediaCopy, error)
 	SetCopy(userId, key string, c domain.MediaCopy) error
-	GetImage(userId, key string) (domain.Base64Image, error)
-	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
-	GetVideo(userId, key string) (domain.Base64Video, error)
-	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
 
 func StreamNewOrderHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	orders OrderStorer,
@@ -233,7 +232,7 @@ func tweetSponsorship(
 }
 
 func StreamGetOrderQuoteHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	userRepo SponsoredUserFetcher,
@@ -364,7 +363,7 @@ func claimOrder(
 }
 
 func StreamVerifyOrderHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	tweetRepo SponsoredTweetFetcher,
@@ -461,7 +460,7 @@ func StreamVerifyOrderHandler(
 }
 
 func StreamGetSponsoredTweetHandler(
-	auth OwnerTweetStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,

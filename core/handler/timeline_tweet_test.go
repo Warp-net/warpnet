@@ -20,7 +20,7 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 	const owner = "owner-1"
 	ev := event.NewTweetEvent{Id: "t1", UserId: "friend-1", Text: "hello"}
 
-	newHandler := func(users TweetUserFetcher, following bool, created, timelined *bool) warpnet.WarpHandlerFunc {
+	newHandler := func(users TimelineUserFetcher, following bool, created, timelined *bool) warpnet.WarpHandlerFunc {
 		return StreamTimelineNewTweetHandler(
 			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
@@ -90,7 +90,7 @@ func TestStreamTimelineDeleteTweetHandler(t *testing.T) {
 	const owner = "owner-1"
 	ev := event.DeleteTweetEvent{UserId: "friend-1", TweetId: "t1"}
 
-	newHandler := func(users TweetUserFetcher, deleteErr error, deleted, untimelined *string) warpnet.WarpHandlerFunc {
+	newHandler := func(users TimelineUserFetcher, deleteErr error, deleted, untimelined *string) warpnet.WarpHandlerFunc {
 		return StreamTimelineDeleteTweetHandler(
 			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetRepo{deleteFn: func(userId, tweetId string) error {
