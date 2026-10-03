@@ -1777,7 +1777,7 @@ export const warpnetService = {
         return resp;
     },
 
-    async getSponsoredBuyer(file) {
+    async getCopyBuyer(file) {
         const resp = await this.sendToNode({
             path: PRIVATE_GET_SPONSORED_BUYER,
             body: {file: file},

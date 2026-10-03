@@ -80,19 +80,19 @@ func EmbedInJPEG(imageBytes, watermarkBytes []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func AddRecipientToJPEG(jpegBytes, recipient []byte) ([]byte, error) {
+func EmbedOrderInJPEG(jpegBytes, encryptedOrder []byte) ([]byte, error) {
 	watermarkBytes, err := extractFromJPEG(jpegBytes)
 	if err != nil {
 		return nil, err
 	}
-	marked, err := withRecipient(watermarkBytes, recipient)
+	marked, err := addOrder(watermarkBytes, encryptedOrder)
 	if err != nil {
 		return nil, err
 	}
 	return EmbedInJPEG(jpegBytes, marked)
 }
 
-func (w Watermark) RestampJPEG(original, redrawn []byte) ([]byte, error) {
+func (w Watermark) SignChangedJPEG(original, redrawn []byte) ([]byte, error) {
 	watermarkBytes, err := extractFromJPEG(original)
 	if err != nil {
 		return nil, err
@@ -102,11 +102,11 @@ func (w Watermark) RestampJPEG(original, redrawn []byte) ([]byte, error) {
 		return nil, err
 	}
 	w.EncryptedMeta = signed.EncryptedMeta
-	restamped, err := w.signAt(security.ConvertToSHA256(redrawn), signed.CreatedAt)
+	block, err := w.signAt(security.ConvertToSHA256(redrawn), signed.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	return EmbedInJPEG(redrawn, restamped)
+	return EmbedInJPEG(redrawn, block)
 }
 
 func VerifyImage(jpegBytes []byte, nodeId, ownerId string) error {
