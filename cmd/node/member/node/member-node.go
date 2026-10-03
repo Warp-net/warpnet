@@ -487,7 +487,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
-	hs = append(hs, m.walletHandlers(authRepo)...)
+	hs = append(hs, m.walletHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.sponsoredHandlers(authRepo, userRepo, r)...)
 
 	m.node.SetStreamHandlers(hs...)
@@ -774,12 +774,12 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_BUYER,
-			handler.StreamGetSponsoredBuyerHandler(m.privKey),
+			handler.StreamGetSponsoredBuyerHandler(m.privKey, r.orderRepo),
 		},
 	}
 }
 
-func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
+func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider, r *memberRepos) []warpnet.WarpStreamHandler {
 	//nolint:govet
 	return []warpnet.WarpStreamHandler{
 		{
@@ -810,7 +810,7 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamH
 		},
 		{
 			event.PUBLIC_GET_WALLET_ADDRESS,
-			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient),
+			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo),
 		},
 	}
 }

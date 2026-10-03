@@ -49,7 +49,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const orderNonceSize = 16
+const (
+	orderNonceSize     = 16
+	orderLimit         = 10
+	orderLimitWindow   = time.Hour
+	nearbyOrdersWindow = 24 * time.Hour
+
+	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+)
 
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
@@ -61,7 +68,12 @@ type SponsoredWallet interface {
 	Network() string
 }
 
+type OrderLister interface {
+	ListByBuyer(buyerId string) ([]domain.Order, error)
+}
+
 type OrderStorer interface {
+	OrderLister
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 }
@@ -295,6 +307,10 @@ func authorAddress(streamer SponsoredStreamer, author domain.User, network strin
 	if err != nil {
 		return "", err
 	}
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+		return "", warpnet.WarpError(possibleError.Message)
+	}
 	var address event.WalletAddressResponse
 	if err := json.Unmarshal(resp, &address); err != nil {
 		return "", err
@@ -383,6 +399,13 @@ func StreamVerifyOrderHandler(
 		known, err := orders.Get(ev.TweetId, ev.UserId)
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
+		}
+		isReached, err := isOrderLimitReached(orders, ev.UserId)
+		if err != nil {
+			return nil, err
+		}
+		if isReached {
+			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 		}
 
 		order := domain.Order{
@@ -593,7 +616,27 @@ func issueCopy(
 	return copyKey, mediaRepo.SetCopy(userId, copyKey, c)
 }
 
-func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
+func confirmedOrders(orders OrderLister, buyerId string, from, to time.Time) (int, error) {
+	list, err := orders.ListByBuyer(buyerId)
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	for _, o := range list {
+		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func isOrderLimitReached(orders OrderLister, buyerId string) (bool, error) {
+	now := time.Now()
+	count, err := confirmedOrders(orders, buyerId, now.Add(-orderLimitWindow), now)
+	return count >= orderLimit, err
+}
+
+func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey, orders OrderLister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetSponsoredBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -620,12 +663,19 @@ func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey) warpnet.Warp
 		if err := json.Unmarshal(plain, &order); err != nil {
 			return nil, err
 		}
+		nearby, err := confirmedOrders(
+			orders, order.BuyerId, order.CreatedAt.Add(-nearbyOrdersWindow), order.CreatedAt.Add(nearbyOrdersWindow),
+		)
+		if err != nil {
+			return nil, err
+		}
 		return event.SponsoredBuyerResponse{
-			TweetId:   order.TweetId,
-			BuyerId:   order.BuyerId,
-			OrderId:   order.ID(),
-			TxId:      order.TxId,
-			CreatedAt: order.CreatedAt,
+			TweetId:      order.TweetId,
+			BuyerId:      order.BuyerId,
+			OrderId:      order.ID(),
+			TxId:         order.TxId,
+			CreatedAt:    order.CreatedAt,
+			NearbyOrders: nearby,
 		}, nil
 	}
 }

@@ -31,11 +31,13 @@ package handler
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"github.com/Warp-net/warpnet/core/stream"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -420,7 +422,7 @@ func walletContactsBackend() stubWalletBackend {
 }
 
 func TestGetWalletAddressHandler(t *testing.T) {
-	out, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend())([]byte(`{}`), nil)
+	out, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend(), stubOrders{}, stubSponsoredUsers{})([]byte(`{}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,6 +432,26 @@ func TestGetWalletAddressHandler(t *testing.T) {
 	}
 	if resp.UserId == "" {
 		t.Fatal("a peer must learn which user the address belongs to")
+	}
+}
+
+func TestGetWalletAddressHandler_RefusesABuyerPastTheOrderLimit(t *testing.T) {
+	buyerNode := newTestPeerID(t)
+	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", NodeId: buyerNode.String()}}
+	ask := func(orders stubOrders) error {
+		_, s := stream.NewLoopbackStream(newTestPeerID(t), buyerNode, event.PUBLIC_GET_WALLET_ADDRESS)
+		_, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend(), orders, users)([]byte(`{}`), s)
+		return err
+	}
+
+	if err := ask(confirmedSales("buyer-1", orderLimit, time.Now().Add(-time.Minute))); !errors.Is(err, ErrOrderLimit) {
+		t.Fatalf("one order past the limit: err = %v", err)
+	}
+	if err := ask(confirmedSales("buyer-1", orderLimit-1, time.Now().Add(-time.Minute))); err != nil {
+		t.Fatalf("under the limit: err = %v", err)
+	}
+	if err := ask(confirmedSales("buyer-1", orderLimit, time.Now().Add(-2*time.Hour))); err != nil {
+		t.Fatalf("an hour later: err = %v", err)
 	}
 }
 

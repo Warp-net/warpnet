@@ -165,6 +165,7 @@ type AuthProvider interface {
 type OrderProvider interface {
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
+	ListByBuyer(buyerId string) ([]domain.Order, error)
 }
 
 type UserProvider interface {

@@ -1042,11 +1042,12 @@ type GetSponsoredBuyerEvent struct {
 
 // SponsoredBuyerResponse defines model for SponsoredBuyerResponse.
 type SponsoredBuyerResponse struct {
-	TweetId   domain.ID `json:"tweet_id"`
-	BuyerId   domain.ID `json:"buyer_id"`
-	OrderId   string    `json:"order_id"`
-	TxId      string    `json:"tx_id"`
-	CreatedAt time.Time `json:"created_at"`
+	TweetId      domain.ID `json:"tweet_id"`
+	BuyerId      domain.ID `json:"buyer_id"`
+	OrderId      string    `json:"order_id"`
+	TxId         string    `json:"tx_id"`
+	CreatedAt    time.Time `json:"created_at"`
+	NearbyOrders int       `json:"nearby_orders"`
 }
 
 // OrderQuoteStep defines model for OrderQuoteStep.

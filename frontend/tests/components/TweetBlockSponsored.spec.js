@@ -235,6 +235,7 @@ describe('TweetBlock sponsored tweet', () => {
       id === 'buyer1' ? { id, username: 'leaker' } : { id, username: 'author', avatar_key: '' });
     warpnetService.getSponsoredBuyer.mockResolvedValue({
       tweet_id: 't1', buyer_id: 'buyer1', order_id: 'order-hash', tx_id: 'tx1', created_at: '2026-10-01T12:00:00Z',
+      nearby_orders: 7,
     });
     renderTweet({ ...teaser(), text: 'my paid words' });
 
@@ -245,6 +246,7 @@ describe('TweetBlock sponsored tweet', () => {
 
     expect(await screen.findByText(/Sold to leaker \(@buyer1\)/)).toBeInTheDocument();
     expect(screen.getByText(/Order order-hash/)).toBeInTheDocument();
+    expect(screen.getByText(/bought 7 of your tweets within a day of this one/)).toBeInTheDocument();
     expect(warpnetService.getSponsoredBuyer).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/jpeg;base64,/));
   });
 

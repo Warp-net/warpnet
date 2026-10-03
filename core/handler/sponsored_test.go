@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/draw"
 	"image/jpeg"
+	"strconv"
 	"testing"
 	"time"
 
@@ -72,6 +73,25 @@ func (o stubOrders) Get(tweetId, buyerId string) (domain.Order, error) {
 func (o stubOrders) Save(order domain.Order) error {
 	o[order.TweetId+"/"+order.BuyerId] = order
 	return nil
+}
+
+func (o stubOrders) ListByBuyer(buyerId string) ([]domain.Order, error) {
+	var orders []domain.Order
+	for _, order := range o {
+		if order.BuyerId == buyerId {
+			orders = append(orders, order)
+		}
+	}
+	return orders, nil
+}
+
+func confirmedSales(buyerId string, count int, at time.Time) stubOrders {
+	orders := stubOrders{}
+	for i := range count {
+		tweetId := "sold-" + strconv.Itoa(i)
+		orders[tweetId+"/"+buyerId] = domain.Order{TweetId: tweetId, BuyerId: buyerId, Confirmed: true, CreatedAt: at}
+	}
+	return orders
 }
 
 type stubSponsoredUsers map[string]domain.User
@@ -253,6 +273,19 @@ func TestStreamNewOrderHandler(t *testing.T) {
 		assert.EqualError(t, err, "order: sponsored payments are not open on testnet")
 		assert.Empty(t, w.pays)
 	})
+
+	t.Run("the author's order limit stops the payment and says why", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
+		limited := stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			if path == event.PUBLIC_GET_WALLET_ADDRESS {
+				return json.Marshal(event.ResponseError{Code: 500, Message: ErrOrderLimit.Error()})
+			}
+			return authorNode(t, confirm).GenericStream(nodeId, path, data)
+		}}
+		_, err := newHandler(w, stubOrders{}, limited)(marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
+		assert.EqualError(t, err, ErrOrderLimit.Error())
+		assert.Empty(t, w.pays)
+	})
 }
 
 func TestStreamGetOrderQuoteHandler(t *testing.T) {
@@ -362,6 +395,21 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 	t.Run("a free tweet is not for sale", func(t *testing.T) {
 		_, err := newHandler(&stubSponsoredWallet{splitter: "TSplitter"}, stubTweetRepo{}, stubOrders{})(marshal(t, claim), fromBuyer())
 		assert.EqualError(t, err, "order: tweet is not sponsored")
+	})
+
+	t.Run("a buyer past the hourly limit waits", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
+		orders := confirmedSales("buyer-1", orderLimit, time.Now().Add(-time.Minute))
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err, "a node that paid past the limit is not an error, it waits")
+		assert.False(t, resp.(event.OrderResponse).Confirmed)
+		assert.Empty(t, w.checks)
+		assert.NotContains(t, orders, "tweet-1/buyer-1")
+
+		orders = confirmedSales("buyer-1", orderLimit, time.Now().Add(-2*time.Hour))
+		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed, "an hour later the order goes through")
 	})
 
 	t.Run("a confirmed order is not verified again", func(t *testing.T) {
@@ -502,8 +550,13 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 		return s
 	}
 
+	orders := stubOrders{
+		"tweet-1/buyer-1": order,
+		"tweet-2/buyer-1": {TweetId: "tweet-2", BuyerId: "buyer-1", Confirmed: true, CreatedAt: order.CreatedAt.Add(3 * time.Hour)},
+		"tweet-3/buyer-1": {TweetId: "tweet-3", BuyerId: "buyer-1", Confirmed: true, CreatedAt: order.CreatedAt.Add(-72 * time.Hour)},
+	}
 	resp, err := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets,
-		stubOrders{"tweet-1/buyer-1": order}, media, users, streamer,
+		orders, media, users, streamer,
 	)(marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), fromBuyer(event.PUBLIC_GET_SPONSORED_TWEET))
 	require.NoError(t, err)
 	bought := resp.(domain.Tweet)
@@ -513,8 +566,10 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	assert.NotEqual(t, videoKey, *bought.VideoKey, "the buyer never learns the original's key")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
-	traceBuyer := StreamGetSponsoredBuyerHandler(testSignerKey)
-	want := event.SponsoredBuyerResponse{TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", CreatedAt: order.CreatedAt}
+	traceBuyer := StreamGetSponsoredBuyerHandler(testSignerKey, orders)
+	want := event.SponsoredBuyerResponse{
+		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", CreatedAt: order.CreatedAt, NearbyOrders: 2,
+	}
 
 	getImage := StreamGetImageHandler(streamer, testSignerKey, media, users)
 	served, err := getImage(marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_IMAGE))
@@ -542,7 +597,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 
 func TestStreamGetSponsoredBuyerHandler_UnmarkedFile(t *testing.T) {
 	image, _ := watermarkedImage(t, "author-1")
-	h := StreamGetSponsoredBuyerHandler(testSignerKey)
+	h := StreamGetSponsoredBuyerHandler(testSignerKey, stubOrders{})
 
 	resp, err := h(marshal(t, event.GetSponsoredBuyerEvent{File: image}), nil)
 	require.NoError(t, err)

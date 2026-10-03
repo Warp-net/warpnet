@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"strings"
+
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
@@ -104,6 +106,47 @@ func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 		return domain.Order{}, err
 	}
 	return o, nil
+}
+
+func (repo *OrderRepo) ListByBuyer(buyerId string) ([]domain.Order, error) {
+	if buyerId == "" {
+		return nil, local_store.DBError("empty buyer id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	var keys []local_store.DatabaseKey
+	prefix := local_store.DatabaseKey(OrderRepoName + local_store.Delimeter)
+	err = txn.IterateKeys(prefix, func(key string) error {
+		if strings.HasSuffix(key, local_store.Delimeter+buyerId) {
+			keys = append(keys, local_store.DatabaseKey(key))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) == 0 {
+		return nil, txn.Commit()
+	}
+
+	items, err := txn.BatchGet(keys...)
+	if err != nil {
+		return nil, err
+	}
+	orders := make([]domain.Order, 0, len(items))
+	for _, item := range items {
+		var o domain.Order
+		if err := json.Unmarshal(item.Value, &o); err != nil {
+			return nil, err
+		}
+		orders = append(orders, o)
+	}
+	return orders, txn.Commit()
 }
 
 func orderKey(tweetId, buyerId string) local_store.DatabaseKey {

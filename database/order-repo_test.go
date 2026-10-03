@@ -96,6 +96,24 @@ func (s *OrderRepoTestSuite) TestEmptyValidation() {
 	s.Error(err)
 }
 
+func (s *OrderRepoTestSuite) TestListByBuyer() {
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "c1", TxId: "tx3"}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t4", BuyerId: "c1", TxId: "tx4"}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "xc1", TxId: "tx5"}))
+
+	got, err := s.repo.ListByBuyer("c1")
+	s.Require().NoError(err)
+	s.Require().Len(got, 2, "another buyer's order on the same tweet is not theirs")
+	s.ElementsMatch([]string{"tx3", "tx4"}, []string{got[0].TxId, got[1].TxId})
+
+	none, err := s.repo.ListByBuyer("nobody")
+	s.Require().NoError(err)
+	s.Empty(none)
+
+	_, err = s.repo.ListByBuyer("")
+	s.Error(err)
+}
+
 func TestOrderRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(OrderRepoTestSuite))
