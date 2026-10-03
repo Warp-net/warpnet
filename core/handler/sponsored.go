@@ -51,12 +51,8 @@ import (
 )
 
 const (
-	orderNonceSize   = 16
-	orderLimit       = 10
-	orderLimitWindow = time.Hour
-	sameDayWindow    = 24 * time.Hour
-
-	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+	orderNonceSize    = 16
+	dailyOrdersWindow = 24 * time.Hour
 )
 
 type SponsoredWallet interface {
@@ -69,12 +65,12 @@ type SponsoredWallet interface {
 	Network() string
 }
 
-type OrderLister interface {
-	ListByBuyer(buyerId string) ([]domain.Order, error)
+type OrderCounter interface {
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 }
 
 type OrderStorer interface {
-	OrderLister
+	OrderCounter
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 }
@@ -415,11 +411,12 @@ func StreamVerifyOrderHandler(
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
 		}
-		isReached, err := isOrderLimitReached(orders, ev.UserId)
+		now := time.Now()
+		count, err := orders.CountConfirmed(ev.UserId, now.Add(-domain.OrderLimitWindow), now)
 		if err != nil {
 			return nil, err
 		}
-		if isReached {
+		if count >= domain.OrderLimit {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 		}
 
@@ -632,30 +629,10 @@ func copyTweetMedia(
 	return tweet, nil
 }
 
-func countOrders(orders OrderLister, buyerId string, from, to time.Time) (int, error) {
-	list, err := orders.ListByBuyer(buyerId)
-	if err != nil {
-		return 0, err
-	}
-	var count int
-	for _, o := range list {
-		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
-			count++
-		}
-	}
-	return count, nil
-}
-
-func isOrderLimitReached(orders OrderLister, buyerId string) (bool, error) {
+func notifyOrderLimit(notifier SponsoredNotifier, orders OrderCounter, authorId string, buyer domain.User) error {
 	now := time.Now()
-	count, err := countOrders(orders, buyerId, now.Add(-orderLimitWindow), now)
-	return count >= orderLimit, err
-}
-
-func notifyOrderLimit(notifier SponsoredNotifier, orders OrderLister, authorId string, buyer domain.User) error {
-	now := time.Now()
-	count, err := countOrders(orders, buyer.Id, now.Add(-orderLimitWindow), now)
-	if err != nil || count != orderLimit {
+	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	if err != nil || count != domain.OrderLimit {
 		return err
 	}
 	name := buyer.Username
@@ -664,13 +641,13 @@ func notifyOrderLimit(notifier SponsoredNotifier, orders OrderLister, authorId s
 	}
 	return notifier.Add(domain.Notification{
 		Type:        domain.NotificationOrderLimitType,
-		Text:        name + " bought " + strconv.Itoa(orderLimit) + " of your tweets within an hour; their next orders wait",
+		Text:        name + " bought " + strconv.Itoa(domain.OrderLimit) + " of your tweets within an hour; their next orders wait",
 		RecepientId: authorId,
 		ActorId:     buyer.Id,
 	})
 }
 
-func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderLister) warpnet.WarpHandlerFunc {
+func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCounter) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetCopyBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -697,19 +674,19 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderListe
 		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
-		sameDay, err := countOrders(
-			orders, order.BuyerId, order.CreatedAt.Add(-sameDayWindow), order.CreatedAt.Add(sameDayWindow),
+		dailyOrdersCount, err := orders.CountConfirmed(
+			order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
 		)
 		if err != nil {
 			return nil, err
 		}
 		return event.CopyBuyerResponse{
-			TweetId:       order.TweetId,
-			BuyerId:       order.BuyerId,
-			OrderId:       order.ID(),
-			TxId:          order.TxId,
-			SoldAt:        order.CreatedAt,
-			SameDayOrders: sameDay,
+			TweetId:          order.TweetId,
+			BuyerId:          order.BuyerId,
+			OrderId:          order.ID(),
+			TxId:             order.TxId,
+			SoldAt:           order.CreatedAt,
+			DailyOrdersCount: dailyOrdersCount,
 		}, nil
 	}
 }

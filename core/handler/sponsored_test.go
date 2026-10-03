@@ -75,14 +75,14 @@ func (o stubOrders) Save(order domain.Order) error {
 	return nil
 }
 
-func (o stubOrders) ListByBuyer(buyerId string) ([]domain.Order, error) {
-	var orders []domain.Order
+func (o stubOrders) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
+	var count int
 	for _, order := range o {
-		if order.BuyerId == buyerId {
-			orders = append(orders, order)
+		if order.BuyerId == buyerId && order.Confirmed && !order.CreatedAt.Before(from) && !order.CreatedAt.After(to) {
+			count++
 		}
 	}
-	return orders, nil
+	return count, nil
 }
 
 func confirmedSales(buyerId string, count int, at time.Time) stubOrders {
@@ -387,7 +387,7 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 
 	t.Run("the order that reaches the hourly limit tells the author", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
-		orders := confirmedSales("buyer-1", orderLimit-1, time.Now().Add(-time.Minute))
+		orders := confirmedSales("buyer-1", domain.OrderLimit-1, time.Now().Add(-time.Minute))
 		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err)
 		assert.True(t, resp.(event.OrderResponse).Confirmed)
@@ -422,14 +422,14 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 
 	t.Run("a buyer past the hourly limit waits", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
-		orders := confirmedSales("buyer-1", orderLimit, time.Now().Add(-time.Minute))
+		orders := confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-time.Minute))
 		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err, "a node that paid past the limit is not an error, it waits")
 		assert.False(t, resp.(event.OrderResponse).Confirmed)
 		assert.Empty(t, w.checks)
 		assert.NotContains(t, orders, "tweet-1/buyer-1")
 
-		orders = confirmedSales("buyer-1", orderLimit, time.Now().Add(-2*time.Hour))
+		orders = confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-2*time.Hour))
 		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err)
 		assert.True(t, resp.(event.OrderResponse).Confirmed, "an hour later the order goes through")
@@ -594,7 +594,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
 	traceBuyer := StreamGetCopyBuyerHandler(testSignerKey, orders)
 	want := event.CopyBuyerResponse{
-		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, SameDayOrders: 2,
+		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, DailyOrdersCount: 2,
 	}
 
 	getImage := StreamGetSponsoredImageHandler(streamer, testSignerKey, media, copies, users)

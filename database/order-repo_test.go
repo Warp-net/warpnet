@@ -30,6 +30,7 @@ package database
 
 import (
 	"testing"
+	"time"
 
 	"go.uber.org/goleak"
 
@@ -96,21 +97,22 @@ func (s *OrderRepoTestSuite) TestEmptyValidation() {
 	s.Error(err)
 }
 
-func (s *OrderRepoTestSuite) TestListByBuyer() {
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "c1", TxId: "tx3"}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t4", BuyerId: "c1", TxId: "tx4"}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "xc1", TxId: "tx5"}))
+func (s *OrderRepoTestSuite) TestCountConfirmed() {
+	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "c1", TxId: "tx3", Confirmed: true, CreatedAt: at}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t4", BuyerId: "c1", TxId: "tx4", Confirmed: true, CreatedAt: at.Add(2 * time.Hour)}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t5", BuyerId: "c1", TxId: "tx5", CreatedAt: at}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "xc1", TxId: "tx6", Confirmed: true, CreatedAt: at}))
 
-	got, err := s.repo.ListByBuyer("c1")
+	count, err := s.repo.CountConfirmed("c1", at.Add(-time.Hour), at.Add(time.Hour))
 	s.Require().NoError(err)
-	s.Require().Len(got, 2, "another buyer's order on the same tweet is not theirs")
-	s.ElementsMatch([]string{"tx3", "tx4"}, []string{got[0].TxId, got[1].TxId})
+	s.Equal(1, count, "only the buyer's own confirmed orders inside the window count")
 
-	none, err := s.repo.ListByBuyer("nobody")
+	count, err = s.repo.CountConfirmed("nobody", at.Add(-time.Hour), at.Add(time.Hour))
 	s.Require().NoError(err)
-	s.Empty(none)
+	s.Zero(count)
 
-	_, err = s.repo.ListByBuyer("")
+	_, err = s.repo.CountConfirmed("", at, at)
 	s.Error(err)
 }
 

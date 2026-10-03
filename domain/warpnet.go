@@ -251,6 +251,11 @@ func (o *Order) ID() string {
 	return hex.EncodeToString(sum[:])
 }
 
+const (
+	OrderLimit       = 10
+	OrderLimitWindow = time.Hour
+)
+
 type Poll struct {
 	Options   []string  `json:"options"`
 	ExpiresAt time.Time `json:"expires_at"`
