@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -64,19 +65,21 @@ func StreamGetSponsoredImageHandler(
 		}
 
 		if ev.UserId == ownerId {
-			c, isBuyer := buyerCopy(s, copyRepo, userRepo, ownerId, ev.Key)
-			if !isBuyer {
-				log.Warnf("get sponsored image: refused key %s", ev.Key)
-				return event.GetImageResponse{File: ""}, nil
+			c, err := copyRepo.GetCopy(ownerId, ev.Key)
+			if err != nil {
+				return nil, fmt.Errorf("get sponsored image: fetching copy: %w", err)
+			}
+			if _, err := authorship.VerifyActor(userRepo, streamer, s, c.BuyerId); err != nil {
+				return nil, fmt.Errorf("get sponsored image: %w", err)
 			}
 			original, err := mediaRepo.GetImage(ownerId, c.OriginalKey)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored image: fetching original: %w", err)
 			}
 			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
-			img, err := markFile(string(original), c.EncryptedOrder, imageMarker(c, signer))
+			img, err := buildImageCopy(string(original), c, signer)
 			if err != nil {
-				return nil, fmt.Errorf("get sponsored image: marking copy: %w", err)
+				return nil, fmt.Errorf("get sponsored image: building copy: %w", err)
 			}
 			return event.GetImageResponse{File: img}, nil
 		}
@@ -149,18 +152,20 @@ func StreamGetSponsoredVideoHandler(
 		}
 
 		if ev.UserId == ownerId {
-			c, isBuyer := buyerCopy(s, copyRepo, userRepo, ownerId, ev.Key)
-			if !isBuyer {
-				log.Warnf("get sponsored video: refused key %s", ev.Key)
-				return event.GetVideoResponse{File: ""}, nil
+			c, err := copyRepo.GetCopy(ownerId, ev.Key)
+			if err != nil {
+				return nil, fmt.Errorf("get sponsored video: fetching copy: %w", err)
+			}
+			if _, err := authorship.VerifyActor(userRepo, streamer, s, c.BuyerId); err != nil {
+				return nil, fmt.Errorf("get sponsored video: %w", err)
 			}
 			original, err := mediaRepo.GetVideo(ownerId, c.OriginalKey)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: fetching original: %w", err)
 			}
-			video, err := markFile(string(original), c.EncryptedOrder, media_meta.EmbedOrderInVideo)
+			video, err := buildVideoCopy(string(original), c)
 			if err != nil {
-				return nil, fmt.Errorf("get sponsored video: marking copy: %w", err)
+				return nil, fmt.Errorf("get sponsored video: building copy: %w", err)
 			}
 			return newVideoResponse(domain.Base64Video(video), ev.Deferred), nil
 		}
@@ -214,52 +219,35 @@ func StreamGetSponsoredVideoHandler(
 	}
 }
 
-func buyerCopy(
-	s warpnet.WarpStream,
-	copyRepo SponsoredCopyStorer,
-	userRepo SponsoredUserFetcher,
-	userId, key string,
-) (domain.MediaCopy, bool) {
-	if s == nil || s.Conn() == nil {
-		return domain.MediaCopy{}, false
-	}
-	c, err := copyRepo.GetCopy(userId, key)
-	if err != nil {
-		return domain.MediaCopy{}, false
-	}
-	buyer, err := userRepo.GetByNodeID(s.Conn().RemotePeer().String())
-	return c, err == nil && buyer.Id == c.BuyerId
-}
-
-func markFile(
-	file string,
-	encryptedOrder []byte,
-	mark func(raw, encryptedOrder []byte) ([]byte, error),
-) (string, error) {
-	header, raw, err := splitDataURI(file)
+func buildImageCopy(original string, c domain.MediaCopy, signer media_meta.Metadata) (string, error) {
+	header, raw, err := splitDataURI(original)
 	if err != nil {
 		return "", err
 	}
-	marked, err := mark(raw, encryptedOrder)
+	if len(c.Watermark) != 0 {
+		drawn, err := media_meta.DrawWatermark(raw, c.Watermark)
+		if err != nil {
+			return "", err
+		}
+		if raw, err = signer.SignChangedJPEG(raw, drawn); err != nil {
+			return "", err
+		}
+	}
+	marked, err := media_meta.EmbedOrderInJPEG(raw, c.EncryptedOrder)
 	if err != nil {
 		return "", err
 	}
 	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
 
-func imageMarker(c domain.MediaCopy, signer media_meta.Metadata) func(raw, encryptedOrder []byte) ([]byte, error) {
-	if len(c.Watermark) == 0 {
-		return media_meta.EmbedOrderInJPEG
+func buildVideoCopy(original string, c domain.MediaCopy) (string, error) {
+	header, raw, err := splitDataURI(original)
+	if err != nil {
+		return "", err
 	}
-	return func(raw, encryptedOrder []byte) ([]byte, error) {
-		redrawn, err := media_meta.DrawWatermark(raw, c.Watermark)
-		if err != nil {
-			return nil, err
-		}
-		signedJPEG, err := signer.SignChangedJPEG(raw, redrawn)
-		if err != nil {
-			return nil, err
-		}
-		return media_meta.EmbedOrderInJPEG(signedJPEG, encryptedOrder)
+	marked, err := media_meta.EmbedOrderInVideo(raw, c.EncryptedOrder)
+	if err != nil {
+		return "", err
 	}
+	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }

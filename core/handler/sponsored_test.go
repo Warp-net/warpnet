@@ -477,9 +477,8 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "someone who did not pay gets nothing")
 
-		resp, err = h(req, streamFrom(newTestPeerID(t)))
-		require.NoError(t, err)
-		assert.Equal(t, domain.Tweet{}, resp, "an unknown node gets nothing")
+		_, err = h(req, streamFrom(newTestPeerID(t)))
+		assert.ErrorIs(t, err, database.ErrUserNotFound, "an unknown node gets nothing")
 	})
 
 	t.Run("on the buyer's node", func(t *testing.T) {
@@ -613,26 +612,35 @@ func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
 		"stranger-1": {Id: "stranger-1", NodeId: strangerNode.String()},
 	}
 	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
-	get := func(h warpnet.WarpHandlerFunc, key string, remote warpnet.WarpPeerID) string {
+	get := func(h warpnet.WarpHandlerFunc, key string, remote warpnet.WarpPeerID) (string, error) {
 		_, s := stream.NewLoopbackStream(own, remote, event.PUBLIC_GET_SPONSORED_IMAGE)
 		resp, err := h(marshal(t, event.GetImageEvent{UserId: "author-1", Key: key}), s)
-		require.NoError(t, err)
-		return resp.(event.GetImageResponse).File
+		if err != nil {
+			return "", err
+		}
+		return resp.(event.GetImageResponse).File, nil
 	}
 
 	h := StreamGetSponsoredImageHandler(streamer, testSignerKey, media, copies, users)
-	assert.NotEmpty(t, get(h, "copy-1", buyerNode), "the buyer gets the copy")
-	assert.Empty(t, get(h, "copy-1", strangerNode), "someone else who knows the key gets nothing")
-	assert.Empty(t, get(h, "copy-1", newTestPeerID(t)), "an unknown node gets nothing")
-	assert.Empty(t, get(h, imageKey, buyerNode), "the route gives no originals")
+	copied, err := get(h, "copy-1", buyerNode)
+	require.NoError(t, err)
+	assert.NotEmpty(t, copied, "the buyer gets the copy")
+	_, err = get(h, "copy-1", strangerNode)
+	assert.ErrorIs(t, err, warpnet.ErrForeignAuthor, "someone else who knows the key gets nothing")
+	_, err = get(h, "copy-1", newTestPeerID(t))
+	assert.ErrorIs(t, err, warpnet.ErrForeignAuthor, "an unknown node gets nothing")
+	_, err = get(h, imageKey, buyerNode)
+	assert.ErrorIs(t, err, database.ErrMediaNotFound, "the route gives no originals")
 
-	assert.Empty(t, get(StreamGetImageHandler(streamer, media, users), "copy-1", buyerNode), "the image route gives no copies")
+	served, err := get(StreamGetImageHandler(streamer, media, users), "copy-1", buyerNode)
+	require.NoError(t, err)
+	assert.Empty(t, served, "the image route gives no copies")
 }
 
 func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 	own := newTestPeerID(t)
 	image, _ := imageWithMetadata(t, "author-1")
-	copied, err := markFile(image, []byte("sealed"), media_meta.EmbedOrderInJPEG)
+	copied, err := buildImageCopy(image, domain.MediaCopy{EncryptedOrder: []byte("sealed")}, media_meta.Metadata{})
 	require.NoError(t, err)
 	copyKey := contentKey(copied)
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: testSignerID.String()}}
@@ -681,7 +689,7 @@ func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 
 	sealed, err := security.EncryptAES([]byte(`{"buyer_id":"buyer-1"}`), testIdentityKey(t))
 	require.NoError(t, err)
-	foreign, err := markFile(image, sealed, media_meta.EmbedOrderInJPEG)
+	foreign, err := buildImageCopy(image, domain.MediaCopy{EncryptedOrder: sealed}, media_meta.Metadata{})
 	require.NoError(t, err)
 	_, err = h(marshal(t, event.GetCopyBuyerEvent{File: foreign}), nil)
 	assert.EqualError(t, err, "sponsored buyer: this node did not sell the copy")
