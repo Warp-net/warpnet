@@ -45,13 +45,15 @@ const (
 	ErrAmbiguousMetadata warpnet.WarpError = "media carries more than one warpnet metadata block"
 	ErrNoSigningKey      warpnet.WarpError = "media meta: no signing key"
 	ErrNoSigningIdentity warpnet.WarpError = "media meta: no signing identity"
+	ErrNoOrder           warpnet.WarpError = "media carries no order"
 )
 
 type signedWatermark struct {
-	Version       uint8     `json:"version"`
-	CreatedAt     time.Time `json:"created_at"`
-	EncryptedMeta []byte    `json:"encrypted_meta"`
-	Signature     string    `json:"signature"`
+	Version        uint8     `json:"version"`
+	CreatedAt      time.Time `json:"created_at"`
+	EncryptedMeta  []byte    `json:"encrypted_meta"`
+	Signature      string    `json:"signature"`
+	EncryptedOrder []byte    `json:"encrypted_order,omitempty"`
 }
 
 type Watermark struct {
@@ -97,6 +99,38 @@ func verify(watermarkBytes, rawHash []byte, nodeId, ownerId string) error {
 		return ErrForgedMetadata
 	}
 	return nil
+}
+
+func ExtractOrder(b []byte) ([]byte, error) {
+	watermarkBytes, err := extractWatermark(b)
+	if err != nil {
+		return nil, err
+	}
+	signed, err := parseSignedWatermark(watermarkBytes)
+	if err != nil {
+		return nil, err
+	}
+	if len(signed.EncryptedOrder) == 0 {
+		return nil, ErrNoOrder
+	}
+	return signed.EncryptedOrder, nil
+}
+
+func extractWatermark(b []byte) ([]byte, error) {
+	if !IsISOBaseMediaFile(b) {
+		return extractFromJPEG(b)
+	}
+	_, watermarkBytes, err := SplitVideo(b)
+	return watermarkBytes, err
+}
+
+func addOrder(watermarkBytes, encryptedOrder []byte) ([]byte, error) {
+	signed, err := parseSignedWatermark(watermarkBytes)
+	if err != nil {
+		return nil, err
+	}
+	signed.EncryptedOrder = encryptedOrder
+	return json.Marshal(signed)
 }
 
 func parseSignedWatermark(b []byte) (signedWatermark, error) {

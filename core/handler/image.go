@@ -294,10 +294,14 @@ func verifyContentKey(key, file string) error {
 	if !isContentKey(key) {
 		return nil
 	}
-	if hex.EncodeToString(security.ConvertToSHA256([]byte(file))) != key {
+	if contentKey(file) != key {
 		return ErrMediaKeyMismatch
 	}
 	return nil
+}
+
+func contentKey(file string) string {
+	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
 }
 
 func splitDataURI(file string) (header string, data []byte, err error) {

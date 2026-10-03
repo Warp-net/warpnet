@@ -5,6 +5,9 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     getProfile: vi.fn(),
     getImage: vi.fn(),
+    getVideo: vi.fn(),
+    getSponsoredImage: vi.fn(),
+    getSponsoredVideo: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
     hasReactor: vi.fn(),
@@ -15,6 +18,7 @@ vi.mock('@/service/service', () => ({
     orderSponsoredTweet: vi.fn(),
     getSponsoredTweet: vi.fn(),
     quoteSponsoredTweet: vi.fn(),
+    getCopyBuyer: vi.fn(),
   },
 }));
 
@@ -91,6 +95,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   warpnetService.getProfile.mockResolvedValue({ id: 'author1', username: 'author', avatar_key: '' });
   warpnetService.getImage.mockResolvedValue(null);
+  warpnetService.getSponsoredImage.mockResolvedValue(null);
   warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer' });
   warpnetService.getTweetStats.mockResolvedValue({ tweet_id: 't1' });
   warpnetService.hasReactor.mockResolvedValue(false);
@@ -218,6 +223,26 @@ describe('TweetBlock sponsored tweet', () => {
     expect(warpnetService.orderSponsoredTweet).not.toHaveBeenCalled();
   });
 
+  it("loads a bought tweet's media through the sponsored routes", async () => {
+    warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'bought before', image_keys: ['copy-1'], video_key: 'copy-2' });
+    warpnetService.getSponsoredVideo.mockResolvedValue({ file: 'data:video/mp4;base64,AAAA', size: 4, deferred: false });
+    renderTweet(teaser());
+
+    await waitFor(() => expect(warpnetService.getSponsoredImage).toHaveBeenCalledWith({ userId: 'author1', key: 'copy-1' }));
+    await fireEvent.click(await screen.findByLabelText('Play video'));
+    await waitFor(() => expect(warpnetService.getSponsoredVideo).toHaveBeenCalledWith({ userId: 'author1', key: 'copy-2' }));
+    expect(warpnetService.getImage).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'copy-1' }));
+    expect(warpnetService.getVideo).not.toHaveBeenCalled();
+  });
+
+  it("loads the author's own sponsored media as the originals", async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1', node_id: 'node-author' });
+    renderTweet({ ...teaser(), text: 'my paid words', image_keys: ['original-1'] });
+
+    await waitFor(() => expect(warpnetService.getImage).toHaveBeenCalledWith({ userId: 'author1', key: 'original-1' }));
+    expect(warpnetService.getSponsoredImage).not.toHaveBeenCalled();
+  });
+
   it("shows the author's own sponsored tweet in full, with its price", async () => {
     warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1', node_id: 'node-author' });
     renderTweet({ ...teaser(), text: 'my paid words' });
@@ -226,5 +251,44 @@ describe('TweetBlock sponsored tweet', () => {
     expect(screen.getByText(/1\.5 USDT/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Unlock/ })).not.toBeInTheDocument();
     expect(warpnetService.getSponsoredTweet).not.toHaveBeenCalled();
+  });
+
+  it('names the buyer of a copy the author checks', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1', node_id: 'node-author' });
+    warpnetService.getProfile.mockImplementation(async (id) =>
+      id === 'buyer1' ? { id, username: 'leaker' } : { id, username: 'author', avatar_key: '' });
+    warpnetService.getCopyBuyer.mockResolvedValue({
+      tweet_id: 't1', buyer_id: 'buyer1', order_id: 'order-hash', tx_id: 'tx1', sold_at: '2026-10-01T12:00:00Z',
+    });
+    renderTweet({ ...teaser(), text: 'my paid words' });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Tweet options' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Check a copy' }));
+    const leaked = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'leak.jpg', { type: 'image/jpeg' });
+    await fireEvent.change(screen.getByLabelText('Copy to check'), { target: { files: [leaked] } });
+
+    expect(await screen.findByText(/Sold to leaker \(@buyer1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Order order-hash/)).toBeInTheDocument();
+    expect(warpnetService.getCopyBuyer).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/jpeg;base64,/));
+  });
+
+  it('says so when a checked file names no buyer', async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1', node_id: 'node-author' });
+    warpnetService.getCopyBuyer.mockResolvedValue(null);
+    renderTweet({ ...teaser(), text: 'my paid words' });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Tweet options' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Check a copy' }));
+    const screenshot = new File(['x'], 'shot.png', { type: 'image/png' });
+    await fireEvent.change(screen.getByLabelText('Copy to check'), { target: { files: [screenshot] } });
+
+    expect(await screen.findByText(/names no buyer/)).toBeInTheDocument();
+  });
+
+  it('offers no copy check to a reader', async () => {
+    renderTweet(teaser());
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Tweet options' }));
+    expect(screen.queryByRole('button', { name: 'Check a copy' })).not.toBeInTheDocument();
   });
 });

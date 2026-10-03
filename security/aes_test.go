@@ -41,7 +41,7 @@ func TestAESEncryptDecrypt_Success(t *testing.T) {
 	cipherData, err := EncryptAES(in, password)
 	assert.NoError(t, err)
 
-	out, err := decryptAES(cipherData, password)
+	out, err := DecryptAES(cipherData, password)
 	assert.NoError(t, err)
 
 	assert.Equal(t, in, out)
@@ -53,7 +53,7 @@ func TestAESEncryptDecrypt_WrongPassword(t *testing.T) {
 	cipherData, err := EncryptAES(in, []byte("right"))
 	assert.NoError(t, err)
 
-	_, err = decryptAES(cipherData, []byte("wrong"))
+	_, err = DecryptAES(cipherData, []byte("wrong"))
 	assert.Error(t, err)
 }
 
@@ -106,10 +106,10 @@ func TestAESEncrypt_WeakPasswordIsNotDerivedFromClock(t *testing.T) {
 }
 
 func TestAESDecrypt_TooShort(t *testing.T) {
-	_, err := decryptAES(make([]byte, saltSize-1), []byte("pw"))
+	_, err := DecryptAES(make([]byte, saltSize-1), []byte("pw"))
 	assert.ErrorIs(t, err, ErrCiphertextTooShort)
 
-	_, err = decryptAES(make([]byte, saltSize+nonceSize-1), []byte("pw"))
+	_, err = DecryptAES(make([]byte, saltSize+nonceSize-1), []byte("pw"))
 	assert.ErrorIs(t, err, ErrCiphertextTooShort)
 }
 func TestAESEncrypt_RefusesEmptyPassword(t *testing.T) {

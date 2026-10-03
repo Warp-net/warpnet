@@ -436,6 +436,12 @@ type (
 	VideoKey    string
 )
 
+type MediaCopy struct {
+	OriginalKey    string `json:"original_key"`
+	BuyerId        string `json:"buyer_id"`
+	EncryptedOrder []byte `json:"encrypted_order"`
+}
+
 type Alias struct {
 	ID         ID        `json:"id"`
 	CreatedAt  time.Time `json:"created_at"`

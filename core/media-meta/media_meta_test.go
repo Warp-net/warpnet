@@ -431,3 +431,66 @@ func TestVerifyImage_GarbageInDescriptionTagIsRefused(t *testing.T) {
 		})
 	}
 }
+
+func TestEmbedOrderInJPEG_KeepsTheOwnersClaim(t *testing.T) {
+	watermarked := watermarkedJPEG(t, "alice", 0x40)
+
+	copied, err := EmbedOrderInJPEG(watermarked, []byte("sealed for bob"))
+	require.NoError(t, err)
+
+	assert.NoError(t, VerifyImage(copied, signerID.String(), "alice"), "a node that knows nothing of the order field still accepts the copy")
+	encryptedOrder, err := ExtractOrder(copied)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sealed for bob"), encryptedOrder)
+}
+
+func TestEmbedOrderInVideo_KeepsTheOwnersClaim(t *testing.T) {
+	watermarked := watermarkedMP4(t, "alice")
+
+	copied, err := EmbedOrderInVideo(watermarked, []byte("sealed for bob"))
+	require.NoError(t, err)
+
+	assert.NoError(t, VerifyVideo(copied, signerID.String(), "alice"), "a node that knows nothing of the order field still accepts the copy")
+	assert.True(t, bytes.HasPrefix(copied, minimalMP4()), "the video itself is untouched")
+	encryptedOrder, err := ExtractOrder(copied)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sealed for bob"), encryptedOrder)
+}
+
+func TestEmbedOrder_RebuildsTheSameCopy(t *testing.T) {
+	image := watermarkedJPEG(t, "alice", 0x40)
+	first, err := EmbedOrderInJPEG(image, []byte("bob"))
+	require.NoError(t, err)
+	second, err := EmbedOrderInJPEG(image, []byte("bob"))
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+
+	video := watermarkedMP4(t, "alice")
+	first, err = EmbedOrderInVideo(video, []byte("bob"))
+	require.NoError(t, err)
+	second, err = EmbedOrderInVideo(video, []byte("bob"))
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+}
+
+func TestEmbedOrder_RefusesUnstampedFile(t *testing.T) {
+	_, err := EmbedOrderInJPEG(testJPEG(t, 0x40), []byte("bob"))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = EmbedOrderInVideo(minimalMP4(), []byte("bob"))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestExtractOrder_OnlyACopyCarriesOne(t *testing.T) {
+	_, err := ExtractOrder(watermarkedJPEG(t, "alice", 0x40))
+	assert.ErrorIs(t, err, ErrNoOrder)
+
+	_, err = ExtractOrder(watermarkedMP4(t, "alice"))
+	assert.ErrorIs(t, err, ErrNoOrder)
+
+	_, err = ExtractOrder(testJPEG(t, 0x40))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = ExtractOrder(minimalMP4())
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}

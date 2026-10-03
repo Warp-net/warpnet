@@ -6,7 +6,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"testing"
+	"time"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -14,6 +16,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +92,67 @@ func (u stubSponsoredUsers) GetByNodeID(nodeId string) (domain.User, error) {
 		}
 	}
 	return domain.User{}, database.ErrUserNotFound
+}
+
+type stubSponsoredMedia struct {
+	images map[string]domain.Base64Image
+	videos map[string]domain.Base64Video
+	copies map[string]domain.MediaCopy
+}
+
+func newStubSponsoredMedia() stubSponsoredMedia {
+	return stubSponsoredMedia{
+		images: map[string]domain.Base64Image{},
+		videos: map[string]domain.Base64Video{},
+		copies: map[string]domain.MediaCopy{},
+	}
+}
+
+func (m stubSponsoredMedia) GetImage(userId, key string) (domain.Base64Image, error) {
+	img, ok := m.images[userId+"/"+key]
+	if !ok {
+		return "", database.ErrMediaNotFound
+	}
+	return img, nil
+}
+
+func (m stubSponsoredMedia) GetVideo(userId, key string) (domain.Base64Video, error) {
+	video, ok := m.videos[userId+"/"+key]
+	if !ok {
+		return "", database.ErrMediaNotFound
+	}
+	return video, nil
+}
+
+func (m stubSponsoredMedia) GetCopy(userId, key string) (domain.MediaCopy, error) {
+	c, ok := m.copies[userId+"/"+key]
+	if !ok {
+		return domain.MediaCopy{}, database.ErrMediaNotFound
+	}
+	return c, nil
+}
+
+func (m stubSponsoredMedia) SetCopy(userId, key string, c domain.MediaCopy) error {
+	m.copies[userId+"/"+key] = c
+	return nil
+}
+
+func (m stubSponsoredMedia) SetImage(string, domain.Base64Image) (domain.ImageKey, error) {
+	return "", nil
+}
+
+func (m stubSponsoredMedia) SetVideo(string, domain.Base64Video) (domain.VideoKey, error) {
+	return "", nil
+}
+
+func (m stubSponsoredMedia) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
+	m.images[userId+"/"+key] = img
+	return nil
+}
+
+func (m stubSponsoredMedia) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
+	m.videos[userId+"/"+key] = video
+	return nil
 }
 
 func testIdentityKey(t *testing.T) ed25519.PrivateKey {
@@ -340,16 +404,22 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 			"stranger-1": {Id: "stranger-1", NodeId: strangerNode.String()},
 		}
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Confirmed: true}}
-		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, tweets, orders, users,
+		media := newStubSponsoredMedia()
+		image, _ := watermarkedImage(t, "author-1")
+		media.images["author-1/img-1"] = domain.Base64Image(image)
+		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, newStubSponsoredMedia(), users,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}})
 
 		resp, err := h(req, streamFrom(own))
 		require.NoError(t, err)
-		assert.Equal(t, "paid", resp.(domain.Tweet).Text, "the author reads the own tweet")
+		assert.Equal(t, full, resp, "the author reads the own tweet")
 
 		resp, err = h(req, streamFrom(buyerNode))
 		require.NoError(t, err)
-		assert.Equal(t, full, resp, "a confirmed buyer gets the full tweet")
+		bought := resp.(domain.Tweet)
+		assert.Equal(t, "paid", bought.Text, "a confirmed buyer gets the full tweet")
+		require.Len(t, bought.ImageKeys, 1)
+		assert.NotEqual(t, "img-1", bought.ImageKeys[0], "a confirmed buyer gets a copy of the image, not the original")
 
 		resp, err = h(req, streamFrom(strangerNode))
 		require.NoError(t, err)
@@ -377,13 +447,13 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 			},
 		}
 
-		resp, err := StreamGetSponsoredTweetHandler(auth, tweets, stubOrders{}, users, streamer)(req, streamFrom(own))
+		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "nothing bought, nothing shown")
 		assert.Empty(t, paths, "nothing bought, nothing asked")
 
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Nonce: "n1"}}
-		h := StreamGetSponsoredTweetHandler(auth, tweets, orders, users, streamer)
+		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)
 
 		confirmed = false
 		resp, err = h(req, streamFrom(own))
@@ -407,4 +477,145 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "a buyer never passes the tweet on")
 	})
+}
+
+func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
+	own, buyerNode := newTestPeerID(t), newTestPeerID(t)
+	image, imageKey := watermarkedImage(t, "author-1")
+	video, videoKey := watermarkedVideo(t, "author-1")
+	media := newStubSponsoredMedia()
+	media.images["author-1/"+imageKey] = domain.Base64Image(image)
+	media.videos["author-1/"+videoKey] = domain.Base64Video(video)
+	copies := newStubSponsoredMedia()
+
+	full := domain.Tweet{Id: "tweet-1", UserId: "author-1", Text: "paid", ImageKeys: []string{imageKey}, VideoKey: &videoKey, Price: sponsoredPrice()}
+	tweets := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) { return full, nil }}
+	order := domain.Order{
+		TweetId: "tweet-1", AuthorId: "author-1", BuyerId: "buyer-1", Nonce: "n1", TxId: "tx-1",
+		Confirmed: true, CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
+	}
+	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", NodeId: buyerNode.String()}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
+	fromBuyer := func(route warpnet.WarpProtocolID) warpnet.WarpStream {
+		_, s := stream.NewLoopbackStream(own, buyerNode, route)
+		return s
+	}
+
+	resp, err := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets,
+		stubOrders{"tweet-1/buyer-1": order}, media, copies, users, streamer,
+	)(marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), fromBuyer(event.PUBLIC_GET_SPONSORED_TWEET))
+	require.NoError(t, err)
+	bought := resp.(domain.Tweet)
+	require.Len(t, bought.ImageKeys, 1)
+	require.NotNil(t, bought.VideoKey)
+	assert.NotEqual(t, imageKey, bought.ImageKeys[0], "the buyer never learns the original's key")
+	assert.NotEqual(t, videoKey, *bought.VideoKey, "the buyer never learns the original's key")
+
+	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
+	traceBuyer := StreamGetCopyBuyerHandler(testSignerKey)
+	want := event.CopyBuyerResponse{TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt}
+
+	served, err := StreamGetSponsoredImageHandler(streamer, media, copies, users)(
+		marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_SPONSORED_IMAGE))
+	require.NoError(t, err)
+	copied := served.(event.GetImageResponse).File
+	assert.NoError(t, verifyForeignImage(author, bought.ImageKeys[0], copied), "the buyer's node takes the copy for the author's image")
+	traced, err := traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, want, traced)
+
+	served, err = StreamGetSponsoredVideoHandler(streamer, media, copies, users)(
+		marshal(t, event.GetVideoEvent{UserId: "author-1", Key: *bought.VideoKey}), fromBuyer(event.PUBLIC_GET_SPONSORED_VIDEO))
+	require.NoError(t, err)
+	copied = served.(event.GetVideoResponse).File
+	assert.NoError(t, verifyForeignVideo(author, *bought.VideoKey, copied), "the buyer's node takes the copy for the author's video")
+	traced, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, want, traced)
+}
+
+func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
+	own, buyerNode, strangerNode := newTestPeerID(t), newTestPeerID(t), newTestPeerID(t)
+	image, imageKey := watermarkedImage(t, "author-1")
+	media := newStubSponsoredMedia()
+	media.images["author-1/"+imageKey] = domain.Base64Image(image)
+	copies := newStubSponsoredMedia()
+	copies.copies["author-1/copy-1"] = domain.MediaCopy{OriginalKey: imageKey, BuyerId: "buyer-1", EncryptedOrder: []byte("sealed")}
+	users := stubSponsoredUsers{
+		"buyer-1":    {Id: "buyer-1", NodeId: buyerNode.String()},
+		"stranger-1": {Id: "stranger-1", NodeId: strangerNode.String()},
+	}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
+	get := func(h warpnet.WarpHandlerFunc, key string, remote warpnet.WarpPeerID) string {
+		_, s := stream.NewLoopbackStream(own, remote, event.PUBLIC_GET_SPONSORED_IMAGE)
+		resp, err := h(marshal(t, event.GetImageEvent{UserId: "author-1", Key: key}), s)
+		require.NoError(t, err)
+		return resp.(event.GetImageResponse).File
+	}
+
+	h := StreamGetSponsoredImageHandler(streamer, media, copies, users)
+	assert.NotEmpty(t, get(h, "copy-1", buyerNode), "the buyer gets the copy")
+	assert.Empty(t, get(h, "copy-1", strangerNode), "someone else who knows the key gets nothing")
+	assert.Empty(t, get(h, "copy-1", newTestPeerID(t)), "an unknown node gets nothing")
+	assert.Empty(t, get(h, imageKey, buyerNode), "the route gives no originals")
+
+	assert.Empty(t, get(StreamGetImageHandler(streamer, media, users), "copy-1", buyerNode), "the image route gives no copies")
+}
+
+func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
+	own := newTestPeerID(t)
+	image, _ := watermarkedImage(t, "author-1")
+	copied, err := markFile(image, []byte("sealed"), media_meta.EmbedOrderInJPEG)
+	require.NoError(t, err)
+	copyKey := contentKey(copied)
+	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: testSignerID.String()}}
+	var asked []stream.WarpRoute
+	answer := image
+	streamer := stubStreamer{
+		nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "buyer-1"},
+		genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			assert.Equal(t, testSignerID.String(), nodeId)
+			asked = append(asked, path)
+			return json.Marshal(event.GetImageResponse{File: answer})
+		},
+	}
+	copies := newStubSponsoredMedia()
+	h := StreamGetSponsoredImageHandler(streamer, newStubSponsoredMedia(), copies, users)
+	get := func(remote warpnet.WarpPeerID) string {
+		_, s := stream.NewLoopbackStream(own, remote, event.PUBLIC_GET_SPONSORED_IMAGE)
+		resp, err := h(marshal(t, event.GetImageEvent{UserId: "author-1", Key: copyKey}), s)
+		require.NoError(t, err)
+		return resp.(event.GetImageResponse).File
+	}
+
+	assert.Empty(t, get(own), "a file that is not the copy is refused")
+	assert.Empty(t, copies.images, "a refused file is not kept")
+
+	answer, asked = copied, nil
+	assert.Equal(t, copied, get(own), "the buyer gets the copy from the author's node")
+	assert.Equal(t, []stream.WarpRoute{event.PUBLIC_GET_SPONSORED_IMAGE}, asked)
+	assert.Equal(t, domain.Base64Image(copied), copies.images["author-1/"+copyKey], "the buyer's node keeps the copy")
+
+	asked = nil
+	assert.Equal(t, copied, get(own))
+	assert.Empty(t, asked, "a kept copy needs no author")
+
+	assert.Empty(t, get(newTestPeerID(t)), "a buyer never passes the copy on")
+	assert.Empty(t, asked)
+}
+
+func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
+	image, _ := watermarkedImage(t, "author-1")
+	h := StreamGetCopyBuyerHandler(testSignerKey)
+
+	resp, err := h(marshal(t, event.GetCopyBuyerEvent{File: image}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, event.CopyBuyerResponse{}, resp, "the original names no buyer")
+
+	sealed, err := security.EncryptAES([]byte(`{"buyer_id":"buyer-1"}`), testIdentityKey(t))
+	require.NoError(t, err)
+	foreign, err := markFile(image, sealed, media_meta.EmbedOrderInJPEG)
+	require.NoError(t, err)
+	_, err = h(marshal(t, event.GetCopyBuyerEvent{File: foreign}), nil)
+	assert.EqualError(t, err, "sponsored buyer: this node did not sell the copy")
 }

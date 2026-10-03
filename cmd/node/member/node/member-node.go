@@ -434,6 +434,7 @@ type memberRepos struct {
 	chatRepo         ChatProvider
 	mediaRepo        MediaProvider
 	chatMediaRepo    MediaProvider
+	copyRepo         MediaProvider
 	notificationRepo NotificationProvider
 	settingsRepo     SettingsProvider
 	bookmarkRepo     BookmarkProvider
@@ -463,6 +464,7 @@ func (m *MemberNode) setupHandlers(
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		chatMediaRepo:    database.NewChatMediaRepo(db),
+		copyRepo:         database.NewSponsoredMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
 		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
@@ -758,7 +760,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
-			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.orderRepo, userRepo, m),
+			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
@@ -771,6 +773,18 @@ func (m *MemberNode) sponsoredHandlers(
 		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
 			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m),
+		},
+		{
+			event.PRIVATE_GET_SPONSORED_BUYER,
+			handler.StreamGetCopyBuyerHandler(m.privKey),
+		},
+		{
+			event.PUBLIC_GET_SPONSORED_IMAGE,
+			handler.StreamGetSponsoredImageHandler(m, r.mediaRepo, r.copyRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_SPONSORED_VIDEO,
+			handler.StreamGetSponsoredVideoHandler(m, r.mediaRepo, r.copyRepo, userRepo),
 		},
 	}
 }
