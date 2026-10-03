@@ -445,7 +445,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 	})
 
 	t.Run("fetched foreign video is cached", func(t *testing.T) {
-		file, key := watermarkedVideo(t, "remote")
+		file, key := videoWithMetadata(t, "remote")
 		signerUsers := mediaUserDouble{users: map[string]domain.User{
 			"remote": {Id: "remote", NodeId: testSignerID.String()},
 		}}

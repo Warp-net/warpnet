@@ -73,7 +73,7 @@ func StreamGetSponsoredImageHandler(
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored image: fetching original: %w", err)
 			}
-			signer := media_meta.Watermark{PrivKey: identityKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
+			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
 			img, err := markFile(string(original), c.EncryptedOrder, imageMarker(c, signer))
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored image: marking copy: %w", err)
@@ -247,12 +247,12 @@ func markFile(
 	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
 
-func imageMarker(c domain.MediaCopy, signer media_meta.Watermark) func(raw, encryptedOrder []byte) ([]byte, error) {
-	if len(c.Label) == 0 {
+func imageMarker(c domain.MediaCopy, signer media_meta.Metadata) func(raw, encryptedOrder []byte) ([]byte, error) {
+	if len(c.Watermark) == 0 {
 		return media_meta.EmbedOrderInJPEG
 	}
 	return func(raw, encryptedOrder []byte) ([]byte, error) {
-		redrawn, err := media_meta.DrawLabels(raw, c.Label)
+		redrawn, err := media_meta.DrawWatermark(raw, c.Watermark)
 		if err != nil {
 			return nil, err
 		}
