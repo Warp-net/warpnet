@@ -532,6 +532,11 @@ func (g *Gossip) IsGossipRunning() bool {
 	return g.isRunning.Load()
 }
 
+const (
+	publishingBackoffStep = time.Second * 5
+	publishingBackoffMax  = time.Minute * 30
+)
+
 func (g *Gossip) runPeerInfoPublishing(duration time.Duration) {
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
@@ -555,6 +560,10 @@ func (g *Gossip) runPeerInfoPublishing(duration time.Duration) {
 			return
 		case <-ticker.C:
 			jitter := time.Second * time.Duration(rand.IntN(60)) //#nosec
+			duration = duration + publishingBackoffStep
+			if duration > publishingBackoffMax {
+				duration = publishingBackoffMax
+			}
 			ticker.Reset(duration + jitter)
 
 			err := g.publishPeerInfo()
