@@ -439,6 +439,7 @@ type (
 type MediaCopy struct {
 	Original  string `json:"original"`
 	Recipient []byte `json:"recipient"`
+	Overlay   []byte `json:"overlay,omitempty"`
 }
 
 type Alias struct {

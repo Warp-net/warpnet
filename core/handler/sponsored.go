@@ -453,11 +453,12 @@ func StreamGetSponsoredTweetHandler(
 			if isOwn {
 				return tweet, nil
 			}
-			order, isPaid := paidOrder(s, userRepo, orders, ev.TweetId)
+			buyer, order, isPaid := paidOrder(s, userRepo, orders, ev.TweetId)
 			if !isPaid {
 				return domain.Tweet{}, nil
 			}
-			return issueCopies(identityKey, mediaRepo, tweet, order)
+			signer := media_meta.Watermark{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
+			return issueCopies(signer, mediaRepo, tweet, buyer, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -510,29 +511,35 @@ func StreamGetSponsoredTweetHandler(
 	}
 }
 
-func paidOrder(s warpnet.WarpStream, userRepo SponsoredUserFetcher, orders OrderStorer, tweetId string) (domain.Order, bool) {
+func paidOrder(
+	s warpnet.WarpStream,
+	userRepo SponsoredUserFetcher,
+	orders OrderStorer,
+	tweetId string,
+) (domain.User, domain.Order, bool) {
 	if s == nil || s.Conn() == nil {
-		return domain.Order{}, false
+		return domain.User{}, domain.Order{}, false
 	}
 	buyer, err := userRepo.GetByNodeID(s.Conn().RemotePeer().String())
 	if err != nil {
-		return domain.Order{}, false
+		return domain.User{}, domain.Order{}, false
 	}
 	order, err := orders.Get(tweetId, buyer.Id)
-	return order, err == nil && order.Confirmed
+	return buyer, order, err == nil && order.Confirmed
 }
 
 func issueCopies(
-	identityKey ed25519.PrivateKey,
+	signer media_meta.Watermark,
 	mediaRepo SponsoredMediaStorer,
 	tweet domain.Tweet,
+	buyer domain.User,
 	order domain.Order,
 ) (domain.Tweet, error) {
 	plain, err := json.Marshal(order)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	recipient, err := security.EncryptAES(plain, identityKey)
+	recipient, err := security.EncryptAES(plain, signer.PrivKey)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -543,7 +550,12 @@ func issueCopies(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		copyKey, err := issueCopy(mediaRepo, tweet.UserId, key, string(img), recipient, media_meta.AddRecipientToJPEG)
+		overlay, err := labelOverlay(string(img), buyerLabel(buyer))
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		c := domain.MediaCopy{Original: key, Recipient: recipient, Overlay: overlay}
+		copyKey, err := issueCopy(mediaRepo, tweet.UserId, string(img), c, imageMarker(c, signer))
 		if err != nil {
 			return domain.Tweet{}, err
 		}
@@ -558,7 +570,8 @@ func issueCopies(
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	copyKey, err := issueCopy(mediaRepo, tweet.UserId, *tweet.VideoKey, string(video), recipient, media_meta.AddRecipientToVideo)
+	c := domain.MediaCopy{Original: *tweet.VideoKey, Recipient: recipient}
+	copyKey, err := issueCopy(mediaRepo, tweet.UserId, string(video), c, media_meta.AddRecipientToVideo)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -568,16 +581,16 @@ func issueCopies(
 
 func issueCopy(
 	mediaRepo SponsoredMediaStorer,
-	userId, key, file string,
-	recipient []byte,
+	userId, file string,
+	c domain.MediaCopy,
 	embed func(raw, recipient []byte) ([]byte, error),
 ) (string, error) {
-	marked, err := addRecipient(file, recipient, embed)
+	marked, err := addRecipient(file, c.Recipient, embed)
 	if err != nil {
 		return "", err
 	}
 	copyKey := contentKey(marked)
-	return copyKey, mediaRepo.SetCopy(userId, copyKey, domain.MediaCopy{Original: key, Recipient: recipient})
+	return copyKey, mediaRepo.SetCopy(userId, copyKey, c)
 }
 
 func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {

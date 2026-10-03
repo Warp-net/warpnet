@@ -494,3 +494,32 @@ func TestRecipient_OnlyACopyCarriesOne(t *testing.T) {
 	_, err = Recipient(minimalMP4())
 	assert.ErrorIs(t, err, ErrNoMetadata)
 }
+
+func TestRestampJPEG_SignsTheRedrawnPixels(t *testing.T) {
+	original := watermarkedJPEG(t, "alice", 0x40)
+	redrawn := testJPEG(t, 0xc0)
+
+	restamped, err := watermark("alice").RestampJPEG(original, redrawn)
+	require.NoError(t, err)
+	assert.NoError(t, VerifyImage(restamped, signerID.String(), "alice"))
+
+	before, err := extractFromJPEG(original)
+	require.NoError(t, err)
+	after, err := extractFromJPEG(restamped)
+	require.NoError(t, err)
+	was, err := parseSignedWatermark(before)
+	require.NoError(t, err)
+	is, err := parseSignedWatermark(after)
+	require.NoError(t, err)
+	assert.Equal(t, was.EncryptedMeta, is.EncryptedMeta, "the uploader's sealed meta carries over")
+	assert.True(t, was.CreatedAt.Equal(is.CreatedAt))
+
+	again, err := watermark("alice").RestampJPEG(original, redrawn)
+	require.NoError(t, err)
+	assert.Equal(t, restamped, again)
+}
+
+func TestRestampJPEG_RefusesUnstampedOriginal(t *testing.T) {
+	_, err := watermark("alice").RestampJPEG(testJPEG(t, 0x40), testJPEG(t, 0xc0))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}

@@ -64,13 +64,17 @@ type Watermark struct {
 }
 
 func (w Watermark) Sign(rawHash []byte) ([]byte, error) {
+	return w.signAt(rawHash, time.Now().UTC())
+}
+
+func (w Watermark) signAt(rawHash []byte, createdAt time.Time) ([]byte, error) {
 	if err := w.validate(); err != nil {
 		return nil, err
 	}
 
 	signed := signedWatermark{
 		Version:       metaVersion,
-		CreatedAt:     time.Now().UTC(),
+		CreatedAt:     createdAt,
 		EncryptedMeta: w.EncryptedMeta,
 	}
 	signed.Signature = security.Sign(

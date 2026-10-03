@@ -173,6 +173,7 @@ func StreamUploadImageHandler(
 
 func StreamGetImageHandler(
 	streamer MediaStreamer,
+	privKey ed25519.PrivateKey,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
@@ -196,7 +197,8 @@ func StreamGetImageHandler(
 		if isOwnImageRequest {
 			img, err := mediaRepo.GetImage(ev.UserId, ev.Key)
 			if errors.Is(err, database.ErrMediaNotFound) {
-				img, err = imageCopy(mediaRepo, ev.UserId, ev.Key)
+				signer := media_meta.Watermark{PrivKey: privKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
+				img, err = imageCopy(mediaRepo, signer, ev.UserId, ev.Key)
 			}
 			if errors.Is(err, database.ErrMediaNotFound) || img == "" {
 				log.Warnf("get image: key not found: %s", ev.Key)
@@ -308,7 +310,7 @@ func contentKey(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
 }
 
-func imageCopy(mediaRepo MediaStorer, userId, key string) (domain.Base64Image, error) {
+func imageCopy(mediaRepo MediaStorer, signer media_meta.Watermark, userId, key string) (domain.Base64Image, error) {
 	c, err := mediaRepo.GetCopy(userId, key)
 	if err != nil {
 		return "", err
@@ -317,7 +319,7 @@ func imageCopy(mediaRepo MediaStorer, userId, key string) (domain.Base64Image, e
 	if err != nil {
 		return "", err
 	}
-	img, err := addRecipient(string(original), c.Recipient, media_meta.AddRecipientToJPEG)
+	img, err := addRecipient(string(original), c.Recipient, imageMarker(c, signer))
 	return domain.Base64Image(img), err
 }
 

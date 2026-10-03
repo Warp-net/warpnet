@@ -2,9 +2,13 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"image"
+	"image/draw"
+	"image/jpeg"
 	"testing"
 	"time"
 
@@ -478,7 +482,7 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 }
 
 func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
-	own, buyerNode := newTestPeerID(t), newTestPeerID(t)
+	own, buyerNode := testSignerID, newTestPeerID(t)
 	image, imageKey := watermarkedImage(t, "author-1")
 	video, videoKey := watermarkedVideo(t, "author-1")
 	media := newStubSponsoredMedia()
@@ -491,7 +495,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 		TweetId: "tweet-1", AuthorId: "author-1", BuyerId: "buyer-1", Nonce: "n1", TxId: "tx-1",
 		Confirmed: true, CreatedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
 	}
-	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", NodeId: buyerNode.String()}}
+	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", Username: "leaker", NodeId: buyerNode.String()}}
 	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
 	fromBuyer := func(route warpnet.WarpProtocolID) warpnet.WarpStream {
 		_, s := stream.NewLoopbackStream(own, buyerNode, route)
@@ -512,14 +516,19 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	traceBuyer := StreamGetSponsoredBuyerHandler(testSignerKey)
 	want := event.SponsoredBuyerResponse{TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", CreatedAt: order.CreatedAt}
 
-	served, err := StreamGetImageHandler(streamer, media, users)(
-		marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_IMAGE))
+	getImage := StreamGetImageHandler(streamer, testSignerKey, media, users)
+	served, err := getImage(marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_IMAGE))
 	require.NoError(t, err)
 	copied := served.(event.GetImageResponse).File
 	assert.NoError(t, verifyForeignImage(author, bought.ImageKeys[0], copied), "the buyer's node takes the copy for the author's image")
+	assert.NotEqual(t, pixelsOf(t, image), pixelsOf(t, copied), "the buyer's name is drawn over the image")
 	traced, err := traceBuyer(marshal(t, event.GetSponsoredBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, traced)
+
+	served, err = getImage(marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_IMAGE))
+	require.NoError(t, err)
+	assert.Equal(t, copied, served.(event.GetImageResponse).File, "a rebuilt copy is the same file")
 
 	served, err = StreamGetVideoHandler(streamer, media, users)(
 		marshal(t, event.GetVideoEvent{UserId: "author-1", Key: *bought.VideoKey}), fromBuyer(event.PUBLIC_GET_VIDEO))
@@ -545,4 +554,13 @@ func TestStreamGetSponsoredBuyerHandler_UnmarkedFile(t *testing.T) {
 	require.NoError(t, err)
 	_, err = h(marshal(t, event.GetSponsoredBuyerEvent{File: foreign}), nil)
 	assert.EqualError(t, err, "sponsored buyer: this node did not sell the copy")
+}
+
+func pixelsOf(t *testing.T, file string) []byte {
+	t.Helper()
+	decoded, err := jpeg.Decode(bytes.NewReader(rawOf(t, file)))
+	require.NoError(t, err)
+	canvas := image.NewRGBA(decoded.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), decoded, decoded.Bounds().Min, draw.Src)
+	return canvas.Pix
 }

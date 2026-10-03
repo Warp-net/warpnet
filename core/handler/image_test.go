@@ -345,6 +345,7 @@ func TestGetImage_ServesForeignCacheWithoutGateway(t *testing.T) {
 	var streamed bool
 	h := StreamGetImageHandler(
 		recordingStreamer{streamed: &streamed},
+		nil,
 		cachedMediaRepo{cached: domain.Base64Image("data:image/png;base64,CACHED")},
 		foreignUserRepo{},
 	)
@@ -496,19 +497,19 @@ func (d mediaUserDouble) Get(userId string) (domain.User, error) {
 
 func TestStreamGetImageHandler(t *testing.T) {
 	t.Run("malformed payload", func(t *testing.T) {
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, newImageRepoDouble(), mediaUserDouble{})
 		_, err := h([]byte("{"), nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("empty key is rejected", func(t *testing.T) {
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, newImageRepoDouble(), mediaUserDouble{})
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID}), nil)
 		assert.ErrorIs(t, err, ErrEmptyImageKey)
 	})
 
 	t.Run("own missing image answers empty, not an error", func(t *testing.T) {
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(), mediaUserDouble{})
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, newImageRepoDouble(), mediaUserDouble{})
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "gone"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
@@ -518,7 +519,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
 
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, repo, mediaUserDouble{})
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,MINE"}, out)
@@ -529,7 +530,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 		repo.images[ownerID+"/avatar"] = "data:image/jpeg;base64,MINE"
 
 		streamer := &mediaStreamerDouble{}
-		h := StreamGetImageHandler(streamer, repo, mediaUserDouble{})
+		h := StreamGetImageHandler(streamer, nil, repo, mediaUserDouble{})
 		out, err := h(mustJSON(t, event.GetImageEvent{Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,MINE"}, out)
@@ -540,7 +541,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 		repo := newImageRepoDouble()
 		repo.getErr = errors.New("disk on fire")
 
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, repo, mediaUserDouble{})
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
@@ -551,7 +552,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 		repo.getErr = errors.New("disk on fire")
 		repo.getPartial = "data:image/jpeg;base64,TRUNCATED"
 
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, repo, mediaUserDouble{})
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: ownerID, Key: "avatar"}), nil)
 		assert.Error(t, err)
 	})
@@ -561,7 +562,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 		repo.images["stranger/avatar"] = "data:image/jpeg;base64,CACHED"
 
 		streamer := &mediaStreamerDouble{}
-		h := StreamGetImageHandler(streamer, repo, mediaUserDouble{})
+		h := StreamGetImageHandler(streamer, nil, repo, mediaUserDouble{})
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "stranger", Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,CACHED"}, out)
@@ -569,7 +570,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 	})
 
 	t.Run("user lookup failure surfaces", func(t *testing.T) {
-		h := StreamGetImageHandler(&mediaStreamerDouble{}, newImageRepoDouble(),
+		h := StreamGetImageHandler(&mediaStreamerDouble{}, nil, newImageRepoDouble(),
 			mediaUserDouble{err: errors.New("db down")})
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "someone", Key: "avatar"}), nil)
 		assert.Error(t, err)
@@ -581,7 +582,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"alias": {Id: "alias", NodeId: selfNodeID},
 		}}
 
-		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		h := StreamGetImageHandler(streamer, nil, newImageRepoDouble(), users)
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "alias", Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
@@ -597,7 +598,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
-		h := StreamGetImageHandler(streamer, repo, users)
+		h := StreamGetImageHandler(streamer, nil, repo, users)
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: "data:image/jpeg;base64,CACHED"}, out)
@@ -610,7 +611,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
-		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		h := StreamGetImageHandler(streamer, nil, newImageRepoDouble(), users)
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: ""}, out)
@@ -622,7 +623,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
-		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		h := StreamGetImageHandler(streamer, nil, newImageRepoDouble(), users)
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		assert.Error(t, err)
 	})
@@ -633,7 +634,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
-		h := StreamGetImageHandler(streamer, newImageRepoDouble(), users)
+		h := StreamGetImageHandler(streamer, nil, newImageRepoDouble(), users)
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		assert.Error(t, err)
 	})
@@ -648,7 +649,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: testSignerID.String()},
 		}}
 
-		h := StreamGetImageHandler(streamer, repo, users)
+		h := StreamGetImageHandler(streamer, nil, repo, users)
 		_, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: key}), nil)
 		require.NoError(t, err)
 
@@ -665,7 +666,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: remoteNodeID},
 		}}
 
-		h := StreamGetImageHandler(streamer, repo, users)
+		h := StreamGetImageHandler(streamer, nil, repo, users)
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: "avatar"}), nil)
 		require.NoError(t, err)
 
@@ -684,7 +685,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 			"remote": {Id: "remote", NodeId: testSignerID.String()},
 		}}
 
-		h := StreamGetImageHandler(streamer, repo, users)
+		h := StreamGetImageHandler(streamer, nil, repo, users)
 		out, err := h(mustJSON(t, event.GetImageEvent{UserId: "remote", Key: key}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetImageResponse{File: file}, out)

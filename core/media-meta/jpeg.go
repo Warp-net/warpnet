@@ -92,6 +92,23 @@ func AddRecipientToJPEG(jpegBytes, recipient []byte) ([]byte, error) {
 	return EmbedInJPEG(jpegBytes, marked)
 }
 
+func (w Watermark) RestampJPEG(original, redrawn []byte) ([]byte, error) {
+	watermarkBytes, err := extractFromJPEG(original)
+	if err != nil {
+		return nil, err
+	}
+	signed, err := parseSignedWatermark(watermarkBytes)
+	if err != nil {
+		return nil, err
+	}
+	w.EncryptedMeta = signed.EncryptedMeta
+	restamped, err := w.signAt(security.ConvertToSHA256(redrawn), signed.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return EmbedInJPEG(redrawn, restamped)
+}
+
 func VerifyImage(jpegBytes []byte, nodeId, ownerId string) error {
 	watermarkBytes, err := extractFromJPEG(jpegBytes)
 	if err != nil {
