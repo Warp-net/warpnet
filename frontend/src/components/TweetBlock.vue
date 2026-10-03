@@ -90,7 +90,7 @@ resulting from the use or misuse of this software.
                 {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
               </button>
               <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
-              <button v-if="tweet.price" type="button" @click.stop="pickCopy" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Check a copy</button>
+              <button v-if="tweet.price" type="button" @click.stop="openCopyCheck" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Check a copy</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
             <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
@@ -129,7 +129,7 @@ resulting from the use or misuse of this software.
           confirm-label="Check another"
           cancel-label="Close"
           :confirm-disabled="!!copyCheck?.checking"
-          @confirm="pickCopy"
+          @confirm="openCopyCheck"
           @cancel="copyCheck = null"
         />
       </div>
@@ -593,7 +593,7 @@ export default {
       if (!check.sale) {
         return "This file names no buyer. It is your original, or the mark is gone: a screenshot or a re-encoded copy loses it.";
       }
-      const soldAt = new Date(check.sale.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      const soldAt = new Date(check.sale.sold_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
       return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}`;
     },
     isShortOfTokens() {
@@ -1020,7 +1020,7 @@ export default {
       this.showDropdown = false;
       this.showDeleteConfirm = true;
     },
-    pickCopy() {
+    openCopyCheck() {
       this.showDropdown = false;
       this.$refs.copyInput.click();
     },
@@ -1030,7 +1030,7 @@ export default {
       if (!file) return;
       this.copyCheck = {checking: true};
       try {
-        const sale = await warpnetService.getSponsoredBuyer(await readAsDataURL(file));
+        const sale = await warpnetService.getCopyBuyer(await readAsDataURL(file));
         if (!sale) {
           this.copyCheck = {sale: null};
           return;

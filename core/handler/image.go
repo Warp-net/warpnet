@@ -196,7 +196,7 @@ func StreamGetImageHandler(
 		if isOwnImageRequest {
 			img, err := mediaRepo.GetImage(ev.UserId, ev.Key)
 			if errors.Is(err, database.ErrMediaNotFound) {
-				img, err = imageCopy(mediaRepo, ev.UserId, ev.Key)
+				img, err = buildImageCopy(mediaRepo, ev.UserId, ev.Key)
 			}
 			if errors.Is(err, database.ErrMediaNotFound) || img == "" {
 				log.Warnf("get image: key not found: %s", ev.Key)
@@ -308,29 +308,29 @@ func contentKey(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
 }
 
-func imageCopy(mediaRepo MediaStorer, userId, key string) (domain.Base64Image, error) {
+func buildImageCopy(mediaRepo MediaStorer, userId, key string) (domain.Base64Image, error) {
 	c, err := mediaRepo.GetCopy(userId, key)
 	if err != nil {
 		return "", err
 	}
-	original, err := mediaRepo.GetImage(userId, c.Original)
+	original, err := mediaRepo.GetImage(userId, c.OriginalKey)
 	if err != nil {
 		return "", err
 	}
-	img, err := addRecipient(string(original), c.Recipient, media_meta.AddRecipientToJPEG)
+	img, err := markFile(string(original), c.EncryptedOrder, media_meta.EmbedOrderInJPEG)
 	return domain.Base64Image(img), err
 }
 
-func addRecipient(
+func markFile(
 	file string,
-	recipient []byte,
-	embed func(raw, recipient []byte) ([]byte, error),
+	encryptedOrder []byte,
+	mark func(raw, encryptedOrder []byte) ([]byte, error),
 ) (string, error) {
 	header, raw, err := splitDataURI(file)
 	if err != nil {
 		return "", err
 	}
-	marked, err := embed(raw, recipient)
+	marked, err := mark(raw, encryptedOrder)
 	if err != nil {
 		return "", err
 	}

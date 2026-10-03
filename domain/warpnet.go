@@ -437,8 +437,8 @@ type (
 )
 
 type MediaCopy struct {
-	Original  string `json:"original"`
-	Recipient []byte `json:"recipient"`
+	OriginalKey    string `json:"original_key"`
+	EncryptedOrder []byte `json:"encrypted_order"`
 }
 
 type Alias struct {

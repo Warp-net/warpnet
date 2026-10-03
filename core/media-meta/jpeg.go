@@ -80,12 +80,12 @@ func EmbedInJPEG(imageBytes, watermarkBytes []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func AddRecipientToJPEG(jpegBytes, recipient []byte) ([]byte, error) {
+func EmbedOrderInJPEG(jpegBytes, encryptedOrder []byte) ([]byte, error) {
 	watermarkBytes, err := extractFromJPEG(jpegBytes)
 	if err != nil {
 		return nil, err
 	}
-	marked, err := withRecipient(watermarkBytes, recipient)
+	marked, err := addOrder(watermarkBytes, encryptedOrder)
 	if err != nil {
 		return nil, err
 	}

@@ -509,15 +509,15 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	assert.NotEqual(t, videoKey, *bought.VideoKey, "the buyer never learns the original's key")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
-	traceBuyer := StreamGetSponsoredBuyerHandler(testSignerKey)
-	want := event.SponsoredBuyerResponse{TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", CreatedAt: order.CreatedAt}
+	traceBuyer := StreamGetCopyBuyerHandler(testSignerKey)
+	want := event.CopyBuyerResponse{TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt}
 
 	served, err := StreamGetImageHandler(streamer, media, users)(
 		marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_IMAGE))
 	require.NoError(t, err)
 	copied := served.(event.GetImageResponse).File
 	assert.NoError(t, verifyForeignImage(author, bought.ImageKeys[0], copied), "the buyer's node takes the copy for the author's image")
-	traced, err := traceBuyer(marshal(t, event.GetSponsoredBuyerEvent{File: copied}), nil)
+	traced, err := traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, traced)
 
@@ -526,23 +526,23 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	require.NoError(t, err)
 	copied = served.(event.GetVideoResponse).File
 	assert.NoError(t, verifyForeignVideo(author, *bought.VideoKey, copied), "the buyer's node takes the copy for the author's video")
-	traced, err = traceBuyer(marshal(t, event.GetSponsoredBuyerEvent{File: copied}), nil)
+	traced, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, traced)
 }
 
-func TestStreamGetSponsoredBuyerHandler_UnmarkedFile(t *testing.T) {
+func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 	image, _ := watermarkedImage(t, "author-1")
-	h := StreamGetSponsoredBuyerHandler(testSignerKey)
+	h := StreamGetCopyBuyerHandler(testSignerKey)
 
-	resp, err := h(marshal(t, event.GetSponsoredBuyerEvent{File: image}), nil)
+	resp, err := h(marshal(t, event.GetCopyBuyerEvent{File: image}), nil)
 	require.NoError(t, err)
-	assert.Equal(t, event.SponsoredBuyerResponse{}, resp, "the original names no buyer")
+	assert.Equal(t, event.CopyBuyerResponse{}, resp, "the original names no buyer")
 
 	sealed, err := security.EncryptAES([]byte(`{"buyer_id":"buyer-1"}`), testIdentityKey(t))
 	require.NoError(t, err)
-	foreign, err := addRecipient(image, sealed, media_meta.AddRecipientToJPEG)
+	foreign, err := markFile(image, sealed, media_meta.EmbedOrderInJPEG)
 	require.NoError(t, err)
-	_, err = h(marshal(t, event.GetSponsoredBuyerEvent{File: foreign}), nil)
+	_, err = h(marshal(t, event.GetCopyBuyerEvent{File: foreign}), nil)
 	assert.EqualError(t, err, "sponsored buyer: this node did not sell the copy")
 }

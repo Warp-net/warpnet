@@ -45,15 +45,15 @@ const (
 	ErrAmbiguousMetadata warpnet.WarpError = "media carries more than one warpnet metadata block"
 	ErrNoSigningKey      warpnet.WarpError = "media meta: no signing key"
 	ErrNoSigningIdentity warpnet.WarpError = "media meta: no signing identity"
-	ErrNoRecipient       warpnet.WarpError = "media carries no recipient mark"
+	ErrNoOrder           warpnet.WarpError = "media carries no order"
 )
 
 type signedWatermark struct {
-	Version       uint8     `json:"version"`
-	CreatedAt     time.Time `json:"created_at"`
-	EncryptedMeta []byte    `json:"encrypted_meta"`
-	Signature     string    `json:"signature"`
-	Recipient     []byte    `json:"recipient,omitempty"`
+	Version        uint8     `json:"version"`
+	CreatedAt      time.Time `json:"created_at"`
+	EncryptedMeta  []byte    `json:"encrypted_meta"`
+	Signature      string    `json:"signature"`
+	EncryptedOrder []byte    `json:"encrypted_order,omitempty"`
 }
 
 type Watermark struct {
@@ -101,7 +101,7 @@ func verify(watermarkBytes, rawHash []byte, nodeId, ownerId string) error {
 	return nil
 }
 
-func Recipient(b []byte) ([]byte, error) {
+func ExtractOrder(b []byte) ([]byte, error) {
 	watermarkBytes, err := extractWatermark(b)
 	if err != nil {
 		return nil, err
@@ -110,10 +110,10 @@ func Recipient(b []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(signed.Recipient) == 0 {
-		return nil, ErrNoRecipient
+	if len(signed.EncryptedOrder) == 0 {
+		return nil, ErrNoOrder
 	}
-	return signed.Recipient, nil
+	return signed.EncryptedOrder, nil
 }
 
 func extractWatermark(b []byte) ([]byte, error) {
@@ -124,12 +124,12 @@ func extractWatermark(b []byte) ([]byte, error) {
 	return watermarkBytes, err
 }
 
-func withRecipient(watermarkBytes, recipient []byte) ([]byte, error) {
+func addOrder(watermarkBytes, encryptedOrder []byte) ([]byte, error) {
 	signed, err := parseSignedWatermark(watermarkBytes)
 	if err != nil {
 		return nil, err
 	}
-	signed.Recipient = recipient
+	signed.EncryptedOrder = encryptedOrder
 	return json.Marshal(signed)
 }
 

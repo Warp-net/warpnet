@@ -457,7 +457,7 @@ func StreamGetSponsoredTweetHandler(
 			if !isPaid {
 				return domain.Tweet{}, nil
 			}
-			return issueCopies(identityKey, mediaRepo, tweet, order)
+			return buyerTweet(identityKey, mediaRepo, tweet, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -522,17 +522,17 @@ func paidOrder(s warpnet.WarpStream, userRepo SponsoredUserFetcher, orders Order
 	return order, err == nil && order.Confirmed
 }
 
-func issueCopies(
+func buyerTweet(
 	identityKey ed25519.PrivateKey,
 	mediaRepo SponsoredMediaStorer,
 	tweet domain.Tweet,
 	order domain.Order,
 ) (domain.Tweet, error) {
-	plain, err := json.Marshal(order)
+	orderJSON, err := json.Marshal(order)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	recipient, err := security.EncryptAES(plain, identityKey)
+	encryptedOrder, err := security.EncryptAES(orderJSON, identityKey)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -543,7 +543,7 @@ func issueCopies(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		copyKey, err := issueCopy(mediaRepo, tweet.UserId, key, string(img), recipient, media_meta.AddRecipientToJPEG)
+		copyKey, err := newCopy(mediaRepo, tweet.UserId, key, string(img), encryptedOrder, media_meta.EmbedOrderInJPEG)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
@@ -558,7 +558,7 @@ func issueCopies(
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	copyKey, err := issueCopy(mediaRepo, tweet.UserId, *tweet.VideoKey, string(video), recipient, media_meta.AddRecipientToVideo)
+	copyKey, err := newCopy(mediaRepo, tweet.UserId, *tweet.VideoKey, string(video), encryptedOrder, media_meta.EmbedOrderInVideo)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -566,23 +566,23 @@ func issueCopies(
 	return tweet, nil
 }
 
-func issueCopy(
+func newCopy(
 	mediaRepo SponsoredMediaStorer,
 	userId, key, file string,
-	recipient []byte,
-	embed func(raw, recipient []byte) ([]byte, error),
+	encryptedOrder []byte,
+	mark func(raw, encryptedOrder []byte) ([]byte, error),
 ) (string, error) {
-	marked, err := addRecipient(file, recipient, embed)
+	copyFile, err := markFile(file, encryptedOrder, mark)
 	if err != nil {
 		return "", err
 	}
-	copyKey := contentKey(marked)
-	return copyKey, mediaRepo.SetCopy(userId, copyKey, domain.MediaCopy{Original: key, Recipient: recipient})
+	copyKey := contentKey(copyFile)
+	return copyKey, mediaRepo.SetCopy(userId, copyKey, domain.MediaCopy{OriginalKey: key, EncryptedOrder: encryptedOrder})
 }
 
-func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
+func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		var ev event.GetSponsoredBuyerEvent
+		var ev event.GetCopyBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
@@ -591,28 +591,28 @@ func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey) warpnet.Warp
 			return nil, err
 		}
 
-		recipient, err := media_meta.Recipient(raw)
-		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoRecipient) {
-			return event.SponsoredBuyerResponse{}, nil
+		encryptedOrder, err := media_meta.ExtractOrder(raw)
+		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoOrder) {
+			return event.CopyBuyerResponse{}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
-		plain, err := security.DecryptAES(recipient, identityKey)
+		orderJSON, err := security.DecryptAES(encryptedOrder, identityKey)
 		if err != nil {
 			return nil, warpnet.WarpError("sponsored buyer: this node did not sell the copy")
 		}
 
 		var order domain.Order
-		if err := json.Unmarshal(plain, &order); err != nil {
+		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
-		return event.SponsoredBuyerResponse{
-			TweetId:   order.TweetId,
-			BuyerId:   order.BuyerId,
-			OrderId:   order.ID(),
-			TxId:      order.TxId,
-			CreatedAt: order.CreatedAt,
+		return event.CopyBuyerResponse{
+			TweetId: order.TweetId,
+			BuyerId: order.BuyerId,
+			OrderId: order.ID(),
+			TxId:    order.TxId,
+			SoldAt:  order.CreatedAt,
 		}, nil
 	}
 }
