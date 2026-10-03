@@ -85,6 +85,8 @@ export const PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
 export const PRIVATE_GET_SPONSORED_QUOTE = "/private/get/sponsored/quote/0.0.0"
 export const PRIVATE_GET_SPONSORED_BUYER = "/private/get/sponsored/buyer/0.0.0"
+export const PUBLIC_GET_SPONSORED_IMAGE = "/public/get/sponsored/image/0.0.0"
+export const PUBLIC_GET_SPONSORED_VIDEO = "/public/get/sponsored/video/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
@@ -685,6 +687,56 @@ export const warpnetService = {
 
         const request = {
             path: PUBLIC_GET_CHAT_VIDEO,
+            body: {
+                user_id: userId,
+                key: key,
+                deferred: deferred,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result) {
+            return null
+        }
+        return {
+            file: result.file || '',
+            size: result.size || 0,
+            deferred: !!result.deferred,
+        };
+    },
+    async getSponsoredImage({userId, key}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const cacheKey = `sponsored-image::${key}`;
+        const cached = stateMap.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const request = {
+            path: PUBLIC_GET_SPONSORED_IMAGE,
+            body: {
+                user_id: userId,
+                key: key,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result || !result.file) {
+            return null
+        }
+        stateMap.set(cacheKey, result.file);
+        return result.file;
+    },
+    async getSponsoredVideo({userId, key, deferred = false}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const request = {
+            path: PUBLIC_GET_SPONSORED_VIDEO,
             body: {
                 user_id: userId,
                 key: key,
