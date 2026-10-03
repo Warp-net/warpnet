@@ -347,6 +347,43 @@ func TestStreamGetUsersHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("a remote list brings a known user back online and keeps its profile", func(t *testing.T) {
+		updated := map[string]domain.User{}
+		h := StreamGetUsersHandler(
+			stubUserFetcher{
+				getFn: func(userId string) (domain.User, error) {
+					if userId == "someone-else" {
+						return domain.User{Id: userId, NodeId: "node-3", Username: "fresh", RoundTripTime: 42, IsOffline: true}, nil
+					}
+					return domain.User{Id: userId, NodeId: "node-2"}, nil
+				},
+				updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+					updated[userId] = newUser
+					return newUser, nil
+				},
+			},
+			stubUserStreamer{
+				nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+				genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+					return json.Marshal(event.UsersResponse{Users: []domain.User{
+						{Id: "remote-owner", NodeId: "node-2", Username: "fresh"},
+						{Id: "someone-else", NodeId: "node-3", Username: "stale"},
+					}})
+				},
+			},
+		)
+		if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: "remote-owner"}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		revived, ok := updated["someone-else"]
+		if !ok || revived.IsOffline {
+			t.Fatalf("a user another node sees online stayed offline here: %v", updated)
+		}
+		if revived.Username != "" || revived.RoundTripTime != 42 {
+			t.Fatalf("bringing a user back online changed its profile: %+v", revived)
+		}
+	})
+
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetUsersHandler(stubUserFetcher{listFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
