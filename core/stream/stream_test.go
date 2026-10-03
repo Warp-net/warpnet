@@ -389,12 +389,14 @@ func TestMaxRequestSize(t *testing.T) {
 
 func TestMaxResponseSize(t *testing.T) {
 	cases := map[string]int64{
-		event.PUBLIC_GET_IMAGE:          MaxMediaSize,
-		event.PUBLIC_GET_VIDEO:          MaxMediaSize,
-		event.PUBLIC_GET_TWEETS:         MaxListSize,
-		event.PUBLIC_GET_USERS:          MaxListSize,
-		event.PRIVATE_POST_UPLOAD_IMAGE: MaxControlSize,
-		event.PUBLIC_POST_TIMELINE:      MaxControlSize,
+		event.PUBLIC_GET_IMAGE:           MaxMediaSize,
+		event.PUBLIC_GET_VIDEO:           MaxMediaSize,
+		event.PUBLIC_GET_SPONSORED_IMAGE: MaxMediaSize,
+		event.PUBLIC_GET_SPONSORED_VIDEO: MaxMediaSize,
+		event.PUBLIC_GET_TWEETS:          MaxListSize,
+		event.PUBLIC_GET_USERS:           MaxListSize,
+		event.PRIVATE_POST_UPLOAD_IMAGE:  MaxControlSize,
+		event.PUBLIC_POST_TIMELINE:       MaxControlSize,
 	}
 	for route, want := range cases {
 		assert.Equal(t, want, maxResponseSize(WarpRoute(route)), "route %q", route)

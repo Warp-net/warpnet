@@ -578,6 +578,9 @@ export default {
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
     },
+    isBought() {
+      return !!(this.tweet && this.tweet.price) && !this.isOwner && !!this.tweet.text;
+    },
     unlockMessage() {
       const author = this.authorName || "the author";
       const marked = "\n\nYour copy is marked with your name and ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
@@ -741,7 +744,9 @@ export default {
       if (imageKeys.length === 0) return;
       this.tweetImages = imageKeys.map(() => '');
       imageKeys.forEach((key, i) => {
-        warpnetService.getImage({userId: this.tweet.user_id, key})
+        const request = {userId: this.tweet.user_id, key};
+        const image = this.isBought ? warpnetService.getSponsoredImage(request) : warpnetService.getImage(request);
+        image
             .then((img) => { if (img) this.tweetImages[i] = img; })
             .catch((err) => console.warn(`failed to load tweet image [${this.tweet.id}]`, err));
       });
@@ -953,10 +958,10 @@ export default {
       this.videoError = '';
       this.videoLoading = true;
       try {
-        const video = await warpnetService.getVideo({
-          userId: this.tweet.user_id,
-          key,
-        });
+        const request = {userId: this.tweet.user_id, key};
+        const video = this.isBought
+          ? await warpnetService.getSponsoredVideo(request)
+          : await warpnetService.getVideo(request);
         if (!video || !video.file) {
           this.videoError = "This video isn't available right now. The author's node may be offline.";
           return;

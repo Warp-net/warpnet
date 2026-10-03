@@ -439,6 +439,7 @@ type (
 
 type MediaCopy struct {
 	OriginalKey    string `json:"original_key"`
+	BuyerId        string `json:"buyer_id"`
 	EncryptedOrder []byte `json:"encrypted_order"`
 	Label          []byte `json:"label,omitempty"`
 }

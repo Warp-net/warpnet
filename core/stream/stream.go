@@ -296,7 +296,8 @@ func maxRequestSize(r WarpRoute) int64 {
 
 func maxResponseSize(r WarpRoute) int64 {
 	switch r.String() {
-	case event.PUBLIC_GET_IMAGE, event.PUBLIC_GET_VIDEO:
+	case event.PUBLIC_GET_IMAGE, event.PUBLIC_GET_VIDEO,
+		event.PUBLIC_GET_SPONSORED_IMAGE, event.PUBLIC_GET_SPONSORED_VIDEO:
 		return MaxMediaSize
 	}
 	if r.IsGet() {
