@@ -130,6 +130,10 @@ resulting from the use or misuse of this software.
                     v-if="notification.type === 'message'"
                     class="pt-1 fas fa-envelope text-blue"
                   ></i>
+                  <i
+                    v-if="notification.type === 'order_limit'"
+                    class="pt-1 fas fa-pepper-hot text-blue"
+                  ></i>
 
                   <img
                     :src="avatarFor(notification)"

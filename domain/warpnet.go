@@ -373,6 +373,7 @@ const (
 	NotificationReplyType      NotificationType = "reply"
 	NotificationMessageType    NotificationType = "message"
 	NotificationNewUserType    NotificationType = "new_user"
+	NotificationOrderLimitType NotificationType = "order_limit"
 )
 
 type Notification struct {

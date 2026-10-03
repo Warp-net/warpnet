@@ -170,6 +170,13 @@ describe('TweetBlock sponsored tweet', () => {
     expect(screen.queryByText(/not enough|less than the network fee/)).not.toBeInTheDocument();
   });
 
+  it('tells the buyer the copy is marked before they pay', async () => {
+    renderTweet(teaser());
+    await openBill();
+
+    expect(screen.getByText(/Your copy is marked with your name and ID/)).toBeInTheDocument();
+  });
+
   it('will not pay without enough USDT', async () => {
     warpnetService.quoteSponsoredTweet.mockResolvedValue(quote({ balance: '1000000' }));
     renderTweet(teaser());
