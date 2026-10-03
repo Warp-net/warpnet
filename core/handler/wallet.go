@@ -53,7 +53,11 @@ type WalletOwnerStorer interface {
 	GetOwner() domain.Owner
 }
 
-const walletDerivation = "warpnet-account"
+const (
+	walletDerivation = "warpnet-account"
+
+	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+)
 
 type WalletBackend interface {
 	Address(ctx context.Context, seed string) (string, error)
@@ -240,6 +244,10 @@ type WalletStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+type WalletOrderCounter interface {
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+}
+
 type WalletPeerFetcher interface {
 	GetByNodeID(nodeId string) (domain.User, error)
 }
@@ -248,7 +256,7 @@ func StreamGetWalletAddressHandler(
 	auth WalletOwnerStorer,
 	identityKey ed25519.PrivateKey,
 	backend WalletBackend,
-	orders OrderLister,
+	orders WalletOrderCounter,
 	users WalletPeerFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -277,7 +285,7 @@ func StreamGetWalletAddressHandler(
 	}
 }
 
-func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orders OrderLister) (bool, error) {
+func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orders WalletOrderCounter) (bool, error) {
 	if s == nil || s.Conn() == nil {
 		return false, nil
 	}
@@ -288,7 +296,9 @@ func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orde
 	if err != nil {
 		return false, err
 	}
-	return isOrderLimitReached(orders, buyer.Id)
+	now := time.Now()
+	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	return count >= domain.OrderLimit, err
 }
 
 func StreamGetWalletContactsHandler(

@@ -50,12 +50,8 @@ import (
 )
 
 const (
-	orderNonceSize   = 16
-	orderLimit       = 10
-	orderLimitWindow = time.Hour
-	sameDayWindow    = 24 * time.Hour
-
-	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+	orderNonceSize = 16
+	sameDayWindow  = 24 * time.Hour
 )
 
 type SponsoredWallet interface {
@@ -68,12 +64,12 @@ type SponsoredWallet interface {
 	Network() string
 }
 
-type OrderLister interface {
-	ListByBuyer(buyerId string) ([]domain.Order, error)
+type OrderCounter interface {
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 }
 
 type OrderStorer interface {
-	OrderLister
+	OrderCounter
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 }
@@ -408,11 +404,12 @@ func StreamVerifyOrderHandler(
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
 		}
-		isReached, err := isOrderLimitReached(orders, ev.UserId)
+		now := time.Now()
+		count, err := orders.CountConfirmed(ev.UserId, now.Add(-domain.OrderLimitWindow), now)
 		if err != nil {
 			return nil, err
 		}
-		if isReached {
+		if count >= domain.OrderLimit {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 		}
 
@@ -622,27 +619,7 @@ func copyTweetMedia(
 	return tweet, nil
 }
 
-func countOrders(orders OrderLister, buyerId string, from, to time.Time) (int, error) {
-	list, err := orders.ListByBuyer(buyerId)
-	if err != nil {
-		return 0, err
-	}
-	var count int
-	for _, o := range list {
-		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
-			count++
-		}
-	}
-	return count, nil
-}
-
-func isOrderLimitReached(orders OrderLister, buyerId string) (bool, error) {
-	now := time.Now()
-	count, err := countOrders(orders, buyerId, now.Add(-orderLimitWindow), now)
-	return count >= orderLimit, err
-}
-
-func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderLister) warpnet.WarpHandlerFunc {
+func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCounter) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetCopyBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -669,8 +646,8 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderListe
 		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
-		sameDay, err := countOrders(
-			orders, order.BuyerId, order.CreatedAt.Add(-sameDayWindow), order.CreatedAt.Add(sameDayWindow),
+		sameDay, err := orders.CountConfirmed(
+			order.BuyerId, order.CreatedAt.Add(-sameDayWindow), order.CreatedAt.Add(sameDayWindow),
 		)
 		if err != nil {
 			return nil, err

@@ -444,13 +444,13 @@ func TestGetWalletAddressHandler_RefusesABuyerPastTheOrderLimit(t *testing.T) {
 		return err
 	}
 
-	if err := ask(confirmedSales("buyer-1", orderLimit, time.Now().Add(-time.Minute))); !errors.Is(err, ErrOrderLimit) {
+	if err := ask(confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-time.Minute))); !errors.Is(err, ErrOrderLimit) {
 		t.Fatalf("one order past the limit: err = %v", err)
 	}
-	if err := ask(confirmedSales("buyer-1", orderLimit-1, time.Now().Add(-time.Minute))); err != nil {
+	if err := ask(confirmedSales("buyer-1", domain.OrderLimit-1, time.Now().Add(-time.Minute))); err != nil {
 		t.Fatalf("under the limit: err = %v", err)
 	}
-	if err := ask(confirmedSales("buyer-1", orderLimit, time.Now().Add(-2*time.Hour))); err != nil {
+	if err := ask(confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-2*time.Hour))); err != nil {
 		t.Fatalf("an hour later: err = %v", err)
 	}
 }

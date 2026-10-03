@@ -29,6 +29,7 @@ package database
 
 import (
 	"strings"
+	"time"
 
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
@@ -108,14 +109,14 @@ func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 	return o, nil
 }
 
-func (repo *OrderRepo) ListByBuyer(buyerId string) ([]domain.Order, error) {
+func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
 	if buyerId == "" {
-		return nil, local_store.DBError("empty buyer id")
+		return 0, local_store.DBError("empty buyer id")
 	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer txn.Rollback()
 
@@ -128,25 +129,27 @@ func (repo *OrderRepo) ListByBuyer(buyerId string) ([]domain.Order, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if len(keys) == 0 {
-		return nil, txn.Commit()
+		return 0, txn.Commit()
 	}
 
 	items, err := txn.BatchGet(keys...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	orders := make([]domain.Order, 0, len(items))
+	var count int
 	for _, item := range items {
 		var o domain.Order
 		if err := json.Unmarshal(item.Value, &o); err != nil {
-			return nil, err
+			return 0, err
 		}
-		orders = append(orders, o)
+		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
+			count++
+		}
 	}
-	return orders, txn.Commit()
+	return count, txn.Commit()
 }
 
 func orderKey(tweetId, buyerId string) local_store.DatabaseKey {
