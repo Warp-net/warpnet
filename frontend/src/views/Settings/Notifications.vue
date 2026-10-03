@@ -117,6 +117,7 @@ export default {
         { key: 'message', label: 'Direct messages' },
         { key: 'moderation', label: 'Moderation results' },
         { key: 'new_user', label: 'New user discovered' },
+        { key: 'order_limit', label: 'A buyer reaching the hourly order limit' },
       ],
       settings: {
         email_enabled: false,
