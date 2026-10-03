@@ -526,7 +526,7 @@ func TestSignChangedJPEG_RefusesUnstampedOriginal(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoMetadata)
 }
 
-func TestAddRecipient_RebuildsTheSameBytesEverywhere(t *testing.T) {
+func TestEmbedOrder_RebuildsTheSameBytesEverywhere(t *testing.T) {
 	stamp := func(raw []byte) []byte {
 		block, err := watermark("alice").signAt(security.ConvertToSHA256(raw), time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC))
 		require.NoError(t, err)
@@ -539,13 +539,13 @@ func TestAddRecipient_RebuildsTheSameBytesEverywhere(t *testing.T) {
 	plain := testJPEG(t, 0x40)
 	photo, err := EmbedInJPEG(plain, stamp(plain))
 	require.NoError(t, err)
-	copied, err := AddRecipientToJPEG(photo, []byte("sealed for bob"))
+	copied, err := EmbedOrderInJPEG(photo, []byte("sealed for bob"))
 	require.NoError(t, err)
-	assert.Equal(t, "9f641be89a4b6bf329869c469738b6111f49ac2230f8a7cdba6af4dd7c13d7c8", key(copied), "an image copy is rebuilt on request, so its bytes and key must never drift")
+	assert.Equal(t, "e87b93567c0a46968f2c9333af2ad438cdc39632de8ff87296fd7aeb8e31cbbf", key(copied), "an image copy is rebuilt on request, so its bytes and key must never drift")
 
 	video, err := EmbedInVideo(minimalMP4(), stamp(minimalMP4()))
 	require.NoError(t, err)
-	copied, err = AddRecipientToVideo(video, []byte("sealed for bob"))
+	copied, err = EmbedOrderInVideo(video, []byte("sealed for bob"))
 	require.NoError(t, err)
-	assert.Equal(t, "7b7a61cb6a343868e32bf68ad66dd6a8903018b14e5541d666358638e8e24149", key(copied), "a video copy is rebuilt on request, so its bytes and key must never drift")
+	assert.Equal(t, "f8cf1517558cf0b9a18aa2eb8e34b293823ca50e4c1a63572a366a83d2d798a2", key(copied), "a video copy is rebuilt on request, so its bytes and key must never drift")
 }
