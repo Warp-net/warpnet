@@ -580,7 +580,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	served, err := getImage(marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.ImageKeys[0]}), fromBuyer(event.PUBLIC_GET_SPONSORED_IMAGE))
 	require.NoError(t, err)
 	copied := served.(event.GetImageResponse).File
-	assert.NoError(t, verifyForeignImage(author, bought.ImageKeys[0], copied), "the buyer's node takes the copy for the author's image")
+	assert.NoError(t, media_meta.VerifyForeignImage(author, bought.ImageKeys[0], copied), "the buyer's node takes the copy for the author's image")
 	assert.NotEqual(t, pixelsOf(t, image), pixelsOf(t, copied), "the buyer's name is drawn over the image")
 	traced, err := traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
@@ -594,7 +594,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 		marshal(t, event.GetVideoEvent{UserId: "author-1", Key: *bought.VideoKey}), fromBuyer(event.PUBLIC_GET_SPONSORED_VIDEO))
 	require.NoError(t, err)
 	copied = served.(event.GetVideoResponse).File
-	assert.NoError(t, verifyForeignVideo(author, *bought.VideoKey, copied), "the buyer's node takes the copy for the author's video")
+	assert.NoError(t, media_meta.VerifyForeignVideo(author, *bought.VideoKey, copied), "the buyer's node takes the copy for the author's video")
 	traced, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, traced)
@@ -640,9 +640,9 @@ func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
 func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 	own := newTestPeerID(t)
 	image, _ := imageWithMetadata(t, "author-1")
-	copied, err := buildImageCopy(image, domain.MediaCopy{EncryptedOrder: []byte("sealed")}, media_meta.Metadata{})
+	copied, err := media_meta.BuildImageCopy(image, domain.MediaCopy{EncryptedOrder: []byte("sealed")}, media_meta.Metadata{})
 	require.NoError(t, err)
-	copyKey := contentKey(copied)
+	copyKey := media_meta.BuildContentKey(copied)
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: testSignerID.String()}}
 	var asked []stream.WarpRoute
 	answer := image
@@ -689,7 +689,7 @@ func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 
 	sealed, err := security.EncryptAES([]byte(`{"buyer_id":"buyer-1"}`), testIdentityKey(t))
 	require.NoError(t, err)
-	foreign, err := buildImageCopy(image, domain.MediaCopy{EncryptedOrder: sealed}, media_meta.Metadata{})
+	foreign, err := media_meta.BuildImageCopy(image, domain.MediaCopy{EncryptedOrder: sealed}, media_meta.Metadata{})
 	require.NoError(t, err)
 	_, err = h(marshal(t, event.GetCopyBuyerEvent{File: foreign}), nil)
 	assert.EqualError(t, err, "sponsored buyer: this node did not sell the copy")

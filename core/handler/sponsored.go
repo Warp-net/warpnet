@@ -578,7 +578,7 @@ func copyTweetMedia(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		_, raw, err := splitDataURI(string(img))
+		_, raw, err := media_meta.SplitDataURI(string(img))
 		if err != nil {
 			return domain.Tweet{}, err
 		}
@@ -587,11 +587,11 @@ func copyTweetMedia(
 			return domain.Tweet{}, err
 		}
 		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark}
-		copied, err := buildImageCopy(string(img), c, signer)
+		copied, err := media_meta.BuildImageCopy(string(img), c, signer)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		copyKey := contentKey(copied)
+		copyKey := media_meta.BuildContentKey(copied)
 		if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
 			return domain.Tweet{}, err
 		}
@@ -607,11 +607,11 @@ func copyTweetMedia(
 		return domain.Tweet{}, err
 	}
 	c := domain.MediaCopy{OriginalKey: *tweet.VideoKey, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder}
-	copied, err := buildVideoCopy(string(video), c)
+	copied, err := media_meta.BuildVideoCopy(string(video), c)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	copyKey := contentKey(copied)
+	copyKey := media_meta.BuildContentKey(copied)
 	if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
 		return domain.Tweet{}, err
 	}
@@ -625,7 +625,7 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCount
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		_, raw, err := splitDataURI(ev.File)
+		_, raw, err := media_meta.SplitDataURI(ev.File)
 		if err != nil {
 			return nil, err
 		}

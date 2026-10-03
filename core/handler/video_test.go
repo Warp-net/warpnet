@@ -157,7 +157,7 @@ func TestUploadVideo_MissingBase64Signature(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, err = h(bt, s{})
-	assert.ErrorIs(t, err, ErrInvalidBase64Signature)
+	assert.ErrorIs(t, err, media_meta.ErrInvalidBase64Signature)
 }
 
 func TestUploadVideo_UnsupportedFormatRejected(t *testing.T) {

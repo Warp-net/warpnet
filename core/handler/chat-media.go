@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -125,7 +126,7 @@ func StreamGetChatImageHandler(
 			return nil, fmt.Errorf("get chat image: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
+		if err := media_meta.VerifyForeignImage(u, ev.Key, imgResp.File); err != nil {
 			log.Warnf("get chat image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
@@ -209,7 +210,7 @@ func StreamGetChatVideoHandler(
 			return nil, fmt.Errorf("get chat video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := media_meta.VerifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get chat video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}

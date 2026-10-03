@@ -29,7 +29,6 @@ package handler
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -77,7 +76,7 @@ func StreamGetSponsoredImageHandler(
 				return nil, fmt.Errorf("get sponsored image: fetching original: %w", err)
 			}
 			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
-			img, err := buildImageCopy(string(original), c, signer)
+			img, err := media_meta.BuildImageCopy(string(original), c, signer)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored image: building copy: %w", err)
 			}
@@ -114,7 +113,7 @@ func StreamGetSponsoredImageHandler(
 			return nil, fmt.Errorf("get sponsored image: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
+		if err := media_meta.VerifyForeignImage(u, ev.Key, imgResp.File); err != nil {
 			log.Warnf("get sponsored image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
@@ -164,7 +163,7 @@ func StreamGetSponsoredVideoHandler(
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: fetching original: %w", err)
 			}
-			video, err := buildVideoCopy(string(original), c)
+			video, err := media_meta.BuildVideoCopy(string(original), c)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: building copy: %w", err)
 			}
@@ -204,7 +203,7 @@ func StreamGetSponsoredVideoHandler(
 			return nil, fmt.Errorf("get sponsored video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := media_meta.VerifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get sponsored video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -219,37 +218,4 @@ func StreamGetSponsoredVideoHandler(
 
 		return videoResp, nil
 	}
-}
-
-func buildImageCopy(original string, c domain.MediaCopy, signer media_meta.Metadata) (string, error) {
-	header, raw, err := splitDataURI(original)
-	if err != nil {
-		return "", err
-	}
-	if len(c.Watermark) != 0 {
-		drawn, err := media_meta.DrawWatermark(raw, c.Watermark)
-		if err != nil {
-			return "", err
-		}
-		if raw, err = signer.SignChangedJPEG(raw, drawn); err != nil {
-			return "", err
-		}
-	}
-	marked, err := media_meta.EmbedOrderInJPEG(raw, c.EncryptedOrder)
-	if err != nil {
-		return "", err
-	}
-	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
-}
-
-func buildVideoCopy(original string, c domain.MediaCopy) (string, error) {
-	header, raw, err := splitDataURI(original)
-	if err != nil {
-		return "", err
-	}
-	marked, err := media_meta.EmbedOrderInVideo(raw, c.EncryptedOrder)
-	if err != nil {
-		return "", err
-	}
-	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
