@@ -109,6 +109,27 @@ describe('Notifications.vue', () => {
     expect(screen.queryByText(/No notifications yet/i)).not.toBeInTheDocument();
   });
 
+  it('marks a buyer reaching the order limit with the sponsored pepper', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        {
+          id: 'n3',
+          type: 'order_limit',
+          user_id: 'author1',
+          actor_id: 'buyer1',
+          text: 'leaker bought 10 of your tweets within an hour; their next orders wait',
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    renderNotifications();
+
+    const row = await screen.findByText(/leaker bought 10 of your tweets within an hour/);
+    expect(row.closest('button').querySelector('.fa-pepper-hot')).not.toBeNull();
+  });
+
   it('navigates home when the back button is clicked', async () => {
     renderNotifications();
     await screen.findByRole('heading', { name: 'Notifications' });

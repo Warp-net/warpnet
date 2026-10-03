@@ -583,10 +583,11 @@ export default {
     },
     unlockMessage() {
       const author = this.authorName || "the author";
+      const marked = "\n\nYour copy is marked with your name and ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
       if (this.quoteError) {
-        return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`;
+        return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.${marked}`;
       }
-      return `The payment goes to ${author} and can't be undone.`;
+      return `The payment goes to ${author} and can't be undone.${marked}`;
     },
     copyCheckMessage() {
       const check = this.copyCheck;
