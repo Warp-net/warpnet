@@ -30,6 +30,7 @@ package database
 
 import (
 	"testing"
+	"time"
 
 	"go.uber.org/goleak"
 
@@ -93,6 +94,25 @@ func (s *OrderRepoTestSuite) TestEmptyValidation() {
 	_, err := s.repo.Get("", "b1")
 	s.Error(err)
 	_, err = s.repo.Get("t1", "")
+	s.Error(err)
+}
+
+func (s *OrderRepoTestSuite) TestCountConfirmed() {
+	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "c1", TxId: "tx3", Confirmed: true, CreatedAt: at}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t4", BuyerId: "c1", TxId: "tx4", Confirmed: true, CreatedAt: at.Add(2 * time.Hour)}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t5", BuyerId: "c1", TxId: "tx5", CreatedAt: at}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "xc1", TxId: "tx6", Confirmed: true, CreatedAt: at}))
+
+	count, err := s.repo.CountConfirmed("c1", at.Add(-time.Hour), at.Add(time.Hour))
+	s.Require().NoError(err)
+	s.Equal(1, count, "only the buyer's own confirmed orders inside the window count")
+
+	count, err = s.repo.CountConfirmed("nobody", at.Add(-time.Hour), at.Add(time.Hour))
+	s.Require().NoError(err)
+	s.Zero(count)
+
+	_, err = s.repo.CountConfirmed("", at, at)
 	s.Error(err)
 }
 

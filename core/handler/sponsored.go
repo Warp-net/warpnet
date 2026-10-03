@@ -49,7 +49,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const orderNonceSize = 16
+const (
+	orderNonceSize    = 16
+	dailyOrdersWindow = 24 * time.Hour
+)
 
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
@@ -61,7 +64,12 @@ type SponsoredWallet interface {
 	Network() string
 }
 
+type OrderCounter interface {
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+}
+
 type OrderStorer interface {
+	OrderCounter
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 }
@@ -303,6 +311,10 @@ func authorAddress(streamer SponsoredStreamer, author domain.User, network strin
 	if err != nil {
 		return "", err
 	}
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+		return "", warpnet.WarpError(possibleError.Message)
+	}
 	var address event.WalletAddressResponse
 	if err := json.Unmarshal(resp, &address); err != nil {
 		return "", err
@@ -391,6 +403,14 @@ func StreamVerifyOrderHandler(
 		known, err := orders.Get(ev.TweetId, ev.UserId)
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
+		}
+		now := time.Now()
+		count, err := orders.CountConfirmed(ev.UserId, now.Add(-domain.OrderLimitWindow), now)
+		if err != nil {
+			return nil, err
+		}
+		if count >= domain.OrderLimit {
+			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 		}
 
 		order := domain.Order{
@@ -599,7 +619,7 @@ func copyTweetMedia(
 	return tweet, nil
 }
 
-func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
+func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCounter) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetCopyBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -626,12 +646,19 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandl
 		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
+		dailyOrdersCount, err := orders.CountConfirmed(
+			order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
+		)
+		if err != nil {
+			return nil, err
+		}
 		return event.CopyBuyerResponse{
-			TweetId: order.TweetId,
-			BuyerId: order.BuyerId,
-			OrderId: order.ID(),
-			TxId:    order.TxId,
-			SoldAt:  order.CreatedAt,
+			TweetId:          order.TweetId,
+			BuyerId:          order.BuyerId,
+			OrderId:          order.ID(),
+			TxId:             order.TxId,
+			SoldAt:           order.CreatedAt,
+			DailyOrdersCount: dailyOrdersCount,
 		}, nil
 	}
 }

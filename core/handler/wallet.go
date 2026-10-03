@@ -40,6 +40,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -52,7 +53,11 @@ type WalletOwnerStorer interface {
 	GetOwner() domain.Owner
 }
 
-const walletDerivation = "warpnet-account"
+const (
+	walletDerivation = "warpnet-account"
+
+	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+)
 
 type WalletBackend interface {
 	Address(ctx context.Context, seed string) (string, error)
@@ -239,8 +244,29 @@ type WalletStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-func StreamGetWalletAddressHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
-	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+type WalletOrderCounter interface {
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+}
+
+type WalletPeerFetcher interface {
+	GetByNodeID(nodeId string) (domain.User, error)
+}
+
+func StreamGetWalletAddressHandler(
+	auth WalletOwnerStorer,
+	identityKey ed25519.PrivateKey,
+	backend WalletBackend,
+	orders WalletOrderCounter,
+	users WalletPeerFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		isReached, err := isPeerOrderLimitReached(s, users, orders)
+		if err != nil {
+			return nil, err
+		}
+		if isReached {
+			return nil, ErrOrderLimit
+		}
 		owner := auth.GetOwner()
 		seed, err := walletSeed(owner, identityKey, backend.Network())
 		if err != nil {
@@ -257,6 +283,22 @@ func StreamGetWalletAddressHandler(auth WalletOwnerStorer, identityKey ed25519.P
 			UserId:  owner.UserId,
 		}, nil
 	}
+}
+
+func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orders WalletOrderCounter) (bool, error) {
+	if s == nil || s.Conn() == nil {
+		return false, nil
+	}
+	buyer, err := users.GetByNodeID(s.Conn().RemotePeer().String())
+	if errors.Is(err, database.ErrUserNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	now := time.Now()
+	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	return count >= domain.OrderLimit, err
 }
 
 func StreamGetWalletContactsHandler(
