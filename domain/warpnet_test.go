@@ -34,6 +34,7 @@ func TestNotificationType_String(t *testing.T) {
 	assert.Equal(t, "reaction", NotificationReactionType.String())
 	assert.Equal(t, "mention", NotificationMentionType.String())
 	assert.Equal(t, "reply", NotificationReplyType.String())
+	assert.Equal(t, "order_limit", NotificationOrderLimitType.String())
 }
 
 func TestModerationResult(t *testing.T) {
