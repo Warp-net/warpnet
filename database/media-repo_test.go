@@ -253,7 +253,7 @@ func (s *MediaRepoTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
 func (s *MediaRepoTestSuite) TestCopyRoundTripAndIsolation() {
 	alice := uuid.New().String()
 	bob := uuid.New().String()
-	sold := domain.MediaCopy{Original: "original-key", Recipient: []byte("sealed")}
+	sold := domain.MediaCopy{OriginalKey: "original-key", EncryptedOrder: []byte("sealed")}
 
 	s.Require().NoError(s.repo.SetCopy(alice, "copy-key", sold))
 

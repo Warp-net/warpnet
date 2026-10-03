@@ -434,80 +434,80 @@ func TestVerifyImage_GarbageInDescriptionTagIsRefused(t *testing.T) {
 	}
 }
 
-func TestAddRecipientToJPEG_KeepsTheOwnersClaim(t *testing.T) {
+func TestEmbedOrderInJPEG_KeepsTheOwnersClaim(t *testing.T) {
 	watermarked := watermarkedJPEG(t, "alice", 0x40)
 
-	copied, err := AddRecipientToJPEG(watermarked, []byte("sealed for bob"))
+	copied, err := EmbedOrderInJPEG(watermarked, []byte("sealed for bob"))
 	require.NoError(t, err)
 
-	assert.NoError(t, VerifyImage(copied, signerID.String(), "alice"), "a node that knows nothing of recipients still accepts the copy")
-	recipient, err := Recipient(copied)
+	assert.NoError(t, VerifyImage(copied, signerID.String(), "alice"), "a node that knows nothing of the order field still accepts the copy")
+	encryptedOrder, err := ExtractOrder(copied)
 	require.NoError(t, err)
-	assert.Equal(t, []byte("sealed for bob"), recipient)
+	assert.Equal(t, []byte("sealed for bob"), encryptedOrder)
 }
 
-func TestAddRecipientToVideo_KeepsTheOwnersClaim(t *testing.T) {
+func TestEmbedOrderInVideo_KeepsTheOwnersClaim(t *testing.T) {
 	watermarked := watermarkedMP4(t, "alice")
 
-	copied, err := AddRecipientToVideo(watermarked, []byte("sealed for bob"))
+	copied, err := EmbedOrderInVideo(watermarked, []byte("sealed for bob"))
 	require.NoError(t, err)
 
-	assert.NoError(t, VerifyVideo(copied, signerID.String(), "alice"), "a node that knows nothing of recipients still accepts the copy")
+	assert.NoError(t, VerifyVideo(copied, signerID.String(), "alice"), "a node that knows nothing of the order field still accepts the copy")
 	assert.True(t, bytes.HasPrefix(copied, minimalMP4()), "the video itself is untouched")
-	recipient, err := Recipient(copied)
+	encryptedOrder, err := ExtractOrder(copied)
 	require.NoError(t, err)
-	assert.Equal(t, []byte("sealed for bob"), recipient)
+	assert.Equal(t, []byte("sealed for bob"), encryptedOrder)
 }
 
-func TestAddRecipient_RebuildsTheSameCopy(t *testing.T) {
+func TestEmbedOrder_RebuildsTheSameCopy(t *testing.T) {
 	image := watermarkedJPEG(t, "alice", 0x40)
-	first, err := AddRecipientToJPEG(image, []byte("bob"))
+	first, err := EmbedOrderInJPEG(image, []byte("bob"))
 	require.NoError(t, err)
-	second, err := AddRecipientToJPEG(image, []byte("bob"))
+	second, err := EmbedOrderInJPEG(image, []byte("bob"))
 	require.NoError(t, err)
 	assert.Equal(t, first, second)
 
 	video := watermarkedMP4(t, "alice")
-	first, err = AddRecipientToVideo(video, []byte("bob"))
+	first, err = EmbedOrderInVideo(video, []byte("bob"))
 	require.NoError(t, err)
-	second, err = AddRecipientToVideo(video, []byte("bob"))
+	second, err = EmbedOrderInVideo(video, []byte("bob"))
 	require.NoError(t, err)
 	assert.Equal(t, first, second)
 }
 
-func TestAddRecipient_RefusesUnstampedFile(t *testing.T) {
-	_, err := AddRecipientToJPEG(testJPEG(t, 0x40), []byte("bob"))
+func TestEmbedOrder_RefusesUnstampedFile(t *testing.T) {
+	_, err := EmbedOrderInJPEG(testJPEG(t, 0x40), []byte("bob"))
 	assert.ErrorIs(t, err, ErrNoMetadata)
 
-	_, err = AddRecipientToVideo(minimalMP4(), []byte("bob"))
-	assert.ErrorIs(t, err, ErrNoMetadata)
-}
-
-func TestRecipient_OnlyACopyCarriesOne(t *testing.T) {
-	_, err := Recipient(watermarkedJPEG(t, "alice", 0x40))
-	assert.ErrorIs(t, err, ErrNoRecipient)
-
-	_, err = Recipient(watermarkedMP4(t, "alice"))
-	assert.ErrorIs(t, err, ErrNoRecipient)
-
-	_, err = Recipient(testJPEG(t, 0x40))
-	assert.ErrorIs(t, err, ErrNoMetadata)
-
-	_, err = Recipient(minimalMP4())
+	_, err = EmbedOrderInVideo(minimalMP4(), []byte("bob"))
 	assert.ErrorIs(t, err, ErrNoMetadata)
 }
 
-func TestRestampJPEG_SignsTheRedrawnPixels(t *testing.T) {
+func TestExtractOrder_OnlyACopyCarriesOne(t *testing.T) {
+	_, err := ExtractOrder(watermarkedJPEG(t, "alice", 0x40))
+	assert.ErrorIs(t, err, ErrNoOrder)
+
+	_, err = ExtractOrder(watermarkedMP4(t, "alice"))
+	assert.ErrorIs(t, err, ErrNoOrder)
+
+	_, err = ExtractOrder(testJPEG(t, 0x40))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = ExtractOrder(minimalMP4())
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestSignChangedJPEG_SignsTheRedrawnPixels(t *testing.T) {
 	original := watermarkedJPEG(t, "alice", 0x40)
 	redrawn := testJPEG(t, 0xc0)
 
-	restamped, err := watermark("alice").RestampJPEG(original, redrawn)
+	signedJPEG, err := watermark("alice").SignChangedJPEG(original, redrawn)
 	require.NoError(t, err)
-	assert.NoError(t, VerifyImage(restamped, signerID.String(), "alice"))
+	assert.NoError(t, VerifyImage(signedJPEG, signerID.String(), "alice"))
 
 	before, err := extractFromJPEG(original)
 	require.NoError(t, err)
-	after, err := extractFromJPEG(restamped)
+	after, err := extractFromJPEG(signedJPEG)
 	require.NoError(t, err)
 	was, err := parseSignedWatermark(before)
 	require.NoError(t, err)
@@ -516,13 +516,13 @@ func TestRestampJPEG_SignsTheRedrawnPixels(t *testing.T) {
 	assert.Equal(t, was.EncryptedMeta, is.EncryptedMeta, "the uploader's sealed meta carries over")
 	assert.True(t, was.CreatedAt.Equal(is.CreatedAt))
 
-	again, err := watermark("alice").RestampJPEG(original, redrawn)
+	again, err := watermark("alice").SignChangedJPEG(original, redrawn)
 	require.NoError(t, err)
-	assert.Equal(t, restamped, again)
+	assert.Equal(t, signedJPEG, again)
 }
 
-func TestRestampJPEG_RefusesUnstampedOriginal(t *testing.T) {
-	_, err := watermark("alice").RestampJPEG(testJPEG(t, 0x40), testJPEG(t, 0xc0))
+func TestSignChangedJPEG_RefusesUnstampedOriginal(t *testing.T) {
+	_, err := watermark("alice").SignChangedJPEG(testJPEG(t, 0x40), testJPEG(t, 0xc0))
 	assert.ErrorIs(t, err, ErrNoMetadata)
 }
 

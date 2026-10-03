@@ -143,7 +143,7 @@ func StreamGetVideoHandler(
 		if isOwnVideoRequest {
 			video, err := mediaRepo.GetVideo(ev.UserId, ev.Key)
 			if errors.Is(err, database.ErrMediaNotFound) {
-				video, err = videoCopy(mediaRepo, ev.UserId, ev.Key)
+				video, err = buildVideoCopy(mediaRepo, ev.UserId, ev.Key)
 			}
 			if errors.Is(err, database.ErrMediaNotFound) || video == "" {
 				log.Warnf("get video: key not found: %s", ev.Key)
@@ -232,16 +232,16 @@ func verifyForeignVideo(u domain.User, key, file string) error {
 	return verifyForeignMedia(u, key, file, media_meta.VerifyVideo)
 }
 
-func videoCopy(mediaRepo VideoStorer, userId, key string) (domain.Base64Video, error) {
+func buildVideoCopy(mediaRepo VideoStorer, userId, key string) (domain.Base64Video, error) {
 	c, err := mediaRepo.GetCopy(userId, key)
 	if err != nil {
 		return "", err
 	}
-	original, err := mediaRepo.GetVideo(userId, c.Original)
+	original, err := mediaRepo.GetVideo(userId, c.OriginalKey)
 	if err != nil {
 		return "", err
 	}
-	video, err := addRecipient(string(original), c.Recipient, media_meta.AddRecipientToVideo)
+	video, err := markFile(string(original), c.EncryptedOrder, media_meta.EmbedOrderInVideo)
 	return domain.Base64Video(video), err
 }
 
