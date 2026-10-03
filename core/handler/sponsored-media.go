@@ -246,3 +246,20 @@ func markFile(
 	}
 	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
+
+func imageMarker(c domain.MediaCopy, signer media_meta.Watermark) func(raw, encryptedOrder []byte) ([]byte, error) {
+	if len(c.Label) == 0 {
+		return media_meta.EmbedOrderInJPEG
+	}
+	return func(raw, encryptedOrder []byte) ([]byte, error) {
+		redrawn, err := media_meta.DrawLabels(raw, c.Label)
+		if err != nil {
+			return nil, err
+		}
+		signedJPEG, err := signer.SignChangedJPEG(raw, redrawn)
+		if err != nil {
+			return nil, err
+		}
+		return media_meta.EmbedOrderInJPEG(signedJPEG, encryptedOrder)
+	}
+}

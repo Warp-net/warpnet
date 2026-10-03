@@ -554,13 +554,18 @@ func buyerTweet(
 		return domain.Tweet{}, err
 	}
 
+	labelText := "@" + buyer.Username + " · " + buyer.Id
 	imageKeys := make([]string, 0, len(tweet.ImageKeys))
 	for _, key := range tweet.ImageKeys {
 		img, err := mediaRepo.GetImage(tweet.UserId, key)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		label, err := labelPNG(string(img), buyerLabel(buyer))
+		_, raw, err := splitDataURI(string(img))
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		label, err := media_meta.LabelPNG(raw, labelText)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
