@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 // Copyright 2025 Vadim Filin
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 package handler
 
 import (
@@ -46,20 +45,20 @@ import (
 )
 
 const (
-	overlayFontDivisor = 24
-	overlayMinFontSize = 12
-	overlayMaxFontSize = 320
-	overlayDPI         = 72
+	labelFontDivisor = 24
+	labelMinFontSize = 12
+	labelMaxFontSize = 320
+	labelDPI         = 72
 
-	tiltCos = 58618
-	tiltSin = 29309
+	rotateCos = 58618
+	rotateSin = 29309
 
-	ErrMalformedOverlay warpnet.WarpError = "copy overlay is not a grayscale mask"
+	ErrBadLabel warpnet.WarpError = "copy label is not a grayscale mask"
 )
 
 var (
-	overlayFill   = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x55}
-	overlayShadow = color.NRGBA{A: 0x44}
+	labelColor  = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x55}
+	labelShadow = color.NRGBA{A: 0x44}
 )
 
 func buyerLabel(buyer domain.User) string {
@@ -69,11 +68,11 @@ func buyerLabel(buyer domain.User) string {
 	return "@" + buyer.Username + " · " + buyer.Id
 }
 
-func overlayFontSize(size image.Point) int {
-	return min(max(min(size.X, size.Y)/overlayFontDivisor, overlayMinFontSize), overlayMaxFontSize)
+func labelFontSize(size image.Point) int {
+	return min(max(min(size.X, size.Y)/labelFontDivisor, labelMinFontSize), labelMaxFontSize)
 }
 
-func labelOverlay(file, label string) ([]byte, error) {
+func labelPNG(file, label string) ([]byte, error) {
 	_, raw, err := splitDataURI(file)
 	if err != nil {
 		return nil, err
@@ -82,7 +81,7 @@ func labelOverlay(file, label string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	mask, err := labelMask(label, overlayFontSize(image.Pt(config.Width, config.Height)))
+	mask, err := textMask(label, labelFontSize(image.Pt(config.Width, config.Height)))
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +92,12 @@ func labelOverlay(file, label string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func labelMask(label string, fontSize int) (*image.Alpha, error) {
+func textMask(label string, fontSize int) (*image.Alpha, error) {
 	ttf, err := opentype.Parse(goregular.TTF)
 	if err != nil {
 		return nil, err
 	}
-	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{Size: float64(fontSize), DPI: overlayDPI})
+	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{Size: float64(fontSize), DPI: labelDPI})
 	if err != nil {
 		return nil, err
 	}
@@ -111,21 +110,21 @@ func labelMask(label string, fontSize int) (*image.Alpha, error) {
 	return text, nil
 }
 
-func tilt(src *image.Alpha) *image.Alpha {
+func rotate(src *image.Alpha) *image.Alpha {
 	w, h := src.Rect.Dx(), src.Rect.Dy()
-	lift := (w*tiltSin + 0xffff) >> 16
-	dst := image.NewAlpha(image.Rect(0, 0, (w*tiltCos+h*tiltSin+0xffff)>>16, lift+(h*tiltCos+0xffff)>>16))
+	lift := (w*rotateSin + 0xffff) >> 16
+	dst := image.NewAlpha(image.Rect(0, 0, (w*rotateCos+h*rotateSin+0xffff)>>16, lift+(h*rotateCos+0xffff)>>16))
 	for y := range dst.Rect.Dy() {
 		for x := range dst.Rect.Dx() {
-			sx := x*tiltCos - (y-lift)*tiltSin
-			sy := x*tiltSin + (y-lift)*tiltCos
-			dst.Pix[y*dst.Stride+x] = bilinear(src, sx>>8, sy>>8)
+			sx := x*rotateCos - (y-lift)*rotateSin
+			sy := x*rotateSin + (y-lift)*rotateCos
+			dst.Pix[y*dst.Stride+x] = blendPixel(src, sx>>8, sy>>8)
 		}
 	}
 	return dst
 }
 
-func bilinear(src *image.Alpha, x, y int) uint8 {
+func blendPixel(src *image.Alpha, x, y int) uint8 {
 	x0, y0, fx, fy := x>>8, y>>8, x&0xff, y&0xff
 	top := alphaAt(src, x0, y0)*(0x100-fx) + alphaAt(src, x0+1, y0)*fx
 	bottom := alphaAt(src, x0, y0+1)*(0x100-fx) + alphaAt(src, x0+1, y0+1)*fx
@@ -139,22 +138,22 @@ func alphaAt(src *image.Alpha, x, y int) int {
 	return int(src.Pix[y*src.Stride+x])
 }
 
-func drawOverlay(raw, overlay []byte) ([]byte, error) {
+func drawLabels(raw, label []byte) ([]byte, error) {
 	src, err := jpeg.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	decoded, err := png.Decode(bytes.NewReader(overlay))
+	decoded, err := png.Decode(bytes.NewReader(label))
 	if err != nil {
 		return nil, err
 	}
-	label, ok := decoded.(*image.Gray)
+	gray, ok := decoded.(*image.Gray)
 	if !ok {
-		return nil, ErrMalformedOverlay
+		return nil, ErrBadLabel
 	}
-	mask := tilt(&image.Alpha{Pix: label.Pix, Stride: label.Stride, Rect: label.Rect})
+	mask := rotate(&image.Alpha{Pix: gray.Pix, Stride: gray.Stride, Rect: gray.Rect})
 	bounds := src.Bounds()
-	fontSize := overlayFontSize(bounds.Size())
+	fontSize := labelFontSize(bounds.Size())
 
 	canvas := image.NewRGBA(bounds)
 	draw.Draw(canvas, bounds, src, bounds.Min, draw.Src)
@@ -168,8 +167,8 @@ func drawOverlay(raw, overlay []byte) ([]byte, error) {
 		for j := -reach; j <= reach; j++ {
 			at := bounds.Min.Add(along.Mul(i)).Add(across.Mul(j))
 			place := image.Rectangle{Min: at, Max: at.Add(size)}
-			draw.DrawMask(canvas, place.Add(shadow), image.NewUniform(overlayShadow), image.Point{}, mask, image.Point{}, draw.Over)
-			draw.DrawMask(canvas, place, image.NewUniform(overlayFill), image.Point{}, mask, image.Point{}, draw.Over)
+			draw.DrawMask(canvas, place.Add(shadow), image.NewUniform(labelShadow), image.Point{}, mask, image.Point{}, draw.Over)
+			draw.DrawMask(canvas, place, image.NewUniform(labelColor), image.Point{}, mask, image.Point{}, draw.Over)
 		}
 	}
 
@@ -180,19 +179,19 @@ func drawOverlay(raw, overlay []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func imageMarker(c domain.MediaCopy, signer media_meta.Watermark) func(raw, recipient []byte) ([]byte, error) {
-	if len(c.Overlay) == 0 {
-		return media_meta.AddRecipientToJPEG
+func imageMarker(c domain.MediaCopy, signer media_meta.Watermark) func(raw, encryptedOrder []byte) ([]byte, error) {
+	if len(c.Label) == 0 {
+		return media_meta.EmbedOrderInJPEG
 	}
-	return func(raw, recipient []byte) ([]byte, error) {
-		redrawn, err := drawOverlay(raw, c.Overlay)
+	return func(raw, encryptedOrder []byte) ([]byte, error) {
+		redrawn, err := drawLabels(raw, c.Label)
 		if err != nil {
 			return nil, err
 		}
-		restamped, err := signer.RestampJPEG(raw, redrawn)
+		signedJPEG, err := signer.SignChangedJPEG(raw, redrawn)
 		if err != nil {
 			return nil, err
 		}
-		return media_meta.AddRecipientToJPEG(restamped, recipient)
+		return media_meta.EmbedOrderInJPEG(signedJPEG, encryptedOrder)
 	}
 }

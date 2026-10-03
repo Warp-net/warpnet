@@ -51,10 +51,10 @@ import (
 )
 
 const (
-	orderNonceSize     = 16
-	orderLimit         = 10
-	orderLimitWindow   = time.Hour
-	nearbyOrdersWindow = 24 * time.Hour
+	orderNonceSize   = 16
+	orderLimit       = 10
+	orderLimitWindow = time.Hour
+	sameDayWindow    = 24 * time.Hour
 
 	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
 )
@@ -491,7 +491,7 @@ func StreamGetSponsoredTweetHandler(
 				return domain.Tweet{}, nil
 			}
 			signer := media_meta.Watermark{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
-			return issueCopies(signer, mediaRepo, tweet, buyer, order)
+			return buyerTweet(signer, mediaRepo, tweet, buyer, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -561,18 +561,18 @@ func paidOrder(
 	return buyer, order, err == nil && order.Confirmed
 }
 
-func issueCopies(
+func buyerTweet(
 	signer media_meta.Watermark,
 	mediaRepo SponsoredMediaStorer,
 	tweet domain.Tweet,
 	buyer domain.User,
 	order domain.Order,
 ) (domain.Tweet, error) {
-	plain, err := json.Marshal(order)
+	orderJSON, err := json.Marshal(order)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	recipient, err := security.EncryptAES(plain, signer.PrivKey)
+	encryptedOrder, err := security.EncryptAES(orderJSON, signer.PrivKey)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -583,12 +583,12 @@ func issueCopies(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		overlay, err := labelOverlay(string(img), buyerLabel(buyer))
+		label, err := labelPNG(string(img), buyerLabel(buyer))
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		c := domain.MediaCopy{Original: key, Recipient: recipient, Overlay: overlay}
-		copyKey, err := issueCopy(mediaRepo, tweet.UserId, string(img), c, imageMarker(c, signer))
+		c := domain.MediaCopy{OriginalKey: key, EncryptedOrder: encryptedOrder, Label: label}
+		copyKey, err := newCopy(mediaRepo, tweet.UserId, string(img), c, imageMarker(c, signer))
 		if err != nil {
 			return domain.Tweet{}, err
 		}
@@ -603,8 +603,8 @@ func issueCopies(
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	c := domain.MediaCopy{Original: *tweet.VideoKey, Recipient: recipient}
-	copyKey, err := issueCopy(mediaRepo, tweet.UserId, string(video), c, media_meta.AddRecipientToVideo)
+	c := domain.MediaCopy{OriginalKey: *tweet.VideoKey, EncryptedOrder: encryptedOrder}
+	copyKey, err := newCopy(mediaRepo, tweet.UserId, string(video), c, media_meta.EmbedOrderInVideo)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -612,21 +612,21 @@ func issueCopies(
 	return tweet, nil
 }
 
-func issueCopy(
+func newCopy(
 	mediaRepo SponsoredMediaStorer,
 	userId, file string,
 	c domain.MediaCopy,
-	embed func(raw, recipient []byte) ([]byte, error),
+	mark func(raw, encryptedOrder []byte) ([]byte, error),
 ) (string, error) {
-	marked, err := addRecipient(file, c.Recipient, embed)
+	copyFile, err := markFile(file, c.EncryptedOrder, mark)
 	if err != nil {
 		return "", err
 	}
-	copyKey := contentKey(marked)
+	copyKey := contentKey(copyFile)
 	return copyKey, mediaRepo.SetCopy(userId, copyKey, c)
 }
 
-func confirmedOrders(orders OrderLister, buyerId string, from, to time.Time) (int, error) {
+func countOrders(orders OrderLister, buyerId string, from, to time.Time) (int, error) {
 	list, err := orders.ListByBuyer(buyerId)
 	if err != nil {
 		return 0, err
@@ -642,13 +642,13 @@ func confirmedOrders(orders OrderLister, buyerId string, from, to time.Time) (in
 
 func isOrderLimitReached(orders OrderLister, buyerId string) (bool, error) {
 	now := time.Now()
-	count, err := confirmedOrders(orders, buyerId, now.Add(-orderLimitWindow), now)
+	count, err := countOrders(orders, buyerId, now.Add(-orderLimitWindow), now)
 	return count >= orderLimit, err
 }
 
 func notifyOrderLimit(notifier SponsoredNotifier, orders OrderLister, authorId string, buyer domain.User) error {
 	now := time.Now()
-	count, err := confirmedOrders(orders, buyer.Id, now.Add(-orderLimitWindow), now)
+	count, err := countOrders(orders, buyer.Id, now.Add(-orderLimitWindow), now)
 	if err != nil || count != orderLimit {
 		return err
 	}
@@ -664,9 +664,9 @@ func notifyOrderLimit(notifier SponsoredNotifier, orders OrderLister, authorId s
 	})
 }
 
-func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey, orders OrderLister) warpnet.WarpHandlerFunc {
+func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderLister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		var ev event.GetSponsoredBuyerEvent
+		var ev event.GetCopyBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
@@ -675,35 +675,35 @@ func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey, orders Order
 			return nil, err
 		}
 
-		recipient, err := media_meta.Recipient(raw)
-		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoRecipient) {
-			return event.SponsoredBuyerResponse{}, nil
+		encryptedOrder, err := media_meta.ExtractOrder(raw)
+		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoOrder) {
+			return event.CopyBuyerResponse{}, nil
 		}
 		if err != nil {
 			return nil, err
 		}
-		plain, err := security.DecryptAES(recipient, identityKey)
+		orderJSON, err := security.DecryptAES(encryptedOrder, identityKey)
 		if err != nil {
 			return nil, warpnet.WarpError("sponsored buyer: this node did not sell the copy")
 		}
 
 		var order domain.Order
-		if err := json.Unmarshal(plain, &order); err != nil {
+		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
-		nearby, err := confirmedOrders(
-			orders, order.BuyerId, order.CreatedAt.Add(-nearbyOrdersWindow), order.CreatedAt.Add(nearbyOrdersWindow),
+		sameDay, err := countOrders(
+			orders, order.BuyerId, order.CreatedAt.Add(-sameDayWindow), order.CreatedAt.Add(sameDayWindow),
 		)
 		if err != nil {
 			return nil, err
 		}
-		return event.SponsoredBuyerResponse{
-			TweetId:      order.TweetId,
-			BuyerId:      order.BuyerId,
-			OrderId:      order.ID(),
-			TxId:         order.TxId,
-			CreatedAt:    order.CreatedAt,
-			NearbyOrders: nearby,
+		return event.CopyBuyerResponse{
+			TweetId:       order.TweetId,
+			BuyerId:       order.BuyerId,
+			OrderId:       order.ID(),
+			TxId:          order.TxId,
+			SoldAt:        order.CreatedAt,
+			SameDayOrders: sameDay,
 		}, nil
 	}
 }

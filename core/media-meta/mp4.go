@@ -101,12 +101,12 @@ func SplitVideo(b []byte) (raw, watermarkBytes []byte, err error) {
 	return raw, watermarkBytes, nil
 }
 
-func AddRecipientToVideo(videoBytes, recipient []byte) ([]byte, error) {
+func EmbedOrderInVideo(videoBytes, encryptedOrder []byte) ([]byte, error) {
 	raw, watermarkBytes, err := SplitVideo(videoBytes)
 	if err != nil {
 		return nil, err
 	}
-	marked, err := withRecipient(watermarkBytes, recipient)
+	marked, err := addOrder(watermarkBytes, encryptedOrder)
 	if err != nil {
 		return nil, err
 	}
