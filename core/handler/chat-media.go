@@ -41,6 +41,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	ErrEmptyChatImageKey warpnet.WarpError = "empty image key"
+	ErrEmptyChatVideoKey warpnet.WarpError = "empty video key"
+)
+
 type ChatMediaStorer interface {
 	GetImage(userId, key string) (domain.Base64Image, error)
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
@@ -74,7 +79,7 @@ func StreamGetChatImageHandler(
 			return nil, fmt.Errorf("get chat image: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get chat image: %w", ErrEmptyImageKey)
+			return nil, fmt.Errorf("get chat image: %w", ErrEmptyChatImageKey)
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -155,7 +160,7 @@ func StreamGetChatVideoHandler(
 			return nil, fmt.Errorf("get chat video: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get chat video: %w", ErrEmptyVideoKey)
+			return nil, fmt.Errorf("get chat video: %w", ErrEmptyChatVideoKey)
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -174,7 +179,7 @@ func StreamGetChatVideoHandler(
 			if err != nil && !errors.Is(err, database.ErrMediaNotFound) {
 				return nil, fmt.Errorf("get chat video: fetching media: %w", err)
 			}
-			return newVideoResponse(video, ev.Deferred), nil
+			return buildChatVideoResponse(video, ev.Deferred), nil
 		}
 
 		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
@@ -183,7 +188,7 @@ func StreamGetChatVideoHandler(
 		}
 
 		if stored, err := mediaRepo.GetVideo(ev.UserId, ev.Key); err == nil && stored != "" {
-			return newVideoResponse(stored, ev.Deferred), nil
+			return buildChatVideoResponse(stored, ev.Deferred), nil
 		}
 
 		u, err := userRepo.Get(ev.UserId)
@@ -245,4 +250,15 @@ func isChatMediaAllowed(
 		return false
 	}
 	return chatRepo.IsParticipants(ownNodeInfo.OwnerId, requester.Id)
+}
+
+func buildChatVideoResponse(video domain.Base64Video, deferred bool) event.GetVideoResponse {
+	if deferred {
+		return event.GetVideoResponse{
+			File:     "",
+			Size:     int64(len(video)),
+			Deferred: true,
+		}
+	}
+	return event.GetVideoResponse{File: string(video), Size: int64(len(video))}
 }
