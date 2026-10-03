@@ -41,8 +41,8 @@ type Settings struct {
 var Defaults = Settings{
 	NetworkLowWater:      20,
 	NetworkHighWater:     50,
-	DiscoveryBurst:       32,
-	DiscoveryPerTenSec:   2,
+	DiscoveryBurst:       64,
+	DiscoveryPerTenSec:   32,
 	StreamReadBurst:      60,
 	StreamReadPerMinute:  300,
 	StreamWriteBurst:     30,
