@@ -84,7 +84,8 @@ func StreamGetSponsoredImageHandler(
 			return event.GetImageResponse{File: img}, nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetImageResponse{File: ""}, nil
 		}
 
@@ -170,7 +171,8 @@ func StreamGetSponsoredVideoHandler(
 			return newVideoResponse(domain.Base64Video(video), ev.Deferred), nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetVideoResponse{File: ""}, nil
 		}
 

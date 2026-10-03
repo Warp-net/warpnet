@@ -95,7 +95,8 @@ func StreamGetChatImageHandler(
 			return event.GetImageResponse{File: string(img)}, nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetImageResponse{File: ""}, nil
 		}
 
@@ -175,7 +176,8 @@ func StreamGetChatVideoHandler(
 			return newVideoResponse(video, ev.Deferred), nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetVideoResponse{File: ""}, nil
 		}
 
@@ -230,7 +232,7 @@ func isChatMediaAllowed(
 	userRepo ChatMediaUserFetcher,
 	ownNodeInfo warpnet.NodeInfo,
 ) bool {
-	if isOwnRequest(s, ownNodeInfo) {
+	if warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil {
 		return true
 	}
 	if s == nil || s.Conn() == nil {
@@ -242,8 +244,4 @@ func isChatMediaAllowed(
 		return false
 	}
 	return chatRepo.IsParticipants(ownNodeInfo.OwnerId, requester.Id)
-}
-
-func isOwnRequest(s warpnet.WarpStream, ownNodeInfo warpnet.NodeInfo) bool {
-	return warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
 }

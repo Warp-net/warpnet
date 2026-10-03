@@ -473,7 +473,7 @@ func StreamGetSponsoredTweetHandler(
 		}
 
 		owner := auth.GetOwner()
-		isOwn := isOwnRequest(s, streamer.NodeInfo())
+		isOwn := warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil
 		if ev.UserId == owner.UserId && isOwn {
 			return tweetRepo.Get(owner.UserId, ev.TweetId)
 		}
