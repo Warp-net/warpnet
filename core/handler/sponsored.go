@@ -53,6 +53,9 @@ import (
 const (
 	orderNonceSize    = 16
 	dailyOrdersWindow = 24 * time.Hour
+
+	ErrChainUnavailable warpnet.WarpError = "order: the TRON network cannot be reached, nothing was paid; try again later"
+	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so it is not sent again; check the wallet history"
 )
 
 type SponsoredWallet interface {
@@ -60,6 +63,7 @@ type SponsoredWallet interface {
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
 	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
+	IsAvailable(ctx context.Context) bool
 	Splitter() string
 	MaxFeePercent() uint64
 	Network() string
@@ -73,6 +77,7 @@ type OrderStorer interface {
 	OrderCounter
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
+	Delete(tweetId, buyerId string) error
 }
 
 type SponsoredTweetFetcher interface {
@@ -149,10 +154,15 @@ func StreamNewOrderHandler(
 		if err != nil {
 			return nil, err
 		}
+		if order.TxId == "" {
+			return nil, ErrPaymentUnknown
+		}
 		if !order.Confirmed {
-			order, err = claimOrder(orders, streamer, author, order)
+			claimed, err := claimOrder(orders, streamer, author, order)
 			if err != nil {
-				return nil, err
+				log.Warnf("order: %s is paid in tx %s, the author has not confirmed it yet: %v", ev.TweetId, order.TxId, err)
+			} else {
+				order = claimed
 			}
 		}
 		return event.OrderResponse{TweetId: ev.TweetId, TxId: order.TxId, Confirmed: order.Confirmed}, nil
@@ -168,6 +178,9 @@ func payAuthor(
 	author domain.User,
 	tweetId string,
 ) (domain.Order, error) {
+	if !backend.IsAvailable(context.Background()) {
+		return domain.Order{}, ErrChainUnavailable
+	}
 	sponsorship, err := tweetSponsorship(backend, streamer, author, tweetId)
 	if err != nil {
 		return domain.Order{}, err
@@ -189,11 +202,24 @@ func payAuthor(
 	if err != nil {
 		return domain.Order{}, err
 	}
+	if err := orders.Save(order); err != nil {
+		return domain.Order{}, err
+	}
 	sponsorship.OrderId = order.ID()
 	payment, err := backend.Pay(context.Background(), seed, sponsorship)
-	if err != nil {
+	if payment.PayTx == "" && (err == nil || errors.Is(err, wallet.ErrNoAnswer)) {
+		log.Errorf("order: the payment for %s may have gone through, its order stays to block another: %v", tweetId, err)
+		return domain.Order{}, ErrPaymentUnknown
+	}
+	if payment.PayTx == "" {
+		if deleteErr := orders.Delete(order.TweetId, order.BuyerId); deleteErr != nil {
+			log.Errorf("order: %s was not paid, but its order was not removed: %v", tweetId, deleteErr)
+		}
 		log.Errorf("order: pay for %s: %v", tweetId, err)
 		return domain.Order{}, err
+	}
+	if err != nil {
+		log.Warnf("order: the payment for %s got no answer, tx %s may still land: %v", tweetId, payment.PayTx, err)
 	}
 	order.TxId = payment.PayTx
 	if err := orders.Save(order); err != nil {
@@ -519,6 +545,9 @@ func StreamGetSponsoredTweetHandler(
 		}
 		if order.Tweet != nil {
 			return *order.Tweet, nil
+		}
+		if order.TxId == "" {
+			return domain.Tweet{}, nil
 		}
 
 		author, err := userRepo.Get(ev.UserId)

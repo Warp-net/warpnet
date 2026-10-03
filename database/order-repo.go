@@ -77,6 +77,26 @@ func (repo *OrderRepo) Save(o domain.Order) error {
 	return txn.Commit()
 }
 
+func (repo *OrderRepo) Delete(tweetId, buyerId string) error {
+	if tweetId == "" {
+		return local_store.DBError("empty tweet id")
+	}
+	if buyerId == "" {
+		return local_store.DBError("empty buyer id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err := txn.Delete(orderKey(tweetId, buyerId)); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Commit()
+}
+
 func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 	if tweetId == "" {
 		return domain.Order{}, local_store.DBError("empty tweet id")
