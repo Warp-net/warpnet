@@ -104,7 +104,6 @@ type MediaStorer interface {
 	GetImage(userId, key string) (domain.Base64Image, error)
 	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
-	GetCopy(userId, key string) (domain.MediaCopy, error)
 }
 
 func StreamUploadImageHandler(
@@ -173,7 +172,6 @@ func StreamUploadImageHandler(
 
 func StreamGetImageHandler(
 	streamer MediaStreamer,
-	privKey ed25519.PrivateKey,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
@@ -196,10 +194,6 @@ func StreamGetImageHandler(
 
 		if isOwnImageRequest {
 			img, err := mediaRepo.GetImage(ev.UserId, ev.Key)
-			if errors.Is(err, database.ErrMediaNotFound) {
-				signer := media_meta.Watermark{PrivKey: privKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
-				img, err = buildImageCopy(mediaRepo, signer, ev.UserId, ev.Key)
-			}
 			if errors.Is(err, database.ErrMediaNotFound) || img == "" {
 				log.Warnf("get image: key not found: %s", ev.Key)
 				return event.GetImageResponse{File: ""}, nil
@@ -308,35 +302,6 @@ func verifyContentKey(key, file string) error {
 
 func contentKey(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
-}
-
-func buildImageCopy(mediaRepo MediaStorer, signer media_meta.Watermark, userId, key string) (domain.Base64Image, error) {
-	c, err := mediaRepo.GetCopy(userId, key)
-	if err != nil {
-		return "", err
-	}
-	original, err := mediaRepo.GetImage(userId, c.OriginalKey)
-	if err != nil {
-		return "", err
-	}
-	img, err := markFile(string(original), c.EncryptedOrder, imageMarker(c, signer))
-	return domain.Base64Image(img), err
-}
-
-func markFile(
-	file string,
-	encryptedOrder []byte,
-	mark func(raw, encryptedOrder []byte) ([]byte, error),
-) (string, error) {
-	header, raw, err := splitDataURI(file)
-	if err != nil {
-		return "", err
-	}
-	marked, err := mark(raw, encryptedOrder)
-	if err != nil {
-		return "", err
-	}
-	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
 
 func splitDataURI(file string) (header string, data []byte, err error) {

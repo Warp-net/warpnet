@@ -5,6 +5,9 @@ vi.mock('@/service/service', () => ({
   warpnetService: {
     getProfile: vi.fn(),
     getImage: vi.fn(),
+    getVideo: vi.fn(),
+    getSponsoredImage: vi.fn(),
+    getSponsoredVideo: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
     hasReactor: vi.fn(),
@@ -92,6 +95,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   warpnetService.getProfile.mockResolvedValue({ id: 'author1', username: 'author', avatar_key: '' });
   warpnetService.getImage.mockResolvedValue(null);
+  warpnetService.getSponsoredImage.mockResolvedValue(null);
   warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'viewer1', node_id: 'node-viewer' });
   warpnetService.getTweetStats.mockResolvedValue({ tweet_id: 't1' });
   warpnetService.hasReactor.mockResolvedValue(false);
@@ -217,6 +221,26 @@ describe('TweetBlock sponsored tweet', () => {
 
     expect(await screen.findByText('bought before')).toBeInTheDocument();
     expect(warpnetService.orderSponsoredTweet).not.toHaveBeenCalled();
+  });
+
+  it("loads a bought tweet's media through the sponsored routes", async () => {
+    warpnetService.getSponsoredTweet.mockResolvedValue({ ...teaser(), text: 'bought before', image_keys: ['copy-1'], video_key: 'copy-2' });
+    warpnetService.getSponsoredVideo.mockResolvedValue({ file: 'data:video/mp4;base64,AAAA', size: 4, deferred: false });
+    renderTweet(teaser());
+
+    await waitFor(() => expect(warpnetService.getSponsoredImage).toHaveBeenCalledWith({ userId: 'author1', key: 'copy-1' }));
+    await fireEvent.click(await screen.findByLabelText('Play video'));
+    await waitFor(() => expect(warpnetService.getSponsoredVideo).toHaveBeenCalledWith({ userId: 'author1', key: 'copy-2' }));
+    expect(warpnetService.getImage).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'copy-1' }));
+    expect(warpnetService.getVideo).not.toHaveBeenCalled();
+  });
+
+  it("loads the author's own sponsored media as the originals", async () => {
+    warpnetService.getOwnerProfile.mockReturnValue({ user_id: 'author1', node_id: 'node-author' });
+    renderTweet({ ...teaser(), text: 'my paid words', image_keys: ['original-1'] });
+
+    await waitFor(() => expect(warpnetService.getImage).toHaveBeenCalledWith({ userId: 'author1', key: 'original-1' }));
+    expect(warpnetService.getSponsoredImage).not.toHaveBeenCalled();
   });
 
   it("shows the author's own sponsored tweet in full, with its price", async () => {

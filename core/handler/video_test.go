@@ -33,7 +33,6 @@ import (
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -73,10 +72,6 @@ func (v *videoRepoStub) SetVideo(userId string, video domain.Base64Video) (domai
 func (v *videoRepoStub) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
 	v.stored = video
 	return nil
-}
-
-func (v *videoRepoStub) GetCopy(userId, key string) (domain.MediaCopy, error) {
-	return domain.MediaCopy{}, database.ErrMediaNotFound
 }
 
 func TestUploadVideo_Success(t *testing.T) {

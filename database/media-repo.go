@@ -38,11 +38,12 @@ import (
 )
 
 const (
-	MediaRepoName     = "/MEDIA"
-	ChatMediaRepoName = "/CHATMEDIA"
-	ImageSubNamespace = "IMAGES"
-	VideoSubNamespace = "VIDEOS"
-	CopySubNamespace  = "COPIES"
+	MediaRepoName          = "/MEDIA"
+	ChatMediaRepoName      = "/CHATMEDIA"
+	SponsoredMediaRepoName = "/SPONSOREDMEDIA"
+	ImageSubNamespace      = "IMAGES"
+	VideoSubNamespace      = "VIDEOS"
+	CopySubNamespace       = "COPIES"
 )
 
 var (
@@ -67,6 +68,10 @@ func NewMediaRepo(db MediaStorer) *MediaRepo {
 
 func NewChatMediaRepo(db MediaStorer) *MediaRepo {
 	return &MediaRepo{db: db, prefix: ChatMediaRepoName}
+}
+
+func NewSponsoredMediaRepo(db MediaStorer) *MediaRepo {
+	return &MediaRepo{db: db, prefix: SponsoredMediaRepoName}
 }
 
 func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
@@ -226,7 +231,7 @@ func (repo *MediaRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
-	if userId == "" || key == "" || c.OriginalKey == "" {
+	if userId == "" || key == "" || c.OriginalKey == "" || c.BuyerId == "" {
 		return local_store.DBError("no data for copy set")
 	}
 
