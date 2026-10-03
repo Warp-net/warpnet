@@ -180,7 +180,7 @@ func payAuthor(
 		CreatedAt: time.Now(),
 	}
 
-	seed, err := walletSeed(owner, identityKey, backend.Network())
+	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 	if err != nil {
 		return domain.Order{}, err
 	}
@@ -258,7 +258,7 @@ func StreamGetOrderQuoteHandler(
 		if err != nil {
 			return nil, err
 		}
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -421,7 +421,7 @@ func StreamVerifyOrderHandler(
 			TxId:      ev.TxId,
 			CreatedAt: time.Now(),
 		}
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
