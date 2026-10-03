@@ -409,7 +409,7 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		}
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Confirmed: true}}
 		media := newStubSponsoredMedia()
-		image, _ := watermarkedImage(t, "author-1")
+		image, _ := imageWithMetadata(t, "author-1")
 		media.images["author-1/img-1"] = domain.Base64Image(image)
 		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, newStubSponsoredMedia(), users,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}})
@@ -485,8 +485,8 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 
 func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	own, buyerNode := testSignerID, newTestPeerID(t)
-	image, imageKey := watermarkedImage(t, "author-1")
-	video, videoKey := watermarkedVideo(t, "author-1")
+	image, imageKey := imageWithMetadata(t, "author-1")
+	video, videoKey := videoWithMetadata(t, "author-1")
 	media := newStubSponsoredMedia()
 	media.images["author-1/"+imageKey] = domain.Base64Image(image)
 	media.videos["author-1/"+videoKey] = domain.Base64Video(video)
@@ -548,7 +548,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 
 func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
 	own, buyerNode, strangerNode := newTestPeerID(t), newTestPeerID(t), newTestPeerID(t)
-	image, imageKey := watermarkedImage(t, "author-1")
+	image, imageKey := imageWithMetadata(t, "author-1")
 	media := newStubSponsoredMedia()
 	media.images["author-1/"+imageKey] = domain.Base64Image(image)
 	copies := newStubSponsoredMedia()
@@ -576,7 +576,7 @@ func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
 
 func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 	own := newTestPeerID(t)
-	image, _ := watermarkedImage(t, "author-1")
+	image, _ := imageWithMetadata(t, "author-1")
 	copied, err := markFile(image, []byte("sealed"), media_meta.EmbedOrderInJPEG)
 	require.NoError(t, err)
 	copyKey := contentKey(copied)
@@ -617,7 +617,7 @@ func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 }
 
 func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
-	image, _ := watermarkedImage(t, "author-1")
+	image, _ := imageWithMetadata(t, "author-1")
 	h := StreamGetCopyBuyerHandler(testSignerKey)
 
 	resp, err := h(marshal(t, event.GetCopyBuyerEvent{File: image}), nil)

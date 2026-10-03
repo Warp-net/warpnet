@@ -466,7 +466,7 @@ func StreamGetSponsoredTweetHandler(
 			if !isPaid {
 				return domain.Tweet{}, nil
 			}
-			signer := media_meta.Watermark{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
+			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
 			return buyerTweet(signer, mediaRepo, copyRepo, tweet, buyer, order)
 		}
 		if !isOwn {
@@ -538,7 +538,7 @@ func paidOrder(
 }
 
 func buyerTweet(
-	signer media_meta.Watermark,
+	signer media_meta.Metadata,
 	mediaRepo SponsoredMediaStorer,
 	copyRepo SponsoredCopyStorer,
 	tweet domain.Tweet,
