@@ -359,8 +359,14 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		_, s := stream.NewLoopbackStream(newTestPeerID(t), buyerNode, event.PUBLIC_POST_SPONSORED_ORDER)
 		return s
 	}
+	var notified []domain.Notification
+	notifier := stubModerationNotifier{addFn: func(not domain.Notification) error {
+		notified = append(notified, not)
+		return nil
+	}}
 	newHandler := func(w SponsoredWallet, tweets SponsoredTweetFetcher, orders OrderStorer) warpnet.WarpHandlerFunc {
-		return StreamVerifyOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, tweets, orders, users, stubStreamer{})
+		notified = nil
+		return StreamVerifyOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, tweets, orders, users, notifier, stubStreamer{})
 	}
 
 	t.Run("confirms a payment bound to this buyer and records it", func(t *testing.T) {
@@ -374,6 +380,21 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		require.Len(t, w.checks, 1)
 		assert.Equal(t, wallet.Sponsorship{Splitter: "TSplitter", OrderId: want.ID(), Author: "TAuthorAddress", Amount: "1500000"}, w.checks[0])
 		assert.True(t, orders["tweet-1/buyer-1"].Confirmed)
+		assert.Empty(t, notified, "one order is no news")
+	})
+
+	t.Run("the order that reaches the hourly limit tells the author", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
+		orders := confirmedSales("buyer-1", orderLimit-1, time.Now().Add(-time.Minute))
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
+
+		require.Len(t, notified, 1)
+		assert.Equal(t, domain.NotificationOrderLimitType, notified[0].Type)
+		assert.Equal(t, "author-1", notified[0].RecepientId)
+		assert.Equal(t, "buyer-1", notified[0].ActorId)
+		assert.Contains(t, notified[0].Text, "bought 10 of your tweets within an hour")
 	})
 
 	t.Run("a pending payment is not recorded", func(t *testing.T) {

@@ -33,6 +33,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -91,6 +92,10 @@ type SponsoredUserFetcher interface {
 type SponsoredStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
+}
+
+type SponsoredNotifier interface {
+	Add(not domain.Notification) error
 }
 
 type SponsoredMediaStorer interface {
@@ -361,6 +366,7 @@ func StreamVerifyOrderHandler(
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
 	userRepo SponsoredUserFetcher,
+	notifier SponsoredNotifier,
 	streamer SponsoredStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -380,7 +386,8 @@ func StreamVerifyOrderHandler(
 		if ev.Nonce == "" {
 			return nil, warpnet.WarpError("order: empty nonce")
 		}
-		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId); err != nil {
+		buyer, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId)
+		if err != nil {
 			return nil, err
 		}
 
@@ -439,6 +446,9 @@ func StreamVerifyOrderHandler(
 			order.Confirmed = true
 			if err := orders.Save(order); err != nil {
 				return nil, err
+			}
+			if err := notifyOrderLimit(notifier, orders, owner.UserId, buyer); err != nil {
+				log.Errorf("order: telling the author about %s's order limit: %v", buyer.Id, err)
 			}
 		}
 		return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId, Confirmed: paid}, nil
@@ -634,6 +644,24 @@ func isOrderLimitReached(orders OrderLister, buyerId string) (bool, error) {
 	now := time.Now()
 	count, err := confirmedOrders(orders, buyerId, now.Add(-orderLimitWindow), now)
 	return count >= orderLimit, err
+}
+
+func notifyOrderLimit(notifier SponsoredNotifier, orders OrderLister, authorId string, buyer domain.User) error {
+	now := time.Now()
+	count, err := confirmedOrders(orders, buyer.Id, now.Add(-orderLimitWindow), now)
+	if err != nil || count != orderLimit {
+		return err
+	}
+	name := buyer.Username
+	if name == "" {
+		name = buyer.Id
+	}
+	return notifier.Add(domain.Notification{
+		Type:        domain.NotificationOrderLimitType,
+		Text:        name + " bought " + strconv.Itoa(orderLimit) + " of your tweets within an hour; their next orders wait",
+		RecepientId: authorId,
+		ActorId:     buyer.Id,
+	})
 }
 
 func StreamGetSponsoredBuyerHandler(identityKey ed25519.PrivateKey, orders OrderLister) warpnet.WarpHandlerFunc {
