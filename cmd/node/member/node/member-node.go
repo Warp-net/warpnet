@@ -780,7 +780,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_IMAGE,
-			handler.StreamGetSponsoredImageHandler(m, r.mediaRepo, r.copyRepo, userRepo),
+			handler.StreamGetSponsoredImageHandler(m, m.privKey, r.mediaRepo, r.copyRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_VIDEO,

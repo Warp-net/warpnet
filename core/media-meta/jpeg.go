@@ -58,13 +58,13 @@ const (
 
 var exifSegmentHeader = []byte("Exif\x00\x00")
 
-func EmbedInJPEG(imageBytes, watermarkBytes []byte) ([]byte, error) {
+func EmbedInJPEG(imageBytes, metadataBytes []byte) ([]byte, error) {
 	segments, err := parseJPEGSegments(imageBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	rootIb, err := newDescriptionIfd(watermarkBytes)
+	rootIb, err := newDescriptionIfd(metadataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -81,19 +81,36 @@ func EmbedInJPEG(imageBytes, watermarkBytes []byte) ([]byte, error) {
 }
 
 func EmbedOrderInJPEG(jpegBytes, encryptedOrder []byte) ([]byte, error) {
-	watermarkBytes, err := extractFromJPEG(jpegBytes)
+	metadataBytes, err := extractFromJPEG(jpegBytes)
 	if err != nil {
 		return nil, err
 	}
-	marked, err := addOrder(watermarkBytes, encryptedOrder)
+	marked, err := addOrder(metadataBytes, encryptedOrder)
 	if err != nil {
 		return nil, err
 	}
 	return EmbedInJPEG(jpegBytes, marked)
 }
 
+func (m Metadata) SignChangedJPEG(original, redrawn []byte) ([]byte, error) {
+	metadataBytes, err := extractFromJPEG(original)
+	if err != nil {
+		return nil, err
+	}
+	signed, err := parseSignedMetadata(metadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	m.EncryptedMeta = signed.EncryptedMeta
+	block, err := m.signAt(security.ConvertToSHA256(redrawn), signed.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return EmbedInJPEG(redrawn, block)
+}
+
 func VerifyImage(jpegBytes []byte, nodeId, ownerId string) error {
-	watermarkBytes, err := extractFromJPEG(jpegBytes)
+	metadataBytes, err := extractFromJPEG(jpegBytes)
 	if err != nil {
 		return err
 	}
@@ -101,7 +118,7 @@ func VerifyImage(jpegBytes []byte, nodeId, ownerId string) error {
 	if err != nil {
 		return err
 	}
-	return verify(watermarkBytes, security.ConvertToSHA256(raw), nodeId, ownerId)
+	return verify(metadataBytes, security.ConvertToSHA256(raw), nodeId, ownerId)
 }
 
 func extractFromJPEG(b []byte) ([]byte, error) {
@@ -119,11 +136,11 @@ func extractFromJPEG(b []byte) ([]byte, error) {
 		return nil, ErrNoMetadata
 	}
 
-	watermarkBytes, err := base64.StdEncoding.DecodeString(encoded)
+	metadataBytes, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return nil, ErrNoMetadata
 	}
-	return watermarkBytes, nil
+	return metadataBytes, nil
 }
 
 func stripJPEGExif(b []byte) ([]byte, error) {
@@ -183,7 +200,7 @@ func parseJPEGSegments(imageBytes []byte) (*jis.SegmentList, error) {
 	return segments, nil
 }
 
-func newDescriptionIfd(watermarkBytes []byte) (*exif.IfdBuilder, error) {
+func newDescriptionIfd(metadataBytes []byte) (*exif.IfdBuilder, error) {
 	ifdMapping, err := exifcommon.NewIfdMappingWithStandard()
 	if err != nil {
 		return nil, fmt.Errorf("amend EXIF: new IFD mapping: %w", err)
@@ -204,7 +221,7 @@ func newDescriptionIfd(watermarkBytes []byte) (*exif.IfdBuilder, error) {
 
 	rootIb := exif.NewIfdBuilder(ifdMapping, tagIndex, identity, exifcommon.EncodeDefaultByteOrder)
 
-	encoded := base64.StdEncoding.EncodeToString(watermarkBytes)
+	encoded := base64.StdEncoding.EncodeToString(metadataBytes)
 	if err := rootIb.SetStandardWithName(ImageDescriptionTag, encoded); err != nil {
 		return nil, fmt.Errorf("amend EXIF: add standard tag: %w", err)
 	}

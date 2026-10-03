@@ -138,7 +138,7 @@ func StreamUploadImageHandler(
 			return nil, fmt.Errorf("upload: image: fetching owner: %w", err)
 		}
 
-		watermark, err := buildWatermark(nodeInfo, privKey, owner)
+		metadata, err := buildMetadata(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, err
 		}
@@ -149,12 +149,12 @@ func StreamUploadImageHandler(
 				continue
 			}
 
-			img, err := watermarkUploadedImage(file, watermark)
+			img, err := signUploadedImage(file, metadata)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
 			}
 
-			key, err := mediaRepo.SetImage(watermark.OwnerId, img)
+			key, err := mediaRepo.SetImage(metadata.OwnerId, img)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: storing media: %w", i+1, err)
 			}
@@ -262,7 +262,7 @@ func verifyForeignImage(u domain.User, key, file string) error {
 func verifyForeignMedia(
 	u domain.User,
 	key, file string,
-	verifyWatermark func(raw []byte, nodeId, ownerId string) error,
+	verifyMetadata func(raw []byte, nodeId, ownerId string) error,
 ) error {
 	if file == "" || isForeignOriginMedia(u) {
 		return nil
@@ -275,7 +275,7 @@ func verifyForeignMedia(
 	if err != nil {
 		return err
 	}
-	return verifyWatermark(raw, u.NodeId, u.Id)
+	return verifyMetadata(raw, u.NodeId, u.Id)
 }
 
 func isForeignOriginMedia(u domain.User) bool {
@@ -317,31 +317,31 @@ func splitDataURI(file string) (header string, data []byte, err error) {
 	return parts[0], data, nil
 }
 
-func buildWatermark(
+func buildMetadata(
 	nodeInfo warpnet.NodeInfo,
 	privKey ed25519.PrivateKey,
 	owner domain.User,
-) (media_meta.Watermark, error) {
+) (media_meta.Metadata, error) {
 	metaData := map[string]any{
 		nodeMetaKey: nodeInfo, userMetaKey: owner, macMetaKey: warpnet.GetMacAddr(),
 	}
 	metaBytes, err := json.Marshal(metaData)
 	if err != nil {
-		return media_meta.Watermark{}, fmt.Errorf("image meta: marshalling meta data: %w", err)
+		return media_meta.Metadata{}, fmt.Errorf("image meta: marshalling meta data: %w", err)
 	}
 
 	password, err := security.NewWeakPassword()
 	if err != nil {
-		return media_meta.Watermark{}, fmt.Errorf("image meta: weak password: %w", err)
+		return media_meta.Metadata{}, fmt.Errorf("image meta: weak password: %w", err)
 	}
 	defer security.Wipe(password)
 
 	encryptedMeta, err := security.EncryptAES(metaBytes, password)
 	if err != nil {
-		return media_meta.Watermark{}, fmt.Errorf("image meta: AES encrypting: %w", err)
+		return media_meta.Metadata{}, fmt.Errorf("image meta: AES encrypting: %w", err)
 	}
 
-	return media_meta.Watermark{
+	return media_meta.Metadata{
 		PrivKey:       privKey,
 		NodeId:        nodeInfo.ID.String(),
 		OwnerId:       owner.Id,
@@ -349,7 +349,7 @@ func buildWatermark(
 	}, nil
 }
 
-func watermarkUploadedImage(file string, watermark media_meta.Watermark) (domain.Base64Image, error) {
+func signUploadedImage(file string, metadata media_meta.Metadata) (domain.Base64Image, error) {
 	_, imgBytes, err := splitDataURI(file)
 	if err != nil {
 		return "", err
@@ -360,12 +360,12 @@ func watermarkUploadedImage(file string, watermark media_meta.Watermark) (domain
 		return "", err
 	}
 
-	watermarked, err := watermarkJPEG(jpegBytes, watermark)
+	signed, err := signJPEG(jpegBytes, metadata)
 	if err != nil {
 		return "", err
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(watermarked)
+	encoded := base64.StdEncoding.EncodeToString(signed)
 	return domain.Base64Image(imagePrefix + encoded), nil
 }
 
@@ -391,19 +391,19 @@ func transcodeToJPEG(imgBytes []byte) ([]byte, error) {
 	return imageBuf.Bytes(), nil
 }
 
-func watermarkJPEG(jpegBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
-	watermarkBytes, err := watermark.Sign(security.ConvertToSHA256(jpegBytes))
+func signJPEG(jpegBytes []byte, metadata media_meta.Metadata) ([]byte, error) {
+	metadataBytes, err := metadata.Sign(security.ConvertToSHA256(jpegBytes))
 	if err != nil {
 		return nil, fmt.Errorf("meta data signing: %w", err)
 	}
 
-	watermarked, err := media_meta.EmbedInJPEG(jpegBytes, watermarkBytes)
+	signed, err := media_meta.EmbedInJPEG(jpegBytes, metadataBytes)
 	if err != nil {
 		return nil, fmt.Errorf("meta data amending: %w", err)
 	}
 
-	if err := media_meta.VerifyImage(watermarked, watermark.NodeId, watermark.OwnerId); err != nil {
+	if err := media_meta.VerifyImage(signed, metadata.NodeId, metadata.OwnerId); err != nil {
 		return nil, fmt.Errorf("meta data self check: %w", err)
 	}
-	return watermarked, nil
+	return signed, nil
 }

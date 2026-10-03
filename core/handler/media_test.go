@@ -53,25 +53,25 @@ func (s signingUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: s.ownerId, NodeId: testSignerID.String()}, nil
 }
 
-func watermarkedImage(t *testing.T, ownerId string) (file, key string) {
+func imageWithMetadata(t *testing.T, ownerId string) (file, key string) {
 	t.Helper()
 
-	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
+	metadata, err := buildMetadata(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	img, err := watermarkUploadedImage(testImagePNG, watermark)
+	img, err := signUploadedImage(testImagePNG, metadata)
 	require.NoError(t, err)
 
 	return string(img), contentKeyOf(string(img))
 }
 
-func watermarkedVideo(t *testing.T, ownerId string) (file, key string) {
+func videoWithMetadata(t *testing.T, ownerId string) (file, key string) {
 	t.Helper()
 
-	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
+	metadata, err := buildMetadata(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	video, err := watermarkUploadedVideo(mp4DataURL(minimalMP4()), watermark)
+	video, err := signUploadedVideo(mp4DataURL(minimalMP4()), metadata)
 	require.NoError(t, err)
 
 	return string(video), contentKeyOf(string(video))
@@ -90,12 +90,12 @@ func rawOf(t *testing.T, dataURL string) []byte {
 }
 
 func TestUploadVideo_ReplacesAnInheritedMetaBox(t *testing.T) {
-	inherited, _ := watermarkedVideo(t, "alice")
+	inherited, _ := videoWithMetadata(t, "alice")
 
-	watermark, err := buildWatermark(signingInformer{"mallory"}.NodeInfo(), testSignerKey, ownerOf("mallory"))
+	metadata, err := buildMetadata(signingInformer{"mallory"}.NodeInfo(), testSignerKey, ownerOf("mallory"))
 	require.NoError(t, err)
 
-	video, err := watermarkUploadedVideo(inherited, watermark)
+	video, err := signUploadedVideo(inherited, metadata)
 	require.NoError(t, err)
 
 	raw := rawOf(t, string(video))
@@ -117,10 +117,10 @@ func TestUploadVideo_HandlesOpenEndedTrailingBox(t *testing.T) {
 		0xAA, 0xBB, 0xCC, 0xDD,
 	}...)
 
-	watermark, err := buildWatermark(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
+	metadata, err := buildMetadata(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
 	require.NoError(t, err)
 
-	video, err := watermarkUploadedVideo(mp4DataURL(openEnded), watermark)
+	video, err := signUploadedVideo(mp4DataURL(openEnded), metadata)
 	require.NoError(t, err)
 
 	assert.NoError(t, media_meta.VerifyVideo(
@@ -128,7 +128,7 @@ func TestUploadVideo_HandlesOpenEndedTrailingBox(t *testing.T) {
 }
 
 func TestVerifyContentKey(t *testing.T) {
-	file, key := watermarkedImage(t, "alice")
+	file, key := imageWithMetadata(t, "alice")
 
 	assert.NoError(t, verifyContentKey(key, file))
 	assert.ErrorIs(t, verifyContentKey(key, file+"tail"), ErrMediaKeyMismatch)
@@ -137,10 +137,10 @@ func TestVerifyContentKey(t *testing.T) {
 }
 
 func TestVerifyForeignMedia(t *testing.T) {
-	file, key := watermarkedImage(t, "alice")
+	file, key := imageWithMetadata(t, "alice")
 	owner := domain.User{Id: "alice", NodeId: testSignerID.String()}
 
-	t.Run("watermarked media of the user who serves it", func(t *testing.T) {
+	t.Run("signed media of the user who serves it", func(t *testing.T) {
 		assert.NoError(t, verifyForeignImage(owner, key, file))
 	})
 
@@ -149,11 +149,11 @@ func TestVerifyForeignMedia(t *testing.T) {
 	})
 
 	t.Run("content that is not what the key names", func(t *testing.T) {
-		other, _ := watermarkedImage(t, "alice")
+		other, _ := imageWithMetadata(t, "alice")
 		assert.ErrorIs(t, verifyForeignImage(owner, key, other+"x"), ErrMediaKeyMismatch)
 	})
 
-	t.Run("media with no watermark", func(t *testing.T) {
+	t.Run("media with no metadata", func(t *testing.T) {
 		plain := imagePrefix + base64.StdEncoding.EncodeToString([]byte("no metadata here"))
 		assert.ErrorIs(t, verifyForeignImage(owner, "avatar", plain), media_meta.ErrNoMetadata)
 	})
@@ -164,12 +164,12 @@ func TestVerifyForeignMedia(t *testing.T) {
 			media_meta.ErrForgedMetadata)
 	})
 
-	t.Run("watermark of another node", func(t *testing.T) {
+	t.Run("metadata of another node", func(t *testing.T) {
 		otherNode := domain.User{Id: "alice", NodeId: remoteNodeID}
 		assert.ErrorIs(t, verifyForeignImage(otherNode, key, file), media_meta.ErrForgedMetadata)
 	})
 
-	t.Run("watermark re-encoded away", func(t *testing.T) {
+	t.Run("metadata re-encoded away", func(t *testing.T) {
 		stripped, err := transcodeToJPEG(rawOf(t, file))
 		require.NoError(t, err)
 
@@ -177,7 +177,7 @@ func TestVerifyForeignMedia(t *testing.T) {
 		assert.ErrorIs(t, verifyForeignImage(owner, "avatar", naked), media_meta.ErrNoMetadata)
 	})
 
-	t.Run("video with no watermark", func(t *testing.T) {
+	t.Run("video with no metadata", func(t *testing.T) {
 		plain := "data:video/mp4;base64," + base64.StdEncoding.EncodeToString(minimalMP4())
 		assert.ErrorIs(t, verifyForeignVideo(
 			domain.User{Id: "alice", NodeId: testSignerID.String()}, "clip", plain),
@@ -201,7 +201,7 @@ func contentKeyOf(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
 }
 
-func TestUpload_StoresNothingWhenTheNodeCannotWatermark(t *testing.T) {
+func TestUpload_StoresNothingWhenTheNodeCannotSign(t *testing.T) {
 	t.Run("image", func(t *testing.T) {
 		repo := newImageRepoDouble()
 

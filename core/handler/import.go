@@ -95,7 +95,7 @@ func StreamImportTweetHandler(
 			return nil, fmt.Errorf("import: fetching owner: %w", err)
 		}
 
-		watermark, err := buildWatermark(nodeInfo, privKey, owner)
+		metadata, err := buildMetadata(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, fmt.Errorf("import: %w", err)
 		}
@@ -106,13 +106,13 @@ func StreamImportTweetHandler(
 			if i >= maxTweetImages {
 				break
 			}
-			photo, err := watermarkUploadedImage(imagePrefix+img, watermark)
+			photo, err := signUploadedImage(imagePrefix+img, metadata)
 			if err != nil {
 				log.Warnf("import: processing photo for tweet %s: %v", ev.Id, err)
 				continue
 			}
 
-			key, err := mediaRepo.SetImage(watermark.OwnerId, photo)
+			key, err := mediaRepo.SetImage(metadata.OwnerId, photo)
 			if err != nil {
 				log.Warnf("import: storing photo for tweet %s: %v", ev.Id, err)
 				continue
