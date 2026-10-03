@@ -87,7 +87,7 @@ func StreamTimelineNewTweetHandler(
 		if ev.Moderation != nil && !ev.Moderation.IsOk {
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
-		if err := validateTweetEvent(ev); err != nil {
+		if err := warpnet.ValidateTweet(ev); err != nil {
 			return nil, err
 		}
 
