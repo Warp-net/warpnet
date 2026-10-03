@@ -50,8 +50,8 @@ import (
 )
 
 const (
-	orderNonceSize = 16
-	sameDayWindow  = 24 * time.Hour
+	orderNonceSize    = 16
+	dailyOrdersWindow = 24 * time.Hour
 )
 
 type SponsoredWallet interface {
@@ -646,19 +646,19 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCount
 		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
-		sameDay, err := orders.CountConfirmed(
-			order.BuyerId, order.CreatedAt.Add(-sameDayWindow), order.CreatedAt.Add(sameDayWindow),
+		dailyOrdersCount, err := orders.CountConfirmed(
+			order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
 		)
 		if err != nil {
 			return nil, err
 		}
 		return event.CopyBuyerResponse{
-			TweetId:       order.TweetId,
-			BuyerId:       order.BuyerId,
-			OrderId:       order.ID(),
-			TxId:          order.TxId,
-			SoldAt:        order.CreatedAt,
-			SameDayOrders: sameDay,
+			TweetId:          order.TweetId,
+			BuyerId:          order.BuyerId,
+			OrderId:          order.ID(),
+			TxId:             order.TxId,
+			SoldAt:           order.CreatedAt,
+			DailyOrdersCount: dailyOrdersCount,
 		}, nil
 	}
 }

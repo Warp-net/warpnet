@@ -259,7 +259,7 @@ describe('TweetBlock sponsored tweet', () => {
       id === 'buyer1' ? { id, username: 'leaker' } : { id, username: 'author', avatar_key: '' });
     warpnetService.getCopyBuyer.mockResolvedValue({
       tweet_id: 't1', buyer_id: 'buyer1', order_id: 'order-hash', tx_id: 'tx1', sold_at: '2026-10-01T12:00:00Z',
-      same_day_orders: 7,
+      daily_orders_count: 7,
     });
     renderTweet({ ...teaser(), text: 'my paid words' });
 

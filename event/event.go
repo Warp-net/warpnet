@@ -1042,12 +1042,12 @@ type GetCopyBuyerEvent struct {
 
 // CopyBuyerResponse defines model for CopyBuyerResponse.
 type CopyBuyerResponse struct {
-	TweetId       domain.ID `json:"tweet_id"`
-	BuyerId       domain.ID `json:"buyer_id"`
-	OrderId       string    `json:"order_id"`
-	TxId          string    `json:"tx_id"`
-	SoldAt        time.Time `json:"sold_at"`
-	SameDayOrders int       `json:"same_day_orders"`
+	TweetId          domain.ID `json:"tweet_id"`
+	BuyerId          domain.ID `json:"buyer_id"`
+	OrderId          string    `json:"order_id"`
+	TxId             string    `json:"tx_id"`
+	SoldAt           time.Time `json:"sold_at"`
+	DailyOrdersCount int       `json:"daily_orders_count"`
 }
 
 // OrderQuoteStep defines model for OrderQuoteStep.

@@ -573,7 +573,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
 	traceBuyer := StreamGetCopyBuyerHandler(testSignerKey, orders)
 	want := event.CopyBuyerResponse{
-		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, SameDayOrders: 2,
+		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, DailyOrdersCount: 2,
 	}
 
 	getImage := StreamGetSponsoredImageHandler(streamer, testSignerKey, media, copies, users)
