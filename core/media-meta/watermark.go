@@ -39,28 +39,28 @@ import (
 )
 
 const (
-	labelFontDivisor = 24
-	labelMinFontSize = 12
-	labelMaxFontSize = 320
-	labelDPI         = 72
+	watermarkFontDivisor = 24
+	watermarkMinFontSize = 12
+	watermarkMaxFontSize = 320
+	watermarkDPI         = 72
 
 	rotateCos = 58618
 	rotateSin = 29309
 
-	ErrBadLabel warpnet.WarpError = "copy label is not a grayscale mask"
+	ErrBadWatermark warpnet.WarpError = "copy watermark is not a grayscale mask"
 )
 
 var (
-	labelColor  = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x55}
-	labelShadow = color.NRGBA{A: 0x44}
+	watermarkColor  = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0x55}
+	watermarkShadow = color.NRGBA{A: 0x44}
 )
 
-func LabelPNG(jpegBytes []byte, text string) ([]byte, error) {
+func WatermarkPNG(jpegBytes []byte, text string) ([]byte, error) {
 	config, err := jpeg.DecodeConfig(bytes.NewReader(jpegBytes))
 	if err != nil {
 		return nil, err
 	}
-	mask, err := textMask(text, labelFontSize(image.Pt(config.Width, config.Height)))
+	mask, err := textMask(text, watermarkFontSize(image.Pt(config.Width, config.Height)))
 	if err != nil {
 		return nil, err
 	}
@@ -71,22 +71,22 @@ func LabelPNG(jpegBytes []byte, text string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func DrawLabels(jpegBytes, label []byte) ([]byte, error) {
+func DrawWatermark(jpegBytes, watermark []byte) ([]byte, error) {
 	src, err := jpeg.Decode(bytes.NewReader(jpegBytes))
 	if err != nil {
 		return nil, err
 	}
-	decoded, err := png.Decode(bytes.NewReader(label))
+	decoded, err := png.Decode(bytes.NewReader(watermark))
 	if err != nil {
 		return nil, err
 	}
 	gray, ok := decoded.(*image.Gray)
 	if !ok {
-		return nil, ErrBadLabel
+		return nil, ErrBadWatermark
 	}
 	mask := rotate(&image.Alpha{Pix: gray.Pix, Stride: gray.Stride, Rect: gray.Rect})
 	bounds := src.Bounds()
-	fontSize := labelFontSize(bounds.Size())
+	fontSize := watermarkFontSize(bounds.Size())
 
 	canvas := image.NewRGBA(bounds)
 	draw.Draw(canvas, bounds, src, bounds.Min, draw.Src)
@@ -100,8 +100,8 @@ func DrawLabels(jpegBytes, label []byte) ([]byte, error) {
 		for j := -reach; j <= reach; j++ {
 			at := bounds.Min.Add(along.Mul(i)).Add(across.Mul(j))
 			place := image.Rectangle{Min: at, Max: at.Add(size)}
-			draw.DrawMask(canvas, place.Add(shadow), image.NewUniform(labelShadow), image.Point{}, mask, image.Point{}, draw.Over)
-			draw.DrawMask(canvas, place, image.NewUniform(labelColor), image.Point{}, mask, image.Point{}, draw.Over)
+			draw.DrawMask(canvas, place.Add(shadow), image.NewUniform(watermarkShadow), image.Point{}, mask, image.Point{}, draw.Over)
+			draw.DrawMask(canvas, place, image.NewUniform(watermarkColor), image.Point{}, mask, image.Point{}, draw.Over)
 		}
 	}
 
@@ -112,8 +112,8 @@ func DrawLabels(jpegBytes, label []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func labelFontSize(size image.Point) int {
-	return min(max(min(size.X, size.Y)/labelFontDivisor, labelMinFontSize), labelMaxFontSize)
+func watermarkFontSize(size image.Point) int {
+	return min(max(min(size.X, size.Y)/watermarkFontDivisor, watermarkMinFontSize), watermarkMaxFontSize)
 }
 
 func textMask(text string, fontSize int) (*image.Alpha, error) {
@@ -121,7 +121,7 @@ func textMask(text string, fontSize int) (*image.Alpha, error) {
 	if err != nil {
 		return nil, err
 	}
-	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{Size: float64(fontSize), DPI: labelDPI})
+	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{Size: float64(fontSize), DPI: watermarkDPI})
 	if err != nil {
 		return nil, err
 	}

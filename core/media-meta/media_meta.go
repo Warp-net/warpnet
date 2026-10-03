@@ -48,7 +48,7 @@ const (
 	ErrNoOrder           warpnet.WarpError = "media carries no order"
 )
 
-type signedWatermark struct {
+type signedMetadata struct {
 	Version        uint8     `json:"version"`
 	CreatedAt      time.Time `json:"created_at"`
 	EncryptedMeta  []byte    `json:"encrypted_meta"`
@@ -56,36 +56,36 @@ type signedWatermark struct {
 	EncryptedOrder []byte    `json:"encrypted_order,omitempty"`
 }
 
-type Watermark struct {
+type Metadata struct {
 	PrivKey       ed25519.PrivateKey
 	NodeId        string
 	OwnerId       string
 	EncryptedMeta []byte
 }
 
-func (w Watermark) Sign(rawHash []byte) ([]byte, error) {
-	return w.signAt(rawHash, time.Now().UTC())
+func (m Metadata) Sign(rawHash []byte) ([]byte, error) {
+	return m.signAt(rawHash, time.Now().UTC())
 }
 
-func (w Watermark) signAt(rawHash []byte, createdAt time.Time) ([]byte, error) {
-	if err := w.validate(); err != nil {
+func (m Metadata) signAt(rawHash []byte, createdAt time.Time) ([]byte, error) {
+	if err := m.validate(); err != nil {
 		return nil, err
 	}
 
-	signed := signedWatermark{
+	signed := signedMetadata{
 		Version:       metaVersion,
 		CreatedAt:     createdAt,
-		EncryptedMeta: w.EncryptedMeta,
+		EncryptedMeta: m.EncryptedMeta,
 	}
 	signed.Signature = security.Sign(
-		w.PrivKey,
-		signingBytes(signed.Version, signed.CreatedAt, w.NodeId, w.OwnerId, rawHash, signed.EncryptedMeta),
+		m.PrivKey,
+		signingBytes(signed.Version, signed.CreatedAt, m.NodeId, m.OwnerId, rawHash, signed.EncryptedMeta),
 	)
 	return json.Marshal(signed)
 }
 
-func verify(watermarkBytes, rawHash []byte, nodeId, ownerId string) error {
-	signed, err := parseSignedWatermark(watermarkBytes)
+func verify(metadataBytes, rawHash []byte, nodeId, ownerId string) error {
+	signed, err := parseSignedMetadata(metadataBytes)
 	if err != nil {
 		return err
 	}
@@ -106,11 +106,11 @@ func verify(watermarkBytes, rawHash []byte, nodeId, ownerId string) error {
 }
 
 func ExtractOrder(b []byte) ([]byte, error) {
-	watermarkBytes, err := extractWatermark(b)
+	metadataBytes, err := extractMetadata(b)
 	if err != nil {
 		return nil, err
 	}
-	signed, err := parseSignedWatermark(watermarkBytes)
+	signed, err := parseSignedMetadata(metadataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -120,16 +120,16 @@ func ExtractOrder(b []byte) ([]byte, error) {
 	return signed.EncryptedOrder, nil
 }
 
-func extractWatermark(b []byte) ([]byte, error) {
+func extractMetadata(b []byte) ([]byte, error) {
 	if !IsISOBaseMediaFile(b) {
 		return extractFromJPEG(b)
 	}
-	_, watermarkBytes, err := SplitVideo(b)
-	return watermarkBytes, err
+	_, metadataBytes, err := SplitVideo(b)
+	return metadataBytes, err
 }
 
-func addOrder(watermarkBytes, encryptedOrder []byte) ([]byte, error) {
-	signed, err := parseSignedWatermark(watermarkBytes)
+func addOrder(metadataBytes, encryptedOrder []byte) ([]byte, error) {
+	signed, err := parseSignedMetadata(metadataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +137,8 @@ func addOrder(watermarkBytes, encryptedOrder []byte) ([]byte, error) {
 	return json.Marshal(signed)
 }
 
-func parseSignedWatermark(b []byte) (signedWatermark, error) {
-	var signed signedWatermark
+func parseSignedMetadata(b []byte) (signedMetadata, error) {
+	var signed signedMetadata
 	if len(b) == 0 {
 		return signed, ErrNoMetadata
 	}
@@ -168,11 +168,11 @@ func signingBytes(
 	}, "\x00"))
 }
 
-func (w Watermark) validate() error {
-	if len(w.PrivKey) != ed25519.PrivateKeySize {
+func (m Metadata) validate() error {
+	if len(m.PrivKey) != ed25519.PrivateKeySize {
 		return ErrNoSigningKey
 	}
-	if w.NodeId == "" || w.OwnerId == "" {
+	if m.NodeId == "" || m.OwnerId == "" {
 		return ErrNoSigningIdentity
 	}
 	return nil
