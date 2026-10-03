@@ -1,5 +1,4 @@
 core/moderation/binding/go-llama.cpp/** linguist-detectable=false
-vendor/** linguist-detectable=false
 docs/** linguist-detectable=false
 
 *.c linguist-detectable=false
