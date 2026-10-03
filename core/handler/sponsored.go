@@ -454,20 +454,27 @@ func StreamGetSponsoredTweetHandler(
 
 		owner := auth.GetOwner()
 		isOwn := isOwnRequest(s, streamer.NodeInfo())
+		if ev.UserId == owner.UserId && isOwn {
+			return tweetRepo.Get(owner.UserId, ev.TweetId)
+		}
 		if ev.UserId == owner.UserId {
+			buyer, err := findRequester(s, userRepo)
+			if err != nil {
+				return nil, err
+			}
+			order, err := orders.Get(ev.TweetId, buyer.Id)
+			if err != nil && !errors.Is(err, database.ErrOrderNotFound) {
+				return nil, err
+			}
+			if !order.Confirmed {
+				return domain.Tweet{}, nil
+			}
 			tweet, err := tweetRepo.Get(owner.UserId, ev.TweetId)
 			if err != nil {
 				return nil, err
 			}
-			if isOwn {
-				return tweet, nil
-			}
-			buyer, order, isPaid := paidOrder(s, userRepo, orders, ev.TweetId)
-			if !isPaid {
-				return domain.Tweet{}, nil
-			}
 			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
-			return buyerTweet(signer, mediaRepo, copyRepo, tweet, buyer, order)
+			return copyTweetMedia(signer, mediaRepo, copyRepo, tweet, buyer, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -520,24 +527,14 @@ func StreamGetSponsoredTweetHandler(
 	}
 }
 
-func paidOrder(
-	s warpnet.WarpStream,
-	userRepo SponsoredUserFetcher,
-	orders OrderStorer,
-	tweetId string,
-) (domain.User, domain.Order, bool) {
+func findRequester(s warpnet.WarpStream, userRepo SponsoredUserFetcher) (domain.User, error) {
 	if s == nil || s.Conn() == nil {
-		return domain.User{}, domain.Order{}, false
+		return domain.User{}, database.ErrUserNotFound
 	}
-	buyer, err := userRepo.GetByNodeID(s.Conn().RemotePeer().String())
-	if err != nil {
-		return domain.User{}, domain.Order{}, false
-	}
-	order, err := orders.Get(tweetId, buyer.Id)
-	return buyer, order, err == nil && order.Confirmed
+	return userRepo.GetByNodeID(s.Conn().RemotePeer().String())
 }
 
-func buyerTweet(
+func copyTweetMedia(
 	signer media_meta.Metadata,
 	mediaRepo SponsoredMediaStorer,
 	copyRepo SponsoredCopyStorer,
@@ -570,8 +567,12 @@ func buyerTweet(
 			return domain.Tweet{}, err
 		}
 		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark}
-		copyKey, err := newCopy(copyRepo, tweet.UserId, string(img), c, imageMarker(c, signer))
+		copied, err := buildImageCopy(string(img), c, signer)
 		if err != nil {
+			return domain.Tweet{}, err
+		}
+		copyKey := contentKey(copied)
+		if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
 			return domain.Tweet{}, err
 		}
 		imageKeys = append(imageKeys, copyKey)
@@ -586,26 +587,16 @@ func buyerTweet(
 		return domain.Tweet{}, err
 	}
 	c := domain.MediaCopy{OriginalKey: *tweet.VideoKey, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder}
-	copyKey, err := newCopy(copyRepo, tweet.UserId, string(video), c, media_meta.EmbedOrderInVideo)
+	copied, err := buildVideoCopy(string(video), c)
 	if err != nil {
+		return domain.Tweet{}, err
+	}
+	copyKey := contentKey(copied)
+	if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
 		return domain.Tweet{}, err
 	}
 	tweet.VideoKey = &copyKey
 	return tweet, nil
-}
-
-func newCopy(
-	copyRepo SponsoredCopyStorer,
-	userId, file string,
-	c domain.MediaCopy,
-	mark func(raw, encryptedOrder []byte) ([]byte, error),
-) (string, error) {
-	copyFile, err := markFile(file, c.EncryptedOrder, mark)
-	if err != nil {
-		return "", err
-	}
-	copyKey := contentKey(copyFile)
-	return copyKey, copyRepo.SetCopy(userId, copyKey, c)
 }
 
 func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey) warpnet.WarpHandlerFunc {
