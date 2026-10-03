@@ -9,10 +9,12 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
@@ -522,4 +524,28 @@ func TestRestampJPEG_SignsTheRedrawnPixels(t *testing.T) {
 func TestRestampJPEG_RefusesUnstampedOriginal(t *testing.T) {
 	_, err := watermark("alice").RestampJPEG(testJPEG(t, 0x40), testJPEG(t, 0xc0))
 	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestAddRecipient_RebuildsTheSameBytesEverywhere(t *testing.T) {
+	stamp := func(raw []byte) []byte {
+		block, err := watermark("alice").signAt(security.ConvertToSHA256(raw), time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC))
+		require.NoError(t, err)
+		return block
+	}
+	key := func(b []byte) string {
+		return hex.EncodeToString(security.ConvertToSHA256(b))
+	}
+
+	plain := testJPEG(t, 0x40)
+	photo, err := EmbedInJPEG(plain, stamp(plain))
+	require.NoError(t, err)
+	copied, err := AddRecipientToJPEG(photo, []byte("sealed for bob"))
+	require.NoError(t, err)
+	assert.Equal(t, "9f641be89a4b6bf329869c469738b6111f49ac2230f8a7cdba6af4dd7c13d7c8", key(copied), "an image copy is rebuilt on request, so its bytes and key must never drift")
+
+	video, err := EmbedInVideo(minimalMP4(), stamp(minimalMP4()))
+	require.NoError(t, err)
+	copied, err = AddRecipientToVideo(video, []byte("sealed for bob"))
+	require.NoError(t, err)
+	assert.Equal(t, "7b7a61cb6a343868e32bf68ad66dd6a8903018b14e5541d666358638e8e24149", key(copied), "a video copy is rebuilt on request, so its bytes and key must never drift")
 }
