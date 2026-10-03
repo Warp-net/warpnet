@@ -226,7 +226,7 @@ func (repo *MediaRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
-	if userId == "" || key == "" || c.Original == "" {
+	if userId == "" || key == "" || c.OriginalKey == "" {
 		return local_store.DBError("no data for copy set")
 	}
 
