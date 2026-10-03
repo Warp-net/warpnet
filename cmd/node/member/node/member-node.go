@@ -774,7 +774,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_BUYER,
-			handler.StreamGetSponsoredBuyerHandler(m.privKey, r.orderRepo),
+			handler.StreamGetCopyBuyerHandler(m.privKey, r.orderRepo),
 		},
 	}
 }
