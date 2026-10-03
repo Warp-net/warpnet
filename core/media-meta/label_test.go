@@ -1,16 +1,19 @@
+// Copyright 2025 Vadim Filin
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //nolint:all
-package handler
+package media_meta
 
 import (
 	"bytes"
-	"encoding/base64"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
 	"testing"
 
-	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,10 +44,10 @@ func markedShare(img image.Image, r image.Rectangle, gray uint8) float64 {
 func TestDrawLabels_CoversEveryQuarter(t *testing.T) {
 	size := image.Pt(640, 480)
 	plain := uniformJPEG(t, size, 0x80)
-	label, err := labelPNG(imagePrefix+base64.StdEncoding.EncodeToString(plain), "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
+	label, err := LabelPNG(plain, "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
 	require.NoError(t, err)
 
-	drawn, err := drawLabels(plain, label)
+	drawn, err := DrawLabels(plain, label)
 	require.NoError(t, err)
 	img, err := jpeg.Decode(bytes.NewReader(drawn))
 	require.NoError(t, err)
@@ -66,20 +69,15 @@ func TestDrawLabels_IsTheSameOnEveryMachine(t *testing.T) {
 	var mask bytes.Buffer
 	require.NoError(t, png.Encode(&mask, stripes))
 
-	drawn, err := drawLabels(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes())
+	drawn, err := DrawLabels(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes())
 	require.NoError(t, err)
-	assert.Equal(t, "cdb205bda3e1f47e0aaf28795210512368c8044569dd1aa837a1c50f7f7a41a3", contentKeyOf(string(drawn)), "a copy is rebuilt on request, so its bytes and key must never drift")
+	assert.Equal(t, "cdb205bda3e1f47e0aaf28795210512368c8044569dd1aa837a1c50f7f7a41a3", hex.EncodeToString(security.ConvertToSHA256(drawn)), "a copy is rebuilt on request, so its bytes and key must never drift")
 }
 
 func TestDrawLabels_RefusesAColourLabel(t *testing.T) {
 	var colour bytes.Buffer
 	require.NoError(t, png.Encode(&colour, image.NewRGBA(image.Rect(0, 0, 4, 4))))
 
-	_, err := drawLabels(uniformJPEG(t, image.Pt(32, 32), 0x30), colour.Bytes())
+	_, err := DrawLabels(uniformJPEG(t, image.Pt(32, 32), 0x30), colour.Bytes())
 	assert.ErrorIs(t, err, ErrBadLabel)
-}
-
-func TestBuyerLabel(t *testing.T) {
-	assert.Equal(t, "@leaker · buyer-1", buyerLabel(domain.User{Id: "buyer-1", Username: "leaker"}))
-	assert.Equal(t, "buyer-1", buyerLabel(domain.User{Id: "buyer-1"}))
 }
