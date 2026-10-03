@@ -248,11 +248,11 @@ func markFile(
 }
 
 func imageMarker(c domain.MediaCopy, signer media_meta.Metadata) func(raw, encryptedOrder []byte) ([]byte, error) {
-	if len(c.Label) == 0 {
+	if len(c.Watermark) == 0 {
 		return media_meta.EmbedOrderInJPEG
 	}
 	return func(raw, encryptedOrder []byte) ([]byte, error) {
-		redrawn, err := media_meta.DrawLabels(raw, c.Label)
+		redrawn, err := media_meta.DrawWatermark(raw, c.Watermark)
 		if err != nil {
 			return nil, err
 		}

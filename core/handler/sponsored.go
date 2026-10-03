@@ -554,7 +554,7 @@ func buyerTweet(
 		return domain.Tweet{}, err
 	}
 
-	labelText := "@" + buyer.Username + " · " + buyer.Id
+	watermarkText := "@" + buyer.Username + " · " + buyer.Id
 	imageKeys := make([]string, 0, len(tweet.ImageKeys))
 	for _, key := range tweet.ImageKeys {
 		img, err := mediaRepo.GetImage(tweet.UserId, key)
@@ -565,11 +565,11 @@ func buyerTweet(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		label, err := media_meta.LabelPNG(raw, labelText)
+		watermark, err := media_meta.WatermarkPNG(raw, watermarkText)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Label: label}
+		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark}
 		copyKey, err := newCopy(copyRepo, tweet.UserId, string(img), c, imageMarker(c, signer))
 		if err != nil {
 			return domain.Tweet{}, err

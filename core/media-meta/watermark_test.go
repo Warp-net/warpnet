@@ -41,13 +41,13 @@ func markedShare(img image.Image, r image.Rectangle, gray uint8) float64 {
 	return float64(marked) / float64(r.Dx()*r.Dy())
 }
 
-func TestDrawLabels_CoversEveryQuarter(t *testing.T) {
+func TestDrawWatermark_CoversEveryQuarter(t *testing.T) {
 	size := image.Pt(640, 480)
 	plain := uniformJPEG(t, size, 0x80)
-	label, err := LabelPNG(plain, "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
+	watermark, err := WatermarkPNG(plain, "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
 	require.NoError(t, err)
 
-	drawn, err := DrawLabels(plain, label)
+	drawn, err := DrawWatermark(plain, watermark)
 	require.NoError(t, err)
 	img, err := jpeg.Decode(bytes.NewReader(drawn))
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestDrawLabels_CoversEveryQuarter(t *testing.T) {
 	}
 }
 
-func TestDrawLabels_IsTheSameOnEveryMachine(t *testing.T) {
+func TestDrawWatermark_IsTheSameOnEveryMachine(t *testing.T) {
 	stripes := image.NewGray(image.Rect(0, 0, 120, 16))
 	for i := range stripes.Pix {
 		stripes.Pix[i] = uint8(i * 37)
@@ -69,15 +69,15 @@ func TestDrawLabels_IsTheSameOnEveryMachine(t *testing.T) {
 	var mask bytes.Buffer
 	require.NoError(t, png.Encode(&mask, stripes))
 
-	drawn, err := DrawLabels(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes())
+	drawn, err := DrawWatermark(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes())
 	require.NoError(t, err)
 	assert.Equal(t, "cdb205bda3e1f47e0aaf28795210512368c8044569dd1aa837a1c50f7f7a41a3", hex.EncodeToString(security.ConvertToSHA256(drawn)), "a copy is rebuilt on request, so its bytes and key must never drift")
 }
 
-func TestDrawLabels_RefusesAColourLabel(t *testing.T) {
+func TestDrawWatermark_RefusesAColourMask(t *testing.T) {
 	var colour bytes.Buffer
 	require.NoError(t, png.Encode(&colour, image.NewRGBA(image.Rect(0, 0, 4, 4))))
 
-	_, err := DrawLabels(uniformJPEG(t, image.Pt(32, 32), 0x30), colour.Bytes())
-	assert.ErrorIs(t, err, ErrBadLabel)
+	_, err := DrawWatermark(uniformJPEG(t, image.Pt(32, 32), 0x30), colour.Bytes())
+	assert.ErrorIs(t, err, ErrBadWatermark)
 }
