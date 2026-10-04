@@ -113,6 +113,7 @@ type WalletProvider interface {
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
 	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
+	IsAvailable(ctx context.Context) bool
 	Token() string
 	Decimals() uint8
 	Network() string
@@ -166,6 +167,7 @@ type OrderProvider interface {
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+	Delete(tweetId, buyerId string) error
 }
 
 type UserProvider interface {

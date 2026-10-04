@@ -88,6 +88,21 @@ func (s *OrderRepoTestSuite) TestGetIsPerBuyer() {
 	s.ErrorIs(err, ErrOrderNotFound)
 }
 
+func (s *OrderRepoTestSuite) TestDelete() {
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t6", BuyerId: "d1", Nonce: "n6"}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t6", BuyerId: "d2", Nonce: "n7"}))
+
+	s.Require().NoError(s.repo.Delete("t6", "d1"))
+	_, err := s.repo.Get("t6", "d1")
+	s.ErrorIs(err, ErrOrderNotFound)
+	_, err = s.repo.Get("t6", "d2")
+	s.NoError(err, "another buyer's order stays")
+
+	s.NoError(s.repo.Delete("t6", "d1"), "a missing order is already deleted")
+	s.Error(s.repo.Delete("", "d1"))
+	s.Error(s.repo.Delete("t6", ""))
+}
+
 func (s *OrderRepoTestSuite) TestEmptyValidation() {
 	s.Error(s.repo.Save(domain.Order{BuyerId: "b1"}))
 	s.Error(s.repo.Save(domain.Order{TweetId: "t1"}))

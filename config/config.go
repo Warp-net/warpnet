@@ -96,10 +96,10 @@ func init() {
 	if network == "mainnet" {
 		network = warpnetNetwork
 	}
-	if network == warpnetNetwork {
+	if network == warpnetNetwork && len(bootstrapAddrList) == 0 {
 		bootstrapAddrList = append(bootstrapAddrList, warpnetBootstrapNodes...)
 	}
-	if network == testNetNetwork {
+	if network == testNetNetwork && len(bootstrapAddrList) == 0 {
 		bootstrapAddrList = append(bootstrapAddrList, testnetBootstrapNodes...)
 	}
 
