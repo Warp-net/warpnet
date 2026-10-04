@@ -58,6 +58,10 @@ const (
 	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so it is not sent again; check the wallet history"
 )
 
+type SponsoredAuthStorer interface {
+	GetOwner() domain.Owner
+}
+
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
@@ -105,16 +109,11 @@ type SponsoredMediaStorer interface {
 }
 
 type SponsoredCopyStorer interface {
-	GetCopy(userId, key string) (domain.MediaCopy, error)
 	SetCopy(userId, key string, c domain.MediaCopy) error
-	GetImage(userId, key string) (domain.Base64Image, error)
-	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
-	GetVideo(userId, key string) (domain.Base64Video, error)
-	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
 
 func StreamNewOrderHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	orders OrderStorer,
@@ -198,7 +197,7 @@ func payAuthor(
 		CreatedAt: time.Now(),
 	}
 
-	seed, err := walletSeed(owner, identityKey, backend.Network())
+	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 	if err != nil {
 		return domain.Order{}, err
 	}
@@ -259,7 +258,7 @@ func tweetSponsorship(
 }
 
 func StreamGetOrderQuoteHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	userRepo SponsoredUserFetcher,
@@ -289,7 +288,7 @@ func StreamGetOrderQuoteHandler(
 		if err != nil {
 			return nil, err
 		}
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -390,7 +389,7 @@ func claimOrder(
 }
 
 func StreamVerifyOrderHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	tweetRepo SponsoredTweetFetcher,
@@ -454,7 +453,7 @@ func StreamVerifyOrderHandler(
 			TxId:      ev.TxId,
 			CreatedAt: time.Now(),
 		}
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -487,7 +486,7 @@ func StreamVerifyOrderHandler(
 }
 
 func StreamGetSponsoredTweetHandler(
-	auth OwnerTweetStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
@@ -509,7 +508,7 @@ func StreamGetSponsoredTweetHandler(
 		}
 
 		owner := auth.GetOwner()
-		isOwn := isOwnRequest(s, streamer.NodeInfo())
+		isOwn := warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil
 		if ev.UserId == owner.UserId && isOwn {
 			return tweetRepo.Get(owner.UserId, ev.TweetId)
 		}
@@ -617,7 +616,7 @@ func copyTweetMedia(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		_, raw, err := splitDataURI(string(img))
+		_, raw, err := media_meta.SplitDataURI(string(img))
 		if err != nil {
 			return domain.Tweet{}, err
 		}
@@ -626,11 +625,11 @@ func copyTweetMedia(
 			return domain.Tweet{}, err
 		}
 		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark}
-		copied, err := buildImageCopy(string(img), c, signer)
+		copied, err := media_meta.BuildImageCopy(string(img), c, signer)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		copyKey := contentKey(copied)
+		copyKey := media_meta.BuildContentKey(copied)
 		if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
 			return domain.Tweet{}, err
 		}
@@ -646,11 +645,11 @@ func copyTweetMedia(
 		return domain.Tweet{}, err
 	}
 	c := domain.MediaCopy{OriginalKey: *tweet.VideoKey, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder}
-	copied, err := buildVideoCopy(string(video), c)
+	copied, err := media_meta.BuildVideoCopy(string(video), c)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
-	copyKey := contentKey(copied)
+	copyKey := media_meta.BuildContentKey(copied)
 	if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
 		return domain.Tweet{}, err
 	}
@@ -682,7 +681,7 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCount
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		_, raw, err := splitDataURI(ev.File)
+		_, raw, err := media_meta.SplitDataURI(ev.File)
 		if err != nil {
 			return nil, err
 		}

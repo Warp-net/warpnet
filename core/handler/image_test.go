@@ -259,7 +259,7 @@ func assertSealedMediaMeta(t *testing.T, sealed []byte) {
 	assert.NotEqual(t, make([]byte, metaSaltSize), salt, "salt must be random, not all-zero")
 	assert.NotEqual(t, make([]byte, metaNonceSize), nonce, "nonce must be random, not all-zero")
 
-	for _, marker := range []string{nodeMetaKey, userMetaKey, macMetaKey} {
+	for _, marker := range []string{"node", "user", "MAC"} {
 		assert.False(t, bytes.Contains(sealed, []byte(marker)),
 			"plaintext marker %q must not survive sealing", marker)
 	}
@@ -293,7 +293,7 @@ func readExifMeta(t *testing.T, data []byte) []byte {
 }
 
 func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
-	metadata, err := buildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
+	metadata, err := media_meta.BuildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
 	meta := metadata.EncryptedMeta
 
@@ -319,11 +319,11 @@ func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
 }
 
 func TestMediaMeta_EachUploadSealsAfresh(t *testing.T) {
-	firstMetadata, err := buildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
+	firstMetadata, err := media_meta.BuildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
 	first := firstMetadata.EncryptedMeta
 
-	secondMetadata, err := buildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
+	secondMetadata, err := media_meta.BuildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
 	second := secondMetadata.EncryptedMeta
 

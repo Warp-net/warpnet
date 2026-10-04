@@ -190,7 +190,7 @@ func TestGetChatImage_EmptyKey(t *testing.T) {
 		mustJSON(t, event.GetImageEvent{UserId: ownerID}),
 		streamFrom(warpnet.FromStringToPeerID(selfNodeID)),
 	)
-	assert.ErrorIs(t, err, ErrEmptyImageKey)
+	assert.ErrorIs(t, err, ErrEmptyChatImageKey)
 }
 
 func TestGetChatImage_InvalidPayload(t *testing.T) {

@@ -30,7 +30,6 @@ package handler
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -44,7 +43,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/Warp-net/warpnet/security"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	log "github.com/sirupsen/logrus"
 )
@@ -72,7 +70,7 @@ type WalletBackend interface {
 
 func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +112,7 @@ func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateK
 
 func StreamGetOwnWalletAddressHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +146,7 @@ func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.Private
 		if err != nil {
 			return nil, err
 		}
-		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +165,7 @@ func StreamGetWalletHistoryHandler(auth WalletOwnerStorer, identityKey ed25519.P
 		if len(buf) > 0 {
 			_ = json.Unmarshal(buf, &ev)
 		}
-		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +202,7 @@ func StreamGetWalletHistoryHandler(auth WalletOwnerStorer, identityKey ed25519.P
 
 func StreamGetWalletKeyHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
-		seed, err := walletSeed(auth.GetOwner(), identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -268,7 +266,7 @@ func StreamGetWalletAddressHandler(
 			return nil, ErrOrderLimit
 		}
 		owner := auth.GetOwner()
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -317,7 +315,7 @@ func StreamGetWalletContactsHandler(
 			_ = json.Unmarshal(buf, &ev)
 		}
 		owner := auth.GetOwner()
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -505,16 +503,4 @@ func walletAsset(asset string, backend WalletBackend) (string, error) {
 		}
 	}
 	return "", warpnet.WarpError("wallet: unknown asset " + asset)
-}
-
-func walletSeed(owner domain.Owner, identityKey ed25519.PrivateKey, network string) (string, error) {
-	if owner.Username == "" {
-		return "", warpnet.WarpError("wallet: no owner in session")
-	}
-	if len(identityKey) == 0 {
-		return "", warpnet.WarpError("wallet: no identity key in session")
-	}
-	raw := security.DeriveWalletSeed(identityKey, network, owner.Username)
-	defer security.Wipe(raw)
-	return hex.EncodeToString(raw), nil
 }

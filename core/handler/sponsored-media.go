@@ -29,12 +29,12 @@ package handler
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	"errors"
 	"fmt"
 
 	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/media-meta"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -42,12 +42,40 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	ErrEmptySponsoredImageKey warpnet.WarpError = "empty image key"
+	ErrEmptySponsoredVideoKey warpnet.WarpError = "empty video key"
+)
+
+type SponsoredMediaStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
+type SponsoredMediaFetcher interface {
+	GetImage(userId, key string) (domain.Base64Image, error)
+	GetVideo(userId, key string) (domain.Base64Video, error)
+}
+
+type SponsoredMediaCopyStorer interface {
+	GetCopy(userId, key string) (domain.MediaCopy, error)
+	GetImage(userId, key string) (domain.Base64Image, error)
+	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
+	GetVideo(userId, key string) (domain.Base64Video, error)
+	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+}
+
+type SponsoredMediaUserFetcher interface {
+	Get(userId string) (domain.User, error)
+	Create(user domain.User) (domain.User, error)
+}
+
 func StreamGetSponsoredImageHandler(
-	streamer SponsoredStreamer,
+	streamer SponsoredMediaStreamer,
 	identityKey ed25519.PrivateKey,
-	mediaRepo SponsoredMediaStorer,
-	copyRepo SponsoredCopyStorer,
-	userRepo SponsoredUserFetcher,
+	mediaRepo SponsoredMediaFetcher,
+	copyRepo SponsoredMediaCopyStorer,
+	userRepo SponsoredMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
@@ -55,7 +83,7 @@ func StreamGetSponsoredImageHandler(
 			return nil, fmt.Errorf("get sponsored image: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get sponsored image: %w", ErrEmptyImageKey)
+			return nil, fmt.Errorf("get sponsored image: %w", ErrEmptySponsoredImageKey)
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -77,14 +105,15 @@ func StreamGetSponsoredImageHandler(
 				return nil, fmt.Errorf("get sponsored image: fetching original: %w", err)
 			}
 			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
-			img, err := buildImageCopy(string(original), c, signer)
+			img, err := media_meta.BuildImageCopy(string(original), c, signer)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored image: building copy: %w", err)
 			}
 			return event.GetImageResponse{File: img}, nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetImageResponse{File: ""}, nil
 		}
 
@@ -113,7 +142,7 @@ func StreamGetSponsoredImageHandler(
 			return nil, fmt.Errorf("get sponsored image: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
+		if err := media_meta.VerifyForeignImage(u, ev.Key, imgResp.File); err != nil {
 			log.Warnf("get sponsored image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
@@ -131,10 +160,10 @@ func StreamGetSponsoredImageHandler(
 }
 
 func StreamGetSponsoredVideoHandler(
-	streamer SponsoredStreamer,
-	mediaRepo SponsoredMediaStorer,
-	copyRepo SponsoredCopyStorer,
-	userRepo SponsoredUserFetcher,
+	streamer SponsoredMediaStreamer,
+	mediaRepo SponsoredMediaFetcher,
+	copyRepo SponsoredMediaCopyStorer,
+	userRepo SponsoredMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetVideoEvent
@@ -142,7 +171,7 @@ func StreamGetSponsoredVideoHandler(
 			return nil, fmt.Errorf("get sponsored video: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get sponsored video: %w", ErrEmptyVideoKey)
+			return nil, fmt.Errorf("get sponsored video: %w", ErrEmptySponsoredVideoKey)
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -163,19 +192,20 @@ func StreamGetSponsoredVideoHandler(
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: fetching original: %w", err)
 			}
-			video, err := buildVideoCopy(string(original), c)
+			video, err := media_meta.BuildVideoCopy(string(original), c)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: building copy: %w", err)
 			}
-			return newVideoResponse(domain.Base64Video(video), ev.Deferred), nil
+			return buildSponsoredVideoResponse(domain.Base64Video(video), ev.Deferred), nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetVideoResponse{File: ""}, nil
 		}
 
 		if stored, err := copyRepo.GetVideo(ev.UserId, ev.Key); err == nil && stored != "" {
-			return newVideoResponse(stored, ev.Deferred), nil
+			return buildSponsoredVideoResponse(stored, ev.Deferred), nil
 		}
 
 		u, err := userRepo.Get(ev.UserId)
@@ -202,7 +232,7 @@ func StreamGetSponsoredVideoHandler(
 			return nil, fmt.Errorf("get sponsored video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := media_meta.VerifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get sponsored video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -219,35 +249,13 @@ func StreamGetSponsoredVideoHandler(
 	}
 }
 
-func buildImageCopy(original string, c domain.MediaCopy, signer media_meta.Metadata) (string, error) {
-	header, raw, err := splitDataURI(original)
-	if err != nil {
-		return "", err
-	}
-	if len(c.Watermark) != 0 {
-		drawn, err := media_meta.DrawWatermark(raw, c.Watermark)
-		if err != nil {
-			return "", err
-		}
-		if raw, err = signer.SignChangedJPEG(raw, drawn); err != nil {
-			return "", err
+func buildSponsoredVideoResponse(video domain.Base64Video, deferred bool) event.GetVideoResponse {
+	if deferred {
+		return event.GetVideoResponse{
+			File:     "",
+			Size:     int64(len(video)),
+			Deferred: true,
 		}
 	}
-	marked, err := media_meta.EmbedOrderInJPEG(raw, c.EncryptedOrder)
-	if err != nil {
-		return "", err
-	}
-	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
-}
-
-func buildVideoCopy(original string, c domain.MediaCopy) (string, error) {
-	header, raw, err := splitDataURI(original)
-	if err != nil {
-		return "", err
-	}
-	marked, err := media_meta.EmbedOrderInVideo(raw, c.EncryptedOrder)
-	if err != nil {
-		return "", err
-	}
-	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
+	return event.GetVideoResponse{File: string(video), Size: int64(len(video))}
 }

@@ -98,7 +98,7 @@ func StreamUploadVideoHandler(
 			return nil, fmt.Errorf("upload: video: fetching owner: %w", err)
 		}
 
-		metadata, err := buildMetadata(nodeInfo, privKey, owner)
+		metadata, err := media_meta.BuildMetadata(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +186,7 @@ func StreamGetVideoHandler(
 			return nil, fmt.Errorf("get video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := media_meta.VerifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -224,12 +224,8 @@ func videoDataPrefix(header string) (string, bool) {
 	return prefix, ok
 }
 
-func verifyForeignVideo(u domain.User, key, file string) error {
-	return verifyForeignMedia(u, key, file, media_meta.VerifyVideo)
-}
-
 func signUploadedVideo(file string, metadata media_meta.Metadata) (domain.Base64Video, error) {
-	header, videoBytes, err := splitDataURI(file)
+	header, videoBytes, err := media_meta.SplitDataURI(file)
 	if err != nil {
 		return "", err
 	}

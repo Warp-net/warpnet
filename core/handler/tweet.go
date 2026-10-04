@@ -483,7 +483,7 @@ func StreamGetTweetHandler(
 			if err != nil {
 				return nil, err
 			}
-			if isOwnRequest(s, streamer.NodeInfo()) {
+			if warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil {
 				return tweet, nil
 			}
 			return tweet.Teaser(), nil
@@ -588,7 +588,7 @@ func StreamGetTweetsHandler(
 			)
 		}
 
-		if !isOwnRequest(s, streamer.NodeInfo()) {
+		if warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) != nil {
 			for i := range tweets {
 				tweets[i] = tweets[i].Teaser()
 			}

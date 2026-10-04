@@ -33,6 +33,7 @@ import (
 	"html"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -95,7 +96,7 @@ func StreamImportTweetHandler(
 			return nil, fmt.Errorf("import: fetching owner: %w", err)
 		}
 
-		metadata, err := buildMetadata(nodeInfo, privKey, owner)
+		metadata, err := media_meta.BuildMetadata(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, fmt.Errorf("import: %w", err)
 		}
@@ -106,7 +107,7 @@ func StreamImportTweetHandler(
 			if i >= maxTweetImages {
 				break
 			}
-			photo, err := signUploadedImage(imagePrefix+img, metadata)
+			photo, err := media_meta.SignUploadedImage(media_meta.ImagePrefix+img, metadata)
 			if err != nil {
 				log.Warnf("import: processing photo for tweet %s: %v", ev.Id, err)
 				continue
