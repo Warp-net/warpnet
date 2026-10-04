@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -45,6 +46,11 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
+
+const tweetCharLimit = 280
+
+// sponsoredPriceLimit is 1 000 000 USDT in token base units.
+const sponsoredPriceLimit = 1_000_000_000_000
 
 type TweetUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
@@ -128,7 +134,7 @@ func StreamNewTweetHandler(
 			return nil, warpnet.WarpError("tweet: a priced tweet goes through the sponsored route")
 		}
 
-		if err := warpnet.ValidateTweet(ev); err != nil {
+		if err := validateTweetEvent(ev); err != nil {
 			return nil, err
 		}
 
@@ -166,7 +172,7 @@ func StreamNewSponsoredTweetHandler(
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		if err := warpnet.ValidateTweet(ev); err != nil {
+		if err := validateTweetEvent(ev); err != nil {
 			return nil, err
 		}
 		if !ev.IsSponsored() {
@@ -231,6 +237,62 @@ func addTweet(
 	return tweet, nil
 }
 
+func validateTweetEvent(ev event.NewTweetEvent) error {
+	if ev.UserId == "" {
+		return warpnet.WarpError("empty user id")
+	}
+	if ev.Text == "" && !ev.IsSponsored() {
+		return warpnet.WarpError("empty tweet text")
+	}
+	// Runes, not bytes: 280 means 280 user-visible characters
+	// regardless of script (the UI counters count characters too).
+	if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
+		return warpnet.WarpError("tweet text is too long")
+	}
+	if ev.IsSponsored() {
+		if !ev.Price.IsPositive() {
+			return warpnet.WarpError("sponsored tweet: price must be positive")
+		}
+		if ev.Price.Units.Cmp(big.NewInt(sponsoredPriceLimit)) > 0 {
+			return warpnet.WarpError("sponsored tweet: price is above 1000000 USDT")
+		}
+		if ev.Poll != nil {
+			return warpnet.WarpError("sponsored tweet: poll is not allowed")
+		}
+	}
+	return validatePoll(ev.Poll)
+}
+
+const (
+	pollMinOptions      = 2
+	pollMaxOptions      = 4
+	pollOptionRuneLimit = 25
+)
+
+func validatePoll(p *domain.Poll) error {
+	if p == nil {
+		return nil
+	}
+	if len(p.Options) < pollMinOptions {
+		return warpnet.WarpError("poll: too few options")
+	}
+	if len(p.Options) > pollMaxOptions {
+		return warpnet.WarpError("poll: too many options")
+	}
+	if p.ExpiresAt.IsZero() {
+		return warpnet.WarpError("poll: empty expiration time")
+	}
+	for _, opt := range p.Options {
+		if strings.TrimSpace(opt) == "" {
+			return warpnet.WarpError("poll: empty option")
+		}
+		if utf8.RuneCountInString(opt) > pollOptionRuneLimit {
+			return warpnet.WarpError("poll: option is too long")
+		}
+	}
+	return nil
+}
+
 const (
 	ErrNotAReply     = warpnet.WarpError("reply: tweet has no parent")
 	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
@@ -255,7 +317,7 @@ func StreamNewReplyHandler(
 		if ev.Moderation != nil && !ev.Moderation.IsOk {
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
-		if err := warpnet.ValidateTweet(ev); err != nil {
+		if err := validateTweetEvent(ev); err != nil {
 			return nil, err
 		}
 		if !ev.IsReply() {
@@ -918,7 +980,7 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		if ev.Text == "" {
 			return nil, warpnet.WarpError("edit tweet: empty text")
 		}
-		if utf8.RuneCountInString(ev.Text) > warpnet.TweetCharLimit {
+		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
 			return nil, warpnet.WarpError("tweet text is too long")
 		}
 

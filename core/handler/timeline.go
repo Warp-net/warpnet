@@ -28,11 +28,23 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"math/big"
+	"strings"
+	"unicode/utf8"
+
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	timelineTweetCharLimit      = 280
+	timelineSponsoredPriceLimit = 1_000_000_000_000
+	timelinePollMinOptions      = 2
+	timelinePollMaxOptions      = 4
+	timelinePollOptionRuneLimit = 25
 )
 
 type TimelineFetcher interface {
@@ -110,7 +122,7 @@ func StreamTimelineNewTweetHandler(
 		if ev.Moderation != nil && !ev.Moderation.IsOk {
 			return nil, tweetRepo.Blocklist(ev.Id)
 		}
-		if err := warpnet.ValidateTweet(ev); err != nil {
+		if err := validateTimelineTweet(ev); err != nil {
 			return nil, err
 		}
 
@@ -165,4 +177,52 @@ func StreamTimelineDeleteTweetHandler(
 		}
 		return event.Accepted, nil
 	}
+}
+
+func validateTimelineTweet(ev event.NewTweetEvent) error {
+	if ev.UserId == "" {
+		return warpnet.WarpError("empty user id")
+	}
+	if ev.Text == "" && !ev.IsSponsored() {
+		return warpnet.WarpError("empty tweet text")
+	}
+	if utf8.RuneCountInString(ev.Text) > timelineTweetCharLimit {
+		return warpnet.WarpError("tweet text is too long")
+	}
+	if ev.IsSponsored() {
+		if !ev.Price.IsPositive() {
+			return warpnet.WarpError("sponsored tweet: price must be positive")
+		}
+		if ev.Price.Units.Cmp(big.NewInt(timelineSponsoredPriceLimit)) > 0 {
+			return warpnet.WarpError("sponsored tweet: price is above 1000000 USDT")
+		}
+		if ev.Poll != nil {
+			return warpnet.WarpError("sponsored tweet: poll is not allowed")
+		}
+	}
+	return validateTimelinePoll(ev.Poll)
+}
+
+func validateTimelinePoll(p *domain.Poll) error {
+	if p == nil {
+		return nil
+	}
+	if len(p.Options) < timelinePollMinOptions {
+		return warpnet.WarpError("poll: too few options")
+	}
+	if len(p.Options) > timelinePollMaxOptions {
+		return warpnet.WarpError("poll: too many options")
+	}
+	if p.ExpiresAt.IsZero() {
+		return warpnet.WarpError("poll: empty expiration time")
+	}
+	for _, opt := range p.Options {
+		if strings.TrimSpace(opt) == "" {
+			return warpnet.WarpError("poll: empty option")
+		}
+		if utf8.RuneCountInString(opt) > timelinePollOptionRuneLimit {
+			return warpnet.WarpError("poll: option is too long")
+		}
+	}
+	return nil
 }
