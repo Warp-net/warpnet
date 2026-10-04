@@ -10,7 +10,12 @@ import (
 	"testing"
 	"time"
 
+	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
+	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 )
@@ -56,6 +61,48 @@ func TestNewClientRejectsInvalidPrivKey(t *testing.T) {
 	_, err := newClient([]byte{0x00}, freshPSK(t), "testnet", []string{"addr"})
 	if err == nil {
 		t.Fatal("expected invalid priv key error")
+	}
+}
+
+// A bootstrap node the client reaches at start-up must not become the peer
+// that requests go to; only connect() pairs.
+func TestBootstrapDialLeavesPairedPeerUnset(t *testing.T) {
+	psk := freshPSK(t)
+	bootstrap, err := libp2p.New(
+		libp2p.NoTransports,
+		libp2p.Transport(camouflage.NewCamouflageTransport),
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.PrivateNetwork(psk),
+		libp2p.Security(noise.ID, noise.New),
+		libp2p.Muxer(yamux.ID, yamux.DefaultTransport),
+	)
+	if err != nil {
+		t.Fatalf("bootstrap host: %v", err)
+	}
+	defer bootstrap.Close()
+	addr := bootstrap.Addrs()[0].String() + "/p2p/" + bootstrap.ID().String()
+
+	cn, err := newClient(freshKey(t), psk, "testnet", []string{addr})
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
+	defer cn.close()
+
+	if got := cn.host.Network().Connectedness(bootstrap.ID()); got != network.Connected {
+		t.Fatalf("expected the bootstrap node to be dialled, got %s", got)
+	}
+	if cn.isConnected() {
+		t.Fatal("a bootstrap node must not count as the paired node")
+	}
+	if got := cn.connectedness(); got != network.NotConnected.String() {
+		t.Fatalf("expected %s before pairing, got %s", network.NotConnected, got)
+	}
+
+	if err := cn.connect(addr); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if !cn.isConnected() {
+		t.Fatal("connect must make the dialled peer the paired node")
 	}
 }
 
