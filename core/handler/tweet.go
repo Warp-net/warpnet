@@ -886,7 +886,7 @@ func StreamGetTweetStatsHandler(
 					return stats, nil
 				}
 			}
-			// Author unknown locally or their node is offline: fall through
+			// Author unknown locally or their node maybe offline: fall through
 			// to the local CRDT-replicated counts instead of fabricating an
 			// all-zero response (mirrors the view handler's fallback).
 		}

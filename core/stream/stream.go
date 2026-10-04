@@ -222,7 +222,7 @@ func (p *streamPool) send(
 	// (context.DeadlineExceeded) all mean the peer is unreachable — offline.
 	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
 		errors.Is(err, context.DeadlineExceeded) {
-		return nil, warpnet.ErrNodeIsOffline
+		return nil, fmt.Errorf("%s %w", serverInfo.ID.String(), warpnet.ErrNodeIsOffline)
 	}
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)
