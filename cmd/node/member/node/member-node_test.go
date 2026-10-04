@@ -328,6 +328,38 @@ func TestSetUserOffline(t *testing.T) {
 	require.NotPanics(t, func() { m.setUserOffline("12D3KooWOfflineNode") })
 }
 
+func TestSetUserOnline(t *testing.T) {
+	m, db, _ := newTestMemberNode(t)
+
+	userRepo := database.NewUserRepo(db)
+	_, err := userRepo.Create(domain.User{Id: "user-1", NodeId: "12D3KooWOnlineNode", RoundTripTime: 42})
+	require.NoError(t, err)
+	_, err = userRepo.Update("user-1", domain.User{
+		IsOffline:     true,
+		RoundTripTime: 42,
+		Moderation:    &domain.UserModeration{Strikes: 1},
+	})
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() { m.setUserOnline("12D3KooWUnknownNode") })
+
+	before := time.Now().UTC()
+	m.setUserOnline("12D3KooWOnlineNode")
+	got, err := userRepo.Get("user-1")
+	require.NoError(t, err)
+	require.False(t, got.IsOffline)
+	require.NotNil(t, got.LastSeen)
+	require.False(t, got.LastSeen.Before(before))
+	require.Equal(t, int64(42), got.RoundTripTime)
+	require.Equal(t, uint8(1), got.Moderation.Strikes)
+
+	seen := *got.LastSeen
+	m.setUserOnline("12D3KooWOnlineNode")
+	got, err = userRepo.Get("user-1")
+	require.NoError(t, err)
+	require.True(t, seen.Equal(*got.LastSeen), "a node seen a moment ago is not rewritten on every stream")
+}
+
 // TestNodeInfoAliasesAreDecodablePeerIDs pins the wire form of a paired
 // device. A peer ID holds the binary multihash, so the stored text has to be
 // decoded: converted, it reaches peers base58-encoded twice and every one of

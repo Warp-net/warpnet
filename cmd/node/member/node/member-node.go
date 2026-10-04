@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -50,6 +51,7 @@ import (
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -378,6 +380,8 @@ func (m *MemberNode) SelfStream(
 
 type streamNodeID = string
 
+const lastSeenInterval = time.Minute
+
 func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute, data any) (_ []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -395,7 +399,32 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		m.setUserOffline(nodeIdStr)
 	}
+	if err == nil {
+		m.setUserOnline(nodeIdStr)
+	}
 	return bt, err
+}
+
+func (m *MemberNode) setUserOnline(nodeIdStr streamNodeID) {
+	if m == nil {
+		return
+	}
+	u, err := m.userRepo.GetByNodeID(nodeIdStr)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
+	if err != nil {
+		log.Warningf("member: stream: failed to get user: %v", err)
+		return
+	}
+	now := time.Now().UTC()
+	if !u.IsOffline && u.LastSeen != nil && now.Sub(*u.LastSeen) < lastSeenInterval {
+		return
+	}
+	_, err = m.userRepo.Update(u.Id, domain.User{IsOffline: false, RoundTripTime: u.RoundTripTime, LastSeen: &now})
+	if err != nil && !errors.Is(err, database.ErrConflict) {
+		log.Warningf("member: stream: failed to set user online: %v", err)
+	}
 }
 
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {

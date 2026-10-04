@@ -657,6 +657,31 @@ func (s *UserRepoTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
 	s.Equal(int64(20), updated.RoundTripTime)
 }
 
+func (s *UserRepoTestSuite) TestUpdateKeepsTheLatestLastSeen() {
+	original := s.createUser(domain.User{Username: "ivan"})
+	earlier := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	later := earlier.Add(30 * time.Minute)
+
+	updated, err := s.repo.Update(original.Id, domain.User{LastSeen: &later})
+	s.Require().NoError(err)
+	s.Require().NotNil(updated.LastSeen)
+	s.True(later.Equal(*updated.LastSeen))
+
+	updated, err = s.repo.Update(original.Id, domain.User{LastSeen: &earlier})
+	s.Require().NoError(err)
+	s.True(later.Equal(*updated.LastSeen), "an older sighting must not move last seen back")
+
+	updated, err = s.repo.Update(original.Id, domain.User{IsOffline: true})
+	s.Require().NoError(err)
+	s.Require().NotNil(updated.LastSeen)
+	s.True(later.Equal(*updated.LastSeen), "an update without a sighting must keep last seen")
+
+	got, err := s.repo.Get(original.Id)
+	s.Require().NoError(err)
+	s.Require().NotNil(got.LastSeen)
+	s.True(later.Equal(*got.LastSeen))
+}
+
 func (s *UserRepoTestSuite) TestUpdateRebindsNodeIndex() {
 	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
 
