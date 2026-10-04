@@ -231,7 +231,7 @@ func newClient(
 	h.Network().Notify(&nodeNotifiee{c: cn})
 
 	for _, addr := range bootstrapNodes {
-		if err := cn.connect(addr); err != nil {
+		if _, err := cn.dial(addr); err != nil {
 			logf(LogLevelWarn, "failed to connect to bootstrap node %s: %v", addr, err)
 			continue
 		}
@@ -268,9 +268,8 @@ func isRelayAddr(addr multiaddr.Multiaddr) bool {
 	return err == nil
 }
 
-// connect accepts one or more newline-separated multiaddrs for a single
-// peer and hands them all to host.Connect in one call so the dial ranker
-// can rank and dial them in parallel.
+// connect dials the paired desktop node and makes it the peer every
+// request goes to.
 func (c *clientNode) connect(peerInfo string) error {
 	c.flushEvents()
 	go func() {
@@ -282,6 +281,22 @@ func (c *clientNode) connect(peerInfo string) error {
 		return fmt.Errorf("not connected to desktop node")
 	}
 
+	peerID, err := c.dial(peerInfo)
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	c.desktopPeerID = peerID
+	c.mu.Unlock()
+	return nil
+}
+
+// dial accepts one or more newline-separated multiaddrs for a single
+// peer and hands them all to host.Connect in one call so the dial ranker
+// can rank and dial them in parallel. It leaves the paired peer alone, so
+// bootstrap nodes dialled through it never stand in for the desktop node.
+func (c *clientNode) dial(peerInfo string) (peer.ID, error) {
 	var (
 		peerID peer.ID
 		addrs  []multiaddr.Multiaddr
@@ -312,13 +327,13 @@ func (c *clientNode) connect(peerInfo string) error {
 		addrs = append(addrs, info.Addrs...)
 	}
 	if peerID == "" || len(addrs) == 0 {
-		return fmt.Errorf("invalid peer info: %s", peerInfo)
+		return "", fmt.Errorf("invalid peer info: %s", peerInfo)
 	}
 	if len(peerID) > 52 {
-		return fmt.Errorf("stream: node id is too long: %s", peerID)
+		return "", fmt.Errorf("stream: node id is too long: %s", peerID)
 	}
 	if err := peerID.Validate(); err != nil {
-		return err
+		return "", err
 	}
 
 	// Peerstore is internally thread-safe and host.Connect can take 30s —
@@ -330,13 +345,9 @@ func (c *clientNode) connect(peerInfo string) error {
 	defer cancel()
 
 	if err := c.host.Connect(ctx, peer.AddrInfo{ID: peerID, Addrs: addrs}); err != nil {
-		return fmt.Errorf("connection failed: %w", err)
+		return "", fmt.Errorf("connection failed: %w", err)
 	}
-
-	c.mu.Lock()
-	c.desktopPeerID = peerID
-	c.mu.Unlock()
-	return nil
+	return peerID, nil
 }
 
 func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
