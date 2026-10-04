@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -38,6 +39,11 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	ErrEmptyChatImageKey warpnet.WarpError = "empty image key"
+	ErrEmptyChatVideoKey warpnet.WarpError = "empty video key"
 )
 
 type ChatMediaStorer interface {
@@ -73,7 +79,7 @@ func StreamGetChatImageHandler(
 			return nil, fmt.Errorf("get chat image: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get chat image: %w", ErrEmptyImageKey)
+			return nil, fmt.Errorf("get chat image: %w", ErrEmptyChatImageKey)
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -95,7 +101,8 @@ func StreamGetChatImageHandler(
 			return event.GetImageResponse{File: string(img)}, nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetImageResponse{File: ""}, nil
 		}
 
@@ -124,7 +131,7 @@ func StreamGetChatImageHandler(
 			return nil, fmt.Errorf("get chat image: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignImage(u, ev.Key, imgResp.File); err != nil {
+		if err := media_meta.VerifyForeignImage(u, ev.Key, imgResp.File); err != nil {
 			log.Warnf("get chat image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
@@ -153,7 +160,7 @@ func StreamGetChatVideoHandler(
 			return nil, fmt.Errorf("get chat video: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get chat video: %w", ErrEmptyVideoKey)
+			return nil, fmt.Errorf("get chat video: %w", ErrEmptyChatVideoKey)
 		}
 
 		ownNodeInfo := streamer.NodeInfo()
@@ -172,15 +179,16 @@ func StreamGetChatVideoHandler(
 			if err != nil && !errors.Is(err, database.ErrMediaNotFound) {
 				return nil, fmt.Errorf("get chat video: fetching media: %w", err)
 			}
-			return newVideoResponse(video, ev.Deferred), nil
+			return buildChatVideoResponse(video, ev.Deferred), nil
 		}
 
-		if !isOwnRequest(s, ownNodeInfo) {
+		isOwnRequest := warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+		if !isOwnRequest {
 			return event.GetVideoResponse{File: ""}, nil
 		}
 
 		if stored, err := mediaRepo.GetVideo(ev.UserId, ev.Key); err == nil && stored != "" {
-			return newVideoResponse(stored, ev.Deferred), nil
+			return buildChatVideoResponse(stored, ev.Deferred), nil
 		}
 
 		u, err := userRepo.Get(ev.UserId)
@@ -207,7 +215,7 @@ func StreamGetChatVideoHandler(
 			return nil, fmt.Errorf("get chat video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := media_meta.VerifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get chat video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -230,7 +238,7 @@ func isChatMediaAllowed(
 	userRepo ChatMediaUserFetcher,
 	ownNodeInfo warpnet.NodeInfo,
 ) bool {
-	if isOwnRequest(s, ownNodeInfo) {
+	if warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil {
 		return true
 	}
 	if s == nil || s.Conn() == nil {
@@ -244,6 +252,13 @@ func isChatMediaAllowed(
 	return chatRepo.IsParticipants(ownNodeInfo.OwnerId, requester.Id)
 }
 
-func isOwnRequest(s warpnet.WarpStream, ownNodeInfo warpnet.NodeInfo) bool {
-	return warpnet.VerifyAuthorship(s, ownNodeInfo.ID.String()) == nil
+func buildChatVideoResponse(video domain.Base64Video, deferred bool) event.GetVideoResponse {
+	if deferred {
+		return event.GetVideoResponse{
+			File:     "",
+			Size:     int64(len(video)),
+			Deferred: true,
+		}
+	}
+	return event.GetVideoResponse{File: string(video), Size: int64(len(video))}
 }

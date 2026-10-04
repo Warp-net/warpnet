@@ -318,6 +318,27 @@ describe('Home sponsored composer', () => {
     return box;
   };
 
+  it.each([
+    '-1', '1.2.3', '1,5', '1e5', '.5', '5.', 'abc', '0', '0.0000001',
+    '1000000.000001', '9007199254.740993', '9223372036854.775807', '99999999999999999999999',
+  ])('refuses %s as a price', async (price) => {
+    await composeSponsored(price);
+    expect(screen.getByRole('button', { name: 'Tweet' })).toBeDisabled();
+    expect(screen.getByText('Enter an amount above zero and up to 1,000,000 USDT, with at most 6 decimals.')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['0.000001', '1'],
+    [' 2 ', '2000000'],
+    ['007.5', '7500000'],
+    ['1000000', '1000000000000'],
+  ])('sends %s as %s base units', async (price, units) => {
+    warpnetService.createTweet.mockResolvedValue({ id: 't1' });
+    await composeSponsored(price);
+    await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
+    await waitFor(() => expect(warpnetService.createTweet).toHaveBeenCalledWith(expect.objectContaining({ price: units })));
+  });
+
   it('holds the post until the price is one the wallet can charge', async () => {
     await composeSponsored('0');
     const post = screen.getByRole('button', { name: 'Tweet' });

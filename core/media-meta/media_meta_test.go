@@ -9,10 +9,12 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
@@ -35,8 +37,8 @@ func mustSigner(seed string) (ed25519.PrivateKey, warpnet.WarpPeerID) {
 	return priv, id
 }
 
-func watermark(ownerId string) Watermark {
-	return Watermark{
+func metadata(ownerId string) Metadata {
+	return Metadata{
 		PrivKey:       signerKey,
 		NodeId:        signerID.String(),
 		OwnerId:       ownerId,
@@ -70,11 +72,11 @@ func minimalMP4() []byte {
 	}
 }
 
-func watermarkedJPEG(t *testing.T, ownerId string, shade uint8) []byte {
+func jpegWithMetadata(t *testing.T, ownerId string, shade uint8) []byte {
 	t.Helper()
 
 	plain := testJPEG(t, shade)
-	meta, err := watermark(ownerId).Sign(security.ConvertToSHA256(plain))
+	meta, err := metadata(ownerId).Sign(security.ConvertToSHA256(plain))
 	require.NoError(t, err)
 
 	out, err := EmbedInJPEG(plain, meta)
@@ -82,10 +84,10 @@ func watermarkedJPEG(t *testing.T, ownerId string, shade uint8) []byte {
 	return out
 }
 
-func watermarkedMP4(t *testing.T, ownerId string) []byte {
+func mp4WithMetadata(t *testing.T, ownerId string) []byte {
 	t.Helper()
 
-	meta, err := watermark(ownerId).Sign(security.ConvertToSHA256(minimalMP4()))
+	meta, err := metadata(ownerId).Sign(security.ConvertToSHA256(minimalMP4()))
 	require.NoError(t, err)
 
 	out, err := EmbedInVideo(minimalMP4(), meta)
@@ -93,13 +95,13 @@ func watermarkedMP4(t *testing.T, ownerId string) []byte {
 	return out
 }
 
-func TestWatermark_RefusesWithoutKeyOrIdentity(t *testing.T) {
+func TestMetadata_RefusesWithoutKeyOrIdentity(t *testing.T) {
 	hash := security.ConvertToSHA256([]byte("bytes"))
 
-	_, err := Watermark{NodeId: "node", OwnerId: "owner"}.Sign(hash)
+	_, err := Metadata{NodeId: "node", OwnerId: "owner"}.Sign(hash)
 	assert.ErrorIs(t, err, ErrNoSigningKey)
 
-	_, err = Watermark{PrivKey: signerKey}.Sign(hash)
+	_, err = Metadata{PrivKey: signerKey}.Sign(hash)
 	assert.ErrorIs(t, err, ErrNoSigningIdentity)
 }
 
@@ -107,12 +109,12 @@ func TestVerify_EncryptedMetaIsCoveredBySignature(t *testing.T) {
 	plain := testJPEG(t, 0x40)
 	hash := security.ConvertToSHA256(plain)
 
-	watermarkBytes, err := watermark("alice").Sign(hash)
+	metadataBytes, err := metadata("alice").Sign(hash)
 	require.NoError(t, err)
-	require.NoError(t, verify(watermarkBytes, hash, signerID.String(), "alice"))
+	require.NoError(t, verify(metadataBytes, hash, signerID.String(), "alice"))
 
-	var signed signedWatermark
-	require.NoError(t, json.Unmarshal(watermarkBytes, &signed))
+	var signed signedMetadata
+	require.NoError(t, json.Unmarshal(metadataBytes, &signed))
 	signed.EncryptedMeta = []byte("somebody else's encrypted meta")
 	swapped, err := json.Marshal(signed)
 	require.NoError(t, err)
@@ -120,15 +122,15 @@ func TestVerify_EncryptedMetaIsCoveredBySignature(t *testing.T) {
 	assert.ErrorIs(t, verify(swapped, hash, signerID.String(), "alice"), ErrForgedMetadata)
 }
 
-func TestVerifyImage_HoldsOnlyForTheIdentityItWasWatermarkedFor(t *testing.T) {
-	watermarked := watermarkedJPEG(t, "alice", 0x40)
+func TestVerifyImage_HoldsOnlyForTheIdentityItWasSignedFor(t *testing.T) {
+	signedFile := jpegWithMetadata(t, "alice", 0x40)
 
-	assert.NoError(t, VerifyImage(watermarked, signerID.String(), "alice"))
+	assert.NoError(t, VerifyImage(signedFile, signerID.String(), "alice"))
 
-	assert.ErrorIs(t, VerifyImage(watermarked, signerID.String(), "mallory"), ErrForgedMetadata)
+	assert.ErrorIs(t, VerifyImage(signedFile, signerID.String(), "mallory"), ErrForgedMetadata)
 
 	_, otherNode := mustSigner("another-node")
-	assert.ErrorIs(t, VerifyImage(watermarked, otherNode.String(), "alice"), ErrForgedMetadata)
+	assert.ErrorIs(t, VerifyImage(signedFile, otherNode.String(), "alice"), ErrForgedMetadata)
 }
 
 func TestVerifyImage_UnstampedFileIsRefused(t *testing.T) {
@@ -151,7 +153,7 @@ func TestVerifyImage_LegacyEncryptedMetaIsRefused(t *testing.T) {
 func TestVerifyImage_BlobForgedByAnotherNodeIsRefused(t *testing.T) {
 	attackerKey, attackerID := mustSigner("attacker")
 
-	claim := Watermark{
+	claim := Metadata{
 		PrivKey:       attackerKey,
 		NodeId:        signerID.String(), // the victim's node
 		OwnerId:       "victim",
@@ -169,9 +171,9 @@ func TestVerifyImage_BlobForgedByAnotherNodeIsRefused(t *testing.T) {
 }
 
 func TestVerifyImage_TransplantedBlockIsRefused(t *testing.T) {
-	watermarked := watermarkedJPEG(t, "alice", 0x40)
+	signedFile := jpegWithMetadata(t, "alice", 0x40)
 
-	meta, err := extractFromJPEG(watermarked)
+	meta, err := extractFromJPEG(signedFile)
 	require.NoError(t, err)
 
 	transplanted, err := EmbedInJPEG(testJPEG(t, 0xC0), meta)
@@ -214,14 +216,14 @@ func TestEmbedInJPEG_WritesTheDescriptionTag(t *testing.T) {
 	assert.Equal(t, []byte("payload"), meta)
 }
 
-func TestVerifyVideo_HoldsOnlyForTheIdentityItWasWatermarkedFor(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
+func TestVerifyVideo_HoldsOnlyForTheIdentityItWasSignedFor(t *testing.T) {
+	signedFile := mp4WithMetadata(t, "alice")
 
-	assert.NoError(t, VerifyVideo(watermarked, signerID.String(), "alice"))
-	assert.ErrorIs(t, VerifyVideo(watermarked, signerID.String(), "mallory"), ErrForgedMetadata)
+	assert.NoError(t, VerifyVideo(signedFile, signerID.String(), "alice"))
+	assert.ErrorIs(t, VerifyVideo(signedFile, signerID.String(), "mallory"), ErrForgedMetadata)
 
 	_, otherNode := mustSigner("another-node")
-	assert.ErrorIs(t, VerifyVideo(watermarked, otherNode.String(), "alice"), ErrForgedMetadata)
+	assert.ErrorIs(t, VerifyVideo(signedFile, otherNode.String(), "alice"), ErrForgedMetadata)
 }
 
 func TestVerifyVideo_UnstampedFileIsRefused(t *testing.T) {
@@ -229,21 +231,21 @@ func TestVerifyVideo_UnstampedFileIsRefused(t *testing.T) {
 }
 
 func TestVerifyVideo_TamperedPayloadIsRefused(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
+	signedFile := mp4WithMetadata(t, "alice")
 
-	tampered := make([]byte, len(watermarked)+1)
-	copy(tampered, watermarked[:24])
+	tampered := make([]byte, len(signedFile)+1)
+	copy(tampered, signedFile[:24])
 	tampered[24] = 'X'
-	copy(tampered[25:], watermarked[24:])
+	copy(tampered[25:], signedFile[24:])
 	binary.BigEndian.PutUint32(tampered[0:4], 25)
 
 	assert.ErrorIs(t, VerifyVideo(tampered, signerID.String(), "alice"), ErrForgedMetadata)
 }
 
 func TestEmbedInVideo_AppendsOneUUIDBox(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
+	signedFile := mp4WithMetadata(t, "alice")
 
-	boxes, err := walkBoxes(watermarked)
+	boxes, err := walkBoxes(signedFile)
 	require.NoError(t, err)
 
 	var metaBoxes int
@@ -253,36 +255,36 @@ func TestEmbedInVideo_AppendsOneUUIDBox(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, metaBoxes, "exactly one claim of responsibility per file")
-	assert.True(t, bytes.HasPrefix(watermarked, minimalMP4()), "the video itself is untouched")
+	assert.True(t, bytes.HasPrefix(signedFile, minimalMP4()), "the video itself is untouched")
 }
 
 func TestSplitVideo_SeparatesWhatTheSignatureCovers(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
+	signedFile := mp4WithMetadata(t, "alice")
 
-	raw, watermarkBytes, err := SplitVideo(watermarked)
+	raw, metadataBytes, err := SplitVideo(signedFile)
 	require.NoError(t, err)
 	assert.Equal(t, minimalMP4(), raw)
 
-	var signed signedWatermark
-	require.NoError(t, json.Unmarshal(watermarkBytes, &signed))
+	var signed signedMetadata
+	require.NoError(t, json.Unmarshal(metadataBytes, &signed))
 	assert.NotEmpty(t, signed.Signature)
 }
 
 func TestSplitVideo_RefusesTwoMetaBoxes(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
+	signedFile := mp4WithMetadata(t, "alice")
 
-	boxes, err := walkBoxes(watermarked)
+	boxes, err := walkBoxes(signedFile)
 	require.NoError(t, err)
 
 	var metaBox []byte
 	for _, box := range boxes {
 		if isWarpnetBox(box) {
-			metaBox = watermarked[box.offset : box.offset+box.size]
+			metaBox = signedFile[box.offset : box.offset+box.size]
 		}
 	}
 	require.NotNil(t, metaBox)
 
-	_, _, err = SplitVideo(append(watermarked, metaBox...))
+	_, _, err = SplitVideo(append(signedFile, metaBox...))
 	assert.ErrorIs(t, err, ErrAmbiguousMetadata)
 }
 
@@ -310,12 +312,12 @@ func TestCloseOpenEndedBox(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint32(12), binary.BigEndian.Uint32(closed[24:28]))
 
-	meta, err := watermark("alice").Sign(security.ConvertToSHA256(closed))
+	meta, err := metadata("alice").Sign(security.ConvertToSHA256(closed))
 	require.NoError(t, err)
-	watermarked, err := EmbedInVideo(closed, meta)
+	signedFile, err := EmbedInVideo(closed, meta)
 	require.NoError(t, err)
 
-	assert.NoError(t, VerifyVideo(watermarked, signerID.String(), "alice"))
+	assert.NoError(t, VerifyVideo(signedFile, signerID.String(), "alice"))
 }
 
 func TestWalkBoxes_RejectsMalformed(t *testing.T) {
@@ -330,7 +332,7 @@ func TestIsISOBaseMedia(t *testing.T) {
 
 	assert.True(t, IsISOBaseMediaFile(minimalMP4()))
 	assert.True(t, IsISOBaseMediaFile(leadingFree))
-	assert.True(t, IsISOBaseMediaFile(watermarkedMP4(t, "alice")), "a watermarked file is still a container")
+	assert.True(t, IsISOBaseMediaFile(mp4WithMetadata(t, "alice")), "a signed file is still a container")
 	assert.False(t, IsISOBaseMediaFile([]byte{0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0}))
 	assert.False(t, IsISOBaseMediaFile([]byte("short")))
 	assert.False(t, IsISOBaseMediaFile(nil))
@@ -338,33 +340,33 @@ func TestIsISOBaseMedia(t *testing.T) {
 }
 
 func TestEmbedInVideo_RoundTripsThroughBase64(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
+	signedFile := mp4WithMetadata(t, "alice")
 
-	idx := bytes.Index(watermarked, warpnetUUID[:])
+	idx := bytes.Index(signedFile, warpnetUUID[:])
 	require.GreaterOrEqual(t, idx, 0, "warpnet meta uuid box not found")
 
-	decoded, err := base64.StdEncoding.DecodeString(string(watermarked[idx+len(warpnetUUID):]))
+	decoded, err := base64.StdEncoding.DecodeString(string(signedFile[idx+len(warpnetUUID):]))
 	require.NoError(t, err)
 
-	var signed signedWatermark
+	var signed signedMetadata
 	assert.NoError(t, json.Unmarshal(decoded, &signed))
 }
 
-func TestVerifyImage_StrippedWatermarkIsRefused(t *testing.T) {
-	watermarked := watermarkedJPEG(t, "alice", 0x40)
-	require.NoError(t, VerifyImage(watermarked, signerID.String(), "alice"))
+func TestVerifyImage_StrippedMetadataIsRefused(t *testing.T) {
+	signedFile := jpegWithMetadata(t, "alice", 0x40)
+	require.NoError(t, VerifyImage(signedFile, signerID.String(), "alice"))
 
-	stripped, err := stripJPEGExif(watermarked)
+	stripped, err := stripJPEGExif(signedFile)
 	require.NoError(t, err)
 
 	assert.ErrorIs(t, VerifyImage(stripped, signerID.String(), "alice"), ErrNoMetadata)
 }
 
-func TestVerifyVideo_StrippedWatermarkIsRefused(t *testing.T) {
-	watermarked := watermarkedMP4(t, "alice")
-	require.NoError(t, VerifyVideo(watermarked, signerID.String(), "alice"))
+func TestVerifyVideo_StrippedMetadataIsRefused(t *testing.T) {
+	signedFile := mp4WithMetadata(t, "alice")
+	require.NoError(t, VerifyVideo(signedFile, signerID.String(), "alice"))
 
-	raw, _, err := SplitVideo(watermarked)
+	raw, _, err := SplitVideo(signedFile)
 	require.NoError(t, err)
 
 	assert.ErrorIs(t, VerifyVideo(raw, signerID.String(), "alice"), ErrNoMetadata)
@@ -374,11 +376,11 @@ func TestVerify_TamperedSignatureIsRefused(t *testing.T) {
 	rawJPEG := testJPEG(t, 0x40)
 	hash := security.ConvertToSHA256(rawJPEG)
 
-	watermarkBytes, err := watermark("alice").Sign(hash)
+	metadataBytes, err := metadata("alice").Sign(hash)
 	require.NoError(t, err)
 
-	var signed signedWatermark
-	require.NoError(t, json.Unmarshal(watermarkBytes, &signed))
+	var signed signedMetadata
+	require.NoError(t, json.Unmarshal(metadataBytes, &signed))
 
 	flipped := []byte(signed.Signature)
 	flipped[0] ^= 'A' ^ 'B'
@@ -394,11 +396,11 @@ func TestVerify_UnknownVersionIsRefused(t *testing.T) {
 	rawJPEG := testJPEG(t, 0x40)
 	hash := security.ConvertToSHA256(rawJPEG)
 
-	watermarkBytes, err := watermark("alice").Sign(hash)
+	metadataBytes, err := metadata("alice").Sign(hash)
 	require.NoError(t, err)
 
-	var signed signedWatermark
-	require.NoError(t, json.Unmarshal(watermarkBytes, &signed))
+	var signed signedMetadata
+	require.NoError(t, json.Unmarshal(metadataBytes, &signed))
 	signed.Version = metaVersion + 1
 
 	future, err := json.Marshal(signed)
@@ -411,11 +413,11 @@ func TestVerify_SignatureWithoutEncryptedMetaIsRefused(t *testing.T) {
 	rawJPEG := testJPEG(t, 0x40)
 	hash := security.ConvertToSHA256(rawJPEG)
 
-	empty := Watermark{PrivKey: signerKey, NodeId: signerID.String(), OwnerId: "alice"}
-	watermarkBytes, err := empty.Sign(hash)
+	empty := Metadata{PrivKey: signerKey, NodeId: signerID.String(), OwnerId: "alice"}
+	metadataBytes, err := empty.Sign(hash)
 	require.NoError(t, err)
 
-	assert.ErrorIs(t, verify(watermarkBytes, hash, signerID.String(), "alice"), ErrNoMetadata)
+	assert.ErrorIs(t, verify(metadataBytes, hash, signerID.String(), "alice"), ErrNoMetadata)
 }
 
 func TestVerifyImage_GarbageInDescriptionTagIsRefused(t *testing.T) {
@@ -430,4 +432,120 @@ func TestVerifyImage_GarbageInDescriptionTagIsRefused(t *testing.T) {
 			assert.ErrorIs(t, VerifyImage(file, signerID.String(), "alice"), ErrNoMetadata)
 		})
 	}
+}
+
+func TestEmbedOrderInJPEG_KeepsTheOwnersClaim(t *testing.T) {
+	signedFile := jpegWithMetadata(t, "alice", 0x40)
+
+	copied, err := EmbedOrderInJPEG(signedFile, []byte("sealed for bob"))
+	require.NoError(t, err)
+
+	assert.NoError(t, VerifyImage(copied, signerID.String(), "alice"), "a node that knows nothing of the order field still accepts the copy")
+	encryptedOrder, err := ExtractOrder(copied)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sealed for bob"), encryptedOrder)
+}
+
+func TestEmbedOrderInVideo_KeepsTheOwnersClaim(t *testing.T) {
+	signedFile := mp4WithMetadata(t, "alice")
+
+	copied, err := EmbedOrderInVideo(signedFile, []byte("sealed for bob"))
+	require.NoError(t, err)
+
+	assert.NoError(t, VerifyVideo(copied, signerID.String(), "alice"), "a node that knows nothing of the order field still accepts the copy")
+	assert.True(t, bytes.HasPrefix(copied, minimalMP4()), "the video itself is untouched")
+	encryptedOrder, err := ExtractOrder(copied)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("sealed for bob"), encryptedOrder)
+}
+
+func TestEmbedOrder_RebuildsTheSameCopy(t *testing.T) {
+	image := jpegWithMetadata(t, "alice", 0x40)
+	first, err := EmbedOrderInJPEG(image, []byte("bob"))
+	require.NoError(t, err)
+	second, err := EmbedOrderInJPEG(image, []byte("bob"))
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+
+	video := mp4WithMetadata(t, "alice")
+	first, err = EmbedOrderInVideo(video, []byte("bob"))
+	require.NoError(t, err)
+	second, err = EmbedOrderInVideo(video, []byte("bob"))
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+}
+
+func TestEmbedOrder_RefusesUnstampedFile(t *testing.T) {
+	_, err := EmbedOrderInJPEG(testJPEG(t, 0x40), []byte("bob"))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = EmbedOrderInVideo(minimalMP4(), []byte("bob"))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestExtractOrder_OnlyACopyCarriesOne(t *testing.T) {
+	_, err := ExtractOrder(jpegWithMetadata(t, "alice", 0x40))
+	assert.ErrorIs(t, err, ErrNoOrder)
+
+	_, err = ExtractOrder(mp4WithMetadata(t, "alice"))
+	assert.ErrorIs(t, err, ErrNoOrder)
+
+	_, err = ExtractOrder(testJPEG(t, 0x40))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+
+	_, err = ExtractOrder(minimalMP4())
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestSignChangedJPEG_SignsTheRedrawnPixels(t *testing.T) {
+	original := jpegWithMetadata(t, "alice", 0x40)
+	redrawn := testJPEG(t, 0xc0)
+
+	signedJPEG, err := metadata("alice").SignChangedJPEG(original, redrawn)
+	require.NoError(t, err)
+	assert.NoError(t, VerifyImage(signedJPEG, signerID.String(), "alice"))
+
+	before, err := extractFromJPEG(original)
+	require.NoError(t, err)
+	after, err := extractFromJPEG(signedJPEG)
+	require.NoError(t, err)
+	was, err := parseSignedMetadata(before)
+	require.NoError(t, err)
+	is, err := parseSignedMetadata(after)
+	require.NoError(t, err)
+	assert.Equal(t, was.EncryptedMeta, is.EncryptedMeta, "the uploader's sealed meta carries over")
+	assert.True(t, was.CreatedAt.Equal(is.CreatedAt))
+
+	again, err := metadata("alice").SignChangedJPEG(original, redrawn)
+	require.NoError(t, err)
+	assert.Equal(t, signedJPEG, again)
+}
+
+func TestSignChangedJPEG_RefusesUnstampedOriginal(t *testing.T) {
+	_, err := metadata("alice").SignChangedJPEG(testJPEG(t, 0x40), testJPEG(t, 0xc0))
+	assert.ErrorIs(t, err, ErrNoMetadata)
+}
+
+func TestEmbedOrder_RebuildsTheSameBytesEverywhere(t *testing.T) {
+	stamp := func(raw []byte) []byte {
+		block, err := metadata("alice").signAt(security.ConvertToSHA256(raw), time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC))
+		require.NoError(t, err)
+		return block
+	}
+	key := func(b []byte) string {
+		return hex.EncodeToString(security.ConvertToSHA256(b))
+	}
+
+	plain := testJPEG(t, 0x40)
+	photo, err := EmbedInJPEG(plain, stamp(plain))
+	require.NoError(t, err)
+	copied, err := EmbedOrderInJPEG(photo, []byte("sealed for bob"))
+	require.NoError(t, err)
+	assert.Equal(t, "e87b93567c0a46968f2c9333af2ad438cdc39632de8ff87296fd7aeb8e31cbbf", key(copied), "an image copy is rebuilt on request, so its bytes and key must never drift")
+
+	video, err := EmbedInVideo(minimalMP4(), stamp(minimalMP4()))
+	require.NoError(t, err)
+	copied, err = EmbedOrderInVideo(video, []byte("sealed for bob"))
+	require.NoError(t, err)
+	assert.Equal(t, "f8cf1517558cf0b9a18aa2eb8e34b293823ca50e4c1a63572a366a83d2d798a2", key(copied), "a video copy is rebuilt on request, so its bytes and key must never drift")
 }

@@ -251,6 +251,11 @@ func (o *Order) ID() string {
 	return hex.EncodeToString(sum[:])
 }
 
+const (
+	OrderLimit       = 10
+	OrderLimitWindow = time.Hour
+)
+
 type Poll struct {
 	Options   []string  `json:"options"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -368,6 +373,7 @@ const (
 	NotificationReplyType      NotificationType = "reply"
 	NotificationMessageType    NotificationType = "message"
 	NotificationNewUserType    NotificationType = "new_user"
+	NotificationOrderLimitType NotificationType = "order_limit"
 )
 
 type Notification struct {
@@ -435,6 +441,13 @@ type (
 	Base64Video string
 	VideoKey    string
 )
+
+type MediaCopy struct {
+	OriginalKey    string `json:"original_key"`
+	BuyerId        string `json:"buyer_id"`
+	EncryptedOrder []byte `json:"encrypted_order"`
+	Watermark      []byte `json:"watermark,omitempty"`
+}
 
 type Alias struct {
 	ID         ID        `json:"id"`

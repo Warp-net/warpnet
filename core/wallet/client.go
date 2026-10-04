@@ -50,6 +50,7 @@ import (
 
 const (
 	requestTimeout = 90 * time.Second
+	engineTimeout  = 75 * time.Second
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
 	NativeCoin     = "TRX"
@@ -62,9 +63,13 @@ const (
 	paramToken      = "token"
 	paramSeed       = "seed"
 	paramPrivateKey = "private_key"
+	paramAmount     = "amount"
 )
 
-var ErrUnavailable = errors.New("wallet: payment engine unavailable")
+var (
+	ErrUnavailable = errors.New("wallet: payment engine unavailable")
+	ErrNoAnswer    = errors.New("wallet: the payment engine never answered")
+)
 
 type Account struct {
 	TokenBalance string
@@ -113,6 +118,27 @@ type Payment struct {
 	PayTx      string
 }
 
+type Quote struct {
+	Token          string      `json:"token"`
+	FeePercent     uint64      `json:"fee_percent"`
+	Fee            string      `json:"fee"`
+	Total          string      `json:"total"`
+	Balance        string      `json:"balance"`
+	TRX            string      `json:"trx"`
+	EnergyPrice    int64       `json:"energy_price"`
+	BandwidthPrice int64       `json:"bandwidth_price"`
+	NetworkFee     string      `json:"network_fee"`
+	Steps          []QuoteStep `json:"steps"`
+}
+
+type QuoteStep struct {
+	Kind        string `json:"kind"`
+	Energy      int64  `json:"energy"`
+	Bandwidth   int64  `json:"bandwidth"`
+	Burn        string `json:"burn"`
+	Approximate bool   `json:"approximate"`
+}
+
 type request struct {
 	ID     string          `json:"id"`
 	Method string          `json:"method"`
@@ -123,9 +149,13 @@ type responseError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Rejection bool   `json:"rejection"`
+	Tx        string `json:"tx,omitempty"`
+	cause     error
 }
 
 func (e *responseError) Error() string { return e.Message }
+
+func (e *responseError) Unwrap() error { return e.cause }
 
 type response struct {
 	ID     string          `json:"id"`
@@ -264,7 +294,10 @@ func (c *Client) readErrors(r io.Reader) {
 }
 
 func (c *Client) engineArgs() []string {
-	args := []string{"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network}
+	args := []string{
+		"serve", c.prefix() + "endpoint", c.cfg.Endpoint, "-network", c.cfg.Network,
+		"-timeout", engineTimeout.String(),
+	}
 	if c.cfg.RPS > 0 {
 		args = append(args, "-rps", strconv.FormatFloat(c.cfg.RPS, 'g', -1, 64))
 	}
@@ -384,7 +417,7 @@ func (c *Client) fail(cmd *exec.Cmd, err error) {
 	}
 	for id, ch := range c.pending {
 		delete(c.pending, id)
-		ch <- response{Error: &responseError{Code: "unavailable", Message: err.Error()}}
+		ch <- response{Error: &responseError{Code: "unavailable", Message: err.Error(), cause: ErrNoAnswer}}
 	}
 }
 
@@ -427,7 +460,7 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 		return ctx.Err()
 	case <-timer.C:
 		c.forget(id)
-		return fmt.Errorf("%w: timeout", ErrUnavailable)
+		return fmt.Errorf("%w: %w: timeout", ErrUnavailable, ErrNoAnswer)
 	case resp := <-ch:
 		if resp.Error != nil {
 			return resp.Error
@@ -483,7 +516,7 @@ func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (
 		Tx string `json:"tx"`
 	}
 	asset = c.assetOr(asset)
-	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, "amount": amount}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, paramAmount: amount}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
 		return "", err
 	}
@@ -541,6 +574,10 @@ func (c *Client) Pay(ctx context.Context, seed string, s Sponsorship) (Payment, 
 		PayTx      string `json:"pay_tx"`
 	}
 	if err := c.call(ctx, "wallet.pay", payParams(c.cfg.Network, seed, s), &out); err != nil {
+		var engineErr *responseError
+		if errors.As(err, &engineErr) && engineErr.Tx != "" {
+			return Payment{PayTx: engineErr.Tx}, err
+		}
 		return Payment{}, err
 	}
 	log.Infof(
@@ -548,6 +585,26 @@ func (c *Client) Pay(ctx context.Context, seed string, s Sponsorship) (Payment, 
 		s.Author, s.Amount, out.Token, c.cfg.Network, out.Fee, out.FeePercent, out.PayTx,
 	)
 	return Payment(out), nil
+}
+
+// Quote asks what Pay would cost the wallet of seed for s, without signing
+// anything: the token amounts exactly and the TRX the network would burn.
+func (c *Client) Quote(ctx context.Context, seed string, s Sponsorship) (Quote, error) {
+	payer, err := c.Address(ctx, seed)
+	if err != nil {
+		return Quote{}, err
+	}
+	var out Quote
+	err = c.call(ctx, "wallet.quote", quoteParams(c.cfg.Network, payer, s), &out)
+	return out, err
+}
+
+func (c *Client) IsAvailable(ctx context.Context) bool {
+	var out struct {
+		Available bool `json:"available"`
+	}
+	err := c.call(ctx, "available", map[string]string{"network": c.cfg.Network}, &out)
+	return err == nil && out.Available
 }
 
 func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, error) {
@@ -575,6 +632,20 @@ func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, 
 	return out.Confirmed, nil
 }
 
+func quoteParams(network, payer string, s Sponsorship) map[string]any {
+	params := map[string]any{
+		paramNetwork: network,
+		"payer":      payer,
+		"splitter":   s.Splitter,
+		"author":     s.Author,
+		paramAmount:  s.Amount,
+	}
+	if s.MaxFeePercent > 0 {
+		params["max_fee_percent"] = s.MaxFeePercent
+	}
+	return params
+}
+
 func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
 	return map[string]any{
 		"chain":           "tron",
@@ -598,7 +669,7 @@ func payParams(network, seed string, s Sponsorship) map[string]any {
 		"splitter":   s.Splitter,
 		"order_id":   s.OrderId,
 		"author":     s.Author,
-		"amount":     s.Amount,
+		paramAmount:  s.Amount,
 	}
 	if s.MaxFeePercent > 0 {
 		params["max_fee_percent"] = s.MaxFeePercent

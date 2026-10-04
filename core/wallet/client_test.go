@@ -29,10 +29,13 @@ resulting from the use or misuse of this software.
 package wallet
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +44,7 @@ import (
 	"testing"
 
 	paymentengine "github.com/Warp-net/payment-engine-lib"
+	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -69,6 +73,36 @@ func engineClient(t *testing.T, binary []byte) (*Client, string) {
 func unpackedName(binary []byte) string {
 	sum := sha256.Sum256(binary)
 	return "payment-engine-" + hex.EncodeToString(sum[:6])
+}
+
+func answeringEngine(t *testing.T, answer func(request) string) *Client {
+	t.Helper()
+	client, _ := engineClient(t, nil)
+	requests, requestsW := io.Pipe()
+	answers, answersW := io.Pipe()
+	engine := &exec.Cmd{}
+	client.cmd, client.stop, client.stdin = engine, func() {}, requestsW
+	go client.read(engine, answers)
+	go func() {
+		scanner := bufio.NewScanner(requests)
+		for scanner.Scan() {
+			var req request
+			if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+				return
+			}
+			line := answer(req)
+			if line == "" {
+				_ = answersW.Close()
+				return
+			}
+			_, _ = answersW.Write([]byte(line + "\n"))
+		}
+	}()
+	t.Cleanup(func() {
+		_ = answersW.Close()
+		_ = requestsW.Close()
+	})
+	return client
 }
 
 func TestResolveBinaryUnpacksTheEmbeddedEngine(t *testing.T) {
@@ -293,6 +327,71 @@ func TestEngineThatDiesIsReportedOnce(t *testing.T) {
 	}
 }
 
+func TestEngineAnswersBeforeTheClientGivesUp(t *testing.T) {
+	client, _ := engineClient(t, nil)
+	args := strings.Join(client.engineArgs(), " ")
+	if !strings.Contains(args, "-timeout "+engineTimeout.String()) || engineTimeout >= requestTimeout {
+		t.Fatalf("args = %q: the engine must give up on a request before the client stops waiting for it", args)
+	}
+}
+
+func TestPayKeepsTheTxOfAPaymentWhoseAnswerWasLost(t *testing.T) {
+	client := answeringEngine(t, func(req request) string {
+		return `{"id":"` + req.ID + `","error":{"code":"unavailable","message":"payments: unavailable: broadcast: 504","tx":"tx-lost"}}`
+	})
+	payment, err := client.Pay(context.Background(), "seed", Sponsorship{Splitter: "TSplitter", Amount: "1"})
+	if err == nil || payment.PayTx != "tx-lost" {
+		t.Fatalf("payment = %+v, err = %v: the tx the engine sent was dropped", payment, err)
+	}
+	if errors.Is(err, ErrNoAnswer) {
+		t.Fatal("the engine answered, yet the payment reads as unanswered")
+	}
+}
+
+func TestPayRefusedBeforeSendingHasNoTx(t *testing.T) {
+	client := answeringEngine(t, func(req request) string {
+		return `{"id":"` + req.ID + `","error":{"code":"insufficient_balance","message":"wallet: insufficient balance"}}`
+	})
+	payment, err := client.Pay(context.Background(), "seed", Sponsorship{Splitter: "TSplitter", Amount: "1"})
+	if err == nil || payment.PayTx != "" || errors.Is(err, ErrNoAnswer) {
+		t.Fatalf("payment = %+v, err = %v, want a plain refusal", payment, err)
+	}
+}
+
+func TestPayToAnEngineThatDiesHasNoAnswer(t *testing.T) {
+	client := answeringEngine(t, func(request) string { return "" })
+	payment, err := client.Pay(context.Background(), "seed", Sponsorship{Splitter: "TSplitter", Amount: "1"})
+	if !errors.Is(err, ErrNoAnswer) || payment.PayTx != "" {
+		t.Fatalf("payment = %+v, err = %v: a payment the engine never answered may have been sent", payment, err)
+	}
+}
+
+func TestIsAvailable(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		answer string
+		want   bool
+	}{
+		{"the chain answers", `"result":{"available":true}`, true},
+		{"the chain is down", `"result":{"available":false}`, false},
+		{"an engine without the method", `"error":{"code":"protocol","message":"ipc: protocol error: unknown method \"available\""}`, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var asked request
+			client := answeringEngine(t, func(req request) string {
+				asked = req
+				return `{"id":"` + req.ID + `",` + tt.answer + `}`
+			})
+			if got := client.IsAvailable(context.Background()); got != tt.want {
+				t.Fatalf("IsAvailable() = %v, want %v", got, tt.want)
+			}
+			if asked.Method != "available" || !strings.Contains(string(asked.Params), `"network":"testnet"`) {
+				t.Fatalf("asked %s %s, want the availability of testnet", asked.Method, asked.Params)
+			}
+		})
+	}
+}
+
 func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	sponsorship := Sponsorship{
 		Splitter:      "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy",
@@ -314,6 +413,24 @@ func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	sponsorship.MaxFeePercent = 0
 	if _, ok := payParams("testnet", "abcdef", sponsorship)["max_fee_percent"]; ok {
 		t.Fatal("a sponsorship that agreed no ceiling must not send one")
+	}
+}
+
+func TestQuoteParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
+	sponsorship := Sponsorship{
+		Splitter:      "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy",
+		Author:        "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143",
+		Amount:        "1000000",
+		MaxFeePercent: 5,
+	}
+	params := quoteParams("testnet", "TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6", sponsorship)
+	for _, key := range []string{"network", "payer", "splitter", "author", "amount", "max_fee_percent"} {
+		if _, ok := params[key]; !ok {
+			t.Fatalf("wallet.quote needs %q, got %v", key, params)
+		}
+	}
+	if len(params) != 6 {
+		t.Fatalf("wallet.quote was sent something it does not define: %v", params)
 	}
 }
 

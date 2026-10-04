@@ -259,7 +259,7 @@ func assertSealedMediaMeta(t *testing.T, sealed []byte) {
 	assert.NotEqual(t, make([]byte, metaSaltSize), salt, "salt must be random, not all-zero")
 	assert.NotEqual(t, make([]byte, metaNonceSize), nonce, "nonce must be random, not all-zero")
 
-	for _, marker := range []string{nodeMetaKey, userMetaKey, macMetaKey} {
+	for _, marker := range []string{"node", "user", "MAC"} {
 		assert.False(t, bytes.Contains(sealed, []byte(marker)),
 			"plaintext marker %q must not survive sealing", marker)
 	}
@@ -293,9 +293,9 @@ func readExifMeta(t *testing.T, data []byte) []byte {
 }
 
 func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
-	watermark, err := buildWatermark(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
+	metadata, err := media_meta.BuildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
-	meta := watermark.EncryptedMeta
+	meta := metadata.EncryptedMeta
 
 	assertSealedMediaMeta(t, meta)
 
@@ -319,13 +319,13 @@ func TestMediaMeta_EmbeddedInExifStaysSealed(t *testing.T) {
 }
 
 func TestMediaMeta_EachUploadSealsAfresh(t *testing.T) {
-	firstWatermark, err := buildWatermark(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
+	firstMetadata, err := media_meta.BuildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
-	first := firstWatermark.EncryptedMeta
+	first := firstMetadata.EncryptedMeta
 
-	secondWatermark, err := buildWatermark(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
+	secondMetadata, err := media_meta.BuildMetadata(n{}.NodeInfo(), testSignerKey, ownerOf(ownerID))
 	assert.NoError(t, err)
-	second := secondWatermark.EncryptedMeta
+	second := secondMetadata.EncryptedMeta
 
 	assert.NotEqual(t, first, second, "identical metadata must not seal identically")
 	assert.NotEqual(t, first[:metaSaltSize], second[:metaSaltSize], "salt must be per-upload")
@@ -623,7 +623,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 	})
 
 	t.Run("fetched foreign image is cached for next time", func(t *testing.T) {
-		file, key := watermarkedImage(t, "remote")
+		file, key := imageWithMetadata(t, "remote")
 		repo := newImageRepoDouble()
 		streamer := &mediaStreamerDouble{
 			response: mustJSON(t, event.GetImageResponse{File: file}),
@@ -658,7 +658,7 @@ func TestStreamGetImageHandler(t *testing.T) {
 	})
 
 	t.Run("cache write failure still returns the image", func(t *testing.T) {
-		file, key := watermarkedImage(t, "remote")
+		file, key := imageWithMetadata(t, "remote")
 		repo := newImageRepoDouble()
 		repo.foreignErr = errors.New("disk full")
 		streamer := &mediaStreamerDouble{

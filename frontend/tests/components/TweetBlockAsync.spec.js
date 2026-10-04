@@ -70,6 +70,23 @@ const baseTweet = {
 };
 
 describe('TweetBlock per-element loading', () => {
+  it("names the author by their current profile, not the name stored in the tweet", async () => {
+    warpnetService.getProfile.mockResolvedValue({ id: 'author1', username: 'renamed', avatar_key: '' });
+
+    renderTweet({ ...baseTweet });
+
+    expect(await screen.findByText('renamed')).toBeInTheDocument();
+    expect(screen.queryByText('author')).not.toBeInTheDocument();
+  });
+
+  it('keeps the name stored in the tweet while the author profile hangs', async () => {
+    warpnetService.getProfile.mockImplementation(() => new Promise(() => {}));
+
+    renderTweet({ ...baseTweet });
+
+    expect(await screen.findByText('author')).toBeInTheDocument();
+  });
+
   it('renders the tweet text without waiting for a hanging author profile', async () => {
     warpnetService.getProfile.mockImplementation(() => new Promise(() => {}));
 

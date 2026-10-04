@@ -83,7 +83,10 @@ export const PRIVATE_POST_TWEET = "/private/post/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
 export const PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
 export const PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"
-const SPONSORED_PAYMENT_CONFIRMING = "sponsored tweet: payment is confirming"
+export const PRIVATE_GET_SPONSORED_QUOTE = "/private/get/sponsored/quote/0.0.0"
+export const PRIVATE_GET_SPONSORED_BUYER = "/private/get/sponsored/buyer/0.0.0"
+export const PUBLIC_GET_SPONSORED_IMAGE = "/public/get/sponsored/image/0.0.0"
+export const PUBLIC_GET_SPONSORED_VIDEO = "/public/get/sponsored/video/0.0.0"
 export const PRIVATE_POST_IMPORT_TWITTER_TWEET = "/private/post/import/twitter/tweet/0.0.0"
 export const PUBLIC_GET_FOLLOWINGS = "/public/get/followings/0.0.0"
 export const PRIVATE_GET_STATS = "/private/get/admin/stats/0.0.0"
@@ -684,6 +687,56 @@ export const warpnetService = {
 
         const request = {
             path: PUBLIC_GET_CHAT_VIDEO,
+            body: {
+                user_id: userId,
+                key: key,
+                deferred: deferred,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result) {
+            return null
+        }
+        return {
+            file: result.file || '',
+            size: result.size || 0,
+            deferred: !!result.deferred,
+        };
+    },
+    async getSponsoredImage({userId, key}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const cacheKey = `sponsored-image::${key}`;
+        const cached = stateMap.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const request = {
+            path: PUBLIC_GET_SPONSORED_IMAGE,
+            body: {
+                user_id: userId,
+                key: key,
+            }
+        }
+
+        const result = await this.sendToNode(request);
+        if (!result || !result.file) {
+            return null
+        }
+        stateMap.set(cacheKey, result.file);
+        return result.file;
+    },
+    async getSponsoredVideo({userId, key, deferred = false}) {
+        if (!key || key.length === 0) {
+            return null
+        }
+
+        const request = {
+            path: PUBLIC_GET_SPONSORED_VIDEO,
             body: {
                 user_id: userId,
                 key: key,
@@ -1755,14 +1808,36 @@ export const warpnetService = {
         return resp;
     },
 
+    async quoteSponsoredTweet({tweetId, userId}) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SPONSORED_QUOTE,
+            body: {tweet_id: tweetId, user_id: userId},
+        });
+        if (!resp || resp.code || !resp.total) {
+            throw new Error(resp?.message || "Couldn't work out what the tweet costs.");
+        }
+        return resp;
+    },
+
     async getSponsoredTweet({tweetId, userId}) {
         const resp = await this.sendToNode({
             path: PUBLIC_GET_SPONSORED_TWEET,
             body: {tweet_id: tweetId, user_id: userId},
         });
-        if (resp && resp.message === SPONSORED_PAYMENT_CONFIRMING) return {pending: true};
+        if (resp && resp.confirmed === false) return {pending: true};
         if (!resp || resp.code || !resp.id) return null;
         return resp;
+    },
+
+    async getCopyBuyer(file) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SPONSORED_BUYER,
+            body: {file: file},
+        });
+        if (!resp || resp.code) {
+            throw new Error(resp?.message || "Couldn't read the file.");
+        }
+        return resp.buyer_id ? resp : null;
     },
 
     isDesktopNode() {

@@ -68,8 +68,8 @@ func IsISOBaseMediaFile(b []byte) bool {
 	return false
 }
 
-func EmbedInVideo(videoBytes, watermarkBytes []byte) ([]byte, error) {
-	box, err := newWarpnetBox(watermarkBytes)
+func EmbedInVideo(videoBytes, metadataBytes []byte) ([]byte, error) {
+	box, err := newWarpnetBox(metadataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func EmbedInVideo(videoBytes, watermarkBytes []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func SplitVideo(b []byte) (raw, watermarkBytes []byte, err error) {
+func SplitVideo(b []byte) (raw, metadataBytes []byte, err error) {
 	boxes, err := walkBoxes(b)
 	if err != nil {
 		return nil, nil, err
@@ -94,11 +94,23 @@ func SplitVideo(b []byte) (raw, watermarkBytes []byte, err error) {
 		return raw, nil, nil
 	}
 
-	watermarkBytes, err = base64.StdEncoding.DecodeString(encoded)
+	metadataBytes, err = base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return nil, nil, ErrNoMetadata
 	}
-	return raw, watermarkBytes, nil
+	return raw, metadataBytes, nil
+}
+
+func EmbedOrderInVideo(videoBytes, encryptedOrder []byte) ([]byte, error) {
+	raw, metadataBytes, err := SplitVideo(videoBytes)
+	if err != nil {
+		return nil, err
+	}
+	marked, err := addOrder(metadataBytes, encryptedOrder)
+	if err != nil {
+		return nil, err
+	}
+	return EmbedInVideo(raw, marked)
 }
 
 func CloseOpenEndedBox(b []byte) ([]byte, error) {
@@ -125,11 +137,11 @@ func CloseOpenEndedBox(b []byte) ([]byte, error) {
 }
 
 func VerifyVideo(videoBytes []byte, nodeId, ownerId string) error {
-	raw, watermarkBytes, err := SplitVideo(videoBytes)
+	raw, metadataBytes, err := SplitVideo(videoBytes)
 	if err != nil {
 		return err
 	}
-	return verify(watermarkBytes, security.ConvertToSHA256(raw), nodeId, ownerId)
+	return verify(metadataBytes, security.ConvertToSHA256(raw), nodeId, ownerId)
 }
 
 type isoBox struct {
@@ -188,8 +200,8 @@ func isWarpnetBox(box isoBox) bool {
 		bytes.Equal(box.payload[:boxUUIDSize], warpnetUUID[:])
 }
 
-func newWarpnetBox(watermarkBytes []byte) ([]byte, error) {
-	encoded := base64.StdEncoding.EncodeToString(watermarkBytes)
+func newWarpnetBox(metadataBytes []byte) ([]byte, error) {
+	encoded := base64.StdEncoding.EncodeToString(metadataBytes)
 
 	boxSize := boxHeaderSize + boxUUIDSize + len(encoded)
 	if boxSize > math.MaxUint32 {

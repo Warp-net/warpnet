@@ -36,7 +36,7 @@ func StreamGetWhoToFollowHandler(
 		}
 
 		if ev.UserId == "" {
-			return nil, errEmptyUserId
+			return nil, warpnet.WarpError("empty user id")
 		}
 
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)

@@ -98,17 +98,17 @@ func StreamUploadVideoHandler(
 			return nil, fmt.Errorf("upload: video: fetching owner: %w", err)
 		}
 
-		watermark, err := buildWatermark(nodeInfo, privKey, owner)
+		metadata, err := media_meta.BuildMetadata(nodeInfo, privKey, owner)
 		if err != nil {
 			return nil, err
 		}
 
-		video, err := watermarkUploadedVideo(ev.Video, watermark)
+		video, err := signUploadedVideo(ev.Video, metadata)
 		if err != nil {
 			return nil, fmt.Errorf("upload: video: %w", err)
 		}
 
-		key, err := mediaRepo.SetVideo(watermark.OwnerId, video)
+		key, err := mediaRepo.SetVideo(metadata.OwnerId, video)
 		if err != nil {
 			return nil, fmt.Errorf("upload: video: storing media: %w", err)
 		}
@@ -186,7 +186,7 @@ func StreamGetVideoHandler(
 			return nil, fmt.Errorf("get video: unmarshalling response: %w", err)
 		}
 
-		if err := verifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
+		if err := media_meta.VerifyForeignVideo(u, ev.Key, videoResp.File); err != nil {
 			log.Warnf("get video: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetVideoResponse{File: ""}, nil
 		}
@@ -224,12 +224,8 @@ func videoDataPrefix(header string) (string, bool) {
 	return prefix, ok
 }
 
-func verifyForeignVideo(u domain.User, key, file string) error {
-	return verifyForeignMedia(u, key, file, media_meta.VerifyVideo)
-}
-
-func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain.Base64Video, error) {
-	header, videoBytes, err := splitDataURI(file)
+func signUploadedVideo(file string, metadata media_meta.Metadata) (domain.Base64Video, error) {
+	header, videoBytes, err := media_meta.SplitDataURI(file)
 	if err != nil {
 		return "", err
 	}
@@ -247,16 +243,16 @@ func watermarkUploadedVideo(file string, watermark media_meta.Watermark) (domain
 		return "", ErrUnsupportedVideo
 	}
 
-	watermarked, err := watermarkRaw(videoBytes, watermark)
+	signed, err := signVideo(videoBytes, metadata)
 	if err != nil {
 		return "", err
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(watermarked)
+	encoded := base64.StdEncoding.EncodeToString(signed)
 	return domain.Base64Video(prefix + encoded), nil
 }
 
-func watermarkRaw(videoBytes []byte, watermark media_meta.Watermark) ([]byte, error) {
+func signVideo(videoBytes []byte, metadata media_meta.Metadata) ([]byte, error) {
 	raw, _, err := media_meta.SplitVideo(videoBytes)
 	if err != nil {
 		return nil, fmt.Errorf("meta data stripping: %w", err)
@@ -267,18 +263,18 @@ func watermarkRaw(videoBytes []byte, watermark media_meta.Watermark) ([]byte, er
 		return nil, fmt.Errorf("meta data stripping: %w", err)
 	}
 
-	watermarkBytes, err := watermark.Sign(security.ConvertToSHA256(raw))
+	metadataBytes, err := metadata.Sign(security.ConvertToSHA256(raw))
 	if err != nil {
 		return nil, fmt.Errorf("meta data signing: %w", err)
 	}
 
-	watermarked, err := media_meta.EmbedInVideo(raw, watermarkBytes)
+	signed, err := media_meta.EmbedInVideo(raw, metadataBytes)
 	if err != nil {
 		return nil, fmt.Errorf("meta data amending: %w", err)
 	}
 
-	if err := media_meta.VerifyVideo(watermarked, watermark.NodeId, watermark.OwnerId); err != nil {
+	if err := media_meta.VerifyVideo(signed, metadata.NodeId, metadata.OwnerId); err != nil {
 		return nil, fmt.Errorf("meta data self check: %w", err)
 	}
-	return watermarked, nil
+	return signed, nil
 }

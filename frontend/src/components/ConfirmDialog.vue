@@ -9,7 +9,8 @@
     <div class="bg-white dark:bg-darktheme-card rounded-lg w-full max-w-sm flex flex-col shadow-lg" @click.stop>
       <div class="px-5 py-4">
         <h2 v-if="title" class="font-bold text-lg mb-2">{{ title }}</h2>
-        <p class="text-sm text-dark whitespace-pre-line">{{ message }}</p>
+        <p class="text-sm text-dark whitespace-pre-line break-words">{{ message }}</p>
+        <slot />
       </div>
       <div class="flex justify-end gap-2 px-5 py-3 border-t border-lighter">
         <button
@@ -18,10 +19,11 @@
         >{{ cancelLabel }}</button>
         <button
           @click.stop="$emit('confirm')"
+          :disabled="confirmDisabled"
           class="px-4 py-1 rounded-full font-semibold text-white"
-          :class="destructive
+          :class="[destructive
             ? 'bg-red-600 hover:bg-red-700'
-            : 'bg-blue hover:bg-darkblue'"
+            : 'bg-blue hover:bg-darkblue', {'opacity-50 cursor-not-allowed': confirmDisabled}]"
         >{{ confirmLabel }}</button>
       </div>
     </div>
@@ -41,6 +43,7 @@ export default {
     confirmLabel: { type: String, default: "OK" },
     cancelLabel: { type: String, default: "Cancel" },
     destructive: { type: Boolean, default: false },
+    confirmDisabled: { type: Boolean, default: false },
   },
   emits: ["confirm", "cancel"],
   methods: {

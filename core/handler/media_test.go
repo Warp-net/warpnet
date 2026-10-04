@@ -30,7 +30,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -53,25 +52,25 @@ func (s signingUserRepo) Get(userId string) (domain.User, error) {
 	return domain.User{Id: s.ownerId, NodeId: testSignerID.String()}, nil
 }
 
-func watermarkedImage(t *testing.T, ownerId string) (file, key string) {
+func imageWithMetadata(t *testing.T, ownerId string) (file, key string) {
 	t.Helper()
 
-	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
+	metadata, err := media_meta.BuildMetadata(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	img, err := watermarkUploadedImage(testImagePNG, watermark)
+	img, err := media_meta.SignUploadedImage(testImagePNG, metadata)
 	require.NoError(t, err)
 
 	return string(img), contentKeyOf(string(img))
 }
 
-func watermarkedVideo(t *testing.T, ownerId string) (file, key string) {
+func videoWithMetadata(t *testing.T, ownerId string) (file, key string) {
 	t.Helper()
 
-	watermark, err := buildWatermark(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
+	metadata, err := media_meta.BuildMetadata(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
 	require.NoError(t, err)
 
-	video, err := watermarkUploadedVideo(mp4DataURL(minimalMP4()), watermark)
+	video, err := signUploadedVideo(mp4DataURL(minimalMP4()), metadata)
 	require.NoError(t, err)
 
 	return string(video), contentKeyOf(string(video))
@@ -90,12 +89,12 @@ func rawOf(t *testing.T, dataURL string) []byte {
 }
 
 func TestUploadVideo_ReplacesAnInheritedMetaBox(t *testing.T) {
-	inherited, _ := watermarkedVideo(t, "alice")
+	inherited, _ := videoWithMetadata(t, "alice")
 
-	watermark, err := buildWatermark(signingInformer{"mallory"}.NodeInfo(), testSignerKey, ownerOf("mallory"))
+	metadata, err := media_meta.BuildMetadata(signingInformer{"mallory"}.NodeInfo(), testSignerKey, ownerOf("mallory"))
 	require.NoError(t, err)
 
-	video, err := watermarkUploadedVideo(inherited, watermark)
+	video, err := signUploadedVideo(inherited, metadata)
 	require.NoError(t, err)
 
 	raw := rawOf(t, string(video))
@@ -117,80 +116,14 @@ func TestUploadVideo_HandlesOpenEndedTrailingBox(t *testing.T) {
 		0xAA, 0xBB, 0xCC, 0xDD,
 	}...)
 
-	watermark, err := buildWatermark(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
+	metadata, err := media_meta.BuildMetadata(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
 	require.NoError(t, err)
 
-	video, err := watermarkUploadedVideo(mp4DataURL(openEnded), watermark)
+	video, err := signUploadedVideo(mp4DataURL(openEnded), metadata)
 	require.NoError(t, err)
 
 	assert.NoError(t, media_meta.VerifyVideo(
 		rawOf(t, string(video)), testSignerID.String(), "alice"))
-}
-
-func TestVerifyContentKey(t *testing.T) {
-	file, key := watermarkedImage(t, "alice")
-
-	assert.NoError(t, verifyContentKey(key, file))
-	assert.ErrorIs(t, verifyContentKey(key, file+"tail"), ErrMediaKeyMismatch)
-
-	assert.NoError(t, verifyContentKey("https://mastodon.social/avatar.png", file))
-}
-
-func TestVerifyForeignMedia(t *testing.T) {
-	file, key := watermarkedImage(t, "alice")
-	owner := domain.User{Id: "alice", NodeId: testSignerID.String()}
-
-	t.Run("watermarked media of the user who serves it", func(t *testing.T) {
-		assert.NoError(t, verifyForeignImage(owner, key, file))
-	})
-
-	t.Run("empty answer is nothing to check", func(t *testing.T) {
-		assert.NoError(t, verifyForeignImage(owner, key, ""))
-	})
-
-	t.Run("content that is not what the key names", func(t *testing.T) {
-		other, _ := watermarkedImage(t, "alice")
-		assert.ErrorIs(t, verifyForeignImage(owner, key, other+"x"), ErrMediaKeyMismatch)
-	})
-
-	t.Run("media with no watermark", func(t *testing.T) {
-		plain := imagePrefix + base64.StdEncoding.EncodeToString([]byte("no metadata here"))
-		assert.ErrorIs(t, verifyForeignImage(owner, "avatar", plain), media_meta.ErrNoMetadata)
-	})
-
-	t.Run("media of another user on the same node", func(t *testing.T) {
-		assert.ErrorIs(t,
-			verifyForeignImage(domain.User{Id: "mallory", NodeId: testSignerID.String()}, "avatar", file),
-			media_meta.ErrForgedMetadata)
-	})
-
-	t.Run("watermark of another node", func(t *testing.T) {
-		otherNode := domain.User{Id: "alice", NodeId: remoteNodeID}
-		assert.ErrorIs(t, verifyForeignImage(otherNode, key, file), media_meta.ErrForgedMetadata)
-	})
-
-	t.Run("watermark re-encoded away", func(t *testing.T) {
-		stripped, err := transcodeToJPEG(rawOf(t, file))
-		require.NoError(t, err)
-
-		naked := imagePrefix + base64.StdEncoding.EncodeToString(stripped)
-		assert.ErrorIs(t, verifyForeignImage(owner, "avatar", naked), media_meta.ErrNoMetadata)
-	})
-
-	t.Run("video with no watermark", func(t *testing.T) {
-		plain := "data:video/mp4;base64," + base64.StdEncoding.EncodeToString(minimalMP4())
-		assert.ErrorIs(t, verifyForeignVideo(
-			domain.User{Id: "alice", NodeId: testSignerID.String()}, "clip", plain),
-			media_meta.ErrNoMetadata)
-	})
-
-	t.Run("bridged fediverse media is out of scope", func(t *testing.T) {
-		bridged := domain.User{Id: "warpnet@mastodon.social", Network: fediverse.MastodonNetwork}
-		assert.NoError(t, verifyForeignImage(bridged, "https://mastodon.social/a.png", "data:image/png;base64,AAAA"))
-
-		viaGateway := domain.User{Id: "someone@mastodon.social", NodeId: fediverse.GatewayNodeID()}
-		assert.NoError(t, verifyForeignImage(viaGateway, "https://mastodon.social/b.png", "data:image/png;base64,AAAA"))
-	})
 }
 
 func ownerOf(ownerId string) domain.User {
@@ -201,7 +134,7 @@ func contentKeyOf(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
 }
 
-func TestUpload_StoresNothingWhenTheNodeCannotWatermark(t *testing.T) {
+func TestUpload_StoresNothingWhenTheNodeCannotSign(t *testing.T) {
 	t.Run("image", func(t *testing.T) {
 		repo := newImageRepoDouble()
 

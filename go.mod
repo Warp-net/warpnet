@@ -11,7 +11,7 @@ tool (
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Warp-net/libp2p-camouflage-transport v0.0.3
-	github.com/Warp-net/payment-engine-lib v0.0.2
+	github.com/Warp-net/payment-engine-lib v0.0.5
 	github.com/dgraph-io/badger/v4 v4.9.3
 	github.com/docker/go-units v0.5.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
@@ -42,6 +42,7 @@ require (
 	github.com/wailsapp/wails/v2 v2.13.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.54.0
+	golang.org/x/image v0.44.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 )
@@ -263,7 +264,6 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260718201538-764159d718ef // indirect
-	golang.org/x/image v0.44.0 // indirect
 	golang.org/x/mobile v0.0.0-20260709172247-6129f5bee9d5 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect

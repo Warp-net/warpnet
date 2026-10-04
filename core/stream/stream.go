@@ -288,7 +288,7 @@ const (
 func maxRequestSize(r WarpRoute) int64 {
 	switch r.String() {
 	case event.PRIVATE_POST_UPLOAD_IMAGE, event.PRIVATE_POST_UPLOAD_VIDEO,
-		event.PRIVATE_POST_IMPORT_TWITTER_TWEET:
+		event.PRIVATE_POST_IMPORT_TWITTER_TWEET, event.PRIVATE_GET_SPONSORED_BUYER:
 		return MaxMediaSize
 	}
 	return MaxControlSize
@@ -296,7 +296,8 @@ func maxRequestSize(r WarpRoute) int64 {
 
 func maxResponseSize(r WarpRoute) int64 {
 	switch r.String() {
-	case event.PUBLIC_GET_IMAGE, event.PUBLIC_GET_VIDEO:
+	case event.PUBLIC_GET_IMAGE, event.PUBLIC_GET_VIDEO,
+		event.PUBLIC_GET_SPONSORED_IMAGE, event.PUBLIC_GET_SPONSORED_VIDEO:
 		return MaxMediaSize
 	}
 	if r.IsGet() {

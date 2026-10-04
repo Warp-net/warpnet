@@ -530,7 +530,7 @@ func (e *Engine) authenticate(rec domain.RatingRecord) (entry, error) {
 // merely late, and a dimension or kinds this build does not know may be a
 // newer build's, so none of those is anyone's fault.
 func isForgery(err error) bool {
-	for _, structural := range []error{
+	for _, structural := range [5]error{
 		ErrRecordSelfRated, ErrRecordBadPeerID,
 		ErrRecordBadGeneration, ErrRecordEmptyOffences, ErrRecordBadKind,
 	} {

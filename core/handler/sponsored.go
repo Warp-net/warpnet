@@ -33,10 +33,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/authorship"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -44,25 +46,42 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
 )
 
-const orderNonceSize = 16
+const (
+	orderNonceSize    = 16
+	dailyOrdersWindow = 24 * time.Hour
 
-const ErrSponsoredPending = warpnet.WarpError("sponsored tweet: payment is confirming")
+	ErrChainUnavailable warpnet.WarpError = "order: the TRON network cannot be reached, nothing was paid; try again later"
+	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so it is not sent again; check the wallet history"
+)
+
+type SponsoredAuthStorer interface {
+	GetOwner() domain.Owner
+}
 
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
+	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
+	IsAvailable(ctx context.Context) bool
 	Splitter() string
 	MaxFeePercent() uint64
 	Network() string
 }
 
+type OrderCounter interface {
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+}
+
 type OrderStorer interface {
+	OrderCounter
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
+	Delete(tweetId, buyerId string) error
 }
 
 type SponsoredTweetFetcher interface {
@@ -80,8 +99,21 @@ type SponsoredStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+type SponsoredNotifier interface {
+	Add(not domain.Notification) error
+}
+
+type SponsoredMediaStorer interface {
+	GetImage(userId, key string) (domain.Base64Image, error)
+	GetVideo(userId, key string) (domain.Base64Video, error)
+}
+
+type SponsoredCopyStorer interface {
+	SetCopy(userId, key string, c domain.MediaCopy) error
+}
+
 func StreamNewOrderHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	orders OrderStorer,
@@ -121,10 +153,15 @@ func StreamNewOrderHandler(
 		if err != nil {
 			return nil, err
 		}
+		if order.TxId == "" {
+			return nil, ErrPaymentUnknown
+		}
 		if !order.Confirmed {
-			order, err = claimOrder(orders, streamer, author, order)
+			claimed, err := claimOrder(orders, streamer, author, order)
 			if err != nil {
-				return nil, err
+				log.Warnf("order: %s is paid in tx %s, the author has not confirmed it yet: %v", ev.TweetId, order.TxId, err)
+			} else {
+				order = claimed
 			}
 		}
 		return event.OrderResponse{TweetId: ev.TweetId, TxId: order.TxId, Confirmed: order.Confirmed}, nil
@@ -140,19 +177,10 @@ func payAuthor(
 	author domain.User,
 	tweetId string,
 ) (domain.Order, error) {
-	if backend.Splitter() == "" {
-		return domain.Order{}, warpnet.WarpError("order: sponsored payments are not open on " + backend.Network())
+	if !backend.IsAvailable(context.Background()) {
+		return domain.Order{}, ErrChainUnavailable
 	}
-
-	teaser, err := streamedTweet(streamer, author, tweetId)
-	if err != nil {
-		return domain.Order{}, err
-	}
-	if !teaser.Price.IsPositive() {
-		return domain.Order{}, warpnet.WarpError("order: tweet has no price")
-	}
-
-	address, err := authorAddress(streamer, author, backend.Network())
+	sponsorship, err := tweetSponsorship(backend, streamer, author, tweetId)
 	if err != nil {
 		return domain.Order{}, err
 	}
@@ -169,26 +197,124 @@ func payAuthor(
 		CreatedAt: time.Now(),
 	}
 
-	seed, err := walletSeed(owner, identityKey, backend.Network())
+	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 	if err != nil {
 		return domain.Order{}, err
 	}
-	payment, err := backend.Pay(context.Background(), seed, wallet.Sponsorship{
-		Splitter:      backend.Splitter(),
-		OrderId:       order.ID(),
-		Author:        address,
-		Amount:        teaser.Price.Units.String(),
-		MaxFeePercent: backend.MaxFeePercent(),
-	})
-	if err != nil {
+	if err := orders.Save(order); err != nil {
+		return domain.Order{}, err
+	}
+	sponsorship.OrderId = order.ID()
+	payment, err := backend.Pay(context.Background(), seed, sponsorship)
+	if payment.PayTx == "" && (err == nil || errors.Is(err, wallet.ErrNoAnswer)) {
+		log.Errorf("order: the payment for %s may have gone through, its order stays to block another: %v", tweetId, err)
+		return domain.Order{}, ErrPaymentUnknown
+	}
+	if payment.PayTx == "" {
+		if deleteErr := orders.Delete(order.TweetId, order.BuyerId); deleteErr != nil {
+			log.Errorf("order: %s was not paid, but its order was not removed: %v", tweetId, deleteErr)
+		}
 		log.Errorf("order: pay for %s: %v", tweetId, err)
 		return domain.Order{}, err
+	}
+	if err != nil {
+		log.Warnf("order: the payment for %s got no answer, tx %s may still land: %v", tweetId, payment.PayTx, err)
 	}
 	order.TxId = payment.PayTx
 	if err := orders.Save(order); err != nil {
 		log.Errorf("order: %s paid in tx %s but the receipt was not saved: %v", tweetId, payment.PayTx, err)
 	}
 	return order, nil
+}
+
+func tweetSponsorship(
+	backend SponsoredWallet,
+	streamer SponsoredStreamer,
+	author domain.User,
+	tweetId string,
+) (wallet.Sponsorship, error) {
+	if backend.Splitter() == "" {
+		return wallet.Sponsorship{}, warpnet.WarpError("order: sponsored payments are not open on " + backend.Network())
+	}
+
+	teaser, err := streamedTweet(streamer, author, tweetId)
+	if err != nil {
+		return wallet.Sponsorship{}, err
+	}
+	if !teaser.Price.IsPositive() {
+		return wallet.Sponsorship{}, warpnet.WarpError("order: tweet has no price")
+	}
+
+	address, err := authorAddress(streamer, author, backend.Network())
+	if err != nil {
+		return wallet.Sponsorship{}, err
+	}
+	return wallet.Sponsorship{
+		Splitter:      backend.Splitter(),
+		Author:        address,
+		Amount:        teaser.Price.Units.String(),
+		MaxFeePercent: backend.MaxFeePercent(),
+	}, nil
+}
+
+func StreamGetOrderQuoteHandler(
+	auth SponsoredAuthStorer,
+	identityKey ed25519.PrivateKey,
+	backend SponsoredWallet,
+	userRepo SponsoredUserFetcher,
+	streamer SponsoredStreamer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.GetOrderQuoteEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("order quote: empty tweet id")
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("order quote: empty user id")
+		}
+		owner := auth.GetOwner()
+		if ev.UserId == owner.UserId {
+			return nil, warpnet.WarpError("order quote: an own tweet is not for sale")
+		}
+
+		author, err := userRepo.Get(ev.UserId)
+		if err != nil {
+			return nil, err
+		}
+		sponsorship, err := tweetSponsorship(backend, streamer, author, ev.TweetId)
+		if err != nil {
+			return nil, err
+		}
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		quote, err := backend.Quote(context.Background(), seed, sponsorship)
+		if err != nil {
+			log.Warnf("order quote: %s: %v", ev.TweetId, err)
+			return nil, err
+		}
+
+		steps := make([]event.OrderQuoteStep, 0, len(quote.Steps))
+		for _, step := range quote.Steps {
+			steps = append(steps, event.OrderQuoteStep(step))
+		}
+		return event.OrderQuoteResponse{
+			Token:          quote.Token,
+			FeePercent:     quote.FeePercent,
+			Fee:            quote.Fee,
+			Total:          quote.Total,
+			Balance:        quote.Balance,
+			TRX:            quote.TRX,
+			EnergyPrice:    quote.EnergyPrice,
+			BandwidthPrice: quote.BandwidthPrice,
+			NetworkFee:     quote.NetworkFee,
+			Steps:          steps,
+		}, nil
+	}
 }
 
 func streamedTweet(streamer SponsoredStreamer, author domain.User, tweetId string) (domain.Tweet, error) {
@@ -214,6 +340,10 @@ func authorAddress(streamer SponsoredStreamer, author domain.User, network strin
 	resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_WALLET_ADDRESS, event.WalletAddressEvent{Chain: network})
 	if err != nil {
 		return "", err
+	}
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Message != "" {
+		return "", warpnet.WarpError(possibleError.Message)
 	}
 	var address event.WalletAddressResponse
 	if err := json.Unmarshal(resp, &address); err != nil {
@@ -259,12 +389,13 @@ func claimOrder(
 }
 
 func StreamVerifyOrderHandler(
-	auth WalletOwnerStorer,
+	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
 	userRepo SponsoredUserFetcher,
+	notifier SponsoredNotifier,
 	streamer SponsoredStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -284,7 +415,8 @@ func StreamVerifyOrderHandler(
 		if ev.Nonce == "" {
 			return nil, warpnet.WarpError("order: empty nonce")
 		}
-		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId); err != nil {
+		buyer, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId)
+		if err != nil {
 			return nil, err
 		}
 
@@ -304,6 +436,14 @@ func StreamVerifyOrderHandler(
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
 		}
+		now := time.Now()
+		count, err := orders.CountConfirmed(ev.UserId, now.Add(-domain.OrderLimitWindow), now)
+		if err != nil {
+			return nil, err
+		}
+		if count >= domain.OrderLimit {
+			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
+		}
 
 		order := domain.Order{
 			TweetId:   ev.TweetId,
@@ -313,7 +453,7 @@ func StreamVerifyOrderHandler(
 			TxId:      ev.TxId,
 			CreatedAt: time.Now(),
 		}
-		seed, err := walletSeed(owner, identityKey, backend.Network())
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
@@ -337,15 +477,21 @@ func StreamVerifyOrderHandler(
 			if err := orders.Save(order); err != nil {
 				return nil, err
 			}
+			if err := notifyOrderLimit(notifier, orders, owner.UserId, buyer); err != nil {
+				log.Errorf("order: telling the author about %s's order limit: %v", buyer.Id, err)
+			}
 		}
 		return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId, Confirmed: paid}, nil
 	}
 }
 
 func StreamGetSponsoredTweetHandler(
-	auth OwnerTweetStorer,
+	auth SponsoredAuthStorer,
+	identityKey ed25519.PrivateKey,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
+	mediaRepo SponsoredMediaStorer,
+	copyRepo SponsoredCopyStorer,
 	userRepo SponsoredUserFetcher,
 	streamer SponsoredStreamer,
 ) warpnet.WarpHandlerFunc {
@@ -362,16 +508,28 @@ func StreamGetSponsoredTweetHandler(
 		}
 
 		owner := auth.GetOwner()
-		isOwn := isOwnRequest(s, streamer.NodeInfo())
+		isOwn := warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil
+		if ev.UserId == owner.UserId && isOwn {
+			return tweetRepo.Get(owner.UserId, ev.TweetId)
+		}
 		if ev.UserId == owner.UserId {
+			buyer, err := findRequester(s, userRepo)
+			if err != nil {
+				return nil, err
+			}
+			order, err := orders.Get(ev.TweetId, buyer.Id)
+			if err != nil && !errors.Is(err, database.ErrOrderNotFound) {
+				return nil, err
+			}
+			if !order.Confirmed {
+				return domain.Tweet{}, nil
+			}
 			tweet, err := tweetRepo.Get(owner.UserId, ev.TweetId)
 			if err != nil {
 				return nil, err
 			}
-			if !isOwn && !isPaidByPeer(s, userRepo, orders, ev.TweetId) {
-				return domain.Tweet{}, nil
-			}
-			return tweet, nil
+			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
+			return copyTweetMedia(signer, mediaRepo, copyRepo, tweet, buyer, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -387,6 +545,9 @@ func StreamGetSponsoredTweetHandler(
 		if order.Tweet != nil {
 			return *order.Tweet, nil
 		}
+		if order.TxId == "" {
+			return domain.Tweet{}, nil
+		}
 
 		author, err := userRepo.Get(ev.UserId)
 		if err != nil {
@@ -398,7 +559,7 @@ func StreamGetSponsoredTweetHandler(
 				return nil, err
 			}
 			if !order.Confirmed {
-				return nil, ErrSponsoredPending
+				return event.OrderResponse{TweetId: ev.TweetId, TxId: order.TxId}, nil
 			}
 		}
 		resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_SPONSORED_TWEET, ev)
@@ -424,14 +585,136 @@ func StreamGetSponsoredTweetHandler(
 	}
 }
 
-func isPaidByPeer(s warpnet.WarpStream, userRepo SponsoredUserFetcher, orders OrderStorer, tweetId string) bool {
+func findRequester(s warpnet.WarpStream, userRepo SponsoredUserFetcher) (domain.User, error) {
 	if s == nil || s.Conn() == nil {
-		return false
+		return domain.User{}, database.ErrUserNotFound
 	}
-	buyer, err := userRepo.GetByNodeID(s.Conn().RemotePeer().String())
+	return userRepo.GetByNodeID(s.Conn().RemotePeer().String())
+}
+
+func copyTweetMedia(
+	signer media_meta.Metadata,
+	mediaRepo SponsoredMediaStorer,
+	copyRepo SponsoredCopyStorer,
+	tweet domain.Tweet,
+	buyer domain.User,
+	order domain.Order,
+) (domain.Tweet, error) {
+	orderJSON, err := json.Marshal(order)
 	if err != nil {
-		return false
+		return domain.Tweet{}, err
 	}
-	order, err := orders.Get(tweetId, buyer.Id)
-	return err == nil && order.Confirmed
+	encryptedOrder, err := security.EncryptAES(orderJSON, signer.PrivKey)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+
+	watermarkText := "@" + buyer.Username + " · " + buyer.Id
+	imageKeys := make([]string, 0, len(tweet.ImageKeys))
+	for _, key := range tweet.ImageKeys {
+		img, err := mediaRepo.GetImage(tweet.UserId, key)
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		_, raw, err := media_meta.SplitDataURI(string(img))
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		watermark, err := media_meta.WatermarkPNG(raw, watermarkText)
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark}
+		copied, err := media_meta.BuildImageCopy(string(img), c, signer)
+		if err != nil {
+			return domain.Tweet{}, err
+		}
+		copyKey := media_meta.BuildContentKey(copied)
+		if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
+			return domain.Tweet{}, err
+		}
+		imageKeys = append(imageKeys, copyKey)
+	}
+	tweet.ImageKeys = imageKeys
+
+	if tweet.VideoKey == nil {
+		return tweet, nil
+	}
+	video, err := mediaRepo.GetVideo(tweet.UserId, *tweet.VideoKey)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	c := domain.MediaCopy{OriginalKey: *tweet.VideoKey, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder}
+	copied, err := media_meta.BuildVideoCopy(string(video), c)
+	if err != nil {
+		return domain.Tweet{}, err
+	}
+	copyKey := media_meta.BuildContentKey(copied)
+	if err := copyRepo.SetCopy(tweet.UserId, copyKey, c); err != nil {
+		return domain.Tweet{}, err
+	}
+	tweet.VideoKey = &copyKey
+	return tweet, nil
+}
+
+func notifyOrderLimit(notifier SponsoredNotifier, orders OrderCounter, authorId string, buyer domain.User) error {
+	now := time.Now()
+	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	if err != nil || count != domain.OrderLimit {
+		return err
+	}
+	name := buyer.Username
+	if name == "" {
+		name = buyer.Id
+	}
+	return notifier.Add(domain.Notification{
+		Type:        domain.NotificationOrderLimitType,
+		Text:        name + " bought " + strconv.Itoa(domain.OrderLimit) + " of your tweets within an hour; their next orders wait",
+		RecepientId: authorId,
+		ActorId:     buyer.Id,
+	})
+}
+
+func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCounter) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.GetCopyBuyerEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		_, raw, err := media_meta.SplitDataURI(ev.File)
+		if err != nil {
+			return nil, err
+		}
+
+		encryptedOrder, err := media_meta.ExtractOrder(raw)
+		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoOrder) {
+			return event.CopyBuyerResponse{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		orderJSON, err := security.DecryptAES(encryptedOrder, identityKey)
+		if err != nil {
+			return nil, warpnet.WarpError("sponsored buyer: this node did not sell the copy")
+		}
+
+		var order domain.Order
+		if err := json.Unmarshal(orderJSON, &order); err != nil {
+			return nil, err
+		}
+		dailyOrdersCount, err := orders.CountConfirmed(
+			order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return event.CopyBuyerResponse{
+			TweetId:          order.TweetId,
+			BuyerId:          order.BuyerId,
+			OrderId:          order.ID(),
+			TxId:             order.TxId,
+			SoldAt:           order.CreatedAt,
+			DailyOrdersCount: dailyOrdersCount,
+		}, nil
+	}
 }

@@ -110,7 +110,7 @@ func EncryptAES(plainData, password []byte) ([]byte, error) {
 	return aesGCM.Seal(out, nonce, plainData, nil), nil
 }
 
-func decryptAES(sealed, password []byte) ([]byte, error) {
+func DecryptAES(sealed, password []byte) ([]byte, error) {
 	if len(sealed) < saltSize {
 		return nil, ErrCiphertextTooShort
 	}

@@ -111,7 +111,9 @@ type WalletProvider interface {
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
 	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
+	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
+	IsAvailable(ctx context.Context) bool
 	Token() string
 	Decimals() uint8
 	Network() string
@@ -164,6 +166,8 @@ type AuthProvider interface {
 type OrderProvider interface {
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+	Delete(tweetId, buyerId string) error
 }
 
 type UserProvider interface {
@@ -282,6 +286,8 @@ type MediaProvider interface {
 	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
 	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
+	GetCopy(userId string, key string) (domain.MediaCopy, error)
+	SetCopy(userId string, key string, c domain.MediaCopy) error
 }
 
 type MutesProvider interface {

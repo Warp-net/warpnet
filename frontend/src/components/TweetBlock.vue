@@ -46,7 +46,7 @@ resulting from the use or misuse of this software.
         <img
           :src="profile.avatar || '/default_profile.png'"
           class="h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
-          :alt="`${tweet.username || 'User'} avatar`"
+          :alt="`${authorName || 'User'} avatar`"
         />
       </button>
     </div>
@@ -56,7 +56,7 @@ resulting from the use or misuse of this software.
     <div class="w-full min-w-0">
       <div class="flex items-center w-full min-w-0">
         <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="font-semibold hover:underline flat-btn truncate min-w-0 text-left">
-          {{ tweet.username || 'Anonymous' }}
+          {{ authorName || 'Anonymous' }}
         </button>
         <p class="hidden md:block text-sm text-dark ml-2 truncate min-w-0">
           @{{ tweet.user_id }}
@@ -90,6 +90,7 @@ resulting from the use or misuse of this software.
                 {{ tweet.pinned ? 'Unpin from profile' : 'Pin to profile' }}
               </button>
               <button type="button" @click.stop="openEdit" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Edit tweet</button>
+              <button v-if="tweet.price" type="button" @click.stop="openCopyCheck" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Check a copy</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
             <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
@@ -111,6 +112,26 @@ resulting from the use or misuse of this software.
           @confirm="doDelete"
           @cancel="showDeleteConfirm = false"
         />
+        <input
+          v-if="isOwner && tweet.price"
+          ref="copyInput"
+          type="file"
+          accept="image/*,video/*"
+          class="hidden"
+          aria-label="Copy to check"
+          @click.stop
+          @change="checkCopy"
+        />
+        <ConfirmDialog
+          :show="!!copyCheck"
+          title="Who bought this copy?"
+          :message="copyCheckMessage"
+          confirm-label="Check another"
+          cancel-label="Close"
+          :confirm-disabled="!!copyCheck?.checking"
+          @confirm="openCopyCheck"
+          @cancel="copyCheck = null"
+        />
       </div>
       <template v-if="isLocked">
         <div
@@ -121,28 +142,61 @@ resulting from the use or misuse of this software.
           <i class="fas fa-pepper-hot text-3xl" aria-hidden="true"></i>
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span v-if="unlockPending" class="text-xs text-dark" role="status">
+            <i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paid. The network is confirming it, the tweet opens by itself.
+          </span>
           <button
+              v-else
               type="button"
-              @click.stop="unlockPending ? unlock() : (showUnlockConfirm = true)"
+              @click.stop="openUnlock()"
               :disabled="unlocking"
               class="h-9 px-4 text-white font-semibold bg-blue hover:bg-darkblue rounded-full"
               :class="{'opacity-50 cursor-not-allowed': unlocking}"
           >
-            <span v-if="unlocking"><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>{{ unlockPending ? 'Checking…' : 'Paying…' }}</span>
-            <span v-else-if="unlockPending">Check payment</span>
+            <span v-if="unlocking"><i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Paying…</span>
             <span v-else>Unlock for {{ tweet.price.amount }} USDT</span>
           </button>
-          <span v-if="unlockPending" class="text-xs text-dark">Paid. The network is still confirming it, try again in a minute.</span>
         </div>
         <ConfirmDialog
           :show="showUnlockConfirm"
           title="Unlock this tweet?"
-          :message="`You pay ${tweet.price.amount} USDT to ${tweet.username || 'the author'}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.`"
+          :message="unlockMessage"
           confirm-label="Pay"
           cancel-label="Cancel"
+          :confirm-disabled="quoting || isShortOfTokens"
           @confirm="unlock"
           @cancel="showUnlockConfirm = false"
-        />
+        >
+          <p v-if="quoting" class="mt-3 text-sm text-dark" role="status">
+            <i class="fas fa-circle-notch fa-spin mr-1" aria-hidden="true"></i>Working out the costs…
+          </p>
+          <p v-else-if="quoteError" class="mt-3 text-sm text-red-700">{{ quoteError }}</p>
+          <template v-else-if="quote">
+            <table class="mt-3 w-full text-sm text-dark" aria-label="What the tweet costs">
+              <tbody>
+                <tr>
+                  <td class="py-0.5">To {{ authorName || 'the author' }}</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">{{ tweet.price.amount }} USDT</td>
+                </tr>
+                <tr>
+                  <td class="py-0.5">Service fee, {{ quote.fee_percent }}%</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">{{ decimal(quote.fee) }} USDT</td>
+                </tr>
+                <tr class="font-semibold">
+                  <td class="py-0.5">Total</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">{{ decimal(quote.total) }} USDT</td>
+                </tr>
+                <tr class="font-semibold">
+                  <td class="py-0.5">Network fee</td>
+                  <td class="py-0.5 text-right whitespace-nowrap">≈ {{ decimal(quote.network_fee) }} TRX</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="mt-2 text-xs text-dark">The network burns TRX for what your staked energy and bandwidth and the free daily bandwidth don't cover. ≈ marks an estimate.</p>
+            <p v-if="isShortOfTokens" class="mt-2 text-sm text-red-700">You have {{ decimal(quote.balance) }} USDT, not enough to pay.</p>
+            <p v-if="isShortOfTrx" class="mt-2 text-sm text-red-700">You have {{ decimal(quote.trx) }} TRX, less than the network fee.</p>
+          </template>
+        </ConfirmDialog>
       </template>
       <p v-else-if="!tweet.moderation || tweet.moderation?.is_ok" :key="tweet.text" class="pb-2 break-words" v-linkify>
         {{ displayText }}
@@ -409,10 +463,31 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
+import {watchOrder} from "@/lib/order-worker";
 import {extractYoutubeId} from "@/lib/youtube";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
+
+// USDT on TRON and TRX in sun both count in millionths.
+const unitDecimals = 6;
+
+function bigUnits(value) {
+  try {
+    return BigInt(value || "0");
+  } catch {
+    return 0n;
+  }
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("Couldn't read the file."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default {
   name: "Tweet",
@@ -445,6 +520,10 @@ export default {
       showUnlockConfirm: false,
       unlocking: false,
       unlockPending: false,
+      quote: null,
+      quoting: false,
+      quoteError: "",
+      copyCheck: null,
       showRetweetMenu: false,
       quotedSourceText: '',
       quotedSourceUsername: '',
@@ -491,8 +570,44 @@ export default {
     canReply() {
       return acceptsReplies(this.tweet);
     },
+    // The tweet keeps the name its author had when posting; the loaded
+    // profile carries the current one, so a rename shows on old tweets too.
+    authorName() {
+      return (this.profile && this.profile.username) || this.tweet.username;
+    },
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
+    },
+    isBought() {
+      return !!(this.tweet && this.tweet.price) && !this.isOwner && !!this.tweet.text;
+    },
+    unlockMessage() {
+      const author = this.authorName || "the author";
+      const marked = "\n\nYour copy is marked with your name and ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
+      if (this.quoteError) {
+        return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.${marked}`;
+      }
+      return `The payment goes to ${author} and can't be undone.${marked}`;
+    },
+    copyCheckMessage() {
+      const check = this.copyCheck;
+      if (!check) return "";
+      if (check.checking) return "Reading the file…";
+      if (check.error) return check.error;
+      if (!check.sale) {
+        return "This file names no buyer. It is your original, or the mark is gone: a screenshot or a re-encoded copy loses it.";
+      }
+      const soldAt = new Date(check.sale.sold_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      const dailyOrders = check.sale.daily_orders_count > 1
+        ? `\nThey bought ${check.sale.daily_orders_count} of your tweets within a day of this one.`
+        : "";
+      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}`;
+    },
+    isShortOfTokens() {
+      return !!this.quote && bigUnits(this.quote.balance) < bigUnits(this.quote.total);
+    },
+    isShortOfTrx() {
+      return !!this.quote && bigUnits(this.quote.trx) < bigUnits(this.quote.network_fee);
     },
     displayText() {
       const text = (this.tweet && this.tweet.text) || '';
@@ -562,14 +677,36 @@ export default {
         console.warn(`failed to load retweeter profile [${by}]`, err);
       }
     },
+    async openUnlock() {
+      this.showUnlockConfirm = true;
+      this.quote = null;
+      this.quoteError = "";
+      this.quoting = true;
+      try {
+        this.quote = await warpnetService.quoteSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+      } catch (err) {
+        console.warn(`failed to quote tweet [${this.tweet.id}]`, err);
+        this.quoteError = `Couldn't work out the network fee: ${err?.message || err}`;
+      } finally {
+        this.quoting = false;
+      }
+    },
+    decimal(units) {
+      const value = bigUnits(units);
+      const base = 10n ** BigInt(unitDecimals);
+      const frac = (value % base).toString().padStart(unitDecimals, "0").replace(/0+$/, "");
+      return frac ? `${value / base}.${frac}` : `${value / base}`;
+    },
     async unlock() {
       this.showUnlockConfirm = false;
       if (this.unlocking) return;
       this.unlocking = true;
       try {
         const order = await warpnetService.orderSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
-        this.unlockPending = !order.confirmed;
-        if (this.unlockPending) return;
+        if (!order.confirmed) {
+          this.awaitConfirmation();
+          return;
+        }
         await this.loadSponsoredContent();
       } catch (err) {
         console.error(`failed to unlock tweet [${this.tweet.id}]`, err);
@@ -582,9 +719,21 @@ export default {
       const full = await warpnetService.getSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
       if (!full) return;
       if (full.pending) {
-        this.unlockPending = true;
+        this.awaitConfirmation();
         return;
       }
+      this.showSponsoredContent(full);
+    },
+    awaitConfirmation() {
+      this.unlockPending = true;
+      if (this._unwatchOrder) return;
+      this._unwatchOrder = watchOrder(this.tweet.id, this.tweet.user_id, (full) => {
+        this._unwatchOrder = null;
+        this.unlockPending = false;
+        this.showSponsoredContent(full);
+      });
+    },
+    showSponsoredContent(full) {
       this.tweet.text = full.text;
       this.tweet.image_keys = full.image_keys || [];
       this.tweet.video_key = full.video_key;
@@ -595,7 +744,9 @@ export default {
       if (imageKeys.length === 0) return;
       this.tweetImages = imageKeys.map(() => '');
       imageKeys.forEach((key, i) => {
-        warpnetService.getImage({userId: this.tweet.user_id, key})
+        const request = {userId: this.tweet.user_id, key};
+        const image = this.isBought ? warpnetService.getSponsoredImage(request) : warpnetService.getImage(request);
+        image
             .then((img) => { if (img) this.tweetImages[i] = img; })
             .catch((err) => console.warn(`failed to load tweet image [${this.tweet.id}]`, err));
       });
@@ -807,10 +958,10 @@ export default {
       this.videoError = '';
       this.videoLoading = true;
       try {
-        const video = await warpnetService.getVideo({
-          userId: this.tweet.user_id,
-          key,
-        });
+        const request = {userId: this.tweet.user_id, key};
+        const video = this.isBought
+          ? await warpnetService.getSponsoredVideo(request)
+          : await warpnetService.getVideo(request);
         if (!video || !video.file) {
           this.videoError = "This video isn't available right now. The author's node may be offline.";
           return;
@@ -877,6 +1028,28 @@ export default {
     deleteTweet() {
       this.showDropdown = false;
       this.showDeleteConfirm = true;
+    },
+    openCopyCheck() {
+      this.showDropdown = false;
+      this.$refs.copyInput.click();
+    },
+    async checkCopy(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      this.copyCheck = {checking: true};
+      try {
+        const sale = await warpnetService.getCopyBuyer(await readAsDataURL(file));
+        if (!sale) {
+          this.copyCheck = {sale: null};
+          return;
+        }
+        const buyer = await warpnetService.getProfile(sale.buyer_id).catch(() => null);
+        this.copyCheck = {sale, buyerName: (buyer && buyer.username) || sale.buyer_id};
+      } catch (err) {
+        console.warn(`failed to check a copy of tweet [${this.tweet.id}]`, err);
+        this.copyCheck = {error: err?.message || "Couldn't read the file."};
+      }
     },
     async doDelete() {
       this.showDeleteConfirm = false;
@@ -1252,6 +1425,10 @@ export default {
     if (this._statsRetryTimer) {
       clearTimeout(this._statsRetryTimer);
       this._statsRetryTimer = null;
+    }
+    if (this._unwatchOrder) {
+      this._unwatchOrder();
+      this._unwatchOrder = null;
     }
     this.cancelLongPress();
     this.cancelReactionBar();

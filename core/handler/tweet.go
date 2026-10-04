@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -47,6 +48,9 @@ import (
 )
 
 const tweetCharLimit = 280
+
+// sponsoredPriceLimit is 1 000 000 USDT in token base units.
+const sponsoredPriceLimit = 1_000_000_000_000
 
 type TweetUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
@@ -248,6 +252,9 @@ func validateTweetEvent(ev event.NewTweetEvent) error {
 	if ev.IsSponsored() {
 		if !ev.Price.IsPositive() {
 			return warpnet.WarpError("sponsored tweet: price must be positive")
+		}
+		if ev.Price.Units.Cmp(big.NewInt(sponsoredPriceLimit)) > 0 {
+			return warpnet.WarpError("sponsored tweet: price is above 1000000 USDT")
 		}
 		if ev.Poll != nil {
 			return warpnet.WarpError("sponsored tweet: poll is not allowed")
@@ -476,7 +483,7 @@ func StreamGetTweetHandler(
 			if err != nil {
 				return nil, err
 			}
-			if isOwnRequest(s, streamer.NodeInfo()) {
+			if warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil {
 				return tweet, nil
 			}
 			return tweet.Teaser(), nil
@@ -581,7 +588,7 @@ func StreamGetTweetsHandler(
 			)
 		}
 
-		if !isOwnRequest(s, streamer.NodeInfo()) {
+		if warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) != nil {
 			for i := range tweets {
 				tweets[i] = tweets[i].Teaser()
 			}

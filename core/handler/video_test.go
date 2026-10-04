@@ -157,7 +157,7 @@ func TestUploadVideo_MissingBase64Signature(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, err = h(bt, s{})
-	assert.ErrorIs(t, err, ErrInvalidBase64Signature)
+	assert.ErrorIs(t, err, media_meta.ErrInvalidBase64Signature)
 }
 
 func TestUploadVideo_UnsupportedFormatRejected(t *testing.T) {
@@ -445,7 +445,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 	})
 
 	t.Run("fetched foreign video is cached", func(t *testing.T) {
-		file, key := watermarkedVideo(t, "remote")
+		file, key := videoWithMetadata(t, "remote")
 		signerUsers := mediaUserDouble{users: map[string]domain.User{
 			"remote": {Id: "remote", NodeId: testSignerID.String()},
 		}}

@@ -434,6 +434,7 @@ type memberRepos struct {
 	chatRepo         ChatProvider
 	mediaRepo        MediaProvider
 	chatMediaRepo    MediaProvider
+	copyRepo         MediaProvider
 	notificationRepo NotificationProvider
 	settingsRepo     SettingsProvider
 	bookmarkRepo     BookmarkProvider
@@ -463,6 +464,7 @@ func (m *MemberNode) setupHandlers(
 		chatRepo:         database.NewChatRepo(db),
 		mediaRepo:        database.NewMediaRepo(db),
 		chatMediaRepo:    database.NewChatMediaRepo(db),
+		copyRepo:         database.NewSponsoredMediaRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
 		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
@@ -487,7 +489,7 @@ func (m *MemberNode) setupHandlers(
 	hs = append(hs, m.settingsHandlers(authRepo, r)...)
 	hs = append(hs, m.socialFilterHandlers(userRepo, r)...)
 	hs = append(hs, m.bookmarksHandlers(r)...)
-	hs = append(hs, m.walletHandlers(authRepo)...)
+	hs = append(hs, m.walletHandlers(authRepo, userRepo, r)...)
 	hs = append(hs, m.sponsoredHandlers(authRepo, userRepo, r)...)
 
 	m.node.SetStreamHandlers(hs...)
@@ -758,20 +760,36 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
-			handler.StreamGetSponsoredTweetHandler(authRepo, r.tweetRepo, r.orderRepo, userRepo, m),
+			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
 			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
 		},
 		{
+			event.PRIVATE_GET_SPONSORED_QUOTE,
+			handler.StreamGetOrderQuoteHandler(authRepo, m.privKey, m.walletClient, userRepo, m),
+		},
+		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
-			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m),
+			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m.notifier, m),
+		},
+		{
+			event.PRIVATE_GET_SPONSORED_BUYER,
+			handler.StreamGetCopyBuyerHandler(m.privKey, r.orderRepo),
+		},
+		{
+			event.PUBLIC_GET_SPONSORED_IMAGE,
+			handler.StreamGetSponsoredImageHandler(m, m.privKey, r.mediaRepo, r.copyRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_SPONSORED_VIDEO,
+			handler.StreamGetSponsoredVideoHandler(m, r.mediaRepo, r.copyRepo, userRepo),
 		},
 	}
 }
 
-func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamHandler {
+func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider, r *memberRepos) []warpnet.WarpStreamHandler {
 	//nolint:govet
 	return []warpnet.WarpStreamHandler{
 		{
@@ -802,7 +820,7 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider) []warpnet.WarpStreamH
 		},
 		{
 			event.PUBLIC_GET_WALLET_ADDRESS,
-			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient),
+			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo),
 		},
 	}
 }

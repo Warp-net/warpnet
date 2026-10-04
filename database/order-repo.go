@@ -28,6 +28,9 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	"strings"
+	"time"
+
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
@@ -74,6 +77,26 @@ func (repo *OrderRepo) Save(o domain.Order) error {
 	return txn.Commit()
 }
 
+func (repo *OrderRepo) Delete(tweetId, buyerId string) error {
+	if tweetId == "" {
+		return local_store.DBError("empty tweet id")
+	}
+	if buyerId == "" {
+		return local_store.DBError("empty buyer id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	if err := txn.Delete(orderKey(tweetId, buyerId)); err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Commit()
+}
+
 func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 	if tweetId == "" {
 		return domain.Order{}, local_store.DBError("empty tweet id")
@@ -104,6 +127,49 @@ func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 		return domain.Order{}, err
 	}
 	return o, nil
+}
+
+func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
+	if buyerId == "" {
+		return 0, local_store.DBError("empty buyer id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return 0, err
+	}
+	defer txn.Rollback()
+
+	var keys []local_store.DatabaseKey
+	prefix := local_store.DatabaseKey(OrderRepoName + local_store.Delimeter)
+	err = txn.IterateKeys(prefix, func(key string) error {
+		if strings.HasSuffix(key, local_store.Delimeter+buyerId) {
+			keys = append(keys, local_store.DatabaseKey(key))
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if len(keys) == 0 {
+		return 0, txn.Commit()
+	}
+
+	items, err := txn.BatchGet(keys...)
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	for _, item := range items {
+		var o domain.Order
+		if err := json.Unmarshal(item.Value, &o); err != nil {
+			return 0, err
+		}
+		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
+			count++
+		}
+	}
+	return count, txn.Commit()
 }
 
 func orderKey(tweetId, buyerId string) local_store.DatabaseKey {
