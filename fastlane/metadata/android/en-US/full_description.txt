@@ -1,14 +1,26 @@
-Warpnet is the Android client for Warpnet, a fully decentralized, peer-to-peer social network with no central servers.
+Warpnet is the Android client for Warpnet, a peer-to-peer social network in which every user runs their own node. There are no accounts and no instance servers: your posts, follows and timeline are stored on your node.
 
-Instead of signing in to a cloud account, the app pairs with your own Warpnet node — the desktop/server application you run yourself — by scanning a QR code. From then on the phone talks to your node directly over an encrypted libp2p connection.
+Instead of signing in to a cloud account, the app pairs with your own Warpnet node — the desktop/server application you run yourself — by scanning a QR code. From then on the app works through that node over an end-to-end encrypted libp2p connection.
 
-• Truly decentralized — no company, no central server, no account to sign up for
 • Pairs with your self-hosted Warpnet node via a QR code
-• Direct end-to-end peer-to-peer connection (libp2p)
+• End-to-end encrypted connection to your node (libp2p, Noise protocol), authenticated against the node identity in the QR code
 • Push notifications without any cloud gateway — no Firebase, no Google Cloud Messaging; a lightweight always-on connection to your node delivers them
 • No Google Play Services, no proprietary dependencies — 100% free and open-source software
 • Dark and light themes
 • Material Design
+
+What the app connects to:
+
+• Your node. The app tries the node's local network address first, then its public address (a static IP, port forwarding, or a UPnP/NAT-PMP mapping the node sets up on your router).
+• Bootstrap/relay nodes. At start the app connects to the bootstrap nodes your node hands it during pairing — by default three nodes run by the Warpnet project on one host, 207.154.221.44. They are the entry points to Warpnet's peer discovery network (a libp2p DHT). The app exchanges only libp2p control traffic with them: its peer ID and public key, the "warpdroid" user agent and DHT routing queries. They see your IP address, but none of your posts or messages. While refreshing its routing table the app may also query other publicly reachable Warpnet nodes.
+• Relaying. If your node cannot be reached directly (it is behind NAT without port forwarding and you are not on its network), the connection to it is relayed through one of these nodes (libp2p circuit relay v2). The relay passes on traffic it cannot read: the Noise encryption runs end to end between the phone and your node. The relay does see both IP addresses and peer IDs, and when and how much data flows.
+• To keep the project's hosts out of the path, run your own relay node (the same AGPL code) and start your node with --node.bootstrap; the app uses whatever list your node hands it.
+
+Traffic camouflage:
+
+To get through networks that block unknown protocols, every connection the app opens — to your node and to bootstrap/relay nodes — is wrapped in a TLS session that imitates Google Chrome connecting to www.googleapis.com (that name is sent as the TLS SNI), and the TLS greeting is split across two TCP packets to get past deep packet inspection. Nothing is sent to Google: the connection goes to the IP address of your node or of the relay, so a traffic monitor such as PCAPdroid shows "www.googleapis.com" next to those addresses. The outer TLS is only a disguise and its certificate is not checked; security comes from the Noise layer inside it.
+
+Full details: https://github.com/Warp-net/warpnet/blob/main/docs/NETWORK.md
 
 Warpnet is free software released under the GNU Affero General Public License v3 (AGPL-3.0-or-later). The Android client is derived from Tusky.
 

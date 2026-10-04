@@ -71,8 +71,8 @@ Warpnet's bet: the only way to be genuinely censorship-resistant is to remove th
 
 ## Features
 
-- **Serverless by design** — no instances, no relay servers (just stateless relay routers), no central database. Peers connect directly over [libp2p](https://libp2p.io/).
-- **Encrypted everywhere** — inter-node communication runs over the **Noise protocol**.
+- **Serverless by design** — no instances, no relay servers (just stateless relay routers), no central database. Peers connect directly over [libp2p](https://libp2p.io/), or through a relay node when NAT leaves no direct path.
+- **Encrypted everywhere** — inter-node communication runs over the **Noise protocol**, wrapped in a TLS layer that looks like ordinary HTTPS to get past DPI — see [network and transport security](docs/NETWORK.md).
 - **Local-first storage** — your posts, follows, and timeline live in an embedded datastore on *your* machine.
 - **Censorship-resistant** — public content propagates peer-to-peer through the DHT; there's no single point that can be blocked.
 - **Two first-class clients, one protocol** — a desktop app (Wails + Vue) and an Android app (a [Tusky](https://github.com/tuskyapp/Tusky) fork) both speak the same node protocol.
@@ -138,7 +138,7 @@ Warpnet has three node roles:
 
 | Role | What it does |
 |---|---|
-| **relay** | Stable entry points that help new nodes find peers via the DHT. Stateless. Thin. |
+| **relay** | Stable entry points that help new nodes find peers via the DHT, and relay encrypted traffic (circuit relay v2) for nodes behind NAT. Stateless. Thin. |
 | **member** | The full "fat" node most people run — holds local data, serves the UI, and participates in the network. |
 | **moderator** | LLM moderation node. |
 
@@ -213,7 +213,7 @@ Every contribution — code, docs, bug reports, or just kicking the tyres on tes
 ## FAQ
 
 **Is there a server I need to run or pay for?**
-No. You run a node; the node is your participation in the network. Relay nodes only help with peer discovery.
+No. You run a node; the node is your participation in the network. Relay nodes help with peer discovery and forward encrypted traffic for nodes behind NAT; they store nothing. See [network and transport security](docs/NETWORK.md).
 
 **Where is my data stored?**
 Locally, on your own device, in an embedded datastore. Public posts propagate to peers; private data never leaves your node.
@@ -222,7 +222,7 @@ Locally, on your own device, in an embedded datastore. Public posts propagate to
 Mastodon is *federated* — you still live on an instance run by an admin. Warpnet has no instances and no admins.
 
 **How is this different from Nostr?**
-Nostr stores your events on stateful relay servers. Warpnet has no relay tier — nodes are full peers connected over libp2p.
+Nostr stores your events on stateful relay servers. Warpnet relays store nothing — nodes are full peers connected over libp2p, and a relay only forwards encrypted traffic when two nodes cannot reach each other directly.
 
 **Why AGPLv3?**
 Because a censorship-resistant network should stay free and open: anyone running a modified version that others interact with must share their changes.
