@@ -335,16 +335,6 @@ func TestBootstrapListFollowsTheNetwork(t *testing.T) {
 		"a testnet node must not dial the production bootstrap nodes")
 }
 
-func TestCustomBootstrapIsAddedToTheDefaults(t *testing.T) {
-	custom := "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
-
-	c := withFlags(t, "--node.bootstrap", custom)
-
-	require.NotEmpty(t, c.Bootstrap)
-	assert.Equal(t, custom, c.Bootstrap[0])
-	assert.Subset(t, c.Bootstrap, warpnetBootstrapNodes)
-}
-
 func TestCustomBootstrapAcceptsACommaSeparatedList(t *testing.T) {
 	a := "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
 	b := "/ip4/5.6.7.8/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU"

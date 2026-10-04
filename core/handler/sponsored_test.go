@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"image"
 	"image/draw"
 	"image/jpeg"
@@ -27,6 +29,7 @@ import (
 )
 
 type stubSponsoredWallet struct {
+	isDown   bool
 	splitter string
 	pays     []wallet.Sponsorship
 	payTx    string
@@ -56,6 +59,19 @@ func (w *stubSponsoredWallet) IsPaid(_ context.Context, _ string, s wallet.Spons
 	return w.isPaid, nil
 }
 
+func (w *stubSponsoredWallet) IsAvailable(context.Context) bool { return !w.isDown }
+
+type orderCheckingWallet struct {
+	*stubSponsoredWallet
+	orders      stubOrders
+	isOrderKept bool
+}
+
+func (w *orderCheckingWallet) Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error) {
+	_, w.isOrderKept = w.orders["tweet-1/buyer-1"]
+	return w.stubSponsoredWallet.Pay(ctx, seed, s)
+}
+
 func (w *stubSponsoredWallet) Splitter() string      { return w.splitter }
 func (w *stubSponsoredWallet) MaxFeePercent() uint64 { return 5 }
 func (w *stubSponsoredWallet) Network() string       { return "testnet" }
@@ -72,6 +88,11 @@ func (o stubOrders) Get(tweetId, buyerId string) (domain.Order, error) {
 
 func (o stubOrders) Save(order domain.Order) error {
 	o[order.TweetId+"/"+order.BuyerId] = order
+	return nil
+}
+
+func (o stubOrders) Delete(tweetId, buyerId string) error {
+	delete(o, tweetId+"/"+buyerId)
 	return nil
 }
 
@@ -267,6 +288,79 @@ func TestStreamNewOrderHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, event.OrderResponse{TweetId: "tweet-1", TxId: "tx-2", Confirmed: false}, resp)
 		assert.Equal(t, "tx-2", orders["tweet-1/buyer-1"].TxId)
+	})
+
+	order := marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1"})
+
+	t.Run("an unreachable chain takes no payment and keeps no order", func(t *testing.T) {
+		w := &stubSponsoredWallet{isDown: true, splitter: "TSplitter", payTx: "tx-1"}
+		orders := stubOrders{}
+		_, err := newHandler(w, orders, authorNode(t, confirm))(order, nil)
+		assert.ErrorIs(t, err, ErrChainUnavailable)
+		assert.Empty(t, w.pays)
+		assert.Empty(t, orders)
+	})
+
+	t.Run("the order is kept before the payment is sent", func(t *testing.T) {
+		orders := stubOrders{}
+		w := &orderCheckingWallet{stubSponsoredWallet: &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}, orders: orders}
+		_, err := newHandler(w, orders, authorNode(t, confirm))(order, nil)
+		require.NoError(t, err)
+		assert.True(t, w.isOrderKept, "a payment is never sent for an order the node could lose")
+	})
+
+	t.Run("a payment refused before sending keeps no order, so it can be paid again", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payErr: errors.New("insufficient balance")}
+		orders := stubOrders{}
+		h := newHandler(w, orders, authorNode(t, confirm))
+		_, err := h(order, nil)
+		assert.EqualError(t, err, "insufficient balance")
+		assert.Empty(t, orders, "nothing was sent, so nothing blocks the next try")
+
+		w.payErr, w.payTx = nil, "tx-1"
+		resp, err := h(order, nil)
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
+		assert.Len(t, w.pays, 2)
+	})
+
+	t.Run("a payment whose answer was lost keeps its tx and is never paid again", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-lost", payErr: errors.New("payments: unavailable: no answer to the broadcast")}
+		orders := stubOrders{}
+		h := newHandler(w, orders, authorNode(t, func(ev event.VerifyOrderEvent) ([]byte, error) {
+			return json.Marshal(event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId})
+		}))
+		resp, err := h(order, nil)
+		require.NoError(t, err, "the payment may be on chain: the buyer waits for it instead of paying again")
+		assert.Equal(t, event.OrderResponse{TweetId: "tweet-1", TxId: "tx-lost"}, resp)
+		assert.Equal(t, "tx-lost", orders["tweet-1/buyer-1"].TxId)
+
+		_, err = h(order, nil)
+		require.NoError(t, err)
+		assert.Len(t, w.pays, 1, "a second try only claims the kept tx")
+	})
+
+	t.Run("a payment the engine never answered keeps its order and is never sent again", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payErr: fmt.Errorf("%w: timeout", wallet.ErrNoAnswer)}
+		orders := stubOrders{}
+		h := newHandler(w, orders, authorNode(t, confirm))
+		_, err := h(order, nil)
+		assert.ErrorIs(t, err, ErrPaymentUnknown)
+		assert.Contains(t, orders, "tweet-1/buyer-1", "the order blocks another payment")
+
+		w.payErr, w.payTx = nil, "tx-1"
+		_, err = h(order, nil)
+		assert.ErrorIs(t, err, ErrPaymentUnknown)
+		assert.Len(t, w.pays, 1)
+	})
+
+	t.Run("an author who cannot confirm a paid order leaves it pending", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-3"}
+		resp, err := newHandler(w, stubOrders{}, authorNode(t, func(event.VerifyOrderEvent) ([]byte, error) {
+			return json.Marshal(event.ResponseError{Code: 500, Message: "payments: chain data unavailable"})
+		}))(order, nil)
+		require.NoError(t, err, "the money is gone: an error here reads as a failed payment and invites another")
+		assert.Equal(t, event.OrderResponse{TweetId: "tweet-1", TxId: "tx-3"}, resp)
 	})
 
 	t.Run("a network without a splitter takes no payment", func(t *testing.T) {
@@ -523,6 +617,12 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "nothing bought, nothing shown")
 		assert.Empty(t, paths, "nothing bought, nothing asked")
+
+		paying := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Nonce: "n1"}}
+		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		require.NoError(t, err)
+		assert.Equal(t, domain.Tweet{}, resp, "an order without a tx has nothing to claim yet")
+		assert.Empty(t, paths, "an order without a tx asks the author nothing")
 
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Nonce: "n1"}}
 		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)
