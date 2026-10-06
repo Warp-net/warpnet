@@ -409,9 +409,111 @@ func TestStreamUnretweetHandler(t *testing.T) {
 			t.Fatalf("expected stream error: %v", err)
 		}
 	})
+
+	for _, tc := range []struct {
+		name          string
+		eventTweetId  string
+		author        string
+		wantTimeline  string
+		wantForwarded bool
+	}{
+		{"foreign tweet", tweetId, tweetOwner, tweetId, true},
+		{"own tweet by its id", tweetId, owner, domain.RetweetPrefix + tweetId, false},
+		{"own tweet by its RT: id", domain.RetweetPrefix + tweetId, owner, domain.RetweetPrefix + tweetId, false},
+	} {
+		t.Run("owner unretweet of "+tc.name, func(t *testing.T) {
+			var gotGet, gotUnretweet, gotTimeline string
+			forwarded := false
+			h := StreamUnretweetHandler(stubReTweetRepo{
+				getFn: func(userID, tweetID string) (domain.Tweet, error) {
+					gotGet = tweetID
+					return domain.Tweet{Id: tweetID, UserId: tc.author}, nil
+				},
+				unRetweetFn: func(_, tweetID string) error {
+					gotUnretweet = tweetID
+					return nil
+				},
+			}, actorUsers(nil), stubTimelineRepo{deleteFn: func(userID, tweetID string) error {
+				if userID != owner {
+					t.Fatalf("timeline of %q touched, want %q", userID, owner)
+				}
+				gotTimeline = tweetID
+				return nil
+			}}, stubStreamer{
+				nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+				genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+					forwarded = true
+					return nil, nil
+				},
+			})
+
+			resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tc.eventTweetId, RetweeterId: owner}), actorConn)
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if resp != event.Accepted {
+				t.Fatalf("expected accepted: %v", resp)
+			}
+			if gotGet != tweetId || gotUnretweet != tweetId {
+				t.Fatalf("expected source id %q, got get=%q unretweet=%q", tweetId, gotGet, gotUnretweet)
+			}
+			if gotTimeline != tc.wantTimeline {
+				t.Fatalf("expected timeline delete of %q, got %q", tc.wantTimeline, gotTimeline)
+			}
+			if forwarded != tc.wantForwarded {
+				t.Fatalf("forwarded=%v, want %v", forwarded, tc.wantForwarded)
+			}
+		})
+	}
+
+	t.Run("forwarded unretweet leaves the author's timeline alone", func(t *testing.T) {
+		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
+			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
+		}}, actorUsers(nil), stubTimelineRepo{deleteFn: func(userID, tweetID string) error {
+			t.Fatalf("unexpected timeline delete %s/%s", userID, tweetID)
+			return nil
+		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: tweetOwner}, genericStreamFn: failOnStream(t)})
+		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted: %v", resp)
+		}
+	})
+
+	t.Run("timeline failure does not fail the unretweet", func(t *testing.T) {
+		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
+			return domain.Tweet{Id: tweetID, UserId: owner}, nil
+		}}, actorUsers(nil), stubTimelineRepo{deleteFn: func(userID, tweetID string) error {
+			return errors.New("timeline down")
+		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted: %v", resp)
+		}
+	})
+
+	t.Run("failed unretweet leaves the timeline alone", func(t *testing.T) {
+		repoErr := errors.New("db failed")
+		h := StreamUnretweetHandler(stubReTweetRepo{
+			unRetweetFn: func(retweetedByUserID, tweetId string) error { return repoErr },
+		}, actorUsers(nil), stubTimelineRepo{deleteFn: func(userID, tweetID string) error {
+			t.Fatalf("unexpected timeline delete %s/%s", userID, tweetID)
+			return nil
+		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
+		if !errors.Is(err, repoErr) {
+			t.Fatalf("expected unretweet error: %v", err)
+		}
+	})
 }
 
-func TestUnretweetRemovesRetweetFromTimeline(t *testing.T) {
+func newRetweetRepos(t *testing.T) (*database.TweetRepo, *database.TimelineRepo) {
+	t.Helper()
 	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	if err != nil {
 		t.Fatalf("local-store: %v", err)
@@ -420,8 +522,24 @@ func TestUnretweetRemovesRetweetFromTimeline(t *testing.T) {
 	if err := database.NewAuthRepo(db, "test").Authenticate("test", "test"); err != nil {
 		t.Fatalf("auth: %v", err)
 	}
-	tweetRepo := database.NewTweetRepo(db, nil)
-	timelineRepo := database.NewTimelineRepo(db)
+	return database.NewTweetRepo(db, nil), database.NewTimelineRepo(db)
+}
+
+func timelineIds(t *testing.T, repo *database.TimelineRepo, userId string) []string {
+	t.Helper()
+	tweets, _, err := repo.GetTimeline(userId, nil, nil)
+	if err != nil {
+		t.Fatalf("timeline: %v", err)
+	}
+	ids := make([]string, 0, len(tweets))
+	for _, tw := range tweets {
+		ids = append(ids, tw.Id)
+	}
+	return ids
+}
+
+func TestUnretweetRemovesRetweetFromTimeline(t *testing.T) {
+	tweetRepo, timelineRepo := newRetweetRepos(t)
 
 	retweeter := "bob"
 	_, conn := authorStream(t)
@@ -437,33 +555,36 @@ func TestUnretweetRemovesRetweetFromTimeline(t *testing.T) {
 	rt := retweeter
 	source := domain.Tweet{Id: "tweet-1", UserId: "alice", Text: "original", RetweetedBy: &rt, CreatedAt: time.Now()}
 	retweet := StreamNewReTweetHandler(users, tweetRepo, timelineRepo, stubModerationNotifier{}, streamer)
-	if _, err := retweet(marshal(t, event.NewRetweetEvent(source)), conn); err != nil {
-		t.Fatalf("retweet: %v", err)
-	}
-	if tweets, _, _ := timelineRepo.GetTimeline(retweeter, nil, nil); len(tweets) != 1 {
-		t.Fatalf("expected retweet in timeline, got %d", len(tweets))
-	}
-
 	unretweet := StreamUnretweetHandler(tweetRepo, users, timelineRepo, streamer)
-	if _, err := unretweet(marshal(t, event.UnretweetEvent{TweetId: source.Id, RetweeterId: retweeter}), conn); err != nil {
-		t.Fatalf("unretweet: %v", err)
-	}
-	if tweets, _, _ := timelineRepo.GetTimeline(retweeter, nil, nil); len(tweets) != 0 {
-		t.Fatalf("expected empty timeline after unretweet, got %d", len(tweets))
+
+	for round := 1; round <= 2; round++ {
+		if _, err := retweet(marshal(t, event.NewRetweetEvent(source)), conn); err != nil {
+			t.Fatalf("round %d retweet: %v", round, err)
+		}
+		if ids := timelineIds(t, timelineRepo, retweeter); len(ids) != 1 || ids[0] != source.Id {
+			t.Fatalf("round %d: expected the retweet in timeline, got %v", round, ids)
+		}
+		if count, err := tweetRepo.RetweetsCount(source.Id); err != nil || count != 1 {
+			t.Fatalf("round %d: expected 1 retweet, got %d (%v)", round, count, err)
+		}
+
+		if _, err := unretweet(marshal(t, event.UnretweetEvent{TweetId: source.Id, RetweeterId: retweeter}), conn); err != nil {
+			t.Fatalf("round %d unretweet: %v", round, err)
+		}
+		if ids := timelineIds(t, timelineRepo, retweeter); len(ids) != 0 {
+			t.Fatalf("round %d: expected empty timeline after unretweet, got %v", round, ids)
+		}
+		if _, err := tweetRepo.Get(retweeter, source.Id); !errors.Is(err, database.ErrTweetNotFound) {
+			t.Fatalf("round %d: expected the retweet gone from the profile, got %v", round, err)
+		}
+		if count, err := tweetRepo.RetweetsCount(source.Id); err != nil || count != 0 {
+			t.Fatalf("round %d: expected 0 retweets, got %d (%v)", round, count, err)
+		}
 	}
 }
 
 func TestUnretweetOfOwnTweetKeepsTheOriginal(t *testing.T) {
-	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
-	if err != nil {
-		t.Fatalf("local-store: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := database.NewAuthRepo(db, "test").Authenticate("test", "test"); err != nil {
-		t.Fatalf("auth: %v", err)
-	}
-	tweetRepo := database.NewTweetRepo(db, nil)
-	timelineRepo := database.NewTimelineRepo(db)
+	tweetRepo, timelineRepo := newRetweetRepos(t)
 
 	owner := "alice"
 	_, conn := authorStream(t)
@@ -480,14 +601,18 @@ func TestUnretweetOfOwnTweetKeepsTheOriginal(t *testing.T) {
 	if err := timelineRepo.AddTweetToTimeline(owner, original); err != nil {
 		t.Fatalf("timeline: %v", err)
 	}
+	retweetId := domain.RetweetPrefix + original.Id
 
-	for _, unretweetId := range []string{original.Id, domain.RetweetPrefix + original.Id} {
+	for _, unretweetId := range []string{original.Id, retweetId} {
 		rt := owner
 		source := original
 		source.RetweetedBy = &rt
 		retweet := StreamNewReTweetHandler(users, tweetRepo, timelineRepo, stubModerationNotifier{}, streamer)
 		if _, err := retweet(marshal(t, event.NewRetweetEvent(source)), conn); err != nil {
 			t.Fatalf("retweet: %v", err)
+		}
+		if ids := timelineIds(t, timelineRepo, owner); len(ids) != 2 {
+			t.Fatalf("expected the original and the retweet in timeline, got %v", ids)
 		}
 
 		unretweet := StreamUnretweetHandler(tweetRepo, users, timelineRepo, streamer)
@@ -498,10 +623,92 @@ func TestUnretweetOfOwnTweetKeepsTheOriginal(t *testing.T) {
 		if _, err := tweetRepo.Get(owner, original.Id); err != nil {
 			t.Fatalf("unretweet %q deleted the original: %v", unretweetId, err)
 		}
-		tweets, _, _ := timelineRepo.GetTimeline(owner, nil, nil)
-		if len(tweets) != 1 || tweets[0].Id != original.Id {
-			t.Fatalf("unretweet %q: expected only the original in timeline, got %+v", unretweetId, tweets)
+		if _, err := tweetRepo.Get(owner, retweetId); !errors.Is(err, database.ErrTweetNotFound) {
+			t.Fatalf("unretweet %q left the retweet: %v", unretweetId, err)
 		}
+		if ids := timelineIds(t, timelineRepo, owner); len(ids) != 1 || ids[0] != original.Id {
+			t.Fatalf("unretweet %q: expected only the original in timeline, got %v", unretweetId, ids)
+		}
+		if count, err := tweetRepo.RetweetsCount(original.Id); err != nil || count != 0 {
+			t.Fatalf("unretweet %q: expected 0 retweets, got %d (%v)", unretweetId, count, err)
+		}
+	}
+}
+
+func TestUnretweetKeepsFollowedAuthorsTweetInTimeline(t *testing.T) {
+	tweetRepo, timelineRepo := newRetweetRepos(t)
+
+	retweeter := "bob"
+	_, conn := authorStream(t)
+	actorNode := conn.Conn().RemotePeer().String()
+	users := stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		if userId == retweeter {
+			return domain.User{Id: userId, NodeId: actorNode}, nil
+		}
+		return domain.User{}, database.ErrUserNotFound
+	}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: retweeter}}
+
+	followed := domain.Tweet{Id: "tweet-1", UserId: "alice", Text: "original", CreatedAt: time.Now().Add(-time.Hour)}
+	if err := timelineRepo.AddTweetToTimeline(retweeter, followed); err != nil {
+		t.Fatalf("timeline: %v", err)
+	}
+
+	rt := retweeter
+	source := followed
+	source.RetweetedBy = &rt
+	source.CreatedAt = time.Now()
+	retweet := StreamNewReTweetHandler(users, tweetRepo, timelineRepo, stubModerationNotifier{}, streamer)
+	if _, err := retweet(marshal(t, event.NewRetweetEvent(source)), conn); err != nil {
+		t.Fatalf("retweet: %v", err)
+	}
+
+	unretweet := StreamUnretweetHandler(tweetRepo, users, timelineRepo, streamer)
+	if _, err := unretweet(marshal(t, event.UnretweetEvent{TweetId: source.Id, RetweeterId: retweeter}), conn); err != nil {
+		t.Fatalf("unretweet: %v", err)
+	}
+
+	tweets, _, err := timelineRepo.GetTimeline(retweeter, nil, nil)
+	if err != nil {
+		t.Fatalf("timeline: %v", err)
+	}
+	if len(tweets) != 1 || tweets[0].Id != followed.Id || tweets[0].RetweetedBy != nil {
+		t.Fatalf("expected only alice's own tweet in timeline, got %+v", tweets)
+	}
+}
+
+func TestEditOfSelfRetweetedTweetKeepsTheTweet(t *testing.T) {
+	tweetRepo, timelineRepo := newRetweetRepos(t)
+
+	owner := "alice"
+	original, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "original", CreatedAt: time.Now()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	rt := owner
+	source := original
+	source.RetweetedBy = &rt
+	if _, err := tweetRepo.NewRetweet(source, true); err != nil {
+		t.Fatalf("retweet: %v", err)
+	}
+
+	edit := StreamEditTweetHandler(tweetRepo, timelineRepo)
+	if _, err := edit(marshal(t, event.EditTweetEvent{UserId: owner, TweetId: original.Id, Text: "edited"}), nil); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+
+	edited, err := tweetRepo.Get(owner, original.Id)
+	if err != nil {
+		t.Fatalf("edit deleted the tweet: %v", err)
+	}
+	if edited.Text != "edited" {
+		t.Fatalf("expected edited text, got %q", edited.Text)
+	}
+	if _, err := tweetRepo.Get(owner, domain.RetweetPrefix+original.Id); !errors.Is(err, database.ErrTweetNotFound) {
+		t.Fatalf("expected the self-retweet cancelled, got %v", err)
+	}
+	if count, err := tweetRepo.RetweetsCount(original.Id); err != nil || count != 0 {
+		t.Fatalf("expected 0 retweets, got %d (%v)", count, err)
 	}
 }
 
