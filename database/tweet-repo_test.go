@@ -1026,6 +1026,96 @@ func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfNeverRetweetedTweetIsReject
 	s.ErrorIs(err, ErrTweetNotFound, "a never-retweeted tweet has no counter at all")
 }
 
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfOwnTweetKeepsTheOriginal() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost myself")
+
+	for _, unretweetId := range []string{tweet.Id, domain.RetweetPrefix + tweet.Id} {
+		by := author
+		retweet, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &by,
+		}, false)
+		s.Require().NoError(err)
+
+		s.Require().NoError(s.repo.UnRetweet(author, unretweetId, false))
+
+		_, err = s.repo.Get(author, tweet.Id)
+		s.Require().NoError(err, "unretweet by %q must keep the original", unretweetId)
+		_, err = s.repo.Get(author, retweet.Id)
+		s.ErrorIs(err, ErrTweetNotFound)
+
+		count, err := s.repo.RetweetsCount(tweet.Id)
+		s.Require().NoError(err)
+		s.Equal(uint64(0), count)
+		retweeters, _, err := s.repo.Retweeters(tweet.Id, nil, nil)
+		s.Require().NoError(err)
+		s.Empty(retweeters)
+	}
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetNeverDeletesAnOriginalThatWasNotRetweeted() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "never boosted")
+
+	for _, unretweetId := range []string{tweet.Id, domain.RetweetPrefix + tweet.Id} {
+		s.Error(s.repo.UnRetweet(author, unretweetId, false))
+
+		got, err := s.repo.Get(author, tweet.Id)
+		s.Require().NoError(err, "unretweet by %q must keep the original", unretweetId)
+		s.Equal(tweet.Text, got.Text)
+	}
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfOwnTweetKeepsOtherRetweets() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "boosted twice")
+
+	for _, by := range []string{author, booster} {
+		retweeter := by
+		_, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &retweeter,
+		}, false)
+		s.Require().NoError(err)
+	}
+
+	s.Require().NoError(s.repo.UnRetweet(author, tweet.Id, false))
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+	retweeters, _, err := s.repo.Retweeters(tweet.Id, nil, nil)
+	s.Require().NoError(err)
+	s.Equal([]string{booster}, retweeters)
+	_, err = s.repo.Get(booster, tweet.Id)
+	s.NoError(err, "the other retweeter's copy must stay")
+	_, err = s.repo.Get(author, tweet.Id)
+	s.NoError(err, "the original must stay")
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfForeignTweetAcceptsEitherId() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost me")
+
+	for _, unretweetId := range []string{tweet.Id, domain.RetweetPrefix + tweet.Id} {
+		booster := ulid.Make().String()
+		_, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
+		}, false)
+		s.Require().NoError(err)
+
+		s.Require().NoError(s.repo.UnRetweet(booster, unretweetId, false))
+
+		_, err = s.repo.Get(booster, tweet.Id)
+		s.ErrorIs(err, ErrTweetNotFound, "unretweet by %q must drop the booster's copy", unretweetId)
+		_, err = s.repo.Get(author, tweet.Id)
+		s.NoError(err, "the original must stay")
+		count, err := s.repo.RetweetsCount(tweet.Id)
+		s.Require().NoError(err)
+		s.Equal(uint64(0), count)
+	}
+}
+
 func (s *TweetRepoLifecycleTestSuite) TestRetweetsCountRejectsEmptyIDAndUnknownTweet() {
 	_, err := s.repo.RetweetsCount("")
 	s.Error(err)

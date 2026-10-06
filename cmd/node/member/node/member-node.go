@@ -608,7 +608,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_UNRETWEET,
-			handler.StreamUnretweetHandler(r.tweetRepo, userRepo, m),
+			handler.StreamUnretweetHandler(r.tweetRepo, userRepo, r.timelineRepo, m),
 		},
 	}
 }

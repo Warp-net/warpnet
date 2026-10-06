@@ -189,6 +189,8 @@ const dedupSkipPaths = new Set([
 const walletHistoryWindow = 60000
 const walletHistoryReads = new Map()
 
+const retweetPrefix = "RT:"
+
 function isPostPath(path) {
     return typeof path === "string" && path.includes("/post/");
 }
@@ -200,6 +202,17 @@ function postRequestKey(path, body) {
     } catch (_) {
         return null;
     }
+}
+
+function sourceTweetId(tweetId) {
+    if (typeof tweetId === "string" && tweetId.startsWith(retweetPrefix)) {
+        return tweetId.slice(retweetPrefix.length);
+    }
+    return tweetId;
+}
+
+function retweeterCacheKey(tweetId, profileId) {
+    return `retweeter::${sourceTweetId(tweetId)}::${profileId}`; // order matters
 }
 
 export const warpnetService = {
@@ -2281,6 +2294,7 @@ export const warpnetService = {
 
     async retweetTweet({tweetId, userId, username, text, comment}) {
         const owner = this.getOwnerProfile()
+        tweetId = sourceTweetId(tweetId)
 
         // The optional `comment` (when non-empty) turns the retweet
         // into a quote — a regular tweet authored by the retweeter
@@ -2334,13 +2348,13 @@ export const warpnetService = {
     },
 
     async setRetweeter(tweetId, profileId, profileObj) {
-        const cacheKey = `retweeter::${tweetId}::${profileId}`; // order matters
+        const cacheKey = retweeterCacheKey(tweetId, profileId);
         stateMap.set(cacheKey, profileObj)
         localStorage.setItem(cacheKey, "1")
     },
 
     async hasRetweeter(tweetId, profileId) {
-        const cacheKey = `retweeter::${tweetId}::${profileId}`; // order matters
+        const cacheKey = retweeterCacheKey(tweetId, profileId);
         if (stateMap.has(cacheKey)) {
             return true
         }
@@ -2348,12 +2362,12 @@ export const warpnetService = {
     },
 
     async getRetweeter(tweetId, profileId) {
-        const cacheKey = `retweeter::${tweetId}::${profileId}`; // order matters
+        const cacheKey = retweeterCacheKey(tweetId, profileId);
         return stateMap.get(cacheKey)
     },
 
     async deleteRetweeter(tweetId, profileId) {
-        const cacheKey = `retweeter::${tweetId}::${profileId}`; // order matters
+        const cacheKey = retweeterCacheKey(tweetId, profileId);
         stateMap.delete(cacheKey)
         localStorage.removeItem(cacheKey)
     },
