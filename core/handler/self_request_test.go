@@ -236,7 +236,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		repo := stubReTweetRepo{getFn: func(userID, tweetId string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetId, UserId: owner}, nil
 		}}
-		h := StreamUnretweetHandler(repo, ownerRetweetUserRepo, streamer)
+		h := StreamUnretweetHandler(repo, ownerRetweetUserRepo, stubTimelineRepo{}, streamer)
 		if _, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetID, RetweeterId: "stranger"}), ownerConn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

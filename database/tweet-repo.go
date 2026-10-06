@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -687,14 +688,15 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive
 		return local.DBError("unretweet: empty tweet ID or user ID")
 	}
 
+	sourceTweetId := strings.TrimPrefix(tweetId, domain.RetweetPrefix)
 	retweetCountKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetsCountSubspace).
-		AddRootID(tweetId).
+		AddRootID(sourceTweetId).
 		Build()
 
 	retweetersKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(reTweetersSubspace).
-		AddRootID(tweetId).
+		AddRootID(sourceTweetId).
 		AddRange(local.NoneRangeKey).
 		AddParentId(retweetedByUserID).
 		Build()
@@ -705,11 +707,20 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive
 	}
 	defer txn.Rollback()
 
+	tweet, _, err := get(txn, retweetedByUserID, sourceTweetId)
+	if err != nil {
+		return err
+	}
+	retweetId := sourceTweetId
+	if tweet.UserId == retweetedByUserID {
+		retweetId = domain.RetweetPrefix + sourceTweetId
+	}
+
 	if err := txn.Delete(retweetersKey); err != nil {
 		return err
 	}
 
-	if err := deleteTweet(txn, retweetedByUserID, tweetId); err != nil {
+	if err := deleteTweet(txn, retweetedByUserID, retweetId); err != nil {
 		return err
 	}
 

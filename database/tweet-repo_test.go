@@ -1026,6 +1026,33 @@ func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfNeverRetweetedTweetIsReject
 	s.ErrorIs(err, ErrTweetNotFound, "a never-retweeted tweet has no counter at all")
 }
 
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfOwnTweetKeepsTheOriginal() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost myself")
+
+	for _, unretweetId := range []string{tweet.Id, domain.RetweetPrefix + tweet.Id} {
+		by := author
+		retweet, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &by,
+		}, false)
+		s.Require().NoError(err)
+
+		s.Require().NoError(s.repo.UnRetweet(author, unretweetId, false))
+
+		_, err = s.repo.Get(author, tweet.Id)
+		s.Require().NoError(err, "unretweet by %q must keep the original", unretweetId)
+		_, err = s.repo.Get(author, retweet.Id)
+		s.ErrorIs(err, ErrTweetNotFound)
+
+		count, err := s.repo.RetweetsCount(tweet.Id)
+		s.Require().NoError(err)
+		s.Equal(uint64(0), count)
+		retweeters, _, err := s.repo.Retweeters(tweet.Id, nil, nil)
+		s.Require().NoError(err)
+		s.Empty(retweeters)
+	}
+}
+
 func (s *TweetRepoLifecycleTestSuite) TestRetweetsCountRejectsEmptyIDAndUnknownTweet() {
 	_, err := s.repo.RetweetsCount("")
 	s.Error(err)

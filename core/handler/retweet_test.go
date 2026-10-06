@@ -10,6 +10,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -302,7 +303,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubStreamer{})
+		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubTimelineRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -310,7 +311,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty retweeter id", func(t *testing.T) {
-		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubStreamer{})
+		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubTimelineRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty retweeter id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -318,7 +319,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubStreamer{})
+		h := StreamUnretweetHandler(stubReTweetRepo{}, stubRetweetUserRepo{}, stubTimelineRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.UnretweetEvent{RetweeterId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -329,7 +330,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 		repoErr := errors.New("not found")
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{}, repoErr
-		}}, actorUsers(nil), stubStreamer{})
+		}}, actorUsers(nil), stubTimelineRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -340,7 +341,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 		repoErr := errors.New("db failed")
 		h := StreamUnretweetHandler(stubReTweetRepo{
 			unRetweetFn: func(retweetedByUserID, tweetId string) error { return repoErr },
-		}, actorUsers(nil), stubStreamer{})
+		}, actorUsers(nil), stubTimelineRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected unretweet error: %v", err)
@@ -350,7 +351,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	t.Run("own tweet unretweet", func(t *testing.T) {
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: owner}, nil
-		}}, actorUsers(nil), stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}}, actorUsers(nil), stubTimelineRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -365,7 +366,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
 		}}, actorUsers(func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
-		}), stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}), stubTimelineRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, event.UnretweetEvent{TweetId: tweetId, RetweeterId: owner}), actorConn)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -378,7 +379,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 	t.Run("stream node offline", func(t *testing.T) {
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
-		}}, actorUsers(nil), stubStreamer{
+		}}, actorUsers(nil), stubTimelineRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
@@ -397,7 +398,7 @@ func TestStreamUnretweetHandler(t *testing.T) {
 		streamErr := errors.New("broken")
 		h := StreamUnretweetHandler(stubReTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 			return domain.Tweet{Id: tweetID, UserId: tweetOwner}, nil
-		}}, actorUsers(nil), stubStreamer{
+		}}, actorUsers(nil), stubTimelineRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
@@ -408,6 +409,100 @@ func TestStreamUnretweetHandler(t *testing.T) {
 			t.Fatalf("expected stream error: %v", err)
 		}
 	})
+}
+
+func TestUnretweetRemovesRetweetFromTimeline(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	if err != nil {
+		t.Fatalf("local-store: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := database.NewAuthRepo(db, "test").Authenticate("test", "test"); err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	tweetRepo := database.NewTweetRepo(db, nil)
+	timelineRepo := database.NewTimelineRepo(db)
+
+	retweeter := "bob"
+	_, conn := authorStream(t)
+	actorNode := conn.Conn().RemotePeer().String()
+	users := stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		if userId == retweeter {
+			return domain.User{Id: userId, NodeId: actorNode}, nil
+		}
+		return domain.User{}, database.ErrUserNotFound
+	}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: retweeter}}
+
+	rt := retweeter
+	source := domain.Tweet{Id: "tweet-1", UserId: "alice", Text: "original", RetweetedBy: &rt, CreatedAt: time.Now()}
+	retweet := StreamNewReTweetHandler(users, tweetRepo, timelineRepo, stubModerationNotifier{}, streamer)
+	if _, err := retweet(marshal(t, event.NewRetweetEvent(source)), conn); err != nil {
+		t.Fatalf("retweet: %v", err)
+	}
+	if tweets, _, _ := timelineRepo.GetTimeline(retweeter, nil, nil); len(tweets) != 1 {
+		t.Fatalf("expected retweet in timeline, got %d", len(tweets))
+	}
+
+	unretweet := StreamUnretweetHandler(tweetRepo, users, timelineRepo, streamer)
+	if _, err := unretweet(marshal(t, event.UnretweetEvent{TweetId: source.Id, RetweeterId: retweeter}), conn); err != nil {
+		t.Fatalf("unretweet: %v", err)
+	}
+	if tweets, _, _ := timelineRepo.GetTimeline(retweeter, nil, nil); len(tweets) != 0 {
+		t.Fatalf("expected empty timeline after unretweet, got %d", len(tweets))
+	}
+}
+
+func TestUnretweetOfOwnTweetKeepsTheOriginal(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	if err != nil {
+		t.Fatalf("local-store: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := database.NewAuthRepo(db, "test").Authenticate("test", "test"); err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	tweetRepo := database.NewTweetRepo(db, nil)
+	timelineRepo := database.NewTimelineRepo(db)
+
+	owner := "alice"
+	_, conn := authorStream(t)
+	actorNode := conn.Conn().RemotePeer().String()
+	users := stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: actorNode}, nil
+	}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}, genericStreamFn: failOnStream(t)}
+
+	original, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "original", CreatedAt: time.Now()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := timelineRepo.AddTweetToTimeline(owner, original); err != nil {
+		t.Fatalf("timeline: %v", err)
+	}
+
+	for _, unretweetId := range []string{original.Id, domain.RetweetPrefix + original.Id} {
+		rt := owner
+		source := original
+		source.RetweetedBy = &rt
+		retweet := StreamNewReTweetHandler(users, tweetRepo, timelineRepo, stubModerationNotifier{}, streamer)
+		if _, err := retweet(marshal(t, event.NewRetweetEvent(source)), conn); err != nil {
+			t.Fatalf("retweet: %v", err)
+		}
+
+		unretweet := StreamUnretweetHandler(tweetRepo, users, timelineRepo, streamer)
+		if _, err := unretweet(marshal(t, event.UnretweetEvent{TweetId: unretweetId, RetweeterId: owner}), conn); err != nil {
+			t.Fatalf("unretweet %q: %v", unretweetId, err)
+		}
+
+		if _, err := tweetRepo.Get(owner, original.Id); err != nil {
+			t.Fatalf("unretweet %q deleted the original: %v", unretweetId, err)
+		}
+		tweets, _, _ := timelineRepo.GetTimeline(owner, nil, nil)
+		if len(tweets) != 1 || tweets[0].Id != original.Id {
+			t.Fatalf("unretweet %q: expected only the original in timeline, got %+v", unretweetId, tweets)
+		}
+	}
 }
 
 func TestStreamNewReTweetHandler_SponsoredSourceKeepsOnlyTheTeaser(t *testing.T) {
