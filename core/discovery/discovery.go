@@ -366,7 +366,9 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 			log.Warnf(
 				"discovery: source '%s': update user %s of known peer: %v",
 				peer.Source, user.Id, err)
+			return
 		}
+		log.Infof("discovery: source '%s': new user '%s' has been updated", peer.Source, newUser.Id)
 		return
 	}
 	if err != nil {
