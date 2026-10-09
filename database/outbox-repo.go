@@ -41,7 +41,7 @@ import (
 
 const OutboxNamespace = "/OUTBOX"
 
-const outboxTTL = time.Hour * 24 * 7
+const outboxTTL = 30 * 24 * time.Hour
 
 type OutboxStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)

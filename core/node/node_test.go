@@ -603,3 +603,51 @@ func TestSelfStream_RejectsARewrittenDestination(t *testing.T) {
 
 	assert.Zero(t, reached, "a rewritten destination reached a privileged handler")
 }
+
+type memOutboxStore struct {
+	mu    sync.Mutex
+	items map[string][]warpevent.Message
+}
+
+func (s *memOutboxStore) Enqueue(dest, route string, payload []byte) (warpevent.Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	msg := warpevent.Message{MessageId: fmt.Sprint(len(s.items[dest])), Destination: route, Body: payload}
+	s.items[dest] = append(s.items[dest], msg)
+	return msg, nil
+}
+
+func (s *memOutboxStore) ListByNode(dest string) ([]warpevent.Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]warpevent.Message(nil), s.items[dest]...), nil
+}
+
+func (s *memOutboxStore) Delete(string, string) error { return nil }
+
+func (s *memOutboxStore) ListNodes() ([]string, error) { return nil, nil }
+
+func TestStream_OfflineWriteIsQueuedInOutbox(t *testing.T) {
+	n := newTestNode(t)
+	store := &memOutboxStore{items: map[string][]warpevent.Message{}}
+	n.SetOutbox(store)
+
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	offline, err := warpnet.IDFromPublicKey(pub)
+	require.NoError(t, err)
+	unreachable, err := warpnet.NewMultiaddr("/ip4/127.0.0.1/tcp/1")
+	require.NoError(t, err)
+	n.Node().Peerstore().AddAddr(offline, unreachable, warpnet.PermanentTTL)
+
+	_, err = n.Stream(offline, stream.WarpRoute(warpevent.PUBLIC_POST_FOLLOW), []byte(`{}`))
+	require.ErrorIs(t, err, stream.ErrQueuedInOutbox)
+	require.ErrorIs(t, err, warpnet.ErrNodeIsOffline, "callers matching offline keep working")
+
+	_, err = n.Stream(offline, echoRoute, []byte(`{}`))
+	require.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
+	require.NotErrorIs(t, err, stream.ErrQueuedInOutbox, "reads are never queued")
+
+	queued, _ := store.ListByNode(offline.String())
+	require.Len(t, queued, 1)
+}

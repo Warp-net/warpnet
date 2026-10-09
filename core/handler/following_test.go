@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -294,6 +295,33 @@ func TestStreamFollowHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("I follow someone - queued in outbox", func(t *testing.T) {
+		var followed, subscribed bool
+		queuedErr := fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, warpnet.ErrNodeIsOffline)
+		h := StreamFollowHandler(stubFollowBroadcaster{subscribeFn: func(userId string) error {
+			subscribed = true
+			return nil
+		}}, stubFollowRepo{followFn: func(from, to string) error {
+			followed = from == owner && to == following
+			return nil
+		}}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			return nil, queuedErr
+		}})
+		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if !followed {
+			t.Fatal("expected follow to be stored")
+		}
+		if !subscribed {
+			t.Fatal("expected broadcaster subscribe to be called")
+		}
+	})
+
 	t.Run("I follow someone - stream error", func(t *testing.T) {
 		streamErr := errors.New("stream broken")
 		h := StreamFollowHandler(stubFollowBroadcaster{}, stubFollowRepo{}, ownerAuth, stubFollowUserRepo{}, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -564,6 +592,33 @@ func TestStreamUnfollowHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
 		if !errors.Is(err, warpnet.ErrNodeIsOffline) {
 			t.Fatalf("expected user offline error: %v", err)
+		}
+	})
+
+	t.Run("I unfollow someone - queued in outbox", func(t *testing.T) {
+		var unfollowed, unsubscribed bool
+		queuedErr := fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, warpnet.ErrNodeIsOffline)
+		h := StreamUnfollowHandler(stubFollowBroadcaster{unsubscribeFn: func(userId string) error {
+			unsubscribed = true
+			return nil
+		}}, stubFollowRepo{unfollowFn: func(from, to string) error {
+			unfollowed = from == owner && to == following
+			return nil
+		}}, ownerAuth, stubFollowUserRepo{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			return nil, queuedErr
+		}})
+		resp, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+		if !unfollowed {
+			t.Fatal("expected unfollow to be stored")
+		}
+		if !unsubscribed {
+			t.Fatal("expected broadcaster unsubscribe to be called")
 		}
 	})
 
