@@ -64,7 +64,7 @@ type Streamer interface {
 }
 
 type OfflineOutbox interface {
-	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte)
+	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte) error
 	NotifyOnline(nodeIdStr string)
 	Close()
 }
@@ -593,7 +593,9 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 
 	resp, err := n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
 	if n.outbox != nil && errors.Is(err, warpnet.ErrNodeIsOffline) {
-		n.outbox.Enqueue(nodeId.String(), path, bt)
+		if qErr := n.outbox.Enqueue(nodeId.String(), path, bt); qErr == nil {
+			err = fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, err)
+		}
 	}
 	return resp, err
 }

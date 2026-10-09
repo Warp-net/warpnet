@@ -51,6 +51,10 @@ func (r WarpRoute) IsGet() bool {
 	return strings.Contains(string(r), "get")
 }
 
+func (r WarpRoute) IsFollow() bool {
+	return strings.Contains(string(r), "follow")
+}
+
 type WarpRoutes []WarpRoute
 
 func (rs WarpRoutes) FromRoutesToPrIDs() []warpnet.WarpProtocolID {

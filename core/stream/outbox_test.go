@@ -47,22 +47,33 @@ const (
 	routeMessage  = WarpRoute("/public/post/message/0.0.0")
 	routeReaction = WarpRoute("/public/post/react/0.0.0")
 	routeFollow   = WarpRoute("/public/post/follow/0.0.0")
+	routeUnfollow = WarpRoute("/public/post/unfollow/0.0.0")
 	routeGetUser  = WarpRoute("/public/get/user/0.0.0")
 )
 
 type fakeStore struct {
 	mu    sync.Mutex
 	items map[string][]event.Message
+	ttls  map[string]time.Duration
 }
 
-func newFakeStore() *fakeStore { return &fakeStore{items: map[string][]event.Message{}} }
+func newFakeStore() *fakeStore {
+	return &fakeStore{items: map[string][]event.Message{}, ttls: map[string]time.Duration{}}
+}
 
-func (r *fakeStore) Enqueue(dest, route string, payload []byte) (event.Message, error) {
+func (r *fakeStore) Enqueue(dest, route string, payload []byte, ttl time.Duration) (event.Message, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	e := event.Message{MessageId: ulid.Make().String(), Destination: route, Body: payload}
 	r.items[dest] = append(r.items[dest], e)
+	r.ttls[e.MessageId] = ttl
 	return e, nil
+}
+
+func (r *fakeStore) ttl(id string) time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ttls[id]
 }
 
 func (r *fakeStore) ListByNode(dest string) ([]event.Message, error) {
@@ -153,12 +164,41 @@ func TestEnqueueQueuesWriteAndMarksPending(t *testing.T) {
 	store := newFakeStore()
 	o := newTestOutbox(t, store, nil)
 
-	o.Enqueue(testPeerA, routeMessage, []byte(`{}`))
+	require.NoError(t, o.Enqueue(testPeerA, routeMessage, []byte(`{}`)))
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Len(t, entries, 1)
 	require.Equal(t, string(routeMessage), entries[0].Destination)
 	require.True(t, o.isPending(testPeerA))
+}
+
+func TestEnqueueKeepsFollowsLonger(t *testing.T) {
+	store := newFakeStore()
+	o := newTestOutbox(t, store, nil)
+
+	require.NoError(t, o.Enqueue(testPeerA, routeMessage, []byte(`{}`)))
+	require.NoError(t, o.Enqueue(testPeerA, routeFollow, []byte(`{}`)))
+	require.NoError(t, o.Enqueue(testPeerA, routeUnfollow, []byte(`{}`)))
+
+	entries, _ := store.ListByNode(testPeerA)
+	require.Len(t, entries, 3)
+	require.Equal(t, outboxTTL, store.ttl(entries[0].MessageId))
+	require.Equal(t, followOutboxTTL, store.ttl(entries[1].MessageId))
+	require.Equal(t, followOutboxTTL, store.ttl(entries[2].MessageId))
+}
+
+func TestEnqueueQueuesFollowAgainAfterUnfollow(t *testing.T) {
+	store := newFakeStore()
+	o := newTestOutbox(t, store, nil)
+	payload := []byte(`{"follower_id":"a","following_id":"b"}`)
+
+	require.NoError(t, o.Enqueue(testPeerA, routeFollow, payload))
+	require.NoError(t, o.Enqueue(testPeerA, routeUnfollow, payload))
+	require.NoError(t, o.Enqueue(testPeerA, routeFollow, payload))
+
+	entries, _ := store.ListByNode(testPeerA)
+	require.Len(t, entries, 3)
+	require.Equal(t, string(routeFollow), entries[2].Destination, "the last action wins on delivery")
 }
 
 func TestEnqueueDedupesIdenticalPending(t *testing.T) {
@@ -191,7 +231,7 @@ func TestEnqueueSkipsReads(t *testing.T) {
 	store := newFakeStore()
 	o := newTestOutbox(t, store, nil)
 
-	o.Enqueue(testPeerA, routeGetUser, []byte(`{}`))
+	require.Error(t, o.Enqueue(testPeerA, routeGetUser, []byte(`{}`)))
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Empty(t, entries, "GET reads are never queued")
@@ -210,6 +250,23 @@ func TestRunReplaysQueuedFromPreviousRun(t *testing.T) {
 		entries, _ := store.ListByNode(testPeerA)
 		return len(entries) == 0 && sender.callCount() == 1
 	}, 3*time.Second, 10*time.Millisecond, "startup flush delivers persisted entries")
+}
+
+func TestFlushQueuedNodesDeliversToEveryNode(t *testing.T) {
+	const testPeerB = "12D3KooWRqJrnUdkzB6YaPaJ5oxtBVsqZ3XpH1FkMkFg2nNYk7ws"
+	store := newFakeStore()
+	mustEnqueue(store, testPeerA, string(routeFollow))
+	mustEnqueue(store, testPeerB, string(routeMessage))
+
+	sender := &fakeSender{results: []error{nil, nil}}
+	o := newTestOutbox(t, store, sender)
+
+	o.flushQueuedNodes()
+
+	require.Eventually(t, func() bool {
+		nodes, _ := store.ListNodes()
+		return len(nodes) == 0 && sender.callCount() == 2
+	}, 3*time.Second, 10*time.Millisecond, "a tick retries every queued node, online event or not")
 }
 
 func TestFlushDeliversAllAndClearsPending(t *testing.T) {
@@ -338,5 +395,5 @@ func TestFlushNoSenderKeepsEntries(t *testing.T) {
 }
 
 func mustEnqueue(store OutboxStore, node, route string) {
-	_, _ = store.Enqueue(node, route, []byte(`{}`))
+	_, _ = store.Enqueue(node, route, []byte(`{}`), outboxTTL)
 }

@@ -32,6 +32,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -40,10 +41,20 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const outboxTriggerBuffer = 256
+const (
+	outboxTriggerBuffer = 256
+	outboxFlushInterval = 5 * time.Minute
+	outboxTTL           = 7 * 24 * time.Hour
+	followOutboxTTL     = 30 * 24 * time.Hour
+)
+
+const (
+	ErrQueuedInOutbox = warpnet.WarpError("queued in outbox")
+	errNotQueued      = warpnet.WarpError("outbox: not queued")
+)
 
 type OutboxStore interface {
-	Enqueue(destNodeId, route string, payload []byte) (event.Message, error)
+	Enqueue(destNodeId, route string, payload []byte, ttl time.Duration) (event.Message, error)
 	ListByNode(destNodeId string) ([]event.Message, error)
 	Delete(destNodeId, messageId string) error
 	ListNodes() ([]string, error)
@@ -102,9 +113,9 @@ func (o *Outbox) getSender() Sender {
 	return o.sender
 }
 
-func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) {
+func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) error {
 	if o == nil || nodeIdStr == "" || route.IsGet() {
-		return
+		return errNotQueued
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -112,19 +123,25 @@ func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) {
 	queued, err := o.store.ListByNode(nodeIdStr)
 	if err != nil {
 		log.Warnf("outbox: enqueue: list queued for %s: %v", nodeIdStr, err)
-		return
+		return err
 	}
-	for _, msg := range queued {
-		if msg.Destination == string(route) && bytes.Equal(msg.Body, payload) {
-			return
+	if n := len(queued); n > 0 {
+		last := queued[n-1]
+		if last.Destination == string(route) && bytes.Equal(last.Body, payload) {
+			return nil
 		}
 	}
 
-	if _, err := o.store.Enqueue(nodeIdStr, string(route), payload); err != nil {
+	ttl := outboxTTL
+	if route.IsFollow() {
+		ttl = followOutboxTTL
+	}
+	if _, err := o.store.Enqueue(nodeIdStr, string(route), payload, ttl); err != nil {
 		log.Warnf("outbox: enqueue for %s: %v", nodeIdStr, err)
-		return
+		return err
 	}
 	o.pending[nodeIdStr] = struct{}{}
+	return nil
 }
 
 func (o *Outbox) NotifyOnline(nodeId string) {
@@ -142,18 +159,34 @@ func (o *Outbox) Close() {
 }
 
 func (o *Outbox) run() {
+	ticker := time.NewTicker(outboxFlushInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-o.ctx.Done():
 			return
 		case <-o.stop:
 			return
+		case <-ticker.C:
+			o.flushQueuedNodes()
 		case nodeId := <-o.trigger:
 			if !o.hasQueued(nodeId) {
 				continue
 			}
 			go o.flushNode(nodeId)
 		}
+	}
+}
+
+func (o *Outbox) flushQueuedNodes() {
+	nodes, err := o.store.ListNodes()
+	if err != nil {
+		log.Errorf("outbox: list queued nodes: %v", err)
+		return
+	}
+	for _, nodeId := range nodes {
+		go o.flushNode(nodeId)
 	}
 }
 
