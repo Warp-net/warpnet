@@ -30,9 +30,11 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -198,7 +200,7 @@ func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {
 			return nil, err
 		}
 
-		return event.SearchUsersResponse{Cursor: cur, Users: users}, nil
+		return event.SearchUsersResponse{Cursor: cur, Users: slices.DeleteFunc(users, fediverse.IsFederatedWarpnet)}, nil
 	}
 }
 
@@ -226,7 +228,7 @@ func StreamGetUsersHandler(
 
 			return event.UsersResponse{
 				Cursor: cursor,
-				Users:  users,
+				Users:  slices.DeleteFunc(users, fediverse.IsFederatedWarpnet),
 			}, nil
 		}
 
@@ -236,7 +238,7 @@ func StreamGetUsersHandler(
 
 		return event.UsersResponse{
 			Cursor: cursor,
-			Users:  users,
+			Users:  slices.DeleteFunc(users, fediverse.IsFederatedWarpnet),
 		}, nil
 	}
 }

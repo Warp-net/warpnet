@@ -263,6 +263,20 @@ func TestStreamGetUsersHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("filters out Warpnet users federated back by a gateway", func(t *testing.T) {
+		h := StreamGetUsersHandler(stubUserFetcher{listFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
+			return []domain.User{{Id: "01KTRA1QJ8M2W7Y4ZB6C9D3E5F@warpnet-gw.example"}, {Id: "u1"}}, "end", nil
+		}}, stubUserStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.UsersResponse)
+		if len(r.Users) != 1 || r.Users[0].Id != "u1" {
+			t.Fatalf("expected only u1, got: %v", r.Users)
+		}
+	})
+
 	t.Run("no users locally - fetches from remote and returns", func(t *testing.T) {
 		requestUser := "requester-1"
 		fetchedUsers := []domain.User{{Id: "u1"}}

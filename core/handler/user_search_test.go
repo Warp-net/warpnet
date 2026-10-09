@@ -56,6 +56,21 @@ func TestStreamSearchUsersHandler(t *testing.T) {
 			t.Fatalf("expected repo error: %v", err)
 		}
 	})
+	t.Run("filters out Warpnet users federated back by a gateway", func(t *testing.T) {
+		resp, err := StreamSearchUsersHandler(stubSearchUserFetcher{searchFn: func(_ string, _ *uint64, _ *string) ([]domain.User, string, error) {
+			return []domain.User{
+				{Id: "01KTRA1QJ8M2W7Y4ZB6C9D3E5F@warpnet-gw.example", Username: "alice testnet"},
+				{Id: "alice@mastodon.social", Username: "alice"},
+			}, "end", nil
+		}})(marshal(t, event.SearchUsersEvent{Query: "alice"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected: %v", err)
+		}
+		r := resp.(event.SearchUsersResponse)
+		if len(r.Users) != 1 || r.Users[0].Id != "alice@mastodon.social" {
+			t.Fatalf("expected only alice@mastodon.social, got: %+v", r.Users)
+		}
+	})
 	t.Run("happy path passes through cursor and limit", func(t *testing.T) {
 		var gotQuery string
 		var gotLimit *uint64
