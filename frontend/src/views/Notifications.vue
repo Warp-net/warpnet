@@ -286,14 +286,19 @@ export default {
       // Mark this one read so the badge decrements even if the click
       // ends up not navigating (overlay / unknown type).
       this.markRead(notification);
-      // If the notification points at a tweet, navigate directly.
-      // Otherwise show the lightweight overlay (follow / unknown types).
+      // A tweet notification opens the tweet, an actor-only one (follow,
+      // new user, order limit) opens the actor's profile; the rest
+      // (moderation) fall back to the overlay.
       if (notification?.tweet_id) {
         this.$router.push({
           name: 'Tweet',
           params: { id: notification.tweet_id },
           query: { u: notification.user_id || '' },
         });
+        return;
+      }
+      if (notification?.actor_id) {
+        this.$router.push({ name: 'Profile', params: { id: notification.actor_id } });
         return;
       }
       this.overlayNotificationId = notification?.id || '';

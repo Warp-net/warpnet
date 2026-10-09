@@ -130,6 +130,73 @@ describe('Notifications.vue', () => {
     expect(row.closest('button').querySelector('.fa-pepper-hot')).not.toBeNull();
   });
 
+  it('opens the tweet when a reaction notification is clicked', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        {
+          id: 'n1',
+          type: 'reaction',
+          user_id: 'alice',
+          actor_id: 'bob',
+          tweet_id: 't1',
+          text: 'bob reacted your tweet',
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    renderNotifications();
+    await fireEvent.click(await screen.findByText('bob reacted your tweet'));
+
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'Tweet',
+      params: { id: 't1' },
+      query: { u: 'alice' },
+    });
+  });
+
+  it('opens the follower profile when a follow notification is clicked', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        {
+          id: 'n1',
+          type: 'follow',
+          user_id: 'alice',
+          actor_id: 'carol',
+          text: 'carol started following you',
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    renderNotifications();
+    await fireEvent.click(await screen.findByText('carol started following you'));
+
+    expect(routerPush).toHaveBeenCalledWith({ name: 'Profile', params: { id: 'carol' } });
+  });
+
+  it('stays on the page for a notification with neither tweet nor actor', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        {
+          id: 'n1',
+          type: 'moderation',
+          user_id: 'alice',
+          text: 'your report was reviewed',
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    renderNotifications();
+    await fireEvent.click(await screen.findByText('your report was reviewed'));
+
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it('navigates home when the back button is clicked', async () => {
     renderNotifications();
     await screen.findByRole('heading', { name: 'Notifications' });
