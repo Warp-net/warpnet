@@ -261,10 +261,8 @@ describe('Root.vue', () => {
     expect(nextBtn).not.toBeDisabled();
   });
 
-  // ----- pairing onboarding flag -----
+  // ----- sign-up completion -----
   //
-  // Root.vue signals SideNav to auto-open the pairing dialog by
-  // writing a sessionStorage key after a successful first-run signup.
   // Drive the modal sign-up to the final step so we exercise the
   // real signMeUp() handler.
   const completeSignUp = async ({ username = 'alice', password = STRONG_PASSWORD } = {}) => {
@@ -287,14 +285,14 @@ describe('Root.vue', () => {
     await fireEvent.click(signUpButtons[signUpButtons.length - 1]);
   };
 
-  it('writes the pairing-onboarding flag after a first-run signup', async () => {
+  it('does not auto-open the pairing QR after a first-run signup', async () => {
     renderRoot({ firstRun: true });
     await completeSignUp();
 
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });
-    expect(sessionStorage.getItem('warpnet:show-pairing-onboarding')).toBe('1');
+    expect(sessionStorage.getItem('warpnet:show-pairing-onboarding')).toBeNull();
   });
 
   it('routes to Search?q=id when the OS handed us a warpnet://user/{id} link', async () => {
@@ -326,32 +324,6 @@ describe('Root.vue', () => {
     await waitFor(() => {
       expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
     });
-  });
-
-  it('does not write the pairing-onboarding flag when signInUser rejects', async () => {
-    warpnetService.signInUser.mockRejectedValueOnce(new Error('Already taken'));
-    renderRoot({ firstRun: true });
-    await completeSignUp();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Already taken/);
-    expect(sessionStorage.getItem('warpnet:show-pairing-onboarding')).toBeNull();
-  });
-
-  it('completes signup even when sessionStorage.setItem throws (privacy mode)', async () => {
-    const origSetItem = sessionStorage.setItem.bind(sessionStorage);
-    sessionStorage.setItem = vi.fn(() => {
-      throw new Error('storage disabled');
-    });
-    try {
-      renderRoot({ firstRun: true });
-      await completeSignUp();
-
-      await waitFor(() => {
-        expect(routerPush).toHaveBeenCalledWith({ name: 'Home' });
-      });
-    } finally {
-      sessionStorage.setItem = origSetItem;
-    }
   });
 
   it('offers a retry instead of login/sign-up when the first-run probe fails', async () => {
