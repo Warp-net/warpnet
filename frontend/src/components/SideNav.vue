@@ -498,16 +498,6 @@ export default {
       }
     });
 
-    try {
-      if (typeof sessionStorage !== "undefined" &&
-          sessionStorage.getItem("warpnet:show-pairing-onboarding") === "1") {
-        sessionStorage.removeItem("warpnet:show-pairing-onboarding");
-        await this.signInByQR();
-      }
-    } catch (error) {
-      console.error("Failed to open pairing onboarding:", error);
-    }
-
     const fullProfile = await warpnetService.getProfile(this.profile.user_id);
     try {
       if (fullProfile && !fullProfile.code && fullProfile.avatar_key) {
