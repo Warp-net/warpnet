@@ -895,6 +895,32 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("other user tweet stats - remote error falls back to local counts", func(t *testing.T) {
+		// The gateway relays a 404 for a Fediverse post deleted at its origin.
+		remoteErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "status 404: remote returned error status"})
+		h := StreamGetTweetStatsHandler(
+			stubTweetRepo{},
+			stubTweetReactionRepo{reactionsCountFn: func(tweetId string) (uint64, error) { return 5, nil }},
+			stubTweetRetweetRepo{},
+			stubRepliesCounter{},
+			stubTweetUserRepo{},
+			stubStreamer{
+				nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+				genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+					return remoteErr, nil
+				},
+			},
+		)
+		resp, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetId, UserId: "other-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		stats := resp.(event.TweetStatsResponse)
+		if stats.TweetId != tweetId || stats.ReactionsCount != 5 {
+			t.Fatalf("expected local stats: %+v", stats)
+		}
+	})
+
 	t.Run("other user tweet stats - stream error", func(t *testing.T) {
 		streamErr := errors.New("broken")
 		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
