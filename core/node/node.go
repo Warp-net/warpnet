@@ -353,8 +353,8 @@ func (n *WarpNode) trackIncomingEvents() {
 			case event.EvtPeerConnectednessChanged:
 				pid := typedEvent.Peer.String()
 				log.Infof(
-					"node: event: peer ...%s connectedness updated: %s",
-					pid[len(pid)-6:],
+					"node: event: peer %s connectedness updated: %s",
+					pid,
 					typedEvent.Connectedness.String(),
 				)
 				isOnline := typedEvent.Connectedness == warpnet.Connected ||
@@ -380,8 +380,8 @@ func (n *WarpNode) trackIncomingEvents() {
 			case event.EvtPeerIdentificationCompleted:
 				pid := typedEvent.Peer.String()
 				log.Debugf(
-					"node: event: peer ...%s identification completed, observed address: %s",
-					pid[len(pid)-6:], typedEvent.ObservedAddr.String(),
+					"node: event: peer %s identification completed, observed address: %s",
+					pid, typedEvent.ObservedAddr.String(),
 				)
 			case event.EvtLocalReachabilityChanged:
 				r := typedEvent.Reachability // it's int32 under the hood
