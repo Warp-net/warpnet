@@ -51,12 +51,15 @@ resulting from the use or misuse of this software.
       </button>
     </div>
     <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
-      <img
-        @click="pushToProfilePage(profile.id)"
-        :src="profile.avatar || '/default_profile.png'"
-        class="w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
-        :alt="profile.username"
-      />
+      <div class="relative flex-none">
+        <img
+          @click="pushToProfilePage(profile.id)"
+          :src="profile.avatar || '/default_profile.png'"
+          class="block w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
+          :alt="profile.username"
+        />
+        <UserStatusDot :user="profile" />
+      </div>
       <div class="hidden lg:block ml-4 min-w-0">
         <p @click="pushToProfilePage(profile.id)" class="text-left text-sm font-bold leading-tight cursor-pointer truncate max-w-[9rem]">{{ profile.username }}</p>
         <p class="text-left text-sm leading-tight text-dark truncate max-w-[9rem]">{{ profile.id.slice(0, 8) }}...</p>
@@ -96,12 +99,13 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {bridgedNetwork, NETWORK_MASTODON, NETWORK_THREADS} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 const sectionLimit = 5;
 
 export default {
   name: 'WhoToFollow',
-  components: {NetworkIcon},
+  components: {NetworkIcon, UserStatusDot},
   props: ["profile"],
   data() {
     return {

@@ -32,8 +32,11 @@ resulting from the use or misuse of this software.
         </router-link>
         
         <div v-if="chat && otherUser" class="flex items-center">
-          <img :src="otherUser.avatar || '/default_profile.png'"
-               class="w-10 h-10 rounded-full mr-3" />
+          <div class="relative flex-none mr-3">
+            <img :src="otherUser.avatar || '/default_profile.png'"
+                 class="block w-10 h-10 rounded-full" />
+            <UserStatusDot :user="otherUser" />
+          </div>
           <div>
             <p class="font-bold">{{ otherUser.username }}</p>
             <p class="text-sm text-dark">@{{ chat.other_user_id }}</p>
@@ -104,6 +107,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 // Mirrors messageLimit in core/handler/chat.go.
 const messageCharLimit = 5000;
@@ -114,6 +118,7 @@ export default {
     SideNav: defineAsyncComponent(() => import('../components/SideNav.vue')),
     Loader: defineAsyncComponent(() => import('../components/Loader.vue')),
     EmojiPicker: defineAsyncComponent(() => import('@/components/EmojiPicker.vue')),
+    UserStatusDot,
   },
   data() {
     return {

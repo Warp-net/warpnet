@@ -657,6 +657,26 @@ func (s *UserRepoTestSuite) TestLivenessFieldsAlwaysFollowTheLatestUpdate() {
 	s.Equal(int64(20), updated.RoundTripTime)
 }
 
+func (s *UserRepoTestSuite) TestUpdateKeepsLastSeenUntilANewOneArrives() {
+	original := s.createUser(domain.User{Username: "henry"})
+	seen := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+
+	updated, err := s.repo.Update(original.Id, domain.User{LastSeen: &seen})
+	s.Require().NoError(err)
+	s.Require().NotNil(updated.LastSeen)
+	s.True(seen.Equal(*updated.LastSeen))
+
+	updated, err = s.repo.Update(original.Id, domain.User{IsOffline: true})
+	s.Require().NoError(err)
+	s.Require().NotNil(updated.LastSeen, "an offline update must not erase when the user was last seen")
+	s.True(seen.Equal(*updated.LastSeen))
+
+	got, err := s.repo.Get(original.Id)
+	s.Require().NoError(err)
+	s.Require().NotNil(got.LastSeen)
+	s.True(seen.Equal(*got.LastSeen))
+}
+
 func (s *UserRepoTestSuite) TestUpdateRebindsNodeIndex() {
 	original := s.createUser(domain.User{Username: "grace", NodeId: "node-old"})
 

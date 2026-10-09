@@ -868,6 +868,10 @@ func (m *MemberNode) userHandlers(
 			handler.StreamGetUserHandler(r.tweetRepo, followRepo, userRepo, authRepo, m),
 		},
 		{
+			event.PRIVATE_GET_USER_STATUS,
+			handler.StreamGetUserStatusHandler(userRepo, authRepo, m),
+		},
+		{
 			event.PUBLIC_GET_USERS,
 			handler.StreamGetUsersHandler(userRepo, m),
 		},
