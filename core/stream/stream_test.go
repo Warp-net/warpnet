@@ -13,6 +13,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	relayclient "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -246,6 +248,39 @@ func TestStreamPool_CachedOfflinePeerShortCircuits(t *testing.T) {
 	pool.SetStreamable(server.ID())
 	_, err = pool.Send(info, testRoute, []byte(`{}`))
 	assert.NoError(t, err)
+}
+
+// A peer reachable only through a relay (the Fediverse gateway) is not
+// connected when its circuit expires. The next send dials it, lands on a
+// limited connection and must use it rather than wait for a direct one
+// until sendTimeout and report the peer offline.
+func TestStreamPool_FreshDialThroughRelayIsUsed(t *testing.T) {
+	relay, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.EnableRelayService(),
+		libp2p.ForceReachabilityPublic(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = relay.Close() })
+
+	server := newStreamHost(t)
+	client := newStreamHost(t)
+	echoServer(t, server, []byte(`{"pong":true}`))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	require.NoError(t, server.Connect(ctx, addrOf(relay)))
+	_, err = relayclient.Reserve(ctx, server, addrOf(relay))
+	require.NoError(t, err)
+
+	circuit := relay.Addrs()[0].
+		Encapsulate(ma.StringCast("/p2p/" + relay.ID().String() + "/p2p-circuit"))
+	client.Peerstore().AddAddr(server.ID(), circuit, time.Hour)
+
+	pool := newPool(t, client)
+	resp, err := pool.Send(peer.AddrInfo{ID: server.ID()}, testRoute, []byte(`{}`))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"pong":true}`, string(resp))
 }
 
 func TestStreamPool_StreamableMarkCanBeClearedAndReapplied(t *testing.T) {
