@@ -63,6 +63,7 @@ resulting from the use or misuse of this software.
             v-model="tweet.text"
             placeholder="What's happening?"
             class="w-full focus:outline-none mt-3 pb-3"
+            @paste="onComposePaste"
           ></textarea>
           <div
             class="text-right text-xs"
@@ -317,6 +318,7 @@ import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+import {pastedImages} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
 import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
 
@@ -515,6 +517,15 @@ export default {
       const files = dropped.filter(f => f.type && f.type.startsWith('image/'));
       if (files.length === 0) return;
       this.addImageFiles(files);
+    },
+    async onComposePaste(event) {
+      const images = await pastedImages(event);
+      if (images.length === 0) return;
+      if (this.imageAttachDisabled) {
+        toast.error(this.imageAttachTitle);
+        return;
+      }
+      this.addImageFiles(images);
     },
     addImageFiles(files) {
       const remaining = 4 - this.imageAttachments.length;
