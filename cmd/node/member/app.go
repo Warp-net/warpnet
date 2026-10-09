@@ -350,7 +350,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		var ev event.LoginEvent
 		err := json.Unmarshal(request.Body, &ev)
 		if err != nil {
-			log.Errorf("message body as login event: %v %s \n", err, request.Body)
+			log.Errorf("message body as login event: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
