@@ -284,6 +284,7 @@ resulting from the use or misuse of this software.
               class="flex-1 px-4 py-2 rounded-full bg-lighter focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue text-sm"
               placeholder="Start a new message"
               @keyup.enter="sendMessage"
+              @paste="onMessagePaste"
           />
           <button
               @click="sendMessage"
@@ -336,6 +337,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {isBridgedUser} from "@/lib/network";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+import {pastedImages} from "@/lib/clipboard";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 
 // Mirrors messageLimit in core/handler/chat.go.
@@ -457,7 +459,19 @@ export default {
       if (input) {
         input.value = '';
       }
-      // Upload as they are picked, so send only has to hand over the keys.
+      this.addImageFiles(files);
+    },
+    async onMessagePaste(event) {
+      const images = await pastedImages(event);
+      if (images.length === 0) return;
+      if (this.imageAttachDisabled) {
+        toast.error(this.imageAttachTitle);
+        return;
+      }
+      this.addImageFiles(images);
+    },
+    // Upload as they are picked, so send only has to hand over the keys.
+    addImageFiles(files) {
       for (const file of files.slice(0, maxMessageImages - this.imageAttachments.length)) {
         const reader = new FileReader();
         reader.onload = async () => {
