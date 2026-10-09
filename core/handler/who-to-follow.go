@@ -74,6 +74,9 @@ func StreamGetWhoToFollowHandler(
 			if user.IsOffline { // exclude offline
 				continue
 			}
+			if fediverse.IsFederatedWarpnet(user) {
+				continue
+			}
 
 			if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
 				continue
