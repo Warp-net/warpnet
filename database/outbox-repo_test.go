@@ -30,14 +30,11 @@ package database
 
 import (
 	"testing"
-	"time"
 
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/suite"
 )
-
-const testOutboxTTL = time.Hour
 
 type OutboxRepoSuite struct {
 	suite.Suite
@@ -61,9 +58,9 @@ func (s *OutboxRepoSuite) TearDownTest() {
 func (s *OutboxRepoSuite) TestEnqueueAndListFIFO() {
 	node := ulid.Make().String()
 
-	first, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{"n":1}`), testOutboxTTL)
+	first, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{"n":1}`))
 	s.Require().NoError(err)
-	second, err := s.repo.Enqueue(node, "/public/post/react/0.0.0", []byte(`{"n":2}`), testOutboxTTL)
+	second, err := s.repo.Enqueue(node, "/public/post/react/0.0.0", []byte(`{"n":2}`))
 	s.Require().NoError(err)
 
 	entries, err := s.repo.ListByNode(node)
@@ -77,7 +74,7 @@ func (s *OutboxRepoSuite) TestEnqueueAndListFIFO() {
 
 func (s *OutboxRepoSuite) TestDelete() {
 	node := ulid.Make().String()
-	entry, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{}`), testOutboxTTL)
+	entry, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
 
 	s.Require().NoError(s.repo.Delete(node, entry.MessageId))
@@ -91,11 +88,11 @@ func (s *OutboxRepoSuite) TestListNodesDistinct() {
 	nodeA := ulid.Make().String()
 	nodeB := ulid.Make().String()
 
-	_, err := s.repo.Enqueue(nodeA, "/public/post/message/0.0.0", []byte(`{}`), testOutboxTTL)
+	_, err := s.repo.Enqueue(nodeA, "/public/post/message/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
-	_, err = s.repo.Enqueue(nodeA, "/public/post/react/0.0.0", []byte(`{}`), testOutboxTTL)
+	_, err = s.repo.Enqueue(nodeA, "/public/post/react/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
-	_, err = s.repo.Enqueue(nodeB, "/public/post/message/0.0.0", []byte(`{}`), testOutboxTTL)
+	_, err = s.repo.Enqueue(nodeB, "/public/post/message/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
 
 	nodes, err := s.repo.ListNodes()
@@ -108,7 +105,7 @@ func (s *OutboxRepoSuite) TestListByNodeBeyondDefaultPage() {
 	const total = 45
 
 	for i := 0; i < total; i++ {
-		_, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{}`), testOutboxTTL)
+		_, err := s.repo.Enqueue(node, "/public/post/message/0.0.0", []byte(`{}`))
 		s.Require().NoError(err)
 	}
 
@@ -121,26 +118,15 @@ func (s *OutboxRepoSuite) TestListNodesBeyondDefaultPage() {
 	nodeA := "A" + ulid.Make().String()
 	nodeB := "Z" + ulid.Make().String()
 	for i := 0; i < 25; i++ {
-		_, err := s.repo.Enqueue(nodeA, "/public/post/message/0.0.0", []byte(`{}`), testOutboxTTL)
+		_, err := s.repo.Enqueue(nodeA, "/public/post/message/0.0.0", []byte(`{}`))
 		s.Require().NoError(err)
 	}
-	_, err := s.repo.Enqueue(nodeB, "/public/post/message/0.0.0", []byte(`{}`), testOutboxTTL)
+	_, err := s.repo.Enqueue(nodeB, "/public/post/message/0.0.0", []byte(`{}`))
 	s.Require().NoError(err)
 
 	nodes, err := s.repo.ListNodes()
 	s.Require().NoError(err)
 	s.ElementsMatch([]string{nodeA, nodeB}, nodes)
-}
-
-func (s *OutboxRepoSuite) TestEnqueueExpiresAfterTTL() {
-	node := ulid.Make().String()
-	_, err := s.repo.Enqueue(node, "/public/post/follow/0.0.0", []byte(`{}`), time.Second)
-	s.Require().NoError(err)
-
-	s.Eventually(func() bool {
-		entries, err := s.repo.ListByNode(node)
-		return err == nil && len(entries) == 0
-	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *OutboxRepoSuite) TestListByNodeEmpty() {

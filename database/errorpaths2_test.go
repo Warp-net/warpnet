@@ -253,7 +253,7 @@ func TestPollRepoErrorPaths(t *testing.T) {
 func TestOutboxRepoErrorPaths(t *testing.T) {
 	const nodeId = "dest-node"
 	seedMessage := func(t *testing.T, s *faultStore) {
-		_, err := NewOutboxRepo(s).Enqueue(nodeId, "/private/post/tweet", []byte(`{"a":1}`), time.Hour)
+		_, err := NewOutboxRepo(s).Enqueue(nodeId, "/private/post/tweet", []byte(`{"a":1}`))
 		require.NoError(t, err)
 	}
 
@@ -261,7 +261,7 @@ func TestOutboxRepoErrorPaths(t *testing.T) {
 		{
 			name: "Enqueue",
 			run: func(s *faultStore) error {
-				_, err := NewOutboxRepo(s).Enqueue(nodeId, "/route", []byte("{}"), time.Hour)
+				_, err := NewOutboxRepo(s).Enqueue(nodeId, "/route", []byte("{}"))
 				return err
 			},
 			ops: []faultOp{op("SetWithTTL"), op("Commit")},
@@ -296,7 +296,7 @@ func TestOutboxRepoErrorPaths(t *testing.T) {
 		s := newFaultStore(t)
 		repo := NewOutboxRepo(s)
 
-		msg, err := repo.Enqueue(nodeId, "/private/post/tweet", []byte(`{"a":1}`), time.Hour)
+		msg, err := repo.Enqueue(nodeId, "/private/post/tweet", []byte(`{"a":1}`))
 		require.NoError(t, err)
 		require.NotEmpty(t, msg.MessageId)
 

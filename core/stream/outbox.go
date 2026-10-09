@@ -44,8 +44,6 @@ import (
 const (
 	outboxTriggerBuffer = 256
 	outboxFlushInterval = 5 * time.Minute
-	outboxTTL           = 7 * 24 * time.Hour
-	followOutboxTTL     = 30 * 24 * time.Hour
 )
 
 const (
@@ -54,7 +52,7 @@ const (
 )
 
 type OutboxStore interface {
-	Enqueue(destNodeId, route string, payload []byte, ttl time.Duration) (event.Message, error)
+	Enqueue(destNodeId, route string, payload []byte) (event.Message, error)
 	ListByNode(destNodeId string) ([]event.Message, error)
 	Delete(destNodeId, messageId string) error
 	ListNodes() ([]string, error)
@@ -132,11 +130,7 @@ func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) erro
 		}
 	}
 
-	ttl := outboxTTL
-	if route.IsFollow() {
-		ttl = followOutboxTTL
-	}
-	if _, err := o.store.Enqueue(nodeIdStr, string(route), payload, ttl); err != nil {
+	if _, err := o.store.Enqueue(nodeIdStr, string(route), payload); err != nil {
 		log.Warnf("outbox: enqueue for %s: %v", nodeIdStr, err)
 		return err
 	}

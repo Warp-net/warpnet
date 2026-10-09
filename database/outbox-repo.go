@@ -41,6 +41,8 @@ import (
 
 const OutboxNamespace = "/OUTBOX"
 
+const outboxTTL = 30 * 24 * time.Hour
+
 type OutboxStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
 }
@@ -61,7 +63,7 @@ func (repo *OutboxRepo) messageKey(destNodeId, messageId string) local_store.Dat
 		Build()
 }
 
-func (repo *OutboxRepo) Enqueue(destNodeId, route string, payload []byte, ttl time.Duration) (event.Message, error) {
+func (repo *OutboxRepo) Enqueue(destNodeId, route string, payload []byte) (event.Message, error) {
 	if destNodeId == "" || route == "" {
 		return event.Message{}, local_store.DBError("outbox: dest node id or route is empty")
 	}
@@ -87,7 +89,7 @@ func (repo *OutboxRepo) Enqueue(destNodeId, route string, payload []byte, ttl ti
 	}
 	defer txn.Rollback()
 
-	if err = txn.SetWithTTL(repo.messageKey(destNodeId, string(msg.MessageId)), data, ttl); err != nil {
+	if err = txn.SetWithTTL(repo.messageKey(destNodeId, string(msg.MessageId)), data, outboxTTL); err != nil {
 		return msg, err
 	}
 	return msg, txn.Commit()

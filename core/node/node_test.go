@@ -609,7 +609,7 @@ type memOutboxStore struct {
 	items map[string][]warpevent.Message
 }
 
-func (s *memOutboxStore) Enqueue(dest, route string, payload []byte, _ time.Duration) (warpevent.Message, error) {
+func (s *memOutboxStore) Enqueue(dest, route string, payload []byte) (warpevent.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	msg := warpevent.Message{MessageId: fmt.Sprint(len(s.items[dest])), Destination: route, Body: payload}

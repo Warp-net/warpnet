@@ -54,26 +54,16 @@ const (
 type fakeStore struct {
 	mu    sync.Mutex
 	items map[string][]event.Message
-	ttls  map[string]time.Duration
 }
 
-func newFakeStore() *fakeStore {
-	return &fakeStore{items: map[string][]event.Message{}, ttls: map[string]time.Duration{}}
-}
+func newFakeStore() *fakeStore { return &fakeStore{items: map[string][]event.Message{}} }
 
-func (r *fakeStore) Enqueue(dest, route string, payload []byte, ttl time.Duration) (event.Message, error) {
+func (r *fakeStore) Enqueue(dest, route string, payload []byte) (event.Message, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	e := event.Message{MessageId: ulid.Make().String(), Destination: route, Body: payload}
 	r.items[dest] = append(r.items[dest], e)
-	r.ttls[e.MessageId] = ttl
 	return e, nil
-}
-
-func (r *fakeStore) ttl(id string) time.Duration {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.ttls[id]
 }
 
 func (r *fakeStore) ListByNode(dest string) ([]event.Message, error) {
@@ -170,21 +160,6 @@ func TestEnqueueQueuesWriteAndMarksPending(t *testing.T) {
 	require.Len(t, entries, 1)
 	require.Equal(t, string(routeMessage), entries[0].Destination)
 	require.True(t, o.isPending(testPeerA))
-}
-
-func TestEnqueueKeepsFollowsLonger(t *testing.T) {
-	store := newFakeStore()
-	o := newTestOutbox(t, store, nil)
-
-	require.NoError(t, o.Enqueue(testPeerA, routeMessage, []byte(`{}`)))
-	require.NoError(t, o.Enqueue(testPeerA, routeFollow, []byte(`{}`)))
-	require.NoError(t, o.Enqueue(testPeerA, routeUnfollow, []byte(`{}`)))
-
-	entries, _ := store.ListByNode(testPeerA)
-	require.Len(t, entries, 3)
-	require.Equal(t, outboxTTL, store.ttl(entries[0].MessageId))
-	require.Equal(t, followOutboxTTL, store.ttl(entries[1].MessageId))
-	require.Equal(t, followOutboxTTL, store.ttl(entries[2].MessageId))
 }
 
 func TestEnqueueQueuesFollowAgainAfterUnfollow(t *testing.T) {
@@ -395,5 +370,5 @@ func TestFlushNoSenderKeepsEntries(t *testing.T) {
 }
 
 func mustEnqueue(store OutboxStore, node, route string) {
-	_, _ = store.Enqueue(node, route, []byte(`{}`), outboxTTL)
+	_, _ = store.Enqueue(node, route, []byte(`{}`))
 }
