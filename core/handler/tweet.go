@@ -865,12 +865,14 @@ func StreamGetTweetStatsHandler(
 					log.Errorf("stream other stats handler failed: %v", err)
 					return nil, err
 				}
+				var possibleError event.ResponseError
 				if err == nil {
-					var possibleError event.ResponseError
-					if _ = json.Unmarshal(statsResp, &possibleError); possibleError.Message != "" {
-						return nil, fmt.Errorf("unmarshal other reply response: %w", possibleError)
-					}
-
+					_ = json.Unmarshal(statsResp, &possibleError)
+				}
+				if possibleError.Message != "" {
+					log.Warnf("get tweet stats: node %s answered: %s", u.NodeId, possibleError.Message)
+				}
+				if err == nil && possibleError.Message == "" {
 					var stats event.TweetStatsResponse
 					if err := json.Unmarshal(statsResp, &stats); err != nil {
 						return nil, fmt.Errorf("fetching tweet stats response: %w", err)
@@ -886,9 +888,10 @@ func StreamGetTweetStatsHandler(
 					return stats, nil
 				}
 			}
-			// Author unknown locally or their node maybe offline: fall through
-			// to the local CRDT-replicated counts instead of fabricating an
-			// all-zero response (mirrors the view handler's fallback).
+			// Author unknown locally, their node maybe offline or unable to
+			// answer (the gateway relays a 404 for a deleted Fediverse post):
+			// fall through to the local CRDT-replicated counts instead of
+			// fabricating an all-zero response (mirrors the view handler's fallback).
 		}
 
 		var (
