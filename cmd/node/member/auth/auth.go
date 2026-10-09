@@ -51,6 +51,10 @@ const (
 	ErrAlreadyAuthenticated warpnet.WarpError = "already authenticated"
 )
 
+// DefaultUsername is the public name of a new profile: the login is half of the
+// database and identity key secret, so it never becomes the profile name.
+const DefaultUsername = "Anonymous"
+
 type UserPersistencyLayer interface {
 	Create(user domain.User) (domain.User, error)
 	Update(userId string, newUser domain.User) (domain.User, error)
@@ -141,7 +145,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 			CreatedAt:     owner.CreatedAt,
 			Id:            id,
 			NodeId:        "none",
-			Username:      owner.Username,
+			Username:      DefaultUsername,
 			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
 		if err != nil {
