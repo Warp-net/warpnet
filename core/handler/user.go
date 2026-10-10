@@ -128,12 +128,12 @@ func StreamGetUserHandler(
 		otherUser, err := repo.Get(ev.UserId)
 		if err != nil {
 			log.Warnf("get other user from db: %v - %s", err, ev.UserId)
-			otherUser = updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
-			if otherUser.Username == "" {
+			fetchedUser, fetchErr := updateOtherUser(ev, domain.User{Id: ev.UserId, NodeId: ev.NodeId}, streamer)
+			if fetchErr != nil || fetchedUser.Username == "" {
 				return nil, fmt.Errorf("get user: other user %w", err)
 			}
-			_, _ = repo.Create(otherUser)
-			return otherUser, nil
+			_, _ = repo.Create(fetchedUser)
+			return fetchedUser, nil
 		}
 		if otherUser.NodeId == "" {
 			return otherUser, fmt.Errorf("get user: node id is not found") //nolint:err113
@@ -142,16 +142,19 @@ func StreamGetUserHandler(
 			return otherUser, nil
 		}
 		go func() {
-			updatedUser := updateOtherUser(ev, otherUser, streamer)
-			_, err = repo.Update(updatedUser.Id, updatedUser)
+			updatedUser, err := updateOtherUser(ev, otherUser, streamer)
+			if err != nil {
+				return
+			}
+			_, _ = repo.Update(updatedUser.Id, updatedUser)
 		}()
 		return otherUser, nil
 	}
 }
 
-func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) domain.User {
+func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStreamer) (domain.User, error) {
 	if user.NodeId == "" {
-		return user
+		return user, warpnet.ErrEmptyNodeId
 	}
 	otherUserData, err := streamer.GenericStream(
 		user.NodeId,
@@ -159,25 +162,22 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 		ev,
 	)
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
-		user.IsOffline = true
-		return user
+		return user, err
 	}
 	if err != nil {
 		log.Errorf("get other user from stream: %v %s %s", err, user.Id, user.Username)
-		return user
+		return user, err
 	}
 
 	var possibleError event.ResponseError
 	if _ = json.Unmarshal(otherUserData, &possibleError); possibleError.Message != "" {
-		if strings.Contains(possibleError.Message, "user not found") {
-			user.IsOffline = true
-		} else {
+		if !strings.Contains(possibleError.Message, "user not found") {
 			log.Errorf(
 				"stream: unmarshal other user error response: %v %s %s",
 				possibleError, user.Id, user.Username,
 			)
 		}
-		return user
+		return user, possibleError
 	}
 
 	if err = json.Unmarshal(otherUserData, &user); err != nil {
@@ -186,7 +186,7 @@ func updateOtherUser(ev event.GetUserEvent, user domain.User, streamer UserStrea
 	now := time.Now().UTC()
 	user.LastSeen = &now
 	user.IsOffline = false
-	return user
+	return user, nil
 }
 
 func StreamSearchUsersHandler(userRepo UserFetcher) warpnet.WarpHandlerFunc {

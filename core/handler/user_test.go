@@ -190,6 +190,41 @@ func TestStreamGetUserHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("other user profile - failed refresh writes nothing back", func(t *testing.T) {
+		for name, streamErr := range map[string]error{
+			"offline":       warpnet.ErrNodeIsOffline,
+			"stream broken": errors.New("boom"),
+		} {
+			t.Run(name, func(t *testing.T) {
+				asked := make(chan struct{})
+				written := make(chan domain.User, 1)
+				h := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, stubUserFetcher{
+					getFn: func(userId string) (domain.User, error) {
+						return domain.User{Id: userId, NodeId: "node-2", Username: "other"}, nil
+					},
+					updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+						written <- newUser
+						return newUser, nil
+					},
+				}, stubAuth{owner: domain.Owner{UserId: owner}}, stubUserStreamer{
+					genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+						close(asked)
+						return nil, streamErr
+					},
+				})
+				if _, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil); err != nil {
+					t.Fatalf("unexpected err: %v", err)
+				}
+				<-asked
+				select {
+				case u := <-written:
+					t.Fatalf("a stale copy was written back over the stored status: %+v", u)
+				case <-time.After(200 * time.Millisecond):
+				}
+			})
+		}
+	})
+
 	t.Run("other user profile - missing node id", func(t *testing.T) {
 		h := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, stubUserFetcher{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: ""}, nil
