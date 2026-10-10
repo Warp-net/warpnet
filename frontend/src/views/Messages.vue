@@ -51,11 +51,12 @@ resulting from the use or misuse of this software.
              :class="chat.id === active?.id ? 'border-r-2 border-blue' : ''"
              @click="selectChat(chat)">
           <div class="flex items-start px-4 py-2 hover:bg-lightest border-b">
-            <div class="mr-4">
+            <div class="mr-4 relative flex-none">
               <img
                   :src="getUser(chat.other_user_id)?.avatar || '/default_profile.png'"
-                  class="h-12 w-12 rounded-full object-cover bg-transparent"
+                  class="block h-12 w-12 rounded-full object-cover bg-transparent"
               />
+              <UserStatusDot :user="getUser(chat.other_user_id)" />
             </div>
             <div class="w-full truncate">
               <div class="flex items-center">
@@ -102,11 +103,12 @@ resulting from the use or misuse of this software.
           <i class="fas fa-arrow-left text-blue"></i>
         </button>
         <button type="button" @click="gotoProfile(active.other_user_id)" class="flex items-center text-left flat-btn" aria-label="View profile">
-          <div class="mr-4">
+          <div class="mr-4 relative flex-none">
             <img
                 :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
-                class="w-6 h-6 rounded-full object-cover bg-transparent"
+                class="block w-6 h-6 rounded-full object-cover bg-transparent"
             />
+            <UserStatusDot :user="getUser(active.other_user_id)" size-class="h-2.5 w-2.5 -bottom-0.5 -right-0.5" />
           </div>
           <div class="flex flex-col">
             <h1 class="font-bold">{{ getUser(active.other_user_id)?.username }}</h1>
@@ -336,6 +338,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {isBridgedUser} from "@/lib/network";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {pastedImages} from "@/lib/clipboard";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
@@ -349,6 +352,7 @@ const maxMessageImages = 4;
 export default {
   name: "Messages",
   components: {
+    UserStatusDot,
     SideNav: defineAsyncComponent(() => import('@/components/SideNav.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
     NewMessageOverlay: defineAsyncComponent(() => import('@/components/NewMessageOverlay.vue')),

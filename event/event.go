@@ -487,6 +487,13 @@ type UsersResponse struct {
 	Users  []domain.User `json:"users"`
 }
 
+// UserStatusResponse defines model for UserStatusResponse.
+type UserStatusResponse struct {
+	UserId   domain.ID  `json:"user_id"`
+	IsOnline bool       `json:"is_online"`
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+}
+
 type UploadImageEvent struct {
 	// Image mime type + "," + base64
 	Image1 string `json:"image1"`

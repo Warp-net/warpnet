@@ -97,6 +97,7 @@ export const PRIVATE_DELETE_TWEET = "/private/delete/tweet/0.0.0"
 export const PRIVATE_POST_USER = "/private/post/user/0.0.0"
 export const PUBLIC_POST_UNFOLLOW = "/public/post/unfollow/0.0.0"
 export const PUBLIC_GET_USER = "/public/get/user/0.0.0"
+export const PRIVATE_GET_USER_STATUS = "/private/get/user/status/0.0.0"
 export const PUBLIC_GET_USERS = "/public/get/users/0.0.0"
 export const PUBLIC_GET_WHOTOFOLLOW = "/public/get/whotofollow/0.0.0"
 export const PUBLIC_GET_FOLLOWERS = "/public/get/followers/0.0.0"
@@ -162,7 +163,6 @@ let blockedCachePrimed = false;
 // the muted state without a per-row roundtrip.
 const mutedIdsCache = new Set();
 let mutedCachePrimed = false;
-const lastSeenCache = new Map();
 const bookmarkedIdsCache = new Set();
 let bookmarkedCachePrimed = false;
 let bookmarksPrimePromise = null;
@@ -474,24 +474,18 @@ export const warpnetService = {
             },
         }
 
-        const user = await this.sendToNode(request);
-        return this.trackLastSeen(user);
+        return this.sendToNode(request);
     },
 
-    trackLastSeen(user) {
-        if (!user || !user.id) return user;
-        const owner = this.getOwnerProfile();
-        if (owner && user.id === owner.user_id) return user;
-        if (!user.isOffline) {
-            lastSeenCache.set(user.id, Date.now());
+    async getUserStatus(userId) {
+        const request = {
+            path: PRIVATE_GET_USER_STATUS,
+            body: {
+                user_id: userId,
+            },
         }
-        const mem = lastSeenCache.get(user.id) || 0;
-        const be = user.last_seen ? Date.parse(user.last_seen) : 0;
-        const freshest = Math.max(mem, be || 0);
-        if (freshest > 0) {
-            user.last_seen = new Date(freshest).toISOString();
-        }
-        return user;
+
+        return this.sendToNode(request);
     },
 
     async getUsers({profileId, cursorReset}) {
@@ -522,7 +516,6 @@ export const warpnetService = {
         }
 
         usersResp.users = usersResp.users.filter(user => user.id !== profileId);
-        usersResp.users.forEach(u => this.trackLastSeen(u));
 
         return usersResp.users;
     },

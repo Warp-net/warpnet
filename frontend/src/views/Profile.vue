@@ -91,12 +91,14 @@ resulting from the use or misuse of this software.
         <!-- profile details -->
         <div class="py-3 flex flex-col">
           <div class="px-3 flex flex-row justify-between">
-            <img
-              v-if="profile"
-              :src="profile.avatar || '/default_profile.png'"
-              class="w-24 h-24 md:w-32 md:h-32 rounded-full border-white object-cover bg-transparent"
-              style="margin-top: -80px; border-width: 6px;"
-            />
+            <div v-if="profile" class="relative flex-none" style="margin-top: -80px;">
+              <img
+                :src="profile.avatar || '/default_profile.png'"
+                class="block w-24 h-24 md:w-32 md:h-32 rounded-full border-white object-cover bg-transparent"
+                style="border-width: 6px;"
+              />
+              <UserStatusDot :user="profile" size-class="h-5 w-5 bottom-2 right-2 md:h-6 md:w-6 md:bottom-3 md:right-3" />
+            </div>
 
             <div v-if="isMySelf(profile.id) && profile">
               <button
@@ -180,10 +182,6 @@ resulting from the use or misuse of this software.
             <p class="font-bold text-xl">{{ profile.username || '...' }}</p>
             <p class="text-dark">
               @{{ profile.id || '' }}
-              <span
-                  v-if="profile.isOffline"
-                  class="text-sm font-medium bg-red-900 py-1 px-1 mx-2 rounded text-white align-middle"
-              >{{ lastSeenText ? `Last seen ${lastSeenText}` : 'Offline' }}</span>
               <span
                 v-if="isFollower() && !isSelf"
                 class="text-sm font-medium bg-gray-100 py-1 px-1 mx-2 rounded text-gray-500 align-middle"
@@ -399,6 +397,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
   name: "Profile",
@@ -412,6 +411,7 @@ export default {
     Tweets: defineAsyncComponent(() => import('@/components/Tweets.vue')),
     ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
     ReportDialog: defineAsyncComponent(() => import('@/components/ReportDialog.vue')),
+    UserStatusDot,
   },
   data() {
     return {
@@ -468,11 +468,6 @@ export default {
       return this.tweets.filter(
         t => t && ((t.image_keys && t.image_keys.length > 0) || t.video_key)
       );
-    },
-    lastSeenText() {
-      if (this.isSelf || !this.profile || !this.profile.last_seen) return "";
-      const m = moment(this.profile.last_seen);
-      return m.isValid() ? m.fromNow() : "";
     },
     // Bridged networks have no direct messages, so the profile
     // hides its Send message button instead of offering a dead action.

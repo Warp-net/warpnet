@@ -190,6 +190,41 @@ func TestStreamGetUserHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("other user profile - failed refresh writes nothing back", func(t *testing.T) {
+		for name, streamErr := range map[string]error{
+			"offline":       warpnet.ErrNodeIsOffline,
+			"stream broken": errors.New("boom"),
+		} {
+			t.Run(name, func(t *testing.T) {
+				asked := make(chan struct{})
+				written := make(chan domain.User, 1)
+				h := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, stubUserFetcher{
+					getFn: func(userId string) (domain.User, error) {
+						return domain.User{Id: userId, NodeId: "node-2", Username: "other"}, nil
+					},
+					updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+						written <- newUser
+						return newUser, nil
+					},
+				}, stubAuth{owner: domain.Owner{UserId: owner}}, stubUserStreamer{
+					genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+						close(asked)
+						return nil, streamErr
+					},
+				})
+				if _, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil); err != nil {
+					t.Fatalf("unexpected err: %v", err)
+				}
+				<-asked
+				select {
+				case u := <-written:
+					t.Fatalf("a stale copy was written back over the stored status: %+v", u)
+				case <-time.After(200 * time.Millisecond):
+				}
+			})
+		}
+	})
+
 	t.Run("other user profile - missing node id", func(t *testing.T) {
 		h := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, stubUserFetcher{getFn: func(userId string) (domain.User, error) {
 			return domain.User{Id: userId, NodeId: ""}, nil
@@ -447,6 +482,201 @@ func TestStreamUpdateProfileHandler(t *testing.T) {
 		_, err := h(marshal(t, event.NewUserEvent{Bio: "new bio"}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
+		}
+	})
+}
+
+func TestStreamGetUserStatusHandler(t *testing.T) {
+	owner := "owner-1"
+	ownNode := warpnet.WarpPeerID("own-node")
+	auth := stubAuth{owner: domain.Owner{UserId: owner}}
+	infoOf := func(ownerId string) []byte {
+		return []byte(`{"type":"member","owner_id":"` + ownerId +
+			`","node_id":"12D3KooWH5YPwJiptN44YWhwePX1jHrnCLfXzEqQTMnto6fgKcHz"}`)
+	}
+	otherUser := func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: "node-2"}, nil
+	}
+	streamerAnswering := func(resp []byte, err error) stubUserStreamer {
+		return stubUserStreamer{
+			nodeInfo: warpnet.NodeInfo{ID: ownNode, OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				if nodeId != "node-2" || path != event.PUBLIC_GET_INFO {
+					t.Fatalf("unexpected request: %s %s", nodeId, path)
+				}
+				return resp, err
+			},
+		}
+	}
+
+	t.Run("invalid payload", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{}, auth, stubUserStreamer{})
+		if _, err := h([]byte("{"), nil); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("empty user id", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{}, auth, stubUserStreamer{})
+		_, err := h(marshal(t, event.GetUserEvent{}), nil)
+		if !errors.Is(err, errEmptyUserId) {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("owner is online without asking anyone", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{}, auth, stubUserStreamer{
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				t.Fatal("the owner's own node must not be asked")
+				return nil, nil
+			},
+		})
+		resp, err := h(marshal(t, event.GetUserEvent{UserId: owner}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if st := resp.(event.UserStatusResponse); !st.IsOnline || st.LastSeen == nil {
+			t.Fatalf("unexpected status: %+v", st)
+		}
+	})
+
+	t.Run("unknown user", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{getFn: func(string) (domain.User, error) {
+			return domain.User{}, database.ErrUserNotFound
+		}}, auth, stubUserStreamer{})
+		_, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if !errors.Is(err, database.ErrUserNotFound) {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("user without a node id", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId}, nil
+		}}, auth, stubUserStreamer{})
+		if _, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("node answers as the user's node", func(t *testing.T) {
+		var stored domain.User
+		h := StreamGetUserStatusHandler(stubUserFetcher{
+			getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, NodeId: "node-2", IsOffline: true}, nil
+			},
+			updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+				stored = newUser
+				return newUser, nil
+			},
+		}, auth, streamerAnswering(infoOf("other-1"), nil))
+		resp, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		st := resp.(event.UserStatusResponse)
+		if !st.IsOnline || st.LastSeen == nil || st.UserId != "other-1" {
+			t.Fatalf("unexpected status: %+v", st)
+		}
+		if stored.IsOffline || stored.LastSeen == nil {
+			t.Fatalf("online status not stored: %+v", stored)
+		}
+	})
+
+	t.Run("offline node", func(t *testing.T) {
+		seen := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+		var stored *domain.User
+		h := StreamGetUserStatusHandler(stubUserFetcher{
+			getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, NodeId: "node-2", LastSeen: &seen}, nil
+			},
+			updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+				stored = &newUser
+				return newUser, nil
+			},
+		}, auth, streamerAnswering(nil, warpnet.ErrNodeIsOffline))
+		resp, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		st := resp.(event.UserStatusResponse)
+		if st.IsOnline || st.LastSeen == nil || !st.LastSeen.Equal(seen) {
+			t.Fatalf("unexpected status: %+v", st)
+		}
+		if stored == nil || !stored.IsOffline {
+			t.Fatalf("offline status not stored: %+v", stored)
+		}
+	})
+
+	t.Run("already offline user is not written again", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{
+			getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, NodeId: "node-2", IsOffline: true}, nil
+			},
+			updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+				t.Fatal("unexpected update")
+				return newUser, nil
+			},
+		}, auth, streamerAnswering(nil, warpnet.ErrNodeIsOffline))
+		resp, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(event.UserStatusResponse).IsOnline {
+			t.Fatal("expected offline")
+		}
+	})
+
+	t.Run("node owned by another user", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{getFn: otherUser}, auth, streamerAnswering(infoOf("someone-else"), nil))
+		resp, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(event.UserStatusResponse).IsOnline {
+			t.Fatal("a node serving another account must not light the user up")
+		}
+	})
+
+	t.Run("record pointing at this node", func(t *testing.T) {
+		h := StreamGetUserStatusHandler(stubUserFetcher{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: ownNode.String()}, nil
+		}}, auth, stubUserStreamer{
+			nodeInfo: warpnet.NodeInfo{ID: ownNode, OwnerId: owner},
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				t.Fatal("this node must not stream to itself")
+				return nil, nil
+			},
+		})
+		resp, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(event.UserStatusResponse).IsOnline {
+			t.Fatal("expected offline")
+		}
+	})
+
+	t.Run("unclear answers are errors, not a status", func(t *testing.T) {
+		cases := map[string]stubUserStreamer{
+			"rejected":     streamerAnswering(marshal(t, event.ResponseError{Code: 429, Message: "too many requests"}), nil),
+			"legacy error": streamerAnswering([]byte(`["denied"]`), nil),
+			"empty":        streamerAnswering(nil, nil),
+			"stream error": streamerAnswering(nil, stream.ErrResponseRead),
+		}
+		for name, streamer := range cases {
+			t.Run(name, func(t *testing.T) {
+				h := StreamGetUserStatusHandler(stubUserFetcher{
+					getFn: otherUser,
+					updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+						t.Fatal("unexpected update")
+						return newUser, nil
+					},
+				}, auth, streamer)
+				if _, err := h(marshal(t, event.GetUserEvent{UserId: "other-1"}), nil); err == nil {
+					t.Fatal("expected error")
+				}
+			})
 		}
 	})
 }
