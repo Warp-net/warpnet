@@ -50,6 +50,7 @@ import (
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
@@ -413,8 +414,7 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	if u.IsOffline {
 		return
 	}
-	u.IsOffline = true
-	_, err = m.userRepo.Update(u.Id, u)
+	_, err = m.userRepo.Update(u.Id, domain.User{IsOffline: true, RoundTripTime: u.RoundTripTime})
 	// The flag is monotonic: a commit conflict means a concurrent
 	// stream failure already stored the same thing — not an error.
 	if err != nil && !errors.Is(err, database.ErrConflict) {

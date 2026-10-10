@@ -328,6 +328,33 @@ func TestSetUserOffline(t *testing.T) {
 	require.NotPanics(t, func() { m.setUserOffline("12D3KooWOfflineNode") })
 }
 
+func TestSetUserOfflineWritesOnlyTheStatus(t *testing.T) {
+	m, db, _ := newTestMemberNode(t)
+
+	userRepo := database.NewUserRepo(db)
+	_, err := userRepo.Create(domain.User{
+		Id: "user-2", NodeId: "12D3KooWStruckNode", Username: "old", RoundTripTime: 70,
+		Moderation: &domain.UserModeration{IsModerated: true, Strikes: 1},
+	})
+	require.NoError(t, err)
+
+	for range 3 {
+		m.setUserOffline("12D3KooWStruckNode")
+		_, err = userRepo.Update("user-2", domain.User{IsOffline: false, RoundTripTime: 70})
+		require.NoError(t, err)
+	}
+	_, err = userRepo.Update("user-2", domain.User{Username: "renamed", RoundTripTime: 70})
+	require.NoError(t, err)
+	m.setUserOffline("12D3KooWStruckNode")
+
+	got, err := userRepo.Get("user-2")
+	require.NoError(t, err)
+	require.True(t, got.IsOffline)
+	require.Equal(t, uint8(1), got.Moderation.Strikes)
+	require.Equal(t, int64(70), got.RoundTripTime)
+	require.Equal(t, "renamed", got.Username)
+}
+
 // TestNodeInfoAliasesAreDecodablePeerIDs pins the wire form of a paired
 // device. A peer ID holds the binary multihash, so the stored text has to be
 // decoded: converted, it reaches peers base58-encoded twice and every one of
