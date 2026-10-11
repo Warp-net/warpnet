@@ -313,6 +313,10 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		log.Debugf("selfupdate: version %s is up to date", u.current)
 		return nil
 	}
+	if !u.isSigned(rel) {
+		log.Infof("selfupdate: version %s is not signed yet, skipping", rel.Version)
+		return nil
+	}
 	if u.failures.Has(rel.Version) {
 		log.Warnf("selfupdate: version %s failed to start before, skipping", rel.Version)
 		return nil
@@ -453,6 +457,16 @@ func (u *SelfUpdater) install(rel Release) (func(), error) {
 	defer func() { _ = os.Remove(path) }() // no-op once installed
 
 	return u.binary.Install(path)
+}
+
+// isSigned reports whether rel already carries the signature of its listing: a
+// forge shows the release as soon as the first asset lands, the signature last.
+func (u *SelfUpdater) isSigned(rel Release) bool {
+	if key, _ := releaseKey(); key == nil {
+		return true
+	}
+	_, err := rel.AssetURL(u.artifact.SignatureName)
+	return err == nil
 }
 
 func (u *SelfUpdater) verifyListing(rel Release, listing []byte) error {

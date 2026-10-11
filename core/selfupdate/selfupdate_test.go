@@ -476,14 +476,24 @@ func TestSelfUpdaterInstallsSignedRelease(t *testing.T) {
 	assert.True(t, binary.restarted)
 }
 
-func TestSelfUpdaterRejectsUnsignedRelease(t *testing.T) {
+func TestSelfUpdaterWaitsForReleaseSignature(t *testing.T) {
 	archive := tarGz(t, testBinary, []byte("new binary"))
 	sums := sumsFor(archive)
 	signRelease(t, sums)
 	u, binary := signedUpdaterFixture(t, "v0.7.548", archive, sums, nil)
+	u.isApprovalRequired = true
 
-	require.ErrorIs(t, u.checkAndUpdate(nil), ErrReleaseUnsigned)
+	errs := make(chan error, 1)
+	go func() { errs <- u.checkAndUpdate(nil) }()
+	select {
+	case err := <-errs:
+		require.NoError(t, err)
+	case <-time.After(approverWait):
+		t.Fatal("the owner was asked about an unsigned release")
+	}
 
+	_, next, _ := u.GetPendingUpdate()
+	assert.Empty(t, next, "an unsigned release must not be offered")
 	assert.Equal(t, "current binary", read(t, binary.path))
 	assert.False(t, binary.restarted)
 	assert.NoFileExists(t, binary.StagePath(testAsset), "an unsigned release must not even be downloaded")
