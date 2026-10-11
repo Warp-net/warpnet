@@ -237,7 +237,7 @@ func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 
 	created, updated := users.snapshot()
 	require.Len(t, created, 1)
-	assert.Equal(t, "alice", created[0].Username)
+	assert.Equal(t, DefaultUsername, created[0].Username, "the login must not become the public name")
 	assert.NotEmpty(t, created[0].Id)
 
 	require.Len(t, updated, 1)

@@ -56,6 +56,32 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("filters out Warpnet users federated back by a gateway", func(t *testing.T) {
+		h := StreamGetWhoToFollowHandler(
+			stubAuth{owner: domain.Owner{UserId: owner, NodeId: "node-1", Username: "test"}},
+			stubUserFetcher{
+				whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
+					return []domain.User{
+						{Id: "01KTRA1QJ8M2W7Y4ZB6C9D3E5F@warpnet-gw.example", NodeId: "gateway", Network: "mastodon"},
+						{Id: "alice@mastodon.social", NodeId: "gateway", Network: "mastodon"},
+					}, "end", nil
+				},
+				getFn: func(userId string) (domain.User, error) {
+					return domain.User{Id: owner, Network: warpnet.WarpnetName}, nil
+				},
+			},
+			stubUserFollowsCounter{},
+		)
+		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		r := resp.(event.UsersResponse)
+		if len(r.Users) != 1 || r.Users[0].Id != "alice@mastodon.social" {
+			t.Fatalf("expected only alice@mastodon.social, got: %v", r.Users)
+		}
+	})
+
 	t.Run("keeps repo order", func(t *testing.T) {
 		ulidID := "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		h := StreamGetWhoToFollowHandler(

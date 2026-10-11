@@ -64,7 +64,7 @@ type Streamer interface {
 }
 
 type OfflineOutbox interface {
-	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte)
+	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte) error
 	NotifyOnline(nodeIdStr string)
 	Close()
 }
@@ -353,8 +353,8 @@ func (n *WarpNode) trackIncomingEvents() {
 			case event.EvtPeerConnectednessChanged:
 				pid := typedEvent.Peer.String()
 				log.Infof(
-					"node: event: peer ...%s connectedness updated: %s",
-					pid[len(pid)-6:],
+					"node: event: peer %s connectedness updated: %s",
+					pid,
 					typedEvent.Connectedness.String(),
 				)
 				isOnline := typedEvent.Connectedness == warpnet.Connected ||
@@ -380,8 +380,8 @@ func (n *WarpNode) trackIncomingEvents() {
 			case event.EvtPeerIdentificationCompleted:
 				pid := typedEvent.Peer.String()
 				log.Debugf(
-					"node: event: peer ...%s identification completed, observed address: %s",
-					pid[len(pid)-6:], typedEvent.ObservedAddr.String(),
+					"node: event: peer %s identification completed, observed address: %s",
+					pid, typedEvent.ObservedAddr.String(),
 				)
 			case event.EvtLocalReachabilityChanged:
 				r := typedEvent.Reachability // it's int32 under the hood
@@ -593,7 +593,9 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 
 	resp, err := n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
 	if n.outbox != nil && errors.Is(err, warpnet.ErrNodeIsOffline) {
-		n.outbox.Enqueue(nodeId.String(), path, bt)
+		if qErr := n.outbox.Enqueue(nodeId.String(), path, bt); qErr == nil {
+			err = fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, err)
+		}
 	}
 	return resp, err
 }

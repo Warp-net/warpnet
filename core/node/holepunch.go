@@ -48,7 +48,7 @@ func (holePunchTracer) Trace(evt *holepunch.Event) {
 	if evt == nil {
 		return
 	}
-	peer := evt.Remote.ShortString()
+	peer := evt.Remote.String()
 
 	switch e := evt.Evt.(type) {
 	case *holepunch.StartHolePunchEvt:
@@ -114,7 +114,7 @@ func (connTracer) Disconnected(n network.Network, c network.Conn) {
 		return
 	}
 	if !isRelayed(c) {
-		log.Debugf("holepunch: direct connection closed: peer %s", c.RemotePeer().ShortString())
+		log.Debugf("holepunch: direct connection closed: peer %s", c.RemotePeer().String())
 		return
 	}
 	// libp2p drops the relayed connection once a punch succeeds. Seeing the

@@ -66,6 +66,7 @@ type ReTweetsStorer interface {
 
 type RetweetTimelineUpdater interface {
 	AddTweetToTimeline(userId string, tweet domain.Tweet) error
+	DeleteTweetFromTimeline(userID, tweetID string) error
 }
 
 type RetweetNotifier interface {
@@ -196,6 +197,7 @@ func StreamNewReTweetHandler(
 func StreamUnretweetHandler(
 	tweetRepo ReTweetsStorer,
 	userRepo RetweetedUserFetcher,
+	timelineRepo RetweetTimelineUpdater,
 	streamer RetweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -217,8 +219,9 @@ func StreamUnretweetHandler(
 		}
 
 		retweetedBy := ev.RetweeterId
+		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
-		tweet, err := tweetRepo.Get(retweetedBy, ev.TweetId)
+		tweet, err := tweetRepo.Get(retweetedBy, tweetId)
 		if err != nil {
 			return nil, err
 		}
@@ -226,10 +229,20 @@ func StreamUnretweetHandler(
 		ownerId := ownNodeInfo.OwnerId
 		// Mirror the retweet path: only the retweeter's own node adjusts the
 		// network-wide (CRDT) counter.
-		err = tweetRepo.UnRetweet(retweetedBy, ev.TweetId, retweetedBy == ownerId)
+		err = tweetRepo.UnRetweet(retweetedBy, tweetId, retweetedBy == ownerId)
 		if err != nil {
 			log.Errorf("unretweet handler failed: %v", err)
 			return nil, err
+		}
+
+		if retweetedBy == ownerId {
+			retweetId := tweetId
+			if tweet.UserId == retweetedBy {
+				retweetId = domain.RetweetPrefix + tweetId
+			}
+			if err = timelineRepo.DeleteTweetFromTimeline(ownerId, retweetId); err != nil {
+				log.Infof("fail deleting retweet from timeline: %v", err)
+			}
 		}
 
 		isOwnTweetUnretweet := tweet.UserId == ownerId

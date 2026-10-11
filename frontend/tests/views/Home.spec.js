@@ -18,6 +18,7 @@ vi.mock('@/service/service', () => ({
     consumePendingDeepLink: vi.fn(),
     getNodeInfo: vi.fn(),
     createTweet: vi.fn(),
+    uploadImage: vi.fn(),
   },
 }));
 
@@ -298,6 +299,18 @@ describe('Home composer watchers', () => {
     await fireEvent.update(box, 'x'.repeat(300));
 
     await waitFor(() => expect(box.value).toHaveLength(280));
+  });
+
+  it('attaches an image pasted into the composer', async () => {
+    warpnetService.uploadImage.mockResolvedValue('img-key');
+    renderHome();
+    const box = await screen.findByLabelText('Compose a tweet');
+    const shot = new File(['png'], 'shot.png', { type: 'image/png' });
+
+    await fireEvent.paste(box, { clipboardData: { files: [shot], types: ['Files'] } });
+
+    await waitFor(() => expect(warpnetService.uploadImage).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/)));
+    expect(screen.getByAltText('Image preview')).toBeInTheDocument();
   });
 
   it('focuses the composer when arriving with ?compose', async () => {

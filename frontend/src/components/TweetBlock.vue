@@ -42,12 +42,13 @@ resulting from the use or misuse of this software.
       @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
-      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn" aria-label="View profile">
+      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn relative block" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
-          class="h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
+          class="block h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
           :alt="`${authorName || 'User'} avatar`"
         />
+        <UserStatusDot :user="{ id: tweet.user_id, network: tweet.network }" />
       </button>
     </div>
     <!-- min-w-0 throughout: fediverse handles are long unbreakable strings
@@ -468,6 +469,7 @@ import {extractYoutubeId} from "@/lib/youtube";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 // USDT on TRON and TRX in sun both count in millionths.
 const unitDecimals = 6;
@@ -497,6 +499,7 @@ export default {
   },
   components: {
     NetworkIcon,
+    UserStatusDot,
     ReactorsOverlay: defineAsyncComponent(() => import('./ReactorsOverlay.vue')),
     RetweetersOverlay: defineAsyncComponent(() => import('./RetweetersOverlay.vue')),
     EditTweetOverlay: defineAsyncComponent(() => import('./EditTweetOverlay.vue')),

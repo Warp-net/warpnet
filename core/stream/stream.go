@@ -211,10 +211,10 @@ func (p *streamPool) send(
 
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
-	if netw := p.n.Network(); netw != nil && netw.Connectedness(serverInfo.ID) == network.Limited {
-		log.Debugf("stream: peer %s has limited connection", serverInfo.ID.String())
-		ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
-	}
+	// Set before the dial, not only for an already limited peer: a dial that
+	// lands on a relay would otherwise wait for a direct connection until
+	// sendTimeout and report the peer offline.
+	ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
 
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
 	// No known addresses (routing.ErrNotFound), every dial failed
@@ -222,7 +222,7 @@ func (p *streamPool) send(
 	// (context.DeadlineExceeded) all mean the peer is unreachable — offline.
 	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
 		errors.Is(err, context.DeadlineExceeded) {
-		return nil, warpnet.ErrNodeIsOffline
+		return nil, fmt.Errorf("%s %w", serverInfo.ID.String(), warpnet.ErrNodeIsOffline)
 	}
 	if err != nil {
 		log.Debugf("stream: new: failed to create stream: %v", err)

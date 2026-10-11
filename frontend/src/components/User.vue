@@ -24,11 +24,12 @@ resulting from the use or misuse of this software.
 <template>
   <div class="w-full px-4 py-2 border-b hover:bg-lightest transition-colors duration-150 flex flex-row">
     <div class="flex-none">
-      <a @click="pushToProfilePage(user.id)">
+      <a @click="pushToProfilePage(user.id)" class="relative block">
         <img
           :src="`${user.avatar || '/default_profile.png'}`"
-          class="h-12 w-12 rounded-full cursor-pointer transition-opacity duration-150 hover:opacity-80"
+          class="block h-12 w-12 rounded-full cursor-pointer transition-opacity duration-150 hover:opacity-80"
          />
+        <UserStatusDot :user="user" />
       </a>
     </div>
     <div class="ml-2 flex flex-col w-full">
@@ -107,6 +108,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {decodeHtmlEntities, isBridgedUser} from "@/lib/network";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
   name: "User",
@@ -122,6 +124,7 @@ export default {
   },
   components: {
     ConfirmDialog: defineAsyncComponent(() => import('./ConfirmDialog.vue')),
+    UserStatusDot,
   },
   data() {
     return {

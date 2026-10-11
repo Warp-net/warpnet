@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
@@ -16,6 +16,7 @@ vi.mock('@/service/service', () => ({
     markMessageNotificationsRead: vi.fn(),
     markChatRead: vi.fn(),
     getChatReadAt: vi.fn(() => 0),
+    uploadChatImages: vi.fn(),
   },
 }));
 
@@ -131,6 +132,21 @@ describe('Messages.vue', () => {
       await screen.findByText('look at this photo', undefined, { timeout: 3000 })
     ).toBeInTheDocument();
     expect(screen.queryByAltText('Attachment')).not.toBeInTheDocument();
+  });
+
+  it('attaches an image pasted into the message box', async () => {
+    warpnetService.getChats.mockResolvedValue([
+      { id: 'chat-1', owner_id: ALICE, other_user_id: BOB, last_message: '' },
+    ]);
+    warpnetService.uploadChatImages.mockResolvedValue(['img-key']);
+    renderMessages({ chatId: 'chat-1' });
+    const box = await screen.findByPlaceholderText('Start a new message');
+    const shot = new File(['png'], 'shot.png', { type: 'image/png' });
+
+    await fireEvent.paste(box, { clipboardData: { files: [shot], types: ['Files'] } });
+
+    await waitFor(() => expect(warpnetService.uploadChatImages).toHaveBeenCalledWith([expect.stringMatching(/^data:image\/png;base64,/)]));
+    expect(screen.getByAltText('Image preview')).toBeInTheDocument();
   });
 
   it('keeps bridged mastodon chats hidden', async () => {

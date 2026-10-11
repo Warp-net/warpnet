@@ -692,7 +692,7 @@ func (e *Engine) ratePeers() error {
 		score := e.Score(peerID)
 		tier := score.Tier()
 		e.ratings.Rate(peerID, tier)
-		if p.tierMoved(tier) {
+		if p.isTierMoved(tier) {
 			log.Infof("rating: peer %s is %s now, score %d of %d", peerID, tier, score, MaxScore)
 		}
 	}

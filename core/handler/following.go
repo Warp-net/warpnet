@@ -156,6 +156,9 @@ func StreamFollowHandler(
 					FollowerId:  ev.FollowerId,
 				},
 			)
+			if errors.Is(err, stream.ErrQueuedInOutbox) {
+				followDataResp, err = []byte(event.Accepted), nil
+			}
 			if errors.Is(err, warpnet.ErrNodeIsOffline) {
 				return nil, warpnet.ErrNodeIsOffline
 			}
@@ -284,6 +287,9 @@ func StreamUnfollowHandler(
 					FollowerId:  ownerUserId,
 				},
 			)
+			if errors.Is(err, stream.ErrQueuedInOutbox) {
+				unfollowDataResp, err = []byte(event.Accepted), nil
+			}
 			if errors.Is(err, warpnet.ErrNodeIsOffline) {
 				return nil, warpnet.ErrNodeIsOffline
 			}

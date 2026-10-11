@@ -26,21 +26,17 @@ resulting from the use or misuse of this software.
     @click="selected(user)"
     class="w-full px-4 py-2 border-b hover:bg-lightest flex flex-row cursor-pointer"
   >
-    <div class="flex-none">
+    <div class="flex-none relative">
       <img
         :src="`${user.avatar || '/default_profile.png'}`"
-        class="h-12 w-12 rounded-full"
+        class="block h-12 w-12 rounded-full"
       />
+      <UserStatusDot :user="user" />
     </div>
     <div class="ml-2 flex flex-col w-full">
       <div class="flex flex-row justify-between w-full">
         <div class="flex flex-col">
-          <p class="font-bold">{{ user.username }}
-            <span
-                v-if="user.isOffline"
-                class="text-sm font-medium bg-red-900 py-1 px-1 mx-2 rounded text-white align-middle"
-            >Offline</span>
-          </p>
+          <p class="font-bold">{{ user.username }}</p>
           <p class="text-dark text-sm">
             @{{ user.id }}
           </p>
@@ -51,9 +47,11 @@ resulting from the use or misuse of this software.
 </template>
 
 <script>
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
   name: "User",
+  components: {UserStatusDot},
   props: ["user"],
   methods: {
     selected(user) {

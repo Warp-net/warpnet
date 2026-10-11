@@ -352,8 +352,6 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		return
 	}
 
-	fmt.Printf("\033[1mdiscovery: connected to new peer: %s, source '%s' \033[0m\n", pi.String(), peer.Source)
-
 	user, err := s.requestNodeUser(pi, info.OwnerId)
 	if err != nil {
 		log.Errorf("discovery: source '%s': request node user: %s", peer.Source, err.Error())
@@ -366,6 +364,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 			log.Warnf(
 				"discovery: source '%s': update user %s of known peer: %v",
 				peer.Source, user.Id, err)
+			return
 		}
 		return
 	}
@@ -375,6 +374,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 			peer.Source, user.Id, err)
 		return
 	}
+	log.Infoln()
 	log.Infof(
 		"discovery: new user added: id: %s, name: %s, node_id: %s, created_at: %s, RTT: %d, source: %s",
 		newUser.Id,
@@ -384,6 +384,7 @@ func (s *discoveryService) handleAsMember(peer discoveredPeer) {
 		newUser.RoundTripTime,
 		peer.Source,
 	)
+	log.Infoln()
 }
 
 func (s *discoveryService) handleAsRelay(peer discoveredPeer) {

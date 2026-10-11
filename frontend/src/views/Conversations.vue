@@ -57,9 +57,10 @@ resulting from the use or misuse of this software.
                 <div class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
                   @click="selectChat(chat)">
                   <div class="flex-none mr-2 md:mr-4 pt-1">
-                    <a :href="`#/${chat.other_user_id}`">
+                    <a :href="`#/${chat.other_user_id}`" class="relative block">
                       <img :src="getUser(chat.other_user_id).avatar || '/default_profile.png'"
-                           class="flex-none w-12 h-12 rounded-full"  />
+                           class="block flex-none w-12 h-12 rounded-full"  />
+                      <UserStatusDot :user="getUser(chat.other_user_id)" />
                     </a>
                   </div>
                   <div class="w-full truncate">
@@ -107,6 +108,7 @@ resulting from the use or misuse of this software.
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {isBridgedUser} from "@/lib/network";
+import UserStatusDot from "@/components/UserStatusDot.vue";
 
 export default {
   name: "Chats",
@@ -114,6 +116,7 @@ export default {
     NewMessageOverlay: defineAsyncComponent(() => import('../components/NewMessageOverlay.vue')),
     Loader: defineAsyncComponent(() => import('../components/Loader.vue')),
     SideNav: defineAsyncComponent(() => import('../components/SideNav.vue')),
+    UserStatusDot,
   },
   data() {
     return {

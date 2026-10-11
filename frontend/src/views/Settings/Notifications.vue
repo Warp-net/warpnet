@@ -27,6 +27,7 @@
           <input
             type="email"
             v-model="settings.recipient"
+            :required="settings.email_enabled"
             placeholder="you@example.com"
             class="mt-1 w-full rounded border border-lighter bg-white p-2"
           />
@@ -111,7 +112,7 @@ export default {
       ownerProfile: {},
       types: [
         { key: 'follow', label: 'New followers' },
-        { key: 'like', label: 'Likes on your tweets' },
+        { key: 'reaction', label: 'Reactions to your tweets' },
         { key: 'retweet', label: 'Retweets and quotes' },
         { key: 'reply', label: 'Replies to your tweets' },
         { key: 'message', label: 'Direct messages' },

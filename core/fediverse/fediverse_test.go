@@ -92,3 +92,18 @@ func TestIsBridged(t *testing.T) {
 		}
 	}
 }
+
+func TestIsFederatedWarpnet(t *testing.T) {
+	for id, want := range map[string]bool{
+		"01KTRA1QJ8M2W7Y4ZB6C9D3E5F@warpnet-gw.example":  true,
+		"@01ktra1qj8m2w7y4zb6c9d3e5f@warpnet-gw.example": true,
+		"01KTRA1QJ8M2W7Y4ZB6C9D3E5F":                     false,
+		"01KTRA1QJ8M2W7Y4ZB6C9D3E5F@":                    false,
+		EntryHandle:                                      false,
+		ThreadsEntryHandle:                               false,
+	} {
+		if got := IsFederatedWarpnet(domain.User{Id: id}); got != want {
+			t.Errorf("IsFederatedWarpnet(%q) = %v, want %v", id, got, want)
+		}
+	}
+}

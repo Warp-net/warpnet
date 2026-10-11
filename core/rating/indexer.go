@@ -73,7 +73,7 @@ type indexedPeer struct {
 
 // tierMoved reports a tier that differs from the one last seen, and
 // remembers it. A peer whose tier holds is reported once.
-func (p *indexedPeer) tierMoved(tier Tier) bool {
+func (p *indexedPeer) isTierMoved(tier Tier) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.tierKnown && p.tier == tier {

@@ -84,6 +84,7 @@ const (
 	PUBLIC_POST_REPLY                  = "/public/post/reply/0.0.0"
 	PRIVATE_POST_IMPORT_TWITTER_TWEET  = "/private/post/import/twitter/tweet/0.0.0"
 	PRIVATE_POST_USER                  = "/private/post/user/0.0.0"
+	PRIVATE_GET_USER_STATUS            = "/private/get/user/status/0.0.0"
 	PUBLIC_GET_FOLLOWINGS              = "/public/get/followings/0.0.0"
 	PUBLIC_GET_WALLET_ADDRESS          = "/public/get/wallet/address/0.0.0"
 	PUBLIC_GET_FOLLOWERS               = "/public/get/followers/0.0.0"

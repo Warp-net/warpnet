@@ -51,6 +51,10 @@ const (
 	ErrAlreadyAuthenticated warpnet.WarpError = "already authenticated"
 )
 
+// DefaultUsername is the public name of a new profile: the login is half of the
+// database and identity key secret, so it never becomes the profile name.
+const DefaultUsername = "Anonymous"
+
 type UserPersistencyLayer interface {
 	Create(user domain.User) (domain.User, error)
 	Update(userId string, newUser domain.User) (domain.User, error)
@@ -106,7 +110,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		return authInfo, ErrAlreadyAuthenticated
 	}
 
-	log.Infof("authenticating user '%s'", message.Username)
+	log.Infoln("authenticating user")
 
 	message.Password = strings.TrimSpace(message.Password)
 
@@ -141,7 +145,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 			CreatedAt:     owner.CreatedAt,
 			Id:            id,
 			NodeId:        "none",
-			Username:      owner.Username,
+			Username:      DefaultUsername,
 			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
 		if err != nil {
@@ -158,8 +162,8 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 	}
 
 	if owner.Username != message.Username {
-		log.Errorf("username mismatch: '%s' == '%s'", owner.Username, message.Username)
-		return authInfo, fmt.Errorf("%w: %s", ErrUsernamesMismatch, message.Username)
+		log.Errorln("username mismatch")
+		return authInfo, ErrUsernamesMismatch
 	}
 	as.authReady <- domain.AuthNodeInfo{
 		UserId: owner.UserId,
@@ -186,9 +190,8 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		owner.NodeId = authInfo.ID
 
 		log.Infof(
-			"auth: user authenticated: id: %s, name: '%s', node_id: %s, created_at: %s, latency: %d",
+			"auth: user authenticated: id: %s, node_id: %s, created_at: %s, latency: %d",
 			user.Id,
-			owner.Username,
 			user.NodeId,
 			user.CreatedAt,
 			user.RoundTripTime,

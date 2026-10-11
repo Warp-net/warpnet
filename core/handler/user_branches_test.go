@@ -84,36 +84,40 @@ func TestUpdateOtherUser(t *testing.T) {
 	base := domain.User{Id: "other-1", NodeId: "other-node", Username: "known"}
 	ev := event.GetUserEvent{UserId: base.Id}
 
-	t.Run("offline node marks the user offline", func(t *testing.T) {
+	t.Run("offline node is an error and leaves the status to the status route", func(t *testing.T) {
 		streamer := stubUserStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return nil, warpnet.ErrNodeIsOffline
 		}}
-		got := updateOtherUser(ev, base, streamer)
-		require.True(t, got.IsOffline)
+		got, err := updateOtherUser(ev, base, streamer)
+		require.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
+		require.False(t, got.IsOffline)
 	})
 
 	t.Run("stream failure returns the user untouched", func(t *testing.T) {
 		streamer := stubUserStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return nil, errors.New("boom")
 		}}
-		got := updateOtherUser(ev, base, streamer)
+		got, err := updateOtherUser(ev, base, streamer)
+		require.Error(t, err)
 		require.False(t, got.IsOffline)
 		require.Equal(t, "known", got.Username)
 	})
 
-	t.Run("user-not-found response marks the user offline", func(t *testing.T) {
+	t.Run("user-not-found response is an error and leaves the status alone", func(t *testing.T) {
 		streamer := stubUserStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return json.Marshal(event.ResponseError{Message: "user not found"})
 		}}
-		got := updateOtherUser(ev, base, streamer)
-		require.True(t, got.IsOffline)
+		got, err := updateOtherUser(ev, base, streamer)
+		require.Error(t, err)
+		require.False(t, got.IsOffline)
 	})
 
 	t.Run("other error responses leave the user alone", func(t *testing.T) {
 		streamer := stubUserStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return json.Marshal(event.ResponseError{Message: "internal"})
 		}}
-		got := updateOtherUser(ev, base, streamer)
+		got, err := updateOtherUser(ev, base, streamer)
+		require.Error(t, err)
 		require.False(t, got.IsOffline)
 	})
 
@@ -121,7 +125,8 @@ func TestUpdateOtherUser(t *testing.T) {
 		streamer := stubUserStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return []byte("{"), nil
 		}}
-		got := updateOtherUser(ev, base, streamer)
+		got, err := updateOtherUser(ev, base, streamer)
+		require.NoError(t, err)
 		require.NotNil(t, got.LastSeen)
 		require.False(t, got.IsOffline)
 	})
@@ -130,7 +135,8 @@ func TestUpdateOtherUser(t *testing.T) {
 		streamer := stubUserStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return json.Marshal(domain.User{Id: base.Id, Username: "fresh"})
 		}}
-		got := updateOtherUser(ev, base, streamer)
+		got, err := updateOtherUser(ev, base, streamer)
+		require.NoError(t, err)
 		require.Equal(t, "fresh", got.Username)
 		require.NotNil(t, got.LastSeen)
 		require.False(t, got.IsOffline)

@@ -33,7 +33,10 @@ package fediverse
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -67,6 +70,15 @@ const (
 // through the ActivityPub gateway rather than Warpnet itself.
 func IsBridged(network string) bool {
 	return network == MastodonNetwork || network == ThreadsNetwork
+}
+
+func IsFederatedWarpnet(user domain.User) bool {
+	name, host, ok := strings.Cut(strings.TrimPrefix(user.Id, "@"), "@")
+	if !ok || host == "" {
+		return false
+	}
+	_, err := ulid.ParseStrict(name)
+	return err == nil
 }
 
 var ErrNotSupported = errors.New("not supported functionality")
