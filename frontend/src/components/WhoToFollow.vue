@@ -51,11 +51,11 @@ resulting from the use or misuse of this software.
       </button>
     </div>
     <div v-for="profile in activeProfiles" :key="profile.id" class="w-full flex hover:bg-lighter transition-colors duration-150 p-3 border-t border-lighter">
-      <div class="relative flex-none">
+      <div class="grid flex-none">
         <img
           @click="pushToProfilePage(profile.id)"
           :src="profile.avatar || '/default_profile.png'"
-          class="block w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
+          class="col-start-1 row-start-1 block w-12 h-12 rounded-full cursor-pointer object-cover bg-transparent"
           :alt="profile.username"
         />
         <UserStatusDot :user="profile" />

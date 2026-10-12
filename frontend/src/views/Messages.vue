@@ -51,10 +51,10 @@ resulting from the use or misuse of this software.
              :class="chat.id === active?.id ? 'border-r-2 border-blue' : ''"
              @click="selectChat(chat)">
           <div class="flex items-start px-4 py-2 hover:bg-lightest border-b">
-            <div class="mr-4 relative flex-none">
+            <div class="mr-4 grid flex-none">
               <img
                   :src="getUser(chat.other_user_id)?.avatar || '/default_profile.png'"
-                  class="block h-12 w-12 rounded-full object-cover bg-transparent"
+                  class="col-start-1 row-start-1 block h-12 w-12 rounded-full object-cover bg-transparent"
               />
               <UserStatusDot :user="getUser(chat.other_user_id)" />
             </div>
@@ -103,12 +103,12 @@ resulting from the use or misuse of this software.
           <i class="fas fa-arrow-left text-blue"></i>
         </button>
         <button type="button" @click="gotoProfile(active.other_user_id)" class="flex items-center text-left flat-btn" aria-label="View profile">
-          <div class="mr-4 relative flex-none">
+          <div class="mr-4 grid flex-none">
             <img
                 :src="getUser(active.other_user_id)?.avatar || '/default_profile.png'"
-                class="block w-6 h-6 rounded-full object-cover bg-transparent"
+                class="col-start-1 row-start-1 block w-6 h-6 rounded-full object-cover bg-transparent"
             />
-            <UserStatusDot :user="getUser(active.other_user_id)" size-class="h-2.5 w-2.5 -bottom-0.5 -right-0.5" />
+            <UserStatusDot :user="getUser(active.other_user_id)" size-class="h-2.5 w-2.5 -mb-0.5 -mr-0.5" />
           </div>
           <div class="flex flex-col">
             <h1 class="font-bold">{{ getUser(active.other_user_id)?.username }}</h1>

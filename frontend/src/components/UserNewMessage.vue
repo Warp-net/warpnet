@@ -26,10 +26,10 @@ resulting from the use or misuse of this software.
     @click="selected(user)"
     class="w-full px-4 py-2 border-b hover:bg-lightest flex flex-row cursor-pointer"
   >
-    <div class="flex-none relative">
+    <div class="flex-none grid">
       <img
         :src="`${user.avatar || '/default_profile.png'}`"
-        class="block h-12 w-12 rounded-full"
+        class="col-start-1 row-start-1 block h-12 w-12 rounded-full"
       />
       <UserStatusDot :user="user" />
     </div>

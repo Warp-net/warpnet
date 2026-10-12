@@ -32,9 +32,9 @@ resulting from the use or misuse of this software.
         </router-link>
         
         <div v-if="chat && otherUser" class="flex items-center">
-          <div class="relative flex-none mr-3">
+          <div class="grid flex-none mr-3">
             <img :src="otherUser.avatar || '/default_profile.png'"
-                 class="block w-10 h-10 rounded-full" />
+                 class="col-start-1 row-start-1 block w-10 h-10 rounded-full" />
             <UserStatusDot :user="otherUser" />
           </div>
           <div>
