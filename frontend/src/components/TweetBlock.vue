@@ -42,10 +42,10 @@ resulting from the use or misuse of this software.
       @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
-      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn relative block" aria-label="View profile">
+      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn grid" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
-          class="block h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
+          class="col-start-1 row-start-1 block h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
           :alt="`${authorName || 'User'} avatar`"
         />
         <UserStatusDot :user="{ id: tweet.user_id, network: tweet.network }" />

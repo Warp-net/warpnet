@@ -24,10 +24,10 @@ resulting from the use or misuse of this software.
 <template>
   <div class="w-full px-4 py-2 border-b hover:bg-lightest transition-colors duration-150 flex flex-row">
     <div class="flex-none">
-      <a @click="pushToProfilePage(user.id)" class="relative block">
+      <a @click="pushToProfilePage(user.id)" class="grid">
         <img
           :src="`${user.avatar || '/default_profile.png'}`"
-          class="block h-12 w-12 rounded-full cursor-pointer transition-opacity duration-150 hover:opacity-80"
+          class="col-start-1 row-start-1 block h-12 w-12 rounded-full cursor-pointer transition-opacity duration-150 hover:opacity-80"
          />
         <UserStatusDot :user="user" />
       </a>
