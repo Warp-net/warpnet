@@ -31,6 +31,7 @@ import router from "./router";
 import directives from "./directives";
 import filters from "./filters";
 import { warpnetService } from "./service/service";
+import { blockStrayDrops } from "./lib/drop-guard";
 
 // Apply the saved dark theme before the first view mounts: SideNav restores it
 // too, but it isn't mounted on the logged-out screens, so login and signup
@@ -38,6 +39,8 @@ import { warpnetService } from "./service/service";
 if (localStorage.getItem("theme") === "dark") {
     document.documentElement.classList.add("dark");
 }
+
+blockStrayDrops(window);
 
 const app = createApp(App);
 
