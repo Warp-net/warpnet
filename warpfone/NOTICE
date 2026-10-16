@@ -92,3 +92,11 @@ carry that line, so they are named here instead.
   removed from the project.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-16, languages
+- All localizations except English were removed: the other 18 languages of
+  the string catalog (British English included), the action extension's
+  translated InfoPlist.strings and an unused Catalan plurals file.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
