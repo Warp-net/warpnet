@@ -292,13 +292,13 @@ describe('Home first paint under hanging elements', () => {
 });
 
 describe('Home composer watchers', () => {
-  it('clamps the composer to 280 runes', async () => {
+  it('clamps the composer to 2048 bytes', async () => {
     renderHome();
     const box = await screen.findByLabelText('Compose a tweet');
 
-    await fireEvent.update(box, 'x'.repeat(300));
+    await fireEvent.update(box, 'щ'.repeat(1100));
 
-    await waitFor(() => expect(box.value).toHaveLength(280));
+    await waitFor(() => expect(box.value).toBe('щ'.repeat(1024)));
   });
 
   it('attaches an image pasted into the composer', async () => {

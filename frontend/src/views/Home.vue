@@ -67,8 +67,8 @@ resulting from the use or misuse of this software.
           ></textarea>
           <div
             class="text-right text-xs"
-            :class="tweetLength >= 280 ? 'text-red-600 font-semibold' : (tweetLength >= 260 ? 'text-yellow-600' : 'text-dark')"
-          >{{ tweetLength }} / 280</div>
+            :class="tweetLength >= 2048 ? 'text-red-600 font-semibold' : (tweetLength >= 1900 ? 'text-yellow-600' : 'text-dark')"
+          >{{ tweetLength }} / 2048</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
@@ -317,12 +317,12 @@ import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
-import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {pastedImages} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
 import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
 
-const tweetCharLimit = 280;
+const tweetByteLimit = 2048;
 // Bridged sources are polled much slower than the 10s local-timeline poll:
 // every page is a per-handle fan-out through the gateway.
 const bridgedRefreshMs = 75000;
@@ -395,11 +395,8 @@ export default {
     };
   },
   watch: {
-    // The node caps a tweet at 280 runes, so the composer has to cap on runes
-    // too. A plain maxlength would count UTF-16 units and stop people halfway
-    // through their allowance as soon as they use emoji.
     "tweet.text"(value) {
-      const clamped = clampRunes(value, tweetCharLimit);
+      const clamped = clampBytes(value, tweetByteLimit);
       if (clamped !== value) this.tweet.text = clamped;
     },
     '$route.query.compose'(val) {
@@ -424,7 +421,7 @@ export default {
   },
   computed: {
     tweetLength() {
-      return runeLength(this.tweet.text);
+      return byteLength(this.tweet.text);
     },
     acceptedVideoTypes() {
       return acceptedVideoAccept;
@@ -483,7 +480,8 @@ export default {
         text: this.tweet.text,
         emoji,
         field,
-        limit: tweetCharLimit,
+        limit: tweetByteLimit,
+        measure: byteLength,
       });
       if (!next) return;
       this.tweet.text = next.text;

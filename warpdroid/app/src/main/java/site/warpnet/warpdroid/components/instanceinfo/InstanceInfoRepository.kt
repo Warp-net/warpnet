@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class InstanceInfoRepository @Inject constructor() {
 
     val defaultInstanceInfo: InstanceInfo = InstanceInfo(
-        maxChars = WarpnetLimits.MAX_TWEET_CHARS,
+        maxChars = WarpnetLimits.MAX_TWEET_BYTES,
         pollMaxOptions = DEFAULT_MAX_OPTION_COUNT,
         pollMaxLength = DEFAULT_MAX_OPTION_LENGTH,
         pollMinDuration = DEFAULT_MIN_POLL_DURATION,

@@ -21,14 +21,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
-import android.icu.text.BreakIterator
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import android.provider.MediaStore
-import android.text.Spanned
-import android.text.style.URLSpan
 import android.view.KeyEvent
 import android.view.MenuItem
 import android.view.View
@@ -89,7 +86,6 @@ import site.warpnet.warpdroid.entity.Tweet
 import site.warpnet.warpdroid.settings.AppTheme
 import site.warpnet.warpdroid.settings.PrefKeys
 import site.warpnet.warpdroid.settings.PrefKeys.APP_THEME
-import site.warpnet.warpdroid.util.MentionSpan
 import site.warpnet.warpdroid.util.PickMediaFiles
 import site.warpnet.warpdroid.util.defaultFinders
 import site.warpnet.warpdroid.util.getInitialLanguages
@@ -145,8 +141,7 @@ class ComposeActivity :
     var highlightFinders = defaultFinders
 
     @VisibleForTesting
-    var maximumTootCharacters = WarpnetLimits.MAX_TWEET_CHARS
-    var charactersReservedPerUrl = InstanceInfoRepository.DEFAULT_CHARACTERS_RESERVED_PER_URL
+    var maximumTootCharacters = WarpnetLimits.MAX_TWEET_BYTES
 
     private val viewModel: ComposeViewModel by viewModels(
         extrasProducer = {
@@ -483,7 +478,6 @@ class ComposeActivity :
         lifecycleScope.launch {
             viewModel.instanceInfo.collect { instanceData ->
                 maximumTootCharacters = instanceData.maxChars
-                charactersReservedPerUrl = instanceData.charactersReservedPerUrl
                 maxUploadMediaNumber = instanceData.maxMediaAttachments
                 mediaDescriptionLimit = instanceData.mediaDescriptionLimit
                 updateVisibleCharactersLeft()
@@ -836,11 +830,7 @@ class ComposeActivity :
 
     @VisibleForTesting
     fun calculateTextLength(): Int {
-        return statusLength(
-            binding.composeEditField.text,
-            binding.composeContentWarningField.text,
-            charactersReservedPerUrl
-        )
+        return binding.composeEditField.text.toString().toByteArray(Charsets.UTF_8).size
     }
 
     @VisibleForTesting
@@ -1251,64 +1241,6 @@ class ComposeActivity :
         fun canHandleMimeType(mimeType: String?): Boolean {
             return mimeType != null &&
                 (mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/") || mimeType == "text/plain")
-        }
-
-        /**
-         * Calculate the effective status length.
-         *
-         * Some text is counted differently:
-         *
-         * In the status body:
-         *
-         * - URLs always count for [urlLength] characters irrespective of their actual length
-         *   (https://docs.joinmastodon.org/user/posting/#links)
-         * - Mentions ("@user@some.instance") only count the "@user" part
-         *   (https://docs.joinmastodon.org/user/posting/#mentions)
-         * - Hashtags are always treated as their actual length, including the "#"
-         *   (https://docs.joinmastodon.org/user/posting/#hashtags)
-         *
-         * Content warning text is always treated as its full length, URLs and other entities
-         * are not treated differently.
-         *
-         * @param body status body text
-         * @param contentWarning optional content warning text
-         * @param urlLength the number of characters attributed to URLs
-         * @return the effective status length
-         */
-        @JvmStatic
-        fun statusLength(body: Spanned, contentWarning: Spanned?, urlLength: Int): Int {
-            var length = body.toString().perceivedCharacterLength() - body.getSpans(0, body.length, URLSpan::class.java)
-                .fold(0) { acc, span ->
-                    // Accumulate a count of characters to be *ignored* in the final length
-                    acc + when (span) {
-                        is MentionSpan -> {
-                            // Ignore everything from the second "@" (if present)
-                            span.url.length - (
-                                span.url.indexOf("@", 1).takeIf { it >= 0 }
-                                    ?: span.url.length
-                                )
-                        }
-                        else -> {
-                            // Expected to be negative if the URL length < maxUrlLength
-                            span.url.perceivedCharacterLength() - urlLength
-                        }
-                    }
-                }
-
-            // Content warning text is treated as is, URLs or mentions there are not special
-            contentWarning?.let { length += it.toString().perceivedCharacterLength() }
-            return length
-        }
-
-        // String.length would count emojis as multiple characters but Warpnet counts them as 1, so we need this workaround
-        private fun String.perceivedCharacterLength(): Int {
-            val breakIterator = BreakIterator.getCharacterInstance()
-            breakIterator.setText(this)
-            var count = 0
-            while (breakIterator.next() != BreakIterator.DONE) {
-                count++
-            }
-            return count
         }
     }
 }
