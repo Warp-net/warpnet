@@ -58,7 +58,8 @@ sealed class TweetViewData {
         val repliedToAccount: TimelineUser? = null,
         val filter: Filter? = null,
         val filterActive: Boolean,
-        val quote: QuoteViewData?
+        val quote: QuoteViewData?,
+        val isOwnThreadReply: Boolean = false
     ) : TweetViewData() {
         override val id: String
             get() = status.id
