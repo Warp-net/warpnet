@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
+import { render, screen, fireEvent, waitFor, createEvent } from '@testing-library/vue';
 import { reactive } from 'vue';
 
 vi.mock('@/service/service', () => ({
@@ -19,7 +19,14 @@ vi.mock('@/service/service', () => ({
     getNodeInfo: vi.fn(),
     createTweet: vi.fn(),
     uploadImage: vi.fn(),
+    uploadVideo: vi.fn(),
   },
+}));
+
+// jsdom never decodes a video, so the poster capture would only wait out its timeout.
+vi.mock('@/lib/video', async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureVideoPoster: vi.fn().mockResolvedValue(null),
 }));
 
 import Home from '@/views/Home.vue';
@@ -313,11 +320,89 @@ describe('Home composer watchers', () => {
     expect(screen.getByAltText('Image preview')).toBeInTheDocument();
   });
 
+  describe('with object URLs', () => {
+    const { createObjectURL, revokeObjectURL } = URL;
+    beforeAll(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:clip');
+      URL.revokeObjectURL = vi.fn();
+    });
+    afterAll(() => {
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    it('attaches a video pasted into the composer', async () => {
+      warpnetService.uploadVideo.mockResolvedValue('video-key');
+      renderHome();
+      const box = await screen.findByLabelText('Compose a tweet');
+      const clip = new File(['mp4'], 'clip.mp4', { type: 'video/mp4' });
+
+      await fireEvent.paste(box, { clipboardData: { files: [clip], types: ['Files'] } });
+
+      await waitFor(() => expect(warpnetService.uploadVideo).toHaveBeenCalledWith(expect.stringMatching(/^data:video\/mp4;base64,/)));
+      expect(warpnetService.uploadImage).not.toHaveBeenCalled();
+    });
+  });
+
   it('focuses the composer when arriving with ?compose', async () => {
     renderHome({ compose: '1' });
     const box = await screen.findByLabelText('Compose a tweet');
 
     await waitFor(() => expect(document.activeElement).toBe(box));
+  });
+});
+
+describe('Home composer file drop', () => {
+  const dropInput = (container) => container.querySelector('input[type="file"][aria-hidden="true"]');
+
+  it('catches files dragged in from a file manager with a native file input', async () => {
+    warpnetService.uploadImage.mockResolvedValue('img-key');
+    const { container } = renderHome();
+    const box = await screen.findByLabelText('Compose a tweet');
+    const input = dropInput(container);
+    expect(input).not.toBeVisible();
+
+    await fireEvent.dragEnter(box, { dataTransfer: { types: ['text/uri-list', 'text/html'] } });
+    expect(input).toBeVisible();
+
+    // WebKitGTK hides the files from the drop event, so the drag over the input
+    // and the drop are left to it.
+    const over = createEvent.dragOver(input, { dataTransfer: { types: ['text/uri-list'] } });
+    await fireEvent(input, over);
+    expect(over.defaultPrevented).toBe(false);
+    const drop = createEvent.drop(input, { dataTransfer: { types: ['text/uri-list'], files: [], getData: () => '' } });
+    await fireEvent(input, drop);
+    expect(drop.defaultPrevented).toBe(false);
+    const shot = new File(['png'], 'shot.png', { type: 'image/png' });
+    Object.defineProperty(input, 'files', { value: [shot], configurable: true });
+    await fireEvent.change(input);
+
+    await waitFor(() => expect(warpnetService.uploadImage).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/)));
+    expect(input).not.toBeVisible();
+  });
+
+  it('cancels a dragged link so the app does not navigate to it', async () => {
+    const { container } = renderHome();
+    const box = await screen.findByLabelText('Compose a tweet');
+    const input = dropInput(container);
+
+    await fireEvent.dragEnter(box, { dataTransfer: { types: ['text/plain', 'text/uri-list'] } });
+    const drop = createEvent.drop(input, {
+      dataTransfer: { types: ['text/plain', 'text/uri-list'], files: [], getData: () => 'https://example.com\r\n' },
+    });
+    await fireEvent(input, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(input).not.toBeVisible();
+  });
+
+  it('leaves a drag that carries files to the drop event', async () => {
+    const { container } = renderHome();
+    const box = await screen.findByLabelText('Compose a tweet');
+
+    await fireEvent.dragEnter(box, { dataTransfer: { types: ['Files'] } });
+
+    expect(dropInput(container)).not.toBeVisible();
   });
 });
 

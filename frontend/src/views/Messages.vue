@@ -340,7 +340,7 @@ import {toast} from "@/lib/toast";
 import {isBridgedUser} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
-import {pastedImages} from "@/lib/clipboard";
+import {pastedFiles} from "@/lib/clipboard";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 
 // Mirrors messageLimit in core/handler/chat.go.
@@ -466,7 +466,7 @@ export default {
       this.addImageFiles(files);
     },
     async onMessagePaste(event) {
-      const images = await pastedImages(event);
+      const images = (await pastedFiles(event)).filter(f => f.type.startsWith('image/'));
       if (images.length === 0) return;
       if (this.imageAttachDisabled) {
         toast.error(this.imageAttachTitle);
