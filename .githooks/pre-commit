@@ -20,6 +20,7 @@ SNAPCRAFT="snap/snapcraft.yaml"
 FRONTEND_PKG="frontend/package.json"
 FRONTEND_LOCK="frontend/package-lock.json"
 FDROID_VERSIONCODE="warpdroid/fdroid/versionCode"
+WARPFONE_VERSION="warpfone/Version.xcconfig"
 CHANGELOGS="fastlane/metadata/android/en-US/changelogs"
 
 if [ ! -f "$CONFIG" ]; then
@@ -75,6 +76,12 @@ NEW_BASE=$(( (10#$MAJOR * 1000000 + 10#$MINOR * 10000 + 10#$PATCH) * 10 ))
 if [ -f "$FDROID_VERSIONCODE" ]; then
     echo "$NEW_BASE" > "$FDROID_VERSIONCODE"
     git add "$FDROID_VERSIONCODE"
+fi
+
+# iOS client.
+if [ -f "$WARPFONE_VERSION" ]; then
+    printf 'MARKETING_VERSION = %s\nCURRENT_PROJECT_VERSION = %s\n' "$NEW_VERSION" "$NEW_BASE" > "$WARPFONE_VERSION"
+    git add "$WARPFONE_VERSION"
 fi
 
 # Keep the warpdroid F-Droid fastlane changelog in sync with the new
