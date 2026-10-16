@@ -482,7 +482,7 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 	t.Run("applies the compose limits", func(t *testing.T) {
 		h := build(localParent, stubModerationNotifier{})
 		ev := makeReply()
-		ev.Text = strings.Repeat("a", tweetCharLimit+1)
+		ev.Text = strings.Repeat("a", tweetByteLimit+1)
 		if _, err := h(marshal(t, ev), conn); err == nil {
 			t.Fatal("expected an oversized reply to be rejected")
 		}

@@ -37,27 +37,26 @@ describe("EditTweetOverlay emoji wiring", () => {
     expect(wrapper.vm.text).toBe("a😀b");
   });
 
-  it("counts the tweet in runes, not UTF-16 units", async () => {
+  it("counts the tweet in UTF-8 bytes", async () => {
     const wrapper = mountOverlay("😀😀😀");
     await wrapper.vm.$nextTick();
-    expect(wrapper.vm.textLength).toBe(3);
-    expect(wrapper.text()).toContain("3 / 280");
+    expect(wrapper.vm.textLength).toBe(12);
+    expect(wrapper.text()).toContain("12 / 2048");
   });
 
-  it("refuses an emoji that would push the tweet past 280 runes", async () => {
-    const wrapper = mountOverlay("a".repeat(280));
+  it("refuses an emoji that would push the tweet past 2048 bytes", async () => {
+    const wrapper = mountOverlay("a".repeat(2045));
     wrapper.vm.insertEmoji("😀");
     await wrapper.vm.$nextTick();
-    expect(wrapper.vm.text).toBe("a".repeat(280));
+    expect(wrapper.vm.text).toBe("a".repeat(2045));
   });
 
-  it("clamps pasted text on the rune count", async () => {
+  it("clamps pasted text on the byte count", async () => {
     const wrapper = mountOverlay("");
-    // 300 emoji are 600 UTF-16 units; the clamp must leave 280 emoji, not 140.
-    wrapper.vm.text = "😀".repeat(300);
+    wrapper.vm.text = "😀".repeat(600);
     await wrapper.vm.$nextTick();
-    expect(wrapper.vm.textLength).toBe(280);
-    expect(wrapper.vm.text).not.toContain("�");
+    expect(wrapper.vm.textLength).toBe(2048);
+    expect(wrapper.vm.text).toBe("😀".repeat(512));
   });
 
   it("lets Escape close the picker without discarding the draft", async () => {

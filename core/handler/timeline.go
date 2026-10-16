@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	timelineTweetCharLimit      = 280
+	timelineTweetByteLimit      = 2048
 	timelineSponsoredPriceLimit = 1_000_000_000_000
 	timelinePollMinOptions      = 2
 	timelinePollMaxOptions      = 4
@@ -195,7 +195,7 @@ func validateTimelineTweet(ev event.NewTweetEvent) error {
 	if ev.Text == "" && !ev.IsSponsored() {
 		return warpnet.WarpError("empty tweet text")
 	}
-	if utf8.RuneCountInString(ev.Text) > timelineTweetCharLimit {
+	if len(ev.Text) > timelineTweetByteLimit {
 		return warpnet.WarpError("tweet text is too long")
 	}
 	if ev.IsSponsored() {

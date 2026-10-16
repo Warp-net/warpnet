@@ -47,7 +47,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const tweetCharLimit = 280
+const tweetByteLimit = 2048
 
 // sponsoredPriceLimit is 1 000 000 USDT in token base units.
 const sponsoredPriceLimit = 1_000_000_000_000
@@ -248,9 +248,7 @@ func validateTweetEvent(ev event.NewTweetEvent) error {
 	if ev.Text == "" && !ev.IsSponsored() {
 		return warpnet.WarpError("empty tweet text")
 	}
-	// Runes, not bytes: 280 means 280 user-visible characters
-	// regardless of script (the UI counters count characters too).
-	if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
+	if len(ev.Text) > tweetByteLimit {
 		return warpnet.WarpError("tweet text is too long")
 	}
 	if ev.IsSponsored() {
@@ -992,7 +990,7 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		if ev.Text == "" {
 			return nil, warpnet.WarpError("edit tweet: empty text")
 		}
-		if utf8.RuneCountInString(ev.Text) > tweetCharLimit {
+		if len(ev.Text) > tweetByteLimit {
 			return nil, warpnet.WarpError("tweet text is too long")
 		}
 

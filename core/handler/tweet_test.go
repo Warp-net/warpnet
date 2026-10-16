@@ -332,7 +332,7 @@ func TestStreamNewTweetHandler(t *testing.T) {
 
 	t.Run("tweet text too long", func(t *testing.T) {
 		h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, stubTweetUserRepo{}, stubModerationNotifier{}, stubStreamer{})
-		longText := make([]byte, tweetCharLimit+1)
+		longText := make([]byte, tweetByteLimit+1)
 		for i := range longText {
 			longText[i] = 'a'
 		}
@@ -1297,7 +1297,7 @@ func TestStreamNewTweetHandler_CornerCases(t *testing.T) {
 		},
 		{
 			name:    "text too long",
-			event:   event.NewTweetEvent{UserId: "owner123", Text: string(make([]byte, 281))},
+			event:   event.NewTweetEvent{UserId: "owner123", Text: string(make([]byte, tweetByteLimit+1))},
 			setup:   func(*mockTweetsStorer, *mockTimeline, *mockFollowChecker, *mockOwner, *mockBroadcaster) {},
 			wantErr: true,
 		},
@@ -1785,4 +1785,28 @@ func TestStreamEditTweetHandler_SponsoredTweetIsFrozen(t *testing.T) {
 	}}
 	_, err := StreamEditTweetHandler(repo, stubTimelineRepo{})(marshal(t, event.EditTweetEvent{UserId: "owner-1", TweetId: "tweet-1", Text: "cheaper"}), nil)
 	assert.EqualError(t, err, "edit tweet: a sponsored tweet cannot be edited")
+}
+
+func TestTweetLimitCountsUTF8Bytes(t *testing.T) {
+	tests := []struct {
+		name    string
+		text    string
+		wantErr bool
+	}{
+		{"2048 bytes of two-byte letters", strings.Repeat("щ", tweetByteLimit/2), false},
+		{"one byte over", strings.Repeat("щ", tweetByteLimit/2) + "a", true},
+		{"280 four-byte runes still fit", strings.Repeat("𒀀", 280), false},
+		{"513 four-byte runes", strings.Repeat("𒀀", 513), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := event.NewTweetEvent{UserId: "owner", Text: tt.text}
+			if err := validateTweetEvent(ev); (err != nil) != tt.wantErr {
+				t.Fatalf("validateTweetEvent: err = %v, wantErr %t", err, tt.wantErr)
+			}
+			if err := validateTimelineTweet(ev); (err != nil) != tt.wantErr {
+				t.Fatalf("validateTimelineTweet: err = %v, wantErr %t", err, tt.wantErr)
+			}
+		})
+	}
 }
