@@ -519,13 +519,7 @@ export default {
       this.addImageFiles(files);
     },
     async onComposePaste(event) {
-      let files;
-      try {
-        files = await pastedFiles(event);
-      } catch (err) {
-        toast.error(err?.message || String(err));
-        return;
-      }
+      const files = await pastedFiles(event);
       const video = files.find(f => f.type.startsWith('video/'));
       if (video) {
         if (this.videoAttachDisabled) {

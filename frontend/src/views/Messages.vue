@@ -466,13 +466,7 @@ export default {
       this.addImageFiles(files);
     },
     async onMessagePaste(event) {
-      let images;
-      try {
-        images = (await pastedFiles(event)).filter(f => f.type.startsWith('image/'));
-      } catch (err) {
-        toast.error(err?.message || String(err));
-        return;
-      }
+      const images = (await pastedFiles(event)).filter(f => f.type.startsWith('image/'));
       if (images.length === 0) return;
       if (this.imageAttachDisabled) {
         toast.error(this.imageAttachTitle);

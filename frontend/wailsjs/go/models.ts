@@ -24,22 +24,6 @@ export namespace main {
 	        this.signature = source["signature"];
 	    }
 	}
-	export class ClipboardFile {
-	    name: string;
-	    type: string;
-	    data: number[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ClipboardFile(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.type = source["type"];
-	        this.data = source["data"];
-	    }
-	}
 
 }
 

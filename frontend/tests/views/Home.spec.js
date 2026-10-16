@@ -19,7 +19,14 @@ vi.mock('@/service/service', () => ({
     getNodeInfo: vi.fn(),
     createTweet: vi.fn(),
     uploadImage: vi.fn(),
+    uploadVideo: vi.fn(),
   },
+}));
+
+// jsdom never decodes a video, so the poster capture would only wait out its timeout.
+vi.mock('@/lib/video', async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureVideoPoster: vi.fn().mockResolvedValue(null),
 }));
 
 import Home from '@/views/Home.vue';
@@ -311,6 +318,30 @@ describe('Home composer watchers', () => {
 
     await waitFor(() => expect(warpnetService.uploadImage).toHaveBeenCalledWith(expect.stringMatching(/^data:image\/png;base64,/)));
     expect(screen.getByAltText('Image preview')).toBeInTheDocument();
+  });
+
+  describe('with object URLs', () => {
+    const { createObjectURL, revokeObjectURL } = URL;
+    beforeAll(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:clip');
+      URL.revokeObjectURL = vi.fn();
+    });
+    afterAll(() => {
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    it('attaches a video pasted into the composer', async () => {
+      warpnetService.uploadVideo.mockResolvedValue('video-key');
+      renderHome();
+      const box = await screen.findByLabelText('Compose a tweet');
+      const clip = new File(['mp4'], 'clip.mp4', { type: 'video/mp4' });
+
+      await fireEvent.paste(box, { clipboardData: { files: [clip], types: ['Files'] } });
+
+      await waitFor(() => expect(warpnetService.uploadVideo).toHaveBeenCalledWith(expect.stringMatching(/^data:video\/mp4;base64,/)));
+      expect(warpnetService.uploadImage).not.toHaveBeenCalled();
+    });
   });
 
   it('focuses the composer when arriving with ?compose', async () => {

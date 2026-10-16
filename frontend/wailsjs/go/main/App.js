@@ -6,10 +6,6 @@ export function Call(arg1) {
   return window['go']['main']['App']['Call'](arg1);
 }
 
-export function ClipboardFiles() {
-  return window['go']['main']['App']['ClipboardFiles']();
-}
-
 export function ConsumePendingDeepLink() {
   return window['go']['main']['App']['ConsumePendingDeepLink']();
 }

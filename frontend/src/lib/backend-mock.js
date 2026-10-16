@@ -80,7 +80,6 @@ if (process.env.NODE_ENV === 'development') {
                 SelectNetwork: () => Promise.resolve(),
                 Network: () => Promise.resolve("warpnet"),
                 ConsumePendingDeepLink: () => Promise.resolve(""),
-                ClipboardFiles: () => Promise.resolve([]),
             }
         }
     };

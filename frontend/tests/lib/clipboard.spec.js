@@ -1,8 +1,8 @@
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {pastedFiles} from '@/lib/clipboard';
-import {ClipboardFiles} from '@/lib/transport';
+import {toast} from '@/lib/toast';
 
-vi.mock('@/lib/transport', () => ({ClipboardFiles: vi.fn()}));
+vi.mock('@/lib/toast', () => ({toast: {info: vi.fn()}}));
 
 const pasteEvent = (clipboardData) => ({clipboardData, preventDefault: vi.fn()});
 
@@ -13,7 +13,7 @@ const stubClipboard = (read) => {
 
 afterEach(() => {
     delete navigator.clipboard;
-    ClipboardFiles.mockReset();
+    toast.info.mockReset();
 });
 
 describe('pastedFiles', () => {
@@ -36,16 +36,12 @@ describe('pastedFiles', () => {
         expect(read).not.toHaveBeenCalled();
     });
 
-    it('asks the desktop shell for files WebKitGTK hides behind a bare uri list', async () => {
-        ClipboardFiles.mockResolvedValue([{name: 'clip.mp4', type: 'video/mp4', data: btoa('movie')}]);
+    it('keeps the path of a file copied in a file manager out of the text and points to the attach button', async () => {
         const event = pasteEvent({files: [], types: ['text/uri-list'], getData: () => ''});
 
-        const [file] = await pastedFiles(event);
-
+        expect(await pastedFiles(event)).toEqual([]);
         expect(event.preventDefault).toHaveBeenCalled();
-        expect(file.name).toBe('clip.mp4');
-        expect(file.type).toBe('video/mp4');
-        expect(file.size).toBe(5);
+        expect(toast.info).toHaveBeenCalledWith(expect.stringMatching(/attach button/));
     });
 
     it('leaves a copied link to the textarea', async () => {
@@ -53,7 +49,7 @@ describe('pastedFiles', () => {
 
         expect(await pastedFiles(event)).toEqual([]);
         expect(event.preventDefault).not.toHaveBeenCalled();
-        expect(ClipboardFiles).not.toHaveBeenCalled();
+        expect(toast.info).not.toHaveBeenCalled();
     });
 
     it('reads the image WebKitGTK leaves out of the paste event', async () => {
