@@ -94,6 +94,7 @@ resulting from the use or misuse of this software.
               <button v-if="tweet.price" type="button" @click.stop="openCopyCheck" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Check a copy</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
+            <button v-if="canDeleteReply" type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete reply</button>
             <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
           </div>
         </div>
@@ -105,8 +106,8 @@ resulting from the use or misuse of this software.
         />
         <ConfirmDialog
           :show="showDeleteConfirm"
-          title="Delete tweet?"
-          message="This tweet will be permanently deleted. This can't be undone."
+          :title="canDeleteReply ? 'Delete reply?' : 'Delete tweet?'"
+          :message="deleteMessage"
           confirm-label="Delete"
           cancel-label="Cancel"
           :destructive="true"
@@ -496,6 +497,7 @@ export default {
   props: {
     tweet: {type: Object, required: true},
     autoloadVideo: {type: Boolean, default: false},
+    ownRootId: {type: String, default: ''},
   },
   components: {
     NetworkIcon,
@@ -577,6 +579,17 @@ export default {
     // profile carries the current one, so a rename shows on old tweets too.
     authorName() {
       return (this.profile && this.profile.username) || this.tweet.username;
+    },
+    canDeleteReply() {
+      const owner = warpnetService.getOwnerProfile();
+      return !!this.ownRootId && this.tweet.root_id === this.ownRootId && !this.isOwner
+        && !!owner && this.tweet.parent_user_id === owner.user_id;
+    },
+    deleteMessage() {
+      if (this.canDeleteReply) {
+        return "This reply will be removed from your thread. This can't be undone.";
+      }
+      return "This tweet will be permanently deleted. This can't be undone.";
     },
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
