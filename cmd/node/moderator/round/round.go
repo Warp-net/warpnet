@@ -39,7 +39,7 @@ import (
 
 const (
 	// voteWindow is how long a round collects votes before the tally.
-	voteWindow = 90 * time.Second
+	voteWindow = 150 * time.Second
 	// failoverDelay spaces the takeover chain of the round's voters: the
 	// voter at rank k finalizes at k*failoverDelay unless a Final
 	// announcement arrives first. One step must comfortably fit gossip
@@ -48,7 +48,7 @@ const (
 	// voteDelayStep spaces the volunteer timers of moderators ranked
 	// below the quorum target; one step must fit a fetch + inference +
 	// gossip propagation so a suppressed rank never starts work.
-	voteDelayStep = 20 * time.Second
+	voteDelayStep = 35 * time.Second
 	// quorumTarget is how many votes make a round served: once that many
 	// are in, a moderator whose volunteer timer fires later stays silent
 	// instead of spending an inference nobody needs.
