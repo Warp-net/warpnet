@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import SwiftUI
@@ -105,7 +107,6 @@ public struct AppAccountsSelectorView: View {
           Section {
             settingsButton
             aboutButton
-            supportButton
           }
           #if !os(visionOS)
             .listRowBackground(theme.primaryBackgroundColor)
@@ -151,18 +152,6 @@ public struct AppAccountsSelectorView: View {
       }
     } label: {
       Label("tab.settings", systemImage: "gear")
-    }
-  }
-  
-  private var supportButton: some View {
-    Button {
-      isPresented = false
-      HapticManager.shared.fireHaptic(.buttonPress)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        routerPath.presentedSheet = .support
-      }
-    } label: {
-      Label("settings.app.support", systemImage: "wand.and.stars")
     }
   }
   

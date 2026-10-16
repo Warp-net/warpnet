@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import DesignSystem
 import Env
@@ -86,8 +88,6 @@ struct AboutView: View {
         • [OpenDyslexic](http://opendyslexic.org)
 
         • [SwiftUI-Introspect](https://github.com/siteline/SwiftUI-Introspect)
-
-        • [RevenueCat](https://github.com/RevenueCat/purchases-ios)
 
         • [SFSafeSymbols](https://github.com/SFSafeSymbols/SFSafeSymbols)
         """)

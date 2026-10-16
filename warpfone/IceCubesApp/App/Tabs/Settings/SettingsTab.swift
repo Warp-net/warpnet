@@ -249,10 +249,6 @@ struct SettingsTabs: View {
       .accessibilityRemoveTraits(.isButton)
       .tint(theme.labelColor)
 
-      NavigationLink(destination: SupportAppView()) {
-        Label("settings.app.support", systemImage: "wand.and.stars")
-      }
-
       if let reviewURL = URL(string: "https://apps.apple.com/app/id\(AppInfo.appStoreAppId)?action=write-review") {
         Link(destination: reviewURL) {
           Label("settings.rate", systemImage: "link")

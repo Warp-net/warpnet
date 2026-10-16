@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import AppAccount
 import Conversations
@@ -119,9 +121,6 @@ extension View {
         }
       case .about:
         NavigationSheet { AboutView() }
-          .withEnvironments()
-      case .support:
-        NavigationSheet { SupportAppView() }
           .withEnvironments()
       case let .report(status):
         ReportView(status: status)

@@ -45,3 +45,16 @@ carry that line, so they are named here instead.
   IceCubesNotifications/IceCubesNotifications.entitlements
   IceCubesShareExtension/Info.plist
   IceCubesShareExtension/IceCubesShareExtension.entitlements
+
+2026-10-16, services
+- Removed the tip jar (RevenueCat) and the GIF search (Giphy), which ran on the
+  Ice Cubes author's API keys. SupportAppView.swift and GIFPickerView.swift were
+  deleted, and both packages were dropped from the project.
+- The instances.social server directory used the author's token; the client now
+  returns no suggestions.
+- The app no longer asks for push notifications at launch, so no device token
+  reaches the Ice Cubes push relay.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

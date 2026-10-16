@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import Foundation
 import Models
@@ -52,7 +54,6 @@ public enum SheetDestination: Identifiable {
   case statusEditHistory(status: String)
   case settings
   case about
-  case support
   case accountPushNotficationsSettings
   case report(status: Status)
   case shareImage(image: UIImage, status: Status)
@@ -84,7 +85,7 @@ public enum SheetDestination: Identifiable {
       "shareImage"
     case .editTagGroup:
       "editTagGroup"
-    case .settings, .support, .about, .accountPushNotficationsSettings:
+    case .settings, .about, .accountPushNotficationsSettings:
       "settings"
     case .timelineContentFilter:
       "timelineContentFilter"

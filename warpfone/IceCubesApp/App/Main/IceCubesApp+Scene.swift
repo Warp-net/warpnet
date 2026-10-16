@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import MediaUI
 import StatusKit
@@ -10,8 +12,6 @@ extension IceCubesApp {
         .applyTheme(theme)
         .onAppear {
           setNewClientsInEnv(client: appAccountsManager.currentClient)
-          setupRevenueCat()
-          refreshPushSubs()
         }
         .environment(appAccountsManager)
         .environment(appAccountsManager.currentClient)
@@ -22,7 +22,6 @@ extension IceCubesApp {
         .environment(theme)
         .environment(watcher)
         .environment(pushNotificationsService)
-        .environment(\.isSupporter, isSupporter)
         .sheet(item: $quickLook.selectedMediaAttachment) { selectedMediaAttachment in
           MediaUIView(selectedAttachment: selectedMediaAttachment,
                       attachments: quickLook.mediaAttachments)

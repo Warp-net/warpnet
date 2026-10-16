@@ -28,15 +28,6 @@
       }
     },
     {
-      "identity" : "giphy-ios-sdk",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Giphy/giphy-ios-sdk",
-      "state" : {
-        "revision" : "9c58a350a3381f1641f5a31cdcd162a406274892",
-        "version" : "2.2.8"
-      }
-    },
-    {
       "identity" : "keychain-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/evgenyneu/keychain-swift",
@@ -70,15 +61,6 @@
       "state" : {
         "revision" : "15fde63470d782c897816a74bdd516a907e33147",
         "version" : "12.3.0"
-      }
-    },
-    {
-      "identity" : "purchases-ios",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/RevenueCat/purchases-ios.git",
-      "state" : {
-        "revision" : "b3597e0aa5e1193b04d9e1ff04eaf5cab3b8737d",
-        "version" : "4.34.0"
       }
     },
     {

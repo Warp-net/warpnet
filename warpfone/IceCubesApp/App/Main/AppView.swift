@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import AppAccount
 import AVFoundation
@@ -6,7 +8,6 @@ import Env
 import KeychainSwift
 import MediaUI
 import Network
-import RevenueCat
 import StatusKit
 import SwiftUI
 import Timeline
