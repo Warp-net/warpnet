@@ -377,6 +377,7 @@ func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream: %w", err)
 	}
+	defer stream.Close()
 
 	var rw = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	if data != nil {
