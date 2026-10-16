@@ -272,7 +272,10 @@ class WarpnetRepository @Inject constructor(
             // The parent is a reply stored under its own parent; we don't know
             // that grandparent here, so pass the thread root as the fallback
             // partition (resolves parents that hang directly off the root).
-            val parent = runCatching { fetchTweetRaw(current.parentId!!, userId, rootId = current.rootId) }.getOrNull() ?: break
+            // The node reads a tweet under the named user, so name the parent's
+            // author; a local-only reply carries none and keeps userId.
+            val parentUserId = current.parentUserId.orEmpty().ifEmpty { userId }
+            val parent = runCatching { fetchTweetRaw(current.parentId!!, parentUserId, rootId = current.rootId) }.getOrNull() ?: break
             chain += parent.toTweet(resolveUser(parent.userId, cache))
             current = parent
             steps++
