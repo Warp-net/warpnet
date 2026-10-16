@@ -298,6 +298,7 @@ func validatePoll(p *domain.Poll) error {
 const (
 	ErrNotAReply     = warpnet.WarpError("reply: tweet has no parent")
 	ErrForeignThread = warpnet.WarpError("reply: parent tweet does not live on this node")
+	ErrForeignReply  = warpnet.WarpError("reply: not the owner's reply or thread")
 )
 
 func StreamNewReplyHandler(
@@ -795,9 +796,22 @@ func deleteReply(
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 
+	reply, err := repo.GetReply(parentId, id)
+	if err != nil {
+		return nil, err
+	}
+	ownerId := streamer.NodeInfo().OwnerId
+	isOwnReply := reply.UserId == ownerId
+	if !isOwnReply {
+		root, err := repo.Get(ownerId, reply.RootId)
+		if err != nil || root.UserId != ownerId {
+			return nil, ErrForeignReply
+		}
+	}
+
 	// Mirror handleNewReply: only the replier's own node adjusts the
 	// network-wide (CRDT) counter.
-	if _, err := repo.DeleteReply(parentId, id, ev.UserId == streamer.NodeInfo().OwnerId); err != nil {
+	if _, err := repo.DeleteReply(parentId, id, isOwnReply); err != nil {
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
 	}

@@ -143,7 +143,7 @@ class ViewThreadViewModel @AssistedInject constructor(
                     statusContext.ancestors.map { status -> status.toViewData() }.filter()
                 val descendants =
                     statusContext.descendants.map { status -> status.toViewData() }.filter()
-                val statuses = ancestors + detailedStatus + descendants
+                val statuses = (ancestors + detailedStatus + descendants).markOwnThreadReplies()
 
                 _uiState.value = ThreadUiState.Success(
                     statusViewData = statuses,
@@ -239,7 +239,7 @@ class ViewThreadViewModel @AssistedInject constructor(
                 isQuoteExpanded = oldQuoteViewData?.isExpanded ?: alwaysOpenSpoiler,
                 isQuoteCollapsed = oldQuoteViewData?.isCollapsed ?: true,
                 isQuoteShown = viewData.quote?.quoteShown ?: false
-            )
+            ).copy(isOwnThreadReply = viewData.isOwnThreadReply)
         }
     }
 
@@ -341,6 +341,20 @@ class ViewThreadViewModel @AssistedInject constructor(
             } else {
                 !status.isFilterHide
             }
+        }
+    }
+
+    private fun List<TweetViewData.Concrete>.markOwnThreadReplies(): List<TweetViewData.Concrete> {
+        val root = firstOrNull() ?: return this
+        if (!root.status.inReplyToId.isNullOrEmpty() || root.status.account.id != activeAccount.accountId) {
+            return this
+        }
+        val authors = associate { it.id to it.status.account.id }
+        return map { viewData ->
+            viewData.copy(
+                isOwnThreadReply = viewData.status.account.id != activeAccount.accountId &&
+                    authors[viewData.status.inReplyToId] == activeAccount.accountId
+            )
         }
     }
 

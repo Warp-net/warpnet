@@ -289,6 +289,7 @@ class WarpnetRepository @Inject constructor(
         val tweet = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("fetchTweetRaw returned empty body for $tweetId")
         if (isAgedForCache(tweet)) tweetCache.put(tweetId, tweet)
+        replyParents.put(tweetId, tweet)
         return tweet
     }
 
@@ -340,13 +341,15 @@ class WarpnetRepository @Inject constructor(
         // (database/tweet-repo.go:152). Emitting "" instead fails the
         // server-side time.Time decode before the zero-value fallback
         // runs, so the post would silently disappear.
+        val parent = parentId?.let { replyParents.get(it) ?: tweetCache.get(it) }
         val draft = WarpnetTweet(
             id = "",
-            rootId = parentId ?: "",
+            rootId = parent?.let { it.rootId.ifEmpty { it.id } } ?: parentId.orEmpty(),
             text = text,
             userId = authorUserId,
             username = authorUsername,
             parentId = parentId,
+            parentUserId = parent?.userId,
             imageKeys = imageKeys.ifEmpty { null },
             videoKey = videoKey?.takeIf { it.isNotBlank() },
             poll = poll,
@@ -354,13 +357,14 @@ class WarpnetRepository @Inject constructor(
         val raw = client.request(ProtocolIds.PRIVATE_POST_TWEET, newTweetAdapter.toJson(draft))
         val created = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("postStatus returned empty body")
+        replyParents.put(created.id, created)
         return created.toTweet(author = runCatching { getUser(created.userId) }.getOrNull())
     }
 
-    suspend fun deleteStatus(tweetId: String, userId: String) {
+    suspend fun deleteStatus(tweetId: String, userId: String, parentId: String? = null) {
         // A reply is stored under its parent's partition, so the delete must
-        // carry parent/root. Recover them from the cached body (a viewed reply
-        // is cached by getReplies); a top-level tweet leaves them empty.
+        // carry parent/root. The caller names the parent; the cached body
+        // (only tweets an hour old are cached) fills in what it doesn't.
         val cached = tweetCache.get(tweetId)
         client.request(
             ProtocolIds.PRIVATE_DELETE_TWEET,
@@ -368,7 +372,7 @@ class WarpnetRepository @Inject constructor(
                 DeleteTweetEvent(
                     tweetId = tweetId,
                     userId = userId,
-                    parentId = cached?.parentId.orEmpty(),
+                    parentId = parentId.orEmpty().ifEmpty { cached?.parentId.orEmpty() },
                     rootId = cached?.rootId.orEmpty(),
                 ),
             ),
@@ -1342,6 +1346,7 @@ class WarpnetRepository @Inject constructor(
         // replies) so opening one as a thread/ancestor later is a cache hit;
         // stats are still fetched live below.
         seedTweetCache(tweets)
+        tweets.forEach { replyParents.put(it.id, it) }
         val cache = mutableMapOf<String, WarpnetUser>()
         // Stats are fetched per tweet in parallel so a 30-tweet timeline
         // doesn't pay 30x serialised round-trip latency. Failures degrade
@@ -1563,6 +1568,8 @@ class WarpnetRepository @Inject constructor(
         maxSize = 512,
         ttlMillis = TWEET_CACHE_TTL_MILLIS,
     )
+
+    private val replyParents = LruCache<String, WarpnetTweet>(512)
 
     // Image-blob cache for getImageBytes. Keys are SHA-256 content hashes,
     // so (userId, key) -> bytes is immutable: no TTL or invalidation needed.

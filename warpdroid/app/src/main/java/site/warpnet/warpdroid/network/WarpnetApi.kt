@@ -491,11 +491,12 @@ class WarpnetApi @Inject constructor(
     suspend fun deleteStatus(
         statusId: String,
         deleteMedia: Boolean? = null,
+        parentId: String? = null,
     ): NetworkResult<DeletedTweet> {
         val userId = accountManager.activeAccount?.accountId.orEmpty()
         if (userId.isEmpty()) return stubFailure("deleteStatus")
         return result {
-            warpnet.deleteStatus(tweetId = statusId, userId = userId)
+            warpnet.deleteStatus(tweetId = statusId, userId = userId, parentId = parentId)
             // Warpnet's delete returns no body; the Warpnet shape expects a
             // draftable DeletedTweet. Hand back an empty one — callers use
             // `DeletedTweet.isEmpty` to skip reopening a draft.

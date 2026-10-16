@@ -536,7 +536,7 @@ class ViewThreadFragment :
     }
 
     override fun onDelete(viewData: TweetViewData.Concrete) {
-        viewModel.delete(viewData.id)
+        viewModel.delete(viewData.id, viewData.status.inReplyToId)
     }
 
     override fun onRedraft(viewData: TweetViewData.Concrete) {

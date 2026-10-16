@@ -289,6 +289,18 @@ fun TweetMoreMenu(
                         }
                     }
                 )
+
+                if (viewData.isOwnThreadReply) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_delete)) },
+                        onClick = {
+                            onDismissRequest()
+                            confirmationDialogState.showDeleteStatusDialog {
+                                listener.onDelete(viewData)
+                            }
+                        }
+                    )
+                }
             } else {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_edit)) },
