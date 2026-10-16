@@ -86,6 +86,15 @@ export function OpenURL(url) {
   window.open(url, "_blank", "noopener");
 }
 
+// ClipboardFiles asks the desktop shell for the images and videos copied in a
+// file manager; the browser dashboard gets them in the paste event itself.
+export function ClipboardFiles() {
+  if (hasWails()) {
+    return Wails.ClipboardFiles();
+  }
+  return Promise.resolve([]);
+}
+
 export function EventsOff(eventName, ...additional) {
   if (hasWailsRuntime()) {
     WailsRuntime.EventsOff(eventName, ...additional);

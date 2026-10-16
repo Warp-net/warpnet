@@ -318,7 +318,7 @@ import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
-import {pastedImages} from "@/lib/clipboard";
+import {pastedFiles} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
 import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
 
@@ -519,7 +519,23 @@ export default {
       this.addImageFiles(files);
     },
     async onComposePaste(event) {
-      const images = await pastedImages(event);
+      let files;
+      try {
+        files = await pastedFiles(event);
+      } catch (err) {
+        toast.error(err?.message || String(err));
+        return;
+      }
+      const video = files.find(f => f.type.startsWith('video/'));
+      if (video) {
+        if (this.videoAttachDisabled) {
+          toast.error(this.videoAttachTitle);
+          return;
+        }
+        this.addVideoFile(video);
+        return;
+      }
+      const images = files.filter(f => f.type.startsWith('image/'));
       if (images.length === 0) return;
       if (this.imageAttachDisabled) {
         toast.error(this.imageAttachTitle);
