@@ -102,3 +102,8 @@ func (r *PeersRatings) RateMultiplier(peerID warpnet.WarpPeerID) float64 {
 func (r *PeersRatings) IsAllowedInDHT(peerID warpnet.WarpPeerID) bool {
 	return r.Tier(peerID).IsAllowedInDHT()
 }
+
+// IsMediaAllowed reports whether a tweet a peer delivers keeps its media.
+func (r *PeersRatings) IsMediaAllowed(peerID warpnet.WarpPeerID) bool {
+	return r.Tier(peerID).IsMediaAllowed()
+}

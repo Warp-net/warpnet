@@ -32,7 +32,8 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 				return nil
 			}},
 			stubFollowChecker{following: following},
-			users)
+			users,
+			stubPeersRatings{})
 	}
 
 	t.Run("sent by its author's node", func(t *testing.T) {
@@ -81,6 +82,55 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, event.Accepted, resp)
 		assert.False(t, created, "an unsolicited tweet must not enter the timeline")
+	})
+}
+
+func TestStreamTimelineTweetHandler_FlooredPeerMedia(t *testing.T) {
+	t.Parallel()
+
+	video := "video-1"
+	ev := event.NewTweetEvent{Id: "t1", UserId: "friend-1", Text: "hello", ImageKeys: []string{"image-1"}, VideoKey: &video}
+
+	storeTweet := func(t *testing.T, isFloor bool) domain.Tweet {
+		t.Helper()
+		users, conn := authorStream(t)
+		ratings := stubPeersRatings{}
+		if isFloor {
+			ratings.floored = conn.Conn().RemotePeer()
+		}
+
+		var stored domain.Tweet
+		_, err := StreamTimelineNewTweetHandler(
+			stubAuth{owner: domain.Owner{UserId: "owner-1"}},
+			stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) {
+				stored = tweet
+				return tweet, nil
+			}},
+			stubTimelineRepo{},
+			stubFollowChecker{following: true},
+			users,
+			ratings,
+		)(marshal(t, ev), conn)
+		require.NoError(t, err)
+		return stored
+	}
+
+	t.Run("a floored peer's tweet is stored without media", func(t *testing.T) {
+		t.Parallel()
+		stored := storeTweet(t, true)
+
+		assert.Equal(t, "hello", stored.Text)
+		assert.Empty(t, stored.ImageKeys)
+		assert.Nil(t, stored.VideoKey)
+	})
+
+	t.Run("a peer above the floor keeps its media", func(t *testing.T) {
+		t.Parallel()
+		stored := storeTweet(t, false)
+
+		assert.Equal(t, []string{"image-1"}, stored.ImageKeys)
+		require.NotNil(t, stored.VideoKey)
+		assert.Equal(t, video, *stored.VideoKey)
 	})
 }
 

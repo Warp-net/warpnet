@@ -74,6 +74,10 @@ type TimelineUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 }
 
+type TimelinePeersRatings interface {
+	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
+}
+
 func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTimelineEvent
@@ -107,6 +111,7 @@ func StreamTimelineNewTweetHandler(
 	timelineRepo TimelineStorer,
 	followRepo TimelineFollowChecker,
 	userRepo TimelineUserFetcher,
+	ratings TimelinePeersRatings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -132,6 +137,10 @@ func StreamTimelineNewTweetHandler(
 		}
 		if followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId) {
 			return event.Accepted, nil
+		}
+		if !ratings.IsMediaAllowed(s.Conn().RemotePeer()) {
+			ev.ImageKeys = nil
+			ev.VideoKey = nil
 		}
 
 		tweet, err := tweetRepo.Create(ev.UserId, ev)

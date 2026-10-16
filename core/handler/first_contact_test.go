@@ -81,7 +81,7 @@ func TestFirstContactActor(t *testing.T) {
 				return marshal(t, bridgedUser(gatewayNode.String())), nil
 			},
 		}
-		h := StreamNewReplyHandler(stubTweetRepo{}, unknownActor(&created), stubModerationNotifier{}, streamer)
+		h := StreamNewReplyHandler(stubTweetRepo{}, unknownActor(&created), stubModerationNotifier{}, streamer, stubPeersRatings{})
 
 		resp, err := h(marshal(t, reply()), fromGateway)
 		if err != nil {
@@ -109,7 +109,7 @@ func TestFirstContactActor(t *testing.T) {
 				return marshal(t, bridgedUser("somebody-elses-node")), nil
 			},
 		}
-		h := StreamNewReplyHandler(stubTweetRepo{}, unknownActor(&created), stubModerationNotifier{}, streamer)
+		h := StreamNewReplyHandler(stubTweetRepo{}, unknownActor(&created), stubModerationNotifier{}, streamer, stubPeersRatings{})
 
 		if _, err := h(marshal(t, reply()), fromGateway); !errors.Is(err, warpnet.ErrForeignAuthor) {
 			t.Fatalf("expected ErrForeignAuthor, got %v", err)
@@ -124,7 +124,7 @@ func TestFirstContactActor(t *testing.T) {
 				return nil, errors.New("no such user")
 			},
 		}
-		h := StreamNewReplyHandler(stubTweetRepo{}, unknownActor(&created), stubModerationNotifier{}, streamer)
+		h := StreamNewReplyHandler(stubTweetRepo{}, unknownActor(&created), stubModerationNotifier{}, streamer, stubPeersRatings{})
 
 		if _, err := h(marshal(t, reply()), fromGateway); !errors.Is(err, warpnet.ErrForeignAuthor) {
 			t.Fatalf("expected ErrForeignAuthor, got %v", err)

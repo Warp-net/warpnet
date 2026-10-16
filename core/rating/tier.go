@@ -83,3 +83,9 @@ func (t Tier) RateMultiplier() float64 {
 func (t Tier) IsAllowedInDHT() bool {
 	return t != TierFloor
 }
+
+// IsMediaAllowed reports whether tweets delivered by peers of this tier
+// keep their media.
+func (t Tier) IsMediaAllowed() bool {
+	return t != TierFloor
+}

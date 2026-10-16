@@ -108,6 +108,10 @@ type TweetNotifier interface {
 	Add(not domain.Notification) error
 }
 
+type TweetPeersRatings interface {
+	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
+}
+
 func StreamNewTweetHandler(
 	broadcaster TweetBroadcaster,
 	authRepo OwnerTweetStorer,
@@ -303,6 +307,7 @@ func StreamNewReplyHandler(
 	userRepo TweetUserFetcher,
 	notifyRepo TweetNotifier,
 	streamer TweetStreamer,
+	ratings TweetPeersRatings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -336,6 +341,10 @@ func StreamNewReplyHandler(
 			if parentUser.NodeId == "" || parentUser.NodeId != ownNodeInfo.ID.String() {
 				return nil, ErrForeignThread
 			}
+		}
+		if !ratings.IsMediaAllowed(s.Conn().RemotePeer()) {
+			ev.ImageKeys = nil
+			ev.VideoKey = nil
 		}
 
 		return handleNewReply(ev, tweetRepo, userRepo, notifyRepo, streamer)

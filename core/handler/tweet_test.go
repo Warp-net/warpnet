@@ -151,6 +151,14 @@ func (s stubFollowChecker) IsFollowing(_, _ string) bool {
 	return s.following
 }
 
+type stubPeersRatings struct {
+	floored warpnet.WarpPeerID
+}
+
+func (s stubPeersRatings) IsMediaAllowed(peerID warpnet.WarpPeerID) bool {
+	return peerID != s.floored
+}
+
 type stubTweetBroadcaster struct {
 	publishFn func(ownerId, dest string, bt []byte) error
 }
