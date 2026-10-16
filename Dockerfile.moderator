@@ -15,7 +15,7 @@ ENV GOMODCACHE=/go/pkg/mod
 ENV GOPATH=/warpnet
 ENV GOCACHE=/root/.cache/go-build
 ENV CGO_ENABLED=1
-ENV GOMEMLIMIT=2750MiB
+ENV GOMEMLIMIT=64MiB
 ENV GOGC=50
 
 RUN go mod download
