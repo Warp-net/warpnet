@@ -45,7 +45,8 @@ resulting from the use or misuse of this software.
         </button>
       </div>
       <div
-        class="px-5 py-3 border-b-8 border-lighter flex"
+        class="relative px-5 py-3 border-b-8 border-lighter flex"
+        @dragenter="onComposeDragEnter"
         @dragover.prevent
         @drop.prevent="onImageDrop"
       >
@@ -264,6 +265,19 @@ resulting from the use or misuse of this software.
             </button>
           </div>
         </div>
+        <input
+            v-show="showFileDropInput"
+            ref="dropFileInput"
+            type="file"
+            multiple
+            tabindex="-1"
+            aria-hidden="true"
+            class="absolute inset-0 w-full h-full opacity-0 z-10"
+            @dragover.stop
+            @dragleave="showFileDropInput = false"
+            @drop.stop="onDropFileInputDrop"
+            @change="dropFileInputChange"
+        />
       </div>
 
       <!-- timeline -->
@@ -390,6 +404,7 @@ export default {
       loadingMore: false,
       endOfFeed: false,
       showEmojiPicker: false,
+      showFileDropInput: false,
       poll: null,
       sponsored: null,
     };
@@ -508,7 +523,32 @@ export default {
       }
     },
     onImageDrop(event) {
-      const dropped = Array.from(event.dataTransfer?.files || []);
+      this.attachDroppedFiles(Array.from(event.dataTransfer?.files || []));
+    },
+    // WebKitGTK, which the Linux desktop app runs on, keeps files dragged in
+    // from a file manager out of the drop event (they arrive as a text/uri-list
+    // without Files) and hands them only to a native file input, so such a drag
+    // is caught by one laid over the composer.
+    onComposeDragEnter(event) {
+      const types = Array.from(event.dataTransfer?.types || []);
+      if (!types.includes('Files') && types.includes('text/uri-list')) {
+        this.showFileDropInput = true;
+      }
+    },
+    // A dragged link reads back as itself, while the files' URIs read back empty.
+    onDropFileInputDrop(event) {
+      if (event.dataTransfer?.getData('text/uri-list')) {
+        event.preventDefault();
+        this.showFileDropInput = false;
+      }
+    },
+    dropFileInputChange() {
+      const input = this.$refs.dropFileInput;
+      this.showFileDropInput = false;
+      this.attachDroppedFiles(Array.from(input.files || []));
+      input.value = '';
+    },
+    attachDroppedFiles(dropped) {
       const videos = dropped.filter(f => f.type && f.type.startsWith('video/'));
       if (videos.length > 0 && !this.videoAttachDisabled) {
         this.addVideoFile(videos[0]);
