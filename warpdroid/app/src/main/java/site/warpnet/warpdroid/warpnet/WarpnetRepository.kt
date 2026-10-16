@@ -282,9 +282,19 @@ class WarpnetRepository @Inject constructor(
 
     private suspend fun fetchTweetRaw(tweetId: String, userId: String, parentId: String = "", rootId: String = ""): WarpnetTweet {
         tweetCache.get(tweetId)?.let { return it }
+        // The node finds a reply only under its parent, so name the parent and
+        // root of a reply already shown when the caller knows just its id.
+        val known = replyParents.get(tweetId)
         val raw = client.request(
             ProtocolIds.PUBLIC_GET_TWEET,
-            getTweetAdapter.toJson(GetTweetEvent(tweetId = tweetId, userId = userId, parentId = parentId, rootId = rootId)),
+            getTweetAdapter.toJson(
+                GetTweetEvent(
+                    tweetId = tweetId,
+                    userId = userId,
+                    parentId = parentId.ifEmpty { known?.parentId.orEmpty() },
+                    rootId = rootId.ifEmpty { known?.rootId.orEmpty() },
+                ),
+            ),
         )
         val tweet = tweetAdapter.fromJson(raw)
             ?: throw IllegalStateException("fetchTweetRaw returned empty body for $tweetId")
