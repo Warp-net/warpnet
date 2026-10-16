@@ -357,10 +357,10 @@ class WarpnetRepository @Inject constructor(
         return created.toTweet(author = runCatching { getUser(created.userId) }.getOrNull())
     }
 
-    suspend fun deleteStatus(tweetId: String, userId: String) {
+    suspend fun deleteStatus(tweetId: String, userId: String, parentId: String? = null) {
         // A reply is stored under its parent's partition, so the delete must
-        // carry parent/root. Recover them from the cached body (a viewed reply
-        // is cached by getReplies); a top-level tweet leaves them empty.
+        // carry parent/root. The caller names the parent; the cached body
+        // (only tweets an hour old are cached) fills in what it doesn't.
         val cached = tweetCache.get(tweetId)
         client.request(
             ProtocolIds.PRIVATE_DELETE_TWEET,
@@ -368,7 +368,7 @@ class WarpnetRepository @Inject constructor(
                 DeleteTweetEvent(
                     tweetId = tweetId,
                     userId = userId,
-                    parentId = cached?.parentId.orEmpty(),
+                    parentId = parentId.orEmpty().ifEmpty { cached?.parentId.orEmpty() },
                     rootId = cached?.rootId.orEmpty(),
                 ),
             ),
