@@ -77,3 +77,11 @@ carry that line, so they are named here instead.
   IceCubesApp/Assets.xcassets/AppIcon.solidimagestack/*/Content.imageset/*.png
   IceCubesActionExtension/Assets.xcassets/ActionIcon.appiconset/ActionIcon1024.png
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-16, name
+- The app calls itself Warpnet in its strings: the About screen and its credits
+  header, the translation hint, the Ice Cube colour themes and the action
+  extension's localized names. The About footer keeps the Ice Cubes credit.
+- Files without the notice line:
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+  IceCubesActionExtension/*.lproj/InfoPlist.strings

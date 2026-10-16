@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import SwiftUI
 
 public let availableColorsSets: [ColorSetCouple] =
@@ -23,10 +25,10 @@ public enum ColorScheme: String {
 }
 
 public enum ColorSetName: String {
-  case iceCubeDark = "Ice Cube - Dark"
-  case iceCubeLight = "Ice Cube - Light"
-  case iceCubeNeonDark = "Ice Cube Neon - Dark"
-  case iceCubeNeonLight = "Ice Cube Neon - Light"
+  case iceCubeDark = "Warpnet - Dark"
+  case iceCubeLight = "Warpnet - Light"
+  case iceCubeNeonDark = "Warpnet Neon - Dark"
+  case iceCubeNeonLight = "Warpnet Neon - Light"
   case desertDark = "Desert - Dark"
   case desertLight = "Desert - Light"
   case nemesisDark = "Nemesis - Dark"
