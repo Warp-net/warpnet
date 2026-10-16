@@ -57,6 +57,7 @@ func TestEveryModuleReadsTheTierTheEngineRecorded(t *testing.T) {
 		assert.Equal(t, tier.GossipScore(), r.GossipScore(peer), "%s", tier)
 		assert.Equal(t, tier.RateMultiplier(), r.RateMultiplier(peer), "%s", tier)
 		assert.Equal(t, tier.IsAllowedInDHT(), r.IsAllowedInDHT(peer), "%s", tier)
+		assert.Equal(t, tier.IsMediaAllowed(), r.IsMediaAllowed(peer), "%s", tier)
 	}
 }
 

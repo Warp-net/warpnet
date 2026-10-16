@@ -560,7 +560,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_REPLY,
-			handler.StreamNewReplyHandler(r.tweetRepo, userRepo, m.notifier, m),
+			handler.StreamNewReplyHandler(r.tweetRepo, userRepo, m.notifier, m, m.ratings),
 		},
 		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
@@ -572,7 +572,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_TIMELINE,
-			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo),
+			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.ratings),
 		},
 		{
 			event.PUBLIC_DELETE_TIMELINE,

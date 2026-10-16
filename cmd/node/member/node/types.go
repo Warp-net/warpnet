@@ -137,6 +137,7 @@ type PeersRatings interface {
 	GossipScore(peerID warpnet.WarpPeerID) float64
 	RateMultiplier(peerID warpnet.WarpPeerID) float64
 	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
+	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.
