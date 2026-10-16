@@ -76,10 +76,10 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
-import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {acceptsReplies, tweetNetwork} from "@/lib/network";
 
-const tweetCharLimit = 280;
+const tweetByteLimit = 2048;
 
 export default {
   name: "Tweet",
@@ -103,9 +103,8 @@ export default {
     };
   },
   watch: {
-    // Runes, not UTF-16 units: matches the 280 the node enforces.
     replyText(value) {
-      const clamped = clampRunes(value, tweetCharLimit);
+      const clamped = clampBytes(value, tweetByteLimit);
       if (clamped !== value) this.replyText = clamped;
     },
   },
@@ -128,7 +127,8 @@ export default {
         text: this.replyText,
         emoji,
         field,
-        limit: tweetCharLimit,
+        limit: tweetByteLimit,
+        measure: byteLength,
       });
       if (!next) return;
       this.replyText = next.text;

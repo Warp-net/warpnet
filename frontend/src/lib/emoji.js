@@ -43,6 +43,28 @@ export function clampRunes(text, limit) {
   return runes.length <= limit ? text : runes.slice(0, limit).join("");
 }
 
+export function byteLength(text) {
+  return text ? new TextEncoder().encode(text).length : 0;
+}
+
+function runeBytes(rune) {
+  const cp = rune.codePointAt(0);
+  return cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+}
+
+export function clampBytes(text, limit) {
+  if (!text) return "";
+  if (byteLength(text) <= limit) return text;
+  let size = 0;
+  let out = "";
+  for (const rune of text) {
+    size += runeBytes(rune);
+    if (size > limit) break;
+    out += rune;
+  }
+  return out;
+}
+
 // DEFAULT_REACTION mirrors domain.DefaultReaction: the emoji a like
 // carries when none was named, and what every pre-reactions like reads
 // back as.
@@ -132,16 +154,16 @@ export function findEmoji(char) {
 
 // insertEmoji splices an emoji into `text` at the field's caret (replacing any
 // selection) and reports where the caret should land afterwards. Returns null
-// when the insert would blow the rune budget, so the caller can leave the text
+// when the insert would blow the budget, so the caller can leave the text
 // untouched rather than silently dropping characters off the end.
-export function insertEmoji({ text, emoji, field, limit }) {
+export function insertEmoji({ text, emoji, field, limit, measure = runeLength }) {
   const value = text || "";
   const hasCaret = field && typeof field.selectionStart === "number";
   const start = hasCaret ? field.selectionStart : value.length;
   const end = hasCaret ? field.selectionEnd : value.length;
 
   const next = value.slice(0, start) + emoji + value.slice(end);
-  if (limit && runeLength(next) > limit) return null;
+  if (limit && measure(next) > limit) return null;
 
   return { text: next, caret: start + emoji.length };
 }

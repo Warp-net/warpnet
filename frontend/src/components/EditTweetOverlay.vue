@@ -43,7 +43,7 @@
               @close="showEmojiPicker = false"
             />
           </div>
-          <span class="text-xs text-dark">{{ textLength }} / 280</span>
+          <span class="text-xs text-dark">{{ textLength }} / 2048</span>
         </div>
         <div class="flex justify-end gap-2 mt-3">
           <button
@@ -66,9 +66,9 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {defineAsyncComponent} from "vue";
 import {dismissable} from "@/lib/modal.mixin";
-import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
+import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
 
-const tweetCharLimit = 280;
+const tweetByteLimit = 2048;
 
 export default {
   name: "EditTweetOverlay",
@@ -88,13 +88,12 @@ export default {
   },
   computed: {
     textLength() {
-      return runeLength(this.text);
+      return byteLength(this.text);
     },
   },
   watch: {
-    // Runes, not UTF-16 units: matches the 280 the node enforces.
     text(value) {
-      const clamped = clampRunes(value, tweetCharLimit);
+      const clamped = clampBytes(value, tweetByteLimit);
       if (clamped !== value) this.text = clamped;
     },
     show: {
@@ -111,7 +110,8 @@ export default {
         text: this.text,
         emoji,
         field,
-        limit: tweetCharLimit,
+        limit: tweetByteLimit,
+        measure: byteLength,
       });
       if (!next) return;
       this.text = next.text;
