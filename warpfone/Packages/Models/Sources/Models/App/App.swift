@@ -3,7 +3,6 @@
 import Foundation
 
 public enum AppInfo {
-  public static let appStoreAppId = "6444915884"
   public static let clientName = "Warpnet"
   public static let scheme = "warpfone://"
   public static let scopes = "read write follow push"

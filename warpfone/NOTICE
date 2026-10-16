@@ -58,3 +58,11 @@ carry that line, so they are named here instead.
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-16, about and settings
+- About no longer links to the Ice Cubes privacy policy and terms of use, and
+  no longer loads the Ice Cubes accounts. Its footer credits Ice Cubes.
+- Settings points the source code link at the Warpnet repository and drops the
+  App Store rating link.
+- Files without the notice line:
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

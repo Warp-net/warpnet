@@ -243,19 +243,11 @@ struct SettingsTabs: View {
         }
       #endif
 
-      Link(destination: URL(string: "https://github.com/Dimillian/IceCubesApp")!) {
+      Link(destination: URL(string: AppInfo.weblink)!) {
         Label("settings.app.source", systemImage: "link")
       }
       .accessibilityRemoveTraits(.isButton)
       .tint(theme.labelColor)
-
-      if let reviewURL = URL(string: "https://apps.apple.com/app/id\(AppInfo.appStoreAppId)?action=write-review") {
-        Link(destination: reviewURL) {
-          Label("settings.rate", systemImage: "link")
-        }
-        .accessibilityRemoveTraits(.isButton)
-        .tint(theme.labelColor)
-      }
 
       NavigationLink(destination: AboutView()) {
         Label("settings.app.about", systemImage: "info.circle")
