@@ -229,20 +229,6 @@ struct SettingsTabs: View {
 
   private var appSection: some View {
     Section {
-      #if !targetEnvironment(macCatalyst) && !os(visionOS)
-        NavigationLink(destination: IconSelectorView()) {
-          Label {
-            Text("settings.app.icon")
-          } icon: {
-            let icon = IconSelectorView.Icon(string: UIApplication.shared.alternateIconName ?? "AppIcon")
-            Image(uiImage: .init(named: icon.appIconName)!)
-              .resizable()
-              .frame(width: 25, height: 25)
-              .cornerRadius(4)
-          }
-        }
-      #endif
-
       Link(destination: URL(string: AppInfo.weblink)!) {
         Label("settings.app.source", systemImage: "link")
       }

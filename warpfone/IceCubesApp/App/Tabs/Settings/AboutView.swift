@@ -25,28 +25,6 @@ struct AboutView: View {
   var body: some View {
     List {
       Section {
-        #if !targetEnvironment(macCatalyst)
-        HStack {
-          Spacer()
-          Image(uiImage: .init(named: "AppIconAlternate0")!)
-            .resizable()
-            .frame(width: 50, height: 50)
-            .cornerRadius(4)
-          Image(uiImage: .init(named: "AppIconAlternate4")!)
-            .resizable()
-            .frame(width: 50, height: 50)
-            .cornerRadius(4)
-          Image(uiImage: .init(named: "AppIconAlternate17")!)
-            .resizable()
-            .frame(width: 50, height: 50)
-            .cornerRadius(4)
-          Image(uiImage: .init(named: "AppIconAlternate23")!)
-            .resizable()
-            .frame(width: 50, height: 50)
-            .cornerRadius(4)
-          Spacer()
-        }
-        #endif
       } footer: {
         Text("\(versionNumber)Based on Ice Cubes ©2023 Thomas Ricouard")
       }

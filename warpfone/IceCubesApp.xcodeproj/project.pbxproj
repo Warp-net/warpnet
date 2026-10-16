@@ -91,7 +91,6 @@
 		9FC2A38F2B49D1AA00DFD1C1 /* StatusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9FC2A38E2B49D1AA00DFD1C1 /* StatusKit */; };
 		9FD34823293D06E800DB0EE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9FD34822293D06E800DB0EE9 /* Assets.xcassets */; };
 		9FD542E72962D2FF0045321A /* Lists in Frameworks */ = {isa = PBXBuildFile; productRef = 9FD542E62962D2FF0045321A /* Lists */; };
-		9FE151A6293C90F900E9683D /* IconSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE151A5293C90F900E9683D /* IconSelectorView.swift */; };
 		9FE3DB57296FEFCA00628CB0 /* AppAccount in Frameworks */ = {isa = PBXBuildFile; productRef = 9FE3DB56296FEFCA00628CB0 /* AppAccount */; };
 		9FFF677C299B7B2C00FE700A /* Notifications in Frameworks */ = {isa = PBXBuildFile; productRef = 9FFF677B299B7B2C00FE700A /* Notifications */; };
 		9FFF6780299B7D2B00FE700A /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 9FFF677F299B7D2B00FE700A /* DesignSystem */; };
@@ -235,7 +234,6 @@
 		9FD34822293D06E800DB0EE9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9FD542E52962D2CE0045321A /* Lists */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Lists; path = Packages/Lists; sourceTree = "<group>"; };
 		9FE0346A2ADD59AC00529EA8 /* MediaUI */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = MediaUI; path = Packages/MediaUI; sourceTree = "<group>"; };
-		9FE151A5293C90F900E9683D /* IconSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconSelectorView.swift; sourceTree = "<group>"; };
 		9FE3DB55296FEF5800628CB0 /* AppAccount */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = AppAccount; path = Packages/AppAccount; sourceTree = "<group>"; };
 		B0BAB49E29B3D7A9008F54D7 /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		C4CBB90B298A0DA3007E1707 /* en-GB */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "en-GB"; path = "en-GB.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
@@ -512,7 +510,6 @@
 				C9B22676297F6C2E001F9EFE /* ContentSettingsView.swift */,
 				9F7335F82968576500AFF0BA /* DisplaySettingsView.swift */,
 				9F1E8B46298EBCBB00609F80 /* HapticSettingsView.swift */,
-				9FE151A5293C90F900E9683D /* IconSelectorView.swift */,
 				9F2B92FB295DA94500DE16D0 /* InstanceInfoView.swift */,
 				9F2A5410296A1429009B2D7C /* PushNotificationsView.swift */,
 				9FAE4ACA293783B000772766 /* SettingsTab.swift */,
@@ -804,7 +801,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9FE151A6293C90F900E9683D /* IconSelectorView.swift in Sources */,
 				9FB183222AE9268800BBB692 /* IceCubesApp+Menu.swift in Sources */,
 				9F7D939A29805DBD00EE6B7A /* AccountSettingView.swift in Sources */,
 				069709AA298C9AD7006E4CB5 /* AboutView.swift in Sources */,
@@ -1171,7 +1167,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconAlternate0 AppIconAlternate6 AppIconAlternate7 AppIconAlternate8 AppIconAlternate10 AppIconAlternate11 AppIconAlternate12 AppIconAlternate13 AppIconAlternate14 AppIconAlternate15 AppIconAlternate16 AppIconAlternate17 AppIconAlternate19 AppIconAlternate18 AppIconAlternate20 AppIconAlternate21 AppIconAlternate22 AppIconAlternate23 AppIconAlternate24 AppIconAlternate25 AppIconAlternate26 AppIconAlternate27 AppIconAlternate28 AppIconAlternate29 AppIconAlternate30 AppIconAlternate31 AppIconAlternate32 AppIconAlternate33 AppIconAlternate34 AppIconAlternate35 AppIconAlternate36 AppIconAlternate37 AppIconAlternate38 AppIconAlternate39 AppIconAlternate40 AppIconAlternate42 AppIconAlternate2 AppIconAlternate41 AppIconAlternate45 AppIconAlternate44 AppIconAlternate1 AppIconAlternate4 AppIconAlternate3 AppIconAlternate5 AppIconAlternate46 AppIconAlternate9 AppIconAlternate43";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
@@ -1225,7 +1220,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconAlternate0 AppIconAlternate6 AppIconAlternate7 AppIconAlternate8 AppIconAlternate10 AppIconAlternate11 AppIconAlternate12 AppIconAlternate13 AppIconAlternate14 AppIconAlternate15 AppIconAlternate16 AppIconAlternate17 AppIconAlternate19 AppIconAlternate18 AppIconAlternate20 AppIconAlternate21 AppIconAlternate22 AppIconAlternate23 AppIconAlternate24 AppIconAlternate25 AppIconAlternate26 AppIconAlternate27 AppIconAlternate28 AppIconAlternate29 AppIconAlternate30 AppIconAlternate31 AppIconAlternate32 AppIconAlternate33 AppIconAlternate34 AppIconAlternate35 AppIconAlternate36 AppIconAlternate37 AppIconAlternate38 AppIconAlternate39 AppIconAlternate40 AppIconAlternate42 AppIconAlternate2 AppIconAlternate41 AppIconAlternate45 AppIconAlternate44 AppIconAlternate1 AppIconAlternate4 AppIconAlternate3 AppIconAlternate5 AppIconAlternate46 AppIconAlternate9 AppIconAlternate43";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;

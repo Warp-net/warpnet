@@ -66,3 +66,14 @@ carry that line, so they are named here instead.
   App Store rating link.
 - Files without the notice line:
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-16, icons
+- The Ice Cubes app icons were replaced with the Warpnet W (white on #C5007F),
+  the same glyph the Android client and the desktop side navigation use. The 47
+  alternate icons and the icon picker were removed.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Assets.xcassets/AppIcon.appiconset/*.png
+  IceCubesApp/Assets.xcassets/AppIcon.solidimagestack/*/Content.imageset/*.png
+  IceCubesActionExtension/Assets.xcassets/ActionIcon.appiconset/ActionIcon1024.png
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
