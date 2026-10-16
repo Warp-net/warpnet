@@ -983,7 +983,7 @@ type mockTweetsStorer struct {
 	DeleteFunc        func(string, string) error
 	AddReplyFunc      func(domain.Tweet) (domain.Tweet, error)
 	GetReplyFunc      func(string, string) (domain.Tweet, error)
-	DeleteReplyFunc   func(string, string) (domain.Tweet, error)
+	DeleteReplyFunc   func(string, string, bool) (domain.Tweet, error)
 	GetRepliesFunc    func(string, *uint64, *string) ([]domain.Tweet, string, error)
 	UpdateFunc        func(domain.Tweet) error
 	AppendEditFunc    func(domain.TweetEdit) (domain.TweetEdit, error)
@@ -1040,9 +1040,9 @@ func (m *mockTweetsStorer) GetReply(p, id string) (domain.Tweet, error) {
 	return domain.Tweet{}, errNotFound
 }
 
-func (m *mockTweetsStorer) DeleteReply(p, id string, _ bool) (domain.Tweet, error) {
+func (m *mockTweetsStorer) DeleteReply(p, id string, isTransitive bool) (domain.Tweet, error) {
 	if m.DeleteReplyFunc != nil {
-		return m.DeleteReplyFunc(p, id)
+		return m.DeleteReplyFunc(p, id, isTransitive)
 	}
 	return domain.Tweet{ParentId: &p}, nil
 }
@@ -1506,54 +1506,116 @@ func TestStreamGetTweetHandler_CornerCases(t *testing.T) {
 func TestStreamDeleteTweetHandler_ReplyPath(t *testing.T) {
 	t.Parallel()
 
+	const owner = "owner123"
+	ownerRoot := domain.Tweet{Id: "root1", UserId: owner}
+	errDeleteFailed := errors.New("db failed")
+
 	tests := []struct {
-		name    string
-		ev      event.DeleteTweetEvent
-		setup   func(*mockTweetsStorer, *mockUserFetcher, *mockStreamer)
-		wantErr bool
+		name           string
+		ev             event.DeleteTweetEvent
+		stored         domain.Tweet
+		storedErr      error
+		deleteErr      error
+		wantErr        error
+		wantDeleted    bool
+		wantTransitive bool
 	}{
 		{
-			name: "delete reply locally",
-			ev:   event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
-			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer) {
-				ts.DeleteReplyFunc = func(p, id string) (domain.Tweet, error) {
-					parent := "parentUser"
-					return domain.Tweet{ParentUserId: &parent}, nil
-				}
-				s.GenericStreamFunc = func(string, stream.WarpRoute, any) ([]byte, error) {
-					t.Error("a reply delete must not leave this node")
-					return nil, nil
-				}
-			},
+			name:           "own reply in a foreign thread",
+			ev:             event.DeleteTweetEvent{UserId: owner, TweetId: "r1", ParentId: "p1", RootId: "foreign-root"},
+			stored:         domain.Tweet{Id: "r1", UserId: owner, RootId: "foreign-root"},
+			wantDeleted:    true,
+			wantTransitive: true,
 		},
 		{
-			name:    "delete reply error",
+			name:        "someone else's reply in the owner's thread",
+			ev:          event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "root1", RootId: "root1"},
+			stored:      domain.Tweet{Id: "r1", UserId: "u1", RootId: "root1"},
+			wantDeleted: true,
+		},
+		{
+			name:        "someone else's nested reply in the owner's thread",
+			ev:          event.DeleteTweetEvent{UserId: "u1", TweetId: "r2", ParentId: "r1", RootId: "root1"},
+			stored:      domain.Tweet{Id: "r2", UserId: "u1", RootId: "root1"},
+			wantDeleted: true,
+		},
+		{
+			name:        "the owner as user_id keeps someone else's reply foreign",
+			ev:          event.DeleteTweetEvent{UserId: owner, TweetId: "r1", ParentId: "root1"},
+			stored:      domain.Tweet{Id: "r1", UserId: "u1", RootId: "root1"},
+			wantDeleted: true,
+		},
+		{
+			name:    "someone else's reply in a foreign thread",
+			ev:      event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1", RootId: "foreign-root"},
+			stored:  domain.Tweet{Id: "r1", UserId: "u1", RootId: "foreign-root"},
+			wantErr: ErrForeignReply,
+		},
+		{
+			name:    "the owner as user_id in a foreign thread",
+			ev:      event.DeleteTweetEvent{UserId: owner, TweetId: "r1", ParentId: "p1"},
+			stored:  domain.Tweet{Id: "r1", UserId: "u1", RootId: "foreign-root"},
+			wantErr: ErrForeignReply,
+		},
+		{
+			name:    "someone else's reply without a root",
 			ev:      event.DeleteTweetEvent{UserId: "u1", TweetId: "r1", ParentId: "p1"},
-			wantErr: true,
-			setup: func(ts *mockTweetsStorer, uf *mockUserFetcher, s *mockStreamer) {
-				ts.DeleteReplyFunc = func(p, id string) (domain.Tweet, error) {
-					return domain.Tweet{}, errors.New("db failed")
-				}
-			},
+			stored:  domain.Tweet{Id: "r1", UserId: "u1"},
+			wantErr: ErrForeignReply,
+		},
+		{
+			name:      "reply not stored here",
+			ev:        event.DeleteTweetEvent{UserId: owner, TweetId: "r1", ParentId: "p1"},
+			storedErr: errNotFound,
+			wantErr:   errNotFound,
+		},
+		{
+			name:           "delete reply error",
+			ev:             event.DeleteTweetEvent{UserId: owner, TweetId: "r1", ParentId: "p1"},
+			stored:         domain.Tweet{Id: "r1", UserId: owner},
+			deleteErr:      errDeleteFailed,
+			wantErr:        errDeleteFailed,
+			wantDeleted:    true,
+			wantTransitive: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ts := &mockTweetsStorer{}
-			uf := &mockUserFetcher{}
-			s := &mockStreamer{}
-			tt.setup(ts, uf, s)
+			var isDeleted, isTransitive bool
+			ts := &mockTweetsStorer{
+				GetReplyFunc: func(string, string) (domain.Tweet, error) {
+					return tt.stored, tt.storedErr
+				},
+				GetFunc: func(userId, id string) (domain.Tweet, error) {
+					if userId == owner && id == ownerRoot.Id {
+						return ownerRoot, nil
+					}
+					return domain.Tweet{}, errNotFound
+				},
+				DeleteReplyFunc: func(_, _ string, transitive bool) (domain.Tweet, error) {
+					isDeleted, isTransitive = true, transitive
+					return tt.stored, tt.deleteErr
+				},
+			}
+			s := &mockStreamer{
+				GenericStreamFunc: func(string, stream.WarpRoute, any) ([]byte, error) {
+					t.Error("a reply delete must not leave this node")
+					return nil, nil
+				},
+			}
 
 			handler := StreamDeleteTweetHandler(nil, &mockOwner{}, ts, &mockTimeline{}, &mockReactionStorer{}, s)
 			_, err := handler(marshal(t, tt.ev), nil)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
+			assert.Equal(t, tt.wantDeleted, isDeleted)
+			assert.Equal(t, tt.wantTransitive, isTransitive)
 		})
 	}
 }
