@@ -1,4 +1,6 @@
 // Modified by Warpnet. See NOTICE.
 
+#include "Version.xcconfig"
+
 DEVELOPMENT_TEAM =
 BUNDLE_ID_PREFIX = site.warpnet

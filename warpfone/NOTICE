@@ -85,3 +85,10 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp/Resources/Localization/Localizable.xcstrings
   IceCubesActionExtension/*.lproj/InfoPlist.strings
+
+2026-10-16, version
+- The version comes from the Warpnet version file through Version.xcconfig,
+  included by both configurations; the per-target 1.10.31 / 730 values were
+  removed from the project.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj

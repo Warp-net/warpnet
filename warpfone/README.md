@@ -11,3 +11,7 @@ Debug builds read `IceCubesApp.xcconfig`, which is not committed: copy
 `IceCubesApp.xcconfig.template` and set your team and bundle id prefix.
 Release builds read `IceCubesApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
 stays empty until the project has an Apple developer team.
+
+The version follows the repository's `version` file. The pre-commit hook writes
+it into `Version.xcconfig`, which both configurations include, so the app and
+its extensions always carry the same version.
