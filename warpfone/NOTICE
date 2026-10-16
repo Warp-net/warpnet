@@ -1,0 +1,27 @@
+warpfone, the iOS client of Warpnet
+
+This directory contains a modified copy of Ice Cubes, a SwiftUI Mastodon client
+by Thomas Ricouard and contributors: https://github.com/Dimillian/IceCubesApp
+
+Upstream revision: 95420025342e599ac511a26b87febcbcacff57a0 (2024-02-06,
+version 1.10.31). This is the last revision published under the Apache License,
+Version 2.0. Ice Cubes moved to AGPL-3.0 on 2024-02-10 in 7b7e65bf, and nothing
+from that revision or later is included here.
+
+The files taken from Ice Cubes remain under the Apache License, Version 2.0
+(see LICENSE in this directory).
+
+Changes made by the Warpnet project are listed below. Every source file that
+Warpnet changed starts with the line "// Modified by Warpnet. See NOTICE."
+
+2026-10-16
+- Not imported: .github/, ci_scripts/, Images/, README.md, PRIVACY.MD, TERMS.MD.
+- Removed the composer's remote text-rewrite and image-description features.
+  Two source files were deleted (Network and StatusKit packages), and these
+  were modified:
+  Packages/StatusKit/Sources/StatusKit/Editor/Components/AccessoryView.swift
+  Packages/StatusKit/Sources/StatusKit/Editor/Components/MediaEditView.swift
+  Packages/StatusKit/Sources/StatusKit/Editor/ViewModel.swift
+  Packages/Env/Sources/Env/UserPreferences.swift
+  IceCubesApp/App/Tabs/Settings/SettingsTab.swift
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

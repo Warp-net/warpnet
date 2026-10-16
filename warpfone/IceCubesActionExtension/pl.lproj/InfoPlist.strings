@@ -1,0 +1,10 @@
+/* 
+  InfoPlist.strings
+  IceCubesApp
+
+  Created by Thomas Durand on 27/01/2023.
+  Updated by Andrzej Rózga on 30/01/2023.
+  
+*/
+
+"CFBundleDisplayName" = "Otwórz w Ice Cubes";
