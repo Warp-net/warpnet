@@ -19,6 +19,14 @@ WarpNet is provided “as is” without warranty of any kind, either expressed o
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
 
+A directory that carries its own license file is governed by that file instead
+of this one:
+
+- warpdroid/ (the Android client) is licensed under the GNU Affero General Public
+  License, version 3 or later; see warpdroid/LICENSE.
+- warpfone/ (the iOS client) is licensed under the Apache License, Version 2.0;
+  see warpfone/LICENSE and warpfone/NOTICE.
+
 GNU AFFERO GENERAL PUBLIC LICENSE
 
 Version 3, 19 November 2007
