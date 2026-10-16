@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Models
 import Network
 import Observation
@@ -127,7 +129,7 @@ public enum AccountsListMode {
                        relationships: relationships,
                        nextPageState: link?.maxId != nil ? .hasNextPage : .none)
     } catch {
-      let logger = Logger(subsystem: "com.icecubesapp", category: "UI")
+      let logger = Logger(subsystem: "site.warpnet.warpfone", category: "UI")
       logger.log(level: .info, "\(error.localizedDescription)")
     }
   }

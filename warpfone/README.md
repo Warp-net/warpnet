@@ -9,3 +9,5 @@ transport, QR pairing and the Warpnet data layer are not wired in yet.
 Building needs macOS with Xcode 15 or later; the deployment target is iOS 17.
 Debug builds read `IceCubesApp.xcconfig`, which is not committed: copy
 `IceCubesApp.xcconfig.template` and set your team and bundle id prefix.
+Release builds read `IceCubesApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
+stays empty until the project has an Apple developer team.

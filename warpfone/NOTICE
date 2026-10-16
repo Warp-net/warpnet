@@ -11,10 +11,12 @@ from that revision or later is included here.
 The files taken from Ice Cubes remain under the Apache License, Version 2.0
 (see LICENSE in this directory).
 
-Changes made by the Warpnet project are listed below. Every source file that
-Warpnet changed starts with the line "// Modified by Warpnet. See NOTICE."
+Changes made by the Warpnet project are listed below. Every Swift and xcconfig
+file that Warpnet changed starts with the line "// Modified by Warpnet. See
+NOTICE." Project, property list, entitlements and string catalog files cannot
+carry that line, so they are named here instead.
 
-2026-10-16
+2026-10-16, import
 - Not imported: .github/, ci_scripts/, Images/, README.md, PRIVACY.MD, TERMS.MD.
 - Removed the composer's remote text-rewrite and image-description features.
   Two source files were deleted (Network and StatusKit packages), and these
@@ -25,3 +27,21 @@ Warpnet changed starts with the line "// Modified by Warpnet. See NOTICE."
   Packages/Env/Sources/Env/UserPreferences.swift
   IceCubesApp/App/Tabs/Settings/SettingsTab.swift
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-16, identity
+- The bundle ids are now site.warpnet.warpfone, plus .ShareExtension,
+  .ActionExtension and .Notifications. The display name is "Warpnet" and the
+  URL scheme is warpfone://. The release team and bundle id prefix are set in
+  IceCubesApp-release.xcconfig.
+- The app group and keychain access group are read from the AppGroup and
+  KeychainAccessGroup Info.plist keys, which derive from BUNDLE_ID_PREFIX and
+  the team prefix. The iCloud container entitlement was removed.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+  IceCubesApp/App/IceCubesApp.entitlements
+  IceCubesApp/App/IceCubesApp-release.entitlements
+  IceCubesNotifications/Info.plist
+  IceCubesNotifications/IceCubesNotifications.entitlements
+  IceCubesShareExtension/Info.plist
+  IceCubesShareExtension/IceCubesShareExtension.entitlements

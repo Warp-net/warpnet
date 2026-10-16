@@ -16,5 +16,9 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).NotificationService</string>
 	</dict>
+	<key>AppGroup</key>
+	<string>group.$(BUNDLE_ID_PREFIX).warpfone</string>
+	<key>KeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).warpfone</string>
 </dict>
 </plist>

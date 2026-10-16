@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import Foundation
 import Models
@@ -28,7 +30,7 @@ import OSLog
   public var unreadNotificationsCount: Int = 0
   public var latestEvent: (any StreamEvent)?
   
-  private let logger = Logger(subsystem: "com.icecubesapp", category: "stream")
+  private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "stream")
 
   public static let shared = StreamWatcher()
   

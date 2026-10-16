@@ -1,2 +1,4 @@
-DEVELOPMENT_TEAM = Z6P74P6T99
-BUNDLE_ID_PREFIX = com.thomasricouard
+// Modified by Warpnet. See NOTICE.
+
+DEVELOPMENT_TEAM =
+BUNDLE_ID_PREFIX = site.warpnet

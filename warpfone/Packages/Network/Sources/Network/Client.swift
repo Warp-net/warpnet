@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import Foundation
 import Models
@@ -45,7 +47,7 @@ import OSLog
   private let urlSession: URLSession
   private let decoder = JSONDecoder()
   
-  private let logger = Logger(subsystem: "com.icecubesapp", category: "networking")
+  private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "networking")
 
   // Putting all mutable state inside an `OSAllocatedUnfairLock` makes `Client`
   // provably `Sendable`. The lock is a struct, but it uses a `ManagedBuffer`

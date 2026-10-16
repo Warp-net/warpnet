@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -28,7 +30,7 @@ private struct SafariRouter: ViewModifier {
         routerPath.handle(url: url)
       })
       .onOpenURL { url in
-        // Open external URL (from icecubesapp://)
+        // Open external URL (from warpfone://)
         let urlString = url.absoluteString.replacingOccurrences(of: AppInfo.scheme, with: "https://")
         guard let url = URL(string: urlString), url.host != nil else { return }
         _ = routerPath.handle(url: url)
