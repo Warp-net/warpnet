@@ -13,6 +13,7 @@
 		069709A8298C87B5006E4CB5 /* OpenDyslexic-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = 069709A7298C87B5006E4CB5 /* OpenDyslexic-Regular.otf */; };
 		069709AA298C9AD7006E4CB5 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069709A9298C9AD7006E4CB5 /* AboutView.swift */; };
 		28A15CCBAD5F4E6389FAB391 /* PairingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7879F62AC35F8849E6A33F0 /* PairingModel.swift */; };
+		58A6ABF317A370C8CF6FB9E1 /* SharedPostPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1614FF40AE69DF401351FC /* SharedPostPublisher.swift */; };
 		611151B148D2330C0731A6E7 /* WarpnetVideoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */; };
 		639CDF9C296AC82F00C35E58 /* SafariRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639CDF9B296AC82F00C35E58 /* SafariRouter.swift */; };
 		7BFB91C72485C337E2EFD0C3 /* WarpnetTransport in Frameworks */ = {isa = PBXBuildFile; productRef = B979A68FAE002F6F5E11073F /* WarpnetTransport */; };
@@ -134,6 +135,7 @@
 		069709A9298C9AD7006E4CB5 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarpnetVideoLoader.swift; sourceTree = "<group>"; };
 		308DF3E6331C7C5C1E0D8480 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
+		3A1614FF40AE69DF401351FC /* SharedPostPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPostPublisher.swift; sourceTree = "<group>"; };
 		639CDF9B296AC82F00C35E58 /* SafariRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariRouter.swift; sourceTree = "<group>"; };
 		76E7D36BBCCC132453A9DD80 /* WarpnetDataLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarpnetDataLoader.swift; sourceTree = "<group>"; };
 		8A911FE4DB4D158CC91E1F42 /* WarpnetTransport */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = WarpnetTransport; path = Packages/WarpnetTransport; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				76E7D36BBCCC132453A9DD80 /* WarpnetDataLoader.swift */,
 				1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */,
 				92282D680EE224ACEDA2C667 /* BackgroundRefresh.swift */,
+				3A1614FF40AE69DF401351FC /* SharedPostPublisher.swift */,
 			);
 			path = Warpnet;
 			sourceTree = "<group>";
@@ -706,6 +709,7 @@
 				04BD462E114C0E6E46EF9812 /* WarpnetDataLoader.swift in Sources */,
 				611151B148D2330C0731A6E7 /* WarpnetVideoLoader.swift in Sources */,
 				85AB8517A4D9AF7F8F588129 /* BackgroundRefresh.swift in Sources */,
+				58A6ABF317A370C8CF6FB9E1 /* SharedPostPublisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

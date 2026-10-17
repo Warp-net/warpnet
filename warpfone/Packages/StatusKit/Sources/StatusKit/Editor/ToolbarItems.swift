@@ -50,7 +50,14 @@ extension StatusEditor {
       ToolbarItem(placement: .navigationBarTrailing) {
         Button {
           Task {
-            await postAllStatus()
+            if mainSEVM.mode.isInShareExtension {
+              if await mainSEVM.queueSharedPost(in: context) {
+                close()
+                NotificationCenter.default.post(name: .shareSheetClose, object: nil)
+              }
+            } else {
+              await postAllStatus()
+            }
           }
         } label: {
           Image(systemName: "paperplane.fill")

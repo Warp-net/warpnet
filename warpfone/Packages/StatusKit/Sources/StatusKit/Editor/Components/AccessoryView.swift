@@ -123,13 +123,15 @@ extension StatusEditor {
       .disabled(viewModel.showPoll)
 
       
-      Button {
-        // all SEVM have the same visibility value
-        followUpSEVMs.append(ViewModel(mode: .new(visibility: focusedSEVM.visibility)))
-      } label: {
-        Image(systemName: "arrowshape.turn.up.left.circle.fill")
+      if !focusedSEVM.mode.isInShareExtension {
+        Button {
+          // all SEVM have the same visibility value
+          followUpSEVMs.append(ViewModel(mode: .new(visibility: focusedSEVM.visibility)))
+        } label: {
+          Image(systemName: "arrowshape.turn.up.left.circle.fill")
+        }
+        .disabled(!canAddNewSEVM)
       }
-      .disabled(!canAddNewSEVM)
 
       Spacer()
       

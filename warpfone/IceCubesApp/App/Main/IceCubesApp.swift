@@ -49,6 +49,7 @@ struct IceCubesApp: App {
       await currentInstance.fetchCurrentInstance()
       watcher.setClient(client: client, instanceStreamingURL: currentInstance.instance?.urls?.streamingApi)
       watcher.watch(streams: [.user, .direct])
+      await SharedPostPublisher.publish(with: client)
     }
   }
 
@@ -65,6 +66,7 @@ struct IceCubesApp: App {
         await pairing.resume()
         watcher.watch(streams: [.user, .direct])
         await userPreferences.refreshServerPreferences()
+        await SharedPostPublisher.publish(with: appAccountsManager.currentClient)
       }
     default:
       break

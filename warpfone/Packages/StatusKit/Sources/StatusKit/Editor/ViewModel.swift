@@ -7,6 +7,7 @@ import Models
 import NaturalLanguage
 import Network
 import PhotosUI
+import SwiftData
 import SwiftUI
 
 extension StatusEditor {
@@ -119,7 +120,7 @@ extension StatusEditor {
     }
 
     var shouldDisablePollButton: Bool {
-      !mediaContainers.isEmpty
+      !mediaContainers.isEmpty || mode.isInShareExtension
     }
 
     var shouldDisplayDismissWarning: Bool {
@@ -651,6 +652,7 @@ extension StatusEditor {
     }
 
     func upload(container: MediaContainer) async {
+      guard !mode.isInShareExtension else { return }
       if let index = indexOf(container: container) {
         let originalContainer = mediaContainers[index]
         guard originalContainer.mediaAttachment == nil else { return }
@@ -761,6 +763,39 @@ extension StatusEditor {
     }
 
     private var mediaAttributes: [StatusData.MediaAttribute] = []
+
+    func queueSharedPost(in context: ModelContext) async -> Bool {
+      do {
+        let directory = SharedStore.mediaDirectory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let compressor = Compressor()
+        var files: [String] = []
+        for container in mediaContainers {
+          if let image = container.image {
+            let name = "\(UUID().uuidString).jpg"
+            try await compressor.compressImageForUpload(image).write(to: directory.appending(path: name))
+            files.append(name)
+          } else if let url = container.movieTransferable?.url,
+                    let compressed = await compressor.compressVideo(url)
+          {
+            let name = "\(UUID().uuidString).\(compressed.pathExtension.isEmpty ? "mp4" : compressed.pathExtension)"
+            try FileManager.default.copyItem(at: compressed, to: directory.appending(path: name))
+            files.append(name)
+          } else if let gif = container.gifTransferable?.data {
+            let name = "\(UUID().uuidString).gif"
+            try gif.write(to: directory.appending(path: name))
+            files.append(name)
+          }
+        }
+        context.insert(SharedPost(content: statusText.string, mediaFiles: files))
+        try context.save()
+        return true
+      } catch {
+        postingError = error.localizedDescription
+        showPostingErrorAlert = true
+        return false
+      }
+    }
 
     private func uploadMedia(data: Data, mimeType: String) async throws -> MediaAttachment? {
       guard let client else { return nil }

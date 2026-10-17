@@ -45,6 +45,14 @@ extension StatusEditor {
             textInput
             pollView
             characterCountAndLangView
+            if viewModel.mode.isInShareExtension {
+              Text("warpnet.share.hint")
+                .font(.scaledFootnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, .layoutPadding)
+                .padding(.bottom, 8)
+            }
             MediaView(viewModel: viewModel)
             embeddedStatus
           }
@@ -145,7 +153,7 @@ extension StatusEditor {
     
     @ViewBuilder
     private var characterCountAndLangView: some View {
-      let value = (currentInstance.instance?.configuration?.statuses.maxCharacters ?? 500) + viewModel.statusTextCharacterLength
+      let value = (currentInstance.instance?.configuration?.statuses.maxCharacters ?? 2048) + viewModel.statusTextCharacterLength
       HStack(alignment: .center) {
         Button {
           withAnimation {
@@ -181,7 +189,7 @@ extension StatusEditor {
       viewModel.theme = theme
       viewModel.preferences = preferences
       viewModel.prepareStatusText()
-      if !client.isAuth {
+      if !client.isAuth, !viewModel.mode.isInShareExtension {
         #if targetEnvironment(macCatalyst)
           dismissWindow()
         #else

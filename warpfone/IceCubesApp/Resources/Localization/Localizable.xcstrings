@@ -6725,6 +6725,16 @@
         }
       }
     },
+    "warpnet.share.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warpnet publishes this tweet the next time it reaches your node."
+          }
+        }
+      }
+    },
     "warpnet.startup.account" : {
       "localizations" : {
         "en" : {

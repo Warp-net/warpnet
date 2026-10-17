@@ -56,6 +56,7 @@ enum BackgroundRefresh {
     let client = accounts.currentClient
     guard client.isAuth else { return false }
     let notifications = try? await client.pushes()
+    await SharedPostPublisher.publish(with: client)
     if UIApplication.shared.applicationState == .background {
       await pairing.pause()
     }

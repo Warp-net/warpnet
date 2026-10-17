@@ -209,3 +209,12 @@ carry that line, so they are named here instead.
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Info.plist
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The share extension, which has no node of its own, queues the tweet and its
+  media in the app group: a SharedPost in the SwiftData store the app and the
+  extension now share, with the media files beside it. The app publishes the
+  queue when it next reaches the node, in the foreground or from the
+  background refresh; one the node refuses becomes a draft. Shared tweets
+  carry no poll and no follow-up posts.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

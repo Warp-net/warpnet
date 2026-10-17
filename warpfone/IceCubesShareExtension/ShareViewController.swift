@@ -36,9 +36,7 @@ class ShareViewController: UIViewController {
           .environment(account)
           .environment(theme)
           .environment(instance)
-          .modelContainer(for: [
-            Draft.self,
-          ])
+          .modelContainer(SharedStore.container)
           .tint(theme.tintColor)
           .preferredColorScheme(colorScheme == .light ? .light : .dark)
         let childView = UIHostingController(rootView: view)
