@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"os"
 	"os/signal"
@@ -136,6 +137,12 @@ func main() {
 		audit.ChallengeRoute,
 		moder.ChallengeHandler(),
 	})
+
+	if config.Config().Node.IsSelfUpdate {
+		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.ModeratorArtifact(), false)
+		defer updater.Close()
+		updater.Run(n.Stop)
+	}
 
 	<-interruptChan
 	log.Infoln("moderator node interrupted...")

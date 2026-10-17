@@ -57,6 +57,18 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
 
+      - name: Build Moderator (Linux AMD64)
+        if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/amd64' }}
+        # Taken out of Dockerfile.moderator: llama links glibc, libstdc++ and
+        # libgomp dynamically, so the released moderator must be built in the
+        # image it replaces itself in.
+        run: |
+          git submodule update --init core/moderation
+          docker build -f Dockerfile.moderator -t warpnet-moderator-release .
+          id=$(docker create warpnet-moderator-release)
+          docker cp "$id:/warpnet/warpnet" moderator
+          docker rm "$id"
+
       - name: Build (Wails, Linux with compression)
         working-directory: cmd/node/member
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
@@ -91,6 +103,14 @@ jobs:
           mv cmd/node/relay/relay out/relay_linux_amd64/relay
           tar -C out/relay_linux_amd64 -czf relay_linux_amd64.tar.gz .
           shasum -a 256 relay_linux_amd64.tar.gz > relay_linux_amd64_checksums.txt
+
+      - name: Package Moderator + checksum (Linux AMD64)
+        if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/amd64' }}
+        run: |
+          mkdir -p out/moderator_linux_amd64
+          mv moderator out/moderator_linux_amd64/moderator
+          tar -C out/moderator_linux_amd64 -czf moderator_linux_amd64.tar.gz .
+          shasum -a 256 moderator_linux_amd64.tar.gz > moderator_linux_amd64_checksums.txt
 
       - name: Package + checksum (Linux ARM64)
         if: ${{ startsWith(matrix.os, 'ubuntu') && matrix.platform == 'linux/arm64' }}
@@ -128,6 +148,8 @@ jobs:
           files: |
             relay_linux_amd64.tar.gz
             relay_linux_amd64_checksums.txt
+            moderator_linux_amd64.tar.gz
+            moderator_linux_amd64_checksums.txt
             warpnet_linux_amd64.tar.gz
             warpnet_linux_amd64_checksums.txt
             warpnet_linux_arm64.tar.gz
@@ -333,6 +355,7 @@ jobs:
           auth="Authorization: token $CODEBERG_TOKEN"
 
           for asset in relay_linux_amd64.tar.gz \
+                       moderator_linux_amd64.tar.gz \
                        warpnet_linux_amd64.tar.gz \
                        warpnet_linux_arm64.tar.gz \
                        warpnet_windows_amd64.zip; do
