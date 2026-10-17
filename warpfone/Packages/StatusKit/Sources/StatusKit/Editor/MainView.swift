@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AppAccount
 import DesignSystem
 import EmojiText
@@ -6,7 +8,6 @@ import Models
 import Network
 import NukeUI
 import PhotosUI
-import StoreKit
 import SwiftUI
 import UIKit
 
@@ -20,7 +21,6 @@ extension StatusEditor {
     @State private var presentationDetent: PresentationDetent = .large
     @State private var mainSEVM: ViewModel
     @State private var followUpSEVMs: [ViewModel] = []
-    @State private var editingMediaContainer: MediaContainer?
     @State private var scrollID: UUID?
 
     @FocusState private var editorFocusState: EditorFocusState?
@@ -48,8 +48,7 @@ extension StatusEditor {
             }
             EditorView(
               viewModel: mainSEVM,
-              followUpSEVMs: $followUpSEVMs, 
-              editingMediaContainer: $editingMediaContainer,
+              followUpSEVMs: $followUpSEVMs,
               editorFocusState: $editorFocusState,
               assignedFocusState: .main,
               isMain: true
@@ -62,7 +61,6 @@ extension StatusEditor {
               EditorView(
                 viewModel: sevm,
                 followUpSEVMs: $followUpSEVMs,
-                editingMediaContainer: $editingMediaContainer,
                 editorFocusState: $editorFocusState,
                 assignedFocusState: .followUp(index: sevm.id),
                 isMain: false
@@ -143,9 +141,6 @@ extension StatusEditor {
             }
           }
         }
-      }
-      .sheet(item: $editingMediaContainer) { container in
-        StatusEditor.MediaEditView(viewModel: focusedSEVM, container: container)
       }
       .presentationDetents([.large, .height(100)], selection: $presentationDetent)
       .presentationBackgroundInteraction(.enabled)

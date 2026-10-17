@@ -1,4 +1,7 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
+import Models
 import Network
 import SwiftUI
 
@@ -23,7 +26,11 @@ public struct AccountDetailContextMenu: View {
             Label("account.action.mention", systemImage: "at")
           }
           Button {
-            routerPath.presentedSheet = .mentionStatusEditor(account: account, visibility: .direct)
+            Task {
+              if let conversation: Conversation = try? await client.post(endpoint: Chats.open(accountId: account.id)) {
+                routerPath.navigate(to: .conversationDetail(conversation: conversation))
+              }
+            }
           } label: {
             Label("account.action.message", systemImage: "tray.full")
           }
@@ -74,6 +81,12 @@ public struct AccountDetailContextMenu: View {
             } label: {
               Label("account.action.mute", systemImage: "speaker.slash")
             }
+          }
+
+          Button(role: .destructive) {
+            routerPath.presentedSheet = .reportAccount(account: account)
+          } label: {
+            Label("warpnet.report.account-action", systemImage: "exclamationmark.bubble")
           }
 
           if let relationship = viewModel.relationship,
@@ -136,30 +149,9 @@ public struct AccountDetailContextMenu: View {
             #endif
         }
 
-        if let lang = preferences.serverPreferences?.postLanguage ?? Locale.current.language.languageCode?.identifier {
-          Button {
-            Task {
-              await viewModel.translate(userLang: lang)
-            }
-          } label: {
-            Label("status.action.translate", systemImage: "captions.bubble")
-          }
-        }
-
-        if viewModel.relationship?.following == true {
-          Button {
-            routerPath.presentedSheet = .listAddAccount(account: account)
-          } label: {
-            Label("account.action.add-remove-list", systemImage: "list.bullet")
-          }
-        }
-
         if let url = account.url {
           ShareLink(item: url, subject: Text(account.safeDisplayName)) {
             Label("account.action.share", systemImage: "square.and.arrow.up")
-          }
-          Button { UIApplication.shared.open(url) } label: {
-            Label("status.action.view-in-browser", systemImage: "safari")
           }
         }
 

@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -93,7 +95,12 @@ public struct ConversationDetailView: View {
     .onChange(of: watcher.latestEvent?.id) {
       if let latestEvent = watcher.latestEvent {
         viewModel.handleEvent(event: latestEvent)
-        DispatchQueue.main.async {
+      }
+    }
+    .task {
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(10))
+        if await viewModel.fetchMessages() {
           withAnimation {
             scrollProxy?.scrollTo(Constants.bottomAnchor, anchor: .bottom)
           }
@@ -122,15 +129,6 @@ public struct ConversationDetailView: View {
   private var inputTextView: some View {
     VStack {
       HStack(alignment: .bottom, spacing: 8) {
-        if viewModel.conversation.lastStatus != nil {
-          Button {
-            routerPath.presentedSheet = .replyToStatusEditor(status: viewModel.conversation.lastStatus!)
-          } label: {
-            Image(systemName: "plus")
-          }
-          .padding(.bottom, 7)
-        }
-
         TextField("conversations.new.message.placeholder", text: $viewModel.newMessageText, axis: .vertical)
           .focused($isMessageFieldFocused)
           .keyboardType(.default)
@@ -146,6 +144,9 @@ public struct ConversationDetailView: View {
             Task {
               guard !viewModel.isSendingMessage else { return }
               await viewModel.postMessage()
+              withAnimation {
+                scrollProxy?.scrollTo(Constants.bottomAnchor, anchor: .bottom)
+              }
             }
           } label: {
             if viewModel.isSendingMessage {

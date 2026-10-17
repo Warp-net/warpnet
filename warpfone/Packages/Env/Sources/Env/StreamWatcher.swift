@@ -10,14 +10,10 @@ import OSLog
 @MainActor
 @Observable public class StreamWatcher {
   private var client: Client?
-  private var task: URLSessionWebSocketTask?
-  private var watchedStreams: [Stream] = []
-  private var instanceStreamingURL: URL?
+  private var pollTask: Task<Void, Never>?
+  private var lastSeenId: String?
 
-  private let decoder = JSONDecoder()
-  private let encoder = JSONEncoder()
-
-  private var retryDelay: Int = 10
+  private let pollInterval: Duration = .seconds(20)
 
   public enum Stream: String {
     case federated = "public"
@@ -29,148 +25,73 @@ import OSLog
   public var events: [any StreamEvent] = []
   public var unreadNotificationsCount: Int = 0
   public var latestEvent: (any StreamEvent)?
-  
+
   private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "stream")
 
   public static let shared = StreamWatcher()
-  
-  private init() {
-    decoder.keyDecodingStrategy = .convertFromSnakeCase
-  }
+  public static let lastSeenPushKey = "warpnet.pushes.last-seen"
 
-  public func setClient(client: Client, instanceStreamingURL: URL?) {
-    if self.client != nil {
-      stopWatching()
-    }
+  private init() {}
+
+  public func setClient(client: Client, instanceStreamingURL _: URL?) {
+    stopWatching()
     self.client = client
-    self.instanceStreamingURL = instanceStreamingURL
-    connect()
+    lastSeenId = nil
   }
 
-  private func connect() {
-    guard let task = try? client?.makeWebSocketTask(
-      endpoint: Streaming.streaming,
-      instanceStreamingURL: instanceStreamingURL
-    ) else {
-      return
-    }
-    self.task = task
-    self.task?.resume()
-    receiveMessage()
-  }
-
-  public func watch(streams: [Stream]) {
-    if client?.isAuth == false {
-      return
-    }
-    if task == nil {
-      connect()
-    }
-    watchedStreams = streams
-    streams.forEach { stream in
-      sendMessage(message: StreamMessage(type: "subscribe", stream: stream.rawValue))
+  public func watch(streams _: [Stream]) {
+    guard client?.isAuth == true, pollTask == nil else { return }
+    pollTask = Task { [weak self] in
+      while !Task.isCancelled {
+        await self?.poll()
+        try? await Task.sleep(for: self?.pollInterval ?? .seconds(20))
+      }
     }
   }
 
   public func stopWatching() {
-    task?.cancel()
-    task = nil
+    pollTask?.cancel()
+    pollTask = nil
   }
 
-  private func sendMessage(message: StreamMessage) {
-    if let encodedMessage = try? encoder.encode(message),
-       let stringMessage = String(data: encodedMessage, encoding: .utf8)
-    {
-      task?.send(.string(stringMessage), completionHandler: { _ in })
-    }
-  }
-
-  private func receiveMessage() {
-    task?.receive(completionHandler: { [weak self] result in
-      guard let self else { return }
-      switch result {
-      case let .success(message):
-        switch message {
-        case let .string(string):
-          do {
-            guard let data = string.data(using: .utf8) else {
-              logger.error("Error decoding streaming event string")
-              return
-            }
-            let rawEvent = try decoder.decode(RawStreamEvent.self, from: data)
-            logger.info("Stream update: \(rawEvent.event)")
-            if let event = rawEventToEvent(rawEvent: rawEvent) {
-              Task { @MainActor in
-                self.events.append(event)
-                self.latestEvent = event
-                if let event = event as? StreamEventNotification, event.notification.status?.visibility != .direct {
-                  self.unreadNotificationsCount += 1
-                }
-              }
-            }
-          } catch {
-            logger.error("Error decoding streaming event: \(error.localizedDescription)")
-          }
-
-        default:
-          break
-        }
-
-        receiveMessage()
-
-      case .failure:
-        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(retryDelay)) {
-          self.retryDelay += 30
-          self.stopWatching()
-          self.connect()
-          self.watch(streams: self.watchedStreams)
-        }
-      }
-    })
-  }
-
-  private func rawEventToEvent(rawEvent: RawStreamEvent) -> (any StreamEvent)? {
-    guard let payloadData = rawEvent.payload.data(using: .utf8) else {
-      return nil
-    }
+  private func poll() async {
+    guard let client, client.isAuth else { return }
+    let notifications: [Models.Notification]
     do {
-      switch rawEvent.event {
-      case "update":
-        let status = try decoder.decode(Status.self, from: payloadData)
-        return StreamEventUpdate(status: status)
-      case "status.update":
-        let status = try decoder.decode(Status.self, from: payloadData)
-        return StreamEventStatusUpdate(status: status)
-      case "delete":
-        return StreamEventDelete(status: rawEvent.payload)
-      case "notification":
-        let notification = try decoder.decode(Notification.self, from: payloadData)
-        return StreamEventNotification(notification: notification)
-      case "conversation":
-        let conversation = try decoder.decode(Conversation.self, from: payloadData)
-        return StreamEventConversation(conversation: conversation)
-      default:
-        return nil
-      }
+      notifications = try await client.pushes()
     } catch {
-      logger.error("Error decoding streaming event to final event: \(error.localizedDescription)")
-      logger.error("Raw data: \(rawEvent.payload)")
-      return nil
+      logger.error("Polling pushes: \(error.localizedDescription, privacy: .public)")
+      return
+    }
+    guard let newest = notifications.map(\.id).max() else { return }
+    UserDefaults.standard.set(max(UserDefaults.standard.string(forKey: Self.lastSeenPushKey) ?? newest, newest),
+                              forKey: Self.lastSeenPushKey)
+    guard let previous = lastSeenId else {
+      lastSeenId = newest
+      return
+    }
+    let fresh = notifications.filter { $0.id > previous }.sorted { $0.id < $1.id }
+    lastSeenId = max(previous, newest)
+    for notification in fresh {
+      let event = StreamEventNotification(notification: notification)
+      events.append(event)
+      latestEvent = event
+      unreadNotificationsCount += 1
     }
   }
-  
+
   public func emmitDeleteEvent(for status: String) {
     let event = StreamEventDelete(status: status)
     self.events.append(event)
     self.latestEvent = event
   }
-  
+
   public func emmitEditEvent(for status: Status) {
     let event = StreamEventStatusUpdate(status: status)
     self.events.append(event)
     self.latestEvent = event
   }
-  
+
   public func emmitPostEvent(for status: Status) {
     let event = StreamEventUpdate(status: status)
     self.events.append(event)

@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AVKit
 import DesignSystem
 import Env
@@ -12,7 +14,6 @@ extension StatusEditor {
     @Environment(Theme.self) private var theme
     @Environment(CurrentInstance.self) private var currentInstance
     var viewModel: ViewModel
-    @Binding var editingMediaContainer: MediaContainer?
 
     @State private var isErrorDisplayed: Bool = false
 
@@ -59,9 +60,8 @@ extension StatusEditor {
       private var scrollBottomPadding: CGFloat? = 0
     #endif
 
-    init(viewModel: ViewModel, editingMediaContainer: Binding<StatusEditor.MediaContainer?>) {
+    init(viewModel: ViewModel) {
       self.viewModel = viewModel
-      _editingMediaContainer = editingMediaContainer
     }
 
     private func pixel(at index: Int) -> some View {
@@ -99,15 +99,14 @@ extension StatusEditor {
               makeRemoteMediaView(mediaAttachement: attachement)
             } else if container.image != nil {
               makeLocalImageView(container: container)
+            } else if viewModel.mode.isInShareExtension {
+              sharedMediaView
             } else if let error = container.error as? ServerError {
               makeErrorView(error: error)
             } else {
               placeholderView
             }
           }
-      }
-      .overlay(alignment: .bottomTrailing) {
-        makeAltMarker(container: container)
       }
       .overlay(alignment: .topTrailing) {
         makeDiscardMarker(container: container)
@@ -123,12 +122,12 @@ extension StatusEditor {
       ZStack(alignment: .center) {
         Image(uiImage: container.image!)
           .resizable()
-          .blur(radius: container.mediaAttachment == nil ? 20 : 0)
+          .blur(radius: container.mediaAttachment == nil && !viewModel.mode.isInShareExtension ? 20 : 0)
           .scaledToFill()
           .cornerRadius(8)
         if container.error != nil {
           Text("status.editor.error.upload")
-        } else if container.mediaAttachment == nil {
+        } else if container.mediaAttachment == nil, !viewModel.mode.isInShareExtension {
           ProgressView()
         }
       }
@@ -164,17 +163,7 @@ extension StatusEditor {
 
     @ViewBuilder
     private func makeImageMenu(container: MediaContainer) -> some View {
-      if container.mediaAttachment?.url != nil {
-        if currentInstance.isEditAltTextSupported || !viewModel.mode.isEditing {
-          Button {
-            editingMediaContainer = container
-          } label: {
-            Label(container.mediaAttachment?.description?.isEmpty == false ?
-              "status.editor.description.edit" : "status.editor.description.add",
-              systemImage: "pencil.line")
-          }
-        }
-      } else if container.error != nil {
+      if container.mediaAttachment?.url == nil, container.error != nil {
         Button {
           isErrorDisplayed = true
         } label: {
@@ -201,19 +190,6 @@ extension StatusEditor {
       }
     }
 
-    private func makeAltMarker(container: MediaContainer) -> some View {
-      Button {
-        editingMediaContainer = container
-      } label: {
-        Text("status.image.alt-text.abbreviation")
-          .font(.caption2)
-      }
-      .padding(8)
-      .background(.thinMaterial)
-      .cornerRadius(8)
-      .padding(4)
-    }
-
     private func makeDiscardMarker(container: MediaContainer) -> some View {
       Button(role: .destructive) {
         deleteAction(container: container)
@@ -237,6 +213,18 @@ extension StatusEditor {
       viewModel.mediaContainers.removeAll {
         $0.id == container.id
       }
+    }
+
+    private var sharedMediaView: some View {
+      ZStack(alignment: .center) {
+        Rectangle()
+          .foregroundColor(theme.secondaryBackgroundColor)
+          .accessibilityHidden(true)
+        Image(systemName: "film")
+          .font(.largeTitle)
+          .foregroundStyle(.secondary)
+      }
+      .cornerRadius(8)
     }
 
     private var placeholderView: some View {

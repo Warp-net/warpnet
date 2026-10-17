@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 import SwiftSoup
 import SwiftUI
@@ -140,7 +142,7 @@ public struct HTMLString: Codable, Equatable, Hashable, @unchecked Sendable {
         let href = try node.attr("href")
         if href != "" {
           if let url = URL(string: href),
-             let _ = Int(url.lastPathComponent)
+             Int(url.lastPathComponent) != nil || (url.scheme == "warpnet" && url.host == "status")
           {
             statusesURLs.append(url)
           }

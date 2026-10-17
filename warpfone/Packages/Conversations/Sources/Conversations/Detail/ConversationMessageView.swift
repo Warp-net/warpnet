@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -16,9 +18,6 @@ struct ConversationMessageView: View {
 
   let message: Status
   let conversation: Conversation
-
-  @State private var isLiked: Bool = false
-  @State private var isBookmarked: Bool = false
 
   var body: some View {
     let isOwnMessage = message.account.id == currentAccount.account?.id
@@ -51,11 +50,6 @@ struct ConversationMessageView: View {
         .cornerRadius(8)
         .padding(.leading, isOwnMessage ? 24 : 0)
         .padding(.trailing, isOwnMessage ? 0 : 24)
-        .overlay {
-          if isLiked, message.account.id != currentAccount.account?.id {
-            likeView
-          }
-        }
         .contextMenu {
           contextMenu
         }
@@ -71,97 +65,44 @@ struct ConversationMessageView: View {
           .padding(.trailing, isOwnMessage ? 0 : 24)
       }
 
-      if message.id == String(conversation.lastStatus?.id ?? "") {
-        HStack {
-          if isOwnMessage {
-            Spacer()
-          }
-          Group {
-            Text(message.createdAt.shortDateFormatted) +
-              Text(" ")
-            Text(message.createdAt.asDate, style: .time)
-          }
-          .font(.scaledFootnote)
-          .foregroundStyle(.secondary)
-          if !isOwnMessage {
-            Spacer()
-          }
+      HStack {
+        if isOwnMessage {
+          Spacer()
+        }
+        Group {
+          Text(message.createdAt.shortDateFormatted) +
+            Text(" ")
+          Text(message.createdAt.asDate, style: .time)
+        }
+        .font(.scaledFootnote)
+        .foregroundStyle(.secondary)
+        if !isOwnMessage {
+          Spacer()
         }
       }
-    }
-    .onAppear {
-      isLiked = message.favourited == true
-      isBookmarked = message.bookmarked == true
     }
   }
 
   @ViewBuilder
   private var contextMenu: some View {
     Button {
-      routerPath.navigate(to: .statusDetail(id: message.id))
-    } label: {
-      Label("conversations.action.view-detail", systemImage: "arrow.forward")
-    }
-    Button {
       UIPasteboard.general.string = message.content.asRawText
     } label: {
       Label("status.action.copy-text", systemImage: "doc.on.doc")
-    }
-    Button {
-      Task {
-        do {
-          let status: Status
-          if isLiked {
-            status = try await client.post(endpoint: Statuses.unfavorite(id: message.id))
-          } else {
-            status = try await client.post(endpoint: Statuses.favorite(id: message.id))
-          }
-          withAnimation {
-            isLiked = status.favourited == true
-          }
-        } catch {}
-      }
-    } label: {
-      Label(isLiked ? "status.action.unfavorite" : "status.action.favorite",
-            systemImage: isLiked ? "star.fill" : "star")
-    }
-    Button { Task {
-      do {
-        let status: Status
-        if isBookmarked {
-          status = try await client.post(endpoint: Statuses.unbookmark(id: message.id))
-        } else {
-          status = try await client.post(endpoint: Statuses.bookmark(id: message.id))
-        }
-        withAnimation {
-          isBookmarked = status.bookmarked == true
-        }
-      } catch {}
-    } } label: {
-      Label(isBookmarked ? "status.action.unbookmark" : "status.action.bookmark",
-            systemImage: isBookmarked ? "bookmark.fill" : "bookmark")
     }
     Divider()
     if message.account.id == currentAccount.account?.id {
       Button("status.action.delete", role: .destructive) {
         Task {
-          _ = try await client.delete(endpoint: Statuses.status(id: message.id))
+          _ = try? await client.delete(endpoint: Chats.deleteMessage(chatId: conversation.id, messageId: message.id))
+          StreamWatcher.shared.emmitDeleteEvent(for: message.id)
         }
       }
     } else {
-      Section(message.reblog?.account.acct ?? message.account.acct) {
-        Button {
-          routerPath.presentedSheet = .mentionStatusEditor(account: message.reblog?.account ?? message.account, visibility: .pub)
-        } label: {
-          Label("status.action.mention", systemImage: "at")
-        }
-      }
-      Section {
-        Button(role: .destructive) {
-          routerPath.presentedSheet = .report(status: message.reblogAsAsStatus ?? message)
-        } label: {
-          Label("status.action.report", systemImage: "exclamationmark.bubble")
-        }
+      Button(role: .destructive) {
+        routerPath.presentedSheet = .reportAccount(account: message.account)
+      } label: {
+        Label("warpnet.report.account-action", systemImage: "exclamationmark.bubble")
       }
     }
   }
@@ -211,18 +152,6 @@ struct ConversationMessageView: View {
 #else
       quickLook.prepareFor(selectedMediaAttachment: attachement, mediaAttachments: [attachement])
 #endif
-    }
-  }
-
-  private var likeView: some View {
-    HStack {
-      Spacer()
-      VStack {
-        Image(systemName: "star.fill")
-          .foregroundColor(.yellow)
-          .offset(x: -16, y: -7)
-        Spacer()
-      }
     }
   }
 }

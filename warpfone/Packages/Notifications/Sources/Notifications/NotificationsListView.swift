@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -105,11 +107,9 @@ public struct NotificationsListView: View {
       }
     }
     .refreshable {
-      SoundEffectManager.shared.playSound(.pull)
       HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.3))
       await viewModel.fetchNotifications()
       HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.7))
-      SoundEffectManager.shared.playSound(.refresh)
     }
     .onChange(of: watcher.latestEvent?.id) {
       if let latestEvent = watcher.latestEvent {

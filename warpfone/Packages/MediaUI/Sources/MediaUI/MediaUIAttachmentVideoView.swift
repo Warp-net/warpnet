@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AVKit
 import DesignSystem
 import Env
@@ -7,6 +9,8 @@ import Models
 
 @MainActor
 @Observable public class MediaUIAttachmentVideoViewModel {
+  public static var makePlayerItem: (URL) -> AVPlayerItem = { AVPlayerItem(url: $0) }
+
   var player: AVPlayer?
   let url: URL
   let forceAutoPlay: Bool
@@ -18,7 +22,7 @@ import Models
   }
 
   func preparePlayer(autoPlay: Bool, isCompact: Bool) {
-    player = .init(url: url)
+    player = .init(playerItem: Self.makePlayerItem(url))
     player?.audiovisualBackgroundPlaybackPolicy = .pauses
     #if !os(visionOS)
     player?.preventsDisplaySleepDuringVideoPlayback = false

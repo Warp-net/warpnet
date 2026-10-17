@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -41,6 +43,13 @@ struct StatusRowDetailView: View {
       .font(.scaledCaption)
       .foregroundStyle(.secondary)
 
+      if let views = viewModel.finalStatus.viewsCount, views > 0 {
+        Divider()
+        Label("warpnet.status.views-\(views)", systemImage: "eye")
+          .font(.scaledCaption)
+          .foregroundStyle(.secondary)
+      }
+
       if let editedAt = viewModel.status.editedAt {
         Divider()
         HStack {
@@ -50,10 +59,6 @@ struct StatusRowDetailView: View {
             Text(editedAt.asDate, style: .time)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onTapGesture {
-          viewModel.routerPath.presentedSheet = .statusEditHistory(status: viewModel.status.id)
-        }
-        .underline()
         .font(.scaledCaption)
         .foregroundStyle(.secondary)
       }

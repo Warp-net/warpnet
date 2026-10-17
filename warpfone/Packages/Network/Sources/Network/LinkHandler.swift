@@ -1,19 +1,23 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
-import RegexBuilder
 
 public struct LinkHandler {
   public let rawLink: String
 
+  public init(rawLink: String) {
+    self.rawLink = rawLink
+  }
+
+  public init(maxId: String) {
+    let encoded = maxId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? maxId
+    rawLink = "<warpnet://next?max_id=\(encoded)>; rel=\"next\""
+  }
+
   public var maxId: String? {
-    do {
-      let regex = try Regex("max_id=[0-9]+")
-      if let match = rawLink.firstMatch(of: regex) {
-        return match.output.first?.substring?.replacingOccurrences(of: "max_id=", with: "")
-      }
-    } catch {
-      return nil
-    }
-    return nil
+    guard let range = rawLink.range(of: #"max_id=[^&>;\s]+"#, options: .regularExpression) else { return nil }
+    let value = String(rawLink[range].dropFirst("max_id=".count))
+    return value.removingPercentEncoding ?? value
   }
 }
 

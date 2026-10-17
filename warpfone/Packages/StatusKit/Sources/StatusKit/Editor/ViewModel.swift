@@ -60,21 +60,13 @@ extension StatusEditor {
       didSet {
         let range = selectedRange
         processText()
-        checkEmbed()
         textView?.attributedText = statusText
         selectedRange = range
       }
     }
 
-    private var urlLengthAdjustments: Int = 0
-    private let maxLengthOfUrl = 23
-
-    private var spoilerTextCount: Int {
-      spoilerOn ? spoilerText.utf16.count : 0
-    }
-
     var statusTextCharacterLength: Int {
-      urlLengthAdjustments - statusText.string.utf16.count - spoilerTextCount
+      -statusText.string.utf8.count
     }
 
     private var itemsProvider: [NSItemProvider]?
@@ -118,8 +110,6 @@ extension StatusEditor {
     var replyToStatus: Status?
     var embeddedStatus: Status?
 
-    var customEmojiContainer: [CategorizedEmojiContainer] = []
-
     var postingError: String?
     var showPostingErrorAlert: Bool = false
 
@@ -128,19 +118,7 @@ extension StatusEditor {
     }
 
     var shouldDisablePollButton: Bool {
-      !mediaContainers.isEmpty
-    }
-      
-    var allMediaHasDescription: Bool {
-        var everyMediaHasAltText: Bool = true;
-        mediaContainers.forEach { mediaContainer in
-            if (((mediaContainer.mediaAttachment?.description) == nil) ||
-                mediaContainer.mediaAttachment?.description?.count == 0) {
-                everyMediaHasAltText = false
-            }
-        }
-        
-        return everyMediaHasAltText;
+      !mediaContainers.isEmpty || mode.isInShareExtension
     }
 
     var shouldDisplayDismissWarning: Bool {
@@ -156,14 +134,15 @@ extension StatusEditor {
     var visibility: Models.Visibility = .pub
 
     var mentionsSuggestions: [Account] = []
-    var tagsSuggestions: [Tag] = []
-    var showRecentsTagsInline: Bool = false
     var selectedLanguage: String?
     var hasExplicitlySelectedLanguage: Bool = false
     private var currentSuggestionRange: NSRange?
 
-    private var embeddedStatusURL: URL? {
-      URL(string: embeddedStatus?.reblog?.url ?? embeddedStatus?.url ?? "")
+    private var quotedStatusId: String? {
+      if case let .quote(status) = mode {
+        return status.id
+      }
+      return nil
     }
 
     private var mentionString: String?
@@ -200,10 +179,6 @@ extension StatusEditor {
     func postStatus() async -> Status? {
       guard let client else { return nil }
       do {
-        if (!allMediaHasDescription && UserPreferences.shared.appRequireAltText) {
-          throw PostError.missingAltText
-        }
-          
         if postingTimer == nil {
           Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
             Task { @MainActor in
@@ -232,7 +207,8 @@ extension StatusEditor {
                               mediaIds: mediaContainers.compactMap { $0.mediaAttachment?.id },
                               poll: pollData,
                               language: selectedLanguage,
-                              mediaAttributes: mediaAttributes)
+                              mediaAttributes: mediaAttributes,
+                              quotedStatusId: quotedStatusId)
         switch mode {
         case .new, .replyTo, .quote, .mention, .shareExtension:
           postStatus = try await client.post(endpoint: Statuses.postStatus(json: data))
@@ -358,10 +334,6 @@ extension StatusEditor {
         }
       case let .quote(status):
         embeddedStatus = status
-        if let url = embeddedStatusURL {
-          statusText = .init(string: "\n\nFrom: @\(status.reblog?.account.acct ?? status.account.acct)\n\(url)")
-          selectedRange = .init(location: 0, length: 0)
-        }
       }
     }
 
@@ -372,22 +344,17 @@ extension StatusEditor {
                                 .backgroundColor: UIColor.clear,
                                 .underlineColor: UIColor.clear],
                                range: NSMakeRange(0, statusText.string.utf16.count))
-      let hashtagPattern = "(#+[\\w0-9(_)]{0,})"
       let mentionPattern = "(@+[a-zA-Z0-9(_).-]{1,})"
       let urlPattern = "(?i)https?://(?:www\\.)?\\S+(?:/|\\b)"
 
       do {
-        let hashtagRegex = try NSRegularExpression(pattern: hashtagPattern, options: [])
         let mentionRegex = try NSRegularExpression(pattern: mentionPattern, options: [])
         let urlRegex = try NSRegularExpression(pattern: urlPattern, options: [])
 
         let range = NSMakeRange(0, statusText.string.utf16.count)
-        var ranges = hashtagRegex.matches(in: statusText.string,
+        let ranges = mentionRegex.matches(in: statusText.string,
                                           options: [],
                                           range: range).map(\.range)
-        ranges.append(contentsOf: mentionRegex.matches(in: statusText.string,
-                                                       options: [],
-                                                       range: range).map(\.range))
 
         let urlRanges = urlRegex.matches(in: statusText.string,
                                          options: [],
@@ -410,20 +377,12 @@ extension StatusEditor {
           resetAutoCompletion()
         }
 
-        var totalUrlLength = 0
-        var numUrls = 0
-
         for range in urlRanges {
-          numUrls += 1
-          totalUrlLength += range.length
-
           statusText.addAttributes([.foregroundColor: UIColor(theme?.tintColor ?? .brand),
                                     .underlineStyle: NSUnderlineStyle.single.rawValue,
                                     .underlineColor: UIColor(theme?.tintColor ?? .brand)],
                                    range: NSRange(location: range.location, length: range.length))
         }
-
-        urlLengthAdjustments = totalUrlLength - (maxLengthOfUrl * numUrls)
 
         statusText.enumerateAttributes(in: range) { attributes, range, _ in
           if attributes[.link] != nil {
@@ -547,17 +506,6 @@ extension StatusEditor {
       return options.isEmpty ? nil : options
     }
 
-    // MARK: - Embeds
-
-    private func checkEmbed() {
-      if let url = embeddedStatusURL,
-         !statusText.string.contains(url.absoluteString)
-      {
-        embeddedStatus = nil
-        mode = .new(visibility: visibility)
-      }
-    }
-
     // MARK: - Autocomplete
 
     private func loadAutoCompleteResults(query: String) {
@@ -566,28 +514,7 @@ extension StatusEditor {
       suggestedTask?.cancel()
       suggestedTask = Task {
         do {
-          var results: SearchResults?
           switch query.first {
-          case "#":
-            if query.utf8.count == 1 {
-              withAnimation {
-                showRecentsTagsInline = true
-              }
-              return
-            }
-            showRecentsTagsInline = false
-            query.removeFirst()
-            results = try await client.get(endpoint: Search.search(query: query,
-                                                                   type: "hashtags",
-                                                                   offset: 0,
-                                                                   following: nil),
-                                           forceVersion: .v2)
-            guard !Task.isCancelled else {
-              return
-            }
-            withAnimation {
-              tagsSuggestions = results?.hashtags.sorted(by: { $0.totalUses > $1.totalUses }) ?? []
-            }
           case "@":
             guard query.utf8.count > 1 else { return }
             query.removeFirst()
@@ -610,15 +537,11 @@ extension StatusEditor {
     }
 
     private func resetAutoCompletion() {
-      if !tagsSuggestions.isEmpty ||
-          !mentionsSuggestions.isEmpty ||
-          currentSuggestionRange != nil ||
-          showRecentsTagsInline {
+      if !mentionsSuggestions.isEmpty ||
+          currentSuggestionRange != nil {
         withAnimation {
-          tagsSuggestions = []
           mentionsSuggestions = []
           currentSuggestionRange = nil
-          showRecentsTagsInline = false
         }
       }
     }
@@ -626,12 +549,6 @@ extension StatusEditor {
     func selectMentionSuggestion(account: Account) {
       if let range = currentSuggestionRange {
         replaceTextWith(text: "@\(account.acct) ", inRange: range)
-      }
-    }
-
-    func selectHashtagSuggestion(tag: String) {
-      if let range = currentSuggestionRange {
-        replaceTextWith(text: "#\(tag) ", inRange: range)
       }
     }
 
@@ -722,6 +639,7 @@ extension StatusEditor {
     }
 
     func upload(container: MediaContainer) async {
+      guard !mode.isInShareExtension else { return }
       if let index = indexOf(container: container) {
         let originalContainer = mediaContainers[index]
         guard originalContainer.mediaAttachment == nil else { return }
@@ -831,29 +749,37 @@ extension StatusEditor {
       }
     }
 
-    func addDescription(container: MediaContainer, description: String) async {
-      guard let client, let attachment = container.mediaAttachment else { return }
-      if let index = indexOf(container: container) {
-        do {
-          let media: MediaAttachment = try await client.put(endpoint: Media.media(id: attachment.id,
-                                                                                  json: .init(description: description)))
-          mediaContainers[index] = MediaContainer(
-            id: container.id,
-            image: nil,
-            movieTransferable: nil,
-            gifTransferable: nil,
-            mediaAttachment: media,
-            error: nil
-          )
-        } catch { }
-      }
-    }
-
     private var mediaAttributes: [StatusData.MediaAttribute] = []
-    func editDescription(container: MediaContainer, description: String) async {
-      guard let attachment = container.mediaAttachment else { return }
-      if indexOf(container: container) != nil {
-        mediaAttributes.append(StatusData.MediaAttribute(id: attachment.id, description: description, thumbnail: nil, focus: nil))
+
+    func queueSharedPost() async -> Bool {
+      do {
+        let directory = SharedStore.directory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let compressor = Compressor()
+        var files: [String] = []
+        for container in mediaContainers {
+          if let image = container.image {
+            let name = "\(UUID().uuidString).jpg"
+            try await compressor.compressImageForUpload(image).write(to: directory.appending(path: name))
+            files.append(name)
+          } else if let url = container.movieTransferable?.url,
+                    let compressed = await compressor.compressVideo(url)
+          {
+            let name = "\(UUID().uuidString).\(compressed.pathExtension.isEmpty ? "mp4" : compressed.pathExtension)"
+            try FileManager.default.copyItem(at: compressed, to: directory.appending(path: name))
+            files.append(name)
+          } else if let gif = container.gifTransferable?.data {
+            let name = "\(UUID().uuidString).gif"
+            try gif.write(to: directory.appending(path: name))
+            files.append(name)
+          }
+        }
+        try SharedStore.enqueue(SharedPost(content: statusText.string, mediaFiles: files))
+        return true
+      } catch {
+        postingError = error.localizedDescription
+        showPostingErrorAlert = true
+        return false
       }
     }
 
@@ -865,39 +791,6 @@ extension StatusEditor {
                                           mimeType: mimeType,
                                           filename: "file",
                                           data: data)
-    }
-
-    // MARK: - Custom emojis
-
-    func fetchCustomEmojis() async {
-      typealias EmojiContainer = CategorizedEmojiContainer
-
-      guard let client else { return }
-      do {
-        let customEmojis: [Emoji] = try await client.get(endpoint: CustomEmojis.customEmojis) ?? []
-        var emojiContainers: [EmojiContainer] = []
-
-        customEmojis.reduce([String: [Emoji]]()) { currentDict, emoji in
-          var dict = currentDict
-          let category = emoji.category ?? "Custom"
-
-          if let emojis = dict[category] {
-            dict[category] = emojis + [emoji]
-          } else {
-            dict[category] = [emoji]
-          }
-
-          return dict
-        }.sorted(by: { lhs, rhs in
-          if rhs.key == "Custom" { false }
-          else if lhs.key == "Custom" { true }
-          else { lhs.key < rhs.key }
-        }).forEach { key, value in
-          emojiContainers.append(.init(categoryName: key, emojis: value))
-        }
-
-        customEmojiContainer = emojiContainers
-      } catch {}
     }
   }
 }

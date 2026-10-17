@@ -89,4 +89,5 @@ fastlane/test_output
 
 iOSInjectionProject/
 .DS_Store
-IceCubesApp.xcconfig
+WarpnetApp.xcconfig
+Warpnet.xcframework/

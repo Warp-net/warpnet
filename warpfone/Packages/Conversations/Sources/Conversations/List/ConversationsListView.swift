@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -8,7 +10,6 @@ import SwiftUI
 public struct ConversationsListView: View {
   @Environment(UserPreferences.self) private var preferences
   @Environment(RouterPath.self) private var routerPath
-  @Environment(StreamWatcher.self) private var watcher
   @Environment(Client.self) private var client
   @Environment(Theme.self) private var theme
 
@@ -86,11 +87,6 @@ public struct ConversationsListView: View {
       #endif
       .navigationTitle("conversations.navigation-title")
       .navigationBarTitleDisplayMode(.inline)
-      .onChange(of: watcher.latestEvent?.id) {
-        if let latestEvent = watcher.latestEvent {
-          viewModel.handleEvent(event: latestEvent)
-        }
-      }
       .onChange(of: scrollToTopSignal) {
         withAnimation {
           proxy.scrollTo(ScrollToView.Constants.scrollToTop, anchor: .top)
@@ -100,11 +96,9 @@ public struct ConversationsListView: View {
         // note: this Task wrapper should not be necessary, but it reportedly crashes without it
         // when refreshing on an empty list
         Task {
-          SoundEffectManager.shared.playSound(.pull)
           HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.3))
           await viewModel.fetchConversations()
           HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.7))
-          SoundEffectManager.shared.playSound(.refresh)
         }
       }
       .onAppear {

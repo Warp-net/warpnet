@@ -1,8 +1,10 @@
+// Modified by Warpnet. See NOTICE.
+
 import SwiftUI
 
 public extension Color {
   static var brand: Color {
-    Color(red: 187 / 255, green: 59 / 255, blue: 226 / 255)
+    Color(hex: 0xC5007F)
   }
 
   static var primaryBackground: Color {

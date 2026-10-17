@@ -1,6 +1,9 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Foundation
+import Models
 import Network
 import SwiftUI
 
@@ -50,21 +53,18 @@ struct StatusRowContextMenu: View {
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))
-          SoundEffectManager.shared.playSound(.favorite)
           await statusDataController.toggleFavorite(remoteStatus: nil)
         } } label: {
-          Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "star.fill" : "star")
+          Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "heart.fill" : "heart")
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))
-          SoundEffectManager.shared.playSound(.boost)
           await statusDataController.toggleReblog(remoteStatus: nil)
         } } label: {
           boostLabel
         }
         .disabled(viewModel.status.visibility == .direct || viewModel.status.visibility == .priv && viewModel.status.account.id != account.account?.id)
         Button { Task {
-          SoundEffectManager.shared.playSound(.bookmark)
           HapticManager.shared.fireHaptic(.notification(.success))
           await statusDataController.toggleBookmark(remoteStatus: nil)
         } } label: {
@@ -133,12 +133,6 @@ struct StatusRowContextMenu: View {
       }
     }
 
-    if let url = URL(string: viewModel.status.reblog?.url ?? viewModel.status.url ?? "") {
-      Button { UIApplication.shared.open(url) } label: {
-        Label("status.action.view-in-browser", systemImage: "safari")
-      }
-    }
-
     Button {
       UIPasteboard.general.string = viewModel.status.reblog?.content.asRawText ?? viewModel.status.content.asRawText
     } label: {
@@ -155,16 +149,6 @@ struct StatusRowContextMenu: View {
       UIPasteboard.general.string = viewModel.status.reblog?.url ?? viewModel.status.url
     } label: {
       Label("status.action.copy-link", systemImage: "link")
-    }
-
-    if let lang = preferences.serverPreferences?.postLanguage ?? Locale.current.language.languageCode?.identifier {
-      Button {
-        Task {
-          await viewModel.translate(userLang: lang)
-        }
-      } label: {
-        Label("status.action.translate", systemImage: "captions.bubble")
-      }
     }
 
     if account.account?.id == viewModel.status.reblog?.account.id ?? viewModel.status.account.id {
@@ -257,11 +241,12 @@ struct StatusRowContextMenu: View {
       Label("status.action.mention", systemImage: "at")
     }
     Button {
-      #if targetEnvironment(macCatalyst) || os(visionOS)
-        openWindow(value: WindowDestinationEditor.mentionStatusEditor(account: viewModel.status.reblog?.account ?? viewModel.status.account, visibility: .direct))
-      #else
-        viewModel.routerPath.presentedSheet = .mentionStatusEditor(account: viewModel.status.reblog?.account ?? viewModel.status.account, visibility: .direct)
-      #endif
+      Task {
+        let account = viewModel.status.reblog?.account ?? viewModel.status.account
+        if let conversation: Conversation = try? await client.post(endpoint: Chats.open(accountId: account.id)) {
+          viewModel.routerPath.navigate(to: .conversationDetail(conversation: conversation))
+        }
+      }
     } label: {
       Label("status.action.message", systemImage: "tray.full")
     }
