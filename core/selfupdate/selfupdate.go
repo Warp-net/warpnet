@@ -72,6 +72,7 @@ const (
 const (
 	archAMD64 = "amd64"
 	archARM64 = "arm64"
+	osLinux   = "linux"
 )
 
 // ReleaseSource resolves the newest published release.
@@ -125,7 +126,7 @@ func (a Artifact) isSupported() bool {
 // RelayArtifact returns the relay asset for the running platform. Releases
 // publish the relay for linux/amd64 only.
 func RelayArtifact() Artifact {
-	if runtime.GOOS != "linux" || runtime.GOARCH != archAMD64 {
+	if runtime.GOOS != osLinux || runtime.GOARCH != archAMD64 {
 		return Artifact{}
 	}
 	return Artifact{
@@ -136,9 +137,23 @@ func RelayArtifact() Artifact {
 	}
 }
 
+// ModeratorArtifact returns the moderator asset for the running platform.
+// Releases publish the moderator for linux/amd64 only.
+func ModeratorArtifact() Artifact {
+	if runtime.GOOS != osLinux || runtime.GOARCH != archAMD64 {
+		return Artifact{}
+	}
+	return Artifact{
+		AssetName:     "moderator_linux_amd64.tar.gz",
+		ChecksumName:  "moderator_linux_amd64_checksums.txt",
+		SignatureName: "moderator_linux_amd64_checksums.txt.sig",
+		BinaryName:    "moderator",
+	}
+}
+
 func MemberArtifact() Artifact {
 	switch runtime.GOOS {
-	case "linux":
+	case osLinux:
 		if runtime.GOARCH != archAMD64 && runtime.GOARCH != archARM64 {
 			return Artifact{}
 		}

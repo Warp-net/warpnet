@@ -603,6 +603,19 @@ func TestMemberArtifact(t *testing.T) {
 	}
 }
 
+func TestModeratorArtifact(t *testing.T) {
+	a := ModeratorArtifact()
+	if runtime.GOOS != "linux" || runtime.GOARCH != archAMD64 {
+		assert.False(t, a.isSupported(), "no release publishes a moderator asset for %s/%s", runtime.GOOS, runtime.GOARCH)
+		return
+	}
+	require.True(t, a.isSupported())
+	assert.Equal(t, "moderator_linux_amd64.tar.gz", a.AssetName)
+	assert.Equal(t, "moderator_linux_amd64_checksums.txt", a.ChecksumName)
+	assert.Equal(t, "moderator_linux_amd64_checksums.txt.sig", a.SignatureName)
+	assert.Equal(t, "moderator", a.BinaryName)
+}
+
 func TestArtifactSupport(t *testing.T) {
 	assert.False(t, Artifact{}.isSupported())
 	assert.False(t, Artifact{AssetName: testAsset}.isSupported())
