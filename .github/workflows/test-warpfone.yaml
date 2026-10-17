@@ -1,0 +1,27 @@
+name: Tests / Warpfone
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'warpfone/**'
+      - 'event/paths.go'
+      - '.github/workflows/test-warpfone.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  transport:
+    name: WarpnetTransport
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check ProtocolIds against event/paths.go
+        run: |
+          warpfone/scripts/generate-protocol-ids.sh
+          git diff --exit-code -- warpfone/Packages/WarpnetTransport/Sources/WarpnetTransport/ProtocolIds.swift
+
+      - name: Run tests
+        run: swift test --package-path warpfone/Packages/WarpnetTransport
