@@ -340,3 +340,16 @@ carry that line, so they are named here instead.
   of Explore.
 - Files without the notice line:
   WarpnetApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-18, build
+- The app builds with Xcode 26 and the iOS 26 SDK again. StreamWatcher names
+  Swift.Duration, which Env's own Duration shadowed. The content filter label
+  uses an SF Symbol name, and SFSafeSymbols was dropped from the project.
+  HTMLString names SwiftSoup.Document, which SwiftUI's Document makes
+  ambiguous. The resolved packages move to EmojiText 4.4.0, swift-markdown
+  and swift-cmark 0.9.0, Nuke 12.9.0, SwiftSoup 2.14.3, SwiftUI-Introspect
+  1.5.0, LRUCache 1.3.0 and ButtonKit 0.8.1, and the unused libwebp-xcode pin
+  is gone.
+- Files without the notice line:
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved

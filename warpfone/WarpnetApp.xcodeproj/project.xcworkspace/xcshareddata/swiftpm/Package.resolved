@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Dean151/ButtonKit",
       "state" : {
-        "revision" : "377f5bab4ed047704316d531e0826d4de5ebf6a4",
-        "version" : "0.1.1"
+        "revision" : "8ea442e22cc396960aba246bf03d967842aeedb9",
+        "version" : "0.8.1"
       }
     },
     {
@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/divadretlaw/EmojiText",
       "state" : {
-        "revision" : "c54000aa9ccc048619054a5a2da2ce0576ffea18",
-        "version" : "4.0.1"
+        "revision" : "9e31e12b89ba00339bc3ba841befaaee8a306c55",
+        "version" : "4.4.0"
       }
     },
     {
@@ -28,21 +28,12 @@
       }
     },
     {
-      "identity" : "libwebp-xcode",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/SDWebImage/libwebp-Xcode",
-      "state" : {
-        "revision" : "b2b1d20a90b14d11f6ef4241da6b81c1d3f171e4",
-        "version" : "1.3.2"
-      }
-    },
-    {
       "identity" : "lrucache",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nicklockwood/LRUCache",
       "state" : {
-        "revision" : "6d2b5246c9c98dcd498552bb22f08d55b12a8371",
-        "version" : "1.0.4"
+        "revision" : "f0570e943ea4445d258113ba73f50cb2b7e564ac",
+        "version" : "1.3.0"
       }
     },
     {
@@ -50,26 +41,17 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/kean/Nuke",
       "state" : {
-        "revision" : "15fde63470d782c897816a74bdd516a907e33147",
-        "version" : "12.3.0"
-      }
-    },
-    {
-      "identity" : "sfsafesymbols",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/SFSafeSymbols/SFSafeSymbols",
-      "state" : {
-        "revision" : "7cca2d60925876b5953a2cf7341cd80fbeac983c",
-        "version" : "4.1.1"
+        "revision" : "83e19143355b02e9261edb2323b3e1e93287ebb9",
+        "version" : "12.9.0"
       }
     },
     {
       "identity" : "swift-cmark",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-cmark.git",
+      "location" : "https://github.com/swiftlang/swift-cmark.git",
       "state" : {
-        "revision" : "f218e5d7691f78b55bfa39b367763f4612486c35",
-        "version" : "0.3.0"
+        "revision" : "08ddb528923cc1a6527e02b7a1aee9e516ca749a",
+        "version" : "0.9.0"
       }
     },
     {
@@ -77,8 +59,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-markdown",
       "state" : {
-        "revision" : "e4f95e2dc23097a1a9a1dfdfe3fe3ee44de77378",
-        "version" : "0.3.0"
+        "revision" : "25cb61d3482054b09ae76ca4f281b1bfe7fe5a43",
+        "version" : "0.9.0"
       }
     },
     {
@@ -86,8 +68,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/scinfu/SwiftSoup.git",
       "state" : {
-        "revision" : "8b6cf29eead8841a1fa7822481cb3af4ddaadba6",
-        "version" : "2.6.1"
+        "revision" : "e7f85f4d3dd91ca9a1e94d3328aa1ed5120a8c0f",
+        "version" : "2.14.3"
       }
     },
     {
@@ -95,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/siteline/SwiftUI-Introspect.git",
       "state" : {
-        "revision" : "9e1cc02a65b22e09a8251261cccbccce02731fc5",
-        "version" : "1.1.1"
+        "revision" : "38e59fc76180f51798faed506aa36fc2acf20661",
+        "version" : "1.5.0"
       }
     }
   ],

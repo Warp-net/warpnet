@@ -3,11 +3,13 @@
 The iOS client of Warpnet. It starts from Ice Cubes 1.10.31, the last Apache-2.0
 release of the SwiftUI Mastodon client by Thomas Ricouard (see [NOTICE](NOTICE)).
 
-Status: the app pairs with a Warpnet node by QR code and reads timelines,
-threads, profiles and notifications from it. Screens for features the node does
-not have are still there and fail; removing them is the next step.
+Status: the app pairs with a Warpnet node by QR code and covers what the node
+serves: timelines, threads, profiles, tweets, reactions, retweets and quotes,
+chats and notifications. Screens for features the node does not have were
+removed. It has not been through App Review yet.
 
-Building needs macOS with Xcode 15 or later; the deployment target is iOS 17.
+Building needs macOS with Xcode 26 or later, since App Store Connect takes only
+builds made with the iOS 26 SDK; the deployment target is iOS 17.
 The app links the Warpnet node as `Warpnet.xcframework`, which is not committed:
 run `scripts/build-xcframework.sh` first (it needs Go, see the root `go.mod`).
 The framework is built from `node/`, warpfone's own copy of the gomobile node.

@@ -13,7 +13,7 @@ import OSLog
   private var pollTask: Task<Void, Never>?
   private var lastSeenId: String?
 
-  private let pollInterval: Duration = .seconds(20)
+  private let pollInterval: Swift.Duration = .seconds(20)
 
   public enum Stream: String {
     case federated = "public"

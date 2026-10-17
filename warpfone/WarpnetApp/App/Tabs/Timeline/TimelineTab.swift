@@ -122,7 +122,7 @@ struct TimelineTab: View {
     Button(action: {
       routerPath.presentedSheet = .timelineContentFilter
     }, label: {
-      Label("timeline.content-filter.title", systemSymbol: .line3HorizontalDecrease)
+      Label("timeline.content-filter.title", systemImage: "line.3.horizontal.decrease")
     })
   }
 

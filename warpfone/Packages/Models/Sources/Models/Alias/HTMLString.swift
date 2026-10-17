@@ -50,7 +50,7 @@ public struct HTMLString: Codable, Equatable, Hashable, @unchecked Sendable {
 
       asMarkdown = ""
       do {
-        let document: Document = try SwiftSoup.parse(htmlValue)
+        let document: SwiftSoup.Document = try SwiftSoup.parse(htmlValue)
         handleNode(node: document)
 
         document.outputSettings(OutputSettings().prettyPrint(pretty: false))
