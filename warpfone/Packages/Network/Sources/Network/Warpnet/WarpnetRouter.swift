@@ -528,7 +528,9 @@ struct WarpnetRouter: Sendable {
   private func notifications(_ endpoint: Notifications) async throws -> Response {
     let pairing = try await repository.viewer()
     switch endpoint {
-    case let .notifications(minId, maxId, _, limit):
+    case let .notifications(minId, maxId, excludedTypes, limit):
+      let wanted = max(limit, 20)
+      let excluded = Set(excludedTypes ?? [])
       var cursor = ""
       if let maxId {
         guard let known = await repository.cursor(scope: "notifications", after: maxId),
@@ -536,19 +538,34 @@ struct WarpnetRouter: Sendable {
         else { return try response([MastodonNotification]()) }
         cursor = known
       }
-      let page: GetNotificationsResponse = try await repository.call(ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
-                                                                     GetNotificationsEvent(cursor: cursor, limit: max(limit, 20)))
-      var items = page.notifications
-      if let minId, let index = items.firstIndex(where: { $0.id == minId }) {
-        items = Array(items[..<index])
-      } else if minId != nil, maxId == nil {
-        items = items.filter { $0.id > (minId ?? "") }
+      var collected: [MastodonNotification] = []
+      for _ in 0 ..< Self.maxPagesPerRequest {
+        let page: GetNotificationsResponse = try await repository.call(ProtocolIds.PRIVATE_GET_NOTIFICATIONS,
+                                                                       GetNotificationsEvent(cursor: cursor, limit: wanted))
+        var items = page.notifications
+        if let minId {
+          if let index = items.firstIndex(where: { $0.id == minId }) {
+            items = Array(items[..<index])
+          } else {
+            items = items.filter { $0.id > minId }
+          }
+        }
+        let mapped = await notifications(items, viewerId: pairing.userId).filter { !excluded.contains($0.type) }
+        collected += mapped
+        guard minId == nil else { break }
+        // Ice Cubes pages from the last id of its regrouped list, which can be
+        // any id of the page.
+        for item in page.notifications {
+          await repository.storeCursor(page.cursor, scope: "notifications", after: item.id)
+        }
+        guard collected.count < wanted,
+              !page.notifications.isEmpty,
+              !page.cursor.isEmpty,
+              page.cursor != WarpnetRepository.endCursor
+        else { break }
+        cursor = page.cursor
       }
-      let mapped = await notifications(items, viewerId: pairing.userId)
-      if minId == nil, let last = mapped.last {
-        await repository.storeCursor(page.cursor, scope: "notifications", after: last.id)
-      }
-      return try response(mapped)
+      return try response(collected)
 
     case let .notification(id):
       let notification: WarpnetNotification = try await repository.call(ProtocolIds.PRIVATE_GET_NOTIFICATION,
@@ -571,7 +588,8 @@ struct WarpnetRouter: Sendable {
       let account = item.actorId.flatMap { actors[$0] }.map { WarpnetMapper.account($0) }
         ?? WarpnetMapper.account(userId: item.actorId ?? item.id, username: item.text)
       var status: MastodonStatus?
-      if let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow" {
+      // A reply notice names the viewer's own tweet, not the reply.
+      if let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", item.type != "reply" {
         status = try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId), filterContext: "notifications")
       }
       result.append(MastodonNotification(id: item.id,

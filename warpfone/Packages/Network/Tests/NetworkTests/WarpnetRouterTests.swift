@@ -313,6 +313,38 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(notifications.first?.account.id, "01BOB")
   }
 
+  func testNotificationsFilterTypesFillThePageAndPageFromAnyId() async throws {
+    let pages: [String: (items: [[String: Any]], cursor: String)] = [
+      "": ([["id": "06", "type": "reaction", "actor_id": "01A", "tweet_id": "01T", "created_at": "2026-10-17T08:06:00Z"],
+            ["id": "05", "type": "follow", "actor_id": "01B", "created_at": "2026-10-17T08:05:00Z"],
+            ["id": "04", "type": "new_user", "created_at": "2026-10-17T08:04:00Z"]], "c2"),
+      "c2": ([["id": "03", "type": "reply", "actor_id": "01C", "tweet_id": "01MINE", "created_at": "2026-10-17T08:03:00Z"],
+              ["id": "02", "type": "follow", "actor_id": "01D", "created_at": "2026-10-17T08:02:00Z"]], "end"),
+    ]
+    let (router, binding) = await makeRouter { route, body in
+      if route == ProtocolIds.PRIVATE_GET_NOTIFICATIONS {
+        let page = pages[body["cursor"] as? String ?? ""] ?? ([], "end")
+        return ScriptedNode.json(["notifications": page.items, "cursor": page.cursor])
+      }
+      return Self.standardNode(route, body, timeline: [])
+    }
+    let follows = try await decoder.decode([Models.Notification].self,
+                                           from: router.route(Notifications.notifications(minId: nil, maxId: nil,
+                                                                                          types: ["favourite", "reblog", "mention"],
+                                                                                          limit: 20),
+                                                              method: .get).body)
+    XCTAssertEqual(follows.map(\.id), ["05", "02"])
+    XCTAssertEqual(binding.calls(to: ProtocolIds.PRIVATE_GET_NOTIFICATIONS).count, 2)
+
+    let older = try await decoder.decode([Models.Notification].self,
+                                         from: router.route(Notifications.notifications(minId: nil, maxId: "06", types: nil, limit: 20),
+                                                            method: .get).body)
+    XCTAssertEqual(older.map(\.id), ["03", "02"])
+    XCTAssertEqual(older.first?.supportedType, .mention)
+    XCTAssertNil(older.first?.status)
+    XCTAssertFalse(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEET).contains { $0["tweet_id"] as? String == "01MINE" })
+  }
+
   func testQuoteURLResolvesToTheQuotedStatus() async throws {
     let (router, binding) = await makeRouter { route, body in
       switch route {
