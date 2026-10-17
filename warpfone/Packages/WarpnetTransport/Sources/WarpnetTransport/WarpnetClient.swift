@@ -184,8 +184,12 @@ public actor WarpnetClient {
     return try result.get()
   }
 
+  // Error answers are a few dozen bytes; a video answer is tens of megabytes
+  // and must not be copied and parsed twice.
+  static let maxErrorResponseBytes = 4096
+
   static func throwIfErrorResponse(_ raw: String) throws {
-    if raw.isEmpty { return }
+    if raw.isEmpty || raw.utf8.count > maxErrorResponseBytes { return }
     guard let first = raw.first(where: { !$0.isWhitespace }) else {
       throw WarpnetError.transportFailure(raw)
     }

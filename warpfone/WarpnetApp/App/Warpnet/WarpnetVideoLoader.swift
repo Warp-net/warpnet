@@ -12,10 +12,16 @@ final class WarpnetVideoLoader: NSObject, AVAssetResourceLoaderDelegate, @unchec
   private static let chunkSize = 1 << 20
 
   private let queue = DispatchQueue(label: "site.warpnet.warpfone.video")
+  // A node call can't be cancelled once it runs, so videos scrolled past
+  // must be dropped while they still wait for a slot.
+  private let slots = DownloadSlots(2)
   private let lock = NSLock()
   private var client: Client?
-  private var downloads: [URL: Task<URL, Error>] = [:]
+  private var downloads: [URL: (token: UUID, task: Task<URL, Error>)] = [:]
+  private var files: [URL: URL] = [:]
   private var order: [URL] = []
+  private var wanted: [URL: Int] = [:]
+  private var active: [ObjectIdentifier: URL] = [:]
 
   @MainActor
   static func install() {
@@ -26,9 +32,8 @@ final class WarpnetVideoLoader: NSObject, AVAssetResourceLoaderDelegate, @unchec
   func setClient(_ client: Client?) {
     lock.withLock {
       self.client = client
-      downloads.values.forEach { $0.cancel() }
+      downloads.values.forEach { $0.task.cancel() }
       downloads = [:]
-      order = []
     }
   }
 
@@ -44,50 +49,108 @@ final class WarpnetVideoLoader: NSObject, AVAssetResourceLoaderDelegate, @unchec
   {
     guard let url = loadingRequest.request.url, url.scheme == "warpnet" else { return false }
     let request = PendingRequest(value: loadingRequest)
-    let task = download(url)
+    let id = ObjectIdentifier(loadingRequest)
+    let task: Task<URL, Error> = lock.withLock {
+      active[id] = url
+      wanted[url, default: 0] += 1
+      if let file = files[url] {
+        return Task<URL, Error> { file }
+      }
+      if let download = downloads[url] {
+        return download.task
+      }
+      let token = UUID()
+      let task = download(url, token: token)
+      downloads[url] = (token, task)
+      return task
+    }
     Task { [queue] in
-      do {
-        let file = try await task.value
-        queue.async { Self.respond(to: request.value, from: file) }
-      } catch {
-        self.forget(url)
-        queue.async { request.value.finishLoading(with: error) }
+      let result = await task.result
+      queue.async {
+        switch result {
+        case let .success(file):
+          Self.respond(to: request.value, from: file)
+        case let .failure(error):
+          if !request.value.isCancelled {
+            request.value.finishLoading(with: error)
+          }
+        }
+        self.release(id)
       }
     }
     return true
   }
 
-  private func download(_ url: URL) -> Task<URL, Error> {
-    lock.withLock {
-      if let task = downloads[url] { return task }
-      let client = client
-      let task = Task<URL, Error> {
-        guard let client else { throw URLError(.notConnectedToInternet) }
+  func resourceLoader(_: AVAssetResourceLoader, didCancel loadingRequest: AVAssetResourceLoadingRequest) {
+    release(ObjectIdentifier(loadingRequest))
+  }
+
+  private func download(_ url: URL, token: UUID) -> Task<URL, Error> {
+    let client = client
+    return Task<URL, Error> { [slots] in
+      guard let client else { throw URLError(.notConnectedToInternet) }
+      await slots.acquire()
+      do {
+        try Task.checkCancellation()
         let data = try await client.mediaData(for: url)
+        try Task.checkCancellation()
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(Self.filePrefix + UUID().uuidString)
         try data.write(to: file, options: .atomic)
+        await slots.release()
+        self.stored(file, for: url, token: token)
         return file
+      } catch {
+        await slots.release()
+        self.failed(url, token: token)
+        throw error
       }
-      downloads[url] = task
-      order.append(url)
-      while order.count > Self.keptFiles {
-        let evicted = order.removeFirst()
-        if let old = downloads.removeValue(forKey: evicted) {
-          Task {
-            if let file = try? await old.value {
-              try? FileManager.default.removeItem(at: file)
-            }
-          }
-        }
-      }
-      return task
     }
   }
 
-  private func forget(_ url: URL) {
+  private func stored(_ file: URL, for url: URL, token: UUID) {
     lock.withLock {
-      downloads[url] = nil
-      order.removeAll { $0 == url }
+      if downloads[url]?.token == token {
+        downloads[url] = nil
+      }
+      files[url] = file
+      order.append(url)
+      evict()
+    }
+  }
+
+  private func failed(_ url: URL, token: UUID) {
+    lock.withLock {
+      if downloads[url]?.token == token {
+        downloads[url] = nil
+      }
+    }
+  }
+
+  private func release(_ id: ObjectIdentifier) {
+    lock.withLock {
+      guard let url = active.removeValue(forKey: id) else { return }
+      let remaining = (wanted[url] ?? 1) - 1
+      wanted[url] = remaining > 0 ? remaining : nil
+      if remaining <= 0, let download = downloads.removeValue(forKey: url) {
+        download.task.cancel()
+      }
+      evict()
+    }
+  }
+
+  // Called with the lock held. A file that a pending request still reads stays.
+  private func evict() {
+    var index = 0
+    while order.count > Self.keptFiles, index < order.count {
+      let url = order[index]
+      guard wanted[url] == nil else {
+        index += 1
+        continue
+      }
+      order.remove(at: index)
+      if let file = files.removeValue(forKey: url) {
+        try? FileManager.default.removeItem(at: file)
+      }
     }
   }
 
@@ -141,4 +204,29 @@ final class WarpnetVideoLoader: NSObject, AVAssetResourceLoaderDelegate, @unchec
 
 private struct PendingRequest: @unchecked Sendable {
   let value: AVAssetResourceLoadingRequest
+}
+
+private actor DownloadSlots {
+  private var free: Int
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  init(_ count: Int) {
+    free = count
+  }
+
+  func acquire() async {
+    guard free == 0 else {
+      free -= 1
+      return
+    }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    if waiters.isEmpty {
+      free += 1
+    } else {
+      waiters.removeFirst().resume()
+    }
+  }
 }
