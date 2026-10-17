@@ -251,7 +251,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ boosted %@"
+            "value" : "%@ retweeted %@"
           }
         }
       }
@@ -482,7 +482,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Favorites"
+            "value" : "Reactions"
           }
         }
       }
@@ -526,7 +526,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Posts and replies"
+            "value" : "Tweets and replies"
           }
         }
       }
@@ -537,7 +537,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Posts"
+            "value" : "Tweets"
           }
         }
       }
@@ -603,7 +603,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Display boosts"
+            "value" : "Display retweets"
           }
         }
       }
@@ -734,7 +734,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld new posts"
+            "value" : "%lld new tweets"
           }
         }
       }
@@ -896,7 +896,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hide Boosts"
+            "value" : "Hide Retweets"
           }
         }
       }
@@ -907,7 +907,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show Boosts"
+            "value" : "Show Retweets"
           }
         }
       }
@@ -982,7 +982,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Boosted by"
+            "value" : "Retweeted by"
           }
         }
       }
@@ -1235,7 +1235,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Favorited by"
+            "value" : "Reacted by"
           }
         }
       }
@@ -1268,7 +1268,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Those users won't see your posts until you accept them."
+            "value" : "Those users won't see your tweets until you accept them."
           }
         }
       }
@@ -1443,7 +1443,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pinned post"
+            "value" : "Pinned tweet"
           }
         }
       }
@@ -1454,7 +1454,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Posts"
+            "value" : "Tweets"
           }
         }
       }
@@ -1908,7 +1908,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Toots preview"
+            "value" : "Tweets preview"
           }
         }
       }
@@ -2645,7 +2645,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Posts"
+            "value" : "Tweets"
           }
         }
       }
@@ -2921,7 +2921,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New Post"
+            "value" : "New Tweet"
           }
         }
       }
@@ -3109,7 +3109,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "boosted"
+            "value" : "retweeted"
           }
         }
       }
@@ -3175,7 +3175,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Favorite"
+            "value" : "Reactions"
           }
         }
       }
@@ -3230,7 +3230,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Boost"
+            "value" : "Retweets"
           }
         }
       }
@@ -3336,7 +3336,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Report Post"
+            "value" : "Report Tweet"
           }
         }
       }
@@ -3398,7 +3398,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cached Posts: %@"
+            "value" : "Cached Tweets: %@"
           }
         }
       }
@@ -3438,7 +3438,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Collapse long posts"
+            "value" : "Collapse long tweets"
           }
         }
       }
@@ -3448,7 +3448,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Collapsed posts only display a limited number of lines together with a button to show the full post"
+            "value" : "Collapsed tweets only display a limited number of lines together with a button to show the full tweet"
           }
         }
       }
@@ -3662,7 +3662,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Example Post"
+            "value" : "Example Tweet"
           }
         }
       }
@@ -3902,7 +3902,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Status Action Buttons"
+            "value" : "Tweet Action Buttons"
           }
         }
       }
@@ -3912,7 +3912,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Secondary status action"
+            "value" : "Secondary tweet action"
           }
         }
       }
@@ -3922,7 +3922,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Status Media Style"
+            "value" : "Tweet Media Style"
           }
         }
       }
@@ -4473,7 +4473,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Post"
+            "value" : "Tweet"
           }
         }
       }
@@ -4495,7 +4495,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Boost"
+            "value" : "Retweet"
           }
         }
       }
@@ -4506,7 +4506,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Favorite"
+            "value" : "React"
           }
         }
       }
@@ -4549,7 +4549,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Swipe actions are available upon swiping left or right on a post. The secondary action is only available if the primary action is set."
+            "value" : "Swipe actions are available upon swiping left or right on a tweet. The secondary action is only available if the primary action is set."
           }
         }
       }
@@ -4761,7 +4761,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Boost"
+            "value" : "Retweet"
           }
         }
       }
@@ -4772,7 +4772,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Boost to Followers"
+            "value" : "Retweet to Followers"
           }
         }
       }
@@ -4816,7 +4816,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Are you sure you want to delete this post?"
+            "value" : "Are you sure you want to delete this tweet?"
           }
         }
       }
@@ -4849,7 +4849,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Favorite"
+            "value" : "React"
           }
         }
       }
@@ -4893,7 +4893,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Post"
+            "value" : "Tweet"
           }
         }
       }
@@ -4904,7 +4904,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quote this post"
+            "value" : "Quote this tweet"
           }
         }
       }
@@ -4926,7 +4926,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Report Post"
+            "value" : "Report Tweet"
           }
         }
       }
@@ -4937,7 +4937,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your post"
+            "value" : "Your tweet"
           }
         }
       }
@@ -4959,7 +4959,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Share this post"
+            "value" : "Share this tweet"
           }
         }
       }
@@ -4970,7 +4970,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Share post as image"
+            "value" : "Share tweet as image"
           }
         }
       }
@@ -4981,7 +4981,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Share post link"
+            "value" : "Share tweet link"
           }
         }
       }
@@ -5048,7 +5048,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unboost"
+            "value" : "Undo Retweet"
           }
         }
       }
@@ -5059,7 +5059,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unfavorite"
+            "value" : "Remove Reaction"
           }
         }
       }
@@ -5290,7 +5290,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editing your post"
+            "value" : "Editing your tweet"
           }
         }
       }
@@ -5301,7 +5301,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New Post"
+            "value" : "New Tweet"
           }
         }
       }
@@ -5378,7 +5378,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An error occurred while loading posts, please try again."
+            "value" : "An error occurred while loading tweets, please try again."
           }
         }
       }
@@ -5389,7 +5389,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "An error occurred in the context of this post, please try again."
+            "value" : "An error occurred in the context of this tweet, please try again."
           }
         }
       }
@@ -5411,7 +5411,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Error while posting"
+            "value" : "Error while sending the tweet"
           }
         }
       }
@@ -5684,7 +5684,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Post from %@"
+            "value" : "Tweet from %@"
           }
         }
       }
@@ -5706,7 +5706,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "boosted"
+            "value" : "retweeted"
           }
         }
       }
@@ -5728,7 +5728,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You boosted"
+            "value" : "You retweeted"
           }
         }
       }
@@ -5739,7 +5739,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show full post"
+            "value" : "Show full tweet"
           }
         }
       }
@@ -5805,7 +5805,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld boosts"
+            "value" : "%lld retweets"
           }
         }
       }
@@ -5816,7 +5816,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld favorites"
+            "value" : "%lld reactions"
           }
         }
       }
@@ -6009,13 +6009,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld new post"
+                  "value" : "%lld new tweet"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld new posts"
+                  "value" : "%lld new tweets"
                 }
               }
             }
@@ -6142,7 +6142,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Show Boosts"
+            "value" : "Show Retweets"
           }
         }
       }

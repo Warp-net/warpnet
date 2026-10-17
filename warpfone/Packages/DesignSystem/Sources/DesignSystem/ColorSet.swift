@@ -53,7 +53,7 @@ public struct ColorSetCouple: Identifiable {
 public struct IceCubeDark: ColorSet {
   public var name: ColorSetName = .iceCubeDark
   public var scheme: ColorScheme = .dark
-  public var tintColor: Color = .init(red: 187 / 255, green: 59 / 255, blue: 226 / 255)
+  public var tintColor: Color = .init(hex: 0xC5007F)
   public var primaryBackgroundColor: Color = .init(red: 16 / 255, green: 21 / 255, blue: 35 / 255)
   public var secondaryBackgroundColor: Color = .init(red: 30 / 255, green: 35 / 255, blue: 62 / 255)
   public var labelColor: Color = .white
@@ -64,7 +64,7 @@ public struct IceCubeDark: ColorSet {
 public struct IceCubeLight: ColorSet {
   public var name: ColorSetName = .iceCubeLight
   public var scheme: ColorScheme = .light
-  public var tintColor: Color = .init(red: 187 / 255, green: 59 / 255, blue: 226 / 255)
+  public var tintColor: Color = .init(hex: 0xC5007F)
   public var primaryBackgroundColor: Color = .white
   public var secondaryBackgroundColor: Color = .init(hex: 0xF0F1F2)
   public var labelColor: Color = .black

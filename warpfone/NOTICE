@@ -260,3 +260,9 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The Warpnet colour themes and the brand colour use the Warpnet magenta
+  #C5007F, which is also the app's accent colour, and the English strings say
+  tweet, retweet and reaction instead of post, boost and favourite.
+- Files without the notice line:
+  IceCubesApp/Assets.xcassets/AccentColor.colorset/Contents.json
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
