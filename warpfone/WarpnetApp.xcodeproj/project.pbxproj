@@ -62,7 +62,7 @@
 		9F7D939A29805DBD00EE6B7A /* AccountSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7D939929805DBD00EE6B7A /* AccountSettingView.swift */; };
 		9FAD858B29743F7400496AB1 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FAD858A29743F7400496AB1 /* ShareViewController.swift */; };
 		9FAD858E29743F7400496AB1 /* (null) in Resources */ = {isa = PBXBuildFile; };
-		9FAD859229743F7400496AB1 /* IceCubesShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9FAD858829743F7400496AB1 /* IceCubesShareExtension.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9FAD859229743F7400496AB1 /* WarpnetShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9FAD858829743F7400496AB1 /* WarpnetShareExtension.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		9FAD859A297440CB00496AB1 /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 9FAD8599297440CB00496AB1 /* KeychainSwift */; };
 		9FAD859C2974422700496AB1 /* AppAccount in Frameworks */ = {isa = PBXBuildFile; productRef = 9FAD859B2974422700496AB1 /* AppAccount */; };
 		9FAD859E2974569B00496AB1 /* Account in Frameworks */ = {isa = PBXBuildFile; productRef = 9FAD859D2974569B00496AB1 /* Account */; };
@@ -72,10 +72,10 @@
 		9FAD85CF2975B68900496AB1 /* SideBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FAD85CE2975B68900496AB1 /* SideBarView.swift */; };
 		9FAE4ACB293783B000772766 /* SettingsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FAE4ACA293783B000772766 /* SettingsTab.swift */; };
 		9FAE4ACE29379A5A00772766 /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 9FAE4ACD29379A5A00772766 /* KeychainSwift */; };
-		9FB183222AE9268800BBB692 /* IceCubesApp+Menu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB183212AE9268800BBB692 /* IceCubesApp+Menu.swift */; };
-		9FB183292AE9449100BBB692 /* IceCubesApp+Scene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB183282AE9449100BBB692 /* IceCubesApp+Scene.swift */; };
+		9FB183222AE9268800BBB692 /* WarpnetApp+Menu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB183212AE9268800BBB692 /* WarpnetApp+Menu.swift */; };
+		9FB183292AE9449100BBB692 /* WarpnetApp+Scene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB183282AE9449100BBB692 /* WarpnetApp+Scene.swift */; };
 		9FBA1D352B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FBA1D342B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift */; };
-		9FBFE63D292A715500C250E9 /* IceCubesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FBFE63C292A715500C250E9 /* IceCubesApp.swift */; };
+		9FBFE63D292A715500C250E9 /* WarpnetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FBFE63C292A715500C250E9 /* WarpnetApp.swift */; };
 		9FBFE64E292A72BD00C250E9 /* Network in Frameworks */ = {isa = PBXBuildFile; productRef = 9FBFE64D292A72BD00C250E9 /* Network */; };
 		9FC2A38B2B49D19A00DFD1C1 /* StatusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9FC2A38A2B49D19A00DFD1C1 /* StatusKit */; };
 		9FC2A38F2B49D1AA00DFD1C1 /* StatusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9FC2A38E2B49D1AA00DFD1C1 /* StatusKit */; };
@@ -95,7 +95,7 @@
 		E9DF41FC29830FEC0003AAD2 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E9DF41FB29830FEC0003AAD2 /* UniformTypeIdentifiers.framework */; };
 		E9DF420129830FEC0003AAD2 /* ActionRequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9DF420029830FEC0003AAD2 /* ActionRequestHandler.swift */; };
 		E9DF420329830FEC0003AAD2 /* Action.js in Resources */ = {isa = PBXBuildFile; fileRef = E9DF420229830FEC0003AAD2 /* Action.js */; };
-		E9DF420729830FEC0003AAD2 /* IceCubesActionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E9DF41FA29830FEC0003AAD2 /* IceCubesActionExtension.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E9DF420729830FEC0003AAD2 /* WarpnetActionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E9DF41FA29830FEC0003AAD2 /* WarpnetActionExtension.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FAC9177746035E68620EC88F /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E921099B2DC257731331A40C /* QRScannerView.swift */; };
 /* End PBXBuildFile section */
 
@@ -105,14 +105,14 @@
 			containerPortal = 9FBFE631292A715500C250E9 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 9FAD858729743F7400496AB1;
-			remoteInfo = IceCubesShareExtension;
+			remoteInfo = WarpnetShareExtension;
 		};
 		E9DF420529830FEC0003AAD2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 9FBFE631292A715500C250E9 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = E9DF41F929830FEC0003AAD2;
-			remoteInfo = IceCubesActionExtension;
+			remoteInfo = WarpnetActionExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -123,8 +123,8 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				E9DF420729830FEC0003AAD2 /* IceCubesActionExtension.appex in Embed Foundation Extensions */,
-				9FAD859229743F7400496AB1 /* IceCubesShareExtension.appex in Embed Foundation Extensions */,
+				E9DF420729830FEC0003AAD2 /* WarpnetActionExtension.appex in Embed Foundation Extensions */,
+				9FAD859229743F7400496AB1 /* WarpnetShareExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -184,22 +184,22 @@
 		9F7335EB2967461B00AFF0BA /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 		9F7335EE29674F7100AFF0BA /* QuickLook.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLook.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/QuickLook.framework; sourceTree = DEVELOPER_DIR; };
 		9F7335F82968576500AFF0BA /* DisplaySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySettingsView.swift; sourceTree = "<group>"; };
-		9F7D939529800B0300EE6B7A /* IceCubesApp-release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "IceCubesApp-release.xcconfig"; sourceTree = "<group>"; };
+		9F7D939529800B0300EE6B7A /* WarpnetApp-release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "WarpnetApp-release.xcconfig"; sourceTree = "<group>"; };
 		9F7D939929805DBD00EE6B7A /* AccountSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingView.swift; sourceTree = "<group>"; };
-		9FAD858829743F7400496AB1 /* IceCubesShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = IceCubesShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9FAD858829743F7400496AB1 /* WarpnetShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WarpnetShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9FAD858A29743F7400496AB1 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		9FAD858F29743F7400496AB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		9FAD859629743F7E00496AB1 /* IceCubesShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesShareExtension.entitlements; sourceTree = "<group>"; };
+		9FAD859629743F7E00496AB1 /* WarpnetShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WarpnetShareExtension.entitlements; sourceTree = "<group>"; };
 		9FAD85CE2975B68900496AB1 /* SideBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideBarView.swift; sourceTree = "<group>"; };
 		9FAE4AC8293774FF00772766 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9FAE4ACA293783B000772766 /* SettingsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTab.swift; sourceTree = "<group>"; };
-		9FB183212AE9268800BBB692 /* IceCubesApp+Menu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IceCubesApp+Menu.swift"; sourceTree = "<group>"; };
-		9FB183282AE9449100BBB692 /* IceCubesApp+Scene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IceCubesApp+Scene.swift"; sourceTree = "<group>"; };
+		9FB183212AE9268800BBB692 /* WarpnetApp+Menu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WarpnetApp+Menu.swift"; sourceTree = "<group>"; };
+		9FB183282AE9449100BBB692 /* WarpnetApp+Scene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WarpnetApp+Scene.swift"; sourceTree = "<group>"; };
 		9FBA1D342B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarEntriesSettingsView.swift; sourceTree = "<group>"; };
-		9FBFE639292A715500C250E9 /* Ice Cubes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ice Cubes.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		9FBFE63C292A715500C250E9 /* IceCubesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IceCubesApp.swift; sourceTree = "<group>"; };
+		9FBFE639292A715500C250E9 /* Warpnet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Warpnet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9FBFE63C292A715500C250E9 /* WarpnetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarpnetApp.swift; sourceTree = "<group>"; };
 		9FC2A3892B49D10000DFD1C1 /* StatusKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = StatusKit; path = Packages/StatusKit; sourceTree = "<group>"; };
-		9FC60CB82AE6C2F600C6EAD2 /* IceCubesActionExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesActionExtension.entitlements; sourceTree = "<group>"; };
+		9FC60CB82AE6C2F600C6EAD2 /* WarpnetActionExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WarpnetActionExtension.entitlements; sourceTree = "<group>"; };
 		9FD34822293D06E800DB0EE9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9FE0346A2ADD59AC00529EA8 /* MediaUI */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = MediaUI; path = Packages/MediaUI; sourceTree = "<group>"; };
 		9FE3DB55296FEF5800628CB0 /* AppAccount */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = AppAccount; path = Packages/AppAccount; sourceTree = "<group>"; };
@@ -208,17 +208,17 @@
 		C9B22676297F6C2E001F9EFE /* ContentSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSettingsView.swift; sourceTree = "<group>"; };
 		CD8FC99308EBB4E517B4787C /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
 		D08A9C3429956CFA00204A4A /* SwipeActionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeActionsSettingsView.swift; sourceTree = "<group>"; };
-		DD31E2E5297FB68B00A4BE29 /* IceCubesApp.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = IceCubesApp.xcconfig; sourceTree = "<group>"; };
+		DD31E2E5297FB68B00A4BE29 /* WarpnetApp.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WarpnetApp.xcconfig; sourceTree = "<group>"; };
 		E921099B2DC257731331A40C /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		E92817FD29844DB700875FD1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E970C10929845A9400E88A8C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		E9DF41FA29830FEC0003AAD2 /* IceCubesActionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = IceCubesActionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9DF41FA29830FEC0003AAD2 /* WarpnetActionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WarpnetActionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9DF41FB29830FEC0003AAD2 /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		E9DF420029830FEC0003AAD2 /* ActionRequestHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRequestHandler.swift; sourceTree = "<group>"; };
 		E9DF420229830FEC0003AAD2 /* Action.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Action.js; sourceTree = "<group>"; };
 		E9DF420429830FEC0003AAD2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		E9FEB8AD2B1CAB4600815AB5 /* IceCubesApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesApp.entitlements; sourceTree = "<group>"; };
-		E9FEB8AE2B1CAB7000815AB5 /* IceCubesApp-release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "IceCubesApp-release.entitlements"; sourceTree = "<group>"; };
+		E9FEB8AD2B1CAB4600815AB5 /* WarpnetApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WarpnetApp.entitlements; sourceTree = "<group>"; };
+		E9FEB8AE2B1CAB7000815AB5 /* WarpnetApp-release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "WarpnetApp-release.entitlements"; sourceTree = "<group>"; };
 		EB338BD0C2DF94827DA51250 /* ConnectionBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionBanner.swift; sourceTree = "<group>"; };
 		EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Warpnet.xcframework; sourceTree = "<group>"; };
 		EEB3C87330913F5D42D83B3C /* GoBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoBinding.swift; sourceTree = "<group>"; };
@@ -297,8 +297,8 @@
 		9F398AB429360A5800A889F2 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				E9FEB8AD2B1CAB4600815AB5 /* IceCubesApp.entitlements */,
-				E9FEB8AE2B1CAB7000815AB5 /* IceCubesApp-release.entitlements */,
+				E9FEB8AD2B1CAB4600815AB5 /* WarpnetApp.entitlements */,
+				E9FEB8AE2B1CAB7000815AB5 /* WarpnetApp-release.entitlements */,
 				9FB183232AE926BB00BBB692 /* Main */,
 				9F654BF0299AC46200D27FA5 /* Report */,
 				9FAE4AC9293783A200772766 /* Tabs */,
@@ -354,15 +354,15 @@
 			path = Embeds;
 			sourceTree = "<group>";
 		};
-		9FAD858929743F7400496AB1 /* IceCubesShareExtension */ = {
+		9FAD858929743F7400496AB1 /* WarpnetShareExtension */ = {
 			isa = PBXGroup;
 			children = (
-				9FAD859629743F7E00496AB1 /* IceCubesShareExtension.entitlements */,
+				9FAD859629743F7E00496AB1 /* WarpnetShareExtension.entitlements */,
 				9FAD858A29743F7400496AB1 /* ShareViewController.swift */,
 				9FAD858F29743F7400496AB1 /* Info.plist */,
 				0B4629A3878C7F177A045CB7 /* PrivacyInfo.xcprivacy */,
 			);
-			path = IceCubesShareExtension;
+			path = WarpnetShareExtension;
 			sourceTree = "<group>";
 		};
 		9FAE4AC9293783A200772766 /* Tabs */ = {
@@ -385,9 +385,9 @@
 		9FB183232AE926BB00BBB692 /* Main */ = {
 			isa = PBXGroup;
 			children = (
-				9FBFE63C292A715500C250E9 /* IceCubesApp.swift */,
-				9FB183212AE9268800BBB692 /* IceCubesApp+Menu.swift */,
-				9FB183282AE9449100BBB692 /* IceCubesApp+Scene.swift */,
+				9FBFE63C292A715500C250E9 /* WarpnetApp.swift */,
+				9FB183212AE9268800BBB692 /* WarpnetApp+Menu.swift */,
+				9FB183282AE9449100BBB692 /* WarpnetApp+Scene.swift */,
 				9F6028552B3F36AE00476078 /* AppView.swift */,
 			);
 			path = Main;
@@ -396,11 +396,11 @@
 		9FBFE630292A715500C250E9 = {
 			isa = PBXGroup;
 			children = (
-				DD31E2E5297FB68B00A4BE29 /* IceCubesApp.xcconfig */,
-				9F7D939529800B0300EE6B7A /* IceCubesApp-release.xcconfig */,
-				9FBFE63B292A715500C250E9 /* IceCubesApp */,
-				E9DF41FD29830FEC0003AAD2 /* IceCubesActionExtension */,
-				9FAD858929743F7400496AB1 /* IceCubesShareExtension */,
+				DD31E2E5297FB68B00A4BE29 /* WarpnetApp.xcconfig */,
+				9F7D939529800B0300EE6B7A /* WarpnetApp-release.xcconfig */,
+				9FBFE63B292A715500C250E9 /* WarpnetApp */,
+				E9DF41FD29830FEC0003AAD2 /* WarpnetActionExtension */,
+				9FAD858929743F7400496AB1 /* WarpnetShareExtension */,
 				9FBFE63A292A715500C250E9 /* Products */,
 				9FBFE64C292A72BD00C250E9 /* Frameworks */,
 				9FE3DB55296FEF5800628CB0 /* AppAccount */,
@@ -422,14 +422,14 @@
 		9FBFE63A292A715500C250E9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				9FBFE639292A715500C250E9 /* Ice Cubes.app */,
-				9FAD858829743F7400496AB1 /* IceCubesShareExtension.appex */,
-				E9DF41FA29830FEC0003AAD2 /* IceCubesActionExtension.appex */,
+				9FBFE639292A715500C250E9 /* Warpnet.app */,
+				9FAD858829743F7400496AB1 /* WarpnetShareExtension.appex */,
+				E9DF41FA29830FEC0003AAD2 /* WarpnetActionExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		9FBFE63B292A715500C250E9 /* IceCubesApp */ = {
+		9FBFE63B292A715500C250E9 /* WarpnetApp */ = {
 			isa = PBXGroup;
 			children = (
 				9FA0D2AC29921C1F008A143B /* Embeds */,
@@ -439,7 +439,7 @@
 				9F398AB529360A6100A889F2 /* Resources */,
 				320B3C7B339100E9EBBECF5F /* PrivacyInfo.xcprivacy */,
 			);
-			path = IceCubesApp;
+			path = WarpnetApp;
 			sourceTree = "<group>";
 		};
 		9FBFE64C292A72BD00C250E9 /* Frameworks */ = {
@@ -480,25 +480,25 @@
 			path = Localization;
 			sourceTree = "<group>";
 		};
-		E9DF41FD29830FEC0003AAD2 /* IceCubesActionExtension */ = {
+		E9DF41FD29830FEC0003AAD2 /* WarpnetActionExtension */ = {
 			isa = PBXGroup;
 			children = (
-				9FC60CB82AE6C2F600C6EAD2 /* IceCubesActionExtension.entitlements */,
+				9FC60CB82AE6C2F600C6EAD2 /* WarpnetActionExtension.entitlements */,
 				E9DF420029830FEC0003AAD2 /* ActionRequestHandler.swift */,
 				E9DF420229830FEC0003AAD2 /* Action.js */,
 				E9DF420429830FEC0003AAD2 /* Info.plist */,
 				E92817FD29844DB700875FD1 /* Assets.xcassets */,
 				E970C10A29845A9400E88A8C /* InfoPlist.strings */,
 			);
-			path = IceCubesActionExtension;
+			path = WarpnetActionExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		9FAD858729743F7400496AB1 /* IceCubesShareExtension */ = {
+		9FAD858729743F7400496AB1 /* WarpnetShareExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9FAD859329743F7400496AB1 /* Build configuration list for PBXNativeTarget "IceCubesShareExtension" */;
+			buildConfigurationList = 9FAD859329743F7400496AB1 /* Build configuration list for PBXNativeTarget "WarpnetShareExtension" */;
 			buildPhases = (
 				9FAD858429743F7400496AB1 /* Sources */,
 				9FAD858529743F7400496AB1 /* Frameworks */,
@@ -508,7 +508,7 @@
 			);
 			dependencies = (
 			);
-			name = IceCubesShareExtension;
+			name = WarpnetShareExtension;
 			packageProductDependencies = (
 				9FAD8599297440CB00496AB1 /* KeychainSwift */,
 				9FAD859B2974422700496AB1 /* AppAccount */,
@@ -518,13 +518,13 @@
 				9FAD85A3297456A800496AB1 /* DesignSystem */,
 				9FC2A38E2B49D1AA00DFD1C1 /* StatusKit */,
 			);
-			productName = IceCubesShareExtension;
-			productReference = 9FAD858829743F7400496AB1 /* IceCubesShareExtension.appex */;
+			productName = WarpnetShareExtension;
+			productReference = 9FAD858829743F7400496AB1 /* WarpnetShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		9FBFE638292A715500C250E9 /* IceCubesApp */ = {
+		9FBFE638292A715500C250E9 /* WarpnetApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9FBFE648292A715600C250E9 /* Build configuration list for PBXNativeTarget "IceCubesApp" */;
+			buildConfigurationList = 9FBFE648292A715600C250E9 /* Build configuration list for PBXNativeTarget "WarpnetApp" */;
 			buildPhases = (
 				9FBFE635292A715500C250E9 /* Sources */,
 				9FBFE636292A715500C250E9 /* Frameworks */,
@@ -537,7 +537,7 @@
 				9FAD859129743F7400496AB1 /* PBXTargetDependency */,
 				E9DF420629830FEC0003AAD2 /* PBXTargetDependency */,
 			);
-			name = IceCubesApp;
+			name = WarpnetApp;
 			packageProductDependencies = (
 				9FBFE64D292A72BD00C250E9 /* Network */,
 				9F29553F292B6C3400E0E81B /* Timeline */,
@@ -553,13 +553,13 @@
 				9FC2A38A2B49D19A00DFD1C1 /* StatusKit */,
 				B979A68FAE002F6F5E11073F /* WarpnetTransport */,
 			);
-			productName = IceCubesApp;
-			productReference = 9FBFE639292A715500C250E9 /* Ice Cubes.app */;
+			productName = WarpnetApp;
+			productReference = 9FBFE639292A715500C250E9 /* Warpnet.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E9DF41F929830FEC0003AAD2 /* IceCubesActionExtension */ = {
+		E9DF41F929830FEC0003AAD2 /* WarpnetActionExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E9DF420A29830FEC0003AAD2 /* Build configuration list for PBXNativeTarget "IceCubesActionExtension" */;
+			buildConfigurationList = E9DF420A29830FEC0003AAD2 /* Build configuration list for PBXNativeTarget "WarpnetActionExtension" */;
 			buildPhases = (
 				E9DF41F629830FEC0003AAD2 /* Sources */,
 				E9DF41F729830FEC0003AAD2 /* Frameworks */,
@@ -569,13 +569,13 @@
 			);
 			dependencies = (
 			);
-			name = IceCubesActionExtension;
+			name = WarpnetActionExtension;
 			packageProductDependencies = (
 				E92817F9298443D600875FD1 /* Models */,
 				E92817FB298443D600875FD1 /* Network */,
 			);
-			productName = IceCubesActionExtension;
-			productReference = E9DF41FA29830FEC0003AAD2 /* IceCubesActionExtension.appex */;
+			productName = WarpnetActionExtension;
+			productReference = E9DF41FA29830FEC0003AAD2 /* WarpnetActionExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -599,7 +599,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 9FBFE634292A715500C250E9 /* Build configuration list for PBXProject "IceCubesApp" */;
+			buildConfigurationList = 9FBFE634292A715500C250E9 /* Build configuration list for PBXProject "WarpnetApp" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -616,9 +616,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				9FBFE638292A715500C250E9 /* IceCubesApp */,
-				E9DF41F929830FEC0003AAD2 /* IceCubesActionExtension */,
-				9FAD858729743F7400496AB1 /* IceCubesShareExtension */,
+				9FBFE638292A715500C250E9 /* WarpnetApp */,
+				E9DF41F929830FEC0003AAD2 /* WarpnetActionExtension */,
+				9FAD858729743F7400496AB1 /* WarpnetShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -682,7 +682,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9FB183222AE9268800BBB692 /* IceCubesApp+Menu.swift in Sources */,
+				9FB183222AE9268800BBB692 /* WarpnetApp+Menu.swift in Sources */,
 				9F7D939A29805DBD00EE6B7A /* AccountSettingView.swift in Sources */,
 				069709AA298C9AD7006E4CB5 /* AboutView.swift in Sources */,
 				C9B22677297F6C2E001F9EFE /* ContentSettingsView.swift in Sources */,
@@ -692,12 +692,12 @@
 				9FAE4ACB293783B000772766 /* SettingsTab.swift in Sources */,
 				9F15D6022B3D6E280008C220 /* TabbarEntriesSettingsView.swift in Sources */,
 				9F7335F92968576500AFF0BA /* DisplaySettingsView.swift in Sources */,
-				9FB183292AE9449100BBB692 /* IceCubesApp+Scene.swift in Sources */,
+				9FB183292AE9449100BBB692 /* WarpnetApp+Scene.swift in Sources */,
 				9F2B92F6295AE04800DE16D0 /* Tabs.swift in Sources */,
 				9F398AB329360A4C00A889F2 /* TimelineTab.swift in Sources */,
 				9F398AA62935FE8A00A889F2 /* AppRegistry.swift in Sources */,
 				9F15D6002B3D6A850008C220 /* NavigationTab.swift in Sources */,
-				9FBFE63D292A715500C250E9 /* IceCubesApp.swift in Sources */,
+				9FBFE63D292A715500C250E9 /* WarpnetApp.swift in Sources */,
 				9F4A48192976B21900A1A038 /* ProfileTab.swift in Sources */,
 				639CDF9C296AC82F00C35E58 /* SafariRouter.swift in Sources */,
 				9F35DB4729506F6600B3281A /* NotificationTab.swift in Sources */,
@@ -738,7 +738,7 @@
 				ios,
 				maccatalyst,
 			);
-			target = 9FAD858729743F7400496AB1 /* IceCubesShareExtension */;
+			target = 9FAD858729743F7400496AB1 /* WarpnetShareExtension */;
 			targetProxy = 9FAD859029743F7400496AB1 /* PBXContainerItemProxy */;
 		};
 		E9DF420629830FEC0003AAD2 /* PBXTargetDependency */ = {
@@ -747,7 +747,7 @@
 				ios,
 				maccatalyst,
 			);
-			target = E9DF41F929830FEC0003AAD2 /* IceCubesActionExtension */;
+			target = E9DF41F929830FEC0003AAD2 /* WarpnetActionExtension */;
 			targetProxy = E9DF420529830FEC0003AAD2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -767,14 +767,14 @@
 		9FAD859429743F7400496AB1 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = IceCubesShareExtension/IceCubesShareExtension.entitlements;
+				CODE_SIGN_ENTITLEMENTS = WarpnetShareExtension/WarpnetShareExtension.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = IceCubesShareExtension/Info.plist;
+				INFOPLIST_FILE = WarpnetShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Warpnet;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -799,14 +799,14 @@
 		9FAD859529743F7400496AB1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = IceCubesShareExtension/IceCubesShareExtension.entitlements;
+				CODE_SIGN_ENTITLEMENTS = WarpnetShareExtension/WarpnetShareExtension.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = IceCubesShareExtension/Info.plist;
+				INFOPLIST_FILE = WarpnetShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Warpnet;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -831,7 +831,7 @@
 		};
 		9FBFE646292A715600C250E9 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DD31E2E5297FB68B00A4BE29 /* IceCubesApp.xcconfig */;
+			baseConfigurationReference = DD31E2E5297FB68B00A4BE29 /* WarpnetApp.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -897,7 +897,7 @@
 		};
 		9FBFE647292A715600C250E9 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 9F7D939529800B0300EE6B7A /* IceCubesApp-release.xcconfig */;
+			baseConfigurationReference = 9F7D939529800B0300EE6B7A /* WarpnetApp-release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -961,18 +961,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
-				CODE_SIGN_ENTITLEMENTS = IceCubesApp/App/IceCubesApp.entitlements;
+				CODE_SIGN_ENTITLEMENTS = WarpnetApp/App/WarpnetApp.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_ASSET_PATHS = "\"IceCubesApp/Resources\"";
+				DEVELOPMENT_ASSET_PATHS = "\"WarpnetApp/Resources\"";
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = IceCubesApp/Info.plist;
+				INFOPLIST_FILE = WarpnetApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Warpnet;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the pairing QR code of your Warpnet node, and take photos and videos for your posts.";
@@ -993,7 +993,8 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID_PREFIX).warpfone";
-				PRODUCT_NAME = "Ice Cubes";
+				PRODUCT_MODULE_NAME = WarpnetApp;
+				PRODUCT_NAME = Warpnet;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -1012,18 +1013,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
-				CODE_SIGN_ENTITLEMENTS = "IceCubesApp/App/IceCubesApp-release.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "WarpnetApp/App/WarpnetApp-release.entitlements";
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_ASSET_PATHS = "\"IceCubesApp/Resources\"";
+				DEVELOPMENT_ASSET_PATHS = "\"WarpnetApp/Resources\"";
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = IceCubesApp/Info.plist;
+				INFOPLIST_FILE = WarpnetApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Warpnet;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the pairing QR code of your Warpnet node, and take photos and videos for your posts.";
@@ -1044,7 +1045,8 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID_PREFIX).warpfone";
-				PRODUCT_NAME = "Ice Cubes";
+				PRODUCT_MODULE_NAME = WarpnetApp;
+				PRODUCT_NAME = Warpnet;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -1060,14 +1062,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = ActionIcon;
-				CODE_SIGN_ENTITLEMENTS = IceCubesActionExtension/IceCubesActionExtension.entitlements;
+				CODE_SIGN_ENTITLEMENTS = WarpnetActionExtension/WarpnetActionExtension.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = IceCubesActionExtension/Info.plist;
+				INFOPLIST_FILE = WarpnetActionExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Open in Warpnet";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1093,14 +1095,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = ActionIcon;
-				CODE_SIGN_ENTITLEMENTS = IceCubesActionExtension/IceCubesActionExtension.entitlements;
+				CODE_SIGN_ENTITLEMENTS = WarpnetActionExtension/WarpnetActionExtension.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = IceCubesActionExtension/Info.plist;
+				INFOPLIST_FILE = WarpnetActionExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Open in Warpnet";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1126,7 +1128,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		9FAD859329743F7400496AB1 /* Build configuration list for PBXNativeTarget "IceCubesShareExtension" */ = {
+		9FAD859329743F7400496AB1 /* Build configuration list for PBXNativeTarget "WarpnetShareExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9FAD859429743F7400496AB1 /* Debug */,
@@ -1135,7 +1137,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9FBFE634292A715500C250E9 /* Build configuration list for PBXProject "IceCubesApp" */ = {
+		9FBFE634292A715500C250E9 /* Build configuration list for PBXProject "WarpnetApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9FBFE646292A715600C250E9 /* Debug */,
@@ -1144,7 +1146,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9FBFE648292A715600C250E9 /* Build configuration list for PBXNativeTarget "IceCubesApp" */ = {
+		9FBFE648292A715600C250E9 /* Build configuration list for PBXNativeTarget "WarpnetApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9FBFE649292A715600C250E9 /* Debug */,
@@ -1153,7 +1155,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E9DF420A29830FEC0003AAD2 /* Build configuration list for PBXNativeTarget "IceCubesActionExtension" */ = {
+		E9DF420A29830FEC0003AAD2 /* Build configuration list for PBXNativeTarget "WarpnetActionExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E9DF420829830FEC0003AAD2 /* Debug */,

@@ -49,8 +49,8 @@ jobs:
       - name: Archive
         run: |
           xcodebuild archive \
-            -project warpfone/IceCubesApp.xcodeproj \
-            -scheme IceCubesApp \
+            -project warpfone/WarpnetApp.xcodeproj \
+            -scheme WarpnetApp \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/warpfone.xcarchive" \

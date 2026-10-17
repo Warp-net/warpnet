@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "E9DF41F929830FEC0003AAD2"
-               BuildableName = "IceCubesActionExtension.appex"
-               BlueprintName = "IceCubesActionExtension"
-               ReferencedContainer = "container:IceCubesApp.xcodeproj">
+               BuildableName = "WarpnetActionExtension.appex"
+               BlueprintName = "WarpnetActionExtension"
+               ReferencedContainer = "container:WarpnetApp.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -30,9 +30,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "9FBFE638292A715500C250E9"
-               BuildableName = "Ice Cubes.app"
-               BlueprintName = "IceCubesApp"
-               ReferencedContainer = "container:IceCubesApp.xcodeproj">
+               BuildableName = "Warpnet.app"
+               BlueprintName = "WarpnetApp"
+               ReferencedContainer = "container:WarpnetApp.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -61,9 +61,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "9FBFE638292A715500C250E9"
-            BuildableName = "Ice Cubes.app"
-            BlueprintName = "IceCubesApp"
-            ReferencedContainer = "container:IceCubesApp.xcodeproj">
+            BuildableName = "Warpnet.app"
+            BlueprintName = "WarpnetApp"
+            ReferencedContainer = "container:WarpnetApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -80,9 +80,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "9FBFE638292A715500C250E9"
-            BuildableName = "Ice Cubes.app"
-            BlueprintName = "IceCubesApp"
-            ReferencedContainer = "container:IceCubesApp.xcodeproj">
+            BuildableName = "Warpnet.app"
+            BlueprintName = "WarpnetApp"
+            ReferencedContainer = "container:WarpnetApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -13,7 +13,7 @@ import SwiftUI
 import Timeline
 
 @main
-struct IceCubesApp: App {
+struct WarpnetApp: App {
   @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
   @Environment(\.scenePhase) var scenePhase

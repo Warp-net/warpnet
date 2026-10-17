@@ -281,3 +281,20 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Info.plist
+
+2026-10-17, file names
+- Directories, files, targets and schemes named IceCubes* are now named
+  Warpnet*: IceCubesApp/ is WarpnetApp/, IceCubesShareExtension/ is
+  WarpnetShareExtension/, IceCubesActionExtension/ is WarpnetActionExtension/
+  and IceCubesApp.xcodeproj is WarpnetApp.xcodeproj. The xcconfig,
+  entitlements and scheme files and App/Main/IceCubesApp*.swift follow the
+  same pattern. The paths in the entries above are the old ones.
+- The app is built as Warpnet.app instead of Ice Cubes.app. Its Swift module
+  is WarpnetApp, so it does not clash with the node's Warpnet framework, and
+  its App struct is WarpnetApp. The original file headers that name the Ice
+  Cubes targets are kept.
+- Files without the notice line:
+  .gitignore
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+  WarpnetShareExtension/Base.lproj/MainInterface.storyboard

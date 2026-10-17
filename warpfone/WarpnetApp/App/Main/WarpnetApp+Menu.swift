@@ -3,7 +3,7 @@
 import Env
 import SwiftUI
 
-extension IceCubesApp {
+extension WarpnetApp {
   @CommandsBuilder
   var appMenu: some Commands {
     CommandGroup(replacing: .newItem) {

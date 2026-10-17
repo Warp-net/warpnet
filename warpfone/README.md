@@ -17,9 +17,9 @@ and its tests run with `swift test --package-path Packages/WarpnetTransport`.
 `Packages/Network` keeps the Ice Cubes `Client` API, and the router in
 `Sources/Network/Warpnet` answers its Mastodon endpoints from the node; its
 tests run with `swift test --package-path Packages/Network`.
-Debug builds read `IceCubesApp.xcconfig`, which is not committed: copy
-`IceCubesApp.xcconfig.template` and set your team and bundle id prefix.
-Release builds read `IceCubesApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
+Debug builds read `WarpnetApp.xcconfig`, which is not committed: copy
+`WarpnetApp.xcconfig.template` and set your team and bundle id prefix.
+Release builds read `WarpnetApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
 stays empty until the project has an Apple developer team.
 
 Releases to TestFlight go through the `Release / Warpfone` workflow; see

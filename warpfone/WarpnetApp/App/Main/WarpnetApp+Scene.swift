@@ -5,7 +5,7 @@ import MediaUI
 import StatusKit
 import SwiftUI
 
-extension IceCubesApp {
+extension WarpnetApp {
   var appScene: some Scene {
     WindowGroup(id: "MainWindow") {
       AppView(selectedTab: $selectedTab, appRouterPath: $appRouterPath)
