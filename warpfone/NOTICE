@@ -383,3 +383,7 @@ carry that line, so they are named here instead.
 - The notifications list inserts every notification a poll brings, through
   NotificationsViewModel.handleEvents, instead of only the last one of the
   batch.
+
+2026-10-18, quick reactions
+- The heart is a menu with a primary action: a tap still reacts with ❤️, and a
+  long press opens the quick reactions instead of the tweet's own menu.

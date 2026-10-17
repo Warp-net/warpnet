@@ -242,24 +242,29 @@ struct StatusRowActionsView: View {
         actionLabel(action: action)
       }
       .menuStyle(.button), action: action)
+    } else if action == .favorite {
+      // A context menu on the button loses the long press to the row's own.
+      styled(Menu {
+        ForEach(WarpnetReactions.quick, id: \.self) { emoji in
+          Button(emoji) {
+            Task {
+              HapticManager.shared.fireHaptic(.notification(.success))
+              await statusDataController.react(emoji: emoji, remoteStatus: viewModel.localStatusId)
+            }
+          }
+        }
+      } label: {
+        actionLabel(action: action)
+      } primaryAction: {
+        handleAction(action: action)
+      }
+      .menuStyle(.button), action: action)
     } else {
       styled(Button {
         handleAction(action: action)
       } label: {
         actionLabel(action: action)
       }, action: action)
-      .if(action == .favorite) { view in
-        view.contextMenu {
-          ForEach(WarpnetReactions.quick, id: \.self) { emoji in
-            Button(emoji) {
-              Task {
-                HapticManager.shared.fireHaptic(.notification(.success))
-                await statusDataController.react(emoji: emoji, remoteStatus: viewModel.localStatusId)
-              }
-            }
-          }
-        }
-      }
     }
   }
 
