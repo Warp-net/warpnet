@@ -48,6 +48,9 @@ final class PairingModel {
     guard !didRestore else { return }
     didRestore = true
     await restore()
+    if case .failed = phase {
+      didRestore = false
+    }
   }
 
   func restore() async {

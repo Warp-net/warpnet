@@ -28,6 +28,14 @@
 		<string>Atkinson-Hyperlegible-Regular-102.ttf</string>
 		<string>OpenDyslexic-Regular.otf</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>site.warpnet.warpfone.refresh</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>AppGroup</key>
 	<string>group.$(BUNDLE_ID_PREFIX).warpfone</string>
 	<key>KeychainAccessGroup</key>

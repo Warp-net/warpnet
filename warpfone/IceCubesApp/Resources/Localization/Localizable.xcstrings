@@ -6536,6 +6536,46 @@
         }
       }
     },
+    "warpnet.push.follow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Followed you"
+          }
+        }
+      }
+    },
+    "warpnet.push.reaction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reacted to your tweet"
+          }
+        }
+      }
+    },
+    "warpnet.push.reply" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replied to you"
+          }
+        }
+      }
+    },
+    "warpnet.push.retweet" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retweeted your tweet"
+          }
+        }
+      }
+    },
     "warpnet.report.account-action" : {
       "localizations" : {
         "en" : {

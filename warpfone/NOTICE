@@ -198,3 +198,14 @@ carry that line, so they are named here instead.
 - Removed edit history, private notes on profiles and the links to a Mastodon
   server's web settings and to Mastometrics; the edit date of a tweet is still
   shown.
+
+2026-10-17, background
+- A background app refresh task resumes the paired node about every fifteen
+  minutes, reads its pending notifications and shows the new ones as local
+  notifications. The app asks for notification permission once a node is
+  paired, and the in-app poller records what it has already shown so the
+  background task does not repeat it.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

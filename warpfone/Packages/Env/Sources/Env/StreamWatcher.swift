@@ -29,6 +29,7 @@ import OSLog
   private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "stream")
 
   public static let shared = StreamWatcher()
+  public static let lastSeenPushKey = "warpnet.pushes.last-seen"
 
   private init() {}
 
@@ -63,6 +64,8 @@ import OSLog
       return
     }
     guard let newest = notifications.map(\.id).max() else { return }
+    UserDefaults.standard.set(max(UserDefaults.standard.string(forKey: Self.lastSeenPushKey) ?? newest, newest),
+                              forKey: Self.lastSeenPushKey)
     guard let previous = lastSeenId else {
       lastSeenId = newest
       return

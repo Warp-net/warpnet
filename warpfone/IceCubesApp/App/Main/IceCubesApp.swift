@@ -42,6 +42,9 @@ struct IceCubesApp: App {
     currentAccount.setClient(client: client)
     currentInstance.setClient(client: client)
     userPreferences.setClient(client: client)
+    if client.isAuth {
+      BackgroundRefresh.requestAuthorization()
+    }
     Task {
       await currentInstance.fetchCurrentInstance()
       watcher.setClient(client: client, instanceStreamingURL: currentInstance.instance?.urls?.streamingApi)
@@ -53,6 +56,7 @@ struct IceCubesApp: App {
     switch scenePhase {
     case .background:
       watcher.stopWatching()
+      BackgroundRefresh.schedule()
       Task {
         await pairing.pause()
       }
@@ -76,6 +80,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     try? AVAudioSession.sharedInstance().setActive(true)
     WarpnetDataLoader.install()
     WarpnetVideoLoader.install()
+    BackgroundRefresh.register()
     return true
   }
 

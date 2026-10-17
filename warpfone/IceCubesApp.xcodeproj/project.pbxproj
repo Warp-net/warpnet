@@ -16,6 +16,7 @@
 		611151B148D2330C0731A6E7 /* WarpnetVideoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */; };
 		639CDF9C296AC82F00C35E58 /* SafariRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639CDF9B296AC82F00C35E58 /* SafariRouter.swift */; };
 		7BFB91C72485C337E2EFD0C3 /* WarpnetTransport in Frameworks */ = {isa = PBXBuildFile; productRef = B979A68FAE002F6F5E11073F /* WarpnetTransport */; };
+		85AB8517A4D9AF7F8F588129 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92282D680EE224ACEDA2C667 /* BackgroundRefresh.swift */; };
 		8C4C709640EEC75926CC15B9 /* StartupProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88C7A6331494D080F4DFE2C /* StartupProgressView.swift */; };
 		9F15D6002B3D6A850008C220 /* NavigationTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */; };
 		9F15D6022B3D6E280008C220 /* TabbarEntriesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */; };
@@ -136,6 +137,7 @@
 		639CDF9B296AC82F00C35E58 /* SafariRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariRouter.swift; sourceTree = "<group>"; };
 		76E7D36BBCCC132453A9DD80 /* WarpnetDataLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarpnetDataLoader.swift; sourceTree = "<group>"; };
 		8A911FE4DB4D158CC91E1F42 /* WarpnetTransport */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = WarpnetTransport; path = Packages/WarpnetTransport; sourceTree = "<group>"; };
+		92282D680EE224ACEDA2C667 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
 		9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTab.swift; sourceTree = "<group>"; };
 		9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabbarEntriesSettingsView.swift; sourceTree = "<group>"; };
 		9F15D6032B3DC2180008C220 /* NavigationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationSheet.swift; sourceTree = "<group>"; };
@@ -279,6 +281,7 @@
 				B88C7A6331494D080F4DFE2C /* StartupProgressView.swift */,
 				76E7D36BBCCC132453A9DD80 /* WarpnetDataLoader.swift */,
 				1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */,
+				92282D680EE224ACEDA2C667 /* BackgroundRefresh.swift */,
 			);
 			path = Warpnet;
 			sourceTree = "<group>";
@@ -702,6 +705,7 @@
 				8C4C709640EEC75926CC15B9 /* StartupProgressView.swift in Sources */,
 				04BD462E114C0E6E46EF9812 /* WarpnetDataLoader.swift in Sources */,
 				611151B148D2330C0731A6E7 /* WarpnetVideoLoader.swift in Sources */,
+				85AB8517A4D9AF7F8F588129 /* BackgroundRefresh.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
