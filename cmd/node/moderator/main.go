@@ -141,11 +141,7 @@ func main() {
 	if config.Config().Node.IsSelfUpdate {
 		updater := selfupdate.NewSelfUpdater(ctx, version, selfupdate.ModeratorArtifact(), false)
 		defer updater.Close()
-		updater.Run(func() {
-			moder.Close()
-			_ = publisher.Close()
-			n.Stop()
-		})
+		updater.Run(n.Stop)
 	}
 
 	<-interruptChan
