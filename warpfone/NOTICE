@@ -271,3 +271,13 @@ carry that line, so they are named here instead.
   instance.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-17, release
+- The app declares that it uses non-exempt encryption, which the node's
+  peer-to-peer transport does, and the app and the share extension carry
+  privacy manifests: no tracking, no collected data, and the reasons for the
+  user defaults, boot time and file timestamp APIs the app, its node and the
+  extension use.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist

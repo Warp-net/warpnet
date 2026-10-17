@@ -13,12 +13,14 @@
 		069709A8298C87B5006E4CB5 /* OpenDyslexic-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = 069709A7298C87B5006E4CB5 /* OpenDyslexic-Regular.otf */; };
 		069709AA298C9AD7006E4CB5 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069709A9298C9AD7006E4CB5 /* AboutView.swift */; };
 		28A15CCBAD5F4E6389FAB391 /* PairingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7879F62AC35F8849E6A33F0 /* PairingModel.swift */; };
+		3394C4BD5A477850DA899E95 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0B4629A3878C7F177A045CB7 /* PrivacyInfo.xcprivacy */; };
 		58A6ABF317A370C8CF6FB9E1 /* SharedPostPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1614FF40AE69DF401351FC /* SharedPostPublisher.swift */; };
 		611151B148D2330C0731A6E7 /* WarpnetVideoLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */; };
 		639CDF9C296AC82F00C35E58 /* SafariRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639CDF9B296AC82F00C35E58 /* SafariRouter.swift */; };
 		7BFB91C72485C337E2EFD0C3 /* WarpnetTransport in Frameworks */ = {isa = PBXBuildFile; productRef = B979A68FAE002F6F5E11073F /* WarpnetTransport */; };
 		85AB8517A4D9AF7F8F588129 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92282D680EE224ACEDA2C667 /* BackgroundRefresh.swift */; };
 		8C4C709640EEC75926CC15B9 /* StartupProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88C7A6331494D080F4DFE2C /* StartupProgressView.swift */; };
+		8FD6E4E665A9612242F8E0F1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 320B3C7B339100E9EBBECF5F /* PrivacyInfo.xcprivacy */; };
 		9F15D6002B3D6A850008C220 /* NavigationTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */; };
 		9F15D6022B3D6E280008C220 /* TabbarEntriesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */; };
 		9F15D6042B3DC2180008C220 /* NavigationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6032B3DC2180008C220 /* NavigationSheet.swift */; };
@@ -133,8 +135,10 @@
 		069709A3298C8545006E4CB5 /* Atkinson-Hyperlegible-Regular-102.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Atkinson-Hyperlegible-Regular-102.ttf"; sourceTree = "<group>"; };
 		069709A7298C87B5006E4CB5 /* OpenDyslexic-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "OpenDyslexic-Regular.otf"; sourceTree = "<group>"; };
 		069709A9298C9AD7006E4CB5 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		0B4629A3878C7F177A045CB7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarpnetVideoLoader.swift; sourceTree = "<group>"; };
 		308DF3E6331C7C5C1E0D8480 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
+		320B3C7B339100E9EBBECF5F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3A1614FF40AE69DF401351FC /* SharedPostPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPostPublisher.swift; sourceTree = "<group>"; };
 		639CDF9B296AC82F00C35E58 /* SafariRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariRouter.swift; sourceTree = "<group>"; };
 		76E7D36BBCCC132453A9DD80 /* WarpnetDataLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarpnetDataLoader.swift; sourceTree = "<group>"; };
@@ -356,6 +360,7 @@
 				9FAD859629743F7E00496AB1 /* IceCubesShareExtension.entitlements */,
 				9FAD858A29743F7400496AB1 /* ShareViewController.swift */,
 				9FAD858F29743F7400496AB1 /* Info.plist */,
+				0B4629A3878C7F177A045CB7 /* PrivacyInfo.xcprivacy */,
 			);
 			path = IceCubesShareExtension;
 			sourceTree = "<group>";
@@ -432,6 +437,7 @@
 				9FAE4AC8293774FF00772766 /* Info.plist */,
 				9F398AB429360A5800A889F2 /* App */,
 				9F398AB529360A6100A889F2 /* Resources */,
+				320B3C7B339100E9EBBECF5F /* PrivacyInfo.xcprivacy */,
 			);
 			path = IceCubesApp;
 			sourceTree = "<group>";
@@ -624,6 +630,7 @@
 			files = (
 				9FAD858E29743F7400496AB1 /* (null) in Resources */,
 				9F38A7352ACEA26100DBCD66 /* Localizable.xcstrings in Resources */,
+				3394C4BD5A477850DA899E95 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -646,6 +653,7 @@
 				9F18801629AE477F00D85459 /* refresh.wav in Resources */,
 				9F18801929AE477F00D85459 /* tootSent.wav in Resources */,
 				9F2A542E296B1CC0009B2D7C /* glass.wav in Resources */,
+				8FD6E4E665A9612242F8E0F1 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
