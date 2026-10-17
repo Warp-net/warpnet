@@ -181,3 +181,7 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The composer no longer offers visibility, content warnings, a post
+  language, media descriptions, custom emoji or a hashtag button, none of
+  which a tweet can carry; the matching defaults left the content settings.
+  It names the author by display name instead of an @user@server handle.

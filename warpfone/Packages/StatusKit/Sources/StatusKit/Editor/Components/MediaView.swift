@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AVKit
 import DesignSystem
 import Env
@@ -12,7 +14,6 @@ extension StatusEditor {
     @Environment(Theme.self) private var theme
     @Environment(CurrentInstance.self) private var currentInstance
     var viewModel: ViewModel
-    @Binding var editingMediaContainer: MediaContainer?
 
     @State private var isErrorDisplayed: Bool = false
 
@@ -59,9 +60,8 @@ extension StatusEditor {
       private var scrollBottomPadding: CGFloat? = 0
     #endif
 
-    init(viewModel: ViewModel, editingMediaContainer: Binding<StatusEditor.MediaContainer?>) {
+    init(viewModel: ViewModel) {
       self.viewModel = viewModel
-      _editingMediaContainer = editingMediaContainer
     }
 
     private func pixel(at index: Int) -> some View {
@@ -105,9 +105,6 @@ extension StatusEditor {
               placeholderView
             }
           }
-      }
-      .overlay(alignment: .bottomTrailing) {
-        makeAltMarker(container: container)
       }
       .overlay(alignment: .topTrailing) {
         makeDiscardMarker(container: container)
@@ -164,17 +161,7 @@ extension StatusEditor {
 
     @ViewBuilder
     private func makeImageMenu(container: MediaContainer) -> some View {
-      if container.mediaAttachment?.url != nil {
-        if currentInstance.isEditAltTextSupported || !viewModel.mode.isEditing {
-          Button {
-            editingMediaContainer = container
-          } label: {
-            Label(container.mediaAttachment?.description?.isEmpty == false ?
-              "status.editor.description.edit" : "status.editor.description.add",
-              systemImage: "pencil.line")
-          }
-        }
-      } else if container.error != nil {
+      if container.mediaAttachment?.url == nil, container.error != nil {
         Button {
           isErrorDisplayed = true
         } label: {
@@ -199,19 +186,6 @@ extension StatusEditor {
       } message: {
         Text(error.error ?? "")
       }
-    }
-
-    private func makeAltMarker(container: MediaContainer) -> some View {
-      Button {
-        editingMediaContainer = container
-      } label: {
-        Text("status.image.alt-text.abbreviation")
-          .font(.caption2)
-      }
-      .padding(8)
-      .background(.thinMaterial)
-      .cornerRadius(8)
-      .padding(4)
     }
 
     private func makeDiscardMarker(container: MediaContainer) -> some View {

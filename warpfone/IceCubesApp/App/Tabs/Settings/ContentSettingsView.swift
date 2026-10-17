@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AppAccount
 import DesignSystem
 import Env
@@ -25,9 +27,6 @@ struct ContentSettingsView: View {
         Toggle(isOn: $userPreferences.muteVideo) {
           Text("settings.other.mute-video")
         }
-        Toggle(isOn: $userPreferences.showAltTextForMedia) {
-          Text("settings.content.media.show.alt")
-        }
       }
       #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
@@ -45,37 +44,7 @@ struct ContentSettingsView: View {
       .listRowBackground(theme.primaryBackgroundColor)
       #endif
 
-      Section("settings.content.instance-settings") {
-        Toggle(isOn: $userPreferences.useInstanceContentSettings) {
-          Text("settings.content.use-instance-settings")
-        }
-      }
-      #if !os(visionOS)
-      .listRowBackground(theme.primaryBackgroundColor)
-      #endif
-      .onChange(of: userPreferences.useInstanceContentSettings) { _, newVal in
-        if newVal {
-          userPreferences.appAutoExpandSpoilers = userPreferences.autoExpandSpoilers
-          userPreferences.appAutoExpandMedia = userPreferences.autoExpandMedia
-          userPreferences.appDefaultPostsSensitive = userPreferences.postIsSensitive
-          userPreferences.appDefaultPostVisibility = userPreferences.postVisibility
-          userPreferences.appRequireAltText = userPreferences.appRequireAltText
-        }
-      }
-
       Section {
-        Toggle(isOn: $userPreferences.appAutoExpandSpoilers) {
-          Text("settings.content.expand-spoilers")
-        }
-        .disabled(userPreferences.useInstanceContentSettings)
-
-        Picker("settings.content.expand-media", selection: $userPreferences.appAutoExpandMedia) {
-          ForEach(ServerPreferences.AutoExpandMedia.allCases, id: \.rawValue) { media in
-            Text(media.description).tag(media)
-          }
-        }
-        .disabled(userPreferences.useInstanceContentSettings)
-
         Toggle(isOn: $userPreferences.collapseLongPosts) {
           Text("settings.content.collapse-long-posts")
         }
@@ -88,40 +57,6 @@ struct ContentSettingsView: View {
       .listRowBackground(theme.primaryBackgroundColor)
       #endif
 
-      Section("settings.content.posting") {
-        Picker("settings.content.default-visibility", selection: $userPreferences.appDefaultPostVisibility) {
-          ForEach(Visibility.allCases, id: \.rawValue) { vis in
-            Text(vis.title).tag(vis)
-          }
-        }
-        .disabled(userPreferences.useInstanceContentSettings)
-
-        Picker("settings.content.default-reply-visibility", selection: $userPreferences.appDefaultReplyVisibility) {
-          ForEach(Visibility.allCases, id: \.rawValue) { vis in
-            if UserPreferences.getIntOfVisibility(vis) <=
-              UserPreferences.getIntOfVisibility(userPreferences.postVisibility)
-            {
-              Text(vis.title).tag(vis)
-            }
-          }
-        }
-        .onChange(of: userPreferences.postVisibility) {
-          userPreferences.conformReplyVisibilityConstraints()
-        }
-
-        Toggle(isOn: $userPreferences.appDefaultPostsSensitive) {
-          Text("settings.content.default-sensitive")
-        }
-        .disabled(userPreferences.useInstanceContentSettings)
-          
-        Toggle(isOn: $userPreferences.appRequireAltText) {
-          Text("settings.content.require-alt-text")
-        }
-      }
-      #if !os(visionOS)
-      .listRowBackground(theme.primaryBackgroundColor)
-      #endif
-      
       Section("timeline.content-filter.title") {
         Toggle(isOn: $contentFilter.showBoosts) {
           Label("timeline.filter.show-boosts", image: "Rocket")

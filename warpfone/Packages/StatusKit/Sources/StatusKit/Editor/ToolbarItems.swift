@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import Models
 import StoreKit
@@ -7,7 +9,6 @@ import DesignSystem
 extension StatusEditor {
   @MainActor
   struct ToolbarItems: ToolbarContent {
-    @State private var isLanguageConfirmPresented = false
     @State private var isDismissAlertPresented: Bool = false
     @State private var isDraftsSheetDisplayed: Bool = false
     
@@ -49,12 +50,7 @@ extension StatusEditor {
       ToolbarItem(placement: .navigationBarTrailing) {
         Button {
           Task {
-            mainSEVM.evaluateLanguages()
-            if preferences.autoDetectPostLanguage, let _ = mainSEVM.languageConfirmationDialogLanguages {
-              isLanguageConfirmPresented = true
-            } else {
-              await postAllStatus()
-            }
+            await postAllStatus()
           }
         } label: {
           Image(systemName: "paperplane.fill")
@@ -63,9 +59,6 @@ extension StatusEditor {
         .buttonStyle(.borderedProminent)
         .disabled(!mainSEVM.canPost || mainSEVM.isPosting)
         .keyboardShortcut(.return, modifiers: .command)
-        .confirmationDialog("", isPresented: $isLanguageConfirmPresented, actions: {
-          languageConfirmationDialog
-        })
       }
 
       ToolbarItem(placement: .navigationBarLeading) {
@@ -139,28 +132,6 @@ extension StatusEditor {
       private func close() { dismiss() }
     #endif
 
-    @ViewBuilder
-    private var languageConfirmationDialog: some View {
-      if let (detected: detected, selected: selected) = mainSEVM.languageConfirmationDialogLanguages,
-         let detectedLong = Locale.current.localizedString(forLanguageCode: detected),
-         let selectedLong = Locale.current.localizedString(forLanguageCode: selected)
-      {
-        Button("status.editor.language-select.confirmation.detected-\(detectedLong)") {
-          mainSEVM.selectedLanguage = detected
-          Task { await postAllStatus() }
-        }
-        Button("status.editor.language-select.confirmation.selected-\(selectedLong)") {
-          mainSEVM.selectedLanguage = selected
-          Task { await postAllStatus() }
-        }
-        Button("action.cancel", role: .cancel) {
-          mainSEVM.languageConfirmationDialogLanguages = nil
-        }
-      } else {
-        EmptyView()
-      }
-    }
-    
     private var draftsListView: some View {
       DraftsListView(selectedDraft: .init(get: {
         nil
