@@ -14,48 +14,67 @@ enum SharedPostPublisher {
     isPublishing = true
     defer { isPublishing = false }
     for post in SharedStore.pending() {
+      let mediaIds: [String]
       do {
-        var mediaIds: [String] = []
-        for file in post.mediaFiles {
-          let data = try Data(contentsOf: SharedStore.directory.appending(path: file))
-          let attachment: MediaAttachment = try await client.mediaUpload(endpoint: Media.medias,
-                                                                         version: .v2,
-                                                                         method: "POST",
-                                                                         mimeType: mimeType(of: file),
-                                                                         filename: file,
-                                                                         data: data)
-          mediaIds.append(attachment.id)
-        }
+        mediaIds = try await upload(post, with: client)
+      } catch {
+        guard isRefusal(error) else { return }
+        drop(post, title: "warpnet.share.not-published")
+        continue
+      }
+      do {
         let status: Status = try await client.post(endpoint: Statuses.postStatus(json: StatusData(status: post.content,
                                                                                                     visibility: .pub,
                                                                                                     mediaIds: mediaIds)))
         StreamWatcher.shared.emmitPostEvent(for: status)
         SharedStore.remove(post)
       } catch {
-        guard isPermanent(error) else { return }
-        SharedStore.remove(post)
-        notifyNotPublished(post)
+        if isRefusal(error) {
+          drop(post, title: "warpnet.share.not-published")
+        } else if mayHaveBeenPosted(error) {
+          drop(post, title: "warpnet.share.unconfirmed")
+        } else {
+          return
+        }
       }
     }
   }
 
-  private static func notifyNotPublished(_ post: SharedPost) {
+  private static func upload(_ post: SharedPost, with client: Client) async throws -> [String] {
+    var mediaIds: [String] = []
+    for file in post.mediaFiles {
+      let data = try Data(contentsOf: SharedStore.directory.appending(path: file))
+      let attachment: MediaAttachment = try await client.mediaUpload(endpoint: Media.medias,
+                                                                     version: .v2,
+                                                                     method: "POST",
+                                                                     mimeType: mimeType(of: file),
+                                                                     filename: file,
+                                                                     data: data)
+      mediaIds.append(attachment.id)
+    }
+    return mediaIds
+  }
+
+  private static func drop(_ post: SharedPost, title: String.LocalizationValue) {
+    SharedStore.remove(post)
     let content = UNMutableNotificationContent()
-    content.title = String(localized: "warpnet.share.not-published")
+    content.title = String(localized: title)
     content.body = post.content
     UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: post.id.uuidString,
                                                                  content: content,
                                                                  trigger: nil))
   }
 
-  private static func isPermanent(_ error: Error) -> Bool {
+  // The node answers 5000 for every handler error; its middleware errors are
+  // about the request, not the tweet, and pass once the device re-pairs.
+  private static func isRefusal(_ error: Error) -> Bool {
     switch error {
     case is CocoaError, is WarpnetRoutingError:
       return true
     case let error as WarpnetError:
       switch error {
-      case .protocolError:
-        return !error.isRateLimited
+      case let .protocolError(_, message):
+        return !error.isRateLimited && !message.hasPrefix("middleware:")
       case .serializationError:
         return true
       default:
@@ -64,6 +83,13 @@ enum SharedPostPublisher {
     default:
       return false
     }
+  }
+
+  // The request went out but its answer was lost, so the node may already
+  // have posted it; sending it again would post it twice.
+  private static func mayHaveBeenPosted(_ error: Error) -> Bool {
+    guard case let WarpnetError.transportFailure(message) = error else { return false }
+    return message.lowercased().contains("stream: reading response")
   }
 
   private static func mimeType(of file: String) -> String {

@@ -360,3 +360,11 @@ carry that line, so they are named here instead.
   moderated tweet closes its detail screen the way a 404 did.
 - The Post button stays off for empty text and for text over the node's 2 KiB
   limit, since the node refuses both.
+
+2026-10-18, share queue errors
+- A shared tweet is dropped with a notification only when the node refuses the
+  tweet itself. Errors about the request, such as an expired pairing, keep it
+  queued. A post whose answer was lost is dropped as unconfirmed instead of
+  being sent again.
+- Files without the notice line:
+  WarpnetApp/Resources/Localization/Localizable.xcstrings

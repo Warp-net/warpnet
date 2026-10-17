@@ -6795,6 +6795,16 @@
         }
       }
     },
+    "warpnet.share.unconfirmed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tweet not confirmed"
+          }
+        }
+      }
+    },
     "warpnet.startup.account" : {
       "localizations" : {
         "en" : {
