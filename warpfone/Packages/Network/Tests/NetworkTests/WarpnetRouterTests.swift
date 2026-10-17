@@ -50,6 +50,28 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(Set(binding.calls(to: ProtocolIds.PUBLIC_GET_USER).compactMap { $0["user_id"] as? String }), ["A", "B", "C"])
   }
 
+  func testNewerThanReadsBackToTheAnchor() async throws {
+    let pages: [String: (tweets: [[String: Any]], cursor: String)] = [
+      "": ((5 ... 9).reversed().map { ScriptedNode.tweet("0\($0)", by: "A") }, "c2"),
+      "c2": ((1 ... 4).reversed().map { ScriptedNode.tweet("0\($0)", by: "A") }, "end"),
+    ]
+    let (router, _) = await makeRouter { route, body in
+      if route == ProtocolIds.PRIVATE_GET_TIMELINE {
+        let page = pages[body["cursor"] as? String ?? ""] ?? ([], "end")
+        return ScriptedNode.json(["tweets": page.tweets, "cursor": page.cursor])
+      }
+      return Self.standardNode(route, body, timeline: [])
+    }
+    func newer(than id: String) async throws -> [String] {
+      try await decoder.decode([Status].self,
+                               from: router.route(Timelines.home(sinceId: nil, maxId: nil, minId: id), method: .get).body).map(\.id)
+    }
+    let newerThanThree = try await newer(than: "03|A")
+    XCTAssertEqual(newerThanThree, ["09|A", "08|A", "07|A", "06|A", "05|A", "04|A"])
+    let newerThanTop = try await newer(than: "09|A")
+    XCTAssertEqual(newerThanTop, [])
+  }
+
   func testNextPageUsesTheCursorOfTheLastStatus() async throws {
     let pages: [String: (tweets: [[String: Any]], cursor: String)] = [
       "": ((0 ..< 20).map { ScriptedNode.tweet(String(format: "%02d", 99 - $0), by: "A") }, "cursor-2"),

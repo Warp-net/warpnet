@@ -877,10 +877,20 @@ struct WarpnetRouter: Sendable {
                              fetch: @escaping @Sendable (String) async throws -> WarpnetRepository.Page) async throws -> Response
   {
     if let newerThan {
-      let page = try await fetch("")
-      var tweets = page.tweets.filter(keep)
-      if let index = tweets.firstIndex(where: { WarpnetMapper.address($0).id == newerThan }) {
-        tweets = Array(tweets[..<index])
+      var tweets: [WarpnetTweet] = []
+      var seen = Set<String>()
+      var cursor: String? = ""
+      for _ in 0 ..< Self.maxResumePages {
+        guard let current = cursor else { break }
+        let page = try await fetch(current)
+        cursor = Self.isEnd(page.cursor) ? nil : page.cursor
+        var kept = page.tweets.filter(keep)
+        let anchor = kept.firstIndex { WarpnetMapper.address($0).id == newerThan }
+        if let anchor {
+          kept = Array(kept[..<anchor])
+        }
+        tweets += kept.filter { seen.insert(WarpnetMapper.address($0).id).inserted }
+        if anchor != nil { break }
       }
       return try await response(repository.statuses(tweets, filterContext: filterContext))
     }
