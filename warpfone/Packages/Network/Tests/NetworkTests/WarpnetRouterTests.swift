@@ -147,6 +147,8 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(sent["retweeted_by"] as? String, ScriptedNode.viewerId)
     XCTAssertEqual(sent["user_id"] as? String, ScriptedNode.viewerId)
     XCTAssertEqual(sent["text"] as? String, "look at this")
+    let sentAt = try XCTUnwrap(WarpnetFormat.date(fromRFC3339: sent["created_at"] as? String))
+    XCTAssertLessThan(abs(sentAt.timeIntervalSinceNow), 60)
     XCTAssertTrue(binding.calls(to: ProtocolIds.PRIVATE_POST_TWEET).isEmpty)
     XCTAssertEqual(status.id, "01QUOTE|\(ScriptedNode.viewerId)")
     XCTAssertNil(status.reblog)

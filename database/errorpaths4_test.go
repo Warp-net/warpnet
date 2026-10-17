@@ -31,6 +31,7 @@ package database
 import (
 	"math"
 	"testing"
+	"time"
 
 	local "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
@@ -418,6 +419,7 @@ func TestTweetRepoErrorPaths(t *testing.T) {
 		}, false)
 		require.NoError(t, err)
 		require.NotEqual(t, tweetId, stored.Id)
+		require.WithinDuration(t, time.Now(), stored.CreatedAt, time.Minute)
 	})
 
 	t.Run("SelfRetweetGetsPrefix", func(t *testing.T) {

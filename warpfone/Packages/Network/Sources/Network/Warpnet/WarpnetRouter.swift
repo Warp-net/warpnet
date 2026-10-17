@@ -273,6 +273,7 @@ struct WarpnetRouter: Sendable {
     let images = media.filter { $0.hasPrefix(WarpnetRepository.imagePrefix) }
       .map { String($0.dropFirst(WarpnetRepository.imagePrefix.count)) }
     let draft = WarpnetTweet(id: source.tweetId,
+                             createdAt: WarpnetTimestamp.rfc3339(nanos: WarpnetTimestamp.nowNanos()),
                              retweetedBy: viewer.userId,
                              text: json.status.trimmingCharacters(in: .whitespacesAndNewlines),
                              userId: viewer.userId,
