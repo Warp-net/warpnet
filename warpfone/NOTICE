@@ -372,3 +372,9 @@ carry that line, so they are named here instead.
 2026-10-18, blocks and mutes
 - Muting is a single action instead of a menu of durations, in the profile
   and tweet menus, because the node keeps a mute until it is lifted.
+
+2026-10-18, quote embeds
+- Only warpnet://status links count as tweet links in HTMLString. A link
+  ending in a number, which Ice Cubes took for a Mastodon status, can never be
+  embedded here. It used to come before the quote's own link, hide the
+  embed, and hide the whole tweet as a quote when quotes were filtered out.

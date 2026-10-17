@@ -141,9 +141,7 @@ public struct HTMLString: Codable, Equatable, Hashable, @unchecked Sendable {
       } else if node.nodeName() == "a" {
         let href = try node.attr("href")
         if href != "" {
-          if let url = URL(string: href),
-             Int(url.lastPathComponent) != nil || (url.scheme == "warpnet" && url.host == "status")
-          {
+          if let url = URL(string: href), url.scheme == "warpnet", url.host == "status" {
             statusesURLs.append(url)
           }
         }

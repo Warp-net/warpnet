@@ -143,6 +143,11 @@ final class WarpnetMappingTests: XCTestCase {
     let status = try decode(Status.self, WarpnetMapper.status(tweet, author: author, viewer: ViewerState(), quote: quote))
     XCTAssertEqual(status.content.statusesURLs.map(\.absoluteString), [quote])
     XCTAssertEqual(status.content.asRawText, "look")
+
+    let linked = WarpnetTweet(id: "01Q2", retweetedBy: "01AUTHOR", rootId: "01Q2", text: "see https://github.com/Warp-net/warpnet/pull/598",
+                              userId: "01AUTHOR", username: "Alice", quotedTweetId: "01SRC", quotedUserId: "01SRCAUTHOR")
+    let linkedStatus = try decode(Status.self, WarpnetMapper.status(linked, author: author, viewer: ViewerState(), quote: quote))
+    XCTAssertEqual(linkedStatus.content.statusesURLs.map(\.absoluteString), [quote])
     XCTAssertEqual(WarpnetFormat.statusId(fromURL: quote), "01SRC|01SRCAUTHOR")
 
     let escaped = StatusAddress(tweetId: "a|b", userId: "01U").id
