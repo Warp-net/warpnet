@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import Models
 import Network
@@ -9,7 +11,7 @@ import SwiftUI
 @Observable class TimelineViewModel {
   var scrollToIndex: Int?
   var statusesState: StatusesState = .loading
-  var timeline: TimelineFilter = .federated {
+  var timeline: TimelineFilter = .home {
     willSet {
       if timeline == .home && newValue != .resume {
         saveMarker()

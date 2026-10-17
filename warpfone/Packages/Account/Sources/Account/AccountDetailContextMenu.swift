@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import Network
 import SwiftUI
@@ -143,14 +145,6 @@ public struct AccountDetailContextMenu: View {
             }
           } label: {
             Label("status.action.translate", systemImage: "captions.bubble")
-          }
-        }
-
-        if viewModel.relationship?.following == true {
-          Button {
-            routerPath.presentedSheet = .listAddAccount(account: account)
-          } label: {
-            Label("account.action.add-remove-list", systemImage: "list.bullet")
           }
         }
 

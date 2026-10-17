@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import AppAccount
 import DesignSystem
@@ -36,8 +38,6 @@ class ShareViewController: UIViewController {
           .environment(instance)
           .modelContainer(for: [
             Draft.self,
-            LocalTimeline.self,
-            TagGroup.self,
             RecentTag.self,
           ])
           .tint(theme.tintColor)

@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import SwiftUI
 
@@ -41,18 +43,6 @@ extension IceCubesApp {
         NotificationCenter.default.post(name: .homeTimeline, object: nil)
       }
       .keyboardShortcut("h", modifiers: .shift)
-      Button("timeline.trending") {
-        NotificationCenter.default.post(name: .trendingTimeline, object: nil)
-      }
-      .keyboardShortcut("t", modifiers: .shift)
-      Button("timeline.federated") {
-        NotificationCenter.default.post(name: .federatedTimeline, object: nil)
-      }
-      .keyboardShortcut("f", modifiers: .shift)
-      Button("timeline.local") {
-        NotificationCenter.default.post(name: .localTimeline, object: nil)
-      }
-      .keyboardShortcut("l", modifiers: .shift)
     }
   }
 }

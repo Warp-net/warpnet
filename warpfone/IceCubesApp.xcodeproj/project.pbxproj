@@ -55,7 +55,6 @@
 		9F7335EA2966B3F800AFF0BA /* Conversations in Frameworks */ = {isa = PBXBuildFile; productRef = 9F7335E92966B3F800AFF0BA /* Conversations */; };
 		9F7335ED2967463400AFF0BA /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9F7335EB2967461B00AFF0BA /* AVKit.framework */; };
 		9F7335EF29674F7100AFF0BA /* QuickLook.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9F7335EE29674F7100AFF0BA /* QuickLook.framework */; };
-		9F7335F22967608F00AFF0BA /* AddRemoteTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7335F12967608F00AFF0BA /* AddRemoteTimelineView.swift */; };
 		9F7335F92968576500AFF0BA /* DisplaySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7335F82968576500AFF0BA /* DisplaySettingsView.swift */; };
 		9F7D939A29805DBD00EE6B7A /* AccountSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F7D939929805DBD00EE6B7A /* AccountSettingView.swift */; };
 		9FA6FD6229C04A8800E2312C /* TranslationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FA6FD6129C04A8800E2312C /* TranslationSettingsView.swift */; };
@@ -77,13 +76,10 @@
 		9FBA1D352B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FBA1D342B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift */; };
 		9FBFE63D292A715500C250E9 /* IceCubesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FBFE63C292A715500C250E9 /* IceCubesApp.swift */; };
 		9FBFE64E292A72BD00C250E9 /* Network in Frameworks */ = {isa = PBXBuildFile; productRef = 9FBFE64D292A72BD00C250E9 /* Network */; };
-		9FC14EF22B494D180006CEE1 /* TagsGroupSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC14EF12B494D180006CEE1 /* TagsGroupSettingView.swift */; };
-		9FC14EF42B494D940006CEE1 /* RemoteTimelinesSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC14EF32B494D940006CEE1 /* RemoteTimelinesSettingView.swift */; };
 		9FC14EF62B494DFF0006CEE1 /* RecenTagsSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FC14EF52B494DFF0006CEE1 /* RecenTagsSettingView.swift */; };
 		9FC2A38B2B49D19A00DFD1C1 /* StatusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9FC2A38A2B49D19A00DFD1C1 /* StatusKit */; };
 		9FC2A38F2B49D1AA00DFD1C1 /* StatusKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9FC2A38E2B49D1AA00DFD1C1 /* StatusKit */; };
 		9FD34823293D06E800DB0EE9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9FD34822293D06E800DB0EE9 /* Assets.xcassets */; };
-		9FD542E72962D2FF0045321A /* Lists in Frameworks */ = {isa = PBXBuildFile; productRef = 9FD542E62962D2FF0045321A /* Lists */; };
 		9FE3DB57296FEFCA00628CB0 /* AppAccount in Frameworks */ = {isa = PBXBuildFile; productRef = 9FE3DB56296FEFCA00628CB0 /* AppAccount */; };
 		A259DB4F3C77CF5C14892345 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308DF3E6331C7C5C1E0D8480 /* PairingView.swift */; };
 		AC344AA69EEF3B049F07C968 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = CD8FC99308EBB4E517B4787C /* libresolv.tbd */; platformFilters = (ios, maccatalyst, ); };
@@ -99,7 +95,6 @@
 		E9DF420129830FEC0003AAD2 /* ActionRequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9DF420029830FEC0003AAD2 /* ActionRequestHandler.swift */; };
 		E9DF420329830FEC0003AAD2 /* Action.js in Resources */ = {isa = PBXBuildFile; fileRef = E9DF420229830FEC0003AAD2 /* Action.js */; };
 		E9DF420729830FEC0003AAD2 /* IceCubesActionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E9DF41FA29830FEC0003AAD2 /* IceCubesActionExtension.appex */; platformFilters = (ios, maccatalyst, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		FA31A9AB2A66BF7C00D5F662 /* EditTagGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA31A9AA2A66BF7C00D5F662 /* EditTagGroupView.swift */; };
 		FAC9177746035E68620EC88F /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E921099B2DC257731331A40C /* QRScannerView.swift */; };
 /* End PBXBuildFile section */
 
@@ -184,7 +179,6 @@
 		9F7335E82966B3DC00AFF0BA /* Conversations */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Conversations; path = Packages/Conversations; sourceTree = "<group>"; };
 		9F7335EB2967461B00AFF0BA /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/AVKit.framework; sourceTree = DEVELOPER_DIR; };
 		9F7335EE29674F7100AFF0BA /* QuickLook.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLook.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk/System/Library/Frameworks/QuickLook.framework; sourceTree = DEVELOPER_DIR; };
-		9F7335F12967608F00AFF0BA /* AddRemoteTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddRemoteTimelineView.swift; sourceTree = "<group>"; };
 		9F7335F82968576500AFF0BA /* DisplaySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplaySettingsView.swift; sourceTree = "<group>"; };
 		9F7D939529800B0300EE6B7A /* IceCubesApp-release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "IceCubesApp-release.xcconfig"; sourceTree = "<group>"; };
 		9F7D939929805DBD00EE6B7A /* AccountSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingView.swift; sourceTree = "<group>"; };
@@ -202,13 +196,10 @@
 		9FBA1D342B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarEntriesSettingsView.swift; sourceTree = "<group>"; };
 		9FBFE639292A715500C250E9 /* Ice Cubes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ice Cubes.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		9FBFE63C292A715500C250E9 /* IceCubesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IceCubesApp.swift; sourceTree = "<group>"; };
-		9FC14EF12B494D180006CEE1 /* TagsGroupSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsGroupSettingView.swift; sourceTree = "<group>"; };
-		9FC14EF32B494D940006CEE1 /* RemoteTimelinesSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTimelinesSettingView.swift; sourceTree = "<group>"; };
 		9FC14EF52B494DFF0006CEE1 /* RecenTagsSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecenTagsSettingView.swift; sourceTree = "<group>"; };
 		9FC2A3892B49D10000DFD1C1 /* StatusKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = StatusKit; path = Packages/StatusKit; sourceTree = "<group>"; };
 		9FC60CB82AE6C2F600C6EAD2 /* IceCubesActionExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesActionExtension.entitlements; sourceTree = "<group>"; };
 		9FD34822293D06E800DB0EE9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		9FD542E52962D2CE0045321A /* Lists */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Lists; path = Packages/Lists; sourceTree = "<group>"; };
 		9FE0346A2ADD59AC00529EA8 /* MediaUI */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = MediaUI; path = Packages/MediaUI; sourceTree = "<group>"; };
 		9FE3DB55296FEF5800628CB0 /* AppAccount */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = AppAccount; path = Packages/AppAccount; sourceTree = "<group>"; };
 		B88C7A6331494D080F4DFE2C /* StartupProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupProgressView.swift; sourceTree = "<group>"; };
@@ -229,7 +220,6 @@
 		E9FEB8AE2B1CAB7000815AB5 /* IceCubesApp-release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "IceCubesApp-release.entitlements"; sourceTree = "<group>"; };
 		EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Warpnet.xcframework; sourceTree = "<group>"; };
 		EEB3C87330913F5D42D83B3C /* GoBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoBinding.swift; sourceTree = "<group>"; };
-		FA31A9AA2A66BF7C00D5F662 /* EditTagGroupView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditTagGroupView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -260,7 +250,6 @@
 				9FE3DB57296FEFCA00628CB0 /* AppAccount in Frameworks */,
 				9F398AA92935FFDB00A889F2 /* Account in Frameworks */,
 				9FBFE64E292A72BD00C250E9 /* Network in Frameworks */,
-				9FD542E72962D2FF0045321A /* Lists in Frameworks */,
 				9F398AAB2935FFDB00A889F2 /* Models in Frameworks */,
 				9F5E581929545BE700A53960 /* Env in Frameworks */,
 				DA0B24FB2A6876D50045BDD7 /* SFSafeSymbols in Frameworks */,
@@ -300,14 +289,6 @@
 			path = Warpnet;
 			sourceTree = "<group>";
 		};
-		9F0811402B14869F0020F85E /* TagGroup */ = {
-			isa = PBXGroup;
-			children = (
-				FA31A9AA2A66BF7C00D5F662 /* EditTagGroupView.swift */,
-			);
-			path = TagGroup;
-			sourceTree = "<group>";
-		};
 		9F398AB429360A5800A889F2 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -345,7 +326,6 @@
 			isa = PBXGroup;
 			children = (
 				9F398AB229360A4C00A889F2 /* TimelineTab.swift */,
-				9F7335F12967608F00AFF0BA /* AddRemoteTimelineView.swift */,
 			);
 			path = Timeline;
 			sourceTree = "<group>";
@@ -382,7 +362,6 @@
 		9FAE4AC9293783A200772766 /* Tabs */ = {
 			isa = PBXGroup;
 			children = (
-				9F0811402B14869F0020F85E /* TagGroup */,
 				9F7335F02967607A00AFF0BA /* Timeline */,
 				9FE151A4293C90EA00E9683D /* Settings */,
 				9F35DB4629506F6600B3281A /* NotificationTab.swift */,
@@ -428,7 +407,6 @@
 				9FC2A3892B49D10000DFD1C1 /* StatusKit */,
 				9FE0346A2ADD59AC00529EA8 /* MediaUI */,
 				9F29553D292B67B600E0E81B /* Network */,
-				9FD542E52962D2CE0045321A /* Lists */,
 				9F35DB4829506F7F00B3281A /* Notifications */,
 				9F29553E292B6AF600E0E81B /* Timeline */,
 				8A911FE4DB4D158CC91E1F42 /* WarpnetTransport */,
@@ -485,8 +463,6 @@
 				D08A9C3429956CFA00204A4A /* SwipeActionsSettingsView.swift */,
 				9FA6FD6129C04A8800E2312C /* TranslationSettingsView.swift */,
 				9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */,
-				9FC14EF12B494D180006CEE1 /* TagsGroupSettingView.swift */,
-				9FC14EF32B494D940006CEE1 /* RemoteTimelinesSettingView.swift */,
 				9FC14EF52B494DFF0006CEE1 /* RecenTagsSettingView.swift */,
 				9FBA1D342B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift */,
 			);
@@ -568,7 +544,6 @@
 				9F35DB4929506FA100B3281A /* Notifications */,
 				9F5E581829545BE700A53960 /* Env */,
 				9F55C68F2955993C00F94077 /* Explore */,
-				9FD542E62962D2FF0045321A /* Lists */,
 				9F7335E92966B3F800AFF0BA /* Conversations */,
 				9FE3DB56296FEFCA00628CB0 /* AppAccount */,
 				DA0B24FA2A6876D50045BDD7 /* SFSafeSymbols */,
@@ -713,13 +688,10 @@
 				9F35DB4C2952005C00B3281A /* MessagesTab.swift in Sources */,
 				9FAD85CF2975B68900496AB1 /* SideBarView.swift in Sources */,
 				9FAE4ACB293783B000772766 /* SettingsTab.swift in Sources */,
-				9FC14EF42B494D940006CEE1 /* RemoteTimelinesSettingView.swift in Sources */,
-				9FC14EF22B494D180006CEE1 /* TagsGroupSettingView.swift in Sources */,
 				9F15D6022B3D6E280008C220 /* TabbarEntriesSettingsView.swift in Sources */,
 				9F7335F92968576500AFF0BA /* DisplaySettingsView.swift in Sources */,
 				9FB183292AE9449100BBB692 /* IceCubesApp+Scene.swift in Sources */,
 				9F2B92F6295AE04800DE16D0 /* Tabs.swift in Sources */,
-				FA31A9AB2A66BF7C00D5F662 /* EditTagGroupView.swift in Sources */,
 				9F398AB329360A4C00A889F2 /* TimelineTab.swift in Sources */,
 				9F398AA62935FE8A00A889F2 /* AppRegistry.swift in Sources */,
 				9F15D6002B3D6A850008C220 /* NavigationTab.swift in Sources */,
@@ -729,7 +701,6 @@
 				9F35DB4729506F6600B3281A /* NotificationTab.swift in Sources */,
 				9F654BEF299AC45B00D27FA5 /* ReportView.swift in Sources */,
 				D08A9C3529956CFA00204A4A /* SwipeActionsSettingsView.swift in Sources */,
-				9F7335F22967608F00AFF0BA /* AddRemoteTimelineView.swift in Sources */,
 				9FC14EF62B494DFF0006CEE1 /* RecenTagsSettingView.swift in Sources */,
 				9F6028562B3F36AE00476078 /* AppView.swift in Sources */,
 				9F55C68D2955968700F94077 /* ExploreTab.swift in Sources */,
@@ -1278,10 +1249,6 @@
 		9FC2A38E2B49D1AA00DFD1C1 /* StatusKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = StatusKit;
-		};
-		9FD542E62962D2FF0045321A /* Lists */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Lists;
 		};
 		9FE3DB56296FEFCA00628CB0 /* AppAccount */ = {
 			isa = XCSwiftPackageProductDependency;

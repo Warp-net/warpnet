@@ -16,15 +16,11 @@ public enum RouterDestination: Hashable {
   case remoteStatusDetail(url: URL)
   case conversationDetail(conversation: Conversation)
   case hashTag(tag: String, account: String?)
-  case list(list: Models.List)
   case followers(id: String)
   case following(id: String)
   case favoritedBy(id: String)
   case rebloggedBy(id: String)
   case accountsList(accounts: [Account])
-  case trendingTimeline
-  case trendingLinks(cards: [Card])
-  case tagsList(tags: [Tag])
 }
 
 public enum WindowDestinationEditor: Hashable, Codable {
@@ -45,17 +41,11 @@ public enum SheetDestination: Identifiable {
   case replyToStatusEditor(status: Status)
   case quoteStatusEditor(status: Status)
   case mentionStatusEditor(account: Account, visibility: Models.Visibility)
-  case listCreate
-  case listEdit(list: Models.List)
-  case listAddAccount(account: Account)
-  case addRemoteLocalTimeline
-  case addTagGroup
   case statusEditHistory(status: String)
   case settings
   case about
   case report(status: Status)
   case shareImage(image: UIImage, status: Status)
-  case editTagGroup(tagGroup: TagGroup, onSaved: ((TagGroup) -> Void)?)
   case timelineContentFilter
 
   public var id: String {
@@ -63,24 +53,12 @@ public enum SheetDestination: Identifiable {
     case .editStatusEditor, .newStatusEditor, .replyToStatusEditor, .quoteStatusEditor,
          .mentionStatusEditor:
       "statusEditor"
-    case .listCreate:
-      "listCreate"
-    case .listEdit:
-      "listEdit"
-    case .listAddAccount:
-      "listAddAccount"
-    case .addTagGroup:
-      "addTagGroup"
-    case .addRemoteLocalTimeline:
-      "addRemoteLocalTimeline"
     case .statusEditHistory:
       "statusEditHistory"
     case .report:
       "report"
     case .shareImage:
       "shareImage"
-    case .editTagGroup:
-      "editTagGroup"
     case .settings, .about:
       "settings"
     case .timelineContentFilter:

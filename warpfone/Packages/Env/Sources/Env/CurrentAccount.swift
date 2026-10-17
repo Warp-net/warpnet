@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import Foundation
 import Models
@@ -9,7 +11,6 @@ import Observation
   private static var accountsCache: [String: Account] = [:]
 
   public private(set) var account: Account?
-  public private(set) var lists: [List] = []
   public private(set) var tags: [Tag] = []
   public private(set) var followRequests: [Account] = []
   public private(set) var isUpdating: Bool = false
@@ -19,10 +20,6 @@ import Observation
   private var client: Client?
 
   public static let shared = CurrentAccount()
-
-  public var sortedLists: [List] {
-    lists.sorted { $0.title.lowercased() < $1.title.lowercased() }
-  }
 
   public var sortedTags: [Tag] {
     tags.sorted { $0.name.lowercased() < $1.name.lowercased() }
@@ -42,7 +39,6 @@ import Observation
     await withTaskGroup(of: Void.self) { group in
       group.addTask { await self.fetchCurrentAccount() }
       group.addTask { await self.fetchConnections() }
-      group.addTask { await self.fetchLists() }
       group.addTask { await self.fetchFollowedTags() }
       group.addTask { await self.fetchFollowerRequests() }
     }
@@ -70,30 +66,12 @@ import Observation
     Self.accountsCache[client.id] = account
   }
 
-  public func fetchLists() async {
-    guard let client, client.isAuth else { return }
-    do {
-      lists = try await client.get(endpoint: Lists.lists)
-    } catch {
-      lists = []
-    }
-  }
-
   public func fetchFollowedTags() async {
     guard let client, client.isAuth else { return }
     do {
       tags = try await client.get(endpoint: Accounts.followedTags)
     } catch {
       tags = []
-    }
-  }
-
-  public func deleteList(_ list: Models.List) async {
-    guard let client else { return }
-    lists.removeAll(where: { $0.id == list.id })
-    let response = try? await client.delete(endpoint: Lists.list(id: list.id))
-    if response?.statusCode != 200 {
-      lists.append(list)
     }
   }
 

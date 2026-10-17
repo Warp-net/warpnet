@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import DesignSystem
 import Explore
@@ -8,13 +10,10 @@ import SwiftUI
 @MainActor
 enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
   case timeline, notifications, mentions, explore, messages, settings, other
-  case trending, federated, local
-  case profile
+  case profile = 10
   case bookmarks
   case favorites
   case post
-  case followedTags
-  case lists
 
   nonisolated var id: Int {
     rawValue
@@ -33,12 +32,6 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
     switch self {
     case .timeline:
       TimelineTab(popToRootTab: popToRootTab)
-    case .trending:
-      TimelineTab(popToRootTab: popToRootTab, timeline: .trending)
-    case .local:
-      TimelineTab(popToRootTab: popToRootTab, timeline: .local)
-    case .federated:
-      TimelineTab(popToRootTab: popToRootTab, timeline: .federated)
     case .notifications:
       NotificationsTab(selectedTab: selectedTab, popToRootTab: popToRootTab, lockedType: nil)
     case .mentions:
@@ -59,14 +52,6 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
       NavigationTab {
         AccountStatusesListView(mode: .favorites)
       }
-    case .followedTags:
-      NavigationTab {
-        FollowedTagsListView()
-      }
-    case .lists:
-      NavigationTab {
-        ListsListView()
-      }
     case .post:
       VStack { }
     case .other:
@@ -79,12 +64,6 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
     switch self {
     case .timeline:
       Label("tab.timeline", systemImage: iconName)
-    case .trending:
-      Label("tab.trending", systemImage: iconName)
-    case .local:
-      Label("tab.local", systemImage: iconName)
-    case .federated:
-      Label("tab.federated", systemImage: iconName)
     case .notifications:
       Label("tab.notifications", systemImage: iconName)
     case .mentions:
@@ -103,10 +82,6 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
       Label("accessibility.tabs.profile.picker.favorites", systemImage: iconName)
     case .post:
       Label("menu.new-post", systemImage: iconName)
-    case .followedTags:
-      Label("timeline.filter.tags", systemImage: iconName)
-    case .lists:
-      Label("timeline.filter.lists", systemImage: iconName)
     case .other:
       EmptyView()
       
@@ -117,12 +92,6 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
     switch self {
     case .timeline:
       "rectangle.stack"
-    case .trending:
-      "chart.line.uptrend.xyaxis"
-    case .local:
-      "person.2"
-    case .federated:
-      "globe.americas"
     case .notifications:
       "bell"
     case .mentions:
@@ -141,10 +110,6 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
       "star"
     case .post:
       "square.and.pencil"
-    case .followedTags:
-      "tag"
-    case .lists:
-      "list.bullet"
     case .other:
       ""
     }
@@ -161,17 +126,12 @@ class SidebarTabs {
   class Storage {
     @AppStorage("sidebar_tabs") var tabs: [SidedebarTab] = [
       .init(tab: .timeline, enabled: true),
-      .init(tab: .trending, enabled: true),
-      .init(tab: .federated, enabled: true),
-      .init(tab: .local, enabled: true),
       .init(tab: .notifications, enabled: true),
       .init(tab: .mentions, enabled: true),
       .init(tab: .messages, enabled: true),
       .init(tab: .explore, enabled: true),
       .init(tab: .bookmarks, enabled: true),
       .init(tab: .favorites, enabled: true),
-      .init(tab: .followedTags, enabled: true),
-      .init(tab: .lists, enabled: true),
       
       .init(tab: .settings, enabled: true),
       .init(tab: .profile, enabled: true),

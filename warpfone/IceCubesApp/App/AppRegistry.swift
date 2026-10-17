@@ -7,7 +7,6 @@ import DesignSystem
 import Env
 import Explore
 import LinkPresentation
-import Lists
 import MediaUI
 import Models
 import StatusKit
@@ -35,14 +34,6 @@ extension View {
         ConversationDetailView(conversation: conversation)
       case let .hashTag(tag, accountId):
         TimelineView(timeline: .constant(.hashtag(tag: tag, accountId: accountId)),
-                     pinnedFilters: .constant([]),
-                     selectedTagGroup: .constant(nil),
-                     scrollToTopSignal: .constant(0),
-                     canFilterTimeline: false)
-      case let .list(list):
-        TimelineView(timeline: .constant(.list(list: list)),
-                     pinnedFilters: .constant([]),
-                     selectedTagGroup: .constant(nil),
                      scrollToTopSignal: .constant(0),
                      canFilterTimeline: false)
       case let .following(id):
@@ -55,16 +46,6 @@ extension View {
         AccountsListView(mode: .rebloggedBy(statusId: id))
       case let .accountsList(accounts):
         AccountsListView(mode: .accountsList(accounts: accounts))
-      case .trendingTimeline:
-        TimelineView(timeline: .constant(.trending),
-                     pinnedFilters: .constant([]),
-                     selectedTagGroup: .constant(nil),
-                     scrollToTopSignal: .constant(0),
-                     canFilterTimeline: false)
-      case let .trendingLinks(cards):
-        CardsListView(cards: cards)
-      case let .tagsList(tags):
-        TagsListView(tags: tags)
       }
     }
   }
@@ -87,21 +68,6 @@ extension View {
       case let .mentionStatusEditor(account, visibility):
         StatusEditor.MainView(mode: .mention(account: account, visibility: visibility))
           .withEnvironments()
-      case .listCreate:
-        ListCreateView()
-          .withEnvironments()
-      case let .listEdit(list):
-        ListEditView(list: list)
-          .withEnvironments()
-      case let .listAddAccount(account):
-        ListAddAccountView(account: account)
-          .withEnvironments()
-      case .addRemoteLocalTimeline:
-        AddRemoteTimelineView()
-          .withEnvironments()
-      case .addTagGroup:
-        EditTagGroupView()
-          .withEnvironments()
       case let .statusEditHistory(status):
         StatusEditHistoryView(statusId: status)
           .withEnvironments()
@@ -117,9 +83,6 @@ extension View {
           .withEnvironments()
       case let .shareImage(image, status):
         ActivityView(image: image, status: status)
-          .withEnvironments()
-      case let .editTagGroup(tagGroup, onSaved):
-        EditTagGroupView(tagGroup: tagGroup, onSaved: onSaved)
           .withEnvironments()
       case .timelineContentFilter:
         NavigationSheet { TimelineContentFilterView() }
@@ -144,8 +107,6 @@ extension View {
   func withModelContainer() -> some View {
     modelContainer(for: [
       Draft.self,
-      LocalTimeline.self,
-      TagGroup.self,
       RecentTag.self,
     ])
   }

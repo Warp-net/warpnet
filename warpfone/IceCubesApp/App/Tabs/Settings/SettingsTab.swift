@@ -126,12 +126,6 @@ struct SettingsTabs: View {
           Label("settings.general.haptic", systemImage: "waveform.path")
         }
       }
-      NavigationLink(destination: RemoteTimelinesSettingView()) {
-        Label("settings.general.remote-timelines", systemImage: "dot.radiowaves.right")
-      }
-      NavigationLink(destination: TagsGroupSettingView()) {
-        Label("timeline.filter.tag-groups", systemImage: "number")
-      }
       NavigationLink(destination: RecenTagsSettingView()) {
         Label("settings.general.recent-tags", systemImage: "clock")
       }

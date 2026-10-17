@@ -164,3 +164,13 @@ carry that line, so they are named here instead.
   does not keep.
 - The Models and Network packages also declare macOS 14, so the Network tests
   run with swift test on a Mac.
+
+2026-10-17, dead features
+- Removed the timelines the node does not serve: local, federated, trending,
+  lists, tag groups and other servers' local timelines, with their tabs,
+  keyboard shortcuts and settings screens, the LocalTimeline and TagGroup
+  models and the Lists package. The timeline menu no longer offers resuming
+  from the server's read marker or pinning timelines, and Explore no longer
+  shows trending tags, posts and links.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
