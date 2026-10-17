@@ -35,7 +35,6 @@ import SwiftUI
     @AppStorage("haptic_tab") public var hapticTabSelectionEnabled = true
     @AppStorage("haptic_timeline") public var hapticTimelineEnabled = true
     @AppStorage("haptic_button_press") public var hapticButtonPressEnabled = true
-    @AppStorage("sound_effect_enabled") public var soundEffectEnabled = true
 
     @AppStorage("show_tab_label_iphone") public var showiPhoneTabLabel = true
     @AppStorage("show_alt_text_for_media") public var showAltTextForMedia = true
@@ -218,12 +217,6 @@ import SwiftUI
   public var hapticButtonPressEnabled: Bool {
     didSet {
       storage.hapticButtonPressEnabled = hapticButtonPressEnabled
-    }
-  }
-
-  public var soundEffectEnabled: Bool {
-    didSet {
-      storage.soundEffectEnabled = soundEffectEnabled
     }
   }
 
@@ -457,7 +450,6 @@ import SwiftUI
     hapticTabSelectionEnabled = storage.hapticTabSelectionEnabled
     hapticTimelineEnabled = storage.hapticTimelineEnabled
     hapticButtonPressEnabled = storage.hapticButtonPressEnabled
-    soundEffectEnabled = storage.soundEffectEnabled
     showiPhoneTabLabel = storage.showiPhoneTabLabel
     showAltTextForMedia = storage.showAltTextForMedia
     showiPadSecondaryColumn = storage.showiPadSecondaryColumn

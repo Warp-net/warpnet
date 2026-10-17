@@ -318,3 +318,10 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   Packages/Timeline/Package.swift
   WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+2026-10-17, sounds
+- The app plays no sounds: SoundEffectManager.swift, its calls on refresh, tab
+  selection, posting, reactions and retweets, the Sound Effects setting and
+  the ten sound files in WarpnetApp/Embeds were removed.
+- Files without the notice line:
+  WarpnetApp.xcodeproj/project.pbxproj

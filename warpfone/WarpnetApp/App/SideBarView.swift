@@ -80,7 +80,6 @@ struct SideBarView<Content: View>: View {
   private func makeAccountButton(account: AppAccount) -> some View {
     Button {
       selectedTab = .profile
-      SoundEffectManager.shared.playSound(.tabSelection)
     } label: {
       AppAccountView(viewModel: .init(appAccount: account, isCompact: true),
                      isParentPresented: .constant(false))
@@ -105,7 +104,6 @@ struct SideBarView<Content: View>: View {
             }
           }
           selectedTab = tab
-          SoundEffectManager.shared.playSound(.tabSelection)
           if tab == .notifications {
             watcher.unreadNotificationsCount = 0
           }

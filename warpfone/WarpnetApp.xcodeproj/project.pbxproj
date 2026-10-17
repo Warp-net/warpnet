@@ -24,20 +24,10 @@
 		9F15D6002B3D6A850008C220 /* NavigationTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */; };
 		9F15D6022B3D6E280008C220 /* TabbarEntriesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */; };
 		9F15D6042B3DC2180008C220 /* NavigationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6032B3DC2180008C220 /* NavigationSheet.swift */; };
-		9F18801229AE477F00D85459 /* tabSelection.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18800A29AE477E00D85459 /* tabSelection.wav */; };
-		9F18801329AE477F00D85459 /* share.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18800B29AE477E00D85459 /* share.wav */; };
-		9F18801429AE477F00D85459 /* bookmark.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18800C29AE477E00D85459 /* bookmark.wav */; };
-		9F18801529AE477F00D85459 /* pull.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18800D29AE477E00D85459 /* pull.wav */; };
-		9F18801629AE477F00D85459 /* refresh.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18800E29AE477E00D85459 /* refresh.wav */; };
-		9F18801729AE477F00D85459 /* boost.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18800F29AE477E00D85459 /* boost.wav */; };
-		9F18801829AE477F00D85459 /* favorite.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18801029AE477F00D85459 /* favorite.wav */; };
-		9F18801929AE477F00D85459 /* tootSent.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F18801129AE477F00D85459 /* tootSent.wav */; };
 		9F1E8B47298EBCBB00609F80 /* HapticSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1E8B46298EBCBB00609F80 /* HapticSettingsView.swift */; };
 		9F24EEB829360C330042359D /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9F24EEB729360C330042359D /* Preview Assets.xcassets */; };
 		9F295540292B6C3400E0E81B /* Timeline in Frameworks */ = {isa = PBXBuildFile; productRef = 9F29553F292B6C3400E0E81B /* Timeline */; };
 		9F2A540E2969A0B0009B2D7C /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9F2A540D2969A0B0009B2D7C /* StoreKit.framework */; };
-		9F2A542C296B1177009B2D7C /* glass.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9F2A542B296B1177009B2D7C /* glass.caf */; };
-		9F2A542E296B1CC0009B2D7C /* glass.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F2A542D296B1CC0009B2D7C /* glass.wav */; };
 		9F2B92F6295AE04800DE16D0 /* Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2B92F5295AE04800DE16D0 /* Tabs.swift */; };
 		9F35DB4729506F6600B3281A /* NotificationTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F35DB4629506F6600B3281A /* NotificationTab.swift */; };
 		9F35DB4A29506FA100B3281A /* Notifications in Frameworks */ = {isa = PBXBuildFile; productRef = 9F35DB4929506FA100B3281A /* Notifications */; };
@@ -147,22 +137,12 @@
 		9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTab.swift; sourceTree = "<group>"; };
 		9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabbarEntriesSettingsView.swift; sourceTree = "<group>"; };
 		9F15D6032B3DC2180008C220 /* NavigationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationSheet.swift; sourceTree = "<group>"; };
-		9F18800A29AE477E00D85459 /* tabSelection.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = tabSelection.wav; sourceTree = "<group>"; };
-		9F18800B29AE477E00D85459 /* share.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = share.wav; sourceTree = "<group>"; };
-		9F18800C29AE477E00D85459 /* bookmark.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = bookmark.wav; sourceTree = "<group>"; };
-		9F18800D29AE477E00D85459 /* pull.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = pull.wav; sourceTree = "<group>"; };
-		9F18800E29AE477E00D85459 /* refresh.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = refresh.wav; sourceTree = "<group>"; };
-		9F18800F29AE477E00D85459 /* boost.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = boost.wav; sourceTree = "<group>"; };
-		9F18801029AE477F00D85459 /* favorite.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = favorite.wav; sourceTree = "<group>"; };
-		9F18801129AE477F00D85459 /* tootSent.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = tootSent.wav; sourceTree = "<group>"; };
 		9F1E8B46298EBCBB00609F80 /* HapticSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticSettingsView.swift; sourceTree = "<group>"; };
 		9F24EEB729360C330042359D /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		9F29553D292B67B600E0E81B /* Network */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Network; path = Packages/Network; sourceTree = "<group>"; };
 		9F29553E292B6AF600E0E81B /* Timeline */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Timeline; path = Packages/Timeline; sourceTree = "<group>"; };
 		9F2A5404296995FB009B2D7C /* QuickLookUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuickLookUI.framework; path = System/Library/Frameworks/QuickLookUI.framework; sourceTree = SDKROOT; };
 		9F2A540D2969A0B0009B2D7C /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
-		9F2A542B296B1177009B2D7C /* glass.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = glass.caf; sourceTree = "<group>"; };
-		9F2A542D296B1CC0009B2D7C /* glass.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = glass.wav; sourceTree = "<group>"; };
 		9F2B92F5295AE04800DE16D0 /* Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tabs.swift; sourceTree = "<group>"; };
 		9F35DB45294FA04C00B3281A /* DesignSystem */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = DesignSystem; path = Packages/DesignSystem; sourceTree = "<group>"; };
 		9F35DB4629506F6600B3281A /* NotificationTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTab.swift; sourceTree = "<group>"; };
@@ -338,18 +318,8 @@
 		9FA0D2AC29921C1F008A143B /* Embeds */ = {
 			isa = PBXGroup;
 			children = (
-				9F18800C29AE477E00D85459 /* bookmark.wav */,
-				9F18800F29AE477E00D85459 /* boost.wav */,
-				9F18801029AE477F00D85459 /* favorite.wav */,
-				9F18800D29AE477E00D85459 /* pull.wav */,
-				9F18800E29AE477E00D85459 /* refresh.wav */,
-				9F18800A29AE477E00D85459 /* tabSelection.wav */,
-				9F18800B29AE477E00D85459 /* share.wav */,
-				9F18801129AE477F00D85459 /* tootSent.wav */,
 				069709A3298C8545006E4CB5 /* Atkinson-Hyperlegible-Regular-102.ttf */,
 				069709A7298C87B5006E4CB5 /* OpenDyslexic-Regular.otf */,
-				9F2A542D296B1CC0009B2D7C /* glass.wav */,
-				9F2A542B296B1177009B2D7C /* glass.caf */,
 			);
 			path = Embeds;
 			sourceTree = "<group>";
@@ -639,20 +609,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				069709A5298C8545006E4CB5 /* Atkinson-Hyperlegible-Regular-102.ttf in Resources */,
-				9F18801329AE477F00D85459 /* share.wav in Resources */,
-				9F18801729AE477F00D85459 /* boost.wav in Resources */,
-				9F2A542C296B1177009B2D7C /* glass.caf in Resources */,
-				9F18801529AE477F00D85459 /* pull.wav in Resources */,
 				9FD34823293D06E800DB0EE9 /* Assets.xcassets in Resources */,
 				9F38A7332ACEA26100DBCD66 /* Localizable.xcstrings in Resources */,
-				9F18801829AE477F00D85459 /* favorite.wav in Resources */,
 				9F24EEB829360C330042359D /* Preview Assets.xcassets in Resources */,
 				069709A8298C87B5006E4CB5 /* OpenDyslexic-Regular.otf in Resources */,
-				9F18801229AE477F00D85459 /* tabSelection.wav in Resources */,
-				9F18801429AE477F00D85459 /* bookmark.wav in Resources */,
-				9F18801629AE477F00D85459 /* refresh.wav in Resources */,
-				9F18801929AE477F00D85459 /* tootSent.wav in Resources */,
-				9F2A542E296B1CC0009B2D7C /* glass.wav in Resources */,
 				8FD6E4E665A9612242F8E0F1 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

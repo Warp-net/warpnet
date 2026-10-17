@@ -103,11 +103,9 @@ public struct TimelineView: View {
       viewModel.saveMarker()
     }
     .refreshable {
-      SoundEffectManager.shared.playSound(.pull)
       HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.3))
       await viewModel.pullToRefresh()
       HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.7))
-      SoundEffectManager.shared.playSound(.refresh)
     }
     .onChange(of: watcher.latestEvent?.id) {
       Task {

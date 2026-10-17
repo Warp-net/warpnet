@@ -53,21 +53,18 @@ struct StatusRowContextMenu: View {
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))
-          SoundEffectManager.shared.playSound(.favorite)
           await statusDataController.toggleFavorite(remoteStatus: nil)
         } } label: {
           Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "heart.fill" : "heart")
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))
-          SoundEffectManager.shared.playSound(.boost)
           await statusDataController.toggleReblog(remoteStatus: nil)
         } } label: {
           boostLabel
         }
         .disabled(viewModel.status.visibility == .direct || viewModel.status.visibility == .priv && viewModel.status.account.id != account.account?.id)
         Button { Task {
-          SoundEffectManager.shared.playSound(.bookmark)
           HapticManager.shared.fireHaptic(.notification(.success))
           await statusDataController.toggleBookmark(remoteStatus: nil)
         } } label: {

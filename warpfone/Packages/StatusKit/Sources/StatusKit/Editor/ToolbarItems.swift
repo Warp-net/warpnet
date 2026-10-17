@@ -79,7 +79,6 @@ extension StatusEditor {
       let status = await model.postStatus()
       if status != nil, isMainPost {
         close()
-        SoundEffectManager.shared.playSound(.tootSent)
         NotificationCenter.default.post(name: .shareSheetClose, object: nil)
         #if !targetEnvironment(macCatalyst)
           if !mainSEVM.mode.isInShareExtension, !preferences.requestedReview {

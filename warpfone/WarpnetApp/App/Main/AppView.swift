@@ -97,7 +97,6 @@ struct AppView: View {
       }
 
       HapticManager.shared.fireHaptic(.tabSelection)
-      SoundEffectManager.shared.playSound(.tabSelection)
 
       selectedTab = newTab
     })) {
