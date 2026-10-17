@@ -12,6 +12,7 @@ import OSLog
   private var client: Client?
   private var pollTask: Task<Void, Never>?
   private var lastSeenId: String?
+  private var hasBaseline = false
 
   private let pollInterval: Swift.Duration = .seconds(20)
 
@@ -37,6 +38,7 @@ import OSLog
     stopWatching()
     self.client = client
     lastSeenId = nil
+    hasBaseline = false
   }
 
   public func watch(streams _: [Stream]) {
@@ -63,15 +65,23 @@ import OSLog
       logger.error("Polling pushes: \(error.localizedDescription, privacy: .public)")
       return
     }
-    guard let newest = notifications.map(\.id).max() else { return }
-    UserDefaults.standard.set(max(UserDefaults.standard.string(forKey: Self.lastSeenPushKey) ?? newest, newest),
-                              forKey: Self.lastSeenPushKey)
-    guard let previous = lastSeenId else {
+    let newest = notifications.map(\.id).max()
+    if let newest {
+      UserDefaults.standard.set(max(UserDefaults.standard.string(forKey: Self.lastSeenPushKey) ?? newest, newest),
+                                forKey: Self.lastSeenPushKey)
+    }
+    // The first poll marks what was already there, even when that is nothing.
+    guard hasBaseline else {
+      hasBaseline = true
       lastSeenId = newest
       return
     }
-    let fresh = notifications.filter { $0.id > previous }.sorted { $0.id < $1.id }
-    lastSeenId = max(previous, newest)
+    let previous = lastSeenId
+    let fresh = notifications.filter { notification in previous.map { notification.id > $0 } ?? true }
+      .sorted { $0.id < $1.id }
+    if let newest {
+      lastSeenId = max(previous ?? newest, newest)
+    }
     for notification in fresh {
       let event = StreamEventNotification(notification: notification)
       events.append(event)

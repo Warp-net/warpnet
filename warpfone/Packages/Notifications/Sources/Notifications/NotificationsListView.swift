@@ -111,10 +111,9 @@ public struct NotificationsListView: View {
       await viewModel.fetchNotifications()
       HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.7))
     }
-    .onChange(of: watcher.latestEvent?.id) {
-      if let latestEvent = watcher.latestEvent {
-        viewModel.handleEvent(event: latestEvent)
-      }
+    .onChange(of: watcher.events.count) { oldCount, newCount in
+      guard newCount > oldCount else { return }
+      viewModel.handleEvents(Array(watcher.events[oldCount...]))
     }
     .onChange(of: scenePhase) { _, newValue in
       switch newValue {

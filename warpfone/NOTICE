@@ -378,3 +378,8 @@ carry that line, so they are named here instead.
   ending in a number, which Ice Cubes took for a Mastodon status, can never be
   embedded here. It used to come before the quote's own link, hide the
   embed, and hide the whole tweet as a quote when quotes were filtered out.
+
+2026-10-18, live notifications
+- The notifications list inserts every notification a poll brings, through
+  NotificationsViewModel.handleEvents, instead of only the last one of the
+  batch.
