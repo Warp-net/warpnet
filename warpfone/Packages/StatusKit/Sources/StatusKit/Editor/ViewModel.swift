@@ -66,15 +66,8 @@ extension StatusEditor {
       }
     }
 
-    private var urlLengthAdjustments: Int = 0
-    private let maxLengthOfUrl = 23
-
-    private var spoilerTextCount: Int {
-      spoilerOn ? spoilerText.utf16.count : 0
-    }
-
     var statusTextCharacterLength: Int {
-      urlLengthAdjustments - statusText.string.utf16.count - spoilerTextCount
+      -statusText.string.utf8.count
     }
 
     private var itemsProvider: [NSItemProvider]?
@@ -410,20 +403,12 @@ extension StatusEditor {
           resetAutoCompletion()
         }
 
-        var totalUrlLength = 0
-        var numUrls = 0
-
         for range in urlRanges {
-          numUrls += 1
-          totalUrlLength += range.length
-
           statusText.addAttributes([.foregroundColor: UIColor(theme?.tintColor ?? .brand),
                                     .underlineStyle: NSUnderlineStyle.single.rawValue,
                                     .underlineColor: UIColor(theme?.tintColor ?? .brand)],
                                    range: NSRange(location: range.location, length: range.length))
         }
-
-        urlLengthAdjustments = totalUrlLength - (maxLengthOfUrl * numUrls)
 
         statusText.enumerateAttributes(in: range) { attributes, range, _ in
           if attributes[.link] != nil {

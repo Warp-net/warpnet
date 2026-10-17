@@ -158,3 +158,5 @@ carry that line, so they are named here instead.
   instead of URLSession.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+- The composer counts the tweet's UTF-8 bytes against the node's 2048-byte
+  limit, where Mastodon counted UTF-16 units and a fixed length per URL.
