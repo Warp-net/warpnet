@@ -366,12 +366,9 @@ func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()
 
-	connectedness := c.host.Network().Connectedness(desktopPeerID)
-	switch connectedness {
-	case network.Limited:
-		ctx = network.WithAllowLimitedConn(ctx, "warpnet")
-	default:
-	}
+	// The client never listens, so hole punching can't upgrade a relayed
+	// connection; a stream that has to dial must be allowed to ride one.
+	ctx = network.WithAllowLimitedConn(ctx, "warpnet")
 
 	stream, err := c.host.NewStream(ctx, desktopPeerID, protocol.ID(protocolID))
 	if err != nil {
