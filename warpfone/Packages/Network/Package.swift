@@ -9,6 +9,7 @@ let package = Package(
   defaultLocalization: "en",
   platforms: [
     .iOS(.v17),
+    .macOS(.v14),
     .visionOS(.v1),
   ],
   products: [
@@ -34,7 +35,11 @@ let package = Package(
     ),
     .testTarget(
       name: "NetworkTests",
-      dependencies: ["Network"]
+      dependencies: [
+        "Network",
+        .product(name: "Models", package: "Models"),
+        .product(name: "WarpnetTransport", package: "WarpnetTransport"),
+      ]
     ),
   ]
 )

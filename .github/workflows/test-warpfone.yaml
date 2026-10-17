@@ -25,3 +25,12 @@ jobs:
 
       - name: Run tests
         run: swift test --package-path warpfone/Packages/WarpnetTransport
+
+  network:
+    name: Network
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        run: swift test --package-path warpfone/Packages/Network

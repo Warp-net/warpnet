@@ -15,7 +15,8 @@ The framework is built from `node/`, warpfone's own copy of the gomobile node.
 are generated from the node's `event/paths.go` by `scripts/generate-protocol-ids.sh`,
 and its tests run with `swift test --package-path Packages/WarpnetTransport`.
 `Packages/Network` keeps the Ice Cubes `Client` API, and the router in
-`Sources/Network/Warpnet` answers its Mastodon endpoints from the node.
+`Sources/Network/Warpnet` answers its Mastodon endpoints from the node; its
+tests run with `swift test --package-path Packages/Network`.
 Debug builds read `IceCubesApp.xcconfig`, which is not committed: copy
 `IceCubesApp.xcconfig.template` and set your team and bundle id prefix.
 Release builds read `IceCubesApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
