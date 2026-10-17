@@ -325,3 +325,8 @@ carry that line, so they are named here instead.
   the ten sound files in WarpnetApp/Embeds were removed.
 - Files without the notice line:
   WarpnetApp.xcodeproj/project.pbxproj
+
+2026-10-17, review prompt
+- The editor no longer asks for an App Store review after the first tweet:
+  the SKStoreReviewController call, its StoreKit imports and the
+  requestedReview preference were removed.

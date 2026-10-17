@@ -2,7 +2,6 @@
 
 import Env
 import Models
-import StoreKit
 import SwiftUI
 import DesignSystem
 
@@ -15,7 +14,6 @@ extension StatusEditor {
     let focusedSEVM: ViewModel
     let followUpSEVMs: [ViewModel]
 
-    @Environment(UserPreferences.self) private var preferences
     @Environment(Theme.self) private var theme
     
     #if targetEnvironment(macCatalyst)
@@ -80,14 +78,6 @@ extension StatusEditor {
       if status != nil, isMainPost {
         close()
         NotificationCenter.default.post(name: .shareSheetClose, object: nil)
-        #if !targetEnvironment(macCatalyst)
-          if !mainSEVM.mode.isInShareExtension, !preferences.requestedReview {
-            if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
-              SKStoreReviewController.requestReview(in: scene)
-            }
-            preferences.requestedReview = true
-          }
-        #endif
       }
 
       return status

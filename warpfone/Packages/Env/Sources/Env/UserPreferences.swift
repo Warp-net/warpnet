@@ -48,8 +48,6 @@ import SwiftUI
     @AppStorage("swipeactions-use-theme-color") public var swipeActionsUseThemeColor = false
     @AppStorage("swipeactions-icon-style") public var swipeActionsIconStyle: SwipeActionsIconStyle = .iconWithText
 
-    @AppStorage("requested_review") public var requestedReview = false
-
     @AppStorage("collapse-long-posts") public var collapseLongPosts = true
 
     @AppStorage("share-button-behavior") public var shareButtonBehavior: PreferredShareButtonBehavior = .linkOnly
@@ -274,12 +272,6 @@ import SwiftUI
     }
   }
 
-  public var requestedReview: Bool {
-    didSet {
-      storage.requestedReview = requestedReview
-    }
-  }
-
   public var collapseLongPosts: Bool {
     didSet {
       storage.collapseLongPosts = collapseLongPosts
@@ -459,7 +451,6 @@ import SwiftUI
     swipeActionsStatusLeadingRight = storage.swipeActionsStatusLeadingRight
     swipeActionsUseThemeColor = storage.swipeActionsUseThemeColor
     swipeActionsIconStyle = storage.swipeActionsIconStyle
-    requestedReview = storage.requestedReview
     collapseLongPosts = storage.collapseLongPosts
     shareButtonBehavior = storage.shareButtonBehavior
     pendingShownAtBottom = storage.pendingShownAtBottom
