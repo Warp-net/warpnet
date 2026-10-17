@@ -127,6 +127,20 @@ final class WarpnetMappingTests: XCTestCase {
     XCTAssertFalse(status.account.haveAvatar)
   }
 
+  func testOnlyBridgedTweetsAndUsersHaveAWebPage() throws {
+    let native = WarpnetTweet(id: "01N", rootId: "01N", text: "hi", userId: "01AUTHOR", username: "Alice")
+    let nativeStatus = try decode(Status.self, WarpnetMapper.status(native, author: author, viewer: ViewerState()))
+    XCTAssertNil(nativeStatus.url)
+    XCTAssertNil(nativeStatus.account.url)
+
+    let tootURL = "https://mastodon.social/users/warpnet/statuses/117424661773742753"
+    let bridged = WarpnetTweet(id: tootURL, rootId: tootURL, text: "hi", userId: "warpnet@mastodon.social", username: "Warpnet")
+    let bridgedAuthor = WarpnetUser(id: "warpnet@mastodon.social", username: "Warpnet")
+    let bridgedStatus = try decode(Status.self, WarpnetMapper.status(bridged, author: bridgedAuthor, viewer: ViewerState()))
+    XCTAssertEqual(bridgedStatus.url, tootURL)
+    XCTAssertEqual(bridgedStatus.account.url?.absoluteString, "https://mastodon.social/@warpnet")
+  }
+
   func testVideoBecomesAVideoAttachment() throws {
     let tweet = WarpnetTweet(id: "01VID", rootId: "01VID", text: "", userId: "01AUTHOR", username: "Alice", videoKey: "v1")
     let status = try decode(Status.self, WarpnetMapper.status(tweet, author: author, viewer: ViewerState()))

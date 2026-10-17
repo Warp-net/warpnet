@@ -30,7 +30,7 @@ enum WarpnetMapper {
                            fields: fields,
                            locked: user.locked,
                            emojis: [],
-                           url: "\(WarpnetFormat.baseURL)/users/\(WarpnetFormat.pathComponent(user.id))",
+                           url: WarpnetFormat.webURL(userId: user.id),
                            source: .init(privacy: "public", sensitive: false, note: user.bio, fields: []),
                            bot: false,
                            discoverable: true)
@@ -86,7 +86,7 @@ enum WarpnetMapper {
                           reblogged: viewer.isRetweeted,
                           pinned: tweet.pinned,
                           bookmarked: viewer.isBookmarked,
-                          url: "\(WarpnetFormat.baseURL)/tweets/\(WarpnetFormat.pathComponent(address.tweetId))",
+                          url: WarpnetFormat.webURL(tweetId: address.tweetId),
                           inReplyToId: parent?.id,
                           inReplyToAccountId: parent?.userId,
                           poll: hiddenNotice == nil ? poll(tweet, address: address, results: viewer.poll) : nil,

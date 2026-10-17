@@ -144,17 +144,7 @@ struct StatusRowActionsView: View {
               switch userPreferences.shareButtonBehavior {
               case .linkOnly:
                 ShareLink(item: url) {
-                  action.image(dataController: statusDataController)
-                    .foregroundColor(Color(UIColor.secondaryLabel))
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .contentShape(Rectangle())
-                    #if targetEnvironment(macCatalyst)
-                    .font(.scaledBody)
-                    #else
-                    .font(.body)
-                    .dynamicTypeSize(.large)
-                    #endif
+                  shareLabel(action)
                 }
                 .buttonStyle(.borderless)
                 #if !os(visionOS)
@@ -167,17 +157,7 @@ struct StatusRowActionsView: View {
                           subject: Text(viewModel.finalStatus.account.safeDisplayName),
                           message: Text(viewModel.finalStatus.content.asRawText))
                 {
-                  action.image(dataController: statusDataController)
-                    .foregroundColor(Color(UIColor.secondaryLabel))
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .contentShape(Rectangle())
-                    #if targetEnvironment(macCatalyst)
-                    .font(.scaledBody)
-                    #else
-                    .font(.body)
-                    .dynamicTypeSize(.large)
-                    #endif
+                  shareLabel(action)
                 }
                 .buttonStyle(.borderless)
                 #if !os(visionOS)
@@ -186,6 +166,16 @@ struct StatusRowActionsView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("status.action.share-link")
               }
+            } else {
+              ShareLink(item: viewModel.finalStatus.content.asRawText) {
+                shareLabel(action)
+              }
+              .buttonStyle(.borderless)
+              #if !os(visionOS)
+              .offset(x: -8)
+              #endif
+              .accessibilityElement(children: .combine)
+              .accessibilityLabel("status.action.share")
             }
             Spacer()
           } else if action == .menu {
@@ -266,6 +256,20 @@ struct StatusRowActionsView: View {
         actionLabel(action: action)
       }, action: action)
     }
+  }
+
+  private func shareLabel(_ action: Action) -> some View {
+    action.image(dataController: statusDataController)
+      .foregroundColor(Color(UIColor.secondaryLabel))
+      .padding(.vertical, 6)
+      .padding(.horizontal, 8)
+      .contentShape(Rectangle())
+      #if targetEnvironment(macCatalyst)
+      .font(.scaledBody)
+      #else
+      .font(.body)
+      .dynamicTypeSize(.large)
+      #endif
   }
 
   private func actionLabel(action: Action) -> some View {

@@ -18,7 +18,7 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
   let pinned: Bool
   let bookmarked: Bool
   let emojis: [MastodonEmoji]
-  let url: String
+  let url: String?
   let inReplyToId: String?
   let inReplyToAccountId: String?
   let visibility: String
@@ -42,7 +42,7 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
        reblogged: Bool,
        pinned: Bool,
        bookmarked: Bool,
-       url: String,
+       url: String?,
        inReplyToId: String?,
        inReplyToAccountId: String?,
        poll: MastodonPoll?,
@@ -97,7 +97,7 @@ struct MastodonAccount: Encodable, Sendable {
   let fields: [MastodonField]
   let locked: Bool
   let emojis: [MastodonEmoji]
-  let url: String
+  let url: String?
   let source: Source
   let bot: Bool
   let discoverable: Bool

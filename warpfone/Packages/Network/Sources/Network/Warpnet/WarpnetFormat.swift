@@ -1,8 +1,6 @@
 import Foundation
 
 enum WarpnetFormat {
-  static let baseURL = "https://warpnet.site"
-
   static func html(fromPlainText text: String) -> String {
     guard !text.isEmpty else { return "" }
     var out = ""
@@ -85,6 +83,19 @@ enum WarpnetFormat {
 
   static func missingImageURL(userId: String) -> String {
     "warpnet://image/\(pathComponent(userId))/missing.png"
+  }
+
+  // A Warpnet tweet or user has no web page; a bridged one keeps its
+  // Fediverse URL as the tweet id, and its profile lives at host/@user.
+  static func webURL(tweetId: String) -> String? {
+    guard let scheme = URL(string: tweetId)?.scheme?.lowercased(), scheme == "https" || scheme == "http" else { return nil }
+    return tweetId
+  }
+
+  static func webURL(userId: String) -> String? {
+    let parts = userId.split(separator: "@")
+    guard parts.count == 2, parts[1].contains(".") else { return nil }
+    return "https://\(parts[1])/@\(parts[0])"
   }
 
   static func statusURL(id: String) -> String {

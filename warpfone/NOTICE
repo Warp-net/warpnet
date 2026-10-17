@@ -387,3 +387,8 @@ carry that line, so they are named here instead.
 2026-10-18, quick reactions
 - The heart is a menu with a primary action: a tap still reacts with ❤️, and a
   long press opens the quick reactions instead of the tweet's own menu.
+
+2026-10-18, web links
+- A tweet without a web page shares its text from the tweet menu and the
+  share button, and the menu offers Copy Link only for tweets that have one.
+  Sharing the tweet as an image no longer depends on a link.

@@ -101,35 +101,39 @@ struct StatusRowContextMenu: View {
         ShareLink(item: url) {
           Label("status.action.share-link", systemImage: "link")
         }
-
-        Button {
-          let view = HStack {
-            StatusRowView(viewModel: viewModel)
-              .padding(16)
-          }
-          .environment(\.isInCaptureMode, true)
-          .environment(Theme.shared)
-          .environment(preferences)
-          .environment(account)
-          .environment(currentInstance)
-          .environment(SceneDelegate())
-          .environment(quickLook)
-          .environment(viewModel.client)
-          .environment(RouterPath())
-          .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
-          .foregroundColor(Theme.shared.labelColor)
-          .background(Theme.shared.primaryBackgroundColor)
-          .frame(width: sceneDelegate.windowWidth - 12)
-          .tint(Theme.shared.tintColor)
-          let renderer = ImageRenderer(content: view)
-          renderer.scale = displayScale
-          renderer.isOpaque = false
-          if let image = renderer.uiImage {
-            viewModel.routerPath.presentedSheet = .shareImage(image: image, status: viewModel.status)
-          }
-        } label: {
-          Label("status.action.share-image", systemImage: "photo")
+      } else {
+        ShareLink(item: viewModel.status.reblog?.content.asRawText ?? viewModel.status.content.asRawText) {
+          Label("status.action.share", systemImage: "square.and.arrow.up")
         }
+      }
+
+      Button {
+        let view = HStack {
+          StatusRowView(viewModel: viewModel)
+            .padding(16)
+        }
+        .environment(\.isInCaptureMode, true)
+        .environment(Theme.shared)
+        .environment(preferences)
+        .environment(account)
+        .environment(currentInstance)
+        .environment(SceneDelegate())
+        .environment(quickLook)
+        .environment(viewModel.client)
+        .environment(RouterPath())
+        .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
+        .foregroundColor(Theme.shared.labelColor)
+        .background(Theme.shared.primaryBackgroundColor)
+        .frame(width: sceneDelegate.windowWidth - 12)
+        .tint(Theme.shared.tintColor)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = displayScale
+        renderer.isOpaque = false
+        if let image = renderer.uiImage {
+          viewModel.routerPath.presentedSheet = .shareImage(image: image, status: viewModel.status)
+        }
+      } label: {
+        Label("status.action.share-image", systemImage: "photo")
       }
     }
 
@@ -145,10 +149,12 @@ struct StatusRowContextMenu: View {
       Label("status.action.select-text", systemImage: "selection.pin.in.out")
     }
 
-    Button {
-      UIPasteboard.general.string = viewModel.status.reblog?.url ?? viewModel.status.url
-    } label: {
-      Label("status.action.copy-link", systemImage: "link")
+    if let link = viewModel.status.reblog?.url ?? viewModel.status.url {
+      Button {
+        UIPasteboard.general.string = link
+      } label: {
+        Label("status.action.copy-link", systemImage: "link")
+      }
     }
 
     if account.account?.id == viewModel.status.reblog?.account.id ?? viewModel.status.account.id {
