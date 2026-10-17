@@ -334,3 +334,9 @@ carry that line, so they are named here instead.
 2026-10-17, view in browser
 - The tweet and profile menus no longer offer View in Browser. The menu of a
   link preview keeps it, since that link points to an outside web page.
+
+2026-10-17, search tab
+- The magnifying glass tab and the screen it opens are called Search instead
+  of Explore.
+- Files without the notice line:
+  WarpnetApp/Resources/Localization/Localizable.xcstrings

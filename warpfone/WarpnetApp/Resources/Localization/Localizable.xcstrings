@@ -2219,7 +2219,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Explore"
+            "value" : "Search"
           }
         }
       }
@@ -5882,7 +5882,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Explore"
+            "value" : "Search"
           }
         }
       }
