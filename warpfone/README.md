@@ -10,6 +10,9 @@ Building needs macOS with Xcode 15 or later; the deployment target is iOS 17.
 The app links the Warpnet node as `Warpnet.xcframework`, which is not committed:
 run `scripts/build-xcframework.sh` first (it needs Go, see the root `go.mod`).
 The framework is built from `node/`, warpfone's own copy of the gomobile node.
+`Packages/WarpnetTransport` is the wire layer on top of it. Its `ProtocolIds`
+are generated from the node's `event/paths.go` by `scripts/generate-protocol-ids.sh`,
+and its tests run with `swift test --package-path Packages/WarpnetTransport`.
 Debug builds read `IceCubesApp.xcconfig`, which is not committed: copy
 `IceCubesApp.xcconfig.template` and set your team and bundle id prefix.
 Release builds read `IceCubesApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
