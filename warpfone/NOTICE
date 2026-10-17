@@ -218,3 +218,6 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The Safari action now opens Fediverse profile links (https://server/@name)
+  in Warpnet, which looks the account up through the node's gateway, instead
+  of checking for a Mastodon server over HTTP.

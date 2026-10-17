@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 //
 //  ActionRequestHandler.swift
 //  IceCubesActionExtension
@@ -10,7 +12,6 @@ import UIKit
 import UniformTypeIdentifiers
 
 import Models
-import Network
 
 // Sample code was sending this from a thread to another, let asume @Sendable for this
 extension NSExtensionContext: @unchecked Sendable {}
@@ -20,8 +21,7 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling, Sendable
     case inputProviderNotFound
     case loadedItemHasWrongType
     case urlNotFound
-    case noHost
-    case notMastodonInstance
+    case notFediverseProfile
   }
 
   func beginRequest(with context: NSExtensionContext) {
@@ -29,8 +29,8 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling, Sendable
     Task {
       do {
         let url = try await url(from: context)
-        guard await url.isMastodonInstance else {
-          throw Error.notMastodonInstance
+        guard url.isFediverseProfile else {
+          throw Error.notFediverseProfile
         }
         await MainActor.run {
           let deeplink = url.iceCubesAppDeepLink
@@ -47,18 +47,10 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling, Sendable
 }
 
 extension URL {
-  var isMastodonInstance: Bool {
-    get async {
-      do {
-        guard let host = host() else {
-          throw ActionRequestHandler.Error.noHost
-        }
-        let _: Instance = try await Client(server: host).get(endpoint: Instances.instance)
-        return true
-      } catch {
-        return false
-      }
-    }
+  var isFediverseProfile: Bool {
+    guard let scheme = scheme?.lowercased(), ["https", "http"].contains(scheme), host() != nil else { return false }
+    let parts = pathComponents.filter { $0 != "/" }
+    return parts.count == 1 && parts[0].count > 1 && parts[0].hasPrefix("@")
   }
 
   var iceCubesAppDeepLink: URL {
