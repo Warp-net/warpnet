@@ -55,7 +55,7 @@ public struct ExploreView: View {
         } else if viewModel.allSectionsEmpty {
           EmptyView(iconName: "magnifyingglass",
                     title: "explore.search.title",
-                    message: "explore.search.message-\(client.server)")
+                    message: "warpnet.explore.empty")
             #if !os(visionOS)
             .listRowBackground(theme.secondaryBackgroundColor)
             #endif
@@ -90,11 +90,6 @@ public struct ExploreView: View {
                   isPresented: $viewModel.isSearchPresented,
                   placement: .navigationBarDrawer(displayMode: .always),
                   prompt: Text("explore.search.prompt"))
-      .searchScopes($viewModel.searchScope) {
-        ForEach(ExploreViewModel.SearchScope.allCases, id: \.self) { scope in
-          Text(scope.localizedString)
-        }
-      }
       .task(id: viewModel.searchQuery) {
         await viewModel.search()
       }
@@ -137,36 +132,6 @@ public struct ExploreView: View {
               .listRowHoverEffectDisabled()
               #endif
           }
-        }
-      }
-    }
-    if !results.hashtags.isEmpty, viewModel.searchScope == .all || viewModel.searchScope == .hashtags {
-      Section("explore.section.tags") {
-        ForEach(results.hashtags) { tag in
-          TagRowView(tag: tag)
-            #if !os(visionOS)
-            .listRowBackground(theme.primaryBackgroundColor)
-            #else
-            .listRowBackground(RoundedRectangle(cornerRadius: 8)
-                 .foregroundStyle(.background).hoverEffect())
-            .listRowHoverEffectDisabled()
-            #endif
-            .padding(.vertical, 4)
-        }
-      }
-    }
-    if !results.statuses.isEmpty, viewModel.searchScope == .all || viewModel.searchScope == .posts {
-      Section("explore.section.posts") {
-        ForEach(results.statuses) { status in
-          StatusRowView(viewModel: .init(status: status, client: client, routerPath: routerPath))
-            #if !os(visionOS)
-            .listRowBackground(theme.primaryBackgroundColor)
-            #else
-            .listRowBackground(RoundedRectangle(cornerRadius: 8)
-                 .foregroundStyle(.background).hoverEffect())
-            .listRowHoverEffectDisabled()
-            #endif
-            .padding(.vertical, 8)
         }
       }
     }

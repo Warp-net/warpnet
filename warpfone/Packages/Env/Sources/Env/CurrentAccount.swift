@@ -11,7 +11,6 @@ import Observation
   private static var accountsCache: [String: Account] = [:]
 
   public private(set) var account: Account?
-  public private(set) var tags: [Tag] = []
   public private(set) var followRequests: [Account] = []
   public private(set) var isUpdating: Bool = false
   public private(set) var updatingFollowRequestAccountIds = Set<String>()
@@ -20,10 +19,6 @@ import Observation
   private var client: Client?
 
   public static let shared = CurrentAccount()
-
-  public var sortedTags: [Tag] {
-    tags.sorted { $0.name.lowercased() < $1.name.lowercased() }
-  }
 
   private init() {}
 
@@ -39,7 +34,6 @@ import Observation
     await withTaskGroup(of: Void.self) { group in
       group.addTask { await self.fetchCurrentAccount() }
       group.addTask { await self.fetchConnections() }
-      group.addTask { await self.fetchFollowedTags() }
       group.addTask { await self.fetchFollowerRequests() }
     }
   }
@@ -64,37 +58,6 @@ import Observation
     account = try? await client.get(endpoint: Accounts.verifyCredentials)
     isLoadingAccount = false
     Self.accountsCache[client.id] = account
-  }
-
-  public func fetchFollowedTags() async {
-    guard let client, client.isAuth else { return }
-    do {
-      tags = try await client.get(endpoint: Accounts.followedTags)
-    } catch {
-      tags = []
-    }
-  }
-
-  public func followTag(id: String) async -> Tag? {
-    guard let client else { return nil }
-    do {
-      let tag: Tag = try await client.post(endpoint: Tags.follow(id: id))
-      tags.append(tag)
-      return tag
-    } catch {
-      return nil
-    }
-  }
-
-  public func unfollowTag(id: String) async -> Tag? {
-    guard let client else { return nil }
-    do {
-      let tag: Tag = try await client.post(endpoint: Tags.unfollow(id: id))
-      tags.removeAll { $0.id == tag.id }
-      return tag
-    } catch {
-      return nil
-    }
   }
 
   public func fetchFollowerRequests() async {

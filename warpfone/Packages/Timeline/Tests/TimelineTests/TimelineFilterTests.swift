@@ -9,7 +9,6 @@ import Models
 final class TimelineFilterTests: XCTestCase {
   func testCodableHome() throws {
     XCTAssertTrue(try testCodableOn(filter: .home))
-    XCTAssertTrue(try testCodableOn(filter: .hashtag(tag: "test", accountId: nil)))
   }
   
   private func testCodableOn(filter: TimelineFilter) throws -> Bool {

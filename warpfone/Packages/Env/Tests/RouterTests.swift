@@ -19,7 +19,7 @@ final class RouterTests: XCTestCase {
     let router = RouterPath()
     let url = URL(string: "https://mastodon.social/tags/test")!
     _ = router.handle(url: url)
-    XCTAssertTrue(router.path.first == .hashTag(tag: "test", account: nil))
+    XCTAssertTrue(router.path.isEmpty)
   }
   
   func testRouterLocalStatusURL() {

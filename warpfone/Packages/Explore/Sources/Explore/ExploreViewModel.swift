@@ -8,7 +8,7 @@ import SwiftUI
 @MainActor
 @Observable class ExploreViewModel {
   enum SearchScope: String, CaseIterable {
-    case all, people, hashtags, posts
+    case all, people
 
     var localizedString: LocalizedStringKey {
       switch self {
@@ -16,10 +16,6 @@ import SwiftUI
         .init("explore.scope.all")
       case .people:
         .init("explore.scope.people")
-      case .hashtags:
-        .init("explore.scope.hashtags")
-      case .posts:
-        .init("explore.scope.posts")
       }
     }
   }

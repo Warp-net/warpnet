@@ -2290,24 +2290,13 @@
         }
       }
     },
-    "explore.search.message-%@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "From this screen you can search anything on %@"
-          }
-        }
-      }
-    },
     "explore.search.prompt" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Search users, posts and tags"
+            "value" : "Search people or @name@server"
           }
         }
       }
@@ -2318,7 +2307,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Search your instance"
+            "value" : "Search people"
           }
         }
       }
@@ -6273,6 +6262,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trending"
+          }
+        }
+      }
+    },
+    "warpnet.explore.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find people on Warpnet by name, or anyone on the Fediverse by their handle, such as @name@mastodon.social."
           }
         }
       }

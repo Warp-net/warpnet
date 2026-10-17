@@ -32,10 +32,6 @@ extension View {
         StatusDetailView(remoteStatusURL: url)
       case let .conversationDetail(conversation):
         ConversationDetailView(conversation: conversation)
-      case let .hashTag(tag, accountId):
-        TimelineView(timeline: .constant(.hashtag(tag: tag, accountId: accountId)),
-                     scrollToTopSignal: .constant(0),
-                     canFilterTimeline: false)
       case let .following(id):
         AccountsListView(mode: .following(accountId: id))
       case let .followers(id):
@@ -107,7 +103,6 @@ extension View {
   func withModelContainer() -> some View {
     modelContainer(for: [
       Draft.self,
-      RecentTag.self,
     ])
   }
 }

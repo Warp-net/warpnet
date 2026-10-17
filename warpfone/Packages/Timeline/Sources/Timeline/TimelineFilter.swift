@@ -8,7 +8,6 @@ import SwiftUI
 public enum TimelineFilter: Hashable, Equatable, Identifiable {
 
   case home
-  case hashtag(tag: String, accountId: String?)
   case latest
   case resume
 
@@ -32,8 +31,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
       "Resume"
     case .home:
       "Home"
-    case let .hashtag(tag, _):
-      "#\(tag)"
     }
   }
 
@@ -45,8 +42,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
       "timeline.resume"
     case .home:
       "timeline.home"
-    case let .hashtag(tag, _):
-      "#\(tag)"
     }
   }
 
@@ -58,8 +53,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
       "clock.arrow.2.circlepath"
     case .home:
       "house"
-    case .hashtag:
-      "number"
     }
   }
 
@@ -68,18 +61,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
     case .latest: return Timelines.home(sinceId: nil, maxId: nil, minId: nil)
     case .resume: return Timelines.home(sinceId: nil, maxId: nil, minId: nil)
     case .home: return Timelines.home(sinceId: sinceId, maxId: maxId, minId: minId)
-    case let .hashtag(tag, accountId):
-      if let accountId {
-        return Accounts.statuses(id: accountId,
-                                 sinceId: nil,
-                                 tag: tag,
-                                 onlyMedia: false,
-                                 excludeReplies: false,
-                                 excludeReblogs: false,
-                                 pinned: nil)
-      } else {
-        return Timelines.hashtag(tag: tag, additional: nil, maxId: maxId, minId: minId)
-      }
     }
   }
 }
@@ -87,7 +68,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
 extension TimelineFilter: Codable {
   enum CodingKeys: String, CodingKey {
     case home
-    case hashtag
     case latest
     case resume
   }
@@ -98,14 +78,6 @@ extension TimelineFilter: Codable {
     switch key {
     case .home:
       self = .home
-    case .hashtag:
-      var nestedContainer = try container.nestedUnkeyedContainer(forKey: .hashtag)
-      let tag = try nestedContainer.decode(String.self)
-      let accountId = try nestedContainer.decode(String?.self)
-      self = .hashtag(
-        tag: tag,
-        accountId: accountId
-      )
     case .latest:
       self = .latest
     default:
@@ -123,10 +95,6 @@ extension TimelineFilter: Codable {
     switch self {
     case .home:
       try container.encode(CodingKeys.home.rawValue, forKey: .home)
-    case let .hashtag(tag, accountId):
-      var nestedContainer = container.nestedUnkeyedContainer(forKey: .hashtag)
-      try nestedContainer.encode(tag)
-      try nestedContainer.encode(accountId)
     case .latest:
       try container.encode(CodingKeys.latest.rawValue, forKey: .latest)
     case .resume:

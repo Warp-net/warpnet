@@ -174,3 +174,10 @@ carry that line, so they are named here instead.
   shows trending tags, posts and links.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+- Removed hashtags: the hashtag timeline and its follow button, followed and
+  recent tags with the RecentTag model, hashtag suggestions in the composer,
+  the followed-tag label on statuses and tag links that opened a timeline.
+  Search finds people only, and the Explore search texts say so.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

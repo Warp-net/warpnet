@@ -25,7 +25,6 @@ import SwiftUI
         if oldValue != timeline {
           await reset()
           pendingStatusesObserver.pendingStatuses = []
-          tag = nil
         }
         
         guard !Task.isCancelled else {
@@ -33,19 +32,11 @@ import SwiftUI
         }
         
         await fetchNewestStatuses(pullToRefresh: false)
-        switch timeline {
-        case let .hashtag(tag, _):
-          await fetchTag(id: tag)
-        default:
-          break
-        }
       }
     }
   }
 
   private(set) var timelineTask: Task<Void, Never>?
-
-  var tag: Tag?
 
   // Internal source of truth for a timeline.
   private(set) var datasource = TimelineDatasource()
@@ -100,16 +91,6 @@ import SwiftUI
       self?.scrollToIndexAnimated = true
       self?.scrollToIndex = index
     }
-  }
-
-  private func fetchTag(id: String) async {
-    guard let client else { return }
-    do {
-      let tag: Tag = try await client.get(endpoint: Tags.tag(id: id))
-      withAnimation {
-        self.tag = tag
-      }
-    } catch {}
   }
 
   func reset() async {

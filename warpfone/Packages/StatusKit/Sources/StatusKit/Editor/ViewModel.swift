@@ -149,8 +149,6 @@ extension StatusEditor {
     var visibility: Models.Visibility = .pub
 
     var mentionsSuggestions: [Account] = []
-    var tagsSuggestions: [Tag] = []
-    var showRecentsTagsInline: Bool = false
     var selectedLanguage: String?
     var hasExplicitlySelectedLanguage: Bool = false
     private var currentSuggestionRange: NSRange?
@@ -365,22 +363,17 @@ extension StatusEditor {
                                 .backgroundColor: UIColor.clear,
                                 .underlineColor: UIColor.clear],
                                range: NSMakeRange(0, statusText.string.utf16.count))
-      let hashtagPattern = "(#+[\\w0-9(_)]{0,})"
       let mentionPattern = "(@+[a-zA-Z0-9(_).-]{1,})"
       let urlPattern = "(?i)https?://(?:www\\.)?\\S+(?:/|\\b)"
 
       do {
-        let hashtagRegex = try NSRegularExpression(pattern: hashtagPattern, options: [])
         let mentionRegex = try NSRegularExpression(pattern: mentionPattern, options: [])
         let urlRegex = try NSRegularExpression(pattern: urlPattern, options: [])
 
         let range = NSMakeRange(0, statusText.string.utf16.count)
-        var ranges = hashtagRegex.matches(in: statusText.string,
+        let ranges = mentionRegex.matches(in: statusText.string,
                                           options: [],
                                           range: range).map(\.range)
-        ranges.append(contentsOf: mentionRegex.matches(in: statusText.string,
-                                                       options: [],
-                                                       range: range).map(\.range))
 
         let urlRanges = urlRegex.matches(in: statusText.string,
                                          options: [],
@@ -551,28 +544,7 @@ extension StatusEditor {
       suggestedTask?.cancel()
       suggestedTask = Task {
         do {
-          var results: SearchResults?
           switch query.first {
-          case "#":
-            if query.utf8.count == 1 {
-              withAnimation {
-                showRecentsTagsInline = true
-              }
-              return
-            }
-            showRecentsTagsInline = false
-            query.removeFirst()
-            results = try await client.get(endpoint: Search.search(query: query,
-                                                                   type: "hashtags",
-                                                                   offset: 0,
-                                                                   following: nil),
-                                           forceVersion: .v2)
-            guard !Task.isCancelled else {
-              return
-            }
-            withAnimation {
-              tagsSuggestions = results?.hashtags.sorted(by: { $0.totalUses > $1.totalUses }) ?? []
-            }
           case "@":
             guard query.utf8.count > 1 else { return }
             query.removeFirst()
@@ -595,15 +567,11 @@ extension StatusEditor {
     }
 
     private func resetAutoCompletion() {
-      if !tagsSuggestions.isEmpty ||
-          !mentionsSuggestions.isEmpty ||
-          currentSuggestionRange != nil ||
-          showRecentsTagsInline {
+      if !mentionsSuggestions.isEmpty ||
+          currentSuggestionRange != nil {
         withAnimation {
-          tagsSuggestions = []
           mentionsSuggestions = []
           currentSuggestionRange = nil
-          showRecentsTagsInline = false
         }
       }
     }
@@ -611,12 +579,6 @@ extension StatusEditor {
     func selectMentionSuggestion(account: Account) {
       if let range = currentSuggestionRange {
         replaceTextWith(text: "@\(account.acct) ", inRange: range)
-      }
-    }
-
-    func selectHashtagSuggestion(tag: String) {
-      if let range = currentSuggestionRange {
-        replaceTextWith(text: "#\(tag) ", inRange: range)
       }
     }
 

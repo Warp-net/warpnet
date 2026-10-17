@@ -38,7 +38,6 @@ class ShareViewController: UIViewController {
           .environment(instance)
           .modelContainer(for: [
             Draft.self,
-            RecentTag.self,
           ])
           .tint(theme.tintColor)
           .preferredColorScheme(colorScheme == .light ? .light : .dark)

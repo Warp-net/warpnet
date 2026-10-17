@@ -15,7 +15,6 @@ public enum RouterDestination: Hashable {
   case statusDetailWithStatus(status: Status)
   case remoteStatusDetail(url: URL)
   case conversationDetail(conversation: Conversation)
-  case hashTag(tag: String, account: String?)
   case followers(id: String)
   case following(id: String)
   case favoritedBy(id: String)
@@ -82,18 +81,7 @@ public enum SheetDestination: Identifiable {
   }
 
   public func handleStatus(status: AnyStatus, url: URL) -> OpenURLAction.Result {
-    if url.pathComponents.count == 3, url.pathComponents[1] == "tags",
-       url.host() == status.account.url?.host(),
-       let tag = url.pathComponents.last
-    {
-      // OK this test looks weird but it's
-      // A 3 component path i.e. ["/", "tags", "tagname"]
-      // That is on the same host as the person that posted the tag,
-      // i.e. not a link that matches the pattern but elsewhere on the internet
-      // In those circumstances, hijack the link and goto the tags page instead
-      navigate(to: .hashTag(tag: tag, account: nil))
-      return .handled
-    } else if let mention = status.mentions.first(where: { $0.url == url }) {
+    if let mention = status.mentions.first(where: { $0.url == url }) {
       navigate(to: .accountDetail(id: mention.id))
       return .handled
     } else if let client,
@@ -114,12 +102,7 @@ public enum SheetDestination: Identifiable {
   }
 
   public func handle(url: URL) -> OpenURLAction.Result {
-    if url.pathComponents.contains(where: { $0 == "tags" }),
-       let tag = url.pathComponents.last
-    {
-      navigate(to: .hashTag(tag: tag, account: nil))
-      return .handled
-    } else if url.lastPathComponent.first == "@",
+    if url.lastPathComponent.first == "@",
                 let host = url.host,
               !host.hasPrefix("www") {
       let acct = "\(url.lastPathComponent)@\(host)"

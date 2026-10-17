@@ -126,9 +126,6 @@ struct SettingsTabs: View {
           Label("settings.general.haptic", systemImage: "waveform.path")
         }
       }
-      NavigationLink(destination: RecenTagsSettingView()) {
-        Label("settings.general.recent-tags", systemImage: "clock")
-      }
       NavigationLink(destination: ContentSettingsView()) {
         Label("settings.general.content", systemImage: "rectangle.stack")
       }

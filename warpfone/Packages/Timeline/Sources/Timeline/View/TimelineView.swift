@@ -43,7 +43,6 @@ public struct TimelineView: View {
       ZStack(alignment: .top) {
         List {
           scrollToTopView
-          TimelineTagHeaderView(tag: $viewModel.tag)
           StatusesListView(fetcher: viewModel, client: client, routerPath: routerPath)
             .environment(\.isHomeTimeline, timeline == .home)
         }
