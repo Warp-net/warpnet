@@ -116,7 +116,12 @@ final class PairingModel {
 
   func resume() async {
     guard let session, accounts.currentClient.isAuth else { return }
-    await session.resume()
+    if case .rejected = await session.resume() {
+      accounts.setUnpaired()
+      notice = String(localized: "warpnet.pairing.auto-failed")
+      phase = .scanning
+      return
+    }
     monitor?.start()
   }
 

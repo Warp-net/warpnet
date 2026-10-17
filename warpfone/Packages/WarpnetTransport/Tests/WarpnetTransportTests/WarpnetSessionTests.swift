@@ -12,11 +12,15 @@ final class WarpnetSessionTests: XCTestCase {
                                  bootstrapPeers: [])
   static let rawJson = #"{"token":"t","psk":"ab","network":"testnet","addresses":["/ip4/10.0.0.2/tcp/4001","/ip4/127.0.0.1/tcp/4001"],"node_id":"NODE","user_id":"USER"}"#
 
-  func makeSession(_ binding: FakeBinding, storage: MemoryStorage = MemoryStorage()) -> WarpnetSession {
+  func makeSession(_ binding: FakeBinding,
+                   storage: MemoryStorage = MemoryStorage(),
+                   repairInterval: TimeInterval = 3600) -> WarpnetSession
+  {
     let store = PairingStore(storage: storage) { Data(repeating: 7, count: $0) }
     return WarpnetSession(binding: binding,
                           client: WarpnetClient(binding: binding, retryBackoffs: []),
-                          store: store) { peer, seeds in
+                          store: store,
+                          repairInterval: repairInterval) { peer, seeds in
       "key-\(peer)-\(try seeds.seed(memberPeerId: peer).count)"
     }
   }
@@ -117,6 +121,36 @@ final class WarpnetSessionTests: XCTestCase {
     let session = makeSession(binding, storage: storage)
     guard case .transportError = await session.restore() else { return XCTFail("expected a transport error") }
     XCTAssertEqual(session.store.loadRawQr(), Self.rawJson)
+  }
+
+  func testResumeRepairsOnlyAfterTheInterval() async throws {
+    let binding = FakeBinding()
+    binding.streamResults = [#"["/ip4/10.0.0.2/tcp/4001"]"#, #"["/ip4/10.0.0.2/tcp/4001"]"#]
+    let fresh = makeSession(binding)
+    _ = await fresh.pair(Self.info, rawJson: Self.rawJson)
+    let skipped = await fresh.resume()
+    XCTAssertNil(skipped)
+    XCTAssertEqual(binding.streamCalls.count, 1)
+
+    let stale = makeSession(binding, repairInterval: 0)
+    _ = await stale.pair(Self.info, rawJson: Self.rawJson)
+    binding.streamResults = [#"["/ip4/10.0.0.2/tcp/4001"]"#]
+    let refreshed = await stale.resume()
+    XCTAssertEqual(refreshed, .success(Self.info))
+    XCTAssertEqual(binding.streamCalls.last?.protocolId, ProtocolIds.PRIVATE_POST_PAIR)
+  }
+
+  func testResumeForgetsARevokedPairing() async throws {
+    let binding = FakeBinding()
+    binding.streamResults = [#"["/ip4/10.0.0.2/tcp/4001"]"#]
+    let session = makeSession(binding, repairInterval: 0)
+    _ = await session.pair(Self.info, rawJson: Self.rawJson)
+    binding.streamResults = [#"{"code":5000,"message":"pairing revoked"}"#]
+    let outcome = await session.resume()
+    XCTAssertEqual(outcome, .rejected(code: 5000, message: "pairing revoked"))
+    XCTAssertNil(session.store.loadRawQr())
+    let pairing = await session.pairing
+    XCTAssertNil(pairing)
   }
 
   func testUnpairRemovesThisDeviceAndForgetsThePairing() async throws {

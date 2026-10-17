@@ -14,17 +14,23 @@ public actor WarpnetSession {
   public nonisolated let client: WarpnetClient
   public nonisolated let store: PairingStore
   private let derivePrivateKeyHex: KeyDerivation
+  private let repairInterval: TimeInterval
+  private var pairedAt: Date?
 
   public private(set) var pairing: AuthNodeInfo?
 
+  // The node forgets a device that has not paired for 72 hours, and iOS can
+  // keep a suspended app alive longer than that.
   public init(binding: WarpnetBinding,
               client: WarpnetClient,
               store: PairingStore,
+              repairInterval: TimeInterval = 3600,
               derivePrivateKeyHex: @escaping KeyDerivation)
   {
     self.binding = binding
     self.client = client
     self.store = store
+    self.repairInterval = repairInterval
     self.derivePrivateKeyHex = derivePrivateKeyHex
   }
 
@@ -68,6 +74,7 @@ public actor WarpnetSession {
       try await client.pair(rawJson)
       try? store.save(rawQr: rawJson, memberPeerId: info.nodeId)
       pairing = info
+      pairedAt = Date()
       return .success(info)
     } catch let error as WarpnetError {
       switch error {
@@ -93,14 +100,33 @@ public actor WarpnetSession {
     await client.shutdown()
     store.clear()
     pairing = nil
+    pairedAt = nil
   }
 
   public func pause() async {
     await client.pause()
   }
 
-  public func resume() async {
+  @discardableResult
+  public func resume() async -> PairingOutcome? {
     await client.resume()
+    guard let pairing, let pairedAt, Date().timeIntervalSince(pairedAt) >= repairInterval,
+          let rawJson = store.loadRawQr()
+    else { return nil }
+    do {
+      try await client.pair(rawJson)
+      self.pairedAt = Date()
+      return .success(pairing)
+    } catch let error as WarpnetError where error.isDurablePairRejection {
+      await client.shutdown()
+      store.clear()
+      self.pairing = nil
+      self.pairedAt = nil
+      guard case let .protocolError(code, message) = error else { return nil }
+      return .rejected(code: code, message: message)
+    } catch {
+      return nil
+    }
   }
 
   public func dialCandidates() -> [String] {
