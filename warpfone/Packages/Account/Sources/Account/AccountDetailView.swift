@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import EmojiText
 import Env
@@ -327,12 +329,6 @@ public struct AccountDetailView: View {
             } label: {
               Label("account.action.edit-filters", systemImage: "line.3.horizontal.decrease.circle")
             }
-          }
-
-          Button {
-            routerPath.presentedSheet = .accountPushNotficationsSettings
-          } label: {
-            Label("settings.push.navigation-title", systemImage: "bell")
           }
 
           if let account = viewModel.account {

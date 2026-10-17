@@ -401,25 +401,6 @@ import SwiftUI
     }
   }
 
-  public var notificationsCount: [OauthToken: Int] = [:] {
-    didSet {
-      for (key, value) in notificationsCount {
-        Self.sharedDefault?.set(value, forKey: "push_notifications_count_\(key.createdAt)")
-      }
-    }
-  }
-
-  public var totalNotificationsCount: Int {
-    notificationsCount.compactMap{ $0.value }.reduce(0, +)
-  }
-
-  public func reloadNotificationsCount(tokens: [OauthToken]) {
-    notificationsCount = [:]
-    for token in tokens {
-      notificationsCount[token] = Self.sharedDefault?.integer(forKey: "push_notifications_count_\(token.createdAt)") ?? 0
-    }
-  }
-
   public var serverPreferences: ServerPreferences?
 
   public func setClient(client: Client) {

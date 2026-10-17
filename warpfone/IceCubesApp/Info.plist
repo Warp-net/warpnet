@@ -28,10 +28,6 @@
 		<string>Atkinson-Hyperlegible-Regular-102.ttf</string>
 		<string>OpenDyslexic-Regular.otf</string>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
 	<key>AppGroup</key>
 	<string>group.$(BUNDLE_ID_PREFIX).warpfone</string>
 	<key>KeychainAccessGroup</key>

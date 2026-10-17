@@ -1,4 +1,5 @@
 // swift-tools-version: 5.9
+// Modified by Warpnet. See NOTICE.
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -18,12 +19,14 @@ let package = Package(
   ],
   dependencies: [
     .package(name: "Models", path: "../Models"),
+    .package(name: "WarpnetTransport", path: "../WarpnetTransport"),
   ],
   targets: [
     .target(
       name: "Network",
       dependencies: [
         .product(name: "Models", package: "Models"),
+        .product(name: "WarpnetTransport", package: "WarpnetTransport"),
       ],
       swiftSettings: [
         .enableExperimentalFeature("StrictConcurrency"),

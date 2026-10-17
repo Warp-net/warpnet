@@ -48,13 +48,11 @@ public enum SheetDestination: Identifiable {
   case listCreate
   case listEdit(list: Models.List)
   case listAddAccount(account: Account)
-  case addAccount
   case addRemoteLocalTimeline
   case addTagGroup
   case statusEditHistory(status: String)
   case settings
   case about
-  case accountPushNotficationsSettings
   case report(status: Status)
   case shareImage(image: UIImage, status: Status)
   case editTagGroup(tagGroup: TagGroup, onSaved: ((TagGroup) -> Void)?)
@@ -71,8 +69,6 @@ public enum SheetDestination: Identifiable {
       "listEdit"
     case .listAddAccount:
       "listAddAccount"
-    case .addAccount:
-      "addAccount"
     case .addTagGroup:
       "addTagGroup"
     case .addRemoteLocalTimeline:
@@ -85,7 +81,7 @@ public enum SheetDestination: Identifiable {
       "shareImage"
     case .editTagGroup:
       "editTagGroup"
-    case .settings, .about, .accountPushNotficationsSettings:
+    case .settings, .about:
       "settings"
     case .timelineContentFilter:
       "timelineContentFilter"

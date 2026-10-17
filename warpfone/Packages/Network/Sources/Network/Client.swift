@@ -7,15 +7,11 @@ import Observation
 import os
 import SwiftUI
 import OSLog
+import WarpnetTransport
 
 @Observable public final class Client: Equatable, Identifiable, Hashable, @unchecked Sendable {
   public static func == (lhs: Client, rhs: Client) -> Bool {
-    let lhsToken = lhs.critical.withLock { $0.oauthToken }
-    let rhsToken = rhs.critical.withLock { $0.oauthToken }
-
-    return (lhsToken != nil) == (rhsToken != nil) &&
-      lhs.server == rhs.server &&
-      lhsToken?.accessToken == rhsToken?.accessToken
+    lhs.id == rhs.id
   }
 
   public enum Version: String, Sendable {
@@ -26,16 +22,8 @@ import OSLog
     case unexpectedRequest
   }
 
-  public enum OauthError: Error {
-    case missingApp
-    case invalidRedirectURL
-  }
-
   public var id: String {
-    critical.withLock {
-      let isAuth = $0.oauthToken != nil
-      return "\(isAuth)\(server)\($0.oauthToken?.createdAt ?? 0)"
-    }
+    "\(isAuth)\(server)"
   }
 
   public func hash(into hasher: inout Hasher) {
@@ -44,6 +32,7 @@ import OSLog
 
   public let server: String
   public let version: Version
+  public let session: WarpnetSession?
   private let urlSession: URLSession
   private let decoder = JSONDecoder()
   
@@ -54,24 +43,22 @@ import OSLog
   // reference type to hold its associated state.
   private let critical: OSAllocatedUnfairLock<Critical>
   private struct Critical: Sendable {
-    /// Only used as a transitionary app while in the oauth flow.
-    var oauthApp: InstanceApp?
-    var oauthToken: OauthToken?
     var connections: Set<String> = []
   }
 
   public var isAuth: Bool {
-    critical.withLock { $0.oauthToken != nil }
+    session != nil
   }
 
   public var connections: Set<String> {
     critical.withLock { $0.connections }
   }
 
-  public init(server: String, version: Version = .v1, oauthToken: OauthToken? = nil) {
+  public init(server: String, version: Version = .v1, session: WarpnetSession? = nil) {
     self.server = server
     self.version = version
-    critical = .init(initialState: Critical(oauthToken: oauthToken, connections: [server]))
+    self.session = session
+    critical = .init(initialState: Critical(connections: [server]))
     urlSession = URLSession.shared
     decoder.keyDecodingStrategy = .convertFromSnakeCase
   }
@@ -103,11 +90,7 @@ import OSLog
     var components = URLComponents()
     components.scheme = scheme
     components.host = forceServer ?? server
-    if type(of: endpoint) == Oauth.self {
-      components.path += "/\(endpoint.path())"
-    } else {
-      components.path += "/api/\(forceVersion?.rawValue ?? version.rawValue)/\(endpoint.path())"
-    }
+    components.path += "/api/\(forceVersion?.rawValue ?? version.rawValue)/\(endpoint.path())"
     components.queryItems = endpoint.queryItems()
     guard let url = components.url else {
       throw ClientError.unexpectedRequest
@@ -118,9 +101,6 @@ import OSLog
   private func makeURLRequest(url: URL, endpoint: Endpoint, httpMethod: String) -> URLRequest {
     var request = URLRequest(url: url)
     request.httpMethod = httpMethod
-    if let oauthToken = critical.withLock({ $0.oauthToken }) {
-      request.setValue("Bearer \(oauthToken.accessToken)", forHTTPHeaderField: "Authorization")
-    }
     if let json = endpoint.jsonValue {
       let encoder = JSONEncoder()
       encoder.keyEncodingStrategy = .convertToSnakeCase
@@ -210,35 +190,9 @@ import OSLog
     }
   }
 
-  public func oauthURL() async throws -> URL {
-    let app: InstanceApp = try await post(endpoint: Apps.registerApp)
-    critical.withLock { $0.oauthApp = app }
-    return try makeURL(endpoint: Oauth.authorize(clientId: app.clientId))
-  }
-
-  public func continueOauthFlow(url: URL) async throws -> OauthToken {
-    guard let app = critical.withLock({ $0.oauthApp }) else {
-      throw OauthError.missingApp
-    }
-    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-          let code = components.queryItems?.first(where: { $0.name == "code" })?.value
-    else {
-      throw OauthError.invalidRedirectURL
-    }
-    let token: OauthToken = try await post(endpoint: Oauth.token(code: code,
-                                                                 clientId: app.clientId,
-                                                                 clientSecret: app.clientSecret))
-    critical.withLock { $0.oauthToken = token }
-    return token
-  }
-
   public func makeWebSocketTask(endpoint: Endpoint, instanceStreamingURL: URL?) throws -> URLSessionWebSocketTask {
     let url = try makeURL(scheme: "wss", endpoint: endpoint, forceServer: instanceStreamingURL?.host)
-    var subprotocols: [String] = []
-    if let oauthToken = critical.withLock({ $0.oauthToken }) {
-      subprotocols.append(oauthToken.accessToken)
-    }
-    return urlSession.webSocketTask(with: url, protocols: subprotocols)
+    return urlSession.webSocketTask(with: url)
   }
 
   public func mediaUpload<Entity: Decodable>(endpoint: Endpoint,

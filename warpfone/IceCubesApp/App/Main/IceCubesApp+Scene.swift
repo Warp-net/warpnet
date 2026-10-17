@@ -21,30 +21,13 @@ extension IceCubesApp {
         .environment(userPreferences)
         .environment(theme)
         .environment(watcher)
-        .environment(pushNotificationsService)
+        .environment(pairing)
         .sheet(item: $quickLook.selectedMediaAttachment) { selectedMediaAttachment in
           MediaUIView(selectedAttachment: selectedMediaAttachment,
                       attachments: quickLook.mediaAttachments)
             .presentationBackground(.ultraThinMaterial)
             .presentationCornerRadius(16)
             .withEnvironments()
-        }
-        .onChange(of: pushNotificationsService.handledNotification) { _, newValue in
-          if newValue != nil {
-            pushNotificationsService.handledNotification = nil
-            if appAccountsManager.currentAccount.oauthToken?.accessToken != newValue?.account.token.accessToken,
-               let account = appAccountsManager.availableAccounts.first(where:
-                 { $0.oauthToken?.accessToken == newValue?.account.token.accessToken })
-            {
-              appAccountsManager.currentAccount = account
-              DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                selectedTab = .notifications
-                pushNotificationsService.handledNotification = newValue
-              }
-            } else {
-              selectedTab = .notifications
-            }
-          }
         }
         .withModelContainer()
     }

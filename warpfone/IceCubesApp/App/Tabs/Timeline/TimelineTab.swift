@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AppAccount
 import Combine
 import DesignSystem
@@ -67,9 +69,6 @@ struct TimelineTab: View {
       Task {
         await currentAccount.fetchLists()
       }
-      if !client.isAuth {
-        routerPath.presentedSheet = .addAccount
-      }
     }
     .onChange(of: client.isAuth) {
       resetTimelineFilter()
@@ -133,15 +132,6 @@ struct TimelineTab: View {
     contentFilterButton
   }
 
-  private var addAccountButton: some View {
-    Button {
-      routerPath.presentedSheet = .addAccount
-    } label: {
-      Image(systemName: "person.badge.plus")
-    }
-    .accessibilityLabel("accessibility.tabs.timeline.add-account")
-  }
-
   @ToolbarContentBuilder
   private var toolbarView: some ToolbarContent {
     if canFilterTimeline {
@@ -149,13 +139,7 @@ struct TimelineTab: View {
         timelineFilterButton
       }
     }
-    if client.isAuth {
-      ToolbarTab(routerPath: $routerPath)
-    } else {
-      ToolbarItem(placement: .navigationBarTrailing) {
-        addAccountButton
-      }
-    }
+    ToolbarTab(routerPath: $routerPath)
     switch timeline {
     case let .list(list):
       ToolbarItem {

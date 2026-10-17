@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import AppAccount
 import DesignSystem
@@ -26,10 +28,8 @@ struct SideBarView<Content: View>: View {
   @State private var sidebarTabs = SidebarTabs.shared
 
   private func badgeFor(tab: Tab) -> Int {
-    if tab == .notifications, selectedTab != tab,
-       let token = appAccounts.currentAccount.oauthToken
-    {
-      return watcher.unreadNotificationsCount + (userPreferences.notificationsCount[token] ?? 0)
+    if tab == .notifications, selectedTab != tab {
+      return watcher.unreadNotificationsCount
     }
     return 0
   }
@@ -77,30 +77,13 @@ struct SideBarView<Content: View>: View {
     .buttonStyle(.borderedProminent)
   }
 
-  private func makeAccountButton(account: AppAccount, showBadge: Bool) -> some View {
+  private func makeAccountButton(account: AppAccount) -> some View {
     Button {
-      if account.id == appAccounts.currentAccount.id {
-        selectedTab = .profile
-        SoundEffectManager.shared.playSound(.tabSelection)
-      } else {
-        var transation = Transaction()
-        transation.disablesAnimations = true
-        withTransaction(transation) {
-          appAccounts.currentAccount = account
-        }
-      }
+      selectedTab = .profile
+      SoundEffectManager.shared.playSound(.tabSelection)
     } label: {
-      ZStack(alignment: .topTrailing) {
-        AppAccountView(viewModel: .init(appAccount: account, isCompact: true),
-                       isParentPresented: .constant(false))
-        if showBadge,
-           let token = account.oauthToken,
-           let notificationsCount = userPreferences.notificationsCount[token],
-           notificationsCount > 0
-        {
-          makeBadgeView(count: notificationsCount)
-        }
-      }
+      AppAccountView(viewModel: .init(appAccount: account, isCompact: true),
+                     isParentPresented: .constant(false))
     }
     .frame(width: .sidebarWidth, height: 50)
     .padding(.vertical, 8)
@@ -124,9 +107,6 @@ struct SideBarView<Content: View>: View {
           selectedTab = tab
           SoundEffectManager.shared.playSound(.tabSelection)
           if tab == .notifications {
-            if let token = appAccounts.currentAccount.oauthToken {
-              userPreferences.notificationsCount[token] = 0
-            }
             watcher.unreadNotificationsCount = 0
           }
         } label: {
@@ -142,17 +122,10 @@ struct SideBarView<Content: View>: View {
       if horizontalSizeClass == .regular {
         ScrollView {
           VStack(alignment: .center) {
-            if appAccounts.availableAccounts.isEmpty {
-              tabsView
-            } else {
-              ForEach(appAccounts.availableAccounts) { account in
-                makeAccountButton(account: account,
-                                  showBadge: account.id != appAccounts.currentAccount.id)
-                if account.id == appAccounts.currentAccount.id {
-                  tabsView
-                }
-              }
+            if appAccounts.currentClient.isAuth {
+              makeAccountButton(account: appAccounts.currentAccount)
             }
+            tabsView
           }
         }
         .frame(width: .sidebarWidth)

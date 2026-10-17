@@ -1,4 +1,5 @@
 // swift-tools-version: 5.9
+// Modified by Warpnet. See NOTICE.
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -21,6 +22,7 @@ let package = Package(
     .package(name: "Models", path: "../Models"),
     .package(name: "Env", path: "../Env"),
     .package(name: "DesignSystem", path: "../DesignSystem"),
+    .package(name: "WarpnetTransport", path: "../WarpnetTransport"),
   ],
   targets: [
     .target(
@@ -30,6 +32,7 @@ let package = Package(
         .product(name: "Models", package: "Models"),
         .product(name: "Env", package: "Env"),
         .product(name: "DesignSystem", package: "DesignSystem"),
+        .product(name: "WarpnetTransport", package: "WarpnetTransport"),
       ],
       swiftSettings: [
         .enableExperimentalFeature("StrictConcurrency"),

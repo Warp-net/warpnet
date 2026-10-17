@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Account
 import AppAccount
 import DesignSystem
@@ -11,7 +13,7 @@ struct AccountSettingsView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.openURL) private var openURL
 
-  @Environment(PushNotificationsService.self) private var pushNotifications
+  @Environment(PairingModel.self) private var pairing
   @Environment(CurrentAccount.self) private var currentAccount
   @Environment(CurrentInstance.self) private var currentInstance
   @Environment(Theme.self) private var theme
@@ -48,11 +50,6 @@ struct AccountSettingsView: View {
           }
           .buttonStyle(.plain)
         }
-        if let subscription = pushNotifications.subscriptions.first(where: { $0.account.token == appAccount.oauthToken }) {
-          NavigationLink(destination: PushNotificationsView(subscription: subscription)) {
-            Label("settings.general.push-notifications", systemImage: "bell.and.waves.left.and.right")
-          }
-        }
       }
       .listRowBackground(theme.primaryBackgroundColor)
 
@@ -78,19 +75,13 @@ struct AccountSettingsView: View {
 
       Section {
         Button(role: .destructive) {
-          if let token = appAccount.oauthToken {
-            Task {
-              let client = Client(server: appAccount.server, oauthToken: token)
-              await timelineCache.clearCache(for: client.id)
-              if let sub = pushNotifications.subscriptions.first(where: { $0.account.token == token }) {
-                await sub.deleteSubscription()
-              }
-              appAccountsManager.delete(account: appAccount)
-              dismiss()
-            }
+          Task {
+            await timelineCache.clearCache(for: client.id)
+            await pairing.unpair()
+            dismiss()
           }
         } label: {
-          Text("account.action.logout")
+          Text("warpnet.pairing.unpair")
             .frame(maxWidth: .infinity)
         }
       }

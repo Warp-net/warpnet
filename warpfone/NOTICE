@@ -118,3 +118,23 @@ carry that line, so they are named here instead.
   wire layer, and binds it to the node in App/Warpnet/GoBinding.swift.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-17, pairing
+- Sign-in is now pairing with the user's Warpnet node: a QR scan or pasted
+  connection data replaces the instance picker and OAuth. AddAccountsView, the
+  Apps and Oauth endpoints, the OAuth token and app models and the
+  instances.social client were removed. The app keeps one pairing; AppAccount
+  names the paired node, and logging out unpairs the device on that node.
+- The Mastodon push stack went with OAuth, since every subscription was keyed
+  by an OAuth token: PushNotificationsService, its settings screen, the
+  IceCubesNotifications extension, the push endpoint and models, the
+  aps-environment entitlement and the remote-notification background mode.
+- The node is paused in the background and resumed in the foreground.
+- Package manifests must start with their tools version, so they carry the
+  notice line second.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+  IceCubesApp/App/IceCubesApp.entitlements
+  IceCubesApp/App/IceCubesApp-release.entitlements
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

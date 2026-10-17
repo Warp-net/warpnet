@@ -6276,6 +6276,336 @@
           }
         }
       }
+    },
+    "warpnet.pairing.address" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Address"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.auto-failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved pairing is no longer accepted; please scan again."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.camera-unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The camera is not available here. Enter the pairing data manually instead."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.confirm-title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to this node?"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.connect" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.error.peer-mismatch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peer identity does not match the QR; refusing to pair."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.error.rejected-%lld-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pairing rejected (%1$lld): %2$@"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.error.transport-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not connect: %@"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.invalid-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not read QR: %@"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.manual" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter pairing data manually"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.manual-body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On your computer, press “Copy connection data” under the QR code and paste it here."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.manual-hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste pairing data"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.manual-submit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.manual-title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter pairing data"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.node" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.onboarding-title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pair with your computer"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.owner" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Owner"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.scan-new" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan a new code"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.step-1" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1. Start the Warpnet app on your computer."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.step-2" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2. Open the menu → “Sign in by QR-code” to show a QR code."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.step-3" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3. Point the camera at that QR code."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to my node"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Warpnet node is not available on this device."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.unpair" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpair this device"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.unpair.confirmation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This device will be removed from your node and will forget the pairing."
+          }
+        }
+      }
+    },
+    "warpnet.startup.account" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading your profile…"
+          }
+        }
+      }
+    },
+    "warpnet.startup.connected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection established…"
+          }
+        }
+      }
+    },
+    "warpnet.startup.handshake" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Securing the connection…"
+          }
+        }
+      }
+    },
+    "warpnet.startup.node" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starting your node…"
+          }
+        }
+      }
+    },
+    "warpnet.startup.pairing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pairing with your node…"
+          }
+        }
+      }
+    },
+    "warpnet.startup.peers" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discovering peers…"
+          }
+        }
+      }
+    },
+    "warpnet.startup.timeline" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading your timeline…"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

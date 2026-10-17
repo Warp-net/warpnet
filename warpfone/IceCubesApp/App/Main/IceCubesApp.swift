@@ -23,7 +23,7 @@ struct IceCubesApp: App {
   @State var currentInstance = CurrentInstance.shared
   @State var currentAccount = CurrentAccount.shared
   @State var userPreferences = UserPreferences.shared
-  @State var pushNotificationsService = PushNotificationsService.shared
+  @State var pairing = PairingModel.shared
   @State var watcher = StreamWatcher.shared
   @State var quickLook = QuickLook.shared
   @State var theme = Theme.shared
@@ -51,11 +51,13 @@ struct IceCubesApp: App {
     switch scenePhase {
     case .background:
       watcher.stopWatching()
-    case .active:
-      watcher.watch(streams: [.user, .direct])
-      UNUserNotificationCenter.current().setBadgeCount(0)
-      userPreferences.reloadNotificationsCount(tokens: appAccountsManager.availableAccounts.compactMap(\.oauthToken))
       Task {
+        await pairing.pause()
+      }
+    case .active:
+      Task {
+        await pairing.resume()
+        watcher.watch(streams: [.user, .direct])
         await userPreferences.refreshServerPreferences()
       }
     default:
@@ -70,25 +72,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
   {
     try? AVAudioSession.sharedInstance().setCategory(.ambient, options: .mixWithOthers)
     try? AVAudioSession.sharedInstance().setActive(true)
-    PushNotificationsService.shared.setAccounts(accounts: AppAccountsManager.shared.pushAccounts)
     return true
-  }
-
-  func application(_: UIApplication,
-                   didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data)
-  {
-    PushNotificationsService.shared.pushToken = deviceToken
-    Task {
-      PushNotificationsService.shared.setAccounts(accounts: AppAccountsManager.shared.pushAccounts)
-      await PushNotificationsService.shared.updateSubscriptions(forceCreate: false)
-    }
-  }
-
-  func application(_: UIApplication, didFailToRegisterForRemoteNotificationsWithError _: Error) {}
-
-  func application(_: UIApplication, didReceiveRemoteNotification _: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
-    UserPreferences.shared.reloadNotificationsCount(tokens: AppAccountsManager.shared.availableAccounts.compactMap(\.oauthToken))
-    return .noData
   }
 
   func application(_: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options _: UIScene.ConnectionOptions) -> UISceneConfiguration {

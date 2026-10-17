@@ -96,9 +96,6 @@ extension View {
       case let .listAddAccount(account):
         ListAddAccountView(account: account)
           .withEnvironments()
-      case .addAccount:
-        AddAccountView()
-          .withEnvironments()
       case .addRemoteLocalTimeline:
         AddRemoteTimelineView()
           .withEnvironments()
@@ -112,13 +109,6 @@ extension View {
         SettingsTabs(popToRootTab: .constant(.settings), isModal: true)
           .withEnvironments()
           .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
-      case .accountPushNotficationsSettings:
-        if let subscription = PushNotificationsService.shared.subscriptions.first(where: { $0.account.token == AppAccountsManager.shared.currentAccount.oauthToken }) {
-          NavigationSheet { PushNotificationsView(subscription: subscription) }
-            .withEnvironments()
-        } else {
-          EmptyView()
-        }
       case .about:
         NavigationSheet { AboutView() }
           .withEnvironments()
@@ -146,7 +136,7 @@ extension View {
       .environment(CurrentInstance.shared)
       .environment(Theme.shared)
       .environment(AppAccountsManager.shared)
-      .environment(PushNotificationsService.shared)
+      .environment(PairingModel.shared)
       .environment(AppAccountsManager.shared.currentClient)
       .environment(QuickLook.shared)
   }

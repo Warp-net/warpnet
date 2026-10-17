@@ -17,7 +17,7 @@ struct SettingsTabs: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-  @Environment(PushNotificationsService.self) private var pushNotifications
+  @Environment(PairingModel.self) private var pairing
   @Environment(UserPreferences.self) private var preferences
   @Environment(Client.self) private var client
   @Environment(CurrentInstance.self) private var currentInstance
@@ -25,8 +25,7 @@ struct SettingsTabs: View {
   @Environment(Theme.self) private var theme
 
   @State private var routerPath = RouterPath()
-  @State private var addAccountSheetPresented = false
-  @State private var isEditingAccount = false
+  @State private var isUnpairConfirmationPresented = false
   @State private var cachedRemoved = false
   @State private var timelineCache = TimelineCache()
 
@@ -71,7 +70,7 @@ struct SettingsTabs: View {
       routerPath.client = client
     }
     .task {
-      if appAccountsManager.currentAccount.oauthToken != nil {
+      if appAccountsManager.currentClient.isAuth {
         await currentInstance.fetchCurrentInstance()
       }
     }
@@ -86,49 +85,29 @@ struct SettingsTabs: View {
 
   private var accountsSection: some View {
     Section("settings.section.accounts") {
-      ForEach(appAccountsManager.availableAccounts) { account in
-        HStack {
-          if isEditingAccount {
-            Button {
-              Task {
-                await logoutAccount(account: account)
-              }
-            } label: {
-              Image(systemName: "trash")
-                .renderingMode(.template)
-                .tint(.red)
-            }
-          }
-          AppAccountView(viewModel: .init(appAccount: account), isParentPresented: .constant(false))
-        }
+      if appAccountsManager.currentClient.isAuth {
+        AppAccountView(viewModel: .init(appAccount: appAccountsManager.currentAccount), isParentPresented: .constant(false))
       }
-      .onDelete { indexSet in
-        if let index = indexSet.first {
-          let account = appAccountsManager.availableAccounts[index]
+      Button(role: .destructive) {
+        isUnpairConfirmationPresented = true
+      } label: {
+        Text("warpnet.pairing.unpair")
+      }
+      .confirmationDialog("warpnet.pairing.unpair.confirmation",
+                          isPresented: $isUnpairConfirmationPresented,
+                          titleVisibility: .visible)
+      {
+        Button("warpnet.pairing.unpair", role: .destructive) {
           Task {
-            await logoutAccount(account: account)
+            await timelineCache.clearCache(for: client.id)
+            await pairing.unpair()
           }
         }
       }
-      if !appAccountsManager.availableAccounts.isEmpty {
-        editAccountButton
-      }
-      addAccountButton
     }
     #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
     #endif
-  }
-
-  private func logoutAccount(account: AppAccount) async {
-    if let token = account.oauthToken,
-       let sub = pushNotifications.subscriptions.first(where: { $0.account.token == token })
-    {
-      let client = Client(server: account.server, oauthToken: token)
-      await timelineCache.clearCache(for: client.id)
-      await sub.deleteSubscription()
-      appAccountsManager.delete(account: account)
-    }
   }
 
   @ViewBuilder
@@ -249,31 +228,6 @@ struct SettingsTabs: View {
     #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
     #endif
-  }
-
-  private var addAccountButton: some View {
-    Button {
-      addAccountSheetPresented.toggle()
-    } label: {
-      Text("settings.account.add")
-    }
-    .sheet(isPresented: $addAccountSheetPresented) {
-      AddAccountView()
-    }
-  }
-
-  private var editAccountButton: some View {
-    Button(role: isEditingAccount ? .none : .destructive) {
-      withAnimation {
-        isEditingAccount.toggle()
-      }
-    } label: {
-      if isEditingAccount {
-        Text("action.done")
-      } else {
-        Text("account.action.logout")
-      }
-    }
   }
 
   private var cacheSection: some View {

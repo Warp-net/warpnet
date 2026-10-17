@@ -6,7 +6,6 @@ import SwiftUI
 
 @MainActor
 public struct AppAccountsSelectorView: View {
-  @Environment(UserPreferences.self) private var preferences
   @Environment(CurrentAccount.self) private var currentAccount
   @Environment(AppAccountsManager.self) private var appAccounts
   @Environment(Theme.self) private var theme
@@ -18,14 +17,6 @@ public struct AppAccountsSelectorView: View {
 
   private let accountCreationEnabled: Bool
   private let avatarConfig: AvatarView.FrameConfig
-
-  private var showNotificationBadge: Bool {
-    accountsViewModel
-      .filter { $0.account?.id != currentAccount.account?.id }
-      .compactMap(\.appAccount.oauthToken)
-      .map { preferences.notificationsCount[$0] ?? 0 }
-      .reduce(0, +) > 0
-  }
 
   private var preferredHeight: CGFloat {
     var baseHeight: CGFloat = 310
@@ -82,7 +73,7 @@ public struct AppAccountsSelectorView: View {
           .allowsHitTesting(false)
       }
     }.overlay(alignment: .topTrailing) {
-      if !currentAccount.followRequests.isEmpty || showNotificationBadge, accountCreationEnabled {
+      if !currentAccount.followRequests.isEmpty, accountCreationEnabled {
         Circle()
           .fill(Color.red)
           .frame(width: 9, height: 9)
@@ -97,7 +88,6 @@ public struct AppAccountsSelectorView: View {
           ForEach(accountsViewModel.sorted { $0.acct < $1.acct }, id: \.appAccount.id) { viewModel in
             AppAccountView(viewModel: viewModel, isParentPresented: $isPresented)
           }
-          addAccountButton
         }
         #if !os(visionOS)
           .listRowBackground(theme.primaryBackgroundColor)
@@ -131,18 +121,6 @@ public struct AppAccountsSelectorView: View {
     }
   }
   
-  private var addAccountButton: some View {
-    Button {
-      isPresented = false
-      HapticManager.shared.fireHaptic(.buttonPress)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        routerPath.presentedSheet = .addAccount
-      }
-    } label: {
-      Label("app-account.button.add", systemImage: "person.badge.plus")
-    }
-  }
-
   private var settingsButton: some View {
     Button {
       isPresented = false

@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import DesignSystem
 import Env
@@ -16,7 +18,6 @@ struct AddRemoteTimelineView: View {
 
   @State private var instanceName: String = ""
   @State private var instance: Instance?
-  @State private var instances: [InstanceSocial] = []
 
   private let instanceNamePublisher = PassthroughSubject<String, Never>()
 
@@ -45,8 +46,6 @@ struct AddRemoteTimelineView: View {
           Text("timeline.add.action.add")
         }
         .listRowBackground(theme.primaryBackgroundColor)
-
-        instancesListView
       }
       .formStyle(.grouped)
       .navigationTitle("timeline.add-remote.title")
@@ -70,41 +69,6 @@ struct AddRemoteTimelineView: View {
       }
       .onAppear {
         isInstanceURLFieldFocused = true
-        let client = InstanceSocialClient()
-        Task {
-          instances = await client.fetchInstances(keyword: instanceName)
-        }
-      }
-    }
-  }
-
-  private var instancesListView: some View {
-    Section("instance.suggestions") {
-      if instances.isEmpty {
-        ProgressView()
-          .listRowBackground(theme.primaryBackgroundColor)
-      } else {
-        ForEach(instanceName.isEmpty ? instances : instances.filter { $0.name.contains(instanceName.lowercased()) }) { instance in
-          Button {
-            instanceName = instance.name
-          } label: {
-            VStack(alignment: .leading, spacing: 4) {
-              Text(instance.name)
-                .font(.scaledHeadline)
-                .foregroundColor(.primary)
-              Text(instance.info?.shortDescription ?? "")
-                .font(.scaledBody)
-                .foregroundStyle(Color.secondary)
-
-              (Text("instance.list.users-\(instance.users)")
-                + Text("  ⸱  ")
-                + Text("instance.list.posts-\(instance.statuses)"))
-                .font(.scaledFootnote)
-                .foregroundStyle(Color.secondary)
-            }
-          }
-          .listRowBackground(theme.primaryBackgroundColor)
-        }
       }
     }
   }

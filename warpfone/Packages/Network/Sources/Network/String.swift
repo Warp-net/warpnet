@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 
 public extension String {
@@ -8,16 +10,5 @@ public extension String {
       .replacingOccurrences(of: "&quot;", with: "\"")
       .replacingOccurrences(of: "&apos;", with: "'")
       .replacingOccurrences(of: "&#39;", with: "’")
-  }
-
-  func URLSafeBase64ToBase64() -> String {
-    var base64 = replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-    let countMod4 = count % 4
-
-    if countMod4 != 0 {
-      base64.append(String(repeating: "=", count: 4 - countMod4))
-    }
-
-    return base64
   }
 }

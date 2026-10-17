@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import DesignSystem
 import Models
@@ -28,7 +30,7 @@ import SwiftUI
     if let acct = appAccount.accountName {
       acct
     } else {
-      "@\(account?.acct ?? "...")@\(appAccount.server)"
+      "@\(account?.acct ?? "...")"
     }
   }
 
@@ -37,7 +39,7 @@ import SwiftUI
     self.isCompact = isCompact
     self.isInSettings = isInSettings
     self.showBadge = showBadge
-    client = .init(server: appAccount.server, oauthToken: appAccount.oauthToken)
+    client = AppAccountsManager.shared.currentClient
   }
 
   func fetchAccount() async {
@@ -50,11 +52,8 @@ import SwiftUI
   }
 
   private func refreshAcct(account: Account) {
-    do {
-      if appAccount.accountName == nil {
-        appAccount.accountName = "\(account.acct)@\(appAccount.server)"
-        try appAccount.save()
-      }
-    } catch {}
+    if appAccount.accountName == nil {
+      appAccount.accountName = "@\(account.acct)"
+    }
   }
 }

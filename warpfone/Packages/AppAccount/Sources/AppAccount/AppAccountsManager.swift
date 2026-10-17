@@ -1,61 +1,45 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import Env
 import Models
 import Network
 import Observation
 import SwiftUI
+import WarpnetTransport
 
 @MainActor
 @Observable public class AppAccountsManager {
-  @AppStorage("latestCurrentAccountKey", store: UserPreferences.sharedDefault)
-  public static var latestCurrentAccountKey: String = ""
+  public private(set) var currentAccount: AppAccount
+  public private(set) var currentClient: Client
 
-  public var currentAccount: AppAccount {
-    didSet {
-      Self.latestCurrentAccountKey = currentAccount.id
-      currentClient = .init(server: currentAccount.server,
-                            oauthToken: currentAccount.oauthToken)
-    }
+  public var availableAccounts: [AppAccount] {
+    currentClient.isAuth ? [currentAccount] : []
   }
 
-  public var availableAccounts: [AppAccount]
-  public var currentClient: Client
-
-  public var pushAccounts: [PushAccount] {
-    availableAccounts.filter { $0.oauthToken != nil }
-      .map { .init(server: $0.server, token: $0.oauthToken!, accountName: $0.accountName) }
-  }
+  @ObservationIgnored public private(set) var session: WarpnetSession?
 
   public static var shared = AppAccountsManager()
 
+  private static let unpairedAccount = AppAccount(server: "", accountName: nil)
+
   init() {
-    var defaultAccount = AppAccount(server: AppInfo.defaultServer, accountName: nil, oauthToken: nil)
-    let keychainAccounts = AppAccount.retrieveAll()
-    availableAccounts = keychainAccounts
-    if let currentAccount = keychainAccounts.first(where: { $0.id == Self.latestCurrentAccountKey }) {
-      defaultAccount = currentAccount
-    } else {
-      defaultAccount = keychainAccounts.last ?? defaultAccount
-    }
-    currentAccount = defaultAccount
-    currentClient = .init(server: defaultAccount.server, oauthToken: defaultAccount.oauthToken)
+    currentAccount = Self.unpairedAccount
+    currentClient = .init(server: Self.unpairedAccount.server)
   }
 
-  public func add(account: AppAccount) {
-    do {
-      try account.save()
-      availableAccounts.append(account)
-      currentAccount = account
-    } catch {}
+  public func configure(session: WarpnetSession) {
+    self.session = session
   }
 
-  public func delete(account: AppAccount) {
-    availableAccounts.removeAll(where: { $0.id == account.id })
-    account.delete()
-    if currentAccount.id == account.id {
-      currentAccount = availableAccounts.first ?? AppAccount(server: AppInfo.defaultServer,
-                                                             accountName: nil,
-                                                             oauthToken: nil)
-    }
+  public func setPaired(_ info: AuthNodeInfo) {
+    guard let session else { return }
+    currentAccount = AppAccount(server: info.nodeId, accountName: nil)
+    currentClient = .init(server: info.nodeId, session: session)
+  }
+
+  public func setUnpaired() {
+    currentAccount = Self.unpairedAccount
+    currentClient = .init(server: Self.unpairedAccount.server)
   }
 }

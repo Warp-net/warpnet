@@ -3,8 +3,8 @@
 The iOS client of Warpnet. It starts from Ice Cubes 1.10.31, the last Apache-2.0
 release of the SwiftUI Mastodon client by Thomas Ricouard (see [NOTICE](NOTICE)).
 
-Status: upstream snapshot. The app still talks to Mastodon over HTTP. The Warpnet
-transport, QR pairing and the Warpnet data layer are not wired in yet.
+Status: the app pairs with a Warpnet node by QR code, but its data layer still
+speaks Mastodon over HTTP; routing it to the node is the next step.
 
 Building needs macOS with Xcode 15 or later; the deployment target is iOS 17.
 The app links the Warpnet node as `Warpnet.xcframework`, which is not committed:

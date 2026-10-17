@@ -18,6 +18,7 @@ struct AppView: View {
   @Environment(UserPreferences.self) private var userPreferences
   @Environment(Theme.self) private var theme
   @Environment(StreamWatcher.self) private var watcher
+  @Environment(PairingModel.self) private var pairing
   
   @Environment(\.openWindow) var openWindow
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -30,6 +31,20 @@ struct AppView: View {
   @State var sidebarTabs = SidebarTabs.shared
   
   var body: some View {
+    Group {
+      if appAccountsManager.currentClient.isAuth {
+        mainView
+      } else {
+        PairingView()
+      }
+    }
+    .task {
+      await pairing.restoreIfNeeded()
+    }
+  }
+
+  @ViewBuilder
+  private var mainView: some View {
     #if os(visionOS)
     tabBarView
     #else
@@ -98,10 +113,8 @@ struct AppView: View {
   }
 
   private func badgeFor(tab: Tab) -> Int {
-    if tab == .notifications, selectedTab != tab,
-       let token = appAccountsManager.currentAccount.oauthToken
-    {
-      return watcher.unreadNotificationsCount + (userPreferences.notificationsCount[token] ?? 0)
+    if tab == .notifications, selectedTab != tab {
+      return watcher.unreadNotificationsCount
     }
     return 0
   }

@@ -76,6 +76,17 @@ import WarpnetTransport
   }
 #endif
 
+func makeWarpnetSession() -> WarpnetSession? {
+  #if canImport(Warpnet)
+    return WarpnetSession(binding: GoBinding(),
+                          nodeLogSink: NodeLogger(),
+                          keychainService: "\(Bundle.main.bundleIdentifier ?? "warpfone").pairing",
+                          accessGroup: nil)
+  #else
+    return nil
+  #endif
+}
+
 struct NodeLogger: WarpnetTransport.NodeLogSink {
   private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "node")
 
