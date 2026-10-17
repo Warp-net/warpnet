@@ -49,6 +49,8 @@ struct WarpnetRouter: Sendable {
       return try await instances(endpoint)
     case let endpoint as Chats:
       return try await chats(endpoint)
+    case let endpoint as ServerFilters:
+      return try await filters(endpoint, method: method)
     default:
       throw WarpnetRoutingError.unsupported(endpoint.path())
     }
@@ -106,7 +108,7 @@ struct WarpnetRouter: Sendable {
     switch endpoint {
     case let .home(sinceId, maxId, minId):
       let repository = repository
-      return try await pagedStatuses(scope: "home", maxId: maxId, newerThan: minId ?? sinceId, fetch: { cursor in
+      return try await pagedStatuses(scope: "home", maxId: maxId, newerThan: minId ?? sinceId, filterContext: "home", fetch: { cursor in
         try await repository.homePage(cursor: cursor)
       })
     case .pub, .list, .hashtag:
@@ -133,8 +135,8 @@ struct WarpnetRouter: Sendable {
       async let ancestors = repository.ancestors(of: tweet)
       async let descendants = repository.descendants(of: address.original)
       let (up, down) = await (ancestors, descendants)
-      async let ancestorStatuses = repository.statuses(up)
-      async let descendantStatuses = repository.statuses(down)
+      async let ancestorStatuses = repository.statuses(up, filterContext: "thread")
+      async let descendantStatuses = repository.statuses(down, filterContext: "thread")
       return try await response(MastodonContext(ancestors: ancestorStatuses, descendants: descendantStatuses))
 
     case let .postStatus(json):
@@ -544,7 +546,7 @@ struct WarpnetRouter: Sendable {
         ?? WarpnetMapper.account(userId: item.actorId ?? item.id, username: item.text)
       var status: MastodonStatus?
       if let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow" {
-        status = try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId))
+        status = try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId), filterContext: "notifications")
       }
       result.append(MastodonNotification(id: item.id,
                                          type: type,
@@ -562,6 +564,56 @@ struct WarpnetRouter: Sendable {
     case "follow": "follow"
     case "mention", "reply": "mention"
     default: nil
+    }
+  }
+
+  // MARK: - Filters
+
+  private func filters(_ endpoint: ServerFilters, method: Method) async throws -> Response {
+    let pairing = try await repository.viewer()
+    switch endpoint {
+    case .filters:
+      let page: GetFiltersResponse = try await repository.call(ProtocolIds.PRIVATE_GET_SETTINGS_FILTERS,
+                                                               GetFiltersEvent(userId: pairing.userId, limit: 100))
+      await repository.setFilters(page.filters)
+      return try response(page.filters.map(WarpnetMapper.serverFilter))
+
+    case let .filter(id) where method == .delete:
+      try await repository.send(ProtocolIds.PRIVATE_DELETE_SETTINGS_FILTER, DeleteFilterEvent(userId: pairing.userId, filterId: id))
+      await repository.forgetFilters()
+      return try response(EmptyEvent())
+
+    case let .filter(id):
+      let filter: WarpnetFilter = try await repository.call(ProtocolIds.PRIVATE_GET_SETTINGS_FILTER,
+                                                            GetFilterEvent(userId: pairing.userId, filterId: id))
+      return try response(WarpnetMapper.serverFilter(filter))
+
+    case let .createFilter(json):
+      let created: WarpnetFilter = try await repository.call(ProtocolIds.PRIVATE_POST_SETTINGS_FILTER,
+                                                             WarpnetMapper.filter(json, id: "", userId: pairing.userId))
+      await repository.forgetFilters()
+      return try response(WarpnetMapper.serverFilter(created))
+
+    case let .editFilter(id, json):
+      let updated: WarpnetFilter = try await repository.call(ProtocolIds.PRIVATE_POST_SETTINGS_FILTER_UPDATE,
+                                                             WarpnetMapper.filter(json, id: id, userId: pairing.userId))
+      await repository.forgetFilters()
+      return try response(WarpnetMapper.serverFilter(updated))
+
+    case let .addKeyword(filterId, keyword, wholeWord):
+      let created: WarpnetFilterKeyword = try await repository.call(ProtocolIds.PRIVATE_POST_SETTINGS_FILTER_KEYWORD,
+                                                                    AddFilterKeywordEvent(userId: pairing.userId,
+                                                                                          filterId: filterId,
+                                                                                          keyword: keyword,
+                                                                                          wholeWord: wholeWord))
+      await repository.forgetFilters()
+      return try response(MastodonServerFilter.Keyword(id: created.id, keyword: created.keyword, wholeWord: created.wholeWord))
+
+    case let .removeKeyword(id):
+      try await repository.send(ProtocolIds.PRIVATE_DELETE_SETTINGS_FILTER_KEYWORD,
+                                DeleteFilterKeywordEvent(userId: pairing.userId, keywordId: id))
+      await repository.forgetFilters()
+      return try response(EmptyEvent())
     }
   }
 
@@ -759,6 +811,7 @@ struct WarpnetRouter: Sendable {
   private func pagedStatuses(scope: String,
                              maxId: String?,
                              newerThan: String?,
+                             filterContext: String? = nil,
                              keep: @escaping @Sendable (WarpnetTweet) -> Bool = { _ in true },
                              fetch: @escaping @Sendable (String) async throws -> WarpnetRepository.Page) async throws -> Response
   {
@@ -768,7 +821,7 @@ struct WarpnetRouter: Sendable {
       if let index = tweets.firstIndex(where: { WarpnetMapper.address($0).id == newerThan }) {
         tweets = Array(tweets[..<index])
       }
-      return try await response(repository.statuses(tweets))
+      return try await response(repository.statuses(tweets, filterContext: filterContext))
     }
 
     var tweets: [WarpnetTweet] = []
@@ -792,7 +845,7 @@ struct WarpnetRouter: Sendable {
       fetched += 1
     }
 
-    let statuses = await repository.statuses(tweets)
+    let statuses = await repository.statuses(tweets, filterContext: filterContext)
     if let last = statuses.last {
       await repository.storeCursor(next ?? WarpnetRepository.endCursor, scope: scope, after: last.id)
     }

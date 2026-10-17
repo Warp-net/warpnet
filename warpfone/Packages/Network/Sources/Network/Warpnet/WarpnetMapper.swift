@@ -93,24 +93,26 @@ enum WarpnetMapper {
   }
 
   static func retweet(_ original: MastodonStatus, address: StatusAddress, retweeter: MastodonAccount) -> MastodonStatus {
-    MastodonStatus(id: address.id,
-                   content: "",
-                   account: retweeter,
-                   createdAt: original.createdAt,
-                   editedAt: nil,
-                   reblog: original,
-                   mediaAttachments: [],
-                   repliesCount: 0,
-                   reblogsCount: 0,
-                   favouritesCount: 0,
-                   favourited: false,
-                   reblogged: false,
-                   pinned: false,
-                   bookmarked: false,
-                   url: original.url,
-                   inReplyToId: nil,
-                   inReplyToAccountId: nil,
-                   poll: nil)
+    let wrapper = MastodonStatus(id: address.id,
+                                 content: "",
+                                 account: retweeter,
+                                 createdAt: original.createdAt,
+                                 editedAt: nil,
+                                 reblog: original,
+                                 mediaAttachments: [],
+                                 repliesCount: 0,
+                                 reblogsCount: 0,
+                                 favouritesCount: 0,
+                                 favourited: false,
+                                 reblogged: false,
+                                 pinned: false,
+                                 bookmarked: false,
+                                 url: original.url,
+                                 inReplyToId: nil,
+                                 inReplyToAccountId: nil,
+                                 poll: nil)
+    wrapper.filtered = original.filtered
+    return wrapper
   }
 
   static func conversation(_ chat: WarpnetChat, viewerId: String, other: WarpnetUser?) -> MastodonConversation {
@@ -149,6 +151,52 @@ enum WarpnetMapper {
                    inReplyToId: nil,
                    inReplyToAccountId: nil,
                    poll: nil)
+  }
+
+  static let filterContexts: Set<String> = ["home", "notifications", "thread"]
+
+  static func serverFilter(_ filter: WarpnetFilter) -> MastodonServerFilter {
+    MastodonServerFilter(id: filter.id,
+                         title: filter.title,
+                         keywords: filter.keywords.map { .init(id: $0.id, keyword: $0.keyword, wholeWord: $0.wholeWord) },
+                         filterAction: filter.action == "hide" ? "hide" : "warn",
+                         context: filter.context,
+                         expiresAt: WarpnetFormat.date(fromRFC3339: filter.expiresAt).map { WarpnetFormat.serverDate($0) })
+  }
+
+  static func filter(_ data: ServerFilterData, id: String, userId: String, now: Date = Date()) -> WarpnetFilter {
+    let expiresAt = data.expiresIn.flatMap(Int.init).map { seconds in
+      WarpnetTimestamp.rfc3339(nanos: (Int64(now.timeIntervalSince1970) + Int64(seconds)) * 1_000_000_000)
+    }
+    return WarpnetFilter(id: id,
+                         userId: userId,
+                         title: data.title,
+                         context: data.context.map(\.rawValue).filter { filterContexts.contains($0) },
+                         action: data.filterAction.rawValue,
+                         expiresAt: expiresAt)
+  }
+
+  static func filterResults(text: String, filters: [WarpnetFilter]) -> [MastodonFilterResult]? {
+    let results = filters.compactMap { filter -> MastodonFilterResult? in
+      let matched = filter.keywords.filter { matches(text, $0) }.map(\.keyword)
+      guard !matched.isEmpty else { return nil }
+      return MastodonFilterResult(filter: .init(id: filter.id,
+                                                title: filter.title,
+                                                context: filter.context,
+                                                filterAction: filter.action == "hide" ? "hide" : "warn"),
+                                  keywordMatches: matched)
+    }
+    return results.isEmpty ? nil : results
+  }
+
+  private static func matches(_ text: String, _ keyword: WarpnetFilterKeyword) -> Bool {
+    let word = keyword.keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !word.isEmpty else { return false }
+    guard keyword.wholeWord else {
+      return text.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    }
+    let pattern = "(?<![\\p{L}\\p{N}_])" + NSRegularExpression.escapedPattern(for: word) + "(?![\\p{L}\\p{N}_])"
+    return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
   }
 
   static func relationship(userId: String,

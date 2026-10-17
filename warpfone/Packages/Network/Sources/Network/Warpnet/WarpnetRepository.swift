@@ -35,6 +35,7 @@ actor WarpnetRepository {
   private static let tweetCacheMinAge: TimeInterval = 3600
   private static let bookmarksKey = "warpnet.bookmarks"
   private static let maxConcurrentRequests = 8
+  private static let filtersTTL: TimeInterval = 300
 
   private let session: WarpnetSession
   private let defaults: UserDefaults
@@ -46,6 +47,8 @@ actor WarpnetRepository {
   private var cursors = LRUCache<String, String>(maxCost: 2048)
   private var retweeted = Set<String>()
   private var bookmarks: Set<String>
+  private var filterList: [WarpnetFilter]?
+  private var filtersFetchedAt = Date.distantPast
 
   init(session: WarpnetSession, defaults: UserDefaults = .standard) {
     self.session = session
@@ -200,7 +203,7 @@ actor WarpnetRepository {
 
   // MARK: - Hydration
 
-  func statuses(_ tweets: [WarpnetTweet]) async -> [MastodonStatus] {
+  func statuses(_ tweets: [WarpnetTweet], filterContext: String? = nil) async -> [MastodonStatus] {
     guard !tweets.isEmpty, let pairing = try? await viewer() else { return [] }
     tweets.forEach { remember($0) }
     let originalIds = tweets.map { WarpnetMapper.address($0).tweetId }
@@ -208,17 +211,21 @@ actor WarpnetRepository {
     async let resolvedUsers = users(authorIds)
     async let resolvedStats = statsFor(originalIds, viewerId: pairing.userId)
     async let resolvedPolls = pollsFor(tweets, voterId: pairing.userId)
+    var filters: [WarpnetFilter] = []
+    if let filterContext {
+      filters = await activeFilters(context: filterContext, viewerId: pairing.userId)
+    }
     let (users, stats, polls) = await (resolvedUsers, resolvedStats, resolvedPolls)
-    return tweets.map { build($0, users: users, stats: stats, polls: polls, viewerId: pairing.userId) }
+    return tweets.map { build($0, users: users, stats: stats, polls: polls, filters: filters, viewerId: pairing.userId) }
   }
 
-  func status(_ tweet: WarpnetTweet) async -> MastodonStatus? {
-    await statuses([tweet]).first
+  func status(_ tweet: WarpnetTweet, filterContext: String? = nil) async -> MastodonStatus? {
+    await statuses([tweet], filterContext: filterContext).first
   }
 
-  func status(at address: StatusAddress) async throws -> MastodonStatus {
+  func status(at address: StatusAddress, filterContext: String? = nil) async throws -> MastodonStatus {
     let tweet = try await tweet(address.original)
-    guard let status = await status(tweet) else { throw WarpnetRoutingError.unknownStatus(address.id) }
+    guard let status = await status(tweet, filterContext: filterContext) else { throw WarpnetRoutingError.unknownStatus(address.id) }
     return status
   }
 
@@ -226,6 +233,7 @@ actor WarpnetRepository {
                      users: [String: WarpnetUser],
                      stats: [String: TweetStatsResponse],
                      polls: [String: PollResultsResponse],
+                     filters: [WarpnetFilter],
                      viewerId: String) -> MastodonStatus
   {
     let address = WarpnetMapper.address(tweet)
@@ -235,6 +243,9 @@ actor WarpnetRepository {
                             isBookmarked: bookmarks.contains(id),
                             isRetweeted: retweeted.contains(id) || (address.isRetweet && address.retweetedBy == viewerId))
     let status = WarpnetMapper.status(tweet, author: users[tweet.userId], viewer: state, quote: quoteURL(tweet))
+    if !filters.isEmpty {
+      status.filtered = WarpnetMapper.filterResults(text: tweet.text, filters: filters)
+    }
     guard address.isRetweet else { return status }
     let retweeter = users[address.retweetedBy].map { WarpnetMapper.account($0) }
       ?? WarpnetMapper.account(userId: address.retweetedBy, username: "")
@@ -280,6 +291,27 @@ actor WarpnetRepository {
   }
 
   // MARK: - Viewer state
+
+  func activeFilters(context: String, viewerId: String, now: Date = Date()) async -> [WarpnetFilter] {
+    if filterList == nil || now.timeIntervalSince(filtersFetchedAt) > Self.filtersTTL {
+      let page: GetFiltersResponse? = try? await call(ProtocolIds.PRIVATE_GET_SETTINGS_FILTERS,
+                                                      GetFiltersEvent(userId: viewerId, limit: 100))
+      filterList = page?.filters ?? filterList ?? []
+      filtersFetchedAt = now
+    }
+    return (filterList ?? []).filter { filter in
+      filter.context.contains(context) && (WarpnetFormat.date(fromRFC3339: filter.expiresAt).map { $0 > now } ?? true)
+    }
+  }
+
+  func setFilters(_ filters: [WarpnetFilter]) {
+    filterList = filters
+    filtersFetchedAt = Date()
+  }
+
+  func forgetFilters() {
+    filterList = nil
+  }
 
   func cachedStats(_ tweetId: String) -> TweetStatsResponse? {
     stats.value(for: tweetId)

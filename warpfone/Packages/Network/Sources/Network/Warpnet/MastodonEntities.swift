@@ -25,6 +25,7 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
   let poll: MastodonPoll?
   let spoilerText: String
   let sensitive: Bool
+  var filtered: [MastodonFilterResult]?
 
   init(id: String,
        content: String,
@@ -217,6 +218,33 @@ struct MastodonNotification: Encodable, Sendable {
 struct MastodonContext: Encodable, Sendable {
   let ancestors: [MastodonStatus]
   let descendants: [MastodonStatus]
+}
+
+struct MastodonFilterResult: Encodable, Sendable {
+  struct Summary: Encodable, Sendable {
+    let id: String
+    let title: String
+    let context: [String]
+    let filterAction: String
+  }
+
+  let filter: Summary
+  let keywordMatches: [String]
+}
+
+struct MastodonServerFilter: Encodable, Sendable {
+  struct Keyword: Encodable, Sendable {
+    let id: String
+    let keyword: String
+    let wholeWord: Bool
+  }
+
+  let id: String
+  let title: String
+  let keywords: [Keyword]
+  let filterAction: String
+  let context: [String]
+  let expiresAt: String?
 }
 
 struct MastodonConversation: Encodable, Sendable {

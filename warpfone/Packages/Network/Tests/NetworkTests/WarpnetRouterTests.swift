@@ -391,6 +391,49 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(account.avatar.absoluteString, "warpnet://image/\(ScriptedNode.viewerId)/newavatar")
   }
 
+  func testFiltersAreStoredOnTheNodeAndAppliedToTheHomeTimeline() async throws {
+    let viewer = ScriptedNode.viewerId
+    let filters: [[String: Any]] = [
+      ["id": "f1", "user_id": viewer, "title": "Spoilers", "context": ["home"], "action": "warn",
+       "keywords": [["id": "k1", "keyword": "finale", "whole_word": true]]],
+      ["id": "f2", "user_id": viewer, "title": "Ads", "context": ["thread"], "action": "hide",
+       "keywords": [["id": "k2", "keyword": "promo", "whole_word": false]]],
+    ]
+    let timeline = [
+      ScriptedNode.tweet("03", by: "A", text: "The Finale was great"),
+      ScriptedNode.tweet("02", by: "A", text: "finales everywhere"),
+      ScriptedNode.tweet("01", by: "A", text: "a promo code"),
+    ]
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PRIVATE_GET_SETTINGS_FILTERS:
+        return ScriptedNode.json(["filters": filters, "cursor": "end"])
+      case ProtocolIds.PRIVATE_POST_SETTINGS_FILTER:
+        var created = body
+        created["id"] = "f3"
+        return ScriptedNode.json(created)
+      default:
+        return Self.standardNode(route, body, timeline: timeline)
+      }
+    }
+    let listed = try await decoder.decode([ServerFilter].self, from: router.route(ServerFilters.filters, method: .get).body)
+    XCTAssertEqual(listed.map(\.title), ["Spoilers", "Ads"])
+    XCTAssertEqual(listed.first?.keywords.first?.keyword, "finale")
+    XCTAssertEqual(listed.last?.filterAction, .hide)
+
+    let statuses = try await decoder.decode([Status].self,
+                                            from: router.route(Timelines.home(sinceId: nil, maxId: nil, minId: nil), method: .get).body)
+    XCTAssertEqual(statuses.map { $0.filtered?.first?.filter.title }, ["Spoilers", nil, nil])
+    XCTAssertEqual(statuses.first?.filtered?.first?.keywordMatches, ["finale"])
+
+    let data = ServerFilterData(title: "Noise", context: [.home, .public], filterAction: .hide, expiresIn: "3600")
+    _ = try await router.route(ServerFilters.createFilter(json: data), method: .post)
+    let sent = try XCTUnwrap(binding.calls(to: ProtocolIds.PRIVATE_POST_SETTINGS_FILTER).first)
+    XCTAssertEqual(sent["context"] as? [String], ["home"])
+    XCTAssertEqual(sent["action"] as? String, "hide")
+    XCTAssertNotNil(sent["expires_at"] as? String)
+  }
+
   func testFediverseHandles() {
     XCTAssertEqual(WarpnetRouter.fediverseHandle("@alice@Mastodon.Social"), "alice@mastodon.social")
     XCTAssertEqual(WarpnetRouter.fediverseHandle("https://mastodon.social/@bob"), "bob@mastodon.social")

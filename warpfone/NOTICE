@@ -246,3 +246,8 @@ carry that line, so they are named here instead.
   a Warpnet profile has no place for, left the screen.
 - Files without the notice line:
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- Filters are kept on the node: the filter screens create, change and delete
+  filters and keywords through its settings routes, and since the node stores
+  filters without applying them, the app matches the active ones against the
+  home timeline, threads and notifications itself. Filters can apply to those
+  three contexts, the ones the node knows.
