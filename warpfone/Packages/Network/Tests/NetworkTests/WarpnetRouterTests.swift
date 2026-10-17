@@ -147,6 +147,25 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertGreaterThan(status.favouritesCount, 0)
   }
 
+  func testReactionCarriesTheChosenEmoji() async throws {
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PUBLIC_POST_REACT:
+        return #"{"count":3,"reactions":{"🔥":1,"❤️":2}}"#
+      case ProtocolIds.PUBLIC_GET_TWEET:
+        return ScriptedNode.json(ScriptedNode.tweet("01T", by: "01A", createdAt: "2020-01-01T00:00:00Z"))
+      case ProtocolIds.PUBLIC_GET_TWEET_STATS:
+        return #"{"tweet_id":"01T","reactions_count":3,"my_reaction":"🔥"}"#
+      default:
+        return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let status = try await decoder.decode(Status.self, from: router.route(Statuses.react(id: "01T|01A", emoji: "🔥"), method: .post).body)
+    XCTAssertEqual(binding.calls(to: ProtocolIds.PUBLIC_POST_REACT).first?["emoji"] as? String, "🔥")
+    XCTAssertEqual(status.myReaction, "🔥")
+    XCTAssertEqual(status.favourited, true)
+  }
+
   func testRelationshipProbesBothDirections() async throws {
     let (router, _) = await makeRouter { route, body in
       switch route {

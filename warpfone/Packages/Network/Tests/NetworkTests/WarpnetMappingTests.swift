@@ -53,6 +53,7 @@ final class WarpnetMappingTests: XCTestCase {
     XCTAssertEqual(status.reblogsCount, 2)
     XCTAssertEqual(status.favouritesCount, 5)
     XCTAssertEqual(status.favourited, true)
+    XCTAssertEqual(status.myReaction, "❤️")
     XCTAssertEqual(status.bookmarked, true)
     XCTAssertEqual(status.pinned, true)
     XCTAssertEqual(status.visibility, .pub)

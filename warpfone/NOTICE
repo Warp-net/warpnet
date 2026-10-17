@@ -225,3 +225,9 @@ carry that line, so they are named here instead.
   the code.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-17, Warpnet features
+- The favourite button is a reaction: a tap sends the default heart, a long
+  press offers the desktop client's eight quick reactions, and the button shows
+  the reaction the viewer chose. Status and ReblogStatus carry it as
+  myReaction, and Statuses gained a react endpoint.

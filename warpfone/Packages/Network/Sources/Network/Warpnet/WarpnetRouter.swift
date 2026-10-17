@@ -148,6 +148,9 @@ struct WarpnetRouter: Sendable {
     case let .favorite(id):
       return try await react(id, emoji: "", viewerId: pairing.userId)
 
+    case let .react(id, emoji):
+      return try await react(id, emoji: emoji, viewerId: pairing.userId)
+
     case let .unfavorite(id):
       return try await unreact(id, viewerId: pairing.userId)
 

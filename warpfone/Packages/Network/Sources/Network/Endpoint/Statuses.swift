@@ -9,6 +9,7 @@ public enum Statuses: Endpoint {
   case status(id: String)
   case context(id: String)
   case favorite(id: String)
+  case react(id: String, emoji: String)
   case unfavorite(id: String)
   case reblog(id: String)
   case unreblog(id: String)
@@ -34,6 +35,8 @@ public enum Statuses: Endpoint {
       "statuses/\(id)/context"
     case let .favorite(id):
       "statuses/\(id)/favourite"
+    case let .react(id, emoji):
+      "statuses/\(id)/emoji_reactions/\(emoji)"
     case let .unfavorite(id):
       "statuses/\(id)/unfavourite"
     case let .reblog(id):

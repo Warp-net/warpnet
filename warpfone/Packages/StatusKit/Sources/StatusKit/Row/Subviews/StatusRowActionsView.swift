@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -56,7 +58,7 @@ struct StatusRowActionsView: View {
         }
         return Image(dataController.isReblogged ? "Rocket.Fill" : "Rocket")
       case .favorite:
-        return Image(systemName: dataController.isFavorited ? "star.fill" : "star")
+        return Image(systemName: dataController.isFavorited ? "heart.fill" : "heart")
       case .bookmark:
         return Image(systemName: dataController.isBookmarked ? "bookmark.fill" : "bookmark")
       case .share:
@@ -113,7 +115,7 @@ struct StatusRowActionsView: View {
       case .respond, .share, .menu:
         nil
       case .favorite:
-        .yellow
+        .red
       case .bookmark:
         .pink
       case .boost:
@@ -234,6 +236,14 @@ struct StatusRowActionsView: View {
             .font(.body)
             .dynamicTypeSize(.large)
             #endif
+        } else if action == .favorite, statusDataController.isFavorited, let reaction = statusDataController.myReaction {
+          Text(reaction)
+            #if targetEnvironment(macCatalyst)
+            .font(.scaledBody)
+            #else
+            .font(.body)
+            .dynamicTypeSize(.large)
+            #endif
         } else {
           action
             .image(dataController: statusDataController, privateBoost: privateBoost())
@@ -284,6 +294,18 @@ struct StatusRowActionsView: View {
               (viewModel.status.visibility == .direct || viewModel.status.visibility == .priv && viewModel.status.account.id != currentAccount.account?.id))
     .accessibilityElement(children: .combine)
     .accessibilityLabel(action.accessibilityLabel(dataController: statusDataController, privateBoost: privateBoost()))
+    .if(action == .favorite) { view in
+      view.contextMenu {
+        ForEach(WarpnetReactions.quick, id: \.self) { emoji in
+          Button(emoji) {
+            Task {
+              HapticManager.shared.fireHaptic(.notification(.success))
+              await statusDataController.react(emoji: emoji, remoteStatus: viewModel.localStatusId)
+            }
+          }
+        }
+      }
+    }
   }
 
   private func handleAction(action: Action) {

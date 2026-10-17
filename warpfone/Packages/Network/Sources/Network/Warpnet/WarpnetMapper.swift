@@ -88,7 +88,8 @@ enum WarpnetMapper {
                           url: "\(WarpnetFormat.baseURL)/tweets/\(WarpnetFormat.pathComponent(address.tweetId))",
                           inReplyToId: parent?.id,
                           inReplyToAccountId: parent?.userId,
-                          poll: poll(tweet, address: address, results: viewer.poll))
+                          poll: poll(tweet, address: address, results: viewer.poll),
+                          myReaction: stats.flatMap { $0.myReaction.isEmpty ? nil : $0.myReaction })
   }
 
   static func retweet(_ original: MastodonStatus, address: StatusAddress, retweeter: MastodonAccount) -> MastodonStatus {

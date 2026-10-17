@@ -13,6 +13,7 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
   let reblogsCount: Int
   let favouritesCount: Int
   let favourited: Bool
+  let myReaction: String?
   let reblogged: Bool
   let pinned: Bool
   let bookmarked: Bool
@@ -42,7 +43,8 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
        url: String,
        inReplyToId: String?,
        inReplyToAccountId: String?,
-       poll: MastodonPoll?)
+       poll: MastodonPoll?,
+       myReaction: String? = nil)
   {
     self.id = id
     self.content = content
@@ -56,6 +58,7 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
     self.reblogsCount = reblogsCount
     self.favouritesCount = favouritesCount
     self.favourited = favourited
+    self.myReaction = myReaction
     self.reblogged = reblogged
     self.pinned = pinned
     self.bookmarked = bookmarked
