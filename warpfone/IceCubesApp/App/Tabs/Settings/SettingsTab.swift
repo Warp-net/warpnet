@@ -113,11 +113,6 @@ struct SettingsTabs: View {
   @ViewBuilder
   private var generalSection: some View {
     Section("settings.section.general") {
-      if let instanceData = currentInstance.instance {
-        NavigationLink(destination: InstanceInfoView(instance: instanceData)) {
-          Label("settings.general.instance", systemImage: "server.rack")
-        }
-      }
       NavigationLink(destination: DisplaySettingsView()) {
         Label("settings.general.display", systemImage: "paintpalette")
       }

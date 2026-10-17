@@ -37,7 +37,6 @@
 		9F2A542C296B1177009B2D7C /* glass.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9F2A542B296B1177009B2D7C /* glass.caf */; };
 		9F2A542E296B1CC0009B2D7C /* glass.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9F2A542D296B1CC0009B2D7C /* glass.wav */; };
 		9F2B92F6295AE04800DE16D0 /* Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2B92F5295AE04800DE16D0 /* Tabs.swift */; };
-		9F2B92FC295DA94500DE16D0 /* InstanceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2B92FB295DA94500DE16D0 /* InstanceInfoView.swift */; };
 		9F35DB4729506F6600B3281A /* NotificationTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F35DB4629506F6600B3281A /* NotificationTab.swift */; };
 		9F35DB4A29506FA100B3281A /* Notifications in Frameworks */ = {isa = PBXBuildFile; productRef = 9F35DB4929506FA100B3281A /* Notifications */; };
 		9F35DB4C2952005C00B3281A /* MessagesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F35DB4B2952005C00B3281A /* MessagesTab.swift */; };
@@ -161,7 +160,6 @@
 		9F2A542B296B1177009B2D7C /* glass.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = glass.caf; sourceTree = "<group>"; };
 		9F2A542D296B1CC0009B2D7C /* glass.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = glass.wav; sourceTree = "<group>"; };
 		9F2B92F5295AE04800DE16D0 /* Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tabs.swift; sourceTree = "<group>"; };
-		9F2B92FB295DA94500DE16D0 /* InstanceInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstanceInfoView.swift; sourceTree = "<group>"; };
 		9F35DB45294FA04C00B3281A /* DesignSystem */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = DesignSystem; path = Packages/DesignSystem; sourceTree = "<group>"; };
 		9F35DB4629506F6600B3281A /* NotificationTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTab.swift; sourceTree = "<group>"; };
 		9F35DB4829506F7F00B3281A /* Notifications */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Notifications; path = Packages/Notifications; sourceTree = "<group>"; };
@@ -460,7 +458,6 @@
 				C9B22676297F6C2E001F9EFE /* ContentSettingsView.swift */,
 				9F7335F82968576500AFF0BA /* DisplaySettingsView.swift */,
 				9F1E8B46298EBCBB00609F80 /* HapticSettingsView.swift */,
-				9F2B92FB295DA94500DE16D0 /* InstanceInfoView.swift */,
 				9FAE4ACA293783B000772766 /* SettingsTab.swift */,
 				D08A9C3429956CFA00204A4A /* SwipeActionsSettingsView.swift */,
 				9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */,
@@ -680,7 +677,6 @@
 				9FB183222AE9268800BBB692 /* IceCubesApp+Menu.swift in Sources */,
 				9F7D939A29805DBD00EE6B7A /* AccountSettingView.swift in Sources */,
 				069709AA298C9AD7006E4CB5 /* AboutView.swift in Sources */,
-				9F2B92FC295DA94500DE16D0 /* InstanceInfoView.swift in Sources */,
 				C9B22677297F6C2E001F9EFE /* ContentSettingsView.swift in Sources */,
 				9F15D6042B3DC2180008C220 /* NavigationSheet.swift in Sources */,
 				9F35DB4C2952005C00B3281A /* MessagesTab.swift in Sources */,

@@ -266,3 +266,8 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp/Assets.xcassets/AccentColor.colorset/Contents.json
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- Settings no longer show instance information, which for a paired node would
+  only repeat the placeholder values the app reports in place of a Mastodon
+  instance.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
