@@ -138,3 +138,16 @@ carry that line, so they are named here instead.
   IceCubesApp/App/IceCubesApp.entitlements
   IceCubesApp/App/IceCubesApp-release.entitlements
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-17, node data
+- Client in the Network package no longer speaks HTTP. A WarpnetRouter inside
+  it serves the Mastodon endpoints from the paired node and returns Mastodon
+  JSON for the existing models; endpoints the node has no counterpart for
+  fail with WarpnetRoutingError.unsupported. Status ids carry the tweet's
+  author, thread root and retweeter, so a cached timeline still resolves after
+  a restart, and LinkHandler carries the node's opaque page cursors.
+- Quoted tweets are embedded through a warpnet://status/ link, which
+  HTMLString now treats as a status link.
+- StreamWatcher polls the node's pushes while the app is active instead of
+  opening the Mastodon streaming socket.
+- The Network tests were replaced with tests of the Warpnet routing.

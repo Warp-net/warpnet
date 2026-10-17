@@ -218,6 +218,8 @@ public struct WarpnetNotification: Codable, Equatable, Sendable {
   public var type: String
   public var text: String
   public var userId: String
+  public var actorId: String?
+  public var tweetId: String?
   public var isRead: Bool
 
   enum CodingKeys: String, CodingKey {
@@ -226,15 +228,27 @@ public struct WarpnetNotification: Codable, Equatable, Sendable {
     case type
     case text
     case userId = "user_id"
+    case actorId = "actor_id"
+    case tweetId = "tweet_id"
     case isRead = "is_read"
   }
 
-  public init(id: String, createdAt: String, type: String, text: String = "", userId: String = "", isRead: Bool = false) {
+  public init(id: String,
+              createdAt: String,
+              type: String,
+              text: String = "",
+              userId: String = "",
+              actorId: String? = nil,
+              tweetId: String? = nil,
+              isRead: Bool = false)
+  {
     self.id = id
     self.createdAt = createdAt
     self.type = type
     self.text = text
     self.userId = userId
+    self.actorId = actorId
+    self.tweetId = tweetId
     self.isRead = isRead
   }
 
@@ -245,6 +259,8 @@ public struct WarpnetNotification: Codable, Equatable, Sendable {
     type = try c.value(.type, "")
     text = try c.value(.text, "")
     userId = try c.value(.userId, "")
+    actorId = try c.decodeIfPresent(String.self, forKey: .actorId)
+    tweetId = try c.decodeIfPresent(String.self, forKey: .tweetId)
     isRead = try c.value(.isRead, false)
   }
 }
