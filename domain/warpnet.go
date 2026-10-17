@@ -334,6 +334,7 @@ type User struct {
 	FollowersCount     int64             `json:"followers_count"`
 	Id                 string            `json:"id"`
 	IsOffline          bool              `json:"isOffline"`
+	IsBioCleared       bool              `json:"-"` // a profile edit that empties Bio; never stored
 	LastSeen           *time.Time        `json:"last_seen,omitempty"`
 	NodeId             string            `json:"node_id"`
 	Network            string            `json:"network"`
