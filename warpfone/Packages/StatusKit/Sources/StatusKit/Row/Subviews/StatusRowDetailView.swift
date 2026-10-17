@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -50,10 +52,6 @@ struct StatusRowDetailView: View {
             Text(editedAt.asDate, style: .time)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onTapGesture {
-          viewModel.routerPath.presentedSheet = .statusEditHistory(status: viewModel.status.id)
-        }
-        .underline()
         .font(.scaledCaption)
         .foregroundStyle(.secondary)
       }

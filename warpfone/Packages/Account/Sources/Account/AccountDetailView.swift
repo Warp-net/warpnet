@@ -28,7 +28,6 @@ public struct AccountDetailView: View {
 
   @State private var isEditingAccount: Bool = false
   @State private var isEditingFilters: Bool = false
-  @State private var isEditingRelationshipNote: Bool = false
   
   @State private var displayTitle: Bool = false
 
@@ -145,9 +144,6 @@ public struct AccountDetailView: View {
     .sheet(isPresented: $isEditingFilters, content: {
       FiltersListView()
     })
-    .sheet(isPresented: $isEditingRelationshipNote, content: {
-      EditRelationshipNoteView(accountDetailViewModel: viewModel)
-    })
     .edgesIgnoringSafeArea(.top)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -237,27 +233,11 @@ public struct AccountDetailView: View {
       Menu {
         AccountDetailContextMenu(showBlockConfirmation: $showBlockConfirmation, viewModel: viewModel)
 
-        if !viewModel.isCurrentUser {
-          Button {
-            isEditingRelationshipNote = true
-          } label: {
-            Label("account.relation.note.edit", systemImage: "pencil")
-          }
-        }
-
         if isCurrentUser {
           Button {
             isEditingAccount = true
           } label: {
             Label("account.action.edit-info", systemImage: "pencil")
-          }
-
-          Button {
-            if let url = URL(string: "https://\(client.server)/settings/privacy") {
-              openURL(url)
-            }
-          } label: {
-            Label("account.action.privacy-settings", systemImage: "lock")
           }
 
           if currentInstance.isFiltersSupported {
@@ -268,19 +248,7 @@ public struct AccountDetailView: View {
             }
           }
 
-          if let account = viewModel.account {
-            Divider()
-
-            Button {
-              if let url = URL(string: "https://mastometrics.com/auth/login?username=\(account.acct)@\(client.server)&instance=\(client.server)&auto=true") {
-                openURL(url)
-              }
-            } label: {
-              Label("Mastometrics", systemImage: "chart.xyaxis.line")
-            }
-
-            Divider()
-          }
+          Divider()
 
           Button {
             routerPath.presentedSheet = .settings

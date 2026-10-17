@@ -195,3 +195,6 @@ carry that line, so they are named here instead.
   can now be reported as well as statuses.
 - Files without the notice line:
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+- Removed edit history, private notes on profiles and the links to a Mastodon
+  server's web settings and to Mastometrics; the edit date of a tweet is still
+  shown.

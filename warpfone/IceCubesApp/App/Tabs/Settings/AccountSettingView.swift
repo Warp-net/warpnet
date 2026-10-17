@@ -65,15 +65,6 @@ struct AccountSettingsView: View {
       .listRowBackground(theme.primaryBackgroundColor)
 
       Section {
-        Button {
-          openURL(URL(string: "https://\(client.server)/settings/profile")!)
-        } label: {
-          Text("account.action.more")
-        }
-      }
-      .listRowBackground(theme.primaryBackgroundColor)
-
-      Section {
         Button(role: .destructive) {
           Task {
             await timelineCache.clearCache(for: client.id)

@@ -40,7 +40,6 @@ public enum SheetDestination: Identifiable {
   case replyToStatusEditor(status: Status)
   case quoteStatusEditor(status: Status)
   case mentionStatusEditor(account: Account, visibility: Models.Visibility)
-  case statusEditHistory(status: String)
   case settings
   case about
   case report(status: Status)
@@ -53,8 +52,6 @@ public enum SheetDestination: Identifiable {
     case .editStatusEditor, .newStatusEditor, .replyToStatusEditor, .quoteStatusEditor,
          .mentionStatusEditor:
       "statusEditor"
-    case .statusEditHistory:
-      "statusEditHistory"
     case .report, .reportAccount:
       "report"
     case .shareImage:

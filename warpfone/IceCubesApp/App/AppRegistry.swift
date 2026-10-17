@@ -64,9 +64,6 @@ extension View {
       case let .mentionStatusEditor(account, visibility):
         StatusEditor.MainView(mode: .mention(account: account, visibility: visibility))
           .withEnvironments()
-      case let .statusEditHistory(status):
-        StatusEditHistoryView(statusId: status)
-          .withEnvironments()
       case .settings:
         SettingsTabs(popToRootTab: .constant(.settings), isModal: true)
           .withEnvironments()
