@@ -153,9 +153,6 @@ public struct AccountDetailContextMenu: View {
           ShareLink(item: url, subject: Text(account.safeDisplayName)) {
             Label("account.action.share", systemImage: "square.and.arrow.up")
           }
-          Button { UIApplication.shared.open(url) } label: {
-            Label("status.action.view-in-browser", systemImage: "safari")
-          }
         }
 
         #if !targetEnvironment(macCatalyst)

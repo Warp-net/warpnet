@@ -133,12 +133,6 @@ struct StatusRowContextMenu: View {
       }
     }
 
-    if let url = URL(string: viewModel.status.reblog?.url ?? viewModel.status.url ?? "") {
-      Button { UIApplication.shared.open(url) } label: {
-        Label("status.action.view-in-browser", systemImage: "safari")
-      }
-    }
-
     Button {
       UIPasteboard.general.string = viewModel.status.reblog?.content.asRawText ?? viewModel.status.content.asRawText
     } label: {

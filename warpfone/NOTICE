@@ -330,3 +330,7 @@ carry that line, so they are named here instead.
 - The editor no longer asks for an App Store review after the first tweet:
   the SKStoreReviewController call, its StoreKit imports and the
   requestedReview preference were removed.
+
+2026-10-17, view in browser
+- The tweet and profile menus no longer offer View in Browser. The menu of a
+  link preview keeps it, since that link points to an outside web page.
