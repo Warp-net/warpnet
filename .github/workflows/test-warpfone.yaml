@@ -5,7 +5,10 @@ on:
     branches: [develop]
     paths:
       - 'warpfone/**'
+      - 'warpdroid/node/**'
       - 'event/paths.go'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/test-warpfone.yaml'
 
 permissions:
@@ -14,7 +17,7 @@ permissions:
 jobs:
   transport:
     name: WarpnetTransport
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -28,9 +31,56 @@ jobs:
 
   network:
     name: Network
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
       - name: Run tests
         run: swift test --package-path warpfone/Packages/Network
+
+  node:
+    name: Mobile node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # warpfone/node is a copy of warpdroid/node; only comments and the user
+      # agent may differ.
+      - name: Check that the two node copies match
+        run: |
+          for f in node.go mobile.go logsink.go; do
+            diff <(grep -v -e '^\s*//' -e 'libp2p.UserAgent' warpdroid/node/$f) \
+                 <(grep -v -e '^\s*//' -e 'libp2p.UserAgent' warpfone/node/$f)
+          done
+
+      # Every file is //go:build mobile, so the module-wide test job skips them.
+      - name: Run tests
+        run: go test -race -count=1 -tags mobile ./warpfone/node/... ./warpdroid/node/...
+
+  app:
+    name: App
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Warpnet.xcframework
+        env:
+          WARPFONE_XCFRAMEWORK_TARGETS: iossimulator
+        run: warpfone/scripts/build-xcframework.sh
+
+      - name: Build the app
+        run: |
+          cp warpfone/WarpnetApp.xcconfig.template warpfone/WarpnetApp.xcconfig
+          xcodebuild build \
+            -project warpfone/WarpnetApp.xcodeproj \
+            -scheme WarpnetApp \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

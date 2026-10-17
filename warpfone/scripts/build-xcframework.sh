@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds warpfone/Warpnet.xcframework (iOS, iOS Simulator, Mac Catalyst) from
 # warpfone/node. Needs macOS with Xcode and the Go version of the root go.mod.
+# WARPFONE_XCFRAMEWORK_TARGETS narrows the gomobile targets, e.g. iossimulator.
 
 set -euo pipefail
 
@@ -35,7 +36,7 @@ GOFLAGS="-mod=readonly -buildvcs=false" gomobile bind \
     -trimpath \
     -tags mobile \
     -iosversion=17.0 \
-    -target=ios,iossimulator,maccatalyst \
+    -target="${WARPFONE_XCFRAMEWORK_TARGETS:-ios,iossimulator,maccatalyst}" \
     -o "${WARPFONE_DIR}/Warpnet.xcframework" \
     ./warpfone/node
 
