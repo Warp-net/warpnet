@@ -9,7 +9,8 @@ Version 2.0. Ice Cubes moved to AGPL-3.0 on 2024-02-10 in 7b7e65bf, and nothing
 from that revision or later is included here.
 
 The files taken from Ice Cubes remain under the Apache License, Version 2.0
-(see LICENSE in this directory).
+(see LICENSE in this directory). Code that Warpnet adds here, such as the Go
+node in node/, is licensed under the same terms.
 
 Changes made by the Warpnet project are listed below. Every Swift and xcconfig
 file that Warpnet changed starts with the line "// Modified by Warpnet. See
@@ -100,3 +101,14 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-17, Go node
+- The app target links Warpnet.xcframework, which scripts/build-xcframework.sh
+  builds from node/, and libresolv, which the Go runtime resolves names with.
+  The extensions do not link the node. The app declares
+  NSLocalNetworkUsageDescription because it dials the paired node on the local
+  network.
+- Files without the notice line:
+  .gitignore
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist

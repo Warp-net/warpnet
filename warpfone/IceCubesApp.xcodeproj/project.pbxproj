@@ -95,9 +95,11 @@
 		9FFF677C299B7B2C00FE700A /* Notifications in Frameworks */ = {isa = PBXBuildFile; productRef = 9FFF677B299B7B2C00FE700A /* Notifications */; };
 		9FFF6780299B7D2B00FE700A /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 9FFF677F299B7D2B00FE700A /* DesignSystem */; };
 		9FFF6782299B7D3A00FE700A /* Account in Frameworks */ = {isa = PBXBuildFile; productRef = 9FFF6781299B7D3A00FE700A /* Account */; };
+		AC344AA69EEF3B049F07C968 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = CD8FC99308EBB4E517B4787C /* libresolv.tbd */; platformFilters = (ios, maccatalyst, ); };
 		C9B22677297F6C2E001F9EFE /* ContentSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B22676297F6C2E001F9EFE /* ContentSettingsView.swift */; };
 		D08A9C3529956CFA00204A4A /* SwipeActionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D08A9C3429956CFA00204A4A /* SwipeActionsSettingsView.swift */; };
 		DA0B24FB2A6876D50045BDD7 /* SFSafeSymbols in Frameworks */ = {isa = PBXBuildFile; productRef = DA0B24FA2A6876D50045BDD7 /* SFSafeSymbols */; };
+		DFD13C32927635376BD4DC9B /* Warpnet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */; platformFilters = (ios, maccatalyst, ); };
 		E92817FA298443D600875FD1 /* Models in Frameworks */ = {isa = PBXBuildFile; productRef = E92817F9298443D600875FD1 /* Models */; };
 		E92817FC298443D600875FD1 /* Network in Frameworks */ = {isa = PBXBuildFile; productRef = E92817FB298443D600875FD1 /* Network */; };
 		E92817FE29844DB700875FD1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E92817FD29844DB700875FD1 /* Assets.xcassets */; };
@@ -229,6 +231,7 @@
 		9FE0346A2ADD59AC00529EA8 /* MediaUI */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = MediaUI; path = Packages/MediaUI; sourceTree = "<group>"; };
 		9FE3DB55296FEF5800628CB0 /* AppAccount */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = AppAccount; path = Packages/AppAccount; sourceTree = "<group>"; };
 		C9B22676297F6C2E001F9EFE /* ContentSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSettingsView.swift; sourceTree = "<group>"; };
+		CD8FC99308EBB4E517B4787C /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
 		D08A9C3429956CFA00204A4A /* SwipeActionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeActionsSettingsView.swift; sourceTree = "<group>"; };
 		DD31E2E5297FB68B00A4BE29 /* IceCubesApp.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = IceCubesApp.xcconfig; sourceTree = "<group>"; };
 		E92817FD29844DB700875FD1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -240,6 +243,7 @@
 		E9DF420429830FEC0003AAD2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E9FEB8AD2B1CAB4600815AB5 /* IceCubesApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesApp.entitlements; sourceTree = "<group>"; };
 		E9FEB8AE2B1CAB7000815AB5 /* IceCubesApp-release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "IceCubesApp-release.entitlements"; sourceTree = "<group>"; };
+		EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Warpnet.xcframework; sourceTree = "<group>"; };
 		FA31A9AA2A66BF7C00D5F662 /* EditTagGroupView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditTagGroupView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -293,6 +297,8 @@
 				9F295540292B6C3400E0E81B /* Timeline in Frameworks */,
 				9F35DB4A29506FA100B3281A /* Notifications in Frameworks */,
 				9FC2A38B2B49D19A00DFD1C1 /* StatusKit in Frameworks */,
+				DFD13C32927635376BD4DC9B /* Warpnet.xcframework in Frameworks */,
+				AC344AA69EEF3B049F07C968 /* libresolv.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -486,6 +492,8 @@
 				9F7335EE29674F7100AFF0BA /* QuickLook.framework */,
 				9F7335EB2967461B00AFF0BA /* AVKit.framework */,
 				E9DF41FB29830FEC0003AAD2 /* UniformTypeIdentifiers.framework */,
+				EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */,
+				CD8FC99308EBB4E517B4787C /* libresolv.tbd */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
