@@ -54,7 +54,10 @@ struct WarpnetRouter: Sendable {
     }
   }
 
-  func upload(_ endpoint: Endpoint, mimeType: String, data: Data) async throws -> Data {
+  func upload(_ endpoint: Endpoint, mimeType: String, filename: String, data: Data) async throws -> Data {
+    if let endpoint = endpoint as? Accounts, case .updateCredentialsMedia = endpoint {
+      return try await uploadProfileImage(data, mimeType: mimeType, isHeader: filename == "header")
+    }
     guard let endpoint = endpoint as? Media, case .medias = endpoint else {
       throw WarpnetRoutingError.unsupported(endpoint.path())
     }
@@ -427,10 +430,34 @@ struct WarpnetRouter: Sendable {
       try await repository.send(ProtocolIds.PRIVATE_POST_SETTINGS_UNMUTE, MuteEvent(muterId: pairing.userId, muteeId: id))
       return try await response(relationship(with: id, viewerId: pairing.userId, muting: false))
 
-    case .lookup, .followedTags, .featuredTags, .updateCredentialsMedia, .updateCredentials,
+    case let .updateCredentials(json):
+      let fields = json.fieldsAttributes.sorted { $0.key < $1.key }.map(\.value)
+      let website = fields.first { $0.name.lowercased() == "website" } ?? fields.first
+      let displayName = json.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      return try await response(updateProfile(UpdateProfileEvent(username: displayName.isEmpty ? nil : displayName,
+                                                                 bio: json.note,
+                                                                 website: website?.value.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")))
+
+    case .lookup, .followedTags, .featuredTags, .updateCredentialsMedia,
          .familiarFollowers, .lists, .preferences, .relationshipNote:
       throw WarpnetRoutingError.unsupported(endpoint.path())
     }
+  }
+
+  private func updateProfile(_ event: UpdateProfileEvent) async throws -> MastodonAccount {
+    let pairing = try await repository.viewer()
+    let updated: WarpnetUser = try await repository.call(ProtocolIds.PRIVATE_POST_USER, event)
+    await repository.forgetUser(pairing.userId)
+    return WarpnetMapper.account(updated)
+  }
+
+  private func uploadProfileImage(_ data: Data, mimeType: String, isHeader: Bool) async throws -> Data {
+    guard mimeType.lowercased().hasPrefix("image/") else {
+      throw WarpnetRoutingError.invalidMedia("Only images can be used on a profile")
+    }
+    let key = try await repository.uploadImage(data, mimeType: mimeType)
+    let event = isHeader ? UpdateProfileEvent(backgroundImageKey: key) : UpdateProfileEvent(avatarKey: key)
+    return try await encode(updateProfile(event))
   }
 
   private func relationship(with userId: String,

@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Models
 import Network
 import Observation
@@ -28,6 +30,7 @@ import StatusKit
   var isLocked: Bool = false
   var isDiscoverable: Bool = false
   var fields: [FieldEditViewModel] = []
+  var website: String = ""
   var avatar: URL?
   var header: URL?
   
@@ -82,6 +85,7 @@ import StatusKit
       avatar = account.avatar
       header = account.header
       fields = account.source?.fields.map { .init(name: $0.name, value: $0.value.asRawText) } ?? []
+      website = account.fields.first?.value.asRawText.escape() ?? ""
       withAnimation {
         isLoading = false
       }
@@ -97,7 +101,7 @@ import StatusKit
                                        bot: isBot,
                                        locked: isLocked,
                                        discoverable: isDiscoverable,
-                                       fieldsAttributes: fields.map { .init(name: $0.name, value: $0.value) })
+                                       fieldsAttributes: [.init(name: "Website", value: website)])
       let response = try await client?.patch(endpoint: Accounts.updateCredentials(json: data))
       if response?.statusCode != 200 {
         saveError = true

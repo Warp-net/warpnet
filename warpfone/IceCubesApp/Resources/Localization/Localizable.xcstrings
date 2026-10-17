@@ -6266,6 +6266,26 @@
         }
       }
     },
+    "warpnet.account.website" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website"
+          }
+        }
+      }
+    },
+    "warpnet.account.website.placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://"
+          }
+        }
+      }
+    },
     "warpnet.explore.empty" : {
       "localizations" : {
         "en" : {

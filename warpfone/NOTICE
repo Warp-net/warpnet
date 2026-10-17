@@ -241,3 +241,8 @@ carry that line, so they are named here instead.
   seconds. The Message actions on profiles and statuses open the chat with
   that account; chat rows and messages offer copy, delete and reporting the
   account instead of favourite, bookmark and mention.
+- Editing the profile saves the display name, bio, website, avatar and header
+  on the node; the post defaults, account toggles and free-form fields, which
+  a Warpnet profile has no place for, left the screen.
+- Files without the notice line:
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

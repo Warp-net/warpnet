@@ -252,7 +252,7 @@ final class WarpnetRouterTests: XCTestCase {
       default: return Self.standardNode(route, body, timeline: [])
       }
     }
-    let body = try await router.upload(Media.medias, mimeType: "image/jpeg", data: Data([1, 2, 3]))
+    let body = try await router.upload(Media.medias, mimeType: "image/jpeg", filename: "file", data: Data([1, 2, 3]))
     let attachment = try decoder.decode(MediaAttachment.self, from: body)
     XCTAssertEqual(attachment.id, "img:hash1")
     XCTAssertEqual(attachment.url?.absoluteString, "warpnet://image/\(ScriptedNode.viewerId)/hash1")
@@ -359,6 +359,36 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(event["sender_id"] as? String, viewer)
     XCTAssertEqual(event["receiver_id"] as? String, "01BOB")
     XCTAssertEqual(event["text"] as? String, "ok")
+  }
+
+  func testProfileEditsGoToTheOwnUser() async throws {
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PRIVATE_POST_USER:
+        var user = ScriptedNode.user(ScriptedNode.viewerId, body["username"] as? String ?? "Me")
+        user["avatar_key"] = body["avatar_key"]
+        return ScriptedNode.json(user)
+      case ProtocolIds.PRIVATE_POST_UPLOAD_IMAGE:
+        return #"{"key1":"newavatar"}"#
+      default:
+        return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let data = UpdateCredentialsData(displayName: " Alice ", note: "bio", source: .init(privacy: .pub, sensitive: false),
+                                     bot: false, locked: false, discoverable: false,
+                                     fieldsAttributes: [.init(name: "Website", value: "https://alice.example ")])
+    _ = try await router.route(Accounts.updateCredentials(json: data), method: .patch)
+    let edit = try XCTUnwrap(binding.calls(to: ProtocolIds.PRIVATE_POST_USER).first)
+    XCTAssertEqual(edit["username"] as? String, "Alice")
+    XCTAssertEqual(edit["bio"] as? String, "bio")
+    XCTAssertEqual(edit["website"] as? String, "https://alice.example")
+    XCTAssertNil(edit["avatar_key"])
+
+    let body = try await router.upload(Accounts.updateCredentialsMedia, mimeType: "image/jpeg", filename: "avatar", data: Data([1]))
+    let account = try decoder.decode(Account.self, from: body)
+    XCTAssertEqual(binding.calls(to: ProtocolIds.PRIVATE_POST_USER).last?["avatar_key"] as? String, "newavatar")
+    XCTAssertNil(binding.calls(to: ProtocolIds.PRIVATE_POST_USER).last?["username"])
+    XCTAssertEqual(account.avatar.absoluteString, "warpnet://image/\(ScriptedNode.viewerId)/newavatar")
   }
 
   func testFediverseHandles() {

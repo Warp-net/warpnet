@@ -497,6 +497,35 @@ public struct GetIsFollowingEvent: Encodable, Equatable, Sendable {
   }
 }
 
+public struct UpdateProfileEvent: Encodable, Equatable, Sendable {
+  public var username: String?
+  public var bio: String?
+  public var website: String?
+  public var avatarKey: String?
+  public var backgroundImageKey: String?
+
+  enum CodingKeys: String, CodingKey {
+    case username
+    case bio
+    case website
+    case avatarKey = "avatar_key"
+    case backgroundImageKey = "background_image_key"
+  }
+
+  public init(username: String? = nil,
+              bio: String? = nil,
+              website: String? = nil,
+              avatarKey: String? = nil,
+              backgroundImageKey: String? = nil)
+  {
+    self.username = username
+    self.bio = bio
+    self.website = website
+    self.avatarKey = avatarKey
+    self.backgroundImageKey = backgroundImageKey
+  }
+}
+
 public struct NewChatEvent: Encodable, Equatable, Sendable {
   public var ownerId: String
   public var otherUserId: String

@@ -121,11 +121,11 @@ import WarpnetTransport
                                              version _: Version,
                                              method _: String,
                                              mimeType: String,
-                                             filename _: String,
+                                             filename: String,
                                              data: Data) async throws -> Entity
   {
     guard let router else { throw ClientError.notPaired }
-    let body = try await router.upload(endpoint, mimeType: mimeType, data: data)
+    let body = try await router.upload(endpoint, mimeType: mimeType, filename: filename, data: data)
     return try decode(Entity.self, from: body, endpoint: endpoint)
   }
 
@@ -133,11 +133,11 @@ import WarpnetTransport
                           version _: Version,
                           method _: String,
                           mimeType: String,
-                          filename _: String,
+                          filename: String,
                           data: Data) async throws -> HTTPURLResponse?
   {
     guard let router else { throw ClientError.notPaired }
-    _ = try await router.upload(endpoint, mimeType: mimeType, data: data)
+    _ = try await router.upload(endpoint, mimeType: mimeType, filename: filename, data: data)
     return okResponse()
   }
 
