@@ -22,6 +22,9 @@ Debug builds read `IceCubesApp.xcconfig`, which is not committed: copy
 Release builds read `IceCubesApp-release.xcconfig`, where `DEVELOPMENT_TEAM`
 stays empty until the project has an Apple developer team.
 
+Releases to TestFlight go through the `Release / Warpfone` workflow; see
+[RELEASE.md](RELEASE.md) for its secrets, export compliance and App Review.
+
 The version follows the repository's `version` file. The pre-commit hook writes
 it into `Version.xcconfig`, which both configurations include, so the app and
 its extensions always carry the same version.
