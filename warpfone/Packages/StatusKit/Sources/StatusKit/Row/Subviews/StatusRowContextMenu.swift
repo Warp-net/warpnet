@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Foundation
@@ -155,16 +157,6 @@ struct StatusRowContextMenu: View {
       UIPasteboard.general.string = viewModel.status.reblog?.url ?? viewModel.status.url
     } label: {
       Label("status.action.copy-link", systemImage: "link")
-    }
-
-    if let lang = preferences.serverPreferences?.postLanguage ?? Locale.current.language.languageCode?.identifier {
-      Button {
-        Task {
-          await viewModel.translate(userLang: lang)
-        }
-      } label: {
-        Label("status.action.translate", systemImage: "captions.bubble")
-      }
     }
 
     if account.account?.id == viewModel.status.reblog?.account.id ?? viewModel.status.account.id {

@@ -141,9 +141,6 @@ struct SettingsTabs: View {
           Label("settings.general.sidebarEntries", systemImage: "sidebar.squares.leading")
         }
       }
-      NavigationLink(destination: TranslationSettingsView()) {
-        Label("settings.general.translate", systemImage: "captions.bubble")
-      }
       #if !targetEnvironment(macCatalyst)
         Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
           Label("settings.system", systemImage: "gear")

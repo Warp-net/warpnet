@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import EmojiText
 import Env
@@ -245,32 +247,10 @@ struct AccountDetailHeaderView: View {
         })
         .accessibilityRespondsToUserInteraction(false)
 
-      if let translation = viewModel.translation, !viewModel.isLoadingTranslation {
-        GroupBox {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(translation.content.asSafeMarkdownAttributedString)
-              .font(.scaledBody)
-            Text(getLocalizedStringLabel(langCode: translation.detectedSourceLanguage, provider: translation.provider))
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-      }
-
       fieldsView
     }
     .padding(.horizontal, .layoutPadding)
     .offset(y: -40)
-  }
-
-  private func getLocalizedStringLabel(langCode: String, provider: String) -> String {
-    if let localizedLanguage = Locale.current.localizedString(forLanguageCode: langCode) {
-      let format = NSLocalizedString("status.action.translated-label-from-%@-%@", comment: "")
-      return String.localizedStringWithFormat(format, localizedLanguage, provider)
-    } else {
-      return "status.action.translated-label-\(provider)"
-    }
   }
 
   private func makeCustomInfoLabel(title: LocalizedStringKey, count: Int, needsBadge: Bool = false) -> some View {

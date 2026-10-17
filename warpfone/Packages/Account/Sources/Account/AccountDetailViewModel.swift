@@ -77,8 +77,6 @@ import SwiftUI
 
   var scrollToTopVisible: Bool = false
 
-  var translation: Translation?
-  var isLoadingTranslation = false
 
   private(set) var account: Account?
   private var tabTask: Task<Void, Never>?
@@ -259,22 +257,4 @@ import SwiftUI
   func statusDidAppear(status _: Models.Status) {}
 
   func statusDidDisappear(status _: Status) {}
-
-  func translate(userLang: String) async {
-    guard let account else { return }
-    withAnimation {
-      isLoadingTranslation = true
-    }
-
-    let userAPIKey = DeepLUserAPIHandler.readIfAllowed()
-    let userAPIFree = UserPreferences.shared.userDeeplAPIFree
-    let deeplClient = DeepLClient(userAPIKey: userAPIKey, userAPIFree: userAPIFree)
-
-    let translation = try? await deeplClient.request(target: userLang, text: account.note.asRawText)
-
-    withAnimation {
-      self.translation = translation
-      isLoadingTranslation = false
-    }
-  }
 }

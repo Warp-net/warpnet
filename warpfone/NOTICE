@@ -185,3 +185,8 @@ carry that line, so they are named here instead.
   language, media descriptions, custom emoji or a hashtag button, none of
   which a tweet can carry; the matching defaults left the content settings.
   It names the author by display name instead of an @user@server handle.
+- Removed translation: the translate actions on statuses and profiles, the
+  inline translate button, the translation settings, the DeepL client and the
+  Secret.plist that held its key.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj

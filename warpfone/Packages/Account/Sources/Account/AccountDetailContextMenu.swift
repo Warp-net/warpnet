@@ -138,16 +138,6 @@ public struct AccountDetailContextMenu: View {
             #endif
         }
 
-        if let lang = preferences.serverPreferences?.postLanguage ?? Locale.current.language.languageCode?.identifier {
-          Button {
-            Task {
-              await viewModel.translate(userLang: lang)
-            }
-          } label: {
-            Label("status.action.translate", systemImage: "captions.bubble")
-          }
-        }
-
         if let url = account.url {
           ShareLink(item: url, subject: Text(account.safeDisplayName)) {
             Label("account.action.share", systemImage: "square.and.arrow.up")

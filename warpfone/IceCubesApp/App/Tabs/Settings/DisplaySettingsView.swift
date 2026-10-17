@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Combine
 import DesignSystem
 import Env
@@ -217,7 +219,6 @@ struct DisplaySettingsView: View {
           Text(buttonStyle.description).tag(buttonStyle)
         }
       }
-      Toggle("settings.display.translate-button", isOn: $userPreferences.showTranslateButton)
       Toggle("settings.display.pending-at-bottom", isOn: $userPreferences.pendingShownAtBottom)
       Toggle("settings.display.pending-left", isOn: $userPreferences.pendingShownLeft)
       Toggle("settings.display.show-reply-indentation", isOn: $userPreferences.showReplyIndentation)
