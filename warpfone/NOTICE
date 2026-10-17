@@ -353,3 +353,10 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   WarpnetApp.xcodeproj/project.pbxproj
   WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+2026-10-18, node errors
+- Errors from the node reach the user. The editor shows any failed post in its
+  alert, a failed upload shows its error instead of spinning, and a deleted or
+  moderated tweet closes its detail screen the way a 404 did.
+- The Post button stays off for empty text and for text over the node's 2 KiB
+  limit, since the node refuses both.

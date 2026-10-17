@@ -108,7 +108,7 @@ import SwiftUI
         scrollToId = data.status.id + (data.status.editedAt?.asDate.description ?? "")
       }
     } catch {
-      if let error = error as? ServerError, error.httpCode == 404 {
+      if (error as? ServerError)?.httpCode == 404 || error.isMissingTweet {
         _ = routerPath?.path.popLast()
       } else {
         state = .error(error: error)

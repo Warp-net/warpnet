@@ -114,7 +114,8 @@ extension StatusEditor {
     var showPostingErrorAlert: Bool = false
 
     var canPost: Bool {
-      statusText.length > 0 || !mediaContainers.isEmpty
+      let length = statusText.string.utf8.count
+      return length > 0 && length <= (CurrentInstance.shared.instance?.configuration?.statuses.maxCharacters ?? 2048)
     }
 
     var shouldDisablePollButton: Bool {
@@ -241,10 +242,12 @@ extension StatusEditor {
         if let error = error as? Models.ServerError {
           postingError = error.error
           showPostingErrorAlert = true
-        }
-        if let postError = error as? PostError {
-            postingError = postError.description
-            showPostingErrorAlert = true
+        } else if let postError = error as? PostError {
+          postingError = postError.description
+          showPostingErrorAlert = true
+        } else if !(error is CancellationError) {
+          postingError = error.localizedDescription
+          showPostingErrorAlert = true
         }
         isPosting = false
         HapticManager.shared.fireHaptic(.notification(.error))

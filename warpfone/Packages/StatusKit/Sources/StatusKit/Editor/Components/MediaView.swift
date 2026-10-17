@@ -101,7 +101,7 @@ extension StatusEditor {
               makeLocalImageView(container: container)
             } else if viewModel.mode.isInShareExtension {
               sharedMediaView
-            } else if let error = container.error as? ServerError {
+            } else if let error = container.error {
               makeErrorView(error: error)
             } else {
               placeholderView
@@ -178,7 +178,7 @@ extension StatusEditor {
       }
     }
 
-    private func makeErrorView(error: ServerError) -> some View {
+    private func makeErrorView(error: Error) -> some View {
       ZStack {
         placeholderView
         Text("status.editor.error.upload")
@@ -186,7 +186,7 @@ extension StatusEditor {
       .alert("alert.error", isPresented: $isErrorDisplayed) {
         Button("Ok", action: {})
       } message: {
-        Text(error.error ?? "")
+        Text((error as? ServerError)?.error ?? error.localizedDescription)
       }
     }
 

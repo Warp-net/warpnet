@@ -153,6 +153,21 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(status.content.statusesURLs.map(\.absoluteString), ["warpnet://status/01SRC%7C01SRCAUTHOR"])
   }
 
+  func testDeletedTweetReadsAsMissing() async throws {
+    let (router, _) = await makeRouter { route, body in
+      route == ProtocolIds.PUBLIC_GET_TWEET
+        ? #"{"code":5000,"message":"tweet not found"}"#
+        : Self.standardNode(route, body, timeline: [])
+    }
+    do {
+      _ = try await router.route(Statuses.status(id: "01GONE|01A"), method: .get)
+      XCTFail("a deleted tweet must not load")
+    } catch {
+      XCTAssertTrue(error.isMissingTweet)
+    }
+    XCTAssertFalse(WarpnetError.protocolError(code: 5000, message: "middleware: auth: unknown client peer").isMissingTweet)
+  }
+
   func testFavoriteReactsWithTheDefaultHeart() async throws {
     let (router, binding) = await makeRouter { route, body in
       switch route {

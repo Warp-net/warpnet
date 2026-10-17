@@ -21,6 +21,19 @@ public enum WarpnetRoutingError: Error, Equatable, LocalizedError {
   }
 }
 
+public extension Error {
+  var isMissingTweet: Bool {
+    switch self as Error {
+    case WarpnetRoutingError.unknownStatus:
+      true
+    case let WarpnetError.protocolError(_, message):
+      message.hasSuffix("tweet not found") || message.hasSuffix("tweet is moderated")
+    default:
+      false
+    }
+  }
+}
+
 actor WarpnetRepository {
   struct Page: Sendable {
     let tweets: [WarpnetTweet]
