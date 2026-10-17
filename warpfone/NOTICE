@@ -251,3 +251,12 @@ carry that line, so they are named here instead.
   filters without applying them, the app matches the active ones against the
   home timeline, threads and notifications itself. Filters can apply to those
   three contexts, the ones the node knows.
+- Warpnet states Ice Cubes has no place for: a banner while the paired node is
+  unreachable, the view count of a tweet in its detail (a view is recorded
+  when a tweet is opened), a banner on accounts bridged from the Fediverse,
+  a notice in place of tweets the moderators hid, and a notice in place of
+  sponsored tweets, whose content is sold outside the App Store and is not
+  offered in the app. Status and ReblogStatus carry viewsCount.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

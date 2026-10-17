@@ -18,6 +18,8 @@ public struct WarpnetTweet: Codable, Equatable, Sendable {
   public var quotedTweetId: String?
   public var quotedUserId: String?
   public var poll: WarpnetPoll?
+  public var moderation: WarpnetModeration?
+  public var price: WarpnetPrice?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -37,6 +39,8 @@ public struct WarpnetTweet: Codable, Equatable, Sendable {
     case quotedTweetId = "quoted_tweet_id"
     case quotedUserId = "quoted_user_id"
     case poll
+    case moderation
+    case price
   }
 
   public init(id: String,
@@ -55,7 +59,9 @@ public struct WarpnetTweet: Codable, Equatable, Sendable {
               pinned: Bool = false,
               quotedTweetId: String? = nil,
               quotedUserId: String? = nil,
-              poll: WarpnetPoll? = nil)
+              poll: WarpnetPoll? = nil,
+              moderation: WarpnetModeration? = nil,
+              price: WarpnetPrice? = nil)
   {
     self.id = id
     self.createdAt = createdAt
@@ -74,6 +80,8 @@ public struct WarpnetTweet: Codable, Equatable, Sendable {
     self.quotedTweetId = quotedTweetId
     self.quotedUserId = quotedUserId
     self.poll = poll
+    self.moderation = moderation
+    self.price = price
   }
 
   public init(from decoder: Decoder) throws {
@@ -95,6 +103,46 @@ public struct WarpnetTweet: Codable, Equatable, Sendable {
     quotedTweetId = try c.decodeIfPresent(String.self, forKey: .quotedTweetId)
     quotedUserId = try c.decodeIfPresent(String.self, forKey: .quotedUserId)
     poll = try c.decodeIfPresent(WarpnetPoll.self, forKey: .poll)
+    moderation = try? c.decodeIfPresent(WarpnetModeration.self, forKey: .moderation)
+    price = try? c.decodeIfPresent(WarpnetPrice.self, forKey: .price)
+  }
+}
+
+public struct WarpnetModeration: Codable, Equatable, Sendable {
+  public var isOk: Bool
+  public var reason: String?
+
+  enum CodingKeys: String, CodingKey {
+    case isOk = "is_ok"
+    case reason
+  }
+
+  public init(isOk: Bool, reason: String? = nil) {
+    self.isOk = isOk
+    self.reason = reason
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    isOk = try c.value(.isOk, true)
+    reason = try c.decodeIfPresent(String.self, forKey: .reason)
+  }
+}
+
+public struct WarpnetPrice: Codable, Equatable, Sendable {
+  public var amount: String
+
+  enum CodingKeys: String, CodingKey {
+    case amount
+  }
+
+  public init(amount: String) {
+    self.amount = amount
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    amount = try c.value(.amount, "")
   }
 }
 

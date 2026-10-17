@@ -67,17 +67,18 @@ enum WarpnetMapper {
     let address = address(tweet).original
     let parent = parentAddress(tweet)
     let stats = viewer.stats
-    var content = WarpnetFormat.html(fromPlainText: tweet.text)
-    if let quote {
+    let hiddenNotice = notice(tweet)
+    var content = WarpnetFormat.html(fromPlainText: hiddenNotice ?? tweet.text)
+    if let quote, hiddenNotice == nil {
       content += "<a href=\"\(quote)\"></a>"
     }
-    return MastodonStatus(id: address.id,
+    let status = MastodonStatus(id: address.id,
                           content: content,
                           account: author.map { account($0) } ?? account(userId: tweet.userId, username: tweet.username),
                           createdAt: WarpnetFormat.serverDate(fromRFC3339: tweet.createdAt),
                           editedAt: editedAt(tweet),
                           reblog: nil,
-                          mediaAttachments: attachments(tweet),
+                          mediaAttachments: hiddenNotice == nil ? attachments(tweet) : [],
                           repliesCount: stats?.repliesCount ?? 0,
                           reblogsCount: stats?.retweetsCount ?? 0,
                           favouritesCount: stats?.reactionsCount ?? 0,
@@ -88,8 +89,21 @@ enum WarpnetMapper {
                           url: "\(WarpnetFormat.baseURL)/tweets/\(WarpnetFormat.pathComponent(address.tweetId))",
                           inReplyToId: parent?.id,
                           inReplyToAccountId: parent?.userId,
-                          poll: poll(tweet, address: address, results: viewer.poll),
+                          poll: hiddenNotice == nil ? poll(tweet, address: address, results: viewer.poll) : nil,
                           myReaction: stats.flatMap { $0.myReaction.isEmpty ? nil : $0.myReaction })
+    status.viewsCount = stats?.viewsCount
+    return status
+  }
+
+  static func notice(_ tweet: WarpnetTweet) -> String? {
+    if let moderation = tweet.moderation, !moderation.isOk {
+      let reason = moderation.reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      return reason.isEmpty ? "Hidden by Warpnet moderators." : "Hidden by Warpnet moderators: \(reason)"
+    }
+    if tweet.price != nil, tweet.text.isEmpty, tweet.imageKeys?.isEmpty ?? true, tweet.videoKey?.isEmpty ?? true {
+      return "Sponsored tweet. Its content can't be opened in this app."
+    }
+    return nil
   }
 
   static func retweet(_ original: MastodonStatus, address: StatusAddress, retweeter: MastodonAccount) -> MastodonStatus {

@@ -229,6 +229,17 @@ struct AccountDetailHeaderView: View {
         }
       }
 
+      if let host = bridgedHost {
+        Label("warpnet.account.bridged-\(host)", systemImage: "point.3.connected.trianglepath.dotted")
+          .font(.scaledFootnote)
+          .foregroundStyle(.secondary)
+          .padding(8)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(theme.secondaryBackgroundColor)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .padding(.top, 8)
+      }
+
       if let note = viewModel.relationship?.note, !note.isEmpty,
          !viewModel.isCurrentUser
       {
@@ -251,6 +262,12 @@ struct AccountDetailHeaderView: View {
     }
     .padding(.horizontal, .layoutPadding)
     .offset(y: -40)
+  }
+
+  private var bridgedHost: String? {
+    let parts = account.acct.split(separator: "@")
+    guard parts.count == 2, !parts[0].isEmpty, parts[1].contains(".") else { return nil }
+    return String(parts[1])
   }
 
   private func makeCustomInfoLabel(title: LocalizedStringKey, count: Int, needsBadge: Bool = false) -> some View {

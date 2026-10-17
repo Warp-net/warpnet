@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import Foundation
 import Models
@@ -11,6 +13,7 @@ import SwiftUI
 
   var client: Client?
   var routerPath: RouterPath?
+  @ObservationIgnored private var didRecordView = false
 
   enum State {
     case loading, display(statuses: [Status]), error(error: Error)
@@ -48,11 +51,20 @@ import SwiftUI
   func fetch() async -> Bool {
     if statusId != nil {
       await fetchStatusDetail(animate: false)
+      recordView()
       return true
     } else if remoteStatusURL != nil {
       return await fetchRemoteStatus()
     }
     return false
+  }
+
+  private func recordView() {
+    guard let client, let statusId, !didRecordView else { return }
+    didRecordView = true
+    Task {
+      _ = try? await client.post(endpoint: TweetViews.record(statusId: statusId))
+    }
   }
 
   private func fetchRemoteStatus() async -> Bool {

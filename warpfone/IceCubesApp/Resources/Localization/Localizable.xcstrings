@@ -6266,6 +6266,16 @@
         }
       }
     },
+    "warpnet.account.bridged-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This account is bridged from %@ through the Warpnet gateway."
+          }
+        }
+      }
+    },
     "warpnet.account.website" : {
       "localizations" : {
         "en" : {
@@ -6282,6 +6292,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "https://"
+          }
+        }
+      }
+    },
+    "warpnet.connection.offline" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your node is not reachable"
+          }
+        }
+      }
+    },
+    "warpnet.connection.reconnecting-%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconnecting to your node (attempt %lld)"
           }
         }
       }
@@ -6821,6 +6851,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Loading your timeline…"
+          }
+        }
+      }
+    },
+    "warpnet.status.views-%lld" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld view"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld views"
+                }
+              }
+            }
           }
         }
       }

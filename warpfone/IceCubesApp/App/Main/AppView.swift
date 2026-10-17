@@ -43,8 +43,16 @@ struct AppView: View {
     }
   }
 
-  @ViewBuilder
   private var mainView: some View {
+    platformView
+      .safeAreaInset(edge: .top, spacing: 0) {
+        ConnectionBanner(monitor: pairing.monitor)
+          .animation(.default, value: pairing.monitor?.linkState)
+      }
+  }
+
+  @ViewBuilder
+  private var platformView: some View {
     #if os(visionOS)
     tabBarView
     #else

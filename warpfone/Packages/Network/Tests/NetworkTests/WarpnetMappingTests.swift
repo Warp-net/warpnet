@@ -150,6 +150,27 @@ final class WarpnetMappingTests: XCTestCase {
     XCTAssertNil(WarpnetFormat.statusId(fromURL: "warpnet://image/01U/k"))
   }
 
+  func testModeratedAndSponsoredTweetsShowANotice() throws {
+    var moderated = WarpnetTweet(id: "01M", rootId: "01M", text: "bad words", userId: "01AUTHOR", username: "Alice", imageKeys: ["k1"])
+    moderated.moderation = WarpnetModeration(isOk: false, reason: "Hate")
+    let hidden = try decode(Status.self, WarpnetMapper.status(moderated, author: author, viewer: ViewerState()))
+    XCTAssertEqual(hidden.content.asRawText, "Hidden by Warpnet moderators: Hate")
+    XCTAssertTrue(hidden.mediaAttachments.isEmpty)
+
+    moderated.moderation = WarpnetModeration(isOk: true)
+    XCTAssertEqual(try decode(Status.self, WarpnetMapper.status(moderated, author: author, viewer: ViewerState())).content.asRawText,
+                   "bad words")
+
+    var teaser = WarpnetTweet(id: "01S", rootId: "01S", text: "", userId: "01AUTHOR", username: "Alice")
+    teaser.price = WarpnetPrice(amount: "1.5")
+    let sponsored = try decode(Status.self, WarpnetMapper.status(teaser, author: author, viewer: ViewerState()))
+    XCTAssertEqual(sponsored.content.asRawText, "Sponsored tweet. Its content can't be opened in this app.")
+    XCTAssertFalse(sponsored.content.asRawText.contains("1.5"))
+
+    let stats = TweetStatsResponse(tweetId: "01M", viewsCount: 12)
+    XCTAssertEqual(try decode(Status.self, WarpnetMapper.status(moderated, author: author, viewer: ViewerState(stats: stats))).viewsCount, 12)
+  }
+
   func testAccountSourceCarriesTheEditableBio() throws {
     let account = try decode(Account.self, WarpnetMapper.account(author))
     XCTAssertEqual(account.source?.note, "I <3 p2p")

@@ -83,6 +83,7 @@
 		A259DB4F3C77CF5C14892345 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308DF3E6331C7C5C1E0D8480 /* PairingView.swift */; };
 		AC344AA69EEF3B049F07C968 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = CD8FC99308EBB4E517B4787C /* libresolv.tbd */; platformFilters = (ios, maccatalyst, ); };
 		C9B22677297F6C2E001F9EFE /* ContentSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B22676297F6C2E001F9EFE /* ContentSettingsView.swift */; };
+		CF53702D641867FA21533E9B /* ConnectionBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB338BD0C2DF94827DA51250 /* ConnectionBanner.swift */; };
 		D08A9C3529956CFA00204A4A /* SwipeActionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D08A9C3429956CFA00204A4A /* SwipeActionsSettingsView.swift */; };
 		DA0B24FB2A6876D50045BDD7 /* SFSafeSymbols in Frameworks */ = {isa = PBXBuildFile; productRef = DA0B24FA2A6876D50045BDD7 /* SFSafeSymbols */; };
 		DFD13C32927635376BD4DC9B /* Warpnet.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */; platformFilters = (ios, maccatalyst, ); };
@@ -216,6 +217,7 @@
 		E9DF420429830FEC0003AAD2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E9FEB8AD2B1CAB4600815AB5 /* IceCubesApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesApp.entitlements; sourceTree = "<group>"; };
 		E9FEB8AE2B1CAB7000815AB5 /* IceCubesApp-release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "IceCubesApp-release.entitlements"; sourceTree = "<group>"; };
+		EB338BD0C2DF94827DA51250 /* ConnectionBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionBanner.swift; sourceTree = "<group>"; };
 		EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Warpnet.xcframework; sourceTree = "<group>"; };
 		EEB3C87330913F5D42D83B3C /* GoBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoBinding.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -285,6 +287,7 @@
 				1904B528D94CB3C9CA58BF29 /* WarpnetVideoLoader.swift */,
 				92282D680EE224ACEDA2C667 /* BackgroundRefresh.swift */,
 				3A1614FF40AE69DF401351FC /* SharedPostPublisher.swift */,
+				EB338BD0C2DF94827DA51250 /* ConnectionBanner.swift */,
 			);
 			path = Warpnet;
 			sourceTree = "<group>";
@@ -710,6 +713,7 @@
 				611151B148D2330C0731A6E7 /* WarpnetVideoLoader.swift in Sources */,
 				85AB8517A4D9AF7F8F588129 /* BackgroundRefresh.swift in Sources */,
 				58A6ABF317A370C8CF6FB9E1 /* SharedPostPublisher.swift in Sources */,
+				CF53702D641867FA21533E9B /* ConnectionBanner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

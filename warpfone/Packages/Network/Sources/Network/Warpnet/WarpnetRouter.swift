@@ -51,6 +51,8 @@ struct WarpnetRouter: Sendable {
       return try await chats(endpoint)
     case let endpoint as ServerFilters:
       return try await filters(endpoint, method: method)
+    case let endpoint as TweetViews:
+      return try await views(endpoint)
     default:
       throw WarpnetRoutingError.unsupported(endpoint.path())
     }
@@ -564,6 +566,23 @@ struct WarpnetRouter: Sendable {
     case "follow": "follow"
     case "mention", "reply": "mention"
     default: nil
+    }
+  }
+
+  // MARK: - Views
+
+  private func views(_ endpoint: TweetViews) async throws -> Response {
+    let pairing = try await repository.viewer()
+    switch endpoint {
+    case let .record(statusId):
+      let address = try await repository.address(of: statusId).original
+      guard address.userId != pairing.userId else { return try response(EmptyEvent()) }
+      let views: ViewsCountResponse = try await repository.call(ProtocolIds.PUBLIC_POST_VIEW,
+                                                                ViewEvent(tweetId: address.tweetId,
+                                                                          userId: address.userId,
+                                                                          viewerId: pairing.userId))
+      await adjustStats(address.tweetId) { $0.viewsCount = views.count }
+      return try response(EmptyEvent())
     }
   }
 

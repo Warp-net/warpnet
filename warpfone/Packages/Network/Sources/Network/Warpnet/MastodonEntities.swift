@@ -26,6 +26,7 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
   let spoilerText: String
   let sensitive: Bool
   var filtered: [MastodonFilterResult]?
+  var viewsCount: Int?
 
   init(id: String,
        content: String,

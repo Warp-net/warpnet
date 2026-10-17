@@ -43,6 +43,13 @@ struct StatusRowDetailView: View {
       .font(.scaledCaption)
       .foregroundStyle(.secondary)
 
+      if let views = viewModel.finalStatus.viewsCount, views > 0 {
+        Divider()
+        Label("warpnet.status.views-\(views)", systemImage: "eye")
+          .font(.scaledCaption)
+          .foregroundStyle(.secondary)
+      }
+
       if let editedAt = viewModel.status.editedAt {
         Divider()
         HStack {

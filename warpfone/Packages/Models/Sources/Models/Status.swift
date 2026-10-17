@@ -23,6 +23,7 @@ public protocol AnyStatus {
   var card: Card? { get }
   var favourited: Bool? { get }
   var myReaction: String? { get }
+  var viewsCount: Int? { get }
   var reblogged: Bool? { get }
   var pinned: Bool? { get }
   var bookmarked: Bool? { get }
@@ -63,6 +64,7 @@ public final class Status: AnyStatus, Codable, Identifiable, Equatable, Hashable
   public let card: Card?
   public let favourited: Bool?
   public let myReaction: String?
+  public let viewsCount: Int?
   public let reblogged: Bool?
   public let pinned: Bool?
   public let bookmarked: Bool?
@@ -82,7 +84,7 @@ public final class Status: AnyStatus, Codable, Identifiable, Equatable, Hashable
     filtered?.first?.filter.filterAction == .hide
   }
 
-  public init(id: String, content: HTMLString, account: Account, createdAt: ServerDate, editedAt: ServerDate?, reblog: ReblogStatus?, mediaAttachments: [MediaAttachment], mentions: [Mention], repliesCount: Int, reblogsCount: Int, favouritesCount: Int, card: Card?, favourited: Bool?, reblogged: Bool?, pinned: Bool?, bookmarked: Bool?, emojis: [Emoji], url: String?, application: Application?, inReplyToId: String?, inReplyToAccountId: String?, visibility: Visibility, poll: Poll?, spoilerText: HTMLString, filtered: [Filtered]?, sensitive: Bool, language: String?, myReaction: String? = nil) {
+  public init(id: String, content: HTMLString, account: Account, createdAt: ServerDate, editedAt: ServerDate?, reblog: ReblogStatus?, mediaAttachments: [MediaAttachment], mentions: [Mention], repliesCount: Int, reblogsCount: Int, favouritesCount: Int, card: Card?, favourited: Bool?, reblogged: Bool?, pinned: Bool?, bookmarked: Bool?, emojis: [Emoji], url: String?, application: Application?, inReplyToId: String?, inReplyToAccountId: String?, visibility: Visibility, poll: Poll?, spoilerText: HTMLString, filtered: [Filtered]?, sensitive: Bool, language: String?, myReaction: String? = nil, viewsCount: Int? = nil) {
     self.id = id
     self.content = content
     self.account = account
@@ -97,6 +99,7 @@ public final class Status: AnyStatus, Codable, Identifiable, Equatable, Hashable
     self.card = card
     self.favourited = favourited
     self.myReaction = myReaction
+    self.viewsCount = viewsCount
     self.reblogged = reblogged
     self.pinned = pinned
     self.bookmarked = bookmarked
@@ -179,7 +182,8 @@ public final class Status: AnyStatus, Codable, Identifiable, Equatable, Hashable
                    filtered: reblog.filtered,
                    sensitive: reblog.sensitive,
                    language: reblog.language,
-                   myReaction: reblog.myReaction)
+                   myReaction: reblog.myReaction,
+                   viewsCount: reblog.viewsCount)
     }
     return nil
   }
@@ -207,6 +211,7 @@ public final class ReblogStatus: AnyStatus, Codable, Identifiable, Equatable, Ha
   public let card: Card?
   public let favourited: Bool?
   public let myReaction: String?
+  public let viewsCount: Int?
   public let reblogged: Bool?
   public let pinned: Bool?
   public let bookmarked: Bool?
@@ -226,7 +231,7 @@ public final class ReblogStatus: AnyStatus, Codable, Identifiable, Equatable, Ha
     filtered?.first?.filter.filterAction == .hide
   }
 
-  public init(id: String, content: HTMLString, account: Account, createdAt: ServerDate, editedAt: ServerDate?, mediaAttachments: [MediaAttachment], mentions: [Mention], repliesCount: Int, reblogsCount: Int, favouritesCount: Int, card: Card?, favourited: Bool?, reblogged: Bool?, pinned: Bool?, bookmarked: Bool?, emojis: [Emoji], url: String?, application: Application? = nil, inReplyToId: String?, inReplyToAccountId: String?, visibility: Visibility, poll: Poll?, spoilerText: HTMLString, filtered: [Filtered]?, sensitive: Bool, language: String?, myReaction: String? = nil) {
+  public init(id: String, content: HTMLString, account: Account, createdAt: ServerDate, editedAt: ServerDate?, mediaAttachments: [MediaAttachment], mentions: [Mention], repliesCount: Int, reblogsCount: Int, favouritesCount: Int, card: Card?, favourited: Bool?, reblogged: Bool?, pinned: Bool?, bookmarked: Bool?, emojis: [Emoji], url: String?, application: Application? = nil, inReplyToId: String?, inReplyToAccountId: String?, visibility: Visibility, poll: Poll?, spoilerText: HTMLString, filtered: [Filtered]?, sensitive: Bool, language: String?, myReaction: String? = nil, viewsCount: Int? = nil) {
     self.id = id
     self.content = content
     self.account = account
@@ -240,6 +245,7 @@ public final class ReblogStatus: AnyStatus, Codable, Identifiable, Equatable, Ha
     self.card = card
     self.favourited = favourited
     self.myReaction = myReaction
+    self.viewsCount = viewsCount
     self.reblogged = reblogged
     self.pinned = pinned
     self.bookmarked = bookmarked
