@@ -15,6 +15,7 @@ public actor WarpnetClient {
   private let retryBackoffs: [Duration]
   private var isControlBusy = false
   private var controlWaiters: [CheckedContinuation<Void, Never>] = []
+  private var isPaused = false
 
   public init(binding: WarpnetBinding,
               nodeLogSink: NodeLogSink? = nil,
@@ -114,6 +115,10 @@ public actor WarpnetClient {
   public func request(_ protocolId: String, body: String) async throws -> String {
     var attempt = 0
     while true {
+      if state != .connected, isControlBusy {
+        await lockControl()
+        unlockControl()
+      }
       guard state == .connected else { throw WarpnetError.notConnected }
       do {
         let raw = try await send(protocolId: protocolId, body: body)
@@ -135,6 +140,7 @@ public actor WarpnetClient {
     await runBlocking { binding.pause() }
     if state == .connected || state == .connecting {
       state = .disconnected
+      isPaused = true
     }
   }
 
@@ -143,12 +149,13 @@ public actor WarpnetClient {
     defer { unlockControl() }
     guard state != .uninitialised else { return }
     let binding = binding
-    let isConnected = await runBlocking {
-      binding.resume()
-      return binding.isConnected()
+    await runBlocking { binding.resume() }
+    // The node re-dials in the background and every stream dials on demand;
+    // asking isConnected() right now would only see that dial in flight.
+    if isPaused, state == .disconnected {
+      state = .connected
     }
-    if case .failed = state { return }
-    state = isConnected ? .connected : .disconnected
+    isPaused = false
   }
 
   public func shutdown() async {
@@ -157,6 +164,7 @@ public actor WarpnetClient {
     let binding = binding
     _ = await runBlocking { binding.shutdown() }
     state = .uninitialised
+    isPaused = false
   }
 
   private func send(protocolId: String, body: String) async throws -> String {

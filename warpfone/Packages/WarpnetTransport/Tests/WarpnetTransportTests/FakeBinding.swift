@@ -19,6 +19,7 @@ final class FakeBinding: WarpnetBinding, @unchecked Sendable {
   private var _resumeCount = 0
   private var _shutdownCount = 0
   private var _initializeCalls: [(privKeyHex: String, network: String, psk: String, bootstrap: String)] = []
+  private var _connectGate: DispatchSemaphore?
 
   let peerIdValue = "12D3KooWTestPeer"
 
@@ -68,6 +69,11 @@ final class FakeBinding: WarpnetBinding, @unchecked Sendable {
     set { locked { _refreshResult = newValue } }
   }
 
+  var connectGate: DispatchSemaphore? {
+    get { locked { _connectGate } }
+    set { locked { _connectGate = newValue } }
+  }
+
   var streamCalls: [(protocolId: String, data: String)] { locked { _streamCalls } }
   var signInputs: [String] { locked { _signInputs } }
   var connectCalls: [String] { locked { _connectCalls } }
@@ -87,7 +93,8 @@ final class FakeBinding: WarpnetBinding, @unchecked Sendable {
   }
 
   func connect(addrInfo: String) -> String {
-    locked {
+    connectGate?.wait()
+    return locked {
       _connectCalls.append(addrInfo)
       let result = _connectResults.isEmpty ? "" : _connectResults.removeFirst()
       if result.isEmpty {

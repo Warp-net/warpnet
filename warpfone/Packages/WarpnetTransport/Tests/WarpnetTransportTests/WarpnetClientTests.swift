@@ -238,24 +238,56 @@ final class WarpnetClientTests: XCTestCase {
     }
   }
 
-  func testPauseAndResumeFollowTheBinding() async throws {
+  func testPausedClientFailsFastAndResumeDoesNotWaitForTheRedial() async throws {
     let binding = FakeBinding()
     let client = try await connectedClient(binding)
     await client.pause()
     var state = await client.state
     XCTAssertEqual(state, .disconnected)
     XCTAssertEqual(binding.pauseCount, 1)
+    do {
+      _ = try await client.request("/p", body: "{}")
+      XCTFail("a paused client must not dial")
+    } catch {
+      XCTAssertEqual(error as? WarpnetError, .notConnected)
+    }
 
     binding.isConnectedResult = false
     await client.resume()
     state = await client.state
-    XCTAssertEqual(state, .disconnected)
-
-    binding.isConnectedResult = true
-    await client.resume()
-    state = await client.state
     XCTAssertEqual(state, .connected)
-    XCTAssertEqual(binding.resumeCount, 2)
+    XCTAssertEqual(binding.resumeCount, 1)
+    _ = try await client.request("/p", body: "{}")
+    XCTAssertEqual(binding.streamCalls.count, 1)
+  }
+
+  func testResumeOnlyRestoresAConnectionThePauseTookDown() async throws {
+    let binding = FakeBinding()
+    let client = try await connectedClient(binding)
+    await client.pause()
+    await client.shutdown()
+    try await client.initialise(config)
+    await client.resume()
+    let state = await client.state
+    XCTAssertEqual(state, .disconnected)
+  }
+
+  func testRequestWaitsForAReconnectInFlight() async throws {
+    let binding = FakeBinding()
+    let client = try await connectedClient(binding)
+    let gate = DispatchSemaphore(value: 0)
+    binding.connectGate = gate
+    let reconnect = Task { try await client.connect(["/a"]) }
+    while await client.state != .connecting {
+      await Task.yield()
+    }
+    let request = Task { try await client.request("/p", body: "{}") }
+    try await Task.sleep(for: .milliseconds(50))
+    XCTAssertTrue(binding.streamCalls.isEmpty)
+    gate.signal()
+    try await reconnect.value
+    _ = try await request.value
+    XCTAssertEqual(binding.streamCalls.count, 1)
   }
 
   func testResumeKeepsAFailure() async throws {
