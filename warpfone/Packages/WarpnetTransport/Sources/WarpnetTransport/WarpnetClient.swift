@@ -57,6 +57,11 @@ public actor WarpnetClient {
     await runBlocking { binding.setLogSinkMinLevel(level) }
   }
 
+  public func peerId() async -> String {
+    let binding = binding
+    return await runBlocking { binding.peerId() }
+  }
+
   public func connect(_ candidateAddrs: [String]) async throws {
     guard !candidateAddrs.isEmpty else {
       throw WarpnetError.transportFailure("no addresses to dial")

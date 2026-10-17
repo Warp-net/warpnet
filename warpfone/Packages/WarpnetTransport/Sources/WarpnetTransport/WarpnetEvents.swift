@@ -665,19 +665,14 @@ public struct WarpnetReportEvent: Encodable, Equatable, Sendable {
   }
 }
 
-public enum WarpnetJSON {
-  public static func encode<T: Encodable>(_ value: T) throws -> String {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.withoutEscapingSlashes]
-    let data = try encoder.encode(value)
-    return String(decoding: data, as: UTF8.self)
+public struct DeleteDeviceEvent: Encodable, Equatable, Sendable {
+  public var nodeId: String
+
+  enum CodingKeys: String, CodingKey {
+    case nodeId = "node_id"
   }
 
-  public static func decode<T: Decodable>(_ type: T.Type, from raw: String) throws -> T {
-    do {
-      return try JSONDecoder().decode(type, from: Data(raw.utf8))
-    } catch {
-      throw WarpnetError.serializationError("\(T.self): \(error)")
-    }
+  public init(nodeId: String) {
+    self.nodeId = nodeId
   }
 }
