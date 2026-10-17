@@ -37,6 +37,8 @@ struct IceCubesApp: App {
   }
 
   func setNewClientsInEnv(client: Client) {
+    WarpnetDataLoader.shared.setClient(client)
+    WarpnetVideoLoader.shared.setClient(client)
     currentAccount.setClient(client: client)
     currentInstance.setClient(client: client)
     userPreferences.setClient(client: client)
@@ -72,6 +74,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
   {
     try? AVAudioSession.sharedInstance().setCategory(.ambient, options: .mixWithOthers)
     try? AVAudioSession.sharedInstance().setActive(true)
+    WarpnetDataLoader.install()
+    WarpnetVideoLoader.install()
     return true
   }
 

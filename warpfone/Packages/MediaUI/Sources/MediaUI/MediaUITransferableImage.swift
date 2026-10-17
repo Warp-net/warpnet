@@ -1,4 +1,7 @@
+// Modified by Warpnet. See NOTICE.
+
 import CoreTransferable
+import Nuke
 import SwiftUI
 import UIKit
 
@@ -7,7 +10,7 @@ struct MediaUIImageTransferable: Codable, Transferable {
 
   func fetchData() async -> Data {
     do {
-      return try await URLSession.shared.data(from: url).0
+      return try await ImagePipeline.shared.data(for: url).0
     } catch {
       return Data()
     }

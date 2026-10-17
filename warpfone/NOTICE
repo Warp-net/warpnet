@@ -151,3 +151,10 @@ carry that line, so they are named here instead.
 - StreamWatcher polls the node's pushes while the app is active instead of
   opening the Mastodon streaming socket.
 - The Network tests were replaced with tests of the Warpnet routing.
+- Images with warpnet:// URLs load through a Nuke data loader that asks the
+  node, and videos through an AVAssetResourceLoader delegate that downloads
+  them to a temporary file first. MediaUI takes its player items from a hook
+  the app sets, and fetches shared and saved images through the image pipeline
+  instead of URLSession.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj

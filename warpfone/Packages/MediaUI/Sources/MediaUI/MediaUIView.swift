@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Models
 import Nuke
 import QuickLook
@@ -167,7 +169,7 @@ private struct SavePhotoToolbarItem: ToolbarContent, @unchecked Sendable {
   private func imageData(_ url: URL) async -> Data? {
     var data = ImagePipeline.shared.cache.cachedData(for: .init(url: url))
     if data == nil {
-      data = try? await URLSession.shared.data(from: url).0
+      data = try? await ImagePipeline.shared.data(for: url).0
     }
     return data
   }
