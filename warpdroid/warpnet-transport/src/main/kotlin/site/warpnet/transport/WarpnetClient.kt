@@ -51,6 +51,7 @@ class WarpnetClient(
     private val mutex = Mutex()
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Uninitialised)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
+    private var isPaused = false
 
     private val errorAdapter = moshi.adapter<WarpnetResponseError>()
     private val addrsAdapter = moshi.adapter<List<String>>()
@@ -211,6 +212,10 @@ class WarpnetClient(
         // in-flight call (timeline stalls behind a 15s stream-open).
         var lastFailure: WarpnetException? = null
         for (attempt in 0..STREAM_RETRY_BACKOFFS.size) {
+            // Wait out a connect or resume in flight instead of failing on it.
+            if (_state.value !is ConnectionState.Connected && mutex.isLocked) {
+                mutex.withLock { }
+            }
             if (_state.value !is ConnectionState.Connected) {
                 throw WarpnetException.NotConnected()
             }
@@ -276,6 +281,7 @@ class WarpnetClient(
             // Don't overwrite a Failed state; only demote from Connected/Connecting.
             if (_state.value is ConnectionState.Connected || _state.value is ConnectionState.Connecting) {
                 _state.value = ConnectionState.Disconnected
+                isPaused = true
             }
         }
     }
@@ -288,15 +294,13 @@ class WarpnetClient(
         mutex.withLock {
             if (_state.value == ConnectionState.Uninitialised) return@withLock
             binding.resume()
-            // Resume re-dials known peers in the background. Only promote back
-            // to Connected if the native host actually has a live connection;
-            // preserve Failed so the UI can still surface the prior error.
-            if (_state.value is ConnectionState.Failed) return@withLock
-            _state.value = if (binding.isConnected()) {
-                ConnectionState.Connected
-            } else {
-                ConnectionState.Disconnected
+            // The node re-dials in the background and every stream dials on
+            // demand; asking isConnected() right now would only see that dial
+            // in flight. Failed is preserved so the UI can still surface it.
+            if (isPaused && _state.value == ConnectionState.Disconnected) {
+                _state.value = ConnectionState.Connected
             }
+            isPaused = false
         }
     }
 
@@ -305,6 +309,7 @@ class WarpnetClient(
         mutex.withLock {
             binding.shutdown()
             _state.value = ConnectionState.Uninitialised
+            isPaused = false
         }
     }
 
