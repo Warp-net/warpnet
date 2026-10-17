@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0520CCA5E9E85BFE9352E814 /* GoBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB3C87330913F5D42D83B3C /* GoBinding.swift */; };
 		069709A5298C8545006E4CB5 /* Atkinson-Hyperlegible-Regular-102.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 069709A3298C8545006E4CB5 /* Atkinson-Hyperlegible-Regular-102.ttf */; };
 		069709A8298C87B5006E4CB5 /* OpenDyslexic-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = 069709A7298C87B5006E4CB5 /* OpenDyslexic-Regular.otf */; };
 		069709AA298C9AD7006E4CB5 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 069709A9298C9AD7006E4CB5 /* AboutView.swift */; };
 		639CDF9C296AC82F00C35E58 /* SafariRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639CDF9B296AC82F00C35E58 /* SafariRouter.swift */; };
+		7BFB91C72485C337E2EFD0C3 /* WarpnetTransport in Frameworks */ = {isa = PBXBuildFile; productRef = B979A68FAE002F6F5E11073F /* WarpnetTransport */; };
 		9F15D6002B3D6A850008C220 /* NavigationTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */; };
 		9F15D6022B3D6E280008C220 /* TabbarEntriesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */; };
 		9F15D6042B3DC2180008C220 /* NavigationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15D6032B3DC2180008C220 /* NavigationSheet.swift */; };
@@ -156,6 +158,7 @@
 		069709A7298C87B5006E4CB5 /* OpenDyslexic-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "OpenDyslexic-Regular.otf"; sourceTree = "<group>"; };
 		069709A9298C9AD7006E4CB5 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		639CDF9B296AC82F00C35E58 /* SafariRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariRouter.swift; sourceTree = "<group>"; };
+		8A911FE4DB4D158CC91E1F42 /* WarpnetTransport */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = WarpnetTransport; path = Packages/WarpnetTransport; sourceTree = "<group>"; };
 		9F15D5FF2B3D6A850008C220 /* NavigationTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTab.swift; sourceTree = "<group>"; };
 		9F15D6012B3D6E280008C220 /* TabbarEntriesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabbarEntriesSettingsView.swift; sourceTree = "<group>"; };
 		9F15D6032B3DC2180008C220 /* NavigationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationSheet.swift; sourceTree = "<group>"; };
@@ -244,6 +247,7 @@
 		E9FEB8AD2B1CAB4600815AB5 /* IceCubesApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IceCubesApp.entitlements; sourceTree = "<group>"; };
 		E9FEB8AE2B1CAB7000815AB5 /* IceCubesApp-release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "IceCubesApp-release.entitlements"; sourceTree = "<group>"; };
 		EDD23A16D98A4053B24F1158 /* Warpnet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Warpnet.xcframework; sourceTree = "<group>"; };
+		EEB3C87330913F5D42D83B3C /* GoBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoBinding.swift; sourceTree = "<group>"; };
 		FA31A9AA2A66BF7C00D5F662 /* EditTagGroupView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditTagGroupView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -299,6 +303,7 @@
 				9FC2A38B2B49D19A00DFD1C1 /* StatusKit in Frameworks */,
 				DFD13C32927635376BD4DC9B /* Warpnet.xcframework in Frameworks */,
 				AC344AA69EEF3B049F07C968 /* libresolv.tbd in Frameworks */,
+				7BFB91C72485C337E2EFD0C3 /* WarpnetTransport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -315,6 +320,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9A4F5CEC5122697D432A6448 /* Warpnet */ = {
+			isa = PBXGroup;
+			children = (
+				EEB3C87330913F5D42D83B3C /* GoBinding.swift */,
+			);
+			path = Warpnet;
+			sourceTree = "<group>";
+		};
 		9F0811402B14869F0020F85E /* TagGroup */ = {
 			isa = PBXGroup;
 			children = (
@@ -345,6 +358,7 @@
 				9F398AA52935FE8A00A889F2 /* AppRegistry.swift */,
 				639CDF9B296AC82F00C35E58 /* SafariRouter.swift */,
 				9FAD85CE2975B68900496AB1 /* SideBarView.swift */,
+				9A4F5CEC5122697D432A6448 /* Warpnet */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -457,6 +471,7 @@
 				9FD542E52962D2CE0045321A /* Lists */,
 				9F35DB4829506F7F00B3281A /* Notifications */,
 				9F29553E292B6AF600E0E81B /* Timeline */,
+				8A911FE4DB4D158CC91E1F42 /* WarpnetTransport */,
 			);
 			sourceTree = "<group>";
 		};
@@ -629,6 +644,7 @@
 				9FE3DB56296FEFCA00628CB0 /* AppAccount */,
 				DA0B24FA2A6876D50045BDD7 /* SFSafeSymbols */,
 				9FC2A38A2B49D19A00DFD1C1 /* StatusKit */,
+				B979A68FAE002F6F5E11073F /* WarpnetTransport */,
 			);
 			productName = IceCubesApp;
 			productReference = 9FBFE639292A715500C250E9 /* Ice Cubes.app */;
@@ -816,6 +832,7 @@
 				9FBA1D352B4E9B7E00ADB568 /* SidebarEntriesSettingsView.swift in Sources */,
 				9F2A5411296A1429009B2D7C /* PushNotificationsView.swift in Sources */,
 				9F6028582B3F3B7600476078 /* ToolbarTab.swift in Sources */,
+				0520CCA5E9E85BFE9352E814 /* GoBinding.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1473,6 +1490,10 @@
 		9FFF6781299B7D3A00FE700A /* Account */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Account;
+		};
+		B979A68FAE002F6F5E11073F /* WarpnetTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WarpnetTransport;
 		};
 		DA0B24FA2A6876D50045BDD7 /* SFSafeSymbols */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -112,3 +112,9 @@ carry that line, so they are named here instead.
   .gitignore
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Info.plist
+
+2026-10-17, Warpnet transport
+- The app target depends on the new Packages/WarpnetTransport, the Warpnet
+  wire layer, and binds it to the node in App/Warpnet/GoBinding.swift.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
