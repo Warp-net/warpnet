@@ -7,7 +7,6 @@ import Models
 import NaturalLanguage
 import Network
 import PhotosUI
-import SwiftData
 import SwiftUI
 
 extension StatusEditor {
@@ -752,9 +751,9 @@ extension StatusEditor {
 
     private var mediaAttributes: [StatusData.MediaAttribute] = []
 
-    func queueSharedPost(in context: ModelContext) async -> Bool {
+    func queueSharedPost() async -> Bool {
       do {
-        let directory = SharedStore.mediaDirectory
+        let directory = SharedStore.directory
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let compressor = Compressor()
         var files: [String] = []
@@ -775,8 +774,7 @@ extension StatusEditor {
             files.append(name)
           }
         }
-        context.insert(SharedPost(content: statusText.string, mediaFiles: files))
-        try context.save()
+        try SharedStore.enqueue(SharedPost(content: statusText.string, mediaFiles: files))
         return true
       } catch {
         postingError = error.localizedDescription

@@ -10,13 +10,11 @@ extension StatusEditor {
   @MainActor
   struct ToolbarItems: ToolbarContent {
     @State private var isDismissAlertPresented: Bool = false
-    @State private var isDraftsSheetDisplayed: Bool = false
     
     let mainSEVM: ViewModel
     let focusedSEVM: ViewModel
     let followUpSEVMs: [ViewModel]
 
-    @Environment(\.modelContext) private var context
     @Environment(UserPreferences.self) private var preferences
     @Environment(Theme.self) private var theme
     
@@ -27,31 +25,11 @@ extension StatusEditor {
     #endif
 
     var body: some ToolbarContent {
-      if !mainSEVM.mode.isInShareExtension {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button {
-            isDraftsSheetDisplayed = true
-          } label: {
-            Image(systemName: "pencil.and.list.clipboard")
-          }
-          .accessibilityLabel("accessibility.editor.button.drafts")
-          .popover(isPresented: $isDraftsSheetDisplayed) {
-            if UIDevice.current.userInterfaceIdiom == .phone {
-              draftsListView
-                .presentationDetents([.medium])
-            } else {
-              draftsListView
-                .frame(width: 400, height: 500)
-            }
-          }
-        }
-      }
-        
       ToolbarItem(placement: .navigationBarTrailing) {
         Button {
           Task {
             if mainSEVM.mode.isInShareExtension {
-              if await mainSEVM.queueSharedPost(in: context) {
+              if await mainSEVM.queueSharedPost() {
                 close()
                 NotificationCenter.default.post(name: .shareSheetClose, object: nil)
               }
@@ -86,12 +64,6 @@ extension StatusEditor {
           isPresented: $isDismissAlertPresented,
           actions: {
             Button("status.draft.delete", role: .destructive) {
-              close()
-              NotificationCenter.default.post(name: .shareSheetClose,
-                                              object: nil)
-            }
-            Button("status.draft.save") {
-              context.insert(Draft(content: mainSEVM.statusText.string))
               close()
               NotificationCenter.default.post(name: .shareSheetClose,
                                               object: nil)
@@ -138,15 +110,5 @@ extension StatusEditor {
     #else
       private func close() { dismiss() }
     #endif
-
-    private var draftsListView: some View {
-      DraftsListView(selectedDraft: .init(get: {
-        nil
-      }, set: { draft in
-        if let draft {
-          focusedSEVM.insertStatusText(text: draft.content)
-        }
-      }))
-    }
   }
 }

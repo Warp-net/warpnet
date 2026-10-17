@@ -5114,7 +5114,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete Draft"
+            "value" : "Discard Tweet"
           }
         }
       }
@@ -6781,6 +6781,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Warpnet publishes this tweet the next time it reaches your node."
+          }
+        }
+      }
+    },
+    "warpnet.share.not-published" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tweet not published"
           }
         }
       }

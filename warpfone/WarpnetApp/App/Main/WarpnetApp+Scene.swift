@@ -29,7 +29,6 @@ extension WarpnetApp {
             .presentationCornerRadius(16)
             .withEnvironments()
         }
-        .withModelContainer()
     }
     #if targetEnvironment(macCatalyst)
     .defaultSize(width: userPreferences.showiPadSecondaryColumn ? 1100 : 800, height: 1400)
@@ -70,7 +69,6 @@ extension WarpnetApp {
         }
       }
       .withEnvironments()
-      .withModelContainer()
       .applyTheme(theme)
       .frame(minWidth: 300, minHeight: 400)
     }
@@ -88,7 +86,6 @@ extension WarpnetApp {
         }
       }
       .withEnvironments()
-      .withModelContainer()
       .applyTheme(theme)
       .frame(minWidth: 300, minHeight: 400)
     }

@@ -2,7 +2,7 @@ import Env
 import Foundation
 import Models
 import Network
-import SwiftData
+import UserNotifications
 import WarpnetTransport
 
 @MainActor
@@ -13,13 +13,11 @@ enum SharedPostPublisher {
     guard client.isAuth, !isPublishing else { return }
     isPublishing = true
     defer { isPublishing = false }
-    let context = SharedStore.container.mainContext
-    let posts = (try? context.fetch(FetchDescriptor<SharedPost>(sortBy: [SortDescriptor(\.creationDate)]))) ?? []
-    for post in posts {
+    for post in SharedStore.pending() {
       do {
         var mediaIds: [String] = []
         for file in post.mediaFiles {
-          let data = try Data(contentsOf: SharedStore.mediaDirectory.appending(path: file))
+          let data = try Data(contentsOf: SharedStore.directory.appending(path: file))
           let attachment: MediaAttachment = try await client.mediaUpload(endpoint: Media.medias,
                                                                          version: .v2,
                                                                          method: "POST",
@@ -32,21 +30,22 @@ enum SharedPostPublisher {
                                                                                                     visibility: .pub,
                                                                                                     mediaIds: mediaIds)))
         StreamWatcher.shared.emmitPostEvent(for: status)
-        remove(post, from: context)
+        SharedStore.remove(post)
       } catch {
         guard isPermanent(error) else { return }
-        context.insert(Draft(content: post.content))
-        remove(post, from: context)
+        SharedStore.remove(post)
+        notifyNotPublished(post)
       }
     }
   }
 
-  private static func remove(_ post: SharedPost, from context: ModelContext) {
-    for file in post.mediaFiles {
-      try? FileManager.default.removeItem(at: SharedStore.mediaDirectory.appending(path: file))
-    }
-    context.delete(post)
-    try? context.save()
+  private static func notifyNotPublished(_ post: SharedPost) {
+    let content = UNMutableNotificationContent()
+    content.title = String(localized: "warpnet.share.not-published")
+    content.body = post.content
+    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: post.id.uuidString,
+                                                                 content: content,
+                                                                 trigger: nil))
   }
 
   private static func isPermanent(_ error: Error) -> Bool {

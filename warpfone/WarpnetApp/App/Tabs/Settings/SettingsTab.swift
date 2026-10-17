@@ -8,7 +8,6 @@ import Foundation
 import Models
 import Network
 import Nuke
-import SwiftData
 import SwiftUI
 import Timeline
 

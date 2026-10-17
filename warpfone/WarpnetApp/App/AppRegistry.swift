@@ -99,10 +99,6 @@ extension View {
       .environment(AppAccountsManager.shared.currentClient)
       .environment(QuickLook.shared)
   }
-
-  func withModelContainer() -> some View {
-    modelContainer(SharedStore.container)
-  }
 }
 
 struct ActivityView: UIViewControllerRepresentable {

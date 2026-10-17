@@ -298,3 +298,13 @@ carry that line, so they are named here instead.
   WarpnetApp.xcodeproj/project.pbxproj
   WarpnetApp.xcodeproj/xcshareddata/xcschemes/*.xcscheme
   WarpnetShareExtension/Base.lproj/MainInterface.storyboard
+
+2026-10-17, drafts and the share queue
+- Drafts are gone: the editor lost its drafts button and the Save Draft choice
+  when it closes, and Draft.swift and DraftsListView.swift were deleted.
+- SwiftData is gone. The share extension writes each shared tweet as a JSON
+  file next to its media in the app group, and the app publishes and deletes
+  them. A tweet that cannot be published is dropped with a local notification
+  instead of becoming a draft.
+- Files without the notice line:
+  WarpnetApp/Resources/Localization/Localizable.xcstrings
