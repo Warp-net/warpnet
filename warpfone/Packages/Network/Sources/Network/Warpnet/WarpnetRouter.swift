@@ -47,6 +47,8 @@ struct WarpnetRouter: Sendable {
       return try await markers(endpoint)
     case let endpoint as Instances:
       return try await instances(endpoint)
+    case let endpoint as Chats:
+      return try await chats(endpoint)
     default:
       throw WarpnetRoutingError.unsupported(endpoint.path())
     }
@@ -533,6 +535,60 @@ struct WarpnetRouter: Sendable {
     case "follow": "follow"
     case "mention", "reply": "mention"
     default: nil
+    }
+  }
+
+  // MARK: - Chats
+
+  private func chats(_ endpoint: Chats) async throws -> Response {
+    let pairing = try await repository.viewer()
+    switch endpoint {
+    case let .chats(cursor):
+      if let cursor, Self.isEnd(cursor) {
+        return try response([MastodonConversation]())
+      }
+      let page: GetChatsResponse = try await repository.call(ProtocolIds.PRIVATE_GET_CHATS,
+                                                             GetChatsEvent(userId: pairing.userId,
+                                                                           cursor: cursor ?? "",
+                                                                           limit: WarpnetRepository.pageSize))
+      let others = page.chats.map { $0.ownerId == pairing.userId ? $0.otherUserId : $0.ownerId }
+      let users = await repository.users(others)
+      let conversations = zip(page.chats, others).map { chat, other in
+        WarpnetMapper.conversation(chat, viewerId: pairing.userId, other: users[other])
+      }
+      return try response(conversations, next: nextToken(page.cursor, count: page.chats.count))
+
+    case let .messages(chatId):
+      let page: GetMessagesResponse = try await repository.call(ProtocolIds.PRIVATE_GET_MESSAGES,
+                                                                GetMessagesEvent(ownerId: pairing.userId,
+                                                                                 chatId: chatId,
+                                                                                 limit: WarpnetRepository.pageSize))
+      let users = await repository.users(Array(Set(page.messages.map(\.senderId))))
+      let messages = page.messages.sorted { $0.id < $1.id }
+      return try response(messages.map { WarpnetMapper.message($0, sender: users[$0.senderId]) })
+
+    case let .open(accountId):
+      let chat: WarpnetChat = try await repository.call(ProtocolIds.PUBLIC_POST_CHAT,
+                                                        NewChatEvent(ownerId: pairing.userId, otherUserId: accountId))
+      let other = try? await repository.user(accountId)
+      return try response(WarpnetMapper.conversation(chat, viewerId: pairing.userId, other: other))
+
+    case let .send(chatId, receiverId, text):
+      let message: WarpnetMessage = try await repository.call(ProtocolIds.PUBLIC_POST_MESSAGE,
+                                                              NewMessageEvent(chatId: chatId,
+                                                                              senderId: pairing.userId,
+                                                                              receiverId: receiverId,
+                                                                              text: text))
+      let sender = try? await repository.user(pairing.userId)
+      return try response(WarpnetMapper.message(message, sender: sender))
+
+    case let .delete(chatId):
+      try await repository.send(ProtocolIds.PRIVATE_DELETE_CHAT, DeleteChatEvent(userId: pairing.userId, chatId: chatId))
+      return try response(EmptyEvent())
+
+    case let .deleteMessage(chatId, messageId):
+      try await repository.send(ProtocolIds.PRIVATE_DELETE_MESSAGE, DeleteMessageEvent(chatId: chatId, id: messageId))
+      return try response(EmptyEvent())
     }
   }
 

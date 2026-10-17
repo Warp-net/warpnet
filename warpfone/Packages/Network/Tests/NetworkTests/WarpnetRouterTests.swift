@@ -317,6 +317,50 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual((reports[1]["reason"] as? String)?.unicodeScalars.count, WarpnetLimits.maxReportReasonRunes)
   }
 
+  func testChatsBecomeConversationsWithTheOtherParty() async throws {
+    let viewer = ScriptedNode.viewerId
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PRIVATE_GET_CHATS:
+        return ScriptedNode.json(["chats": [
+          ["id": "chat1", "owner_id": viewer, "other_user_id": "01BOB", "last_message": "see you", "updated_at": "2026-10-17T08:00:00Z"],
+          ["id": "chat2", "owner_id": "01CAROL", "other_user_id": viewer, "last_message": "", "created_at": "2026-10-16T08:00:00Z"],
+        ], "cursor": "end"])
+      case ProtocolIds.PRIVATE_GET_MESSAGES:
+        return ScriptedNode.json(["chat_id": "chat1", "cursor": "end", "messages": [
+          ["id": "02", "chat_id": "chat1", "sender_id": viewer, "receiver_id": "01BOB", "text": "see you", "created_at": "2026-10-17T08:00:00Z"],
+          ["id": "01", "chat_id": "chat1", "sender_id": "01BOB", "receiver_id": viewer, "text": "hi", "created_at": "2026-10-17T07:59:00Z"],
+        ]])
+      case ProtocolIds.PUBLIC_POST_MESSAGE:
+        var message = body
+        message["id"] = "03"
+        message["created_at"] = "2026-10-17T08:01:00Z"
+        return ScriptedNode.json(message)
+      default:
+        return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let conversations = try await decoder.decode([Conversation].self,
+                                                 from: router.route(Chats.chats(cursor: nil), method: .get).body)
+    XCTAssertEqual(conversations.map(\.id), ["chat1", "chat2"])
+    XCTAssertEqual(conversations.map { $0.accounts.first?.id }, ["01BOB", "01CAROL"])
+    XCTAssertEqual(conversations[0].lastStatus?.content.asRawText, "see you")
+    XCTAssertNil(conversations[1].lastStatus)
+
+    let messages = try await decoder.decode([Status].self,
+                                            from: router.route(Chats.messages(chatId: "chat1"), method: .get).body)
+    XCTAssertEqual(messages.map(\.id), ["01", "02"])
+    XCTAssertEqual(messages.map(\.account.id), ["01BOB", viewer])
+
+    let sent = try await decoder.decode(Status.self,
+                                        from: router.route(Chats.send(chatId: "chat1", receiverId: "01BOB", text: "ok"), method: .post).body)
+    XCTAssertEqual(sent.id, "03")
+    let event = try XCTUnwrap(binding.calls(to: ProtocolIds.PUBLIC_POST_MESSAGE).first)
+    XCTAssertEqual(event["sender_id"] as? String, viewer)
+    XCTAssertEqual(event["receiver_id"] as? String, "01BOB")
+    XCTAssertEqual(event["text"] as? String, "ok")
+  }
+
   func testFediverseHandles() {
     XCTAssertEqual(WarpnetRouter.fediverseHandle("@alice@Mastodon.Social"), "alice@mastodon.social")
     XCTAssertEqual(WarpnetRouter.fediverseHandle("https://mastodon.social/@bob"), "bob@mastodon.social")

@@ -113,6 +113,44 @@ enum WarpnetMapper {
                    poll: nil)
   }
 
+  static func conversation(_ chat: WarpnetChat, viewerId: String, other: WarpnetUser?) -> MastodonConversation {
+    let otherId = chat.ownerId == viewerId ? chat.otherUserId : chat.ownerId
+    let party = other.map { account($0) } ?? account(userId: otherId, username: "")
+    let lastStatus = chat.lastMessage.isEmpty ? nil : plainStatus(id: "\(chat.id)#last",
+                                                                  text: chat.lastMessage,
+                                                                  account: party,
+                                                                  createdAt: chat.updatedAt.isEmpty ? chat.createdAt : chat.updatedAt)
+    return MastodonConversation(id: chat.id, unread: false, lastStatus: lastStatus, accounts: [party])
+  }
+
+  static func message(_ message: WarpnetMessage, sender: WarpnetUser?) -> MastodonStatus {
+    plainStatus(id: message.id,
+                text: message.text,
+                account: sender.map { account($0) } ?? account(userId: message.senderId, username: ""),
+                createdAt: message.createdAt)
+  }
+
+  private static func plainStatus(id: String, text: String, account: MastodonAccount, createdAt: String) -> MastodonStatus {
+    MastodonStatus(id: id,
+                   content: WarpnetFormat.html(fromPlainText: text),
+                   account: account,
+                   createdAt: WarpnetFormat.serverDate(fromRFC3339: createdAt),
+                   editedAt: nil,
+                   reblog: nil,
+                   mediaAttachments: [],
+                   repliesCount: 0,
+                   reblogsCount: 0,
+                   favouritesCount: 0,
+                   favourited: false,
+                   reblogged: false,
+                   pinned: false,
+                   bookmarked: false,
+                   url: "",
+                   inReplyToId: nil,
+                   inReplyToAccountId: nil,
+                   poll: nil)
+  }
+
   static func relationship(userId: String,
                            following: Bool,
                            followedBy: Bool,

@@ -3,6 +3,7 @@
 import DesignSystem
 import Env
 import Foundation
+import Models
 import Network
 import SwiftUI
 
@@ -249,11 +250,12 @@ struct StatusRowContextMenu: View {
       Label("status.action.mention", systemImage: "at")
     }
     Button {
-      #if targetEnvironment(macCatalyst) || os(visionOS)
-        openWindow(value: WindowDestinationEditor.mentionStatusEditor(account: viewModel.status.reblog?.account ?? viewModel.status.account, visibility: .direct))
-      #else
-        viewModel.routerPath.presentedSheet = .mentionStatusEditor(account: viewModel.status.reblog?.account ?? viewModel.status.account, visibility: .direct)
-      #endif
+      Task {
+        let account = viewModel.status.reblog?.account ?? viewModel.status.account
+        if let conversation: Conversation = try? await client.post(endpoint: Chats.open(accountId: account.id)) {
+          viewModel.routerPath.navigate(to: .conversationDetail(conversation: conversation))
+        }
+      }
     } label: {
       Label("status.action.message", systemImage: "tray.full")
     }

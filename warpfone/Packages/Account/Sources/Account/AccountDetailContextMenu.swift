@@ -1,6 +1,7 @@
 // Modified by Warpnet. See NOTICE.
 
 import Env
+import Models
 import Network
 import SwiftUI
 
@@ -25,7 +26,11 @@ public struct AccountDetailContextMenu: View {
             Label("account.action.mention", systemImage: "at")
           }
           Button {
-            routerPath.presentedSheet = .mentionStatusEditor(account: account, visibility: .direct)
+            Task {
+              if let conversation: Conversation = try? await client.post(endpoint: Chats.open(accountId: account.id)) {
+                routerPath.navigate(to: .conversationDetail(conversation: conversation))
+              }
+            }
           } label: {
             Label("account.action.message", systemImage: "tray.full")
           }

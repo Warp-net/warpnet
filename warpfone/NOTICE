@@ -235,3 +235,9 @@ carry that line, so they are named here instead.
   the Android client posts one, as a retweet carrying the quoted tweet's id,
   which StatusData now passes as quotedStatusId; the composer no longer pastes
   a link to the quoted status into the text.
+- Messages are the node's 1:1 chats: a new Chats endpoint lists them, loads
+  and sends messages and deletes them, and the conversation screens use it
+  instead of direct-visibility statuses. An open chat refreshes every ten
+  seconds. The Message actions on profiles and statuses open the chat with
+  that account; chat rows and messages offer copy, delete and reporting the
+  account instead of favourite, bookmark and mention.

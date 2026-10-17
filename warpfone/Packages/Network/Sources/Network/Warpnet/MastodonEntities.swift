@@ -219,6 +219,13 @@ struct MastodonContext: Encodable, Sendable {
   let descendants: [MastodonStatus]
 }
 
+struct MastodonConversation: Encodable, Sendable {
+  let id: String
+  let unread: Bool
+  let lastStatus: MastodonStatus?
+  let accounts: [MastodonAccount]
+}
+
 struct MastodonSearchResults: Encodable, Sendable {
   let accounts: [MastodonAccount]
   let statuses: [MastodonStatus]
