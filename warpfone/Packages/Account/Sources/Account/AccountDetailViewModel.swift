@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import Models
 import Network
@@ -58,9 +60,7 @@ import SwiftUI
   var bookmarks: [Status] = []
   private var favoritesNextPage: LinkHandler?
   private var bookmarksNextPage: LinkHandler?
-  var featuredTags: [FeaturedTag] = []
   var fields: [Account.Field] = []
-  var familiarFollowers: [Account] = []
   var selectedTab = Tab.statuses {
     didSet {
       switch selectedTab {
@@ -102,7 +102,6 @@ import SwiftUI
 
   struct AccountData {
     let account: Account
-    let featuredTags: [FeaturedTag]
     let relationships: [Relationship]
   }
 
@@ -114,8 +113,6 @@ import SwiftUI
 
       account = data.account
       fields = data.account.fields
-      featuredTags = data.featuredTags
-      featuredTags.sort { $0.statusesCountInt > $1.statusesCountInt }
       relationship = data.relationships.first
     } catch {
       if let account {
@@ -128,27 +125,11 @@ import SwiftUI
 
   private func fetchAccountData(accountId: String, client: Client) async throws -> AccountData {
     async let account: Account = client.get(endpoint: Accounts.accounts(id: accountId))
-    async let featuredTags: [FeaturedTag] = client.get(endpoint: Accounts.featuredTags(id: accountId))
     if client.isAuth, !isCurrentUser {
       async let relationships: [Relationship] = client.get(endpoint: Accounts.relationships(ids: [accountId]))
-      do {
-        return try await .init(account: account,
-                               featuredTags: featuredTags,
-                               relationships: relationships)
-      } catch {
-        return try await .init(account: account,
-                               featuredTags: [],
-                               relationships: relationships)
-      }
+      return try await .init(account: account, relationships: relationships)
     }
-    return try await .init(account: account,
-                           featuredTags: featuredTags,
-                           relationships: [])
-  }
-
-  func fetchFamilliarFollowers() async {
-    let familiarFollowers: [FamiliarAccounts]? = try? await client?.get(endpoint: Accounts.familiarFollowers(withAccount: accountId))
-    self.familiarFollowers = familiarFollowers?.first?.accounts ?? []
+    return try await .init(account: account, relationships: [])
   }
 
   func fetchNewestStatuses(pullToRefresh: Bool) async {

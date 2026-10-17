@@ -160,3 +160,5 @@ carry that line, so they are named here instead.
   IceCubesApp.xcodeproj/project.pbxproj
 - The composer counts the tweet's UTF-8 bytes against the node's 2048-byte
   limit, where Mastodon counted UTF-16 units and a fixed length per URL.
+- Profiles no longer show featured tags and familiar followers, which the node
+  does not keep.
