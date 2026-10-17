@@ -12,6 +12,9 @@ import UserNotifications
 enum BackgroundRefresh {
   static let identifier = "site.warpnet.warpfone.refresh"
   private static let interval: TimeInterval = 15 * 60
+  // iOS gives a refresh about 30 seconds; queued posts wait for the next one
+  // when the node took most of them.
+  private static let publishBudget: TimeInterval = 15
 
   static func register() {
     BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { task in
@@ -34,18 +37,19 @@ enum BackgroundRefresh {
 
   private static func run(_ pending: PendingTask) {
     schedule()
+    let started = Date()
     let work = Task { @MainActor in
-      await refresh()
+      pending.complete(success: await refresh(startedAt: started))
     }
+    // The node's calls can't be cancelled, so the task is completed here
+    // rather than when they return.
     pending.value.expirationHandler = {
       work.cancel()
-    }
-    Task { @MainActor in
-      pending.value.setTaskCompleted(success: await work.value)
+      pending.complete(success: false)
     }
   }
 
-  private static func refresh() async -> Bool {
+  private static func refresh(startedAt: Date) async -> Bool {
     let pairing = PairingModel.shared
     let accounts = AppAccountsManager.shared
     if accounts.currentClient.isAuth {
@@ -54,15 +58,18 @@ enum BackgroundRefresh {
       await pairing.restoreIfNeeded()
     }
     let client = accounts.currentClient
-    guard client.isAuth else { return false }
+    guard client.isAuth, !Task.isCancelled else { return false }
     let notifications = try? await client.pushes()
-    await SharedPostPublisher.publish(with: client)
+    if let notifications, !Task.isCancelled {
+      await deliver(notifications)
+    }
+    if !Task.isCancelled, Date().timeIntervalSince(startedAt) < publishBudget {
+      await SharedPostPublisher.publish(with: client)
+    }
     if UIApplication.shared.applicationState == .background {
       await pairing.pause()
     }
-    guard let notifications else { return false }
-    await deliver(notifications)
-    return true
+    return notifications != nil
   }
 
   private static func deliver(_ notifications: [Models.Notification]) async {
@@ -98,6 +105,20 @@ enum BackgroundRefresh {
   }
 }
 
-private struct PendingTask: @unchecked Sendable {
+private final class PendingTask: @unchecked Sendable {
   let value: BGTask
+  private let lock = NSLock()
+  private var isCompleted = false
+
+  init(value: BGTask) {
+    self.value = value
+  }
+
+  func complete(success: Bool) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !isCompleted else { return }
+    isCompleted = true
+    value.setTaskCompleted(success: success)
+  }
 }
