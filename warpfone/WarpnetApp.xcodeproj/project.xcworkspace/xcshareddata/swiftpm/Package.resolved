@@ -1,15 +1,6 @@
 {
   "pins" : [
     {
-      "identity" : "bodega",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mergesort/Bodega",
-      "state" : {
-        "revision" : "f0554077c178088ba11557bbdbb71775cc6a1b84",
-        "version" : "2.1.0"
-      }
-    },
-    {
       "identity" : "buttonkit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Dean151/ButtonKit",
@@ -70,15 +61,6 @@
       "state" : {
         "revision" : "7cca2d60925876b5953a2cf7341cd80fbeac983c",
         "version" : "4.1.1"
-      }
-    },
-    {
-      "identity" : "sqlite.swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/stephencelis/SQLite.swift.git",
-      "state" : {
-        "revision" : "7a2e3cd27de56f6d396e84f63beefd0267b55ccb",
-        "version" : "0.14.1"
       }
     },
     {

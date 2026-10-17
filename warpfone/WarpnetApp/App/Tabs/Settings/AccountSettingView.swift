@@ -7,7 +7,6 @@ import Env
 import Models
 import Network
 import SwiftUI
-import Timeline
 
 struct AccountSettingsView: View {
   @Environment(\.dismiss) private var dismiss
@@ -22,8 +21,6 @@ struct AccountSettingsView: View {
 
   @State private var isEditingAccount: Bool = false
   @State private var isEditingFilters: Bool = false
-  @State private var cachedPostsCount: Int = 0
-  @State private var timelineCache = TimelineCache()
 
   let account: Account
   let appAccount: AppAccount
@@ -54,20 +51,8 @@ struct AccountSettingsView: View {
       .listRowBackground(theme.primaryBackgroundColor)
 
       Section {
-        Label("settings.account.cached-posts-\(String(cachedPostsCount))", systemImage: "internaldrive")
-        Button("settings.account.action.delete-cache", role: .destructive) {
-          Task {
-            await timelineCache.clearCache(for: appAccountsManager.currentClient.id)
-            cachedPostsCount = await timelineCache.cachedPostsCount(for: appAccountsManager.currentClient.id)
-          }
-        }
-      }
-      .listRowBackground(theme.primaryBackgroundColor)
-
-      Section {
         Button(role: .destructive) {
           Task {
-            await timelineCache.clearCache(for: client.id)
             await pairing.unpair()
             dismiss()
           }
@@ -92,9 +77,6 @@ struct AccountSettingsView: View {
             .font(.headline)
         }
       }
-    }
-    .task {
-      cachedPostsCount = await timelineCache.cachedPostsCount(for: appAccountsManager.currentClient.id)
     }
     .navigationTitle(account.safeDisplayName)
     #if !os(visionOS)

@@ -42,8 +42,6 @@ struct AboutView: View {
 
         • [LRUCache](https://github.com/nicklockwood/LRUCache)
 
-        • [Bodega](https://github.com/mergesort/Bodega)
-
         • [Nuke](https://github.com/kean/Nuke)
 
         • [SwiftSoup](https://github.com/scinfu/SwiftSoup.git)

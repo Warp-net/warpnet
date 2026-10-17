@@ -9,7 +9,6 @@ import Models
 import Network
 import Nuke
 import SwiftUI
-import Timeline
 
 @MainActor
 struct SettingsTabs: View {
@@ -26,7 +25,6 @@ struct SettingsTabs: View {
   @State private var routerPath = RouterPath()
   @State private var isUnpairConfirmationPresented = false
   @State private var cachedRemoved = false
-  @State private var timelineCache = TimelineCache()
 
   @Binding var popToRootTab: Tab
 
@@ -98,7 +96,6 @@ struct SettingsTabs: View {
       {
         Button("warpnet.pairing.unpair", role: .destructive) {
           Task {
-            await timelineCache.clearCache(for: client.id)
             await pairing.unpair()
           }
         }

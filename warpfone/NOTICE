@@ -308,3 +308,13 @@ carry that line, so they are named here instead.
   instead of becoming a draft.
 - Files without the notice line:
   WarpnetApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-17, timeline cache
+- The timelines no longer keep their tweets in SQLite between launches: the
+  Bodega store in TimelineCache.swift, the cached-posts row and its Clear Cache
+  button in the account settings, and the Bodega and SQLite.swift packages
+  were removed. TimelineCache keeps only the last seen tweet ids in user
+  defaults, which mark the home timeline position.
+- Files without the notice line:
+  Packages/Timeline/Package.swift
+  WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
