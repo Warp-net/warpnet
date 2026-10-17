@@ -77,6 +77,9 @@ extension View {
       case let .report(status):
         ReportView(status: status)
           .withEnvironments()
+      case let .reportAccount(account):
+        ReportView(account: account)
+          .withEnvironments()
       case let .shareImage(image, status):
         ActivityView(image: image, status: status)
           .withEnvironments()

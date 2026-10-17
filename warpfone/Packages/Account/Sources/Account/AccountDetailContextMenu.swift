@@ -78,6 +78,12 @@ public struct AccountDetailContextMenu: View {
             }
           }
 
+          Button(role: .destructive) {
+            routerPath.presentedSheet = .reportAccount(account: account)
+          } label: {
+            Label("warpnet.report.account-action", systemImage: "exclamationmark.bubble")
+          }
+
           if let relationship = viewModel.relationship,
              relationship.following
           {

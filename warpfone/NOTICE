@@ -190,3 +190,8 @@ carry that line, so they are named here instead.
   Secret.plist that held its key.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
+- Reports go to the network's moderators. The report screen asks for one or
+  more of nine categories, the same ones as the desktop client, and profiles
+  can now be reported as well as statuses.
+- Files without the notice line:
+  IceCubesApp/Resources/Localization/Localizable.xcstrings

@@ -250,6 +250,28 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEET).first?["user_id"] as? String, "01SRCAUTHOR")
   }
 
+  func testReportsNameTheModerationClasses() async throws {
+    XCTAssertEqual(WarpnetReportCategory.reason(for: [.hate, .spam, .harassment], details: "  "),
+                   "Non-Violent Crimes, Hate")
+    XCTAssertEqual(WarpnetReportCategory.reason(for: [.privacy], details: " doxxing "), "Privacy — doxxing")
+
+    let (router, binding) = await makeRouter { Self.standardNode($0, $1, timeline: []) }
+    _ = try await router.route(Statuses.report(accountId: "01A", statusId: "01T|01A|01ROOT", comment: "Hate"), method: .post)
+    _ = try await router.route(Statuses.report(accountId: "01B", statusId: nil,
+                                               comment: "Privacy — " + String(repeating: "é", count: 300)),
+                               method: .post)
+
+    let reports = binding.calls(to: ProtocolIds.PUBLIC_POST_REPORT)
+    XCTAssertEqual(reports.count, 2)
+    XCTAssertEqual(reports[0]["type"] as? Int, 1)
+    XCTAssertEqual(reports[0]["object_id"] as? String, "01T")
+    XCTAssertEqual(reports[0]["target_user_id"] as? String, "01A")
+    XCTAssertEqual(reports[0]["target_node_id"] as? String, "12D3KooW01A")
+    XCTAssertEqual(reports[1]["type"] as? Int, 0)
+    XCTAssertEqual(reports[1]["object_id"] as? String, "")
+    XCTAssertEqual((reports[1]["reason"] as? String)?.unicodeScalars.count, WarpnetLimits.maxReportReasonRunes)
+  }
+
   func testFediverseHandles() {
     XCTAssertEqual(WarpnetRouter.fediverseHandle("@alice@Mastodon.Social"), "alice@mastodon.social")
     XCTAssertEqual(WarpnetRouter.fediverseHandle("https://mastodon.social/@bob"), "bob@mastodon.social")

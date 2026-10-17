@@ -44,6 +44,7 @@ public enum SheetDestination: Identifiable {
   case settings
   case about
   case report(status: Status)
+  case reportAccount(account: Account)
   case shareImage(image: UIImage, status: Status)
   case timelineContentFilter
 
@@ -54,7 +55,7 @@ public enum SheetDestination: Identifiable {
       "statusEditor"
     case .statusEditHistory:
       "statusEditHistory"
-    case .report:
+    case .report, .reportAccount:
       "report"
     case .shareImage:
       "shareImage"

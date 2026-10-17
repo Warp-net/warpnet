@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 import Models
 
@@ -18,7 +20,7 @@ public enum Statuses: Endpoint {
   case unbookmark(id: String)
   case history(id: String)
   case translate(id: String, lang: String?)
-  case report(accountId: String, statusId: String, comment: String)
+  case report(accountId: String, statusId: String?, comment: String)
 
   public func path() -> String {
     switch self {
@@ -71,9 +73,12 @@ public enum Statuses: Endpoint {
       }
       return nil
     case let .report(accountId, statusId, comment):
-      return [.init(name: "account_id", value: accountId),
-              .init(name: "status_ids[]", value: statusId),
-              .init(name: "comment", value: comment)]
+      var items: [URLQueryItem] = [.init(name: "account_id", value: accountId)]
+      if let statusId {
+        items.append(.init(name: "status_ids[]", value: statusId))
+      }
+      items.append(.init(name: "comment", value: comment))
+      return items
     default:
       return nil
     }

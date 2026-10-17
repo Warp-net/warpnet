@@ -16,6 +16,8 @@ struct WarpnetRouter: Sendable {
   static let maxPagesPerRequest = 5
   static let maxResumePages = 10
   static let defaultReaction = "❤️"
+  static let userReport = 0
+  static let tweetReport = 1
 
   let repository: WarpnetRepository
 
@@ -201,15 +203,19 @@ struct WarpnetRouter: Sendable {
       return try await response(repository.status(at: address))
 
     case let .report(accountId, statusId, comment):
-      let address = try await repository.address(of: statusId).original
+      var tweetId: String?
+      if let statusId {
+        tweetId = try await repository.address(of: statusId).original.tweetId
+      }
       let target = try await repository.user(accountId)
+      let reason = String(String.UnicodeScalarView(comment.unicodeScalars.prefix(WarpnetLimits.maxReportReasonRunes)))
       try await repository.send(ProtocolIds.PUBLIC_POST_REPORT,
-                                WarpnetReportEvent(type: 1,
-                                                   objectId: address.tweetId,
+                                WarpnetReportEvent(type: tweetId == nil ? Self.userReport : Self.tweetReport,
+                                                   objectId: tweetId ?? "",
                                                    targetUserId: accountId,
                                                    targetNodeId: target.nodeId,
-                                                   reason: String(comment.prefix(256))))
-      return try response(MastodonIdentifier(id: address.tweetId))
+                                                   reason: reason))
+      return try response(MastodonIdentifier(id: tweetId ?? accountId))
 
     case .history, .translate:
       throw WarpnetRoutingError.unsupported(endpoint.path())

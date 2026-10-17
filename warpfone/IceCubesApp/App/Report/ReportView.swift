@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -11,17 +13,61 @@ public struct ReportView: View {
   @Environment(Theme.self) private var theme
   @Environment(Client.self) private var client
 
-  let status: Status
+  let status: Status?
+  let account: Account
+  @State private var categories: Set<WarpnetReportCategory> = []
   @State private var commentText: String = ""
   @State private var isSendingReport: Bool = false
+  @State private var isErrorDisplayed: Bool = false
 
   struct ReportSent: Decodable {
     let id: String
   }
 
+  public init(status: Status) {
+    self.status = status
+    account = status.account
+  }
+
+  public init(account: Account) {
+    status = nil
+    self.account = account
+  }
+
+  private var title: LocalizedStringKey {
+    status == nil ? "warpnet.report.account-title" : "report.title"
+  }
+
   public var body: some View {
     NavigationStack {
       Form {
+        Section {
+          ForEach(WarpnetReportCategory.allCases, id: \.self) { category in
+            Button {
+              if categories.contains(category) {
+                categories.remove(category)
+              } else {
+                categories.insert(category)
+              }
+            } label: {
+              HStack {
+                Text(LocalizedStringKey(category.titleKey))
+                  .foregroundStyle(theme.labelColor)
+                Spacer()
+                if categories.contains(category) {
+                  Image(systemName: "checkmark")
+                    .foregroundStyle(theme.tintColor)
+                }
+              }
+            }
+          }
+        } header: {
+          Text("warpnet.report.categories")
+        } footer: {
+          Text("warpnet.report.footer")
+        }
+        .listRowBackground(theme.primaryBackgroundColor)
+
         Section {
           TextField("report.comment.placeholder",
                     text: $commentText,
@@ -29,17 +75,22 @@ public struct ReportView: View {
         }
         .listRowBackground(theme.primaryBackgroundColor)
 
-        StatusEmbeddedView(status: status, client: .init(server: ""), routerPath: RouterPath())
-          .allowsHitTesting(false)
-          .listRowBackground(theme.primaryBackgroundColor)
+        if let status {
+          StatusEmbeddedView(status: status, client: .init(server: ""), routerPath: RouterPath())
+            .allowsHitTesting(false)
+            .listRowBackground(theme.primaryBackgroundColor)
+        }
       }
-      .navigationTitle("report.title")
+      .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
       #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.secondaryBackgroundColor)
       .scrollDismissesKeyboard(.immediately)
       #endif
+      .alert("warpnet.report.failed", isPresented: $isErrorDisplayed) {
+        Button("OK") {}
+      }
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
           Button {
@@ -47,13 +98,16 @@ public struct ReportView: View {
             Task {
               do {
                 let _: ReportSent =
-                  try await client.post(endpoint: Statuses.report(accountId: status.account.id,
-                                                                  statusId: status.id,
-                                                                  comment: commentText))
+                  try await client.post(endpoint: Statuses.report(accountId: account.id,
+                                                                  statusId: status?.id,
+                                                                  comment: WarpnetReportCategory.reason(for: categories,
+                                                                                                        details: commentText)))
+                HapticManager.shared.fireHaptic(.notification(.success))
                 dismiss()
                 isSendingReport = false
               } catch {
                 isSendingReport = false
+                isErrorDisplayed = true
               }
             }
           } label: {
@@ -63,6 +117,7 @@ public struct ReportView: View {
               Text("report.action.send")
             }
           }
+          .disabled(categories.isEmpty || isSendingReport)
         }
 
         CancelToolbarItem()

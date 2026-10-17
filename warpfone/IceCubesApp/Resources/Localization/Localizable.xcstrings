@@ -3326,7 +3326,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Additional Info"
+            "value" : "Tell us more (optional)"
           }
         }
       }
@@ -6532,6 +6532,155 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This device will be removed from your node and will forget the pairing."
+          }
+        }
+      }
+    },
+    "warpnet.report.account-action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report"
+          }
+        }
+      }
+    },
+    "warpnet.report.account-title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report Account"
+          }
+        }
+      }
+    },
+    "warpnet.report.categories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's wrong? Select all that apply."
+          }
+        }
+      }
+    },
+    "warpnet.report.category.childSafety" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Child safety"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.harassment" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harassment or bullying"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.hate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hate speech"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.privacy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy violation"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.selfHarm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Self-harm or suicide"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.sexual" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sexual content"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.spam" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spam or scam"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.violence" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Violence or threats"
+          }
+        }
+      }
+    },
+    "warpnet.report.category.weapons" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dangerous or weapons"
+          }
+        }
+      }
+    },
+    "warpnet.report.failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The report could not be sent."
+          }
+        }
+      }
+    },
+    "warpnet.report.footer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reports go to moderators on the network. The reported user is not notified."
           }
         }
       }
