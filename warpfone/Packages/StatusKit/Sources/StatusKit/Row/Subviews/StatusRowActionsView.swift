@@ -220,64 +220,107 @@ struct StatusRowActionsView: View {
     }
   }
 
+  @ViewBuilder
   private func actionButton(action: Action) -> some View {
-    Button {
-      handleAction(action: action)
-    } label: {
-      HStack(spacing: 2) {
-        if action == .boost {
-          action
-            .image(dataController: statusDataController, privateBoost: privateBoost())
-            .imageScale(.medium)
-            .fontWeight(.black)
-            #if targetEnvironment(macCatalyst)
-            .font(.scaledBody)
-            #else
-            .font(.body)
-            .dynamicTypeSize(.large)
-            #endif
-        } else if action == .favorite, statusDataController.isFavorited, let reaction = statusDataController.myReaction {
-          Text(reaction)
-            #if targetEnvironment(macCatalyst)
-            .font(.scaledBody)
-            #else
-            .font(.body)
-            .dynamicTypeSize(.large)
-            #endif
-        } else {
-          action
-            .image(dataController: statusDataController, privateBoost: privateBoost())
-            #if targetEnvironment(macCatalyst)
-            .font(.scaledBody)
-            #else
-            .font(.body)
-            .dynamicTypeSize(.large)
-            #endif
+    if action == .boost {
+      styled(Menu {
+        Button {
+          handleAction(action: action)
+        } label: {
+          Label(statusDataController.isReblogged ? "status.action.unboost" : "status.action.boost", image: "Rocket")
         }
-        if !isNarrow,
-           let count = action.count(dataController: statusDataController,
-                                    isFocused: isFocused,
-                                    theme: theme), !viewModel.isRemote
-        {
-          Text(count, format: .number.notation(.compactName))
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .contentTransition(.numericText(value: Double(count)))
-            .foregroundColor(Color(UIColor.secondaryLabel))
-            #if targetEnvironment(macCatalyst)
-            .font(.scaledFootnote)
-            #else
-            .font(.footnote)
-            .dynamicTypeSize(.medium)
-            #endif
-            .monospacedDigit()
-            .opacity(count > 0 ? 1 : 0)
+        Button {
+          #if targetEnvironment(macCatalyst)
+            openWindow(value: WindowDestinationEditor.quoteStatusEditor(status: viewModel.status))
+          #else
+            viewModel.routerPath.presentedSheet = .quoteStatusEditor(status: viewModel.status)
+          #endif
+        } label: {
+          Label("status.action.quote", systemImage: "quote.bubble")
+        }
+      } label: {
+        actionLabel(action: action)
+      }
+      .menuStyle(.button), action: action)
+    } else {
+      styled(Button {
+        handleAction(action: action)
+      } label: {
+        actionLabel(action: action)
+      }, action: action)
+      .if(action == .favorite) { view in
+        view.contextMenu {
+          ForEach(WarpnetReactions.quick, id: \.self) { emoji in
+            Button(emoji) {
+              Task {
+                HapticManager.shared.fireHaptic(.notification(.success))
+                await statusDataController.react(emoji: emoji, remoteStatus: viewModel.localStatusId)
+              }
+            }
+          }
         }
       }
-      .padding(.vertical, 6)
-      .padding(.horizontal, 8)
-      .contentShape(Rectangle())
     }
+  }
+
+  private func actionLabel(action: Action) -> some View {
+    HStack(spacing: 2) {
+      if action == .boost {
+        action
+          .image(dataController: statusDataController, privateBoost: privateBoost())
+          .imageScale(.medium)
+          .fontWeight(.black)
+          #if targetEnvironment(macCatalyst)
+          .font(.scaledBody)
+          #else
+          .font(.body)
+          .dynamicTypeSize(.large)
+          #endif
+      } else if action == .favorite, statusDataController.isFavorited, let reaction = statusDataController.myReaction {
+        Text(reaction)
+          #if targetEnvironment(macCatalyst)
+          .font(.scaledBody)
+          #else
+          .font(.body)
+          .dynamicTypeSize(.large)
+          #endif
+      } else {
+        action
+          .image(dataController: statusDataController, privateBoost: privateBoost())
+          #if targetEnvironment(macCatalyst)
+          .font(.scaledBody)
+          #else
+          .font(.body)
+          .dynamicTypeSize(.large)
+          #endif
+      }
+      if !isNarrow,
+         let count = action.count(dataController: statusDataController,
+                                  isFocused: isFocused,
+                                  theme: theme), !viewModel.isRemote
+      {
+        Text(count, format: .number.notation(.compactName))
+          .lineLimit(1)
+          .minimumScaleFactor(0.6)
+          .contentTransition(.numericText(value: Double(count)))
+          .foregroundColor(Color(UIColor.secondaryLabel))
+          #if targetEnvironment(macCatalyst)
+          .font(.scaledFootnote)
+          #else
+          .font(.footnote)
+          .dynamicTypeSize(.medium)
+          #endif
+          .monospacedDigit()
+          .opacity(count > 0 ? 1 : 0)
+      }
+    }
+    .padding(.vertical, 6)
+    .padding(.horizontal, 8)
+    .contentShape(Rectangle())
+  }
+
+  private func styled(_ content: some View, action: Action) -> some View {
+    content
     #if os(visionOS)
     .buttonStyle(.borderless)
     .foregroundColor(Color(UIColor.secondaryLabel))
@@ -294,18 +337,6 @@ struct StatusRowActionsView: View {
               (viewModel.status.visibility == .direct || viewModel.status.visibility == .priv && viewModel.status.account.id != currentAccount.account?.id))
     .accessibilityElement(children: .combine)
     .accessibilityLabel(action.accessibilityLabel(dataController: statusDataController, privateBoost: privateBoost()))
-    .if(action == .favorite) { view in
-      view.contextMenu {
-        ForEach(WarpnetReactions.quick, id: \.self) { emoji in
-          Button(emoji) {
-            Task {
-              HapticManager.shared.fireHaptic(.notification(.success))
-              await statusDataController.react(emoji: emoji, remoteStatus: viewModel.localStatusId)
-            }
-          }
-        }
-      }
-    }
   }
 
   private func handleAction(action: Action) {

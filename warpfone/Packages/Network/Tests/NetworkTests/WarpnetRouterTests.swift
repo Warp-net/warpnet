@@ -127,6 +127,32 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(status.inReplyToId, "01PARENT|01PAUTHOR|01ROOT")
   }
 
+  func testQuoteGoesOutAsARetweetOfTheSource() async throws {
+    let (router, binding) = await makeRouter { route, body in
+      if route == ProtocolIds.PUBLIC_POST_RETWEET {
+        var tweet = body
+        tweet["id"] = "01QUOTE"
+        tweet["created_at"] = "2026-10-17T10:00:00Z"
+        return ScriptedNode.json(tweet)
+      }
+      return Self.standardNode(route, body, timeline: [])
+    }
+    let data = StatusData(status: " look at this ", visibility: .pub, quotedStatusId: "01SRC|01SRCAUTHOR||01RT")
+    let status = try await decoder.decode(Status.self, from: router.route(Statuses.postStatus(json: data), method: .post).body)
+
+    let sent = try XCTUnwrap(binding.calls(to: ProtocolIds.PUBLIC_POST_RETWEET).first)
+    XCTAssertEqual(sent["id"] as? String, "01SRC")
+    XCTAssertEqual(sent["quoted_tweet_id"] as? String, "01SRC")
+    XCTAssertEqual(sent["quoted_user_id"] as? String, "01SRCAUTHOR")
+    XCTAssertEqual(sent["retweeted_by"] as? String, ScriptedNode.viewerId)
+    XCTAssertEqual(sent["user_id"] as? String, ScriptedNode.viewerId)
+    XCTAssertEqual(sent["text"] as? String, "look at this")
+    XCTAssertTrue(binding.calls(to: ProtocolIds.PRIVATE_POST_TWEET).isEmpty)
+    XCTAssertEqual(status.id, "01QUOTE|\(ScriptedNode.viewerId)")
+    XCTAssertNil(status.reblog)
+    XCTAssertEqual(status.content.statusesURLs.map(\.absoluteString), ["warpnet://status/01SRC%7C01SRCAUTHOR"])
+  }
+
   func testFavoriteReactsWithTheDefaultHeart() async throws {
     let (router, binding) = await makeRouter { route, body in
       switch route {

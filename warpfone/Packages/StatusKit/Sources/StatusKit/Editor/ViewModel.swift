@@ -61,7 +61,6 @@ extension StatusEditor {
       didSet {
         let range = selectedRange
         processText()
-        checkEmbed()
         textView?.attributedText = statusText
         selectedRange = range
       }
@@ -140,8 +139,11 @@ extension StatusEditor {
     var hasExplicitlySelectedLanguage: Bool = false
     private var currentSuggestionRange: NSRange?
 
-    private var embeddedStatusURL: URL? {
-      URL(string: embeddedStatus?.reblog?.url ?? embeddedStatus?.url ?? "")
+    private var quotedStatusId: String? {
+      if case let .quote(status) = mode {
+        return status.id
+      }
+      return nil
     }
 
     private var mentionString: String?
@@ -206,7 +208,8 @@ extension StatusEditor {
                               mediaIds: mediaContainers.compactMap { $0.mediaAttachment?.id },
                               poll: pollData,
                               language: selectedLanguage,
-                              mediaAttributes: mediaAttributes)
+                              mediaAttributes: mediaAttributes,
+                              quotedStatusId: quotedStatusId)
         switch mode {
         case .new, .replyTo, .quote, .mention, .shareExtension:
           postStatus = try await client.post(endpoint: Statuses.postStatus(json: data))
@@ -332,10 +335,6 @@ extension StatusEditor {
         }
       case let .quote(status):
         embeddedStatus = status
-        if let url = embeddedStatusURL {
-          statusText = .init(string: "\n\nFrom: @\(status.reblog?.account.acct ?? status.account.acct)\n\(url)")
-          selectedRange = .init(location: 0, length: 0)
-        }
       }
     }
 
@@ -506,17 +505,6 @@ extension StatusEditor {
     private func getPollOptionsForAPI() -> [String]? {
       let options = pollOptions.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
       return options.isEmpty ? nil : options
-    }
-
-    // MARK: - Embeds
-
-    private func checkEmbed() {
-      if let url = embeddedStatusURL,
-         !statusText.string.contains(url.absoluteString)
-      {
-        embeddedStatus = nil
-        mode = .new(visibility: visibility)
-      }
     }
 
     // MARK: - Autocomplete

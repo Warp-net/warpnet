@@ -108,6 +108,7 @@ public struct StatusData: Encodable, Sendable {
   public let poll: PollData?
   public let language: String?
   public let mediaAttributes: [MediaAttribute]?
+  public let quotedStatusId: String?
 
   public struct PollData: Encodable, Sendable {
     public let options: [String]
@@ -142,7 +143,8 @@ public struct StatusData: Encodable, Sendable {
               mediaIds: [String]? = nil,
               poll: PollData? = nil,
               language: String? = nil,
-              mediaAttributes: [MediaAttribute]? = nil)
+              mediaAttributes: [MediaAttribute]? = nil,
+              quotedStatusId: String? = nil)
   {
     self.status = status
     self.visibility = visibility
@@ -152,5 +154,6 @@ public struct StatusData: Encodable, Sendable {
     self.poll = poll
     self.language = language
     self.mediaAttributes = mediaAttributes
+    self.quotedStatusId = quotedStatusId
   }
 }

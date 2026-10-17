@@ -107,7 +107,7 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
     case .bookmarks:
       "bookmark"
     case .favorites:
-      "star"
+      "heart"
     case .post:
       "square.and.pencil"
     case .other:

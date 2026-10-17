@@ -31,7 +31,7 @@ import SwiftUI
     var iconName: String {
       switch self {
       case .statuses: "bubble.right"
-      case .favorites: "star"
+      case .favorites: "heart"
       case .bookmarks: "bookmark"
       case .replies: "bubble.left.and.bubble.right"
       case .boosts: ""

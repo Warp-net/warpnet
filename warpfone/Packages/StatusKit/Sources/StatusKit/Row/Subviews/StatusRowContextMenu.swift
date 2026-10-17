@@ -55,7 +55,7 @@ struct StatusRowContextMenu: View {
           SoundEffectManager.shared.playSound(.favorite)
           await statusDataController.toggleFavorite(remoteStatus: nil)
         } } label: {
-          Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "star.fill" : "star")
+          Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "heart.fill" : "heart")
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))

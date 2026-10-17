@@ -231,3 +231,7 @@ carry that line, so they are named here instead.
   press offers the desktop client's eight quick reactions, and the button shows
   the reaction the viewer chose. Status and ReblogStatus carry it as
   myReaction, and Statuses gained a react endpoint.
+- The boost button opens a menu to retweet or quote. A quote is posted the way
+  the Android client posts one, as a retweet carrying the quoted tweet's id,
+  which StatusData now passes as quotedStatusId; the composer no longer pastes
+  a link to the quoted status into the text.

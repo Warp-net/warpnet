@@ -227,6 +227,9 @@ struct WarpnetRouter: Sendable {
 
   private func post(_ json: StatusData, viewer: AuthNodeInfo) async throws -> MastodonStatus {
     let author = try await repository.user(viewer.userId)
+    if let quotedStatusId = json.quotedStatusId {
+      return try await quote(quotedStatusId, json: json, viewer: viewer, username: author.username)
+    }
     var parent: StatusAddress?
     if let inReplyToId = json.inReplyToId {
       parent = try await repository.address(of: inReplyToId).original
@@ -252,6 +255,24 @@ struct WarpnetRouter: Sendable {
                              poll: poll)
     let created: WarpnetTweet = try await repository.call(ProtocolIds.PRIVATE_POST_TWEET, draft)
     guard let status = await repository.status(created) else { throw WarpnetRoutingError.emptyResponse(ProtocolIds.PRIVATE_POST_TWEET) }
+    return status
+  }
+
+  private func quote(_ id: String, json: StatusData, viewer: AuthNodeInfo, username: String) async throws -> MastodonStatus {
+    let source = try await repository.address(of: id).original
+    let media = json.mediaIds ?? []
+    let images = media.filter { $0.hasPrefix(WarpnetRepository.imagePrefix) }
+      .map { String($0.dropFirst(WarpnetRepository.imagePrefix.count)) }
+    let draft = WarpnetTweet(id: source.tweetId,
+                             retweetedBy: viewer.userId,
+                             text: json.status.trimmingCharacters(in: .whitespacesAndNewlines),
+                             userId: viewer.userId,
+                             username: username,
+                             imageKeys: images.isEmpty ? nil : images,
+                             quotedTweetId: source.tweetId,
+                             quotedUserId: source.userId)
+    let created: WarpnetTweet = try await repository.call(ProtocolIds.PUBLIC_POST_RETWEET, draft)
+    guard let status = await repository.status(created) else { throw WarpnetRoutingError.emptyResponse(ProtocolIds.PUBLIC_POST_RETWEET) }
     return status
   }
 
