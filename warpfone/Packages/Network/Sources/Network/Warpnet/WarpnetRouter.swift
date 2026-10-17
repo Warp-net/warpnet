@@ -15,6 +15,7 @@ struct WarpnetRouter: Sendable {
   static let minimumPage = 20
   static let maxPagesPerRequest = 5
   static let maxResumePages = 10
+  static let maxListPages = 10
   static let defaultReaction = "❤️"
   static let userReport = 0
   static let tweetReport = 1
@@ -365,12 +366,16 @@ struct WarpnetRouter: Sendable {
       return try await response(WarpnetMapper.account(repository.user(id)))
 
     case let .relationships(ids):
-      var relationships: [MastodonRelationship] = []
-      for id in ids {
-        let relationship = try await relationship(with: id, viewerId: pairing.userId)
-        relationships.append(relationship)
+      async let blocked = listedIds(ProtocolIds.PRIVATE_GET_SETTINGS_BLOCKS, viewerId: pairing.userId)
+      async let muted = listedIds(ProtocolIds.PRIVATE_GET_SETTINGS_MUTES, viewerId: pairing.userId)
+      let (blockedIds, mutedIds) = await (blocked, muted)
+      let relationships = await repository.concurrentMap(ids) { id in
+        try? await relationship(with: id,
+                                viewerId: pairing.userId,
+                                blocking: blockedIds.contains(id),
+                                muting: mutedIds.contains(id))
       }
-      return try response(relationships)
+      return try response(relationships.compactMap { $0 })
 
     case let .follow(id, _, _):
       try await repository.send(ProtocolIds.PUBLIC_POST_FOLLOW, NewFollowEvent(followerId: pairing.userId, followeeId: id))
@@ -473,12 +478,30 @@ struct WarpnetRouter: Sendable {
     let probe = GetIsFollowingEvent(userId: userId)
     async let following: IsFollowingResponse? = try? repository.call(ProtocolIds.PUBLIC_POST_IS_FOLLOWING, probe)
     async let follower: IsFollowerResponse? = try? repository.call(ProtocolIds.PUBLIC_POST_IS_FOLLOWER, probe)
+    async let blocked = blocking == nil ? listedIds(ProtocolIds.PRIVATE_GET_SETTINGS_BLOCKS, viewerId: viewerId) : []
+    async let muted = muting == nil ? listedIds(ProtocolIds.PRIVATE_GET_SETTINGS_MUTES, viewerId: viewerId) : []
     let (isFollowing, isFollower) = await (following?.isFollowing ?? false, follower?.isFollower ?? false)
+    let (blockedIds, mutedIds) = await (blocked, muted)
     return WarpnetMapper.relationship(userId: userId,
                                       following: isFollowing,
                                       followedBy: isFollower,
-                                      blocking: blocking ?? false,
-                                      muting: muting ?? false)
+                                      blocking: blocking ?? blockedIds.contains(userId),
+                                      muting: muting ?? mutedIds.contains(userId))
+  }
+
+  private func listedIds(_ route: String, viewerId: String) async -> Set<String> {
+    var ids = Set<String>()
+    var cursor = ""
+    for _ in 0 ..< Self.maxListPages {
+      guard let page: GetBlocksResponse = try? await repository.call(route, GetBlocksEvent(userId: viewerId,
+                                                                                          cursor: cursor,
+                                                                                          limit: WarpnetRepository.pageSize))
+      else { break }
+      ids.formUnion(page.ids)
+      guard !page.ids.isEmpty, !page.cursor.isEmpty, page.cursor != WarpnetRepository.endCursor else { break }
+      cursor = page.cursor
+    }
+    return ids
   }
 
   private func shelf(_ route: String, viewerId: String, cursor: String?) async throws -> Response {

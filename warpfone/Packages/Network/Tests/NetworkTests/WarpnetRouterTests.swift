@@ -209,6 +209,24 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(status.favourited, true)
   }
 
+  func testRelationshipsReportBlocksAndMutes() async throws {
+    let (router, binding) = await makeRouter { route, body in
+      switch route {
+      case ProtocolIds.PRIVATE_GET_SETTINGS_BLOCKS: return #"{"ids":["01B"],"cursor":"end"}"#
+      case ProtocolIds.PRIVATE_GET_SETTINGS_MUTES: return #"{"ids":["01M"],"cursor":"end"}"#
+      case ProtocolIds.PUBLIC_POST_IS_FOLLOWING: return #"{"is_following":false}"#
+      case ProtocolIds.PUBLIC_POST_IS_FOLLOWER: return #"{"is_follower":false}"#
+      default: return Self.standardNode(route, body, timeline: [])
+      }
+    }
+    let relationships = try decoder.decode([Relationship].self,
+                                           from: await router.route(Accounts.relationships(ids: ["01B", "01M", "01X"]), method: .get).body)
+    XCTAssertEqual(relationships.map(\.id), ["01B", "01M", "01X"])
+    XCTAssertEqual(relationships.map(\.blocking), [true, false, false])
+    XCTAssertEqual(relationships.map(\.muting), [false, true, false])
+    XCTAssertEqual(binding.calls(to: ProtocolIds.PRIVATE_GET_SETTINGS_BLOCKS).count, 1)
+  }
+
   func testRelationshipProbesBothDirections() async throws {
     let (router, _) = await makeRouter { route, body in
       switch route {

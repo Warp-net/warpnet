@@ -368,3 +368,7 @@ carry that line, so they are named here instead.
   being sent again.
 - Files without the notice line:
   WarpnetApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-18, blocks and mutes
+- Muting is a single action instead of a menu of durations, in the profile
+  and tweet menus, because the node keeps a mute until it is lifted.

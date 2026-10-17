@@ -414,7 +414,7 @@ actor WarpnetRepository {
 
   // MARK: - Helpers
 
-  private func concurrentMap<Input: Sendable, Output: Sendable>(_ inputs: [Input],
+  func concurrentMap<Input: Sendable, Output: Sendable>(_ inputs: [Input],
                                                                 _ transform: @escaping @Sendable (Input) async -> Output) async -> [Output]
   {
     guard !inputs.isEmpty else { return [] }

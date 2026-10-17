@@ -68,15 +68,11 @@ public struct AccountDetailContextMenu: View {
               Label("account.action.unmute", systemImage: "speaker")
             }
           } else {
-            Menu {
-              ForEach(Duration.mutingDurations(), id: \.rawValue) { duration in
-                Button(duration.description) {
-                  Task {
-                    do {
-                      viewModel.relationship = try await client.post(endpoint: Accounts.mute(id: account.id, json: MuteData(duration: duration.rawValue)))
-                    } catch { }
-                  }
-                }
+            Button {
+              Task {
+                do {
+                  viewModel.relationship = try await client.post(endpoint: Accounts.mute(id: account.id, json: MuteData(duration: Duration.infinite.rawValue)))
+                } catch { }
               }
             } label: {
               Label("account.action.mute", systemImage: "speaker.slash")
