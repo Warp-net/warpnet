@@ -628,7 +628,7 @@ func copyTweetMedia(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark, IsNoiseDrawn: true}
+		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark, IsPixelMarked: true}
 		copied, err := media_meta.BuildImageCopy(string(img), c, signer)
 		if err != nil {
 			return domain.Tweet{}, err
@@ -707,11 +707,11 @@ func StreamGetCopyBuyerHandler(
 			if err != nil {
 				return nil, err
 			}
-			order, score, err := findOrderByNoise(identityKey, tweet, raw, orders, mediaRepo, copyRepo)
+			order, score, err := findOrderByPixelMark(identityKey, tweet, raw, orders, mediaRepo, copyRepo)
 			if err != nil {
 				return nil, err
 			}
-			if score < media_meta.MinNoiseScore {
+			if score < media_meta.MinPixelMarkScore {
 				return event.CopyBuyerResponse{}, nil
 			}
 			resp, err := buildCopyBuyerResponse(orders, order)
@@ -754,7 +754,7 @@ func buildCopyBuyerResponse(orders OrderCounter, order domain.Order) (event.Copy
 	}, nil
 }
 
-func findOrderByNoise(
+func findOrderByPixelMark(
 	identityKey ed25519.PrivateKey,
 	tweet domain.Tweet,
 	suspect []byte,
@@ -767,7 +767,7 @@ func findOrderByNoise(
 		bestScore float64
 	)
 	for _, key := range tweet.ImageKeys {
-		sold, err := listNoisedOrders(tweet, key, orders, copyRepo)
+		sold, err := listPixelMarkedOrders(tweet, key, orders, copyRepo)
 		if err != nil {
 			return domain.Order{}, 0, err
 		}
@@ -784,9 +784,9 @@ func findOrderByNoise(
 		}
 		seeds := make([][]byte, len(sold))
 		for i, order := range sold {
-			seeds[i] = media_meta.BuildNoiseSeed(identityKey, key, order.BuyerId)
+			seeds[i] = media_meta.BuildPixelMarkSeed(identityKey, key, order.BuyerId)
 		}
-		scores, err := media_meta.ScoreNoise(raw, suspect, seeds)
+		scores, err := media_meta.ScorePixelMark(raw, suspect, seeds)
 		if err != nil {
 			return domain.Order{}, 0, err
 		}
@@ -799,14 +799,14 @@ func findOrderByNoise(
 	return best, bestScore, nil
 }
 
-func listNoisedOrders(tweet domain.Tweet, originalKey string, orders OrderStorer, copyRepo SponsoredCopyLister) ([]domain.Order, error) {
+func listPixelMarkedOrders(tweet domain.Tweet, originalKey string, orders OrderStorer, copyRepo SponsoredCopyLister) ([]domain.Order, error) {
 	copies, err := copyRepo.ListCopies(tweet.UserId, originalKey)
 	if err != nil {
 		return nil, err
 	}
 	sold := make([]domain.Order, 0, len(copies))
 	for _, c := range copies {
-		if !c.IsNoiseDrawn {
+		if !c.IsPixelMarked {
 			continue
 		}
 		order, err := orders.Get(tweet.Id, c.BuyerId)

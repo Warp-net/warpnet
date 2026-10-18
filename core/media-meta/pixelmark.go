@@ -37,21 +37,21 @@ import (
 )
 
 const (
-	MinNoiseScore = 8
+	MinPixelMarkScore = 8
 
-	noiseBlockSize       = 8
-	noiseSignsInHash     = 8 * sha256.Size
-	noiseLevelStep       = 4
-	noiseMinLevelSamples = 50
-	noiseClipSigmas      = 2.5
-	noiseMADScale        = 1.4826
-	noiseSampleStep      = 3
-	sameAspectDelta      = 0.01
+	pixelMarkBlockSize       = 8
+	pixelMarkSignsInHash     = 8 * sha256.Size
+	pixelMarkLevelStep       = 4
+	pixelMarkMinLevelSamples = 50
+	pixelMarkClipSigmas      = 2.5
+	pixelMarkMADScale        = 1.4826
+	pixelMarkSampleStep      = 3
+	sameAspectDelta          = 0.01
 )
 
-var noiseMask = [noiseBlockSize]uint8{0x00, 0x18, 0x3c, 0x7e, 0x7e, 0x3c, 0x18, 0x00}
+var pixelMarkMask = [pixelMarkBlockSize]uint8{0x00, 0x18, 0x3c, 0x7e, 0x7e, 0x3c, 0x18, 0x00}
 
-func BuildNoiseSeed(key ed25519.PrivateKey, originalKey, buyerId string) []byte {
+func BuildPixelMarkSeed(key ed25519.PrivateKey, originalKey, buyerId string) []byte {
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(originalKey))
 	mac.Write([]byte{0})
@@ -59,7 +59,7 @@ func BuildNoiseSeed(key ed25519.PrivateKey, originalKey, buyerId string) []byte 
 	return mac.Sum(nil)
 }
 
-func ScoreNoise(original, suspect []byte, seeds [][]byte) ([]float64, error) {
+func ScorePixelMark(original, suspect []byte, seeds [][]byte) ([]float64, error) {
 	if len(seeds) == 0 {
 		return nil, nil
 	}
@@ -75,7 +75,7 @@ func ScoreNoise(original, suspect []byte, seeds [][]byte) ([]float64, error) {
 	var scores []float64
 	if math.Abs(s.aspect()-o.aspect()) < sameAspectDelta {
 		scores = scoreSeeds(measureResidual(o, resizeLuma(s, o.width, o.height), image.Point{}), seeds)
-		if slices.Max(scores) >= MinNoiseScore {
+		if slices.Max(scores) >= MinPixelMarkScore {
 			return scores, nil
 		}
 	}
@@ -87,18 +87,18 @@ func ScoreNoise(original, suspect []byte, seeds [][]byte) ([]float64, error) {
 	return scores, nil
 }
 
-func drawNoise(canvas *image.RGBA, seed []byte) {
+func drawPixelMark(canvas *image.RGBA, seed []byte) {
 	size := canvas.Rect.Size()
-	cols := (size.X + noiseBlockSize - 1) / noiseBlockSize
-	rows := (size.Y + noiseBlockSize - 1) / noiseBlockSize
-	signs := generateNoiseSigns(seed, cols*rows)
+	cols := (size.X + pixelMarkBlockSize - 1) / pixelMarkBlockSize
+	rows := (size.Y + pixelMarkBlockSize - 1) / pixelMarkBlockSize
+	signs := generatePixelMarkSigns(seed, cols*rows)
 	for y := range size.Y {
-		mask := noiseMask[y%noiseBlockSize]
+		mask := pixelMarkMask[y%pixelMarkBlockSize]
 		for x := range size.X {
-			if mask>>(x%noiseBlockSize)&1 == 0 {
+			if mask>>(x%pixelMarkBlockSize)&1 == 0 {
 				continue
 			}
-			isPositive := signs[(y/noiseBlockSize)*cols+x/noiseBlockSize]
+			isPositive := signs[(y/pixelMarkBlockSize)*cols+x/pixelMarkBlockSize]
 			i := canvas.PixOffset(canvas.Rect.Min.X+x, canvas.Rect.Min.Y+y)
 			for c := i; c < i+3; c++ {
 				switch {
@@ -112,7 +112,7 @@ func drawNoise(canvas *image.RGBA, seed []byte) {
 	}
 }
 
-func generateNoiseSigns(seed []byte, count int) []bool {
+func generatePixelMarkSigns(seed []byte, count int) []bool {
 	signs := make([]bool, count)
 	input := make([]byte, len(seed)+8)
 	copy(input, seed)
@@ -121,7 +121,7 @@ func generateNoiseSigns(seed []byte, count int) []bool {
 		counter uint64
 	)
 	for i := range signs {
-		bit := i % noiseSignsInHash
+		bit := i % pixelMarkSignsInHash
 		if bit == 0 {
 			binary.BigEndian.PutUint64(input[len(seed):], counter)
 			hash = sha256.Sum256(input)
@@ -132,19 +132,19 @@ func generateNoiseSigns(seed []byte, count int) []bool {
 	return signs
 }
 
-type noiseResidual struct {
+type pixelMarkResidual struct {
 	blocks []float64
 	norm   float64
 }
 
-func scoreSeeds(r noiseResidual, seeds [][]byte) []float64 {
+func scoreSeeds(r pixelMarkResidual, seeds [][]byte) []float64 {
 	scores := make([]float64, len(seeds))
 	if r.norm == 0 {
 		return scores
 	}
 	for i, seed := range seeds {
 		var sum float64
-		for b, isPositive := range generateNoiseSigns(seed, len(r.blocks)) {
+		for b, isPositive := range generatePixelMarkSigns(seed, len(r.blocks)) {
 			if isPositive {
 				sum += r.blocks[b]
 			} else {
@@ -156,10 +156,10 @@ func scoreSeeds(r noiseResidual, seeds [][]byte) []float64 {
 	return scores
 }
 
-func measureResidual(original, aligned lumaPlane, offset image.Point) noiseResidual {
-	cols := (original.width + noiseBlockSize - 1) / noiseBlockSize
-	rows := (original.height + noiseBlockSize - 1) / noiseBlockSize
-	r := noiseResidual{blocks: make([]float64, cols*rows)}
+func measureResidual(original, aligned lumaPlane, offset image.Point) pixelMarkResidual {
+	cols := (original.width + pixelMarkBlockSize - 1) / pixelMarkBlockSize
+	rows := (original.height + pixelMarkBlockSize - 1) / pixelMarkBlockSize
+	r := pixelMarkResidual{blocks: make([]float64, cols*rows)}
 	overlap := image.Rect(0, 0, original.width, original.height).
 		Intersect(image.Rect(0, 0, aligned.width, aligned.height).Add(offset))
 	if overlap.Empty() {
@@ -170,18 +170,18 @@ func measureResidual(original, aligned lumaPlane, offset image.Point) noiseResid
 		return r
 	}
 
-	var window [noiseBlockSize][noiseBlockSize]float64
-	for i := range noiseBlockSize {
-		for j := range noiseBlockSize {
-			window[i][j] = math.Sin(math.Pi*(float64(i)+0.5)/noiseBlockSize) * math.Sin(math.Pi*(float64(j)+0.5)/noiseBlockSize)
+	var window [pixelMarkBlockSize][pixelMarkBlockSize]float64
+	for i := range pixelMarkBlockSize {
+		for j := range pixelMarkBlockSize {
+			window[i][j] = math.Sin(math.Pi*(float64(i)+0.5)/pixelMarkBlockSize) * math.Sin(math.Pi*(float64(j)+0.5)/pixelMarkBlockSize)
 		}
 	}
 	weights := make([]float64, len(r.blocks))
 	counts := make([]int, len(r.blocks))
 	for y := overlap.Min.Y; y < overlap.Max.Y; y++ {
 		for x := overlap.Min.X; x < overlap.Max.X; x++ {
-			b := (y/noiseBlockSize)*cols + x/noiseBlockSize
-			w := window[y%noiseBlockSize][x%noiseBlockSize]
+			b := (y/pixelMarkBlockSize)*cols + x/pixelMarkBlockSize
+			w := window[y%pixelMarkBlockSize][x%pixelMarkBlockSize]
 			diff := float64(aligned.at(x-offset.X, y-offset.Y)) - tone.apply(float64(original.at(x, y)))
 			r.blocks[b] += diff * w
 			weights[b] += w
@@ -191,7 +191,7 @@ func measureResidual(original, aligned lumaPlane, offset image.Point) noiseResid
 
 	used := make([]float64, 0, len(r.blocks))
 	for b := range r.blocks {
-		if 2*counts[b] <= noiseBlockSize*noiseBlockSize {
+		if 2*counts[b] <= pixelMarkBlockSize*pixelMarkBlockSize {
 			r.blocks[b] = 0
 			counts[b] = 0
 			continue
@@ -206,7 +206,7 @@ func measureResidual(original, aligned lumaPlane, offset image.Point) noiseResid
 	for i, v := range used {
 		used[i] = math.Abs(v - centre)
 	}
-	limit := noiseClipSigmas * (noiseMADScale*findMedian(used) + 1e-6)
+	limit := pixelMarkClipSigmas * (pixelMarkMADScale*findMedian(used) + 1e-6)
 	var sum float64
 	for b, v := range r.blocks {
 		if counts[b] == 0 {
@@ -224,23 +224,23 @@ type toneCurve struct {
 }
 
 func buildToneCurve(original, aligned lumaPlane, offset image.Point, overlap image.Rectangle) toneCurve {
-	bins := make([][2][]float64, 256/noiseLevelStep)
+	bins := make([][2][]float64, 256/pixelMarkLevelStep)
 	var n int
 	for y := overlap.Min.Y; y < overlap.Max.Y; y++ {
 		for x := overlap.Min.X; x < overlap.Max.X; x++ {
 			n++
-			if (n-1)%noiseSampleStep != 0 {
+			if (n-1)%pixelMarkSampleStep != 0 {
 				continue
 			}
 			level := float64(original.at(x, y))
-			bin := min(max(int(level)/noiseLevelStep, 0), len(bins)-1)
+			bin := min(max(int(level)/pixelMarkLevelStep, 0), len(bins)-1)
 			bins[bin][0] = append(bins[bin][0], level)
 			bins[bin][1] = append(bins[bin][1], float64(aligned.at(x-offset.X, y-offset.Y)))
 		}
 	}
 	var tone toneCurve
 	for _, bin := range bins {
-		if len(bin[0]) < noiseMinLevelSamples {
+		if len(bin[0]) < pixelMarkMinLevelSamples {
 			continue
 		}
 		tone.levels = append(tone.levels, findMedian(bin[0]))

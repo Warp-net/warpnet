@@ -279,7 +279,7 @@ func (s *MediaRepoTestSuite) TestCopyRoundTripAndIsolation() {
 func (s *MediaRepoTestSuite) TestListCopies() {
 	alice := uuid.New().String()
 	longerAlice := alice + "-2"
-	first := domain.MediaCopy{OriginalKey: "original-a", BuyerId: "buyer-1", IsNoiseDrawn: true}
+	first := domain.MediaCopy{OriginalKey: "original-a", BuyerId: "buyer-1", IsPixelMarked: true}
 	second := domain.MediaCopy{OriginalKey: "original-a", BuyerId: "buyer-2"}
 	s.Require().NoError(s.repo.SetCopy(alice, "copy-1", first))
 	s.Require().NoError(s.repo.SetCopy(alice, "copy-2", second))

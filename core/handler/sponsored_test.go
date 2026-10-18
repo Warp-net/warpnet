@@ -705,7 +705,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	watermark, err := media_meta.WatermarkPNG(rawOf(t, image), "@leaker · buyer-1")
 	require.NoError(t, err)
 	assert.Equal(t, watermark, copies.copies["author-1/"+bought.ImageKeys[0]].Watermark, "the watermark names the buyer by nick and id")
-	assert.True(t, copies.copies["author-1/"+bought.ImageKeys[0]].IsNoiseDrawn, "the copy carries the buyer's noise")
+	assert.True(t, copies.copies["author-1/"+bought.ImageKeys[0]].IsPixelMarked, "the copy carries the buyer's pixel mark")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
 	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies)
@@ -879,7 +879,7 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 	require.NoError(t, err)
 	traced := resp.(event.CopyBuyerResponse)
 	assert.True(t, traced.IsPixelMatch, "a copied image has no metadata, only pixels")
-	assert.GreaterOrEqual(t, traced.PixelScore, float64(media_meta.MinNoiseScore))
+	assert.GreaterOrEqual(t, traced.PixelScore, float64(media_meta.MinPixelMarkScore))
 	traced.IsPixelMatch, traced.PixelScore = false, 0
 	sold := orders["tweet-1/buyer-2"]
 	assert.Equal(t, event.CopyBuyerResponse{

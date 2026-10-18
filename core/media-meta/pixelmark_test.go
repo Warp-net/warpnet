@@ -21,7 +21,7 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
-func testNoiseSeed(n int) []byte {
+func testPixelMarkSeed(n int) []byte {
 	seed := sha256.Sum256([]byte("seed " + strconv.Itoa(n)))
 	return seed[:]
 }
@@ -80,7 +80,7 @@ func cropImage(img image.Image, r image.Rectangle) *image.RGBA {
 	return dst
 }
 
-func TestDrawWatermark_NoiseIsTheSameOnEveryMachine(t *testing.T) {
+func TestDrawWatermark_PixelMarkIsTheSameOnEveryMachine(t *testing.T) {
 	stripes := image.NewGray(image.Rect(0, 0, 120, 16))
 	for i := range stripes.Pix {
 		stripes.Pix[i] = uint8(i * 37)
@@ -88,43 +88,43 @@ func TestDrawWatermark_NoiseIsTheSameOnEveryMachine(t *testing.T) {
 	var mask bytes.Buffer
 	require.NoError(t, png.Encode(&mask, stripes))
 
-	drawn, err := DrawWatermark(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes(), testNoiseSeed(1))
+	drawn, err := DrawWatermark(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes(), testPixelMarkSeed(1))
 	require.NoError(t, err)
 	assert.Equal(t, "19f8d4f14234ea665f87d40c1df8c00c5a1540565a0e449e6c6319e41e999ae5", hex.EncodeToString(security.ConvertToSHA256(drawn)), "a copy is rebuilt on request, so its bytes and key must never drift")
 }
 
-func TestDrawWatermark_NoiseIsFaint(t *testing.T) {
+func TestDrawWatermark_PixelMarkIsFaint(t *testing.T) {
 	plain := uniformJPEG(t, image.Pt(64, 48), 0x80)
 	stripes := image.NewGray(image.Rect(0, 0, 1, 1))
 	var mask bytes.Buffer
 	require.NoError(t, png.Encode(&mask, stripes))
 
-	drawn, err := DrawWatermark(plain, mask.Bytes(), testNoiseSeed(1))
+	drawn, err := DrawWatermark(plain, mask.Bytes(), testPixelMarkSeed(1))
 	require.NoError(t, err)
 	img := decodeJPEG(t, drawn)
 	var changed int
 	for y := range 48 {
 		for x := range 64 {
 			diff := int(color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y) - 0x80
-			assert.LessOrEqual(t, diff*diff, 4, "the noise is invisible")
+			assert.LessOrEqual(t, diff*diff, 4, "the pixel mark is invisible")
 			if diff != 0 {
 				changed++
 			}
 		}
 	}
-	assert.Greater(t, changed, 64*48/4, "the noise covers the image")
+	assert.Greater(t, changed, 64*48/4, "the pixel mark covers the image")
 }
 
-func TestScoreNoise_NamesTheBuyer(t *testing.T) {
+func TestScorePixelMark_NamesTheBuyer(t *testing.T) {
 	size := image.Pt(512, 342)
 	original := photoJPEG(t, size)
 	watermark, err := WatermarkPNG(original, "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
 	require.NoError(t, err)
 	other, err := WatermarkPNG(original, "@other · 01M3ZEY4M40NH3H9JP8E2DVCZK")
 	require.NoError(t, err)
-	copied, err := DrawWatermark(original, watermark, testNoiseSeed(1))
+	copied, err := DrawWatermark(original, watermark, testPixelMarkSeed(1))
 	require.NoError(t, err)
-	otherCopy, err := DrawWatermark(original, other, testNoiseSeed(2))
+	otherCopy, err := DrawWatermark(original, other, testPixelMarkSeed(2))
 	require.NoError(t, err)
 	img, otherImg := decodeJPEG(t, copied), decodeJPEG(t, otherCopy)
 
@@ -148,7 +148,7 @@ func TestScoreNoise_NamesTheBuyer(t *testing.T) {
 
 	seeds := make([][]byte, 52)
 	for i := range seeds {
-		seeds[i] = testNoiseSeed(i + 1)
+		seeds[i] = testPixelMarkSeed(i + 1)
 	}
 	for name, suspect := range map[string][]byte{
 		"as served":            copied,
@@ -157,20 +157,20 @@ func TestScoreNoise_NamesTheBuyer(t *testing.T) {
 		"centre crop":          encodePNG(t, cropImage(img, image.Rect(51, 34, 461, 308))),
 		"ui screenshot jpeg80": encodeJPEG(t, screen, 80),
 	} {
-		scores, err := ScoreNoise(original, suspect, seeds)
+		scores, err := ScorePixelMark(original, suspect, seeds)
 		require.NoError(t, err, name)
-		assert.GreaterOrEqual(t, scores[0], float64(MinNoiseScore), "%s names the buyer", name)
+		assert.GreaterOrEqual(t, scores[0], float64(MinPixelMarkScore), "%s names the buyer", name)
 		for i, score := range scores[1:] {
 			assert.Less(t, math.Abs(score), 5.0, "%s names nobody else (seed %d)", name, i+1)
 		}
 	}
 
-	scores, err := ScoreNoise(original, encodeJPEG(t, averaged, 90), seeds[:2])
+	scores, err := ScorePixelMark(original, encodeJPEG(t, averaged, 90), seeds[:2])
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, scores[0], float64(MinNoiseScore), "two copies averaged still name the first buyer")
-	assert.GreaterOrEqual(t, scores[1], float64(MinNoiseScore), "two copies averaged still name the second buyer")
+	assert.GreaterOrEqual(t, scores[0], float64(MinPixelMarkScore), "two copies averaged still name the first buyer")
+	assert.GreaterOrEqual(t, scores[1], float64(MinPixelMarkScore), "two copies averaged still name the second buyer")
 
-	scores, err = ScoreNoise(original, original, seeds)
+	scores, err = ScorePixelMark(original, original, seeds)
 	require.NoError(t, err)
 	for _, score := range scores {
 		assert.Less(t, math.Abs(score), 5.0, "the original names no buyer")
