@@ -381,13 +381,8 @@ func (db *DB) Get(key DatabaseKey) ([]byte, error) {
 		if err != nil {
 			return err
 		}
-
-		val, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		result = append([]byte{}, val...)
-		return nil
+		result, err = item.ValueCopy(nil)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -524,19 +519,11 @@ func (t *warpTxn) Set(key DatabaseKey, value []byte) error {
 }
 
 func (t *warpTxn) Get(key DatabaseKey) ([]byte, error) {
-	var result []byte
 	item, err := t.txn.Get(key.Bytes())
 	if err != nil {
 		return nil, err
 	}
-
-	val, err := item.ValueCopy(nil)
-	if err != nil {
-		return nil, err
-	}
-	result = append([]byte{}, val...)
-
-	return result, nil
+	return item.ValueCopy(nil)
 }
 
 func (t *warpTxn) GetExpiration(key DatabaseKey) (uint64, error) {
