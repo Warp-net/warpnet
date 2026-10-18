@@ -203,15 +203,12 @@ actor WarpnetRepository {
     let replies = page.tweets.sorted { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
     let pairing = try? await viewer()
     let replyStats = await statsFor(replies.map { WarpnetMapper.address($0).tweetId }, viewerId: pairing?.userId ?? "")
-    var thread: [WarpnetTweet] = []
-    for reply in replies {
-      thread.append(reply)
+    let nested = await concurrentMap(replies) { reply -> [WarpnetTweet] in
       let replyAddress = WarpnetMapper.address(reply).original
-      if (replyStats[replyAddress.tweetId]?.repliesCount ?? 0) > 0 {
-        thread.append(contentsOf: await descendants(of: replyAddress, depth: depth - 1))
-      }
+      guard (replyStats[replyAddress.tweetId]?.repliesCount ?? 0) > 0 else { return [] }
+      return await self.descendants(of: replyAddress, depth: depth - 1)
     }
-    return thread
+    return zip(replies, nested).flatMap { reply, children in [reply] + children }
   }
 
   // MARK: - Hydration

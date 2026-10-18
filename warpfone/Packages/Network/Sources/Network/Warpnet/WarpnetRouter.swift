@@ -84,10 +84,11 @@ struct WarpnetRouter: Sendable {
     return try encode(mediaAttachment(id: WarpnetRepository.imagePrefix + key, ownerId: pairing.userId))
   }
 
-  func pushes() async throws -> Data {
+  func pushes(after lastSeenId: String?) async throws -> Data {
     let pairing = try await repository.viewer()
     let page: GetNotificationsResponse = try await repository.call(ProtocolIds.PRIVATE_GET_PUSHES, GetNotificationsEvent(limit: 20))
-    return try await encode(notifications(page.notifications, viewerId: pairing.userId))
+    let fresh = page.notifications.filter { item in lastSeenId.map { item.id > $0 } ?? true }
+    return try await encode(notifications(fresh, viewerId: pairing.userId))
   }
 
   func mediaData(for url: URL) async throws -> Data {
@@ -509,12 +510,10 @@ struct WarpnetRouter: Sendable {
                                                               GetBookmarksEvent(userId: viewerId,
                                                                                 cursor: cursor ?? "",
                                                                                 limit: WarpnetRepository.pageSize))
-    var tweets: [WarpnetTweet] = []
-    for item in page.items {
-      if let tweet = try? await repository.tweet(StatusAddress(tweetId: item.tweetId, userId: item.ownerUserId)) {
-        tweets.append(tweet)
-      }
-    }
+    let repository = repository
+    let tweets = await repository.concurrentMap(page.items) { item in
+      try? await repository.tweet(StatusAddress(tweetId: item.tweetId, userId: item.ownerUserId))
+    }.compactMap { $0 }
     if route == ProtocolIds.PRIVATE_GET_BOOKMARKS {
       for item in page.items {
         await repository.setBookmarked(true, tweetId: item.tweetId)
@@ -583,22 +582,22 @@ struct WarpnetRouter: Sendable {
   private func notifications(_ items: [WarpnetNotification], viewerId: String) async -> [MastodonNotification] {
     let supported = items.compactMap { item in Self.notificationType(item.type).map { (item, $0) } }
     let actors = await repository.users(supported.compactMap { $0.0.actorId })
-    var result: [MastodonNotification] = []
-    for (item, type) in supported {
+    let repository = repository
+    let statuses = await repository.concurrentMap(supported) { item, type -> MastodonStatus? in
+      // A reply notice names the viewer's own tweet, not the reply.
+      guard let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", item.type != "reply" else { return nil }
+      return try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId), filterContext: "notifications")
+    }
+    return zip(supported, statuses).map { entry, status in
+      let (item, type) = entry
       let account = item.actorId.flatMap { actors[$0] }.map { WarpnetMapper.account($0) }
         ?? WarpnetMapper.account(userId: item.actorId ?? item.id, username: item.text)
-      var status: MastodonStatus?
-      // A reply notice names the viewer's own tweet, not the reply.
-      if let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", item.type != "reply" {
-        status = try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId), filterContext: "notifications")
-      }
-      result.append(MastodonNotification(id: item.id,
-                                         type: type,
-                                         createdAt: WarpnetFormat.serverDate(fromRFC3339: item.createdAt),
-                                         account: account,
-                                         status: status))
+      return MastodonNotification(id: item.id,
+                                  type: type,
+                                  createdAt: WarpnetFormat.serverDate(fromRFC3339: item.createdAt),
+                                  account: account,
+                                  status: status)
     }
-    return result
   }
 
   private static func notificationType(_ type: String) -> String? {

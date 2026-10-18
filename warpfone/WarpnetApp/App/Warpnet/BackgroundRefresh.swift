@@ -59,7 +59,7 @@ enum BackgroundRefresh {
     }
     let client = accounts.currentClient
     guard client.isAuth, !Task.isCancelled else { return false }
-    let notifications = try? await client.pushes()
+    let notifications = try? await client.pushes(after: UserDefaults.standard.string(forKey: StreamWatcher.lastSeenPushKey))
     if let notifications, !Task.isCancelled {
       await deliver(notifications)
     }

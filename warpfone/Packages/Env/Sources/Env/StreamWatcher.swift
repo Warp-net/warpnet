@@ -60,7 +60,7 @@ import OSLog
     guard let client, client.isAuth else { return }
     let notifications: [Models.Notification]
     do {
-      notifications = try await client.pushes()
+      notifications = try await client.pushes(after: hasBaseline ? lastSeenId : nil)
     } catch {
       logger.error("Polling pushes: \(error.localizedDescription, privacy: .public)")
       return

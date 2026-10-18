@@ -141,9 +141,9 @@ import WarpnetTransport
     return okResponse()
   }
 
-  public func pushes() async throws -> [Models.Notification] {
+  public func pushes(after lastSeenId: String? = nil) async throws -> [Models.Notification] {
     guard let router else { throw ClientError.notPaired }
-    return try await decoder.decode([Models.Notification].self, from: router.pushes())
+    return try await decoder.decode([Models.Notification].self, from: router.pushes(after: lastSeenId))
   }
 
   public func mediaData(for url: URL) async throws -> Data {

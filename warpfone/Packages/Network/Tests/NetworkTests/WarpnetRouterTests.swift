@@ -367,6 +367,25 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertFalse(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEET).contains { $0["tweet_id"] as? String == "01MINE" })
   }
 
+  func testPushesHydrateOnlyWhatIsNewer() async throws {
+    let (router, binding) = await makeRouter { route, body in
+      if route == ProtocolIds.PRIVATE_GET_PUSHES {
+        return ScriptedNode.json(["notifications": [
+          ["id": "02", "type": "reaction", "actor_id": "01A", "tweet_id": "01T", "created_at": "2026-10-17T08:02:00Z"],
+          ["id": "01", "type": "follow", "actor_id": "01B", "created_at": "2026-10-17T08:01:00Z"],
+        ], "cursor": "end"])
+      }
+      return Self.standardNode(route, body, timeline: [])
+    }
+    let idle = try decoder.decode([Models.Notification].self, from: await router.pushes(after: "02"))
+    XCTAssertTrue(idle.isEmpty)
+    XCTAssertTrue(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEET).isEmpty)
+    XCTAssertTrue(binding.calls(to: ProtocolIds.PUBLIC_GET_USER).isEmpty)
+
+    let fresh = try decoder.decode([Models.Notification].self, from: await router.pushes(after: "01"))
+    XCTAssertEqual(fresh.map(\.id), ["02"])
+  }
+
   func testQuoteURLResolvesToTheQuotedStatus() async throws {
     let (router, binding) = await makeRouter { route, body in
       switch route {
