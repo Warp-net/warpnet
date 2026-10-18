@@ -132,7 +132,6 @@ public struct AccountDetailView: View {
       if !newValue {
         Task {
           await viewModel.fetchAccount()
-          await preferences.refreshServerPreferences()
         }
       }
     }

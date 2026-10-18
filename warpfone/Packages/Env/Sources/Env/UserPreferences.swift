@@ -390,14 +390,6 @@ import SwiftUI
 
   public func setClient(client: Client) {
     self.client = client
-    Task {
-      await refreshServerPreferences()
-    }
-  }
-
-  public func refreshServerPreferences() async {
-    guard let client, client.isAuth else { return }
-    serverPreferences = try? await client.get(endpoint: Accounts.preferences)
   }
 
   public func markLanguageAsSelected(isoCode: String) {

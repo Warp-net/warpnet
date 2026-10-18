@@ -100,7 +100,6 @@ public struct TimelineView: View {
     }
     .onDisappear {
       viewModel.isTimelineVisible = false
-      viewModel.saveMarker()
     }
     .refreshable {
       HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.3))
@@ -142,7 +141,6 @@ public struct TimelineView: View {
         }
       case .background:
         wasBackgrounded = true
-        viewModel.saveMarker()
         
       default:
         break

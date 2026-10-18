@@ -12,11 +12,6 @@ import SwiftUI
   var scrollToIndex: Int?
   var statusesState: StatusesState = .loading
   var timeline: TimelineFilter = .home {
-    willSet {
-      if timeline == .home && newValue != .resume {
-        saveMarker()
-      }
-    }
     didSet {
       timelineTask?.cancel()
       timelineTask = Task {
@@ -40,10 +35,6 @@ import SwiftUI
 
   // Internal source of truth for a timeline.
   private(set) var datasource = TimelineDatasource()
-  private let cache = TimelineCache()
-  private var isCacheEnabled: Bool {
-    canFilterTimeline && timeline.supportNewestPagination
-  }
   
   @ObservationIgnored
   private var visibileStatuses: [Status] = []
@@ -99,7 +90,6 @@ import SwiftUI
   
   private func handleLatestOrResume(_ oldValue: TimelineFilter) async {
     if timeline == .latest || timeline == .resume {
-      await clearCache(filter: oldValue)
       if timeline == .resume, let marker = await fetchMarker() {
         self.marker = marker
       }
@@ -136,16 +126,6 @@ import SwiftUI
         let statuses = await datasource.getFiltered()
         statusesState = .display(statuses: statuses, nextPageState: .hasNextPage)
       }
-    }
-  }
-}
-
-// MARK: - Cache
-
-extension TimelineViewModel {
-  private func clearCache(filter: TimelineFilter) async {
-    if let client, isCacheEnabled {
-      await cache.setLatestSeenStatuses([], for: client, filter: filter.id)
     }
   }
 }
@@ -376,12 +356,6 @@ extension TimelineViewModel: StatusesFetcher {
   func statusDidAppear(status: Status) {
     pendingStatusesObserver.removeStatus(status: status)
     visibileStatuses.insert(status, at: 0)
-    
-    if let client, timeline.supportNewestPagination {
-      Task {
-        await cache.setLatestSeenStatuses(visibileStatuses, for: client, filter: timeline.id)
-      }
-    }
   }
 
   func statusDidDisappear(status: Status) {
@@ -400,16 +374,6 @@ extension TimelineViewModel {
       return data.home
     } catch {
       return nil
-    }
-  }
-  
-  func saveMarker() {
-    guard timeline == .home, let client else { return }
-    Task {
-      guard let id = await cache.getLatestSeenStatus(for: client, filter: timeline.id)?.first else { return }
-      do {
-        let _: Marker = try await client.post(endpoint: Markers.markHome(lastReadId: id))
-      } catch { }
     }
   }
 }

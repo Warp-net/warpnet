@@ -65,7 +65,6 @@ struct WarpnetApp: App {
       Task {
         await pairing.resume()
         watcher.watch(streams: [.user, .direct])
-        await userPreferences.refreshServerPreferences()
         await SharedPostPublisher.publish(with: appAccountsManager.currentClient)
       }
     default:

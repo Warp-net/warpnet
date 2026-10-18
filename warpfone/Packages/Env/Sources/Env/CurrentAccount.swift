@@ -33,17 +33,8 @@ import Observation
   private func fetchUserData() async {
     await withTaskGroup(of: Void.self) { group in
       group.addTask { await self.fetchCurrentAccount() }
-      group.addTask { await self.fetchConnections() }
       group.addTask { await self.fetchFollowerRequests() }
     }
-  }
-
-  public func fetchConnections() async {
-    guard let client else { return }
-    do {
-      let connections: [String] = try await client.get(endpoint: Instances.peers)
-      client.addConnections(connections)
-    } catch {}
   }
 
   public func fetchCurrentAccount() async {

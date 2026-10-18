@@ -392,3 +392,9 @@ carry that line, so they are named here instead.
 - A tweet without a web page shares its text from the tweet menu and the
   share button, and the menu offers Copy Link only for tweets that have one.
   Sharing the tweet as an image no longer depends on a link.
+
+2026-10-18, unserved calls
+- The app no longer calls endpoints the node does not serve on every launch
+  and foreground: the server preferences, the instance peers and the home
+  timeline marker. With the marker gone, the last seen tweet ids lost their
+  only reader, and TimelineCache.swift was deleted.
