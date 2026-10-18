@@ -964,7 +964,7 @@ export default {
     },
     async onQuotePosted() {
       try {
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
@@ -1127,7 +1127,7 @@ export default {
         toast.error(err?.message || "Couldn't update retweet. Please try again.");
       }
       try {
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
@@ -1213,7 +1213,7 @@ export default {
         this.myReaction = previous.emoji;
         this.reactions = previous.reactions;
         this.reactionsCount.set(this.tweet.id, previous.count);
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
         return;
       }
       if (removing) {
@@ -1226,7 +1226,7 @@ export default {
       // counts only our reaction; the real breakdown comes from the author's
       // node, the way retweet() refreshes.
       try {
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
@@ -1266,8 +1266,8 @@ export default {
     getViewsCount(tweetId) {
       return this.viewsCount.get(tweetId) || 0;
     },
-    async loadTweetStats(tweetId, userId) {
-      const stats = await warpnetService.getTweetStats(tweetId, userId);
+    async loadTweetStats(tweetId, userId, force) {
+      const stats = await warpnetService.getTweetStats(tweetId, userId, force);
       if (!stats || !stats.tweet_id) {
         // Transient handler/stream error surfaces as an empty body; a
         // single delayed retry keeps the counters from silently showing

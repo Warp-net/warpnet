@@ -188,6 +188,8 @@ const dedupSkipPaths = new Set([
 
 const walletHistoryWindow = 60000
 const walletHistoryReads = new Map()
+const tweetStatsWindow = 30000
+const tweetStatsReads = new Map()
 
 const retweetPrefix = "RT:"
 
@@ -451,6 +453,7 @@ export const warpnetService = {
         stopRefreshNotifications()
         stateMap.clear()
         walletHistoryReads.clear()
+        tweetStatsReads.clear()
         // The owner is dropped here rather than through setOwnerProfile, so
         // subscribers have to be told explicitly or they keep rendering the
         // signed-out owner.
@@ -2028,7 +2031,11 @@ export const warpnetService = {
         return ids;
     },
 
-    async getTweetStats(tweetId, userId) {
+    async getTweetStats(tweetId, userId, force) {
+        const held = tweetStatsReads.get(tweetId)
+        if (!force && held && Date.now() - held.at < tweetStatsWindow) {
+            return held.read
+        }
         const request = {
             path: PUBLIC_GET_TWEET_STATS,
             body: {
@@ -2036,8 +2043,13 @@ export const warpnetService = {
                 tweet_id: tweetId,
             },
         }
-
-        return await this.sendToNode(request);
+        const read = this.sendToNode(request)
+        tweetStatsReads.set(tweetId, { at: Date.now(), read })
+        const drop = () => {
+            if (tweetStatsReads.get(tweetId)?.read === read) tweetStatsReads.delete(tweetId)
+        }
+        read.then(stats => { if (!stats?.tweet_id) drop() }, drop)
+        return read
     },
 
     // create reply — a reply is a tweet with a parent, posted through the
@@ -2057,7 +2069,10 @@ export const warpnetService = {
                 created_at: new Date().toISOString(),
             },
         }
-        return await this.sendToNode(request);
+        const created = await this.sendToNode(request);
+        tweetStatsReads.delete(parentId)
+        tweetStatsReads.delete(rootId)
+        return created
     },
 
     async getReplies({rootId, parentId, rootUserId, cursorReset}) {
@@ -2121,7 +2136,10 @@ export const warpnetService = {
             },
         }
 
-        return await this.sendToNode(request);
+        const deleted = await this.sendToNode(request);
+        tweetStatsReads.delete(parentId)
+        tweetStatsReads.delete(rootId)
+        return deleted
     },
 
     // reactToTweet reacts to a tweet with `emoji` (the node defaults to a heart

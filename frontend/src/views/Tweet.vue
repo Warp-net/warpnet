@@ -217,7 +217,7 @@ export default {
         this.replyText = '';
         // Refresh the root tweet's counters so the reply count updates
         // without a full page reload.
-        this.$refs.rootTweet?.loadTweetStats(this.tweet.id, this.tweet.user_id)
+        this.$refs.rootTweet?.loadTweetStats(this.tweet.id, this.tweet.user_id, true)
           ?.catch(err => console.error('Failed to refresh tweet stats:', err));
       } catch (err) {
         console.error('Failed to post reply:', err);
