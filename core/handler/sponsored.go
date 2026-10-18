@@ -609,7 +609,7 @@ func copyTweetMedia(
 		return domain.Tweet{}, err
 	}
 
-	watermarkText := "@" + buyer.Username + " · " + buyer.Id
+	watermarkText := buyer.Id
 	imageKeys := make([]string, 0, len(tweet.ImageKeys))
 	for _, key := range tweet.ImageKeys {
 		img, err := mediaRepo.GetImage(tweet.UserId, key)
