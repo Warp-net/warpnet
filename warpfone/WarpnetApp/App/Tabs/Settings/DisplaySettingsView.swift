@@ -18,7 +18,6 @@ import SwiftUI
 struct DisplaySettingsView: View {
   typealias FontState = Theme.FontState
 
-  @Environment(\.colorScheme) private var colorScheme
   @Environment(Theme.self) private var theme
   @Environment(UserPreferences.self) private var userPreferences
 
@@ -76,12 +75,21 @@ struct DisplaySettingsView: View {
     }
   }
 
+  /// The device's own appearance. The environment's colorScheme is the one the
+  /// current theme forces, so leaving Dark for System would keep the app dark.
+  private var systemColorScheme: SwiftUI.ColorScheme {
+    let style = UIApplication.shared.connectedScenes
+      .compactMap { ($0 as? UIWindowScene)?.screen.traitCollection.userInterfaceStyle }
+      .first
+    return style == .dark ? .dark : .light
+  }
+
   private var themeSection: some View {
     Section("settings.display.section.theme") {
       Picker("warpnet.theme.title", selection: .init(get: {
         theme.appTheme
       }, set: { newValue in
-        theme.apply(newValue, systemScheme: colorScheme)
+        theme.apply(newValue, systemScheme: systemColorScheme)
       })) {
         ForEach(Theme.AppTheme.allCases, id: \.rawValue) { appTheme in
           Text(appTheme.title).tag(appTheme)

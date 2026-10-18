@@ -73,15 +73,16 @@ struct LogsView: View {
         }
       }
       .listStyle(.plain)
+      .defaultScrollAnchor(autoscroll ? .bottom : .top)
       .overlay {
         if lines.isEmpty {
           Text("warpnet.logs.empty")
             .foregroundStyle(.secondary)
         }
       }
-      .onChange(of: lines.count) { _, count in
-        if autoscroll, count > 0 {
-          proxy.scrollTo(count - 1, anchor: .bottom)
+      .onChange(of: lines) { _, lines in
+        if autoscroll, !lines.isEmpty {
+          proxy.scrollTo(lines.count - 1, anchor: .bottom)
         }
       }
     }

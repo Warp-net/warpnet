@@ -168,6 +168,7 @@ struct WarpnetRouter: Sendable {
       let author = try? await repository.user(address.userId)
       try await repository.send(ProtocolIds.PUBLIC_POST_RETWEET,
                                 WarpnetTweet(id: address.tweetId,
+                                             createdAt: WarpnetTimestamp.rfc3339(nanos: WarpnetTimestamp.nowNanos()),
                                              retweetedBy: pairing.userId,
                                              rootId: "",
                                              text: tweet.text,
@@ -416,7 +417,7 @@ struct WarpnetRouter: Sendable {
     case .suggestions:
       let page: UsersResponse = try await repository.call(ProtocolIds.PUBLIC_GET_WHOTOFOLLOW,
                                                           GetAllUsersEvent(userId: pairing.userId, limit: 20))
-      return try response(page.users.filter { $0.network != "mastodon" }.map { WarpnetMapper.account($0) })
+      return try response(page.users.filter { !$0.isBridged }.map { WarpnetMapper.account($0) })
 
     case let .block(id):
       try await repository.send(ProtocolIds.PRIVATE_POST_SETTINGS_BLOCK, BlockEvent(blockerId: pairing.userId, blockeeId: id))

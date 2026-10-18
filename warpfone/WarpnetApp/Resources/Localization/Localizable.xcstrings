@@ -1071,7 +1071,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Looking for some social media love? You'll find all your direct messages and private mentions right here. Happy messaging! 📱❤️"
+            "value" : "Looking for some social media love? You'll find all your direct messages right here. Happy messaging! 📱❤️"
           }
         }
       }
@@ -3491,9 +3491,21 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld retweets"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld retweet"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld retweets"
+                }
+              }
+            }
           }
         }
       }
@@ -3502,9 +3514,21 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld reactions"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reaction"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reactions"
+                }
+              }
+            }
           }
         }
       }
@@ -3513,9 +3537,21 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld replies"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reply"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld replies"
+                }
+              }
+            }
           }
         }
       }
@@ -3743,7 +3779,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You are leaving the trusted Warpnet zone. This profile is bridged from %@. Anything you do here (tweet, reply, react, follow) leaves the peer-to-peer network and is stored on %@'s servers, where you no longer own or control that data. It also passes through the Warpnet↔Fediverse gateway, which decrypts and re-encrypts it, so it is briefly in plain text there. Moderation there is done by human administrators, not by Warpnet's automated moderation."
+            "value" : "You are leaving the trusted Warpnet zone. This profile is bridged from %1$@. Anything you do here (tweet, reply, react, follow) leaves the peer-to-peer network and is stored on %1$@'s servers, where you no longer own or control that data. It also passes through the Warpnet↔Fediverse gateway, which decrypts and re-encrypts it, so it is briefly in plain text there. Moderation there is done by human administrators, not by Warpnet's automated moderation."
           }
         }
       }

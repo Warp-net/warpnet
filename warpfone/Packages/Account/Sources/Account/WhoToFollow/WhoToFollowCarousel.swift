@@ -18,8 +18,11 @@ public struct WhoToFollowCarousel: View {
   public init() {}
 
   public var body: some View {
-    Group {
-      if !accounts.isEmpty {
+    // A VStack, not a Group: an empty Group has no view to run `.task` on.
+    VStack(spacing: 0) {
+      if accounts.isEmpty {
+        Color.clear.frame(height: 1)
+      } else {
         VStack(alignment: .leading, spacing: 8) {
           Text("warpnet.who-to-follow")
             .font(.scaledHeadline)

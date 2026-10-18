@@ -51,6 +51,9 @@ struct ThemeApplier: ViewModifier {
       .onChange(of: theme.selectedScheme) { _, newValue in
         setWindowUserInterfaceStyle(from: newValue)
       }
+      .onChange(of: theme.followSystemColorScheme) { _, _ in
+        setWindowUserInterfaceStyle(from: theme.selectedScheme)
+      }
       .onChange(of: colorScheme) { _, newColorScheme in
         if theme.followSystemColorScheme,
            let sets = availableColorsSets
