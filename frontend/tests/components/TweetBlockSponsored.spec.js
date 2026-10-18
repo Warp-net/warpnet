@@ -174,7 +174,7 @@ describe('TweetBlock sponsored tweet', () => {
     renderTweet(teaser());
     await openBill();
 
-    expect(screen.getByText(/Your copy is marked with your name and ID/)).toBeInTheDocument();
+    expect(screen.getByText(/Your copy is marked with your ID/)).toBeInTheDocument();
   });
 
   it('will not pay without enough USDT', async () => {

@@ -33,7 +33,7 @@ func markedShare(img image.Image, r image.Rectangle, gray uint8) float64 {
 	var marked int
 	for y := r.Min.Y; y < r.Max.Y; y++ {
 		for x := r.Min.X; x < r.Max.X; x++ {
-			if diff := int(color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y) - int(gray); diff > 4 || diff < -4 {
+			if diff := int(color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y) - int(gray); diff > 1 || diff < -1 {
 				marked++
 			}
 		}
@@ -44,7 +44,7 @@ func markedShare(img image.Image, r image.Rectangle, gray uint8) float64 {
 func TestDrawWatermark_CoversEveryQuarter(t *testing.T) {
 	size := image.Pt(640, 480)
 	plain := uniformJPEG(t, size, 0x80)
-	watermark, err := WatermarkPNG(plain, "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
+	watermark, err := WatermarkPNG(plain, "01M3ZEY4M40NH3H9JP8E2DVCZH")
 	require.NoError(t, err)
 
 	drawn, err := DrawWatermark(plain, watermark)

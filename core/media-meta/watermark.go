@@ -44,7 +44,7 @@ const (
 	watermarkMaxFontSize = 320
 	watermarkDPI         = 72
 	// The opacity lives in the stored mask, not in the colours, so copies sold earlier keep their bytes.
-	watermarkOpacity = 0x5a
+	watermarkOpacity = 0x26
 
 	rotateCos = 58618
 	rotateSin = 29309
