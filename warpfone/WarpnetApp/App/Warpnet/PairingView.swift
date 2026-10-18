@@ -101,7 +101,8 @@ struct PairingView: View {
       Section {
         LabeledContent("warpnet.pairing.owner", value: info.userId)
         LabeledContent("warpnet.pairing.node", value: shortNodeId(info.nodeId))
-        LabeledContent("warpnet.pairing.address", value: info.addresses.first ?? "")
+        LabeledContent("warpnet.pairing.address",
+                       value: info.dialCandidates.first?.replacingOccurrences(of: "/p2p/\(info.nodeId)", with: "") ?? "")
       } header: {
         Text("warpnet.pairing.confirm-title")
       }
