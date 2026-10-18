@@ -14,6 +14,7 @@ public struct ConversationsListView: View {
   @Environment(Theme.self) private var theme
 
   @State private var viewModel = ConversationsListViewModel()
+  @State private var isNewConversationPresented = false
 
   @Binding var scrollToTopSignal: Int
 
@@ -49,7 +50,7 @@ public struct ConversationsListView: View {
                 Divider()
               }
             } else if conversations.isEmpty, !viewModel.isLoadingFirstPage, !viewModel.isError {
-              EmptyView(iconName: "tray",
+              EmptyView(iconName: "envelope",
                         title: "conversations.empty.title",
                         message: "conversations.empty.message")
             } else if viewModel.isError {
@@ -81,12 +82,25 @@ public struct ConversationsListView: View {
         }
         .padding(.top, .layoutPadding)
       }
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.primaryBackgroundColor)
-      #endif
       .navigationTitle("conversations.navigation-title")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button {
+            isNewConversationPresented = true
+          } label: {
+            Image(systemName: "plus.message")
+          }
+          .accessibilityLabel("warpnet.conversations.new.title")
+        }
+      }
+      .sheet(isPresented: $isNewConversationPresented) {
+        NewConversationView { conversation in
+          routerPath.navigate(to: .conversationDetail(conversation: conversation))
+        }
+      }
       .onChange(of: scrollToTopSignal) {
         withAnimation {
           proxy.scrollTo(ScrollToView.Constants.scrollToTop, anchor: .top)

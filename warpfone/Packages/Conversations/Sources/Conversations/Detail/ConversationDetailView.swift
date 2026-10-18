@@ -48,9 +48,7 @@ public struct ConversationDetailView: View {
         }
         .padding(.horizontal, .layoutPadding)
       }
-      #if !os(visionOS)
       .scrollDismissesKeyboard(.interactively)
-      #endif
       .safeAreaInset(edge: .bottom) {
         inputTextView
       }
@@ -72,10 +70,8 @@ public struct ConversationDetailView: View {
       }
     }
     .navigationBarTitleDisplayMode(.inline)
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .background(theme.primaryBackgroundColor)
-    #endif
     .toolbar {
       ToolbarItem(placement: .principal) {
         if viewModel.conversation.accounts.count == 1,
@@ -99,7 +95,7 @@ public struct ConversationDetailView: View {
     }
     .task {
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(10))
+        try? await Task.sleep(for: .seconds(3))
         if await viewModel.fetchMessages() {
           withAnimation {
             scrollProxy?.scrollTo(Constants.bottomAnchor, anchor: .bottom)

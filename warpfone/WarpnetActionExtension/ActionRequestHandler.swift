@@ -2,7 +2,7 @@
 
 //
 //  ActionRequestHandler.swift
-//  IceCubesActionExtension
+//  WarpnetActionExtension
 //
 //  Created by Thomas Durand on 26/01/2023.
 //
@@ -33,7 +33,7 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling, Sendable
           throw Error.notFediverseProfile
         }
         await MainActor.run {
-          let deeplink = url.iceCubesAppDeepLink
+          let deeplink = url.warpfoneDeepLink
           let output = output(wrapping: deeplink)
           context.completeRequest(returningItems: output)
         }
@@ -53,7 +53,7 @@ extension URL {
     return parts.count == 1 && parts[0].count > 1 && parts[0].hasPrefix("@")
   }
 
-  var iceCubesAppDeepLink: URL {
+  var warpfoneDeepLink: URL {
     var components = URLComponents(url: self, resolvingAgainstBaseURL: false)!
     components.scheme = AppInfo.scheme.trimmingCharacters(in: [":", "/"])
     return components.url!

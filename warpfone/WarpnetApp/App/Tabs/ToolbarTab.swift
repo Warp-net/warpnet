@@ -9,13 +9,16 @@ struct ToolbarTab: ToolbarContent {
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   
   @Environment(UserPreferences.self) private var userPreferences
+  @Environment(PairingModel.self) private var pairing
   
   @Binding var routerPath: RouterPath
   
   var body: some ToolbarContent {
     if !isSecondaryColumn {
-      statusEditorToolbarItem(routerPath: routerPath,
-                              visibility: userPreferences.postVisibility)
+      StatusEditorToolbarItem()
+      ToolbarItem(placement: .navigationBarTrailing) {
+        ConnectionDot(monitor: pairing.monitor)
+      }
       if UIDevice.current.userInterfaceIdiom != .pad ||
           (UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .compact) {
         ToolbarItem(placement: .navigationBarLeading) {

@@ -90,11 +90,7 @@ struct StatusRowHeaderView: View {
   }
 
   private var dateView: some View {
-    Group {
-      Text(Image(systemName: viewModel.finalStatus.visibility.iconName)) +
-      Text(" ⸱ ") +
-      Text(viewModel.finalStatus.createdAt.relativeFormatted)
-    }
+    Text(viewModel.finalStatus.createdAt.relativeFormatted)
     .font(.scaledFootnote)
     .foregroundStyle(.secondary)
     .lineLimit(1)

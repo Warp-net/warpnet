@@ -16,10 +16,8 @@ struct PairingView: View {
       content
         .navigationTitle("warpnet.pairing.title")
         .navigationBarTitleDisplayMode(.inline)
-      #if !os(visionOS)
         .scrollContentBackground(.hidden)
         .background(theme.secondaryBackgroundColor)
-      #endif
     }
     .sheet(isPresented: $isManualEntryPresented) {
       manualEntryView
@@ -48,9 +46,7 @@ struct PairingView: View {
           Text(notice)
             .foregroundStyle(.red)
         }
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
       }
       if pairing.isAvailable {
         Section {
@@ -60,9 +56,7 @@ struct PairingView: View {
         } header: {
           Text("warpnet.pairing.onboarding-title")
         }
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
         Section {
           if QRScannerView.isAvailable {
             QRScannerView { pairing.scanned($0) }
@@ -73,24 +67,18 @@ struct PairingView: View {
               .foregroundStyle(.secondary)
           }
         }
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
         Section {
           Button("warpnet.pairing.manual") {
             isManualEntryPresented = true
           }
         }
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
       } else {
         Section {
           Text("warpnet.pairing.unavailable")
         }
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
       }
     }
     .formStyle(.grouped)
@@ -106,9 +94,7 @@ struct PairingView: View {
       } header: {
         Text("warpnet.pairing.confirm-title")
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
       Section {
         Button {
           Task {
@@ -125,9 +111,7 @@ struct PairingView: View {
         }
         .frame(maxWidth: .infinity)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
     .formStyle(.grouped)
   }
@@ -137,9 +121,7 @@ struct PairingView: View {
       Section {
         Text(message)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
       Section {
         if canRetry {
           Button("warpnet.pairing.retry") {
@@ -152,9 +134,7 @@ struct PairingView: View {
           pairing.cancel()
         }
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
     .formStyle(.grouped)
   }
@@ -175,17 +155,13 @@ struct PairingView: View {
         } footer: {
           Text("warpnet.pairing.manual-body")
         }
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
       }
       .formStyle(.grouped)
       .navigationTitle("warpnet.pairing.manual-title")
       .navigationBarTitleDisplayMode(.inline)
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.secondaryBackgroundColor)
-      #endif
       .toolbar {
         CancelToolbarItem()
         ToolbarItem(placement: .confirmationAction) {

@@ -19,7 +19,6 @@ struct AccountDetailHeaderView: View {
   @Environment(RouterPath.self) private var routerPath
   @Environment(CurrentAccount.self) private var currentAccount
   @Environment(\.redactionReasons) private var reasons
-  @Environment(\.isSupporter) private var isSupporter: Bool
 
   var viewModel: AccountDetailViewModel
   let account: Account
@@ -71,16 +70,14 @@ struct AccountDetailHeaderView: View {
         .frame(height: Constants.headerHeight)
       }
     }
-    #if !os(visionOS)
     .background(theme.secondaryBackgroundColor)
-    #endif
     .frame(height: Constants.headerHeight)
     .onTapGesture {
       guard account.haveHeader else {
         return
       }
       let attachement = MediaAttachment.imageWith(url: account.header)
-      #if targetEnvironment(macCatalyst) || os(visionOS)
+      #if targetEnvironment(macCatalyst)
         openWindow(value: WindowDestinationMedia.mediaViewer(
           attachments: [attachement],
           selectedAttachment: attachement
@@ -101,23 +98,13 @@ struct AccountDetailHeaderView: View {
       ZStack(alignment: .topTrailing) {
         AvatarView(account.avatar, config: .account)
           .accessibilityLabel("accessibility.tabs.profile.user-avatar.label")
-        if viewModel.isCurrentUser, isSupporter {
-          Image(systemName: "checkmark.seal.fill")
-            .resizable()
-            .frame(width: 25, height: 25)
-            .foregroundColor(theme.tintColor)
-            .offset(x: theme.avatarShape == .circle ? 0 : 10,
-                    y: theme.avatarShape == .circle ? 0 : -10)
-            .accessibilityRemoveTraits(.isSelected)
-            .accessibilityLabel("accessibility.tabs.profile.user-avatar.supporter.label")
-        }
       }
       .onTapGesture {
         guard account.haveAvatar else {
           return
         }
         let attachement = MediaAttachment.imageWith(url: account.avatar)
-        #if targetEnvironment(macCatalyst) || os(visionOS)
+        #if targetEnvironment(macCatalyst)
           openWindow(value: WindowDestinationMedia.mediaViewer(attachments: [attachement],
                                                                selectedAttachment: attachement))
         #else
@@ -219,7 +206,6 @@ struct AccountDetailHeaderView: View {
           HStack {
             FollowButton(viewModel: .init(accountId: account.id,
                                           relationship: relationship,
-                                          shouldDisplayNotify: true,
                                           relationshipUpdated: { relationship in
                                             viewModel.relationship = relationship
                                           }))
@@ -316,9 +302,7 @@ struct AccountDetailHeaderView: View {
       Text(note)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
-      #if !os(visionOS)
         .background(theme.secondaryBackgroundColor)
-      #endif
         .cornerRadius(4)
         .overlay(
           RoundedRectangle(cornerRadius: 4)
@@ -368,11 +352,7 @@ struct AccountDetailHeaderView: View {
       .padding(8)
       .accessibilityElement(children: .contain)
       .accessibilityLabel("accessibility.tabs.profile.fields.container.label")
-      #if os(visionOS)
-      .background(Material.thick)
-      #else
       .background(theme.secondaryBackgroundColor)
-      #endif
       .cornerRadius(4)
       .overlay(
         RoundedRectangle(cornerRadius: 4)

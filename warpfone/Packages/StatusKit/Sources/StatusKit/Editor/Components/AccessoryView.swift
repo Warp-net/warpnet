@@ -23,17 +23,6 @@ extension StatusEditor {
 
     var body: some View {
       @Bindable var viewModel = focusedSEVM
-      #if os(visionOS)
-      HStack {
-        contentView
-          .buttonStyle(.borderless)
-      }
-      .frame(width: 32)
-      .padding(16)
-      .glassBackgroundEffect()
-      .cornerRadius(8)
-      .padding(.trailing, 78)
-      #else
       Divider()
       HStack {
         contentView
@@ -41,16 +30,10 @@ extension StatusEditor {
       .frame(height: 20)
       .padding(.vertical, 12)
       .background(.ultraThickMaterial)
-      #endif
     }
 
     @ViewBuilder
     private var contentView: some View {
-      #if os(visionOS)
-      VStack(spacing: 8) {
-        actionsView
-      }
-      #else
       ViewThatFits {
         HStack(alignment: .center, spacing: 16) {
           actionsView
@@ -65,7 +48,6 @@ extension StatusEditor {
         }
         .scrollIndicators(.hidden)
       }
-      #endif
     }
 
     @ViewBuilder
@@ -125,8 +107,7 @@ extension StatusEditor {
       
       if !focusedSEVM.mode.isInShareExtension {
         Button {
-          // all SEVM have the same visibility value
-          followUpSEVMs.append(ViewModel(mode: .new(visibility: focusedSEVM.visibility)))
+          followUpSEVMs.append(ViewModel(mode: .new))
         } label: {
           Image(systemName: "arrowshape.turn.up.left.circle.fill")
         }

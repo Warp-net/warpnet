@@ -34,9 +34,6 @@ public final class Account: Codable, Identifiable, Hashable, Sendable, Equatable
   }
 
   public struct Source: Codable, Equatable, Sendable {
-    public let privacy: Visibility
-    public let sensitive: Bool
-    public let language: String?
     public let note: String
     public let fields: [Field]
   }
@@ -151,10 +148,10 @@ public final class Account: Codable, Identifiable, Hashable, Sendable, Equatable
   public static func placeholder() -> Account {
     .init(id: UUID().uuidString,
           username: "Username",
-          displayName: "John Mastodon",
-          avatar: URL(string: "https://files.mastodon.social/media_attachments/files/003/134/405/original/04060b07ddf7bb0b.png")!,
-          header: URL(string: "https://files.mastodon.social/media_attachments/files/003/134/405/original/04060b07ddf7bb0b.png")!,
-          acct: "johnm@example.com",
+          displayName: "Warpnet user",
+          avatar: URL(string: "warpnet://image/placeholder/missing.png")!,
+          header: URL(string: "warpnet://image/placeholder/missing.png")!,
+          acct: "username",
           note: .init(stringValue: "Some content"),
           createdAt: ServerDate(),
           followersCount: 10,
@@ -175,10 +172,3 @@ public final class Account: Codable, Identifiable, Hashable, Sendable, Equatable
      .placeholder(), .placeholder(), .placeholder(), .placeholder(), .placeholder()]
   }
 }
-
-public struct FamiliarAccounts: Decodable {
-  public let id: String
-  public let accounts: [Account]
-}
-
-extension FamiliarAccounts: Sendable {}

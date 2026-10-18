@@ -52,25 +52,16 @@ struct AppView: View {
 
   @ViewBuilder
   private var platformView: some View {
-    #if os(visionOS)
-    tabBarView
-    #else
     if UIDevice.current.userInterfaceIdiom == .pad || UIDevice.current.userInterfaceIdiom == .mac {
       sidebarView
     } else {
       tabBarView
     }
-    #endif
   }
   
   var availableTabs: [Tab] {
-    guard appAccountsManager.currentClient.isAuth else {
-      return Tab.loggedOutTab()
-    }
     if UIDevice.current.userInterfaceIdiom == .phone || horizontalSizeClass == .compact {
       return iosTabs.tabs
-    } else if UIDevice.current.userInterfaceIdiom == .vision {
-      return Tab.visionOSTab()
     }
     return sidebarTabs.tabs.map{ $0.tab }
   }
@@ -80,11 +71,7 @@ struct AppView: View {
       selectedTab
     }, set: { newTab in
       if newTab == .post {
-        #if os(visionOS)
-        openWindow(value: WindowDestinationEditor.newStatusEditor(visibility: userPreferences.postVisibility))
-        #else
-        appRouterPath.presentedSheet = .newStatusEditor(visibility: userPreferences.postVisibility)
-        #endif
+        appRouterPath.presentedSheet = .newStatusEditor
         return
       }
       if newTab == selectedTab {
@@ -125,7 +112,6 @@ struct AppView: View {
     return 0
   }
   
-  #if !os(visionOS)
   var sidebarView: some View {
     SideBarView(selectedTab: $selectedTab,
                 popToRootTab: $popToRootTab,
@@ -158,7 +144,6 @@ struct AppView: View {
     }
     .environment(appRouterPath)
   }
-  #endif
 
   var notificationsSecondaryColumn: some View {
     NotificationsTab(selectedTab: .constant(.notifications),

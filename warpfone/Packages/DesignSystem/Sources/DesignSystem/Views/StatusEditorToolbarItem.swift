@@ -3,42 +3,20 @@ import Models
 import SwiftUI
 
 @MainActor
-public extension View {
-  func statusEditorToolbarItem(routerPath _: RouterPath,
-                               visibility: Models.Visibility) -> some ToolbarContent
-  {
-    StatusEditorToolbarItem(visibility: visibility)
-  }
-}
-
-@MainActor
-public extension ToolbarContent {
-  func statusEditorToolbarItem(routerPath _: RouterPath,
-                               visibility: Models.Visibility) -> some ToolbarContent
-  {
-    StatusEditorToolbarItem(visibility: visibility)
-  }
-}
-
-@MainActor
 public struct StatusEditorToolbarItem: ToolbarContent {
   @Environment(\.openWindow) private var openWindow
   @Environment(RouterPath.self) private var routerPath
 
-  let visibility: Models.Visibility
-
-  public init(visibility: Models.Visibility) {
-    self.visibility = visibility
-  }
+  public init() {}
 
   public var body: some ToolbarContent {
     ToolbarItem(placement: .navigationBarTrailing) {
       Button {
         Task { @MainActor in
-          #if targetEnvironment(macCatalyst) || os(visionOS)
-            openWindow(value: WindowDestinationEditor.newStatusEditor(visibility: visibility))
+          #if targetEnvironment(macCatalyst)
+            openWindow(value: WindowDestinationEditor.newStatusEditor)
           #else
-            routerPath.presentedSheet = .newStatusEditor(visibility: visibility)
+            routerPath.presentedSheet = .newStatusEditor
             HapticManager.shared.fireHaptic(.buttonPress)
           #endif
         }

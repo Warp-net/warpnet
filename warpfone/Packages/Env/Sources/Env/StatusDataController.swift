@@ -17,9 +17,9 @@ public protocol StatusDataControlling {
   var reblogsCount: Int { get set }
   var repliesCount: Int { get set }
 
-  func toggleBookmark(remoteStatus: String?) async
-  func toggleReblog(remoteStatus: String?) async
-  func toggleFavorite(remoteStatus: String?) async
+  func toggleBookmark() async
+  func toggleReblog() async
+  func toggleFavorite() async
 }
 
 @MainActor
@@ -61,6 +61,7 @@ public final class StatusDataControllerProvider {
   public var isBookmarked: Bool
   public var isFavorited: Bool
   public var myReaction: String?
+  public var reactions: [String: Int]
   public var content: HTMLString
 
   public var favoritesCount: Int
@@ -75,6 +76,7 @@ public final class StatusDataControllerProvider {
     isBookmarked = status.bookmarked == true
     isFavorited = status.favourited == true
     myReaction = status.myReaction
+    reactions = status.reactions ?? [:]
 
     reblogsCount = status.reblogsCount
     repliesCount = status.repliesCount
@@ -87,6 +89,7 @@ public final class StatusDataControllerProvider {
     isBookmarked = status.bookmarked == true
     isFavorited = status.favourited == true
     myReaction = status.myReaction
+    reactions = status.reactions ?? [:]
 
     reblogsCount = status.reblogsCount
     repliesCount = status.repliesCount
@@ -94,29 +97,25 @@ public final class StatusDataControllerProvider {
     content = status.content
   }
 
-  public func toggleFavorite(remoteStatus: String?) async {
-    guard client.isAuth else { return }
-    isFavorited.toggle()
-    let id = remoteStatus ?? status.id
-    let endpoint = isFavorited ? Statuses.favorite(id: id) : Statuses.unfavorite(id: id)
-    withAnimation(.default) {
-      favoritesCount += isFavorited ? 1 : -1
-    }
-    do {
-      let status: Status = try await client.post(endpoint: endpoint)
-      updateFrom(status: status)
-    } catch {
-      isFavorited.toggle()
-      favoritesCount += isFavorited ? -1 : 1
-    }
+  /// A tap takes back the reaction you hold, or reacts with the default heart.
+  public func toggleFavorite() async {
+    await react(emoji: isFavorited ? myReaction ?? WarpnetReactions.defaultReaction : WarpnetReactions.defaultReaction)
   }
 
-  public func react(emoji: String, remoteStatus: String?) async {
+  /// Reacts with `emoji`; reacting with the one you already hold takes it back.
+  public func react(emoji: String) async {
     guard client.isAuth else { return }
-    let previous = (isFavorited, myReaction, favoritesCount)
+    let previous = (isFavorited, myReaction, favoritesCount, reactions)
     let isRemoving = isFavorited && myReaction == emoji
-    let id = remoteStatus ?? status.id
+    let id = status.id
     withAnimation(.default) {
+      if isFavorited, let held = myReaction {
+        let count = (reactions[held] ?? 0) - 1
+        reactions[held] = count > 0 ? count : nil
+      }
+      if !isRemoving {
+        reactions[emoji, default: 0] += 1
+      }
       if !isFavorited {
         favoritesCount += 1
       } else if isRemoving {
@@ -130,14 +129,14 @@ public final class StatusDataControllerProvider {
       let status: Status = try await client.post(endpoint: endpoint)
       updateFrom(status: status)
     } catch {
-      (isFavorited, myReaction, favoritesCount) = previous
+      (isFavorited, myReaction, favoritesCount, reactions) = previous
     }
   }
 
-  public func toggleReblog(remoteStatus: String?) async {
+  public func toggleReblog() async {
     guard client.isAuth else { return }
     isReblogged.toggle()
-    let id = remoteStatus ?? status.id
+    let id = status.id
     let endpoint = isReblogged ? Statuses.reblog(id: id) : Statuses.unreblog(id: id)
     withAnimation(.default) {
       reblogsCount += isReblogged ? 1 : -1
@@ -151,10 +150,10 @@ public final class StatusDataControllerProvider {
     }
   }
 
-  public func toggleBookmark(remoteStatus: String?) async {
+  public func toggleBookmark() async {
     guard client.isAuth else { return }
     isBookmarked.toggle()
-    let id = remoteStatus ?? status.id
+    let id = status.id
     let endpoint = isBookmarked ? Statuses.bookmark(id: id) : Statuses.unbookmark(id: id)
     do {
       let status: Status = try await client.post(endpoint: endpoint)

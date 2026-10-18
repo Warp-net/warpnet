@@ -1,11 +1,5 @@
 import Foundation
 
-public struct RawStreamEvent: Decodable {
-  public let event: String
-  public let stream: [String]
-  public let payload: String
-}
-
 public protocol StreamEvent: Identifiable {
   var date: Date { get }
   var id: String { get }
@@ -44,14 +38,5 @@ public struct StreamEventNotification: StreamEvent {
   public let notification: Notification
   public init(notification: Notification) {
     self.notification = notification
-  }
-}
-
-public struct StreamEventConversation: StreamEvent {
-  public let date = Date()
-  public var id: String { conversation.id }
-  public let conversation: Conversation
-  public init(conversation: Conversation) {
-    self.conversation = conversation
   }
 }

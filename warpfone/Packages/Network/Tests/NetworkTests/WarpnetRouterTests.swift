@@ -134,7 +134,7 @@ final class WarpnetRouterTests: XCTestCase {
       }
       return Self.standardNode(route, body, timeline: [])
     }
-    let data = StatusData(status: "thanks", visibility: .pub, inReplyToId: "01PARENT|01PAUTHOR|01ROOT", mediaIds: ["img:k1", "vid:v1"])
+    let data = StatusData(status: "thanks", inReplyToId: "01PARENT|01PAUTHOR|01ROOT", mediaIds: ["img:k1", "vid:v1"])
     let status = try await decoder.decode(Status.self, from: router.route(Statuses.postStatus(json: data), method: .post).body)
 
     let sent = try XCTUnwrap(binding.calls(to: ProtocolIds.PRIVATE_POST_TWEET).first)
@@ -159,7 +159,7 @@ final class WarpnetRouterTests: XCTestCase {
       }
       return Self.standardNode(route, body, timeline: [])
     }
-    let data = StatusData(status: " look at this ", visibility: .pub, quotedStatusId: "01SRC|01SRCAUTHOR||01RT")
+    let data = StatusData(status: " look at this ", quotedStatusId: "01SRC|01SRCAUTHOR||01RT")
     let status = try await decoder.decode(Status.self, from: router.route(Statuses.postStatus(json: data), method: .post).body)
 
     let sent = try XCTUnwrap(binding.calls(to: ProtocolIds.PUBLIC_POST_RETWEET).first)
@@ -295,10 +295,10 @@ final class WarpnetRouterTests: XCTestCase {
   func testUnsupportedEndpointsAreTypedErrors() async {
     let (router, _) = await makeRouter { Self.standardNode($0, $1, timeline: []) }
     do {
-      _ = try await router.route(Trends.tags, method: .get)
+      _ = try await router.route(UnknownEndpoint(), method: .get)
       XCTFail("expected a failure")
     } catch {
-      XCTAssertEqual(error as? WarpnetRoutingError, .unsupported("trends/tags"))
+      XCTAssertEqual(error as? WarpnetRoutingError, .unsupported("unknown"))
     }
   }
 
@@ -397,7 +397,7 @@ final class WarpnetRouterTests: XCTestCase {
     }
     let results = try await decoder.decode(SearchResults.self,
                                            from: router.route(Search.search(query: "warpnet://status/01SRC%7C01SRCAUTHOR",
-                                                                            type: "statuses", offset: 0, following: nil),
+                                                                            type: "statuses"),
                                                               method: .get).body)
     XCTAssertEqual(results.statuses.map(\.id), ["01SRC|01SRCAUTHOR"])
     XCTAssertEqual(binding.calls(to: ProtocolIds.PUBLIC_GET_TWEET).first?["user_id"] as? String, "01SRCAUTHOR")
@@ -482,9 +482,7 @@ final class WarpnetRouterTests: XCTestCase {
         return Self.standardNode(route, body, timeline: [])
       }
     }
-    let data = UpdateCredentialsData(displayName: " Alice ", note: "bio", source: .init(privacy: .pub, sensitive: false),
-                                     bot: false, locked: false, discoverable: false,
-                                     fieldsAttributes: [.init(name: "Website", value: "https://alice.example ")])
+    let data = UpdateCredentialsData(displayName: " Alice ", note: "bio", website: "https://alice.example ")
     _ = try await router.route(Accounts.updateCredentials(json: data), method: .patch)
     let edit = try XCTUnwrap(binding.calls(to: ProtocolIds.PRIVATE_POST_USER).first)
     XCTAssertEqual(edit["username"] as? String, "Alice")
@@ -547,4 +545,9 @@ final class WarpnetRouterTests: XCTestCase {
     XCTAssertEqual(WarpnetRouter.fediverseHandle("https://mastodon.social/@bob"), "bob@mastodon.social")
     XCTAssertNil(WarpnetRouter.fediverseHandle("alice"))
   }
+}
+
+private struct UnknownEndpoint: Endpoint {
+  func path() -> String { "unknown" }
+  func queryItems() -> [URLQueryItem]? { nil }
 }

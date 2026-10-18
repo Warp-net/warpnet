@@ -73,25 +73,16 @@ extension StatusEditor {
         .scrollPosition(id: $scrollID, anchor: .top)
         .animation(.bouncy(duration: 0.3), value: editorFocusState)
         .animation(.bouncy(duration: 0.3), value: followUpSEVMs)
-        #if !os(visionOS)
         .background(theme.primaryBackgroundColor)
-        #endif
         .safeAreaInset(edge: .bottom) {
           AutoCompleteView(viewModel: focusedSEVM)
         }
-        #if os(visionOS)
-        .ornament(attachmentAnchor: .scene(.leading)) {
-          AccessoryView(focusedSEVM: focusedSEVM,
-                        followUpSEVMs: $followUpSEVMs)
-        }
-        #else
         .safeAreaInset(edge: .bottom) {
           if presentationDetent == .large || presentationDetent == .medium {
             AccessoryView(focusedSEVM: focusedSEVM,
                           followUpSEVMs: $followUpSEVMs)
           }
         }
-        #endif
         .accessibilitySortPriority(1) // Ensure that all elements inside the `ScrollView` occur earlier than the accessory views
         .navigationTitle(focusedSEVM.mode.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -124,11 +115,6 @@ extension StatusEditor {
           mainSEVM.currentAccount = currentAccount.account
           for p in followUpSEVMs {
             p.currentAccount = mainSEVM.currentAccount
-          }
-        }
-        .onChange(of: mainSEVM.visibility) {
-          for p in followUpSEVMs {
-            p.visibility = mainSEVM.visibility
           }
         }
         .onChange(of: followUpSEVMs.count) { oldValue, newValue in

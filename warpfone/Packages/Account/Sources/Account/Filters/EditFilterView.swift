@@ -72,11 +72,9 @@ struct EditFilterView: View {
     }
     .navigationTitle(filter?.title ?? NSLocalizedString("filter.new", comment: ""))
     .navigationBarTitleDisplayMode(.inline)
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .scrollDismissesKeyboard(.interactively)
     .background(theme.secondaryBackgroundColor)
-    #endif
     .onAppear {
       if filter == nil {
         focusedField = .title
@@ -108,9 +106,7 @@ struct EditFilterView: View {
           .disabled(expirySelection != .custom)
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   @ViewBuilder
@@ -124,9 +120,7 @@ struct EditFilterView: View {
           }
         }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
 
     if filter == nil, !title.isEmpty {
       Section {
@@ -146,9 +140,7 @@ struct EditFilterView: View {
         .buttonStyle(.borderedProminent)
         .transition(.opacity)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.secondaryBackgroundColor)
-      #endif
     }
   }
 
@@ -202,9 +194,7 @@ struct EditFilterView: View {
         }
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   private var contextsSection: some View {
@@ -226,9 +216,7 @@ struct EditFilterView: View {
         }
         .disabled(isSavingFilter)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
   }
 
@@ -249,9 +237,7 @@ struct EditFilterView: View {
       }
       .pickerStyle(.inline)
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   private var saveButton: some View {
@@ -279,11 +265,9 @@ struct EditFilterView: View {
     do {
       isSavingFilter = true
       if let filter {
-        self.filter = try await client.put(endpoint: ServerFilters.editFilter(id: filter.id, json: data),
-                                           forceVersion: .v2)
+        self.filter = try await client.put(endpoint: ServerFilters.editFilter(id: filter.id, json: data))
       } else {
-        let newFilter: ServerFilter = try await client.post(endpoint: ServerFilters.createFilter(json: data),
-                                                            forceVersion: .v2)
+        let newFilter: ServerFilter = try await client.post(endpoint: ServerFilters.createFilter(json: data))
         filter = newFilter
       }
     } catch {}
@@ -297,8 +281,7 @@ struct EditFilterView: View {
       let keyword: ServerFilter.Keyword = try await
         client.post(endpoint: ServerFilters.addKeyword(filter: filterId,
                                                        keyword: name,
-                                                       wholeWord: true),
-                    forceVersion: .v2)
+                                                       wholeWord: true))
       keywords.append(keyword)
     } catch {}
     isSavingFilter = false
@@ -307,8 +290,7 @@ struct EditFilterView: View {
   private func deleteKeyword(keyword: ServerFilter.Keyword) async {
     isSavingFilter = true
     do {
-      let response = try await client.delete(endpoint: ServerFilters.removeKeyword(id: keyword.id),
-                                             forceVersion: .v2)
+      let response = try await client.delete(endpoint: ServerFilters.removeKeyword(id: keyword.id))
       if response?.statusCode == 200 {
         keywords.removeAll(where: { $0.id == keyword.id })
       }

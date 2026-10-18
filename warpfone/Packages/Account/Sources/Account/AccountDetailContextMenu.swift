@@ -8,8 +8,6 @@ import SwiftUI
 public struct AccountDetailContextMenu: View {
   @Environment(Client.self) private var client
   @Environment(RouterPath.self) private var routerPath
-  @Environment(CurrentInstance.self) private var currentInstance
-  @Environment(UserPreferences.self) private var preferences
 
   @Binding var showBlockConfirmation: Bool
 
@@ -20,8 +18,7 @@ public struct AccountDetailContextMenu: View {
       Section(account.acct) {
         if !viewModel.isCurrentUser {
           Button {
-            routerPath.presentedSheet = .mentionStatusEditor(account: account,
-                                                             visibility: preferences.postVisibility)
+            routerPath.presentedSheet = .mentionStatusEditor(account: account)
           } label: {
             Label("account.action.mention", systemImage: "at")
           }
@@ -32,7 +29,7 @@ public struct AccountDetailContextMenu: View {
               }
             }
           } label: {
-            Label("account.action.message", systemImage: "tray.full")
+            Label("account.action.message", systemImage: "envelope")
           }
 
             #if !targetEnvironment(macCatalyst)
@@ -71,7 +68,7 @@ public struct AccountDetailContextMenu: View {
             Button {
               Task {
                 do {
-                  viewModel.relationship = try await client.post(endpoint: Accounts.mute(id: account.id, json: MuteData(duration: Duration.infinite.rawValue)))
+                  viewModel.relationship = try await client.post(endpoint: Accounts.mute(id: account.id))
                 } catch { }
               }
             } label: {
@@ -83,61 +80,6 @@ public struct AccountDetailContextMenu: View {
             routerPath.presentedSheet = .reportAccount(account: account)
           } label: {
             Label("warpnet.report.account-action", systemImage: "exclamationmark.bubble")
-          }
-
-          if let relationship = viewModel.relationship,
-             relationship.following
-          {
-            if relationship.notifying {
-              Button {
-                Task {
-                  do {
-                    viewModel.relationship = try await client.post(endpoint: Accounts.follow(id: account.id,
-                                                                                             notify: false,
-                                                                                             reblogs: relationship.showingReblogs))
-                  } catch { }
-                }
-              } label: {
-                Label("account.action.notify-disable", systemImage: "bell.fill")
-              }
-            } else {
-              Button {
-                Task {
-                  do {
-                    viewModel.relationship = try await client.post(endpoint: Accounts.follow(id: account.id,
-                                                                                             notify: true,
-                                                                                             reblogs: relationship.showingReblogs))
-                  } catch { }
-                }
-              } label: {
-                Label("account.action.notify-enable", systemImage: "bell")
-              }
-            }
-            if relationship.showingReblogs {
-              Button {
-                Task {
-                  do {
-                    viewModel.relationship = try await client.post(endpoint: Accounts.follow(id: account.id,
-                                                                                             notify: relationship.notifying,
-                                                                                             reblogs: false))
-                  } catch { }
-                }
-              } label: {
-                Label("account.action.reboosts-hide", image: "Rocket.Fill")
-              }
-            } else {
-              Button {
-                Task {
-                  do {
-                    viewModel.relationship = try await client.post(endpoint: Accounts.follow(id: account.id,
-                                                                                             notify: relationship.notifying,
-                                                                                             reblogs: true))
-                  } catch { }
-                }
-              } label: {
-                Label("account.action.reboosts-show", image: "Rocket")
-              }
-            }
           }
 
             #if !targetEnvironment(macCatalyst)

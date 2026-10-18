@@ -35,11 +35,7 @@ public struct StatusEmbeddedView: View {
       Spacer()
     }
     .padding(8)
-    #if os(visionOS)
-    .background(Material.thickMaterial)
-    #else
     .background(theme.secondaryBackgroundColor)
-    #endif
     .cornerRadius(4)
     .overlay(
       RoundedRectangle(cornerRadius: 4)

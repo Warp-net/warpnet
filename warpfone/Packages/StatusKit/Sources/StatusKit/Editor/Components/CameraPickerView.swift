@@ -22,9 +22,7 @@ extension StatusEditor {
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
       let imagePicker = UIImagePickerController()
-      #if !os(visionOS)
       imagePicker.sourceType = .camera
-      #endif
       imagePicker.delegate = context.coordinator
       return imagePicker
     }

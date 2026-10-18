@@ -19,10 +19,13 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Warpnet connects directly to your paired Warpnet node when both are on the same network.</string>
-	<key>NSUserActivityTypes</key>
-	<array>
-		<string>INSendMessageIntent</string>
-	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchLogo</string>
+	</dict>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Atkinson-Hyperlegible-Regular-102.ttf</string>
@@ -38,7 +41,5 @@
 	</array>
 	<key>AppGroup</key>
 	<string>group.$(BUNDLE_ID_PREFIX).warpfone</string>
-	<key>KeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).warpfone</string>
 </dict>
 </plist>

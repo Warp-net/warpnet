@@ -6,10 +6,6 @@ import Models
 struct StatusRowAccessibilityLabel {
   let viewModel: StatusRowViewModel
 
-  var hasSpoiler: Bool {
-    viewModel.displaySpoiler && viewModel.finalStatus.spoilerText.asRawText.isEmpty == false
-  }
-
   var isReply: Bool {
     if let accountId = viewModel.status.inReplyToAccountId, viewModel.status.mentions.contains(where: { $0.id == accountId }) {
       return true
@@ -38,14 +34,7 @@ struct StatusRowAccessibilityLabel {
       }
     } else {
       userNamePreamble() +
-        Text(hasSpoiler
-          ? viewModel.finalStatus.spoilerText.asRawText
-          : viewModel.finalStatus.content.asRawText
-        ) +
-        Text(hasSpoiler
-          ? "status.editor.spoiler"
-          : ""
-        ) + Text(", ") +
+        Text(viewModel.finalStatus.content.asRawText) + Text(", ") +
         pollText() +
         imageAltText() +
         Text(viewModel.finalStatus.createdAt.relativeFormatted) + Text(", ") +

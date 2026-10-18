@@ -1,5 +1,6 @@
 // Modified by Warpnet. See NOTICE.
 
+import Account
 import AppAccount
 import Combine
 import DesignSystem
@@ -37,7 +38,8 @@ struct TimelineTab: View {
     NavigationStack(path: $routerPath.path) {
       TimelineView(timeline: $timeline,
                    scrollToTopSignal: $scrollToTopSignal,
-                   canFilterTimeline: canFilterTimeline)
+                   canFilterTimeline: canFilterTimeline,
+                   homeInterstitial: AnyView(WhoToFollowCarousel()))
         .withAppRouter()
         .withSheetDestinations(sheetDestinations: $routerPath.presentedSheet)
         .toolbar {

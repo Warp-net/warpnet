@@ -24,9 +24,7 @@ import Models
   func preparePlayer(autoPlay: Bool, isCompact: Bool) {
     player = .init(playerItem: Self.makePlayerItem(url))
     player?.audiovisualBackgroundPlaybackPolicy = .pauses
-    #if !os(visionOS)
     player?.preventsDisplaySleepDuringVideoPlayback = false
-    #endif
     if (autoPlay || forceAutoPlay) && !isCompact {
       player?.play()
       isPlaying = true
@@ -73,9 +71,7 @@ import Models
   }
   
   func preventSleep(_ preventSleep: Bool) {
-    #if !os(visionOS)
     player?.preventsDisplaySleepDuringVideoPlayback = preventSleep
-    #endif
   }
 
   deinit {

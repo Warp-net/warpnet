@@ -83,11 +83,9 @@ public struct ReportView: View {
       }
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.secondaryBackgroundColor)
       .scrollDismissesKeyboard(.immediately)
-      #endif
       .alert("warpnet.report.failed", isPresented: $isErrorDisplayed) {
         Button("OK") {}
       }

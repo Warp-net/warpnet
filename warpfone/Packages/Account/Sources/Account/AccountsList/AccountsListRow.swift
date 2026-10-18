@@ -96,7 +96,6 @@ public struct AccountsListRow: View {
         VStack(alignment: .center) {
           FollowButton(viewModel: .init(accountId: viewModel.account.id,
                                         relationship: relationShip,
-                                        shouldDisplayNotify: false,
                                         relationshipUpdated: { _ in }))
         }
       }

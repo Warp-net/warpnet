@@ -9,7 +9,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
 
   case home
   case latest
-  case resume
 
   public var id: String {
     title
@@ -27,8 +26,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
     switch self {
     case .latest:
       "Latest"
-    case .resume:
-      "Resume"
     case .home:
       "Home"
     }
@@ -38,8 +35,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
     switch self {
     case .latest:
       "timeline.latest"
-    case .resume:
-      "timeline.resume"
     case .home:
       "timeline.home"
     }
@@ -49,8 +44,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
     switch self {
     case .latest:
       "arrow.counterclockwise"
-    case .resume:
-      "clock.arrow.2.circlepath"
     case .home:
       "house"
     }
@@ -59,7 +52,6 @@ public enum TimelineFilter: Hashable, Equatable, Identifiable {
   public func endpoint(sinceId: String?, maxId: String?, minId: String?, offset _: Int?) -> Endpoint {
     switch self {
     case .latest: return Timelines.home(sinceId: nil, maxId: nil, minId: nil)
-    case .resume: return Timelines.home(sinceId: nil, maxId: nil, minId: nil)
     case .home: return Timelines.home(sinceId: sinceId, maxId: maxId, minId: minId)
     }
   }
@@ -69,7 +61,6 @@ extension TimelineFilter: Codable {
   enum CodingKeys: String, CodingKey {
     case home
     case latest
-    case resume
   }
 
   public init(from decoder: Decoder) throws {
@@ -97,8 +88,6 @@ extension TimelineFilter: Codable {
       try container.encode(CodingKeys.home.rawValue, forKey: .home)
     case .latest:
       try container.encode(CodingKeys.latest.rawValue, forKey: .latest)
-    case .resume:
-      try container.encode(CodingKeys.resume.rawValue, forKey: .latest)
     }
   }
 }

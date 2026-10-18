@@ -1,6 +1,5 @@
 // Modified by Warpnet. See NOTICE.
 
-import Charts
 import DesignSystem
 import Env
 import Models
@@ -28,14 +27,18 @@ public struct TimelineView: View {
   @Binding var scrollToTopSignal: Int
 
   private let canFilterTimeline: Bool
+  private let homeInterstitial: AnyView?
 
+  /// `homeInterstitial` goes into the home timeline after the first few tweets.
   public init(timeline: Binding<TimelineFilter>,
               scrollToTopSignal: Binding<Int>,
-              canFilterTimeline: Bool)
+              canFilterTimeline: Bool,
+              homeInterstitial: AnyView? = nil)
   {
     _timeline = timeline
     _scrollToTopSignal = scrollToTopSignal
     self.canFilterTimeline = canFilterTimeline
+    self.homeInterstitial = homeInterstitial
   }
 
   public var body: some View {
@@ -43,16 +46,16 @@ public struct TimelineView: View {
       ZStack(alignment: .top) {
         List {
           scrollToTopView
-          StatusesListView(fetcher: viewModel, client: client, routerPath: routerPath)
-            .environment(\.isHomeTimeline, timeline == .home)
+          StatusesListView(fetcher: viewModel,
+                           client: client,
+                           routerPath: routerPath,
+                           interstitial: timeline == .home ? homeInterstitial : nil)
         }
         .id(client.id)
         .environment(\.defaultMinListRowHeight, 1)
         .listStyle(.plain)
-        #if !os(visionOS)
         .scrollContentBackground(.hidden)
         .background(theme.primaryBackgroundColor)
-        #endif
         .introspect(.list, on: .iOS(.v17)) { (collectionView: UICollectionView) in
           DispatchQueue.main.async {
             self.collectionView = collectionView

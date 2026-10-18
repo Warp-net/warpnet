@@ -1,6 +1,6 @@
 //
 //  Action.js
-//  IceCubesActionExtension
+//  WarpnetActionExtension
 //
 //  Created by Thomas Durand on 26/01/2023.
 //

@@ -64,14 +64,6 @@ extension StatusEditor {
         }
 
         HStack {
-          Picker("status.poll.frequency", selection: $viewModel.pollVotingFrequency) {
-            ForEach(PollVotingFrequency.allCases, id: \.rawValue) {
-              Text($0.displayString)
-                .tag($0)
-            }
-          }
-          .layoutPriority(1.0)
-
           Spacer()
 
           Picker("status.poll.duration", selection: $viewModel.pollDuration) {

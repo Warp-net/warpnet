@@ -7,19 +7,6 @@ import SwiftUI
 
 @MainActor
 @Observable class ExploreViewModel {
-  enum SearchScope: String, CaseIterable {
-    case all, people
-
-    var localizedString: LocalizedStringKey {
-      switch self {
-      case .all:
-        .init("explore.scope.all")
-      case .people:
-        .init("explore.scope.people")
-      }
-    }
-  }
-
   var client: Client? {
     didSet {
       if oldValue != client {
@@ -45,7 +32,6 @@ import SwiftUI
   var isSearching = false
   var suggestedAccounts: [Account] = []
   var suggestedAccountsRelationShips: [Relationship] = []
-  var searchScope: SearchScope = .all
   var scrollToTopVisible: Bool = false
   var isSearchPresented: Bool = false
 
@@ -69,10 +55,7 @@ import SwiftUI
     do {
       try await Task.sleep(for: .milliseconds(250))
       var results: SearchResults = try await client.get(endpoint: Search.search(query: searchQuery,
-                                                                                type: nil,
-                                                                                offset: nil,
-                                                                                following: nil),
-                                                        forceVersion: .v2)
+                                                                                type: nil))
       let relationships: [Relationship] =
         try await client.get(endpoint: Accounts.relationships(ids: results.accounts.map(\.id)))
       results.relationships = relationships

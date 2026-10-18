@@ -7,8 +7,6 @@ import SwiftUI
 
 @MainActor
 struct StatusRowDetailView: View {
-  @Environment(\.openURL) private var openURL
-
   @Environment(StatusDataController.self) private var statusDataController
 
   var viewModel: StatusRowViewModel
@@ -20,25 +18,9 @@ struct StatusRowDetailView: View {
         Group {
           Text(viewModel.status.createdAt.asDate, style: .date) +
             Text("status.summary.at-time") +
-            Text(viewModel.status.createdAt.asDate, style: .time) +
-            Text("  ·")
-          Image(systemName: viewModel.status.visibility.iconName)
-            .accessibilityHidden(true)
+            Text(viewModel.status.createdAt.asDate, style: .time)
         }.accessibilityElement(children: .combine)
         Spacer()
-        if let name = viewModel.status.application?.name, let url = viewModel.status.application?.website {
-          Button {
-            openURL(url)
-          } label: {
-            Text(name)
-              .underline()
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("accessibility.status.application.label")
-          .accessibilityValue(name)
-          .accessibilityAddTraits(.isLink)
-          .accessibilityRemoveTraits(.isButton)
-        }
       }
       .font(.scaledCaption)
       .foregroundStyle(.secondary)

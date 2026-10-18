@@ -9,7 +9,6 @@ import SwiftUI
 @MainActor
 @Observable class StatusDetailViewModel {
   public var statusId: String?
-  public var remoteStatusURL: URL?
 
   var client: Client?
   var routerPath: RouterPath?
@@ -29,23 +28,15 @@ import SwiftUI
   init(statusId: String) {
     state = .loading
     self.statusId = statusId
-    remoteStatusURL = nil
   }
 
   init(status: Status) {
     state = .display(statuses: [status])
     title = "status.post-from-\(status.account.displayNameWithoutEmojis)"
     statusId = status.id
-    remoteStatusURL = nil
     if status.inReplyToId != nil {
       indentationLevelPreviousCache[status.id] = 1
     }
-  }
-
-  init(remoteStatusURL: URL) {
-    state = .loading
-    self.remoteStatusURL = remoteStatusURL
-    statusId = nil
   }
 
   func fetch() async -> Bool {
@@ -53,8 +44,6 @@ import SwiftUI
       await fetchStatusDetail(animate: false)
       recordView()
       return true
-    } else if remoteStatusURL != nil {
-      return await fetchRemoteStatus()
     }
     return false
   }
@@ -64,22 +53,6 @@ import SwiftUI
     didRecordView = true
     Task {
       _ = try? await client.post(endpoint: TweetViews.record(statusId: statusId))
-    }
-  }
-
-  private func fetchRemoteStatus() async -> Bool {
-    guard let client, let remoteStatusURL else { return false }
-    let results: SearchResults? = try? await client.get(endpoint: Search.search(query: remoteStatusURL.absoluteString,
-                                                                                type: "statuses",
-                                                                                offset: nil,
-                                                                                following: nil),
-                                                        forceVersion: .v2)
-    if let statusId = results?.statuses.first?.id {
-      self.statusId = statusId
-      await fetchStatusDetail(animate: false)
-      return true
-    } else {
-      return false
     }
   }
 
@@ -151,13 +124,7 @@ import SwiftUI
     }
   }
 
-  func getIndentationLevel(id: String, maxIndent: UInt) -> (indentationLevel: UInt, extraInset: Double) {
-    let level = min(indentationLevelPreviousCache[id] ?? 0, maxIndent)
-
-    let barSize = Double(level) * 2
-    let spaceBetween = (Double(level) - 1) * 3
-    let size = barSize + spaceBetween + 8
-
-    return (level, size)
+  func getIndentationLevel(id: String, maxIndent: UInt) -> UInt {
+    min(indentationLevelPreviousCache[id] ?? 0, maxIndent)
   }
 }

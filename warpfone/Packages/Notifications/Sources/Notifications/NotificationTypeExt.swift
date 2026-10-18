@@ -7,102 +7,67 @@ import SwiftUI
 extension Models.Notification.NotificationType {
   public func label(count: Int) -> LocalizedStringKey {
     switch self {
-    case .status:
-      "notifications.label.status"
     case .mention:
       ""
     case .reblog:
       "notifications.label.reblog \(count)"
     case .follow:
       "notifications.label.follow \(count)"
-    case .follow_request:
-      "notifications.label.follow-request"
     case .favourite:
       "notifications.label.favorite \(count)"
-    case .poll:
-      "notifications.label.poll"
-    case .update:
-      "notifications.label.update"
+    case .message:
+      "warpnet.notifications.label.message"
+    case .moderation:
+      "warpnet.notifications.label.moderation"
     }
   }
 
-  public func notificationKey() -> String {
+  var icon: Image {
     switch self {
-    case .status:
-      "notifications.label.status.push"
     case .mention:
-      ""
+      Image(systemName: "at")
     case .reblog:
-      "notifications.label.reblog.push"
+      Image(systemName: "arrow.2.squarepath")
     case .follow:
-      "notifications.label.follow.push"
-    case .follow_request:
-      "notifications.label.follow-request.push"
+      Image(systemName: "person.fill.badge.plus")
     case .favourite:
-      "notifications.label.favorite.push"
-    case .poll:
-      "notifications.label.poll.push"
-    case .update:
-      "notifications.label.update.push"
+      Image(systemName: "heart.fill")
+    case .message:
+      Image(systemName: "envelope.fill")
+    case .moderation:
+      Image(systemName: "hammer.fill")
     }
   }
 
-  func icon(isPrivate: Bool) -> Image {
-    if isPrivate {
-      return Image(systemName: "tray.fill")
-    }
+  var tintColor: Color {
     switch self {
-    case .status:
-      return Image(systemName: "pencil")
-    case .mention:
-      return Image(systemName: "at")
+    case .mention, .message:
+      Theme.shared.tintColor.opacity(0.80)
     case .reblog:
-      return Image("Rocket.Fill")
-    case .follow, .follow_request:
-      return Image(systemName: "person.fill.badge.plus")
+      Color.teal.opacity(0.80)
+    case .follow:
+      Color.cyan.opacity(0.80)
     case .favourite:
-      return Image(systemName: "heart.fill")
-    case .poll:
-      return Image(systemName: "chart.bar.fill")
-    case .update:
-      return Image(systemName: "pencil.line")
-    }
-  }
-
-  func tintColor(isPrivate: Bool) -> Color {
-    if isPrivate {
-      return Color.orange.opacity(0.80)
-    }
-    switch self {
-    case .status, .mention, .update, .poll:
-      return Theme.shared.tintColor.opacity(0.80)
-    case .reblog:
-      return Color.teal.opacity(0.80)
-    case .follow, .follow_request:
-      return Color.cyan.opacity(0.80)
-    case .favourite:
-      return Color.red.opacity(0.80)
+      Color.red.opacity(0.80)
+    case .moderation:
+      Color.orange.opacity(0.80)
     }
   }
 
   func menuTitle() -> LocalizedStringKey {
     switch self {
-    case .status:
-      "notifications.menu-title.status"
     case .mention:
       "notifications.menu-title.mention"
     case .reblog:
       "notifications.menu-title.reblog"
     case .follow:
       "notifications.menu-title.follow"
-    case .follow_request:
-      "notifications.menu-title.follow-request"
     case .favourite:
       "notifications.menu-title.favorite"
-    case .poll:
-      "notifications.menu-title.poll"
-    case .update:
-      "notifications.menu-title.update"
+    case .message:
+      "warpnet.notifications.menu-title.message"
+    case .moderation:
+      "warpnet.notifications.menu-title.moderation"
     }
   }
 }

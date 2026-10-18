@@ -8,7 +8,6 @@ let package = Package(
   defaultLocalization: "en",
   platforms: [
     .iOS(.v17),
-    .visionOS(.v1),
   ],
   products: [
     .library(
@@ -23,7 +22,6 @@ let package = Package(
     .package(name: "Network", path: "../Network"),
     .package(name: "Env", path: "../Env"),
     .package(name: "DesignSystem", path: "../DesignSystem"),
-    .package(url: "https://github.com/nicklockwood/LRUCache", from: "1.0.4"),
   ],
   targets: [
     .target(
@@ -35,7 +33,6 @@ let package = Package(
         .product(name: "Network", package: "Network"),
         .product(name: "Env", package: "Env"),
         .product(name: "DesignSystem", package: "DesignSystem"),
-        .product(name: "LRUCache", package: "LRUCache"),
       ],
       swiftSettings: [
         .enableExperimentalFeature("StrictConcurrency"),

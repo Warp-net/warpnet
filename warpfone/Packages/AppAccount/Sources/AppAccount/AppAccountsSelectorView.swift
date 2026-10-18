@@ -89,18 +89,14 @@ public struct AppAccountsSelectorView: View {
             AppAccountView(viewModel: viewModel, isParentPresented: $isPresented)
           }
         }
-        #if !os(visionOS)
-          .listRowBackground(theme.primaryBackgroundColor)
-        #endif
+        .listRowBackground(theme.primaryBackgroundColor)
 
         if accountCreationEnabled {
           Section {
             settingsButton
             aboutButton
           }
-          #if !os(visionOS)
-            .listRowBackground(theme.primaryBackgroundColor)
-          #endif
+          .listRowBackground(theme.primaryBackgroundColor)
         }
       }
       .listStyle(.insetGrouped)

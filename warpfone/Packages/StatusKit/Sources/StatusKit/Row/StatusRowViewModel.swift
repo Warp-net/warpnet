@@ -4,7 +4,6 @@ import Combine
 import DesignSystem
 import Env
 import Models
-import NaturalLanguage
 import Network
 import Observation
 import SwiftUI
@@ -12,8 +11,6 @@ import SwiftUI
 @MainActor
 @Observable public class StatusRowViewModel {
   let status: Status
-  // Whether this status is on a remote local timeline (many actions are unavailable if so)
-  let isRemote: Bool
   let showActions: Bool
   let textDisabled: Bool
   let finalStatus: AnyStatus
@@ -26,19 +23,15 @@ import SwiftUI
 
   var isPinned: Bool
   var embeddedStatus: Status?
-  var displaySpoiler: Bool = false
   var isEmbedLoading: Bool = false
   var isFiltered: Bool = false
 
   var showDeleteAlert: Bool = false
+  var showRedraftAlert: Bool = false
 
   private(set) var actionsAccountsFetched: Bool = false
   var favoriters: [Account] = []
   var rebloggers: [Account] = []
-
-  var isLoadingRemoteContent: Bool = false
-  var localStatusId: String?
-  var localStatus: Status?
 
   private var scrollToId = nil as Binding<String?>?
 
@@ -74,8 +67,7 @@ import SwiftUI
   var collapseLongPosts: Bool = false
 
   private func recalcCollapse() {
-    let hasContentWarning = !status.spoilerText.asRawText.isEmpty
-    let showCollapseButton = collapseLongPosts && isCollapsed && !hasContentWarning
+    let showCollapseButton = collapseLongPosts && isCollapsed
       && finalStatus.content.asRawText.unicodeScalars.count > collapseThresholdLength
     let newlineLimit = showCollapseButton && isCollapsed ? collapsedLines : nil
     if newlineLimit != lineLimit {
@@ -93,9 +85,7 @@ import SwiftUI
   }
 
   var highlightRowColor: Color {
-    if status.visibility == .direct {
-      theme.tintColor.opacity(0.15)
-    } else if userMentionned {
+    if userMentionned {
       theme.secondaryBackgroundColor
     } else {
       theme.primaryBackgroundColor
@@ -105,7 +95,6 @@ import SwiftUI
   public init(status: Status,
               client: Client,
               routerPath: RouterPath,
-              isRemote: Bool = false,
               showActions: Bool = true,
               textDisabled: Bool = false,
               scrollToId: Binding<String?>? = nil)
@@ -114,7 +103,6 @@ import SwiftUI
     finalStatus = status.reblog ?? status
     self.client = client
     self.routerPath = routerPath
-    self.isRemote = isRemote
     self.showActions = showActions
     self.textDisabled = textDisabled
     self.scrollToId = scrollToId
@@ -123,12 +111,6 @@ import SwiftUI
     } else {
       isPinned = status.pinned == true
     }
-    if UserPreferences.shared.autoExpandSpoilers {
-      displaySpoiler = false
-    } else {
-      displaySpoiler = !finalStatus.spoilerText.asRawText.isEmpty
-    }
-
     if status.mentions.first(where: { $0.id == CurrentAccount.shared.account?.id }) != nil {
       userMentionned = true
     } else {
@@ -149,25 +131,11 @@ import SwiftUI
   }
 
   func navigateToDetail() {
-    if isRemote, let url = URL(string: finalStatus.url ?? "") {
-      routerPath.navigate(to: .remoteStatusDetail(url: url))
-    } else {
-      routerPath.navigate(to: .statusDetailWithStatus(status: status.reblogAsAsStatus ?? status))
-    }
+    routerPath.navigate(to: .statusDetailWithStatus(status: status.reblogAsAsStatus ?? status))
   }
 
   func navigateToAccountDetail(account: Account) {
-    if isRemote, let url = account.url {
-      withAnimation {
-        isLoadingRemoteContent = true
-      }
-      Task {
-        await routerPath.navigateToAccountFrom(url: url)
-        isLoadingRemoteContent = false
-      }
-    } else {
-      routerPath.navigate(to: .accountDetailWithAccount(account: account))
-    }
+    routerPath.navigate(to: .accountDetailWithAccount(account: account))
   }
 
   func goToParent() {
@@ -186,10 +154,9 @@ import SwiftUI
 
   private func embededStatusURL() -> URL? {
     let content = finalStatus.content
-    if !content.statusesURLs.isEmpty,
+    if client.isAuth,
        let url = content.statusesURLs.first,
-       !StatusEmbedCache.shared.badStatusesURLs.contains(url),
-       client.hasConnection(with: url)
+       !StatusEmbedCache.shared.badStatusesURLs.contains(url)
     {
       return url
     }
@@ -214,17 +181,9 @@ import SwiftUI
 
     do {
       isEmbedLoading = true
-      var embed: Status?
-      if url.absoluteString.contains(client.server), let id = Int(url.lastPathComponent) {
-        embed = try await client.get(endpoint: Statuses.status(id: String(id)))
-      } else {
-        let results: SearchResults = try await client.get(endpoint: Search.search(query: url.absoluteString,
-                                                                                  type: "statuses",
-                                                                                  offset: 0,
-                                                                                  following: nil),
-                                                          forceVersion: .v2)
-        embed = results.statuses.first
-      }
+      let results: SearchResults = try await client.get(endpoint: Search.search(query: url.absoluteString,
+                                                                                type: "statuses"))
+      let embed = results.statuses.first
       if let embed {
         StatusEmbedCache.shared.set(url: url, status: embed)
       } else {
@@ -269,6 +228,16 @@ import SwiftUI
     } catch {}
   }
 
+  /// Deletes the tweet and opens the editor on its text, media and parent, as warpdroid does.
+  func redraft() async {
+    let source = status.reblogAsAsStatus ?? status
+    do {
+      _ = try await client.delete(endpoint: Statuses.status(id: source.id))
+      StreamWatcher.shared.emmitDeleteEvent(for: status.id)
+      routerPath.presentedSheet = .redraftStatusEditor(status: source)
+    } catch {}
+  }
+
   func fetchActionsAccounts() async {
     guard !actionsAccountsFetched else { return }
     do {
@@ -289,29 +258,6 @@ import SwiftUI
       isPinned = reblog.pinned == true
     } else {
       isPinned = status.pinned == true
-    }
-  }
-
-  func getStatusLang() -> String? {
-    finalStatus.language
-  }
-
-  func fetchRemoteStatus() async -> Bool {
-    guard isRemote, let remoteStatusURL = URL(string: finalStatus.url ?? "") else { return false }
-    isLoadingRemoteContent = true
-    let results: SearchResults? = try? await client.get(endpoint: Search.search(query: remoteStatusURL.absoluteString,
-                                                                                type: "statuses",
-                                                                                offset: nil,
-                                                                                following: nil),
-                                                        forceVersion: .v2)
-    if let status = results?.statuses.first {
-      localStatusId = status.id
-      localStatus = status
-      isLoadingRemoteContent = false
-      return true
-    } else {
-      isLoadingRemoteContent = false
-      return false
     }
   }
 }

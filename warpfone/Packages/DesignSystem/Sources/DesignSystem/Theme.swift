@@ -10,7 +10,6 @@ import SwiftUI
       case followSystemColorSchme
       case displayFullUsernameTimeline
       case lineSpacing
-      case statusActionSecondary
     }
 
     @AppStorage("is_previously_set") public var isThemePreviouslySet: Bool = false
@@ -21,13 +20,12 @@ import SwiftUI
     @AppStorage(ThemeKey.label.rawValue) public var labelColor: Color = .black
     @AppStorage(ThemeKey.avatarPosition2.rawValue) var avatarPosition: AvatarPosition = .leading
     @AppStorage(ThemeKey.avatarShape2.rawValue) var avatarShape: AvatarShape = .circle
-    @AppStorage(ThemeKey.selectedSet.rawValue) var storedSet: ColorSetName = .iceCubeDark
+    @AppStorage(ThemeKey.selectedSet.rawValue) var storedSet: ColorSetName = .warpnetDark
     @AppStorage(ThemeKey.statusActionsDisplay.rawValue) public var statusActionsDisplay: StatusActionsDisplay = .full
     @AppStorage(ThemeKey.statusDisplayStyle.rawValue) public var statusDisplayStyle: StatusDisplayStyle = .large
     @AppStorage(ThemeKey.followSystemColorSchme.rawValue) public var followSystemColorScheme: Bool = true
     @AppStorage(ThemeKey.displayFullUsernameTimeline.rawValue) public var displayFullUsername: Bool = false
     @AppStorage(ThemeKey.lineSpacing.rawValue) public var lineSpacing: Double = 1.2
-    @AppStorage(ThemeKey.statusActionSecondary.rawValue) public var statusActionSecondary: StatusActionSecondary = .share
     @AppStorage("font_size_scale") public var fontSizeScale: Double = 1
     @AppStorage("chosen_font") public var chosenFontData: Data?
 
@@ -70,17 +68,59 @@ import SwiftUI
     }
   }
   
-  public enum StatusActionSecondary: String, CaseIterable {
-    case share, bookmark
-    
-    public var description: LocalizedStringKey {
+  // The choices warpdroid offers in its App theme setting, without its sunset mode.
+  public enum AppTheme: String, CaseIterable {
+    case system, systemBlack, light, dark, black
+
+    public var title: LocalizedStringKey {
       switch self {
-      case .share:
-        "status.action.share-title"
-      case .bookmark:
-        "status.action.bookmark"
+      case .system:
+        "warpnet.theme.system"
+      case .systemBlack:
+        "warpnet.theme.system-black"
+      case .light:
+        "warpnet.theme.light"
+      case .dark:
+        "warpnet.theme.dark"
+      case .black:
+        "warpnet.theme.black"
       }
     }
+  }
+
+  public var appTheme: AppTheme {
+    switch (followSystemColorScheme, selectedSet) {
+    case (true, .warpnetBlack), (true, .warpnetBlackLight):
+      .systemBlack
+    case (true, _):
+      .system
+    case (false, .warpnetLight), (false, .warpnetBlackLight):
+      .light
+    case (false, .warpnetDark):
+      .dark
+    case (false, .warpnetBlack):
+      .black
+    }
+  }
+
+  public func apply(_ appTheme: AppTheme, systemScheme: SwiftUI.ColorScheme) {
+    followSystemColorScheme = appTheme == .system || appTheme == .systemBlack
+    switch appTheme {
+    case .system:
+      applySet(set: systemScheme == .dark ? .warpnetDark : .warpnetLight)
+    case .systemBlack:
+      applySet(set: systemScheme == .dark ? .warpnetBlack : .warpnetBlackLight)
+    case .light:
+      applySet(set: .warpnetLight)
+    case .dark:
+      applySet(set: .warpnetDark)
+    case .black:
+      applySet(set: .warpnetBlack)
+    }
+  }
+
+  public var bookmarkColor: Color {
+    selectedScheme == .dark ? Color(hex: 0x19A341) : Color(hex: 0x00731B)
   }
 
   public enum AvatarShape: String, CaseIterable {
@@ -217,12 +257,6 @@ import SwiftUI
       themeStorage.statusDisplayStyle = statusDisplayStyle
     }
   }
-  
-  public var statusActionSecondary: StatusActionSecondary {
-    didSet {
-      themeStorage.statusActionSecondary = statusActionSecondary
-    }
-  }
 
   public var followSystemColorScheme: Bool {
     didSet {
@@ -254,12 +288,12 @@ import SwiftUI
     }
   }
 
-  public var selectedSet: ColorSetName = .iceCubeDark
+  public var selectedSet: ColorSetName = .warpnetDark
 
   public static let shared = Theme()
 
   public func restoreDefault() {
-    applySet(set: themeStorage.selectedScheme == .dark ? .iceCubeDark : .iceCubeLight)
+    applySet(set: themeStorage.selectedScheme == .dark ? .warpnetDark : .warpnetLight)
     isThemePreviouslySet = true
     avatarPosition = .leading
     avatarShape = .circle
@@ -271,7 +305,6 @@ import SwiftUI
     lineSpacing = 1.2
     fontSizeScale = 1
     chosenFontData = nil
-    statusActionSecondary = .share
   }
   
   private init() {
@@ -291,26 +324,18 @@ import SwiftUI
     lineSpacing = themeStorage.lineSpacing
     fontSizeScale = themeStorage.fontSizeScale
     chosenFontData = themeStorage.chosenFontData
-    statusActionSecondary = themeStorage.statusActionSecondary
     selectedSet = storedSet
+    // Colors always come from the set, which also moves stores written by
+    // the custom color pickers and the Ice Cubes sets onto a Warpnet one.
+    setColor(withName: storedSet)
   }
 
   public static var allColorSet: [ColorSet] {
     [
-      IceCubeDark(),
-      IceCubeLight(),
-      IceCubeNeonDark(),
-      IceCubeNeonLight(),
-      DesertDark(),
-      DesertLight(),
-      NemesisDark(),
-      NemesisLight(),
-      MediumLight(),
-      MediumDark(),
-      ConstellationLight(),
-      ConstellationDark(),
-      ThreadsLight(),
-      ThreadsDark()
+      WarpnetLight(),
+      WarpnetDark(),
+      WarpnetBlackLight(),
+      WarpnetBlack(),
     ]
   }
 
@@ -320,7 +345,7 @@ import SwiftUI
   }
 
   public func setColor(withName name: ColorSetName) {
-    let colorSet = Theme.allColorSet.filter { $0.name == name }.first ?? IceCubeDark()
+    let colorSet = Theme.allColorSet.filter { $0.name == name }.first ?? WarpnetDark()
     selectedScheme = colorSet.scheme
     tintColor = colorSet.tintColor
     primaryBackgroundColor = colorSet.primaryBackgroundColor

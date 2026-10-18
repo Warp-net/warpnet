@@ -25,7 +25,7 @@ class ShareViewController: UIViewController {
     }
     let colorScheme = traitCollection.userInterfaceStyle
     let theme = Theme.shared
-    theme.setColor(withName: colorScheme == .dark ? .iceCubeDark : .iceCubeLight)
+    theme.setColor(withName: colorScheme == .dark ? .warpnetDark : .warpnetLight)
 
     if let item = extensionContext?.inputItems.first as? NSExtensionItem {
       if let attachments = item.attachments {

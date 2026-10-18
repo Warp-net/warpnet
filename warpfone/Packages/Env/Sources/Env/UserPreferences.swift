@@ -10,25 +10,13 @@ import SwiftUI
 @Observable public class UserPreferences {
   class Storage {
     @AppStorage("preferred_browser") public var preferredBrowser: PreferredBrowser = .inAppSafari
-    @AppStorage("show_translate_button_inline") public var showTranslateButton: Bool = true
     @AppStorage("show_pending_at_bottom") public var pendingShownAtBottom: Bool = false
     @AppStorage("show_pending_left") public var pendingShownLeft: Bool = false
 
-    @AppStorage("recently_used_languages") public var recentlyUsedLanguages: [String] = []
     @AppStorage("social_keyboard_composer") public var isSocialKeyboardEnabled: Bool = false
 
-    @AppStorage("use_instance_content_settings") public var useInstanceContentSettings: Bool = true
-    @AppStorage("app_auto_expand_spoilers") public var appAutoExpandSpoilers = false
-    @AppStorage("app_auto_expand_media") public var appAutoExpandMedia: ServerPreferences.AutoExpandMedia = .hideSensitive
-    @AppStorage("app_default_post_visibility") public var appDefaultPostVisibility: Models.Visibility = .pub
-    @AppStorage("app_default_reply_visibility") public var appDefaultReplyVisibility: Models.Visibility = .pub
-    @AppStorage("app_default_posts_sensitive") public var appDefaultPostsSensitive = false
-    @AppStorage("app_require_alt_text") public var appRequireAltText = false
     @AppStorage("autoplay_video") public var autoPlayVideo = true
     @AppStorage("mute_video") public var muteVideo = true
-    @AppStorage("always_use_deepl") public var alwaysUseDeepl = false
-    @AppStorage("user_deepl_api_free") public var userDeeplAPIFree = true
-    @AppStorage("auto_detect_post_language") public var autoDetectPostLanguage = true
 
     @AppStorage("inAppBrowserReaderView") public var inAppBrowserReaderView = false
 
@@ -37,7 +25,6 @@ import SwiftUI
     @AppStorage("haptic_button_press") public var hapticButtonPressEnabled = true
 
     @AppStorage("show_tab_label_iphone") public var showiPhoneTabLabel = true
-    @AppStorage("show_alt_text_for_media") public var showAltTextForMedia = true
 
     @AppStorage("show_second_column_ipad") public var showiPadSecondaryColumn = true
 
@@ -50,10 +37,6 @@ import SwiftUI
 
     @AppStorage("collapse-long-posts") public var collapseLongPosts = true
 
-    @AppStorage("share-button-behavior") public var shareButtonBehavior: PreferredShareButtonBehavior = .linkOnly
-    
-    @AppStorage("fast_refresh") public var fastRefreshEnabled: Bool = false
-
     @AppStorage("max_reply_indentation") public var maxReplyIndentation: UInt = 7
     @AppStorage("show_reply_indentation") public var showReplyIndentation: Bool = true
 
@@ -62,21 +45,12 @@ import SwiftUI
     init() {}
   }
 
-  public static let sharedDefault = UserDefaults(suiteName: AppInfo.appGroup)
   public static let shared = UserPreferences()
   private let storage = Storage()
-
-  private var client: Client?
 
   public var preferredBrowser: PreferredBrowser {
     didSet {
       storage.preferredBrowser = preferredBrowser
-    }
-  }
-
-  public var showTranslateButton: Bool {
-    didSet {
-      storage.showTranslateButton = showTranslateButton
     }
   }
 
@@ -109,57 +83,9 @@ import SwiftUI
     }
   }
 
-  public var recentlyUsedLanguages: [String] {
-    didSet {
-      storage.recentlyUsedLanguages = recentlyUsedLanguages
-    }
-  }
-
   public var isSocialKeyboardEnabled: Bool {
     didSet {
       storage.isSocialKeyboardEnabled = isSocialKeyboardEnabled
-    }
-  }
-
-  public var useInstanceContentSettings: Bool {
-    didSet {
-      storage.useInstanceContentSettings = useInstanceContentSettings
-    }
-  }
-
-  public var appAutoExpandSpoilers: Bool {
-    didSet {
-      storage.appAutoExpandSpoilers = appAutoExpandSpoilers
-    }
-  }
-
-  public var appAutoExpandMedia: ServerPreferences.AutoExpandMedia {
-    didSet {
-      storage.appAutoExpandMedia = appAutoExpandMedia
-    }
-  }
-
-  public var appDefaultPostVisibility: Models.Visibility {
-    didSet {
-      storage.appDefaultPostVisibility = appDefaultPostVisibility
-    }
-  }
-
-  public var appDefaultReplyVisibility: Models.Visibility {
-    didSet {
-      storage.appDefaultReplyVisibility = appDefaultReplyVisibility
-    }
-  }
-
-  public var appDefaultPostsSensitive: Bool {
-    didSet {
-      storage.appDefaultPostsSensitive = appDefaultPostsSensitive
-    }
-  }
-    
-  public var appRequireAltText: Bool {
-    didSet {
-      storage.appRequireAltText = appRequireAltText
     }
   }
 
@@ -172,25 +98,6 @@ import SwiftUI
   public var muteVideo: Bool {
     didSet {
       storage.muteVideo = muteVideo
-    }
-  }
-
-  
-  public var alwaysUseDeepl: Bool {
-    didSet {
-      storage.alwaysUseDeepl = alwaysUseDeepl
-    }
-  }
-
-  public var userDeeplAPIFree: Bool {
-    didSet {
-      storage.userDeeplAPIFree = userDeeplAPIFree
-    }
-  }
-
-  public var autoDetectPostLanguage: Bool {
-    didSet {
-      storage.autoDetectPostLanguage = autoDetectPostLanguage
     }
   }
 
@@ -221,12 +128,6 @@ import SwiftUI
   public var showiPhoneTabLabel: Bool {
     didSet {
       storage.showiPhoneTabLabel = showiPhoneTabLabel
-    }
-  }
-
-  public var showAltTextForMedia: Bool {
-    didSet {
-      storage.showAltTextForMedia = showAltTextForMedia
     }
   }
 
@@ -278,18 +179,6 @@ import SwiftUI
     }
   }
 
-  public var shareButtonBehavior: PreferredShareButtonBehavior {
-    didSet {
-      storage.shareButtonBehavior = shareButtonBehavior
-    }
-  }
-  
-  public var fastRefreshEnabled: Bool {
-    didSet {
-      storage.fastRefreshEnabled = fastRefreshEnabled
-    }
-  }
-
   public var maxReplyIndentation: UInt {
     didSet {
       storage.maxReplyIndentation = maxReplyIndentation
@@ -335,107 +224,15 @@ import SwiftUI
     }
   }
 
-  public var postVisibility: Models.Visibility {
-    if useInstanceContentSettings {
-      serverPreferences?.postVisibility ?? .pub
-    } else {
-      appDefaultPostVisibility
-    }
-  }
-
-  public func conformReplyVisibilityConstraints() {
-    appDefaultReplyVisibility = getReplyVisibility()
-  }
-
-  private func getReplyVisibility() -> Models.Visibility {
-    getMinVisibility(postVisibility, appDefaultReplyVisibility)
-  }
-
-  public func getReplyVisibility(of status: Status) -> Models.Visibility {
-    getMinVisibility(getReplyVisibility(), status.visibility)
-  }
-
-  private func getMinVisibility(_ vis1: Models.Visibility, _ vis2: Models.Visibility) -> Models.Visibility {
-    let no1 = Self.getIntOfVisibility(vis1)
-    let no2 = Self.getIntOfVisibility(vis2)
-
-    return no1 < no2 ? vis1 : vis2
-  }
-
-  public var postIsSensitive: Bool {
-    if useInstanceContentSettings {
-      serverPreferences?.postIsSensitive ?? false
-    } else {
-      appDefaultPostsSensitive
-    }
-  }
-
-  public var autoExpandSpoilers: Bool {
-    if useInstanceContentSettings {
-      serverPreferences?.autoExpandSpoilers ?? true
-    } else {
-      appAutoExpandSpoilers
-    }
-  }
-
-  public var autoExpandMedia: ServerPreferences.AutoExpandMedia {
-    if useInstanceContentSettings {
-      serverPreferences?.autoExpandMedia ?? .hideSensitive
-    } else {
-      appAutoExpandMedia
-    }
-  }
-
-  public var serverPreferences: ServerPreferences?
-
-  public func setClient(client: Client) {
-    self.client = client
-  }
-
-  public func markLanguageAsSelected(isoCode: String) {
-    var copy = recentlyUsedLanguages
-    if let index = copy.firstIndex(of: isoCode) {
-      copy.remove(at: index)
-    }
-    copy.insert(isoCode, at: 0)
-    recentlyUsedLanguages = Array(copy.prefix(3))
-  }
-
-  public static func getIntOfVisibility(_ vis: Models.Visibility) -> Int {
-    switch vis {
-    case .direct:
-      0
-    case .priv:
-      1
-    case .unlisted:
-      2
-    case .pub:
-      3
-    }
-  }
-
   private init() {
     preferredBrowser = storage.preferredBrowser
-    showTranslateButton = storage.showTranslateButton
-    recentlyUsedLanguages = storage.recentlyUsedLanguages
     isSocialKeyboardEnabled = storage.isSocialKeyboardEnabled
-    useInstanceContentSettings = storage.useInstanceContentSettings
-    appAutoExpandSpoilers = storage.appAutoExpandSpoilers
-    appAutoExpandMedia = storage.appAutoExpandMedia
-    appDefaultPostVisibility = storage.appDefaultPostVisibility
-    appDefaultReplyVisibility = storage.appDefaultReplyVisibility
-    appDefaultPostsSensitive = storage.appDefaultPostsSensitive
-    appRequireAltText = storage.appRequireAltText
     autoPlayVideo = storage.autoPlayVideo
-    alwaysUseDeepl = storage.alwaysUseDeepl
-    userDeeplAPIFree = storage.userDeeplAPIFree
-    autoDetectPostLanguage = storage.autoDetectPostLanguage
     inAppBrowserReaderView = storage.inAppBrowserReaderView
     hapticTabSelectionEnabled = storage.hapticTabSelectionEnabled
     hapticTimelineEnabled = storage.hapticTimelineEnabled
     hapticButtonPressEnabled = storage.hapticButtonPressEnabled
     showiPhoneTabLabel = storage.showiPhoneTabLabel
-    showAltTextForMedia = storage.showAltTextForMedia
     showiPadSecondaryColumn = storage.showiPadSecondaryColumn
     swipeActionsStatusTrailingRight = storage.swipeActionsStatusTrailingRight
     swipeActionsStatusTrailingLeft = storage.swipeActionsStatusTrailingLeft
@@ -444,10 +241,8 @@ import SwiftUI
     swipeActionsUseThemeColor = storage.swipeActionsUseThemeColor
     swipeActionsIconStyle = storage.swipeActionsIconStyle
     collapseLongPosts = storage.collapseLongPosts
-    shareButtonBehavior = storage.shareButtonBehavior
     pendingShownAtBottom = storage.pendingShownAtBottom
     pendingShownLeft = storage.pendingShownLeft
-    fastRefreshEnabled = storage.fastRefreshEnabled
     maxReplyIndentation = storage.maxReplyIndentation
     showReplyIndentation = storage.showReplyIndentation
     showAccountPopover = storage.showAccountPopover
@@ -459,7 +254,7 @@ extension UInt: RawRepresentable {
   public var rawValue: Int {
     Int(self)
   }
-  
+
   public init?(rawValue: Int) {
     if rawValue >= 0 {
       self.init(rawValue)

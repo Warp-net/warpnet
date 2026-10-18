@@ -4,7 +4,6 @@ import Combine
 import DesignSystem
 import Env
 import Models
-import NaturalLanguage
 import Network
 import PhotosUI
 import SwiftUI
@@ -29,7 +28,6 @@ extension StatusEditor {
 
     var theme: Theme?
     var preferences: UserPreferences?
-    var languageConfirmationDialogLanguages: (detected: String, selected: String)?
 
     var textView: UITextView? {
       didSet {
@@ -72,12 +70,8 @@ extension StatusEditor {
     private var itemsProvider: [NSItemProvider]?
 
     var showPoll: Bool = false
-    var pollVotingFrequency = PollVotingFrequency.oneVote
     var pollDuration = Duration.oneDay
     var pollOptions: [String] = ["", ""]
-
-    var spoilerOn: Bool = false
-    var spoilerText: String = ""
 
     var postingProgress: Double = 0.0
     var postingTimer: Timer?
@@ -132,11 +126,7 @@ extension StatusEditor {
       return !modifiedStatusText.isEmpty && !mode.isInShareExtension
     }
 
-    var visibility: Models.Visibility = .pub
-
     var mentionsSuggestions: [Account] = []
-    var selectedLanguage: String?
-    var hasExplicitlySelectedLanguage: Bool = false
     private var currentSuggestionRange: NSRange?
 
     private var quotedStatusId: String? {
@@ -152,29 +142,6 @@ extension StatusEditor {
 
     init(mode: Mode) {
       self.mode = mode
-    }
-
-    func setInitialLanguageSelection(preference: String?) {
-      switch mode {
-      case let .edit(status), let .quote(status):
-        selectedLanguage = status.language
-      default:
-        break
-      }
-
-      selectedLanguage = selectedLanguage ?? preference ?? currentAccount?.source?.language
-    }
-
-    func evaluateLanguages() {
-      if let detectedLang = detectLanguage(text: statusText.string),
-         let selectedLanguage,
-         selectedLanguage != "",
-         selectedLanguage != detectedLang
-      {
-        languageConfirmationDialogLanguages = (detected: detectedLang, selected: selectedLanguage)
-      } else {
-        languageConfirmationDialogLanguages = nil
-      }
     }
 
     func postStatus() async -> Status? {
@@ -197,21 +164,15 @@ extension StatusEditor {
         let postStatus: Status?
         var pollData: StatusData.PollData?
         if let pollOptions = getPollOptionsForAPI() {
-          pollData = .init(options: pollOptions,
-                           multiple: pollVotingFrequency.canVoteMultipleTimes,
-                           expires_in: pollDuration.rawValue)
+          pollData = .init(options: pollOptions, expires_in: pollDuration.rawValue)
         }
         let data = StatusData(status: statusText.string,
-                              visibility: visibility,
-                              inReplyToId: mode.replyToStatus?.id,
-                              spoilerText: spoilerOn ? spoilerText : nil,
+                              inReplyToId: mode.inReplyToId,
                               mediaIds: mediaContainers.compactMap { $0.mediaAttachment?.id },
                               poll: pollData,
-                              language: selectedLanguage,
-                              mediaAttributes: mediaAttributes,
                               quotedStatusId: quotedStatusId)
         switch mode {
-        case .new, .replyTo, .quote, .mention, .shareExtension:
+        case .new, .replyTo, .quote, .mention, .shareExtension, .redraft:
           postStatus = try await client.post(endpoint: Statuses.postStatus(json: data))
           if let postStatus {
             StreamWatcher.shared.emmitPostEvent(for: postStatus)
@@ -231,10 +192,6 @@ extension StatusEditor {
         }
         try await Task.sleep(for: .seconds(0.5))
         HapticManager.shared.fireHaptic(.notification(.success))
-        
-        if hasExplicitlySelectedLanguage, let selectedLanguage {
-          preferences?.markLanguageAsSelected(isoCode: selectedLanguage)
-        }
         isPosting = false
         
         return postStatus
@@ -280,11 +237,10 @@ extension StatusEditor {
 
     func prepareStatusText() {
       switch mode {
-      case let .new(visibility):
-        self.visibility = visibility
+      case .new:
+        break
       case let .shareExtension(items):
         itemsProvider = items
-        visibility = .pub
         processItemsProvider(items: items)
       case let .replyTo(status):
         var mentionString = ""
@@ -301,30 +257,21 @@ extension StatusEditor {
           mentionString += " "
         }
         replyToStatus = status
-        visibility = UserPreferences.shared.getReplyVisibility(of: status)
         statusText = .init(string: mentionString)
         selectedRange = .init(location: mentionString.utf16.count, length: 0)
         if !mentionString.isEmpty {
           self.mentionString = mentionString.trimmingCharacters(in: .whitespaces)
         }
-        if !status.spoilerText.asRawText.isEmpty {
-          spoilerOn = true
-          spoilerText = status.spoilerText.asRawText
-        }
-      case let .mention(account, visibility):
+      case let .mention(account):
         statusText = .init(string: "@\(account.acct) ")
-        self.visibility = visibility
         selectedRange = .init(location: statusText.string.utf16.count, length: 0)
-      case let .edit(status):
+      case let .edit(status), let .redraft(status):
         var rawText = status.content.asRawText.escape()
         for mention in status.mentions {
           rawText = rawText.replacingOccurrences(of: "@\(mention.username)", with: "@\(mention.acct)")
         }
         statusText = .init(string: rawText)
         selectedRange = .init(location: statusText.string.utf16.count, length: 0)
-        spoilerOn = !status.spoilerText.asRawText.isEmpty
-        spoilerText = status.spoilerText.asRawText
-        visibility = status.visibility
         mediaContainers = status.mediaAttachments.map {
           MediaContainer(
             id: UUID().uuidString,
@@ -501,7 +448,6 @@ extension StatusEditor {
     func resetPollDefaults() {
       pollOptions = ["", ""]
       pollDuration = .oneDay
-      pollVotingFrequency = .oneVote
     }
 
     private func getPollOptionsForAPI() -> [String]? {
@@ -521,11 +467,7 @@ extension StatusEditor {
           case "@":
             guard query.utf8.count > 1 else { return }
             query.removeFirst()
-            let accounts: [Account] = try await client.get(endpoint: Search.accountsSearch(query: query,
-                                                                                           type: nil,
-                                                                                           offset: 0,
-                                                                                           following: nil),
-                                                           forceVersion: .v1)
+            let accounts: [Account] = try await client.get(endpoint: Search.accountsSearch(query: query))
             guard !Task.isCancelled else {
               return
             }
@@ -670,9 +612,6 @@ extension StatusEditor {
                 error: nil
               )
             }
-            if let uploadedMedia, uploadedMedia.url == nil {
-              scheduleAsyncMediaRefresh(mediaAttachement: uploadedMedia)
-            }
           } else if let videoURL = originalContainer.movieTransferable?.url,
                     let compressedVideoURL = await compressor.compressVideo(videoURL),
                     let data = try? Data(contentsOf: compressedVideoURL)
@@ -688,9 +627,6 @@ extension StatusEditor {
                 error: nil
               )
             }
-            if let uploadedMedia, uploadedMedia.url == nil {
-              scheduleAsyncMediaRefresh(mediaAttachement: uploadedMedia)
-            }
           } else if let gifData = originalContainer.gifTransferable?.data {
             let uploadedMedia = try await uploadMedia(data: gifData, mimeType: "image/gif")
             if let index = indexOf(container: newContainer) {
@@ -702,9 +638,6 @@ extension StatusEditor {
                 mediaAttachment: uploadedMedia,
                 error: nil
               )
-            }
-            if let uploadedMedia, uploadedMedia.url == nil {
-              scheduleAsyncMediaRefresh(mediaAttachement: uploadedMedia)
             }
           }
         } catch {
@@ -721,38 +654,6 @@ extension StatusEditor {
         }
       }
     }
-
-    private func scheduleAsyncMediaRefresh(mediaAttachement: MediaAttachment) {
-      Task {
-        repeat {
-          if let client,
-             let index = mediaContainers.firstIndex(where: { $0.mediaAttachment?.id == mediaAttachement.id })
-          {
-            guard mediaContainers[index].mediaAttachment?.url == nil else {
-              return
-            }
-            do {
-              let newAttachement: MediaAttachment = try await client.get(endpoint: Media.media(id: mediaAttachement.id,
-                                                                                               json: nil))
-              if newAttachement.url != nil {
-                let oldContainer = mediaContainers[index]
-                mediaContainers[index] = MediaContainer(
-                  id: mediaAttachement.id,
-                  image: oldContainer.image,
-                  movieTransferable: oldContainer.movieTransferable,
-                  gifTransferable: oldContainer.gifTransferable,
-                  mediaAttachment: newAttachement,
-                  error: nil
-                )
-              }
-            } catch { }
-          }
-          try? await Task.sleep(for: .seconds(5))
-        } while !Task.isCancelled
-      }
-    }
-
-    private var mediaAttributes: [StatusData.MediaAttribute] = []
 
     func queueSharedPost() async -> Bool {
       do {
@@ -789,8 +690,6 @@ extension StatusEditor {
     private func uploadMedia(data: Data, mimeType: String) async throws -> MediaAttachment? {
       guard let client else { return nil }
       return try await client.mediaUpload(endpoint: Media.medias,
-                                          version: .v2,
-                                          method: "POST",
                                           mimeType: mimeType,
                                           filename: "file",
                                           data: data)

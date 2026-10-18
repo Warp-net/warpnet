@@ -46,9 +46,7 @@ public struct ExploreView: View {
               ProgressView()
               Spacer()
             }
-            #if !os(visionOS)
             .listRowBackground(theme.secondaryBackgroundColor)
-            #endif
             .listRowSeparator(.hidden)
             .id(UUID())
           }
@@ -56,9 +54,7 @@ public struct ExploreView: View {
           EmptyView(iconName: "magnifyingglass",
                     title: "explore.search.title",
                     message: "warpnet.explore.empty")
-            #if !os(visionOS)
             .listRowBackground(theme.secondaryBackgroundColor)
-            #endif
             .listRowSeparator(.hidden)
         } else {
           if !viewModel.suggestedAccounts.isEmpty {
@@ -79,10 +75,8 @@ public struct ExploreView: View {
         }
       }
       .listStyle(.plain)
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.secondaryBackgroundColor)
-      #endif
       .navigationTitle("explore.navigation-title")
       .searchable(text: $viewModel.searchQuery,
                   isPresented: $viewModel.isSearchPresented,
@@ -109,26 +103,18 @@ public struct ExploreView: View {
         .padding(.vertical, 8)
         .redacted(reason: .placeholder)
         .allowsHitTesting(false)
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
     }
   }
 
   @ViewBuilder
   private func makeSearchResultsView(results: SearchResults) -> some View {
-    if !results.accounts.isEmpty, viewModel.searchScope == .all || viewModel.searchScope == .people {
+    if !results.accounts.isEmpty {
       Section("explore.section.users") {
         ForEach(results.accounts) { account in
           if let relationship = results.relationships.first(where: { $0.id == account.id }) {
             AccountsListRow(viewModel: .init(account: account, relationShip: relationship))
-              #if !os(visionOS)
               .listRowBackground(theme.primaryBackgroundColor)
-              #else
-              .listRowBackground(RoundedRectangle(cornerRadius: 8)
-                   .foregroundStyle(.background).hoverEffect())
-              .listRowHoverEffectDisabled()
-              #endif
           }
         }
       }
@@ -142,26 +128,14 @@ public struct ExploreView: View {
       { account in
         if let relationship = viewModel.suggestedAccountsRelationShips.first(where: { $0.id == account.id }) {
           AccountsListRow(viewModel: .init(account: account, relationShip: relationship))
-            #if !os(visionOS)
             .listRowBackground(theme.primaryBackgroundColor)
-            #else
-            .listRowBackground(RoundedRectangle(cornerRadius: 8)
-                 .foregroundStyle(.background).hoverEffect())
-            .listRowHoverEffectDisabled()
-            #endif
         }
       }
       NavigationLink(value: RouterDestination.accountsList(accounts: viewModel.suggestedAccounts)) {
         Text("see-more")
           .foregroundColor(theme.tintColor)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #else
-      .listRowBackground(RoundedRectangle(cornerRadius: 8)
-           .foregroundStyle(.background).hoverEffect())
-      .listRowHoverEffectDisabled()
-      #endif
     }
   }
 

@@ -12,7 +12,7 @@ public struct TimelineContentFilterView: View {
     Form {
       Section {
         Toggle(isOn: $contentFilter.showBoosts) {
-          Label("timeline.filter.show-boosts", image: "Rocket")
+          Label("timeline.filter.show-boosts", systemImage: "arrow.2.squarepath")
         }
         Toggle(isOn: $contentFilter.showReplies) {
           Label("timeline.filter.show-replies", systemImage: "bubble.left.and.bubble.right")
@@ -24,9 +24,7 @@ public struct TimelineContentFilterView: View {
           Label("timeline.filter.show-quote", systemImage: "quote.bubble")
         }
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
     .navigationTitle("timeline.content-filter.title")
     .navigationBarTitleDisplayMode(.inline)

@@ -99,7 +99,11 @@ enum BackgroundRefresh {
       String(localized: "warpnet.push.follow")
     case .mention:
       notification.status?.content.asRawText.escape() ?? String(localized: "warpnet.push.reply")
-    default:
+    case .message:
+      String(localized: "warpnet.push.message")
+    case .moderation:
+      notification.text ?? String(localized: "warpnet.push.moderation")
+    case nil:
       nil
     }
   }

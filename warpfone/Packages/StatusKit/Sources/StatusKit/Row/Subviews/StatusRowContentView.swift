@@ -15,58 +15,40 @@ struct StatusRowContentView: View {
   var viewModel: StatusRowViewModel
 
   var body: some View {
-    if !viewModel.finalStatus.spoilerText.asRawText.isEmpty {
-      @Bindable var viewModel = viewModel
-      StatusRowSpoilerView(status: viewModel.finalStatus, displaySpoiler: $viewModel.displaySpoiler)
+    StatusRowTextView(viewModel: viewModel)
+    if let poll = viewModel.finalStatus.poll {
+      StatusPollView(poll: poll, status: viewModel.finalStatus)
     }
 
-    if !viewModel.displaySpoiler {
-      StatusRowTextView(viewModel: viewModel)
-      if let poll = viewModel.finalStatus.poll {
-        StatusPollView(poll: poll, status: viewModel.finalStatus)
+    if !reasons.contains(.placeholder),
+       !isCompact,
+       viewModel.isEmbedLoading || viewModel.embeddedStatus != nil
+    {
+      if let embeddedStatus = viewModel.embeddedStatus {
+        StatusEmbeddedView(status: embeddedStatus,
+                           client: viewModel.client,
+                           routerPath: viewModel.routerPath)
+          .fixedSize(horizontal: false, vertical: true)
+          .transition(.opacity)
+      } else {
+        StatusEmbeddedView(status: Status.placeholder(),
+                           client: viewModel.client,
+                           routerPath: viewModel.routerPath)
+          .fixedSize(horizontal: false, vertical: true)
+          .redacted(reason: .placeholder)
+          .transition(.opacity)
       }
+    }
 
-      if !reasons.contains(.placeholder),
-         !isCompact,
-         viewModel.isEmbedLoading || viewModel.embeddedStatus != nil
-      {
-        if let embeddedStatus = viewModel.embeddedStatus {
-          StatusEmbeddedView(status: embeddedStatus,
-                             client: viewModel.client,
-                             routerPath: viewModel.routerPath)
-            .fixedSize(horizontal: false, vertical: true)
-            .transition(.opacity)
-        } else {
-          StatusEmbeddedView(status: Status.placeholder(),
-                             client: viewModel.client,
-                             routerPath: viewModel.routerPath)
-            .fixedSize(horizontal: false, vertical: true)
-            .redacted(reason: .placeholder)
-            .transition(.opacity)
+    if !viewModel.finalStatus.mediaAttachments.isEmpty {
+      HStack {
+        StatusRowMediaPreviewView(attachments: viewModel.finalStatus.mediaAttachments)
+        if theme.statusDisplayStyle == .compact {
+          Spacer()
         }
       }
-
-      if !viewModel.finalStatus.mediaAttachments.isEmpty {
-        HStack {
-          StatusRowMediaPreviewView(attachments: viewModel.finalStatus.mediaAttachments,
-                                    sensitive: viewModel.finalStatus.sensitive)
-          if theme.statusDisplayStyle == .compact {
-            Spacer()
-          }
-        }
-        .accessibilityHidden(isFocused == false)
-        .padding(.vertical, 4)
-      }
-
-      if let card = viewModel.finalStatus.card,
-         !viewModel.isEmbedLoading,
-         !isCompact,
-         theme.statusDisplayStyle != .compact,
-         viewModel.embeddedStatus == nil,
-         viewModel.finalStatus.mediaAttachments.isEmpty
-      {
-        StatusRowCardView(card: card)
-      }
+      .accessibilityHidden(isFocused == false)
+      .padding(.vertical, 4)
     }
   }
 }

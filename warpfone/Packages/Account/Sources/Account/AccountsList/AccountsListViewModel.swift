@@ -52,7 +52,6 @@ public enum AccountsListMode {
   var totalCount: Int?
   var accountId: String?
   
-  var searchQuery: String = ""
 
   private var nextPageId: String?
 
@@ -131,29 +130,6 @@ public enum AccountsListMode {
     } catch {
       let logger = Logger(subsystem: "site.warpnet.warpfone", category: "UI")
       logger.log(level: .info, "\(error.localizedDescription)")
-    }
-  }
-  
-  func search() async {
-    guard let client, !searchQuery.isEmpty else { return }
-    do {
-      state = .loading
-      try await Task.sleep(for: .milliseconds(250))
-      var results: SearchResults = try await client.get(endpoint: Search.search(query: searchQuery,
-                                                                                type: "accounts",
-                                                                                offset: nil,
-                                                                                following: true),
-                                                        forceVersion: .v2)
-      let relationships: [Relationship] =
-        try await client.get(endpoint: Accounts.relationships(ids: results.accounts.map(\.id)))
-      results.relationships = relationships
-      withAnimation {
-        state = .display(accounts: results.accounts,
-                         relationships: relationships,
-                         nextPageState: .none)
-      }
-    } catch {
-      
     }
   }
 }

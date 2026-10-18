@@ -16,13 +16,6 @@ import OSLog
 
   private let pollInterval: Swift.Duration = .seconds(20)
 
-  public enum Stream: String {
-    case federated = "public"
-    case local
-    case user
-    case direct
-  }
-
   public var events: [any StreamEvent] = []
   public var unreadNotificationsCount: Int = 0
   public var latestEvent: (any StreamEvent)?
@@ -34,14 +27,14 @@ import OSLog
 
   private init() {}
 
-  public func setClient(client: Client, instanceStreamingURL _: URL?) {
+  public func setClient(client: Client) {
     stopWatching()
     self.client = client
     lastSeenId = nil
     hasBaseline = false
   }
 
-  public func watch(streams _: [Stream]) {
+  public func watch() {
     guard client?.isAuth == true, pollTask == nil else { return }
     pollTask = Task { [weak self] in
       while !Task.isCancelled {

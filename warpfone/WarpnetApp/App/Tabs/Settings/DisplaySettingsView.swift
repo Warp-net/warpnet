@@ -10,10 +10,6 @@ import StatusKit
 import SwiftUI
 
 @Observable class DisplaySettingsLocalValues {
-  var tintColor = Theme.shared.tintColor
-  var primaryBackgroundColor = Theme.shared.primaryBackgroundColor
-  var secondaryBackgroundColor = Theme.shared.secondaryBackgroundColor
-  var labelColor = Theme.shared.labelColor
   var lineSpacing = Theme.shared.lineSpacing
   var fontSizeScale = Theme.shared.fontSizeScale
 }
@@ -30,46 +26,26 @@ struct DisplaySettingsView: View {
 
   @State private var isFontSelectorPresented = false
 
-  private let previewStatusViewModel = StatusRowViewModel(status: Status.placeholder(forSettings: true, language: "la"),
+  private let previewStatusViewModel = StatusRowViewModel(status: Status.placeholder(forSettings: true),
                                                           client: Client(server: ""),
                                                           routerPath: RouterPath()) // translate from latin button
 
   var body: some View {
     ZStack(alignment: .top) {
       Form {
-        #if !os(visionOS)
         StatusRowView(viewModel: previewStatusViewModel)
           .allowsHitTesting(false)
           .opacity(0)
           .hidden()
         themeSection
-        #endif
         fontSection
         layoutSection
         platformsSection
         resetSection
       }
       .navigationTitle("settings.display.navigation-title")
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.secondaryBackgroundColor)
-      #endif
-      .task(id: localValues.tintColor) {
-        do { try await Task.sleep(for: .microseconds(500)) } catch {}
-        theme.tintColor = localValues.tintColor
-      }
-      .task(id: localValues.primaryBackgroundColor) {
-        do { try await Task.sleep(for: .microseconds(500)) } catch {}
-        theme.primaryBackgroundColor = localValues.primaryBackgroundColor
-      }
-      .task(id: localValues.secondaryBackgroundColor) {
-        do { try await Task.sleep(for: .microseconds(500)) } catch {}
-        theme.secondaryBackgroundColor = localValues.secondaryBackgroundColor
-      }
-      .task(id: localValues.labelColor) {
-        do { try await Task.sleep(for: .microseconds(500)) } catch {}
-        theme.labelColor = localValues.labelColor
-      }
       .task(id: localValues.lineSpacing) {
         do { try await Task.sleep(for: .microseconds(500)) } catch {}
         theme.lineSpacing = localValues.lineSpacing
@@ -78,9 +54,7 @@ struct DisplaySettingsView: View {
         do { try await Task.sleep(for: .microseconds(500)) } catch {}
         theme.fontSizeScale = localValues.fontSizeScale
       }
-      #if !os(visionOS)
       examplePost
-      #endif
     }
   }
 
@@ -102,36 +76,19 @@ struct DisplaySettingsView: View {
     }
   }
 
-  @ViewBuilder
   private var themeSection: some View {
-    @Bindable var theme = theme
-    Section {
-      Toggle("settings.display.theme.systemColor", isOn: $theme.followSystemColorScheme)
-      themeSelectorButton
-      Group {
-        ColorPicker("settings.display.theme.tint", selection: $localValues.tintColor)
-        ColorPicker("settings.display.theme.background", selection: $localValues.primaryBackgroundColor)
-        ColorPicker("settings.display.theme.secondary-background", selection: $localValues.secondaryBackgroundColor)
-        ColorPicker("settings.display.theme.text-color", selection: $localValues.labelColor)
-      }
-      .disabled(theme.followSystemColorScheme)
-      .opacity(theme.followSystemColorScheme ? 0.5 : 1.0)
-      .onChange(of: theme.selectedSet) {
-        localValues.tintColor = theme.tintColor
-        localValues.primaryBackgroundColor = theme.primaryBackgroundColor
-        localValues.secondaryBackgroundColor = theme.secondaryBackgroundColor
-        localValues.labelColor = theme.labelColor
-      }
-    } header: {
-      Text("settings.display.section.theme")
-    } footer: {
-      if theme.followSystemColorScheme {
-        Text("settings.display.section.theme.footer")
+    Section("settings.display.section.theme") {
+      Picker("warpnet.theme.title", selection: .init(get: {
+        theme.appTheme
+      }, set: { newValue in
+        theme.apply(newValue, systemScheme: colorScheme)
+      })) {
+        ForEach(Theme.AppTheme.allCases, id: \.rawValue) { appTheme in
+          Text(appTheme.title).tag(appTheme)
+        }
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   private var fontSection: some View {
@@ -183,9 +140,7 @@ struct DisplaySettingsView: View {
         d[.leading]
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   @ViewBuilder
@@ -207,11 +162,6 @@ struct DisplaySettingsView: View {
       Picker("settings.display.status.action-buttons", selection: $theme.statusActionsDisplay) {
         ForEach(Theme.StatusActionsDisplay.allCases, id: \.rawValue) { buttonStyle in
           Text(buttonStyle.description).tag(buttonStyle)
-        }
-      }
-      Picker("settings.display.status.action-secondary", selection: $theme.statusActionSecondary) {
-        ForEach(Theme.StatusActionSecondary.allCases, id: \.rawValue) { action in
-          Text(action.description).tag(action)
         }
       }
       Picker("settings.display.status.media-style", selection: $theme.statusDisplayStyle) {
@@ -238,9 +188,7 @@ struct DisplaySettingsView: View {
       }
       Toggle("settings.display.show-account-popover", isOn: $userPreferences.showAccountPopover)
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   @ViewBuilder
@@ -251,9 +199,7 @@ struct DisplaySettingsView: View {
       Section("settings.display.section.platform") {
         Toggle("settings.display.show-ipad-column", isOn: $userPreferences.showiPadSecondaryColumn)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
   }
 
@@ -265,18 +211,7 @@ struct DisplaySettingsView: View {
         Text("settings.display.restore")
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
-  private var themeSelectorButton: some View {
-    NavigationLink(destination: ThemePreviewView()) {
-      HStack {
-        Text("settings.display.section.theme")
-        Spacer()
-        Text(theme.selectedSet.rawValue)
-      }
-    }
-  }
 }

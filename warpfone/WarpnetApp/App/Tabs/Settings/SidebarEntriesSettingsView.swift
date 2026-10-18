@@ -21,16 +21,12 @@ struct SidebarEntriesSettingsView: View {
         }
         .onMove(perform: move)
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
     .environment(\.editMode, .constant(.active))
     .navigationTitle("settings.general.sidebarEntries")
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .background(theme.secondaryBackgroundColor)
-    #endif
   }
   
   func move(from source: IndexSet, to destination: Int) {

@@ -9,20 +9,22 @@ public struct StatusesListView<Fetcher>: View where Fetcher: StatusesFetcher {
   @Environment(Theme.self) private var theme
 
   @State private var fetcher: Fetcher
-  // Whether this status is on a remote local timeline (many actions are unavailable if so)
-  private let isRemote: Bool
   private let routerPath: RouterPath
   private let client: Client
+  private let interstitial: AnyView?
+
+  /// Rows the interstitial follows, or the end of a shorter list.
+  private let interstitialPosition = 5
 
   public init(fetcher: Fetcher,
               client: Client,
               routerPath: RouterPath,
-              isRemote: Bool = false)
+              interstitial: AnyView? = nil)
   {
     _fetcher = .init(initialValue: fetcher)
-    self.isRemote = isRemote
     self.client = client
     self.routerPath = routerPath
+    self.interstitial = interstitial
   }
 
   public var body: some View {
@@ -46,17 +48,22 @@ public struct StatusesListView<Fetcher>: View where Fetcher: StatusesFetcher {
       .listRowSeparator(.hidden)
 
     case let .display(statuses, nextPageState):
-      ForEach(statuses, id: \.id) { status in
+      ForEach(Array(statuses.enumerated()), id: \.element.id) { index, status in
         StatusRowView(viewModel: StatusRowViewModel(status: status,
                                                     client: client,
-                                                    routerPath: routerPath,
-                                                    isRemote: isRemote))
+                                                    routerPath: routerPath))
           .onAppear {
             fetcher.statusDidAppear(status: status)
           }
           .onDisappear {
             fetcher.statusDidDisappear(status: status)
           }
+        if index == min(interstitialPosition, statuses.count) - 1, let interstitial {
+          interstitialRow(interstitial)
+        }
+      }
+      if statuses.isEmpty, let interstitial {
+        interstitialRow(interstitial)
       }
       switch nextPageState {
       case .hasNextPage:
@@ -76,6 +83,13 @@ public struct StatusesListView<Fetcher>: View where Fetcher: StatusesFetcher {
     }
   }
 
+  private func interstitialRow(_ content: AnyView) -> some View {
+    content
+      .listRowInsets(EdgeInsets())
+      .listRowSeparator(.hidden)
+      .listRowBackground(theme.primaryBackgroundColor)
+  }
+
   private var loadingRow: some View {
     HStack {
       Spacer()
@@ -83,8 +97,6 @@ public struct StatusesListView<Fetcher>: View where Fetcher: StatusesFetcher {
       Spacer()
     }
     .padding(.horizontal, .layoutPadding)
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 }

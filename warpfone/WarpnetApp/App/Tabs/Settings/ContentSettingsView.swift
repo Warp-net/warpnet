@@ -28,21 +28,7 @@ struct ContentSettingsView: View {
           Text("settings.other.mute-video")
         }
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
-
-      Section("settings.content.sharing") {
-        Picker("settings.content.sharing.share-button-behavior", selection: $userPreferences.shareButtonBehavior) {
-          ForEach(PreferredShareButtonBehavior.allCases, id: \.rawValue) { option in
-            Text(option.title)
-              .tag(option)
-          }
-        }
-      }
-       #if !os(visionOS)
-      .listRowBackground(theme.primaryBackgroundColor)
-      #endif
 
       Section {
         Toggle(isOn: $userPreferences.collapseLongPosts) {
@@ -53,13 +39,11 @@ struct ContentSettingsView: View {
       } footer: {
         Text("settings.content.collapse-long-posts-hint")
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
 
       Section("timeline.content-filter.title") {
         Toggle(isOn: $contentFilter.showBoosts) {
-          Label("timeline.filter.show-boosts", image: "Rocket")
+          Label("timeline.filter.show-boosts", systemImage: "arrow.2.squarepath")
         }
         Toggle(isOn: $contentFilter.showReplies) {
           Label("timeline.filter.show-replies", systemImage: "bubble.left.and.bubble.right")
@@ -71,14 +55,10 @@ struct ContentSettingsView: View {
           Label("timeline.filter.show-quote", systemImage: "quote.bubble")
         }
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
     }
     .navigationTitle("settings.content.navigation-title")
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .background(theme.secondaryBackgroundColor)
-    #endif
   }
 }

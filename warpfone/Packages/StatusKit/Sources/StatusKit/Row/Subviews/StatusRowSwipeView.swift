@@ -7,15 +7,10 @@ import SwiftUI
 struct StatusRowSwipeView: View {
   @Environment(Theme.self) private var theme
   @Environment(UserPreferences.self) private var preferences
-  @Environment(CurrentAccount.self) private var currentAccount
   @Environment(StatusDataController.self) private var statusDataController
 
   enum Mode {
     case leading, trailing
-  }
-
-  func privateBoost() -> Bool {
-    viewModel.status.visibility == .priv && viewModel.status.account.id == currentAccount.account?.id
   }
 
   var viewModel: StatusRowViewModel
@@ -32,11 +27,11 @@ struct StatusRowSwipeView: View {
 
   @ViewBuilder
   private var trailingSwipeActions: some View {
-    if preferences.swipeActionsStatusTrailingRight != StatusAction.none, !viewModel.isRemote {
+    if preferences.swipeActionsStatusTrailingRight != StatusAction.none {
       makeSwipeButton(action: preferences.swipeActionsStatusTrailingRight)
         .tint(preferences.swipeActionsStatusTrailingRight.color(themeTintColor: theme.tintColor, useThemeColor: preferences.swipeActionsUseThemeColor, outside: true))
     }
-    if preferences.swipeActionsStatusTrailingLeft != StatusAction.none, !viewModel.isRemote {
+    if preferences.swipeActionsStatusTrailingLeft != StatusAction.none {
       makeSwipeButton(action: preferences.swipeActionsStatusTrailingLeft)
         .tint(preferences.swipeActionsStatusTrailingLeft.color(themeTintColor: theme.tintColor, useThemeColor: preferences.swipeActionsUseThemeColor, outside: false))
     }
@@ -44,11 +39,11 @@ struct StatusRowSwipeView: View {
 
   @ViewBuilder
   private var leadingSwipeActions: some View {
-    if preferences.swipeActionsStatusLeadingLeft != StatusAction.none, !viewModel.isRemote {
+    if preferences.swipeActionsStatusLeadingLeft != StatusAction.none {
       makeSwipeButton(action: preferences.swipeActionsStatusLeadingLeft)
         .tint(preferences.swipeActionsStatusLeadingLeft.color(themeTintColor: theme.tintColor, useThemeColor: preferences.swipeActionsUseThemeColor, outside: true))
     }
-    if preferences.swipeActionsStatusLeadingRight != StatusAction.none, !viewModel.isRemote {
+    if preferences.swipeActionsStatusLeadingRight != StatusAction.none {
       makeSwipeButton(action: preferences.swipeActionsStatusLeadingRight)
         .tint(preferences.swipeActionsStatusLeadingRight.color(themeTintColor: theme.tintColor, useThemeColor: preferences.swipeActionsUseThemeColor, outside: false))
     }
@@ -61,19 +56,17 @@ struct StatusRowSwipeView: View {
       makeSwipeButtonForRouterPath(action: action, destination: .replyToStatusEditor(status: viewModel.status))
     case .quote:
       makeSwipeButtonForRouterPath(action: action, destination: .quoteStatusEditor(status: viewModel.status))
-        .disabled(viewModel.status.visibility == .direct || viewModel.status.visibility == .priv)
     case .favorite:
       makeSwipeButtonForTask(action: action) {
-        await statusDataController.toggleFavorite(remoteStatus: nil)
+        await statusDataController.toggleFavorite()
       }
     case .boost:
-      makeSwipeButtonForTask(action: action, privateBoost: privateBoost()) {
-        await statusDataController.toggleReblog(remoteStatus: nil)
+      makeSwipeButtonForTask(action: action) {
+        await statusDataController.toggleReblog()
       }
-      .disabled(viewModel.status.visibility == .direct || viewModel.status.visibility == .priv && viewModel.status.account.id != currentAccount.account?.id)
     case .bookmark:
       makeSwipeButtonForTask(action: action) {
-        await statusDataController.toggleBookmark(remoteStatus: nil)
+        await statusDataController.toggleBookmark()
       }
     case .none:
       EmptyView()
@@ -91,40 +84,36 @@ struct StatusRowSwipeView: View {
   }
 
   @ViewBuilder
-  private func makeSwipeButtonForTask(action: StatusAction, privateBoost: Bool = false, task: @escaping () async -> Void) -> some View {
+  private func makeSwipeButtonForTask(action: StatusAction, task: @escaping () async -> Void) -> some View {
     Button {
       Task {
         HapticManager.shared.fireHaptic(.notification(.success))
         await task()
       }
     } label: {
-      makeSwipeLabel(action: action, style: preferences.swipeActionsIconStyle, privateBoost: privateBoost)
+      makeSwipeLabel(action: action, style: preferences.swipeActionsIconStyle)
     }
   }
 
   @ViewBuilder
-  private func makeSwipeLabel(action: StatusAction, style: UserPreferences.SwipeActionsIconStyle, privateBoost: Bool = false) -> some View {
+  private func makeSwipeLabel(action: StatusAction, style: UserPreferences.SwipeActionsIconStyle) -> some View {
     switch style {
     case .iconOnly:
       Label(action.displayName(isReblogged: statusDataController.isReblogged,
                                isFavorited: statusDataController.isFavorited,
-                               isBookmarked: statusDataController.isBookmarked,
-                               privateBoost: privateBoost),
+                               isBookmarked: statusDataController.isBookmarked),
             imageNamed: action.iconName(isReblogged: statusDataController.isReblogged,
                                         isFavorited: statusDataController.isFavorited,
-                                        isBookmarked: statusDataController.isBookmarked,
-                                        privateBoost: privateBoost))
+                                        isBookmarked: statusDataController.isBookmarked))
         .labelStyle(.iconOnly)
         .environment(\.symbolVariants, .none)
     case .iconWithText:
       Label(action.displayName(isReblogged: statusDataController.isReblogged,
                                isFavorited: statusDataController.isFavorited,
-                               isBookmarked: statusDataController.isBookmarked,
-                               privateBoost: privateBoost),
+                               isBookmarked: statusDataController.isBookmarked),
             imageNamed: action.iconName(isReblogged: statusDataController.isReblogged,
                                         isFavorited: statusDataController.isFavorited,
-                                        isBookmarked: statusDataController.isBookmarked,
-                                        privateBoost: privateBoost))
+                                        isBookmarked: statusDataController.isBookmarked))
         .labelStyle(.titleAndIcon)
         .environment(\.symbolVariants, .none)
     }
