@@ -1044,7 +1044,8 @@ type OrderQuoteResponse struct {
 
 // GetCopyBuyerEvent defines model for GetCopyBuyerEvent.
 type GetCopyBuyerEvent struct {
-	File string `json:"file"`
+	File    string `json:"file"`
+	TweetId string `json:"tweet_id,omitempty"`
 }
 
 // CopyBuyerResponse defines model for CopyBuyerResponse.
@@ -1055,6 +1056,8 @@ type CopyBuyerResponse struct {
 	TxId             string    `json:"tx_id"`
 	SoldAt           time.Time `json:"sold_at"`
 	DailyOrdersCount int       `json:"daily_orders_count"`
+	IsPixelMatch     bool      `json:"is_pixel_match"`
+	PixelScore       float64   `json:"pixel_score"`
 }
 
 // OrderQuoteStep defines model for OrderQuoteStep.

@@ -39,7 +39,11 @@ func BuildImageCopy(original string, c domain.MediaCopy, signer Metadata) (strin
 		return "", err
 	}
 	if len(c.Watermark) != 0 {
-		drawn, err := DrawWatermark(raw, c.Watermark)
+		var noiseSeed []byte
+		if c.IsNoiseDrawn {
+			noiseSeed = BuildNoiseSeed(signer.PrivKey, c.OriginalKey, c.BuyerId)
+		}
+		drawn, err := DrawWatermark(raw, c.Watermark, noiseSeed)
 		if err != nil {
 			return "", err
 		}

@@ -6,12 +6,17 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/jpeg"
+	"image/png"
+	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,6 +185,16 @@ func (m stubSponsoredMedia) GetCopy(userId, key string) (domain.MediaCopy, error
 func (m stubSponsoredMedia) SetCopy(userId, key string, c domain.MediaCopy) error {
 	m.copies[userId+"/"+key] = c
 	return nil
+}
+
+func (m stubSponsoredMedia) ListCopies(userId, originalKey string) ([]domain.MediaCopy, error) {
+	var copies []domain.MediaCopy
+	for key, c := range m.copies {
+		if strings.HasPrefix(key, userId+"/") && c.OriginalKey == originalKey {
+			copies = append(copies, c)
+		}
+	}
+	return copies, nil
 }
 
 func (m stubSponsoredMedia) SetImage(string, domain.Base64Image) (domain.ImageKey, error) {
@@ -690,9 +705,10 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	watermark, err := media_meta.WatermarkPNG(rawOf(t, image), "@leaker · buyer-1")
 	require.NoError(t, err)
 	assert.Equal(t, watermark, copies.copies["author-1/"+bought.ImageKeys[0]].Watermark, "the watermark names the buyer by nick and id")
+	assert.True(t, copies.copies["author-1/"+bought.ImageKeys[0]].IsNoiseDrawn, "the copy carries the buyer's noise")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
-	traceBuyer := StreamGetCopyBuyerHandler(testSignerKey, orders)
+	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies)
 	want := event.CopyBuyerResponse{
 		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, DailyOrdersCount: 2,
 	}
@@ -802,7 +818,7 @@ func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 
 func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 	image, _ := imageWithMetadata(t, "author-1")
-	h := StreamGetCopyBuyerHandler(testSignerKey, stubOrders{})
+	h := StreamGetCopyBuyerHandler(stubAuth{}, testSignerKey, stubTweetRepo{}, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia())
 
 	resp, err := h(marshal(t, event.GetCopyBuyerEvent{File: image}), nil)
 	require.NoError(t, err)
@@ -814,6 +830,80 @@ func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 	require.NoError(t, err)
 	_, err = h(marshal(t, event.GetCopyBuyerEvent{File: foreign}), nil)
 	assert.EqualError(t, err, "sponsored buyer: this node did not sell the copy")
+}
+
+func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
+	own := testSignerID
+	photo, photoKey := photoWithMetadata(t, "author-1")
+	media := newStubSponsoredMedia()
+	media.images["author-1/"+photoKey] = domain.Base64Image(photo)
+	copies := newStubSponsoredMedia()
+	full := domain.Tweet{Id: "tweet-1", UserId: "author-1", Text: "paid", ImageKeys: []string{photoKey}, Price: sponsoredPrice()}
+	tweets := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) { return full, nil }}
+	soldAt := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	orders := stubOrders{}
+	users := stubSponsoredUsers{}
+	auth := stubAuth{owner: domain.Owner{UserId: "author-1"}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
+
+	served := map[string]string{}
+	for _, buyerId := range []string{"buyer-1", "buyer-2"} {
+		buyerNode := newTestPeerID(t)
+		users[buyerId] = domain.User{Id: buyerId, Username: buyerId, NodeId: buyerNode.String()}
+		orders["tweet-1/"+buyerId] = domain.Order{
+			TweetId: "tweet-1", AuthorId: "author-1", BuyerId: buyerId, Nonce: buyerId, TxId: "tx-" + buyerId, Confirmed: true, CreatedAt: soldAt,
+		}
+		_, s := stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
+		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer)(
+			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
+		require.NoError(t, err)
+		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_IMAGE)
+		img, err := StreamGetSponsoredImageHandler(streamer, testSignerKey, media, copies, users)(
+			marshal(t, event.GetImageEvent{UserId: "author-1", Key: bought.(domain.Tweet).ImageKeys[0]}), s)
+		require.NoError(t, err)
+		served[buyerId] = img.(event.GetImageResponse).File
+	}
+
+	decoded, err := jpeg.Decode(bytes.NewReader(rawOf(t, served["buyer-2"])))
+	require.NoError(t, err)
+	var clipboard bytes.Buffer
+	require.NoError(t, png.Encode(&clipboard, decoded))
+	pasted := "data:image/png;base64," + base64.StdEncoding.EncodeToString(clipboard.Bytes())
+
+	traceBuyer := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies)
+	resp, err := traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: pasted}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, event.CopyBuyerResponse{}, resp, "without the tweet there is no original to compare the pixels with")
+
+	resp, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: pasted, TweetId: "tweet-1"}), nil)
+	require.NoError(t, err)
+	traced := resp.(event.CopyBuyerResponse)
+	assert.True(t, traced.IsPixelMatch, "a copied image has no metadata, only pixels")
+	assert.GreaterOrEqual(t, traced.PixelScore, float64(media_meta.MinNoiseScore))
+	traced.IsPixelMatch, traced.PixelScore = false, 0
+	sold := orders["tweet-1/buyer-2"]
+	assert.Equal(t, event.CopyBuyerResponse{
+		TweetId: "tweet-1", BuyerId: "buyer-2", OrderId: sold.ID(), TxId: "tx-buyer-2", SoldAt: soldAt, DailyOrdersCount: 1,
+	}, traced)
+}
+
+func photoWithMetadata(t *testing.T, ownerId string) (file, key string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 512, 342))
+	for y := range 342 {
+		for x := range 512 {
+			v := uint8(128 + 60*math.Sin(float64(x)/41) + 30*math.Cos(float64(y)/23))
+			img.Set(x, y, color.RGBA{R: v, G: 255 - v, B: uint8(x / 2), A: 0xff})
+		}
+	}
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+
+	metadata, err := media_meta.BuildMetadata(signingInformer{ownerId}.NodeInfo(), testSignerKey, ownerOf(ownerId))
+	require.NoError(t, err)
+	signed, err := media_meta.SignUploadedImage("data:image/png;base64,"+base64.StdEncoding.EncodeToString(buf.Bytes()), metadata)
+	require.NoError(t, err)
+	return string(signed), contentKeyOf(string(signed))
 }
 
 func pixelsOf(t *testing.T, file string) []byte {
