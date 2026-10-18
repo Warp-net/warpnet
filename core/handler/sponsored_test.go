@@ -702,10 +702,10 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	require.NotNil(t, bought.VideoKey)
 	assert.NotEqual(t, imageKey, bought.ImageKeys[0], "the buyer never learns the original's key")
 	assert.NotEqual(t, videoKey, *bought.VideoKey, "the buyer never learns the original's key")
-	watermark, err := media_meta.WatermarkPNG(rawOf(t, image), "@leaker · buyer-1")
+	watermark, err := media_meta.WatermarkPNG(rawOf(t, image), "buyer-1")
 	require.NoError(t, err)
-	assert.Equal(t, watermark, copies.copies["author-1/"+bought.ImageKeys[0]].Watermark, "the watermark names the buyer by nick and id")
 	assert.True(t, copies.copies["author-1/"+bought.ImageKeys[0]].IsPixelMarked, "the copy carries the buyer's pixel mark")
+	assert.Equal(t, watermark, copies.copies["author-1/"+bought.ImageKeys[0]].Watermark, "the watermark names the buyer by id")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
 	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies)
