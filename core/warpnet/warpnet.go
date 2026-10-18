@@ -75,6 +75,8 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	pstore "github.com/libp2p/go-libp2p/p2p/host/peerstore"
+	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
@@ -495,9 +497,69 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 
+type addrBook interface {
+	peerstore.AddrBook
+	peerstore.CertifiedAddrBook
+	io.Closer
+}
+
+type warpPeerstore struct {
+	peerstore.Metrics
+	peerstore.KeyBook
+	addrBook
+	peerstore.ProtoBook
+	peerstore.PeerMetadata
+}
+
 func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
-	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
-	return WarpPeerstore(store), err
+	opts := pstoreds.DefaultOpts()
+	addrs, err := pstoreds.NewAddrBook(ctx, db, opts)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := pstoreds.NewKeyBook(ctx, db, opts)
+	if err != nil {
+		_ = addrs.Close()
+		return nil, err
+	}
+	protocols, err := pstoremem.NewProtoBook(pstoremem.WithMaxProtocols(opts.MaxProtocols))
+	if err != nil {
+		_ = addrs.Close()
+		return nil, err
+	}
+	return &warpPeerstore{
+		Metrics:      pstore.NewMetrics(),
+		KeyBook:      keys,
+		addrBook:     addrs,
+		ProtoBook:    protocols,
+		PeerMetadata: pstoremem.NewPeerMetadata(),
+	}, nil
+}
+
+func (ps *warpPeerstore) Peers() peer.IDSlice {
+	set := make(map[peer.ID]struct{})
+	for _, p := range ps.PeersWithKeys() {
+		set[p] = struct{}{}
+	}
+	for _, p := range ps.PeersWithAddrs() {
+		set[p] = struct{}{}
+	}
+	peers := make(peer.IDSlice, 0, len(set))
+	for p := range set {
+		peers = append(peers, p)
+	}
+	return peers
+}
+
+func (ps *warpPeerstore) PeerInfo(p peer.ID) peer.AddrInfo {
+	return peer.AddrInfo{ID: p, Addrs: ps.Addrs(p)}
+}
+
+func (ps *warpPeerstore) RemovePeer(p peer.ID) {
+	ps.KeyBook.RemovePeer(p)
+	ps.ProtoBook.RemovePeer(p)
+	ps.PeerMetadata.RemovePeer(p)
+	ps.Metrics.RemovePeer(p)
 }
 
 // MultiAddressIP is the IP a multiaddress points at: the peer's own for a direct
