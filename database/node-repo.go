@@ -38,7 +38,6 @@ import (
 
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
-	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -666,110 +665,11 @@ func buildRootKey(key datastore.Key) string {
 const (
 	BlocklistSubNamespace     = "BLOCKLIST"
 	BlocklistUserSubNamespace = "USER"
-	BlocklistTermSubNamespace = "TERM"
 )
-
-type BlockLevel int
-
-func (b BlockLevel) Next() BlockLevel {
-	if b >= PermanentBlock {
-		return PermanentBlock
-	}
-	return b + 1
-}
-
-const (
-	InitialBlock BlockLevel = iota + 1
-	MediumBlock
-	AdvancedBlock
-	PermanentBlock
-)
-
-const (
-	noExpiryBlockDuration time.Duration = local_store.PermanentTTL
-	advancedBlockDuration               = 7 * 24 * time.Hour
-	mediumBlockDuration                 = 24 * time.Hour
-	initialBlockDuration                = time.Hour
-)
-
-var blockDurationMapping = map[BlockLevel]time.Duration{
-	InitialBlock:   initialBlockDuration,
-	MediumBlock:    mediumBlockDuration,
-	AdvancedBlock:  advancedBlockDuration,
-	PermanentBlock: noExpiryBlockDuration,
-}
-
-type BlocklistTerm struct {
-	PeerID string
-	Level  BlockLevel
-}
-
-func (d *NodeRepo) BlocklistExponential(peerId string) error {
-	if d == nil {
-		return ErrNilNodeRepo
-	}
-	if peerId == "" {
-		return local_store.DBError("empty peer ID")
-	}
-
-	txn, err := d.db.NewTxn()
-	if err != nil {
-		return err
-	}
-	defer txn.Rollback()
-
-	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(BlocklistTermSubNamespace).
-		AddRootID(peerId).
-		Build()
-
-	bt, err := txn.Get(blocklistTermKey)
-	if err != nil && !local_store.IsNotFoundError(err) {
-		return err
-	}
-
-	var term BlocklistTerm
-	if bt != nil {
-		if err := json.Unmarshal(bt, &term); err != nil {
-			return err
-		}
-	}
-
-	if term.Level == 0 {
-		term.Level = InitialBlock
-	} else {
-		term.Level = term.Level.Next()
-	}
-
-	dur := blockDurationMapping[term.Level]
-
-	blocklistUserKey := local_store.NewPrefixBuilder(d.prefix).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(BlocklistUserSubNamespace).
-		AddRootID(peerId).
-		Build()
-
-	if err := txn.SetWithTTL(blocklistUserKey, []byte{}, dur); err != nil {
-		return err
-	}
-
-	bt, err = json.Marshal(term)
-	if err != nil {
-		return err
-	}
-
-	if err := txn.Set(blocklistTermKey, bt); err != nil {
-		return err
-	}
-	return txn.Commit()
-}
 
 // BlocklistPermanent puts peerId on the peer-level blocklist with no
-// TTL (PermanentBlock). Unlike Blocklist (which escalates the
-// BlockLevel and writes the matching expiring entry), this is what
-// social blocks resolve to: the user explicitly decided to block,
-// and the ban stays until they unblock.
+// TTL. This is what social blocks resolve to: the user explicitly
+// decided to block, and the ban stays until they unblock.
 func (d *NodeRepo) BlocklistPermanent(peerId string) error {
 	if d == nil {
 		return ErrNilNodeRepo
@@ -790,21 +690,7 @@ func (d *NodeRepo) BlocklistPermanent(peerId string) error {
 		AddRootID(peerId).
 		Build()
 
-	if err := txn.SetWithTTL(blocklistUserKey, []byte{}, noExpiryBlockDuration); err != nil {
-		return err
-	}
-
-	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(BlocklistTermSubNamespace).
-		AddRootID(peerId).
-		Build()
-	term := BlocklistTerm{PeerID: peerId, Level: PermanentBlock}
-	bt, err := json.Marshal(term)
-	if err != nil {
-		return err
-	}
-	if err := txn.Set(blocklistTermKey, bt); err != nil {
+	if err := txn.SetWithTTL(blocklistUserKey, []byte{}, local_store.PermanentTTL); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -827,34 +713,6 @@ func (d *NodeRepo) IsBlocklisted(peerId string) bool {
 	return err == nil
 }
 
-func (d *NodeRepo) BlocklistTerm(peerId string) (*BlocklistTerm, error) {
-	if d == nil {
-		return nil, ErrNilNodeRepo
-	}
-	if peerId == "" {
-		return nil, local_store.DBError("empty peer ID")
-	}
-	var term BlocklistTerm
-
-	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(BlocklistTermSubNamespace).
-		AddRootID(peerId).
-		Build()
-	bt, err := d.db.Get(blocklistTermKey)
-	if local_store.IsNotFoundError(err) {
-		return &term, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(bt, &term); err != nil {
-		return nil, err
-	}
-	return &term, nil
-}
-
 func (d *NodeRepo) BlocklistRemove(peerId string) error {
 	if d == nil {
 		return nil
@@ -874,19 +732,5 @@ func (d *NodeRepo) BlocklistRemove(peerId string) error {
 		AddRootID(peerId).
 		Build()
 	_ = txn.Delete(blocklistUserKey)
-
-	blocklistTermKey := local_store.NewPrefixBuilder(d.prefix).
-		AddSubPrefix(BlocklistSubNamespace).
-		AddSubPrefix(BlocklistTermSubNamespace).
-		AddRootID(peerId).
-		Build()
-	term := BlocklistTerm{PeerID: peerId, Level: 0}
-	bt, err := json.Marshal(term)
-	if err != nil {
-		return err
-	}
-	if err := txn.Set(blocklistTermKey, bt); err != nil {
-		return err
-	}
 	return txn.Commit()
 }

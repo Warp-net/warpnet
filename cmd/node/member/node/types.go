@@ -81,7 +81,6 @@ type DistributedHashTableCloser interface {
 
 type NodeProvider interface {
 	datastore.Datastore
-	BlocklistExponential(peerId string) error
 	BlocklistPermanent(peerId string) error
 	BlocklistRemove(peerId string) error
 }

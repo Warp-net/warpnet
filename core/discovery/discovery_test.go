@@ -160,12 +160,6 @@ func (f *fakeNodeRepo) IsBlocklisted(peerId string) bool {
 	return f.blocklisted[peerId]
 }
 
-func (f *fakeNodeRepo) BlocklistExponential(peerId string) error { return nil }
-
-func (f *fakeNodeRepo) BlocklistTerm(peerId string) (*database.BlocklistTerm, error) {
-	return &database.BlocklistTerm{}, nil
-}
-
 type fakeUserRepo struct {
 	mu sync.Mutex
 

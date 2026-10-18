@@ -69,11 +69,8 @@ func TestNodeRepoNilGuards(t *testing.T) {
 	}
 
 	var nilRepo *NodeRepo
-	require.ErrorIs(t, nilRepo.BlocklistExponential("peer"), ErrNilNodeRepo)
 	require.ErrorIs(t, nilRepo.BlocklistPermanent("peer"), ErrNilNodeRepo)
 	require.False(t, nilRepo.IsBlocklisted("peer"))
-	_, err := nilRepo.BlocklistTerm("peer")
-	require.ErrorIs(t, err, ErrNilNodeRepo)
 	require.NoError(t, nilRepo.BlocklistRemove("peer"))
 }
 
@@ -311,29 +308,13 @@ func TestNodeRepoBlocklistErrorPaths(t *testing.T) {
 
 	t.Run("EmptyPeerId", func(t *testing.T) {
 		repo := NewNodeRepo(newFaultStore(t))
-		require.Error(t, repo.BlocklistExponential(""))
 		require.Error(t, repo.BlocklistPermanent(""))
 		require.False(t, repo.IsBlocklisted(""))
-		_, err := repo.BlocklistTerm("")
-		require.Error(t, err)
 		require.NoError(t, repo.BlocklistRemove(""))
 	})
 
-	t.Run("ExponentialFaults", func(t *testing.T) {
-		for _, o := range []faultOp{op("Get"), op("SetWithTTL"), op("Set"), op("Commit")} {
-			t.Run(o.String(), func(t *testing.T) {
-				s := newFaultStore(t).arm(o.method, o.nth)
-				require.ErrorIs(t, NewNodeRepo(s).BlocklistExponential(peer), errFault)
-			})
-		}
-		t.Run("NewTxn", func(t *testing.T) {
-			s := newFaultStore(t).failNewTxn(errFault)
-			require.ErrorIs(t, NewNodeRepo(s).BlocklistExponential(peer), errFault)
-		})
-	})
-
 	t.Run("PermanentFaults", func(t *testing.T) {
-		for _, o := range []faultOp{op("SetWithTTL"), op("Set"), op("Commit")} {
+		for _, o := range []faultOp{op("SetWithTTL"), op("Commit")} {
 			t.Run(o.String(), func(t *testing.T) {
 				s := newFaultStore(t).arm(o.method, o.nth)
 				require.ErrorIs(t, NewNodeRepo(s).BlocklistPermanent(peer), errFault)
@@ -346,7 +327,7 @@ func TestNodeRepoBlocklistErrorPaths(t *testing.T) {
 	})
 
 	t.Run("RemoveFaults", func(t *testing.T) {
-		for _, o := range []faultOp{op("Set"), op("Commit")} {
+		for _, o := range []faultOp{op("Commit")} {
 			t.Run(o.String(), func(t *testing.T) {
 				s := newFaultStore(t)
 				require.NoError(t, NewNodeRepo(s).BlocklistPermanent(peer))
@@ -360,35 +341,4 @@ func TestNodeRepoBlocklistErrorPaths(t *testing.T) {
 		})
 	})
 
-	t.Run("TermStoreFails", func(t *testing.T) {
-		s := newFaultStore(t)
-		require.NoError(t, NewNodeRepo(s).BlocklistPermanent(peer))
-
-		s.arm("db.Get", 1)
-		_, err := NewNodeRepo(s).BlocklistTerm(peer)
-		require.ErrorIs(t, err, errFault)
-	})
-
-	t.Run("CorruptTermPayload", func(t *testing.T) {
-		s := newFaultStore(t)
-		repo := NewNodeRepo(s)
-		require.NoError(t, repo.BlocklistPermanent(peer))
-
-		termKey := local_store.NewPrefixBuilder(repo.prefix).
-			AddSubPrefix(BlocklistSubNamespace).
-			AddSubPrefix(BlocklistTermSubNamespace).
-			AddRootID(peer).
-			Build()
-		require.NoError(t, s.db.Set(termKey, []byte("{not-json")))
-
-		_, err := repo.BlocklistTerm(peer)
-		require.Error(t, err)
-		require.Error(t, repo.BlocklistExponential(peer))
-	})
-
-	t.Run("TermOfUnknownPeerIsZero", func(t *testing.T) {
-		term, err := NewNodeRepo(newFaultStore(t)).BlocklistTerm("never-blocked")
-		require.NoError(t, err)
-		require.Equal(t, BlockLevel(0), term.Level)
-	})
 }

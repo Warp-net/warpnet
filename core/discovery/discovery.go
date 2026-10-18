@@ -62,8 +62,6 @@ type DiscoveryInfoStorer interface {
 type NodeStorer interface {
 	BlocklistRemove(peerId string) error
 	IsBlocklisted(peerId string) bool
-	BlocklistExponential(peerId string) error
-	BlocklistTerm(peerId string) (*database.BlocklistTerm, error)
 }
 
 // IPLimiter answers whether the IP a peer is announced at may still be heard.

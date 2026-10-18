@@ -237,109 +237,27 @@ func (s *NodeRepoDatastoreTestSuite) TestCloseIsIdempotent() {
 	s.NoError(repo.Close())
 }
 
-func (s *NodeRepoDatastoreTestSuite) TestBlocklistEscalationLadderSaturates() {
-	peer := "12D3KooWEscalate"
-
-	expected := []BlockLevel{InitialBlock, MediumBlock, AdvancedBlock, PermanentBlock}
-	for i, want := range expected {
-		s.Require().NoError(s.repo.BlocklistExponential(peer), "strike %d", i+1)
-
-		term, err := s.repo.BlocklistTerm(peer)
-		s.Require().NoError(err)
-		s.Equal(want, term.Level, "strike %d should reach level %d", i+1, want)
-		s.True(s.repo.IsBlocklisted(peer), "peer must be blocked after strike %d", i+1)
-	}
-
-	for i := 0; i < 5; i++ {
-		s.Require().NoError(s.repo.BlocklistExponential(peer))
-		term, err := s.repo.BlocklistTerm(peer)
-		s.Require().NoError(err)
-		s.Equal(PermanentBlock, term.Level, "extra strike %d must stay permanent", i+1)
-	}
-}
-
-func (s *NodeRepoDatastoreTestSuite) TestBlockLevelNextSaturates() {
-	s.Equal(MediumBlock, InitialBlock.Next())
-	s.Equal(AdvancedBlock, MediumBlock.Next())
-	s.Equal(PermanentBlock, AdvancedBlock.Next())
-	s.Equal(PermanentBlock, PermanentBlock.Next())
-	s.Equal(PermanentBlock, BlockLevel(99).Next())
-}
-
-func (s *NodeRepoDatastoreTestSuite) TestBlocklistRemoveResetsEscalation() {
-	peer := "12D3KooWRehab"
-
-	s.Require().NoError(s.repo.BlocklistExponential(peer))
-	s.Require().NoError(s.repo.BlocklistExponential(peer))
-	term, err := s.repo.BlocklistTerm(peer)
-	s.Require().NoError(err)
-	s.Equal(MediumBlock, term.Level)
-
-	s.Require().NoError(s.repo.BlocklistRemove(peer))
-	s.False(s.repo.IsBlocklisted(peer), "unblock must lift the ban immediately")
-
-	term, err = s.repo.BlocklistTerm(peer)
-	s.Require().NoError(err)
-	s.Equal(BlockLevel(0), term.Level, "unblock must clear the accumulated term")
-
-	s.Require().NoError(s.repo.BlocklistExponential(peer))
-	term, err = s.repo.BlocklistTerm(peer)
-	s.Require().NoError(err)
-	s.Equal(InitialBlock, term.Level, "a rehabilitated peer restarts at the mildest ban")
-}
-
-func (s *NodeRepoDatastoreTestSuite) TestBlocklistPermanentIsNotAnEscalationStep() {
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistPermanentHoldsUntilRemoved() {
 	peer := "12D3KooWSocialBlock"
 
 	s.Require().NoError(s.repo.BlocklistPermanent(peer))
 	s.True(s.repo.IsBlocklisted(peer))
 
-	term, err := s.repo.BlocklistTerm(peer)
-	s.Require().NoError(err)
-	s.Equal(PermanentBlock, term.Level)
-	s.Equal(peer, term.PeerID)
-
 	s.Require().NoError(s.repo.BlocklistPermanent(peer))
-	term, err = s.repo.BlocklistTerm(peer)
-	s.Require().NoError(err)
-	s.Equal(PermanentBlock, term.Level)
+	s.True(s.repo.IsBlocklisted(peer))
 
 	s.Require().NoError(s.repo.BlocklistRemove(peer))
 	s.False(s.repo.IsBlocklisted(peer))
 }
 
-func (s *NodeRepoDatastoreTestSuite) TestEscalatedPeerCanBeSociallyBlocked() {
-	peer := "12D3KooWUpgrade"
-
-	s.Require().NoError(s.repo.BlocklistExponential(peer))
-	s.Require().NoError(s.repo.BlocklistPermanent(peer))
-
-	term, err := s.repo.BlocklistTerm(peer)
-	s.Require().NoError(err)
-	s.Equal(PermanentBlock, term.Level)
-	s.True(s.repo.IsBlocklisted(peer))
-}
-
 func (s *NodeRepoDatastoreTestSuite) TestBlocklistRejectsEmptyPeerAndUnknownIsFree() {
-	s.Error(s.repo.BlocklistExponential(""))
 	s.Error(s.repo.BlocklistPermanent(""))
-
-	_, err := s.repo.BlocklistTerm("")
-	s.Error(err)
 
 	s.False(s.repo.IsBlocklisted(""), "empty peer ID must never read as blocked")
 	s.False(s.repo.IsBlocklisted("12D3KooWTotallyUnknownStranger"))
 
 	s.NoError(s.repo.BlocklistRemove(""))
 	s.NoError(s.repo.BlocklistRemove("12D3KooWNeverBlocked"))
-}
-
-func (s *NodeRepoDatastoreTestSuite) TestBlocklistTermOfUnknownPeerIsZeroValue() {
-	term, err := s.repo.BlocklistTerm("12D3KooWFreshFace")
-	s.Require().NoError(err)
-	s.Require().NotNil(term)
-	s.Equal(BlockLevel(0), term.Level)
-	s.Empty(term.PeerID)
 }
 
 func (s *NodeRepoDatastoreTestSuite) TestBlocklistDoesNotLeakAcrossPrefixSiblings() {
@@ -376,10 +294,7 @@ func (s *NodeRepoDatastoreTestSuite) TestNilRepoNeverPanics() {
 	_, err = repo.Batch(s.ctx)
 	s.ErrorIs(err, ErrNilNodeRepo)
 
-	s.ErrorIs(repo.BlocklistExponential("p"), ErrNilNodeRepo)
 	s.ErrorIs(repo.BlocklistPermanent("p"), ErrNilNodeRepo)
-	_, err = repo.BlocklistTerm("p")
-	s.ErrorIs(err, ErrNilNodeRepo)
 	s.False(repo.IsBlocklisted("p"))
 	s.NoError(repo.BlocklistRemove("p"))
 	s.NoError(repo.Close())
