@@ -267,7 +267,9 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 			return
 		}
 
-		log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf(">>> STREAM REQUEST %s %s\n", string(s.Protocol()), string(data))
+		}
 
 		response, err := handler(data, s)
 		if err == nil && s.Protocol() == warpevent.PRIVATE_POST_PAIR {
@@ -292,7 +294,9 @@ func (n *WarpNode) unwrap(handler warpnet.WarpHandlerFunc) warpnet.StreamHandler
 			return
 		}
 
-		log.Debugf("<<< STREAM RESPONSE: %s %s\n", string(s.Protocol()), string(payload))
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("<<< STREAM RESPONSE: %s %s\n", string(s.Protocol()), string(payload))
+		}
 		if len(payload) == 0 {
 			return
 		}
