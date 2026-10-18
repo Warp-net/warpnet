@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 import Models
 import Network
@@ -9,6 +11,7 @@ public protocol StatusDataControlling {
   var isReblogged: Bool { get set }
   var isBookmarked: Bool { get set }
   var isFavorited: Bool { get set }
+  var myReaction: String? { get set }
 
   var favoritesCount: Int { get set }
   var reblogsCount: Int { get set }
@@ -57,6 +60,7 @@ public final class StatusDataControllerProvider {
   public var isReblogged: Bool
   public var isBookmarked: Bool
   public var isFavorited: Bool
+  public var myReaction: String?
   public var content: HTMLString
 
   public var favoritesCount: Int
@@ -70,6 +74,7 @@ public final class StatusDataControllerProvider {
     isReblogged = status.reblogged == true
     isBookmarked = status.bookmarked == true
     isFavorited = status.favourited == true
+    myReaction = status.myReaction
 
     reblogsCount = status.reblogsCount
     repliesCount = status.repliesCount
@@ -81,6 +86,7 @@ public final class StatusDataControllerProvider {
     isReblogged = status.reblogged == true
     isBookmarked = status.bookmarked == true
     isFavorited = status.favourited == true
+    myReaction = status.myReaction
 
     reblogsCount = status.reblogsCount
     repliesCount = status.repliesCount
@@ -102,6 +108,29 @@ public final class StatusDataControllerProvider {
     } catch {
       isFavorited.toggle()
       favoritesCount += isFavorited ? -1 : 1
+    }
+  }
+
+  public func react(emoji: String, remoteStatus: String?) async {
+    guard client.isAuth else { return }
+    let previous = (isFavorited, myReaction, favoritesCount)
+    let isRemoving = isFavorited && myReaction == emoji
+    let id = remoteStatus ?? status.id
+    withAnimation(.default) {
+      if !isFavorited {
+        favoritesCount += 1
+      } else if isRemoving {
+        favoritesCount -= 1
+      }
+      isFavorited = !isRemoving
+      myReaction = isRemoving ? nil : emoji
+    }
+    do {
+      let endpoint = isRemoving ? Statuses.unfavorite(id: id) : Statuses.react(id: id, emoji: emoji)
+      let status: Status = try await client.post(endpoint: endpoint)
+      updateFrom(status: status)
+    } catch {
+      (isFavorited, myReaction, favoritesCount) = previous
     }
   }
 

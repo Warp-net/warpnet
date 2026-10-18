@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Models
 import SwiftUI
@@ -59,7 +61,7 @@ extension Models.Notification.NotificationType {
     case .follow, .follow_request:
       return Image(systemName: "person.fill.badge.plus")
     case .favourite:
-      return Image(systemName: "star.fill")
+      return Image(systemName: "heart.fill")
     case .poll:
       return Image(systemName: "chart.bar.fill")
     case .update:
@@ -79,7 +81,7 @@ extension Models.Notification.NotificationType {
     case .follow, .follow_request:
       return Color.cyan.opacity(0.80)
     case .favourite:
-      return Color.yellow.opacity(0.80)
+      return Color.red.opacity(0.80)
     }
   }
 

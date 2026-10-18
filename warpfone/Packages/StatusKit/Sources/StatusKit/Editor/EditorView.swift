@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import AppAccount
 import DesignSystem
 import Env
@@ -22,9 +24,7 @@ extension StatusEditor {
     
     @Bindable var viewModel: ViewModel
     @Binding var followUpSEVMs: [ViewModel]
-    @Binding var editingMediaContainer: MediaContainer?
 
-    @FocusState<UUID?> var isSpoilerTextFocused: UUID?
     @FocusState<EditorFocusState?>.Binding var editorFocusState: EditorFocusState?
     let assignedFocusState: EditorFocusState
     let isMain: Bool
@@ -40,13 +40,20 @@ extension StatusEditor {
         }
 
         VStack(spacing: 0) {
-          spoilerTextView
           VStack(spacing: 0) {
             accountHeaderView
             textInput
             pollView
             characterCountAndLangView
-            MediaView(viewModel: viewModel, editingMediaContainer: $editingMediaContainer)
+            if viewModel.mode.isInShareExtension {
+              Text("warpnet.share.hint")
+                .font(.scaledFootnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, .layoutPadding)
+                .padding(.bottom, 8)
+            }
+            MediaView(viewModel: viewModel)
             embeddedStatus
           }
           .padding(.vertical)
@@ -59,17 +66,6 @@ extension StatusEditor {
       #endif
       .focused($editorFocusState, equals: assignedFocusState)
       .onAppear { setupViewModel() }
-    }
-
-    @ViewBuilder
-    private var spoilerTextView: some View {
-      if viewModel.spoilerOn {
-        TextField("status.editor.spoiler", text: $viewModel.spoilerText)
-          .focused($isSpoilerTextFocused, equals: viewModel.id)
-          .padding(.horizontal, .layoutPadding)
-          .padding(.vertical)
-          .background(theme.tintColor.opacity(0.20))
-      }
     }
 
     @ViewBuilder
@@ -86,14 +82,9 @@ extension StatusEditor {
               .accessibilityHidden(true)
           }
 
-          VStack(alignment: .leading, spacing: 4) {
-            PrivacyMenu(visibility: $viewModel.visibility, tint: isMain ? theme.tintColor : .secondary)
-              .disabled(!isMain)
-
-            Text("@\(account.acct)@\(appAccounts.currentClient.server)")
-              .font(.scaledFootnote)
-              .foregroundStyle(.secondary)
-          }
+          Text(account.safeDisplayName)
+            .font(.scaledSubheadline)
+            .fontWeight(.semibold)
 
           Spacer()
 
@@ -162,11 +153,8 @@ extension StatusEditor {
     
     @ViewBuilder
     private var characterCountAndLangView: some View {
-      let value = (currentInstance.instance?.configuration?.statuses.maxCharacters ?? 500) + viewModel.statusTextCharacterLength
+      let value = (currentInstance.instance?.configuration?.statuses.maxCharacters ?? 2048) + viewModel.statusTextCharacterLength
       HStack(alignment: .center) {
-        LangButton(viewModel: viewModel)
-          .padding(.leading, .layoutPadding)
-        
         Button {
           withAnimation {
             viewModel.showPoll.toggle()
@@ -178,18 +166,8 @@ extension StatusEditor {
         .buttonStyle(.bordered)
         .accessibilityLabel("accessibility.editor.button.poll")
         .disabled(viewModel.shouldDisablePollButton)
+        .padding(.leading, .layoutPadding)
 
-        Button {
-          withAnimation {
-            viewModel.spoilerOn.toggle()
-          }
-          isSpoilerTextFocused = viewModel.id
-        } label: {
-          Image(systemName: viewModel.spoilerOn ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
-        }
-        .buttonStyle(.bordered)
-        .accessibilityLabel("accessibility.editor.button.spoiler")
-        
         Spacer()
         
         Text("\(value)")
@@ -211,7 +189,7 @@ extension StatusEditor {
       viewModel.theme = theme
       viewModel.preferences = preferences
       viewModel.prepareStatusText()
-      if !client.isAuth {
+      if !client.isAuth, !viewModel.mode.isInShareExtension {
         #if targetEnvironment(macCatalyst)
           dismissWindow()
         #else
@@ -219,8 +197,6 @@ extension StatusEditor {
         #endif
         NotificationCenter.default.post(name: .shareSheetClose, object: nil)
       }
-
-      Task { await viewModel.fetchCustomEmojis() }
     }
   }
 

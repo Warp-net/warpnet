@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 import Models
 
@@ -7,6 +9,7 @@ public enum Statuses: Endpoint {
   case status(id: String)
   case context(id: String)
   case favorite(id: String)
+  case react(id: String, emoji: String)
   case unfavorite(id: String)
   case reblog(id: String)
   case unreblog(id: String)
@@ -18,7 +21,7 @@ public enum Statuses: Endpoint {
   case unbookmark(id: String)
   case history(id: String)
   case translate(id: String, lang: String?)
-  case report(accountId: String, statusId: String, comment: String)
+  case report(accountId: String, statusId: String?, comment: String)
 
   public func path() -> String {
     switch self {
@@ -32,6 +35,8 @@ public enum Statuses: Endpoint {
       "statuses/\(id)/context"
     case let .favorite(id):
       "statuses/\(id)/favourite"
+    case let .react(id, emoji):
+      "statuses/\(id)/emoji_reactions/\(emoji)"
     case let .unfavorite(id):
       "statuses/\(id)/unfavourite"
     case let .reblog(id):
@@ -71,9 +76,12 @@ public enum Statuses: Endpoint {
       }
       return nil
     case let .report(accountId, statusId, comment):
-      return [.init(name: "account_id", value: accountId),
-              .init(name: "status_ids[]", value: statusId),
-              .init(name: "comment", value: comment)]
+      var items: [URLQueryItem] = [.init(name: "account_id", value: accountId)]
+      if let statusId {
+        items.append(.init(name: "status_ids[]", value: statusId))
+      }
+      items.append(.init(name: "comment", value: comment))
+      return items
     default:
       return nil
     }
@@ -100,6 +108,7 @@ public struct StatusData: Encodable, Sendable {
   public let poll: PollData?
   public let language: String?
   public let mediaAttributes: [MediaAttribute]?
+  public let quotedStatusId: String?
 
   public struct PollData: Encodable, Sendable {
     public let options: [String]
@@ -134,7 +143,8 @@ public struct StatusData: Encodable, Sendable {
               mediaIds: [String]? = nil,
               poll: PollData? = nil,
               language: String? = nil,
-              mediaAttributes: [MediaAttribute]? = nil)
+              mediaAttributes: [MediaAttribute]? = nil,
+              quotedStatusId: String? = nil)
   {
     self.status = status
     self.visibility = visibility
@@ -144,5 +154,6 @@ public struct StatusData: Encodable, Sendable {
     self.poll = poll
     self.language = language
     self.mediaAttributes = mediaAttributes
+    self.quotedStatusId = quotedStatusId
   }
 }

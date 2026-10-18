@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import EmojiText
 import Env
@@ -26,7 +28,6 @@ public struct AccountDetailView: View {
 
   @State private var isEditingAccount: Bool = false
   @State private var isEditingFilters: Bool = false
-  @State private var isEditingRelationshipNote: Bool = false
   
   @State private var displayTitle: Bool = false
 
@@ -53,10 +54,6 @@ public struct AccountDetailView: View {
         makeHeaderView(proxy: proxy)
           .applyAccountDetailsRowStyle(theme: theme)
           .padding(.bottom, -20)
-        familiarFollowers
-          .applyAccountDetailsRowStyle(theme: theme)
-        featuredTagsView
-          .applyAccountDetailsRowStyle(theme: theme)
 
         Picker("", selection: $viewModel.selectedTab) {
           ForEach(isCurrentUser ? AccountDetailViewModel.Tab.currentAccountTabs : AccountDetailViewModel.Tab.accountTabs,
@@ -113,20 +110,15 @@ public struct AccountDetailView: View {
               await viewModel.fetchNewestStatuses(pullToRefresh: false)
             }
           }
-          if !viewModel.isCurrentUser {
-            group.addTask { await viewModel.fetchFamilliarFollowers() }
-          }
         }
       }
     }
     .refreshable {
       Task {
-        SoundEffectManager.shared.playSound(.pull)
         HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.3))
         await viewModel.fetchAccount()
         await viewModel.fetchNewestStatuses(pullToRefresh: true)
         HapticManager.shared.fireHaptic(.dataRefresh(intensity: 0.7))
-        SoundEffectManager.shared.playSound(.refresh)
       }
     }
     .onChange(of: watcher.latestEvent?.id) {
@@ -140,7 +132,6 @@ public struct AccountDetailView: View {
       if !newValue {
         Task {
           await viewModel.fetchAccount()
-          await preferences.refreshServerPreferences()
         }
       }
     }
@@ -149,9 +140,6 @@ public struct AccountDetailView: View {
     })
     .sheet(isPresented: $isEditingFilters, content: {
       FiltersListView()
-    })
-    .sheet(isPresented: $isEditingRelationshipNote, content: {
-      EditRelationshipNoteView(accountDetailViewModel: viewModel)
     })
     .edgesIgnoringSafeArea(.top)
     .navigationBarTitleDisplayMode(.inline)
@@ -175,62 +163,6 @@ public struct AccountDetailView: View {
                               scrollViewProxy: proxy)
     case let .error(error):
       Text("Error: \(error.localizedDescription)")
-    }
-  }
-
-  @ViewBuilder
-  private var featuredTagsView: some View {
-    if !viewModel.featuredTags.isEmpty {
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 4) {
-          if !viewModel.featuredTags.isEmpty {
-            ForEach(viewModel.featuredTags) { tag in
-              Button {
-                routerPath.navigate(to: .hashTag(tag: tag.name, account: viewModel.accountId))
-              } label: {
-                VStack(alignment: .leading, spacing: 0) {
-                  Text("#\(tag.name)")
-                    .font(.scaledCallout)
-                  Text("account.detail.featured-tags-n-posts \(tag.statusesCountInt)")
-                    .font(.caption2)
-                }
-              }.buttonStyle(.bordered)
-            }
-          }
-        }
-        .padding(.leading, .layoutPadding)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var familiarFollowers: some View {
-    if !viewModel.familiarFollowers.isEmpty {
-      VStack(alignment: .leading, spacing: 2) {
-        Text("account.detail.familiar-followers")
-          .font(.scaledHeadline)
-          .padding(.leading, .layoutPadding)
-          .accessibilityAddTraits(.isHeader)
-        ScrollView(.horizontal, showsIndicators: false) {
-          LazyHStack(spacing: 0) {
-            ForEach(viewModel.familiarFollowers) { account in
-              Button {
-                routerPath.navigate(to: .accountDetailWithAccount(account: account))
-              } label: {
-                AvatarView(account.avatar, config: .badge)
-                  .padding(.leading, -4)
-                  .accessibilityLabel(account.safeDisplayName)
-
-              }
-              .accessibilityAddTraits(.isImage)
-              .buttonStyle(.plain)
-            }
-          }
-          .padding(.leading, .layoutPadding + 4)
-        }
-      }
-      .padding(.top, 2)
-      .padding(.bottom, 12)
     }
   }
 
@@ -298,27 +230,11 @@ public struct AccountDetailView: View {
       Menu {
         AccountDetailContextMenu(showBlockConfirmation: $showBlockConfirmation, viewModel: viewModel)
 
-        if !viewModel.isCurrentUser {
-          Button {
-            isEditingRelationshipNote = true
-          } label: {
-            Label("account.relation.note.edit", systemImage: "pencil")
-          }
-        }
-
         if isCurrentUser {
           Button {
             isEditingAccount = true
           } label: {
             Label("account.action.edit-info", systemImage: "pencil")
-          }
-
-          Button {
-            if let url = URL(string: "https://\(client.server)/settings/privacy") {
-              openURL(url)
-            }
-          } label: {
-            Label("account.action.privacy-settings", systemImage: "lock")
           }
 
           if currentInstance.isFiltersSupported {
@@ -329,25 +245,7 @@ public struct AccountDetailView: View {
             }
           }
 
-          Button {
-            routerPath.presentedSheet = .accountPushNotficationsSettings
-          } label: {
-            Label("settings.push.navigation-title", systemImage: "bell")
-          }
-
-          if let account = viewModel.account {
-            Divider()
-
-            Button {
-              if let url = URL(string: "https://mastometrics.com/auth/login?username=\(account.acct)@\(client.server)&instance=\(client.server)&auto=true") {
-                openURL(url)
-              }
-            } label: {
-              Label("Mastometrics", systemImage: "chart.xyaxis.line")
-            }
-
-            Divider()
-          }
+          Divider()
 
           Button {
             routerPath.presentedSheet = .settings

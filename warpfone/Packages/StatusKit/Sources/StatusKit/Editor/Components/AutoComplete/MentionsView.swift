@@ -1,9 +1,10 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import EmojiText
 import Foundation
 import SwiftUI
 import Models
-import SwiftData
 
 
 extension StatusEditor.AutoCompleteView  {

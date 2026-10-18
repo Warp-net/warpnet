@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import SwiftUI
 
 public enum StatusAction: String, CaseIterable, Identifiable {
@@ -43,7 +45,7 @@ public enum StatusAction: String, CaseIterable, Identifiable {
 
       return isReblogged ? "Rocket.Fill" : "Rocket"
     case .favorite:
-      return isFavorited ? "star.fill" : "star"
+      return isFavorited ? "heart.fill" : "heart"
     case .bookmark:
       return isBookmarked ? "bookmark.fill" : "bookmark"
     }
@@ -64,7 +66,7 @@ public enum StatusAction: String, CaseIterable, Identifiable {
     case .boost:
       return themeTintColor
     case .favorite:
-      return .yellow
+      return .red
     case .bookmark:
       return .pink
     }

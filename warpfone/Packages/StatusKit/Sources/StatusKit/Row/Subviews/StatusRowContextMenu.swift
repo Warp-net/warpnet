@@ -1,6 +1,9 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Foundation
+import Models
 import Network
 import SwiftUI
 
@@ -50,21 +53,18 @@ struct StatusRowContextMenu: View {
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))
-          SoundEffectManager.shared.playSound(.favorite)
           await statusDataController.toggleFavorite(remoteStatus: nil)
         } } label: {
-          Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "star.fill" : "star")
+          Label(statusDataController.isFavorited ? "status.action.unfavorite" : "status.action.favorite", systemImage: statusDataController.isFavorited ? "heart.fill" : "heart")
         }
         Button { Task {
           HapticManager.shared.fireHaptic(.notification(.success))
-          SoundEffectManager.shared.playSound(.boost)
           await statusDataController.toggleReblog(remoteStatus: nil)
         } } label: {
           boostLabel
         }
         .disabled(viewModel.status.visibility == .direct || viewModel.status.visibility == .priv && viewModel.status.account.id != account.account?.id)
         Button { Task {
-          SoundEffectManager.shared.playSound(.bookmark)
           HapticManager.shared.fireHaptic(.notification(.success))
           await statusDataController.toggleBookmark(remoteStatus: nil)
         } } label: {
@@ -101,41 +101,39 @@ struct StatusRowContextMenu: View {
         ShareLink(item: url) {
           Label("status.action.share-link", systemImage: "link")
         }
-
-        Button {
-          let view = HStack {
-            StatusRowView(viewModel: viewModel)
-              .padding(16)
-          }
-          .environment(\.isInCaptureMode, true)
-          .environment(Theme.shared)
-          .environment(preferences)
-          .environment(account)
-          .environment(currentInstance)
-          .environment(SceneDelegate())
-          .environment(quickLook)
-          .environment(viewModel.client)
-          .environment(RouterPath())
-          .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
-          .foregroundColor(Theme.shared.labelColor)
-          .background(Theme.shared.primaryBackgroundColor)
-          .frame(width: sceneDelegate.windowWidth - 12)
-          .tint(Theme.shared.tintColor)
-          let renderer = ImageRenderer(content: view)
-          renderer.scale = displayScale
-          renderer.isOpaque = false
-          if let image = renderer.uiImage {
-            viewModel.routerPath.presentedSheet = .shareImage(image: image, status: viewModel.status)
-          }
-        } label: {
-          Label("status.action.share-image", systemImage: "photo")
+      } else {
+        ShareLink(item: viewModel.status.reblog?.content.asRawText ?? viewModel.status.content.asRawText) {
+          Label("status.action.share", systemImage: "square.and.arrow.up")
         }
       }
-    }
 
-    if let url = URL(string: viewModel.status.reblog?.url ?? viewModel.status.url ?? "") {
-      Button { UIApplication.shared.open(url) } label: {
-        Label("status.action.view-in-browser", systemImage: "safari")
+      Button {
+        let view = HStack {
+          StatusRowView(viewModel: viewModel)
+            .padding(16)
+        }
+        .environment(\.isInCaptureMode, true)
+        .environment(Theme.shared)
+        .environment(preferences)
+        .environment(account)
+        .environment(currentInstance)
+        .environment(SceneDelegate())
+        .environment(quickLook)
+        .environment(viewModel.client)
+        .environment(RouterPath())
+        .preferredColorScheme(Theme.shared.selectedScheme == .dark ? .dark : .light)
+        .foregroundColor(Theme.shared.labelColor)
+        .background(Theme.shared.primaryBackgroundColor)
+        .frame(width: sceneDelegate.windowWidth - 12)
+        .tint(Theme.shared.tintColor)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = displayScale
+        renderer.isOpaque = false
+        if let image = renderer.uiImage {
+          viewModel.routerPath.presentedSheet = .shareImage(image: image, status: viewModel.status)
+        }
+      } label: {
+        Label("status.action.share-image", systemImage: "photo")
       }
     }
 
@@ -151,19 +149,11 @@ struct StatusRowContextMenu: View {
       Label("status.action.select-text", systemImage: "selection.pin.in.out")
     }
 
-    Button {
-      UIPasteboard.general.string = viewModel.status.reblog?.url ?? viewModel.status.url
-    } label: {
-      Label("status.action.copy-link", systemImage: "link")
-    }
-
-    if let lang = preferences.serverPreferences?.postLanguage ?? Locale.current.language.languageCode?.identifier {
+    if let link = viewModel.status.reblog?.url ?? viewModel.status.url {
       Button {
-        Task {
-          await viewModel.translate(userLang: lang)
-        }
+        UIPasteboard.general.string = link
       } label: {
-        Label("status.action.translate", systemImage: "captions.bubble")
+        Label("status.action.copy-link", systemImage: "link")
       }
     }
 
@@ -210,16 +200,12 @@ struct StatusRowContextMenu: View {
               Label("account.action.unmute", systemImage: "speaker")
             }
           } else {
-            Menu {
-              ForEach(Duration.mutingDurations(), id: \.rawValue) { duration in
-                Button(duration.description) {
-                  Task {
-                    do {
-                      let operationAccount = viewModel.status.reblog?.account ?? viewModel.status.account
-                      viewModel.authorRelationship = try await client.post(endpoint: Accounts.mute(id: operationAccount.id, json: MuteData(duration: duration.rawValue)))
-                    } catch { }
-                  }
-                }
+            Button {
+              Task {
+                do {
+                  let operationAccount = viewModel.status.reblog?.account ?? viewModel.status.account
+                  viewModel.authorRelationship = try await client.post(endpoint: Accounts.mute(id: operationAccount.id, json: MuteData(duration: Duration.infinite.rawValue)))
+                } catch { }
               }
             } label: {
               Label("account.action.mute", systemImage: "speaker.slash")
@@ -257,11 +243,12 @@ struct StatusRowContextMenu: View {
       Label("status.action.mention", systemImage: "at")
     }
     Button {
-      #if targetEnvironment(macCatalyst) || os(visionOS)
-        openWindow(value: WindowDestinationEditor.mentionStatusEditor(account: viewModel.status.reblog?.account ?? viewModel.status.account, visibility: .direct))
-      #else
-        viewModel.routerPath.presentedSheet = .mentionStatusEditor(account: viewModel.status.reblog?.account ?? viewModel.status.account, visibility: .direct)
-      #endif
+      Task {
+        let account = viewModel.status.reblog?.account ?? viewModel.status.account
+        if let conversation: Conversation = try? await client.post(endpoint: Chats.open(accountId: account.id)) {
+          viewModel.routerPath.navigate(to: .conversationDetail(conversation: conversation))
+        }
+      }
     } label: {
       Label("status.action.message", systemImage: "tray.full")
     }

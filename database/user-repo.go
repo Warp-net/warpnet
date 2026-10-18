@@ -226,7 +226,9 @@ func (repo *UserRepo) Update(userId string, newUser domain.User) (domain.User, e
 	if newUser.Birthdate != "" {
 		existingUser.Birthdate = newUser.Birthdate
 	}
-	if newUser.Bio != "" {
+	if newUser.IsBioCleared {
+		existingUser.Bio = ""
+	} else if newUser.Bio != "" {
 		existingUser.Bio = newUser.Bio
 	}
 	if newUser.AvatarKey != "" {

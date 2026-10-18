@@ -598,6 +598,22 @@ func (s *UserRepoTestSuite) TestUpdatePersistsAndIsReadableBack() {
 	s.Equal("bob", got.Username)
 }
 
+func (s *UserRepoTestSuite) TestUpdateClearsBioOnlyWhenAsked() {
+	original := s.createUser(domain.User{Username: "eve", Bio: "before"})
+
+	_, err := s.repo.Update(original.Id, domain.User{Username: "eve2"})
+	s.Require().NoError(err)
+	got, err := s.repo.Get(original.Id)
+	s.Require().NoError(err)
+	s.Equal("before", got.Bio)
+
+	_, err = s.repo.Update(original.Id, domain.User{IsBioCleared: true})
+	s.Require().NoError(err)
+	got, err = s.repo.Get(original.Id)
+	s.Require().NoError(err)
+	s.Empty(got.Bio)
+}
+
 func (s *UserRepoTestSuite) TestModerationStrikesAccumulate() {
 	original := s.createUser(domain.User{Username: "dave"})
 

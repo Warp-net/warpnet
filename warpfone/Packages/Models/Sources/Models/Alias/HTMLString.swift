@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 import SwiftSoup
 import SwiftUI
@@ -48,7 +50,7 @@ public struct HTMLString: Codable, Equatable, Hashable, @unchecked Sendable {
 
       asMarkdown = ""
       do {
-        let document: Document = try SwiftSoup.parse(htmlValue)
+        let document: SwiftSoup.Document = try SwiftSoup.parse(htmlValue)
         handleNode(node: document)
 
         document.outputSettings(OutputSettings().prettyPrint(pretty: false))
@@ -139,9 +141,7 @@ public struct HTMLString: Codable, Equatable, Hashable, @unchecked Sendable {
       } else if node.nodeName() == "a" {
         let href = try node.attr("href")
         if href != "" {
-          if let url = URL(string: href),
-             let _ = Int(url.lastPathComponent)
-          {
+          if let url = URL(string: href), url.scheme == "warpnet", url.host == "status" {
             statusesURLs.append(url)
           }
         }

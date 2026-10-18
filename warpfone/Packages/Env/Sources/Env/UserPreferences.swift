@@ -35,7 +35,6 @@ import SwiftUI
     @AppStorage("haptic_tab") public var hapticTabSelectionEnabled = true
     @AppStorage("haptic_timeline") public var hapticTimelineEnabled = true
     @AppStorage("haptic_button_press") public var hapticButtonPressEnabled = true
-    @AppStorage("sound_effect_enabled") public var soundEffectEnabled = true
 
     @AppStorage("show_tab_label_iphone") public var showiPhoneTabLabel = true
     @AppStorage("show_alt_text_for_media") public var showAltTextForMedia = true
@@ -48,8 +47,6 @@ import SwiftUI
     @AppStorage("swipeactions-status-leading-right") public var swipeActionsStatusLeadingRight = StatusAction.none
     @AppStorage("swipeactions-use-theme-color") public var swipeActionsUseThemeColor = false
     @AppStorage("swipeactions-icon-style") public var swipeActionsIconStyle: SwipeActionsIconStyle = .iconWithText
-
-    @AppStorage("requested_review") public var requestedReview = false
 
     @AppStorage("collapse-long-posts") public var collapseLongPosts = true
 
@@ -221,12 +218,6 @@ import SwiftUI
     }
   }
 
-  public var soundEffectEnabled: Bool {
-    didSet {
-      storage.soundEffectEnabled = soundEffectEnabled
-    }
-  }
-
   public var showiPhoneTabLabel: Bool {
     didSet {
       storage.showiPhoneTabLabel = showiPhoneTabLabel
@@ -278,12 +269,6 @@ import SwiftUI
   public var swipeActionsIconStyle: SwipeActionsIconStyle {
     didSet {
       storage.swipeActionsIconStyle = swipeActionsIconStyle
-    }
-  }
-
-  public var requestedReview: Bool {
-    didSet {
-      storage.requestedReview = requestedReview
     }
   }
 
@@ -401,37 +386,10 @@ import SwiftUI
     }
   }
 
-  public var notificationsCount: [OauthToken: Int] = [:] {
-    didSet {
-      for (key, value) in notificationsCount {
-        Self.sharedDefault?.set(value, forKey: "push_notifications_count_\(key.createdAt)")
-      }
-    }
-  }
-
-  public var totalNotificationsCount: Int {
-    notificationsCount.compactMap{ $0.value }.reduce(0, +)
-  }
-
-  public func reloadNotificationsCount(tokens: [OauthToken]) {
-    notificationsCount = [:]
-    for token in tokens {
-      notificationsCount[token] = Self.sharedDefault?.integer(forKey: "push_notifications_count_\(token.createdAt)") ?? 0
-    }
-  }
-
   public var serverPreferences: ServerPreferences?
 
   public func setClient(client: Client) {
     self.client = client
-    Task {
-      await refreshServerPreferences()
-    }
-  }
-
-  public func refreshServerPreferences() async {
-    guard let client, client.isAuth else { return }
-    serverPreferences = try? await client.get(endpoint: Accounts.preferences)
   }
 
   public func markLanguageAsSelected(isoCode: String) {
@@ -476,7 +434,6 @@ import SwiftUI
     hapticTabSelectionEnabled = storage.hapticTabSelectionEnabled
     hapticTimelineEnabled = storage.hapticTimelineEnabled
     hapticButtonPressEnabled = storage.hapticButtonPressEnabled
-    soundEffectEnabled = storage.soundEffectEnabled
     showiPhoneTabLabel = storage.showiPhoneTabLabel
     showAltTextForMedia = storage.showAltTextForMedia
     showiPadSecondaryColumn = storage.showiPadSecondaryColumn
@@ -486,7 +443,6 @@ import SwiftUI
     swipeActionsStatusLeadingRight = storage.swipeActionsStatusLeadingRight
     swipeActionsUseThemeColor = storage.swipeActionsUseThemeColor
     swipeActionsIconStyle = storage.swipeActionsIconStyle
-    requestedReview = storage.requestedReview
     collapseLongPosts = storage.collapseLongPosts
     shareButtonBehavior = storage.shareButtonBehavior
     pendingShownAtBottom = storage.pendingShownAtBottom

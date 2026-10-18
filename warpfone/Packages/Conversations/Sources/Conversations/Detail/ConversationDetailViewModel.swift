@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Foundation
 import Models
 import Network
@@ -17,30 +19,30 @@ import SwiftUI
 
   init(conversation: Conversation) {
     self.conversation = conversation
-    messages = conversation.lastStatus != nil ? [conversation.lastStatus!] : []
   }
 
-  func fetchMessages() async {
-    guard let client, let lastMessageId = messages.last?.id else { return }
+  @discardableResult
+  func fetchMessages() async -> Bool {
+    guard let client else { return false }
     do {
-      let context: StatusContext = try await client.get(endpoint: Statuses.context(id: lastMessageId))
+      let fetched: [Status] = try await client.get(endpoint: Chats.messages(chatId: conversation.id))
       isLoadingMessages = false
-      messages.insert(contentsOf: context.ancestors, at: 0)
-      messages.append(contentsOf: context.descendants)
-    } catch {}
+      let hasNew = fetched.last?.id != messages.last?.id
+      messages = fetched
+      return hasNew
+    } catch {
+      isLoadingMessages = false
+      return false
+    }
   }
 
   func postMessage() async {
-    guard let client else { return }
+    guard let client, let receiver = conversation.accounts.first else { return }
     isSendingMessage = true
-    var finalText = conversation.accounts.map { "@\($0.acct)" }.joined(separator: " ")
-    finalText += " "
-    finalText += newMessageText
-    let data = StatusData(status: finalText,
-                          visibility: .direct,
-                          inReplyToId: messages.last?.id)
     do {
-      let status: Status = try await client.post(endpoint: Statuses.postStatus(json: data))
+      let status: Status = try await client.post(endpoint: Chats.send(chatId: conversation.id,
+                                                                     receiverId: receiver.id,
+                                                                     text: newMessageText))
       appendNewStatus(status: status)
       withAnimation {
         newMessageText = ""
@@ -52,21 +54,8 @@ import SwiftUI
   }
 
   func handleEvent(event: any StreamEvent) {
-    if let event = event as? StreamEventStatusUpdate,
-       let index = messages.firstIndex(where: { $0.id == event.status.id })
-    {
-      messages[index] = event.status
-    } else if let event = event as? StreamEventDelete,
-              let index = messages.firstIndex(where: { $0.id == event.status })
-    {
-      messages.remove(at: index)
-    } else if let event = event as? StreamEventConversation,
-              event.conversation.id == conversation.id
-    {
-      conversation = event.conversation
-      if conversation.lastStatus != nil {
-        appendNewStatus(status: conversation.lastStatus!)
-      }
+    if let event = event as? StreamEventDelete {
+      messages.removeAll { $0.id == event.status }
     }
   }
 

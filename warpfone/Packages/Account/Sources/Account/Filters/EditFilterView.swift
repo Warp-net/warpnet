@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -207,7 +209,7 @@ struct EditFilterView: View {
 
   private var contextsSection: some View {
     Section("filter.edit.contexts") {
-      ForEach(ServerFilter.Context.allCases, id: \.self) { context in
+      ForEach([ServerFilter.Context.home, .notifications, .thread], id: \.self) { context in
         Toggle(isOn: .init(get: {
           contexts.contains(where: { $0 == context })
         }, set: { _ in

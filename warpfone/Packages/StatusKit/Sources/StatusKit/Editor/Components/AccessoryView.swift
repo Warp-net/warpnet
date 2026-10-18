@@ -13,12 +13,10 @@ extension StatusEditor {
     @Environment(UserPreferences.self) private var preferences
     @Environment(Theme.self) private var theme
     @Environment(CurrentInstance.self) private var currentInstance
-    @Environment(\.colorScheme) private var colorScheme
 
     let focusedSEVM: ViewModel
     @Binding var followUpSEVMs: [ViewModel]
 
-    @State private var isCustomEmojisSheetDisplay: Bool = false
     @State private var isPhotosPickerPresented: Bool = false
     @State private var isFileImporterPresented: Bool = false
     @State private var isCameraPickerPresented: Bool = false
@@ -125,47 +123,22 @@ extension StatusEditor {
       .disabled(viewModel.showPoll)
 
       
-      Button {
-        // all SEVM have the same visibility value
-        followUpSEVMs.append(ViewModel(mode: .new(visibility: focusedSEVM.visibility)))
-      } label: {
-        Image(systemName: "arrowshape.turn.up.left.circle.fill")
-      }
-      .disabled(!canAddNewSEVM)
-      
-      if !viewModel.customEmojiContainer.isEmpty {
+      if !focusedSEVM.mode.isInShareExtension {
         Button {
-          isCustomEmojisSheetDisplay = true
+          // all SEVM have the same visibility value
+          followUpSEVMs.append(ViewModel(mode: .new(visibility: focusedSEVM.visibility)))
         } label: {
-          // This is a workaround for an apparent bug in the `face.smiling` SF Symbol.
-          // See https://github.com/Dimillian/IceCubesApp/issues/1193
-          let customEmojiSheetIconName = colorScheme == .light ? "face.smiling" : "face.smiling.inverse"
-          Image(systemName: customEmojiSheetIconName)
+          Image(systemName: "arrowshape.turn.up.left.circle.fill")
         }
-        .accessibilityLabel("accessibility.editor.button.custom-emojis")
-        .popover(isPresented: $isCustomEmojisSheetDisplay) {
-          if UIDevice.current.userInterfaceIdiom == .phone {
-            CustomEmojisView(viewModel: focusedSEVM)
-          } else {
-            CustomEmojisView(viewModel: focusedSEVM)
-              .frame(width: 400, height: 500)
-          }
-        }
+        .disabled(!canAddNewSEVM)
       }
-      
-      
+
       Spacer()
       
       Button {
         viewModel.insertStatusText(text: "@")
       } label: {
         Image(systemName: "at")
-      }
-      
-      Button {
-        viewModel.insertStatusText(text: "#")
-      } label: {
-        Image(systemName: "number")
       }
     }
 

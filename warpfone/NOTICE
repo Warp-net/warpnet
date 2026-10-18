@@ -9,7 +9,8 @@ Version 2.0. Ice Cubes moved to AGPL-3.0 on 2024-02-10 in 7b7e65bf, and nothing
 from that revision or later is included here.
 
 The files taken from Ice Cubes remain under the Apache License, Version 2.0
-(see LICENSE in this directory).
+(see LICENSE in this directory). Code that Warpnet adds here, such as the Go
+node in node/, is licensed under the same terms.
 
 Changes made by the Warpnet project are listed below. Every Swift and xcconfig
 file that Warpnet changed starts with the line "// Modified by Warpnet. See
@@ -100,3 +101,309 @@ carry that line, so they are named here instead.
 - Files without the notice line:
   IceCubesApp.xcodeproj/project.pbxproj
   IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-17, Go node
+- The app target links Warpnet.xcframework, which scripts/build-xcframework.sh
+  builds from node/, and libresolv, which the Go runtime resolves names with.
+  The extensions do not link the node. The app declares
+  NSLocalNetworkUsageDescription because it dials the paired node on the local
+  network.
+- Files without the notice line:
+  .gitignore
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+
+2026-10-17, Warpnet transport
+- The app target depends on the new Packages/WarpnetTransport, the Warpnet
+  wire layer, and binds it to the node in App/Warpnet/GoBinding.swift.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-17, pairing
+- Sign-in is now pairing with the user's Warpnet node: a QR scan or pasted
+  connection data replaces the instance picker and OAuth. AddAccountsView, the
+  Apps and Oauth endpoints, the OAuth token and app models and the
+  instances.social client were removed. The app keeps one pairing; AppAccount
+  names the paired node, and logging out unpairs the device on that node.
+- The Mastodon push stack went with OAuth, since every subscription was keyed
+  by an OAuth token: PushNotificationsService, its settings screen, the
+  IceCubesNotifications extension, the push endpoint and models, the
+  aps-environment entitlement and the remote-notification background mode.
+- The node is paused in the background and resumed in the foreground.
+- Package manifests must start with their tools version, so they carry the
+  notice line second.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+  IceCubesApp/App/IceCubesApp.entitlements
+  IceCubesApp/App/IceCubesApp-release.entitlements
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-17, node data
+- Client in the Network package no longer speaks HTTP. A WarpnetRouter inside
+  it serves the Mastodon endpoints from the paired node and returns Mastodon
+  JSON for the existing models; endpoints the node has no counterpart for
+  fail with WarpnetRoutingError.unsupported. Status ids carry the tweet's
+  author, thread root and retweeter, so a cached timeline still resolves after
+  a restart, and LinkHandler carries the node's opaque page cursors.
+- Quoted tweets are embedded through a warpnet://status/ link, which
+  HTMLString now treats as a status link.
+- StreamWatcher polls the node's pushes while the app is active instead of
+  opening the Mastodon streaming socket.
+- The Network tests were replaced with tests of the Warpnet routing.
+- Images with warpnet:// URLs load through a Nuke data loader that asks the
+  node, and videos through an AVAssetResourceLoader delegate that downloads
+  them to a temporary file first. MediaUI takes its player items from a hook
+  the app sets, and fetches shared and saved images through the image pipeline
+  instead of URLSession.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+- The composer counts the tweet's UTF-8 bytes against the node's 2048-byte
+  limit, where Mastodon counted UTF-16 units and a fixed length per URL.
+- Profiles no longer show featured tags and familiar followers, which the node
+  does not keep.
+- The Models and Network packages also declare macOS 14, so the Network tests
+  run with swift test on a Mac.
+
+2026-10-17, dead features
+- Removed the timelines the node does not serve: local, federated, trending,
+  lists, tag groups and other servers' local timelines, with their tabs,
+  keyboard shortcuts and settings screens, the LocalTimeline and TagGroup
+  models and the Lists package. The timeline menu no longer offers resuming
+  from the server's read marker or pinning timelines, and Explore no longer
+  shows trending tags, posts and links.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+- Removed hashtags: the hashtag timeline and its follow button, followed and
+  recent tags with the RecentTag model, hashtag suggestions in the composer,
+  the followed-tag label on statuses and tag links that opened a timeline.
+  Search finds people only, and the Explore search texts say so.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The composer no longer offers visibility, content warnings, a post
+  language, media descriptions, custom emoji or a hashtag button, none of
+  which a tweet can carry; the matching defaults left the content settings.
+  It names the author by display name instead of an @user@server handle.
+- Removed translation: the translate actions on statuses and profiles, the
+  inline translate button, the translation settings, the DeepL client and the
+  Secret.plist that held its key.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+- Reports go to the network's moderators. The report screen asks for one or
+  more of nine categories, the same ones as the desktop client, and profiles
+  can now be reported as well as statuses.
+- Files without the notice line:
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- Removed edit history, private notes on profiles and the links to a Mastodon
+  server's web settings and to Mastometrics; the edit date of a tweet is still
+  shown.
+
+2026-10-17, background
+- A background app refresh task resumes the paired node about every fifteen
+  minutes, reads its pending notifications and shows the new ones as local
+  notifications. The app asks for notification permission once a node is
+  paired, and the in-app poller records what it has already shown so the
+  background task does not repeat it.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The share extension, which has no node of its own, queues the tweet and its
+  media in the app group: a SharedPost in the SwiftData store the app and the
+  extension now share, with the media files beside it. The app publishes the
+  queue when it next reaches the node, in the foreground or from the
+  background refresh; one the node refuses becomes a draft. Shared tweets
+  carry no poll and no follow-up posts.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The Safari action now opens Fediverse profile links (https://server/@name)
+  in Warpnet, which looks the account up through the node's gateway, instead
+  of checking for a Mastodon server over HTTP.
+- The app no longer builds for visionOS; its #if os(visionOS) branches stay in
+  the code.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-17, Warpnet features
+- The favourite button is a reaction: a tap sends the default heart, a long
+  press offers the desktop client's eight quick reactions, and the button shows
+  the reaction the viewer chose. Status and ReblogStatus carry it as
+  myReaction, and Statuses gained a react endpoint.
+- The boost button opens a menu to retweet or quote. A quote is posted the way
+  the Android client posts one, as a retweet carrying the quoted tweet's id,
+  which StatusData now passes as quotedStatusId; the composer no longer pastes
+  a link to the quoted status into the text.
+- Messages are the node's 1:1 chats: a new Chats endpoint lists them, loads
+  and sends messages and deletes them, and the conversation screens use it
+  instead of direct-visibility statuses. An open chat refreshes every ten
+  seconds. The Message actions on profiles and statuses open the chat with
+  that account; chat rows and messages offer copy, delete and reporting the
+  account instead of favourite, bookmark and mention.
+- Editing the profile saves the display name, bio, website, avatar and header
+  on the node; the post defaults, account toggles and free-form fields, which
+  a Warpnet profile has no place for, left the screen.
+- Files without the notice line:
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- Filters are kept on the node: the filter screens create, change and delete
+  filters and keywords through its settings routes, and since the node stores
+  filters without applying them, the app matches the active ones against the
+  home timeline, threads and notifications itself. Filters can apply to those
+  three contexts, the ones the node knows.
+- Warpnet states Ice Cubes has no place for: a banner while the paired node is
+  unreachable, the view count of a tweet in its detail (a view is recorded
+  when a tweet is opened), a banner on accounts bridged from the Fediverse,
+  a notice in place of tweets the moderators hid, and a notice in place of
+  sponsored tweets, whose content is sold outside the App Store and is not
+  offered in the app. Status and ReblogStatus carry viewsCount.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- The Warpnet colour themes and the brand colour use the Warpnet magenta
+  #C5007F, which is also the app's accent colour, and the English strings say
+  tweet, retweet and reaction instead of post, boost and favourite.
+- Files without the notice line:
+  IceCubesApp/Assets.xcassets/AccentColor.colorset/Contents.json
+  IceCubesApp/Resources/Localization/Localizable.xcstrings
+- Settings no longer show instance information, which for a paired node would
+  only repeat the placeholder values the app reports in place of a Mastodon
+  instance.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+
+2026-10-17, release
+- The app declares that it uses non-exempt encryption, which the node's
+  peer-to-peer transport does, and the app and the share extension carry
+  privacy manifests: no tracking, no collected data, and the reasons for the
+  user defaults, boot time and file timestamp APIs the app, its node and the
+  extension use.
+- Files without the notice line:
+  IceCubesApp.xcodeproj/project.pbxproj
+  IceCubesApp/Info.plist
+
+2026-10-17, file names
+- Directories, files, targets and schemes named IceCubes* are now named
+  Warpnet*: IceCubesApp/ is WarpnetApp/, IceCubesShareExtension/ is
+  WarpnetShareExtension/, IceCubesActionExtension/ is WarpnetActionExtension/
+  and IceCubesApp.xcodeproj is WarpnetApp.xcodeproj. The xcconfig,
+  entitlements and scheme files and App/Main/IceCubesApp*.swift follow the
+  same pattern. The paths in the entries above are the old ones.
+- The app is built as Warpnet.app instead of Ice Cubes.app. Its Swift module
+  is WarpnetApp, so it does not clash with the node's Warpnet framework, and
+  its App struct is WarpnetApp. The original file headers that name the Ice
+  Cubes targets are kept.
+- Files without the notice line:
+  .gitignore
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+  WarpnetShareExtension/Base.lproj/MainInterface.storyboard
+
+2026-10-17, drafts and the share queue
+- Drafts are gone: the editor lost its drafts button and the Save Draft choice
+  when it closes, and Draft.swift and DraftsListView.swift were deleted.
+- SwiftData is gone. The share extension writes each shared tweet as a JSON
+  file next to its media in the app group, and the app publishes and deletes
+  them. A tweet that cannot be published is dropped with a local notification
+  instead of becoming a draft.
+- Files without the notice line:
+  WarpnetApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-17, timeline cache
+- The timelines no longer keep their tweets in SQLite between launches: the
+  Bodega store in TimelineCache.swift, the cached-posts row and its Clear Cache
+  button in the account settings, and the Bodega and SQLite.swift packages
+  were removed. TimelineCache keeps only the last seen tweet ids in user
+  defaults, which mark the home timeline position.
+- Files without the notice line:
+  Packages/Timeline/Package.swift
+  WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+2026-10-17, sounds
+- The app plays no sounds: SoundEffectManager.swift, its calls on refresh, tab
+  selection, posting, reactions and retweets, the Sound Effects setting and
+  the ten sound files in WarpnetApp/Embeds were removed.
+- Files without the notice line:
+  WarpnetApp.xcodeproj/project.pbxproj
+
+2026-10-17, review prompt
+- The editor no longer asks for an App Store review after the first tweet:
+  the SKStoreReviewController call, its StoreKit imports and the
+  requestedReview preference were removed.
+
+2026-10-17, view in browser
+- The tweet and profile menus no longer offer View in Browser. The menu of a
+  link preview keeps it, since that link points to an outside web page.
+
+2026-10-17, search tab
+- The magnifying glass tab and the screen it opens are called Search instead
+  of Explore.
+- Files without the notice line:
+  WarpnetApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-18, build
+- The app builds with Xcode 26 and the iOS 26 SDK again. StreamWatcher names
+  Swift.Duration, which Env's own Duration shadowed. The content filter label
+  uses an SF Symbol name, and SFSafeSymbols was dropped from the project.
+  HTMLString names SwiftSoup.Document, which SwiftUI's Document makes
+  ambiguous. The resolved packages move to EmojiText 4.4.0, swift-markdown
+  and swift-cmark 0.9.0, Nuke 12.9.0, SwiftSoup 2.14.3, SwiftUI-Introspect
+  1.5.0, LRUCache 1.3.0 and ButtonKit 0.8.1, and the unused libwebp-xcode pin
+  is gone.
+- Files without the notice line:
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+2026-10-18, node errors
+- Errors from the node reach the user. The editor shows any failed post in its
+  alert, a failed upload shows its error instead of spinning, and a deleted or
+  moderated tweet closes its detail screen the way a 404 did.
+- The Post button stays off for empty text and for text over the node's 2 KiB
+  limit, since the node refuses both.
+
+2026-10-18, share queue errors
+- A shared tweet is dropped with a notification only when the node refuses the
+  tweet itself. Errors about the request, such as an expired pairing, keep it
+  queued. A post whose answer was lost is dropped as unconfirmed instead of
+  being sent again.
+- Files without the notice line:
+  WarpnetApp/Resources/Localization/Localizable.xcstrings
+
+2026-10-18, blocks and mutes
+- Muting is a single action instead of a menu of durations, in the profile
+  and tweet menus, because the node keeps a mute until it is lifted.
+
+2026-10-18, quote embeds
+- Only warpnet://status links count as tweet links in HTMLString. A link
+  ending in a number, which Ice Cubes took for a Mastodon status, can never be
+  embedded here. It used to come before the quote's own link, hide the
+  embed, and hide the whole tweet as a quote when quotes were filtered out.
+
+2026-10-18, live notifications
+- The notifications list inserts every notification a poll brings, through
+  NotificationsViewModel.handleEvents, instead of only the last one of the
+  batch.
+
+2026-10-18, quick reactions
+- The heart is a menu with a primary action: a tap still reacts with ❤️, and a
+  long press opens the quick reactions instead of the tweet's own menu.
+
+2026-10-18, web links
+- A tweet without a web page shares its text from the tweet menu and the
+  share button, and the menu offers Copy Link only for tweets that have one.
+  Sharing the tweet as an image no longer depends on a link.
+
+2026-10-18, unserved calls
+- The app no longer calls endpoints the node does not serve on every launch
+  and foreground: the server preferences, the instance peers and the home
+  timeline marker. With the marker gone, the last seen tweet ids lost their
+  only reader, and TimelineCache.swift was deleted.
+
+2026-10-18, KeychainSwift
+- KeychainSwift was removed from the Env package, the project and the About
+  credits. Nothing used it since the pairing keys moved to WarpnetTransport's
+  own keychain storage.
+- Files without the notice line:
+  Packages/Env/Package.swift
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved

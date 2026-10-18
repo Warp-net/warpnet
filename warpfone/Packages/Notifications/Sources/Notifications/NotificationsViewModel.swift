@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import Env
 import Foundation
 import Models
@@ -174,39 +176,49 @@ import SwiftUI
   }
 
   func handleEvent(event: any StreamEvent) {
+    handleEvents([event])
+  }
+
+  func handleEvents(_ events: [any StreamEvent]) {
     Task {
-      // Check if the event is a notification,
-      // if it is not already in the list,
-      // and if it can be shown (no selected type or the same as the received notification type)
-      if let event = event as? StreamEventNotification,
-         !consolidatedNotifications.flatMap(\.notificationIds).contains(event.notification.id),
-         selectedType == nil || selectedType?.rawValue == event.notification.type
+      for event in events {
+        await insert(event)
+      }
+    }
+  }
+
+  private func insert(_ event: any StreamEvent) async {
+    // Check if the event is a notification,
+    // if it is not already in the list,
+    // and if it can be shown (no selected type or the same as the received notification type)
+    if let event = event as? StreamEventNotification,
+       !consolidatedNotifications.flatMap(\.notificationIds).contains(event.notification.id),
+       selectedType == nil || selectedType?.rawValue == event.notification.type
+    {
+      if event.notification.isConsolidable(selectedType: selectedType),
+         !consolidatedNotifications.isEmpty
       {
-        if event.notification.isConsolidable(selectedType: selectedType),
-           !consolidatedNotifications.isEmpty
-        {
-          // If the notification type can be consolidated, try to consolidate with the latest row
-          let latestConsolidatedNotification = consolidatedNotifications.removeFirst()
-          await consolidatedNotifications.insert(
-            contentsOf: ([event.notification] + latestConsolidatedNotification.notifications)
-              .consolidated(selectedType: selectedType),
-            at: 0
-          )
-        } else {
-          // Otherwise, just insert the new notification
-          await consolidatedNotifications.insert(
-            contentsOf: [event.notification].consolidated(selectedType: selectedType),
-            at: 0
-          )
-        }
+        // If the notification type can be consolidated, try to consolidate with the latest row
+        let latestConsolidatedNotification = consolidatedNotifications.removeFirst()
+        await consolidatedNotifications.insert(
+          contentsOf: ([event.notification] + latestConsolidatedNotification.notifications)
+            .consolidated(selectedType: selectedType),
+          at: 0
+        )
+      } else {
+        // Otherwise, just insert the new notification
+        await consolidatedNotifications.insert(
+          contentsOf: [event.notification].consolidated(selectedType: selectedType),
+          at: 0
+        )
+      }
 
-        if event.notification.supportedType == .follow_request, let currentAccount {
-          await currentAccount.fetchFollowerRequests()
-        }
+      if event.notification.supportedType == .follow_request, let currentAccount {
+        await currentAccount.fetchFollowerRequests()
+      }
 
-        withAnimation {
-          state = .display(notifications: consolidatedNotifications, nextPageState: .hasNextPage)
-        }
+      withAnimation {
+        state = .display(notifications: consolidatedNotifications, nextPageState: .hasNextPage)
       }
     }
   }

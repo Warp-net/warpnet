@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import EmojiText
 import Env
@@ -65,7 +67,6 @@ public struct StatusRowView: View {
         } else {
           if !isCompact && context != .detail {
             Group {
-              StatusRowTagView(viewModel: viewModel)
               StatusRowReblogView(viewModel: viewModel)
               StatusRowReplyView(viewModel: viewModel)
             }

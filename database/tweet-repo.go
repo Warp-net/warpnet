@@ -657,6 +657,9 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	switch {
 	case isQuote:
 		tweet.Id = ulid.Make().String()
+		if tweet.CreatedAt.IsZero() {
+			tweet.CreatedAt = time.Now()
+		}
 	case tweet.UserId == *tweet.RetweetedBy:
 		tweet.Id = domain.RetweetPrefix + tweet.Id
 	}
