@@ -611,13 +611,16 @@ export default {
       if (check.checking) return "Reading the file…";
       if (check.error) return check.error;
       if (!check.sale) {
-        return "This file names no buyer. It is your original, or the mark is gone: a screenshot or a re-encoded copy loses it.";
+        return "This file names no buyer. It is your original, an image from another tweet, or the marks are gone: rotation or heavy editing hides them.";
       }
       const soldAt = new Date(check.sale.sold_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
       const dailyOrders = check.sale.daily_orders_count > 1
         ? `\nThey bought ${check.sale.daily_orders_count} of your tweets within a day of this one.`
         : "";
-      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}`;
+      const pixelMatch = check.sale.is_pixel_match
+        ? `\nFound by the hidden pattern in the pixels (score ${Math.round(check.sale.pixel_score)}; 8 or more is a match).`
+        : "";
+      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}${pixelMatch}`;
     },
     isShortOfTokens() {
       return !!this.quote && bigUnits(this.quote.balance) < bigUnits(this.quote.total);
@@ -1055,7 +1058,7 @@ export default {
       if (!file) return;
       this.copyCheck = {checking: true};
       try {
-        const sale = await warpnetService.getCopyBuyer(await readAsDataURL(file));
+        const sale = await warpnetService.getCopyBuyer(await readAsDataURL(file), this.tweet.id);
         if (!sale) {
           this.copyCheck = {sale: null};
           return;

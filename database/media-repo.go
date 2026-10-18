@@ -55,6 +55,7 @@ type MediaStorer interface {
 	Set(key local_store.DatabaseKey, value []byte) error
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	NewReadTxn() (local_store.WarpTransactioner, error)
 }
 
 type MediaRepo struct {
@@ -247,4 +248,48 @@ func (repo *MediaRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
 		Build()
 
 	return repo.db.Set(mediaKey, data)
+}
+
+func (repo *MediaRepo) ListCopies(userId, originalKey string) ([]domain.MediaCopy, error) {
+	if repo == nil {
+		return nil, ErrMediaRepoNotInit
+	}
+	if userId == "" || originalKey == "" {
+		return nil, local_store.DBError("no data for copies list")
+	}
+
+	txn, err := repo.db.NewReadTxn()
+	if err != nil {
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	var keys []local_store.DatabaseKey
+	prefix := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(CopySubNamespace).
+		AddParentId(userId).
+		Build() + local_store.Delimeter
+	err = txn.IterateKeys(prefix, func(key string) error {
+		keys = append(keys, local_store.DatabaseKey(key))
+		return nil
+	})
+	if err != nil || len(keys) == 0 {
+		return nil, err
+	}
+
+	items, err := txn.BatchGet(keys...)
+	if err != nil {
+		return nil, err
+	}
+	var copies []domain.MediaCopy
+	for _, item := range items {
+		var c domain.MediaCopy
+		if err := json.Unmarshal(item.Value, &c); err != nil {
+			return nil, err
+		}
+		if c.OriginalKey == originalKey {
+			copies = append(copies, c)
+		}
+	}
+	return copies, nil
 }

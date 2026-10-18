@@ -289,6 +289,7 @@ type MediaProvider interface {
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 	SetCopy(userId string, key string, c domain.MediaCopy) error
+	ListCopies(userId string, originalKey string) ([]domain.MediaCopy, error)
 }
 
 type MutesProvider interface {

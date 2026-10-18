@@ -275,3 +275,26 @@ func (s *MediaRepoTestSuite) TestCopyRoundTripAndIsolation() {
 	_, err = repo.GetCopy(alice, "copy-key")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 }
+
+func (s *MediaRepoTestSuite) TestListCopies() {
+	alice := uuid.New().String()
+	longerAlice := alice + "-2"
+	first := domain.MediaCopy{OriginalKey: "original-a", BuyerId: "buyer-1", IsPixelMarked: true}
+	second := domain.MediaCopy{OriginalKey: "original-a", BuyerId: "buyer-2"}
+	s.Require().NoError(s.repo.SetCopy(alice, "copy-1", first))
+	s.Require().NoError(s.repo.SetCopy(alice, "copy-2", second))
+	s.Require().NoError(s.repo.SetCopy(alice, "copy-3", domain.MediaCopy{OriginalKey: "original-b", BuyerId: "buyer-1"}))
+	s.Require().NoError(s.repo.SetCopy(longerAlice, "copy-4", domain.MediaCopy{OriginalKey: "original-a", BuyerId: "buyer-3"}))
+
+	copies, err := s.repo.ListCopies(alice, "original-a")
+	s.Require().NoError(err)
+	s.ElementsMatch([]domain.MediaCopy{first, second}, copies, "only this user's copies of this original")
+
+	copies, err = s.repo.ListCopies(uuid.New().String(), "original-a")
+	s.Require().NoError(err)
+	s.Empty(copies)
+
+	var repo *MediaRepo
+	_, err = repo.ListCopies(alice, "original-a")
+	s.ErrorIs(err, ErrMediaRepoNotInit)
+}

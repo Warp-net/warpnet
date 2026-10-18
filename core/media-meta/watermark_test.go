@@ -47,7 +47,7 @@ func TestDrawWatermark_CoversEveryQuarter(t *testing.T) {
 	watermark, err := WatermarkPNG(plain, "01M3ZEY4M40NH3H9JP8E2DVCZH")
 	require.NoError(t, err)
 
-	drawn, err := DrawWatermark(plain, watermark)
+	drawn, err := DrawWatermark(plain, watermark, nil)
 	require.NoError(t, err)
 	img, err := jpeg.Decode(bytes.NewReader(drawn))
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestDrawWatermark_IsTheSameOnEveryMachine(t *testing.T) {
 	var mask bytes.Buffer
 	require.NoError(t, png.Encode(&mask, stripes))
 
-	drawn, err := DrawWatermark(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes())
+	drawn, err := DrawWatermark(uniformJPEG(t, image.Pt(320, 200), 0x30), mask.Bytes(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, "cdb205bda3e1f47e0aaf28795210512368c8044569dd1aa837a1c50f7f7a41a3", hex.EncodeToString(security.ConvertToSHA256(drawn)), "a copy is rebuilt on request, so its bytes and key must never drift")
 }
@@ -78,6 +78,6 @@ func TestDrawWatermark_RefusesAColourMask(t *testing.T) {
 	var colour bytes.Buffer
 	require.NoError(t, png.Encode(&colour, image.NewRGBA(image.Rect(0, 0, 4, 4))))
 
-	_, err := DrawWatermark(uniformJPEG(t, image.Pt(32, 32), 0x30), colour.Bytes())
+	_, err := DrawWatermark(uniformJPEG(t, image.Pt(32, 32), 0x30), colour.Bytes(), nil)
 	assert.ErrorIs(t, err, ErrBadWatermark)
 }

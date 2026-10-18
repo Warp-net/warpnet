@@ -448,6 +448,7 @@ type MediaCopy struct {
 	BuyerId        string `json:"buyer_id"`
 	EncryptedOrder []byte `json:"encrypted_order"`
 	Watermark      []byte `json:"watermark,omitempty"`
+	IsPixelMarked  bool   `json:"is_pixel_marked,omitempty"`
 }
 
 type Alias struct {

@@ -76,7 +76,7 @@ func WatermarkPNG(jpegBytes []byte, text string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func DrawWatermark(jpegBytes, watermark []byte) ([]byte, error) {
+func DrawWatermark(jpegBytes, watermark, pixelMarkSeed []byte) ([]byte, error) {
 	src, err := jpeg.Decode(bytes.NewReader(jpegBytes))
 	if err != nil {
 		return nil, err
@@ -108,6 +108,9 @@ func DrawWatermark(jpegBytes, watermark []byte) ([]byte, error) {
 			draw.DrawMask(canvas, place.Add(shadow), image.NewUniform(watermarkShadow), image.Point{}, mask, image.Point{}, draw.Over)
 			draw.DrawMask(canvas, place, image.NewUniform(watermarkColor), image.Point{}, mask, image.Point{}, draw.Over)
 		}
+	}
+	if len(pixelMarkSeed) != 0 {
+		drawPixelMark(canvas, pixelMarkSeed)
 	}
 
 	var buf bytes.Buffer
