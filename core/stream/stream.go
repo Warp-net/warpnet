@@ -27,7 +27,6 @@ resulting from the use or misuse of this software.
 package stream
 
 import (
-	"bufio"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -245,12 +244,10 @@ func (p *streamPool) send(
 	msg.Signature = security.Sign(p.privKey, msg.SigningBytes())
 	data, _ := json.Marshal(msg)
 
-	var rw = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	if data != nil {
 		log.Debugf("stream: sent to %s data with size %d\n", r, len(data))
-		_, err = rw.Write(data)
+		_, err = stream.Write(data)
 	}
-	flush(rw)
 	closeWrite(stream)
 	if err != nil {
 		log.Errorf("stream: writing: %v", err)
@@ -258,7 +255,7 @@ func (p *streamPool) send(
 	}
 
 	_ = stream.SetReadDeadline(time.Now().Add(responseReadTimeout))
-	resp, err := readLimited(rw, maxResponseSize(r))
+	resp, err := readLimited(stream, maxResponseSize(r))
 	if err != nil {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
 		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
@@ -270,12 +267,6 @@ func (p *streamPool) send(
 func closeStream(stream warpnet.WarpStream) {
 	if err := stream.Close(); err != nil {
 		log.Errorf("stream: closing: %s", err)
-	}
-}
-
-func flush(rw *bufio.ReadWriter) {
-	if err := rw.Flush(); err != nil {
-		log.Errorf("stream: flush: %s", err)
 	}
 }
 
