@@ -30,13 +30,10 @@ package dht
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	ds "github.com/Warp-net/warpnet/database/datastore"
-	"github.com/Warp-net/warpnet/json"
 	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
@@ -105,11 +102,7 @@ type distributedHashTable struct {
 const (
 	bootstrapDrainTimeout = 5 * time.Second
 	ratingSweepInterval   = 30 * time.Second
-	peersSaveInterval     = 5 * time.Minute
-	savedPeersLimit       = 20
 )
-
-var savedPeersKey = ds.NewKey("/bootstrap/peers")
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
 	log.Debugln("dht: node removed", id)
@@ -163,7 +156,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 		dht.MaxRecordAge(time.Hour),
 		dht.RoutingTableRefreshPeriod(time.Hour),
 		dht.RoutingTableRefreshQueryTimeout(time.Minute*5), //nolint:mnd
-		dht.BootstrapPeersFunc(d.getBootstrapPeers),
+		dht.BootstrapPeers(d.cfg.bootstrapNodes...),
 		dht.ProviderDatastore(d.cfg.store),
 		dht.ProviderManagerOpts(records.Cache(newLRU())),
 		dht.RoutingTableLatencyTolerance(time.Minute),
@@ -211,7 +204,6 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	if d.cfg.ratings != nil {
 		go d.sweepRatedPeers()
 	}
-	go d.savePeersPeriodically()
 	log.Infoln("dht: routing started")
 	return d.dht, nil
 }
@@ -268,77 +260,6 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	<-d.dht.RefreshRoutingTable() //nolint:errcheck
 	log.Infoln("dht: bootstrap complete")
-}
-
-func (d *distributedHashTable) getBootstrapPeers() []warpnet.WarpAddrInfo {
-	peers := slices.Clone(d.cfg.bootstrapNodes)
-	if d.cfg.store == nil {
-		return peers
-	}
-	data, err := d.cfg.store.Get(d.ctx, savedPeersKey)
-	if err != nil {
-		return peers
-	}
-	var saved []warpnet.WarpAddrInfo
-	if err := json.Unmarshal(data, &saved); err != nil {
-		log.Warnf("dht: saved peers: %v", err)
-		return peers
-	}
-	return append(peers, saved...)
-}
-
-func (d *distributedHashTable) savePeersPeriodically() {
-	ticker := time.NewTicker(peersSaveInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		case <-d.stopChan:
-			return
-		case <-ticker.C:
-			d.savePeers()
-		}
-	}
-}
-
-func (d *distributedHashTable) savePeers() {
-	if d.cfg.store == nil {
-		return
-	}
-	ps := d.dht.Host().Peerstore()
-	peers := make([]warpnet.WarpAddrInfo, 0, savedPeersLimit)
-	for _, id := range d.dht.RoutingTable().ListPeers() {
-		addrs := filterPublicAddrs(ps.Addrs(id))
-		if len(addrs) == 0 {
-			continue
-		}
-		peers = append(peers, warpnet.WarpAddrInfo{ID: id, Addrs: addrs})
-		if len(peers) == savedPeersLimit {
-			break
-		}
-	}
-	if len(peers) == 0 {
-		return
-	}
-	data, err := json.Marshal(peers)
-	if err != nil {
-		log.Errorf("dht: save peers: %v", err)
-		return
-	}
-	if err := d.cfg.store.Put(d.ctx, savedPeersKey, data); err != nil {
-		log.Errorf("dht: save peers: %v", err)
-	}
-}
-
-func filterPublicAddrs(addrs []warpnet.WarpAddress) []warpnet.WarpAddress {
-	public := make([]warpnet.WarpAddress, 0, len(addrs))
-	for _, addr := range addrs {
-		if warpnet.IsPublicMultiAddress(addr) && !warpnet.IsRelayMultiaddress(addr) {
-			public = append(public, addr)
-		}
-	}
-	return public
 }
 
 // rendezvousNamespace returns the discovery namespace for the current network.
