@@ -360,6 +360,7 @@ func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) 
 			},
 		),
 		rcmgr.WithConnRateLimiters(newSubnetRateLimiter(perSubnet)),
+		rcmgr.WithMetricsDisabled(),
 	)
 }
 
