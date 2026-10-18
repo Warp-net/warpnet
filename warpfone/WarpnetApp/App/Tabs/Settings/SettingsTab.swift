@@ -37,12 +37,11 @@ struct SettingsTabs: View {
         accountsSection
         generalSection
         otherSections
+        developerSection
         cacheSection
       }
       .scrollContentBackground(.hidden)
-      #if !os(visionOS)
       .background(theme.secondaryBackgroundColor)
-      #endif
       .navigationTitle(Text("settings.title"))
       .navigationBarTitleDisplayMode(.inline)
       .toolbarBackground(theme.primaryBackgroundColor.opacity(0.30), for: .navigationBar)
@@ -74,7 +73,7 @@ struct SettingsTabs: View {
     .withSafariRouter()
     .environment(routerPath)
     .onChange(of: $popToRootTab.wrappedValue) { _, newValue in
-      if newValue == .notifications {
+      if newValue == .settings {
         routerPath.path = []
       }
     }
@@ -101,9 +100,7 @@ struct SettingsTabs: View {
         }
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   @ViewBuilder
@@ -139,9 +136,7 @@ struct SettingsTabs: View {
         .tint(theme.labelColor)
       #endif
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   @ViewBuilder
@@ -169,17 +164,10 @@ struct SettingsTabs: View {
       Toggle(isOn: $preferences.isSocialKeyboardEnabled) {
         Label("settings.other.social-keyboard", systemImage: "keyboard")
       }
-      Toggle(isOn: $preferences.fastRefreshEnabled) {
-        Label("settings.other.fast-refresh", systemImage: "arrow.clockwise")
-      }
     } header: {
       Text("settings.section.other")
-    } footer: {
-      Text("settings.section.other.footer")
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   private var appSection: some View {
@@ -201,9 +189,16 @@ struct SettingsTabs: View {
         Text("settings.section.app.footer \(appVersion)").frame(maxWidth: .infinity, alignment: .center)
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
+  }
+
+  private var developerSection: some View {
+    Section("warpnet.settings.section.developer") {
+      NavigationLink(destination: LogsView()) {
+        Label("warpnet.logs.title", systemImage: "doc.text.magnifyingglass")
+      }
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
   }
 
   private var cacheSection: some View {
@@ -220,8 +215,6 @@ struct SettingsTabs: View {
         }
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 }

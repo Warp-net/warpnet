@@ -1,6 +1,6 @@
 import SwiftUI
 
-#if canImport(VisionKit) && !targetEnvironment(macCatalyst) && !os(visionOS)
+#if canImport(VisionKit) && !targetEnvironment(macCatalyst)
   import Vision
   import VisionKit
 

@@ -17,6 +17,7 @@ struct WarpnetRouter: Sendable {
   static let maxResumePages = 10
   static let maxListPages = 10
   static let defaultReaction = "❤️"
+  static let systemAccountId = "warpnet"
   static let userReport = 0
   static let tweetReport = 1
 
@@ -40,8 +41,6 @@ struct WarpnetRouter: Sendable {
       return try await search(endpoint)
     case let endpoint as Polls:
       return try await polls(endpoint)
-    case let endpoint as Media:
-      return try await media(endpoint, method: method)
     case let endpoint as FollowRequests:
       return try await followRequests(endpoint)
     case let endpoint as Markers:
@@ -115,8 +114,6 @@ struct WarpnetRouter: Sendable {
       return try await pagedStatuses(scope: "home", maxId: maxId, newerThan: minId ?? sinceId, filterContext: "home", fetch: { cursor in
         try await repository.homePage(cursor: cursor)
       })
-    case .pub, .list, .hashtag:
-      throw WarpnetRoutingError.unsupported(endpoint.path())
     }
   }
 
@@ -171,6 +168,7 @@ struct WarpnetRouter: Sendable {
       let author = try? await repository.user(address.userId)
       try await repository.send(ProtocolIds.PUBLIC_POST_RETWEET,
                                 WarpnetTweet(id: address.tweetId,
+                                             createdAt: WarpnetTimestamp.rfc3339(nanos: WarpnetTimestamp.nowNanos()),
                                              retweetedBy: pairing.userId,
                                              rootId: "",
                                              text: tweet.text,
@@ -230,9 +228,6 @@ struct WarpnetRouter: Sendable {
                                                    targetNodeId: target.nodeId,
                                                    reason: reason))
       return try response(MastodonIdentifier(id: tweetId ?? accountId))
-
-    case .history, .translate:
-      throw WarpnetRoutingError.unsupported(endpoint.path())
     }
   }
 
@@ -378,7 +373,7 @@ struct WarpnetRouter: Sendable {
       }
       return try response(relationships.compactMap { $0 })
 
-    case let .follow(id, _, _):
+    case let .follow(id):
       try await repository.send(ProtocolIds.PUBLIC_POST_FOLLOW, NewFollowEvent(followerId: pairing.userId, followeeId: id))
       await repository.forgetUser(id)
       return try await response(relationship(with: id, viewerId: pairing.userId))
@@ -398,8 +393,7 @@ struct WarpnetRouter: Sendable {
                                                                GetFollowingsEvent(userId: id, cursor: maxId ?? "", limit: WarpnetRepository.pageSize))
       return try await response(repository.accounts(page.followings), next: nextToken(page.cursor, count: page.followings.count))
 
-    case let .statuses(id, sinceId, tag, onlyMedia, excludeReplies, excludeReblogs, pinned):
-      guard tag == nil else { throw WarpnetRoutingError.unsupported(endpoint.path()) }
+    case let .statuses(id, sinceId, onlyMedia, excludeReplies, excludeReblogs, pinned):
       let repository = repository
       if pinned == true {
         let page = try await repository.userPage(userId: id, cursor: "")
@@ -423,7 +417,7 @@ struct WarpnetRouter: Sendable {
     case .suggestions:
       let page: UsersResponse = try await repository.call(ProtocolIds.PUBLIC_GET_WHOTOFOLLOW,
                                                           GetAllUsersEvent(userId: pairing.userId, limit: 20))
-      return try response(page.users.filter { $0.network != "mastodon" }.map { WarpnetMapper.account($0) })
+      return try response(page.users.filter { !$0.isBridged }.map { WarpnetMapper.account($0) })
 
     case let .block(id):
       try await repository.send(ProtocolIds.PRIVATE_POST_SETTINGS_BLOCK, BlockEvent(blockerId: pairing.userId, blockeeId: id))
@@ -433,7 +427,7 @@ struct WarpnetRouter: Sendable {
       try await repository.send(ProtocolIds.PRIVATE_POST_SETTINGS_UNBLOCK, BlockEvent(blockerId: pairing.userId, blockeeId: id))
       return try await response(relationship(with: id, viewerId: pairing.userId, blocking: false))
 
-    case let .mute(id, _):
+    case let .mute(id):
       try await repository.send(ProtocolIds.PRIVATE_POST_SETTINGS_MUTE, MuteEvent(muterId: pairing.userId, muteeId: id))
       return try await response(relationship(with: id, viewerId: pairing.userId, muting: true))
 
@@ -442,15 +436,12 @@ struct WarpnetRouter: Sendable {
       return try await response(relationship(with: id, viewerId: pairing.userId, muting: false))
 
     case let .updateCredentials(json):
-      let fields = json.fieldsAttributes.sorted { $0.key < $1.key }.map(\.value)
-      let website = fields.first { $0.name.lowercased() == "website" } ?? fields.first
       let displayName = json.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
       return try await response(updateProfile(UpdateProfileEvent(username: displayName.isEmpty ? nil : displayName,
                                                                  bio: json.note,
-                                                                 website: website?.value.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")))
+                                                                 website: json.website.trimmingCharacters(in: .whitespacesAndNewlines))))
 
-    case .lookup, .followedTags, .featuredTags, .updateCredentialsMedia,
-         .familiarFollowers, .lists, .preferences, .relationshipNote:
+    case .updateCredentialsMedia:
       throw WarpnetRoutingError.unsupported(endpoint.path())
     }
   }
@@ -565,17 +556,6 @@ struct WarpnetRouter: Sendable {
         cursor = page.cursor
       }
       return try response(collected)
-
-    case let .notification(id):
-      let notification: WarpnetNotification = try await repository.call(ProtocolIds.PRIVATE_GET_NOTIFICATION,
-                                                                         GetNotificationEvent(notificationId: id))
-      guard let mapped = await notifications([notification], viewerId: pairing.userId).first else {
-        throw WarpnetRoutingError.unsupported("notification type \(notification.type)")
-      }
-      return try response(mapped)
-
-    case .clear:
-      throw WarpnetRoutingError.unsupported(endpoint.path())
     }
   }
 
@@ -585,18 +565,19 @@ struct WarpnetRouter: Sendable {
     let repository = repository
     let statuses = await repository.concurrentMap(supported) { item, type -> MastodonStatus? in
       // A reply notice names the viewer's own tweet, not the reply.
-      guard let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", item.type != "reply" else { return nil }
+      guard let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", type != "message", item.type != "reply" else { return nil }
       return try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId), filterContext: "notifications")
     }
     return zip(supported, statuses).map { entry, status in
       let (item, type) = entry
       let account = item.actorId.flatMap { actors[$0] }.map { WarpnetMapper.account($0) }
-        ?? WarpnetMapper.account(userId: item.actorId ?? item.id, username: item.text)
+        ?? WarpnetMapper.account(userId: item.actorId ?? Self.systemAccountId, username: item.actorId == nil ? "Warpnet" : item.text)
       return MastodonNotification(id: item.id,
                                   type: type,
                                   createdAt: WarpnetFormat.serverDate(fromRFC3339: item.createdAt),
                                   account: account,
-                                  status: status)
+                                  status: status,
+                                  text: item.text.isEmpty ? nil : item.text)
     }
   }
 
@@ -606,6 +587,8 @@ struct WarpnetRouter: Sendable {
     case "retweet": "reblog"
     case "follow": "follow"
     case "mention", "reply": "mention"
+    case "message": "message"
+    case "moderation": "moderation"
     default: nil
     }
   }
@@ -735,14 +718,14 @@ struct WarpnetRouter: Sendable {
 
   private func search(_ endpoint: Search) async throws -> Response {
     switch endpoint {
-    case let .search(query, type, _, _):
+    case let .search(query, type):
       if type == "statuses", let id = WarpnetFormat.statusId(fromURL: query) {
         let status = try await repository.status(at: repository.address(of: id))
-        return try response(MastodonSearchResults(accounts: [], statuses: [status], hashtags: []))
+        return try response(MastodonSearchResults(accounts: [], statuses: [status]))
       }
       guard type == nil || type == "accounts" else { throw WarpnetRoutingError.unsupported("search \(type ?? "")") }
-      return try await response(MastodonSearchResults(accounts: searchAccounts(query), statuses: [], hashtags: []))
-    case let .accountsSearch(query, _, _, _):
+      return try await response(MastodonSearchResults(accounts: searchAccounts(query), statuses: []))
+    case let .accountsSearch(query):
       return try await response(searchAccounts(query))
     }
   }
@@ -807,16 +790,6 @@ struct WarpnetRouter: Sendable {
 
   // MARK: - Media
 
-  private func media(_ endpoint: Media, method: Method) async throws -> Response {
-    switch endpoint {
-    case let .media(id, _) where method == .get:
-      let pairing = try await repository.viewer()
-      return try response(mediaAttachment(id: id, ownerId: pairing.userId))
-    case .media, .medias:
-      throw WarpnetRoutingError.unsupported(endpoint.path())
-    }
-  }
-
   private func mediaAttachment(id: String, ownerId: String) -> MastodonMediaAttachment {
     let isVideo = id.hasPrefix(WarpnetRepository.videoPrefix)
     let key = String(id.dropFirst(isVideo ? WarpnetRepository.videoPrefix.count : WarpnetRepository.imagePrefix.count))
@@ -852,8 +825,6 @@ struct WarpnetRouter: Sendable {
       return try response(MastodonMarker(notifications: .init(lastReadId: lastReadId,
                                                               version: 1,
                                                               updatedAt: WarpnetFormat.serverDate(Date()))))
-    case .markers, .markHome:
-      throw WarpnetRoutingError.unsupported(endpoint.path())
     }
   }
 
@@ -861,8 +832,6 @@ struct WarpnetRouter: Sendable {
     switch endpoint {
     case .instance:
       return try response(WarpnetMapper.instance())
-    case .peers:
-      throw WarpnetRoutingError.unsupported(endpoint.path())
     }
   }
 

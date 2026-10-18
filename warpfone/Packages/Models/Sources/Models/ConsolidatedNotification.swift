@@ -16,6 +16,8 @@ public struct ConsolidatedNotification: Identifiable {
 
   public var id: String? { notifications.first?.id }
 
+  public var text: String? { notifications.first?.text }
+
   public init(notifications: [Notification],
               type: Notification.NotificationType,
               createdAt: ServerDate,

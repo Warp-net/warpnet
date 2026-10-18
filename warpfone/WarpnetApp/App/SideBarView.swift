@@ -62,10 +62,10 @@ struct SideBarView<Content: View>: View {
 
   private var postButton: some View {
     Button {
-      #if targetEnvironment(macCatalyst) || os(visionOS)
-        openWindow(value: WindowDestinationEditor.newStatusEditor(visibility: userPreferences.postVisibility))
+      #if targetEnvironment(macCatalyst)
+        openWindow(value: WindowDestinationEditor.newStatusEditor)
       #else
-        routerPath.presentedSheet = .newStatusEditor(visibility: userPreferences.postVisibility)
+        routerPath.presentedSheet = .newStatusEditor
       #endif
     } label: {
       Image(systemName: "square.and.pencil")

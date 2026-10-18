@@ -13,9 +13,9 @@ extension WarpnetApp {
       .keyboardShortcut("n", modifiers: .shift)
       Button("menu.new-post") {
         #if targetEnvironment(macCatalyst)
-          openWindow(value: WindowDestinationEditor.newStatusEditor(visibility: userPreferences.postVisibility))
+          openWindow(value: WindowDestinationEditor.newStatusEditor)
         #else
-          appRouterPath.presentedSheet = .newStatusEditor(visibility: userPreferences.postVisibility)
+          appRouterPath.presentedSheet = .newStatusEditor
         #endif
       }
       .keyboardShortcut("n", modifiers: .command)

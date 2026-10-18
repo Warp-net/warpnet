@@ -12,25 +12,22 @@ import OSLog
   var client: Client?
 
   public let accountId: String
-  public let shouldDisplayNotify: Bool
   public let relationshipUpdated: (Relationship) -> Void
   public private(set) var relationship: Relationship
 
   public init(accountId: String,
               relationship: Relationship,
-              shouldDisplayNotify: Bool,
               relationshipUpdated: @escaping ((Relationship) -> Void))
   {
     self.accountId = accountId
     self.relationship = relationship
-    self.shouldDisplayNotify = shouldDisplayNotify
     self.relationshipUpdated = relationshipUpdated
   }
 
   func follow() async throws {
     guard let client else { return }
     do {
-      relationship = try await client.post(endpoint: Accounts.follow(id: accountId, notify: false, reblogs: true))
+      relationship = try await client.post(endpoint: Accounts.follow(id: accountId))
       relationshipUpdated(relationship)
     } catch {
       throw error
@@ -41,30 +38,6 @@ import OSLog
     guard let client else { return }
     do {
       relationship = try await client.post(endpoint: Accounts.unfollow(id: accountId))
-      relationshipUpdated(relationship)
-    } catch {
-      throw error
-    }
-  }
-
-  func toggleNotify() async throws {
-    guard let client else { return }
-    do {
-      relationship = try await client.post(endpoint: Accounts.follow(id: accountId,
-                                                                     notify: !relationship.notifying,
-                                                                     reblogs: relationship.showingReblogs))
-      relationshipUpdated(relationship)
-    } catch {
-      throw error
-    }
-  }
-
-  func toggleReboosts() async throws {
-    guard let client else { return }
-    do {
-      relationship = try await client.post(endpoint: Accounts.follow(id: accountId,
-                                                                     notify: relationship.notifying,
-                                                                     reblogs: !relationship.showingReblogs))
       relationshipUpdated(relationship)
     } catch {
       throw error
@@ -96,28 +69,6 @@ public struct FollowButton: View {
             .accessibilityLabel("account.follow.following")
             .accessibilityValue(viewModel.relationship.following ? "accessibility.general.toggle.on" : "accessibility.general.toggle.off")
         }
-      }
-      if viewModel.relationship.following,
-         viewModel.shouldDisplayNotify
-      {
-        HStack {
-          AsyncButton {
-            try await viewModel.toggleNotify()
-          } label: {
-            Image(systemName: viewModel.relationship.notifying ? "bell.fill" : "bell")
-          }
-          .accessibilityLabel("accessibility.tabs.profile.user-notifications.label")
-          .accessibilityValue(viewModel.relationship.notifying ? "accessibility.general.toggle.on" : "accessibility.general.toggle.off")
-          AsyncButton {
-            try await viewModel.toggleReboosts()
-          } label: {
-            Image(viewModel.relationship.showingReblogs ? "Rocket.Fill" : "Rocket")
-          }
-          .accessibilityLabel("accessibility.tabs.profile.user-reblogs.label")
-          .accessibilityValue(viewModel.relationship.showingReblogs ? "accessibility.general.toggle.on" : "accessibility.general.toggle.off")
-        }
-        .asyncButtonStyle(.none)
-        .disabledWhenLoading()
       }
     }
     .buttonStyle(.bordered)

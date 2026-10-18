@@ -7,14 +7,6 @@ public extension Color {
     Color(hex: 0xC5007F)
   }
 
-  static var primaryBackground: Color {
-    Color(red: 16 / 255, green: 21 / 255, blue: 35 / 255)
-  }
-
-  static var secondaryBackground: Color {
-    Color(red: 30 / 255, green: 35 / 255, blue: 62 / 255)
-  }
-
   static var label: Color {
     Color(.label)
   }

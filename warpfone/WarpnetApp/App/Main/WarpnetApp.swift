@@ -40,14 +40,13 @@ struct WarpnetApp: App {
     WarpnetVideoLoader.shared.setClient(client)
     currentAccount.setClient(client: client)
     currentInstance.setClient(client: client)
-    userPreferences.setClient(client: client)
     if client.isAuth {
       BackgroundRefresh.requestAuthorization()
     }
     Task {
       await currentInstance.fetchCurrentInstance()
-      watcher.setClient(client: client, instanceStreamingURL: currentInstance.instance?.urls?.streamingApi)
-      watcher.watch(streams: [.user, .direct])
+      watcher.setClient(client: client)
+      watcher.watch()
       await SharedPostPublisher.publish(with: client)
     }
   }
@@ -63,7 +62,7 @@ struct WarpnetApp: App {
     case .active:
       Task {
         await pairing.resume()
-        watcher.watch(streams: [.user, .direct])
+        watcher.watch()
         await SharedPostPublisher.publish(with: appAccountsManager.currentClient)
       }
     default:

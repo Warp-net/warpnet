@@ -24,7 +24,6 @@ enum SharedPostPublisher {
       }
       do {
         let status: Status = try await client.post(endpoint: Statuses.postStatus(json: StatusData(status: post.content,
-                                                                                                    visibility: .pub,
                                                                                                     mediaIds: mediaIds)))
         StreamWatcher.shared.emmitPostEvent(for: status)
         SharedStore.remove(post)
@@ -45,8 +44,6 @@ enum SharedPostPublisher {
     for file in post.mediaFiles {
       let data = try Data(contentsOf: SharedStore.directory.appending(path: file))
       let attachment: MediaAttachment = try await client.mediaUpload(endpoint: Media.medias,
-                                                                     version: .v2,
-                                                                     method: "POST",
                                                                      mimeType: mimeType(of: file),
                                                                      filename: file,
                                                                      data: data)

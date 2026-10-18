@@ -24,15 +24,6 @@ public struct Instance: Codable, Sendable {
     public let polls: Polls
   }
 
-  public struct Rule: Codable, Identifiable, Sendable {
-    public let id: String
-    public let text: String
-  }
-
-  public struct URLs: Codable, Sendable {
-    public let streamingApi: URL?
-  }
-
   public let title: String
   public let shortDescription: String
   public let email: String
@@ -42,6 +33,4 @@ public struct Instance: Codable, Sendable {
   public let registrations: Bool
   public let thumbnail: URL?
   public let configuration: Configuration?
-  public let rules: [Rule]?
-  public let urls: URLs?
 }

@@ -258,6 +258,12 @@ public struct WarpnetUser: Codable, Equatable, Sendable {
     website = try c.decodeIfPresent(String.self, forKey: .website)
     locked = try c.value(.locked, false)
   }
+
+  /// A user from a foreign network such as Mastodon. Older nodes leave
+  /// `network` empty, so fall back to the id shape: fediverse ids are "user@host".
+  public var isBridged: Bool {
+    network.isEmpty ? id.contains("@") : !["warpnet", "testnet", "mainnet"].contains(network)
+  }
 }
 
 public struct WarpnetNotification: Codable, Equatable, Sendable {

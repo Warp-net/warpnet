@@ -69,22 +69,16 @@ final class TimelineViewModelTests: XCTestCase {
                    repliesCount: status.repliesCount,
                    reblogsCount: status.reblogsCount, 
                    favouritesCount: status.favouritesCount,
-                   card: status.card,
                    favourited: status.favourited,
                    reblogged: status.reblogged,
                    pinned: status.pinned,
                    bookmarked: status.bookmarked,
                    emojis: status.emojis,
                    url: status.url,
-                   application: status.application,
                    inReplyToId: status.inReplyToId,
                    inReplyToAccountId: status.inReplyToAccountId,
-                   visibility: status.visibility,
                    poll: status.poll,
-                   spoilerText: status.spoilerText,
-                   filtered: status.filtered,
-                   sensitive: status.sensitive,
-                   language: status.language)
+                   filtered: status.filtered)
     await subject.handleEvent(event: StreamEventStatusUpdate(status: status))
     let statuses = await subject.datasource.get()
     count = await subject.datasource.count()

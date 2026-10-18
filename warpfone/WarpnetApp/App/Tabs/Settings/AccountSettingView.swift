@@ -14,7 +14,6 @@ struct AccountSettingsView: View {
 
   @Environment(PairingModel.self) private var pairing
   @Environment(CurrentAccount.self) private var currentAccount
-  @Environment(CurrentInstance.self) private var currentInstance
   @Environment(Theme.self) private var theme
   @Environment(AppAccountsManager.self) private var appAccountsManager
   @Environment(Client.self) private var client
@@ -37,16 +36,14 @@ struct AccountSettingsView: View {
         }
         .buttonStyle(.plain)
 
-        if currentInstance.isFiltersSupported {
-          Button {
-            isEditingFilters = true
-          } label: {
-            Label("account.action.edit-filters", systemImage: "line.3.horizontal.decrease.circle")
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
+        Button {
+          isEditingFilters = true
+        } label: {
+          Label("account.action.edit-filters", systemImage: "line.3.horizontal.decrease.circle")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
       }
       .listRowBackground(theme.primaryBackgroundColor)
 
@@ -79,9 +76,7 @@ struct AccountSettingsView: View {
       }
     }
     .navigationTitle(account.safeDisplayName)
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .background(theme.secondaryBackgroundColor)
-    #endif
   }
 }

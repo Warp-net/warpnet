@@ -14,11 +14,10 @@ struct NotificationRowView: View {
   let notification: ConsolidatedNotification
   let client: Client
   let routerPath: RouterPath
-  let followRequests: [Account]
 
   var body: some View {
     HStack(alignment: .top, spacing: 8) {
-      if notification.accounts.count == 1 {
+      if notification.accounts.count == 1, notification.type != .moderation {
         makeAvatarView(type: notification.type)
           .accessibilityHidden(true)
       } else {
@@ -32,11 +31,6 @@ struct NotificationRowView: View {
           // The main label is redundant for mentions
           .accessibilityHidden(notification.type == .mention)
         makeContent(type: notification.type)
-        if notification.type == .follow_request,
-           followRequests.map(\.id).contains(notification.accounts[0].id)
-        {
-          FollowRequestButtons(account: notification.accounts[0])
-        }
       }
     }
     .accessibilityElement(children: .combine)
@@ -66,10 +60,10 @@ struct NotificationRowView: View {
     ZStack(alignment: .center) {
       Circle()
         .strokeBorder(Color.white, lineWidth: 1)
-        .background(Circle().foregroundColor(type.tintColor(isPrivate: notification.status?.visibility == .direct)))
+        .background(Circle().foregroundColor(type.tintColor))
         .frame(width: 24, height: 24)
 
-      type.icon(isPrivate: notification.status?.visibility == .direct)
+      type.icon
         .resizable()
         .scaledToFit()
         .frame(width: 12, height: 12)
@@ -122,16 +116,6 @@ struct NotificationRowView: View {
                        .fontWeight(.semibold)
                        .lineLimit(3)
                        .fixedSize(horizontal: false, vertical: true)
-          if let status = notification.status, notification.type == .mention {
-            Group {
-              Text(" ⸱ ")
-              Text(Image(systemName: status.visibility.iconName))
-            }
-            .accessibilityHidden(true)
-            .font(.scaledFootnote)
-            .fontWeight(.regular)
-            .foregroundStyle(.secondary)
-          }
           Spacer()
         }
       } else {
@@ -142,13 +126,29 @@ struct NotificationRowView: View {
     }
     .contentShape(Rectangle())
     .onTapGesture {
+      open()
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private func open() {
+    switch notification.type {
+    case .moderation:
+      break
+    case .message:
+      let account = notification.accounts[0]
+      Task {
+        if let conversation: Conversation = try? await client.post(endpoint: Chats.open(accountId: account.id)) {
+          routerPath.navigate(to: .conversationDetail(conversation: conversation))
+        }
+      }
+    default:
       if notification.accounts.count == 1 {
         routerPath.navigate(to: .accountDetailWithAccount(account: notification.accounts[0]))
       } else {
         routerPath.navigate(to: .accountsList(accounts: notification.accounts))
       }
     }
-    .accessibilityElement(children: .combine)
   }
 
   @ViewBuilder
@@ -173,6 +173,11 @@ struct NotificationRowView: View {
         Spacer()
       }
       .environment(\.isCompact, true)
+    } else if type == .moderation {
+      Text(notification.text ?? "")
+        .font(.scaledCallout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     } else {
       Group {
         Text("@\(notification.accounts[0].acct)")
@@ -196,11 +201,7 @@ struct NotificationRowView: View {
       }
       .contentShape(Rectangle())
       .onTapGesture {
-        if notification.accounts.count == 1 {
-          routerPath.navigate(to: .accountDetailWithAccount(account: notification.accounts[0]))
-        } else {
-          routerPath.navigate(to: .accountsList(accounts: notification.accounts))
-        }
+        open()
       }
     }
   }

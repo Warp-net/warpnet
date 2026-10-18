@@ -34,7 +34,7 @@ import SwiftUI
       case .favorites: "heart"
       case .bookmarks: "bookmark"
       case .replies: "bubble.left.and.bubble.right"
-      case .boosts: ""
+      case .boosts: "arrow.2.squarepath"
       case .media: "photo.on.rectangle.angled"
       }
     }
@@ -138,7 +138,6 @@ import SwiftUI
       statuses =
         try await client.get(endpoint: Accounts.statuses(id: accountId,
                                                          sinceId: nil,
-                                                         tag: nil,
                                                          onlyMedia: selectedTab == .media,
                                                          excludeReplies: selectedTab != .replies,
                                                          excludeReblogs: selectedTab != .boosts,
@@ -151,7 +150,6 @@ import SwiftUI
         pinned =
           try await client.get(endpoint: Accounts.statuses(id: accountId,
                                                            sinceId: nil,
-                                                           tag: nil,
                                                            onlyMedia: false,
                                                            excludeReplies: false,
                                                            excludeReblogs: false,
@@ -184,7 +182,6 @@ import SwiftUI
         let newStatuses: [Status] =
           try await client.get(endpoint: Accounts.statuses(id: accountId,
                                                            sinceId: lastId,
-                                                           tag: nil,
                                                            onlyMedia: selectedTab == .media,
                                                            excludeReplies: selectedTab != .replies,
                                                            excludeReblogs: selectedTab != .boosts,

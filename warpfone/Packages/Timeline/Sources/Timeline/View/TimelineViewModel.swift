@@ -15,7 +15,7 @@ import SwiftUI
     didSet {
       timelineTask?.cancel()
       timelineTask = Task {
-        await handleLatestOrResume(oldValue)
+        await handleLatest(oldValue)
         
         if oldValue != timeline {
           await reset()
@@ -38,6 +38,11 @@ import SwiftUI
   
   @ObservationIgnored
   private var visibileStatuses: [Status] = []
+
+  // Like warpdroid, a tweet counts as viewed once it stays on screen for a moment.
+  @ObservationIgnored
+  private var viewedStatusIds = Set<String>()
+  private static let viewDwell: Swift.Duration = .milliseconds(750)
   
   private var canStreamEvents: Bool = true {
     didSet {
@@ -75,7 +80,6 @@ import SwiftUI
   var isTimelineVisible: Bool = false
   let pendingStatusesObserver: TimelineUnreadStatusesObserver = .init()
   var scrollToIndexAnimated: Bool = false
-  var marker: Marker.Content?
   
   init() {
     pendingStatusesObserver.scrollToIndex = { [weak self] index in
@@ -88,11 +92,8 @@ import SwiftUI
     await datasource.reset()
   }
   
-  private func handleLatestOrResume(_ oldValue: TimelineFilter) async {
-    if timeline == .latest || timeline == .resume {
-      if timeline == .resume, let marker = await fetchMarker() {
-        self.marker = marker
-      }
+  private func handleLatest(_ oldValue: TimelineFilter) async {
+    if timeline == .latest {
       timeline = oldValue
     }
   }
@@ -135,7 +136,7 @@ import SwiftUI
 extension TimelineViewModel: StatusesFetcher {
   func pullToRefresh() async {
     timelineTask?.cancel()
-    if !timeline.supportNewestPagination || UserPreferences.shared.fastRefreshEnabled {
+    if !timeline.supportNewestPagination {
       await reset()
     }
     await fetchNewestStatuses(pullToRefresh: true)
@@ -144,9 +145,6 @@ extension TimelineViewModel: StatusesFetcher {
   func refreshTimeline() {
     timelineTask?.cancel()
     timelineTask = Task {
-      if UserPreferences.shared.fastRefreshEnabled {
-        await reset()
-      }
       await fetchNewestStatuses(pullToRefresh: false)
     }
   }
@@ -159,33 +157,10 @@ extension TimelineViewModel: StatusesFetcher {
     }
   }
   
-  func fetchStatuses(from: Marker.Content) async throws {
-    guard let client else { return }
-    statusesState = .loading
-    var statuses: [Status] = try await client.get(endpoint: timeline.endpoint(sinceId: nil,
-                                                                              maxId: from.lastReadId,
-                                                                              minId: nil,
-                                                                              offset: 0))
-
-    StatusDataControllerProvider.shared.updateDataControllers(for: statuses, client: client)
-
-    await datasource.set(statuses)
-    statuses = await datasource.getFiltered()
-    marker = nil
-
-    withAnimation {
-      statusesState = .display(statuses: statuses, nextPageState: .hasNextPage)
-    }
-    
-    await fetchNewestStatuses(pullToRefresh: false)
-  }
-
   func fetchNewestStatuses(pullToRefresh: Bool) async {
     guard let client else { return }
     do {
-      if let marker {
-        try await fetchStatuses(from: marker)
-      } else if await datasource.isEmpty {
+      if await datasource.isEmpty {
         try await fetchFirstPage(client: client)
       } else if let latest = await datasource.get().first, timeline.supportNewestPagination {
         pendingStatusesObserver.isLoadingNewStatuses = !pullToRefresh
@@ -356,24 +331,22 @@ extension TimelineViewModel: StatusesFetcher {
   func statusDidAppear(status: Status) {
     pendingStatusesObserver.removeStatus(status: status)
     visibileStatuses.insert(status, at: 0)
+    recordViewAfterDwell(status)
+  }
+
+  private func recordViewAfterDwell(_ status: Status) {
+    let viewedId = status.reblog?.id ?? status.id
+    guard let client, client.isAuth, !viewedStatusIds.contains(viewedId) else { return }
+    Task {
+      try? await Task.sleep(for: Self.viewDwell)
+      guard visibileStatuses.contains(where: { $0.id == status.id }),
+            viewedStatusIds.insert(viewedId).inserted
+      else { return }
+      _ = try? await client.post(endpoint: TweetViews.record(statusId: viewedId))
+    }
   }
 
   func statusDidDisappear(status: Status) {
     visibileStatuses.removeAll(where: { $0.id == status.id })
-  }
-}
-
-// MARK: - MARKER
-extension TimelineViewModel {
-  func fetchMarker() async -> Marker.Content? {
-    guard let client else {
-      return nil
-    }
-    do {
-      let data: Marker = try await client.get(endpoint: Markers.markers)
-      return data.home
-    } catch {
-      return nil
-    }
   }
 }

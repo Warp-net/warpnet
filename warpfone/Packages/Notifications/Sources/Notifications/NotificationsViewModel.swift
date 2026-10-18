@@ -23,11 +23,6 @@ import SwiftUI
     static let notificationLimit: Int = 30
   }
 
-  public enum Tab: LocalizedStringKey, CaseIterable {
-    case all = "notifications.tab.all"
-    case mentions = "notifications.tab.mentions"
-  }
-
   var client: Client? {
     didSet {
       if oldValue != client {
@@ -79,7 +74,7 @@ import SwiftUI
   private var consolidatedNotifications: [ConsolidatedNotification] = []
 
   func fetchNotifications() async {
-    guard let client, let currentAccount else { return }
+    guard let client else { return }
     do {
       var nextPageState: State.PagingState = .hasNextPage
       if consolidatedNotifications.isEmpty {
@@ -103,10 +98,6 @@ import SwiftUI
           contentsOf: newNotifications.consolidated(selectedType: selectedType),
           at: 0
         )
-      }
-
-      if consolidatedNotifications.contains(where: { $0.type == .follow_request }) {
-        await currentAccount.fetchFollowerRequests()
       }
 
       markAsRead()
@@ -156,9 +147,6 @@ import SwiftUI
                                                                    types: queryTypes,
                                                                    limit: Constants.notificationLimit))
       await consolidatedNotifications.append(contentsOf: newNotifications.consolidated(selectedType: selectedType))
-      if consolidatedNotifications.contains(where: { $0.type == .follow_request }) {
-        await currentAccount?.fetchFollowerRequests()
-      }
       state = .display(notifications: consolidatedNotifications,
                        nextPageState: newNotifications.count < Constants.notificationLimit ? .none : .hasNextPage)
     } catch {
@@ -211,10 +199,6 @@ import SwiftUI
           contentsOf: [event.notification].consolidated(selectedType: selectedType),
           at: 0
         )
-      }
-
-      if event.notification.supportedType == .follow_request, let currentAccount {
-        await currentAccount.fetchFollowerRequests()
       }
 
       withAnimation {

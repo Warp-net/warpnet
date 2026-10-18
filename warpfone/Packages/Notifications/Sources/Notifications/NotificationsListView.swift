@@ -81,7 +81,7 @@ public struct NotificationsListView: View {
               Label {
                 Text(type.menuTitle())
               } icon: {
-                type.icon(isPrivate: false)
+                type.icon
               }
             }
           }
@@ -89,10 +89,8 @@ public struct NotificationsListView: View {
       }
     }
     .navigationBarTitleDisplayMode(.inline)
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .background(theme.primaryBackgroundColor)
-    #endif
     .onAppear {
       viewModel.client = client
       viewModel.currentAccount = account
@@ -134,18 +132,12 @@ public struct NotificationsListView: View {
       ForEach(ConsolidatedNotification.placeholders()) { notification in
         NotificationRowView(notification: notification,
                             client: client,
-                            routerPath: routerPath,
-                            followRequests: account.followRequests)
+                            routerPath: routerPath)
           .listRowInsets(.init(top: 12,
                                leading: .layoutPadding + 4,
                                bottom: 0,
                                trailing: .layoutPadding))
-          #if os(visionOS)
-          .listRowBackground(RoundedRectangle(cornerRadius: 8)
-            .foregroundStyle(.background))
-          #else
            .listRowBackground(theme.primaryBackgroundColor)
-          #endif
           .redacted(reason: .placeholder)
           .allowsHitTesting(false)
       }
@@ -155,28 +147,19 @@ public struct NotificationsListView: View {
         EmptyView(iconName: "bell.slash",
                   title: "notifications.empty.title",
                   message: "notifications.empty.message")
-          #if !os(visionOS)
           .listRowBackground(theme.primaryBackgroundColor)
-          #endif
           .listSectionSeparator(.hidden)
       } else {
         ForEach(notifications) { notification in
           NotificationRowView(notification: notification,
                               client: client,
-                              routerPath: routerPath,
-                              followRequests: account.followRequests)
+                              routerPath: routerPath)
             .listRowInsets(.init(top: 12,
                                  leading: .layoutPadding + 4,
                                  bottom: 6,
                                  trailing: .layoutPadding))
-            #if os(visionOS)
-            .listRowBackground(RoundedRectangle(cornerRadius: 8)
-              .foregroundStyle(notification.type == .mention && lockedType != .mention ? Material.thick : Material.regular).hoverEffect())
-            .listRowHoverEffectDisabled()
-            #else
             .listRowBackground(notification.type == .mention && lockedType != .mention ?
               theme.secondaryBackgroundColor : theme.primaryBackgroundColor)
-            #endif
             .id(notification.id)
         }
       }
@@ -204,9 +187,7 @@ public struct NotificationsListView: View {
           await viewModel.fetchNotifications()
         }
       }
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
       .listSectionSeparator(.hidden)
     }
   }
@@ -221,9 +202,7 @@ public struct NotificationsListView: View {
                          leading: .layoutPadding + 4,
                          bottom: .layoutPadding,
                          trailing: .layoutPadding))
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   private var topPaddingView: some View {

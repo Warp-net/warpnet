@@ -100,6 +100,8 @@ public struct StatusRowView: View {
               if !reasons.contains(.placeholder),
                   viewModel.showActions, isFocused || theme.statusActionsDisplay != .none,
                  !isInCaptureMode {
+                StatusRowReactionsView()
+                  .padding(.top, 6)
                 StatusRowActionsView(isBlockConfirmationPresented: $isBlockConfirmationPresented,
                                      viewModel: viewModel)
                   .tint(isFocused ? theme.tintColor : .gray)
@@ -143,13 +145,7 @@ public struct StatusRowView: View {
         StatusRowSwipeView(viewModel: viewModel, mode: .leading)
       }
     }
-    #if os(visionOS)
-    .listRowBackground(RoundedRectangle(cornerRadius: 8)
-      .foregroundStyle(.background).hoverEffect())
-    .listRowHoverEffectDisabled()
-    #else
     .listRowBackground(viewModel.highlightRowColor)
-    #endif
     .listRowInsets(.init(top: 0,
                          leading: .layoutPadding,
                          bottom: 0,
@@ -175,11 +171,6 @@ public struct StatusRowView: View {
           viewModel.navigateToDetail()
         }
     }
-    .overlay {
-      if viewModel.isLoadingRemoteContent {
-        remoteContentLoadingView
-      }
-    }
     .alert(isPresented: $viewModel.showDeleteAlert, content: {
       Alert(
         title: Text("status.action.delete.confirm.title"),
@@ -194,6 +185,14 @@ public struct StatusRowView: View {
         secondaryButton: .cancel()
       )
     })
+    .alert("warpnet.status.action.redraft.confirm", isPresented: $viewModel.showRedraftAlert) {
+      Button("warpnet.status.action.redraft", role: .destructive) {
+        Task {
+          await viewModel.redraft()
+        }
+      }
+      Button("action.cancel", role: .cancel) {}
+    }
     .confirmationDialog("",
                         isPresented: $isBlockConfirmationPresented) {
       Button("account.action.block", role: .destructive) {
@@ -230,13 +229,12 @@ public struct StatusRowView: View {
       HapticManager.shared.fireHaptic(.notification(.success))
       viewModel.routerPath.presentedSheet = .quoteStatusEditor(status: viewModel.status)
     }
-    .disabled(viewModel.status.visibility == .direct || viewModel.status.visibility == .priv)
 
     if viewModel.finalStatus.mediaAttachments.isEmpty == false {
       Button("accessibility.status.media-viewer-action.label") {
         HapticManager.shared.fireHaptic(.notification(.success))
         let attachments = viewModel.finalStatus.mediaAttachments
-        #if targetEnvironment(macCatalyst) || os(visionOS)
+        #if targetEnvironment(macCatalyst)
           openWindow(value: WindowDestinationMedia.mediaViewer(
             attachments: attachments,
             selectedAttachment: attachments[0]
@@ -244,12 +242,6 @@ public struct StatusRowView: View {
         #else
           quickLook.prepareFor(selectedMediaAttachment: attachments[0], mediaAttachments: attachments)
         #endif
-      }
-    }
-
-    Button(viewModel.displaySpoiler ? "status.show-more" : "status.show-less") {
-      withAnimation {
-        viewModel.displaySpoiler.toggle()
       }
     }
 
@@ -313,20 +305,6 @@ public struct StatusRowView: View {
     }
   }
 
-  private var remoteContentLoadingView: some View {
-    ZStack(alignment: .center) {
-      VStack {
-        Spacer()
-        HStack {
-          Spacer()
-          ProgressView()
-          Spacer()
-        }
-        Spacer()
-      }
-    }
-    .background(Color.black.opacity(0.40))
-    .transition(.opacity)
-  }
+
 }
 

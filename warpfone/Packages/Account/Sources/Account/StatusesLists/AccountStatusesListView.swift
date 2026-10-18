@@ -23,10 +23,8 @@ public struct AccountStatusesListView: View {
       StatusesListView(fetcher: viewModel, client: client, routerPath: routerPath)
     }
     .listStyle(.plain)
-    #if !os(visionOS)
     .scrollContentBackground(.hidden)
     .background(theme.primaryBackgroundColor)
-    #endif
     .navigationTitle(viewModel.mode.title)
     .navigationBarTitleDisplayMode(.inline)
     .refreshable {

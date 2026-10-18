@@ -13,7 +13,6 @@ public enum RouterDestination: Hashable {
   case accountSettingsWithAccount(account: Account, appAccount: AppAccount)
   case statusDetail(id: String)
   case statusDetailWithStatus(status: Status)
-  case remoteStatusDetail(url: URL)
   case conversationDetail(conversation: Conversation)
   case followers(id: String)
   case following(id: String)
@@ -23,11 +22,12 @@ public enum RouterDestination: Hashable {
 }
 
 public enum WindowDestinationEditor: Hashable, Codable {
-  case newStatusEditor(visibility: Models.Visibility)
+  case newStatusEditor
   case editStatusEditor(status: Status)
+  case redraftStatusEditor(status: Status)
   case replyToStatusEditor(status: Status)
   case quoteStatusEditor(status: Status)
-  case mentionStatusEditor(account: Account, visibility: Models.Visibility)
+  case mentionStatusEditor(account: Account)
 }
 
 public enum WindowDestinationMedia: Hashable, Codable {
@@ -35,11 +35,12 @@ public enum WindowDestinationMedia: Hashable, Codable {
 }
 
 public enum SheetDestination: Identifiable {
-  case newStatusEditor(visibility: Models.Visibility)
+  case newStatusEditor
   case editStatusEditor(status: Status)
+  case redraftStatusEditor(status: Status)
   case replyToStatusEditor(status: Status)
   case quoteStatusEditor(status: Status)
-  case mentionStatusEditor(account: Account, visibility: Models.Visibility)
+  case mentionStatusEditor(account: Account)
   case settings
   case about
   case report(status: Status)
@@ -49,7 +50,7 @@ public enum SheetDestination: Identifiable {
 
   public var id: String {
     switch self {
-    case .editStatusEditor, .newStatusEditor, .replyToStatusEditor, .quoteStatusEditor,
+    case .editStatusEditor, .redraftStatusEditor, .newStatusEditor, .replyToStatusEditor, .quoteStatusEditor,
          .mentionStatusEditor:
       "statusEditor"
     case .report, .reportAccount:
@@ -78,45 +79,14 @@ public enum SheetDestination: Identifiable {
     path.append(to)
   }
 
-  public func handleStatus(status: AnyStatus, url: URL) -> OpenURLAction.Result {
-    if let mention = status.mentions.first(where: { $0.url == url }) {
-      navigate(to: .accountDetail(id: mention.id))
-      return .handled
-    } else if let client,
-              client.isAuth,
-              client.hasConnection(with: url),
-              let id = Int(url.lastPathComponent)
-    {
-      if !StatusEmbedCache.shared.badStatusesURLs.contains(url) {
-        if url.absoluteString.contains(client.server) {
-          navigate(to: .statusDetail(id: String(id)))
-        } else {
-          navigate(to: .remoteStatusDetail(url: url))
-        }
-        return .handled
-      }
-    }
-    return urlHandler?(url) ?? .systemAction
-  }
-
   public func handle(url: URL) -> OpenURLAction.Result {
     if url.lastPathComponent.first == "@",
-                let host = url.host,
-              !host.hasPrefix("www") {
+       let host = url.host,
+       !host.hasPrefix("www")
+    {
       let acct = "\(url.lastPathComponent)@\(host)"
       Task {
         await navigateToAccountFrom(acct: acct, url: url)
-      }
-      return .handled
-    } else if let client,
-              client.isAuth,
-              client.hasConnection(with: url),
-              let id = Int(url.lastPathComponent)
-    {
-      if url.absoluteString.contains(client.server) {
-        navigate(to: .statusDetail(id: String(id)))
-      } else {
-        navigate(to: .remoteStatusDetail(url: url))
       }
       return .handled
     }
@@ -126,24 +96,7 @@ public enum SheetDestination: Identifiable {
   public func navigateToAccountFrom(acct: String, url: URL) async {
     guard let client else { return }
     let results: SearchResults? = try? await client.get(endpoint: Search.search(query: acct,
-                                                                                type: "accounts",
-                                                                                offset: nil,
-                                                                                following: nil),
-                                                        forceVersion: .v2)
-    if let account = results?.accounts.first {
-      navigate(to: .accountDetailWithAccount(account: account))
-    } else {
-      _ = await UIApplication.shared.open(url)
-    }
-  }
-
-  public func navigateToAccountFrom(url: URL) async {
-    guard let client else { return }
-    let results: SearchResults? = try? await client.get(endpoint: Search.search(query: url.absoluteString,
-                                                                                type: "accounts",
-                                                                                offset: nil,
-                                                                                following: nil),
-                                                        forceVersion: .v2)
+                                                                                type: "accounts"))
     if let account = results?.accounts.first {
       navigate(to: .accountDetailWithAccount(account: account))
     } else {

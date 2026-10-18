@@ -91,6 +91,7 @@ struct NodeLogger: WarpnetTransport.NodeLogSink {
   private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "node")
 
   func write(level: NodeLogLevel, component: String, message: String) {
+    NodeLogBuffer.shared.append(level: level, component: component, message: message)
     switch level {
     case .debug:
       logger.debug("\(component, privacy: .public): \(message, privacy: .public)")

@@ -17,7 +17,6 @@ struct StatusRowTextView: View {
       HStack {
         EmojiTextApp(statusDataController.content,
                      emojis: viewModel.finalStatus.emojis,
-                     language: viewModel.finalStatus.language,
                      lineLimit: viewModel.lineLimit)
           .font(isFocused ? .scaledBodyFocused : .scaledBody)
           .lineSpacing(CGFloat(theme.lineSpacing))
@@ -25,7 +24,7 @@ struct StatusRowTextView: View {
           .emojiText.size(isFocused ? Font.scaledBodyFocusedFont.emojiSize : Font.scaledBodyFont.emojiSize)
           .emojiText.baselineOffset(isFocused ? Font.scaledBodyFocusedFont.emojiBaselineOffset : Font.scaledBodyFont.emojiBaselineOffset)
           .environment(\.openURL, OpenURLAction { url in
-            viewModel.routerPath.handleStatus(status: viewModel.finalStatus, url: url)
+            viewModel.routerPath.handle(url: url)
           })
       }
       .frame(maxWidth: .infinity, alignment: .leading)

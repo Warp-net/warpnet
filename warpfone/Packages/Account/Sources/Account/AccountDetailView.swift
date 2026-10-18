@@ -16,8 +16,6 @@ public struct AccountDetailView: View {
 
   @Environment(StreamWatcher.self) private var watcher
   @Environment(CurrentAccount.self) private var currentAccount
-  @Environment(CurrentInstance.self) private var currentInstance
-  @Environment(UserPreferences.self) private var preferences
   @Environment(Theme.self) private var theme
   @Environment(Client.self) private var client
   @Environment(RouterPath.self) private var routerPath
@@ -59,15 +57,9 @@ public struct AccountDetailView: View {
           ForEach(isCurrentUser ? AccountDetailViewModel.Tab.currentAccountTabs : AccountDetailViewModel.Tab.accountTabs,
                   id: \.self)
           { tab in
-            if tab == .boosts {
-              Image("Rocket")
-                .tag(tab)
-                .accessibilityLabel(tab.accessibilityLabel)
-            } else {
-              Image(systemName: tab.iconName)
-                .tag(tab)
-                .accessibilityLabel(tab.accessibilityLabel)
-            }
+            Image(systemName: tab.iconName)
+              .tag(tab)
+              .accessibilityLabel(tab.accessibilityLabel)
           }
         }
         .pickerStyle(.segmented)
@@ -84,10 +76,8 @@ public struct AccountDetailView: View {
       }
       .environment(\.defaultMinListRowHeight, 1)
       .listStyle(.plain)
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.primaryBackgroundColor)
-      #endif
       .onChange(of: scrollToTopSignal) {
         withAnimation {
           proxy.scrollTo(ScrollToView.Constants.scrollToTop, anchor: .top)
@@ -179,18 +169,12 @@ public struct AccountDetailView: View {
                              bottom: 0,
                              trailing: .layoutPadding))
         .listRowSeparator(.hidden)
-        #if !os(visionOS)
         .listRowBackground(theme.primaryBackgroundColor)
-        #endif
       ForEach(viewModel.pinned) { status in
         StatusRowView(viewModel: .init(status: status, client: client, routerPath: routerPath))
       }
       Rectangle()
-        #if os(visionOS)
-        .fill(Color.clear)
-        #else
         .fill(theme.secondaryBackgroundColor)
-        #endif
         .frame(height: 12)
         .listRowInsets(.init())
         .listRowSeparator(.hidden)
@@ -214,11 +198,10 @@ public struct AccountDetailView: View {
       if !viewModel.isCurrentUser {
         Button {
           if let account = viewModel.account {
-            #if targetEnvironment(macCatalyst) || os(visionOS)
-              openWindow(value: WindowDestinationEditor.mentionStatusEditor(account: account, visibility: preferences.postVisibility))
+            #if targetEnvironment(macCatalyst)
+              openWindow(value: WindowDestinationEditor.mentionStatusEditor(account: account))
             #else
-              routerPath.presentedSheet = .mentionStatusEditor(account: account,
-                                                               visibility: preferences.postVisibility)
+              routerPath.presentedSheet = .mentionStatusEditor(account: account)
             #endif
   
           }
@@ -237,12 +220,10 @@ public struct AccountDetailView: View {
             Label("account.action.edit-info", systemImage: "pencil")
           }
 
-          if currentInstance.isFiltersSupported {
-            Button {
-              isEditingFilters = true
-            } label: {
-              Label("account.action.edit-filters", systemImage: "line.3.horizontal.decrease.circle")
-            }
+          Button {
+            isEditingFilters = true
+          } label: {
+            Label("account.action.edit-filters", systemImage: "line.3.horizontal.decrease.circle")
           }
 
           Divider()
@@ -283,9 +264,7 @@ extension View {
   func applyAccountDetailsRowStyle(theme: Theme) -> some View {
     listRowInsets(.init())
       .listRowSeparator(.hidden)
-      #if !os(visionOS)
       .listRowBackground(theme.primaryBackgroundColor)
-      #endif
   }
 }
 

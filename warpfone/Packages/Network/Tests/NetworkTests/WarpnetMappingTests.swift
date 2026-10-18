@@ -56,7 +56,6 @@ final class WarpnetMappingTests: XCTestCase {
     XCTAssertEqual(status.myReaction, "❤️")
     XCTAssertEqual(status.bookmarked, true)
     XCTAssertEqual(status.pinned, true)
-    XCTAssertEqual(status.visibility, .pub)
     XCTAssertNil(status.inReplyToId)
     XCTAssertNil(status.editedAt)
   }
@@ -188,6 +187,14 @@ final class WarpnetMappingTests: XCTestCase {
 
     let stats = TweetStatsResponse(tweetId: "01M", viewsCount: 12)
     XCTAssertEqual(try decode(Status.self, WarpnetMapper.status(moderated, author: author, viewer: ViewerState(stats: stats))).viewsCount, 12)
+  }
+
+  func testStatusCarriesEachEmojiCount() throws {
+    let tweet = WarpnetTweet(id: "01R", rootId: "01R", text: "hi", userId: "01AUTHOR", username: "Alice")
+    let stats = TweetStatsResponse(tweetId: "01R", reactionsCount: 3, reactions: ["❤️": 2, "🔥": 1, "👍": 0], myReaction: "🔥")
+    let status = try decode(Status.self, WarpnetMapper.status(tweet, author: author, viewer: ViewerState(stats: stats)))
+    XCTAssertEqual(status.reactions, ["❤️": 2, "🔥": 1])
+    XCTAssertEqual(status.myReaction, "🔥")
   }
 
   func testAccountSourceCarriesTheEditableBio() throws {

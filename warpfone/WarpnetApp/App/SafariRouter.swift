@@ -19,9 +19,7 @@ private struct SafariRouter: ViewModifier {
   @Environment(UserPreferences.self) private var preferences
   @Environment(RouterPath.self) private var routerPath
 
-  #if !os(visionOS)
   @State private var safariManager = InAppSafariManager()
-  #endif
 
   func body(content: Content) -> some View {
     content
@@ -37,43 +35,26 @@ private struct SafariRouter: ViewModifier {
       }
       .onAppear {
         routerPath.urlHandler = { url in
-          if url.absoluteString.contains("@twitter.com"), url.absoluteString.hasPrefix("mailto:") {
-            let username = url.absoluteString
-              .replacingOccurrences(of: "@twitter.com", with: "")
-              .replacingOccurrences(of: "mailto:", with: "")
-            let twitterLink = "https://twitter.com/\(username)"
-            if let url = URL(string: twitterLink) {
-              UIApplication.shared.open(url)
-              return .handled
-            }
-          }
           #if !targetEnvironment(macCatalyst)
             guard preferences.preferredBrowser == .inAppSafari else { return .systemAction }
             // SFSafariViewController only supports initial URLs with http:// or https:// schemes.
             guard let scheme = url.scheme, ["https", "http"].contains(scheme.lowercased()) else {
               return .systemAction
             }
-            #if os(visionOS)
-            return .systemAction
-            #else
             return safariManager.open(url)
-            #endif
           #else
             return .systemAction
           #endif
         }
       }
-      #if !os(visionOS)
       .background {
         WindowReader { window in
           safariManager.windowScene = window.windowScene
         }
       }
-      #endif
   }
 }
 
-#if !os(visionOS)
 @MainActor
 @Observable private class InAppSafariManager: NSObject, SFSafariViewControllerDelegate {
   var windowScene: UIWindowScene?
@@ -126,7 +107,6 @@ private struct SafariRouter: ViewModifier {
     }
   }
 }
-#endif
 
 private struct WindowReader: UIViewRepresentable {
   var onUpdate: (UIWindow) -> Void

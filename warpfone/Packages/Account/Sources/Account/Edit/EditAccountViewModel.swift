@@ -9,27 +9,10 @@ import StatusKit
 
 @MainActor
 @Observable class EditAccountViewModel {
-  @Observable class FieldEditViewModel: Identifiable {
-    let id = UUID().uuidString
-    var name: String = ""
-    var value: String = ""
-
-    init(name: String, value: String) {
-      self.name = name
-      self.value = value
-    }
-  }
-
   public var client: Client?
 
   var displayName: String = ""
   var note: String = ""
-  var postPrivacy = Models.Visibility.pub
-  var isSensitive: Bool = false
-  var isBot: Bool = false
-  var isLocked: Bool = false
-  var isDiscoverable: Bool = false
-  var fields: [FieldEditViewModel] = []
   var website: String = ""
   var avatar: URL?
   var header: URL?
@@ -77,14 +60,8 @@ import StatusKit
       let account: Account = try await client.get(endpoint: Accounts.verifyCredentials)
       displayName = account.displayName ?? ""
       note = account.source?.note ?? ""
-      postPrivacy = account.source?.privacy ?? .pub
-      isSensitive = account.source?.sensitive ?? false
-      isBot = account.bot
-      isLocked = account.locked
-      isDiscoverable = account.discoverable ?? false
       avatar = account.avatar
       header = account.header
-      fields = account.source?.fields.map { .init(name: $0.name, value: $0.value.asRawText) } ?? []
       website = account.fields.first?.value.asRawText.escape() ?? ""
       withAnimation {
         isLoading = false
@@ -95,13 +72,7 @@ import StatusKit
   func save() async {
     isSaving = true
     do {
-      let data = UpdateCredentialsData(displayName: displayName,
-                                       note: note,
-                                       source: .init(privacy: postPrivacy, sensitive: isSensitive),
-                                       bot: isBot,
-                                       locked: isLocked,
-                                       discoverable: isDiscoverable,
-                                       fieldsAttributes: [.init(name: "Website", value: website)])
+      let data = UpdateCredentialsData(displayName: displayName, note: note, website: website)
       let response = try await client?.patch(endpoint: Accounts.updateCredentials(json: data))
       if response?.statusCode != 200 {
         saveError = true
@@ -117,8 +88,6 @@ import StatusKit
     guard let client else { return false }
     do {
       let response = try await client.mediaUpload(endpoint: Accounts.updateCredentialsMedia,
-                                                   version: .v1,
-                                                   method: "PATCH",
                                                    mimeType: "image/jpeg",
                                                    filename: "header",
                                                    data: data)
@@ -132,8 +101,6 @@ import StatusKit
     guard let client else { return false }
     do {
       let response = try await client.mediaUpload(endpoint: Accounts.updateCredentialsMedia,
-                                                   version: .v1,
-                                                   method: "PATCH",
                                                    mimeType: "image/jpeg",
                                                    filename: "avatar",
                                                    data: data)

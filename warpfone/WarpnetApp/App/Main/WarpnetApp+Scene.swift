@@ -32,8 +32,6 @@ extension WarpnetApp {
     }
     #if targetEnvironment(macCatalyst)
     .defaultSize(width: userPreferences.showiPadSecondaryColumn ? 1100 : 800, height: 1400)
-    #elseif os(visionOS)
-    .defaultSize(width: 800, height: 1200)
     #endif
     .commands {
       appMenu
@@ -44,7 +42,7 @@ extension WarpnetApp {
     .onChange(of: appAccountsManager.currentClient) { _, newValue in
       setNewClientsInEnv(client: newValue)
       if newValue.isAuth {
-        watcher.watch(streams: [.user, .direct])
+        watcher.watch()
       }
     }
   }
@@ -54,16 +52,18 @@ extension WarpnetApp {
     WindowGroup(for: WindowDestinationEditor.self) { destination in
       Group {
         switch destination.wrappedValue {
-        case let .newStatusEditor(visibility):
-          StatusEditor.MainView(mode: .new(visibility: visibility))
+        case .newStatusEditor:
+          StatusEditor.MainView(mode: .new)
         case let .editStatusEditor(status):
           StatusEditor.MainView(mode: .edit(status: status))
+        case let .redraftStatusEditor(status):
+          StatusEditor.MainView(mode: .redraft(status: status))
         case let .quoteStatusEditor(status):
           StatusEditor.MainView(mode: .quote(status: status))
         case let .replyToStatusEditor(status):
           StatusEditor.MainView(mode: .replyTo(status: status))
-        case let .mentionStatusEditor(account, visibility):
-          StatusEditor.MainView(mode: .mention(account: account, visibility: visibility))
+        case let .mentionStatusEditor(account):
+          StatusEditor.MainView(mode: .mention(account: account))
         case .none:
           EmptyView()
         }

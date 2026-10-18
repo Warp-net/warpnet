@@ -19,12 +19,8 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
     rawValue
   }
 
-  static func loggedOutTab() -> [Tab] {
-    [.timeline, .settings]
-  }
-  
-  static func visionOSTab() -> [Tab] {
-    [.profile, .timeline, .notifications, .mentions, .explore, .post, .settings]
+  static var customizable: [Tab] {
+    allCases.filter { $0 != .other }
   }
 
   @ViewBuilder
@@ -91,7 +87,7 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
   var iconName: String {
     switch self {
     case .timeline:
-      "rectangle.stack"
+      "house"
     case .notifications:
       "bell"
     case .mentions:
@@ -99,11 +95,11 @@ enum Tab: Int, Identifiable, Hashable, CaseIterable, Codable {
     case .explore:
       "magnifyingglass"
     case .messages:
-      "tray"
+      "envelope"
     case .settings:
       "gear"
     case .profile:
-      "person.crop.circle"
+      "person"
     case .bookmarks:
       "bookmark"
     case .favorites:

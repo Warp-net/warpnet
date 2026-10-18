@@ -28,8 +28,6 @@ extension View {
         StatusDetailView(statusId: id)
       case let .statusDetailWithStatus(status):
         StatusDetailView(status: status)
-      case let .remoteStatusDetail(url):
-        StatusDetailView(remoteStatusURL: url)
       case let .conversationDetail(conversation):
         ConversationDetailView(conversation: conversation)
       case let .following(id):
@@ -52,17 +50,20 @@ extension View {
       case let .replyToStatusEditor(status):
         StatusEditor.MainView(mode: .replyTo(status: status))
           .withEnvironments()
-      case let .newStatusEditor(visibility):
-        StatusEditor.MainView(mode: .new(visibility: visibility))
+      case .newStatusEditor:
+        StatusEditor.MainView(mode: .new)
           .withEnvironments()
       case let .editStatusEditor(status):
         StatusEditor.MainView(mode: .edit(status: status))
           .withEnvironments()
+      case let .redraftStatusEditor(status):
+        StatusEditor.MainView(mode: .redraft(status: status))
+          .withEnvironments()
       case let .quoteStatusEditor(status):
         StatusEditor.MainView(mode: .quote(status: status))
           .withEnvironments()
-      case let .mentionStatusEditor(account, visibility):
-        StatusEditor.MainView(mode: .mention(account: account, visibility: visibility))
+      case let .mentionStatusEditor(account):
+        StatusEditor.MainView(mode: .mention(account: account))
           .withEnvironments()
       case .settings:
         SettingsTabs(popToRootTab: .constant(.settings), isModal: true)

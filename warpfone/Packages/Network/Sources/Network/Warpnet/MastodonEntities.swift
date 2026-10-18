@@ -21,12 +21,10 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
   let url: String?
   let inReplyToId: String?
   let inReplyToAccountId: String?
-  let visibility: String
   let poll: MastodonPoll?
-  let spoilerText: String
-  let sensitive: Bool
   var filtered: [MastodonFilterResult]?
   var viewsCount: Int?
+  var reactions: [String: Int]?
 
   init(id: String,
        content: String,
@@ -68,17 +66,12 @@ final class MastodonStatus: Encodable, @unchecked Sendable {
     self.url = url
     self.inReplyToId = inReplyToId
     self.inReplyToAccountId = inReplyToAccountId
-    visibility = "public"
     self.poll = poll
-    spoilerText = ""
-    sensitive = false
   }
 }
 
 struct MastodonAccount: Encodable, Sendable {
   struct Source: Encodable, Sendable {
-    let privacy: String
-    let sensitive: Bool
     let note: String
     let fields: [MastodonField]
   }
@@ -214,6 +207,7 @@ struct MastodonNotification: Encodable, Sendable {
   let createdAt: String
   let account: MastodonAccount
   let status: MastodonStatus?
+  let text: String?
 }
 
 struct MastodonContext: Encodable, Sendable {
@@ -258,20 +252,6 @@ struct MastodonConversation: Encodable, Sendable {
 struct MastodonSearchResults: Encodable, Sendable {
   let accounts: [MastodonAccount]
   let statuses: [MastodonStatus]
-  let hashtags: [MastodonTag]
-}
-
-struct MastodonTag: Encodable, Sendable {
-  struct History: Encodable, Sendable {
-    let day: String
-    let accounts: String
-    let uses: String
-  }
-
-  let name: String
-  let url: String
-  let following: Bool
-  let history: [History]
 }
 
 struct MastodonInstance: Encodable, Sendable {

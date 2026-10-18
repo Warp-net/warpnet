@@ -19,8 +19,6 @@ public enum Statuses: Endpoint {
   case unpin(id: String)
   case bookmark(id: String)
   case unbookmark(id: String)
-  case history(id: String)
-  case translate(id: String, lang: String?)
   case report(accountId: String, statusId: String?, comment: String)
 
   public func path() -> String {
@@ -55,10 +53,6 @@ public enum Statuses: Endpoint {
       "statuses/\(id)/bookmark"
     case let .unbookmark(id):
       "statuses/\(id)/unbookmark"
-    case let .history(id):
-      "statuses/\(id)/history"
-    case let .translate(id, _):
-      "statuses/\(id)/translate"
     case .report:
       "reports"
     }
@@ -70,11 +64,6 @@ public enum Statuses: Endpoint {
       return makePaginationParam(sinceId: nil, maxId: maxId, mindId: nil)
     case let .favoritedBy(_, maxId):
       return makePaginationParam(sinceId: nil, maxId: maxId, mindId: nil)
-    case let .translate(_, lang):
-      if let lang {
-        return [.init(name: "lang", value: lang)]
-      }
-      return nil
     case let .report(accountId, statusId, comment):
       var items: [URLQueryItem] = [.init(name: "account_id", value: accountId)]
       if let statusId {
@@ -101,59 +90,31 @@ public enum Statuses: Endpoint {
 
 public struct StatusData: Encodable, Sendable {
   public let status: String
-  public let visibility: Visibility
   public let inReplyToId: String?
-  public let spoilerText: String?
   public let mediaIds: [String]?
   public let poll: PollData?
-  public let language: String?
-  public let mediaAttributes: [MediaAttribute]?
   public let quotedStatusId: String?
 
   public struct PollData: Encodable, Sendable {
     public let options: [String]
-    public let multiple: Bool
     public let expires_in: Int
 
-    public init(options: [String], multiple: Bool, expires_in: Int) {
+    public init(options: [String], expires_in: Int) {
       self.options = options
-      self.multiple = multiple
       self.expires_in = expires_in
     }
   }
 
-  public struct MediaAttribute: Encodable, Sendable {
-    public let id: String
-    public let description: String?
-    public let thumbnail: String?
-    public let focus: String?
-
-    public init(id: String, description: String?, thumbnail: String?, focus: String?) {
-      self.id = id
-      self.description = description
-      self.thumbnail = thumbnail
-      self.focus = focus
-    }
-  }
-
   public init(status: String,
-              visibility: Visibility,
               inReplyToId: String? = nil,
-              spoilerText: String? = nil,
               mediaIds: [String]? = nil,
               poll: PollData? = nil,
-              language: String? = nil,
-              mediaAttributes: [MediaAttribute]? = nil,
               quotedStatusId: String? = nil)
   {
     self.status = status
-    self.visibility = visibility
     self.inReplyToId = inReplyToId
-    self.spoilerText = spoilerText
     self.mediaIds = mediaIds
     self.poll = poll
-    self.language = language
-    self.mediaAttributes = mediaAttributes
     self.quotedStatusId = quotedStatusId
   }
 }

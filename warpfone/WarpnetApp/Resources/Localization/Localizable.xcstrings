@@ -2,39 +2,7 @@
   "sourceLanguage" : "en",
   "strings" : {
     "" : {},
-    "  ⸱  " : {},
     "#%@" : {},
-    "%@ add-tag-groups.edit.tags.field.warning.search-results.already-selected" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ is already selected"
-          }
-        }
-      }
-    },
-    "%@ add-tag-groups.edit.title.field.warning.already-exists" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ already exists"
-          }
-        }
-      }
-    },
-    "%@ add-tag-groups.edit.title.field.warning.invalid-sfsymbol-name" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ is an invalid SFSymbol name"
-          }
-        }
-      }
-    },
-    "• [EmojiText](https://github.com/divadretlaw/EmojiText)\n\n• [HTML2Markdown](https://gitlab.com/mflint/HTML2Markdown)\n\n• [KeychainSwift](https://github.com/evgenyneu/keychain-swift)\n\n• [LRUCache](https://github.com/nicklockwood/LRUCache)\n\n• [Bodega](https://github.com/mergesort/Bodega)\n\n• [Nuke](https://github.com/kean/Nuke)\n\n• [SwiftSoup](https://github.com/scinfu/SwiftSoup.git)\n\n• [Atkinson Hyperlegible](https://github.com/googlefonts/atkinson-hyperlegible)\n\n• [OpenDyslexic](http://opendyslexic.org)\n\n• [SwiftUI-Introspect](https://github.com/siteline/SwiftUI-Introspect)\n\n• [SFSafeSymbols](https://github.com/SFSafeSymbols/SFSafeSymbols)" : {},
     "accessibility.app-account.selector.accounts" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -79,39 +47,6 @@
         }
       }
     },
-    "accessibility.editor.button.custom-emojis" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Custom emojis"
-          }
-        }
-      }
-    },
-    "accessibility.editor.button.drafts" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drafts"
-          }
-        }
-      }
-    },
-    "accessibility.editor.button.language" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Language"
-          }
-        }
-      }
-    },
     "accessibility.editor.button.poll" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -119,39 +54,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Poll"
-          }
-        }
-      }
-    },
-    "accessibility.editor.button.spoiler" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Content warning"
-          }
-        }
-      }
-    },
-    "accessibility.editor.privacy.hint" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Changes post audience."
-          }
-        }
-      }
-    },
-    "accessibility.editor.privacy.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Visibility"
           }
         }
       }
@@ -267,17 +169,6 @@
         }
       }
     },
-    "accessibility.status.application.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "App"
-          }
-        }
-      }
-    },
     "accessibility.status.contains-media.label-%@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -340,28 +231,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Selected"
-          }
-        }
-      }
-    },
-    "accessibility.status.spoiler-full-content" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Full Content"
-          }
-        }
-      }
-    },
-    "accessibility.tabs.messages.unread.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unread"
           }
         }
       }
@@ -476,6 +345,16 @@
         }
       }
     },
+    "accessibility.tabs.profile.picker.boosts" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retweets"
+          }
+        }
+      }
+    },
     "accessibility.tabs.profile.picker.favorites" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -483,28 +362,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reactions"
-          }
-        }
-      }
-    },
-    "accessibility.tabs.profile.picker.followed-tags" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tags"
-          }
-        }
-      }
-    },
-    "accessibility.tabs.profile.picker.lists" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lists"
           }
         }
       }
@@ -575,39 +432,6 @@
         }
       }
     },
-    "accessibility.tabs.profile.user-avatar.supporter.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supporter"
-          }
-        }
-      }
-    },
-    "accessibility.tabs.profile.user-notifications.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Receive notifications"
-          }
-        }
-      }
-    },
-    "accessibility.tabs.profile.user-reblogs.label" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Display retweets"
-          }
-        }
-      }
-    },
     "accessibility.tabs.profile.user.account-blocked.label" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -648,16 +472,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Private account"
-          }
-        }
-      }
-    },
-    "accessibility.tabs.timeline.add-account" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Account"
           }
         }
       }
@@ -739,18 +553,6 @@
         }
       }
     },
-    "account.action.add-remove-list" : {
-      "comment" : "MARK: Package: Account",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add/Remove from lists"
-          }
-        }
-      }
-    },
     "account.action.block" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -804,16 +606,6 @@
         }
       }
     },
-    "account.action.logout" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Log Out Account"
-          }
-        }
-      }
-    },
     "account.action.mention" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -836,16 +628,6 @@
         }
       }
     },
-    "account.action.more" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "More Settings"
-          }
-        }
-      }
-    },
     "account.action.mute" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -853,61 +635,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mute"
-          }
-        }
-      }
-    },
-    "account.action.notify-disable" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disable Notifications"
-          }
-        }
-      }
-    },
-    "account.action.notify-enable" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enable Notifications"
-          }
-        }
-      }
-    },
-    "account.action.privacy-settings" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Privacy Settings"
-          }
-        }
-      }
-    },
-    "account.action.reboosts-hide" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hide Retweets"
-          }
-        }
-      }
-    },
-    "account.action.reboosts-show" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show Retweets"
           }
         }
       }
@@ -945,37 +672,6 @@
         }
       }
     },
-    "account.add.error.instance-not-supported" : {
-      "comment" : "MARK: Add Account",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This instance is not currently supported."
-          }
-        }
-      }
-    },
-    "account.add.navigation-title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Account"
-          }
-        }
-      }
-    },
-    "account.add.sign-in" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign in"
-          }
-        }
-      }
-    },
     "account.boosted-by" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -983,17 +679,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retweeted by"
-          }
-        }
-      }
-    },
-    "account.detail.familiar-followers" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Also followed by"
           }
         }
       }
@@ -1009,17 +694,6 @@
         }
       }
     },
-    "account.detail.n-fields %lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld fields"
-          }
-        }
-      }
-    },
     "account.edit.about" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1027,61 +701,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "About"
-          }
-        }
-      }
-    },
-    "account.edit.account-settings.bot" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bot account"
-          }
-        }
-      }
-    },
-    "account.edit.account-settings.discoverable" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Discoverable"
-          }
-        }
-      }
-    },
-    "account.edit.account-settings.private" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Private"
-          }
-        }
-      }
-    },
-    "account.edit.account-settings.section-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Account settings"
-          }
-        }
-      }
-    },
-    "account.edit.add-metadata-button" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add a new metadata"
           }
         }
       }
@@ -1141,39 +760,6 @@
         }
       }
     },
-    "account.edit.metadata-name-placeholder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Label"
-          }
-        }
-      }
-    },
-    "account.edit.metadata-section-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profile Metadata"
-          }
-        }
-      }
-    },
-    "account.edit.metadata-value-placeholder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Content"
-          }
-        }
-      }
-    },
     "account.edit.navigation-title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1181,50 +767,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Edit Profile"
-          }
-        }
-      }
-    },
-    "account.edit.post-settings.content-settings-reference" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Warning: These settings are overwritten by the global content settings"
-          }
-        }
-      }
-    },
-    "account.edit.post-settings.privacy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Default privacy"
-          }
-        }
-      }
-    },
-    "account.edit.post-settings.section-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Post settings"
-          }
-        }
-      }
-    },
-    "account.edit.post-settings.sensitive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sensitive content"
           }
         }
       }
@@ -1382,61 +924,6 @@
         }
       }
     },
-    "account.list.create" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create a new list"
-          }
-        }
-      }
-    },
-    "account.list.create.confirm" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create list"
-          }
-        }
-      }
-    },
-    "account.list.create.description" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter the name for your list"
-          }
-        }
-      }
-    },
-    "account.list.delete" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete list"
-          }
-        }
-      }
-    },
-    "account.list.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "List name"
-          }
-        }
-      }
-    },
     "account.post.pinned" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1466,50 +953,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Follows You"
-          }
-        }
-      }
-    },
-    "account.relation.note.edit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit Note"
-          }
-        }
-      }
-    },
-    "account.relation.note.edit.error.save.message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Error while saving your note, please try again."
-          }
-        }
-      }
-    },
-    "account.relation.note.edit.error.save.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Error while saving your note"
-          }
-        }
-      }
-    },
-    "account.relation.note.edit.placeholder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter Note text"
           }
         }
       }
@@ -1590,97 +1033,6 @@
         }
       }
     },
-    "add-tag-groups.edit.icon.field" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tag Group Icon (SFSymbol name)"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.tags" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add tags to the group"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.tags.add" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tag"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.tags.field.warning.duplicated-tag" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Duplicated tag"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.tags.field.warning.number-of-tags" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Number of tags is less than 2"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.tags.field.warning.search-results.no-symbol-found" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No Symbol Found"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.title.field" : {
-      "comment" : "MARK: Tag Groups",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tag Group Title"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.title.field.warning.empty-title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Empty title"
-          }
-        }
-      }
-    },
-    "add-tag-groups.edit.title.field.warning.no-symbol-selected" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No symbol is selected"
-          }
-        }
-      }
-    },
     "alert.button.ok" : {
       "localizations" : {
         "en" : {
@@ -1701,18 +1053,6 @@
         }
       }
     },
-    "app-account.button.add" : {
-      "comment" : "MARK: Package: AppAccount",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Account"
-          }
-        }
-      }
-    },
     "conversations.action.delete" : {
       "comment" : "MARK: Package: Conversations",
       "extractionState" : "manual",
@@ -1725,35 +1065,13 @@
         }
       }
     },
-    "conversations.action.mark-read" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mark as read"
-          }
-        }
-      }
-    },
-    "conversations.action.view-detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View detail"
-          }
-        }
-      }
-    },
     "conversations.empty.message" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Looking for some social media love? You'll find all your direct messages and private mentions right here. Happy messaging! 📱❤️"
+            "value" : "Looking for some social media love? You'll find all your direct messages right here. Happy messaging! 📱❤️"
           }
         }
       }
@@ -1802,17 +1120,6 @@
         }
       }
     },
-    "conversations.latest.message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Latest Message"
-          }
-        }
-      }
-    },
     "conversations.navigation-title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1831,84 +1138,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New Message"
-          }
-        }
-      }
-    },
-    "DeepL API Free" : {},
-    "DeepL API Pro" : {},
-    "design.tag.n-posts-from-n-participants %lld %lld" : {
-      "comment" : "MARK: Package: DesignSystem",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%#@count_posts@ posts from %#@count_participants@ participants"
-          },
-          "substitutions" : {
-            "count_participants" : {
-              "argNum" : 2,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg"
-                    }
-                  }
-                }
-              }
-            },
-            "count_posts" : {
-              "argNum" : 1,
-              "formatSpecifier" : "lld",
-              "variations" : {
-                "plural" : {
-                  "one" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg"
-                    }
-                  },
-                  "other" : {
-                    "stringUnit" : {
-                      "state" : "translated",
-                      "value" : "%arg"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "design.theme.navigation-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Theme Selector"
-          }
-        }
-      }
-    },
-    "design.theme.toots-preview" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tweets preview"
           }
         }
       }
@@ -2068,39 +1297,6 @@
         }
       }
     },
-    "enum.expand-media.hide" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hide All"
-          }
-        }
-      }
-    },
-    "enum.expand-media.hide-sensitive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hide Sensitive"
-          }
-        }
-      }
-    },
-    "enum.expand-media.show" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show All"
-          }
-        }
-      }
-    },
     "enum.status-actions-display.all" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2189,29 +1385,6 @@
         }
       }
     },
-    "env.poll-vote-frequency.multiple" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Multiple Votes"
-          }
-        }
-      }
-    },
-    "env.poll-vote-frequency.one" : {
-      "comment" : "MARK: Package: Env",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "One Vote"
-          }
-        }
-      }
-    },
     "explore.navigation-title" : {
       "comment" : "MARK: Package: Explore",
       "extractionState" : "manual",
@@ -2220,50 +1393,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Search"
-          }
-        }
-      }
-    },
-    "explore.scope.all" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All"
-          }
-        }
-      }
-    },
-    "explore.scope.hashtags" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hashtags"
-          }
-        }
-      }
-    },
-    "explore.scope.people" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "People"
-          }
-        }
-      }
-    },
-    "explore.scope.posts" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Posts"
           }
         }
       }
@@ -2312,17 +1441,6 @@
         }
       }
     },
-    "explore.section.posts" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Posts"
-          }
-        }
-      }
-    },
     "explore.section.suggested-users" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2330,50 +1448,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Suggested Users"
-          }
-        }
-      }
-    },
-    "explore.section.tags" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tags"
-          }
-        }
-      }
-    },
-    "explore.section.trending.links" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trending Links"
-          }
-        }
-      }
-    },
-    "explore.section.trending.posts" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trending Posts"
-          }
-        }
-      }
-    },
-    "explore.section.trending.tags" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trending Tags"
           }
         }
       }
@@ -2599,292 +1673,6 @@
         }
       }
     },
-    "instance.info.domains" : {
-      "comment" : "MARK: Instances",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Domains"
-          }
-        }
-      }
-    },
-    "instance.info.email" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Email"
-          }
-        }
-      }
-    },
-    "instance.info.name" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Name"
-          }
-        }
-      }
-    },
-    "instance.info.navigation-title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instance Info"
-          }
-        }
-      }
-    },
-    "instance.info.posts" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tweets"
-          }
-        }
-      }
-    },
-    "instance.info.section.info" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instance info"
-          }
-        }
-      }
-    },
-    "instance.info.section.rules" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instance rules"
-          }
-        }
-      }
-    },
-    "instance.info.users" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Users"
-          }
-        }
-      }
-    },
-    "instance.info.version" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Version"
-          }
-        }
-      }
-    },
-    "instance.list.posts-%@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ posts"
-          }
-        }
-      }
-    },
-    "instance.list.users-%@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ users"
-          }
-        }
-      }
-    },
-    "instance.suggestions" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suggestions"
-          }
-        }
-      }
-    },
-    "instance.url" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instance URL"
-          }
-        }
-      }
-    },
-    "list.edit.isExclusive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hide these posts from home"
-          }
-        }
-      }
-    },
-    "list.edit.repliesPolicy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show replies to"
-          }
-        }
-      }
-    },
-    "list.edit.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Title"
-          }
-        }
-      }
-    },
-    "list.repliesPolicy.followed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Any followed user"
-          }
-        }
-      }
-    },
-    "list.repliesPolicy.list" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Members of the list"
-          }
-        }
-      }
-    },
-    "list.repliesPolicy.none" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No one"
-          }
-        }
-      }
-    },
-    "lists.add-remove-%@" : {
-      "comment" : "MARK: Package: Lists",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add/Remove %@"
-          }
-        }
-      }
-    },
-    "lists.create" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create a new list"
-          }
-        }
-      }
-    },
-    "lists.create.confirm" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create list"
-          }
-        }
-      }
-    },
-    "lists.edit.settings" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "List settings"
-          }
-        }
-      }
-    },
-    "lists.edit.users-in-list" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Users in this list"
-          }
-        }
-      }
-    },
-    "lists.edit.users-search" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search users"
-          }
-        }
-      }
-    },
-    "lists.name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "List name"
-          }
-        }
-      }
-    },
-    "lists.name.message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter the name for your list"
-          }
-        }
-      }
-    },
     "menu.font" : {
       "localizations" : {
         "en" : {
@@ -3015,17 +1803,6 @@
         }
       }
     },
-    "notifications.label.favorite.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "⭐️ Starred: "
-          }
-        }
-      }
-    },
     "notifications.label.follow %lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3037,72 +1814,6 @@
         }
       }
     },
-    "notifications.label.follow-request" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "requested to follow you"
-          }
-        }
-      }
-    },
-    "notifications.label.follow-request.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🔒 Requested to follow you: "
-          }
-        }
-      }
-    },
-    "notifications.label.follow.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "👋 Followed you: "
-          }
-        }
-      }
-    },
-    "notifications.label.mention %lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "mentioned you"
-          }
-        }
-      }
-    },
-    "notifications.label.poll" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "poll ended"
-          }
-        }
-      }
-    },
-    "notifications.label.poll.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "📈 Poll ended: "
-          }
-        }
-      }
-    },
     "notifications.label.reblog %lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3110,61 +1821,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "retweeted"
-          }
-        }
-      }
-    },
-    "notifications.label.reblog.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🚀 Boosted: "
-          }
-        }
-      }
-    },
-    "notifications.label.status" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "posted a status"
-          }
-        }
-      }
-    },
-    "notifications.label.status.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🖊️ Posted: "
-          }
-        }
-      }
-    },
-    "notifications.label.update" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "edited a post"
-          }
-        }
-      }
-    },
-    "notifications.label.update.push" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Updated: "
           }
         }
       }
@@ -3191,17 +1847,6 @@
         }
       }
     },
-    "notifications.menu-title.follow-request" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Follow Request"
-          }
-        }
-      }
-    },
     "notifications.menu-title.mention" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3209,17 +1854,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mention"
-          }
-        }
-      }
-    },
-    "notifications.menu-title.poll" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Poll"
           }
         }
       }
@@ -3235,28 +1869,6 @@
         }
       }
     },
-    "notifications.menu-title.status" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Post"
-          }
-        }
-      }
-    },
-    "notifications.menu-title.update" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Post Edited"
-          }
-        }
-      }
-    },
     "notifications.navigation-title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3264,48 +1876,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "All Notifications"
-          }
-        }
-      }
-    },
-    "notifications.tab.all" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All"
-          }
-        }
-      }
-    },
-    "notifications.tab.mentions" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mentions"
-          }
-        }
-      }
-    },
-    "placeholder.loading.long" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading, loading, loading ..."
-          }
-        }
-      }
-    },
-    "placeholder.loading.short" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading ..."
           }
         }
       }
@@ -3372,37 +1942,6 @@
         }
       }
     },
-    "settings.account.action.delete-cache" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clear Cache"
-          }
-        }
-      }
-    },
-    "settings.account.add" : {
-      "comment" : "MARK: Settings",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add Account"
-          }
-        }
-      }
-    },
-    "settings.account.cached-posts-%@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cached Tweets: %@"
-          }
-        }
-      }
-    },
     "settings.app.about" : {
       "localizations" : {
         "en" : {
@@ -3453,82 +1992,12 @@
         }
       }
     },
-    "settings.content.default-reply-visibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reply Visibility"
-          }
-        }
-      }
-    },
-    "settings.content.default-sensitive" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Always Mark Media as Sensitive"
-          }
-        }
-      }
-    },
-    "settings.content.default-visibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Posting Visibility"
-          }
-        }
-      }
-    },
-    "settings.content.expand-media" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Media Display"
-          }
-        }
-      }
-    },
-    "settings.content.expand-spoilers" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Always Show Sensitive Posts"
-          }
-        }
-      }
-    },
-    "settings.content.instance-settings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Server Content Settings"
-          }
-        }
-      }
-    },
     "settings.content.media" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Media"
-          }
-        }
-      }
-    },
-    "settings.content.media.show.alt" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show ALT Texts"
           }
         }
       }
@@ -3543,84 +2012,12 @@
         }
       }
     },
-    "settings.content.posting" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Posting"
-          }
-        }
-      }
-    },
     "settings.content.reading" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reading"
-          }
-        }
-      }
-    },
-    "settings.content.require-alt-text" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Require Alt Text to Post"
-          }
-        }
-      }
-    },
-    "settings.content.sharing" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sharing"
-          }
-        }
-      }
-    },
-    "settings.content.sharing.share-behavior.link-and-text" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Link and Text"
-          }
-        }
-      }
-    },
-    "settings.content.sharing.share-behavior.link-only" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Link Only"
-          }
-        }
-      }
-    },
-    "settings.content.sharing.share-button-behavior" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Share Button Behavior"
-          }
-        }
-      }
-    },
-    "settings.content.use-instance-settings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use Server Settings"
           }
         }
       }
@@ -3641,28 +2038,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Avatar Shape"
-          }
-        }
-      }
-    },
-    "settings.display.colors.apply" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apply custom colors"
-          }
-        }
-      }
-    },
-    "settings.display.example-toot" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Example Tweet"
           }
         }
       }
@@ -3807,12 +2182,6 @@
         "en" : {
           "variations" : {
             "device" : {
-              "applevision" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Apple Vision"
-                }
-              },
               "ipad" : {
                 "stringUnit" : {
                   "state" : "translated",
@@ -3842,16 +2211,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Theme"
-          }
-        }
-      }
-    },
-    "settings.display.section.theme.footer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Custom colors can only be set if match system color scheme is disabled"
           }
         }
       }
@@ -3907,82 +2266,12 @@
         }
       }
     },
-    "settings.display.status.action-secondary" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Secondary tweet action"
-          }
-        }
-      }
-    },
     "settings.display.status.media-style" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tweet Media Style"
-          }
-        }
-      }
-    },
-    "settings.display.theme.background" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Background Color"
-          }
-        }
-      }
-    },
-    "settings.display.theme.secondary-background" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Secondary Background Color"
-          }
-        }
-      }
-    },
-    "settings.display.theme.systemColor" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Match System"
-          }
-        }
-      }
-    },
-    "settings.display.theme.text-color" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Text Color"
-          }
-        }
-      }
-    },
-    "settings.display.theme.tint" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tint Color"
-          }
-        }
-      }
-    },
-    "settings.display.translate-button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show Translate Button"
           }
         }
       }
@@ -4057,46 +2346,6 @@
         }
       }
     },
-    "settings.general.instance" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instance Information"
-          }
-        }
-      }
-    },
-    "settings.general.push-notifications" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Push Notifications"
-          }
-        }
-      }
-    },
-    "settings.general.recent-tags" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recently Used Tags"
-          }
-        }
-      }
-    },
-    "settings.general.remote-timelines" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remote Local Timelines"
-          }
-        }
-      }
-    },
     "settings.general.sidebarEntries" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4124,16 +2373,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tabs Customizations"
-          }
-        }
-      }
-    },
-    "settings.general.translate" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Translation Settings"
           }
         }
       }
@@ -4188,16 +2427,6 @@
         }
       }
     },
-    "settings.other.fast-refresh" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fast refresh"
-          }
-        }
-      }
-    },
     "settings.other.mute-video" : {
       "localizations" : {
         "en" : {
@@ -4214,136 +2443,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enable Social Keyboard"
-          }
-        }
-      }
-    },
-    "settings.other.sound-effect" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enable Sound Effects"
-          }
-        }
-      }
-    },
-    "settings.push.boosts" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Boosts"
-          }
-        }
-      }
-    },
-    "settings.push.duplicate.button.fix" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🪄 Fix It"
-          }
-        }
-      }
-    },
-    "settings.push.duplicate.footer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Receiving duplicate notifications? Try this magic button in order to fix it"
-          }
-        }
-      }
-    },
-    "settings.push.duplicate.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Duplicate Notifications Fixer"
-          }
-        }
-      }
-    },
-    "settings.push.favorites" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favorites"
-          }
-        }
-      }
-    },
-    "settings.push.follows" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Follows"
-          }
-        }
-      }
-    },
-    "settings.push.main-toggle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Push Notifications"
-          }
-        }
-      }
-    },
-    "settings.push.main-toggle.description" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Receive push notifications on new activities"
-          }
-        }
-      }
-    },
-    "settings.push.mentions" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mentions"
-          }
-        }
-      }
-    },
-    "settings.push.navigation-title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Push Notifications"
-          }
-        }
-      }
-    },
-    "settings.push.new-posts" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New Posts"
-          }
-        }
-      }
-    },
-    "settings.push.polls" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Poll Results"
           }
         }
       }
@@ -4404,16 +2503,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Other"
-          }
-        }
-      }
-    },
-    "settings.section.other.footer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fast refresh disables timeline position saving and caching. It'll always fetch a fresh timeline."
           }
         }
       }
@@ -4654,92 +2743,12 @@
         }
       }
     },
-    "settings.timeline.add" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add a Local Timeline"
-          }
-        }
-      }
-    },
     "settings.title" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Settings"
-          }
-        }
-      }
-    },
-    "settings.translation.always-deepl" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Always Translate using DeepL"
-          }
-        }
-      }
-    },
-    "settings.translation.api-key-type" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Type of the Key"
-          }
-        }
-      }
-    },
-    "settings.translation.auto-detect-post-language" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto detect language"
-          }
-        }
-      }
-    },
-    "settings.translation.auto-detect-post-language-footer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Warpnet will try to automatically detect the language of the post you're about to post and will suggest to update your post language if necessary."
-          }
-        }
-      }
-    },
-    "settings.translation.navigation-title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Translation"
-          }
-        }
-      }
-    },
-    "settings.translation.needed-message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This feature requires a DeepL API key"
-          }
-        }
-      }
-    },
-    "settings.translation.user-api-key" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DeepL API Key"
           }
         }
       }
@@ -4766,13 +2775,12 @@
         }
       }
     },
-    "status.action.boost-to-followers" : {
-      "extractionState" : "manual",
+    "status.action.context-menu" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Retweet to Followers"
+            "value" : "More"
           }
         }
       }
@@ -4887,17 +2895,6 @@
         }
       }
     },
-    "status.action.post" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tweet"
-          }
-        }
-      }
-    },
     "status.action.quote" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4997,40 +2994,6 @@
         }
       }
     },
-    "status.action.translate" : {
-      "comment" : "MARK: Package: Status",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Translate"
-          }
-        }
-      }
-    },
-    "status.action.translated-label-%@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Translated using %@"
-          }
-        }
-      }
-    },
-    "status.action.translated-label-from-%@-%@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Translated from %@ using %@"
-          }
-        }
-      }
-    },
     "status.action.unbookmark" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5075,39 +3038,6 @@
         }
       }
     },
-    "status.action.view-in-browser" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View in Browser"
-          }
-        }
-      }
-    },
-    "status.card.copy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy this link"
-          }
-        }
-      }
-    },
-    "status.card.share" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Share this link"
-          }
-        }
-      }
-    },
     "status.draft.delete" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5115,17 +3045,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Discard Tweet"
-          }
-        }
-      }
-    },
-    "status.draft.save" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save Draft"
           }
         }
       }
@@ -5152,50 +3071,6 @@
         }
       }
     },
-    "status.editor.description.add" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add description"
-          }
-        }
-      }
-    },
-    "status.editor.description.edit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit description"
-          }
-        }
-      }
-    },
-    "status.editor.drafts.navigation-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drafts"
-          }
-        }
-      }
-    },
-    "status.editor.emojis.navigation-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Custom Emojis"
-          }
-        }
-      }
-    },
     "status.editor.error.upload" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5214,61 +3089,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Type your follow-up content here."
-          }
-        }
-      }
-    },
-    "status.editor.language-select.confirmation.detected-%@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Post in %@ (Detected language)"
-          }
-        }
-      }
-    },
-    "status.editor.language-select.confirmation.selected-%@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Post in %@ (Selected language)"
-          }
-        }
-      }
-    },
-    "status.editor.language-select.navigation-title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select Language"
-          }
-        }
-      }
-    },
-    "status.editor.language-select.recently-used" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recently Used"
-          }
-        }
-      }
-    },
-    "status.editor.media.edit-image" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit Media"
           }
         }
       }
@@ -5339,17 +3159,6 @@
         }
       }
     },
-    "status.editor.spoiler" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Content warning"
-          }
-        }
-      }
-    },
     "status.editor.text.placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5357,17 +3166,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "What's on your mind?"
-          }
-        }
-      }
-    },
-    "status.editor.visibility" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Post visibility"
           }
         }
       }
@@ -5460,39 +3258,6 @@
         }
       }
     },
-    "status.media.content.show" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show content"
-          }
-        }
-      }
-    },
-    "status.media.contextmenu.copy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy image"
-          }
-        }
-      }
-    },
-    "status.media.contextmenu.save" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save image"
-          }
-        }
-      }
-    },
     "status.media.contextmenu.share" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5500,28 +3265,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Share this image"
-          }
-        }
-      }
-    },
-    "status.media.contextmenu.view-browser" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View in Browser"
-          }
-        }
-      }
-    },
-    "status.media.sensitive.show" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show sensitive content"
           }
         }
       }
@@ -5555,17 +3298,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Poll Duration"
-          }
-        }
-      }
-    },
-    "status.poll.frequency" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Polling Frequency"
           }
         }
       }
@@ -5722,17 +3454,6 @@
         }
       }
     },
-    "status.row.you-boosted" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You retweeted"
-          }
-        }
-      }
-    },
     "status.show-full-post" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5744,28 +3465,6 @@
         }
       }
     },
-    "status.show-less" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show less"
-          }
-        }
-      }
-    },
-    "status.show-more" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show more"
-          }
-        }
-      }
-    },
     "status.summary.at-time" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5773,17 +3472,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : " at "
-          }
-        }
-      }
-    },
-    "status.summary.edit-history" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit History"
           }
         }
       }
@@ -5803,9 +3491,21 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld retweets"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld retweet"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld retweets"
+                }
+              }
+            }
           }
         }
       }
@@ -5814,9 +3514,21 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld reactions"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reaction"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reactions"
+                }
+              }
+            }
           }
         }
       }
@@ -5825,53 +3537,21 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld replies"
-          }
-        }
-      }
-    },
-    "status.visibility.direct" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Private"
-          }
-        }
-      }
-    },
-    "status.visibility.follower" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Followers"
-          }
-        }
-      }
-    },
-    "status.visibility.public" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Everyone"
-          }
-        }
-      }
-    },
-    "status.visibility.unlisted" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unlisted"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld reply"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld replies"
+                }
+              }
+            }
           }
         }
       }
@@ -5883,26 +3563,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Search"
-          }
-        }
-      }
-    },
-    "tab.federated" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Federated"
-          }
-        }
-      }
-    },
-    "tab.local" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Local"
           }
         }
       }
@@ -5967,62 +3627,6 @@
         }
       }
     },
-    "tab.trending" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trending"
-          }
-        }
-      }
-    },
-    "tag-groups.edit.section.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add or remove tag from tag groups"
-          }
-        }
-      }
-    },
-    "tag.suggested.mentions-%lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld mentions"
-          }
-        }
-      }
-    },
-    "timeline-new-posts %lld" : {
-      "comment" : "Turkish does not have \"-ler\" on words in the sentence, so it follows the singular word.",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld new tweet"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld new tweets"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "timeline.%@-is-valid" : {
       "comment" : "MARK: Timeline",
       "localizations" : {
@@ -6034,104 +3638,12 @@
         }
       }
     },
-    "timeline.add-remote.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add remote local timeline"
-          }
-        }
-      }
-    },
-    "timeline.add.action.add" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add"
-          }
-        }
-      }
-    },
-    "timeline.add.url" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instance URL"
-          }
-        }
-      }
-    },
     "timeline.content-filter.title" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Content Filter"
-          }
-        }
-      }
-    },
-    "timeline.federated" : {
-      "comment" : "MARK: Package: Timeline",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Federated"
-          }
-        }
-      }
-    },
-    "timeline.filter.add-local" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add a local timeline"
-          }
-        }
-      }
-    },
-    "timeline.filter.add-tag-groups" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add tag group"
-          }
-        }
-      }
-    },
-    "timeline.filter.edit-tag-groups" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit tag group"
-          }
-        }
-      }
-    },
-    "timeline.filter.lists" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lists"
-          }
-        }
-      }
-    },
-    "timeline.filter.local" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Local Timelines"
           }
         }
       }
@@ -6180,26 +3692,6 @@
         }
       }
     },
-    "timeline.filter.tag-groups" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tag Groups"
-          }
-        }
-      }
-    },
-    "timeline.filter.tags" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Followed Tags"
-          }
-        }
-      }
-    },
     "timeline.home" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6222,46 +3714,62 @@
         }
       }
     },
-    "timeline.local" : {
-      "extractionState" : "manual",
+    "warpnet.about.copy-info" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Local"
+            "value" : "Copy"
           }
         }
       }
     },
-    "timeline.n-recent-from-n-participants %lld %lld" : {
-      "extractionState" : "manual",
+    "warpnet.about.device-and-account" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld recent posts from %lld participants"
+            "value" : "Your device and account"
           }
         }
       }
     },
-    "timeline.resume" : {
-      "extractionState" : "manual",
+    "warpnet.about.issues" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Resume"
+            "value" : "Bug reports & feature requests"
           }
         }
       }
     },
-    "timeline.trending" : {
-      "extractionState" : "manual",
+    "warpnet.about.powered-by" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Trending"
+            "value" : "Powered by Warpnet"
+          }
+        }
+      }
+    },
+    "warpnet.about.version-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warpnet %@"
+          }
+        }
+      }
+    },
+    "warpnet.about.website" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project website"
           }
         }
       }
@@ -6271,7 +3779,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This account is bridged from %@ through the Warpnet gateway."
+            "value" : "You are leaving the trusted Warpnet zone. This profile is bridged from %1$@. Anything you do here (tweet, reply, react, follow) leaves the peer-to-peer network and is stored on %1$@'s servers, where you no longer own or control that data. It also passes through the Warpnet↔Fediverse gateway, which decrypts and re-encrypts it, so it is briefly in plain text there. Moderation there is done by human administrators, not by Warpnet's automated moderation."
           }
         }
       }
@@ -6296,6 +3804,26 @@
         }
       }
     },
+    "warpnet.connection.dot.down" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not connected to your node"
+          }
+        }
+      }
+    },
+    "warpnet.connection.dot.up" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected to your node"
+          }
+        }
+      }
+    },
     "warpnet.connection.offline" : {
       "localizations" : {
         "en" : {
@@ -6316,12 +3844,132 @@
         }
       }
     },
+    "warpnet.conversations.new.search" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search people"
+          }
+        }
+      }
+    },
+    "warpnet.conversations.new.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New message"
+          }
+        }
+      }
+    },
     "warpnet.explore.empty" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Find people on Warpnet by name, or anyone on the Fediverse by their handle, such as @name@mastodon.social."
+          }
+        }
+      }
+    },
+    "warpnet.logs.autoscroll" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoscroll"
+          }
+        }
+      }
+    },
+    "warpnet.logs.clear" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        }
+      }
+    },
+    "warpnet.logs.copy-all" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy all"
+          }
+        }
+      }
+    },
+    "warpnet.logs.empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No node logs yet"
+          }
+        }
+      }
+    },
+    "warpnet.logs.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs"
+          }
+        }
+      }
+    },
+    "warpnet.logs.verbose" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbose node logs"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.label.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sent you a message"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.label.moderation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "moderation update"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.menu-title.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.menu-title.moderation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderation"
           }
         }
       }
@@ -6596,6 +4244,26 @@
         }
       }
     },
+    "warpnet.push.message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sent you a message"
+          }
+        }
+      }
+    },
+    "warpnet.push.moderation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderation update"
+          }
+        }
+      }
+    },
     "warpnet.push.reaction" : {
       "localizations" : {
         "en" : {
@@ -6775,6 +4443,16 @@
         }
       }
     },
+    "warpnet.settings.section.developer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Developer tools"
+          }
+        }
+      }
+    },
     "warpnet.share.hint" : {
       "localizations" : {
         "en" : {
@@ -6875,6 +4553,46 @@
         }
       }
     },
+    "warpnet.status.action.more-reactions" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More emoji"
+          }
+        }
+      }
+    },
+    "warpnet.status.action.redraft" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete and re-draft"
+          }
+        }
+      }
+    },
+    "warpnet.status.action.redraft.confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete and re-draft this tweet?"
+          }
+        }
+      }
+    },
+    "warpnet.status.reactions-%lld-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld reacted with %2$@"
+          }
+        }
+      }
+    },
     "warpnet.status.views-%lld" : {
       "localizations" : {
         "en" : {
@@ -6896,7 +4614,78 @@
           }
         }
       }
-    }
+    },
+    "warpnet.theme.black" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Black"
+          }
+        }
+      }
+    },
+    "warpnet.theme.dark" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark"
+          }
+        }
+      }
+    },
+    "warpnet.theme.light" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        }
+      }
+    },
+    "warpnet.theme.system" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use system design"
+          }
+        }
+      }
+    },
+    "warpnet.theme.system-black" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use system design (black)"
+          }
+        }
+      }
+    },
+    "warpnet.theme.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App theme"
+          }
+        }
+      }
+    },
+    "warpnet.who-to-follow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Who to follow"
+          }
+        }
+      }
+    },
+    "• [EmojiText](https://github.com/divadretlaw/EmojiText)\n\n• [HTML2Markdown](https://gitlab.com/mflint/HTML2Markdown)\n\n• [KeychainSwift](https://github.com/evgenyneu/keychain-swift)\n\n• [LRUCache](https://github.com/nicklockwood/LRUCache)\n\n• [Bodega](https://github.com/mergesort/Bodega)\n\n• [Nuke](https://github.com/kean/Nuke)\n\n• [SwiftSoup](https://github.com/scinfu/SwiftSoup.git)\n\n• [Atkinson Hyperlegible](https://github.com/googlefonts/atkinson-hyperlegible)\n\n• [OpenDyslexic](http://opendyslexic.org)\n\n• [SwiftUI-Introspect](https://github.com/siteline/SwiftUI-Introspect)\n\n• [SFSafeSymbols](https://github.com/SFSafeSymbols/SFSafeSymbols)" : {}
   },
   "version" : "1.0"
 }

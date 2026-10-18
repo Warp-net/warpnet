@@ -37,10 +37,6 @@ public enum Duration: Int, CaseIterable {
     }
   }
 
-  public static func mutingDurations() -> [Duration] {
-    allCases.filter { $0 != .custom }
-  }
-
   public static func filterDurations() -> [Duration] {
     [.infinite, .thirtyMinutes, .oneHour, .sixHours, .twelveHours, .oneDay, .sevenDays, .custom]
   }

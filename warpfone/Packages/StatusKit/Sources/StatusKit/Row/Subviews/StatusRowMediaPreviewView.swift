@@ -14,13 +14,11 @@ public struct StatusRowMediaPreviewView: View {
   @Environment(Theme.self) private var theme
 
   public let attachments: [MediaAttachment]
-  public let sensitive: Bool
 
   @State private var isQuickLookLoading: Bool = false
 
-  init(attachments: [MediaAttachment], sensitive: Bool) {
+  init(attachments: [MediaAttachment]) {
     self.attachments = attachments
-    self.sensitive = sensitive
   }
 
 #if targetEnvironment(macCatalyst)
@@ -51,8 +49,7 @@ public struct StatusRowMediaPreviewView: View {
           attachment: attachments[0],
           maxSize: imageMaxHeight == 300 
           ? nil
-          : CGSize(width: imageMaxHeight, height: imageMaxHeight),
-          sensitive: sensitive
+          : CGSize(width: imageMaxHeight, height: imageMaxHeight)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.accessibilityLabel(for: attachments[0]))
@@ -76,7 +73,6 @@ public struct StatusRowMediaPreviewView: View {
   private func makeAttachmentView(_ attachement: MediaAttachment) -> some View {
     if let data = DisplayData(from: attachement) {
       MediaPreview(
-        sensitive: sensitive,
         imageMaxHeight: imageMaxHeight,
         displayData: data
       )
@@ -85,14 +81,11 @@ public struct StatusRowMediaPreviewView: View {
           tabAction(for: index)
         }
       }
-      #if os(visionOS)
-      .hoverEffect()
-      #endif
     }
   }
 
   private func tabAction(for index: Int) {
-    #if targetEnvironment(macCatalyst) || os(visionOS)
+    #if targetEnvironment(macCatalyst)
       openWindow(
         value: WindowDestinationMedia.mediaViewer(
           attachments: attachments,
@@ -119,7 +112,6 @@ public struct StatusRowMediaPreviewView: View {
 }
 
 private struct MediaPreview: View {
-  let sensitive: Bool
   let imageMaxHeight: CGFloat
   let displayData: DisplayData
 
@@ -143,12 +135,6 @@ private struct MediaPreview: View {
               .fill(Color.gray)
           }
         }
-        .overlay {
-          BlurOverLay(sensitive: sensitive, font: .scaledFootnote)
-        }
-        .overlay {
-          AltTextButton(text: displayData.description, font: .scaledFootnote)
-        }
       case .av:
         MediaUIAttachmentVideoView(viewModel: .init(url: displayData.url))
           .accessibilityAddTraits(.startsMediaSession)
@@ -163,140 +149,6 @@ private struct MediaPreview: View {
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(displayData.accessibilityText))
     .accessibilityAddTraits(displayData.type == .image ? [.isImage, .isButton] : .isButton)
-  }
-}
-
-@MainActor
-struct BlurOverLay: View {
-  let sensitive: Bool
-  let font: Font?
-
-  @State private var isFrameExpanded = true
-
-  @Environment(Theme.self) private var theme
-  @Environment(\.isInCaptureMode) private var isInCaptureMode: Bool
-  @Environment(UserPreferences.self) private var preferences
-  @Environment(\.isMediaCompact) private var isCompact: Bool
-
-  @Namespace var buttonSpace
-
-  var body: some View {
-    if hasOverlay {
-      ZStack {
-        Rectangle()
-          .foregroundColor(.clear)
-          .background(.ultraThinMaterial)
-          .frame(
-            width: isFrameExpanded ? nil : 0,
-            height: isFrameExpanded ? nil : 0
-          )
-        if !isCompact {
-          Button {
-            withAnimation(.spring) {
-              isFrameExpanded.toggle()
-            }
-          } label: {
-            if isFrameExpanded {
-              ViewThatFits(in: .horizontal) {
-                HStack {
-                  Image(systemName: "eye")
-                    .matchedGeometryEffect(id: "eye", in: buttonSpace)
-                  Text(sensitive ? "status.media.sensitive.show" : "status.media.content.show")
-                }
-                HStack {
-                  Image(systemName: "eye")
-                    .matchedGeometryEffect(id: "eye", in: buttonSpace)
-                  Text("Show")
-                }
-                Image(systemName: "eye")
-                  .matchedGeometryEffect(id: "eye", in: buttonSpace)
-              }
-              .lineLimit(1)
-              .foregroundColor(theme.labelColor)
-            } else {
-              Image(systemName: "eye.slash")
-                .transition(.opacity)
-                .matchedGeometryEffect(id: "eye", in: buttonSpace)
-            }
-          }
-          .foregroundColor(theme.labelColor)
-          .buttonStyle(.borderedProminent)
-          .padding(theme.statusDisplayStyle == .compact ? 0 : 10)
-        }
-      }
-      .font(font)
-      .frame(
-        maxWidth: .infinity,
-        maxHeight: .infinity,
-        alignment: isFrameExpanded ? .center : .bottomLeading
-      )
-    } else {
-      EmptyView()
-    }
-  }
-
-  private var hasOverlay: Bool {
-    switch (sensitive, preferences.autoExpandMedia) {
-    case (_, .hideAll), (true, .hideSensitive):
-      switch isInCaptureMode {
-      case true: false
-      case false: true
-      }
-    default: false
-    }
-  }
-}
-
-struct AltTextButton: View {
-  let text: String?
-  let font: Font?
-
-  @Environment(\.isInCaptureMode) private var isInCaptureMode: Bool
-  @Environment(\.isMediaCompact) private var isCompact: Bool
-  @Environment(UserPreferences.self) private var preferences
-  @Environment(\.locale) private var locale
-  @Environment(Theme.self) private var theme
-
-  @State private var isDisplayingAlert = false
-
-  var body: some View {
-    if !isInCaptureMode,
-       let text,
-       !text.isEmpty,
-       !isCompact,
-       preferences.showAltTextForMedia
-    {
-      Button {
-        isDisplayingAlert = true
-      } label: {
-        ZStack {
-          // use to sync button with show/hide content button
-          Image(systemName: "eye.slash").opacity(0)
-          Text("status.image.alt-text.abbreviation")
-        }
-      }
-      .buttonStyle(.borderless)
-      .padding(EdgeInsets(top: 5, leading: 7, bottom: 5, trailing: 7))
-      .background(.thinMaterial)
-      #if os(visionOS)
-      .clipShape(Capsule())
-      #endif
-      .cornerRadius(4)
-      .padding(theme.statusDisplayStyle == .compact ? 0 : 10)
-      .alert(
-        "status.editor.media.image-description",
-        isPresented: $isDisplayingAlert
-      ) {
-        Button("alert.button.ok", action: {})
-      } message: {
-        Text(text)
-      }
-      .frame(
-        maxWidth: .infinity,
-        maxHeight: .infinity,
-        alignment: .bottomTrailing
-      )
-    }
   }
 }
 
@@ -365,8 +217,7 @@ struct WrapperForPreview: View {
             VStack {
               Text("Preview for \(number) item(s)")
               StatusRowMediaPreviewView(
-                attachments: Array(repeating: Self.attachment, count: number),
-                sensitive: true
+                attachments: Array(repeating: Self.attachment, count: number)
               )
             }
             .padding()
@@ -397,7 +248,6 @@ struct WrapperForPreview: View {
 private struct FeaturedImagePreView: View {
   let attachment: MediaAttachment
   let maxSize: CGSize?
-  let sensitive: Bool
 
   @Environment(\.isSecondaryColumn) private var isSecondaryColumn: Bool
   @Environment(Theme.self) private var theme
@@ -438,19 +288,7 @@ private struct FeaturedImagePreView: View {
               RoundedRectangle(cornerRadius: 10)
                 .stroke(.gray.opacity(0.35), lineWidth: 1)
             )
-            #if os(visionOS)
-            .hoverEffect()
-            #endif
         }
-      }
-      .overlay {
-        BlurOverLay(sensitive: sensitive, font: .scaledFootnote)
-      }
-      .overlay {
-        AltTextButton(
-          text: attachment.description,
-          font: theme.statusDisplayStyle == .compact ? .footnote : .body
-        )
       }
       .clipped()
       .cornerRadius(10)

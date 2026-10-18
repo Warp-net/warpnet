@@ -50,6 +50,13 @@ final class WarpnetDtosTests: XCTestCase {
     XCTAssertNil(user.avatarKey)
   }
 
+  func testUserIsBridgedWhenFromAForeignNetwork() {
+    XCTAssertFalse(WarpnetUser(id: "01J", username: "a", network: "testnet").isBridged)
+    XCTAssertTrue(WarpnetUser(id: "01J", username: "a", network: "bluesky").isBridged)
+    XCTAssertTrue(WarpnetUser(id: "bob@mastodon.social", username: "bob").isBridged)
+    XCTAssertFalse(WarpnetUser(id: "01J", username: "a").isBridged)
+  }
+
   func testFollowEventUsesTheNodeFieldNames() throws {
     let json = try WarpnetJSON.encode(NewFollowEvent(followerId: "a", followeeId: "b"))
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: String])

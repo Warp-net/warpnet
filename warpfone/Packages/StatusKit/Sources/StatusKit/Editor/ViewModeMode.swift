@@ -5,10 +5,11 @@ import UIKit
 public extension StatusEditor.ViewModel {
   enum Mode {
     case replyTo(status: Status)
-    case new(visibility: Models.Visibility)
+    case new
     case edit(status: Status)
+    case redraft(status: Status)
     case quote(status: Status)
-    case mention(account: Account, visibility: Models.Visibility)
+    case mention(account: Account)
     case shareExtension(items: [NSItemProvider])
 
     var isInShareExtension: Bool {
@@ -38,9 +39,20 @@ public extension StatusEditor.ViewModel {
       }
     }
 
+    var inReplyToId: String? {
+      switch self {
+      case let .replyTo(status):
+        status.id
+      case let .redraft(status):
+        status.inReplyToId
+      default:
+        nil
+      }
+    }
+
     var title: LocalizedStringKey {
       switch self {
-      case .new, .mention, .shareExtension:
+      case .new, .mention, .shareExtension, .redraft:
         "status.editor.mode.new"
       case .edit:
         "status.editor.mode.edit"

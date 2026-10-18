@@ -5,10 +5,6 @@ private struct SecondaryColumnKey: EnvironmentKey {
   static let defaultValue = false
 }
 
-private struct ExtraLeadingInset: EnvironmentKey {
-  static let defaultValue: CGFloat = 0
-}
-
 private struct IsCompact: EnvironmentKey {
   static let defaultValue: Bool = false
 }
@@ -25,15 +21,11 @@ private struct IsInCaptureMode: EnvironmentKey {
   static let defaultValue: Bool = false
 }
 
-private struct IsSupporter: EnvironmentKey {
-  static let defaultValue: Bool = false
-}
-
 private struct IsStatusFocused: EnvironmentKey {
   static let defaultValue: Bool = false
 }
 
-private struct IsHomeTimeline: EnvironmentKey {
+private struct IsInOwnThread: EnvironmentKey {
   static let defaultValue: Bool = false
 }
 
@@ -45,11 +37,6 @@ public extension EnvironmentValues {
   var isSecondaryColumn: Bool {
     get { self[SecondaryColumnKey.self] }
     set { self[SecondaryColumnKey.self] = newValue }
-  }
-
-  var extraLeadingInset: CGFloat {
-    get { self[ExtraLeadingInset.self] }
-    set { self[ExtraLeadingInset.self] = newValue }
   }
 
   var isCompact: Bool {
@@ -72,23 +59,19 @@ public extension EnvironmentValues {
     set { self[IsInCaptureMode.self] = newValue }
   }
 
-  var isSupporter: Bool {
-    get { self[IsSupporter.self] }
-    set { self[IsSupporter.self] = newValue }
-  }
-
   var isStatusFocused: Bool {
     get { self[IsStatusFocused.self] }
     set { self[IsStatusFocused.self] = newValue }
   }
 
+  /// Whether the row sits in a thread whose root tweet is the viewer's.
+  var isInOwnThread: Bool {
+    get { self[IsInOwnThread.self] }
+    set { self[IsInOwnThread.self] = newValue }
+  }
+
   var indentationLevel: UInt {
     get { self[IndentationLevel.self] }
     set { self[IndentationLevel.self] = newValue }
-  }
-
-  var isHomeTimeline: Bool {
-    get { self[IsHomeTimeline.self] }
-    set { self[IsHomeTimeline.self] = newValue }
   }
 }

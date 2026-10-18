@@ -14,10 +14,6 @@ import WarpnetTransport
     lhs.id == rhs.id
   }
 
-  public enum Version: String, Sendable {
-    case v1, v2
-  }
-
   public enum ClientError: Error {
     case unexpectedRequest
     case notPaired
@@ -32,59 +28,24 @@ import WarpnetTransport
   }
 
   public let server: String
-  public let version: Version
   public let session: WarpnetSession?
   private let router: WarpnetRouter?
   private let decoder = JSONDecoder()
 
   private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "networking")
 
-  // Putting all mutable state inside an `OSAllocatedUnfairLock` makes `Client`
-  // provably `Sendable`. The lock is a struct, but it uses a `ManagedBuffer`
-  // reference type to hold its associated state.
-  private let critical: OSAllocatedUnfairLock<Critical>
-  private struct Critical: Sendable {
-    var connections: Set<String> = []
-  }
-
   public var isAuth: Bool {
     session != nil
   }
 
-  public var connections: Set<String> {
-    critical.withLock { $0.connections }
-  }
-
-  public init(server: String, version: Version = .v1, session: WarpnetSession? = nil) {
+  public init(server: String, session: WarpnetSession? = nil) {
     self.server = server
-    self.version = version
     self.session = session
     router = session.map { WarpnetRouter(session: $0) }
-    critical = .init(initialState: Critical(connections: [server]))
     decoder.keyDecodingStrategy = .convertFromSnakeCase
   }
 
-  public func addConnections(_ connections: [String]) {
-    critical.withLock {
-      $0.connections.formUnion(connections)
-    }
-  }
-
-  public func hasConnection(with url: URL) -> Bool {
-    if url.scheme == "warpnet" { return isAuth }
-    guard let host = url.host else { return false }
-    return critical.withLock {
-      if let rootHost = host.split(separator: ".", maxSplits: 1).last {
-        // Sometimes the connection is with the root host instead of a subdomain
-        // eg. Mastodon runs on mastdon.domain.com but the connection is with domain.com
-        $0.connections.contains(host) || $0.connections.contains(String(rootHost))
-      } else {
-        $0.connections.contains(host)
-      }
-    }
-  }
-
-  public func get<Entity: Decodable>(endpoint: Endpoint, forceVersion _: Version? = nil) async throws -> Entity {
+  public func get<Entity: Decodable>(endpoint: Endpoint) async throws -> Entity {
     try await makeEntityRequest(endpoint: endpoint, method: .get)
   }
 
@@ -94,11 +55,11 @@ import WarpnetTransport
     return try (decode(Entity.self, from: response.body, endpoint: endpoint), linkHandler)
   }
 
-  public func post<Entity: Decodable>(endpoint: Endpoint, forceVersion _: Version? = nil) async throws -> Entity {
+  public func post<Entity: Decodable>(endpoint: Endpoint) async throws -> Entity {
     try await makeEntityRequest(endpoint: endpoint, method: .post)
   }
 
-  public func post(endpoint: Endpoint, forceVersion _: Version? = nil) async throws -> HTTPURLResponse? {
+  public func post(endpoint: Endpoint) async throws -> HTTPURLResponse? {
     _ = try await route(endpoint, method: .post)
     return okResponse()
   }
@@ -108,18 +69,16 @@ import WarpnetTransport
     return okResponse()
   }
 
-  public func put<Entity: Decodable>(endpoint: Endpoint, forceVersion _: Version? = nil) async throws -> Entity {
+  public func put<Entity: Decodable>(endpoint: Endpoint) async throws -> Entity {
     try await makeEntityRequest(endpoint: endpoint, method: .put)
   }
 
-  public func delete(endpoint: Endpoint, forceVersion _: Version? = nil) async throws -> HTTPURLResponse? {
+  public func delete(endpoint: Endpoint) async throws -> HTTPURLResponse? {
     _ = try await route(endpoint, method: .delete)
     return okResponse()
   }
 
   public func mediaUpload<Entity: Decodable>(endpoint: Endpoint,
-                                             version _: Version,
-                                             method _: String,
                                              mimeType: String,
                                              filename: String,
                                              data: Data) async throws -> Entity
@@ -130,8 +89,6 @@ import WarpnetTransport
   }
 
   public func mediaUpload(endpoint: Endpoint,
-                          version _: Version,
-                          method _: String,
                           mimeType: String,
                           filename: String,
                           data: Data) async throws -> HTTPURLResponse?

@@ -31,7 +31,7 @@ enum WarpnetMapper {
                            locked: user.locked,
                            emojis: [],
                            url: WarpnetFormat.webURL(userId: user.id),
-                           source: .init(privacy: "public", sensitive: false, note: user.bio, fields: []),
+                           source: .init(note: user.bio, fields: []),
                            bot: false,
                            discoverable: true)
   }
@@ -92,6 +92,7 @@ enum WarpnetMapper {
                           poll: hiddenNotice == nil ? poll(tweet, address: address, results: viewer.poll) : nil,
                           myReaction: stats.flatMap { $0.myReaction.isEmpty ? nil : $0.myReaction })
     status.viewsCount = stats?.viewsCount
+    status.reactions = stats?.reactions.filter { $0.value > 0 }
     return status
   }
 

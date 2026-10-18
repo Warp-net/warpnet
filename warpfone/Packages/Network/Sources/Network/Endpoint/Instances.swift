@@ -2,15 +2,9 @@ import Foundation
 
 public enum Instances: Endpoint {
   case instance
-  case peers
 
   public func path() -> String {
-    switch self {
-    case .instance:
-      "instance"
-    case .peers:
-      "instance/peers"
-    }
+    "instance"
   }
 
   public func queryItems() -> [URLQueryItem]? {

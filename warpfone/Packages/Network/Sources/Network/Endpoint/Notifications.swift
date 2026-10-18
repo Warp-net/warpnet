@@ -5,18 +5,9 @@ public enum Notifications: Endpoint {
                      maxId: String?,
                      types: [String]?,
                      limit: Int)
-  case notification(id: String)
-  case clear
 
   public func path() -> String {
-    switch self {
-    case .notifications:
-      "notifications"
-    case let .notification(id):
-      "notifications/\(id)"
-    case .clear:
-      "notifications/clear"
-    }
+    "notifications"
   }
 
   public func queryItems() -> [URLQueryItem]? {
@@ -30,8 +21,6 @@ public enum Notifications: Endpoint {
         }
       }
       return params
-    default:
-      return nil
     }
   }
 }

@@ -30,11 +30,9 @@ public struct EditAccountView: View {
         }
       }
       .environment(\.editMode, .constant(.active))
-      #if !os(visionOS)
       .scrollContentBackground(.hidden)
       .background(theme.secondaryBackgroundColor)
       .scrollDismissesKeyboard(.immediately)
-      #endif
       .navigationTitle("account.edit.navigation-title")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -60,9 +58,7 @@ public struct EditAccountView: View {
         Spacer()
       }
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
   
   private var imagesSection: some View {
@@ -138,9 +134,7 @@ public struct EditAccountView: View {
       TextField("account.edit.about", text: $viewModel.note, axis: .vertical)
         .frame(maxHeight: 150)
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   private var websiteSection: some View {
@@ -150,9 +144,7 @@ public struct EditAccountView: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
     }
-    #if !os(visionOS)
     .listRowBackground(theme.primaryBackgroundColor)
-    #endif
   }
 
   @ToolbarContentBuilder
