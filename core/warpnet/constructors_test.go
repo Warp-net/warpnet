@@ -16,9 +16,7 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,45 +77,16 @@ func TestNewConnManagerTakesTheOwnersWaterMarks(t *testing.T) {
 }
 
 func TestNewPeerstore(t *testing.T) {
-	store, err := NewPeerstore(context.Background(), dssync.MutexWrap(ds.NewMapDatastore()))
+	store, err := NewPeerstore()
 	require.NoError(t, err)
 	require.NotNil(t, store)
 	t.Cleanup(func() { _ = store.Close() })
-}
-
-func TestNewPeerstore_PersistsAddrsButNotProtocols(t *testing.T) {
-	db := dssync.MutexWrap(ds.NewMapDatastore())
-	_, pub, err := p2pCrypto.GenerateEd25519Key(rand.Reader)
-	require.NoError(t, err)
-	id, err := peer.IDFromPublicKey(pub)
-	require.NoError(t, err)
-	addr := multiaddr.StringCast("/ip4/192.0.2.7/tcp/4001")
 
 	protocols := make([]protocol.ID, 0, 200)
 	for i := range 200 {
 		protocols = append(protocols, protocol.ID(fmt.Sprintf("/public/get/route-%03d/0.0.0", i)))
 	}
-
-	store, err := NewPeerstore(context.Background(), db)
-	require.NoError(t, err)
-	store.AddAddr(id, addr, peerstore.PermanentAddrTTL)
-	require.NoError(t, store.SetProtocols(id, protocols...))
-	stored, err := store.GetProtocols(id)
-	require.NoError(t, err)
-	require.Len(t, stored, len(protocols))
-	_, ok := peerstore.GetCertifiedAddrBook(store)
-	require.True(t, ok)
-	require.NoError(t, store.Close())
-
-	reopened, err := NewPeerstore(context.Background(), db)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = reopened.Close() })
-	addrs := reopened.Addrs(id)
-	require.Len(t, addrs, 1)
-	require.True(t, addr.Equal(addrs[0]))
-	stored, err = reopened.GetProtocols(id)
-	require.NoError(t, err)
-	require.Empty(t, stored)
+	require.NoError(t, store.SetProtocols("peer", protocols...))
 }
 
 func TestBitswapStack(t *testing.T) {

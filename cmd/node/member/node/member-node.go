@@ -102,7 +102,7 @@ func NewMemberNode(
 		return nil, node.ErrPrivateKeyRequired
 	}
 	nodeRepo := database.NewNodeRepo(db)
-	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
+	store, err := warpnet.NewPeerstore()
 	if err != nil {
 		return nil, err
 	}
