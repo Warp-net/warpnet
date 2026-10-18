@@ -38,9 +38,12 @@ import (
 	"github.com/ipfs/go-cid"
 	ds "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
+	"github.com/Warp-net/warpnet/json"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -300,4 +303,78 @@ func TestCloseIsIdempotent(t *testing.T) {
 	table.Close()
 	table.Close()
 	table.Close()
+}
+
+func TestSavedPeersBootstrapTheNextStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	store := memStore()
+	relay := warpnet.WarpAddrInfo{
+		ID:    newHost(t).ID(),
+		Addrs: []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/203.0.113.1/tcp/4001")},
+	}
+	d := NewDHTable(ctx, Network("testnet"), RoutingStore(store))
+	host := newHost(t)
+	_, err := d.StartRouting(host)
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+
+	known := newHost(t).ID()
+	public := multiaddr.StringCast("/ip4/198.51.100.7/tcp/4001")
+	host.Peerstore().AddAddrs(known, []multiaddr.Multiaddr{
+		public,
+		multiaddr.StringCast("/ip4/127.0.0.1/tcp/4001"),
+		multiaddr.StringCast("/ip4/203.0.113.1/tcp/4001/p2p/" + relay.ID.String() + "/p2p-circuit"),
+	}, time.Hour)
+	added, err := d.dht.RoutingTable().TryAddPeer(known, true, false)
+	require.NoError(t, err)
+	require.True(t, added)
+
+	d.savePeers()
+	d.dht.RoutingTable().RemovePeer(known)
+	d.savePeers()
+
+	peers := NewDHTable(ctx, Network("testnet"), RoutingStore(store), BootstrapNodes(relay)).getBootstrapPeers()
+	require.Len(t, peers, 2)
+	require.Equal(t, relay.ID, peers[0].ID)
+	require.Equal(t, known, peers[1].ID)
+	require.Len(t, peers[1].Addrs, 1)
+	require.True(t, public.Equal(peers[1].Addrs[0]))
+}
+
+func TestBootstrapPeersWithoutSavedPeers(t *testing.T) {
+	relay := warpnet.WarpAddrInfo{ID: "relay"}
+	d := NewDHTable(context.Background(), Network("testnet"), RoutingStore(memStore()), BootstrapNodes(relay))
+	require.Equal(t, []warpnet.WarpAddrInfo{relay}, d.getBootstrapPeers())
+}
+
+func TestSavedPeerIsDialedWhenBootstrapNodesAreDown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	known := newHost(t)
+	knownDHT := NewDHTable(ctx, Network("testnet"), RoutingStore(memStore()))
+	_, err := knownDHT.StartRouting(known)
+	require.NoError(t, err)
+	t.Cleanup(knownDHT.Close)
+
+	store := memStore()
+	data, err := json.Marshal([]warpnet.WarpAddrInfo{{ID: known.ID(), Addrs: known.Addrs()}})
+	require.NoError(t, err)
+	require.NoError(t, store.Put(ctx, savedPeersKey, data))
+
+	deadRelay := warpnet.WarpAddrInfo{
+		ID:    newHost(t).ID(),
+		Addrs: []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/127.0.0.1/tcp/1")},
+	}
+	host := newHost(t)
+	d := NewDHTable(ctx, Network("testnet"), RoutingStore(store), BootstrapNodes(deadRelay))
+	_, err = d.StartRouting(host)
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+
+	require.Eventually(t, func() bool {
+		return host.Network().Connectedness(known.ID()) == network.Connected
+	}, 10*time.Second, 50*time.Millisecond)
 }
