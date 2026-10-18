@@ -3,6 +3,7 @@
 package node
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -14,7 +15,9 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
+	relayclient "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -103,6 +106,74 @@ func TestBootstrapDialLeavesPairedPeerUnset(t *testing.T) {
 	}
 	if !cn.isConnected() {
 		t.Fatal("connect must make the dialled peer the paired node")
+	}
+}
+
+// After a pause the next stream dials the paired node itself. When only a relay
+// reaches it, the stream must ride that relayed connection instead of waiting
+// out its timeout for a direct one.
+func TestStreamRidesTheRelayedConnectionItDials(t *testing.T) {
+	psk := freshPSK(t)
+	muxer := *yamux.DefaultTransport // newClient tunes the shared default
+	host := func(opts ...libp2p.Option) []libp2p.Option {
+		return append([]libp2p.Option{
+			libp2p.NoTransports,
+			libp2p.Transport(camouflage.NewCamouflageTransport),
+			libp2p.PrivateNetwork(psk),
+			libp2p.Security(noise.ID, noise.New),
+			libp2p.Muxer(yamux.ID, &muxer),
+		}, opts...)
+	}
+	relay, err := libp2p.New(host(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.EnableRelayService(),
+		libp2p.ForceReachabilityPublic(),
+	)...)
+	if err != nil {
+		t.Fatalf("relay host: %v", err)
+	}
+	defer relay.Close()
+	desktop, err := libp2p.New(host(libp2p.NoListenAddrs, libp2p.EnableRelay())...)
+	if err != nil {
+		t.Fatalf("desktop host: %v", err)
+	}
+	defer desktop.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	relayInfo := peer.AddrInfo{ID: relay.ID(), Addrs: relay.Addrs()}
+	if err := desktop.Connect(ctx, relayInfo); err != nil {
+		t.Fatalf("desktop to relay: %v", err)
+	}
+	if _, err := relayclient.Reserve(ctx, desktop, relayInfo); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	desktop.SetStreamHandler("/test/0.0.0", func(s network.Stream) {
+		_, _ = s.Write([]byte("pong"))
+		_ = s.Close()
+	})
+
+	relayAddr := relay.Addrs()[0].String() + "/p2p/" + relay.ID().String()
+	cn, err := newClient(freshKey(t), psk, "testnet", []string{relayAddr})
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
+	defer cn.close()
+	if err := cn.connect(relayAddr + "/p2p-circuit/p2p/" + desktop.ID().String()); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	cn.pause()
+
+	start := time.Now()
+	resp, err := cn.stream("/test/0.0.0", []byte("ping"))
+	if err != nil {
+		t.Fatalf("stream after %s: %v", time.Since(start), err)
+	}
+	if string(resp) != "pong" {
+		t.Fatalf("expected pong, got %q", resp)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("the stream waited %s for a direct connection", elapsed)
 	}
 }
 

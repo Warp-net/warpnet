@@ -19,6 +19,14 @@ WarpNet is provided “as is” without warranty of any kind, either expressed o
 Use at your own risk. The maintainers shall not be liable for any damages or data loss
 resulting from the use or misuse of this software.
 
+A directory that carries its own license file is governed by that file instead
+of this one:
+
+- warpdroid/ (the Android client) is licensed under the GNU Affero General Public
+  License, version 3 or later; see warpdroid/LICENSE.
+- warpfone/ (the iOS client) is licensed under the Apache License, Version 2.0;
+  see warpfone/LICENSE and warpfone/NOTICE.
+
 GNU AFFERO GENERAL PUBLIC LICENSE
 
 Version 3, 19 November 2007
@@ -363,7 +371,7 @@ works based on it.
 A patent license is "discriminatory" if it does not include within the scope of its coverage, prohibits 
 the exercise of, or is conditioned on the non-exercise of one or more of the rights that are specifically
 granted under this License. You may not convey a covered work if you are a party to an arrangement with 
-a third party that is in the remote of distributing software, under which you make payment to the third
+a third party that is in the business of distributing software, under which you make payment to the third
 party based on the extent of your activity of conveying the work, and under which the third party grants,
 to any of the parties who would receive the covered work from you, a discriminatory patent license 
 

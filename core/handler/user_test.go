@@ -474,6 +474,26 @@ func TestStreamUpdateProfileHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("an empty bio clears it", func(t *testing.T) {
+		var got domain.User
+		h := StreamUpdateProfileHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{updateFn: func(userId string, newUser domain.User) (domain.User, error) {
+			got = newUser
+			return newUser, nil
+		}})
+		if _, err := h([]byte(`{"bio":""}`), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if !got.IsBioCleared {
+			t.Fatal("an explicit empty bio must clear it")
+		}
+		if _, err := h([]byte(`{"username":"Bob"}`), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if got.IsBioCleared {
+			t.Fatal("an edit without a bio must keep it")
+		}
+	})
+
 	t.Run("update error", func(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamUpdateProfileHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{updateFn: func(userId string, newUser domain.User) (domain.User, error) {

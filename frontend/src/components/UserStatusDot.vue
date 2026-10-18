@@ -24,7 +24,7 @@ resulting from the use or misuse of this software.
 <template>
   <span
     v-if="status"
-    class="absolute block rounded-full ring-2 ring-lightest dark:ring-darktheme-background"
+    class="col-start-1 row-start-1 self-end justify-self-end block rounded-full ring-2 ring-lightest dark:ring-darktheme-background"
     :class="[sizeClass, status.online ? 'bg-green-500' : 'bg-red-600']"
     role="img"
     :title="label"
@@ -43,7 +43,7 @@ export default {
   name: "UserStatusDot",
   props: {
     user: { type: Object, default: null },
-    sizeClass: { type: String, default: "h-3 w-3 bottom-0 right-0" },
+    sizeClass: { type: String, default: "h-3 w-3" },
   },
   data() {
     return { unwatch: null };

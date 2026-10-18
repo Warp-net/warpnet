@@ -1,0 +1,241 @@
+// Modified by Warpnet. See NOTICE.
+
+import AVKit
+import DesignSystem
+import Env
+import MediaUI
+import Models
+import NukeUI
+import SwiftUI
+
+extension StatusEditor {
+  @MainActor
+  struct MediaView: View {
+    @Environment(Theme.self) private var theme
+    @Environment(CurrentInstance.self) private var currentInstance
+    var viewModel: ViewModel
+
+    @State private var isErrorDisplayed: Bool = false
+
+    @Namespace var mediaSpace
+    @State private var scrollID: String?
+
+    var body: some View {
+      ScrollView(.horizontal, showsIndicators: showsScrollIndicators) {
+        switch count {
+        case 1: mediaLayout
+        case 2: mediaLayout
+        case 3: mediaLayout
+        case 4: mediaLayout
+        default: mediaLayout
+        }
+      }
+      .scrollPosition(id: $scrollID, anchor: .trailing)
+      .scrollClipDisabled()
+      .padding(.horizontal, .layoutPadding)
+      .frame(height: count > 0 ? containerHeight : 0)
+      .animation(.spring(duration: 0.3), value: count)
+      .onChange(of: count) { oldValue, newValue in
+        if oldValue < newValue {
+          Task {
+            try? await Task.sleep(for: .seconds(0.5))
+            withAnimation(.bouncy(duration: 0.5)) {
+              scrollID = containers.last?.id
+            }
+          }
+        }
+      }
+    }
+
+    private var count: Int { viewModel.mediaContainers.count }
+    private var containers: [MediaContainer] { viewModel.mediaContainers }
+    private let containerHeight: CGFloat = 300
+    private var containerWidth: CGFloat { containerHeight / 1.5 }
+
+    #if targetEnvironment(macCatalyst)
+      private var showsScrollIndicators: Bool { count > 1 }
+      private var scrollBottomPadding: CGFloat?
+    #else
+      private var showsScrollIndicators: Bool = false
+      private var scrollBottomPadding: CGFloat? = 0
+    #endif
+
+    init(viewModel: ViewModel) {
+      self.viewModel = viewModel
+    }
+
+    private func pixel(at index: Int) -> some View {
+      Rectangle().frame(width: 0, height: 0)
+        .matchedGeometryEffect(id: index, in: mediaSpace, anchor: .leading)
+    }
+
+    private var mediaLayout: some View {
+      HStack(alignment: .center, spacing: count > 1 ? 8 : 0) {
+        if count > 0 {
+          if count == 1 {
+            makeMediaItem(at: 0)
+              .containerRelativeFrame(.horizontal, alignment: .leading)
+          } else {
+            makeMediaItem(at: 0)
+          }
+        } else { pixel(at: 0) }
+        if count > 1 { makeMediaItem(at: 1) } else { pixel(at: 1) }
+        if count > 2 { makeMediaItem(at: 2) } else { pixel(at: 2) }
+        if count > 3 { makeMediaItem(at: 3) } else { pixel(at: 3) }
+      }
+      .padding(.bottom, scrollBottomPadding)
+      .scrollTargetLayout()
+    }
+
+    private func makeMediaItem(at index: Int) -> some View {
+      let container = viewModel.mediaContainers[index]
+
+      return Menu {
+        makeImageMenu(container: container)
+      } label: {
+        RoundedRectangle(cornerRadius: 8).fill(.clear)
+          .overlay {
+            if let attachement = container.mediaAttachment {
+              makeRemoteMediaView(mediaAttachement: attachement)
+            } else if container.image != nil {
+              makeLocalImageView(container: container)
+            } else if viewModel.mode.isInShareExtension {
+              sharedMediaView
+            } else if let error = container.error {
+              makeErrorView(error: error)
+            } else {
+              placeholderView
+            }
+          }
+      }
+      .overlay(alignment: .topTrailing) {
+        makeDiscardMarker(container: container)
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+      .frame(minWidth: count == 1 ? nil : containerWidth, maxWidth: 600)
+      .id(container.id)
+      .matchedGeometryEffect(id: container.id, in: mediaSpace, anchor: .leading)
+      .matchedGeometryEffect(id: index, in: mediaSpace, anchor: .leading)
+    }
+
+    private func makeLocalImageView(container: MediaContainer) -> some View {
+      ZStack(alignment: .center) {
+        Image(uiImage: container.image!)
+          .resizable()
+          .blur(radius: container.mediaAttachment == nil && !viewModel.mode.isInShareExtension ? 20 : 0)
+          .scaledToFill()
+          .cornerRadius(8)
+        if container.error != nil {
+          Text("status.editor.error.upload")
+        } else if container.mediaAttachment == nil, !viewModel.mode.isInShareExtension {
+          ProgressView()
+        }
+      }
+    }
+
+    private func makeRemoteMediaView(mediaAttachement: MediaAttachment) -> some View {
+      ZStack(alignment: .center) {
+        switch mediaAttachement.supportedType {
+        case .gifv, .video, .audio:
+          if let url = mediaAttachement.url {
+            MediaUIAttachmentVideoView(viewModel: .init(url: url, forceAutoPlay: true))
+          } else {
+            placeholderView
+          }
+        case .image:
+          if let url = mediaAttachement.url ?? mediaAttachement.previewUrl {
+            LazyImage(url: url) { state in
+              if let image = state.image {
+                image
+                  .resizable()
+                  .scaledToFill()
+              } else {
+                placeholderView
+              }
+            }
+          }
+        case .none:
+          EmptyView()
+        }
+      }
+      .cornerRadius(8)
+    }
+
+    @ViewBuilder
+    private func makeImageMenu(container: MediaContainer) -> some View {
+      if container.mediaAttachment?.url == nil, container.error != nil {
+        Button {
+          isErrorDisplayed = true
+        } label: {
+          Label("action.view.error", systemImage: "exclamationmark.triangle")
+        }
+      }
+
+      Button(role: .destructive) {
+        deleteAction(container: container)
+      } label: {
+        Label("action.delete", systemImage: "trash")
+      }
+    }
+
+    private func makeErrorView(error: Error) -> some View {
+      ZStack {
+        placeholderView
+        Text("status.editor.error.upload")
+      }
+      .alert("alert.error", isPresented: $isErrorDisplayed) {
+        Button("Ok", action: {})
+      } message: {
+        Text((error as? ServerError)?.error ?? error.localizedDescription)
+      }
+    }
+
+    private func makeDiscardMarker(container: MediaContainer) -> some View {
+      Button(role: .destructive) {
+        deleteAction(container: container)
+      } label: {
+        Image(systemName: "xmark")
+          .font(.caption2)
+          .foregroundStyle(.tint)
+          .padding(8)
+          .background(Circle().fill(.thinMaterial))
+      }
+      .padding(4)
+    }
+
+    private func deleteAction(container: MediaContainer) {
+      viewModel.mediaPickers.removeAll(where: {
+        if let id = $0.itemIdentifier {
+          return id == container.id
+        }
+        return false
+      })
+      viewModel.mediaContainers.removeAll {
+        $0.id == container.id
+      }
+    }
+
+    private var sharedMediaView: some View {
+      ZStack(alignment: .center) {
+        Rectangle()
+          .foregroundColor(theme.secondaryBackgroundColor)
+          .accessibilityHidden(true)
+        Image(systemName: "film")
+          .font(.largeTitle)
+          .foregroundStyle(.secondary)
+      }
+      .cornerRadius(8)
+    }
+
+    private var placeholderView: some View {
+      ZStack(alignment: .center) {
+        Rectangle()
+          .foregroundColor(theme.secondaryBackgroundColor)
+          .accessibilityHidden(true)
+        ProgressView()
+      }
+      .cornerRadius(8)
+    }
+  }
+
+}

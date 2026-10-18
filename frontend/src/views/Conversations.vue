@@ -57,9 +57,9 @@ resulting from the use or misuse of this software.
                 <div class="w-full p-2 pt-1 pb-1 md:p-4 md:pt-2 md:pb-2 border-b hover:bg-lightest flex"
                   @click="selectChat(chat)">
                   <div class="flex-none mr-2 md:mr-4 pt-1">
-                    <a :href="`#/${chat.other_user_id}`" class="relative block">
+                    <a :href="`#/${chat.other_user_id}`" class="grid">
                       <img :src="getUser(chat.other_user_id).avatar || '/default_profile.png'"
-                           class="block flex-none w-12 h-12 rounded-full"  />
+                           class="col-start-1 row-start-1 block flex-none w-12 h-12 rounded-full"  />
                       <UserStatusDot :user="getUser(chat.other_user_id)" />
                     </a>
                   </div>

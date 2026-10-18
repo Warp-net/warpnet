@@ -52,6 +52,13 @@ func TestOnlyTheFloorLeavesTheRoutingTable(t *testing.T) {
 	assert.False(t, TierFloor.IsAllowedInDHT())
 }
 
+func TestOnlyTheFloorLosesMedia(t *testing.T) {
+	for _, tier := range []Tier{TierTrusted, TierWatched, TierDegraded} {
+		assert.True(t, tier.IsMediaAllowed(), "%s must keep its media", tier)
+	}
+	assert.False(t, TierFloor.IsMediaAllowed())
+}
+
 func TestATrustedPeerIsNeverHeldBack(t *testing.T) {
 	assert.Equal(t, float64(0), TierTrusted.GossipScore())
 	assert.Equal(t, float64(1), TierTrusted.RateMultiplier())

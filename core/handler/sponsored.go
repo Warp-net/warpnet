@@ -112,6 +112,10 @@ type SponsoredCopyStorer interface {
 	SetCopy(userId, key string, c domain.MediaCopy) error
 }
 
+type SponsoredCopyLister interface {
+	ListCopies(userId, originalKey string) ([]domain.MediaCopy, error)
+}
+
 func StreamNewOrderHandler(
 	auth SponsoredAuthStorer,
 	identityKey ed25519.PrivateKey,
@@ -609,7 +613,7 @@ func copyTweetMedia(
 		return domain.Tweet{}, err
 	}
 
-	watermarkText := "@" + buyer.Username + " · " + buyer.Id
+	watermarkText := buyer.Id
 	imageKeys := make([]string, 0, len(tweet.ImageKeys))
 	for _, key := range tweet.ImageKeys {
 		img, err := mediaRepo.GetImage(tweet.UserId, key)
@@ -624,7 +628,7 @@ func copyTweetMedia(
 		if err != nil {
 			return domain.Tweet{}, err
 		}
-		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark}
+		c := domain.MediaCopy{OriginalKey: key, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder, Watermark: watermark, IsPixelMarked: true}
 		copied, err := media_meta.BuildImageCopy(string(img), c, signer)
 		if err != nil {
 			return domain.Tweet{}, err
@@ -675,7 +679,14 @@ func notifyOrderLimit(notifier SponsoredNotifier, orders OrderCounter, authorId 
 	})
 }
 
-func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCounter) warpnet.WarpHandlerFunc {
+func StreamGetCopyBuyerHandler(
+	auth SponsoredAuthStorer,
+	identityKey ed25519.PrivateKey,
+	tweetRepo SponsoredTweetFetcher,
+	orders OrderStorer,
+	mediaRepo SponsoredMediaStorer,
+	copyRepo SponsoredCopyLister,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetCopyBuyerEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -687,8 +698,28 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCount
 		}
 
 		encryptedOrder, err := media_meta.ExtractOrder(raw)
-		if errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoOrder) {
+		isUnmarked := errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoOrder)
+		if isUnmarked && (ev.TweetId == "" || media_meta.IsISOBaseMediaFile(raw)) {
 			return event.CopyBuyerResponse{}, nil
+		}
+		if isUnmarked {
+			tweet, err := tweetRepo.Get(auth.GetOwner().UserId, ev.TweetId)
+			if err != nil {
+				return nil, err
+			}
+			order, score, err := findOrderByPixelMark(identityKey, tweet, raw, orders, mediaRepo, copyRepo)
+			if err != nil {
+				return nil, err
+			}
+			if score < media_meta.MinPixelMarkScore {
+				return event.CopyBuyerResponse{}, nil
+			}
+			resp, err := buildCopyBuyerResponse(orders, order)
+			if err != nil {
+				return nil, err
+			}
+			resp.IsPixelMatch, resp.PixelScore = true, score
+			return resp, nil
 		}
 		if err != nil {
 			return nil, err
@@ -702,19 +733,90 @@ func StreamGetCopyBuyerHandler(identityKey ed25519.PrivateKey, orders OrderCount
 		if err := json.Unmarshal(orderJSON, &order); err != nil {
 			return nil, err
 		}
-		dailyOrdersCount, err := orders.CountConfirmed(
-			order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
-		)
+		return buildCopyBuyerResponse(orders, order)
+	}
+}
+
+func buildCopyBuyerResponse(orders OrderCounter, order domain.Order) (event.CopyBuyerResponse, error) {
+	dailyOrdersCount, err := orders.CountConfirmed(
+		order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
+	)
+	if err != nil {
+		return event.CopyBuyerResponse{}, err
+	}
+	return event.CopyBuyerResponse{
+		TweetId:          order.TweetId,
+		BuyerId:          order.BuyerId,
+		OrderId:          order.ID(),
+		TxId:             order.TxId,
+		SoldAt:           order.CreatedAt,
+		DailyOrdersCount: dailyOrdersCount,
+	}, nil
+}
+
+func findOrderByPixelMark(
+	identityKey ed25519.PrivateKey,
+	tweet domain.Tweet,
+	suspect []byte,
+	orders OrderStorer,
+	mediaRepo SponsoredMediaStorer,
+	copyRepo SponsoredCopyLister,
+) (domain.Order, float64, error) {
+	var (
+		best      domain.Order
+		bestScore float64
+	)
+	for _, key := range tweet.ImageKeys {
+		sold, err := listPixelMarkedOrders(tweet, key, orders, copyRepo)
+		if err != nil {
+			return domain.Order{}, 0, err
+		}
+		if len(sold) == 0 {
+			continue
+		}
+		original, err := mediaRepo.GetImage(tweet.UserId, key)
+		if err != nil {
+			return domain.Order{}, 0, err
+		}
+		_, raw, err := media_meta.SplitDataURI(string(original))
+		if err != nil {
+			return domain.Order{}, 0, err
+		}
+		seeds := make([][]byte, len(sold))
+		for i, order := range sold {
+			seeds[i] = media_meta.BuildPixelMarkSeed(identityKey, key, order.BuyerId)
+		}
+		scores, err := media_meta.ScorePixelMark(raw, suspect, seeds)
+		if err != nil {
+			return domain.Order{}, 0, err
+		}
+		for i, score := range scores {
+			if score > bestScore {
+				best, bestScore = sold[i], score
+			}
+		}
+	}
+	return best, bestScore, nil
+}
+
+func listPixelMarkedOrders(tweet domain.Tweet, originalKey string, orders OrderStorer, copyRepo SponsoredCopyLister) ([]domain.Order, error) {
+	copies, err := copyRepo.ListCopies(tweet.UserId, originalKey)
+	if err != nil {
+		return nil, err
+	}
+	sold := make([]domain.Order, 0, len(copies))
+	for _, c := range copies {
+		if !c.IsPixelMarked {
+			continue
+		}
+		order, err := orders.Get(tweet.Id, c.BuyerId)
+		if errors.Is(err, database.ErrOrderNotFound) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		return event.CopyBuyerResponse{
-			TweetId:          order.TweetId,
-			BuyerId:          order.BuyerId,
-			OrderId:          order.ID(),
-			TxId:             order.TxId,
-			SoldAt:           order.CreatedAt,
-			DailyOrdersCount: dailyOrdersCount,
-		}, nil
+		sold = append(sold, order)
 	}
+	return sold, nil
 }

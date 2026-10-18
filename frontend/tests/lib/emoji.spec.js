@@ -3,6 +3,8 @@ import {
     EMOJI_CATEGORIES,
     SKIN_TONES,
     applyTone,
+    byteLength,
+    clampBytes,
     clampRunes,
     findEmoji,
     insertEmoji,
@@ -63,7 +65,45 @@ describe('clampRunes', () => {
     });
 });
 
+describe('byteLength', () => {
+    it('counts UTF-8 bytes, matching Go len()', () => {
+        expect(byteLength('abc')).toBe(3);
+        expect(byteLength('щ')).toBe(2);
+        expect(byteLength('中')).toBe(3);
+        expect(byteLength('😀')).toBe(4);
+        expect(byteLength('❤️')).toBe(6);
+    });
+
+    it('treats empty input as zero', () => {
+        expect(byteLength('')).toBe(0);
+        expect(byteLength(undefined)).toBe(0);
+    });
+});
+
+describe('clampBytes', () => {
+    it('leaves text within the budget untouched', () => {
+        expect(clampBytes('щщ', 4)).toBe('щщ');
+    });
+
+    it('trims to the byte budget without splitting a character', () => {
+        expect(clampBytes('щщщ', 5)).toBe('щщ');
+        expect(clampBytes('a😀', 4)).toBe('a');
+        expect(clampBytes('😀😀', 7)).toBe('😀');
+        expect(clampBytes('😀😀', 7)).not.toContain('�');
+    });
+
+    it('handles empty input', () => {
+        expect(clampBytes('', 5)).toBe('');
+        expect(clampBytes(undefined, 5)).toBe('');
+    });
+});
+
 describe('insertEmoji', () => {
+    it('measures the budget with the given function', () => {
+        expect(insertEmoji({text: 'ab', emoji: '😀', field: field(2), limit: 6, measure: byteLength}).text).toBe('ab😀');
+        expect(insertEmoji({text: 'abc', emoji: '😀', field: field(3), limit: 6, measure: byteLength})).toBeNull();
+    });
+
     it('inserts at the caret and reports where the caret lands', () => {
         const result = insertEmoji({text: 'ab', emoji: '😀', field: field(1), limit: 280});
         expect(result.text).toBe('a😀b');

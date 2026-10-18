@@ -11,8 +11,8 @@ package site.warpnet.transport
  * counters and validators have a single source of truth.
  */
 object WarpnetLimits {
-    /** Mirrors `tweetCharLimit` in core/handler/tweet.go. */
-    const val MAX_TWEET_CHARS: Int = 280
+    /** Mirrors `tweetByteLimit` in core/handler/tweet.go. */
+    const val MAX_TWEET_BYTES: Int = 2048
 
     const val MIN_POLL_OPTIONS: Int = 2
 

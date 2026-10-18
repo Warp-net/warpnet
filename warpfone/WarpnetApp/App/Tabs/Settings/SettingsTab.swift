@@ -1,0 +1,220 @@
+// Modified by Warpnet. See NOTICE.
+
+import Account
+import AppAccount
+import DesignSystem
+import Env
+import Foundation
+import Models
+import Network
+import Nuke
+import SwiftUI
+
+@MainActor
+struct SettingsTabs: View {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+  @Environment(PairingModel.self) private var pairing
+  @Environment(UserPreferences.self) private var preferences
+  @Environment(Client.self) private var client
+  @Environment(CurrentInstance.self) private var currentInstance
+  @Environment(AppAccountsManager.self) private var appAccountsManager
+  @Environment(Theme.self) private var theme
+
+  @State private var routerPath = RouterPath()
+  @State private var isUnpairConfirmationPresented = false
+  @State private var cachedRemoved = false
+
+  @Binding var popToRootTab: Tab
+
+  let isModal: Bool
+
+  var body: some View {
+    NavigationStack(path: $routerPath.path) {
+      Form {
+        appSection
+        accountsSection
+        generalSection
+        otherSections
+        developerSection
+        cacheSection
+      }
+      .scrollContentBackground(.hidden)
+      .background(theme.secondaryBackgroundColor)
+      .navigationTitle(Text("settings.title"))
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(theme.primaryBackgroundColor.opacity(0.30), for: .navigationBar)
+      .toolbar {
+        if isModal {
+          ToolbarItem {
+            Button {
+              dismiss()
+            } label: {
+              Text("action.done").bold()
+            }
+          }
+        }
+        if UIDevice.current.userInterfaceIdiom == .pad, !preferences.showiPadSecondaryColumn, !isModal {
+          SecondaryColumnToolbarItem()
+        }
+      }
+      .withAppRouter()
+      .withSheetDestinations(sheetDestinations: $routerPath.presentedSheet)
+    }
+    .onAppear {
+      routerPath.client = client
+    }
+    .task {
+      if appAccountsManager.currentClient.isAuth {
+        await currentInstance.fetchCurrentInstance()
+      }
+    }
+    .withSafariRouter()
+    .environment(routerPath)
+    .onChange(of: $popToRootTab.wrappedValue) { _, newValue in
+      if newValue == .settings {
+        routerPath.path = []
+      }
+    }
+  }
+
+  private var accountsSection: some View {
+    Section("settings.section.accounts") {
+      if appAccountsManager.currentClient.isAuth {
+        AppAccountView(viewModel: .init(appAccount: appAccountsManager.currentAccount), isParentPresented: .constant(false))
+      }
+      Button(role: .destructive) {
+        isUnpairConfirmationPresented = true
+      } label: {
+        Text("warpnet.pairing.unpair")
+      }
+      .confirmationDialog("warpnet.pairing.unpair.confirmation",
+                          isPresented: $isUnpairConfirmationPresented,
+                          titleVisibility: .visible)
+      {
+        Button("warpnet.pairing.unpair", role: .destructive) {
+          Task {
+            await pairing.unpair()
+          }
+        }
+      }
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+
+  @ViewBuilder
+  private var generalSection: some View {
+    Section("settings.section.general") {
+      NavigationLink(destination: DisplaySettingsView()) {
+        Label("settings.general.display", systemImage: "paintpalette")
+      }
+      if HapticManager.shared.supportsHaptics {
+        NavigationLink(destination: HapticSettingsView()) {
+          Label("settings.general.haptic", systemImage: "waveform.path")
+        }
+      }
+      NavigationLink(destination: ContentSettingsView()) {
+        Label("settings.general.content", systemImage: "rectangle.stack")
+      }
+      NavigationLink(destination: SwipeActionsSettingsView()) {
+        Label("settings.general.swipeactions", systemImage: "hand.draw")
+      }
+      if UIDevice.current.userInterfaceIdiom == .phone || horizontalSizeClass == .compact {
+        NavigationLink(destination: TabbarEntriesSettingsView()) {
+          Label("settings.general.tabbarEntries", systemImage: "platter.filled.bottom.iphone")
+        }
+      } else if UIDevice.current.userInterfaceIdiom == .pad || UIDevice.current.userInterfaceIdiom == .mac {
+        NavigationLink(destination: SidebarEntriesSettingsView()) {
+          Label("settings.general.sidebarEntries", systemImage: "sidebar.squares.leading")
+        }
+      }
+      #if !targetEnvironment(macCatalyst)
+        Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
+          Label("settings.system", systemImage: "gear")
+        }
+        .tint(theme.labelColor)
+      #endif
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+
+  @ViewBuilder
+  private var otherSections: some View {
+    @Bindable var preferences = preferences
+    Section {
+      #if !targetEnvironment(macCatalyst)
+        Picker(selection: $preferences.preferredBrowser) {
+          ForEach(PreferredBrowser.allCases, id: \.rawValue) { browser in
+            switch browser {
+            case .inAppSafari:
+              Text("settings.general.browser.in-app").tag(browser)
+            case .safari:
+              Text("settings.general.browser.system").tag(browser)
+            }
+          }
+        } label: {
+          Label("settings.general.browser", systemImage: "network")
+        }
+        Toggle(isOn: $preferences.inAppBrowserReaderView) {
+          Label("settings.general.browser.in-app.readerview", systemImage: "doc.plaintext")
+        }
+        .disabled(preferences.preferredBrowser != PreferredBrowser.inAppSafari)
+      #endif
+      Toggle(isOn: $preferences.isSocialKeyboardEnabled) {
+        Label("settings.other.social-keyboard", systemImage: "keyboard")
+      }
+    } header: {
+      Text("settings.section.other")
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+
+  private var appSection: some View {
+    Section {
+      Link(destination: URL(string: AppInfo.weblink)!) {
+        Label("settings.app.source", systemImage: "link")
+      }
+      .accessibilityRemoveTraits(.isButton)
+      .tint(theme.labelColor)
+
+      NavigationLink(destination: AboutView()) {
+        Label("settings.app.about", systemImage: "info.circle")
+      }
+
+    } header: {
+      Text("settings.section.app")
+    } footer: {
+      if let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+        Text("settings.section.app.footer \(appVersion)").frame(maxWidth: .infinity, alignment: .center)
+      }
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+
+  private var developerSection: some View {
+    Section("warpnet.settings.section.developer") {
+      NavigationLink(destination: LogsView()) {
+        Label("warpnet.logs.title", systemImage: "doc.text.magnifyingglass")
+      }
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+
+  private var cacheSection: some View {
+    Section("settings.section.cache") {
+      if cachedRemoved {
+        Text("action.done")
+          .transition(.move(edge: .leading))
+      } else {
+        Button("settings.cache-media.clear", role: .destructive) {
+          ImagePipeline.shared.cache.removeAll()
+          withAnimation {
+            cachedRemoved = true
+          }
+        }
+      }
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+}

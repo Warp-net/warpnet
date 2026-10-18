@@ -239,9 +239,16 @@ func TestAFlooredPeerALookupLetsInIsNeitherDiscoveredNorKept(t *testing.T) {
 	defer cancel()
 	require.NoError(t, node.host.Connect(ctx, peer.AddrInfo{ID: floored.ID()}),
 		"the routed host finds the floored peer through the DHT")
+	// FindPeer stops as soon as it is connected to the peer, often before the
+	// peer's own answer lands, so a full lookup makes sure the peer answers one.
+	node.closestHeard(t, floored.ID())
 	requireHolds(t, node, floored.ID(), "the lookup lets the floored peer into the table")
 	require.False(t, node.admitted.has(floored.ID()), "but discovery never hears of it")
 
-	node.table.removeDisallowedPeers()
-	require.False(t, node.holds(floored.ID()), "and the sweep takes it out")
+	// The lookup's answers reach the table asynchronously and can land after a
+	// sweep, so sweep the way the node does: again until the peer stays out.
+	require.Eventually(t, func() bool {
+		node.table.removeDisallowedPeers()
+		return !node.holds(floored.ID())
+	}, admitTimeout, pollTick, "and the sweeps take it out")
 }

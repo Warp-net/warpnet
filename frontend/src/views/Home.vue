@@ -45,7 +45,8 @@ resulting from the use or misuse of this software.
         </button>
       </div>
       <div
-        class="px-5 py-3 border-b-8 border-lighter flex"
+        class="relative px-5 py-3 border-b-8 border-lighter flex"
+        @dragenter="onComposeDragEnter"
         @dragover.prevent
         @drop.prevent="onImageDrop"
       >
@@ -67,8 +68,8 @@ resulting from the use or misuse of this software.
           ></textarea>
           <div
             class="text-right text-xs"
-            :class="tweetLength >= 280 ? 'text-red-600 font-semibold' : (tweetLength >= 260 ? 'text-yellow-600' : 'text-dark')"
-          >{{ tweetLength }} / 280</div>
+            :class="tweetLength >= 2048 ? 'text-red-600 font-semibold' : (tweetLength >= 1900 ? 'text-yellow-600' : 'text-dark')"
+          >{{ tweetLength }} / 2048</div>
           <div v-if="imageAttachments.length > 0" class="flex flex-wrap gap-2 mt-2 mb-2">
             <div v-for="(img, index) in imageAttachments" :key="img" class="relative inline-block">
               <img
@@ -264,6 +265,19 @@ resulting from the use or misuse of this software.
             </button>
           </div>
         </div>
+        <input
+            v-show="showFileDropInput"
+            ref="dropFileInput"
+            type="file"
+            multiple
+            tabindex="-1"
+            aria-hidden="true"
+            class="absolute inset-0 w-full h-full opacity-0 z-10"
+            @dragover.stop
+            @dragleave="showFileDropInput = false"
+            @drop.stop="onDropFileInputDrop"
+            @change="dropFileInputChange"
+        />
       </div>
 
       <!-- timeline -->
@@ -317,12 +331,12 @@ import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
 import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
-import {clampRunes, focusCaret, insertEmoji, runeLength} from "@/lib/emoji";
-import {pastedImages} from "@/lib/clipboard";
+import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
+import {pastedFiles} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
 import {isBridgedTweet, isBridgedUser, isOwnTweetEcho} from "@/lib/network";
 
-const tweetCharLimit = 280;
+const tweetByteLimit = 2048;
 // Bridged sources are polled much slower than the 10s local-timeline poll:
 // every page is a per-handle fan-out through the gateway.
 const bridgedRefreshMs = 75000;
@@ -390,16 +404,14 @@ export default {
       loadingMore: false,
       endOfFeed: false,
       showEmojiPicker: false,
+      showFileDropInput: false,
       poll: null,
       sponsored: null,
     };
   },
   watch: {
-    // The node caps a tweet at 280 runes, so the composer has to cap on runes
-    // too. A plain maxlength would count UTF-16 units and stop people halfway
-    // through their allowance as soon as they use emoji.
     "tweet.text"(value) {
-      const clamped = clampRunes(value, tweetCharLimit);
+      const clamped = clampBytes(value, tweetByteLimit);
       if (clamped !== value) this.tweet.text = clamped;
     },
     '$route.query.compose'(val) {
@@ -424,7 +436,7 @@ export default {
   },
   computed: {
     tweetLength() {
-      return runeLength(this.tweet.text);
+      return byteLength(this.tweet.text);
     },
     acceptedVideoTypes() {
       return acceptedVideoAccept;
@@ -483,7 +495,8 @@ export default {
         text: this.tweet.text,
         emoji,
         field,
-        limit: tweetCharLimit,
+        limit: tweetByteLimit,
+        measure: byteLength,
       });
       if (!next) return;
       this.tweet.text = next.text;
@@ -508,7 +521,32 @@ export default {
       }
     },
     onImageDrop(event) {
-      const dropped = Array.from(event.dataTransfer?.files || []);
+      this.attachDroppedFiles(Array.from(event.dataTransfer?.files || []));
+    },
+    // WebKitGTK, which the Linux desktop app runs on, keeps files dragged in
+    // from a file manager out of the drop event (they arrive as a text/uri-list
+    // without Files) and hands them only to a native file input, so such a drag
+    // is caught by one laid over the composer.
+    onComposeDragEnter(event) {
+      const types = Array.from(event.dataTransfer?.types || []);
+      if (!types.includes('Files') && types.includes('text/uri-list')) {
+        this.showFileDropInput = true;
+      }
+    },
+    // A dragged link reads back as itself, while the files' URIs read back empty.
+    onDropFileInputDrop(event) {
+      if (event.dataTransfer?.getData('text/uri-list')) {
+        event.preventDefault();
+        this.showFileDropInput = false;
+      }
+    },
+    dropFileInputChange() {
+      const input = this.$refs.dropFileInput;
+      this.showFileDropInput = false;
+      this.attachDroppedFiles(Array.from(input.files || []));
+      input.value = '';
+    },
+    attachDroppedFiles(dropped) {
       const videos = dropped.filter(f => f.type && f.type.startsWith('video/'));
       if (videos.length > 0 && !this.videoAttachDisabled) {
         this.addVideoFile(videos[0]);
@@ -519,7 +557,17 @@ export default {
       this.addImageFiles(files);
     },
     async onComposePaste(event) {
-      const images = await pastedImages(event);
+      const files = await pastedFiles(event);
+      const video = files.find(f => f.type.startsWith('video/'));
+      if (video) {
+        if (this.videoAttachDisabled) {
+          toast.error(this.videoAttachTitle);
+          return;
+        }
+        this.addVideoFile(video);
+        return;
+      }
+      const images = files.filter(f => f.type.startsWith('image/'));
       if (images.length === 0) return;
       if (this.imageAttachDisabled) {
         toast.error(this.imageAttachTitle);

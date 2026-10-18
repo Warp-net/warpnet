@@ -241,7 +241,7 @@ warpnet/
 ├── config/               # node configuration (flags / env / defaults)
 ├── frontend/             # Vue 3 UI (served by member via Wails, by remote via WS)
 ├── warpdroid/            # Android client (Tusky fork) + gomobile AAR bridge
-├── warpfone/             # iOS client (placeholder — not implemented yet)
+├── warpfone/             # iOS client (Ice Cubes 1.10.31 snapshot, not wired to Warpnet yet)
 ├── metrics/              # Prometheus push-metrics client
 ├── deploy/               # docker-compose stacks + deploy scripts
 ├── snap/                 # Snap packaging (snapcraft.yaml)

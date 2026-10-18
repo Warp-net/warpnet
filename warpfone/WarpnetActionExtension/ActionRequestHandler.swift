@@ -1,0 +1,96 @@
+// Modified by Warpnet. See NOTICE.
+
+//
+//  ActionRequestHandler.swift
+//  WarpnetActionExtension
+//
+//  Created by Thomas Durand on 26/01/2023.
+//
+
+import MobileCoreServices
+import UIKit
+import UniformTypeIdentifiers
+
+import Models
+
+// Sample code was sending this from a thread to another, let asume @Sendable for this
+extension NSExtensionContext: @unchecked Sendable {}
+
+final class ActionRequestHandler: NSObject, NSExtensionRequestHandling, Sendable {
+  enum Error: Swift.Error {
+    case inputProviderNotFound
+    case loadedItemHasWrongType
+    case urlNotFound
+    case notFediverseProfile
+  }
+
+  func beginRequest(with context: NSExtensionContext) {
+    // Do not call super in an Action extension with no user interface
+    Task {
+      do {
+        let url = try await url(from: context)
+        guard url.isFediverseProfile else {
+          throw Error.notFediverseProfile
+        }
+        await MainActor.run {
+          let deeplink = url.warpfoneDeepLink
+          let output = output(wrapping: deeplink)
+          context.completeRequest(returningItems: output)
+        }
+      } catch {
+        await MainActor.run {
+          context.completeRequest(returningItems: [])
+        }
+      }
+    }
+  }
+}
+
+extension URL {
+  var isFediverseProfile: Bool {
+    guard let scheme = scheme?.lowercased(), ["https", "http"].contains(scheme), host() != nil else { return false }
+    let parts = pathComponents.filter { $0 != "/" }
+    return parts.count == 1 && parts[0].count > 1 && parts[0].hasPrefix("@")
+  }
+
+  var warpfoneDeepLink: URL {
+    var components = URLComponents(url: self, resolvingAgainstBaseURL: false)!
+    components.scheme = AppInfo.scheme.trimmingCharacters(in: [":", "/"])
+    return components.url!
+  }
+}
+
+extension ActionRequestHandler {
+  /// Will look for an input item that might provide the property list that Javascript sent us
+  private func url(from context: NSExtensionContext) async throws -> URL {
+    for item in context.inputItems as! [NSExtensionItem] {
+      guard let attachments = item.attachments else {
+        continue
+      }
+      for itemProvider in attachments {
+        guard itemProvider.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier) else {
+          continue
+        }
+        guard let dictionary = try await itemProvider.loadItem(forTypeIdentifier: UTType.propertyList.identifier) as? [String: Any] else {
+          throw Error.loadedItemHasWrongType
+        }
+        let input = dictionary[NSExtensionJavaScriptPreprocessingResultsKey] as! [String: Any]? ?? [:]
+        guard let absoluteStringUrl = input["url"] as? String, let url = URL(string: absoluteStringUrl) else {
+          throw Error.urlNotFound
+        }
+        return url
+      }
+    }
+    throw Error.inputProviderNotFound
+  }
+
+  /// Wrap the output to the expected object so we send back results to JS
+  private func output(wrapping deeplink: URL) -> [NSExtensionItem] {
+    let results = ["deeplink": deeplink.absoluteString]
+    let dictionary = [NSExtensionJavaScriptFinalizeArgumentKey: results]
+    let provider = NSItemProvider(item: dictionary as NSDictionary, typeIdentifier: UTType.propertyList.identifier)
+    let item = NSExtensionItem()
+    item.attachments = [provider]
+    return [item]
+  }
+}

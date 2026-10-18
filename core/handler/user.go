@@ -325,6 +325,12 @@ func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) w
 		if err != nil {
 			return nil, err
 		}
+		var sent struct {
+			Bio *string `json:"bio"`
+		}
+		if json.Unmarshal(buf, &sent) == nil && sent.Bio != nil && *sent.Bio == "" {
+			ev.IsBioCleared = true
+		}
 
 		owner := authRepo.GetOwner()
 

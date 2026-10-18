@@ -137,6 +137,7 @@ type PeersRatings interface {
 	GossipScore(peerID warpnet.WarpPeerID) float64
 	RateMultiplier(peerID warpnet.WarpPeerID) float64
 	IsAllowedInDHT(peerID warpnet.WarpPeerID) bool
+	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
 }
 
 // PeerRater listens to what the modules saw the peers do and rates them.
@@ -288,6 +289,7 @@ type MediaProvider interface {
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 	SetCopy(userId string, key string, c domain.MediaCopy) error
+	ListCopies(userId string, originalKey string) ([]domain.MediaCopy, error)
 }
 
 type MutesProvider interface {

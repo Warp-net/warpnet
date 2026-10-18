@@ -39,7 +39,11 @@ func BuildImageCopy(original string, c domain.MediaCopy, signer Metadata) (strin
 		return "", err
 	}
 	if len(c.Watermark) != 0 {
-		drawn, err := DrawWatermark(raw, c.Watermark)
+		var pixelMarkSeed []byte
+		if c.IsPixelMarked {
+			pixelMarkSeed = BuildPixelMarkSeed(signer.PrivKey, c.OriginalKey, c.BuyerId)
+		}
+		drawn, err := DrawWatermark(raw, c.Watermark, pixelMarkSeed)
 		if err != nil {
 			return "", err
 		}

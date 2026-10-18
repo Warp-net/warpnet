@@ -258,7 +258,7 @@ func (d *distributedHashTable) bootstrapDHT() {
 
 	d.correctPeerIdMismatch(d.cfg.bootstrapNodes)
 
-	<-d.dht.RefreshRoutingTable()
+	<-d.dht.RefreshRoutingTable() //nolint:errcheck
 	log.Infoln("dht: bootstrap complete")
 }
 

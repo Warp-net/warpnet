@@ -91,13 +91,13 @@ resulting from the use or misuse of this software.
         <!-- profile details -->
         <div class="py-3 flex flex-col">
           <div class="px-3 flex flex-row justify-between">
-            <div v-if="profile" class="relative flex-none" style="margin-top: -80px;">
+            <div v-if="profile" class="grid flex-none" style="margin-top: -80px;">
               <img
                 :src="profile.avatar || '/default_profile.png'"
-                class="block w-24 h-24 md:w-32 md:h-32 rounded-full border-white object-cover bg-transparent"
+                class="col-start-1 row-start-1 block w-24 h-24 md:w-32 md:h-32 rounded-full border-white object-cover bg-transparent"
                 style="border-width: 6px;"
               />
-              <UserStatusDot :user="profile" size-class="h-5 w-5 bottom-2 right-2 md:h-6 md:w-6 md:bottom-3 md:right-3" />
+              <UserStatusDot :user="profile" size-class="h-5 w-5 mb-2 mr-2 md:h-6 md:w-6 md:mb-3 md:mr-3" />
             </div>
 
             <div v-if="isMySelf(profile.id) && profile">

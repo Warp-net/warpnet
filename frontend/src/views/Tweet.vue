@@ -22,7 +22,7 @@
       </div>
 
       <div v-if="!loading && tweet && !notFound">
-        <TweetBlock ref="rootTweet" :tweet="tweet" :autoloadVideo="autoloadVideo" />
+        <TweetBlock ref="rootTweet" :tweet="tweet" :autoloadVideo="autoloadVideo" :ownRootId="ownRootId" />
 
         <!-- Replies are not offered for a post the target network will not take
              one for; see acceptsReplies in lib/network.js. -->
@@ -65,7 +65,7 @@
 
         <div v-if="replies.length > 0" class="border-t border-lighter">
           <div class="px-5 py-3 text-sm text-dark">Replies</div>
-          <TweetBlock v-for="r in replies" :key="r.id" :tweet="r" />
+          <TweetBlock v-for="r in replies" :key="r.id" :tweet="r" :ownRootId="ownRootId" />
         </div>
       </div>
     </div>
@@ -76,10 +76,10 @@
 <script>
 import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
-import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
+import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {acceptsReplies, tweetNetwork} from "@/lib/network";
 
-const tweetCharLimit = 280;
+const tweetByteLimit = 2048;
 
 export default {
   name: "Tweet",
@@ -96,6 +96,7 @@ export default {
       notFound: false,
       tweet: null,
       replies: [],
+      ownRootId: '',
       ownerProfile: {},
       replyText: '',
       posting: false,
@@ -103,9 +104,8 @@ export default {
     };
   },
   watch: {
-    // Runes, not UTF-16 units: matches the 280 the node enforces.
     replyText(value) {
-      const clamped = clampRunes(value, tweetCharLimit);
+      const clamped = clampBytes(value, tweetByteLimit);
       if (clamped !== value) this.replyText = clamped;
     },
   },
@@ -128,7 +128,8 @@ export default {
         text: this.replyText,
         emoji,
         field,
-        limit: tweetCharLimit,
+        limit: tweetByteLimit,
+        measure: byteLength,
       });
       if (!next) return;
       this.replyText = next.text;
@@ -166,6 +167,22 @@ export default {
       // The reply tree fills in below the root independently — a slow
       // thread page must not hold back the tweet itself.
       this.loadReplies();
+      this.loadThreadOwner();
+    },
+    async loadThreadOwner() {
+      const owner = this.ownerProfile;
+      if (!owner || !owner.user_id) return;
+      if (!this.tweet.parent_id) {
+        if (this.tweet.user_id === owner.user_id) this.ownRootId = this.tweet.id;
+        return;
+      }
+      if (!this.tweet.root_id) return;
+      try {
+        const root = await warpnetService.getTweet({userId: owner.user_id, tweetId: this.tweet.root_id});
+        if (root && root.user_id === owner.user_id) this.ownRootId = this.tweet.root_id;
+      } catch (err) {
+        console.warn('Failed to load the thread root:', err);
+      }
     },
     async loadReplies() {
       try {

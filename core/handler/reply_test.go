@@ -396,6 +396,7 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 			userRepo,
 			notifier,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
+			stubPeersRatings{},
 		)
 	}
 
@@ -481,9 +482,57 @@ func TestStreamNewReplyHandler_Public(t *testing.T) {
 	t.Run("applies the compose limits", func(t *testing.T) {
 		h := build(localParent, stubModerationNotifier{})
 		ev := makeReply()
-		ev.Text = strings.Repeat("a", tweetCharLimit+1)
+		ev.Text = strings.Repeat("a", tweetByteLimit+1)
 		if _, err := h(marshal(t, ev), conn); err == nil {
 			t.Fatal("expected an oversized reply to be rejected")
+		}
+	})
+
+	t.Run("stores a floored peer's reply without media", func(t *testing.T) {
+		var stored domain.Tweet
+		h := StreamNewReplyHandler(
+			stubTweetRepo{addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
+				stored = reply
+				return reply, nil
+			}},
+			localParent,
+			stubModerationNotifier{},
+			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
+			stubPeersRatings{floored: nodeID},
+		)
+		video := "video-1"
+		ev := makeReply()
+		ev.ImageKeys = []string{"image-1"}
+		ev.VideoKey = &video
+		if _, err := h(marshal(t, ev), conn); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if stored.Text != "a reply from elsewhere" || len(stored.ImageKeys) != 0 || stored.VideoKey != nil {
+			t.Fatalf("expected the text without media, got %+v", stored)
+		}
+	})
+
+	t.Run("keeps the media of a peer above the floor", func(t *testing.T) {
+		var stored domain.Tweet
+		h := StreamNewReplyHandler(
+			stubTweetRepo{addReplyFn: func(reply domain.Tweet) (domain.Tweet, error) {
+				stored = reply
+				return reply, nil
+			}},
+			localParent,
+			stubModerationNotifier{},
+			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner, ID: nodeID}},
+			stubPeersRatings{floored: "another-node"},
+		)
+		video := "video-1"
+		ev := makeReply()
+		ev.ImageKeys = []string{"image-1"}
+		ev.VideoKey = &video
+		if _, err := h(marshal(t, ev), conn); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(stored.ImageKeys) != 1 || stored.VideoKey == nil || *stored.VideoKey != video {
+			t.Fatalf("expected the media to be kept, got %+v", stored)
 		}
 	})
 }

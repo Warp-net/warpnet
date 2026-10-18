@@ -239,9 +239,9 @@ abstract class TweetActionsViewModel(
         }
     }
 
-    fun delete(statusId: String) {
+    fun delete(statusId: String, parentId: String? = null) {
         viewModelScope.launch {
-            warpnetApi.deleteStatus(statusId, deleteMedia = true)
+            warpnetApi.deleteStatus(statusId, deleteMedia = true, parentId = parentId)
                 .fold(
                     onSuccess = { eventHub.dispatch(TweetDeletedEvent(statusId)) },
                     onFailure = { Timber.tag(TAG).w(it, "Failed to delete status") }
@@ -299,7 +299,7 @@ abstract class TweetActionsViewModel(
 
     fun redraftStatus(status: Tweet) {
         viewModelScope.launch {
-            warpnetApi.deleteStatus(status.id, deleteMedia = false)
+            warpnetApi.deleteStatus(status.id, deleteMedia = false, parentId = status.inReplyToId)
                 .fold(
                     onSuccess = { deletedStatus ->
                         eventHub.dispatch(TweetDeletedEvent(status.id))

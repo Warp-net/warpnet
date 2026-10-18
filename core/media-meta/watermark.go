@@ -43,6 +43,8 @@ const (
 	watermarkMinFontSize = 12
 	watermarkMaxFontSize = 320
 	watermarkDPI         = 72
+	// The opacity lives in the stored mask, not in the colours, so copies sold earlier keep their bytes.
+	watermarkOpacity = 0x26
 
 	rotateCos = 58618
 	rotateSin = 29309
@@ -64,6 +66,9 @@ func WatermarkPNG(jpegBytes []byte, text string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	for i, a := range mask.Pix {
+		mask.Pix[i] = uint8(int(a) * watermarkOpacity / 0xff) //nolint:gosec // at most 0xff
+	}
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, &image.Gray{Pix: mask.Pix, Stride: mask.Stride, Rect: mask.Rect}); err != nil {
 		return nil, err
@@ -71,7 +76,7 @@ func WatermarkPNG(jpegBytes []byte, text string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func DrawWatermark(jpegBytes, watermark []byte) ([]byte, error) {
+func DrawWatermark(jpegBytes, watermark, pixelMarkSeed []byte) ([]byte, error) {
 	src, err := jpeg.Decode(bytes.NewReader(jpegBytes))
 	if err != nil {
 		return nil, err
@@ -103,6 +108,9 @@ func DrawWatermark(jpegBytes, watermark []byte) ([]byte, error) {
 			draw.DrawMask(canvas, place.Add(shadow), image.NewUniform(watermarkShadow), image.Point{}, mask, image.Point{}, draw.Over)
 			draw.DrawMask(canvas, place, image.NewUniform(watermarkColor), image.Point{}, mask, image.Point{}, draw.Over)
 		}
+	}
+	if len(pixelMarkSeed) != 0 {
+		drawPixelMark(canvas, pixelMarkSeed)
 	}
 
 	var buf bytes.Buffer

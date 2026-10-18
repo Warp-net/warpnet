@@ -42,10 +42,10 @@ resulting from the use or misuse of this software.
       @click="onBodyClick"
   >
     <div class="flex-none mr-2 md:mr-4 pt-1">
-      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn relative block" aria-label="View profile">
+      <button type="button" @click.stop="gotoProfile(tweet.user_id)" class="flat-btn grid" aria-label="View profile">
         <img
           :src="profile.avatar || '/default_profile.png'"
-          class="block h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
+          class="col-start-1 row-start-1 block h-12 w-12 rounded-full flex-none object-cover bg-transparent transition-opacity duration-150 hover:opacity-80"
           :alt="`${authorName || 'User'} avatar`"
         />
         <UserStatusDot :user="{ id: tweet.user_id, network: tweet.network }" />
@@ -94,6 +94,7 @@ resulting from the use or misuse of this software.
               <button v-if="tweet.price" type="button" @click.stop="openCopyCheck" class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flat-btn">Check a copy</button>
               <button type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete tweet</button>
             </template>
+            <button v-if="canDeleteReply" type="button" @click.stop="deleteTweet" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Delete reply</button>
             <button v-if="!isOwner && !tweet.parent_id" type="button" @click.stop="openReport" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flat-btn">Report tweet</button>
           </div>
         </div>
@@ -105,8 +106,8 @@ resulting from the use or misuse of this software.
         />
         <ConfirmDialog
           :show="showDeleteConfirm"
-          title="Delete tweet?"
-          message="This tweet will be permanently deleted. This can't be undone."
+          :title="canDeleteReply ? 'Delete reply?' : 'Delete tweet?'"
+          :message="deleteMessage"
           confirm-label="Delete"
           cancel-label="Cancel"
           :destructive="true"
@@ -496,6 +497,7 @@ export default {
   props: {
     tweet: {type: Object, required: true},
     autoloadVideo: {type: Boolean, default: false},
+    ownRootId: {type: String, default: ''},
   },
   components: {
     NetworkIcon,
@@ -578,6 +580,17 @@ export default {
     authorName() {
       return (this.profile && this.profile.username) || this.tweet.username;
     },
+    canDeleteReply() {
+      const owner = warpnetService.getOwnerProfile();
+      return !!this.ownRootId && this.tweet.root_id === this.ownRootId && !this.isOwner
+        && !!owner && this.tweet.parent_user_id === owner.user_id;
+    },
+    deleteMessage() {
+      if (this.canDeleteReply) {
+        return "This reply will be removed from your thread. This can't be undone.";
+      }
+      return "This tweet will be permanently deleted. This can't be undone.";
+    },
     isLocked() {
       return !!(this.tweet && this.tweet.price) && !this.isOwner && !this.tweet.text;
     },
@@ -586,7 +599,7 @@ export default {
     },
     unlockMessage() {
       const author = this.authorName || "the author";
-      const marked = "\n\nYour copy is marked with your name and ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
+      const marked = "\n\nYour copy is marked with your ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
       if (this.quoteError) {
         return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.${marked}`;
       }
@@ -598,13 +611,16 @@ export default {
       if (check.checking) return "Reading the file…";
       if (check.error) return check.error;
       if (!check.sale) {
-        return "This file names no buyer. It is your original, or the mark is gone: a screenshot or a re-encoded copy loses it.";
+        return "This file names no buyer. It is your original, an image from another tweet, or the marks are gone: rotation or heavy editing hides them.";
       }
       const soldAt = new Date(check.sale.sold_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
       const dailyOrders = check.sale.daily_orders_count > 1
         ? `\nThey bought ${check.sale.daily_orders_count} of your tweets within a day of this one.`
         : "";
-      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}`;
+      const pixelMatch = check.sale.is_pixel_match
+        ? `\nFound by the hidden pattern in the pixels (score ${Math.round(check.sale.pixel_score)}; 8 or more is a match).`
+        : "";
+      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}${pixelMatch}`;
     },
     isShortOfTokens() {
       return !!this.quote && bigUnits(this.quote.balance) < bigUnits(this.quote.total);
@@ -1042,7 +1058,7 @@ export default {
       if (!file) return;
       this.copyCheck = {checking: true};
       try {
-        const sale = await warpnetService.getCopyBuyer(await readAsDataURL(file));
+        const sale = await warpnetService.getCopyBuyer(await readAsDataURL(file), this.tweet.id);
         if (!sale) {
           this.copyCheck = {sale: null};
           return;

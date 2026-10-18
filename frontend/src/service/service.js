@@ -1835,10 +1835,10 @@ export const warpnetService = {
         return resp;
     },
 
-    async getCopyBuyer(file) {
+    async getCopyBuyer(file, tweetId) {
         const resp = await this.sendToNode({
             path: PRIVATE_GET_SPONSORED_BUYER,
-            body: {file: file},
+            body: {file: file, tweet_id: tweetId},
         });
         if (!resp || resp.code) {
             throw new Error(resp?.message || "Couldn't read the file.");

@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	timelineTweetCharLimit      = 280
+	timelineTweetByteLimit      = 2048
 	timelineSponsoredPriceLimit = 1_000_000_000_000
 	timelinePollMinOptions      = 2
 	timelinePollMaxOptions      = 4
@@ -72,6 +72,10 @@ type TimelineFollowChecker interface {
 
 type TimelineUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
+}
+
+type TimelinePeersRatings interface {
+	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
 }
 
 func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
@@ -107,6 +111,7 @@ func StreamTimelineNewTweetHandler(
 	timelineRepo TimelineStorer,
 	followRepo TimelineFollowChecker,
 	userRepo TimelineUserFetcher,
+	ratings TimelinePeersRatings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -132,6 +137,10 @@ func StreamTimelineNewTweetHandler(
 		}
 		if followRepo == nil || !followRepo.IsFollowing(owner.UserId, ev.UserId) {
 			return event.Accepted, nil
+		}
+		if !ratings.IsMediaAllowed(s.Conn().RemotePeer()) {
+			ev.ImageKeys = nil
+			ev.VideoKey = nil
 		}
 
 		tweet, err := tweetRepo.Create(ev.UserId, ev)
@@ -186,7 +195,7 @@ func validateTimelineTweet(ev event.NewTweetEvent) error {
 	if ev.Text == "" && !ev.IsSponsored() {
 		return warpnet.WarpError("empty tweet text")
 	}
-	if utf8.RuneCountInString(ev.Text) > timelineTweetCharLimit {
+	if len(ev.Text) > timelineTweetByteLimit {
 		return warpnet.WarpError("tweet text is too long")
 	}
 	if ev.IsSponsored() {
