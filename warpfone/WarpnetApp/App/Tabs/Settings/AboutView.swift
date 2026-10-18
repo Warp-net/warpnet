@@ -38,8 +38,6 @@ struct AboutView: View {
 
         • [HTML2Markdown](https://gitlab.com/mflint/HTML2Markdown)
 
-        • [KeychainSwift](https://github.com/evgenyneu/keychain-swift)
-
         • [LRUCache](https://github.com/nicklockwood/LRUCache)
 
         • [Nuke](https://github.com/kean/Nuke)

@@ -19,15 +19,6 @@
       }
     },
     {
-      "identity" : "keychain-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/evgenyneu/keychain-swift",
-      "state" : {
-        "branch" : "master",
-        "revision" : "f38cb0ada97847ac5068b915b8d2793b35435668"
-      }
-    },
-    {
       "identity" : "lrucache",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nicklockwood/LRUCache",

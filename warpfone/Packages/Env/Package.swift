@@ -19,7 +19,6 @@ let package = Package(
   dependencies: [
     .package(name: "Models", path: "../Models"),
     .package(name: "Network", path: "../Network"),
-    .package(url: "https://github.com/evgenyneu/keychain-swift", branch: "master"),
   ],
   targets: [
     .target(
@@ -27,7 +26,6 @@ let package = Package(
       dependencies: [
         .product(name: "Models", package: "Models"),
         .product(name: "Network", package: "Network"),
-        .product(name: "KeychainSwift", package: "keychain-swift"),
       ],
       swiftSettings: [
         .enableExperimentalFeature("StrictConcurrency"),

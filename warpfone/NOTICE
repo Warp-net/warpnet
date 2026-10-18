@@ -398,3 +398,12 @@ carry that line, so they are named here instead.
   and foreground: the server preferences, the instance peers and the home
   timeline marker. With the marker gone, the last seen tweet ids lost their
   only reader, and TimelineCache.swift was deleted.
+
+2026-10-18, KeychainSwift
+- KeychainSwift was removed from the Env package, the project and the About
+  credits. Nothing used it since the pairing keys moved to WarpnetTransport's
+  own keychain storage.
+- Files without the notice line:
+  Packages/Env/Package.swift
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
