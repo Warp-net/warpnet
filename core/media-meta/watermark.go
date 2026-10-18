@@ -43,6 +43,8 @@ const (
 	watermarkMinFontSize = 12
 	watermarkMaxFontSize = 320
 	watermarkDPI         = 72
+	// The opacity lives in the stored mask, not in the colours, so copies sold earlier keep their bytes.
+	watermarkOpacity = 0x5a
 
 	rotateCos = 58618
 	rotateSin = 29309
@@ -63,6 +65,9 @@ func WatermarkPNG(jpegBytes []byte, text string) ([]byte, error) {
 	mask, err := textMask(text, watermarkFontSize(image.Pt(config.Width, config.Height)))
 	if err != nil {
 		return nil, err
+	}
+	for i, a := range mask.Pix {
+		mask.Pix[i] = uint8(int(a) * watermarkOpacity / 0xff) //nolint:gosec // at most 0xff
 	}
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, &image.Gray{Pix: mask.Pix, Stride: mask.Stride, Rect: mask.Rect}); err != nil {
