@@ -33,7 +33,7 @@ func markedShare(img image.Image, r image.Rectangle, gray uint8) float64 {
 	var marked int
 	for y := r.Min.Y; y < r.Max.Y; y++ {
 		for x := r.Min.X; x < r.Max.X; x++ {
-			if diff := int(color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y) - int(gray); diff > 16 || diff < -16 {
+			if diff := int(color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y) - int(gray); diff > 4 || diff < -4 {
 				marked++
 			}
 		}
