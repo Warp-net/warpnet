@@ -498,10 +498,7 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 
 func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
-	if err != nil {
-		return nil, err
-	}
-	return newCachedPeerstore(store)
+	return WarpPeerstore(store), err
 }
 
 // MultiAddressIP is the IP a multiaddress points at: the peer's own for a direct
