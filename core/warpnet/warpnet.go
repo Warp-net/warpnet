@@ -70,7 +70,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/p2p/host/autonat"
-	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoremem"
+	// "github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" is deprecated: The database-backed peerstore will be removed from go-libp2p in the future. Use the memory peerstore (pstoremem) instead. For more details see https://github.com/libp2p/go-libp2p/issues/2329 and https://github.com/libp2p/go-libp2p/issues/2355.
+	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" //nolint:staticcheck
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
@@ -495,10 +496,12 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 
-const maxPeerProtocols = 1024
-
-func NewPeerstore() (WarpPeerstore, error) {
-	return pstoremem.NewPeerstore(pstoremem.WithMaxProtocols(maxPeerProtocols))
+func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
+	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
+	if err != nil {
+		return nil, err
+	}
+	return newCachedPeerstore(store)
 }
 
 // MultiAddressIP is the IP a multiaddress points at: the peer's own for a direct

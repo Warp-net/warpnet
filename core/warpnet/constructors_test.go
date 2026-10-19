@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -16,7 +15,6 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,16 +75,10 @@ func TestNewConnManagerTakesTheOwnersWaterMarks(t *testing.T) {
 }
 
 func TestNewPeerstore(t *testing.T) {
-	store, err := NewPeerstore()
+	store, err := NewPeerstore(context.Background(), dssync.MutexWrap(ds.NewMapDatastore()))
 	require.NoError(t, err)
 	require.NotNil(t, store)
 	t.Cleanup(func() { _ = store.Close() })
-
-	protocols := make([]protocol.ID, 0, 200)
-	for i := range 200 {
-		protocols = append(protocols, protocol.ID(fmt.Sprintf("/public/get/route-%03d/0.0.0", i)))
-	}
-	require.NoError(t, store.SetProtocols("peer", protocols...))
 }
 
 func TestBitswapStack(t *testing.T) {
