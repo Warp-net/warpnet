@@ -381,13 +381,8 @@ func (db *DB) Get(key DatabaseKey) ([]byte, error) {
 		if err != nil {
 			return err
 		}
-
-		val, err := item.ValueCopy(nil)
-		if err != nil {
-			return err
-		}
-		result = append([]byte{}, val...)
-		return nil
+		result, err = item.ValueCopy(nil)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -524,19 +519,11 @@ func (t *warpTxn) Set(key DatabaseKey, value []byte) error {
 }
 
 func (t *warpTxn) Get(key DatabaseKey) ([]byte, error) {
-	var result []byte
 	item, err := t.txn.Get(key.Bytes())
 	if err != nil {
 		return nil, err
 	}
-
-	val, err := item.ValueCopy(nil)
-	if err != nil {
-		return nil, err
-	}
-	result = append([]byte{}, val...)
-
-	return result, nil
+	return item.ValueCopy(nil)
 }
 
 func (t *warpTxn) GetExpiration(key DatabaseKey) (uint64, error) {
@@ -648,18 +635,20 @@ func (t *warpTxn) IterateKeys(prefix DatabaseKey, handler IterKeysFunc) error {
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
+	p := []byte(prefix)
 	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
+	opts.Prefix = p
 	it := t.txn.NewIterator(opts)
 	defer it.Close()
-	p := []byte(prefix)
 
 	for it.Seek(p); it.ValidForPrefix(p); it.Next() {
 		item := it.Item()
-		key := string(item.KeyCopy(nil))
+		key := string(item.Key())
 		if strings.Contains(key, FixedKey) {
 			continue
 		}
-		err := handler(string(item.KeyCopy(nil)))
+		err := handler(key)
 		if err != nil {
 			return err
 		}
@@ -671,16 +660,18 @@ func (t *warpTxn) ReverseIterateKeys(prefix DatabaseKey, handler IterKeysFunc) e
 	if strings.Contains(prefix.String(), FixedKey) {
 		return DBError("cannot iterate thru fixed key")
 	}
+	p := []byte(prefix)
 	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
 	opts.Reverse = true
+	opts.Prefix = p
 	it := t.txn.NewIterator(opts)
 	defer it.Close()
-	p := []byte(prefix)
 	seek := append(append([]byte{}, p...), 0xFF)
 
 	for it.Seek(seek); it.ValidForPrefix(p); it.Next() {
 		item := it.Item()
-		key := string(item.KeyCopy(nil))
+		key := string(item.Key())
 		if strings.Contains(key, FixedKey) {
 			continue
 		}
@@ -787,15 +778,15 @@ func iterate(
 	if startCursor.String() == endCursor {
 		return endCursor, nil
 	}
+	prefixBytes := prefix.Bytes()
 	opts := badger.DefaultIteratorOptions
-	opts.PrefetchValues = includeValues
-	opts.PrefetchSize = 20
+	opts.PrefetchValues = false
 	opts.Reverse = reverse
+	opts.Prefix = prefixBytes
 
 	it := txn.NewIterator(opts)
 	defer it.Close()
 
-	prefixBytes := prefix.Bytes()
 	p := prefixBytes
 	if !startCursor.IsEmpty() {
 		p = startCursor.Bytes()
@@ -821,9 +812,11 @@ func iterate(
 			break
 		}
 
-		val, err := item.ValueCopy(nil)
-		if err != nil {
-			return "", err
+		var val []byte
+		if includeValues {
+			if val, err = item.ValueCopy(nil); err != nil {
+				return "", err
+			}
 		}
 		if err := handler(key, val); err != nil {
 			return "", err

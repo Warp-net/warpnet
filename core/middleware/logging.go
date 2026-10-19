@@ -36,6 +36,9 @@ import (
 
 func (p *WarpMiddleware) LoggingMiddleware(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc {
 	return func(data []byte, s warpnet.WarpStream) (any, error) {
+		if !log.IsLevelEnabled(log.DebugLevel) {
+			return next(data, s)
+		}
 		log.Debugf("middleware: server stream opened: %s %s\n", s.Protocol(), s.Conn().RemotePeer())
 		before := time.Now()
 		response, err := next(data, s)

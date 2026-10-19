@@ -491,7 +491,7 @@ func StreamGetTweetHandler(
 			if err != nil {
 				return nil, err
 			}
-			if warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil {
+			if warpnet.VerifyAuthorship(s, owner.NodeId) == nil {
 				return tweet, nil
 			}
 			return tweet.Teaser(), nil
@@ -848,6 +848,7 @@ type CRDTRepliesCounter interface {
 
 func StreamGetTweetStatsHandler(
 	tweetRepo TweetsStorer,
+	authRepo OwnerTweetStorer,
 	reactionRepo ReactionTweetStorer,
 	retweetRepo RetweetsTweetStorer,
 	replyRepo RepliesTweetCounter,
@@ -867,16 +868,16 @@ func StreamGetTweetStatsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
+		owner := authRepo.GetOwner()
 
-		isMyOwnTweet := ev.UserId == ownNodeInfo.OwnerId
+		isMyOwnTweet := ev.UserId == owner.UserId
 		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
 			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 				return nil, err
 			}
 
-			if err == nil && ownNodeInfo.ID.String() != u.NodeId {
+			if err == nil && owner.NodeId != u.NodeId {
 				statsResp, err := streamer.GenericStream(
 					u.NodeId,
 					event.PUBLIC_GET_TWEET_STATS,
@@ -904,7 +905,7 @@ func StreamGetTweetStatsHandler(
 					stats.MyReaction = ownReaction(
 						reactionRepo,
 						strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix),
-						ownNodeInfo.OwnerId,
+						owner.UserId,
 					)
 					return stats, nil
 				}
@@ -972,7 +973,7 @@ func StreamGetTweetStatsHandler(
 			ReactionsCount: reactionsCount,
 			RepliesCount:   repliesCount,
 			Reactions:      reactions,
-			MyReaction:     ownReaction(reactionRepo, tweetId, ownNodeInfo.OwnerId),
+			MyReaction:     ownReaction(reactionRepo, tweetId, owner.UserId),
 		}, nil
 	}
 }

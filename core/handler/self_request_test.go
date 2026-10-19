@@ -123,7 +123,7 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 			nodeInfo:        ownerInfo,
 			genericStreamFn: failOnStream(t),
 		}
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, ownerTweetUserRepo, streamer)
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, auth, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, ownerTweetUserRepo, streamer)
 		if _, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetID, UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}

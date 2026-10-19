@@ -588,7 +588,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
-			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.reactionRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetStatsHandler(r.tweetRepo, authRepo, r.reactionRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,

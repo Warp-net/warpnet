@@ -212,7 +212,9 @@ func (g *Gossip) runListener(sub *pubsub.Subscription) error {
 			continue
 		}
 
-		log.Debugf("gossip: received message: %s", string(msg.Data))
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("gossip: received message: %s", string(msg.Data))
+		}
 
 		g.mx.RLock()
 		handlerF, ok := g.handlersMap[topicName]

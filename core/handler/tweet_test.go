@@ -807,7 +807,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	tweetId := "tweet-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -815,7 +815,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("empty tweet id", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetTweetStatsEvent{UserId: owner}), nil)
 		if err == nil || err.Error() != "empty tweet id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -823,7 +823,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{})
 		_, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetId}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -833,6 +833,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	t.Run("own tweet stats - concurrent gathering", func(t *testing.T) {
 		h := StreamGetTweetStatsHandler(
 			stubTweetRepo{tweetsCountFn: func(userId string) (uint64, error) { return 10, nil }, getViewsCountFn: func(tweetId string) (uint64, error) { return 100, nil }},
+			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetReactionRepo{reactionsCountFn: func(tweetId string) (uint64, error) { return 5, nil }},
 			stubTweetRetweetRepo{retweetsCountFn: func(tweetId string) (uint64, error) { return 3, nil }},
 			stubRepliesCounter{repliesCountFn: func(tweetId string) (uint64, error) { return 2, nil }},
@@ -850,7 +851,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("other user tweet stats - user not found", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{getFn: func(userId string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
 		}}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
 		resp, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetId, UserId: "other-1"}), nil)
@@ -864,7 +865,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 	})
 
 	t.Run("other user tweet stats - node offline", func(t *testing.T) {
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, warpnet.ErrNodeIsOffline
@@ -887,7 +888,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 			ViewsCount:     1000,
 			RepliesCount:   7,
 		})
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return remoteStats, nil
@@ -908,6 +909,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 		remoteErr, _ := json.Marshal(event.ResponseError{Code: 500, Message: "status 404: remote returned error status"})
 		h := StreamGetTweetStatsHandler(
 			stubTweetRepo{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetReactionRepo{reactionsCountFn: func(tweetId string) (uint64, error) { return 5, nil }},
 			stubTweetRetweetRepo{},
 			stubRepliesCounter{},
@@ -931,7 +933,7 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 
 	t.Run("other user tweet stats - stream error", func(t *testing.T) {
 		streamErr := errors.New("broken")
-		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
+		h := StreamGetTweetStatsHandler(stubTweetRepo{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetReactionRepo{}, stubTweetRetweetRepo{}, stubRepliesCounter{}, stubTweetUserRepo{}, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 				return nil, streamErr
@@ -943,10 +945,29 @@ func TestStreamGetTweetStatsHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("own tweet stats - owner comes from the auth repo", func(t *testing.T) {
+		h := StreamGetTweetStatsHandler(
+			stubTweetRepo{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetReactionRepo{},
+			stubTweetRetweetRepo{},
+			stubRepliesCounter{},
+			stubTweetUserRepo{},
+			&mockStreamer{NodeInfoFunc: func() warpnet.NodeInfo {
+				t.Fatal("NodeInfo must not be built for every stats request")
+				return warpnet.NodeInfo{}
+			}},
+		)
+		if _, err := h(marshal(t, event.GetTweetStatsEvent{TweetId: tweetId, UserId: owner}), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
 	t.Run("own tweet stats - strips retweet prefix", func(t *testing.T) {
 		var capturedTweetId string
 		h := StreamGetTweetStatsHandler(
 			stubTweetRepo{},
+			stubAuth{owner: domain.Owner{UserId: owner}},
 			stubTweetReactionRepo{reactionsCountFn: func(tweetId string) (uint64, error) {
 				capturedTweetId = tweetId
 				return 0, nil
@@ -1780,7 +1801,7 @@ func TestStreamGetTweetHandler_SponsoredTeaser(t *testing.T) {
 	repo := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) {
 		return domain.Tweet{Id: tweetID, UserId: userID, Text: "paid", ImageKeys: []string{"img-1"}, Price: sponsoredPrice()}, nil
 	}}
-	h := StreamGetTweetHandler(repo, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: owner}})
+	h := StreamGetTweetHandler(repo, stubAuth{owner: domain.Owner{UserId: owner, NodeId: own.String()}}, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: owner}})
 	req := marshal(t, event.GetTweetEvent{UserId: owner, TweetId: "tweet-1"})
 
 	_, ownUI := stream.NewLoopbackStream(own, own, event.PUBLIC_GET_TWEET)
