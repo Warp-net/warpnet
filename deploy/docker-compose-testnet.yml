@@ -67,72 +67,72 @@ services:
       - NODE_SEED=warpnet4 # deterministic seed for 4 bootstrap nodes
       - GOMEMLIMIT=144MiB
 
-#  warpnet-moderator-testnet:
-#    container_name: moderator-testnet
-#    image: ghcr.io/warp-net/warpnet-moderator:latest
-#    network_mode: host
-#    restart: unless-stopped
-#    mem_limit: 256m
-#    memswap_limit: 256m
-#    mem_reservation: 96m
-#    oom_score_adj: 500
-#    environment:
-#      - NODE_PORT=4044
-#      - NODE_HOST_V4=207.154.221.44
-#      - NODE_NETWORK=testnet
-#      - LOGGING_LEVEL=info
-#      - LOGGING_FORMAT=json
-#
-#      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-#      - GOMEMLIMIT=64MiB
-#    volumes:
-#      - /root/.warpdata:/root/.warpdata:rw
-#      # The model path is hardcoded relative to the container CWD (/warpnet).
-#      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+  warpnet-moderator-testnet:
+    container_name: moderator-testnet
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    mem_reservation: 96m
+    oom_score_adj: 500
+    environment:
+      - NODE_PORT=4044
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
 
-#  warpnet-moderator-2-testnet:
-#    container_name: moderator-2-testnet
-#    image: ghcr.io/warp-net/warpnet-moderator:latest
-#    network_mode: host
-#    restart: unless-stopped
-#    mem_limit: 256m
-#    memswap_limit: 256m
-#    mem_reservation: 96m
-#    oom_score_adj: 500
-#    environment:
-#      - NODE_PORT=4045
-#      - NODE_HOST_V4=207.154.221.44
-#      - NODE_NETWORK=testnet
-#      - LOGGING_LEVEL=info
-#      - LOGGING_FORMAT=json
-#
-#      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-#      - GOMEMLIMIT=64MiB
-#    volumes:
-#      - /root/.warpdata:/root/.warpdata:rw
-#      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+      - GOMEMLIMIT=64MiB
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      # The model path is hardcoded relative to the container CWD (/warpnet).
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
 
-#  warpnet-moderator-3-testnet:
-#    container_name: moderator-3-testnet
-#    image: ghcr.io/warp-net/warpnet-moderator:latest
-#    network_mode: host
-#    restart: unless-stopped
-#    mem_limit: 256m
-#    memswap_limit: 256m
-#    mem_reservation: 96m
-#    oom_score_adj: 500
-#    environment:
-#      - NODE_PORT=4046
-#      - NODE_HOST_V4=207.154.221.44
-#      - NODE_NETWORK=testnet
-#      - LOGGING_LEVEL=info
-#      - LOGGING_FORMAT=json
-#
-#      - NODE_METRICS_GATEWAY=207.154.221.44:4091
-#      - GOMEMLIMIT=64MiB
-#    volumes:
-#      - /root/.warpdata:/root/.warpdata:rw
-#      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+  warpnet-moderator-2-testnet:
+    container_name: moderator-2-testnet
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    mem_reservation: 96m
+    oom_score_adj: 500
+    environment:
+      - NODE_PORT=4045
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+      - GOMEMLIMIT=64MiB
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+
+  warpnet-moderator-3-testnet:
+    container_name: moderator-3-testnet
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    mem_reservation: 96m
+    oom_score_adj: 500
+    environment:
+      - NODE_PORT=4046
+      - NODE_HOST_V4=207.154.221.44
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+
+      - NODE_METRICS_GATEWAY=207.154.221.44:4091
+      - GOMEMLIMIT=64MiB
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
 
   vadim-testnet:
     container_name: vadim-testnet
