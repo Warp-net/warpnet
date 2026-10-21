@@ -147,6 +147,8 @@ func NewRelayNode(
 		ctx,
 		ratings,
 		pubsub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
+		corePubsub.NewRelayTopicHandler(event.ReportsTopic),
+		corePubsub.NewRelayTopicHandler(event.ModerationVotesTopic),
 	)
 
 	memoryStore, err := pstoremem.NewPeerstore()

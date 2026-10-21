@@ -27,7 +27,10 @@ resulting from the use or misuse of this software.
 
 package vote
 
-import "github.com/Warp-net/warpnet/domain"
+import (
+	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
+)
 
 // Package vote is the moderator-to-moderator vote contract. It lives
 // outside the shared event package because votes never leave the moderator
@@ -39,7 +42,7 @@ import "github.com/Warp-net/warpnet/domain"
 // Topic carries one Event per moderator per report round. Voter
 // authenticity rides on the envelope (event.Message) signature, so the vote
 // payload itself is unsigned.
-const Topic = "/warpnet/moderation/votes/1.0.0"
+const Topic = event.ModerationVotesTopic
 
 // Event is a single moderator's verdict on one report round. Every
 // moderator that assessed the report publishes one; the round's chair

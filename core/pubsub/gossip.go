@@ -695,3 +695,12 @@ func NewDiscoveryRelayTopicHandler() TopicHandler {
 		},
 	}
 }
+
+func NewRelayTopicHandler(topicName string) TopicHandler {
+	return TopicHandler{
+		TopicName: topicName,
+		Handler: func(_ []byte) error {
+			return nil
+		},
+	}
+}

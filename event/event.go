@@ -603,6 +603,8 @@ type ModerationEvent struct {
 // constant so they cannot drift.
 const ReportsTopic = "/warpnet/reports/1.0.0"
 
+const ModerationVotesTopic = "/warpnet/moderation/votes/1.0.0"
+
 // ReportEvent is published by a member node on the reports pubsub topic
 // when a user clicks Report in the UI. It carries enough for a moderator
 // to fetch the actual offending content (TargetNodeID is a routing hint

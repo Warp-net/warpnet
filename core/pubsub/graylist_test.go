@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/event"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -309,4 +310,21 @@ func TestADegradedPeerPublishingThroughTheMeshIsStillRead(t *testing.T) {
 	}
 	requireRead(t, broadcasts, watched, meshTopic, "watched", "a watched peer is still read through its gossip")
 	requireRead(t, broadcasts, degraded, meshTopic, "degraded", "and so is a degraded one")
+}
+
+func TestAReportReachesAModeratorOnlyThroughARelayInTheTopic(t *testing.T) {
+	skipWithoutHosts(t)
+
+	member, memberNode, _ := ratedGossip(t)
+	relay, relayNode, _ := ratedGossip(t)
+	moderator, moderatorNode, _ := ratedGossip(t)
+	reports := &postInbox{}
+	require.NoError(t, moderator.SubscribeRaw(event.ReportsTopic, reports.handle))
+	connect(t, memberNode, relayNode)
+	connect(t, relayNode, moderatorNode)
+
+	requireNotRead(t, reports, member, event.ReportsTopic, "unrelayed", "a relay outside the topic drops the report")
+
+	require.NoError(t, relay.Subscribe(NewRelayTopicHandler(event.ReportsTopic)))
+	requireRead(t, reports, member, event.ReportsTopic, "relayed", "a relay in the topic forwards the report")
 }
