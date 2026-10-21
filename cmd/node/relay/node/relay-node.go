@@ -29,7 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
 	"github.com/Warp-net/warpnet/cmd/node/relay/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
@@ -149,7 +148,7 @@ func NewRelayNode(
 		ratings,
 		pubsub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 		corePubsub.NewRelayTopicHandler(event.ReportsTopic),
-		corePubsub.NewRelayTopicHandler(vote.Topic),
+		corePubsub.NewRelayTopicHandler(event.ModerationVotesTopic),
 	)
 
 	memoryStore, err := pstoremem.NewPeerstore()
