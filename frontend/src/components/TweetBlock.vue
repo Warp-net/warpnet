@@ -994,7 +994,7 @@ export default {
         const userId = this.tweet.user_id;
         this._videoStream = streamVideo(
           this.$refs.streamedVideo,
-          (offset, length) => warpnetService.getVideoRange({userId, key, offset, length}),
+          (offset, onFrame) => warpnetService.openVideoStream({userId, key, offset}, onFrame),
           (err) => this.onStreamFailed(err),
         );
         return;

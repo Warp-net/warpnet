@@ -556,7 +556,20 @@ type GetVideoRangeEvent struct {
 type GetVideoRangeResponse struct {
 	Size int64  `json:"size"`
 	Mime string `json:"mime"`
-	Data []byte `json:"data"`
+}
+
+// VideoFrame defines model for VideoFrame.
+type VideoFrame struct {
+	Offset int64  `json:"offset"`
+	Data   []byte `json:"data,omitempty"`
+	IsLast bool   `json:"is_last,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// VideoStreamEvent defines model for VideoStreamEvent.
+type VideoStreamEvent struct {
+	StreamId string `json:"stream_id"`
+	Count    int    `json:"count,omitempty"`
 }
 
 type ChallengeEvent struct {

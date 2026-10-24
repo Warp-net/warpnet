@@ -105,7 +105,7 @@ export default {
         const key = this.videoKey;
         this._videoStream = streamVideo(
           this.$refs.streamedVideo,
-          (offset, length) => warpnetService.getChatVideoRange({userId, key, offset, length}),
+          (offset, onFrame) => warpnetService.openVideoStream({userId, key, offset, chat: true}, onFrame),
           (err) => this.onStreamFailed(err),
         );
         return;

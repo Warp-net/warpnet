@@ -18,7 +18,9 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
+	"github.com/Warp-net/warpnet/cmd/node/member/videostream"
 	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -61,9 +63,17 @@ type AppAuthServicer interface {
 
 type NodeServer interface {
 	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
+	SelfStreamOpen(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
 	NodeInfo() warpnet.NodeInfo
 	Stop()
 	Start() error
+}
+
+type VideoSessions interface {
+	Start(id string, offset int64, s warpnet.WarpStream, sender videostream.FrameSender) (domain.VideoManifest, error)
+	Credit(id string, count int)
+	Stop(id string)
+	StopAll()
 }
 
 type NodeUpdater interface {
@@ -82,6 +92,7 @@ type App struct {
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
 	updater   NodeUpdater
+	videos    VideoSessions
 	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
@@ -182,6 +193,7 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
+	a.videos = videostream.NewSessions()
 	version := config.Config().Version
 	network := config.Config().Node.Network
 
@@ -234,6 +246,9 @@ func (a *App) shutdown() {
 	a.node = nil
 	a.mx.Unlock()
 
+	if a.videos != nil {
+		a.videos.StopAll()
+	}
 	if node != nil {
 		node.Stop() // close node first
 	}
@@ -407,6 +422,20 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		}
 		response.Body = []byte(event.Accepted)
 		return response
+	case event.PRIVATE_GET_VIDEO, event.PRIVATE_GET_CHAT_VIDEO:
+		response.Body = a.startVideo(request)
+	case videostream.CreditPath, videostream.StopPath:
+		var ev event.VideoStreamEvent
+		if err := json.Unmarshal(request.Body, &ev); err != nil {
+			response.Body = newErrorResp(err.Error())
+			return response
+		}
+		if request.Path == videostream.StopPath {
+			a.videos.Stop(ev.StreamId)
+		} else {
+			a.videos.Credit(ev.StreamId, ev.Count)
+		}
+		response.Body = []byte(event.Accepted)
 	default:
 		a.mx.RLock()
 		node := a.node
@@ -427,25 +456,11 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		ownNodeId := node.NodeInfo().ID
 		nodeId := ownNodeId.String()
 		response.NodeId = nodeId
-		ts, _ := time.Parse(time.RFC3339, request.Timestamp)
-		if ts.IsZero() {
-			ts = time.Now()
-		}
-		body := jsoniter.RawMessage(request.Body)
-		msg := event.Message{
-			Body:        body,
-			MessageId:   request.MessageId,
-			NodeId:      request.NodeId,
-			Destination: request.Path,
-			Timestamp:   ts.UTC(),
-			Version:     request.Version,
-		}
-		msg.Signature = security.Sign(a.auth.PrivateKey(), msg.SigningBytes())
 
 		respData, err := node.SelfStream(
 			ownNodeId, ownNodeId,
 			stream.WarpRoute(request.Path),
-			msg,
+			a.signMessage(request),
 		)
 		if err != nil {
 			log.Errorf("send stream: %v \n", err)
@@ -460,6 +475,62 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		return response
 	}
 	return response
+}
+
+func (a *App) signMessage(request AppMessage) event.Message {
+	ts, _ := time.Parse(time.RFC3339, request.Timestamp)
+	if ts.IsZero() {
+		ts = time.Now()
+	}
+	msg := event.Message{
+		Body:        jsoniter.RawMessage(request.Body),
+		MessageId:   request.MessageId,
+		NodeId:      request.NodeId,
+		Destination: request.Path,
+		Timestamp:   ts.UTC(),
+		Version:     request.Version,
+	}
+	msg.Signature = security.Sign(a.auth.PrivateKey(), msg.SigningBytes())
+	return msg
+}
+
+func (a *App) startVideo(request AppMessage) stdjson.RawMessage {
+	a.mx.RLock()
+	node := a.node
+	a.mx.RUnlock()
+	if node == nil {
+		return newErrorResp("not attached server node")
+	}
+
+	var ev event.GetVideoRangeEvent
+	if err := json.Unmarshal(request.Body, &ev); err != nil {
+		return newErrorResp(err.Error())
+	}
+
+	ownNodeId := node.NodeInfo().ID
+	s, err := node.SelfStreamOpen(ownNodeId, ownNodeId, stream.WarpRoute(request.Path), a.signMessage(request))
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	manifest, err := a.videos.Start(request.MessageId, ev.Offset, s, wailsFrames{ctx: a.ctx})
+	if err != nil && !errors.Is(err, media_meta.ErrVideoUnavailable) {
+		return newErrorResp(err.Error())
+	}
+
+	bt, err := json.Marshal(event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime})
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	return bt
+}
+
+type wailsFrames struct {
+	ctx context.Context
+}
+
+func (w wailsFrames) SendFrame(streamId string, frame event.VideoFrame) error {
+	wailsruntime.EventsEmit(w.ctx, "video:"+streamId, frame)
+	return nil
 }
 
 func newErrorResp(msg string) stdjson.RawMessage {

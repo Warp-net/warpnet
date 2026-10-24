@@ -563,6 +563,29 @@ func (n *WarpNode) SelfStream(
 	return result, nil
 }
 
+func (n *WarpNode) SelfStreamOpen(
+	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (warpnet.WarpStream, error) {
+	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]
+	if !ok {
+		return nil, fmt.Errorf("node: selfstream: no handler for path %s", path) //nolint:err113
+	}
+	bt, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("node: selfstream: marshal data %w", err)
+	}
+
+	streamClient, streamServer := stream.NewLoopbackStream(to, from, warpnet.WarpProtocolID(path))
+	go handler(streamServer)
+
+	if _, err := streamClient.Write(bt); err != nil {
+		_ = streamClient.Close()
+		return nil, err
+	}
+	_ = streamClient.CloseWrite()
+	return streamClient, nil
+}
+
 // isBenignStreamCloseErr reports whether err returned from reading a stream is a
 // normal end-of-stream signal rather than a real I/O failure. io.ReadAll never
 // surfaces io.EOF, but a loopback stream may return io.ErrClosedPipe once the

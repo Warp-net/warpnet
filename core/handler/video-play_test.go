@@ -119,78 +119,75 @@ func newPlayTestbed(t *testing.T, size int) *playTestbed {
 	}
 }
 
-func (tb *playTestbed) play(t *testing.T, userId, key string, offset, length int64) event.GetVideoRangeResponse {
+func (tb *playTestbed) play(t *testing.T, userId, key string, offset int64) (domain.VideoManifest, []byte, error) {
 	t.Helper()
 	h := StreamPlayVideoHandler(tb.streamer, tb.videos, tb.users)
-	out, err := h(mustJSON(t, event.GetVideoRangeEvent{UserId: userId, Key: key, Offset: offset, Length: length}), nil)
-	require.NoError(t, err)
-	resp, ok := out.(event.GetVideoRangeResponse)
-	require.True(t, ok)
-	return resp
+	return serveVideoRange(t, h, event.GetVideoRangeEvent{UserId: userId, Key: key, Offset: offset}, tb.streamer.self)
 }
 
-func TestPlayVideo_OwnVideoComesFromLocalChunks(t *testing.T) {
+func TestPlayVideo_OwnVideoStreamsFromLocalChunks(t *testing.T) {
 	tb := newPlayTestbed(t, 2*media_meta.VideoChunkSize+300)
 	video := tb.author.video
 	key, err := tb.videos.SetVideo(ownerID, domain.Base64Video("data:video/mp4;base64,"+base64.StdEncoding.EncodeToString(video)))
 	require.NoError(t, err)
 
-	resp := tb.play(t, ownerID, string(key), 0, 1024)
-	assert.Equal(t, int64(len(video)), resp.Size)
-	assert.Equal(t, "video/mp4", resp.Mime)
-	assert.Equal(t, video[:1024], resp.Data)
+	manifest, body, err := tb.play(t, ownerID, string(key), 0)
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(video)), manifest.Size)
+	assert.Equal(t, "video/mp4", manifest.Mime)
+	assert.True(t, bytes.Equal(video, body), "the whole file comes in one stream")
 
-	start := int64(media_meta.VideoChunkSize - 10)
-	assert.Equal(t, video[start:start+20], tb.play(t, ownerID, string(key), start, 20).Data, "a range across a chunk boundary")
-	assert.Equal(t, video[len(video)-50:], tb.play(t, ownerID, string(key), int64(len(video)-50), 1000).Data, "clipped at the end")
+	_, body, err = tb.play(t, ownerID, string(key), media_meta.VideoChunkSize+10)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(video[media_meta.VideoChunkSize:], body), "the stream starts at the chunk holding the offset")
 
 	assert.Zero(t, tb.streamer.openCount(), "own videos never leave the node")
 }
 
-func TestPlayVideo_ForeignVideoStreamsFromTheAuthorAndStaysCached(t *testing.T) {
-	tb := newPlayTestbed(t, 2*media_meta.VideoChunkSize+300)
+func TestPlayVideo_ForeignVideoComesInOneStreamAndStaysCached(t *testing.T) {
+	tb := newPlayTestbed(t, 3*media_meta.VideoChunkSize+300)
 	video, key := tb.author.video, tb.author.key
-	start := int64(media_meta.VideoChunkSize - 6)
 
-	resp := tb.play(t, videoAuthorID, key, start, 2*media_meta.VideoChunkSize)
-	assert.Equal(t, int64(len(video)), resp.Size)
-	assert.True(t, bytes.Equal(video[start:], resp.Data), "the range is clipped at the end of the file")
-	assert.Equal(t, 1, tb.streamer.openCount(), "the manifest and the chunks come in one stream")
-
-	manifest, err := tb.videos.GetManifest(videoAuthorID, key)
+	manifest, body, err := tb.play(t, videoAuthorID, key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, key, manifest.Key())
+	assert.True(t, bytes.Equal(video, body))
+	assert.Equal(t, 1, tb.streamer.openCount(), "one P2P stream carries the whole video")
+
 	for idx := range manifest.Hashes {
 		_, err := tb.videos.GetChunk(videoAuthorID, key, idx)
 		assert.NoError(t, err, "chunk %d is cached", idx)
 	}
 
-	assert.Equal(t, video[:100], tb.play(t, videoAuthorID, key, 0, 100).Data)
-	assert.Equal(t, 1, tb.streamer.openCount(), "a cached video is read without the author")
+	_, body, err = tb.play(t, videoAuthorID, key, 0)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(video, body))
+	assert.Equal(t, 1, tb.streamer.openCount(), "a cached video is streamed without the author")
 }
 
-func TestPlayVideo_SeekingOpensAStreamAtTheChunk(t *testing.T) {
+func TestPlayVideo_SeekStreamsFromTheChunk(t *testing.T) {
 	tb := newPlayTestbed(t, 3*media_meta.VideoChunkSize)
 	video, key := tb.author.video, tb.author.key
 
-	tb.play(t, videoAuthorID, key, 0, 10)
-	start := int64(2*media_meta.VideoChunkSize + 7)
-	assert.Equal(t, video[start:start+10], tb.play(t, videoAuthorID, key, start, 10).Data)
-	assert.Equal(t, 2, tb.streamer.openCount())
+	_, body, err := tb.play(t, videoAuthorID, key, 2*media_meta.VideoChunkSize+7)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(video[2*media_meta.VideoChunkSize:], body))
+	assert.Equal(t, 1, tb.streamer.openCount())
 
-	_, err := tb.videos.GetChunk(videoAuthorID, key, 1)
+	_, err = tb.videos.GetChunk(videoAuthorID, key, 1)
 	assert.ErrorIs(t, err, database.ErrMediaNotFound, "chunks nobody watched stay with the author")
 }
 
-func TestPlayVideo_ForgedChunkNeverReachesThePlayerOrTheCache(t *testing.T) {
+func TestPlayVideo_ForgedChunkStopsTheStream(t *testing.T) {
 	tb := newPlayTestbed(t, 2*media_meta.VideoChunkSize)
 	tb.author.forged = map[int]bool{1: true}
 
-	resp := tb.play(t, videoAuthorID, tb.author.key, 0, 2*media_meta.VideoChunkSize)
-	assert.Empty(t, resp.Data)
+	_, body, err := tb.play(t, videoAuthorID, tb.author.key, 0)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(tb.author.video[:media_meta.VideoChunkSize], body), "only the verified chunk reaches the player")
 
-	_, err := tb.videos.GetChunk(videoAuthorID, tb.author.key, 0)
-	assert.NoError(t, err, "the chunk before the forged one checked out")
+	_, err = tb.videos.GetChunk(videoAuthorID, tb.author.key, 0)
+	assert.NoError(t, err)
 	_, err = tb.videos.GetChunk(videoAuthorID, tb.author.key, 1)
 	assert.ErrorIs(t, err, database.ErrMediaNotFound)
 }
@@ -199,9 +196,10 @@ func TestPlayVideo_ManifestOfAnotherSignerIsRefused(t *testing.T) {
 	tb := newPlayTestbed(t, media_meta.VideoChunkSize)
 	tb.users = mediaUserDouble{users: map[string]domain.User{videoAuthorID: {Id: videoAuthorID, NodeId: remoteNodeID}}}
 
-	assert.Empty(t, tb.play(t, videoAuthorID, tb.author.key, 0, 100).Data)
+	_, _, err := tb.play(t, videoAuthorID, tb.author.key, 0)
+	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
 
-	_, err := tb.videos.GetManifest(videoAuthorID, tb.author.key)
+	_, err = tb.videos.GetManifest(videoAuthorID, tb.author.key)
 	assert.ErrorIs(t, err, database.ErrMediaNotFound, "nothing unverified is cached")
 }
 
@@ -212,10 +210,14 @@ func TestPlayVideo_OlderAuthorNodeFallsBackToTheWholeFile(t *testing.T) {
 	tb.streamer.openErr = fmt.Errorf("stream: new: %w", warpnet.ErrProtocolNotSupported)
 	tb.streamer.file = mustJSON(t, event.GetVideoResponse{File: file})
 
-	resp := tb.play(t, videoAuthorID, key, 0, int64(len(raw)))
-	assert.Equal(t, raw, resp.Data)
-	assert.Equal(t, raw[4:8], tb.play(t, videoAuthorID, key, 4, 4).Data)
-	assert.Equal(t, 1, tb.streamer.files, "the whole file is fetched once and read from chunks after")
+	_, body, err := tb.play(t, videoAuthorID, key, 0)
+	require.NoError(t, err)
+	assert.Equal(t, raw, body)
+
+	_, body, err = tb.play(t, videoAuthorID, key, 4)
+	require.NoError(t, err)
+	assert.Equal(t, raw, body)
+	assert.Equal(t, 1, tb.streamer.files, "the whole file is fetched once and streamed from chunks after")
 }
 
 func TestPlayVideo_OlderAuthorNodeFileMustMatchTheKey(t *testing.T) {
@@ -223,37 +225,33 @@ func TestPlayVideo_OlderAuthorNodeFileMustMatchTheKey(t *testing.T) {
 	tb.streamer.openErr = warpnet.ErrProtocolNotSupported
 	tb.streamer.file = mustJSON(t, event.GetVideoResponse{File: "data:video/mp4;base64,AAAA"})
 
-	assert.Empty(t, tb.play(t, videoAuthorID, tb.author.key, 0, 4).Data)
+	_, _, err := tb.play(t, videoAuthorID, tb.author.key, 0)
+	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
 }
 
 func TestPlayVideo_UnavailableVideos(t *testing.T) {
 	tb := newPlayTestbed(t, 100)
 
-	assert.Zero(t, tb.play(t, ownerID, "missing", 0, 10).Size)
-	assert.Zero(t, tb.play(t, "stranger", tb.author.key, 0, 10).Size)
+	_, _, err := tb.play(t, ownerID, "missing", 0)
+	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	_, _, err = tb.play(t, "stranger", tb.author.key, 0)
+	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
 
 	tb.streamer.openErr = warpnet.ErrNodeIsOffline
-	assert.Zero(t, tb.play(t, videoAuthorID, tb.author.key, 0, 10).Size)
+	_, _, err = tb.play(t, videoAuthorID, tb.author.key, 0)
+	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
 
-	_, err := StreamPlayVideoHandler(tb.streamer, tb.videos, tb.users)(mustJSON(t, event.GetVideoRangeEvent{UserId: ownerID}), nil)
+	_, err = StreamPlayVideoHandler(tb.streamer, tb.videos, tb.users)(mustJSON(t, event.GetVideoRangeEvent{UserId: ownerID}), nil)
 	assert.ErrorIs(t, err, ErrEmptyVideoKey)
-}
-
-func TestPlayVideo_RangeIsCapped(t *testing.T) {
-	tb := newPlayTestbed(t, 6*media_meta.VideoChunkSize)
-	key, err := tb.videos.SetVideo(ownerID, domain.Base64Video("data:video/mp4;base64,"+base64.StdEncoding.EncodeToString(tb.author.video)))
-	require.NoError(t, err)
-
-	assert.Len(t, tb.play(t, ownerID, string(key), 0, 6*media_meta.VideoChunkSize).Data, maxVideoRangeLength)
 }
 
 func TestPlayChatVideo_UsesTheChatRoutes(t *testing.T) {
 	tb := newPlayTestbed(t, 100)
 	h := StreamPlayChatVideoHandler(tb.streamer, tb.chatVideos, chatUserDouble{byId: map[string]domain.User{videoAuthorID: ownerOf(videoAuthorID)}})
 
-	out, err := h(mustJSON(t, event.GetVideoRangeEvent{UserId: videoAuthorID, Key: tb.author.key, Offset: 0, Length: 100}), nil)
+	_, body, err := serveVideoRange(t, h, event.GetVideoRangeEvent{UserId: videoAuthorID, Key: tb.author.key}, tb.streamer.self)
 	require.NoError(t, err)
-	assert.Equal(t, tb.author.video, out.(event.GetVideoRangeResponse).Data)
+	assert.Equal(t, tb.author.video, body)
 	assert.Equal(t, []stream.WarpRoute{event.PUBLIC_GET_CHAT_VIDEO_RANGE}, tb.streamer.opened)
 
 	_, err = tb.chatVideos.GetManifest(videoAuthorID, tb.author.key)

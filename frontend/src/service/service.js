@@ -26,7 +26,7 @@ import {toByteArray} from "base64-js";
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, SelectNetwork, Network} from "@/lib/transport";
+import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, OpenVideoStream, SelectNetwork, Network} from "@/lib/transport";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {isOwnTweetEcho} from "@/lib/network";
 
@@ -124,6 +124,8 @@ export const PUBLIC_GET_CHAT_IMAGE = "/public/get/chat/image/0.0.0"
 export const PRIVATE_POST_UPLOAD_CHAT_VIDEO = "/private/post/chat/video/0.0.0"
 export const PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
 export const PRIVATE_GET_CHAT_VIDEO = "/private/get/chat/video/0.0.0"
+export const VIDEO_CREDIT_PATH = "video-credit"
+export const VIDEO_STOP_PATH = "video-stop"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PRIVATE_GET_UPDATE = "/private/get/update/0.0.0"
@@ -812,23 +814,37 @@ export const warpnetService = {
         };
     },
 
-    async getVideoRange({userId, key, offset, length}) {
-        return this.readVideoRange(PRIVATE_GET_VIDEO, {userId, key, offset, length});
-    },
-
-    async getChatVideoRange({userId, key, offset, length}) {
-        return this.readVideoRange(PRIVATE_GET_CHAT_VIDEO, {userId, key, offset, length});
-    },
-
-    async readVideoRange(path, {userId, key, offset, length}) {
-        const result = await this.sendToNode({
-            path,
-            body: {user_id: userId, key, offset, length},
-        });
+    async openVideoStream({userId, key, offset, chat = false}, onFrame) {
+        const owner = this.getOwnerProfile();
+        const request = {
+            path: chat ? PRIVATE_GET_CHAT_VIDEO : PRIVATE_GET_VIDEO,
+            body: {user_id: userId, key, offset},
+            node_id: owner?.node_id || "Blank",
+            timestamp: new Date().toISOString(),
+        };
+        const {response, close} = await OpenVideoStream(request, (frame) => onFrame({
+            offset: frame.offset || 0,
+            data: frame.data ? toByteArray(frame.data) : new Uint8Array(0),
+            isLast: !!frame.is_last,
+            error: frame.error || '',
+        }));
+        const result = response && response.body;
         if (!result || !result.size) {
+            close();
             return null;
         }
-        return {size: result.size, mime: result.mime, data: toByteArray(result.data || '')};
+
+        const streamId = request.message_id;
+        const tell = (path, body) => this.sendToNode({path, body}).catch(() => {});
+        return {
+            size: result.size,
+            mime: result.mime,
+            credit: (count) => tell(VIDEO_CREDIT_PATH, {stream_id: streamId, count}),
+            stop: () => {
+                close();
+                tell(VIDEO_STOP_PATH, {stream_id: streamId});
+            },
+        };
     },
 
     async getMyTimeline(cursorReset) {

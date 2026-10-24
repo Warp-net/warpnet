@@ -109,3 +109,41 @@ describe("transport client identity", () => {
     expect(localStorage.getItem(CLIENT_KEY)).toBe(first);
   });
 });
+
+describe("transport video stream", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("routes pushed frames to the stream and the answer to the request", async () => {
+    const transport = await loadTransport();
+    const frames = [];
+
+    const opened = transport.OpenVideoStream({ path: "/private/get/video/0.0.0", body: {} }, (f) => frames.push(f));
+    const sock = await openSocket();
+    const req = JSON.parse(text(sock.sent[sock.sent.length - 1]));
+
+    const push = (msg) => sock.onmessage({ data: new TextEncoder().encode(JSON.stringify(msg)).buffer });
+    push({ message_id: req.message_id, path: "video-frame", body: { offset: 0, data: "AQID" } });
+    push({ message_id: req.message_id, path: "/private/get/video/0.0.0", body: { size: 3, mime: "video/mp4" } });
+
+    const { response, close } = await opened;
+    expect(response.body).toEqual({ size: 3, mime: "video/mp4" });
+    expect(frames).toEqual([{ offset: 0, data: "AQID" }]);
+
+    close();
+    push({ message_id: req.message_id, path: "video-frame", body: { offset: 3 } });
+    expect(frames).toHaveLength(1);
+  });
+
+  it("tells open streams when the connection drops", async () => {
+    const transport = await loadTransport();
+    const frames = [];
+
+    transport.OpenVideoStream({ path: "/private/get/video/0.0.0", body: {} }, (f) => frames.push(f)).catch(() => {});
+    const sock = await openSocket();
+    sock.onclose();
+
+    expect(frames).toEqual([{ error: "connection to the node was lost" }]);
+  });
+});

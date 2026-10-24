@@ -6,7 +6,7 @@ vi.mock('@/service/service', () => ({
     getProfile: vi.fn(),
     getImage: vi.fn(),
     getVideo: vi.fn(),
-    getVideoRange: vi.fn(),
+    openVideoStream: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
     hasReactor: vi.fn(),
@@ -218,14 +218,14 @@ describe('TweetBlock video streaming', () => {
     return view;
   };
 
-  it('streams the video from the node range by range instead of fetching it whole', async () => {
-    warpnetService.getVideoRange.mockResolvedValue({size: 10, mime: 'video/mp4', data: new Uint8Array(10)});
+  it('streams the video from the node instead of fetching it whole', async () => {
     const {container} = await startStream();
 
-    const [video, readRange] = streamVideo.mock.calls[0];
+    const [video, openStream] = streamVideo.mock.calls[0];
     expect(video).toBe(container.querySelector('video'));
-    await readRange(1024, 2048);
-    expect(warpnetService.getVideoRange).toHaveBeenCalledWith({userId: 'author1', key: 'vkey1', offset: 1024, length: 2048});
+    const onFrame = vi.fn();
+    await openStream(1024, onFrame);
+    expect(warpnetService.openVideoStream).toHaveBeenCalledWith({userId: 'author1', key: 'vkey1', offset: 1024}, onFrame);
     expect(warpnetService.getVideo).not.toHaveBeenCalled();
   });
 

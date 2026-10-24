@@ -43,6 +43,7 @@ function nodeError(code, message) {
 }
 
 const IS_FIRST_RUN_PATH = "is-first-run";
+const VIDEO_FRAME_PATH = "video-frame";
 const REQUEST_TIMEOUT_MS = 30000;
 
 function hasWails() {
@@ -97,6 +98,7 @@ let connecting = null;
 const NODE_KEY_STORAGE = "warpnet.node.key";
 let session = null;
 const pending = new Map(); // message_id -> { resolve, reject, timer }
+const videoListeners = new Map(); // message_id -> frame callback
 
 function pinnedNodeKey() {
   try {
@@ -169,6 +171,10 @@ function connect() {
         "ERR_NODE_UNREACHABLE",
         "Connection to your Warpnet node was lost."
       ));
+      for (const [, listener] of videoListeners) {
+        listener({ error: "connection to the node was lost" });
+      }
+      videoListeners.clear();
     };
     sock.onmessage = (ev) => {
       if (session && socket === sock) {
@@ -228,6 +234,11 @@ function onMessage(data) {
     msg = JSON.parse(text);
   } catch (e) {
     console.error("ws parse failed:", e);
+    return;
+  }
+  if (msg.path === VIDEO_FRAME_PATH) {
+    const listener = videoListeners.get(msg.message_id);
+    if (listener) listener(msg.body);
     return;
   }
   const p = pending.get(msg.message_id);
@@ -324,6 +335,29 @@ export async function ConsumePendingDeepLink() {
     return Wails.ConsumePendingDeepLink();
   }
   return "";
+}
+
+export async function OpenVideoStream(request, onFrame) {
+  request.message_id = generateUUID();
+  const id = request.message_id;
+  if (hasWails()) {
+    EventsOn(`video:${id}`, onFrame);
+    const close = () => EventsOff(`video:${id}`);
+    try {
+      return { response: await Wails.Call(request), close };
+    } catch (err) {
+      close();
+      throw err;
+    }
+  }
+  videoListeners.set(id, onFrame);
+  const close = () => videoListeners.delete(id);
+  try {
+    return { response: await send(request), close };
+  } catch (err) {
+    close();
+    throw err;
+  }
 }
 
 // IsDesktop reports whether the Wails desktop runtime is present (member

@@ -65,55 +65,91 @@ type VideoReader struct {
 	FilePath  stream.WarpRoute
 }
 
-func (r VideoReader) ReadRange(offset, length int64) (domain.VideoManifest, []byte, error) {
-	manifest, err := r.Cache.GetManifest(r.Author.Id, r.Key)
-	if err != nil && r.Streamer == nil {
-		return domain.VideoManifest{}, nil, err
-	}
-	if err != nil {
-		return r.readRemote(domain.VideoManifest{}, offset, length)
-	}
+type VideoSource struct {
+	VideoReader
 
-	end := min(offset+length, manifest.Size)
-	if offset < 0 || offset >= end {
-		return manifest, nil, nil
-	}
-
-	first := offset / manifest.ChunkSize
-	var chunks []byte
-	for idx := int(first); idx <= int((end-1)/manifest.ChunkSize); idx++ {
-		chunk, err := r.Cache.GetChunk(r.Author.Id, r.Key, idx)
-		if err != nil && r.Streamer != nil {
-			chunkStart := int64(idx) * manifest.ChunkSize
-			_, rest, err := r.readRemote(manifest, chunkStart, end-chunkStart)
-			if err != nil {
-				return manifest, nil, err
-			}
-			chunks = append(chunks, rest...)
-			break
-		}
-		if err != nil {
-			return manifest, nil, err
-		}
-		chunks = append(chunks, chunk...)
-	}
-
-	start := offset - first*manifest.ChunkSize
-	return manifest, chunks[start : start+end-offset], nil
+	manifest domain.VideoManifest
+	offset   int64
+	remote   warpnet.WarpStream
+	data     *bufio.Reader
+	next     int
 }
 
-func (r VideoReader) readRemote(known domain.VideoManifest, offset, length int64) (domain.VideoManifest, []byte, error) {
-	s, err := r.Streamer.OpenStream(r.Author.NodeId, r.RangePath, event.GetVideoRangeEvent{
-		UserId: r.Author.Id,
-		Key:    r.Key,
-		Offset: offset,
-		Length: length,
-	})
-	if errors.Is(err, warpnet.ErrProtocolNotSupported) {
-		return r.readFile(offset, length)
+func (r VideoReader) Open(offset int64) (*VideoSource, error) {
+	video := &VideoSource{VideoReader: r, offset: max(offset, 0)}
+
+	manifest, err := r.Cache.GetManifest(r.Author.Id, r.Key)
+	if err != nil && r.Streamer != nil {
+		manifest, err = video.openRemote(video.offset)
 	}
 	if err != nil {
-		return known, nil, err
+		video.Close()
+		return nil, err
+	}
+	video.manifest = manifest
+	return video, nil
+}
+
+func (v *VideoSource) WriteTo(s warpnet.WarpStream) error {
+	header, err := json.Marshal(v.manifest)
+	if err != nil {
+		return err
+	}
+	if err := writeWithDeadline(s, append(header, '\n')); err != nil {
+		return err
+	}
+
+	for idx := int(v.offset / v.manifest.ChunkSize); idx < len(v.manifest.Hashes); idx++ {
+		chunk, err := v.loadChunk(idx)
+		if err != nil {
+			return err
+		}
+		if err := writeWithDeadline(s, chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (v *VideoSource) Close() {
+	if v.remote == nil {
+		return
+	}
+	_ = v.remote.Reset()
+	v.remote, v.data = nil, nil
+}
+
+func (v *VideoSource) loadChunk(idx int) ([]byte, error) {
+	if v.remote != nil && v.next == idx {
+		return v.readRemoteChunk(idx)
+	}
+
+	chunk, err := v.Cache.GetChunk(v.Author.Id, v.Key, idx)
+	if err == nil || v.Streamer == nil {
+		return chunk, err
+	}
+	if _, err := v.openRemote(int64(idx) * v.manifest.ChunkSize); err != nil {
+		return nil, err
+	}
+	if v.remote == nil {
+		return v.Cache.GetChunk(v.Author.Id, v.Key, idx)
+	}
+	return v.readRemoteChunk(idx)
+}
+
+func (v *VideoSource) openRemote(offset int64) (domain.VideoManifest, error) {
+	v.Close()
+
+	s, err := v.Streamer.OpenStream(v.Author.NodeId, v.RangePath, event.GetVideoRangeEvent{
+		UserId: v.Author.Id,
+		Key:    v.Key,
+		Offset: offset,
+	})
+	if errors.Is(err, warpnet.ErrProtocolNotSupported) {
+		return v.fetchFile()
+	}
+	if err != nil {
+		return v.manifest, err
 	}
 
 	_ = s.SetReadDeadline(time.Now().Add(chunkReadTimeout))
@@ -121,84 +157,73 @@ func (r VideoReader) readRemote(known domain.VideoManifest, offset, length int64
 	header, err := ReadVideoManifest(data)
 	if errors.Is(err, warpnet.ErrProtocolNotSupported) {
 		_ = s.Reset()
-		return r.readFile(offset, length)
+		return v.fetchFile()
 	}
 	if err != nil {
 		_ = s.Reset()
-		return known, nil, err
+		return v.manifest, err
 	}
 
-	manifest := known
+	manifest := v.manifest
 	if len(manifest.Hashes) == 0 {
-		if err := VerifyManifest(r.Author, r.Key, header); err != nil {
+		if err := VerifyManifest(v.Author, v.Key, header); err != nil {
 			_ = s.Reset()
-			return known, nil, err
+			return v.manifest, err
 		}
 		manifest = header
-		if err := r.Cache.SetForeignManifestWithTTL(r.Author.Id, r.Key, manifest); err != nil {
-			log.Errorf("media meta: storing manifest of %s: %v", r.Key, err)
+		if err := v.Cache.SetForeignManifestWithTTL(v.Author.Id, v.Key, manifest); err != nil {
+			log.Errorf("media meta: storing manifest of %s: %v", v.Key, err)
 		}
 	}
 
-	chunks, err := r.readChunks(data, s, manifest, offset, length)
-	if err != nil {
-		_ = s.Reset()
-		return manifest, nil, err
-	}
-	_ = s.Close()
-	return manifest, chunks, nil
+	v.manifest = manifest
+	v.remote, v.data, v.next = s, data, int(offset/manifest.ChunkSize)
+	return manifest, nil
 }
 
-func (r VideoReader) readChunks(
-	data io.Reader, s warpnet.WarpStream, manifest domain.VideoManifest, offset, length int64,
-) ([]byte, error) {
-	end := min(offset+length, manifest.Size)
-	if offset < 0 || offset >= end {
-		return nil, nil
+func (v *VideoSource) readRemoteChunk(idx int) ([]byte, error) {
+	chunk := make([]byte, v.manifest.ChunkLen(idx))
+	_ = v.remote.SetReadDeadline(time.Now().Add(chunkReadTimeout))
+	if _, err := io.ReadFull(v.data, chunk); err != nil {
+		v.Close()
+		return nil, err
+	}
+	if err := VerifyChunk(v.manifest, idx, chunk); err != nil {
+		v.Close()
+		return nil, err
 	}
 
-	first := offset / manifest.ChunkSize
-	var chunks []byte
-	for idx := int(first); idx <= int((end-1)/manifest.ChunkSize); idx++ {
-		chunk := make([]byte, manifest.ChunkLen(idx))
-		_ = s.SetReadDeadline(time.Now().Add(chunkReadTimeout))
-		if _, err := io.ReadFull(data, chunk); err != nil {
-			return nil, err
-		}
-		if err := VerifyChunk(manifest, idx, chunk); err != nil {
-			return nil, err
-		}
-		if err := r.Cache.SetForeignChunkWithTTL(r.Author.Id, r.Key, idx, chunk); err != nil {
-			log.Errorf("media meta: storing chunk %d of %s: %v", idx, r.Key, err)
-		}
-		chunks = append(chunks, chunk...)
+	v.next++
+	if err := v.Cache.SetForeignChunkWithTTL(v.Author.Id, v.Key, idx, chunk); err != nil {
+		log.Errorf("media meta: storing chunk %d of %s: %v", idx, v.Key, err)
 	}
-
-	start := offset - first*manifest.ChunkSize
-	return chunks[start : start+end-offset], nil
+	return chunk, nil
 }
 
-func (r VideoReader) readFile(offset, length int64) (domain.VideoManifest, []byte, error) {
-	resp, err := r.Streamer.GenericStream(r.Author.NodeId, r.FilePath, event.GetVideoEvent{UserId: r.Author.Id, Key: r.Key})
+func (v *VideoSource) fetchFile() (domain.VideoManifest, error) {
+	resp, err := v.Streamer.GenericStream(v.Author.NodeId, v.FilePath, event.GetVideoEvent{UserId: v.Author.Id, Key: v.Key})
 	if err != nil {
-		return domain.VideoManifest{}, nil, err
+		return v.manifest, err
 	}
 
 	var videoResp event.GetVideoResponse
 	if err := json.Unmarshal(resp, &videoResp); err != nil {
-		return domain.VideoManifest{}, nil, err
+		return v.manifest, err
 	}
 	if videoResp.File == "" {
-		return domain.VideoManifest{}, nil, ErrVideoUnavailable
+		return v.manifest, ErrVideoUnavailable
 	}
-	if err := VerifyForeignVideo(r.Author, r.Key, videoResp.File); err != nil {
-		return domain.VideoManifest{}, nil, err
+	if err := VerifyForeignVideo(v.Author, v.Key, videoResp.File); err != nil {
+		return v.manifest, err
 	}
-	if err := r.Cache.SetForeignVideoWithTTL(r.Author.Id, r.Key, domain.Base64Video(videoResp.File)); err != nil {
-		return domain.VideoManifest{}, nil, err
+	if err := v.Cache.SetForeignVideoWithTTL(v.Author.Id, v.Key, domain.Base64Video(videoResp.File)); err != nil {
+		return v.manifest, err
 	}
 
-	cached := r
-	cached.Streamer = nil
-	return cached.ReadRange(offset, length)
+	manifest, err := v.Cache.GetManifest(v.Author.Id, v.Key)
+	if err != nil {
+		return v.manifest, err
+	}
+	v.manifest = manifest
+	return manifest, nil
 }

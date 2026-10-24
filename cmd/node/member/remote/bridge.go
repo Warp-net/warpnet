@@ -26,8 +26,12 @@ package remote
 
 import (
 	"crypto/ed25519"
+	"errors"
+	"github.com/Warp-net/warpnet/cmd/node/member/videostream"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/security"
 	"net/http"
 	"net/url"
@@ -81,6 +85,14 @@ const handshakeTimeout = 10 * time.Second
 
 type Node interface {
 	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error)
+	SelfStreamOpen(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
+}
+
+type VideoSessions interface {
+	Start(id string, offset int64, s warpnet.WarpStream, sender videostream.FrameSender) (domain.VideoManifest, error)
+	Credit(id string, count int)
+	Stop(id string)
+	StopAll()
 }
 
 // Authenticator is the slice of the auth service the dispatcher uses: log the
@@ -141,6 +153,44 @@ func (b *BridgeHandler) enroll(pub []byte) {
 type clientConn struct {
 	static     []byte
 	authorized atomic.Bool
+	videos     VideoSessions
+
+	conn    *websocket.Conn
+	channel Channel
+	writeMx *sync.Mutex
+}
+
+func (c *clientConn) write(msg event.Message) error {
+	out, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	c.writeMx.Lock()
+	defer c.writeMx.Unlock()
+	sealed, err := c.channel.Encrypt(out)
+	if err != nil {
+		_ = c.conn.Close()
+		return err
+	}
+	if err := c.conn.WriteMessage(websocket.BinaryMessage, sealed); err != nil {
+		_ = c.conn.Close() // unblock ReadMessage so the loop exits
+		return err
+	}
+	return nil
+}
+
+func (c *clientConn) SendFrame(streamId string, frame event.VideoFrame) error {
+	body, err := json.Marshal(frame)
+	if err != nil {
+		return err
+	}
+	return c.write(event.Message{
+		MessageId:   streamId,
+		Destination: videostream.FramePath,
+		Body:        body,
+		Timestamp:   time.Now(),
+		Version:     "0.0.0",
+	})
 }
 
 func (b *BridgeHandler) Handle() http.HandlerFunc {
@@ -174,29 +224,22 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		// writeMx serializes Encrypt+WriteMessage (gorilla allows a single writer,
 		// counter nonces require wire order to match encryption order); sem bounds
 		// in-flight work; the frontend matches replies by message_id.
-		var writeMx sync.Mutex
 		var inflight sync.WaitGroup
 		sem := make(chan struct{}, maxInflightDispatches)
 
-		c := &clientConn{static: channel.RemoteStatic()}
+		c := &clientConn{
+			static:  channel.RemoteStatic(),
+			videos:  videostream.NewSessions(),
+			conn:    conn,
+			channel: channel,
+			writeMx: new(sync.Mutex),
+		}
 		c.authorized.Store(b.isEnrolled(c.static))
+		defer c.videos.StopAll()
 
 		respond := func(req event.Message) {
-			out, err := json.Marshal(b.dispatch(req, c))
-			if err != nil {
-				log.Errorf("remote: ws marshal: %v", err)
-				return
-			}
-			writeMx.Lock()
-			defer writeMx.Unlock()
-			sealed, err := channel.Encrypt(out)
-			if err != nil {
-				log.Errorf("remote: ws encrypt: %v", err)
-				_ = conn.Close()
-				return
-			}
-			if err := conn.WriteMessage(websocket.BinaryMessage, sealed); err != nil {
-				_ = conn.Close() // unblock ReadMessage so the loop exits
+			if err := c.write(b.dispatch(req, c)); err != nil {
+				log.Errorf("remote: ws write: %v", err)
 			}
 		}
 
@@ -263,6 +306,28 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 		resp.Body = body
 	case event.PRIVATE_POST_LOGIN:
 		resp.Body = b.login(req.Body, c)
+	case event.PRIVATE_GET_VIDEO, event.PRIVATE_GET_CHAT_VIDEO:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
+		resp.Body = b.startVideo(req, c)
+	case videostream.CreditPath, videostream.StopPath:
+		if !b.isAuthorized(c) {
+			resp.Body = newUnauthorizedResp()
+			break
+		}
+		var ev event.VideoStreamEvent
+		if err := json.Unmarshal(req.Body, &ev); err != nil {
+			resp.Body = newErrorResp(err.Error())
+			break
+		}
+		if req.Destination == videostream.StopPath {
+			c.videos.Stop(ev.StreamId)
+		} else {
+			c.videos.Credit(ev.StreamId, ev.Count)
+		}
+		resp.Body = json.RawMessage(event.Accepted)
 	case event.PRIVATE_POST_LOGOUT:
 		if !b.isAuthorized(c) {
 			resp.Body = newUnauthorizedResp()
@@ -315,6 +380,51 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 	if n == nil {
 		return newErrorResp("not attached server node")
 	}
+	req, ownNodeId, err := b.signRequest(req)
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	respData, err := n.SelfStream(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	return respData
+}
+
+func (b *BridgeHandler) startVideo(req event.Message, c *clientConn) json.RawMessage {
+	b.mx.RLock()
+	n := b.node
+	b.mx.RUnlock()
+	if n == nil {
+		return newErrorResp("not attached server node")
+	}
+
+	var ev event.GetVideoRangeEvent
+	if err := json.Unmarshal(req.Body, &ev); err != nil {
+		return newErrorResp(err.Error())
+	}
+
+	req, ownNodeId, err := b.signRequest(req)
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	s, err := n.SelfStreamOpen(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	manifest, err := c.videos.Start(req.MessageId, ev.Offset, s, c)
+	if err != nil && !errors.Is(err, media_meta.ErrVideoUnavailable) {
+		return newErrorResp(err.Error())
+	}
+
+	body, err := json.Marshal(event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime})
+	if err != nil {
+		return newErrorResp(err.Error())
+	}
+	return body
+}
+
+func (b *BridgeHandler) signRequest(req event.Message) (event.Message, warpnet.WarpPeerID, error) {
 	if req.Timestamp.IsZero() {
 		req.Timestamp = time.Now()
 	}
@@ -322,14 +432,10 @@ func (b *BridgeHandler) call(req event.Message) json.RawMessage {
 	privKey := b.auth.PrivateKey()
 	ownNodeId, err := warpnet.IDFromPublicKey(privKey.Public().(ed25519.PublicKey))
 	if err != nil {
-		return newErrorResp(err.Error())
+		return req, "", err
 	}
 	req.Signature = security.Sign(privKey, req.SigningBytes())
-	respData, err := n.SelfStream(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
-	if err != nil {
-		return newErrorResp(err.Error())
-	}
-	return respData
+	return req, ownNodeId, nil
 }
 
 func newErrorResp(msg string) json.RawMessage {

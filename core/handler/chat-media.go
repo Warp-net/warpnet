@@ -39,13 +39,10 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	maxChatVideoRangeLength = units.MiB * 4
-
 	ErrEmptyChatImageKey warpnet.WarpError = "empty image key"
 	ErrEmptyChatVideoKey warpnet.WarpError = "empty video key"
 )
@@ -335,7 +332,7 @@ func StreamPlayChatVideoHandler(
 		if ev.UserId != ownerId {
 			u, err := userRepo.Get(ev.UserId)
 			if errors.Is(err, database.ErrUserNotFound) {
-				return event.GetVideoRangeResponse{}, nil
+				return domain.VideoManifest{}, nil
 			}
 			if err != nil {
 				return nil, fmt.Errorf("play chat video: fetching user: %w", err)
@@ -350,16 +347,22 @@ func StreamPlayChatVideoHandler(
 			}
 		}
 
-		manifest, data, err := reader.ReadRange(ev.Offset, min(ev.Length, maxChatVideoRangeLength))
+		video, err := reader.Open(ev.Offset)
 		if errors.Is(err, database.ErrMediaNotFound) || errors.Is(err, media_meta.ErrVideoUnavailable) ||
 			errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.GetVideoRangeResponse{}, nil
+			return domain.VideoManifest{}, nil
 		}
 		if err != nil {
 			log.Warnf("play chat video: refused video %s of %s: %v", ev.Key, ev.UserId, err)
-			return event.GetVideoRangeResponse{}, nil
+			return domain.VideoManifest{}, nil
 		}
-		return event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime, Data: data}, nil
+		defer video.Close()
+
+		if err := video.WriteTo(s); err != nil {
+			log.Debugf("play chat video: streaming %s stopped: %v", ev.Key, err)
+			_ = s.Reset()
+		}
+		return []byte{}, nil
 	}
 }
 

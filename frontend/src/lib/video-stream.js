@@ -24,7 +24,7 @@ resulting from the use or misuse of this software.
 
 import { createFile, MP4BoxBuffer } from "mp4box";
 
-const RANGE_SIZE = 1024 * 1024;
+const CREDITS = 4;
 const SECONDS_AHEAD = 20;
 const SECONDS_PER_SEGMENT = 2;
 const SECONDS_KEPT_BEHIND = 10;
@@ -35,15 +35,17 @@ export function canStreamVideo() {
   return typeof window !== "undefined" && typeof window.MediaSource === "function";
 }
 
-export function streamVideo(video, readRange, onFailure) {
+export function streamVideo(video, openStream, onFailure) {
   const mediaSource = new MediaSource();
   const url = URL.createObjectURL(mediaSource);
   const file = createFile();
   const tracks = [];
+  let current = null;
+  let generation = 0;
   let size = Infinity;
   let position = 0;
-  let generation = 0;
-  let reading = false;
+  let owed = 0;
+  let isBroken = false;
   let ready = false;
   let flushed = false;
   let closed = false;
@@ -58,32 +60,74 @@ export function streamVideo(video, readRange, onFailure) {
     return 0;
   };
 
-  const read = async () => {
-    if (reading || closed) return;
-    reading = true;
-    const started = generation;
+  const isAppending = () => tracks.some((t) => t.appending || t.queue.length > 0);
+
+  const hasRoom = () => !ready || (!isAppending() && bufferedAhead() < SECONDS_AHEAD);
+
+  const giveCredit = () => {
+    if (!current || owed === 0 || !hasRoom()) return;
+    current.credit(owed);
+    owed = 0;
+  };
+
+  const stopStream = () => {
+    if (current) current.stop();
+    current = null;
+    owed = 0;
+  };
+
+  const open = async (offset) => {
+    stopStream();
+    const started = ++generation;
+    position = offset;
+    isBroken = false;
+    let handle;
     try {
-      while (!closed && started === generation && position < size && !(ready && bufferedAhead() > SECONDS_AHEAD)) {
-        const at = position;
-        const range = await readRange(at, RANGE_SIZE);
-        if (closed || started !== generation) return;
-        if (!range || !range.size || !range.data || range.data.length === 0) {
-          throw new VideoUnavailableError("video is not available");
-        }
-        size = range.size;
-        const end = at + range.data.length;
-        const next = file.appendBuffer(MP4BoxBuffer.fromArrayBuffer(toArrayBuffer(range.data), at), end >= size);
-        position = Number.isFinite(next) && next !== at ? next : end;
+      handle = await openStream(offset, (frame) => onFrame(started, frame));
+    } catch (err) {
+      if (started === generation) fail(err);
+      return;
+    }
+    if (closed || started !== generation) {
+      if (handle) handle.stop();
+      return;
+    }
+    if (!handle) {
+      fail(new VideoUnavailableError("video is not available"));
+      return;
+    }
+    size = handle.size;
+    current = handle;
+    owed = ready ? CREDITS : 1;
+    giveCredit();
+  };
+
+  const onFrame = (started, frame) => {
+    if (closed || started !== generation) return;
+    if (frame.error) {
+      stopStream();
+      isBroken = true;
+      return;
+    }
+    if (frame.data.length > 0) {
+      const end = frame.offset + frame.data.length;
+      const next = file.appendBuffer(MP4BoxBuffer.fromArrayBuffer(toArrayBuffer(frame.data), frame.offset), end >= size);
+      position = end;
+      if (Number.isFinite(next) && next !== end && next < size) {
+        open(next);
+        return;
       }
-      if (!closed && started === generation && position >= size && !flushed) {
+    }
+    if (frame.isLast) {
+      stopStream();
+      if (!flushed) {
         flushed = true;
         file.flush();
       }
-    } catch (err) {
-      if (started === generation) fail(err);
-    } finally {
-      if (started === generation) reading = false;
+      return;
     }
+    owed++;
+    giveCredit();
   };
 
   const append = (track) => {
@@ -117,26 +161,27 @@ export function streamVideo(video, readRange, onFailure) {
       return;
     }
     append(track);
-    read();
+    giveCredit();
   };
 
   const resume = () => {
     tracks.forEach(append);
-    read();
+    if (isBroken && hasRoom() && position < size) {
+      open(position);
+      return;
+    }
+    giveCredit();
   };
 
   const onSeeking = () => {
     if (!ready || closed) return;
     const { offset } = file.seek(video.currentTime, true);
-    generation++;
-    reading = false;
     flushed = false;
-    position = offset;
     for (const track of tracks) {
       track.queue.length = 0;
       track.done = false;
     }
-    read();
+    open(offset);
   };
 
   file.onReady = (info) => {
@@ -180,6 +225,7 @@ export function streamVideo(video, readRange, onFailure) {
   const stop = () => {
     if (closed) return;
     closed = true;
+    stopStream();
     video.removeEventListener("seeking", onSeeking);
     video.removeEventListener("timeupdate", resume);
     video.removeEventListener("waiting", resume);
@@ -196,7 +242,7 @@ export function streamVideo(video, readRange, onFailure) {
   video.addEventListener("seeking", onSeeking);
   video.addEventListener("timeupdate", resume);
   video.addEventListener("waiting", resume);
-  mediaSource.addEventListener("sourceopen", read, { once: true });
+  mediaSource.addEventListener("sourceopen", () => open(0), { once: true });
   video.src = url;
 
   return { stop };

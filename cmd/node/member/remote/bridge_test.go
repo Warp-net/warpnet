@@ -25,6 +25,7 @@ resulting from the use or misuse of this software.
 package remote
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"errors"
 	"net/http"
@@ -34,6 +35,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/cmd/node/member/videostream"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
@@ -113,6 +116,29 @@ func (n *fakeNode) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute, _ 
 	return json.RawMessage(`{"ok":true}`), nil
 }
 
+func (n *fakeNode) SelfStreamOpen(_, _ warpnet.WarpPeerID, path stream.WarpRoute, _ any) (warpnet.WarpStream, error) {
+	n.mx.Lock()
+	n.calls = append(n.calls, string(path))
+	n.mx.Unlock()
+
+	manifest := media_meta.BuildVideoManifest(testVideo, "video/mp4")
+	client, server := stream.NewLoopbackStream("", "", warpnet.WarpProtocolID(path))
+	go func() {
+		_ = media_meta.WriteVideoRange(server, videoChunks(testVideo), "owner-id", manifest.Key(), manifest, 0, 0)
+		_ = server.Close()
+	}()
+	return client, nil
+}
+
+var testVideo = bytes.Repeat([]byte("frame"), media_meta.VideoChunkSize/5+100)
+
+type videoChunks []byte
+
+func (c videoChunks) GetChunk(_, _ string, idx int) ([]byte, error) {
+	start := idx * media_meta.VideoChunkSize
+	return c[start:min(start+media_meta.VideoChunkSize, len(c))], nil
+}
+
 func (n *fakeNode) callCount() int {
 	n.mx.Lock()
 	defer n.mx.Unlock()
@@ -178,6 +204,12 @@ func dial(t *testing.T, srv *httptest.Server, key noise.DHKey) *testClient {
 
 func (c *testClient) send(t *testing.T, path string, body any) event.Message {
 	t.Helper()
+	c.post(t, path, body)
+	return c.read(t)
+}
+
+func (c *testClient) post(t *testing.T, path string, body any) {
+	t.Helper()
 
 	raw, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -193,6 +225,10 @@ func (c *testClient) send(t *testing.T, path string, body any) event.Message {
 	sealed, err := c.session.Encrypt(req)
 	require.NoError(t, err)
 	require.NoError(t, c.conn.WriteMessage(websocket.BinaryMessage, sealed))
+}
+
+func (c *testClient) read(t *testing.T) event.Message {
+	t.Helper()
 
 	require.NoError(t, c.conn.SetReadDeadline(time.Now().Add(5*time.Second)))
 	_, frame, err := c.conn.ReadMessage()
@@ -292,4 +328,58 @@ func TestBridge_LogoutRevokesAuthorityUntilNextLogin(t *testing.T) {
 
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 	assert.Equal(t, json.RawMessage(`{"ok":true}`), owner.send(t, event.PRIVATE_POST_TWEET, struct{}{}).Body)
+}
+
+func TestBridge_VideoFramesFollowTheCredits(t *testing.T) {
+	srv, _, node := newTestBridge(t)
+	owner := dial(t, srv, clientKey(t))
+	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
+
+	resp := owner.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoRangeEvent{UserId: "owner-id", Key: "key"})
+	var started event.GetVideoRangeResponse
+	require.NoError(t, json.Unmarshal(resp.Body, &started))
+	assert.Equal(t, event.GetVideoRangeResponse{Size: int64(len(testVideo)), Mime: "video/mp4"}, started)
+	assert.Equal(t, 1, node.callCount())
+
+	owner.post(t, videostream.CreditPath, event.VideoStreamEvent{StreamId: "test-message-id", Count: 8})
+
+	var (
+		joined   []byte
+		isLast   bool
+		accepted bool
+	)
+	for range 3 {
+		msg := owner.read(t)
+		if msg.Destination == videostream.CreditPath {
+			accepted = true
+			continue
+		}
+		require.Equal(t, videostream.FramePath, msg.Destination)
+		assert.Equal(t, "test-message-id", msg.MessageId, "frames carry the stream id the player listens on")
+		var frame event.VideoFrame
+		require.NoError(t, json.Unmarshal(msg.Body, &frame))
+		assert.Equal(t, int64(len(joined)), frame.Offset)
+		joined = append(joined, frame.Data...)
+		isLast = frame.IsLast
+	}
+	assert.True(t, accepted)
+	assert.True(t, isLast)
+	assert.True(t, bytes.Equal(testVideo, joined))
+
+	assert.Equal(t, json.RawMessage(event.Accepted),
+		owner.send(t, videostream.StopPath, event.VideoStreamEvent{StreamId: "test-message-id"}).Body)
+}
+
+func TestBridge_UnknownClientCannotStreamVideo(t *testing.T) {
+	srv, _, node := newTestBridge(t)
+	owner := dial(t, srv, clientKey(t))
+	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
+
+	stranger := dial(t, srv, clientKey(t))
+	resp := stranger.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoRangeEvent{UserId: "owner-id", Key: "key"})
+	assert.Equal(t, http.StatusUnauthorized, responseError(t, resp).Code)
+
+	resp = stranger.send(t, videostream.CreditPath, event.VideoStreamEvent{StreamId: "test-message-id", Count: 8})
+	assert.Equal(t, http.StatusUnauthorized, responseError(t, resp).Code)
+	assert.Zero(t, node.callCount())
 }

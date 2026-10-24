@@ -43,8 +43,7 @@ import (
 )
 
 const (
-	maxVideoSize        = units.MiB * 36
-	maxVideoRangeLength = units.MiB * 4
+	maxVideoSize = units.MiB * 36
 
 	ErrTooLargeVideo    warpnet.WarpError = "video is too large: 36 MiB is the maximum"
 	ErrEmptyVideoKey    warpnet.WarpError = "empty video key"
@@ -290,7 +289,7 @@ func StreamPlayVideoHandler(
 		if ev.UserId != ownerId {
 			u, err := userRepo.Get(ev.UserId)
 			if errors.Is(err, database.ErrUserNotFound) {
-				return event.GetVideoRangeResponse{}, nil
+				return domain.VideoManifest{}, nil
 			}
 			if err != nil {
 				return nil, fmt.Errorf("play video: fetching user: %w", err)
@@ -305,16 +304,22 @@ func StreamPlayVideoHandler(
 			}
 		}
 
-		manifest, data, err := reader.ReadRange(ev.Offset, min(ev.Length, maxVideoRangeLength))
+		video, err := reader.Open(ev.Offset)
 		if errors.Is(err, database.ErrMediaNotFound) || errors.Is(err, media_meta.ErrVideoUnavailable) ||
 			errors.Is(err, warpnet.ErrNodeIsOffline) {
-			return event.GetVideoRangeResponse{}, nil
+			return domain.VideoManifest{}, nil
 		}
 		if err != nil {
 			log.Warnf("play video: refused video %s of %s: %v", ev.Key, ev.UserId, err)
-			return event.GetVideoRangeResponse{}, nil
+			return domain.VideoManifest{}, nil
 		}
-		return event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime, Data: data}, nil
+		defer video.Close()
+
+		if err := video.WriteTo(s); err != nil {
+			log.Debugf("play video: streaming %s stopped: %v", ev.Key, err)
+			_ = s.Reset()
+		}
+		return []byte{}, nil
 	}
 }
 

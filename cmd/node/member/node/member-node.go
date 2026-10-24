@@ -377,6 +377,15 @@ func (m *MemberNode) SelfStream(
 	return m.node.SelfStream(from, to, path, data)
 }
 
+func (m *MemberNode) SelfStreamOpen(
+	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
+) (warpnet.WarpStream, error) {
+	if m == nil || m.node == nil {
+		return nil, warpnet.WarpError("member: stream: node is not initialized")
+	}
+	return m.node.SelfStreamOpen(from, to, path, data)
+}
+
 type streamNodeID = string
 
 func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute, data any) (_ []byte, err error) {

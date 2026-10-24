@@ -4,7 +4,7 @@ import { render, waitFor, fireEvent } from '@testing-library/vue';
 vi.mock('@/service/service', () => ({
   warpnetService: {
     getChatVideo: vi.fn(),
-    getChatVideoRange: vi.fn(),
+    openVideoStream: vi.fn(),
   },
 }));
 
@@ -111,10 +111,11 @@ describe('ChatVideo streaming', () => {
     await fireEvent.click(getByLabelText('Play video'));
     await waitFor(() => expect(streamVideo).toHaveBeenCalled());
 
-    const [video, readRange] = streamVideo.mock.calls[0];
+    const [video, openStream] = streamVideo.mock.calls[0];
     expect(video).toBe(container.querySelector('video'));
-    await readRange(0, 1024);
-    expect(warpnetService.getChatVideoRange).toHaveBeenCalledWith({userId: 'sender1', key: 'vkey1', offset: 0, length: 1024});
+    const onFrame = vi.fn();
+    await openStream(0, onFrame);
+    expect(warpnetService.openVideoStream).toHaveBeenCalledWith({userId: 'sender1', key: 'vkey1', offset: 0, chat: true}, onFrame);
     expect(warpnetService.getChatVideo).not.toHaveBeenCalled();
   });
 
