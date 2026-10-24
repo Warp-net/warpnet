@@ -116,7 +116,7 @@ func (n *fakeNode) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute, _ 
 	return json.RawMessage(`{"ok":true}`), nil
 }
 
-func (n *fakeNode) SelfStreamOpen(_, _ warpnet.WarpPeerID, path stream.WarpRoute, _ any) (warpnet.WarpStream, error) {
+func (n *fakeNode) OpenSelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute, _ any) (warpnet.WarpStream, error) {
 	n.mx.Lock()
 	n.calls = append(n.calls, string(path))
 	n.mx.Unlock()
@@ -124,20 +124,15 @@ func (n *fakeNode) SelfStreamOpen(_, _ warpnet.WarpPeerID, path stream.WarpRoute
 	manifest := media_meta.BuildVideoManifest(testVideo, "video/mp4")
 	client, server := stream.NewLoopbackStream("", "", warpnet.WarpProtocolID(path))
 	go func() {
-		_ = media_meta.WriteVideoRange(server, videoChunks(testVideo), "owner-id", manifest.Key(), manifest, 0, 0)
+		if err := media_meta.WriteVideoManifest(server, manifest); err == nil {
+			_, _ = server.Write(testVideo)
+		}
 		_ = server.Close()
 	}()
 	return client, nil
 }
 
 var testVideo = bytes.Repeat([]byte("frame"), media_meta.VideoChunkSize/5+100)
-
-type videoChunks []byte
-
-func (c videoChunks) GetChunk(_, _ string, idx int) ([]byte, error) {
-	start := idx * media_meta.VideoChunkSize
-	return c[start:min(start+media_meta.VideoChunkSize, len(c))], nil
-}
 
 func (n *fakeNode) callCount() int {
 	n.mx.Lock()
@@ -335,10 +330,10 @@ func TestBridge_VideoFramesFollowTheCredits(t *testing.T) {
 	owner := dial(t, srv, clientKey(t))
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 
-	resp := owner.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoRangeEvent{UserId: "owner-id", Key: "key"})
-	var started event.GetVideoRangeResponse
+	resp := owner.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoChunksEvent{UserId: "owner-id", Key: "key"})
+	var started event.GetVideoChunksResponse
 	require.NoError(t, json.Unmarshal(resp.Body, &started))
-	assert.Equal(t, event.GetVideoRangeResponse{Size: int64(len(testVideo)), Mime: "video/mp4"}, started)
+	assert.Equal(t, event.GetVideoChunksResponse{Size: int64(len(testVideo)), Mime: "video/mp4"}, started)
 	assert.Equal(t, 1, node.callCount())
 
 	owner.post(t, videostream.CreditPath, event.VideoStreamEvent{StreamId: "test-message-id", Count: 8})
@@ -376,7 +371,7 @@ func TestBridge_UnknownClientCannotStreamVideo(t *testing.T) {
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 
 	stranger := dial(t, srv, clientKey(t))
-	resp := stranger.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoRangeEvent{UserId: "owner-id", Key: "key"})
+	resp := stranger.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoChunksEvent{UserId: "owner-id", Key: "key"})
 	assert.Equal(t, http.StatusUnauthorized, responseError(t, resp).Code)
 
 	resp = stranger.send(t, videostream.CreditPath, event.VideoStreamEvent{StreamId: "test-message-id", Count: 8})

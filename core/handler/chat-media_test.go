@@ -223,25 +223,26 @@ func TestGetChatVideo_ChatPartnersOnly(t *testing.T) {
 	assert.Empty(t, serve(testSignerID))
 }
 
-func TestGetChatVideoRange_ChatPartnersOnly(t *testing.T) {
-	video := newVideoChunksDouble(ownerID, media_meta.VideoChunkSize+1)
-	h := StreamGetChatVideoRangeHandler(&mediaStreamerDouble{}, testSignerKey, video, ownChat(), chatUsers())
-	ev := event.GetVideoRangeEvent{UserId: ownerID, Key: video.key}
+func TestGetChatVideoChunks_ChatPartnersOnly(t *testing.T) {
+	videos := database.NewChatVideoRepo(newVideoDB(t))
+	key, video := storeTestVideo(t, videos, ownerID, media_meta.VideoChunkSize+1)
+	h := StreamGetChatVideoChunksHandler(&mediaStreamerDouble{}, testSignerKey, videos, ownChat(), chatUsers())
+	ev := event.GetVideoChunksEvent{UserId: ownerID, Key: key}
 
 	t.Run("a peer the owner chats with gets the stream", func(t *testing.T) {
-		manifest, body, err := serveVideoRange(t, h, ev, warpnet.FromStringToPeerID(remoteNodeID))
+		manifest, body, err := serveVideo(t, h, ev, warpnet.FromStringToPeerID(remoteNodeID))
 		require.NoError(t, err)
-		assert.Equal(t, video.key, manifest.Key())
-		assert.Equal(t, video.video, body)
+		assert.Equal(t, key, manifest.Key())
+		assert.Equal(t, video, body)
 	})
 
 	t.Run("an outsider that knows the key gets nothing", func(t *testing.T) {
-		_, _, err := serveVideoRange(t, h, ev, testSignerID)
+		_, _, err := serveVideo(t, h, ev, testSignerID)
 		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
 	})
 
 	t.Run("another user's video is not served here", func(t *testing.T) {
-		_, _, err := serveVideoRange(t, h, event.GetVideoRangeEvent{UserId: testPartnerID, Key: video.key},
+		_, _, err := serveVideo(t, h, event.GetVideoChunksEvent{UserId: testPartnerID, Key: key},
 			warpnet.FromStringToPeerID(remoteNodeID))
 		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
 	})

@@ -2,15 +2,18 @@
 package database
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"io"
 	"os"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/media-meta"
+	"github.com/Warp-net/warpnet/core/stream"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/google/uuid"
@@ -73,7 +76,7 @@ func (s *VideoRepoTestSuite) TestVideoRoundTripAcrossChunks() {
 
 	var joined []byte
 	for idx := range manifest.Hashes {
-		chunk, err := s.repo.GetChunk(alice, string(key), idx)
+		chunk, err := s.repo.getChunk(alice, string(key), idx)
 		s.Require().NoError(err)
 		s.Equal(manifest.ChunkLen(idx), int64(len(chunk)))
 		joined = append(joined, chunk...)
@@ -125,14 +128,14 @@ func (s *VideoRepoTestSuite) TestPartlyCachedVideoIsNotWhole() {
 	manifest := media_meta.BuildVideoManifest(raw, "video/mp4")
 	key := manifest.Key()
 
-	s.Require().NoError(s.repo.SetForeignManifestWithTTL(user, key, manifest))
-	s.Require().NoError(s.repo.SetForeignChunkWithTTL(user, key, 0, raw[:1<<20]))
+	s.Require().NoError(s.repo.setForeignManifest(user, key, manifest))
+	s.Require().NoError(s.repo.setForeignChunk(user, key, 0, raw[:1<<20]))
 
-	chunk, err := s.repo.GetChunk(user, key, 0)
+	chunk, err := s.repo.getChunk(user, key, 0)
 	s.Require().NoError(err)
 	s.True(bytes.Equal(raw[:1<<20], chunk))
 
-	_, err = s.repo.GetChunk(user, key, 1)
+	_, err = s.repo.getChunk(user, key, 1)
 	s.ErrorIs(err, ErrMediaNotFound, "a missing chunk is fetched on demand")
 	_, err = s.repo.GetVideo(user, key)
 	s.ErrorIs(err, ErrMediaNotFound, "a partial cache is not a whole file")
@@ -154,15 +157,15 @@ func (s *VideoRepoTestSuite) TestVideoRejectsEmptyInput() {
 	s.ErrorIs(err, ErrMediaNotFound)
 	_, err = s.repo.GetVideo(user, "")
 	s.ErrorIs(err, ErrMediaNotFound)
-	_, err = s.repo.GetChunk(user, "k", -1)
+	_, err = s.repo.getChunk(user, "k", -1)
 	s.ErrorIs(err, ErrMediaNotFound)
 
 	s.Error(s.repo.SetForeignVideoWithTTL(user, "", "data:video/mp4;base64,AAAA"))
 	s.Error(s.repo.SetForeignVideoWithTTL(user, "k", ""))
 	s.Error(s.repo.SetForeignVideoWithTTL("", "k", "data:video/mp4;base64,AAAA"))
-	s.Error(s.repo.SetForeignManifestWithTTL(user, "k", domain.VideoManifest{}))
-	s.Error(s.repo.SetForeignChunkWithTTL(user, "k", 0, nil))
-	s.Error(s.repo.SetForeignChunkWithTTL(user, "k", -1, []byte{1}))
+	s.Error(s.repo.setForeignManifest(user, "k", domain.VideoManifest{}))
+	s.Error(s.repo.setForeignChunk(user, "k", 0, nil))
+	s.Error(s.repo.setForeignChunk(user, "k", -1, []byte{1}))
 }
 
 func (s *VideoRepoTestSuite) TestNilVideoRepoNeverPanics() {
@@ -174,13 +177,46 @@ func (s *VideoRepoTestSuite) TestNilVideoRepoNeverPanics() {
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 	_, err = repo.GetManifest("u", "k")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
-	_, err = repo.GetChunk("u", "k", 0)
-	s.ErrorIs(err, ErrMediaRepoNotInit)
 	_, err = repo.GetCopy("u", "k")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 	s.ErrorIs(repo.SetForeignVideoWithTTL("u", "k", "data:video/mp4;base64,AAAA"), ErrMediaRepoNotInit)
-	s.ErrorIs(repo.SetForeignManifestWithTTL("u", "k", domain.VideoManifest{Hashes: [][]byte{{1}}}), ErrMediaRepoNotInit)
-	s.ErrorIs(repo.SetForeignChunkWithTTL("u", "k", 0, []byte{1}), ErrMediaRepoNotInit)
+	s.ErrorIs(repo.WriteVideo(nil, "u", "k", domain.VideoManifest{}, 0), ErrMediaRepoNotInit)
+	_, err = repo.OpenForeignVideo(nil, domain.User{}, "k", 0)
+	s.ErrorIs(err, ErrMediaRepoNotInit)
+}
+
+func (s *VideoRepoTestSuite) TestWriteVideoSendsTheManifestAndTheChunksFromTheOffset() {
+	user := uuid.New().String()
+	raw, video := randomVideo(s, 2<<20+300)
+	key, err := s.repo.SetVideo(user, video)
+	s.Require().NoError(err)
+	manifest, err := s.repo.GetManifest(user, string(key))
+	s.Require().NoError(err)
+
+	read := func(offset int64) (domain.VideoManifest, []byte) {
+		client, server := stream.NewLoopbackStream("", "", "/test/route/0.0.0")
+		go func() {
+			s.NoError(s.repo.WriteVideo(server, user, string(key), manifest, offset))
+			_ = server.Close()
+		}()
+
+		r := bufio.NewReaderSize(client, media_meta.MaxManifestSize)
+		header, err := media_meta.ReadVideoManifest(r)
+		s.Require().NoError(err)
+		body, err := io.ReadAll(r)
+		s.Require().NoError(err)
+		return header, body
+	}
+
+	header, body := read(0)
+	s.Equal(manifest, header)
+	s.True(bytes.Equal(raw, body))
+
+	_, body = read(1<<20 + 5)
+	s.True(bytes.Equal(raw[1<<20:], body), "the chunk holding the offset comes whole")
+
+	_, body = read(int64(len(raw)) + 1)
+	s.Empty(body)
 }
 
 func (s *VideoRepoTestSuite) TestImageAndVideoNamespacesDoNotCollide() {

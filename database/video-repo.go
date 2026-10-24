@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/media-meta"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
@@ -41,8 +42,10 @@ import (
 
 const (
 	VideoSubNamespace    = "VIDEOS"
-	ChunkSubNamespace    = "CHUNKS"
-	ManifestSubNamespace = "MANIFEST"
+	chunkSubNamespace    = "CHUNKS"
+	manifestSubNamespace = "MANIFEST"
+
+	chunkWriteTimeout = 30 * time.Second
 )
 
 type VideoStorer interface {
@@ -81,7 +84,7 @@ func (repo *VideoRepo) SetVideo(userId string, video domain.Base64Video) (_ doma
 		return "", err
 	}
 	key := manifest.Key()
-	return domain.VideoKey(key), repo.storeVideo(userId, key, manifest, raw, local_store.PermanentTTL)
+	return domain.VideoKey(key), repo.setVideo(userId, key, manifest, raw, local_store.PermanentTTL)
 }
 
 func (repo *VideoRepo) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
@@ -99,7 +102,7 @@ func (repo *VideoRepo) SetForeignVideoWithTTL(userId, key string, video domain.B
 	if err != nil {
 		return err
 	}
-	return repo.storeVideo(userId, key, manifest, raw, foreignMediaTTL)
+	return repo.setVideo(userId, key, manifest, raw, foreignMediaTTL)
 }
 
 func (repo *VideoRepo) GetVideo(userId, key string) (domain.Base64Video, error) {
@@ -115,7 +118,7 @@ func (repo *VideoRepo) GetVideo(userId, key string) (domain.Base64Video, error) 
 
 	encoder := base64.NewEncoder(base64.StdEncoding, &file)
 	for idx := range manifest.Hashes {
-		chunk, err := repo.GetChunk(userId, key, idx)
+		chunk, err := repo.getChunk(userId, key, idx)
 		if err != nil {
 			return "", err
 		}
@@ -133,7 +136,7 @@ func (repo *VideoRepo) GetManifest(userId, key string) (domain.VideoManifest, er
 		return domain.VideoManifest{}, ErrMediaNotFound
 	}
 
-	data, err := repo.db.Get(repo.manifestKey(userId, key))
+	data, err := repo.db.Get(repo.buildManifestKey(userId, key))
 	if local_store.IsNotFoundError(err) {
 		return domain.VideoManifest{}, ErrMediaNotFound
 	}
@@ -148,44 +151,29 @@ func (repo *VideoRepo) GetManifest(userId, key string) (domain.VideoManifest, er
 	return manifest, nil
 }
 
-func (repo *VideoRepo) GetChunk(userId, key string, idx int) ([]byte, error) {
-	if repo == nil {
-		return nil, ErrMediaRepoNotInit
-	}
-	if key == "" || userId == "" || idx < 0 {
-		return nil, ErrMediaNotFound
-	}
-
-	chunk, err := repo.db.Get(repo.chunkKey(userId, key, idx))
-	if local_store.IsNotFoundError(err) {
-		return nil, ErrMediaNotFound
-	}
-	return chunk, err
-}
-
-func (repo *VideoRepo) SetForeignManifestWithTTL(userId, key string, manifest domain.VideoManifest) error {
+func (repo *VideoRepo) WriteVideo(
+	s warpnet.WarpStream, userId, key string, manifest domain.VideoManifest, offset int64,
+) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
-	if userId == "" || key == "" || len(manifest.Hashes) == 0 {
-		return local_store.DBError("no data for video manifest set provided")
-	}
-
-	data, err := json.Marshal(manifest)
-	if err != nil {
+	if err := media_meta.WriteVideoManifest(s, manifest); err != nil {
 		return err
 	}
-	return repo.db.SetWithTTL(repo.manifestKey(userId, key), data, foreignMediaTTL)
-}
+	if offset >= manifest.Size || manifest.ChunkSize <= 0 {
+		return nil
+	}
 
-func (repo *VideoRepo) SetForeignChunkWithTTL(userId, key string, idx int, chunk []byte) error {
-	if repo == nil {
-		return ErrMediaRepoNotInit
+	for idx := int(max(offset, 0) / manifest.ChunkSize); idx < len(manifest.Hashes); idx++ {
+		chunk, err := repo.getChunk(userId, key, idx)
+		if err != nil {
+			return err
+		}
+		if err := writeWithDeadline(s, chunk); err != nil {
+			return err
+		}
 	}
-	if userId == "" || key == "" || idx < 0 || len(chunk) == 0 {
-		return local_store.DBError("no data for video chunk set provided")
-	}
-	return repo.db.SetWithTTL(repo.chunkKey(userId, key, idx), chunk, foreignMediaTTL)
+	return nil
 }
 
 func (repo *VideoRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
@@ -195,7 +183,38 @@ func (repo *VideoRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
 	return getCopy(repo.db, repo.prefix, userId, key)
 }
 
-func (repo *VideoRepo) storeVideo(
+func (repo *VideoRepo) getChunk(userId, key string, idx int) ([]byte, error) {
+	if key == "" || userId == "" || idx < 0 {
+		return nil, ErrMediaNotFound
+	}
+
+	chunk, err := repo.db.Get(repo.buildChunkKey(userId, key, idx))
+	if local_store.IsNotFoundError(err) {
+		return nil, ErrMediaNotFound
+	}
+	return chunk, err
+}
+
+func (repo *VideoRepo) setForeignManifest(userId, key string, manifest domain.VideoManifest) error {
+	if userId == "" || key == "" || len(manifest.Hashes) == 0 {
+		return local_store.DBError("no data for video manifest set provided")
+	}
+
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	return repo.db.SetWithTTL(repo.buildManifestKey(userId, key), data, foreignMediaTTL)
+}
+
+func (repo *VideoRepo) setForeignChunk(userId, key string, idx int, chunk []byte) error {
+	if userId == "" || key == "" || idx < 0 || len(chunk) == 0 {
+		return local_store.DBError("no data for video chunk set provided")
+	}
+	return repo.db.SetWithTTL(repo.buildChunkKey(userId, key, idx), chunk, foreignMediaTTL)
+}
+
+func (repo *VideoRepo) setVideo(
 	userId, key string, manifest domain.VideoManifest, raw []byte, ttl time.Duration,
 ) error {
 	data, err := json.Marshal(manifest)
@@ -212,29 +231,29 @@ func (repo *VideoRepo) storeVideo(
 	for idx := range manifest.Hashes {
 		start := int64(idx) * manifest.ChunkSize
 		chunk := raw[start : start+manifest.ChunkLen(idx)]
-		if err := txn.SetWithTTL(repo.chunkKey(userId, key, idx), chunk, ttl); err != nil {
+		if err := txn.SetWithTTL(repo.buildChunkKey(userId, key, idx), chunk, ttl); err != nil {
 			return err
 		}
 	}
-	if err := txn.SetWithTTL(repo.manifestKey(userId, key), data, ttl); err != nil {
+	if err := txn.SetWithTTL(repo.buildManifestKey(userId, key), data, ttl); err != nil {
 		return err
 	}
 	return txn.Commit()
 }
 
-func (repo *VideoRepo) manifestKey(userId, key string) local_store.DatabaseKey {
+func (repo *VideoRepo) buildManifestKey(userId, key string) local_store.DatabaseKey {
 	return local_store.NewPrefixBuilder(repo.prefix).
 		AddSubPrefix(VideoSubNamespace).
-		AddRootID(ManifestSubNamespace).
+		AddRootID(manifestSubNamespace).
 		AddParentId(userId).
 		AddId(key).
 		Build()
 }
 
-func (repo *VideoRepo) chunkKey(userId, key string, idx int) local_store.DatabaseKey {
+func (repo *VideoRepo) buildChunkKey(userId, key string, idx int) local_store.DatabaseKey {
 	return local_store.NewPrefixBuilder(repo.prefix).
 		AddSubPrefix(VideoSubNamespace).
-		AddRootID(ChunkSubNamespace).
+		AddRootID(chunkSubNamespace).
 		AddParentId(userId).
 		AddId(key).
 		AddId(strconv.Itoa(idx)).
@@ -252,4 +271,10 @@ func splitVideo(video domain.Base64Video) (domain.VideoManifest, []byte, error) 
 
 	mime, _, _ := strings.Cut(strings.TrimPrefix(header, "data:"), ";")
 	return media_meta.BuildVideoManifest(raw, mime), raw, nil
+}
+
+func writeWithDeadline(s warpnet.WarpStream, data []byte) error {
+	_ = s.SetWriteDeadline(time.Now().Add(chunkWriteTimeout))
+	_, err := s.Write(data)
+	return err
 }

@@ -69,8 +69,11 @@ func VerifyForeignVideo(u domain.User, key, file string) error {
 	if err != nil {
 		return err
 	}
-	if err := verifyContentKey(key, file); err != nil && BuildVideoManifest(raw, "").Key() != key {
-		return err
+	isChunkedKey := BuildVideoManifest(raw, "").Key() == key
+	if !isChunkedKey {
+		if err := verifyContentKey(key, file); err != nil {
+			return err
+		}
 	}
 	return VerifyVideo(raw, u.NodeId, u.Id)
 }

@@ -18,13 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type chunks []byte
-
-func (c chunks) GetChunk(_, _ string, idx int) ([]byte, error) {
-	start := idx * media_meta.VideoChunkSize
-	return c[start:min(start+media_meta.VideoChunkSize, len(c))], nil
-}
-
 type frames struct {
 	mx  sync.Mutex
 	got []event.VideoFrame
@@ -64,10 +57,23 @@ func serveVideo(t *testing.T, video []byte, offset int64) (warpnet.WarpStream, c
 	client, server := stream.NewLoopbackStream("", "", "/private/get/video/0.0.0")
 	written := make(chan error, 1)
 	go func() {
-		written <- media_meta.WriteVideoRange(server, chunks(video), "author", manifest.Key(), manifest, offset, 0)
+		written <- writeVideo(server, manifest, video, offset)
 		_ = server.Close()
 	}()
 	return client, written
+}
+
+func writeVideo(s warpnet.WarpStream, manifest domain.VideoManifest, video []byte, offset int64) error {
+	if err := media_meta.WriteVideoManifest(s, manifest); err != nil {
+		return err
+	}
+	size := int64(len(video))
+	for start := offset - offset%media_meta.VideoChunkSize; start < size; start += media_meta.VideoChunkSize {
+		if _, err := s.Write(video[start:min(start+media_meta.VideoChunkSize, size)]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestSessions_FramesFlowOnlyForCredits(t *testing.T) {
@@ -83,12 +89,12 @@ func TestSessions_FramesFlowOnlyForCredits(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	assert.Zero(t, sent.count(), "nothing is pushed before the player asks")
 
-	sessions.Credit("stream-1", 2)
+	sessions.AddCredits("stream-1", 2)
 	require.Eventually(t, func() bool { return sent.count() == 2 }, 5*time.Second, 5*time.Millisecond)
 	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, 2, sent.count(), "two credits, two chunks")
 
-	sessions.Credit("stream-1", 5)
+	sessions.AddCredits("stream-1", 5)
 	require.Eventually(t, func() bool { return sent.count() == 3 }, 5*time.Second, 5*time.Millisecond)
 
 	var joined []byte
@@ -109,7 +115,7 @@ func TestSessions_StreamStartsAtTheChunkOfTheOffset(t *testing.T) {
 
 	_, err := sessions.Start("stream-1", offset, s, sent)
 	require.NoError(t, err)
-	sessions.Credit("stream-1", maxCredits)
+	sessions.AddCredits("stream-1", maxCredits)
 
 	require.Eventually(t, func() bool { return sent.count() == 2 }, 5*time.Second, 5*time.Millisecond)
 	assert.Equal(t, int64(media_meta.VideoChunkSize), sent.all()[0].Offset)
@@ -124,7 +130,7 @@ func TestSessions_StopReleasesTheNodeStream(t *testing.T) {
 
 	_, err := sessions.Start("stream-1", 0, s, sent)
 	require.NoError(t, err)
-	sessions.Credit("stream-1", 1)
+	sessions.AddCredits("stream-1", 1)
 	require.Eventually(t, func() bool { return sent.count() == 1 }, 5*time.Second, 5*time.Millisecond)
 
 	sessions.Stop("stream-1")
@@ -135,7 +141,7 @@ func TestSessions_StopReleasesTheNodeStream(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the handler kept the stream")
 	}
-	sessions.Credit("stream-1", maxCredits)
+	sessions.AddCredits("stream-1", maxCredits)
 	time.Sleep(50 * time.Millisecond)
 	assert.Equal(t, 1, sent.count())
 }
@@ -145,8 +151,7 @@ func TestSessions_BrokenStreamSendsAnErrorFrame(t *testing.T) {
 	manifest := media_meta.BuildVideoManifest(video, "video/mp4")
 	client, server := stream.NewLoopbackStream("", "", "/private/get/video/0.0.0")
 	go func() {
-		header, _ := json.Marshal(manifest)
-		_, _ = server.Write(append(header, '\n'))
+		_ = media_meta.WriteVideoManifest(server, manifest)
 		_, _ = server.Write(video[:media_meta.VideoChunkSize])
 		_ = server.Reset()
 	}()
@@ -155,7 +160,7 @@ func TestSessions_BrokenStreamSendsAnErrorFrame(t *testing.T) {
 	sent := &frames{}
 	_, err := sessions.Start("stream-1", 0, client, sent)
 	require.NoError(t, err)
-	sessions.Credit("stream-1", maxCredits)
+	sessions.AddCredits("stream-1", maxCredits)
 
 	require.Eventually(t, func() bool { return sent.count() == 2 }, 5*time.Second, 5*time.Millisecond)
 	assert.Empty(t, sent.all()[0].Error)

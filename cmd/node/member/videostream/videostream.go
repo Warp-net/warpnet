@@ -85,11 +85,11 @@ func (ss *Sessions) Start(
 		old.stop()
 	}
 
-	go ss.pump(id, sess, data, manifest, max(offset, 0), sender)
+	go ss.sendFrames(id, sess, data, manifest, max(offset, 0), sender)
 	return manifest, nil
 }
 
-func (ss *Sessions) Credit(id string, count int) {
+func (ss *Sessions) AddCredits(id string, count int) {
 	ss.mx.Lock()
 	sess := ss.sessions[id]
 	ss.mx.Unlock()
@@ -125,7 +125,7 @@ func (ss *Sessions) StopAll() {
 	}
 }
 
-func (ss *Sessions) pump(
+func (ss *Sessions) sendFrames(
 	id string, sess *session, data *bufio.Reader, manifest domain.VideoManifest, offset int64, sender FrameSender,
 ) {
 	defer ss.remove(id, sess)

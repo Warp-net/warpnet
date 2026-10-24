@@ -20,16 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type chunkRepo map[int][]byte
-
-func (r chunkRepo) GetChunk(_, _ string, idx int) ([]byte, error) {
-	chunk, ok := r[idx]
-	if !ok {
-		return nil, io.ErrUnexpectedEOF
-	}
-	return chunk, nil
-}
-
 func randomVideo(t *testing.T, size int) []byte {
 	t.Helper()
 	video := make([]byte, size)
@@ -38,8 +28,8 @@ func randomVideo(t *testing.T, size int) []byte {
 	return video
 }
 
-func chunksOf(video []byte) chunkRepo {
-	chunks := chunkRepo{}
+func chunksOf(video []byte) map[int][]byte {
+	chunks := map[int][]byte{}
 	for idx := 0; idx*VideoChunkSize < len(video); idx++ {
 		chunks[idx] = video[idx*VideoChunkSize : min((idx+1)*VideoChunkSize, len(video))]
 	}
@@ -140,47 +130,23 @@ func TestVerifyChunk_RefusesAForgedChunk(t *testing.T) {
 	assert.ErrorIs(t, VerifyChunk(manifest, -1, chunks[1]), ErrForgedChunk)
 }
 
-func readRange(t *testing.T, video []byte, offset, length int64) (domain.VideoManifest, []byte) {
-	t.Helper()
-
-	manifest := BuildVideoManifest(video, "video/mp4")
+func TestWriteVideoManifest_ReadsBackAsTheSameManifest(t *testing.T) {
+	manifest, _ := signedManifest(t, randomVideo(t, VideoChunkSize+10), "alice")
 	client, server := stream.NewLoopbackStream("", "", "/test/route/0.0.0")
 	go func() {
-		assert.NoError(t, WriteVideoRange(server, chunksOf(video), "alice", manifest.Key(), manifest, offset, length))
+		assert.NoError(t, WriteVideoManifest(server, manifest))
+		_, _ = server.Write([]byte("chunk"))
 		_ = server.Close()
 	}()
 
 	r := bufio.NewReaderSize(client, MaxManifestSize)
 	header, err := ReadVideoManifest(r)
 	require.NoError(t, err)
-	body, err := io.ReadAll(r)
+	assert.Equal(t, manifest, header)
+
+	rest, err := io.ReadAll(r)
 	require.NoError(t, err)
-	return header, body
-}
-
-func TestWriteVideoRange_SendsWholeChunksThatCoverTheRange(t *testing.T) {
-	video := randomVideo(t, 2*VideoChunkSize+VideoChunkSize/2)
-
-	t.Run("from a chunk boundary to the end", func(t *testing.T) {
-		header, body := readRange(t, video, 0, 0)
-		assert.Equal(t, BuildVideoManifest(video, "video/mp4"), header)
-		assert.True(t, bytes.Equal(video, body))
-	})
-
-	t.Run("from the middle of a chunk", func(t *testing.T) {
-		_, body := readRange(t, video, VideoChunkSize+VideoChunkSize/2, 0)
-		assert.True(t, bytes.Equal(video[VideoChunkSize:], body), "the chunk holding the offset comes whole")
-	})
-
-	t.Run("across a chunk boundary", func(t *testing.T) {
-		_, body := readRange(t, video, VideoChunkSize-10, 20)
-		assert.True(t, bytes.Equal(video[:2*VideoChunkSize], body))
-	})
-
-	t.Run("past the end", func(t *testing.T) {
-		_, body := readRange(t, video, int64(len(video))+1, 0)
-		assert.Empty(t, body)
-	})
+	assert.Equal(t, "chunk", string(rest), "the chunks follow the manifest line")
 }
 
 func TestReadVideoManifest_AnErrorAnswerIsAnUnavailableVideo(t *testing.T) {

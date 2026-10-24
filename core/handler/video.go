@@ -63,17 +63,17 @@ type VideoStorer interface {
 	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
 
-type VideoRangeStorer interface {
+type VideoChunksStorer interface {
 	GetManifest(userId, key string) (domain.VideoManifest, error)
-	GetChunk(userId, key string, idx int) ([]byte, error)
+	WriteVideo(s warpnet.WarpStream, userId, key string, manifest domain.VideoManifest, offset int64) error
 }
 
-type VideoCacheStorer interface {
+type VideoPlayStorer interface {
 	GetManifest(userId, key string) (domain.VideoManifest, error)
-	GetChunk(userId, key string, idx int) ([]byte, error)
-	SetForeignManifestWithTTL(userId, key string, manifest domain.VideoManifest) error
-	SetForeignChunkWithTTL(userId, key string, idx int, chunk []byte) error
-	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+	WriteVideo(s warpnet.WarpStream, userId, key string, manifest domain.VideoManifest, offset int64) error
+	OpenForeignVideo(
+		fetcher database.VideoFetcher, author domain.User, key string, offset int64,
+	) (*database.VideoReader, error)
 }
 
 type VideoNodeInformer interface {
@@ -89,7 +89,7 @@ type VideoStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-type VideoRangeStreamer interface {
+type VideoPlayStreamer interface {
 	OpenStream(nodeId string, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
@@ -222,18 +222,18 @@ func StreamGetVideoHandler(
 	}
 }
 
-func StreamGetVideoRangeHandler(
+func StreamGetVideoChunksHandler(
 	info VideoNodeInformer,
 	privKey ed25519.PrivateKey,
-	videoRepo VideoRangeStorer,
+	videoRepo VideoChunksStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetVideoRangeEvent
+		var ev event.GetVideoChunksEvent
 		if err := json.Unmarshal(input, &ev); err != nil {
-			return nil, fmt.Errorf("get video range: unmarshalling event: %w", err)
+			return nil, fmt.Errorf("get video chunks: unmarshalling event: %w", err)
 		}
 		if ev.Key == "" {
-			return nil, fmt.Errorf("get video range: %w", ErrEmptyVideoKey)
+			return nil, fmt.Errorf("get video chunks: %w", ErrEmptyVideoKey)
 		}
 
 		nodeInfo := info.NodeInfo()
@@ -249,18 +249,17 @@ func StreamGetVideoRangeHandler(
 			return domain.VideoManifest{}, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("get video range: fetching manifest: %w", err)
+			return nil, fmt.Errorf("get video chunks: fetching manifest: %w", err)
 		}
 
 		signer := media_meta.Metadata{PrivKey: privKey, NodeId: nodeInfo.ID.String(), OwnerId: nodeInfo.OwnerId}
 		manifest, err = signer.SignManifest(ev.Key, manifest)
 		if err != nil {
-			return nil, fmt.Errorf("get video range: signing manifest: %w", err)
+			return nil, fmt.Errorf("get video chunks: signing manifest: %w", err)
 		}
 
-		err = media_meta.WriteVideoRange(s, videoRepo, nodeInfo.OwnerId, ev.Key, manifest, ev.Offset, ev.Length)
-		if err != nil {
-			log.Debugf("get video range: streaming %s stopped: %v", ev.Key, err)
+		if err := videoRepo.WriteVideo(s, nodeInfo.OwnerId, ev.Key, manifest, ev.Offset); err != nil {
+			log.Debugf("get video chunks: streaming %s stopped: %v", ev.Key, err)
 			_ = s.Reset()
 		}
 		return []byte{}, nil
@@ -268,12 +267,12 @@ func StreamGetVideoRangeHandler(
 }
 
 func StreamPlayVideoHandler(
-	streamer VideoRangeStreamer,
-	videoRepo VideoCacheStorer,
+	streamer VideoPlayStreamer,
+	videoRepo VideoPlayStorer,
 	userRepo VideoUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.GetVideoRangeEvent
+		var ev event.GetVideoChunksEvent
 		if err := json.Unmarshal(input, &ev); err != nil {
 			return nil, fmt.Errorf("play video: unmarshalling event: %w", err)
 		}
@@ -282,40 +281,37 @@ func StreamPlayVideoHandler(
 		}
 
 		ownerId := streamer.NodeInfo().OwnerId
-		if ev.UserId == "" {
-			ev.UserId = ownerId
-		}
-		reader := media_meta.VideoReader{Cache: videoRepo, Author: domain.User{Id: ownerId}, Key: ev.Key}
-		if ev.UserId != ownerId {
-			u, err := userRepo.Get(ev.UserId)
-			if errors.Is(err, database.ErrUserNotFound) {
+		if ev.UserId == "" || ev.UserId == ownerId {
+			manifest, err := videoRepo.GetManifest(ownerId, ev.Key)
+			if errors.Is(err, database.ErrMediaNotFound) {
 				return domain.VideoManifest{}, nil
 			}
 			if err != nil {
-				return nil, fmt.Errorf("play video: fetching user: %w", err)
+				return nil, fmt.Errorf("play video: fetching manifest: %w", err)
 			}
-			reader = media_meta.VideoReader{
-				Streamer:  streamer,
-				Cache:     videoRepo,
-				Author:    u,
-				Key:       ev.Key,
-				RangePath: event.PUBLIC_GET_VIDEO_RANGE,
-				FilePath:  event.PUBLIC_GET_VIDEO,
+			if err := videoRepo.WriteVideo(s, ownerId, ev.Key, manifest, ev.Offset); err != nil {
+				log.Debugf("play video: streaming %s stopped: %v", ev.Key, err)
+				_ = s.Reset()
 			}
+			return []byte{}, nil
 		}
 
-		video, err := reader.Open(ev.Offset)
-		if errors.Is(err, database.ErrMediaNotFound) || errors.Is(err, media_meta.ErrVideoUnavailable) ||
-			errors.Is(err, warpnet.ErrNodeIsOffline) {
+		author, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
 			return domain.VideoManifest{}, nil
 		}
 		if err != nil {
-			log.Warnf("play video: refused video %s of %s: %v", ev.Key, ev.UserId, err)
+			return nil, fmt.Errorf("play video: fetching user: %w", err)
+		}
+
+		video, err := videoRepo.OpenForeignVideo(videoFetcher{streamer: streamer}, author, ev.Key, ev.Offset)
+		if err != nil {
+			log.Debugf("play video: video %s of %s is not available: %v", ev.Key, ev.UserId, err)
 			return domain.VideoManifest{}, nil
 		}
 		defer video.Close()
 
-		if err := video.WriteTo(s); err != nil {
+		if err := video.WriteVideo(s); err != nil {
 			log.Debugf("play video: streaming %s stopped: %v", ev.Key, err)
 			_ = s.Reset()
 		}
@@ -397,4 +393,27 @@ func signVideo(videoBytes []byte, metadata media_meta.Metadata) ([]byte, error) 
 		return nil, fmt.Errorf("meta data self check: %w", err)
 	}
 	return signed, nil
+}
+
+type videoFetcher struct {
+	streamer VideoPlayStreamer
+}
+
+func (f videoFetcher) FetchVideoChunks(author domain.User, key string, offset int64) (warpnet.WarpStream, error) {
+	ev := event.GetVideoChunksEvent{UserId: author.Id, Key: key, Offset: offset}
+	return f.streamer.OpenStream(author.NodeId, event.PUBLIC_GET_VIDEO_CHUNKS, ev)
+}
+
+func (f videoFetcher) FetchVideo(author domain.User, key string) (domain.Base64Video, error) {
+	ev := event.GetVideoEvent{UserId: author.Id, Key: key}
+	resp, err := f.streamer.GenericStream(author.NodeId, event.PUBLIC_GET_VIDEO, ev)
+	if err != nil {
+		return "", err
+	}
+
+	var videoResp event.GetVideoResponse
+	if err := json.Unmarshal(resp, &videoResp); err != nil {
+		return "", err
+	}
+	return domain.Base64Video(videoResp.File), nil
 }

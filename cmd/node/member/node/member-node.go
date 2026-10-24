@@ -377,13 +377,13 @@ func (m *MemberNode) SelfStream(
 	return m.node.SelfStream(from, to, path, data)
 }
 
-func (m *MemberNode) SelfStreamOpen(
+func (m *MemberNode) OpenSelfStream(
 	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
 ) (warpnet.WarpStream, error) {
 	if m == nil || m.node == nil {
 		return nil, warpnet.WarpError("member: stream: node is not initialized")
 	}
-	return m.node.SelfStreamOpen(from, to, path, data)
+	return m.node.OpenSelfStream(from, to, path, data)
 }
 
 type streamNodeID = string
@@ -998,8 +998,8 @@ func (m *MemberNode) mediaHandlers(
 			handler.StreamGetVideoHandler(m, r.videoRepo, userRepo),
 		},
 		{
-			event.PUBLIC_GET_VIDEO_RANGE,
-			handler.StreamGetVideoRangeHandler(m, m.privKey, r.videoRepo),
+			event.PUBLIC_GET_VIDEO_CHUNKS,
+			handler.StreamGetVideoChunksHandler(m, m.privKey, r.videoRepo),
 		},
 		{
 			event.PRIVATE_GET_VIDEO,
@@ -1022,8 +1022,8 @@ func (m *MemberNode) mediaHandlers(
 			handler.StreamGetChatVideoHandler(m, r.chatVideoRepo, r.chatRepo, userRepo),
 		},
 		{
-			event.PUBLIC_GET_CHAT_VIDEO_RANGE,
-			handler.StreamGetChatVideoRangeHandler(m, m.privKey, r.chatVideoRepo, r.chatRepo, userRepo),
+			event.PUBLIC_GET_CHAT_VIDEO_CHUNKS,
+			handler.StreamGetChatVideoChunksHandler(m, m.privKey, r.chatVideoRepo, r.chatRepo, userRepo),
 		},
 		{
 			event.PRIVATE_GET_CHAT_VIDEO,

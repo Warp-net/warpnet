@@ -85,12 +85,12 @@ const handshakeTimeout = 10 * time.Second
 
 type Node interface {
 	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error)
-	SelfStreamOpen(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
+	OpenSelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
 }
 
-type VideoSessions interface {
+type videoSessions interface {
 	Start(id string, offset int64, s warpnet.WarpStream, sender videostream.FrameSender) (domain.VideoManifest, error)
-	Credit(id string, count int)
+	AddCredits(id string, count int)
 	Stop(id string)
 	StopAll()
 }
@@ -153,7 +153,7 @@ func (b *BridgeHandler) enroll(pub []byte) {
 type clientConn struct {
 	static     []byte
 	authorized atomic.Bool
-	videos     VideoSessions
+	videos     videoSessions
 
 	conn    *websocket.Conn
 	channel Channel
@@ -325,7 +325,7 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 		if req.Destination == videostream.StopPath {
 			c.videos.Stop(ev.StreamId)
 		} else {
-			c.videos.Credit(ev.StreamId, ev.Count)
+			c.videos.AddCredits(ev.StreamId, ev.Count)
 		}
 		resp.Body = json.RawMessage(event.Accepted)
 	case event.PRIVATE_POST_LOGOUT:
@@ -399,7 +399,7 @@ func (b *BridgeHandler) startVideo(req event.Message, c *clientConn) json.RawMes
 		return newErrorResp("not attached server node")
 	}
 
-	var ev event.GetVideoRangeEvent
+	var ev event.GetVideoChunksEvent
 	if err := json.Unmarshal(req.Body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
@@ -408,7 +408,7 @@ func (b *BridgeHandler) startVideo(req event.Message, c *clientConn) json.RawMes
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
-	s, err := n.SelfStreamOpen(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
+	s, err := n.OpenSelfStream(ownNodeId, ownNodeId, stream.WarpRoute(req.Destination), req)
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
@@ -417,7 +417,7 @@ func (b *BridgeHandler) startVideo(req event.Message, c *clientConn) json.RawMes
 		return newErrorResp(err.Error())
 	}
 
-	body, err := json.Marshal(event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime})
+	body, err := json.Marshal(event.GetVideoChunksResponse{Size: manifest.Size, Mime: manifest.Mime})
 	if err != nil {
 		return newErrorResp(err.Error())
 	}

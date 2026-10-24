@@ -63,7 +63,7 @@ type AppAuthServicer interface {
 
 type NodeServer interface {
 	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (_ []byte, err error)
-	SelfStreamOpen(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
+	OpenSelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
 	NodeInfo() warpnet.NodeInfo
 	Stop()
 	Start() error
@@ -71,7 +71,7 @@ type NodeServer interface {
 
 type VideoSessions interface {
 	Start(id string, offset int64, s warpnet.WarpStream, sender videostream.FrameSender) (domain.VideoManifest, error)
-	Credit(id string, count int)
+	AddCredits(id string, count int)
 	Stop(id string)
 	StopAll()
 }
@@ -433,7 +433,7 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		if request.Path == videostream.StopPath {
 			a.videos.Stop(ev.StreamId)
 		} else {
-			a.videos.Credit(ev.StreamId, ev.Count)
+			a.videos.AddCredits(ev.StreamId, ev.Count)
 		}
 		response.Body = []byte(event.Accepted)
 	default:
@@ -502,33 +502,33 @@ func (a *App) startVideo(request AppMessage) stdjson.RawMessage {
 		return newErrorResp("not attached server node")
 	}
 
-	var ev event.GetVideoRangeEvent
+	var ev event.GetVideoChunksEvent
 	if err := json.Unmarshal(request.Body, &ev); err != nil {
 		return newErrorResp(err.Error())
 	}
 
 	ownNodeId := node.NodeInfo().ID
-	s, err := node.SelfStreamOpen(ownNodeId, ownNodeId, stream.WarpRoute(request.Path), a.signMessage(request))
+	s, err := node.OpenSelfStream(ownNodeId, ownNodeId, stream.WarpRoute(request.Path), a.signMessage(request))
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
-	manifest, err := a.videos.Start(request.MessageId, ev.Offset, s, wailsFrames{ctx: a.ctx})
+	manifest, err := a.videos.Start(request.MessageId, ev.Offset, s, wailsFrameSender{ctx: a.ctx})
 	if err != nil && !errors.Is(err, media_meta.ErrVideoUnavailable) {
 		return newErrorResp(err.Error())
 	}
 
-	bt, err := json.Marshal(event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime})
+	bt, err := json.Marshal(event.GetVideoChunksResponse{Size: manifest.Size, Mime: manifest.Mime})
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
 	return bt
 }
 
-type wailsFrames struct {
+type wailsFrameSender struct {
 	ctx context.Context
 }
 
-func (w wailsFrames) SendFrame(streamId string, frame event.VideoFrame) error {
+func (w wailsFrameSender) SendFrame(streamId string, frame event.VideoFrame) error {
 	wailsruntime.EventsEmit(w.ctx, "video:"+streamId, frame)
 	return nil
 }

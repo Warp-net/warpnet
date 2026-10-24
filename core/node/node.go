@@ -563,7 +563,7 @@ func (n *WarpNode) SelfStream(
 	return result, nil
 }
 
-func (n *WarpNode) SelfStreamOpen(
+func (n *WarpNode) OpenSelfStream(
 	from, to warpnet.WarpPeerID, path stream.WarpRoute, data any,
 ) (warpnet.WarpStream, error) {
 	handler, ok := n.internalHandlers[warpnet.WarpProtocolID(path)]

@@ -37,6 +37,7 @@ import (
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/event"
@@ -294,9 +295,10 @@ type VideoProvider interface {
 	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 	GetManifest(userId string, key string) (domain.VideoManifest, error)
-	GetChunk(userId string, key string, idx int) ([]byte, error)
-	SetForeignManifestWithTTL(userId string, key string, manifest domain.VideoManifest) error
-	SetForeignChunkWithTTL(userId string, key string, idx int, chunk []byte) error
+	WriteVideo(s warpnet.WarpStream, userId string, key string, manifest domain.VideoManifest, offset int64) error
+	OpenForeignVideo(
+		fetcher database.VideoFetcher, author domain.User, key string, offset int64,
+	) (*database.VideoReader, error)
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 }
 

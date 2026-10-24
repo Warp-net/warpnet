@@ -591,20 +591,6 @@ func (t *warpTxn) BatchSet(data []ListItem) (err error) {
 	return err
 }
 
-func (db *DB) valueLimit() int64 {
-	if !db.badgerOpts.InMemory {
-		return 0
-	}
-	return db.badgerOpts.ValueThreshold
-}
-
-func checkValueSize(limit int64, value []byte) error {
-	if limit > 0 && int64(len(value)) >= limit {
-		return ErrValueTooLarge
-	}
-	return nil
-}
-
 func (t *warpTxn) Delete(key DatabaseKey) error {
 	if err := t.txn.Delete(key.Bytes()); err != nil {
 		return err
@@ -1028,4 +1014,18 @@ func ToDatastoreErrNotFound(err error) error {
 	default:
 		return err
 	}
+}
+
+func (db *DB) valueLimit() int64 {
+	if !db.badgerOpts.InMemory {
+		return 0
+	}
+	return db.badgerOpts.ValueThreshold
+}
+
+func checkValueSize(limit int64, value []byte) error {
+	if limit > 0 && int64(len(value)) >= limit {
+		return ErrValueTooLarge
+	}
+	return nil
 }

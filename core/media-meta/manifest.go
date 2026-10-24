@@ -46,17 +46,13 @@ const (
 	VideoChunkSize  = 1 << 20
 	MaxManifestSize = 64 << 10
 
-	manifestSignDomain = "warpnet/video-manifest/v0"
-	chunkWriteTimeout  = 30 * time.Second
+	manifestSignDomain   = "warpnet/video-manifest/v0"
+	manifestWriteTimeout = 30 * time.Second
 
 	ErrForgedManifest   warpnet.WarpError = "video manifest does not match the key or its signer"
 	ErrForgedChunk      warpnet.WarpError = "video chunk does not match its manifest"
 	ErrVideoUnavailable warpnet.WarpError = "video is not available"
 )
-
-type VideoChunkFetcher interface {
-	GetChunk(userId, key string, idx int) ([]byte, error)
-}
 
 func BuildVideoManifest(video []byte, mime string) domain.VideoManifest {
 	manifest := domain.VideoManifest{Size: int64(len(video)), Mime: mime, ChunkSize: VideoChunkSize}
@@ -72,12 +68,12 @@ func (m Metadata) SignManifest(key string, manifest domain.VideoManifest) (domai
 		return manifest, err
 	}
 	manifest.NodeId, manifest.OwnerId = m.NodeId, m.OwnerId
-	manifest.Signature = security.Sign(m.PrivKey, manifestSigningBytes(key, m.NodeId, m.OwnerId))
+	manifest.Signature = security.Sign(m.PrivKey, buildManifestSigningBytes(key, m.NodeId, m.OwnerId))
 	return manifest, nil
 }
 
 func VerifyManifest(u domain.User, key string, manifest domain.VideoManifest) error {
-	if !isWholeManifest(manifest) || manifest.Key() != key {
+	if !isValidManifest(manifest) || manifest.Key() != key {
 		return ErrForgedManifest
 	}
 	if manifest.NodeId == "" || manifest.NodeId != u.NodeId || manifest.OwnerId != u.Id {
@@ -88,7 +84,7 @@ func VerifyManifest(u domain.User, key string, manifest domain.VideoManifest) er
 	if len(pubKey) == 0 {
 		return ErrForgedManifest
 	}
-	body := manifestSigningBytes(key, manifest.NodeId, manifest.OwnerId)
+	body := buildManifestSigningBytes(key, manifest.NodeId, manifest.OwnerId)
 	if err := security.VerifySignature(pubKey, body, manifest.Signature); err != nil {
 		return ErrForgedManifest
 	}
@@ -105,39 +101,14 @@ func VerifyChunk(manifest domain.VideoManifest, idx int, chunk []byte) error {
 	return nil
 }
 
-func WriteVideoRange(
-	s warpnet.WarpStream,
-	chunks VideoChunkFetcher,
-	userId, key string,
-	manifest domain.VideoManifest,
-	offset, length int64,
-) error {
-	header, err := json.Marshal(manifest)
+func WriteVideoManifest(s warpnet.WarpStream, manifest domain.VideoManifest) error {
+	line, err := json.Marshal(manifest)
 	if err != nil {
 		return err
 	}
-	if err := writeWithDeadline(s, append(header, '\n')); err != nil {
-		return err
-	}
-	if offset < 0 || offset >= manifest.Size || manifest.ChunkSize <= 0 {
-		return nil
-	}
-
-	first := int(offset / manifest.ChunkSize)
-	last := len(manifest.Hashes) - 1
-	if length > 0 {
-		last = min(last, int((offset+length-1)/manifest.ChunkSize))
-	}
-	for idx := first; idx <= last; idx++ {
-		chunk, err := chunks.GetChunk(userId, key, idx)
-		if err != nil {
-			return err
-		}
-		if err := writeWithDeadline(s, chunk); err != nil {
-			return err
-		}
-	}
-	return nil
+	_ = s.SetWriteDeadline(time.Now().Add(manifestWriteTimeout))
+	_, err = s.Write(append(line, '\n'))
+	return err
 }
 
 func ReadVideoManifest(r *bufio.Reader) (domain.VideoManifest, error) {
@@ -156,7 +127,7 @@ func ReadVideoManifest(r *bufio.Reader) (domain.VideoManifest, error) {
 	return manifest, nil
 }
 
-func isWholeManifest(manifest domain.VideoManifest) bool {
+func isValidManifest(manifest domain.VideoManifest) bool {
 	if manifest.ChunkSize != VideoChunkSize || manifest.Size <= 0 || !strings.HasPrefix(manifest.Mime, "video/") {
 		return false
 	}
@@ -171,12 +142,6 @@ func isWholeManifest(manifest domain.VideoManifest) bool {
 	return true
 }
 
-func manifestSigningBytes(key, nodeId, ownerId string) []byte {
+func buildManifestSigningBytes(key, nodeId, ownerId string) []byte {
 	return []byte(strings.Join([]string{manifestSignDomain, key, nodeId, ownerId}, "\x00"))
-}
-
-func writeWithDeadline(s warpnet.WarpStream, data []byte) error {
-	_ = s.SetWriteDeadline(time.Now().Add(chunkWriteTimeout))
-	_, err := s.Write(data)
-	return err
 }

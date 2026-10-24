@@ -544,16 +544,15 @@ type GetVideoResponse struct {
 	Deferred bool   `json:"deferred,omitempty"`
 }
 
-// GetVideoRangeEvent defines model for GetVideoRangeEvent.
-type GetVideoRangeEvent struct {
+// GetVideoChunksEvent defines model for GetVideoChunksEvent.
+type GetVideoChunksEvent struct {
 	UserId string `json:"user_id"`
 	Key    string `json:"key"`
 	Offset int64  `json:"offset"`
-	Length int64  `json:"length,omitempty"`
 }
 
-// GetVideoRangeResponse defines model for GetVideoRangeResponse.
-type GetVideoRangeResponse struct {
+// GetVideoChunksResponse defines model for GetVideoChunksResponse.
+type GetVideoChunksResponse struct {
 	Size int64  `json:"size"`
 	Mime string `json:"mime"`
 }

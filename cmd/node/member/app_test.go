@@ -56,7 +56,7 @@ func (s *stubNodeServer) SelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRou
 	return []byte(`{"ok":true}`), nil
 }
 
-func (s *stubNodeServer) SelfStreamOpen(_, _ warpnet.WarpPeerID, _ stream.WarpRoute, _ any) (warpnet.WarpStream, error) {
+func (s *stubNodeServer) OpenSelfStream(_, _ warpnet.WarpPeerID, _ stream.WarpRoute, _ any) (warpnet.WarpStream, error) {
 	return nil, warpnet.ErrNodeIsOffline
 }
 
