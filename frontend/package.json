@@ -23,6 +23,7 @@
     "linkify-plugin-mention": "^3.0.4",
     "linkifyjs": "^3.0.4",
     "moment": "^2.29.1",
+    "mp4box": "^2.4.1",
     "pako": "^2.1.0",
     "qrcode": "^1.5.4",
     "tailwindcss": "4.0.5",

@@ -103,8 +103,11 @@ type SponsoredNotifier interface {
 	Add(not domain.Notification) error
 }
 
-type SponsoredMediaStorer interface {
+type SponsoredImageStorer interface {
 	GetImage(userId, key string) (domain.Base64Image, error)
+}
+
+type SponsoredVideoStorer interface {
 	GetVideo(userId, key string) (domain.Base64Video, error)
 }
 
@@ -494,7 +497,8 @@ func StreamGetSponsoredTweetHandler(
 	identityKey ed25519.PrivateKey,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
-	mediaRepo SponsoredMediaStorer,
+	imageRepo SponsoredImageStorer,
+	videoRepo SponsoredVideoStorer,
 	copyRepo SponsoredCopyStorer,
 	userRepo SponsoredUserFetcher,
 	streamer SponsoredStreamer,
@@ -533,7 +537,7 @@ func StreamGetSponsoredTweetHandler(
 				return nil, err
 			}
 			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
-			return copyTweetMedia(signer, mediaRepo, copyRepo, tweet, buyer, order)
+			return copyTweetMedia(signer, imageRepo, videoRepo, copyRepo, tweet, buyer, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -598,7 +602,8 @@ func findRequester(s warpnet.WarpStream, userRepo SponsoredUserFetcher) (domain.
 
 func copyTweetMedia(
 	signer media_meta.Metadata,
-	mediaRepo SponsoredMediaStorer,
+	imageRepo SponsoredImageStorer,
+	videoRepo SponsoredVideoStorer,
 	copyRepo SponsoredCopyStorer,
 	tweet domain.Tweet,
 	buyer domain.User,
@@ -616,7 +621,7 @@ func copyTweetMedia(
 	watermarkText := buyer.Id
 	imageKeys := make([]string, 0, len(tweet.ImageKeys))
 	for _, key := range tweet.ImageKeys {
-		img, err := mediaRepo.GetImage(tweet.UserId, key)
+		img, err := imageRepo.GetImage(tweet.UserId, key)
 		if err != nil {
 			return domain.Tweet{}, err
 		}
@@ -644,7 +649,7 @@ func copyTweetMedia(
 	if tweet.VideoKey == nil {
 		return tweet, nil
 	}
-	video, err := mediaRepo.GetVideo(tweet.UserId, *tweet.VideoKey)
+	video, err := videoRepo.GetVideo(tweet.UserId, *tweet.VideoKey)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -684,7 +689,7 @@ func StreamGetCopyBuyerHandler(
 	identityKey ed25519.PrivateKey,
 	tweetRepo SponsoredTweetFetcher,
 	orders OrderStorer,
-	mediaRepo SponsoredMediaStorer,
+	imageRepo SponsoredImageStorer,
 	copyRepo SponsoredCopyLister,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
@@ -707,7 +712,7 @@ func StreamGetCopyBuyerHandler(
 			if err != nil {
 				return nil, err
 			}
-			order, score, err := findOrderByPixelMark(identityKey, tweet, raw, orders, mediaRepo, copyRepo)
+			order, score, err := findOrderByPixelMark(identityKey, tweet, raw, orders, imageRepo, copyRepo)
 			if err != nil {
 				return nil, err
 			}
@@ -759,7 +764,7 @@ func findOrderByPixelMark(
 	tweet domain.Tweet,
 	suspect []byte,
 	orders OrderStorer,
-	mediaRepo SponsoredMediaStorer,
+	imageRepo SponsoredImageStorer,
 	copyRepo SponsoredCopyLister,
 ) (domain.Order, float64, error) {
 	var (
@@ -774,7 +779,7 @@ func findOrderByPixelMark(
 		if len(sold) == 0 {
 			continue
 		}
-		original, err := mediaRepo.GetImage(tweet.UserId, key)
+		original, err := imageRepo.GetImage(tweet.UserId, key)
 		if err != nil {
 			return domain.Order{}, 0, err
 		}

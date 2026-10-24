@@ -194,6 +194,47 @@ func hashBody(data []byte) string {
 func (p *streamPool) send(
 	serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string,
 ) ([]byte, error) {
+	stream, err := p.openStream(serverInfo, r, bodyBytes, msgID)
+	if err != nil {
+		return nil, err
+	}
+	defer closeStream(stream)
+
+	_ = stream.SetReadDeadline(time.Now().Add(responseReadTimeout))
+	resp, err := readLimited(stream, maxResponseSize(r))
+	if err != nil {
+		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
+		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
+	}
+
+	return resp, nil
+}
+
+func (p *streamPool) Open(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) (warpnet.WarpStream, error) {
+	if p == nil {
+		return nil, warpnet.WarpError("nil stream pool")
+	}
+	if p.ctx.Err() != nil {
+		return nil, p.ctx.Err()
+	}
+	if p.isUnstreamable(peerAddr.ID) {
+		return nil, warpnet.ErrNodeIsOffline
+	}
+
+	stream, err := p.openStream(peerAddr, r, data, "")
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		p.SetUnstreamable(peerAddr.ID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.SetStreamable(peerAddr.ID)
+	return stream, nil
+}
+
+func (p *streamPool) openStream(
+	serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string,
+) (warpnet.WarpStream, error) {
 	if p.n == nil || serverInfo.String() == "" || r == "" {
 		return nil, warpnet.WarpError("stream: parameters improperly configured")
 	}
@@ -227,7 +268,6 @@ func (p *streamPool) send(
 		log.Debugf("stream: new: failed to create stream: %v", err)
 		return nil, fmt.Errorf("stream: new: %w", err)
 	}
-	defer closeStream(stream)
 
 	if msgID == "" {
 		msgID = ulid.Make().String()
@@ -250,18 +290,12 @@ func (p *streamPool) send(
 	}
 	closeWrite(stream)
 	if err != nil {
+		closeStream(stream)
 		log.Errorf("stream: writing: %v", err)
 		return nil, fmt.Errorf("stream: writing: %w", err)
 	}
 
-	_ = stream.SetReadDeadline(time.Now().Add(responseReadTimeout))
-	resp, err := readLimited(stream, maxResponseSize(r))
-	if err != nil {
-		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
-		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
-	}
-
-	return resp, nil
+	return stream, nil
 }
 
 func closeStream(stream warpnet.WarpStream) {

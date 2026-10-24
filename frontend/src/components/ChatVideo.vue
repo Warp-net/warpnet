@@ -32,6 +32,15 @@ resulting from the use or misuse of this software.
         class="max-w-xs rounded-lg"
         @error="onVideoError"
     ></video>
+    <video
+        v-else-if="streaming"
+        ref="streamedVideo"
+        controls
+        autoplay
+        playsinline
+        class="max-w-xs rounded-lg"
+        @error="onStreamFailed($event.target.error)"
+    ></video>
     <div v-else-if="error" class="max-w-xs rounded-lg bg-lighter text-black text-xs p-3">
       {{ error }}
       <button type="button" @click="loadVideo" class="block mt-1 text-blue font-semibold">Try again</button>
@@ -68,6 +77,7 @@ resulting from the use or misuse of this software.
 
 <script>
 import {warpnetService} from "@/service/service";
+import {canStreamVideo, streamVideo, VideoUnavailableError} from "@/lib/video-stream";
 
 export default {
   name: "ChatVideo",
@@ -79,14 +89,30 @@ export default {
   data() {
     return {
       fetched: '',
+      streaming: false,
       loading: false,
       error: '',
     };
   },
   methods: {
     async loadVideo() {
-      if (this.loading || this.fetched || !this.videoKey) return;
+      if (this.loading || this.fetched || this.streaming || !this.videoKey) return;
       this.error = '';
+      if (canStreamVideo()) {
+        this.streaming = true;
+        await this.$nextTick();
+        const userId = this.senderId;
+        const key = this.videoKey;
+        this._videoStream = streamVideo(
+          this.$refs.streamedVideo,
+          (offset, length) => warpnetService.getChatVideoRange({userId, key, offset, length}),
+          (err) => this.onStreamFailed(err),
+        );
+        return;
+      }
+      await this.loadWholeVideo();
+    },
+    async loadWholeVideo() {
       this.loading = true;
       try {
         const video = await warpnetService.getChatVideo({
@@ -109,6 +135,25 @@ export default {
       this.fetched = '';
       this.error = 'This video cannot be played. Your system may be missing the required video codec.';
     },
+    onStreamFailed(err) {
+      this.stopVideoStream();
+      if (err instanceof VideoUnavailableError) {
+        this.error = "This video isn't available right now. The sender's node may be offline.";
+        return;
+      }
+      console.warn(`failed to stream message video [${this.videoKey}], loading it whole`, err);
+      this.loadWholeVideo();
+    },
+    stopVideoStream() {
+      if (this._videoStream) {
+        this._videoStream.stop();
+        this._videoStream = null;
+      }
+      this.streaming = false;
+    },
+  },
+  beforeUnmount() {
+    this.stopVideoStream();
   },
 };
 </script>

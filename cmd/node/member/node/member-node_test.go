@@ -238,7 +238,7 @@ func TestHandlerListsAreComplete(t *testing.T) {
 		reactionRepo:     database.NewReactionRepo(db, nil),
 		pollRepo:         database.NewPollRepo(db, nil),
 		chatRepo:         database.NewChatRepo(db),
-		mediaRepo:        database.NewMediaRepo(db),
+		imageRepo:        database.NewImageRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
 		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),

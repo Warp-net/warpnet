@@ -59,6 +59,7 @@ const (
 
 type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+	Open(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) (warpnet.WarpStream, error)
 	SetStreamable(id warpnet.WarpPeerID)
 	SetUnstreamable(id warpnet.WarpPeerID)
 }
@@ -602,6 +603,22 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		}
 	}
 	return resp, err
+}
+
+func (n *WarpNode) OpenStream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error) {
+	if n == nil || n.streamer == nil {
+		return nil, warpnet.WarpError("node is not initialized")
+	}
+
+	if n.node.ID() == nodeId {
+		return nil, ErrSelfRequest
+	}
+
+	bt, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("node: open stream: marshal data %w %s", err, data)
+	}
+	return n.streamer.Open(n.node.Peerstore().PeerInfo(nodeId), path, bt)
 }
 
 func (n *WarpNode) StopNode() {

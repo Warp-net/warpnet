@@ -82,12 +82,16 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
+	msmux "github.com/multiformats/go-multistream"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 	log "github.com/sirupsen/logrus"
 )
 
-var ErrAllDialsFailed = swarm.ErrAllDialsFailed
+var (
+	ErrAllDialsFailed       = swarm.ErrAllDialsFailed
+	ErrProtocolNotSupported = msmux.ErrNotSupported[protocol.ID]{}
+)
 
 type relayStatus string
 

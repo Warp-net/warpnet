@@ -31,12 +31,14 @@ package handler
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -219,4 +221,28 @@ func TestGetChatVideo_ChatPartnersOnly(t *testing.T) {
 
 	assert.Equal(t, "data:video/mp4;base64,PRIVATE", serve(warpnet.FromStringToPeerID(remoteNodeID)))
 	assert.Empty(t, serve(testSignerID))
+}
+
+func TestGetChatVideoRange_ChatPartnersOnly(t *testing.T) {
+	video := newVideoChunksDouble(ownerID, media_meta.VideoChunkSize+1)
+	h := StreamGetChatVideoRangeHandler(&mediaStreamerDouble{}, testSignerKey, video, ownChat(), chatUsers())
+	ev := event.GetVideoRangeEvent{UserId: ownerID, Key: video.key}
+
+	t.Run("a peer the owner chats with gets the stream", func(t *testing.T) {
+		manifest, body, err := serveVideoRange(t, h, ev, warpnet.FromStringToPeerID(remoteNodeID))
+		require.NoError(t, err)
+		assert.Equal(t, video.key, manifest.Key())
+		assert.Equal(t, video.video, body)
+	})
+
+	t.Run("an outsider that knows the key gets nothing", func(t *testing.T) {
+		_, _, err := serveVideoRange(t, h, ev, testSignerID)
+		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	})
+
+	t.Run("another user's video is not served here", func(t *testing.T) {
+		_, _, err := serveVideoRange(t, h, event.GetVideoRangeEvent{UserId: testPartnerID, Key: video.key},
+			warpnet.FromStringToPeerID(remoteNodeID))
+		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	})
 }

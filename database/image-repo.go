@@ -42,8 +42,9 @@ const (
 	ChatMediaRepoName      = "/CHATMEDIA"
 	SponsoredMediaRepoName = "/SPONSOREDMEDIA"
 	ImageSubNamespace      = "IMAGES"
-	VideoSubNamespace      = "VIDEOS"
 	CopySubNamespace       = "COPIES"
+
+	foreignMediaTTL = time.Hour * 24 * 7
 )
 
 var (
@@ -51,31 +52,31 @@ var (
 	ErrMediaRepoNotInit = local_store.DBError("media repo is not initialized")
 )
 
-type MediaStorer interface {
+type ImageStorer interface {
 	Set(key local_store.DatabaseKey, value []byte) error
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
 	NewReadTxn() (local_store.WarpTransactioner, error)
 }
 
-type MediaRepo struct {
-	db     MediaStorer
+type ImageRepo struct {
+	db     ImageStorer
 	prefix string
 }
 
-func NewMediaRepo(db MediaStorer) *MediaRepo {
-	return &MediaRepo{db: db, prefix: MediaRepoName}
+func NewImageRepo(db ImageStorer) *ImageRepo {
+	return &ImageRepo{db: db, prefix: MediaRepoName}
 }
 
-func NewChatMediaRepo(db MediaStorer) *MediaRepo {
-	return &MediaRepo{db: db, prefix: ChatMediaRepoName}
+func NewChatImageRepo(db ImageStorer) *ImageRepo {
+	return &ImageRepo{db: db, prefix: ChatMediaRepoName}
 }
 
-func NewSponsoredMediaRepo(db MediaStorer) *MediaRepo {
-	return &MediaRepo{db: db, prefix: SponsoredMediaRepoName}
+func NewSponsoredImageRepo(db ImageStorer) *ImageRepo {
+	return &ImageRepo{db: db, prefix: SponsoredMediaRepoName}
 }
 
-func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) {
+func (repo *ImageRepo) GetImage(userId, key string) (domain.Base64Image, error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
 	}
@@ -97,7 +98,7 @@ func (repo *MediaRepo) GetImage(userId, key string) (domain.Base64Image, error) 
 	return domain.Base64Image(data), err
 }
 
-func (repo *MediaRepo) SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error) {
+func (repo *ImageRepo) SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
 	}
@@ -116,7 +117,7 @@ func (repo *MediaRepo) SetImage(userId string, img domain.Base64Image) (_ domain
 	return domain.ImageKey(key), repo.db.Set(mediaKey, []byte(img))
 }
 
-func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
+func (repo *ImageRepo) SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
@@ -133,102 +134,17 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Bas
 		AddId(key).
 		Build()
 
-	week := time.Hour * 24 * 7
-	return repo.db.SetWithTTL(mediaKey, []byte(img), week)
+	return repo.db.SetWithTTL(mediaKey, []byte(img), foreignMediaTTL)
 }
 
-func (repo *MediaRepo) GetVideo(userId, key string) (domain.Base64Video, error) {
-	if repo == nil {
-		return "", ErrMediaRepoNotInit
-	}
-	if key == "" || userId == "" {
-		return "", ErrMediaNotFound
-	}
-
-	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
-		AddRootID(VideoSubNamespace).
-		AddParentId(userId).
-		AddId(key).
-		Build()
-
-	data, err := repo.db.Get(mediaKey)
-	if local_store.IsNotFoundError(err) {
-		return "", ErrMediaNotFound
-	}
-
-	return domain.Base64Video(data), err
-}
-
-func (repo *MediaRepo) SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error) {
-	if repo == nil {
-		return "", ErrMediaRepoNotInit
-	}
-	if len(video) == 0 || len(userId) == 0 {
-		return "", local_store.DBError("no data for video set")
-	}
-	h := security.ConvertToSHA256([]byte(video))
-	key := hex.EncodeToString(h)
-
-	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
-		AddRootID(VideoSubNamespace).
-		AddParentId(userId).
-		AddId(key).
-		Build()
-
-	return domain.VideoKey(key), repo.db.Set(mediaKey, []byte(video))
-}
-
-func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error {
-	if repo == nil {
-		return ErrMediaRepoNotInit
-	}
-	if len(video) == 0 || len(userId) == 0 {
-		return local_store.DBError("no data for video set provided")
-	}
-	if key == "" {
-		return local_store.DBError("no key for video set provided")
-	}
-
-	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
-		AddRootID(VideoSubNamespace).
-		AddParentId(userId).
-		AddId(key).
-		Build()
-
-	week := time.Hour * 24 * 7
-	return repo.db.SetWithTTL(mediaKey, []byte(video), week)
-}
-
-func (repo *MediaRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
+func (repo *ImageRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
 	if repo == nil {
 		return domain.MediaCopy{}, ErrMediaRepoNotInit
 	}
-	if key == "" || userId == "" {
-		return domain.MediaCopy{}, ErrMediaNotFound
-	}
-
-	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
-		AddRootID(CopySubNamespace).
-		AddParentId(userId).
-		AddId(key).
-		Build()
-
-	data, err := repo.db.Get(mediaKey)
-	if local_store.IsNotFoundError(err) {
-		return domain.MediaCopy{}, ErrMediaNotFound
-	}
-	if err != nil {
-		return domain.MediaCopy{}, err
-	}
-
-	var c domain.MediaCopy
-	if err := json.Unmarshal(data, &c); err != nil {
-		return domain.MediaCopy{}, err
-	}
-	return c, nil
+	return getCopy(repo.db, repo.prefix, userId, key)
 }
 
-func (repo *MediaRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
+func (repo *ImageRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
 	if repo == nil {
 		return ErrMediaRepoNotInit
 	}
@@ -250,7 +166,7 @@ func (repo *MediaRepo) SetCopy(userId, key string, c domain.MediaCopy) error {
 	return repo.db.Set(mediaKey, data)
 }
 
-func (repo *MediaRepo) ListCopies(userId, originalKey string) ([]domain.MediaCopy, error) {
+func (repo *ImageRepo) ListCopies(userId, originalKey string) ([]domain.MediaCopy, error) {
 	if repo == nil {
 		return nil, ErrMediaRepoNotInit
 	}
@@ -292,4 +208,34 @@ func (repo *MediaRepo) ListCopies(userId, originalKey string) ([]domain.MediaCop
 		}
 	}
 	return copies, nil
+}
+
+type copyGetter interface {
+	Get(key local_store.DatabaseKey) ([]byte, error)
+}
+
+func getCopy(db copyGetter, prefix, userId, key string) (domain.MediaCopy, error) {
+	if key == "" || userId == "" {
+		return domain.MediaCopy{}, ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(prefix).
+		AddRootID(CopySubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	data, err := db.Get(mediaKey)
+	if local_store.IsNotFoundError(err) {
+		return domain.MediaCopy{}, ErrMediaNotFound
+	}
+	if err != nil {
+		return domain.MediaCopy{}, err
+	}
+
+	var c domain.MediaCopy
+	if err := json.Unmarshal(data, &c); err != nil {
+		return domain.MediaCopy{}, err
+	}
+	return c, nil
 }

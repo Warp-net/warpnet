@@ -22,6 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
+import {toByteArray} from "base64-js";
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
@@ -117,10 +118,12 @@ export const PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
 export const PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
 export const PRIVATE_POST_UPLOAD_VIDEO = "/private/post/video/0.0.0"
 export const PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
+export const PRIVATE_GET_VIDEO = "/private/get/video/0.0.0"
 export const PRIVATE_POST_UPLOAD_CHAT_IMAGE = "/private/post/chat/image/0.0.0"
 export const PUBLIC_GET_CHAT_IMAGE = "/public/get/chat/image/0.0.0"
 export const PRIVATE_POST_UPLOAD_CHAT_VIDEO = "/private/post/chat/video/0.0.0"
 export const PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
+export const PRIVATE_GET_CHAT_VIDEO = "/private/get/chat/video/0.0.0"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
 export const PRIVATE_GET_UPDATE = "/private/get/update/0.0.0"
@@ -807,6 +810,25 @@ export const warpnetService = {
             size: result.size || 0,
             deferred: !!result.deferred,
         };
+    },
+
+    async getVideoRange({userId, key, offset, length}) {
+        return this.readVideoRange(PRIVATE_GET_VIDEO, {userId, key, offset, length});
+    },
+
+    async getChatVideoRange({userId, key, offset, length}) {
+        return this.readVideoRange(PRIVATE_GET_CHAT_VIDEO, {userId, key, offset, length});
+    },
+
+    async readVideoRange(path, {userId, key, offset, length}) {
+        const result = await this.sendToNode({
+            path,
+            body: {user_id: userId, key, offset, length},
+        });
+        if (!result || !result.size) {
+            return null;
+        }
+        return {size: result.size, mime: result.mime, data: toByteArray(result.data || '')};
     },
 
     async getMyTimeline(cursorReset) {

@@ -399,6 +399,26 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	return bt, err
 }
 
+func (m *MemberNode) OpenStream(nodeIdStr streamNodeID, path stream.WarpRoute, data any) (warpnet.WarpStream, error) {
+	if m == nil {
+		return nil, warpnet.WarpError("member: stream: node is not initialized")
+	}
+	if nodeIdStr == "" {
+		return nil, fmt.Errorf("member: stream: %w", warpnet.ErrEmptyNodeId)
+	}
+
+	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
+	if nodeId == "" {
+		return nil, fmt.Errorf("member: stream: %w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
+	}
+
+	s, err := m.node.OpenStream(nodeId, path, data)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		m.setUserOffline(nodeIdStr)
+	}
+	return s, err
+}
+
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	if m == nil {
 		return
@@ -432,9 +452,12 @@ type memberRepos struct {
 	reactionRepo     ReactionsProvider
 	pollRepo         PollProvider
 	chatRepo         ChatProvider
-	mediaRepo        MediaProvider
-	chatMediaRepo    MediaProvider
-	copyRepo         MediaProvider
+	imageRepo        ImageProvider
+	videoRepo        VideoProvider
+	chatImageRepo    ImageProvider
+	chatVideoRepo    VideoProvider
+	copyImageRepo    ImageProvider
+	copyVideoRepo    VideoProvider
 	notificationRepo NotificationProvider
 	settingsRepo     SettingsProvider
 	bookmarkRepo     BookmarkProvider
@@ -462,9 +485,12 @@ func (m *MemberNode) setupHandlers(
 		reactionRepo:     database.NewReactionRepo(db, statsDB),
 		pollRepo:         database.NewPollRepo(db, statsDB),
 		chatRepo:         database.NewChatRepo(db),
-		mediaRepo:        database.NewMediaRepo(db),
-		chatMediaRepo:    database.NewChatMediaRepo(db),
-		copyRepo:         database.NewSponsoredMediaRepo(db),
+		imageRepo:        database.NewImageRepo(db),
+		videoRepo:        database.NewVideoRepo(db),
+		chatImageRepo:    database.NewChatImageRepo(db),
+		chatVideoRepo:    database.NewChatVideoRepo(db),
+		copyImageRepo:    database.NewSponsoredImageRepo(db),
+		copyVideoRepo:    database.NewSponsoredVideoRepo(db),
 		notificationRepo: database.NewNotificationsRepo(db),
 		settingsRepo:     database.NewSettingsRepo(db),
 		bookmarkRepo:     database.NewBookmarkRepo(db),
@@ -564,7 +590,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
-			handler.StreamImportTweetHandler(m, m.privKey, r.tweetRepo, r.mediaRepo, userRepo),
+			handler.StreamImportTweetHandler(m, m.privKey, r.tweetRepo, r.imageRepo, userRepo),
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
@@ -760,7 +786,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
-			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo, userRepo, m),
+			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.imageRepo, r.videoRepo, r.copyImageRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
@@ -776,15 +802,15 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_BUYER,
-			handler.StreamGetCopyBuyerHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo),
+			handler.StreamGetCopyBuyerHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.imageRepo, r.copyImageRepo),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_IMAGE,
-			handler.StreamGetSponsoredImageHandler(m, m.privKey, r.mediaRepo, r.copyRepo, userRepo),
+			handler.StreamGetSponsoredImageHandler(m, m.privKey, r.imageRepo, r.copyImageRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_VIDEO,
-			handler.StreamGetSponsoredVideoHandler(m, r.mediaRepo, r.copyRepo, userRepo),
+			handler.StreamGetSponsoredVideoHandler(m, r.videoRepo, r.copyVideoRepo, userRepo),
 		},
 	}
 }
@@ -948,35 +974,51 @@ func (m *MemberNode) mediaHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_UPLOAD_IMAGE,
-			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.imageRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
-			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo),
+			handler.StreamGetImageHandler(m, r.imageRepo, userRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
-			handler.StreamUploadVideoHandler(m, m.privKey, r.mediaRepo, userRepo),
+			handler.StreamUploadVideoHandler(m, m.privKey, r.videoRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_VIDEO,
-			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
+			handler.StreamGetVideoHandler(m, r.videoRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_VIDEO_RANGE,
+			handler.StreamGetVideoRangeHandler(m, m.privKey, r.videoRepo),
+		},
+		{
+			event.PRIVATE_GET_VIDEO,
+			handler.StreamPlayVideoHandler(m, r.videoRepo, userRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
-			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.chatImageRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_CHAT_IMAGE,
-			handler.StreamGetChatImageHandler(m, r.chatMediaRepo, r.chatRepo, userRepo),
+			handler.StreamGetChatImageHandler(m, r.chatImageRepo, r.chatRepo, userRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_VIDEO,
-			handler.StreamUploadVideoHandler(m, m.privKey, r.chatMediaRepo, userRepo),
+			handler.StreamUploadVideoHandler(m, m.privKey, r.chatVideoRepo, userRepo),
 		},
 		{
 			event.PUBLIC_GET_CHAT_VIDEO,
-			handler.StreamGetChatVideoHandler(m, r.chatMediaRepo, r.chatRepo, userRepo),
+			handler.StreamGetChatVideoHandler(m, r.chatVideoRepo, r.chatRepo, userRepo),
+		},
+		{
+			event.PUBLIC_GET_CHAT_VIDEO_RANGE,
+			handler.StreamGetChatVideoRangeHandler(m, m.privKey, r.chatVideoRepo, r.chatRepo, userRepo),
+		},
+		{
+			event.PRIVATE_GET_CHAT_VIDEO,
+			handler.StreamPlayChatVideoHandler(m, r.chatVideoRepo, userRepo),
 		},
 	}
 }

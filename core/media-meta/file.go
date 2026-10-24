@@ -47,11 +47,32 @@ const (
 )
 
 func VerifyForeignImage(u domain.User, key, file string) error {
-	return verifyForeignMedia(u, key, file, VerifyImage)
+	if file == "" || isForeignOriginMedia(u) {
+		return nil
+	}
+	if err := verifyContentKey(key, file); err != nil {
+		return err
+	}
+
+	_, raw, err := SplitDataURI(file)
+	if err != nil {
+		return err
+	}
+	return VerifyImage(raw, u.NodeId, u.Id)
 }
 
 func VerifyForeignVideo(u domain.User, key, file string) error {
-	return verifyForeignMedia(u, key, file, VerifyVideo)
+	if file == "" || isForeignOriginMedia(u) {
+		return nil
+	}
+	_, raw, err := SplitDataURI(file)
+	if err != nil {
+		return err
+	}
+	if err := verifyContentKey(key, file); err != nil && BuildVideoManifest(raw, "").Key() != key {
+		return err
+	}
+	return VerifyVideo(raw, u.NodeId, u.Id)
 }
 
 func SplitDataURI(file string) (header string, data []byte, err error) {
@@ -69,25 +90,6 @@ func SplitDataURI(file string) (header string, data []byte, err error) {
 
 func BuildContentKey(file string) string {
 	return hex.EncodeToString(security.ConvertToSHA256([]byte(file)))
-}
-
-func verifyForeignMedia(
-	u domain.User,
-	key, file string,
-	verifyMetadata func(raw []byte, nodeId, ownerId string) error,
-) error {
-	if file == "" || isForeignOriginMedia(u) {
-		return nil
-	}
-	if err := verifyContentKey(key, file); err != nil {
-		return err
-	}
-
-	_, raw, err := SplitDataURI(file)
-	if err != nil {
-		return err
-	}
-	return verifyMetadata(raw, u.NodeId, u.Id)
 }
 
 func isForeignOriginMedia(u domain.User) bool {

@@ -43,7 +43,8 @@ import (
 )
 
 const (
-	maxVideoSize = units.MiB * 36
+	maxVideoSize        = units.MiB * 36
+	maxVideoRangeLength = units.MiB * 4
 
 	ErrTooLargeVideo    warpnet.WarpError = "video is too large: 36 MiB is the maximum"
 	ErrEmptyVideoKey    warpnet.WarpError = "empty video key"
@@ -63,6 +64,19 @@ type VideoStorer interface {
 	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
 
+type VideoRangeStorer interface {
+	GetManifest(userId, key string) (domain.VideoManifest, error)
+	GetChunk(userId, key string, idx int) ([]byte, error)
+}
+
+type VideoCacheStorer interface {
+	GetManifest(userId, key string) (domain.VideoManifest, error)
+	GetChunk(userId, key string, idx int) ([]byte, error)
+	SetForeignManifestWithTTL(userId, key string, manifest domain.VideoManifest) error
+	SetForeignChunkWithTTL(userId, key string, idx int, chunk []byte) error
+	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+}
+
 type VideoNodeInformer interface {
 	NodeInfo() warpnet.NodeInfo
 }
@@ -72,6 +86,12 @@ type VideoUserFetcher interface {
 }
 
 type VideoStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
+type VideoRangeStreamer interface {
+	OpenStream(nodeId string, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
 }
@@ -200,6 +220,101 @@ func StreamGetVideoHandler(
 		}
 
 		return videoResp, nil
+	}
+}
+
+func StreamGetVideoRangeHandler(
+	info VideoNodeInformer,
+	privKey ed25519.PrivateKey,
+	videoRepo VideoRangeStorer,
+) warpnet.WarpHandlerFunc {
+	return func(input []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetVideoRangeEvent
+		if err := json.Unmarshal(input, &ev); err != nil {
+			return nil, fmt.Errorf("get video range: unmarshalling event: %w", err)
+		}
+		if ev.Key == "" {
+			return nil, fmt.Errorf("get video range: %w", ErrEmptyVideoKey)
+		}
+
+		nodeInfo := info.NodeInfo()
+		if ev.UserId == "" {
+			ev.UserId = nodeInfo.OwnerId
+		}
+		if ev.UserId != nodeInfo.OwnerId {
+			return domain.VideoManifest{}, nil
+		}
+
+		manifest, err := videoRepo.GetManifest(nodeInfo.OwnerId, ev.Key)
+		if errors.Is(err, database.ErrMediaNotFound) {
+			return domain.VideoManifest{}, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get video range: fetching manifest: %w", err)
+		}
+
+		signer := media_meta.Metadata{PrivKey: privKey, NodeId: nodeInfo.ID.String(), OwnerId: nodeInfo.OwnerId}
+		manifest, err = signer.SignManifest(ev.Key, manifest)
+		if err != nil {
+			return nil, fmt.Errorf("get video range: signing manifest: %w", err)
+		}
+
+		err = media_meta.WriteVideoRange(s, videoRepo, nodeInfo.OwnerId, ev.Key, manifest, ev.Offset, ev.Length)
+		if err != nil {
+			log.Debugf("get video range: streaming %s stopped: %v", ev.Key, err)
+			_ = s.Reset()
+		}
+		return []byte{}, nil
+	}
+}
+
+func StreamPlayVideoHandler(
+	streamer VideoRangeStreamer,
+	videoRepo VideoCacheStorer,
+	userRepo VideoUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(input []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetVideoRangeEvent
+		if err := json.Unmarshal(input, &ev); err != nil {
+			return nil, fmt.Errorf("play video: unmarshalling event: %w", err)
+		}
+		if ev.Key == "" {
+			return nil, fmt.Errorf("play video: %w", ErrEmptyVideoKey)
+		}
+
+		ownerId := streamer.NodeInfo().OwnerId
+		if ev.UserId == "" {
+			ev.UserId = ownerId
+		}
+		reader := media_meta.VideoReader{Cache: videoRepo, Author: domain.User{Id: ownerId}, Key: ev.Key}
+		if ev.UserId != ownerId {
+			u, err := userRepo.Get(ev.UserId)
+			if errors.Is(err, database.ErrUserNotFound) {
+				return event.GetVideoRangeResponse{}, nil
+			}
+			if err != nil {
+				return nil, fmt.Errorf("play video: fetching user: %w", err)
+			}
+			reader = media_meta.VideoReader{
+				Streamer:  streamer,
+				Cache:     videoRepo,
+				Author:    u,
+				Key:       ev.Key,
+				RangePath: event.PUBLIC_GET_VIDEO_RANGE,
+				FilePath:  event.PUBLIC_GET_VIDEO,
+			}
+		}
+
+		manifest, data, err := reader.ReadRange(ev.Offset, min(ev.Length, maxVideoRangeLength))
+		if errors.Is(err, database.ErrMediaNotFound) || errors.Is(err, media_meta.ErrVideoUnavailable) ||
+			errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return event.GetVideoRangeResponse{}, nil
+		}
+		if err != nil {
+			log.Warnf("play video: refused video %s of %s: %v", ev.Key, ev.UserId, err)
+			return event.GetVideoRangeResponse{}, nil
+		}
+		return event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime, Data: data}, nil
 	}
 }
 

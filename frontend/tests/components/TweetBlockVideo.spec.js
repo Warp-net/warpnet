@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, waitFor, fireEvent } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
@@ -6,6 +6,7 @@ vi.mock('@/service/service', () => ({
     getProfile: vi.fn(),
     getImage: vi.fn(),
     getVideo: vi.fn(),
+    getVideoRange: vi.fn(),
     getOwnerProfile: vi.fn(),
     getTweetStats: vi.fn(),
     hasReactor: vi.fn(),
@@ -14,8 +15,15 @@ vi.mock('@/service/service', () => ({
   },
 }));
 
+vi.mock('@/lib/video-stream', () => ({
+  VideoUnavailableError: class VideoUnavailableError extends Error {},
+  canStreamVideo: vi.fn(() => false),
+  streamVideo: vi.fn(),
+}));
+
 import TweetBlock from '@/components/TweetBlock.vue';
 import { warpnetService } from '@/service/service';
+import { canStreamVideo, streamVideo, VideoUnavailableError } from '@/lib/video-stream';
 
 class FakeIntersectionObserver {
   constructor(callback) {
@@ -190,6 +198,65 @@ describe('TweetBlock video', () => {
     await waitFor(() => expect(warpnetService.getProfile).toHaveBeenCalled());
     expect(container.querySelector('video')).toBeNull();
     expect(warpnetService.getVideo).not.toHaveBeenCalled();
+  });
+});
+
+describe('TweetBlock video streaming', () => {
+  beforeEach(() => {
+    canStreamVideo.mockReturnValue(true);
+    streamVideo.mockImplementation(() => ({stop: vi.fn()}));
+  });
+  afterEach(() => {
+    canStreamVideo.mockReturnValue(false);
+  });
+
+  const startStream = async () => {
+    const view = renderTweet(videoTweet);
+    await waitFor(() => expect(warpnetService.getProfile).toHaveBeenCalled());
+    await fireEvent.click(view.getByLabelText('Play video'));
+    await waitFor(() => expect(streamVideo).toHaveBeenCalled());
+    return view;
+  };
+
+  it('streams the video from the node range by range instead of fetching it whole', async () => {
+    warpnetService.getVideoRange.mockResolvedValue({size: 10, mime: 'video/mp4', data: new Uint8Array(10)});
+    const {container} = await startStream();
+
+    const [video, readRange] = streamVideo.mock.calls[0];
+    expect(video).toBe(container.querySelector('video'));
+    await readRange(1024, 2048);
+    expect(warpnetService.getVideoRange).toHaveBeenCalledWith({userId: 'author1', key: 'vkey1', offset: 1024, length: 2048});
+    expect(warpnetService.getVideo).not.toHaveBeenCalled();
+  });
+
+  it('tells the viewer when the author node has nothing to stream', async () => {
+    const {getByRole} = await startStream();
+
+    const onFailure = streamVideo.mock.calls[0][2];
+    onFailure(new VideoUnavailableError('gone'));
+
+    await waitFor(() => expect(getByRole('alert').textContent).toContain("isn't available"));
+    expect(warpnetService.getVideo).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the whole file when the browser cannot stream it', async () => {
+    const {container} = await startStream();
+
+    const onFailure = streamVideo.mock.calls[0][2];
+    onFailure(new Error('this system cannot play video/mp4; codecs="hvc1"'));
+
+    await waitFor(() => expect(warpnetService.getVideo).toHaveBeenCalledWith({userId: 'author1', key: 'vkey1'}));
+    await waitFor(() => expect(container.querySelector('video')?.getAttribute('src')).toBe('data:video/mp4;base64,AAAA'));
+  });
+
+  it('stops streaming when the tweet leaves the page', async () => {
+    const stop = vi.fn();
+    streamVideo.mockImplementation(() => ({stop}));
+    const {unmount} = await startStream();
+
+    unmount();
+
+    expect(stop).toHaveBeenCalled();
   });
 });
 

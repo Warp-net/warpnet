@@ -589,7 +589,7 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		media := newStubSponsoredMedia()
 		image, _ := imageWithMetadata(t, "author-1")
 		media.images["author-1/img-1"] = domain.Base64Image(image)
-		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, newStubSponsoredMedia(), users,
+		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, media, newStubSponsoredMedia(), users,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}})
 
 		resp, err := h(req, streamFrom(own))
@@ -628,19 +628,19 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 			},
 		}
 
-		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "nothing bought, nothing shown")
 		assert.Empty(t, paths, "nothing bought, nothing asked")
 
 		paying := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Nonce: "n1"}}
-		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "an order without a tx has nothing to claim yet")
 		assert.Empty(t, paths, "an order without a tx asks the author nothing")
 
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Nonce: "n1"}}
-		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)
+		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)
 
 		confirmed = false
 		resp, err = h(req, streamFrom(own))
@@ -694,7 +694,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 		"tweet-3/buyer-1": {TweetId: "tweet-3", BuyerId: "buyer-1", Confirmed: true, CreatedAt: order.CreatedAt.Add(-72 * time.Hour)},
 	}
 	resp, err := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets,
-		orders, media, copies, users, streamer,
+		orders, media, media, copies, users, streamer,
 	)(marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), fromBuyer(event.PUBLIC_GET_SPONSORED_TWEET))
 	require.NoError(t, err)
 	bought := resp.(domain.Tweet)
@@ -854,7 +854,7 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 			TweetId: "tweet-1", AuthorId: "author-1", BuyerId: buyerId, Nonce: buyerId, TxId: "tx-" + buyerId, Confirmed: true, CreatedAt: soldAt,
 		}
 		_, s := stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
-		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer)(
+		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, media, copies, users, streamer)(
 			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
 		require.NoError(t, err)
 		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_IMAGE)

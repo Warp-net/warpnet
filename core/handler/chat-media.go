@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 
@@ -38,19 +39,42 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/docker/go-units"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
+	maxChatVideoRangeLength = units.MiB * 4
+
 	ErrEmptyChatImageKey warpnet.WarpError = "empty image key"
 	ErrEmptyChatVideoKey warpnet.WarpError = "empty video key"
 )
 
-type ChatMediaStorer interface {
+type ChatImageStorer interface {
 	GetImage(userId, key string) (domain.Base64Image, error)
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
+}
+
+type ChatVideoStorer interface {
 	GetVideo(userId, key string) (domain.Base64Video, error)
 	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+}
+
+type ChatVideoRangeStorer interface {
+	GetManifest(userId, key string) (domain.VideoManifest, error)
+	GetChunk(userId, key string, idx int) ([]byte, error)
+}
+
+type ChatVideoCacheStorer interface {
+	GetManifest(userId, key string) (domain.VideoManifest, error)
+	GetChunk(userId, key string, idx int) ([]byte, error)
+	SetForeignManifestWithTTL(userId, key string, manifest domain.VideoManifest) error
+	SetForeignChunkWithTTL(userId, key string, idx int, chunk []byte) error
+	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
+}
+
+type ChatMediaNodeInformer interface {
+	NodeInfo() warpnet.NodeInfo
 }
 
 type ChatMediaChatFetcher interface {
@@ -67,9 +91,15 @@ type ChatMediaStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
+type ChatVideoRangeStreamer interface {
+	OpenStream(nodeId string, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
+	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
+	NodeInfo() warpnet.NodeInfo
+}
+
 func StreamGetChatImageHandler(
 	streamer ChatMediaStreamer,
-	mediaRepo ChatMediaStorer,
+	mediaRepo ChatImageStorer,
 	chatRepo ChatMediaChatFetcher,
 	userRepo ChatMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
@@ -150,7 +180,7 @@ func StreamGetChatImageHandler(
 
 func StreamGetChatVideoHandler(
 	streamer ChatMediaStreamer,
-	mediaRepo ChatMediaStorer,
+	mediaRepo ChatVideoStorer,
 	chatRepo ChatMediaChatFetcher,
 	userRepo ChatMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
@@ -229,6 +259,107 @@ func StreamGetChatVideoHandler(
 		}
 
 		return videoResp, nil
+	}
+}
+
+func StreamGetChatVideoRangeHandler(
+	info ChatMediaNodeInformer,
+	privKey ed25519.PrivateKey,
+	videoRepo ChatVideoRangeStorer,
+	chatRepo ChatMediaChatFetcher,
+	userRepo ChatMediaUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(input []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetVideoRangeEvent
+		if err := json.Unmarshal(input, &ev); err != nil {
+			return nil, fmt.Errorf("get chat video range: unmarshalling event: %w", err)
+		}
+		if ev.Key == "" {
+			return nil, fmt.Errorf("get chat video range: %w", ErrEmptyChatVideoKey)
+		}
+
+		ownNodeInfo := info.NodeInfo()
+		if ev.UserId == "" {
+			ev.UserId = ownNodeInfo.OwnerId
+		}
+		if ev.UserId != ownNodeInfo.OwnerId {
+			return domain.VideoManifest{}, nil
+		}
+		if !isChatMediaAllowed(s, chatRepo, userRepo, ownNodeInfo) {
+			log.Warnf("get chat video range: refused key %s", ev.Key)
+			return domain.VideoManifest{}, nil
+		}
+
+		manifest, err := videoRepo.GetManifest(ownNodeInfo.OwnerId, ev.Key)
+		if errors.Is(err, database.ErrMediaNotFound) {
+			return domain.VideoManifest{}, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get chat video range: fetching manifest: %w", err)
+		}
+
+		signer := media_meta.Metadata{PrivKey: privKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownNodeInfo.OwnerId}
+		manifest, err = signer.SignManifest(ev.Key, manifest)
+		if err != nil {
+			return nil, fmt.Errorf("get chat video range: signing manifest: %w", err)
+		}
+
+		err = media_meta.WriteVideoRange(s, videoRepo, ownNodeInfo.OwnerId, ev.Key, manifest, ev.Offset, ev.Length)
+		if err != nil {
+			log.Debugf("get chat video range: streaming %s stopped: %v", ev.Key, err)
+			_ = s.Reset()
+		}
+		return []byte{}, nil
+	}
+}
+
+func StreamPlayChatVideoHandler(
+	streamer ChatVideoRangeStreamer,
+	videoRepo ChatVideoCacheStorer,
+	userRepo ChatMediaUserFetcher,
+) warpnet.WarpHandlerFunc {
+	return func(input []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.GetVideoRangeEvent
+		if err := json.Unmarshal(input, &ev); err != nil {
+			return nil, fmt.Errorf("play chat video: unmarshalling event: %w", err)
+		}
+		if ev.Key == "" {
+			return nil, fmt.Errorf("play chat video: %w", ErrEmptyChatVideoKey)
+		}
+
+		ownerId := streamer.NodeInfo().OwnerId
+		if ev.UserId == "" {
+			ev.UserId = ownerId
+		}
+		reader := media_meta.VideoReader{Cache: videoRepo, Author: domain.User{Id: ownerId}, Key: ev.Key}
+		if ev.UserId != ownerId {
+			u, err := userRepo.Get(ev.UserId)
+			if errors.Is(err, database.ErrUserNotFound) {
+				return event.GetVideoRangeResponse{}, nil
+			}
+			if err != nil {
+				return nil, fmt.Errorf("play chat video: fetching user: %w", err)
+			}
+			reader = media_meta.VideoReader{
+				Streamer:  streamer,
+				Cache:     videoRepo,
+				Author:    u,
+				Key:       ev.Key,
+				RangePath: event.PUBLIC_GET_CHAT_VIDEO_RANGE,
+				FilePath:  event.PUBLIC_GET_CHAT_VIDEO,
+			}
+		}
+
+		manifest, data, err := reader.ReadRange(ev.Offset, min(ev.Length, maxChatVideoRangeLength))
+		if errors.Is(err, database.ErrMediaNotFound) || errors.Is(err, media_meta.ErrVideoUnavailable) ||
+			errors.Is(err, warpnet.ErrNodeIsOffline) {
+			return event.GetVideoRangeResponse{}, nil
+		}
+		if err != nil {
+			log.Warnf("play chat video: refused video %s of %s: %v", ev.Key, ev.UserId, err)
+			return event.GetVideoRangeResponse{}, nil
+		}
+		return event.GetVideoRangeResponse{Size: manifest.Size, Mime: manifest.Mime, Data: data}, nil
 	}
 }
 

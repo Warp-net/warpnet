@@ -280,16 +280,24 @@ type ReactionsProvider interface {
 	Unreact(tweetId string, userId string, isTransitive bool) (reactionsNum uint64, err error)
 }
 
-type MediaProvider interface {
+type ImageProvider interface {
 	GetImage(userId string, key string) (domain.Base64Image, error)
-	GetVideo(userId string, key string) (domain.Base64Video, error)
 	SetForeignImageWithTTL(userId string, key string, img domain.Base64Image) error
-	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
 	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
-	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 	SetCopy(userId string, key string, c domain.MediaCopy) error
 	ListCopies(userId string, originalKey string) ([]domain.MediaCopy, error)
+}
+
+type VideoProvider interface {
+	GetVideo(userId string, key string) (domain.Base64Video, error)
+	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
+	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
+	GetManifest(userId string, key string) (domain.VideoManifest, error)
+	GetChunk(userId string, key string, idx int) ([]byte, error)
+	SetForeignManifestWithTTL(userId string, key string, manifest domain.VideoManifest) error
+	SetForeignChunkWithTTL(userId string, key string, idx int, chunk []byte) error
+	GetCopy(userId string, key string) (domain.MediaCopy, error)
 }
 
 type MutesProvider interface {

@@ -1,14 +1,22 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, waitFor, fireEvent } from '@testing-library/vue';
 
 vi.mock('@/service/service', () => ({
   warpnetService: {
     getChatVideo: vi.fn(),
+    getChatVideoRange: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/video-stream', () => ({
+  VideoUnavailableError: class VideoUnavailableError extends Error {},
+  canStreamVideo: vi.fn(() => false),
+  streamVideo: vi.fn(),
 }));
 
 import ChatVideo from '@/components/ChatVideo.vue';
 import { warpnetService } from '@/service/service';
+import { canStreamVideo, streamVideo, VideoUnavailableError } from '@/lib/video-stream';
 
 let errSpy;
 beforeAll(() => {
@@ -85,5 +93,48 @@ describe('ChatVideo', () => {
     await fireEvent.click(getByText('Try again'));
 
     await waitFor(() => expect(warpnetService.getChatVideo).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('ChatVideo streaming', () => {
+  beforeEach(() => {
+    canStreamVideo.mockReturnValue(true);
+    streamVideo.mockImplementation(() => ({stop: vi.fn()}));
+  });
+  afterEach(() => {
+    canStreamVideo.mockReturnValue(false);
+  });
+
+  it('streams the clip over the chat route', async () => {
+    const {getByLabelText, container} = renderVideo();
+
+    await fireEvent.click(getByLabelText('Play video'));
+    await waitFor(() => expect(streamVideo).toHaveBeenCalled());
+
+    const [video, readRange] = streamVideo.mock.calls[0];
+    expect(video).toBe(container.querySelector('video'));
+    await readRange(0, 1024);
+    expect(warpnetService.getChatVideoRange).toHaveBeenCalledWith({userId: 'sender1', key: 'vkey1', offset: 0, length: 1024});
+    expect(warpnetService.getChatVideo).not.toHaveBeenCalled();
+  });
+
+  it('reports an unreachable sender', async () => {
+    const {getByLabelText, getByText} = renderVideo();
+    await fireEvent.click(getByLabelText('Play video'));
+    await waitFor(() => expect(streamVideo).toHaveBeenCalled());
+
+    streamVideo.mock.calls[0][2](new VideoUnavailableError('gone'));
+
+    await waitFor(() => expect(getByText(/isn't available right now/)).toBeTruthy());
+  });
+
+  it('falls back to the whole clip when the browser cannot stream it', async () => {
+    const {getByLabelText, container} = renderVideo();
+    await fireEvent.click(getByLabelText('Play video'));
+    await waitFor(() => expect(streamVideo).toHaveBeenCalled());
+
+    streamVideo.mock.calls[0][2](new Error('no MSE support for this codec'));
+
+    await waitFor(() => expect(container.querySelector('video')?.getAttribute('src')).toBe('data:video/mp4;base64,AAAA'));
   });
 });

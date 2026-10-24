@@ -52,15 +52,22 @@ type SponsoredMediaStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-type SponsoredMediaFetcher interface {
+type SponsoredImageFetcher interface {
 	GetImage(userId, key string) (domain.Base64Image, error)
+}
+
+type SponsoredVideoFetcher interface {
 	GetVideo(userId, key string) (domain.Base64Video, error)
 }
 
-type SponsoredMediaCopyStorer interface {
+type SponsoredImageCopyStorer interface {
 	GetCopy(userId, key string) (domain.MediaCopy, error)
 	GetImage(userId, key string) (domain.Base64Image, error)
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
+}
+
+type SponsoredVideoCopyStorer interface {
+	GetCopy(userId, key string) (domain.MediaCopy, error)
 	GetVideo(userId, key string) (domain.Base64Video, error)
 	SetForeignVideoWithTTL(userId, key string, video domain.Base64Video) error
 }
@@ -73,8 +80,8 @@ type SponsoredMediaUserFetcher interface {
 func StreamGetSponsoredImageHandler(
 	streamer SponsoredMediaStreamer,
 	identityKey ed25519.PrivateKey,
-	mediaRepo SponsoredMediaFetcher,
-	copyRepo SponsoredMediaCopyStorer,
+	mediaRepo SponsoredImageFetcher,
+	copyRepo SponsoredImageCopyStorer,
 	userRepo SponsoredMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
@@ -161,8 +168,8 @@ func StreamGetSponsoredImageHandler(
 
 func StreamGetSponsoredVideoHandler(
 	streamer SponsoredMediaStreamer,
-	mediaRepo SponsoredMediaFetcher,
-	copyRepo SponsoredMediaCopyStorer,
+	mediaRepo SponsoredVideoFetcher,
+	copyRepo SponsoredVideoCopyStorer,
 	userRepo SponsoredMediaUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {

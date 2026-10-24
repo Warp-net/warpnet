@@ -451,6 +451,28 @@ type MediaCopy struct {
 	IsPixelMarked  bool   `json:"is_pixel_marked,omitempty"`
 }
 
+type VideoManifest struct {
+	Size      int64    `json:"size"`
+	Mime      string   `json:"mime"`
+	ChunkSize int64    `json:"chunk_size"`
+	Hashes    [][]byte `json:"hashes"`
+	NodeId    string   `json:"node_id,omitempty"`
+	OwnerId   string   `json:"owner_id,omitempty"`
+	Signature string   `json:"signature,omitempty"`
+}
+
+func (m VideoManifest) Key() string {
+	h := sha256.New()
+	for _, chunkHash := range m.Hashes {
+		h.Write(chunkHash)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (m VideoManifest) ChunkLen(idx int) int64 {
+	return min(m.ChunkSize, m.Size-int64(idx)*m.ChunkSize)
+}
+
 type Alias struct {
 	ID         ID        `json:"id"`
 	CreatedAt  time.Time `json:"created_at"`

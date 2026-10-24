@@ -259,6 +259,17 @@ resulting from the use or misuse of this software.
             @error="onVideoError"
             @click.stop
         ></video>
+        <video
+            v-else-if="videoStreaming"
+            ref="streamedVideo"
+            :poster="videoPoster || undefined"
+            controls
+            autoplay
+            playsinline
+            class="rounded-lg max-w-full border border-lighter bg-black"
+            @error="onStreamFailed($event.target.error)"
+            @click.stop
+        ></video>
         <div
             v-else-if="videoError"
             class="rounded-lg border border-lighter p-4 text-sm text-dark"
@@ -467,6 +478,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {watchOrder} from "@/lib/order-worker";
 import {extractYoutubeId} from "@/lib/youtube";
+import {canStreamVideo, streamVideo, VideoUnavailableError} from "@/lib/video-stream";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
@@ -549,6 +561,7 @@ export default {
       viewsCount: new Map(),
       tweetImages: [],
       videoSrc: '',
+      videoStreaming: false,
       videoLoading: false,
       videoError: '',
       viewedImage: null,
@@ -970,11 +983,25 @@ export default {
       }
     },
     async loadVideo() {
-      if (this.videoLoading || this.videoSrc) return;
+      if (this.videoLoading || this.videoSrc || this.videoStreaming) return;
       const key = this.tweet && this.tweet.video_key;
       if (!key) return;
 
       this.videoError = '';
+      if (!this.isBought && canStreamVideo()) {
+        this.videoStreaming = true;
+        await this.$nextTick();
+        const userId = this.tweet.user_id;
+        this._videoStream = streamVideo(
+          this.$refs.streamedVideo,
+          (offset, length) => warpnetService.getVideoRange({userId, key, offset, length}),
+          (err) => this.onStreamFailed(err),
+        );
+        return;
+      }
+      await this.loadWholeVideo(key);
+    },
+    async loadWholeVideo(key) {
       this.videoLoading = true;
       try {
         const request = {userId: this.tweet.user_id, key};
@@ -996,6 +1023,22 @@ export default {
     onVideoError() {
       this.videoSrc = '';
       this.videoError = 'This video cannot be played. Your system may be missing the required video codec.';
+    },
+    onStreamFailed(err) {
+      this.stopVideoStream();
+      if (err instanceof VideoUnavailableError) {
+        this.videoError = "This video isn't available right now. The author's node may be offline.";
+        return;
+      }
+      console.warn(`failed to stream tweet video [${this.tweet.id}], loading it whole`, err);
+      this.loadWholeVideo(this.tweet.video_key);
+    },
+    stopVideoStream() {
+      if (this._videoStream) {
+        this._videoStream.stop();
+        this._videoStream = null;
+      }
+      this.videoStreaming = false;
     },
     openImageView(img) {
       this.viewedImage = img;
@@ -1433,6 +1476,7 @@ export default {
     this.$nextTick(() => this.setupViewObserver());
   },
   beforeUnmount() {
+    this.stopVideoStream();
     if (this.viewObserver) {
       this.viewObserver.disconnect();
       this.viewObserver = null;

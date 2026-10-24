@@ -87,6 +87,7 @@ const (
 
 	ErrNotRunning    = DBError("DB is not running")
 	ErrWrongPassword = DBError("wrong username or password")
+	ErrValueTooLarge = DBError("value is too large for an in-memory database")
 
 	PermanentTTL = math.MaxInt64 - 1
 )
@@ -347,6 +348,10 @@ func (db *DB) Set(key DatabaseKey, value []byte) error {
 		return ErrNotRunning
 	}
 
+	if err := checkValueSize(db.valueLimit(), value); err != nil {
+		return err
+	}
+
 	return db.badger.Update(func(txn *badger.Txn) error {
 		e := badger.NewEntry(key.Bytes(), value)
 		return txn.SetEntry(e)
@@ -359,6 +364,9 @@ func (db *DB) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error
 	}
 	if !db.isRunning.Load() {
 		return ErrNotRunning
+	}
+	if err := checkValueSize(db.valueLimit(), value); err != nil {
+		return err
 	}
 	return db.badger.Update(func(txn *badger.Txn) error {
 		e := badger.NewEntry(key.Bytes(), value)
@@ -475,7 +483,8 @@ type WarpTransactioner interface {
 }
 
 type warpTxn struct {
-	txn *badger.Txn
+	txn        *badger.Txn
+	valueLimit int64
 }
 
 func (db *DB) NewTxn() (WarpTransactioner, error) {
@@ -485,7 +494,7 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 	if !db.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
-	wtx := &warpTxn{db.badger.NewTransaction(true)}
+	wtx := &warpTxn{txn: db.badger.NewTransaction(true), valueLimit: db.valueLimit()}
 	runtime.SetFinalizer(wtx, func(tx *warpTxn) {
 		defer func() { recover() }() //nolint:errcheck // discard panic from rollback on a leaked txn
 		tx.Rollback()
@@ -505,12 +514,15 @@ func (db *DB) NewReadTxn() (WarpTransactioner, error) {
 	if !db.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
-	wtx := &warpTxn{db.badger.NewTransaction(false)}
+	wtx := &warpTxn{txn: db.badger.NewTransaction(false), valueLimit: db.valueLimit()}
 	runtime.SetFinalizer(wtx, func(tx *warpTxn) { tx.Rollback() })
 	return wtx, nil
 }
 
 func (t *warpTxn) Set(key DatabaseKey, value []byte) error {
+	if err := checkValueSize(t.valueLimit, value); err != nil {
+		return err
+	}
 	err := t.txn.Set(key.Bytes(), value)
 	if err != nil {
 		return err
@@ -536,6 +548,9 @@ func (t *warpTxn) GetExpiration(key DatabaseKey) (uint64, error) {
 }
 
 func (t *warpTxn) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error {
+	if err := checkValueSize(t.valueLimit, value); err != nil {
+		return err
+	}
 	e := badger.NewEntry(key.Bytes(), value)
 	e.WithTTL(ttl)
 
@@ -554,6 +569,9 @@ func (t *warpTxn) BatchSet(data []ListItem) (err error) {
 	for i, item := range data {
 		key := item.Key
 		value := item.Value
+		if err := checkValueSize(t.valueLimit, value); err != nil {
+			return err
+		}
 		err := t.txn.Set([]byte(key), value)
 		if errors.Is(err, badger.ErrTxnTooBig) {
 			isTooBig = true
@@ -571,6 +589,20 @@ func (t *warpTxn) BatchSet(data []ListItem) (err error) {
 		err = t.BatchSet(leftovers)
 	}
 	return err
+}
+
+func (db *DB) valueLimit() int64 {
+	if !db.badgerOpts.InMemory {
+		return 0
+	}
+	return db.badgerOpts.ValueThreshold
+}
+
+func checkValueSize(limit int64, value []byte) error {
+	if limit > 0 && int64(len(value)) >= limit {
+		return ErrValueTooLarge
+	}
+	return nil
 }
 
 func (t *warpTxn) Delete(key DatabaseKey) error {

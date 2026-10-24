@@ -25,14 +25,18 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/base64"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -503,4 +507,102 @@ func TestNewVideoResponse(t *testing.T) {
 	empty := newVideoResponse("", false)
 	assert.Empty(t, empty.File)
 	assert.Zero(t, empty.Size)
+}
+
+type videoChunksDouble struct {
+	userId string
+	key    string
+	video  []byte
+	forged map[int]bool
+}
+
+func newVideoChunksDouble(userId string, size int) videoChunksDouble {
+	video := make([]byte, size)
+	for i := range video {
+		video[i] = byte(i % 251)
+	}
+	return videoChunksDouble{userId: userId, key: media_meta.BuildVideoManifest(video, "video/mp4").Key(), video: video}
+}
+
+func (d videoChunksDouble) GetManifest(userId, key string) (domain.VideoManifest, error) {
+	if userId != d.userId || key != d.key {
+		return domain.VideoManifest{}, database.ErrMediaNotFound
+	}
+	return media_meta.BuildVideoManifest(d.video, "video/mp4"), nil
+}
+
+func (d videoChunksDouble) GetChunk(userId, key string, idx int) ([]byte, error) {
+	if userId != d.userId || key != d.key {
+		return nil, database.ErrMediaNotFound
+	}
+	start := idx * media_meta.VideoChunkSize
+	chunk := bytes.Clone(d.video[start:min(start+media_meta.VideoChunkSize, len(d.video))])
+	if d.forged[idx] {
+		chunk[0] ^= 0xFF
+	}
+	return chunk, nil
+}
+
+func serveVideoRange(
+	t *testing.T, h warpnet.WarpHandlerFunc, ev event.GetVideoRangeEvent, remote warpnet.WarpPeerID,
+) (domain.VideoManifest, []byte, error) {
+	t.Helper()
+
+	client, server := stream.NewLoopbackStream(warpnet.FromStringToPeerID(selfNodeID), remote, event.PUBLIC_GET_VIDEO_RANGE)
+	go func() {
+		defer func() { _ = server.Close() }()
+		out, err := h(mustJSON(t, ev), server)
+		if !assert.NoError(t, err) {
+			return
+		}
+		if bt, ok := out.([]byte); ok && len(bt) == 0 {
+			return
+		}
+		_, _ = server.Write(mustJSON(t, out))
+	}()
+
+	r := bufio.NewReaderSize(client, media_meta.MaxManifestSize)
+	manifest, err := media_meta.ReadVideoManifest(r)
+	if err != nil {
+		_, _ = io.Copy(io.Discard, r)
+		return manifest, nil, err
+	}
+	body, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return manifest, body, nil
+}
+
+func TestStreamGetVideoRangeHandler(t *testing.T) {
+	video := newVideoChunksDouble("alice", 2*media_meta.VideoChunkSize+100)
+	h := StreamGetVideoRangeHandler(signingInformer{"alice"}, testSignerKey, video)
+	viewer := warpnet.FromStringToPeerID(remoteNodeID)
+
+	t.Run("streams the signed manifest and the chunks from the offset", func(t *testing.T) {
+		manifest, body, err := serveVideoRange(t, h,
+			event.GetVideoRangeEvent{UserId: "alice", Key: video.key, Offset: media_meta.VideoChunkSize + 5}, viewer)
+		require.NoError(t, err)
+		require.NoError(t, media_meta.VerifyManifest(ownerOf("alice"), video.key, manifest))
+		assert.True(t, bytes.Equal(video.video[media_meta.VideoChunkSize:], body))
+	})
+
+	t.Run("serves only its owner's videos", func(t *testing.T) {
+		_, _, err := serveVideoRange(t, h, event.GetVideoRangeEvent{UserId: "bob", Key: video.key}, viewer)
+		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	})
+
+	t.Run("unknown key", func(t *testing.T) {
+		_, _, err := serveVideoRange(t, h, event.GetVideoRangeEvent{UserId: "alice", Key: "missing"}, viewer)
+		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	})
+
+	t.Run("empty key", func(t *testing.T) {
+		_, err := h(mustJSON(t, event.GetVideoRangeEvent{UserId: "alice"}), nil)
+		assert.ErrorIs(t, err, ErrEmptyVideoKey)
+	})
+
+	t.Run("a node that cannot sign streams nothing", func(t *testing.T) {
+		unsigned := StreamGetVideoRangeHandler(signingInformer{"alice"}, nil, video)
+		_, err := unsigned(mustJSON(t, event.GetVideoRangeEvent{UserId: "alice", Key: video.key}), nil)
+		assert.ErrorIs(t, err, media_meta.ErrNoSigningKey)
+	})
 }

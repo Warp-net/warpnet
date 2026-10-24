@@ -318,6 +318,54 @@ func TestStreamPool_SuccessfulSendClearsOfflineMark(t *testing.T) {
 	assert.False(t, pool.isUnstreamable(server.ID()))
 }
 
+func TestStreamPool_OpenLeavesTheAnswerOnTheStream(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+	received := echoServer(t, server, []byte("chunked answer"))
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+
+	s, err := pool.Open(addrOf(server), testRoute, []byte(`{"offset":0}`))
+	require.NoError(t, err)
+	defer func() { _ = s.Close() }()
+
+	answer, err := io.ReadAll(s)
+	require.NoError(t, err)
+	assert.Equal(t, "chunked answer", string(answer))
+
+	require.Len(t, *received, 1)
+	msg := (*received)[0]
+	assert.Equal(t, `{"offset":0}`, string(msg.Body))
+	pub, err := client.Peerstore().PubKey(client.ID()).Raw()
+	require.NoError(t, err)
+	assert.NoError(t, security.VerifySignature(pub, msg.SigningBytes(), msg.Signature),
+		"the auth middleware needs the same signed envelope Send writes")
+}
+
+func TestStreamPool_OpenReportsAnUnsupportedRoute(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+	linkHosts(t, client, server)
+	pool := newPool(t, client)
+
+	_, err := pool.Open(addrOf(server), WarpRoute("/public/get/video/9.9.9"), []byte(`{}`))
+	assert.ErrorIs(t, err, warpnet.ErrProtocolNotSupported, "an older node is told apart from an offline one")
+	assert.False(t, pool.isUnstreamable(server.ID()))
+}
+
+func TestStreamPool_OpenShortCircuitsAnOfflinePeer(t *testing.T) {
+	pool := newPool(t, newStreamHost(t))
+	offline := addrOf(newStreamHost(t))
+	pool.SetUnstreamable(offline.ID)
+
+	_, err := pool.Open(offline, testRoute, []byte(`{}`))
+	assert.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
+
+	var nilPool *streamPool
+	_, err = nilPool.Open(offline, testRoute, nil)
+	assert.Error(t, err)
+}
+
 func TestStreamPool_MalformedTargetsAreRejected(t *testing.T) {
 	pool := newPool(t, newStreamHost(t))
 	valid := addrOf(newStreamHost(t))
