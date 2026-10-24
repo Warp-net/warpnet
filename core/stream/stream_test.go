@@ -458,6 +458,8 @@ func TestMaxRequestSize(t *testing.T) {
 	cases := map[string]int64{
 		event.PRIVATE_POST_UPLOAD_IMAGE:         MaxMediaSize,
 		event.PRIVATE_POST_UPLOAD_VIDEO:         MaxMediaSize,
+		event.PRIVATE_POST_UPLOAD_CHAT_IMAGE:    MaxMediaSize,
+		event.PRIVATE_POST_UPLOAD_CHAT_VIDEO:    MaxMediaSize,
 		event.PRIVATE_POST_IMPORT_TWITTER_TWEET: MaxMediaSize,
 		event.PRIVATE_GET_SPONSORED_BUYER:       MaxMediaSize,
 		event.PUBLIC_GET_IMAGE:                  MaxControlSize,
@@ -474,6 +476,8 @@ func TestMaxResponseSize(t *testing.T) {
 	cases := map[string]int64{
 		event.PUBLIC_GET_IMAGE:           MaxMediaSize,
 		event.PUBLIC_GET_VIDEO:           MaxMediaSize,
+		event.PUBLIC_GET_CHAT_IMAGE:      MaxMediaSize,
+		event.PUBLIC_GET_CHAT_VIDEO:      MaxMediaSize,
 		event.PUBLIC_GET_SPONSORED_IMAGE: MaxMediaSize,
 		event.PUBLIC_GET_SPONSORED_VIDEO: MaxMediaSize,
 		event.PUBLIC_GET_TWEETS:          MaxListSize,
