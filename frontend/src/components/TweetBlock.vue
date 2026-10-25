@@ -467,6 +467,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {watchOrder} from "@/lib/order-worker";
 import {extractYoutubeId} from "@/lib/youtube";
+import {createVideoURL, revokeVideoURL} from "@/lib/video";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
@@ -985,7 +986,7 @@ export default {
           this.videoError = "This video isn't available right now. The author's node may be offline.";
           return;
         }
-        this.videoSrc = video.file;
+        this.videoSrc = createVideoURL(video.file);
       } catch (err) {
         console.error(`failed to load tweet video [${this.tweet.id}]`, err);
         this.videoError = 'Failed to load the video.';
@@ -994,6 +995,7 @@ export default {
       }
     },
     onVideoError() {
+      revokeVideoURL(this.videoSrc);
       this.videoSrc = '';
       this.videoError = 'This video cannot be played. Your system may be missing the required video codec.';
     },
@@ -1433,6 +1435,7 @@ export default {
     this.$nextTick(() => this.setupViewObserver());
   },
   beforeUnmount() {
+    revokeVideoURL(this.videoSrc);
     if (this.viewObserver) {
       this.viewObserver.disconnect();
       this.viewObserver = null;

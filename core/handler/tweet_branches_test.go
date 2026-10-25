@@ -416,7 +416,7 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		}}
 		out, err := StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			stubTweetRepo{}, stubTimelineRepo{}, reactions, stubStreamer{},
+			stubTweetRepo{}, stubTimelineRepo{}, reactions, stubTweetMediaRepo{}, stubStreamer{},
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 		require.Equal(t, event.Accepted, out)
@@ -436,7 +436,7 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		}
 		_, err := StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			repo, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{},
+			repo, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 		require.Equal(t, by, unretweeted)
@@ -446,7 +446,7 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		timeline := stubTimelineRepo{deleteFn: func(_, _ string) error { return errors.New("down") }}
 		_, err := StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			stubTweetRepo{}, timeline, stubTweetReactionRepo{}, stubStreamer{},
+			stubTweetRepo{}, timeline, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 	})
@@ -457,7 +457,7 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		}}
 		_, err := StreamDeleteTweetHandler(
 			broadcaster, stubAuth{owner: domain.Owner{UserId: owner}},
-			stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubStreamer{},
+			stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
 	})

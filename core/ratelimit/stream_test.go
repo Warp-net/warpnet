@@ -29,12 +29,19 @@ resulting from the use or misuse of this software.
 package ratelimit
 
 import (
+	"context"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -157,4 +164,61 @@ func (r rating) RateMultiplier(peerID warpnet.WarpPeerID) float64 {
 		return multiplier
 	}
 	return 1
+}
+
+func TestNewConfigurableLimiter_FallsBackOnGarbage(t *testing.T) {
+	assert.NotNil(t, NewConfigurableLimiter(nil))
+	assert.NotNil(t, NewConfigurableLimiter(strings.NewReader("{}")))
+	assert.NotPanics(t, func() {
+		assert.NotNil(t, NewConfigurableLimiter(strings.NewReader("{ this is not json")))
+	})
+}
+
+func TestNewConfigurableLimiter_HoldsVideoAnswersUntilWritten(t *testing.T) {
+	const video, image = warpnet.WarpProtocolID(event.PUBLIC_GET_VIDEO), warpnet.WarpProtocolID(event.PUBLIC_GET_IMAGE)
+
+	limiter := NewConfigurableLimiter(nil)
+	for proto := range peerInboundStreams {
+		require.Equal(t, videoStreamsPerPeer, limiter.GetProtocolPeerLimits(proto).GetStreamLimit(network.DirInbound))
+	}
+	require.Greater(t, limiter.GetProtocolPeerLimits(image).GetStreamLimit(network.DirInbound), videoStreamsPerPeer)
+	require.Nil(t, rcmgr.DefaultLimits.ProtocolPeerLimits, "the libp2p defaults stay untouched")
+
+	rm, err := warpnet.NewResourceManager(limiter)
+	require.NoError(t, err)
+	server, err := warpnet.NewP2PNode(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), libp2p.ResourceManager(rm))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = server.Close() })
+
+	written := make(chan struct{})
+	t.Cleanup(func() { close(written) })
+	answer := func(s network.Stream) {
+		_, _ = s.Write([]byte("x"))
+		<-written
+		_ = s.Close()
+	}
+	server.SetStreamHandler(video, answer)
+	server.SetStreamHandler(image, answer)
+
+	client, err := warpnet.NewP2PNode(libp2p.NoListenAddrs)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	ctx := context.Background()
+	require.NoError(t, client.Connect(ctx, peer.AddrInfo{ID: server.ID(), Addrs: server.Addrs()}))
+
+	request := func(proto warpnet.WarpProtocolID) error {
+		s, err := client.NewStream(ctx, server.ID(), proto)
+		if err != nil {
+			return err
+		}
+		_, err = io.ReadFull(s, make([]byte, 1))
+		return err
+	}
+	for range videoStreamsPerPeer {
+		require.NoError(t, request(video))
+	}
+	require.Error(t, request(video), "one more answer in flight is refused")
+	for range videoStreamsPerPeer + 1 {
+		require.NoError(t, request(image))
+	}
 }

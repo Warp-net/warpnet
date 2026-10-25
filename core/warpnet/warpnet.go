@@ -33,7 +33,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/libp2p/go-libp2p/x/rate"
-	"io"
 	gonet "net"
 	"net/netip"
 	"runtime"
@@ -331,19 +330,6 @@ func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.Ba
 		high,
 		connmgr.WithGracePeriod(time.Hour),
 	)
-}
-
-func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
-	defaults := rcmgr.DefaultLimits.AutoScale()
-	if input == nil {
-		return rcmgr.NewFixedLimiter(defaults)
-	}
-	limiter, err := rcmgr.NewLimiterFromJSON(input, defaults)
-	if err != nil {
-		log.Error("could not parse limiter config", err)
-		return rcmgr.NewFixedLimiter(defaults)
-	}
-	return limiter
 }
 
 func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {

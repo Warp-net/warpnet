@@ -107,6 +107,30 @@ describe('TweetBlock video', () => {
       .toBe('data:video/mp4;base64,AAAA');
   });
 
+  it('plays the clip from a blob and frees it when the tweet goes away', async () => {
+    const {createObjectURL, revokeObjectURL} = URL;
+    URL.createObjectURL = vi.fn(() => 'blob:clip');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const {getByLabelText, container, unmount} = renderTweet(videoTweet);
+
+      await waitFor(() => expect(warpnetService.getProfile).toHaveBeenCalled());
+      await fireEvent.click(getByLabelText('Play video'));
+
+      await waitFor(() => expect(container.querySelector('video')).not.toBeNull());
+      expect(container.querySelector('video').getAttribute('src')).toBe('blob:clip');
+      const blob = URL.createObjectURL.mock.calls[0][0];
+      expect(blob.type).toBe('video/mp4');
+      expect(blob.size).toBe(3);
+
+      unmount();
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
+    } finally {
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+    }
+  });
+
   it('autoloads the video when autoloadVideo is set', async () => {
     const {container} = renderTweet(videoTweet, {autoloadVideo: true});
 

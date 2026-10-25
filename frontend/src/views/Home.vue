@@ -102,7 +102,8 @@ resulting from the use or misuse of this software.
             >
               <i class="fas fa-times text-red-600 hover:text-white"></i>
             </button>
-            <div v-if="!videoKey" class="text-xs text-dark mt-1">Uploading video…</div>
+            <div v-if="videoUploading" class="text-xs text-dark mt-1">Uploading video…</div>
+            <p v-if="isVideoUndecodable" class="text-xs text-red-600 mt-1">This browser can't play this video, so most readers won't either. Try an H.264 MP4.</p>
           </div>
           <div v-if="poll" class="mt-2 mb-2 border border-lighter rounded p-3">
             <div v-for="(option, index) in poll.options" :key="index" class="flex items-center mb-2">
@@ -399,6 +400,7 @@ export default {
       videoAttachment: null,
       videoKey: '',
       videoPosterKey: '',
+      isVideoUndecodable: false,
       videoUploading: false,
       posting: false,
       loadingMore: false,
@@ -624,37 +626,38 @@ export default {
         return;
       }
 
-      this.videoAttachment = {url: URL.createObjectURL(file), name: file.name};
-      this.videoKey = '';
-      this.videoPosterKey = '';
-      this.videoUploading = true;
+      this.removeVideoAttachment();
+      const url = URL.createObjectURL(file);
+      this.videoAttachment = {url, name: file.name, file};
+      this._videoPoster = captureVideoPoster(file).catch(() => null);
 
-      const posterKey = await this.uploadVideoPoster(file);
-      if (this.videoAttachment) {
-        this.videoPosterKey = posterKey;
+      const poster = await this._videoPoster;
+      if (this.videoAttachment && this.videoAttachment.url === url) {
+        this.isVideoUndecodable = !poster;
       }
-
+    },
+    async uploadVideoAttachment() {
+      const {file} = this.videoAttachment;
+      this.videoUploading = true;
       try {
+        if (!this.videoPosterKey) {
+          this.videoPosterKey = await this.uploadVideoPoster(await this._videoPoster);
+        }
         const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
         const key = await warpnetService.uploadVideo(dataUrl);
         if (!key) {
           throw new Error('node returned an empty video key');
         }
         this.videoKey = key;
-      } catch (err) {
-        console.error('Failed to upload video:', err);
-        toast.error(err?.message || 'Failed to upload video. Please try again.');
-        this.removeVideoAttachment();
       } finally {
         this.videoUploading = false;
       }
     },
     // Best effort: a still beats an empty placeholder in the feed, but a clip
     // the browser cannot decode must still post without one.
-    async uploadVideoPoster(file) {
+    async uploadVideoPoster(poster) {
+      if (!poster) return '';
       try {
-        const poster = await captureVideoPoster(file);
-        if (!poster) return '';
         return await warpnetService.uploadImage(poster) || '';
       } catch (err) {
         console.error('Failed to upload video poster:', err);
@@ -676,6 +679,8 @@ export default {
       this.videoAttachment = null;
       this.videoKey = '';
       this.videoPosterKey = '';
+      this.isVideoUndecodable = false;
+      this._videoPoster = null;
     },
     togglePoll() {
       this.poll = this.poll ? null : {options: ['', ''], durationHours: 24};
@@ -708,6 +713,15 @@ export default {
       const price = this.sponsored ? toPriceUnits(this.sponsored.price) : '';
       this.posting = true;
       try {
+        if (this.videoAttachment && !this.videoKey) {
+          try {
+            await this.uploadVideoAttachment();
+          } catch (err) {
+            console.error('Failed to upload video:', err);
+            toast.error(err?.message || 'Failed to upload video. Please try again.');
+            return;
+          }
+        }
         // Use pre-uploaded keys when available (fresh attachments). Fall
         // back to a bulk upload for any slots that haven't been uploaded
         // yet (e.g. attached while offline, retried).

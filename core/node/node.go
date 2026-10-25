@@ -116,7 +116,7 @@ func NewWarpNode(
 	opts ...warpnet.WarpOption,
 ) (*WarpNode, error) {
 	limits = limits.WithDefaults()
-	limiter := warpnet.NewConfigurableLimiter(nil)
+	limiter := ratelimit.NewConfigurableLimiter(nil)
 
 	manager, err := warpnet.NewConnManager(limiter, limits.NetworkLowWater, limits.NetworkHighWater)
 	if err != nil {

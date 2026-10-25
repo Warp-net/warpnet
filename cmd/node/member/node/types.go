@@ -287,6 +287,8 @@ type MediaProvider interface {
 	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
 	SetImage(userId string, img domain.Base64Image) (_ domain.ImageKey, err error)
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
+	DeleteImage(userId string, key string) error
+	DeleteVideo(userId string, key string) error
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 	SetCopy(userId string, key string, c domain.MediaCopy) error
 	ListCopies(userId string, originalKey string) ([]domain.MediaCopy, error)
