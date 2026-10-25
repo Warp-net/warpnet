@@ -227,12 +227,11 @@ func TestAdvertiseAndFindPeersOnAnEmptyTable(t *testing.T) {
 
 	// An empty routing table has nowhere to store the record: advertise is a
 	// no-op and the peer query yields nothing rather than blocking.
-	require.Zero(t, d.advertise(rd, ns), "nothing stored, so the next pass tries again")
+	_, err = d.advertise(rd, ns)
+	require.ErrorIs(t, err, errEmptyRoutingTable)
 	d.findPeers(rd, ns, d.dht.Host().ID())
 }
 
-// router answers every provider query with the same peers and provides
-// with the error it was given.
 type router struct {
 	providers  []peer.AddrInfo
 	provideErr error
@@ -262,10 +261,12 @@ func TestAdvertiseReturnsHowLongTheRecordStands(t *testing.T) {
 	_, _ = d.dht.RoutingTable().TryAddPeer(other.ID(), true, false)
 	ns := rendezvousNamespace("testnet")
 
-	require.Equal(t, 3*time.Hour, d.advertise(drouting.NewRoutingDiscovery(router{}), ns),
-		"a stored record is not advertised again until it runs out")
-	require.Zero(t, d.advertise(drouting.NewRoutingDiscovery(router{provideErr: errors.New("no peer took it")}), ns),
-		"a record nobody took is advertised again next pass")
+	ttl, err := d.advertise(drouting.NewRoutingDiscovery(router{}), ns)
+	require.NoError(t, err)
+	require.Equal(t, 3*time.Hour, ttl, "a stored record is not advertised again until it runs out")
+
+	_, err = d.advertise(drouting.NewRoutingDiscovery(router{provideErr: errors.New("no peer took it")}), ns)
+	require.Error(t, err)
 }
 
 func TestFindPeersHandsDiscoveryOnlyPeersItIsNotConnectedTo(t *testing.T) {

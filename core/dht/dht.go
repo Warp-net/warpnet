@@ -102,7 +102,10 @@ type distributedHashTable struct {
 const (
 	bootstrapDrainTimeout = 5 * time.Second
 	ratingSweepInterval   = 30 * time.Second
+	rendezvousInterval    = 30 * time.Second
 )
+
+const errEmptyRoutingTable warpnet.WarpError = "dht: routing table is empty"
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
 	log.Debugln("dht: node removed", id)
@@ -290,11 +293,12 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 	ns := rendezvousNamespace(d.cfg.network)
 	ownID := d.dht.Host().ID()
 
-	readvertiseAt := time.Now().Add(d.advertise(rd, ns))
-	d.findPeers(rd, ns, ownID)
+	advertiseTimer := time.NewTimer(0)
+	defer advertiseTimer.Stop()
+	findTicker := time.NewTicker(rendezvousInterval)
+	defer findTicker.Stop()
 
-	ticker := time.NewTicker(30 * time.Second) //nolint:mnd
-	defer ticker.Stop()
+	d.findPeers(rd, ns, ownID)
 
 	for {
 		select {
@@ -302,32 +306,29 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 			return
 		case <-d.stopChan:
 			return
-		case <-ticker.C:
-			if time.Now().After(readvertiseAt) {
-				readvertiseAt = time.Now().Add(d.advertise(rd, ns))
+		case <-advertiseTimer.C:
+			ttl, err := d.advertise(rd, ns)
+			if err != nil {
+				log.Debugf("dht: rendezvous: advertise: %v", err)
+				ttl = rendezvousInterval
 			}
+			advertiseTimer.Reset(ttl)
+		case <-findTicker.C:
 			d.findPeers(rd, ns, ownID)
 		}
 	}
 }
 
 // advertise announces this node as a provider for the rendezvous namespace
-// and returns how long the record stands, or zero to try again next pass.
-// Silently skips when the routing table has no peers (Provide needs
-// at least one peer to store the record).
-func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) time.Duration {
+// and returns how long the record stands. Provide needs at least one peer
+// in the routing table to store the record.
+func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) (time.Duration, error) {
 	if d.dht.RoutingTable().Size() == 0 {
-		return 0
+		return 0, errEmptyRoutingTable
 	}
 	ctx, cancel := context.WithTimeout(d.ctx, 60*time.Second) //nolint:mnd
 	defer cancel()
-	ttl, err := rd.Advertise(ctx, ns)
-	if err != nil {
-		log.Debugf("dht: rendezvous: advertise: %v", err)
-		return 0
-	}
-	log.Debugf("dht: rendezvous: advertised for %s", ttl)
-	return ttl
+	return rd.Advertise(ctx, ns)
 }
 
 // findPeers queries the DHT for providers of the rendezvous namespace
