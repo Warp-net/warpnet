@@ -25,12 +25,14 @@ package media_meta
 
 import (
 	"bytes"
+	"cmp"
 	"image"
 	"image/draw"
 	_ "image/gif"
 	"math"
 	"math/cmplx"
 	"runtime"
+	"slices"
 	"sync"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -51,6 +53,8 @@ const (
 	fineScaleSpread  = 0.03
 	coarseCutoff     = 0.12
 	fineCutoff       = 0.06
+	quarterTurns     = 4
+	alignedTurns     = 2
 
 	footprintMarginDivisor = 8
 
@@ -87,6 +91,16 @@ func decodeLuma(b []byte) (lumaPlane, error) {
 		p.pix[i] = float32(0.299*float64(rgb[0]) + 0.587*float64(rgb[1]) + 0.114*float64(rgb[2]))
 	}
 	return p, nil
+}
+
+func turnLuma(p lumaPlane) lumaPlane {
+	out := lumaPlane{width: p.height, height: p.width, pix: make([]float32, len(p.pix))}
+	for y := range p.height {
+		for x := range p.width {
+			out.pix[x*out.width+p.height-1-y] = p.pix[y*p.width+x]
+		}
+	}
+	return out
 }
 
 func cropLuma(p lumaPlane, r image.Rectangle) lumaPlane {
@@ -158,24 +172,42 @@ func resizeLuma(p lumaPlane, width, height int) lumaPlane {
 	return out
 }
 
-func alignSuspect(original, suspect lumaPlane) (lumaPlane, image.Point) {
-	scale, suspect := searchCoarseScale(original, suspect)
-	scale, shift := searchFineScale(original, suspect, scale)
-	aligned := resizeLuma(suspect, scaleSide(suspect.width, 1/scale), scaleSide(suspect.height, 1/scale))
+type coarseMatch struct {
+	scale     float64
+	footprint lumaPlane
+	peak      float64
+}
+
+func alignSuspect(original lumaPlane, match coarseMatch) (lumaPlane, image.Point) {
+	scale, shift := searchFineScale(original, match.footprint, match.scale)
+	aligned := resizeLuma(match.footprint, scaleSide(match.footprint.width, 1/scale), scaleSide(match.footprint.height, 1/scale))
 	return aligned, correctShift(original, aligned, shift)
 }
 
-func searchCoarseScale(original, suspect lumaPlane) (float64, lumaPlane) {
+func searchCoarseTurns(original, suspect lumaPlane) []coarseMatch {
+	matches := make([]coarseMatch, 0, quarterTurns)
+	for turn := range quarterTurns {
+		if turn > 0 {
+			suspect = turnLuma(suspect)
+		}
+		scale, footprint, peak := searchCoarseScale(original, suspect)
+		matches = append(matches, coarseMatch{scale: scale, footprint: footprint, peak: peak})
+	}
+	slices.SortStableFunc(matches, func(a, b coarseMatch) int { return cmp.Compare(b.peak, a.peak) })
+	return matches
+}
+
+func searchCoarseScale(original, suspect lumaPlane) (float64, lumaPlane, float64) {
 	factor := min(0.25, coarseAlignSide/float64(max(original.width, original.height)))
 	scales := make([]float64, coarseScaleCount)
 	for i := range scales {
 		scales[i] = minAlignScale * math.Pow(maxAlignScale/minAlignScale, float64(i)/(coarseScaleCount-1))
 	}
-	i, shift := searchScale(original, suspect, factor, scales, coarseCutoff)
+	i, shift, peak := searchScale(original, suspect, factor, scales, coarseCutoff)
 	if i < 0 {
-		return 1, suspect
+		return 1, suspect, peak
 	}
-	return scales[i], cropFootprint(original, suspect, scales[i], scalePoint(shift, -scales[i]/factor))
+	return scales[i], cropFootprint(original, suspect, scales[i], scalePoint(shift, -scales[i]/factor)), peak
 }
 
 func searchFineScale(original, suspect lumaPlane, scale float64) (float64, image.Point) {
@@ -184,7 +216,7 @@ func searchFineScale(original, suspect lumaPlane, scale float64) (float64, image
 	for i := range scales {
 		scales[i] = scale * (1 - fineScaleSpread + 2*fineScaleSpread*float64(i)/(fineScaleCount-1))
 	}
-	i, shift := searchScale(original, suspect, factor, scales, fineCutoff)
+	i, shift, _ := searchScale(original, suspect, factor, scales, fineCutoff)
 	if i < 0 {
 		return scale, image.Point{}
 	}
@@ -200,7 +232,7 @@ func correctShift(original, aligned lumaPlane, shift image.Point) image.Point {
 	size := image.Pt(min(overlap.Dx(), alignWindowSide), min(overlap.Dy(), alignWindowSide))
 	from := overlap.Min.Add(overlap.Size().Sub(size).Div(2))
 	window := image.Rectangle{Min: from, Max: from.Add(size)}
-	_, correction := correlatePhase(cropLuma(original, window), cropLuma(aligned, window.Sub(shift)), fineCutoff)
+	_, correction := correlatePhase(newSpectrumCache(cropLuma(original, window)), cropLuma(aligned, window.Sub(shift)), fineCutoff)
 	return shift.Add(correction)
 }
 
@@ -214,8 +246,9 @@ func cropFootprint(original, suspect lumaPlane, scale float64, from image.Point)
 	return cropLuma(suspect, part)
 }
 
-func searchScale(original, suspect lumaPlane, factor float64, scales []float64, cutoff float64) (int, image.Point) {
+func searchScale(original, suspect lumaPlane, factor float64, scales []float64, cutoff float64) (int, image.Point, float64) {
 	o := resizeLuma(original, max(int(float64(original.width)*factor), 1), max(int(float64(original.height)*factor), 1))
+	spectra := newSpectrumCache(o)
 	peaks := make([]float64, len(scales))
 	shifts := make([]image.Point, len(scales))
 	indexes := make(chan int, len(scales))
@@ -234,7 +267,7 @@ func searchScale(original, suspect lumaPlane, factor float64, scales []float64, 
 				if width < minAlignSide || height < minAlignSide || width > maxAlignGrowth*o.width || height > maxAlignGrowth*o.height {
 					continue
 				}
-				peaks[i], shifts[i] = correlatePhase(o, resizeLuma(suspect, width, height), cutoff)
+				peaks[i], shifts[i] = correlatePhase(spectra, resizeLuma(suspect, width, height), cutoff)
 			}
 		})
 	}
@@ -247,9 +280,9 @@ func searchScale(original, suspect lumaPlane, factor float64, scales []float64, 
 		}
 	}
 	if best < 0 {
-		return best, image.Point{}
+		return best, image.Point{}, -1
 	}
-	return best, shifts[best]
+	return best, shifts[best], peaks[best]
 }
 
 func scaleSide(side int, factor float64) int {
@@ -260,11 +293,45 @@ func scalePoint(p image.Point, factor float64) image.Point {
 	return image.Pt(int(math.Round(float64(p.X)*factor)), int(math.Round(float64(p.Y)*factor)))
 }
 
-func correlatePhase(a, b lumaPlane, cutoff float64) (float64, image.Point) {
-	height := findFFTSize(max(a.height, b.height))
-	width := findFFTSize(max(a.width, b.width))
+type spectrumCache struct {
+	plane   lumaPlane
+	mu      sync.Mutex
+	spectra map[image.Point]*cachedSpectrum
+	used    []image.Point
+}
+
+type cachedSpectrum struct {
+	once     sync.Once
+	spectrum []complex128
+}
+
+func newSpectrumCache(p lumaPlane) *spectrumCache {
+	return &spectrumCache{plane: p, spectra: make(map[image.Point]*cachedSpectrum)}
+}
+
+func (c *spectrumCache) transform(height, width int) []complex128 {
+	size := image.Pt(width, height)
+	c.mu.Lock()
+	entry, ok := c.spectra[size]
+	if !ok {
+		entry = &cachedSpectrum{}
+		c.spectra[size] = entry
+		c.used = append(c.used, size)
+		if len(c.used) > maxAlignWorkers+1 {
+			delete(c.spectra, c.used[0])
+			c.used = c.used[1:]
+		}
+	}
+	c.mu.Unlock()
+	entry.once.Do(func() { entry.spectrum = transformLuma(c.plane, height, width) })
+	return entry.spectrum
+}
+
+func correlatePhase(a *spectrumCache, b lumaPlane, cutoff float64) (float64, image.Point) {
+	height := findFFTSize(max(a.plane.height, b.height))
+	width := findFFTSize(max(a.plane.width, b.width))
 	cols := width/2 + 1
-	fa := transformLuma(a, height, width)
+	fa := a.transform(height, width)
 	fb := transformLuma(b, height, width)
 	for y := range height {
 		fy := float64(y) / float64(height)
@@ -275,10 +342,10 @@ func correlatePhase(a, b lumaPlane, cutoff float64) (float64, image.Point) {
 			fx := float64(x) / float64(width)
 			v := fa[y*cols+x] * cmplx.Conj(fb[y*cols+x])
 			gain := math.Exp(-(fy*fy+fx*fx)/(2*cutoff*cutoff)) / (cmplx.Abs(v) + 1e-9)
-			fa[y*cols+x] = v * complex(gain, 0)
+			fb[y*cols+x] = v * complex(gain, 0)
 		}
 	}
-	c := transformBack(fa, height, width)
+	c := transformBack(fb, height, width)
 
 	best := 0
 	for i := range c {
