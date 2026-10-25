@@ -223,7 +223,7 @@ func correctShift(original, aligned lumaPlane, shift image.Point) image.Point {
 	size := image.Pt(min(overlap.Dx(), alignWindowSide), min(overlap.Dy(), alignWindowSide))
 	from := overlap.Min.Add(overlap.Size().Sub(size).Div(2))
 	window := image.Rectangle{Min: from, Max: from.Add(size)}
-	_, correction := correlatePhase(cropLuma(original, window), cropLuma(aligned, window.Sub(shift)), fineCutoff)
+	_, correction := correlatePhase(newSpectrumCache(cropLuma(original, window)), cropLuma(aligned, window.Sub(shift)), fineCutoff)
 	return shift.Add(correction)
 }
 
@@ -239,6 +239,7 @@ func cropFootprint(original, suspect lumaPlane, scale float64, from image.Point)
 
 func searchScale(original, suspect lumaPlane, factor float64, scales []float64, cutoff float64) (int, image.Point, float64) {
 	o := resizeLuma(original, max(int(float64(original.width)*factor), 1), max(int(float64(original.height)*factor), 1))
+	spectra := newSpectrumCache(o)
 	peaks := make([]float64, len(scales))
 	shifts := make([]image.Point, len(scales))
 	indexes := make(chan int, len(scales))
@@ -257,7 +258,7 @@ func searchScale(original, suspect lumaPlane, factor float64, scales []float64, 
 				if width < minAlignSide || height < minAlignSide || width > maxAlignGrowth*o.width || height > maxAlignGrowth*o.height {
 					continue
 				}
-				peaks[i], shifts[i] = correlatePhase(o, resizeLuma(suspect, width, height), cutoff)
+				peaks[i], shifts[i] = correlatePhase(spectra, resizeLuma(suspect, width, height), cutoff)
 			}
 		})
 	}
@@ -283,11 +284,45 @@ func scalePoint(p image.Point, factor float64) image.Point {
 	return image.Pt(int(math.Round(float64(p.X)*factor)), int(math.Round(float64(p.Y)*factor)))
 }
 
-func correlatePhase(a, b lumaPlane, cutoff float64) (float64, image.Point) {
-	height := findFFTSize(max(a.height, b.height))
-	width := findFFTSize(max(a.width, b.width))
+type spectrumCache struct {
+	plane   lumaPlane
+	mu      sync.Mutex
+	spectra map[image.Point]*cachedSpectrum
+	used    []image.Point
+}
+
+type cachedSpectrum struct {
+	once     sync.Once
+	spectrum []complex128
+}
+
+func newSpectrumCache(p lumaPlane) *spectrumCache {
+	return &spectrumCache{plane: p, spectra: make(map[image.Point]*cachedSpectrum)}
+}
+
+func (c *spectrumCache) transform(height, width int) []complex128 {
+	size := image.Pt(width, height)
+	c.mu.Lock()
+	entry, ok := c.spectra[size]
+	if !ok {
+		entry = &cachedSpectrum{}
+		c.spectra[size] = entry
+		c.used = append(c.used, size)
+		if len(c.used) > maxAlignWorkers+1 {
+			delete(c.spectra, c.used[0])
+			c.used = c.used[1:]
+		}
+	}
+	c.mu.Unlock()
+	entry.once.Do(func() { entry.spectrum = transformLuma(c.plane, height, width) })
+	return entry.spectrum
+}
+
+func correlatePhase(a *spectrumCache, b lumaPlane, cutoff float64) (float64, image.Point) {
+	height := findFFTSize(max(a.plane.height, b.height))
+	width := findFFTSize(max(a.plane.width, b.width))
 	cols := width/2 + 1
-	fa := transformLuma(a, height, width)
+	fa := a.transform(height, width)
 	fb := transformLuma(b, height, width)
 	for y := range height {
 		fy := float64(y) / float64(height)
@@ -298,10 +333,10 @@ func correlatePhase(a, b lumaPlane, cutoff float64) (float64, image.Point) {
 			fx := float64(x) / float64(width)
 			v := fa[y*cols+x] * cmplx.Conj(fb[y*cols+x])
 			gain := math.Exp(-(fy*fy+fx*fx)/(2*cutoff*cutoff)) / (cmplx.Abs(v) + 1e-9)
-			fa[y*cols+x] = v * complex(gain, 0)
+			fb[y*cols+x] = v * complex(gain, 0)
 		}
 	}
-	c := transformBack(fa, height, width)
+	c := transformBack(fb, height, width)
 
 	best := 0
 	for i := range c {
