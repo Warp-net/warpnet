@@ -4,6 +4,7 @@ package handler
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/ratelimit"
@@ -407,12 +408,27 @@ func TestStreamSponsoredSettingsHandlers(t *testing.T) {
 	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 500 {
 		t.Fatalf("update = %+v, %v", resp, err)
 	}
-	if repo.saved["owner-1"].MinStakeTRX != 500 {
-		t.Fatalf("saved = %+v", repo.saved)
+	saved := repo.saved["owner-1"]
+	if saved.MinStakeTRX != 500 || saved.PreviousMinStakeTRX != 0 || time.Since(saved.ChangedAt) > time.Minute {
+		t.Fatalf("saved = %+v, want 500 with the old 0 kept for claims", saved)
+	}
+
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, auth)(marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 800}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if again := repo.saved["owner-1"]; again.MinStakeTRX != 800 || again.PreviousMinStakeTRX != 0 {
+		t.Fatalf("saved = %+v: a second raise within the window keeps the lowest threshold a claim may still be held to", again)
+	}
+	before := repo.saved["owner-1"]
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, auth)(marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 800}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if repo.saved["owner-1"] != before {
+		t.Fatalf("saving the same threshold moved its history: %+v -> %+v", before, repo.saved["owner-1"])
 	}
 
 	resp, err = StreamGetSponsoredSettingsHandler(repo, auth)([]byte("{}"), nil)
-	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 500 {
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 800 {
 		t.Fatalf("get after update = %+v, %v", resp, err)
 	}
 

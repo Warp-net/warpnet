@@ -58,6 +58,7 @@ const (
 	ErrChainUnavailable warpnet.WarpError = "order: the TRON network cannot be reached, nothing was paid; try again later"
 	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so it is not sent again; check the wallet history"
 	ErrPayerTaken       warpnet.WarpError = "order: this wallet already paid for another buyer of this author"
+	ErrPayerAddress     warpnet.WarpError = "order: the paying wallet is not a TRON address in base58"
 )
 
 type SponsoredAuthStorer interface {
@@ -471,10 +472,8 @@ func StreamVerifyOrderHandler(
 		if err != nil {
 			return nil, err
 		}
-		if sponsored.MinStakeTRX > 0 {
-			if err := verifyBuyerPayer(backend, orders, ev.Payer, buyer.NodeId, sponsored.MinStakeTRX); err != nil {
-				return nil, err
-			}
+		if err := verifyBuyerPayer(backend, orders, ev.Payer, buyer.NodeId, sponsored.ClaimMinStakeTRX(now)); err != nil {
+			return nil, err
 		}
 
 		order := domain.Order{
@@ -853,6 +852,12 @@ func listPixelMarkedOrders(tweet domain.Tweet, originalKey string, orders OrderS
 }
 
 func verifyBuyerPayer(backend SponsoredWallet, orders OrderStorer, payer, buyerNodeId string, minStakeTRX uint64) error {
+	if payer != "" && !wallet.IsAddress(payer) {
+		return ErrPayerAddress
+	}
+	if minStakeTRX == 0 {
+		return nil
+	}
 	errStake := warpnet.WarpError(fmt.Sprintf("order: the author sells only to wallets with at least %d TRX staked", minStakeTRX))
 	if payer == "" {
 		return errStake
@@ -868,7 +873,7 @@ func verifyBuyerPayer(backend SponsoredWallet, orders OrderStorer, payer, buyerN
 	if err != nil {
 		return err
 	}
-	if !account.IsStakeEnough(minStakeTRX) {
+	if !account.IsLockedEnough(minStakeTRX) {
 		return errStake
 	}
 	return nil

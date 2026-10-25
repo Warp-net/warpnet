@@ -34,18 +34,19 @@ import (
 )
 
 type stubSponsoredWallet struct {
-	isDown   bool
-	address  string
-	staked   string
-	balances []string
-	splitter string
-	pays     []wallet.Sponsorship
-	payTx    string
-	payErr   error
-	checks   []wallet.Sponsorship
-	isPaid   bool
-	quotes   []wallet.Sponsorship
-	quote    wallet.Quote
+	isDown    bool
+	address   string
+	staked    string
+	unstaking []wallet.Unstaking
+	balances  []string
+	splitter  string
+	pays      []wallet.Sponsorship
+	payTx     string
+	payErr    error
+	checks    []wallet.Sponsorship
+	isPaid    bool
+	quotes    []wallet.Sponsorship
+	quote     wallet.Quote
 }
 
 func (w *stubSponsoredWallet) Quote(_ context.Context, _ string, s wallet.Sponsorship) (wallet.Quote, error) {
@@ -62,7 +63,7 @@ func (w *stubSponsoredWallet) Address(_ context.Context, _ string) (string, erro
 
 func (w *stubSponsoredWallet) Balance(_ context.Context, address string) (wallet.Account, error) {
 	w.balances = append(w.balances, address)
-	return wallet.Account{Staked: w.staked}, nil
+	return wallet.Account{Staked: w.staked, Unstaking: w.unstaking}, nil
 }
 
 func (w *stubSponsoredWallet) Pay(_ context.Context, _ string, s wallet.Sponsorship) (wallet.Payment, error) {
@@ -131,10 +132,12 @@ func (o stubOrders) IsPayerTaken(payer, buyerNodeId string) (bool, error) {
 	return false, nil
 }
 
-type stubSponsoredSettings struct{ minStakeTRX uint64 }
+const testPayer = "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa"
+
+type stubSponsoredSettings domain.SponsoredSettings
 
 func (s stubSponsoredSettings) GetSponsoredSettings(string) (domain.SponsoredSettings, error) {
-	return domain.SponsoredSettings{MinStakeTRX: s.minStakeTRX}, nil
+	return domain.SponsoredSettings(s), nil
 }
 
 func confirmedSales(buyerId string, count int, at time.Time) stubOrders {
@@ -527,9 +530,12 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		return StreamVerifyOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, tweets, orders, users, notifier, stubStreamer{}, stubSponsoredSettings{})
 	}
 	newDemandingHandler := func(w SponsoredWallet, orders OrderStorer) warpnet.WarpHandlerFunc {
-		return StreamVerifyOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, paidTweet, orders, users, notifier, stubStreamer{}, stubSponsoredSettings{minStakeTRX: 500})
+		return StreamVerifyOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, paidTweet, orders, users, notifier, stubStreamer{}, stubSponsoredSettings{MinStakeTRX: 500})
 	}
-	staking := event.VerifyOrderEvent{TweetId: "tweet-1", UserId: "buyer-1", TxId: "tx-1", Nonce: "n1", Payer: "TBuyerWallet"}
+	newChangedHandler := func(w SponsoredWallet, settings domain.SponsoredSettings) warpnet.WarpHandlerFunc {
+		return StreamVerifyOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, paidTweet, stubOrders{}, users, notifier, stubStreamer{}, stubSponsoredSettings(settings))
+	}
+	staking := event.VerifyOrderEvent{TweetId: "tweet-1", UserId: "buyer-1", TxId: "tx-1", Nonce: "n1", Payer: testPayer}
 
 	t.Run("a staked payer is checked on chain and kept with the order", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "500000000"}
@@ -537,10 +543,10 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		resp, err := newDemandingHandler(w, orders)(marshal(t, staking), fromBuyer())
 		require.NoError(t, err)
 		assert.True(t, resp.(event.OrderResponse).Confirmed)
-		assert.Equal(t, []string{"TBuyerWallet"}, w.balances)
+		assert.Equal(t, []string{testPayer}, w.balances)
 		require.Len(t, w.checks, 1)
-		assert.Equal(t, "TBuyerWallet", w.checks[0].Buyer, "the chain must show this wallet paid, not just any")
-		assert.Equal(t, "TBuyerWallet", orders["tweet-1/buyer-1"].Payer)
+		assert.Equal(t, testPayer, w.checks[0].Buyer, "the chain must show this wallet paid, not just any")
+		assert.Equal(t, testPayer, orders["tweet-1/buyer-1"].Payer)
 		assert.Equal(t, buyerNode.String(), orders["tweet-1/buyer-1"].BuyerNodeId)
 	})
 
@@ -563,15 +569,45 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 
 	t.Run("a wallet that already paid for another node is refused", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "500000000"}
-		orders := stubOrders{"tweet-0/buyer-0": {TweetId: "tweet-0", BuyerId: "buyer-0", BuyerNodeId: "other-node", Payer: "TBuyerWallet", Confirmed: true}}
+		orders := stubOrders{"tweet-0/buyer-0": {TweetId: "tweet-0", BuyerId: "buyer-0", BuyerNodeId: "other-node", Payer: testPayer, Confirmed: true}}
 		_, err := newDemandingHandler(w, orders)(marshal(t, staking), fromBuyer())
 		assert.ErrorIs(t, err, ErrPayerTaken)
 		assert.Empty(t, w.checks)
 	})
 
+	t.Run("a stake unstaked after paying is still locked, so the claim goes through", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "100000000", unstaking: []wallet.Unstaking{{Amount: "400000000", AvailableAt: 1}}}
+		resp, err := newDemandingHandler(w, stubOrders{})(marshal(t, staking), fromBuyer())
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
+	})
+
+	t.Run("a threshold raised within a day holds claims to the old one", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
+		raised := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: time.Now().Add(-time.Hour)}
+		resp, err := newChangedHandler(w, raised)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err, "a node that paid before the stake was asked must not lose its money")
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
+
+		raised.ChangedAt = time.Now().Add(-domain.MinStakeChangeWindow)
+		_, err = newChangedHandler(w, raised)(marshal(t, claim), fromBuyer())
+		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked")
+	})
+
+	t.Run("a payer named in another form of the same address is refused", func(t *testing.T) {
+		for _, payer := range []string{"41ff21468791a710e549e6fbb3b7b6df5324b893c5", " " + testPayer, "0x41FF21468791A710E549E6FBB3B7B6DF5324B893C5"} {
+			w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "500000000"}
+			hexClaim := staking
+			hexClaim.Payer = payer
+			_, err := newHandler(w, paidTweet, stubOrders{})(marshal(t, hexClaim), fromBuyer())
+			assert.ErrorIs(t, err, ErrPayerAddress, payer)
+			assert.Empty(t, w.checks)
+		}
+	})
+
 	t.Run("a node signed up again keeps its wallet", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "500000000"}
-		orders := stubOrders{"tweet-0/buyer-old": {TweetId: "tweet-0", BuyerId: "buyer-old", BuyerNodeId: buyerNode.String(), Payer: "TBuyerWallet", Confirmed: true}}
+		orders := stubOrders{"tweet-0/buyer-old": {TweetId: "tweet-0", BuyerId: "buyer-old", BuyerNodeId: buyerNode.String(), Payer: testPayer, Confirmed: true}}
 		resp, err := newDemandingHandler(w, orders)(marshal(t, staking), fromBuyer())
 		require.NoError(t, err)
 		assert.True(t, resp.(event.OrderResponse).Confirmed)
@@ -584,7 +620,7 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		assert.True(t, resp.(event.OrderResponse).Confirmed)
 		assert.Empty(t, w.balances)
 		require.Len(t, w.checks, 1)
-		assert.Equal(t, "TBuyerWallet", w.checks[0].Buyer)
+		assert.Equal(t, testPayer, w.checks[0].Buyer)
 	})
 
 	t.Run("confirms a payment bound to this buyer and records it", func(t *testing.T) {

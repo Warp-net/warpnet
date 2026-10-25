@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"time"
+
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -164,10 +166,23 @@ func StreamUpdateSponsoredSettingsHandler(
 		if owner.UserId == "" {
 			return nil, warpnet.WarpError("update sponsored settings: empty owner")
 		}
-		if err := repo.SetSponsoredSettings(owner.UserId, ev); err != nil {
+		current, err := repo.GetSponsoredSettings(owner.UserId)
+		if err != nil {
 			return nil, err
 		}
-		return event.GetSponsoredSettingsResponse(ev), nil
+		settings := current
+		if ev.MinStakeTRX != current.MinStakeTRX {
+			now := time.Now()
+			settings = domain.SponsoredSettings{
+				MinStakeTRX:         ev.MinStakeTRX,
+				PreviousMinStakeTRX: current.ClaimMinStakeTRX(now),
+				ChangedAt:           now,
+			}
+		}
+		if err := repo.SetSponsoredSettings(owner.UserId, settings); err != nil {
+			return nil, err
+		}
+		return event.GetSponsoredSettingsResponse(settings), nil
 	}
 }
 

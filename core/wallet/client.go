@@ -39,6 +39,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,6 +69,8 @@ const (
 	paramAmount     = "amount"
 )
 
+var tronAddress = regexp.MustCompile(`^T[1-9A-HJ-NP-Za-km-z]{33}$`)
+
 var (
 	ErrUnavailable = errors.New("wallet: payment engine unavailable")
 	ErrNoAnswer    = errors.New("wallet: the payment engine never answered")
@@ -92,8 +95,28 @@ func (a Account) IsStakeEnough(minTRX uint64) bool {
 	if !ok {
 		return minTRX == 0
 	}
-	required := new(big.Int).Mul(new(big.Int).SetUint64(minTRX), big.NewInt(sunPerTRX))
-	return staked.Cmp(required) >= 0
+	return staked.Cmp(sunOf(minTRX)) >= 0
+}
+
+func (a Account) IsLockedEnough(minTRX uint64) bool {
+	locked, ok := new(big.Int).SetString(a.Staked, 10)
+	if !ok {
+		locked = new(big.Int)
+	}
+	for _, u := range a.Unstaking {
+		if amount, ok := new(big.Int).SetString(u.Amount, 10); ok {
+			locked.Add(locked, amount)
+		}
+	}
+	return locked.Cmp(sunOf(minTRX)) >= 0
+}
+
+func IsAddress(address string) bool {
+	return tronAddress.MatchString(address)
+}
+
+func sunOf(trx uint64) *big.Int {
+	return new(big.Int).Mul(new(big.Int).SetUint64(trx), big.NewInt(sunPerTRX))
 }
 
 type Config struct {
@@ -540,25 +563,33 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 }
 
 func (c *Client) Stake(ctx context.Context, seed, amount string) (string, error) {
-	return c.sendStaking(ctx, "wallet.stake", map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramAmount: amount})
+	return c.sendStaking(ctx, "wallet.stake", seed, amount)
 }
 
 func (c *Client) Unstake(ctx context.Context, seed, amount string) (string, error) {
-	return c.sendStaking(ctx, "wallet.unstake", map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramAmount: amount})
+	return c.sendStaking(ctx, "wallet.unstake", seed, amount)
 }
 
 func (c *Client) Withdraw(ctx context.Context, seed string) (string, error) {
-	return c.sendStaking(ctx, "wallet.withdraw", map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed})
+	return c.sendStaking(ctx, "wallet.withdraw", seed, "")
 }
 
-func (c *Client) sendStaking(ctx context.Context, method string, params map[string]any) (string, error) {
+func (c *Client) sendStaking(ctx context.Context, method, seed, amount string) (string, error) {
 	var out struct {
 		Tx string `json:"tx"`
+	}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed}
+	if amount != "" {
+		params[paramAmount] = amount
 	}
 	if err := c.call(ctx, method, params, &out); err != nil {
 		return "", err
 	}
-	log.Infof("wallet: %s %v sun on %s, tx %s", method, params[paramAmount], c.cfg.Network, out.Tx)
+	if amount == "" {
+		log.Infof("wallet: %s on %s, tx %s", method, c.cfg.Network, out.Tx)
+	} else {
+		log.Infof("wallet: %s %s sun on %s, tx %s", method, amount, c.cfg.Network, out.Tx)
+	}
 	return out.Tx, nil
 }
 

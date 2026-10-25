@@ -134,6 +134,7 @@ func (s *OrderRepoTestSuite) TestCountConfirmed() {
 func (s *OrderRepoTestSuite) TestIsPayerTaken() {
 	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t7", BuyerId: "p1", BuyerNodeId: "node-1", Payer: "TPayerOne", Confirmed: true}))
 	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t8", BuyerId: "p2", BuyerNodeId: "node-2", Payer: "TPayerTwo"}))
+	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t9", BuyerId: "p4", BuyerNodeId: "node-4", Payer: "TPayerOne", Confirmed: true}))
 
 	isTaken, err := s.repo.IsPayerTaken("TPayerOne", "node-1")
 	s.Require().NoError(err)
@@ -142,6 +143,10 @@ func (s *OrderRepoTestSuite) TestIsPayerTaken() {
 	isTaken, err = s.repo.IsPayerTaken("TPayerOne", "node-3")
 	s.Require().NoError(err)
 	s.True(isTaken, "a wallet that paid for another node is taken")
+
+	isTaken, err = s.repo.IsPayerTaken("TPayerOne", "node-4")
+	s.Require().NoError(err)
+	s.True(isTaken, "the first node to pay with a wallet keeps it, a later order does not move it")
 
 	isTaken, err = s.repo.IsPayerTaken("TPayerTwo", "node-3")
 	s.Require().NoError(err)

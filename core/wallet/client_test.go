@@ -540,3 +540,31 @@ func TestBalanceListsWhatIsBeingUnstaked(t *testing.T) {
 		t.Fatalf("account = %+v", account)
 	}
 }
+
+func TestIsAddressTakesOnlyTheBase58Form(t *testing.T) {
+	if !IsAddress("TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa") {
+		t.Fatal("a base58 address is refused")
+	}
+	for _, other := range []string{
+		"", " TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa", "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa\n",
+		"41ff21468791a710e549e6fbb3b7b6df5324b893c5", "0x41ff21468791a710e549e6fbb3b7b6df5324b893c5",
+		"ff21468791a710e549e6fbb3b7b6df5324b893c5", "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQ0", "TBuyerWallet",
+	} {
+		if IsAddress(other) {
+			t.Fatalf("%q passes as a base58 address: another spelling of one wallet would slip past a string compare", other)
+		}
+	}
+}
+
+func TestIsLockedEnoughCountsWhatIsBeingUnstaked(t *testing.T) {
+	account := Account{Staked: "100000000", Unstaking: []Unstaking{{Amount: "300000000"}, {Amount: "100000000"}}}
+	if account.IsStakeEnough(500) {
+		t.Fatal("TRX being unstaked is not a stake a new order may lean on")
+	}
+	if !account.IsLockedEnough(500) || account.IsLockedEnough(501) {
+		t.Fatal("staked and unstaking TRX are both locked")
+	}
+	if !(Account{}).IsLockedEnough(0) || (Account{}).IsLockedEnough(1) {
+		t.Fatal("an empty account locks nothing")
+	}
+}

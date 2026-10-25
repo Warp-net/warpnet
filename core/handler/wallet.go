@@ -55,8 +55,9 @@ type WalletOwnerStorer interface {
 const (
 	walletDerivation = "warpnet-account"
 
-	ErrOrderLimit       warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
-	ErrWalletPayerTaken warpnet.WarpError = "order: this wallet already paid for another buyer of this author"
+	ErrOrderLimit         warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+	ErrWalletPayerTaken   warpnet.WarpError = "order: this wallet already paid for another buyer of this author"
+	ErrWalletPayerAddress warpnet.WarpError = "order: the paying wallet is not a TRON address in base58"
 )
 
 type WalletBackend interface {
@@ -603,6 +604,9 @@ func verifyPeerPayer(
 	}
 	if sponsored.MinStakeTRX == 0 {
 		return nil
+	}
+	if !wallet.IsAddress(payer) {
+		return ErrWalletPayerAddress
 	}
 	isTaken, err := isPeerPayerTaken(s, orders, payer)
 	if err != nil {

@@ -256,6 +256,8 @@ func (o *Order) ID() string {
 const (
 	OrderLimit       = 10
 	OrderLimitWindow = time.Hour
+
+	MinStakeChangeWindow = 24 * time.Hour
 )
 
 type Poll struct {
@@ -408,7 +410,16 @@ type GatewaySettings struct {
 }
 
 type SponsoredSettings struct {
-	MinStakeTRX uint64 `json:"min_stake_trx"`
+	MinStakeTRX         uint64    `json:"min_stake_trx"`
+	PreviousMinStakeTRX uint64    `json:"previous_min_stake_trx,omitempty"`
+	ChangedAt           time.Time `json:"changed_at"`
+}
+
+func (s SponsoredSettings) ClaimMinStakeTRX(now time.Time) uint64 {
+	if now.Sub(s.ChangedAt) < MinStakeChangeWindow {
+		return min(s.MinStakeTRX, s.PreviousMinStakeTRX)
+	}
+	return s.MinStakeTRX
 }
 
 type ModerationResult bool
