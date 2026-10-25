@@ -117,6 +117,9 @@ func TestDrawWatermark_PixelMarkIsFaint(t *testing.T) {
 }
 
 func TestScorePixelMark_NamesTheBuyer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the full alignment search")
+	}
 	size := image.Pt(512, 342)
 	original := photoJPEG(t, size)
 	watermark, err := WatermarkPNG(original, "@leaker · 01M3ZEY4M40NH3H9JP8E2DVCZH")
@@ -215,6 +218,9 @@ func assertNamesOnlyTheBuyer(t *testing.T, scores []float64, name string) {
 }
 
 func TestScorePixelMark_NamesTheBuyerInEveryTurn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the full alignment search")
+	}
 	t.Parallel()
 	original, img, seeds := pixelMarkFixture(t, image.Pt(512, 342))
 	leaks := map[string]func(image.Image) []byte{
@@ -245,6 +251,9 @@ func TestScorePixelMark_NamesTheBuyerOfASquareCopyInEveryTurn(t *testing.T) {
 }
 
 func TestScorePixelMark_TheOriginalNamesNobodyWhenTurned(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the full alignment search")
+	}
 	t.Parallel()
 	original, _, seeds := pixelMarkFixture(t, image.Pt(512, 342))
 	plain := decodeJPEG(t, original)
@@ -261,6 +270,9 @@ func TestScorePixelMark_TheOriginalNamesNobodyWhenTurned(t *testing.T) {
 }
 
 func TestScorePixelMark_AnUnrelatedPictureNamesNobody(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the full alignment search")
+	}
 	t.Parallel()
 	original, _, seeds := pixelMarkFixture(t, image.Pt(512, 342))
 	for name, suspect := range map[string][]byte{
