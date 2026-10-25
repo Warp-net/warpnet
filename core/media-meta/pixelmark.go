@@ -73,10 +73,19 @@ func ScorePixelMark(original, suspect []byte, seeds [][]byte) ([]float64, error)
 	}
 
 	var scores []float64
-	if math.Abs(s.aspect()-o.aspect()) < sameAspectDelta {
-		scores = scoreSeeds(measureResidual(o, resizeLuma(s, o.width, o.height), image.Point{}), seeds)
-		if slices.Max(scores) >= MinPixelMarkScore {
-			return scores, nil
+	turned := s
+	for turn := range quarterTurns {
+		if turn > 0 {
+			turned = turnLuma(turned)
+		}
+		if math.Abs(turned.aspect()-o.aspect()) < sameAspectDelta {
+			resized := scoreSeeds(measureResidual(o, resizeLuma(turned, o.width, o.height), image.Point{}), seeds)
+			if scores == nil || slices.Max(resized) > slices.Max(scores) {
+				scores = resized
+			}
+			if slices.Max(scores) >= MinPixelMarkScore {
+				return scores, nil
+			}
 		}
 	}
 	aligned, offset := alignSuspect(o, s)

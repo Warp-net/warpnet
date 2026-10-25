@@ -151,11 +151,16 @@ func TestScorePixelMark_NamesTheBuyer(t *testing.T) {
 		seeds[i] = testPixelMarkSeed(i + 1)
 	}
 	for name, suspect := range map[string][]byte{
-		"as served":            copied,
-		"jpeg q75":             encodeJPEG(t, img, 75),
-		"half size png":        encodePNG(t, scaleImage(img, size.Div(2))),
-		"centre crop":          encodePNG(t, cropImage(img, image.Rect(51, 34, 461, 308))),
-		"ui screenshot jpeg80": encodeJPEG(t, screen, 80),
+		"as served":                         copied,
+		"jpeg q75":                          encodeJPEG(t, img, 75),
+		"half size png":                     encodePNG(t, scaleImage(img, size.Div(2))),
+		"centre crop":                       encodePNG(t, cropImage(img, image.Rect(51, 34, 461, 308))),
+		"ui screenshot jpeg80":              encodeJPEG(t, screen, 80),
+		"turned right png":                  encodePNG(t, applyOrientation(img, orientationTurnRight)),
+		"upside down jpeg80":                encodeJPEG(t, applyOrientation(img, orientationTurn180), 80),
+		"half size turned left":             encodePNG(t, applyOrientation(scaleImage(img, size.Div(2)), orientationTurnLeft)),
+		"ui screenshot turned right jpeg80": encodeJPEG(t, applyOrientation(screen, orientationTurnRight), 80),
+		"ui screenshot upside down jpeg80":  encodeJPEG(t, applyOrientation(screen, orientationTurn180), 80),
 	} {
 		scores, err := ScorePixelMark(original, suspect, seeds)
 		require.NoError(t, err, name)

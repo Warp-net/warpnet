@@ -51,6 +51,7 @@ const (
 	fineScaleSpread  = 0.03
 	coarseCutoff     = 0.12
 	fineCutoff       = 0.06
+	quarterTurns     = 4
 
 	footprintMarginDivisor = 8
 
@@ -87,6 +88,16 @@ func decodeLuma(b []byte) (lumaPlane, error) {
 		p.pix[i] = float32(0.299*float64(rgb[0]) + 0.587*float64(rgb[1]) + 0.114*float64(rgb[2]))
 	}
 	return p, nil
+}
+
+func turnLuma(p lumaPlane) lumaPlane {
+	out := lumaPlane{width: p.height, height: p.width, pix: make([]float32, len(p.pix))}
+	for y := range p.height {
+		for x := range p.width {
+			out.pix[x*out.width+p.height-1-y] = p.pix[y*p.width+x]
+		}
+	}
+	return out
 }
 
 func cropLuma(p lumaPlane, r image.Rectangle) lumaPlane {
@@ -159,23 +170,35 @@ func resizeLuma(p lumaPlane, width, height int) lumaPlane {
 }
 
 func alignSuspect(original, suspect lumaPlane) (lumaPlane, image.Point) {
-	scale, suspect := searchCoarseScale(original, suspect)
+	scale, suspect := searchCoarseTurn(original, suspect)
 	scale, shift := searchFineScale(original, suspect, scale)
 	aligned := resizeLuma(suspect, scaleSide(suspect.width, 1/scale), scaleSide(suspect.height, 1/scale))
 	return aligned, correctShift(original, aligned, shift)
 }
 
-func searchCoarseScale(original, suspect lumaPlane) (float64, lumaPlane) {
+func searchCoarseTurn(original, suspect lumaPlane) (float64, lumaPlane) {
+	bestScale, best, bestPeak := searchCoarseScale(original, suspect)
+	for range quarterTurns - 1 {
+		suspect = turnLuma(suspect)
+		scale, footprint, peak := searchCoarseScale(original, suspect)
+		if peak > bestPeak {
+			bestScale, best, bestPeak = scale, footprint, peak
+		}
+	}
+	return bestScale, best
+}
+
+func searchCoarseScale(original, suspect lumaPlane) (float64, lumaPlane, float64) {
 	factor := min(0.25, coarseAlignSide/float64(max(original.width, original.height)))
 	scales := make([]float64, coarseScaleCount)
 	for i := range scales {
 		scales[i] = minAlignScale * math.Pow(maxAlignScale/minAlignScale, float64(i)/(coarseScaleCount-1))
 	}
-	i, shift := searchScale(original, suspect, factor, scales, coarseCutoff)
+	i, shift, peak := searchScale(original, suspect, factor, scales, coarseCutoff)
 	if i < 0 {
-		return 1, suspect
+		return 1, suspect, peak
 	}
-	return scales[i], cropFootprint(original, suspect, scales[i], scalePoint(shift, -scales[i]/factor))
+	return scales[i], cropFootprint(original, suspect, scales[i], scalePoint(shift, -scales[i]/factor)), peak
 }
 
 func searchFineScale(original, suspect lumaPlane, scale float64) (float64, image.Point) {
@@ -184,7 +207,7 @@ func searchFineScale(original, suspect lumaPlane, scale float64) (float64, image
 	for i := range scales {
 		scales[i] = scale * (1 - fineScaleSpread + 2*fineScaleSpread*float64(i)/(fineScaleCount-1))
 	}
-	i, shift := searchScale(original, suspect, factor, scales, fineCutoff)
+	i, shift, _ := searchScale(original, suspect, factor, scales, fineCutoff)
 	if i < 0 {
 		return scale, image.Point{}
 	}
@@ -214,7 +237,7 @@ func cropFootprint(original, suspect lumaPlane, scale float64, from image.Point)
 	return cropLuma(suspect, part)
 }
 
-func searchScale(original, suspect lumaPlane, factor float64, scales []float64, cutoff float64) (int, image.Point) {
+func searchScale(original, suspect lumaPlane, factor float64, scales []float64, cutoff float64) (int, image.Point, float64) {
 	o := resizeLuma(original, max(int(float64(original.width)*factor), 1), max(int(float64(original.height)*factor), 1))
 	peaks := make([]float64, len(scales))
 	shifts := make([]image.Point, len(scales))
@@ -247,9 +270,9 @@ func searchScale(original, suspect lumaPlane, factor float64, scales []float64, 
 		}
 	}
 	if best < 0 {
-		return best, image.Point{}
+		return best, image.Point{}, -1
 	}
-	return best, shifts[best]
+	return best, shifts[best], peaks[best]
 }
 
 func scaleSide(side int, factor float64) int {
