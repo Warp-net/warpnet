@@ -25,12 +25,14 @@ package media_meta
 
 import (
 	"bytes"
+	"cmp"
 	"image"
 	"image/draw"
 	_ "image/gif"
 	"math"
 	"math/cmplx"
 	"runtime"
+	"slices"
 	"sync"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -52,6 +54,7 @@ const (
 	coarseCutoff     = 0.12
 	fineCutoff       = 0.06
 	quarterTurns     = 4
+	alignedTurns     = 2
 
 	footprintMarginDivisor = 8
 
@@ -169,23 +172,29 @@ func resizeLuma(p lumaPlane, width, height int) lumaPlane {
 	return out
 }
 
-func alignSuspect(original, suspect lumaPlane) (lumaPlane, image.Point) {
-	scale, suspect := searchCoarseTurn(original, suspect)
-	scale, shift := searchFineScale(original, suspect, scale)
-	aligned := resizeLuma(suspect, scaleSide(suspect.width, 1/scale), scaleSide(suspect.height, 1/scale))
+type coarseMatch struct {
+	scale     float64
+	footprint lumaPlane
+	peak      float64
+}
+
+func alignSuspect(original lumaPlane, match coarseMatch) (lumaPlane, image.Point) {
+	scale, shift := searchFineScale(original, match.footprint, match.scale)
+	aligned := resizeLuma(match.footprint, scaleSide(match.footprint.width, 1/scale), scaleSide(match.footprint.height, 1/scale))
 	return aligned, correctShift(original, aligned, shift)
 }
 
-func searchCoarseTurn(original, suspect lumaPlane) (float64, lumaPlane) {
-	bestScale, best, bestPeak := searchCoarseScale(original, suspect)
-	for range quarterTurns - 1 {
-		suspect = turnLuma(suspect)
-		scale, footprint, peak := searchCoarseScale(original, suspect)
-		if peak > bestPeak {
-			bestScale, best, bestPeak = scale, footprint, peak
+func searchCoarseTurns(original, suspect lumaPlane) []coarseMatch {
+	matches := make([]coarseMatch, 0, quarterTurns)
+	for turn := range quarterTurns {
+		if turn > 0 {
+			suspect = turnLuma(suspect)
 		}
+		scale, footprint, peak := searchCoarseScale(original, suspect)
+		matches = append(matches, coarseMatch{scale: scale, footprint: footprint, peak: peak})
 	}
-	return bestScale, best
+	slices.SortStableFunc(matches, func(a, b coarseMatch) int { return cmp.Compare(b.peak, a.peak) })
+	return matches
 }
 
 func searchCoarseScale(original, suspect lumaPlane) (float64, lumaPlane, float64) {

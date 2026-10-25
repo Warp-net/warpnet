@@ -885,6 +885,32 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 	assert.Equal(t, event.CopyBuyerResponse{
 		TweetId: "tweet-1", BuyerId: "buyer-2", OrderId: sold.ID(), TxId: "tx-buyer-2", SoldAt: soldAt, DailyOrdersCount: 1,
 	}, traced)
+
+	turned := decoded
+	for turns := 1; turns < 4; turns++ {
+		turned = turnRight(turned)
+		var screenshot bytes.Buffer
+		require.NoError(t, png.Encode(&screenshot, turned))
+		resp, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{
+			File: "data:image/png;base64," + base64.StdEncoding.EncodeToString(screenshot.Bytes()), TweetId: "tweet-1",
+		}), nil)
+		require.NoError(t, err)
+		traced = resp.(event.CopyBuyerResponse)
+		assert.True(t, traced.IsPixelMatch, "a paste turned %d quarters is matched by its pixels", turns)
+		assert.Equal(t, "buyer-2", traced.BuyerId, "a paste turned %d quarters names its buyer", turns)
+		assert.GreaterOrEqual(t, traced.PixelScore, float64(media_meta.MinPixelMarkScore))
+	}
+}
+
+func turnRight(img image.Image) *image.RGBA {
+	bounds := img.Bounds()
+	turned := image.NewRGBA(image.Rect(0, 0, bounds.Dy(), bounds.Dx()))
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			turned.Set(bounds.Max.Y-1-y, x-bounds.Min.X, img.At(x, y))
+		}
+	}
+	return turned
 }
 
 func photoWithMetadata(t *testing.T, ownerId string) (file, key string) {

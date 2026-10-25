@@ -88,10 +88,15 @@ func ScorePixelMark(original, suspect []byte, seeds [][]byte) ([]float64, error)
 			}
 		}
 	}
-	aligned, offset := alignSuspect(o, s)
-	registered := scoreSeeds(measureResidual(o, aligned, offset), seeds)
-	if scores == nil || slices.Max(registered) > slices.Max(scores) {
-		scores = registered
+	for _, match := range searchCoarseTurns(o, s)[:alignedTurns] {
+		aligned, offset := alignSuspect(o, match)
+		registered := scoreSeeds(measureResidual(o, aligned, offset), seeds)
+		if scores == nil || slices.Max(registered) > slices.Max(scores) {
+			scores = registered
+		}
+		if slices.Max(scores) >= MinPixelMarkScore {
+			break
+		}
 	}
 	return scores, nil
 }
