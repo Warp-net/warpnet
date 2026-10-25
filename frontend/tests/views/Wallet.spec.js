@@ -376,7 +376,7 @@ describe('Wallet.vue', () => {
       expect(await screen.findByText('tx-stake')).toBeTruthy();
     });
 
-    it('refuses a stake under 1 TRX or above the balance before asking the node', async () => {
+    it('refuses a stake under 1 TRX, above the balance or into the fee reserve before asking the node', async () => {
       renderWallet();
       await screen.findByText(line(/TRX staked$/));
 
@@ -387,10 +387,14 @@ describe('Wallet.vue', () => {
       await fireEvent.update(stakeInput(), '101');
       await fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
       expect(await screen.findByText('That is more TRX than this address holds.')).toBeTruthy();
+
+      await fireEvent.update(stakeInput(), '95');
+      await fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+      expect(await screen.findByText(/Keep at least 10 TRX unstaked/)).toBeTruthy();
       expect(warpnetService.stakeTrx).not.toHaveBeenCalled();
     });
 
-    it('unstakes no more than is staked and shows the node\'s refusal', async () => {
+    it('unstakes no more than is staked, only once confirmed, and shows the node\'s refusal', async () => {
       warpnetService.getWallet.mockResolvedValue(staked());
       warpnetService.unstakeTrx.mockRejectedValue(new Error('wallet: insufficient balance: 0 sun staked for energy'));
       renderWallet();
@@ -403,6 +407,10 @@ describe('Wallet.vue', () => {
 
       await fireEvent.update(stakeInput(), '100');
       await fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+      expect(await screen.findByText('Unstake TRX?')).toBeTruthy();
+      expect(warpnetService.unstakeTrx).not.toHaveBeenCalled();
+      const buttons = screen.getAllByRole('button', { name: 'Unstake' });
+      await fireEvent.click(buttons[buttons.length - 1]);
       await waitFor(() => expect(warpnetService.unstakeTrx).toHaveBeenCalledWith('100000000'));
       expect(await screen.findByText(/0 sun staked for energy/)).toBeTruthy();
     });

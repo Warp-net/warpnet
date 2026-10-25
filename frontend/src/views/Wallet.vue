@@ -145,8 +145,9 @@
           <p class="text-dark text-sm uppercase tracking-wide mb-2">Stake</p>
           <p class="text-2xl font-bold">{{ loadingWallet ? '—' : format(wallet.staked, 6) }} <span class="text-lg text-dark">TRX staked</span></p>
           <p class="text-dark text-sm mt-2 mb-3">
-            Staked TRX gives energy, which pays the network fee on what you buy, and some authors sell only to wallets that keep a stake.
-            TRX you unstake stays locked for the network's unstaking period, 14 days on mainnet, before you can take it back.
+            Some authors sell only to wallets that keep a stake. Staking also gives a little energy each day, far less than a payment burns,
+            so keep enough TRX unstaked for network fees. TRX you unstake stays locked for the network's unstaking period, 14 days on mainnet,
+            before you can take it back.
           </p>
           <input v-model="stakeAmount" inputmode="decimal" placeholder="TRX" aria-label="TRX to stake or unstake" class="w-full mono text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest mb-3" />
           <div class="flex flex-wrap gap-2">
@@ -167,6 +168,14 @@
               Take back {{ format(readyAmount, 6) }} TRX
             </button>
           </div>
+          <ConfirmDialog
+            :show="!!unstakeAmount"
+            title="Unstake TRX?"
+            :message="unstakeMessage"
+            confirm-label="Unstake"
+            @confirm="confirmUnstake()"
+            @cancel="unstakeAmount = ''"
+          />
           <p v-if="stakeError" class="text-red-700 mt-3">{{ stakeError }}</p>
           <p v-if="stakeResult" class="text-green-700 mt-3 break-all">
             Sent. Tx: <a :href="scan('tx', stakeResult)" target="_blank" rel="noopener" class="mono underline">{{ stakeResult }}</a>
@@ -228,6 +237,7 @@ const nativeCoin = "TRX";
 const historyPollTries = 6;
 const minStake = 1000000n;
 const stakeSettleAfter = 6000;
+const feeReserve = { mainnet: 35000000n, testnet: 10000000n };
 
 const SCAN = {
   testnet: "https://nile.tronscan.org/#",
@@ -240,6 +250,7 @@ export default {
     SideNav: defineAsyncComponent(() => import('@/components/SideNav.vue')),
     DefaultRightBar: defineAsyncComponent(() => import('@/components/DefaultRightBar.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
   },
   data() {
     return {
@@ -266,6 +277,7 @@ export default {
       sendError: "",
       sendResult: "",
       stakeAmount: "",
+      unstakeAmount: "",
       staking: false,
       stakeError: "",
       stakeResult: "",
@@ -301,6 +313,13 @@ export default {
         .filter((u) => this.isReady(u))
         .reduce((sum, u) => sum + this.units(u.amount), 0n)
         .toString();
+    },
+    stakeReserve() {
+      return feeReserve[this.wallet.network] || feeReserve.mainnet;
+    },
+    unstakeMessage() {
+      return `${this.format(this.unstakeAmount, 6)} TRX stops counting toward authors' stake requirements at once`
+        + " and stays locked for the network's unstaking period, 14 days on mainnet, before you can take it back.";
     },
     hasReadyStake() {
       return this.units(this.readyAmount) > 0n;
@@ -526,6 +545,10 @@ export default {
         this.stakeError = "That is more TRX than this address holds.";
         return;
       }
+      if (this.units(amount) > this.units(this.wallet.trx_balance) - this.stakeReserve) {
+        this.stakeError = `Keep at least ${this.format(this.stakeReserve, 6)} TRX unstaked: a purchase burns about that much in network fees.`;
+        return;
+      }
       await this.sendStaking(() => warpnetService.stakeTrx(amount));
     },
     async unstake() {
@@ -542,6 +565,11 @@ export default {
         this.stakeError = "That is more TRX than you have staked.";
         return;
       }
+      this.unstakeAmount = amount;
+    },
+    async confirmUnstake() {
+      const amount = this.unstakeAmount;
+      this.unstakeAmount = "";
       await this.sendStaking(() => warpnetService.unstakeTrx(amount));
     },
     async withdraw() {
