@@ -999,7 +999,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_VIDEO_CHUNKS,
-			handler.StreamGetVideoChunksHandler(m, m.privKey, r.videoRepo),
+			handler.StreamGetVideoChunksHandler(m, r.videoRepo),
 		},
 		{
 			event.PRIVATE_GET_VIDEO,
@@ -1023,7 +1023,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_CHAT_VIDEO_CHUNKS,
-			handler.StreamGetChatVideoChunksHandler(m, m.privKey, r.chatVideoRepo, r.chatRepo, userRepo),
+			handler.StreamGetChatVideoChunksHandler(m, r.chatVideoRepo, r.chatRepo, userRepo),
 		},
 		{
 			event.PRIVATE_GET_CHAT_VIDEO,

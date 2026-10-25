@@ -10,7 +10,7 @@ vi.mock('@/lib/transport', () => ({
 }));
 
 import {
-  warpnetService, PRIVATE_GET_VIDEO, PRIVATE_GET_CHAT_VIDEO, VIDEO_CREDIT_PATH, VIDEO_STOP_PATH,
+  warpnetService, PRIVATE_GET_VIDEO, PRIVATE_GET_CHAT_VIDEO, VIDEO_STOP_PATH,
 } from '@/service/service';
 import { Call, OpenVideoStream } from '@/lib/transport';
 
@@ -44,17 +44,13 @@ describe('video streams', () => {
     expect(frames[0].isLast).toBe(true);
   });
 
-  it('paces the stream with credits and stops it on request', async () => {
+  it('stops the stream on request', async () => {
     const stream = await warpnetService.openVideoStream({ userId: 'author1', key: 'k1', offset: 0 }, () => {});
-
-    await stream.credit(4);
-    expect(Call.mock.calls[0][0].path).toBe(VIDEO_CREDIT_PATH);
-    expect(Call.mock.calls[0][0].body).toEqual({ stream_id: 'stream-1', count: 4 });
 
     stream.stop();
     expect(close).toHaveBeenCalled();
-    expect(Call.mock.calls[1][0].path).toBe(VIDEO_STOP_PATH);
-    expect(Call.mock.calls[1][0].body).toEqual({ stream_id: 'stream-1' });
+    expect(Call.mock.calls[0][0].path).toBe(VIDEO_STOP_PATH);
+    expect(Call.mock.calls[0][0].body).toEqual({ stream_id: 'stream-1' });
   });
 
   it('streams chat videos over the chat route', async () => {

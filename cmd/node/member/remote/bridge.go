@@ -25,14 +25,14 @@ resulting from the use or misuse of this software.
 package remote
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/ed25519"
 	"errors"
-	"github.com/Warp-net/warpnet/cmd/node/member/videostream"
-	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/security"
+	"io"
 	"net/http"
 	"net/url"
 	"sync"
@@ -45,7 +45,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const pathIsFirstRun = "is-first-run"
+const (
+	pathIsFirstRun = "is-first-run"
+	pathVideoFrame = "video-frame"
+	pathVideoStop  = "video-stop"
+
+	videoFrameSize = 1 << 20
+)
 
 // maxInflightDispatches bounds the per-connection goroutines a slow client (or a
 // burst of dashboard calls) can spawn, so one connection can't exhaust memory.
@@ -86,13 +92,6 @@ const handshakeTimeout = 10 * time.Second
 type Node interface {
 	SelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) ([]byte, error)
 	OpenSelfStream(from, to warpnet.WarpPeerID, path stream.WarpRoute, data any) (warpnet.WarpStream, error)
-}
-
-type videoSessions interface {
-	Start(id string, offset int64, s warpnet.WarpStream, sender videostream.FrameSender) (domain.VideoManifest, error)
-	AddCredits(id string, count int)
-	Stop(id string)
-	StopAll()
 }
 
 // Authenticator is the slice of the auth service the dispatcher uses: log the
@@ -153,11 +152,13 @@ func (b *BridgeHandler) enroll(pub []byte) {
 type clientConn struct {
 	static     []byte
 	authorized atomic.Bool
-	videos     videoSessions
 
 	conn    *websocket.Conn
 	channel Channel
 	writeMx *sync.Mutex
+
+	videosMx *sync.Mutex
+	videos   map[string]warpnet.WarpStream
 }
 
 func (c *clientConn) write(msg event.Message) error {
@@ -179,18 +180,60 @@ func (c *clientConn) write(msg event.Message) error {
 	return nil
 }
 
-func (c *clientConn) SendFrame(streamId string, frame event.VideoFrame) error {
+func (c *clientConn) sendVideoFrames(id string, data *bufio.Reader, offset int64) {
+	defer c.stopVideo(id)
+
+	buf := make([]byte, videoFrameSize)
+	for {
+		n, err := data.Read(buf)
+		frame := event.VideoFrame{Offset: offset, Data: buf[:n], IsLast: errors.Is(err, io.EOF)}
+		offset += int64(n)
+		if err != nil && !frame.IsLast {
+			frame.Error = err.Error()
+		}
+		if n > 0 || err != nil {
+			if wErr := c.writeVideoFrame(id, frame); wErr != nil {
+				return
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (c *clientConn) writeVideoFrame(id string, frame event.VideoFrame) error {
 	body, err := json.Marshal(frame)
 	if err != nil {
 		return err
 	}
 	return c.write(event.Message{
-		MessageId:   streamId,
-		Destination: videostream.FramePath,
+		MessageId:   id,
+		Destination: pathVideoFrame,
 		Body:        body,
 		Timestamp:   time.Now(),
 		Version:     "0.0.0",
 	})
+}
+
+func (c *clientConn) stopVideo(id string) {
+	c.videosMx.Lock()
+	s := c.videos[id]
+	delete(c.videos, id)
+	c.videosMx.Unlock()
+	if s != nil {
+		_ = s.Reset()
+	}
+}
+
+func (c *clientConn) stopVideos() {
+	c.videosMx.Lock()
+	videos := c.videos
+	c.videos = make(map[string]warpnet.WarpStream)
+	c.videosMx.Unlock()
+	for _, s := range videos {
+		_ = s.Reset()
+	}
 }
 
 func (b *BridgeHandler) Handle() http.HandlerFunc {
@@ -228,14 +271,15 @@ func (b *BridgeHandler) Handle() http.HandlerFunc {
 		sem := make(chan struct{}, maxInflightDispatches)
 
 		c := &clientConn{
-			static:  channel.RemoteStatic(),
-			videos:  videostream.NewSessions(),
-			conn:    conn,
-			channel: channel,
-			writeMx: new(sync.Mutex),
+			static:   channel.RemoteStatic(),
+			conn:     conn,
+			channel:  channel,
+			writeMx:  new(sync.Mutex),
+			videosMx: new(sync.Mutex),
+			videos:   make(map[string]warpnet.WarpStream),
 		}
 		c.authorized.Store(b.isEnrolled(c.static))
-		defer c.videos.StopAll()
+		defer c.stopVideos()
 
 		respond := func(req event.Message) {
 			if err := c.write(b.dispatch(req, c)); err != nil {
@@ -312,7 +356,7 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 			break
 		}
 		resp.Body = b.startVideo(req, c)
-	case videostream.CreditPath, videostream.StopPath:
+	case pathVideoStop:
 		if !b.isAuthorized(c) {
 			resp.Body = newUnauthorizedResp()
 			break
@@ -322,11 +366,7 @@ func (b *BridgeHandler) dispatch(req event.Message, c *clientConn) event.Message
 			resp.Body = newErrorResp(err.Error())
 			break
 		}
-		if req.Destination == videostream.StopPath {
-			c.videos.Stop(ev.StreamId)
-		} else {
-			c.videos.AddCredits(ev.StreamId, ev.Count)
-		}
+		c.stopVideo(ev.StreamId)
 		resp.Body = json.RawMessage(event.Accepted)
 	case event.PRIVATE_POST_LOGOUT:
 		if !b.isAuthorized(c) {
@@ -412,16 +452,21 @@ func (b *BridgeHandler) startVideo(req event.Message, c *clientConn) json.RawMes
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
-	manifest, err := c.videos.Start(req.MessageId, ev.Offset, s, c)
-	if err != nil && !errors.Is(err, media_meta.ErrVideoUnavailable) {
-		return newErrorResp(err.Error())
+	data := bufio.NewReader(s)
+	manifest, err := data.ReadBytes('\n')
+	if err != nil {
+		_ = s.Reset()
+		if len(manifest) == 0 {
+			return newErrorResp(err.Error())
+		}
+		return manifest
 	}
 
-	body, err := json.Marshal(event.GetVideoChunksResponse{Size: manifest.Size, Mime: manifest.Mime})
-	if err != nil {
-		return newErrorResp(err.Error())
-	}
-	return body
+	c.videosMx.Lock()
+	c.videos[req.MessageId] = s
+	c.videosMx.Unlock()
+	go c.sendVideoFrames(req.MessageId, data, ev.Offset)
+	return bytes.TrimSuffix(manifest, []byte{'\n'})
 }
 
 func (b *BridgeHandler) signRequest(req event.Message) (event.Message, warpnet.WarpPeerID, error) {

@@ -510,6 +510,8 @@ func TestNewVideoResponse(t *testing.T) {
 	assert.Zero(t, empty.Size)
 }
 
+const testChunkSize = 1 << 20
+
 func newVideoDB(t *testing.T) *local_store.DB {
 	t.Helper()
 	db, err := local_store.New(t.TempDir(), local_store.DefaultOptions())
@@ -532,7 +534,7 @@ func storeTestVideo(t *testing.T, repo *database.VideoRepo, userId string, size 
 
 func serveVideo(
 	t *testing.T, h warpnet.WarpHandlerFunc, ev event.GetVideoChunksEvent, remote warpnet.WarpPeerID,
-) (domain.VideoManifest, []byte, error) {
+) (domain.VideoManifest, []byte) {
 	t.Helper()
 
 	client, server := stream.NewLoopbackStream(warpnet.FromStringToPeerID(selfNodeID), remote, event.PUBLIC_GET_VIDEO_CHUNKS)
@@ -548,49 +550,42 @@ func serveVideo(
 		_, _ = server.Write(mustJSON(t, out))
 	}()
 
-	r := bufio.NewReaderSize(client, media_meta.MaxManifestSize)
-	manifest, err := media_meta.ReadVideoManifest(r)
-	if err != nil {
-		_, _ = io.Copy(io.Discard, r)
-		return manifest, nil, err
-	}
+	r := bufio.NewReader(client)
+	line, err := r.ReadBytes('\n')
+	require.NoError(t, err)
+	var manifest domain.VideoManifest
+	require.NoError(t, json.Unmarshal(line, &manifest))
 	body, err := io.ReadAll(r)
 	require.NoError(t, err)
-	return manifest, body, nil
+	return manifest, body
 }
 
 func TestStreamGetVideoChunksHandler(t *testing.T) {
 	videos := database.NewVideoRepo(newVideoDB(t))
-	key, video := storeTestVideo(t, videos, "alice", 2*media_meta.VideoChunkSize+100)
-	h := StreamGetVideoChunksHandler(signingInformer{"alice"}, testSignerKey, videos)
+	key, video := storeTestVideo(t, videos, "alice", 2*testChunkSize+100)
+	h := StreamGetVideoChunksHandler(signingInformer{"alice"}, videos)
 	viewer := warpnet.FromStringToPeerID(remoteNodeID)
 
-	t.Run("streams the signed manifest and the chunks from the offset", func(t *testing.T) {
-		manifest, body, err := serveVideo(t, h,
-			event.GetVideoChunksEvent{UserId: "alice", Key: key, Offset: media_meta.VideoChunkSize + 5}, viewer)
-		require.NoError(t, err)
-		require.NoError(t, media_meta.VerifyManifest(ownerOf("alice"), key, manifest))
-		assert.True(t, bytes.Equal(video[media_meta.VideoChunkSize:], body))
+	t.Run("streams the manifest and the video from the offset", func(t *testing.T) {
+		manifest, body := serveVideo(t, h, event.GetVideoChunksEvent{UserId: "alice", Key: key, Offset: testChunkSize}, viewer)
+		assert.Equal(t, key, manifest.Key())
+		assert.Equal(t, int64(len(video)), manifest.Size)
+		assert.True(t, bytes.Equal(video[testChunkSize:], body))
 	})
 
 	t.Run("serves only its owner's videos", func(t *testing.T) {
-		_, _, err := serveVideo(t, h, event.GetVideoChunksEvent{UserId: "bob", Key: key}, viewer)
-		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+		manifest, body := serveVideo(t, h, event.GetVideoChunksEvent{UserId: "bob", Key: key}, viewer)
+		assert.Empty(t, manifest.Hashes)
+		assert.Empty(t, body)
 	})
 
 	t.Run("unknown key", func(t *testing.T) {
-		_, _, err := serveVideo(t, h, event.GetVideoChunksEvent{UserId: "alice", Key: "missing"}, viewer)
-		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+		manifest, _ := serveVideo(t, h, event.GetVideoChunksEvent{UserId: "alice", Key: "missing"}, viewer)
+		assert.Empty(t, manifest.Hashes)
 	})
 
 	t.Run("empty key", func(t *testing.T) {
 		_, err := h(mustJSON(t, event.GetVideoChunksEvent{UserId: "alice"}), nil)
 		assert.ErrorIs(t, err, ErrEmptyVideoKey)
-	})
-
-	t.Run("a node that cannot sign streams nothing", func(t *testing.T) {
-		unsigned := StreamGetVideoChunksHandler(signingInformer{"alice"}, nil, videos)
-		_, err := unsigned(mustJSON(t, event.GetVideoChunksEvent{UserId: "alice", Key: key}), nil)
-		assert.ErrorIs(t, err, media_meta.ErrNoSigningKey)
 	})
 }

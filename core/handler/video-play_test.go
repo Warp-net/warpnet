@@ -9,7 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -101,9 +100,9 @@ func newPlayTestbed(t *testing.T, size int) *playTestbed {
 			self:   viewerNode,
 			author: testSignerID,
 			authorRoutes: map[stream.WarpRoute]warpnet.WarpHandlerFunc{
-				event.PUBLIC_GET_VIDEO_CHUNKS: StreamGetVideoChunksHandler(signingInformer{videoAuthorID}, testSignerKey, authorVideos),
+				event.PUBLIC_GET_VIDEO_CHUNKS: StreamGetVideoChunksHandler(signingInformer{videoAuthorID}, authorVideos),
 				event.PUBLIC_GET_CHAT_VIDEO_CHUNKS: StreamGetChatVideoChunksHandler(
-					signingInformer{videoAuthorID}, testSignerKey, authorChatVideos, partners, viewers,
+					signingInformer{videoAuthorID}, authorChatVideos, partners, viewers,
 				),
 			},
 		},
@@ -115,7 +114,7 @@ func newPlayTestbed(t *testing.T, size int) *playTestbed {
 	}
 }
 
-func (tb *playTestbed) play(t *testing.T, userId, key string, offset int64) (domain.VideoManifest, []byte, error) {
+func (tb *playTestbed) play(t *testing.T, userId, key string, offset int64) (domain.VideoManifest, []byte) {
 	t.Helper()
 	h := StreamPlayVideoHandler(tb.streamer, tb.videos, tb.users)
 	return serveVideo(t, h, event.GetVideoChunksEvent{UserId: userId, Key: key, Offset: offset}, tb.streamer.self)
@@ -123,31 +122,27 @@ func (tb *playTestbed) play(t *testing.T, userId, key string, offset int64) (dom
 
 func TestPlayVideo_OwnVideoStreamsFromLocalChunks(t *testing.T) {
 	tb := newPlayTestbed(t, 10)
-	key, video := storeTestVideo(t, tb.videos, ownerID, 2*media_meta.VideoChunkSize+300)
+	key, video := storeTestVideo(t, tb.videos, ownerID, 2*testChunkSize+300)
 
-	manifest, body, err := tb.play(t, ownerID, key, 0)
-	require.NoError(t, err)
+	manifest, body := tb.play(t, ownerID, key, 0)
 	assert.Equal(t, int64(len(video)), manifest.Size)
 	assert.Equal(t, "video/mp4", manifest.Mime)
 	assert.True(t, bytes.Equal(video, body), "the whole file comes in one stream")
 
-	_, body, err = tb.play(t, ownerID, key, media_meta.VideoChunkSize+10)
-	require.NoError(t, err)
-	assert.True(t, bytes.Equal(video[media_meta.VideoChunkSize:], body), "the stream starts at the chunk holding the offset")
+	_, body = tb.play(t, ownerID, key, testChunkSize+10)
+	assert.True(t, bytes.Equal(video[testChunkSize+10:], body), "the stream starts at the offset")
 
 	assert.Empty(t, tb.streamer.openedRoutes(), "own videos never leave the node")
 }
 
 func TestPlayVideo_ForeignVideoComesFromTheAuthorOnce(t *testing.T) {
-	tb := newPlayTestbed(t, 2*media_meta.VideoChunkSize+300)
+	tb := newPlayTestbed(t, 2*testChunkSize+300)
 
-	manifest, body, err := tb.play(t, videoAuthorID, tb.key, 0)
-	require.NoError(t, err)
+	manifest, body := tb.play(t, videoAuthorID, tb.key, 0)
 	assert.Equal(t, tb.key, manifest.Key())
 	assert.True(t, bytes.Equal(tb.video, body))
 
-	_, body, err = tb.play(t, videoAuthorID, tb.key, 0)
-	require.NoError(t, err)
+	_, body = tb.play(t, videoAuthorID, tb.key, 0)
 	assert.True(t, bytes.Equal(tb.video, body))
 	assert.Equal(t, []stream.WarpRoute{event.PUBLIC_GET_VIDEO_CHUNKS}, tb.streamer.openedRoutes(),
 		"one stream from the author, then the cache")
@@ -156,16 +151,16 @@ func TestPlayVideo_ForeignVideoComesFromTheAuthorOnce(t *testing.T) {
 func TestPlayVideo_UnavailableVideos(t *testing.T) {
 	tb := newPlayTestbed(t, 100)
 
-	_, _, err := tb.play(t, ownerID, "missing", 0)
-	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
-	_, _, err = tb.play(t, "stranger", tb.key, 0)
-	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	manifest, _ := tb.play(t, ownerID, "missing", 0)
+	assert.Empty(t, manifest.Hashes)
+	manifest, _ = tb.play(t, "stranger", tb.key, 0)
+	assert.Empty(t, manifest.Hashes)
 
 	tb.streamer.openErr = warpnet.ErrNodeIsOffline
-	_, _, err = tb.play(t, videoAuthorID, tb.key, 0)
-	assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+	manifest, _ = tb.play(t, videoAuthorID, tb.key, 0)
+	assert.Empty(t, manifest.Hashes)
 
-	_, err = StreamPlayVideoHandler(tb.streamer, tb.videos, tb.users)(mustJSON(t, event.GetVideoChunksEvent{UserId: ownerID}), nil)
+	_, err := StreamPlayVideoHandler(tb.streamer, tb.videos, tb.users)(mustJSON(t, event.GetVideoChunksEvent{UserId: ownerID}), nil)
 	assert.ErrorIs(t, err, ErrEmptyVideoKey)
 }
 
@@ -173,13 +168,13 @@ func TestPlayChatVideo_UsesTheChatRoutes(t *testing.T) {
 	tb := newPlayTestbed(t, 100)
 	h := StreamPlayChatVideoHandler(tb.streamer, tb.chatVideos, chatUserDouble{byId: map[string]domain.User{videoAuthorID: ownerOf(videoAuthorID)}})
 
-	_, body, err := serveVideo(t, h, event.GetVideoChunksEvent{UserId: videoAuthorID, Key: tb.key}, tb.streamer.self)
-	require.NoError(t, err)
+	_, body := serveVideo(t, h, event.GetVideoChunksEvent{UserId: videoAuthorID, Key: tb.key}, tb.streamer.self)
 	assert.Equal(t, tb.video, body)
 	assert.Equal(t, []stream.WarpRoute{event.PUBLIC_GET_CHAT_VIDEO_CHUNKS}, tb.streamer.openedRoutes())
 
-	_, err = tb.chatVideos.GetManifest(videoAuthorID, tb.key)
-	assert.NoError(t, err)
-	_, err = tb.videos.GetManifest(videoAuthorID, tb.key)
+	video, err := tb.chatVideos.GetVideoStream(videoAuthorID, tb.key)
+	require.NoError(t, err)
+	_ = video.Close()
+	_, err = tb.videos.GetVideoStream(videoAuthorID, tb.key)
 	assert.ErrorIs(t, err, database.ErrMediaNotFound, "chat videos are kept apart from the timeline")
 }

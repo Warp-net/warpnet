@@ -31,14 +31,12 @@ package handler
 import (
 	"testing"
 
-	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -225,25 +223,25 @@ func TestGetChatVideo_ChatPartnersOnly(t *testing.T) {
 
 func TestGetChatVideoChunks_ChatPartnersOnly(t *testing.T) {
 	videos := database.NewChatVideoRepo(newVideoDB(t))
-	key, video := storeTestVideo(t, videos, ownerID, media_meta.VideoChunkSize+1)
-	h := StreamGetChatVideoChunksHandler(&mediaStreamerDouble{}, testSignerKey, videos, ownChat(), chatUsers())
+	key, video := storeTestVideo(t, videos, ownerID, testChunkSize+1)
+	h := StreamGetChatVideoChunksHandler(&mediaStreamerDouble{}, videos, ownChat(), chatUsers())
 	ev := event.GetVideoChunksEvent{UserId: ownerID, Key: key}
 
 	t.Run("a peer the owner chats with gets the stream", func(t *testing.T) {
-		manifest, body, err := serveVideo(t, h, ev, warpnet.FromStringToPeerID(remoteNodeID))
-		require.NoError(t, err)
+		manifest, body := serveVideo(t, h, ev, warpnet.FromStringToPeerID(remoteNodeID))
 		assert.Equal(t, key, manifest.Key())
 		assert.Equal(t, video, body)
 	})
 
 	t.Run("an outsider that knows the key gets nothing", func(t *testing.T) {
-		_, _, err := serveVideo(t, h, ev, testSignerID)
-		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+		manifest, body := serveVideo(t, h, ev, testSignerID)
+		assert.Empty(t, manifest.Hashes)
+		assert.Empty(t, body)
 	})
 
 	t.Run("another user's video is not served here", func(t *testing.T) {
-		_, _, err := serveVideo(t, h, event.GetVideoChunksEvent{UserId: testPartnerID, Key: key},
+		manifest, _ := serveVideo(t, h, event.GetVideoChunksEvent{UserId: testPartnerID, Key: key},
 			warpnet.FromStringToPeerID(remoteNodeID))
-		assert.ErrorIs(t, err, media_meta.ErrVideoUnavailable)
+		assert.Empty(t, manifest.Hashes)
 	})
 }

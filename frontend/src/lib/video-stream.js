@@ -24,8 +24,6 @@ resulting from the use or misuse of this software.
 
 import { createFile, MP4BoxBuffer } from "mp4box";
 
-const CREDITS = 4;
-const SECONDS_AHEAD = 20;
 const SECONDS_PER_SEGMENT = 2;
 const SECONDS_KEPT_BEHIND = 10;
 
@@ -44,36 +42,14 @@ export function streamVideo(video, openStream, onFailure) {
   let generation = 0;
   let size = Infinity;
   let position = 0;
-  let owed = 0;
   let isBroken = false;
   let ready = false;
   let flushed = false;
   let closed = false;
 
-  const bufferedAhead = () => {
-    const now = video.currentTime;
-    for (let i = 0; i < video.buffered.length; i++) {
-      if (video.buffered.start(i) <= now + 0.5 && now <= video.buffered.end(i)) {
-        return video.buffered.end(i) - now;
-      }
-    }
-    return 0;
-  };
-
-  const isAppending = () => tracks.some((t) => t.appending || t.queue.length > 0);
-
-  const hasRoom = () => !ready || (!isAppending() && bufferedAhead() < SECONDS_AHEAD);
-
-  const giveCredit = () => {
-    if (!current || owed === 0 || !hasRoom()) return;
-    current.credit(owed);
-    owed = 0;
-  };
-
   const stopStream = () => {
     if (current) current.stop();
     current = null;
-    owed = 0;
   };
 
   const open = async (offset) => {
@@ -98,8 +74,6 @@ export function streamVideo(video, openStream, onFailure) {
     }
     size = handle.size;
     current = handle;
-    owed = ready ? CREDITS : 1;
-    giveCredit();
   };
 
   const onFrame = (started, frame) => {
@@ -124,10 +98,7 @@ export function streamVideo(video, openStream, onFailure) {
         flushed = true;
         file.flush();
       }
-      return;
     }
-    owed++;
-    giveCredit();
   };
 
   const append = (track) => {
@@ -161,16 +132,13 @@ export function streamVideo(video, openStream, onFailure) {
       return;
     }
     append(track);
-    giveCredit();
   };
 
   const resume = () => {
     tracks.forEach(append);
-    if (isBroken && hasRoom() && position < size) {
+    if (isBroken && position < size) {
       open(position);
-      return;
     }
-    giveCredit();
   };
 
   const onSeeking = () => {

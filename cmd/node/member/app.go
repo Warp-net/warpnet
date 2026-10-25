@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,9 +21,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/Warp-net/warpnet/cmd/node/member/auth"
 	member "github.com/Warp-net/warpnet/cmd/node/member/node"
-	"github.com/Warp-net/warpnet/cmd/node/member/videostream"
 	"github.com/Warp-net/warpnet/config"
-	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -33,6 +34,11 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	log "github.com/sirupsen/logrus"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+const (
+	videoStopPath  = "video-stop"
+	videoFrameSize = 1 << 20
 )
 
 type AppStorer interface {
@@ -69,13 +75,6 @@ type NodeServer interface {
 	Start() error
 }
 
-type VideoSessions interface {
-	Start(id string, offset int64, s warpnet.WarpStream, sender videostream.FrameSender) (domain.VideoManifest, error)
-	AddCredits(id string, count int)
-	Stop(id string)
-	StopAll()
-}
-
 type NodeUpdater interface {
 	Run(shutdownF func())
 	GetPendingUpdate() (currentVersion, newVersion, releaseURL string)
@@ -92,7 +91,7 @@ type App struct {
 	psk       security.PSK
 	readyChan chan domain.AuthNodeInfo
 	updater   NodeUpdater
-	videos    VideoSessions
+	videos    map[string]warpnet.WarpStream
 	mx        *sync.RWMutex
 
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
@@ -193,7 +192,7 @@ func (a *App) startup(ctx context.Context) {
 	}()
 	a.ctx = ctx
 	a.mx = new(sync.RWMutex)
-	a.videos = videostream.NewSessions()
+	a.videos = make(map[string]warpnet.WarpStream)
 	version := config.Config().Version
 	network := config.Config().Node.Network
 
@@ -244,10 +243,12 @@ func (a *App) shutdown() {
 	a.mx.Lock()
 	node := a.node
 	a.node = nil
+	videos := a.videos
+	a.videos = make(map[string]warpnet.WarpStream)
 	a.mx.Unlock()
 
-	if a.videos != nil {
-		a.videos.StopAll()
+	for _, s := range videos {
+		_ = s.Reset()
 	}
 	if node != nil {
 		node.Stop() // close node first
@@ -424,17 +425,13 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 		return response
 	case event.PRIVATE_GET_VIDEO, event.PRIVATE_GET_CHAT_VIDEO:
 		response.Body = a.startVideo(request)
-	case videostream.CreditPath, videostream.StopPath:
+	case videoStopPath:
 		var ev event.VideoStreamEvent
 		if err := json.Unmarshal(request.Body, &ev); err != nil {
 			response.Body = newErrorResp(err.Error())
 			return response
 		}
-		if request.Path == videostream.StopPath {
-			a.videos.Stop(ev.StreamId)
-		} else {
-			a.videos.AddCredits(ev.StreamId, ev.Count)
-		}
+		a.stopVideo(ev.StreamId)
 		response.Body = []byte(event.Accepted)
 	default:
 		a.mx.RLock()
@@ -512,25 +509,51 @@ func (a *App) startVideo(request AppMessage) stdjson.RawMessage {
 	if err != nil {
 		return newErrorResp(err.Error())
 	}
-	manifest, err := a.videos.Start(request.MessageId, ev.Offset, s, wailsFrameSender{ctx: a.ctx})
-	if err != nil && !errors.Is(err, media_meta.ErrVideoUnavailable) {
-		return newErrorResp(err.Error())
-	}
-
-	bt, err := json.Marshal(event.GetVideoChunksResponse{Size: manifest.Size, Mime: manifest.Mime})
+	data := bufio.NewReader(s)
+	manifest, err := data.ReadBytes('\n')
 	if err != nil {
-		return newErrorResp(err.Error())
+		_ = s.Reset()
+		if len(manifest) == 0 {
+			return newErrorResp(err.Error())
+		}
+		return manifest
 	}
-	return bt
+
+	a.mx.Lock()
+	a.videos[request.MessageId] = s
+	a.mx.Unlock()
+	go a.sendVideoFrames(request.MessageId, data, ev.Offset)
+	return bytes.TrimSuffix(manifest, []byte{'\n'})
 }
 
-type wailsFrameSender struct {
-	ctx context.Context
+func (a *App) sendVideoFrames(id string, data *bufio.Reader, offset int64) {
+	defer a.stopVideo(id)
+
+	buf := make([]byte, videoFrameSize)
+	for {
+		n, err := data.Read(buf)
+		frame := event.VideoFrame{Offset: offset, Data: bytes.Clone(buf[:n]), IsLast: errors.Is(err, io.EOF)}
+		offset += int64(n)
+		if err != nil && !frame.IsLast {
+			frame.Error = err.Error()
+		}
+		if n > 0 || err != nil {
+			wailsruntime.EventsEmit(a.ctx, "video:"+id, frame)
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
-func (w wailsFrameSender) SendFrame(streamId string, frame event.VideoFrame) error {
-	wailsruntime.EventsEmit(w.ctx, "video:"+streamId, frame)
-	return nil
+func (a *App) stopVideo(id string) {
+	a.mx.Lock()
+	s := a.videos[id]
+	delete(a.videos, id)
+	a.mx.Unlock()
+	if s != nil {
+		_ = s.Reset()
+	}
 }
 
 func newErrorResp(msg string) stdjson.RawMessage {

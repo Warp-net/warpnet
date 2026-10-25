@@ -294,11 +294,10 @@ type VideoProvider interface {
 	GetVideo(userId string, key string) (domain.Base64Video, error)
 	SetForeignVideoWithTTL(userId string, key string, video domain.Base64Video) error
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
-	GetManifest(userId string, key string) (domain.VideoManifest, error)
-	WriteVideo(s warpnet.WarpStream, userId string, key string, manifest domain.VideoManifest, offset int64) error
-	OpenForeignVideo(
-		fetcher database.VideoFetcher, author domain.User, key string, offset int64,
-	) (*database.VideoReader, error)
+	GetVideoStream(userId string, key string) (*database.VideoStream, error)
+	GetForeignVideoStream(
+		fetcher database.VideoFetcher, author domain.User, key string,
+	) (*database.VideoStream, error)
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 }
 

@@ -2,21 +2,28 @@
 package database
 
 import (
-	"bufio"
 	"bytes"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/security"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
 )
@@ -67,7 +74,7 @@ func (s *VideoRepoTestSuite) TestVideoRoundTripAcrossChunks() {
 	key, err := s.repo.SetVideo(alice, video)
 	s.Require().NoError(err)
 
-	manifest, err := s.repo.GetManifest(alice, string(key))
+	manifest, err := s.repo.getManifest(alice, string(key))
 	s.Require().NoError(err)
 	s.Equal(int64(len(raw)), manifest.Size)
 	s.Equal("video/mp4", manifest.Mime)
@@ -117,7 +124,7 @@ func (s *VideoRepoTestSuite) TestForeignVideoIsReadableUnderTheGivenKey() {
 	s.Require().NoError(err)
 	s.Equal(video, got)
 
-	manifest, err := s.repo.GetManifest(user, "remote-clip")
+	manifest, err := s.repo.getManifest(user, "remote-clip")
 	s.Require().NoError(err)
 	s.Len(manifest.Hashes, 1)
 }
@@ -125,7 +132,7 @@ func (s *VideoRepoTestSuite) TestForeignVideoIsReadableUnderTheGivenKey() {
 func (s *VideoRepoTestSuite) TestPartlyCachedVideoIsNotWhole() {
 	user := uuid.New().String()
 	raw, _ := randomVideo(s, 2<<20)
-	manifest := media_meta.BuildVideoManifest(raw, "video/mp4")
+	manifest := buildManifest(raw, "video/mp4")
 	key := manifest.Key()
 
 	s.Require().NoError(s.repo.setForeignManifest(user, key, manifest))
@@ -175,48 +182,47 @@ func (s *VideoRepoTestSuite) TestNilVideoRepoNeverPanics() {
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 	_, err = repo.GetVideo("u", "k")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
-	_, err = repo.GetManifest("u", "k")
+	_, err = repo.GetVideoStream("u", "k")
+	s.ErrorIs(err, ErrMediaRepoNotInit)
+	_, err = repo.GetForeignVideoStream(nil, domain.User{Id: "u"}, "k")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 	_, err = repo.GetCopy("u", "k")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 	s.ErrorIs(repo.SetForeignVideoWithTTL("u", "k", "data:video/mp4;base64,AAAA"), ErrMediaRepoNotInit)
-	s.ErrorIs(repo.WriteVideo(nil, "u", "k", domain.VideoManifest{}, 0), ErrMediaRepoNotInit)
-	_, err = repo.OpenForeignVideo(nil, domain.User{}, "k", 0)
-	s.ErrorIs(err, ErrMediaRepoNotInit)
 }
 
-func (s *VideoRepoTestSuite) TestWriteVideoSendsTheManifestAndTheChunksFromTheOffset() {
+func (s *VideoRepoTestSuite) TestVideoStreamReadsFromTheOffset() {
 	user := uuid.New().String()
-	raw, video := randomVideo(s, 2<<20+300)
-	key, err := s.repo.SetVideo(user, video)
-	s.Require().NoError(err)
-	manifest, err := s.repo.GetManifest(user, string(key))
+	raw, file := randomVideo(s, 2<<20+300)
+	key, err := s.repo.SetVideo(user, file)
 	s.Require().NoError(err)
 
-	read := func(offset int64) (domain.VideoManifest, []byte) {
-		client, server := stream.NewLoopbackStream("", "", "/test/route/0.0.0")
-		go func() {
-			s.NoError(s.repo.WriteVideo(server, user, string(key), manifest, offset))
-			_ = server.Close()
-		}()
+	video, err := s.repo.GetVideoStream(user, string(key))
+	s.Require().NoError(err)
+	defer video.Close()
 
-		r := bufio.NewReaderSize(client, media_meta.MaxManifestSize)
-		header, err := media_meta.ReadVideoManifest(r)
+	manifest, err := video.Manifest()
+	s.Require().NoError(err)
+	s.Equal(int64(len(raw)), manifest.Size)
+
+	read := func(offset int64, whence int) []byte {
+		_, err := video.Seek(offset, whence)
 		s.Require().NoError(err)
-		body, err := io.ReadAll(r)
+		body, err := io.ReadAll(video)
 		s.Require().NoError(err)
-		return header, body
+		return body
 	}
 
-	header, body := read(0)
-	s.Equal(manifest, header)
-	s.True(bytes.Equal(raw, body))
+	s.True(bytes.Equal(raw, read(0, io.SeekStart)))
+	s.True(bytes.Equal(raw[1<<20+5:], read(1<<20+5, io.SeekStart)), "a stream starts at any byte")
+	s.True(bytes.Equal(raw[len(raw)-10:], read(-10, io.SeekEnd)))
+	s.Empty(read(int64(len(raw))+1, io.SeekStart))
 
-	_, body = read(1<<20 + 5)
-	s.True(bytes.Equal(raw[1<<20:], body), "the chunk holding the offset comes whole")
+	_, err = video.Seek(-1, io.SeekStart)
+	s.ErrorIs(err, ErrInvalidSeek)
 
-	_, body = read(int64(len(raw)) + 1)
-	s.Empty(body)
+	_, err = s.repo.GetVideoStream(user, "missing")
+	s.ErrorIs(err, ErrMediaNotFound)
 }
 
 func (s *VideoRepoTestSuite) TestImageAndVideoNamespacesDoNotCollide() {
@@ -263,4 +269,238 @@ func (s *VideoRepoTestSuite) TestInMemoryStoreRefusesWholeChunks() {
 	_, small := randomVideo(s, 1024)
 	_, err = NewVideoRepo(db).SetVideo(uuid.New().String(), small)
 	s.NoError(err)
+}
+
+const videoAuthorId = "author"
+
+var videoAuthorKey, videoAuthorNodeId = mustVideoAuthorKey()
+
+func mustVideoAuthorKey() (ed25519.PrivateKey, warpnet.WarpPeerID) {
+	priv, err := security.GenerateKeyFromSeed([]byte("video-repo-test-seed"))
+	if err != nil {
+		panic(err)
+	}
+	id, err := warpnet.IDFromPublicKey(priv.Public().(ed25519.PublicKey))
+	if err != nil {
+		panic(err)
+	}
+	return priv, id
+}
+
+func newDiskVideoRepo(t *testing.T) *VideoRepo {
+	t.Helper()
+	db, err := local_store.New(t.TempDir(), local_store.DefaultOptions())
+	require.NoError(t, err)
+	require.NoError(t, db.Run("test", "test"))
+	t.Cleanup(db.Close)
+	return NewVideoRepo(db)
+}
+
+type authorNode struct {
+	repo  *VideoRepo
+	user  domain.User
+	video []byte
+	key   string
+	err   error
+	file  domain.Base64Video
+
+	mx           sync.Mutex
+	chunkFetches []int64
+	videoFetches int
+}
+
+func newAuthorNode(t *testing.T, size int) *authorNode {
+	t.Helper()
+	video := make([]byte, size)
+	for i := range video {
+		video[i] = byte(i % 251)
+	}
+
+	a := &authorNode{
+		repo:  newDiskVideoRepo(t),
+		user:  domain.User{Id: videoAuthorId, NodeId: videoAuthorNodeId.String()},
+		video: video,
+	}
+	key, err := a.repo.SetVideo(videoAuthorId, domain.Base64Video("data:video/mp4;base64,"+base64.StdEncoding.EncodeToString(video)))
+	require.NoError(t, err)
+	a.key = string(key)
+	return a
+}
+
+func (a *authorNode) FetchVideoChunks(_ domain.User, key string, offset int64) (warpnet.WarpStream, error) {
+	a.mx.Lock()
+	a.chunkFetches = append(a.chunkFetches, offset)
+	a.mx.Unlock()
+	if a.err != nil {
+		return nil, a.err
+	}
+
+	video, err := a.repo.GetVideoStream(videoAuthorId, key)
+	if err != nil {
+		return nil, err
+	}
+	manifest, err := video.Manifest()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := video.Seek(offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	client, server := stream.NewLoopbackStream("", "", "/public/get/video/1.0.0")
+	go func() {
+		defer func() { _ = video.Close() }()
+		line, _ := json.Marshal(manifest)
+		if _, err := server.Write(append(line, '\n')); err == nil {
+			_, _ = io.Copy(server, video)
+		}
+		_ = server.Close()
+	}()
+	return client, nil
+}
+
+func (a *authorNode) FetchVideo(domain.User, string) (domain.Base64Video, error) {
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	a.videoFetches++
+	return a.file, nil
+}
+
+func (a *authorNode) forgeChunk(t *testing.T, idx int) {
+	t.Helper()
+	chunk, err := a.repo.getChunk(videoAuthorId, a.key, idx)
+	require.NoError(t, err)
+	forged := bytes.Clone(chunk)
+	forged[0] ^= 0xFF
+	require.NoError(t, a.repo.db.SetWithTTL(a.repo.buildChunkKey(videoAuthorId, a.key, idx), forged, local_store.PermanentTTL))
+}
+
+func playForeignVideo(viewer *VideoRepo, a *authorNode, offset int64) ([]byte, error) {
+	video, err := viewer.GetForeignVideoStream(a, a.user, a.key)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = video.Close() }()
+
+	if _, err := video.Seek(offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+	if _, err := video.Manifest(); err != nil {
+		return nil, err
+	}
+	var body bytes.Buffer
+	_, err = io.Copy(&body, video)
+	return body.Bytes(), err
+}
+
+func signedVideoFile(t *testing.T) domain.Base64Video {
+	t.Helper()
+	raw := []byte{0x00, 0x00, 0x00, 0x18, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0x00, 0x00, 0x02, 0x00, 'i', 's', 'o', 'm', 'm', 'p', '4', '1'}
+	signer := media_meta.Metadata{
+		PrivKey:       videoAuthorKey,
+		NodeId:        videoAuthorNodeId.String(),
+		OwnerId:       videoAuthorId,
+		EncryptedMeta: []byte("encrypted forensic payload"),
+	}
+	metadata, err := signer.Sign(security.ConvertToSHA256(raw))
+	require.NoError(t, err)
+	signed, err := media_meta.EmbedInVideo(raw, metadata)
+	require.NoError(t, err)
+	return domain.Base64Video("data:video/mp4;base64," + base64.StdEncoding.EncodeToString(signed))
+}
+
+func TestForeignVideoStream_OneStreamFromTheAuthorAndThenTheCache(t *testing.T) {
+	a := newAuthorNode(t, 3*videoChunkSize+300)
+	viewer := newDiskVideoRepo(t)
+
+	body, err := playForeignVideo(viewer, a, 0)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(a.video, body))
+	assert.Equal(t, []int64{0}, a.chunkFetches, "one stream from the author carries the whole video")
+
+	body, err = playForeignVideo(viewer, a, 0)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(a.video, body))
+	assert.Len(t, a.chunkFetches, 1, "a cached video plays without the author")
+}
+
+func TestForeignVideoStream_MissingChunksComeFromTheFirstOneMissing(t *testing.T) {
+	a := newAuthorNode(t, 3*videoChunkSize)
+	viewer := newDiskVideoRepo(t)
+	seek := int64(2*videoChunkSize + 7)
+
+	body, err := playForeignVideo(viewer, a, seek)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(a.video[seek:], body))
+	_, err = viewer.getChunk(videoAuthorId, a.key, 1)
+	assert.ErrorIs(t, err, ErrMediaNotFound, "chunks nobody watched stay with the author")
+
+	body, err = playForeignVideo(viewer, a, 0)
+	require.NoError(t, err)
+	assert.True(t, bytes.Equal(a.video, body))
+	assert.Equal(t, []int64{2 * videoChunkSize, 0}, a.chunkFetches, "the author is asked from a chunk boundary")
+}
+
+func TestForeignVideoStream_ForgedChunkStopsTheVideo(t *testing.T) {
+	a := newAuthorNode(t, 2*videoChunkSize)
+	a.forgeChunk(t, 1)
+	viewer := newDiskVideoRepo(t)
+
+	body, err := playForeignVideo(viewer, a, 0)
+	assert.ErrorIs(t, err, ErrForgedVideo)
+	assert.True(t, bytes.Equal(a.video[:videoChunkSize], body), "only the verified chunk is read")
+
+	_, err = viewer.getChunk(videoAuthorId, a.key, 0)
+	assert.NoError(t, err)
+	_, err = viewer.getChunk(videoAuthorId, a.key, 1)
+	assert.ErrorIs(t, err, ErrMediaNotFound)
+}
+
+func TestForeignVideoStream_RefusesAManifestForAnotherKey(t *testing.T) {
+	a := newAuthorNode(t, videoChunkSize)
+	other := newAuthorNode(t, videoChunkSize+5)
+	a.key = other.key
+	viewer := newDiskVideoRepo(t)
+
+	_, err := playForeignVideo(viewer, a, 0)
+	assert.Error(t, err)
+
+	_, err = viewer.getManifest(videoAuthorId, a.key)
+	assert.ErrorIs(t, err, ErrMediaNotFound, "nothing unverified is cached")
+}
+
+func TestForeignVideoStream_OlderAuthorNodeSendsTheWholeFile(t *testing.T) {
+	a := newAuthorNode(t, 10)
+	a.file = signedVideoFile(t)
+	a.key = media_meta.BuildContentKey(string(a.file))
+	a.err = fmt.Errorf("stream: new: %w", warpnet.ErrProtocolNotSupported)
+	viewer := newDiskVideoRepo(t)
+	_, raw, err := media_meta.SplitDataURI(string(a.file))
+	require.NoError(t, err)
+
+	body, err := playForeignVideo(viewer, a, 0)
+	require.NoError(t, err)
+	assert.Equal(t, raw, body)
+
+	body, err = playForeignVideo(viewer, a, 4)
+	require.NoError(t, err)
+	assert.Equal(t, raw[4:], body)
+	assert.Equal(t, 1, a.videoFetches, "the whole file is fetched once and read from chunks after")
+}
+
+func TestForeignVideoStream_WholeFileMustMatchTheKey(t *testing.T) {
+	a := newAuthorNode(t, 10)
+	a.file = "data:video/mp4;base64,AAAA"
+	a.err = warpnet.ErrProtocolNotSupported
+
+	_, err := playForeignVideo(newDiskVideoRepo(t), a, 0)
+	assert.ErrorIs(t, err, media_meta.ErrMediaKeyMismatch)
+}
+
+func TestForeignVideoStream_OfflineAuthor(t *testing.T) {
+	a := newAuthorNode(t, 100)
+	a.err = warpnet.ErrNodeIsOffline
+
+	_, err := playForeignVideo(newDiskVideoRepo(t), a, 0)
+	assert.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
 }

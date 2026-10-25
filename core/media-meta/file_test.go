@@ -99,3 +99,13 @@ func TestVerifyForeignMedia(t *testing.T) {
 		assert.NoError(t, VerifyForeignImage(viaGateway, "https://mastodon.social/b.png", "data:image/png;base64,AAAA"))
 	})
 }
+
+func TestVerifyForeignVideo_AcceptsTheChunkedKey(t *testing.T) {
+	signed := mp4WithMetadata(t, "alice")
+	file := "data:video/mp4;base64," + base64.StdEncoding.EncodeToString(signed)
+	alice := domain.User{Id: "alice", NodeId: signerID.String()}
+
+	assert.NoError(t, VerifyForeignVideo(alice, buildVideoKey(signed), file))
+	assert.NoError(t, VerifyForeignVideo(alice, BuildContentKey(file), file), "videos posted before chunking keep their keys")
+	assert.ErrorIs(t, VerifyForeignVideo(alice, buildVideoKey([]byte("another video")), file), ErrMediaKeyMismatch)
+}

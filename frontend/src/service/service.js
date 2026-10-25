@@ -124,7 +124,6 @@ export const PUBLIC_GET_CHAT_IMAGE = "/public/get/chat/image/0.0.0"
 export const PRIVATE_POST_UPLOAD_CHAT_VIDEO = "/private/post/chat/video/0.0.0"
 export const PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
 export const PRIVATE_GET_CHAT_VIDEO = "/private/get/chat/video/0.0.0"
-export const VIDEO_CREDIT_PATH = "video-credit"
 export const VIDEO_STOP_PATH = "video-stop"
 export const PRIVATE_POST_LOGIN = "/private/post/login/0.0.0"
 export const PRIVATE_POST_LOGOUT = "/private/post/logout/0.0.0"
@@ -835,14 +834,12 @@ export const warpnetService = {
         }
 
         const streamId = request.message_id;
-        const tell = (path, body) => this.sendToNode({path, body}).catch(() => {});
         return {
             size: result.size,
             mime: result.mime,
-            credit: (count) => tell(VIDEO_CREDIT_PATH, {stream_id: streamId, count}),
             stop: () => {
                 close();
-                tell(VIDEO_STOP_PATH, {stream_id: streamId});
+                this.sendToNode({path: VIDEO_STOP_PATH, body: {stream_id: streamId}}).catch(() => {});
             },
         };
     },

@@ -35,10 +35,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Warp-net/warpnet/cmd/node/member/videostream"
-	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -121,10 +120,13 @@ func (n *fakeNode) OpenSelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute
 	n.calls = append(n.calls, string(path))
 	n.mx.Unlock()
 
-	manifest := media_meta.BuildVideoManifest(testVideo, "video/mp4")
+	manifest, err := json.Marshal(domain.VideoManifest{Size: int64(len(testVideo)), Mime: "video/mp4"})
+	if err != nil {
+		return nil, err
+	}
 	client, server := stream.NewLoopbackStream("", "", warpnet.WarpProtocolID(path))
 	go func() {
-		if err := media_meta.WriteVideoManifest(server, manifest); err == nil {
+		if _, err := server.Write(append(manifest, '\n')); err == nil {
 			_, _ = server.Write(testVideo)
 		}
 		_ = server.Close()
@@ -132,7 +134,7 @@ func (n *fakeNode) OpenSelfStream(_, _ warpnet.WarpPeerID, path stream.WarpRoute
 	return client, nil
 }
 
-var testVideo = bytes.Repeat([]byte("frame"), media_meta.VideoChunkSize/5+100)
+var testVideo = bytes.Repeat([]byte("frame"), (1<<20)/5+100)
 
 func (n *fakeNode) callCount() int {
 	n.mx.Lock()
@@ -325,31 +327,25 @@ func TestBridge_LogoutRevokesAuthorityUntilNextLogin(t *testing.T) {
 	assert.Equal(t, json.RawMessage(`{"ok":true}`), owner.send(t, event.PRIVATE_POST_TWEET, struct{}{}).Body)
 }
 
-func TestBridge_VideoFramesFollowTheCredits(t *testing.T) {
+func TestBridge_VideoFramesFollowTheStart(t *testing.T) {
 	srv, _, node := newTestBridge(t)
 	owner := dial(t, srv, clientKey(t))
 	owner.send(t, event.PRIVATE_POST_LOGIN, event.LoginEvent{Username: testUsername, Password: testPassword})
 
-	resp := owner.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoChunksEvent{UserId: "owner-id", Key: "key"})
-	var started event.GetVideoChunksResponse
-	require.NoError(t, json.Unmarshal(resp.Body, &started))
-	assert.Equal(t, event.GetVideoChunksResponse{Size: int64(len(testVideo)), Mime: "video/mp4"}, started)
-	assert.Equal(t, 1, node.callCount())
-
-	owner.post(t, videostream.CreditPath, event.VideoStreamEvent{StreamId: "test-message-id", Count: 8})
+	owner.post(t, event.PRIVATE_GET_VIDEO, event.GetVideoChunksEvent{UserId: "owner-id", Key: "key"})
 
 	var (
+		manifest domain.VideoManifest
 		joined   []byte
 		isLast   bool
-		accepted bool
 	)
-	for range 3 {
+	for !isLast || manifest.Size == 0 {
 		msg := owner.read(t)
-		if msg.Destination == videostream.CreditPath {
-			accepted = true
+		if msg.Destination == event.PRIVATE_GET_VIDEO {
+			require.NoError(t, json.Unmarshal(msg.Body, &manifest))
 			continue
 		}
-		require.Equal(t, videostream.FramePath, msg.Destination)
+		require.Equal(t, pathVideoFrame, msg.Destination)
 		assert.Equal(t, "test-message-id", msg.MessageId, "frames carry the stream id the player listens on")
 		var frame event.VideoFrame
 		require.NoError(t, json.Unmarshal(msg.Body, &frame))
@@ -357,12 +353,13 @@ func TestBridge_VideoFramesFollowTheCredits(t *testing.T) {
 		joined = append(joined, frame.Data...)
 		isLast = frame.IsLast
 	}
-	assert.True(t, accepted)
-	assert.True(t, isLast)
+	assert.Equal(t, int64(len(testVideo)), manifest.Size)
+	assert.Equal(t, "video/mp4", manifest.Mime)
 	assert.True(t, bytes.Equal(testVideo, joined))
+	assert.Equal(t, 1, node.callCount())
 
 	assert.Equal(t, json.RawMessage(event.Accepted),
-		owner.send(t, videostream.StopPath, event.VideoStreamEvent{StreamId: "test-message-id"}).Body)
+		owner.send(t, pathVideoStop, event.VideoStreamEvent{StreamId: "test-message-id"}).Body)
 }
 
 func TestBridge_UnknownClientCannotStreamVideo(t *testing.T) {
@@ -374,7 +371,7 @@ func TestBridge_UnknownClientCannotStreamVideo(t *testing.T) {
 	resp := stranger.send(t, event.PRIVATE_GET_VIDEO, event.GetVideoChunksEvent{UserId: "owner-id", Key: "key"})
 	assert.Equal(t, http.StatusUnauthorized, responseError(t, resp).Code)
 
-	resp = stranger.send(t, videostream.CreditPath, event.VideoStreamEvent{StreamId: "test-message-id", Count: 8})
+	resp = stranger.send(t, pathVideoStop, event.VideoStreamEvent{StreamId: "test-message-id"})
 	assert.Equal(t, http.StatusUnauthorized, responseError(t, resp).Code)
 	assert.Zero(t, node.callCount())
 }

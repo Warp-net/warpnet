@@ -28,6 +28,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/media-meta"
@@ -64,16 +65,14 @@ type VideoStorer interface {
 }
 
 type VideoChunksStorer interface {
-	GetManifest(userId, key string) (domain.VideoManifest, error)
-	WriteVideo(s warpnet.WarpStream, userId, key string, manifest domain.VideoManifest, offset int64) error
+	GetVideoStream(userId, key string) (*database.VideoStream, error)
 }
 
 type VideoPlayStorer interface {
-	GetManifest(userId, key string) (domain.VideoManifest, error)
-	WriteVideo(s warpnet.WarpStream, userId, key string, manifest domain.VideoManifest, offset int64) error
-	OpenForeignVideo(
-		fetcher database.VideoFetcher, author domain.User, key string, offset int64,
-	) (*database.VideoReader, error)
+	GetVideoStream(userId, key string) (*database.VideoStream, error)
+	GetForeignVideoStream(
+		fetcher database.VideoFetcher, author domain.User, key string,
+	) (*database.VideoStream, error)
 }
 
 type VideoNodeInformer interface {
@@ -224,7 +223,6 @@ func StreamGetVideoHandler(
 
 func StreamGetVideoChunksHandler(
 	info VideoNodeInformer,
-	privKey ed25519.PrivateKey,
 	videoRepo VideoChunksStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
@@ -236,29 +234,31 @@ func StreamGetVideoChunksHandler(
 			return nil, fmt.Errorf("get video chunks: %w", ErrEmptyVideoKey)
 		}
 
-		nodeInfo := info.NodeInfo()
+		ownerId := info.NodeInfo().OwnerId
 		if ev.UserId == "" {
-			ev.UserId = nodeInfo.OwnerId
+			ev.UserId = ownerId
 		}
-		if ev.UserId != nodeInfo.OwnerId {
-			return domain.VideoManifest{}, nil
+		if ev.UserId != ownerId {
+			return []byte{}, writeVideoManifest(s, domain.VideoManifest{})
 		}
 
-		manifest, err := videoRepo.GetManifest(nodeInfo.OwnerId, ev.Key)
+		video, err := videoRepo.GetVideoStream(ownerId, ev.Key)
 		if errors.Is(err, database.ErrMediaNotFound) {
-			return domain.VideoManifest{}, nil
+			return []byte{}, writeVideoManifest(s, domain.VideoManifest{})
 		}
 		if err != nil {
-			return nil, fmt.Errorf("get video chunks: fetching manifest: %w", err)
+			return nil, fmt.Errorf("get video chunks: %w", err)
 		}
+		defer func() { _ = video.Close() }()
 
-		signer := media_meta.Metadata{PrivKey: privKey, NodeId: nodeInfo.ID.String(), OwnerId: nodeInfo.OwnerId}
-		manifest, err = signer.SignManifest(ev.Key, manifest)
+		if _, err := video.Seek(ev.Offset, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("get video chunks: %w", err)
+		}
+		manifest, err := video.Manifest()
 		if err != nil {
-			return nil, fmt.Errorf("get video chunks: signing manifest: %w", err)
+			return nil, fmt.Errorf("get video chunks: %w", err)
 		}
-
-		if err := videoRepo.WriteVideo(s, nodeInfo.OwnerId, ev.Key, manifest, ev.Offset); err != nil {
+		if err := sendVideo(s, manifest, video); err != nil {
 			log.Debugf("get video chunks: streaming %s stopped: %v", ev.Key, err)
 			_ = s.Reset()
 		}
@@ -281,37 +281,40 @@ func StreamPlayVideoHandler(
 		}
 
 		ownerId := streamer.NodeInfo().OwnerId
-		if ev.UserId == "" || ev.UserId == ownerId {
-			manifest, err := videoRepo.GetManifest(ownerId, ev.Key)
-			if errors.Is(err, database.ErrMediaNotFound) {
-				return domain.VideoManifest{}, nil
-			}
-			if err != nil {
-				return nil, fmt.Errorf("play video: fetching manifest: %w", err)
-			}
-			if err := videoRepo.WriteVideo(s, ownerId, ev.Key, manifest, ev.Offset); err != nil {
-				log.Debugf("play video: streaming %s stopped: %v", ev.Key, err)
-				_ = s.Reset()
-			}
-			return []byte{}, nil
+		if ev.UserId == "" {
+			ev.UserId = ownerId
 		}
 
-		author, err := userRepo.Get(ev.UserId)
-		if errors.Is(err, database.ErrUserNotFound) {
-			return domain.VideoManifest{}, nil
+		var (
+			video *database.VideoStream
+			err   error
+		)
+		if ev.UserId == ownerId {
+			video, err = videoRepo.GetVideoStream(ownerId, ev.Key)
+		} else {
+			var author domain.User
+			author, err = userRepo.Get(ev.UserId)
+			if err == nil {
+				video, err = videoRepo.GetForeignVideoStream(videoFetcher{streamer: streamer}, author, ev.Key)
+			}
+		}
+		if errors.Is(err, database.ErrMediaNotFound) || errors.Is(err, database.ErrUserNotFound) {
+			return []byte{}, writeVideoManifest(s, domain.VideoManifest{})
 		}
 		if err != nil {
-			return nil, fmt.Errorf("play video: fetching user: %w", err)
+			return nil, fmt.Errorf("play video: %w", err)
 		}
+		defer func() { _ = video.Close() }()
 
-		video, err := videoRepo.OpenForeignVideo(videoFetcher{streamer: streamer}, author, ev.Key, ev.Offset)
+		if _, err := video.Seek(ev.Offset, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("play video: %w", err)
+		}
+		manifest, err := video.Manifest()
 		if err != nil {
 			log.Debugf("play video: video %s of %s is not available: %v", ev.Key, ev.UserId, err)
-			return domain.VideoManifest{}, nil
+			return []byte{}, writeVideoManifest(s, domain.VideoManifest{})
 		}
-		defer video.Close()
-
-		if err := video.WriteVideo(s); err != nil {
+		if err := sendVideo(s, manifest, video); err != nil {
 			log.Debugf("play video: streaming %s stopped: %v", ev.Key, err)
 			_ = s.Reset()
 		}
@@ -416,4 +419,21 @@ func (f videoFetcher) FetchVideo(author domain.User, key string) (domain.Base64V
 		return "", err
 	}
 	return domain.Base64Video(videoResp.File), nil
+}
+
+func sendVideo(s warpnet.WarpStream, manifest domain.VideoManifest, video io.Reader) error {
+	if err := writeVideoManifest(s, manifest); err != nil {
+		return err
+	}
+	_, err := io.Copy(s, video)
+	return err
+}
+
+func writeVideoManifest(s warpnet.WarpStream, manifest domain.VideoManifest) error {
+	line, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	_, err = s.Write(append(line, '\n'))
+	return err
 }

@@ -40,7 +40,8 @@ import (
 )
 
 const (
-	contentKeyLen = 64
+	contentKeyLen  = 64
+	videoChunkSize = 1 << 20
 
 	ErrInvalidBase64Signature warpnet.WarpError = "invalid base64 media data"
 	ErrMediaKeyMismatch       warpnet.WarpError = "media content does not match the requested key"
@@ -69,7 +70,7 @@ func VerifyForeignVideo(u domain.User, key, file string) error {
 	if err != nil {
 		return err
 	}
-	isChunkedKey := BuildVideoManifest(raw, "").Key() == key
+	isChunkedKey := buildVideoKey(raw) == key
 	if !isChunkedKey {
 		if err := verifyContentKey(key, file); err != nil {
 			return err
@@ -115,4 +116,13 @@ func verifyContentKey(key, file string) error {
 		return ErrMediaKeyMismatch
 	}
 	return nil
+}
+
+func buildVideoKey(raw []byte) string {
+	var manifest domain.VideoManifest
+	for start := 0; start < len(raw); start += videoChunkSize {
+		end := min(start+videoChunkSize, len(raw))
+		manifest.Hashes = append(manifest.Hashes, security.ConvertToSHA256(raw[start:end]))
+	}
+	return manifest.Key()
 }

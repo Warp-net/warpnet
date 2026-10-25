@@ -456,9 +456,6 @@ type VideoManifest struct {
 	Mime      string   `json:"mime"`
 	ChunkSize int64    `json:"chunk_size"`
 	Hashes    [][]byte `json:"hashes"`
-	NodeId    string   `json:"node_id,omitempty"`
-	OwnerId   string   `json:"owner_id,omitempty"`
-	Signature string   `json:"signature,omitempty"`
 }
 
 func (m VideoManifest) Key() string {

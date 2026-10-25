@@ -551,12 +551,6 @@ type GetVideoChunksEvent struct {
 	Offset int64  `json:"offset"`
 }
 
-// GetVideoChunksResponse defines model for GetVideoChunksResponse.
-type GetVideoChunksResponse struct {
-	Size int64  `json:"size"`
-	Mime string `json:"mime"`
-}
-
 // VideoFrame defines model for VideoFrame.
 type VideoFrame struct {
 	Offset int64  `json:"offset"`
