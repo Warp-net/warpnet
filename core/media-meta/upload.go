@@ -165,6 +165,8 @@ func applyOrientation(img image.Image, orientation int) image.Image {
 	default:
 		return img
 	}
+	s2d[2] -= s2d[0]*float64(bounds.Min.X) + s2d[1]*float64(bounds.Min.Y)
+	s2d[5] -= s2d[3]*float64(bounds.Min.X) + s2d[4]*float64(bounds.Min.Y)
 
 	size := bounds.Size()
 	if orientation >= orientationFlipXTurnLeft {

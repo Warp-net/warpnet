@@ -34,6 +34,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"strings"
 	"testing"
@@ -48,6 +49,8 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/dsoprea/go-exif/v3"
+	exifcommon "github.com/dsoprea/go-exif/v3/common"
 	jis "github.com/dsoprea/go-jpeg-image-structure/v2"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -224,6 +227,52 @@ func TestUploadMultipleImages_Success(t *testing.T) {
 
 	_, err = StreamUploadImageHandler(n{}, testSignerKey, m{}, u{})(bt, s{})
 	assert.NoError(t, err)
+}
+
+func TestUploadImage_StoresAPhoneShotStanding(t *testing.T) {
+	stored := image.NewRGBA(image.Rect(0, 0, 64, 32))
+	for y := range 32 {
+		for x := range 64 {
+			c := color.RGBA{R: 0xff, A: 0xff}
+			if x >= 32 {
+				c = color.RGBA{B: 0xff, A: 0xff}
+			}
+			stored.SetRGBA(x, y, c)
+		}
+	}
+	var plain bytes.Buffer
+	require.NoError(t, jpeg.Encode(&plain, stored, &jpeg.Options{Quality: 100}))
+	intfc, err := jis.NewJpegMediaParser().ParseBytes(plain.Bytes())
+	require.NoError(t, err)
+	segments := intfc.(*jis.SegmentList)
+	ifdMapping, err := exifcommon.NewIfdMappingWithStandard()
+	require.NoError(t, err)
+	tagIndex := exif.NewTagIndex()
+	require.NoError(t, exif.LoadStandardTags(tagIndex))
+	rootIb := exif.NewIfdBuilder(ifdMapping, tagIndex, exifcommon.IfdStandardIfdIdentity, exifcommon.EncodeDefaultByteOrder)
+	require.NoError(t, rootIb.SetStandardWithName("Orientation", []uint16{6}))
+	require.NoError(t, segments.SetExif(rootIb))
+	var photo bytes.Buffer
+	require.NoError(t, segments.Write(&photo))
+
+	repo := newImageRepoDouble()
+	bt, err := json.Marshal(event.UploadImageEvent{Image1: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(photo.Bytes())})
+	require.NoError(t, err)
+	_, err = StreamUploadImageHandler(n{}, testSignerKey, repo, u{})(bt, s{})
+	require.NoError(t, err)
+	require.Len(t, repo.images, 1)
+
+	for _, file := range repo.images {
+		_, raw, err := media_meta.SplitDataURI(string(file))
+		require.NoError(t, err)
+		upright, err := jpeg.Decode(bytes.NewReader(raw))
+		require.NoError(t, err)
+		assert.Equal(t, image.Rect(0, 0, 32, 64), upright.Bounds(), "a portrait shot is stored standing")
+		r, _, b, _ := upright.At(16, 8).RGBA()
+		assert.Greater(t, r, b, "the red left half of the sensor is on top")
+		r, _, b, _ = upright.At(16, 56).RGBA()
+		assert.Greater(t, b, r, "the blue right half of the sensor is at the bottom")
+	}
 }
 
 func TestUploadImage_NoImages(t *testing.T) {
