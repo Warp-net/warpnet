@@ -216,11 +216,12 @@ func (p *streamPool) send(
 	ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
 
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
-	// No known addresses (routing.ErrNotFound), every dial failed
-	// (swarm.ErrAllDialsFailed), or the dial hanging past sendTimeout
-	// (context.DeadlineExceeded) all mean the peer is unreachable — offline.
-	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
-		errors.Is(err, context.DeadlineExceeded) {
+	// No known addresses (routing.ErrNotFound), an empty DHT routing table
+	// (kbucket.ErrLookupFailure), every dial failed (swarm.ErrAllDialsFailed),
+	// or the dial hanging past sendTimeout (context.DeadlineExceeded) all mean
+	// the peer is unreachable — offline.
+	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrLookupFailure) ||
+		errors.Is(err, warpnet.ErrAllDialsFailed) || errors.Is(err, context.DeadlineExceeded) {
 		return nil, fmt.Errorf("%s %w", serverInfo.ID.String(), warpnet.ErrNodeIsOffline)
 	}
 	if err != nil {

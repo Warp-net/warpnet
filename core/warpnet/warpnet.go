@@ -56,6 +56,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
+	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -86,7 +87,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var ErrAllDialsFailed = swarm.ErrAllDialsFailed
+var (
+	ErrAllDialsFailed = swarm.ErrAllDialsFailed
+	ErrLookupFailure  = kbucket.ErrLookupFailure
+)
 
 type relayStatus string
 

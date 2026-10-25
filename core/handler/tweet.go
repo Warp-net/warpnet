@@ -642,6 +642,10 @@ func tweetsRefreshBackground(
 		event.PUBLIC_GET_TWEETS,
 		ev,
 	)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		log.Debugf("get tweets handler: stream: %v", err)
+		return
+	}
 	if err != nil {
 		log.Errorf("get tweets handler: stream: %v", err)
 		return
