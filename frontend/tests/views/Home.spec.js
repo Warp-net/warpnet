@@ -32,6 +32,7 @@ vi.mock('@/lib/video', async (importOriginal) => ({
 import Home from '@/views/Home.vue';
 import { warpnetService } from '@/service/service';
 import { toastState } from '@/lib/toast';
+import { captureVideoPoster } from '@/lib/video';
 
 const scrollDirective = { mounted() {}, updated() {}, unmounted() {} };
 
@@ -331,16 +332,59 @@ describe('Home composer watchers', () => {
       URL.revokeObjectURL = revokeObjectURL;
     });
 
-    it('attaches a video pasted into the composer', async () => {
-      warpnetService.uploadVideo.mockResolvedValue('video-key');
+    const pasteClip = async () => {
       renderHome();
       const box = await screen.findByLabelText('Compose a tweet');
       const clip = new File(['mp4'], 'clip.mp4', { type: 'video/mp4' });
-
       await fireEvent.paste(box, { clipboardData: { files: [clip], types: ['Files'] } });
+      await waitFor(() => expect(captureVideoPoster).toHaveBeenCalled());
+      return box;
+    };
 
-      await waitFor(() => expect(warpnetService.uploadVideo).toHaveBeenCalledWith(expect.stringMatching(/^data:video\/mp4;base64,/)));
+    it('attaches a pasted video but uploads it only when the tweet is posted', async () => {
+      warpnetService.uploadVideo.mockResolvedValue('video-key');
+      warpnetService.createTweet.mockResolvedValue({ id: 't1' });
+      const box = await pasteClip();
+
+      expect(warpnetService.uploadVideo).not.toHaveBeenCalled();
+      await fireEvent.update(box, 'watch this');
+      await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
+
+      await waitFor(() => expect(warpnetService.createTweet).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'watch this', videoKey: 'video-key' }),
+      ));
+      expect(warpnetService.uploadVideo).toHaveBeenCalledWith(expect.stringMatching(/^data:video\/mp4;base64,/));
       expect(warpnetService.uploadImage).not.toHaveBeenCalled();
+    });
+
+    it('sends the captured frame along with the video when posting', async () => {
+      captureVideoPoster.mockResolvedValueOnce('data:image/jpeg;base64,BBBB');
+      warpnetService.uploadImage.mockResolvedValue('poster-key');
+      warpnetService.uploadVideo.mockResolvedValue('video-key');
+      warpnetService.createTweet.mockResolvedValue({ id: 't1' });
+      const box = await pasteClip();
+
+      expect(warpnetService.uploadImage).not.toHaveBeenCalled();
+      await fireEvent.update(box, 'watch this');
+      await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
+
+      await waitFor(() => expect(warpnetService.createTweet).toHaveBeenCalledWith(
+        expect.objectContaining({ imageKeys: ['poster-key'], videoKey: 'video-key' }),
+      ));
+      expect(warpnetService.uploadImage).toHaveBeenCalledWith('data:image/jpeg;base64,BBBB');
+    });
+
+    it('keeps the draft and its video when the upload fails', async () => {
+      warpnetService.uploadVideo.mockRejectedValue(new Error('video is too large: 36 MiB is the maximum'));
+      const box = await pasteClip();
+
+      await fireEvent.update(box, 'watch this');
+      await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
+
+      await waitFor(() => expect(warpnetService.uploadVideo).toHaveBeenCalled());
+      expect(warpnetService.createTweet).not.toHaveBeenCalled();
+      expect(box.value).toBe('watch this');
+      expect(screen.getByTitle('Remove video')).toBeInTheDocument();
     });
   });
 

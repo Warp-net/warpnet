@@ -531,54 +531,45 @@ export default {
       }
 
       this.removeVideoAttachment();
-      // The blob URL identifies this upload: if the user removes the clip or
-      // picks another while it is in flight, this run must stop touching the
-      // composer instead of attaching a key the user no longer wants. Compare
-      // the URL, not the object — Vue hands back a reactive proxy of it, which
-      // never equals the raw object by identity.
+      // The blob URL identifies this attachment: if the user removes the clip
+      // or picks another while its frame is being captured, this run must stop
+      // touching the composer. Compare the URL, not the object — Vue hands
+      // back a reactive proxy of it, which never equals the raw object by
+      // identity.
       const url = URL.createObjectURL(file);
-      this.videoAttachment = {url, name: file.name};
-      this.videoUploading = true;
-      const isCurrent = () => this.videoAttachment && this.videoAttachment.url === url;
+      this.videoAttachment = {url, name: file.name, file};
 
-      // The still frame is uploaded as an ordinary image and travels in the
-      // message's image key, so the recipient sees a preview without
-      // fetching the clip.
-      const poster = await this.captureAndUploadPoster(file);
-      if (isCurrent()) {
-        this.videoPoster = poster.dataUrl;
-        this.videoPosterKey = poster.key;
-      }
-
+      let poster = '';
       try {
-        const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
-        const key = await warpnetService.uploadChatVideo(dataUrl);
-        if (!isCurrent()) return;
-        if (!key) {
-          throw new Error('node returned an empty video key');
-        }
-        this.videoKey = key;
+        poster = await captureVideoPoster(file) || '';
       } catch (err) {
-        console.error('Failed to upload video:', err);
-        if (!isCurrent()) return;
-        toast.error(err?.message || 'Failed to upload video. Please try again.');
-        this.removeVideoAttachment();
-      } finally {
-        if (!this.videoAttachment || isCurrent()) {
-          this.videoUploading = false;
-        }
+        console.error('Failed to capture video poster:', err);
+      }
+      if (this.videoAttachment && this.videoAttachment.url === url) {
+        this.videoPoster = poster;
       }
     },
-    // Best effort: a clip the browser cannot decode must still send without
-    // a preview frame.
-    async captureAndUploadPoster(file) {
+    async uploadVideoAttachment(file, poster) {
+      this.videoUploading = true;
       try {
-        const dataUrl = await captureVideoPoster(file);
-        if (!dataUrl) return {dataUrl: '', key: ''};
-        return {dataUrl, key: await this.uploadAttachment(dataUrl) || ''};
-      } catch (err) {
-        console.error('Failed to upload video poster:', err);
-        return {dataUrl: '', key: ''};
+        // Best effort: a clip the browser cannot decode must still send
+        // without a preview frame.
+        let posterKey = '';
+        if (poster) {
+          try {
+            posterKey = await this.uploadAttachment(poster) || '';
+          } catch (err) {
+            console.error('Failed to upload video poster:', err);
+          }
+        }
+        const dataUrl = normalizeVideoDataUrl(await this.readFileAsDataURL(file), file);
+        const videoKey = await warpnetService.uploadChatVideo(dataUrl);
+        if (!videoKey) {
+          throw new Error('node returned an empty video key');
+        }
+        return {videoKey, posterKey};
+      } finally {
+        this.videoUploading = false;
       }
     },
     readFileAsDataURL(file) {
@@ -621,9 +612,9 @@ export default {
       const sentImages = [...this.imageAttachments];
       const sentImageKeys = [...this.imageKeys];
       const sentVideo = this.videoAttachment;
-      const sentVideoKey = this.videoKey;
-      const sentVideoPosterKey = this.videoPosterKey;
       const sentVideoPoster = this.videoPoster;
+      let sentVideoKey = this.videoKey;
+      let sentVideoPosterKey = this.videoPosterKey;
 
       // Optimistic bubble with a temp id and a "Sending…" status, so the
       // message shows immediately instead of vanishing until the refetch.
@@ -641,6 +632,10 @@ export default {
 
       this.sending = true;
       try {
+        if (sentVideo && !sentVideoKey) {
+          ({videoKey: sentVideoKey, posterKey: sentVideoPosterKey} =
+            await this.uploadVideoAttachment(sentVideo.file, sentVideoPoster));
+        }
         await this.deliverMessage(sentText, sentImages, sentImageKeys, sentVideoKey, sentVideoPosterKey);
         // The local node accepted the message (queued to its outbox and
         // re-sent when the recipient comes online), so it's safe to clear
