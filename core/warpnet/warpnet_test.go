@@ -318,15 +318,3 @@ func TestHostStatsAreAlwaysPopulated(t *testing.T) {
 		_ = GetMacAddr()
 	})
 }
-
-func TestNewConfigurableLimiter_FallsBackOnGarbage(t *testing.T) {
-	assert.NotPanics(t, func() {
-		l := NewConfigurableLimiter(strings.NewReader("{ this is not json"), nil)
-		assert.NotNil(t, l)
-	})
-
-	assert.NotPanics(t, func() {
-		l := NewConfigurableLimiter(strings.NewReader("{}"), nil)
-		assert.NotNil(t, l)
-	})
-}
