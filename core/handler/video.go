@@ -263,6 +263,11 @@ func signVideo(videoBytes []byte, metadata media_meta.Metadata) ([]byte, error) 
 		return nil, fmt.Errorf("meta data stripping: %w", err)
 	}
 
+	raw, err = media_meta.MoveMoovToFront(raw)
+	if err != nil {
+		return nil, fmt.Errorf("moov moving: %w", err)
+	}
+
 	metadataBytes, err := metadata.Sign(security.ConvertToSHA256(raw))
 	if err != nil {
 		return nil, fmt.Errorf("meta data signing: %w", err)

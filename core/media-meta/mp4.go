@@ -40,8 +40,12 @@ const (
 
 	uuidBoxType = "uuid"
 
+	chunkOffsetsHeaderSize = 8
+
 	ErrMalformedISO     warpnet.WarpError = "malformed ISO base media file"
 	ErrMetadataTooLarge warpnet.WarpError = "media meta: metadata box too large"
+
+	errUnmovableMoov warpnet.WarpError = "media meta: moov cannot be moved"
 )
 
 var warpnetUUID = [16]byte{
@@ -136,6 +140,48 @@ func CloseOpenEndedBox(b []byte) ([]byte, error) {
 	return out, nil
 }
 
+func MoveMoovToFront(b []byte) ([]byte, error) {
+	boxes, err := walkBoxes(b)
+	if err != nil {
+		return nil, err
+	}
+
+	moovIdx, mdatIdx := -1, -1
+	for i, box := range boxes {
+		switch box.boxType {
+		case "moof":
+			return b, nil
+		case "moov":
+			if moovIdx < 0 {
+				moovIdx = i
+			}
+		case "mdat":
+			if mdatIdx < 0 {
+				mdatIdx = i
+			}
+		}
+	}
+	if moovIdx < 0 || mdatIdx < 0 || moovIdx < mdatIdx {
+		return b, nil
+	}
+
+	moov := boxes[moovIdx]
+	from, to := boxes[mdatIdx].offset, moov.offset
+
+	movedMoov := make([]byte, moov.size)
+	copy(movedMoov, b[moov.offset:moov.offset+moov.size])
+	if err := shiftChunkOffsets(movedMoov, from, to, moov.size); err != nil {
+		return b, nil //nolint:nilerr // a file whose offsets cannot be moved stays as it was
+	}
+
+	out := make([]byte, 0, len(b))
+	out = append(out, b[:from]...)
+	out = append(out, movedMoov...)
+	out = append(out, b[from:moov.offset]...)
+	out = append(out, b[moov.offset+moov.size:]...)
+	return out, nil
+}
+
 func VerifyVideo(videoBytes []byte, nodeId, ownerId string) error {
 	raw, metadataBytes, err := SplitVideo(videoBytes)
 	if err != nil {
@@ -192,6 +238,64 @@ func boxBounds(b []byte, offset int) (size, headerSize int, err error) {
 		return 0, 0, ErrMalformedISO
 	}
 	return size, headerSize, nil
+}
+
+func shiftChunkOffsets(b []byte, from, to, shift int) error {
+	boxes, err := walkBoxes(b)
+	if err != nil {
+		return err
+	}
+	for _, box := range boxes {
+		switch box.boxType {
+		case "moov", "trak", "mdia", "minf", "stbl":
+			if err := shiftChunkOffsets(box.payload, from, to, shift); err != nil {
+				return err
+			}
+		case "stco":
+			if err := shiftOffsets(box.payload, 4, from, to, shift); err != nil { //nolint:mnd
+				return err
+			}
+		case "co64":
+			if err := shiftOffsets(box.payload, 8, from, to, shift); err != nil { //nolint:mnd
+				return err
+			}
+		case "saio":
+			return errUnmovableMoov
+		}
+	}
+	return nil
+}
+
+func shiftOffsets(payload []byte, entrySize, from, to, shift int) error {
+	if len(payload) < chunkOffsetsHeaderSize {
+		return ErrMalformedISO
+	}
+	count := int(binary.BigEndian.Uint32(payload[4:chunkOffsetsHeaderSize]))
+	if count > (len(payload)-chunkOffsetsHeaderSize)/entrySize {
+		return ErrMalformedISO
+	}
+
+	for i := range count {
+		entry := payload[chunkOffsetsHeaderSize+i*entrySize : chunkOffsetsHeaderSize+(i+1)*entrySize]
+		if entrySize == 4 { //nolint:mnd
+			offset := uint64(binary.BigEndian.Uint32(entry))
+			if offset < uint64(from) || offset >= uint64(to) { //nolint:gosec // file offsets are never negative
+				continue
+			}
+			offset += uint64(shift) //nolint:gosec // file offsets are never negative
+			if offset > math.MaxUint32 {
+				return errUnmovableMoov
+			}
+			binary.BigEndian.PutUint32(entry, uint32(offset))
+			continue
+		}
+		offset := binary.BigEndian.Uint64(entry)
+		if offset < uint64(from) || offset >= uint64(to) { //nolint:gosec // file offsets are never negative
+			continue
+		}
+		binary.BigEndian.PutUint64(entry, offset+uint64(shift)) //nolint:gosec // file offsets are never negative
+	}
+	return nil
 }
 
 func isWarpnetBox(box isoBox) bool {
