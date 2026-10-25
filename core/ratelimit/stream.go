@@ -28,6 +28,7 @@ resulting from the use or misuse of this software.
 package ratelimit
 
 import (
+	"io"
 	"strconv"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -42,6 +44,33 @@ const (
 	streamBucketsSize = 4096
 	streamBucketsTTL  = 10 * time.Minute
 )
+
+const videoStreamsPerPeer = 2
+
+var peerInboundStreams = map[warpnet.WarpProtocolID]int{
+	event.PUBLIC_GET_VIDEO:           videoStreamsPerPeer,
+	event.PUBLIC_GET_CHAT_VIDEO:      videoStreamsPerPeer,
+	event.PUBLIC_GET_SPONSORED_VIDEO: videoStreamsPerPeer,
+}
+
+func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
+	limits := rcmgr.DefaultLimits
+	for proto, streams := range peerInboundStreams {
+		peerLimit := limits.ProtocolPeerBaseLimit
+		peerLimit.StreamsInbound = streams
+		limits.AddProtocolPeerLimit(proto, peerLimit, rcmgr.BaseLimitIncrease{})
+	}
+	defaults := limits.AutoScale()
+	if input == nil {
+		return rcmgr.NewFixedLimiter(defaults)
+	}
+	limiter, err := rcmgr.NewLimiterFromJSON(input, defaults)
+	if err != nil {
+		log.Error("could not parse limiter config", err)
+		return rcmgr.NewFixedLimiter(defaults)
+	}
+	return limiter
+}
 
 var (
 	delivery  = PerMinute(200, 1200)

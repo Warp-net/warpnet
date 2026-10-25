@@ -108,6 +108,11 @@ type TweetNotifier interface {
 	Add(not domain.Notification) error
 }
 
+type TweetMediaDeleter interface {
+	DeleteImage(userId, key string) error
+	DeleteVideo(userId, key string) error
+}
+
 type TweetPeersRatings interface {
 	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
 }
@@ -730,6 +735,7 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	reactionRepo ReactionTweetStorer,
+	mediaRepo TweetMediaDeleter,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -764,6 +770,8 @@ func StreamDeleteTweetHandler(
 			_ = repo.UnRetweet(*t.RetweetedBy, t.Id, false)
 		}
 
+		deleted, _ := repo.Get(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
+
 		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
 			return nil, err
 		}
@@ -773,6 +781,13 @@ func StreamDeleteTweetHandler(
 
 		owner := authRepo.GetOwner()
 		isMyOwnTweet := owner.UserId == ev.UserId
+		isOwnMedia := isMyOwnTweet && deleted.UserId == owner.UserId && deleted.RetweetedBy == nil &&
+			!deleted.IsSponsored() && !strings.HasPrefix(ev.TweetId, domain.RetweetPrefix)
+		if isOwnMedia {
+			if err := deleteTweetMedia(mediaRepo, deleted); err != nil {
+				log.Errorf("delete tweet: media delete: %v", err)
+			}
+		}
 		if isMyOwnTweet {
 			respTweetEvent := event.DeleteTweetEvent{
 				UserId:  ev.UserId,
@@ -1143,4 +1158,15 @@ func ownReaction(repo ReactionTweetStorer, tweetId, ownerId string) string {
 		return ""
 	}
 	return emoji
+}
+
+func deleteTweetMedia(mediaRepo TweetMediaDeleter, tweet domain.Tweet) error {
+	var errs []error
+	for _, key := range tweet.ImageKeys {
+		errs = append(errs, mediaRepo.DeleteImage(tweet.UserId, key))
+	}
+	if tweet.VideoKey != nil {
+		errs = append(errs, mediaRepo.DeleteVideo(tweet.UserId, *tweet.VideoKey))
+	}
+	return errors.Join(errs...)
 }

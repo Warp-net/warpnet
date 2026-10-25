@@ -17,11 +17,18 @@ vi.mock('@/service/service', () => ({
     markChatRead: vi.fn(),
     getChatReadAt: vi.fn(() => 0),
     uploadChatImages: vi.fn(),
+    uploadChatVideo: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/video', async (importOriginal) => ({
+  ...(await importOriginal()),
+  captureVideoPoster: vi.fn().mockResolvedValue(null),
 }));
 
 import Messages from '@/views/Messages.vue';
 import { warpnetService } from '@/service/service';
+import { captureVideoPoster } from '@/lib/video';
 
 const scrollDirective = {
   mounted() {},
@@ -147,6 +154,75 @@ describe('Messages.vue', () => {
 
     await waitFor(() => expect(warpnetService.uploadChatImages).toHaveBeenCalledWith([expect.stringMatching(/^data:image\/png;base64,/)]));
     expect(screen.getByAltText('Image preview')).toBeInTheDocument();
+  });
+
+  describe('video attachments', () => {
+    const { createObjectURL, revokeObjectURL } = URL;
+    beforeAll(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:clip');
+      URL.revokeObjectURL = vi.fn();
+    });
+    afterAll(() => {
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    const attachClip = async () => {
+      warpnetService.getChats.mockResolvedValue([
+        { id: 'chat-1', owner_id: ALICE, other_user_id: BOB, last_message: '' },
+      ]);
+      const { container } = renderMessages({ chatId: 'chat-1' });
+      await screen.findByPlaceholderText('Start a new message');
+      const input = container.querySelector('input[type="file"][accept*="video/mp4"]');
+      const clip = new File(['mp4'], 'clip.mp4', { type: 'video/mp4' });
+      Object.defineProperty(input, 'files', { value: [clip], configurable: true });
+      await fireEvent.change(input);
+      await waitFor(() => expect(captureVideoPoster).toHaveBeenCalled());
+    };
+
+    it('uploads the video and its frame only when the message is sent', async () => {
+      captureVideoPoster.mockResolvedValueOnce('data:image/jpeg;base64,BBBB');
+      warpnetService.uploadChatImages.mockResolvedValue(['poster-key']);
+      warpnetService.uploadChatVideo.mockResolvedValue('video-key');
+      warpnetService.sendDirectMessage.mockResolvedValue({ id: 'm1' });
+      await attachClip();
+
+      expect(warpnetService.uploadChatVideo).not.toHaveBeenCalled();
+      expect(warpnetService.uploadChatImages).not.toHaveBeenCalled();
+      expect(screen.queryByText(/can't play this video/)).not.toBeInTheDocument();
+      await fireEvent.click(screen.getByLabelText('Send message'));
+
+      await waitFor(() => expect(warpnetService.sendDirectMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ imageKeys: ['poster-key'], videoKey: 'video-key' }),
+      ));
+      expect(warpnetService.uploadChatVideo).toHaveBeenCalledWith(expect.stringMatching(/^data:video\/mp4;base64,/));
+      expect(warpnetService.uploadChatImages).toHaveBeenCalledWith(['data:image/jpeg;base64,BBBB']);
+    });
+
+    it('warns when the browser cannot decode the picked video', async () => {
+      await attachClip();
+
+      expect(await screen.findByText(/can't play this video/)).toBeInTheDocument();
+    });
+
+    it('keeps the uploaded video for the retry when the send fails', async () => {
+      warpnetService.uploadChatVideo.mockResolvedValue('video-key');
+      warpnetService.sendDirectMessage.mockRejectedValueOnce(new Error('node is busy'));
+      await attachClip();
+
+      await fireEvent.click(screen.getByLabelText('Send message'));
+      await waitFor(() => expect(warpnetService.sendDirectMessage).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByLabelText('Send message')).toBeEnabled());
+
+      warpnetService.sendDirectMessage.mockResolvedValue({ id: 'm1' });
+      await fireEvent.click(screen.getByLabelText('Send message'));
+
+      await waitFor(() => expect(warpnetService.sendDirectMessage).toHaveBeenCalledTimes(2));
+      expect(warpnetService.sendDirectMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ videoKey: 'video-key' }),
+      );
+      expect(warpnetService.uploadChatVideo).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('keeps bridged mastodon chats hidden', async () => {

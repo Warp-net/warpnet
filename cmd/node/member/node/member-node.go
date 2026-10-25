@@ -568,7 +568,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, r.mediaRepo, m),
 		},
 		{
 			event.PUBLIC_POST_TIMELINE,

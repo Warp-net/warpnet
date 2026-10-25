@@ -55,6 +55,7 @@ type MediaStorer interface {
 	Set(key local_store.DatabaseKey, value []byte) error
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Delete(key local_store.DatabaseKey) error
 	NewReadTxn() (local_store.WarpTransactioner, error)
 }
 
@@ -137,6 +138,23 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Bas
 	return repo.db.SetWithTTL(mediaKey, []byte(img), week)
 }
 
+func (repo *MediaRepo) DeleteImage(userId, key string) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if key == "" || userId == "" {
+		return ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(ImageSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	return repo.db.Delete(mediaKey)
+}
+
 func (repo *MediaRepo) GetVideo(userId, key string) (domain.Base64Video, error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
@@ -197,6 +215,23 @@ func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video domain.B
 
 	week := time.Hour * 24 * 7
 	return repo.db.SetWithTTL(mediaKey, []byte(video), week)
+}
+
+func (repo *MediaRepo) DeleteVideo(userId, key string) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if key == "" || userId == "" {
+		return ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(VideoSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	return repo.db.Delete(mediaKey)
 }
 
 func (repo *MediaRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
