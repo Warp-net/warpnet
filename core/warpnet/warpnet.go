@@ -333,8 +333,14 @@ func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.Ba
 	)
 }
 
-func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
-	defaults := rcmgr.DefaultLimits.AutoScale()
+func NewConfigurableLimiter(input io.Reader, peerInboundStreams map[WarpProtocolID]int) rcmgr.Limiter {
+	limits := rcmgr.DefaultLimits
+	for proto, streams := range peerInboundStreams {
+		peerLimit := limits.ProtocolPeerBaseLimit
+		peerLimit.StreamsInbound = streams
+		limits.AddProtocolPeerLimit(proto, peerLimit, rcmgr.BaseLimitIncrease{})
+	}
+	defaults := limits.AutoScale()
 	if input == nil {
 		return rcmgr.NewFixedLimiter(defaults)
 	}

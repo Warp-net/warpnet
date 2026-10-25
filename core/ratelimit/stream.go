@@ -43,6 +43,14 @@ const (
 	streamBucketsTTL  = 10 * time.Minute
 )
 
+const videoStreamsPerPeer = 2
+
+var PeerInboundStreams = map[warpnet.WarpProtocolID]int{
+	event.PUBLIC_GET_VIDEO:           videoStreamsPerPeer,
+	event.PUBLIC_GET_CHAT_VIDEO:      videoStreamsPerPeer,
+	event.PUBLIC_GET_SPONSORED_VIDEO: videoStreamsPerPeer,
+}
+
 var (
 	delivery  = PerMinute(200, 1200)
 	media     = PerMinute(150, 600)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"io"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,14 +39,14 @@ func TestNewNoise(t *testing.T) {
 }
 
 func TestNewLimiterAndManagers(t *testing.T) {
-	limiter := NewConfigurableLimiter(nil)
+	limiter := NewConfigurableLimiter(nil, nil)
 	require.NotNil(t, limiter)
 
-	fromJSON := NewConfigurableLimiter(strings.NewReader(`{}`))
+	fromJSON := NewConfigurableLimiter(strings.NewReader(`{}`), nil)
 	require.NotNil(t, fromJSON)
 
 	// malformed config falls back to the defaults rather than failing startup
-	fallback := NewConfigurableLimiter(strings.NewReader(`{`))
+	fallback := NewConfigurableLimiter(strings.NewReader(`{`), nil)
 	require.NotNil(t, fallback)
 
 	cm, err := NewConnManager(limiter, 20, 50)
@@ -58,8 +60,54 @@ func TestNewLimiterAndManagers(t *testing.T) {
 	require.NotNil(t, rm)
 }
 
+func TestPeerInboundStreamsHoldUntilTheAnswerIsWritten(t *testing.T) {
+	const capped, other WarpProtocolID = "/test/get/video/0.0.0", "/test/get/image/0.0.0"
+
+	limiter := NewConfigurableLimiter(nil, map[WarpProtocolID]int{capped: 2})
+	require.Equal(t, 2, limiter.GetProtocolPeerLimits(capped).GetStreamLimit(network.DirInbound))
+	require.Greater(t, limiter.GetProtocolPeerLimits(other).GetStreamLimit(network.DirInbound), 2)
+	require.Nil(t, rcmgr.DefaultLimits.ProtocolPeerLimits, "the libp2p defaults stay untouched")
+
+	rm, err := NewResourceManager(limiter)
+	require.NoError(t, err)
+	server, err := NewP2PNode(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), libp2p.ResourceManager(rm))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = server.Close() })
+
+	written := make(chan struct{})
+	t.Cleanup(func() { close(written) })
+	answer := func(s network.Stream) {
+		_, _ = s.Write([]byte("x"))
+		<-written
+		_ = s.Close()
+	}
+	server.SetStreamHandler(capped, answer)
+	server.SetStreamHandler(other, answer)
+
+	client, err := NewP2PNode(libp2p.NoListenAddrs)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+	ctx := context.Background()
+	require.NoError(t, client.Connect(ctx, peer.AddrInfo{ID: server.ID(), Addrs: server.Addrs()}))
+
+	request := func(proto WarpProtocolID) error {
+		s, err := client.NewStream(ctx, server.ID(), proto)
+		if err != nil {
+			return err
+		}
+		_, err = io.ReadFull(s, make([]byte, 1))
+		return err
+	}
+	require.NoError(t, request(capped))
+	require.NoError(t, request(capped))
+	require.Error(t, request(capped), "a third answer in flight is refused")
+	require.NoError(t, request(other))
+	require.NoError(t, request(other))
+	require.NoError(t, request(other))
+}
+
 func TestNewConnManagerTakesTheOwnersWaterMarks(t *testing.T) {
-	limiter := NewConfigurableLimiter(nil)
+	limiter := NewConfigurableLimiter(nil, nil)
 
 	cm, err := NewConnManager(limiter, 30, 80)
 	require.NoError(t, err)
