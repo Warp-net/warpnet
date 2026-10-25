@@ -248,6 +248,7 @@ function requestTimeout(path) {
   if (path.includes("/import/")) return 10 * 60 * 1000;
   if (path.includes("/sponsored/order/")) return 3 * 60 * 1000;
   if (path.includes("/sponsored/quote/")) return 60 * 1000;
+  if (path.includes("/video/")) return 3 * 60 * 1000;
   return REQUEST_TIMEOUT_MS;
 }
 
