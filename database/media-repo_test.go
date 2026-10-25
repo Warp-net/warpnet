@@ -142,6 +142,33 @@ func (s *MediaRepoTestSuite) TestNilMediaRepoNeverPanics() {
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 	s.ErrorIs(repo.SetForeignImageWithTTL("u", "k", "img"), ErrMediaRepoNotInit)
 	s.ErrorIs(repo.SetForeignVideoWithTTL("u", "k", "vid"), ErrMediaRepoNotInit)
+	s.ErrorIs(repo.DeleteImage("u", "k"), ErrMediaRepoNotInit)
+	s.ErrorIs(repo.DeleteVideo("u", "k"), ErrMediaRepoNotInit)
+}
+
+func (s *MediaRepoTestSuite) TestDeleteDropsOnlyTheOwnersMedia() {
+	alice := uuid.New().String()
+	bob := uuid.New().String()
+
+	imageKey, err := s.repo.SetImage(alice, "data:image/jpeg;base64,GONE")
+	s.Require().NoError(err)
+	videoKey, err := s.repo.SetVideo(alice, "data:video/mp4;base64,GONE")
+	s.Require().NoError(err)
+	s.Require().NoError(s.repo.SetForeignVideoWithTTL(bob, string(videoKey), "data:video/mp4;base64,GONE"))
+
+	s.Require().NoError(s.repo.DeleteImage(alice, string(imageKey)))
+	s.Require().NoError(s.repo.DeleteVideo(alice, string(videoKey)))
+
+	_, err = s.repo.GetImage(alice, string(imageKey))
+	s.ErrorIs(err, ErrMediaNotFound)
+	_, err = s.repo.GetVideo(alice, string(videoKey))
+	s.ErrorIs(err, ErrMediaNotFound)
+	_, err = s.repo.GetVideo(bob, string(videoKey))
+	s.NoError(err, "another user's copy under the same key stays")
+
+	s.NoError(s.repo.DeleteVideo(alice, string(videoKey)), "deleting twice is not an error")
+	s.ErrorIs(s.repo.DeleteImage("", "k"), ErrMediaNotFound)
+	s.ErrorIs(s.repo.DeleteVideo(alice, ""), ErrMediaNotFound)
 }
 
 func (s *MediaRepoTestSuite) TestImageKeyIsContentAddressed() {
