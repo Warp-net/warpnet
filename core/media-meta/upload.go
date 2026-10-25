@@ -44,6 +44,8 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/docker/go-units"
+	xdraw "golang.org/x/image/draw"
+	"golang.org/x/image/math/f64"
 )
 
 const (
@@ -54,6 +56,16 @@ const (
 	ImagePrefix = "data:image/jpeg;base64,"
 
 	ErrTooLargeImage warpnet.WarpError = "image is too large"
+)
+
+const (
+	orientationFlipX = iota + 2
+	orientationTurn180
+	orientationFlipY
+	orientationFlipXTurnLeft
+	orientationTurnRight
+	orientationFlipXTurnRight
+	orientationTurnLeft
 )
 
 func BuildMetadata(
@@ -122,12 +134,45 @@ func transcodeToJPEG(imgBytes []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("image decoding: %w", err)
 	}
+	img = applyOrientation(img, extractOrientation(imgBytes))
 
 	var imageBuf bytes.Buffer
 	if err := jpeg.Encode(&imageBuf, img, &jpeg.Options{Quality: 100}); err != nil { //nolint:mnd
 		return nil, fmt.Errorf("JPEG encoding: %w", err)
 	}
 	return imageBuf.Bytes(), nil
+}
+
+func applyOrientation(img image.Image, orientation int) image.Image {
+	bounds := img.Bounds()
+	w, h := float64(bounds.Dx()), float64(bounds.Dy())
+	var s2d f64.Aff3
+	switch orientation {
+	case orientationFlipX:
+		s2d = f64.Aff3{-1, 0, w, 0, 1, 0}
+	case orientationTurn180:
+		s2d = f64.Aff3{-1, 0, w, 0, -1, h}
+	case orientationFlipY:
+		s2d = f64.Aff3{1, 0, 0, 0, -1, h}
+	case orientationFlipXTurnLeft:
+		s2d = f64.Aff3{0, 1, 0, 1, 0, 0}
+	case orientationTurnRight:
+		s2d = f64.Aff3{0, -1, h, 1, 0, 0}
+	case orientationFlipXTurnRight:
+		s2d = f64.Aff3{0, -1, h, -1, 0, w}
+	case orientationTurnLeft:
+		s2d = f64.Aff3{0, 1, 0, -1, 0, w}
+	default:
+		return img
+	}
+
+	size := bounds.Size()
+	if orientation >= orientationFlipXTurnLeft {
+		size = image.Pt(size.Y, size.X)
+	}
+	upright := image.NewRGBA(image.Rectangle{Max: size})
+	xdraw.NearestNeighbor.Transform(upright, s2d, img, bounds, xdraw.Src, nil)
+	return upright
 }
 
 func signJPEG(jpegBytes []byte, metadata Metadata) ([]byte, error) {

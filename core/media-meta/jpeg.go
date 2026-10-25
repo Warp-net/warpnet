@@ -37,7 +37,10 @@ import (
 	jis "github.com/dsoprea/go-jpeg-image-structure/v2"
 )
 
-const ImageDescriptionTag = "ImageDescription"
+const (
+	ImageDescriptionTag = "ImageDescription"
+	orientationTag      = "Orientation"
+)
 
 const (
 	ErrInvalidEXIF   warpnet.WarpError = "invalid exif type: not a segment list"
@@ -143,6 +146,20 @@ func extractFromJPEG(b []byte) ([]byte, error) {
 	return metadataBytes, nil
 }
 
+func extractOrientation(b []byte) int {
+	tags, _, err := exif.GetFlatExifData(findJPEGExif(b), nil)
+	if err != nil {
+		return 0
+	}
+	for _, tag := range tags {
+		value, ok := tag.Value.([]uint16)
+		if ok && tag.TagName == orientationTag && len(value) == 1 {
+			return int(value[0])
+		}
+	}
+	return 0
+}
+
 func stripJPEGExif(b []byte) ([]byte, error) {
 	if len(b) < 2 || b[0] != jpegMarker || b[1] != jpegSOI {
 		return nil, ErrMalformedJPEG
@@ -185,6 +202,25 @@ func isExifSegment(marker byte, segment []byte) bool {
 	return marker == jpegAPP1 &&
 		len(segment) >= jpegHeadLen+len(exifSegmentHeader) &&
 		bytes.Equal(segment[jpegHeadLen:jpegHeadLen+len(exifSegmentHeader)], exifSegmentHeader)
+}
+
+func findJPEGExif(b []byte) []byte {
+	if len(b) < 2 || b[0] != jpegMarker || b[1] != jpegSOI {
+		return nil
+	}
+	for offset := 2; offset+jpegHeadLen <= len(b) && b[offset] == jpegMarker; {
+		marker := b[offset+1]
+		size := int(binary.BigEndian.Uint16(b[offset+2 : offset+jpegHeadLen]))
+		if marker == jpegSOS || marker == jpegEOI || size < 2 || offset+2+size > len(b) {
+			return nil
+		}
+		segment := b[offset : offset+2+size]
+		if isExifSegment(marker, segment) {
+			return segment[jpegHeadLen+len(exifSegmentHeader):]
+		}
+		offset += 2 + size
+	}
+	return nil
 }
 
 func parseJPEGSegments(imageBytes []byte) (*jis.SegmentList, error) {
