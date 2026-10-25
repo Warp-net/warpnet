@@ -134,9 +134,11 @@ func TestRelayStart(t *testing.T) {
 		rn.SetNodePriority(otherID, warpnet.WarpReachability(0))
 	})
 
-	// an unreachable peer surfaces as an error rather than hanging
-	_, err := rn.GenericStream(otherID.String(), "/public/get/info", nil)
-	require.Error(t, err)
+	// an unreachable peer is reported offline, which the relay swallows,
+	// rather than hanging
+	bt, err := rn.GenericStream(otherID.String(), "/public/get/info", nil)
+	require.NoError(t, err)
+	require.Nil(t, bt)
 
 	require.Error(t, rn.SimpleConnect(warpnet.WarpAddrInfo{ID: otherID}))
 }
