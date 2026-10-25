@@ -30,10 +30,12 @@ package database
 
 import (
 	"context"
+	"encoding/base32"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
@@ -795,6 +797,76 @@ func (s *NodeRepoDatastoreTestSuite) TestPutOverwritesAndDeleteIsFinal() {
 	s.ErrorIs(err, datastore.ErrNotFound)
 
 	s.NoError(s.repo.Delete(s.ctx, key))
+}
+
+func peerAddrsKey(peerId warpnet.WarpPeerID) datastore.Key {
+	return datastore.NewKey("/peers/addrs/" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(peerId)))
+}
+
+func providerKey(peerId warpnet.WarpPeerID) datastore.Key {
+	return datastore.NewKey("/providers/CIQA/" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(peerId)))
+}
+
+func (s *NodeRepoDatastoreTestSuite) TestBlocklistedPeerKeysAreHidden() {
+	blocked := warpnet.FromStringToPeerID("12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA")
+	allowed := warpnet.FromStringToPeerID("12D3KooWH5YPwJiptN44YWhwePX1jHrnCLfXzEqQTMnto6fgKcHz")
+	s.Require().NoError(s.repo.Put(s.ctx, peerAddrsKey(blocked), []byte("addrs")))
+	s.Require().NoError(s.repo.Put(s.ctx, peerAddrsKey(allowed), []byte("addrs")))
+	s.Require().NoError(s.repo.Put(s.ctx, providerKey(blocked), []byte("provider")))
+	s.Require().NoError(s.repo.BlocklistPermanent(blocked.String()))
+	defer func() {
+		_ = s.repo.BlocklistRemove(blocked.String())
+		_ = s.repo.Delete(s.ctx, peerAddrsKey(blocked))
+		_ = s.repo.Delete(s.ctx, peerAddrsKey(allowed))
+		_ = s.repo.Delete(s.ctx, providerKey(blocked))
+	}()
+
+	_, err := s.repo.Get(s.ctx, peerAddrsKey(blocked))
+	s.ErrorIs(err, datastore.ErrNotFound)
+	_, err = s.repo.Get(s.ctx, providerKey(blocked))
+	s.ErrorIs(err, datastore.ErrNotFound, "a blocklisted peer's provider records are hidden too")
+	has, err := s.repo.Has(s.ctx, peerAddrsKey(blocked))
+	s.Require().NoError(err)
+	s.False(has)
+	_, err = s.repo.GetSize(s.ctx, peerAddrsKey(blocked))
+	s.ErrorIs(err, datastore.ErrNotFound)
+
+	results, err := s.repo.Query(s.ctx, query.Query{Prefix: "/peers/addrs"})
+	s.Require().NoError(err)
+	entries, err := results.Rest()
+	s.Require().NoError(err)
+	keys := make([]string, 0, len(entries))
+	for _, e := range entries {
+		keys = append(keys, e.Key)
+	}
+	s.Contains(keys, peerAddrsKey(allowed).String())
+	s.NotContains(keys, peerAddrsKey(blocked).String())
+
+	s.Require().NoError(s.repo.BlocklistRemove(blocked.String()))
+	value, err := s.repo.Get(s.ctx, peerAddrsKey(blocked))
+	s.Require().NoError(err, "an unblocked peer's keys are back")
+	s.Equal([]byte("addrs"), value)
+}
+
+func (s *NodeRepoDatastoreTestSuite) TestPeerstoreSeesNoProtocolsOfBlocklistedPeer() {
+	const dhtProtocol = "/testnet/kad/1.0.0"
+	peerId := warpnet.FromStringToPeerID("12D3KooWJWoaqZhDaoEFshF7Rh1bpY9ohihFhzcW6d69Lr2NASuq")
+
+	store, err := warpnet.NewPeerstore(s.ctx, s.repo)
+	s.Require().NoError(err)
+	defer store.Close()
+	s.Require().NoError(store.SetProtocols(peerId, dhtProtocol))
+
+	s.Require().NoError(s.repo.BlocklistPermanent(peerId.String()))
+	defer func() { _ = s.repo.BlocklistRemove(peerId.String()) }()
+	supported, err := store.FirstSupportedProtocol(peerId, dhtProtocol)
+	s.Require().NoError(err)
+	s.Empty(supported, "the DHT takes in only peers that speak its protocol")
+
+	s.Require().NoError(s.repo.BlocklistRemove(peerId.String()))
+	supported, err = store.FirstSupportedProtocol(peerId, dhtProtocol)
+	s.Require().NoError(err)
+	s.Equal(warpnet.WarpProtocolID(dhtProtocol), supported)
 }
 
 func (s *NodeRepoDatastoreTestSuite) TestSyncAndDiskUsageOnLiveDB() {
