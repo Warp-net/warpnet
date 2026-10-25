@@ -812,7 +812,18 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 			event.PRIVATE_POST_WALLET_SEND,
 			handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient),
 		},
-
+		{
+			event.PRIVATE_POST_WALLET_STAKE,
+			handler.StreamWalletStakeHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_UNSTAKE,
+			handler.StreamWalletUnstakeHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_WITHDRAW,
+			handler.StreamWalletWithdrawHandler(authRepo, m.privKey, m.walletClient),
+		},
 		{
 			event.PRIVATE_GET_WALLET_CONTACTS,
 			handler.StreamGetWalletContactsHandler(

@@ -77,8 +77,14 @@ type Account struct {
 	TokenBalance string
 	TRX          string
 	Staked       string
+	Unstaking    []Unstaking
 	Activated    bool
 	CreatedAt    int64
+}
+
+type Unstaking struct {
+	Amount      string `json:"amount"`
+	AvailableAt int64  `json:"available_at"`
 }
 
 func (a Account) IsStakeEnough(minTRX uint64) bool {
@@ -513,16 +519,47 @@ func (c *Client) Export(ctx context.Context, seed string) (address, privateKey s
 
 func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 	var out struct {
-		TokenBalance string `json:"token_balance"`
-		TRX          string `json:"trx"`
-		Staked       string `json:"staked"`
-		Activated    bool   `json:"activated"`
-		CreatedAt    int64  `json:"created_at"`
+		TokenBalance string      `json:"token_balance"`
+		TRX          string      `json:"trx"`
+		Staked       string      `json:"staked"`
+		Unstaking    []Unstaking `json:"unstaking"`
+		Activated    bool        `json:"activated"`
+		CreatedAt    int64       `json:"created_at"`
 	}
 	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
-	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Staked: out.Staked, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
+	return Account{
+		TokenBalance: out.TokenBalance,
+		TRX:          out.TRX,
+		Staked:       out.Staked,
+		Unstaking:    out.Unstaking,
+		Activated:    out.Activated,
+		CreatedAt:    out.CreatedAt,
+	}, nil
+}
+
+func (c *Client) Stake(ctx context.Context, seed, amount string) (string, error) {
+	return c.sendStaking(ctx, "wallet.stake", map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramAmount: amount})
+}
+
+func (c *Client) Unstake(ctx context.Context, seed, amount string) (string, error) {
+	return c.sendStaking(ctx, "wallet.unstake", map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramAmount: amount})
+}
+
+func (c *Client) Withdraw(ctx context.Context, seed string) (string, error) {
+	return c.sendStaking(ctx, "wallet.withdraw", map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed})
+}
+
+func (c *Client) sendStaking(ctx context.Context, method string, params map[string]any) (string, error) {
+	var out struct {
+		Tx string `json:"tx"`
+	}
+	if err := c.call(ctx, method, params, &out); err != nil {
+		return "", err
+	}
+	log.Infof("wallet: %s %v sun on %s, tx %s", method, params[paramAmount], c.cfg.Network, out.Tx)
+	return out.Tx, nil
 }
 
 func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (string, error) {

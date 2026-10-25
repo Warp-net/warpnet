@@ -1004,15 +1004,33 @@ type WalletEvent struct {
 
 // WalletResponse defines model for WalletResponse.
 type WalletResponse struct {
-	Address     string `json:"address"`
-	Token       string `json:"token"`
-	UsdtBalance string `json:"usdt_balance"`
-	TrxBalance  string `json:"trx_balance"`
-	Activated   bool   `json:"activated"`
-	CreatedAt   int64  `json:"created_at,omitempty"`
-	Derivation  string `json:"derivation"`
-	Decimals    uint8  `json:"decimals"`
-	Network     string `json:"network"`
+	Address     string            `json:"address"`
+	Token       string            `json:"token"`
+	UsdtBalance string            `json:"usdt_balance"`
+	TrxBalance  string            `json:"trx_balance"`
+	Staked      string            `json:"staked"`
+	Unstaking   []WalletUnstaking `json:"unstaking"`
+	Activated   bool              `json:"activated"`
+	CreatedAt   int64             `json:"created_at,omitempty"`
+	Derivation  string            `json:"derivation"`
+	Decimals    uint8             `json:"decimals"`
+	Network     string            `json:"network"`
+}
+
+// WalletUnstaking defines model for WalletUnstaking.
+type WalletUnstaking struct {
+	Amount      string `json:"amount"`
+	AvailableAt int64  `json:"available_at"`
+}
+
+// WalletStakeEvent defines model for WalletStakeEvent.
+type WalletStakeEvent struct {
+	Amount string `json:"amount"`
+}
+
+// WalletStakeResponse defines model for WalletStakeResponse.
+type WalletStakeResponse struct {
+	Tx string `json:"tx"`
 }
 
 // NewOrderEvent defines model for NewOrderEvent.

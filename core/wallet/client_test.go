@@ -497,3 +497,46 @@ func TestOnlyTestnetHasASplitter(t *testing.T) {
 		t.Fatal("mainnet has no deployed splitter yet")
 	}
 }
+
+func TestStakingReachesTheEngine(t *testing.T) {
+	var asked []request
+	client := answeringEngine(t, func(req request) string {
+		asked = append(asked, req)
+		return `{"id":"` + req.ID + `","result":{"owner":"TOwner","tx":"tx-` + req.Method + `"}}`
+	})
+	ctx := context.Background()
+	for _, tt := range []struct {
+		method string
+		send   func() (string, error)
+		amount bool
+	}{
+		{"wallet.stake", func() (string, error) { return client.Stake(ctx, "seed", "5000000") }, true},
+		{"wallet.unstake", func() (string, error) { return client.Unstake(ctx, "seed", "2000000") }, true},
+		{"wallet.withdraw", func() (string, error) { return client.Withdraw(ctx, "seed") }, false},
+	} {
+		tx, err := tt.send()
+		if err != nil || tx != "tx-"+tt.method {
+			t.Fatalf("%s: tx = %q, err = %v", tt.method, tx, err)
+		}
+		last := asked[len(asked)-1]
+		if last.Method != tt.method || !strings.Contains(string(last.Params), `"seed":"seed"`) || !strings.Contains(string(last.Params), `"network":"testnet"`) {
+			t.Fatalf("asked %s %s", last.Method, last.Params)
+		}
+		if strings.Contains(string(last.Params), `"amount"`) != tt.amount {
+			t.Fatalf("%s params %s: amount sent = %v, want %v", tt.method, last.Params, !tt.amount, tt.amount)
+		}
+	}
+}
+
+func TestBalanceListsWhatIsBeingUnstaked(t *testing.T) {
+	client := answeringEngine(t, func(req request) string {
+		return `{"id":"` + req.ID + `","result":{"token_balance":"1","trx":"2","staked":"3","unstaking":[{"amount":"4","available_at":1758000000000}]}}`
+	})
+	account, err := client.Balance(context.Background(), "TAddr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if account.Staked != "3" || len(account.Unstaking) != 1 || account.Unstaking[0] != (Unstaking{Amount: "4", AvailableAt: 1758000000000}) {
+		t.Fatalf("account = %+v", account)
+	}
+}

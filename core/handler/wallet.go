@@ -65,6 +65,9 @@ type WalletBackend interface {
 	Transfer(ctx context.Context, seed, asset, to, amount string) (string, error)
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
 	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
+	Stake(ctx context.Context, seed, amount string) (string, error)
+	Unstake(ctx context.Context, seed, amount string) (string, error)
+	Withdraw(ctx context.Context, seed string) (string, error)
 	Token() string
 	Decimals() uint8
 	Network() string
@@ -98,11 +101,17 @@ func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateK
 				address, backend.Network(),
 			)
 		}
+		unstaking := make([]event.WalletUnstaking, 0, len(account.Unstaking))
+		for _, u := range account.Unstaking {
+			unstaking = append(unstaking, event.WalletUnstaking(u))
+		}
 		return event.WalletResponse{
 			Address:     address,
 			Token:       backend.Token(),
 			UsdtBalance: account.TokenBalance,
 			TrxBalance:  account.TRX,
+			Staked:      account.Staked,
+			Unstaking:   unstaking,
 			Activated:   account.Activated,
 			CreatedAt:   account.CreatedAt,
 			Derivation:  walletDerivation,
@@ -158,6 +167,65 @@ func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.Private
 			return nil, warpnet.WarpError("wallet: " + err.Error())
 		}
 		return event.WalletSendResponse{Tx: tx, Asset: asset, To: ev.To, Amount: ev.Amount}, nil
+	}
+}
+
+func StreamWalletStakeHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.WalletStakeEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Amount == "" {
+			return nil, warpnet.WarpError("wallet: empty amount to stake")
+		}
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		tx, err := backend.Stake(context.Background(), seed, ev.Amount)
+		if err != nil {
+			log.Errorf("wallet: stake: %v", err)
+			return nil, warpnet.WarpError("wallet: " + err.Error())
+		}
+		return event.WalletStakeResponse{Tx: tx}, nil
+	}
+}
+
+func StreamWalletUnstakeHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
+	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
+		var ev event.WalletStakeEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.Amount == "" {
+			return nil, warpnet.WarpError("wallet: empty amount to unstake")
+		}
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		tx, err := backend.Unstake(context.Background(), seed, ev.Amount)
+		if err != nil {
+			log.Errorf("wallet: unstake: %v", err)
+			return nil, warpnet.WarpError("wallet: " + err.Error())
+		}
+		return event.WalletStakeResponse{Tx: tx}, nil
+	}
+}
+
+func StreamWalletWithdrawHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
+	return func(_ []byte, _ warpnet.WarpStream) (any, error) {
+		seed, err := wallet.DeriveSeed(auth.GetOwner(), identityKey, backend.Network())
+		if err != nil {
+			return nil, err
+		}
+		tx, err := backend.Withdraw(context.Background(), seed)
+		if err != nil {
+			log.Errorf("wallet: withdraw: %v", err)
+			return nil, warpnet.WarpError("wallet: " + err.Error())
+		}
+		return event.WalletStakeResponse{Tx: tx}, nil
 	}
 }
 

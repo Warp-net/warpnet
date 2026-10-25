@@ -11,6 +11,9 @@ vi.mock('@/service/service', () => ({
     getImage: vi.fn(),
     sendFunds: vi.fn(),
     exportWalletKey: vi.fn(),
+    stakeTrx: vi.fn(),
+    unstakeTrx: vi.fn(),
+    withdrawTrx: vi.fn(),
   },
 }));
 
@@ -333,5 +336,90 @@ describe('Wallet.vue', () => {
     await waitFor(() => expect(screen.queryAllByTestId('loader').length).toBe(0));
     expect(screen.getByText(line(/^50 USDT$/))).toBeTruthy();
     expect(screen.getByText('No transfers yet.')).toBeTruthy();
+  });
+
+  describe('stake', () => {
+    const staked = (extra) => ({ ...wallet, staked: '500000000', unstaking: [], ...extra });
+    const stakeInput = () => screen.getByLabelText('TRX to stake or unstake');
+
+    it('shows the stake and every part being unstaked with its date', async () => {
+      const soon = Date.now() + 86400000;
+      warpnetService.getWallet.mockResolvedValue(staked({
+        unstaking: [{ amount: '70000000', available_at: soon }, { amount: '30000000', available_at: Date.now() - 1000 }],
+      }));
+      renderWallet();
+
+      expect(await screen.findByText(line(/^500 TRX staked$/))).toBeTruthy();
+      expect(screen.getByText('70 TRX')).toBeTruthy();
+      expect(screen.getByText(/^available /)).toBeTruthy();
+      expect(screen.getByText('ready to take back')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Take back 30 TRX/ })).toBeTruthy();
+    });
+
+    it('offers no take-back while every part still waits', async () => {
+      warpnetService.getWallet.mockResolvedValue(staked({ unstaking: [{ amount: '70000000', available_at: Date.now() + 86400000 }] }));
+      renderWallet();
+
+      await screen.findByText('70 TRX');
+      expect(screen.queryByRole('button', { name: /Take back/ })).toBeNull();
+    });
+
+    it('stakes the amount in sun and reports the transaction', async () => {
+      warpnetService.stakeTrx.mockResolvedValue({ tx: 'tx-stake' });
+      renderWallet();
+      await screen.findByText(line(/TRX staked$/));
+
+      await fireEvent.update(stakeInput(), '12.5');
+      await fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+
+      await waitFor(() => expect(warpnetService.stakeTrx).toHaveBeenCalledWith('12500000'));
+      expect(await screen.findByText('tx-stake')).toBeTruthy();
+    });
+
+    it('refuses a stake under 1 TRX or above the balance before asking the node', async () => {
+      renderWallet();
+      await screen.findByText(line(/TRX staked$/));
+
+      await fireEvent.update(stakeInput(), '0.5');
+      await fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+      expect(await screen.findByText('Stake at least 1 TRX.')).toBeTruthy();
+
+      await fireEvent.update(stakeInput(), '101');
+      await fireEvent.click(screen.getByRole('button', { name: 'Stake' }));
+      expect(await screen.findByText('That is more TRX than this address holds.')).toBeTruthy();
+      expect(warpnetService.stakeTrx).not.toHaveBeenCalled();
+    });
+
+    it('unstakes no more than is staked and shows the node\'s refusal', async () => {
+      warpnetService.getWallet.mockResolvedValue(staked());
+      warpnetService.unstakeTrx.mockRejectedValue(new Error('wallet: insufficient balance: 0 sun staked for energy'));
+      renderWallet();
+      await screen.findByText(line(/^500 TRX staked$/));
+
+      await fireEvent.update(stakeInput(), '501');
+      await fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+      expect(await screen.findByText('That is more TRX than you have staked.')).toBeTruthy();
+      expect(warpnetService.unstakeTrx).not.toHaveBeenCalled();
+
+      await fireEvent.update(stakeInput(), '100');
+      await fireEvent.click(screen.getByRole('button', { name: 'Unstake' }));
+      await waitFor(() => expect(warpnetService.unstakeTrx).toHaveBeenCalledWith('100000000'));
+      expect(await screen.findByText(/0 sun staked for energy/)).toBeTruthy();
+    });
+
+    it('takes back what finished unstaking', async () => {
+      warpnetService.getWallet.mockResolvedValue(staked({ unstaking: [{ amount: '30000000', available_at: Date.now() - 1000 }] }));
+      warpnetService.withdrawTrx.mockResolvedValue({ tx: 'tx-withdraw' });
+      renderWallet();
+
+      await fireEvent.click(await screen.findByRole('button', { name: /Take back 30 TRX/ }));
+      expect(await screen.findByText('tx-withdraw')).toBeTruthy();
+    });
+
+    it('cannot unstake an empty stake', async () => {
+      renderWallet();
+      await screen.findByText(line(/^0 TRX staked$/));
+      expect(screen.getByRole('button', { name: 'Unstake' }).disabled).toBe(true);
+    });
   });
 });
