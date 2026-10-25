@@ -235,6 +235,7 @@ resulting from the use or misuse of this software.
             <i class="fas fa-times text-red-600 group-hover:text-white text-xs" aria-hidden="true"></i>
           </button>
           <p v-if="videoUploading" class="text-xs text-dark mt-1">Uploading video…</p>
+          <p v-if="isVideoUndecodable" class="text-xs text-red-600 mt-1">This browser can't play this video, so the recipient may not either. Try an H.264 MP4.</p>
         </div>
         <div class="flex items-center">
           <button
@@ -380,6 +381,7 @@ export default {
       videoKey: '',
       videoPosterKey: '',
       videoPoster: '',
+      isVideoUndecodable: false,
       videoUploading: false,
       usersMap: new Map(),
       pendingUsers: new Set(),
@@ -547,6 +549,7 @@ export default {
       }
       if (this.videoAttachment && this.videoAttachment.url === url) {
         this.videoPoster = poster;
+        this.isVideoUndecodable = !poster;
       }
     },
     async uploadVideoAttachment(file, poster) {
@@ -588,6 +591,7 @@ export default {
       this.videoKey = '';
       this.videoPosterKey = '';
       this.videoPoster = '';
+      this.isVideoUndecodable = false;
       if (this.$refs.messageVideoInput) {
         this.$refs.messageVideoInput.value = '';
       }

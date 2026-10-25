@@ -103,6 +103,7 @@ resulting from the use or misuse of this software.
               <i class="fas fa-times text-red-600 hover:text-white"></i>
             </button>
             <div v-if="videoUploading" class="text-xs text-dark mt-1">Uploading video…</div>
+            <p v-if="isVideoUndecodable" class="text-xs text-red-600 mt-1">This browser can't play this video, so most readers won't either. Try an H.264 MP4.</p>
           </div>
           <div v-if="poll" class="mt-2 mb-2 border border-lighter rounded p-3">
             <div v-for="(option, index) in poll.options" :key="index" class="flex items-center mb-2">
@@ -399,6 +400,7 @@ export default {
       videoAttachment: null,
       videoKey: '',
       videoPosterKey: '',
+      isVideoUndecodable: false,
       videoUploading: false,
       posting: false,
       loadingMore: false,
@@ -628,6 +630,11 @@ export default {
       const url = URL.createObjectURL(file);
       this.videoAttachment = {url, name: file.name, file};
       this._videoPoster = captureVideoPoster(file).catch(() => null);
+
+      const poster = await this._videoPoster;
+      if (this.videoAttachment && this.videoAttachment.url === url) {
+        this.isVideoUndecodable = !poster;
+      }
     },
     async uploadVideoAttachment() {
       const {file} = this.videoAttachment;
@@ -672,6 +679,7 @@ export default {
       this.videoAttachment = null;
       this.videoKey = '';
       this.videoPosterKey = '';
+      this.isVideoUndecodable = false;
       this._videoPoster = null;
     },
     togglePoll() {

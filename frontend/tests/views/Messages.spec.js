@@ -189,6 +189,7 @@ describe('Messages.vue', () => {
 
       expect(warpnetService.uploadChatVideo).not.toHaveBeenCalled();
       expect(warpnetService.uploadChatImages).not.toHaveBeenCalled();
+      expect(screen.queryByText(/can't play this video/)).not.toBeInTheDocument();
       await fireEvent.click(screen.getByLabelText('Send message'));
 
       await waitFor(() => expect(warpnetService.sendDirectMessage).toHaveBeenCalledWith(
@@ -196,6 +197,12 @@ describe('Messages.vue', () => {
       ));
       expect(warpnetService.uploadChatVideo).toHaveBeenCalledWith(expect.stringMatching(/^data:video\/mp4;base64,/));
       expect(warpnetService.uploadChatImages).toHaveBeenCalledWith(['data:image/jpeg;base64,BBBB']);
+    });
+
+    it('warns when the browser cannot decode the picked video', async () => {
+      await attachClip();
+
+      expect(await screen.findByText(/can't play this video/)).toBeInTheDocument();
     });
 
     it('keeps the uploaded video for the retry when the send fails', async () => {

@@ -364,6 +364,7 @@ describe('Home composer watchers', () => {
       warpnetService.createTweet.mockResolvedValue({ id: 't1' });
       const box = await pasteClip();
 
+      expect(screen.queryByText(/can't play this video/)).not.toBeInTheDocument();
       expect(warpnetService.uploadImage).not.toHaveBeenCalled();
       await fireEvent.update(box, 'watch this');
       await fireEvent.click(screen.getByRole('button', { name: 'Tweet' }));
@@ -372,6 +373,12 @@ describe('Home composer watchers', () => {
         expect.objectContaining({ imageKeys: ['poster-key'], videoKey: 'video-key' }),
       ));
       expect(warpnetService.uploadImage).toHaveBeenCalledWith('data:image/jpeg;base64,BBBB');
+    });
+
+    it('warns when the browser cannot decode the picked video', async () => {
+      await pasteClip();
+
+      expect(await screen.findByText(/can't play this video/)).toBeInTheDocument();
     });
 
     it('keeps the draft and its video when the upload fails', async () => {
