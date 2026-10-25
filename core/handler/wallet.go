@@ -31,6 +31,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -54,7 +55,8 @@ type WalletOwnerStorer interface {
 const (
 	walletDerivation = "warpnet-account"
 
-	ErrOrderLimit warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+	ErrOrderLimit       warpnet.WarpError = "order: one buyer gets at most 10 of an author's tweets an hour"
+	ErrWalletPayerTaken warpnet.WarpError = "order: this wallet already paid for another buyer of this author"
 )
 
 type WalletBackend interface {
@@ -242,8 +244,13 @@ type WalletStreamer interface {
 	NodeInfo() warpnet.NodeInfo
 }
 
-type WalletOrderCounter interface {
+type WalletOrderStorer interface {
 	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+	IsPayerTaken(payer, buyerNodeId string) (bool, error)
+}
+
+type WalletSettingsFetcher interface {
+	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
 }
 
 type WalletPeerFetcher interface {
@@ -254,10 +261,15 @@ func StreamGetWalletAddressHandler(
 	auth WalletOwnerStorer,
 	identityKey ed25519.PrivateKey,
 	backend WalletBackend,
-	orders WalletOrderCounter,
+	orders WalletOrderStorer,
 	users WalletPeerFetcher,
+	settings WalletSettingsFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.WalletAddressEvent
+		if len(buf) > 0 {
+			_ = json.Unmarshal(buf, &ev)
+		}
 		isReached, err := isPeerOrderLimitReached(s, users, orders)
 		if err != nil {
 			return nil, err
@@ -266,6 +278,11 @@ func StreamGetWalletAddressHandler(
 			return nil, ErrOrderLimit
 		}
 		owner := auth.GetOwner()
+		if ev.Payer != "" {
+			if err := verifyPeerPayer(s, orders, settings, backend, owner.UserId, ev.Payer); err != nil {
+				return nil, err
+			}
+		}
 		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
@@ -283,7 +300,7 @@ func StreamGetWalletAddressHandler(
 	}
 }
 
-func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orders WalletOrderCounter) (bool, error) {
+func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orders WalletOrderStorer) (bool, error) {
 	if s == nil || s.Conn() == nil {
 		return false, nil
 	}
@@ -503,4 +520,42 @@ func walletAsset(asset string, backend WalletBackend) (string, error) {
 		}
 	}
 	return "", warpnet.WarpError("wallet: unknown asset " + asset)
+}
+
+func verifyPeerPayer(
+	s warpnet.WarpStream,
+	orders WalletOrderStorer,
+	settings WalletSettingsFetcher,
+	backend WalletBackend,
+	ownerId, payer string,
+) error {
+	sponsored, err := settings.GetSponsoredSettings(ownerId)
+	if err != nil {
+		return err
+	}
+	if sponsored.MinStakeTRX == 0 {
+		return nil
+	}
+	isTaken, err := isPeerPayerTaken(s, orders, payer)
+	if err != nil {
+		return err
+	}
+	if isTaken {
+		return ErrWalletPayerTaken
+	}
+	account, err := backend.Balance(context.Background(), payer)
+	if err != nil {
+		return err
+	}
+	if !account.IsStakeEnough(sponsored.MinStakeTRX) {
+		return warpnet.WarpError(fmt.Sprintf("order: the author sells only to wallets with at least %d TRX staked", sponsored.MinStakeTRX))
+	}
+	return nil
+}
+
+func isPeerPayerTaken(s warpnet.WarpStream, orders WalletOrderStorer, payer string) (bool, error) {
+	if s == nil || s.Conn() == nil {
+		return false, nil
+	}
+	return orders.IsPayerTaken(payer, s.Conn().RemotePeer().String())
 }

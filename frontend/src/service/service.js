@@ -49,6 +49,8 @@ export const PRIVATE_GET_SETTINGS_GATEWAY = "/private/get/settings/gateway/0.0.0
 export const PRIVATE_POST_SETTINGS_GATEWAY = "/private/post/settings/gateway/0.0.0"
 export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
+export const PRIVATE_GET_SETTINGS_SPONSORED = "/private/get/settings/sponsored/0.0.0"
+export const PRIVATE_POST_SETTINGS_SPONSORED = "/private/post/settings/sponsored/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -1291,6 +1293,25 @@ export const warpnetService = {
         });
         if (!resp || resp.code || !('network_low_water' in resp)) {
             throw new Error(resp?.message || 'Failed to save rate limit settings');
+        }
+        return resp;
+    },
+
+    async getSponsoredSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SETTINGS_SPONSORED,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    async updateSponsoredSettings(minStakeTrx) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SETTINGS_SPONSORED,
+            body: { min_stake_trx: Math.max(0, Math.floor(Number(minStakeTrx) || 0)) },
+        });
+        if (!resp || resp.code || !('min_stake_trx' in resp)) {
+            throw new Error(resp?.message || 'Failed to save sponsored settings');
         }
         return resp;
     },

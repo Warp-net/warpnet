@@ -35,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,6 +55,7 @@ const (
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
 	NativeCoin     = "TRX"
+	sunPerTRX      = 1_000_000
 
 	testnetSplitter = "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy"
 	maxFeePercent   = 5
@@ -74,8 +76,18 @@ var (
 type Account struct {
 	TokenBalance string
 	TRX          string
+	Staked       string
 	Activated    bool
 	CreatedAt    int64
+}
+
+func (a Account) IsStakeEnough(minTRX uint64) bool {
+	staked, ok := new(big.Int).SetString(a.Staked, 10)
+	if !ok {
+		return minTRX == 0
+	}
+	required := new(big.Int).Mul(new(big.Int).SetUint64(minTRX), big.NewInt(sunPerTRX))
+	return staked.Cmp(required) >= 0
 }
 
 type Config struct {
@@ -103,6 +115,7 @@ type Sponsorship struct {
 	Splitter      string
 	OrderId       string
 	Author        string
+	Buyer         string
 	Amount        string
 	MaxFeePercent uint64
 }
@@ -502,13 +515,14 @@ func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 	var out struct {
 		TokenBalance string `json:"token_balance"`
 		TRX          string `json:"trx"`
+		Staked       string `json:"staked"`
 		Activated    bool   `json:"activated"`
 		CreatedAt    int64  `json:"created_at"`
 	}
 	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
-	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
+	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Staked: out.Staked, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
 }
 
 func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (string, error) {
@@ -647,7 +661,7 @@ func quoteParams(network, payer string, s Sponsorship) map[string]any {
 }
 
 func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
-	return map[string]any{
+	params := map[string]any{
 		"chain":           "tron",
 		paramNetwork:      cfg.Network,
 		"tx_id":           txId,
@@ -660,6 +674,10 @@ func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
 			"decimals": cfg.Decimals,
 		}},
 	}
+	if s.Buyer != "" {
+		params["expected_buyer"] = s.Buyer
+	}
+	return params
 }
 
 func payParams(network, seed string, s Sponsorship) map[string]any {

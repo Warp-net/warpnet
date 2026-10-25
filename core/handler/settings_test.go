@@ -380,3 +380,46 @@ func TestStreamUpdateRateLimitSettingsHandler(t *testing.T) {
 		}
 	})
 }
+
+type stubSponsoredSettingsRepo struct {
+	saved map[string]domain.SponsoredSettings
+}
+
+func (s stubSponsoredSettingsRepo) GetSponsoredSettings(userId string) (domain.SponsoredSettings, error) {
+	return s.saved[userId], nil
+}
+
+func (s stubSponsoredSettingsRepo) SetSponsoredSettings(userId string, ss domain.SponsoredSettings) error {
+	s.saved[userId] = ss
+	return nil
+}
+
+func TestStreamSponsoredSettingsHandlers(t *testing.T) {
+	repo := stubSponsoredSettingsRepo{saved: map[string]domain.SponsoredSettings{}}
+	auth := stubAuth{owner: domain.Owner{UserId: "owner-1"}}
+
+	resp, err := StreamGetSponsoredSettingsHandler(repo, auth)([]byte("{}"), nil)
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 0 {
+		t.Fatalf("an author who set nothing asks no stake: %+v, %v", resp, err)
+	}
+
+	resp, err = StreamUpdateSponsoredSettingsHandler(repo, auth)(marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 500}), nil)
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 500 {
+		t.Fatalf("update = %+v, %v", resp, err)
+	}
+	if repo.saved["owner-1"].MinStakeTRX != 500 {
+		t.Fatalf("saved = %+v", repo.saved)
+	}
+
+	resp, err = StreamGetSponsoredSettingsHandler(repo, auth)([]byte("{}"), nil)
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 500 {
+		t.Fatalf("get after update = %+v, %v", resp, err)
+	}
+
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, auth)([]byte("{"), nil); err == nil {
+		t.Fatal("expected a payload error")
+	}
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, stubAuth{})(marshal(t, event.UpdateSponsoredSettingsEvent{}), nil); err == nil {
+		t.Fatal("expected an empty-owner error")
+	}
+}

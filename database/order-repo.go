@@ -172,6 +172,49 @@ func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, 
 	return count, txn.Commit()
 }
 
+func (repo *OrderRepo) IsPayerTaken(payer, buyerNodeId string) (bool, error) {
+	if payer == "" {
+		return false, local_store.DBError("empty payer")
+	}
+	if buyerNodeId == "" {
+		return false, local_store.DBError("empty buyer node id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false, err
+	}
+	defer txn.Rollback()
+
+	var keys []local_store.DatabaseKey
+	prefix := local_store.DatabaseKey(OrderRepoName + local_store.Delimeter)
+	err = txn.IterateKeys(prefix, func(key string) error {
+		keys = append(keys, local_store.DatabaseKey(key))
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	if len(keys) == 0 {
+		return false, txn.Commit()
+	}
+
+	items, err := txn.BatchGet(keys...)
+	if err != nil {
+		return false, err
+	}
+	for _, item := range items {
+		var o domain.Order
+		if err := json.Unmarshal(item.Value, &o); err != nil {
+			return false, err
+		}
+		if o.Confirmed && o.Payer == payer && o.BuyerNodeId != buyerNodeId {
+			return true, txn.Commit()
+		}
+	}
+	return false, txn.Commit()
+}
+
 func orderKey(tweetId, buyerId string) local_store.DatabaseKey {
 	return local_store.NewPrefixBuilder(OrderRepoName).
 		AddRootID(tweetId).

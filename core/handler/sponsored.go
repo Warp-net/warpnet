@@ -33,6 +33,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -56,6 +57,7 @@ const (
 
 	ErrChainUnavailable warpnet.WarpError = "order: the TRON network cannot be reached, nothing was paid; try again later"
 	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so it is not sent again; check the wallet history"
+	ErrPayerTaken       warpnet.WarpError = "order: this wallet already paid for another buyer of this author"
 )
 
 type SponsoredAuthStorer interface {
@@ -64,6 +66,7 @@ type SponsoredAuthStorer interface {
 
 type SponsoredWallet interface {
 	Address(ctx context.Context, seed string) (string, error)
+	Balance(ctx context.Context, address string) (wallet.Account, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
 	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
@@ -82,6 +85,11 @@ type OrderStorer interface {
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	Delete(tweetId, buyerId string) error
+	IsPayerTaken(payer, buyerNodeId string) (bool, error)
+}
+
+type OrderSettingsFetcher interface {
+	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
 }
 
 type SponsoredTweetFetcher interface {
@@ -184,7 +192,15 @@ func payAuthor(
 	if !backend.IsAvailable(context.Background()) {
 		return domain.Order{}, ErrChainUnavailable
 	}
-	sponsorship, err := tweetSponsorship(backend, streamer, author, tweetId)
+	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
+	if err != nil {
+		return domain.Order{}, err
+	}
+	payer, err := backend.Address(context.Background(), seed)
+	if err != nil {
+		return domain.Order{}, err
+	}
+	sponsorship, err := tweetSponsorship(backend, streamer, author, tweetId, payer)
 	if err != nil {
 		return domain.Order{}, err
 	}
@@ -197,14 +213,11 @@ func payAuthor(
 		TweetId:   tweetId,
 		AuthorId:  author.Id,
 		BuyerId:   owner.UserId,
+		Payer:     payer,
 		Nonce:     hex.EncodeToString(nonce),
 		CreatedAt: time.Now(),
 	}
 
-	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
-	if err != nil {
-		return domain.Order{}, err
-	}
 	if err := orders.Save(order); err != nil {
 		return domain.Order{}, err
 	}
@@ -235,7 +248,7 @@ func tweetSponsorship(
 	backend SponsoredWallet,
 	streamer SponsoredStreamer,
 	author domain.User,
-	tweetId string,
+	tweetId, payer string,
 ) (wallet.Sponsorship, error) {
 	if backend.Splitter() == "" {
 		return wallet.Sponsorship{}, warpnet.WarpError("order: sponsored payments are not open on " + backend.Network())
@@ -249,7 +262,7 @@ func tweetSponsorship(
 		return wallet.Sponsorship{}, warpnet.WarpError("order: tweet has no price")
 	}
 
-	address, err := authorAddress(streamer, author, backend.Network())
+	address, err := authorAddress(streamer, author, backend.Network(), payer)
 	if err != nil {
 		return wallet.Sponsorship{}, err
 	}
@@ -288,11 +301,15 @@ func StreamGetOrderQuoteHandler(
 		if err != nil {
 			return nil, err
 		}
-		sponsorship, err := tweetSponsorship(backend, streamer, author, ev.TweetId)
+		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
 			return nil, err
 		}
-		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
+		payer, err := backend.Address(context.Background(), seed)
+		if err != nil {
+			return nil, err
+		}
+		sponsorship, err := tweetSponsorship(backend, streamer, author, ev.TweetId, payer)
 		if err != nil {
 			return nil, err
 		}
@@ -340,8 +357,8 @@ func streamedTweet(streamer SponsoredStreamer, author domain.User, tweetId strin
 	return tweet, nil
 }
 
-func authorAddress(streamer SponsoredStreamer, author domain.User, network string) (string, error) {
-	resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_WALLET_ADDRESS, event.WalletAddressEvent{Chain: network})
+func authorAddress(streamer SponsoredStreamer, author domain.User, network, payer string) (string, error) {
+	resp, err := streamer.GenericStream(author.NodeId, event.PUBLIC_GET_WALLET_ADDRESS, event.WalletAddressEvent{Chain: network, Payer: payer})
 	if err != nil {
 		return "", err
 	}
@@ -370,6 +387,7 @@ func claimOrder(
 		UserId:  order.BuyerId,
 		TxId:    order.TxId,
 		Nonce:   order.Nonce,
+		Payer:   order.Payer,
 	})
 	if errors.Is(err, warpnet.ErrNodeIsOffline) {
 		return order, nil
@@ -401,6 +419,7 @@ func StreamVerifyOrderHandler(
 	userRepo SponsoredUserFetcher,
 	notifier SponsoredNotifier,
 	streamer SponsoredStreamer,
+	settings OrderSettingsFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.VerifyOrderEvent
@@ -448,14 +467,25 @@ func StreamVerifyOrderHandler(
 		if count >= domain.OrderLimit {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 		}
+		sponsored, err := settings.GetSponsoredSettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		if sponsored.MinStakeTRX > 0 {
+			if err := verifyBuyerPayer(backend, orders, ev.Payer, buyer.NodeId, sponsored.MinStakeTRX); err != nil {
+				return nil, err
+			}
+		}
 
 		order := domain.Order{
-			TweetId:   ev.TweetId,
-			AuthorId:  owner.UserId,
-			BuyerId:   ev.UserId,
-			Nonce:     ev.Nonce,
-			TxId:      ev.TxId,
-			CreatedAt: time.Now(),
+			TweetId:     ev.TweetId,
+			AuthorId:    owner.UserId,
+			BuyerId:     ev.UserId,
+			BuyerNodeId: buyer.NodeId,
+			Payer:       ev.Payer,
+			Nonce:       ev.Nonce,
+			TxId:        ev.TxId,
+			CreatedAt:   time.Now(),
 		}
 		seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 		if err != nil {
@@ -470,6 +500,7 @@ func StreamVerifyOrderHandler(
 			Splitter: backend.Splitter(),
 			OrderId:  order.ID(),
 			Author:   address,
+			Buyer:    ev.Payer,
 			Amount:   tweet.Price.Units.String(),
 		})
 		if err != nil {
@@ -819,4 +850,26 @@ func listPixelMarkedOrders(tweet domain.Tweet, originalKey string, orders OrderS
 		sold = append(sold, order)
 	}
 	return sold, nil
+}
+
+func verifyBuyerPayer(backend SponsoredWallet, orders OrderStorer, payer, buyerNodeId string, minStakeTRX uint64) error {
+	errStake := warpnet.WarpError(fmt.Sprintf("order: the author sells only to wallets with at least %d TRX staked", minStakeTRX))
+	if payer == "" {
+		return errStake
+	}
+	isTaken, err := orders.IsPayerTaken(payer, buyerNodeId)
+	if err != nil {
+		return err
+	}
+	if isTaken {
+		return ErrPayerTaken
+	}
+	account, err := backend.Balance(context.Background(), payer)
+	if err != nil {
+		return err
+	}
+	if !account.IsStakeEnough(minStakeTRX) {
+		return errStake
+	}
+	return nil
 }

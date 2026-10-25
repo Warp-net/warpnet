@@ -456,6 +456,39 @@ func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	}
 }
 
+func TestVerifyParamsNameTheBuyerOnlyWhenKnown(t *testing.T) {
+	cfg := DefaultConfig("testnet", "")
+	s := Sponsorship{Splitter: cfg.Splitter, OrderId: "01", Author: "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143", Amount: "1500000"}
+	if _, ok := verifyParams(cfg, "ab12", s)["expected_buyer"]; ok {
+		t.Fatal("verify must not expect a buyer nobody named")
+	}
+	s.Buyer = "TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6"
+	if got := verifyParams(cfg, "ab12", s)["expected_buyer"]; got != s.Buyer {
+		t.Fatalf("expected_buyer = %v, want %s", got, s.Buyer)
+	}
+}
+
+func TestIsStakeEnoughComparesWholeTRXWithSun(t *testing.T) {
+	cases := []struct {
+		staked string
+		min    uint64
+		want   bool
+	}{
+		{"", 0, true},
+		{"", 1, false},
+		{"0", 0, true},
+		{"499999999", 500, false},
+		{"500000000", 500, true},
+		{"18446744073709551615000000", 18446744073709551615, true},
+		{"garbage", 1, false},
+	}
+	for _, tc := range cases {
+		if got := (Account{Staked: tc.staked}).IsStakeEnough(tc.min); got != tc.want {
+			t.Fatalf("staked %q, min %d TRX: got %v, want %v", tc.staked, tc.min, got, tc.want)
+		}
+	}
+}
+
 func TestOnlyTestnetHasASplitter(t *testing.T) {
 	if DefaultConfig("testnet", "").Splitter == "" {
 		t.Fatal("testnet must pay through the Nile USDT splitter")

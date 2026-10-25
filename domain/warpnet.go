@@ -236,14 +236,16 @@ func (p *Price) decimal() string {
 }
 
 type Order struct {
-	TweetId   string    `json:"tweet_id"`
-	AuthorId  string    `json:"author_id"`
-	BuyerId   string    `json:"buyer_id"`
-	Nonce     string    `json:"nonce"`
-	TxId      string    `json:"tx_id"`
-	Confirmed bool      `json:"confirmed"`
-	Tweet     *Tweet    `json:"tweet,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	TweetId     string    `json:"tweet_id"`
+	AuthorId    string    `json:"author_id"`
+	BuyerId     string    `json:"buyer_id"`
+	BuyerNodeId string    `json:"buyer_node_id,omitempty"`
+	Payer       string    `json:"payer,omitempty"`
+	Nonce       string    `json:"nonce"`
+	TxId        string    `json:"tx_id"`
+	Confirmed   bool      `json:"confirmed"`
+	Tweet       *Tweet    `json:"tweet,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (o *Order) ID() string {
@@ -403,6 +405,10 @@ type NotificationSettings struct {
 
 type GatewaySettings struct {
 	NodeID string `json:"node_id"`
+}
+
+type SponsoredSettings struct {
+	MinStakeTRX uint64 `json:"min_stake_trx"`
 }
 
 type ModerationResult bool

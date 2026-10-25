@@ -65,6 +65,8 @@ const (
 	PRIVATE_POST_SETTINGS_GATEWAY      = "/private/post/settings/gateway/0.0.0"
 	PRIVATE_GET_SETTINGS_RATELIMIT     = "/private/get/settings/ratelimit/0.0.0"
 	PRIVATE_POST_SETTINGS_RATELIMIT    = "/private/post/settings/ratelimit/0.0.0"
+	PRIVATE_GET_SETTINGS_SPONSORED     = "/private/get/settings/sponsored/0.0.0"
+	PRIVATE_POST_SETTINGS_SPONSORED    = "/private/post/settings/sponsored/0.0.0"
 	PRIVATE_GET_MESSAGE                = "/private/get/message/0.0.0"
 	PRIVATE_GET_MESSAGES               = "/private/get/messages/0.0.0"
 	PRIVATE_GET_TIMELINE               = "/private/get/timeline/0.0.0"

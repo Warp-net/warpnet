@@ -779,6 +779,15 @@ type GetGatewaySettingsResponse = domain.GatewaySettings
 // UpdateGatewaySettingsEvent defines model for UpdateGatewaySettingsEvent.
 type UpdateGatewaySettingsEvent = domain.GatewaySettings
 
+// GetSponsoredSettingsEvent defines model for GetSponsoredSettingsEvent.
+type GetSponsoredSettingsEvent struct{}
+
+// GetSponsoredSettingsResponse defines model for GetSponsoredSettingsResponse.
+type GetSponsoredSettingsResponse = domain.SponsoredSettings
+
+// UpdateSponsoredSettingsEvent defines model for UpdateSponsoredSettingsEvent.
+type UpdateSponsoredSettingsEvent = domain.SponsoredSettings
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`
@@ -1018,6 +1027,7 @@ type VerifyOrderEvent struct {
 	UserId  domain.ID `json:"user_id"`
 	TxId    string    `json:"tx_id"`
 	Nonce   string    `json:"nonce"`
+	Payer   string    `json:"payer,omitempty"`
 }
 
 // OrderResponse defines model for OrderResponse.
@@ -1074,6 +1084,7 @@ type OrderQuoteStep struct {
 // WalletAddressEvent defines model for WalletAddressEvent.
 type WalletAddressEvent struct {
 	Chain string `json:"chain"`
+	Payer string `json:"payer,omitempty"`
 }
 
 // WalletAddressResponse defines model for WalletAddressResponse.

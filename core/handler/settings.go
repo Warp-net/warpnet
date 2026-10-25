@@ -48,6 +48,11 @@ type GatewaySettingsStorer interface {
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 }
 
+type SponsoredSettingsStorer interface {
+	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
+	SetSponsoredSettings(userId string, s domain.SponsoredSettings) error
+}
+
 type RateLimitSettingsStorer interface {
 	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
 	SetRateLimitSettings(userId string, s ratelimit.Settings) error
@@ -129,6 +134,40 @@ func StreamUpdateGatewaySettingsHandler(
 			return nil, err
 		}
 		return event.GetGatewaySettingsResponse(ev), nil
+	}
+}
+
+func StreamGetSponsoredSettingsHandler(
+	repo SponsoredSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		owner := authRepo.GetOwner()
+		settings, err := repo.GetSponsoredSettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		return event.GetSponsoredSettingsResponse(settings), nil
+	}
+}
+
+func StreamUpdateSponsoredSettingsHandler(
+	repo SponsoredSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.UpdateSponsoredSettingsEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		owner := authRepo.GetOwner()
+		if owner.UserId == "" {
+			return nil, warpnet.WarpError("update sponsored settings: empty owner")
+		}
+		if err := repo.SetSponsoredSettings(owner.UserId, ev); err != nil {
+			return nil, err
+		}
+		return event.GetSponsoredSettingsResponse(ev), nil
 	}
 }
 
