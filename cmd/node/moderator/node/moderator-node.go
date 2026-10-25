@@ -133,7 +133,8 @@ func NewModeratorNode(
 	if err != nil {
 		return nil, fmt.Errorf("moderator: fail creating memory peerstore: %w", err)
 	}
-	mapStore := datastore.NewMapDatastore()
+	// the DHT's provider GC sweeps the store without the provider manager's lock
+	mapStore := ds.MutexWrap(datastore.NewMapDatastore())
 	// The rating CRDT owns its whole namespace, so it cannot share the
 	// datastore the DHT keeps its records in.
 	ratingStore := datastore.NewMapDatastore()
