@@ -204,6 +204,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	if d.cfg.ratings != nil {
 		go d.sweepRatedPeers()
 	}
+	go d.startRendezvous(d.bootstrapped)
 	log.Infoln("dht: routing started")
 	return d.dht, nil
 }
@@ -267,7 +268,6 @@ func rendezvousNamespace(network string) string {
 	return "warpnet/rendezvous/" + network
 }
 
-// TODO fix leaks and then enable
 // startRendezvous uses libp2p RoutingDiscovery (backed by the DHT content
 // router) to advertise this node and discover peers under a shared
 // namespace. This is the standard libp2p approach for DHT-based
@@ -290,7 +290,7 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 	ns := rendezvousNamespace(d.cfg.network)
 	ownID := d.dht.Host().ID()
 
-	d.advertise(rd, ns)
+	readvertiseAt := time.Now().Add(d.advertise(rd, ns))
 	d.findPeers(rd, ns, ownID)
 
 	ticker := time.NewTicker(30 * time.Second) //nolint:mnd
@@ -303,30 +303,36 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 		case <-d.stopChan:
 			return
 		case <-ticker.C:
-			d.advertise(rd, ns)
+			if time.Now().After(readvertiseAt) {
+				readvertiseAt = time.Now().Add(d.advertise(rd, ns))
+			}
 			d.findPeers(rd, ns, ownID)
 		}
 	}
 }
 
-// advertise announces this node as a provider for the rendezvous namespace.
+// advertise announces this node as a provider for the rendezvous namespace
+// and returns how long the record stands, or zero to try again next pass.
 // Silently skips when the routing table has no peers (Provide needs
 // at least one peer to store the record).
-func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) {
+func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) time.Duration {
 	if d.dht.RoutingTable().Size() == 0 {
-		return
+		return 0
 	}
 	ctx, cancel := context.WithTimeout(d.ctx, 60*time.Second) //nolint:mnd
 	defer cancel()
-	if _, err := rd.Advertise(ctx, ns); err != nil {
+	ttl, err := rd.Advertise(ctx, ns)
+	if err != nil {
 		log.Debugf("dht: rendezvous: advertise: %v", err)
-	} else {
-		log.Debugln("dht: rendezvous: advertised")
+		return 0
 	}
+	log.Debugf("dht: rendezvous: advertised for %s", ttl)
+	return ttl
 }
 
 // findPeers queries the DHT for providers of the rendezvous namespace
-// and feeds discovered peers into the add-peer callbacks.
+// and feeds the ones this node is not connected to into the add-peer
+// callbacks.
 func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns string, ownID warpnet.WarpPeerID) {
 	ctx, cancel := context.WithTimeout(d.ctx, 30*time.Second) //nolint:mnd
 	defer cancel()
@@ -337,6 +343,10 @@ func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns strin
 	}
 	for pi := range ch {
 		if pi.ID == ownID || len(pi.Addrs) == 0 {
+			continue
+		}
+		state := d.dht.Host().Network().Connectedness(pi.ID)
+		if state == warpnet.Connected || state == warpnet.Limited || !d.isPeerAllowed(pi.ID) {
 			continue
 		}
 		log.Debugf("dht: rendezvous: found peer %s %v", pi.ID, pi.Addrs)

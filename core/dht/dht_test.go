@@ -30,6 +30,7 @@ package dht
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -226,8 +227,75 @@ func TestAdvertiseAndFindPeersOnAnEmptyTable(t *testing.T) {
 
 	// An empty routing table has nowhere to store the record: advertise is a
 	// no-op and the peer query yields nothing rather than blocking.
-	d.advertise(rd, ns)
+	require.Zero(t, d.advertise(rd, ns), "nothing stored, so the next pass tries again")
 	d.findPeers(rd, ns, d.dht.Host().ID())
+}
+
+// router answers every provider query with the same peers and provides
+// with the error it was given.
+type router struct {
+	providers  []peer.AddrInfo
+	provideErr error
+}
+
+func (r router) Provide(context.Context, cid.Cid, bool) error { return r.provideErr }
+
+func (r router) FindProvidersAsync(context.Context, cid.Cid, int) <-chan peer.AddrInfo {
+	ch := make(chan peer.AddrInfo, len(r.providers))
+	for _, p := range r.providers {
+		ch <- p
+	}
+	close(ch)
+	return ch
+}
+
+func TestAdvertiseReturnsHowLongTheRecordStands(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	d := NewDHTable(ctx, Network("testnet"), RoutingStore(memStore()))
+	_, err := d.StartRouting(newHost(t))
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+
+	other := newHost(t)
+	_, _ = d.dht.RoutingTable().TryAddPeer(other.ID(), true, false)
+	ns := rendezvousNamespace("testnet")
+
+	require.Equal(t, 3*time.Hour, d.advertise(drouting.NewRoutingDiscovery(router{}), ns),
+		"a stored record is not advertised again until it runs out")
+	require.Zero(t, d.advertise(drouting.NewRoutingDiscovery(router{provideErr: errors.New("no peer took it")}), ns),
+		"a record nobody took is advertised again next pass")
+}
+
+func TestFindPeersHandsDiscoveryOnlyPeersItIsNotConnectedTo(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	connected, unconnected, floored := newHost(t), newHost(t), newHost(t)
+	found := &admissions{peers: map[peer.ID]bool{}}
+	d := NewDHTable(ctx,
+		Network("testnet"),
+		RoutingStore(memStore()),
+		Ratings(refusing{floored.ID().String(): true}),
+		AddPeerCallbacks(found.add),
+	)
+	host := newHost(t)
+	_, err := d.StartRouting(host)
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+	connectHosts(t, host, connected)
+
+	rd := drouting.NewRoutingDiscovery(router{providers: []peer.AddrInfo{
+		{ID: connected.ID(), Addrs: connected.Addrs()},
+		{ID: unconnected.ID(), Addrs: unconnected.Addrs()},
+		{ID: floored.ID(), Addrs: floored.Addrs()},
+	}})
+	d.findPeers(rd, rendezvousNamespace("testnet"), host.ID())
+
+	require.True(t, found.has(unconnected.ID()), "a provider this node has no connection to is news")
+	require.False(t, found.has(connected.ID()), "a connected provider is not")
+	require.False(t, found.has(floored.ID()), "nor one the rating keeps out of the DHT")
 }
 
 func TestCloseIsNilSafeAndIdempotent(t *testing.T) {
