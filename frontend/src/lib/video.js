@@ -42,6 +42,26 @@ export function normalizeVideoDataUrl(dataUrl, file) {
     return `data:${mime};base64,${dataUrl.slice(comma + 1)}`;
 }
 
+export function createVideoURL(dataUrl) {
+    if (typeof URL === "undefined" || !URL.createObjectURL) return dataUrl;
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return dataUrl;
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0) return dataUrl;
+
+    const mime = dataUrl.slice("data:".length, comma).split(";")[0];
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return URL.createObjectURL(new Blob([bytes], {type: mime}));
+}
+
+export function revokeVideoURL(url) {
+    if (typeof url !== "string" || !url.startsWith("blob:")) return;
+    if (typeof URL !== "undefined" && URL.revokeObjectURL) URL.revokeObjectURL(url);
+}
+
 export const POSTER_MAX_WIDTH = 640;
 export const POSTER_SEEK_SECONDS = 1;
 export const POSTER_TIMEOUT_MS = 10000;
