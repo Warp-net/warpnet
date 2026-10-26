@@ -110,6 +110,9 @@ type WalletProvider interface {
 	Transfer(ctx context.Context, seed, asset, to, amount string) (string, error)
 	Export(ctx context.Context, seed string) (address, privateKey string, err error)
 	History(ctx context.Context, address, asset string, limit int) ([]wallet.Transfer, error)
+	Stake(ctx context.Context, seed, amount string) (string, error)
+	Unstake(ctx context.Context, seed, amount string) (string, error)
+	Withdraw(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
 	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
 	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
@@ -169,6 +172,7 @@ type OrderProvider interface {
 	Save(o domain.Order) error
 	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 	Delete(tweetId, buyerId string) error
+	IsPayerTaken(payer, buyerNodeId string) (bool, error)
 }
 
 type UserProvider interface {
@@ -319,9 +323,11 @@ type SettingsProvider interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
 	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
+	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
 	SetRateLimitSettings(userId string, s ratelimit.Settings) error
+	SetSponsoredSettings(userId string, s domain.SponsoredSettings) error
 }
 
 type SubscriptionProvider interface {

@@ -56,6 +56,7 @@ type stubWalletBackend struct {
 	transferFn func(seed, asset, to, amount string) (string, error)
 	exportFn   func(string) (string, string, error)
 	historyFn  func(address, asset string, limit int) ([]wallet.Transfer, error)
+	stakeFn    func(method, seed, amount string) (string, error)
 }
 
 func (s stubWalletBackend) Address(_ context.Context, seed string) (string, error) {
@@ -72,6 +73,15 @@ func (s stubWalletBackend) Export(_ context.Context, seed string) (string, strin
 }
 func (s stubWalletBackend) History(_ context.Context, addr, asset string, limit int) ([]wallet.Transfer, error) {
 	return s.historyFn(addr, asset, limit)
+}
+func (s stubWalletBackend) Stake(_ context.Context, seed, amount string) (string, error) {
+	return s.stakeFn("stake", seed, amount)
+}
+func (s stubWalletBackend) Unstake(_ context.Context, seed, amount string) (string, error) {
+	return s.stakeFn("unstake", seed, amount)
+}
+func (s stubWalletBackend) Withdraw(_ context.Context, seed string) (string, error) {
+	return s.stakeFn("withdraw", seed, "")
 }
 func (s stubWalletBackend) Token() string   { return "TXYZ" }
 func (s stubWalletBackend) Decimals() uint8 { return 6 }
@@ -104,7 +114,10 @@ func TestGetWalletHandler(t *testing.T) {
 			if addr != "TAddr" {
 				t.Fatalf("balance for %s", addr)
 			}
-			return wallet.Account{TokenBalance: "1500000", TRX: "25000000", Activated: true, CreatedAt: 1757000000000}, nil
+			return wallet.Account{
+				TokenBalance: "1500000", TRX: "25000000", Staked: "500000000", Activated: true, CreatedAt: 1757000000000,
+				Unstaking: []wallet.Unstaking{{Amount: "100000000", AvailableAt: 1758000000000}},
+			}, nil
 		},
 	}
 	out, err := StreamGetWalletHandler(ownerAuth(), walletKey(), backend)([]byte(`{}`), nil)
@@ -112,6 +125,9 @@ func TestGetWalletHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := out.(event.WalletResponse)
+	if resp.Staked != "500000000" || len(resp.Unstaking) != 1 || resp.Unstaking[0] != (event.WalletUnstaking{Amount: "100000000", AvailableAt: 1758000000000}) {
+		t.Fatalf("stake = %q, unstaking = %+v", resp.Staked, resp.Unstaking)
+	}
 	if resp.Address != "TAddr" || resp.UsdtBalance != "1500000" || resp.TrxBalance != "25000000" || resp.Decimals != 6 || resp.Token != "TXYZ" || resp.Network != "testnet" {
 		t.Fatalf("resp = %+v", resp)
 	}
@@ -210,6 +226,54 @@ func TestWalletSendHandler(t *testing.T) {
 	resp := out.(event.WalletSendResponse)
 	if resp.Tx != "0xtx" || gotTo != "TGf63ryqEJdybz5S23U2sBcFbW8uAsWSPS" || gotAmount != "1000000" {
 		t.Fatalf("resp = %+v, sent to %s amount %s", resp, gotTo, gotAmount)
+	}
+}
+
+func TestWalletStakingHandlers(t *testing.T) {
+	var asked []string
+	backend := stubWalletBackend{stakeFn: func(method, seed, amount string) (string, error) {
+		if seed == "" {
+			t.Fatal("empty seed")
+		}
+		asked = append(asked, method+" "+amount)
+		if amount == "999" {
+			return "", errors.New("insufficient balance: have 1 sun")
+		}
+		return "tx-" + method, nil
+	}}
+	body := marshalWallet(t, event.WalletStakeEvent{Amount: "5000000"})
+
+	for _, tt := range []struct {
+		handler warpnet.WarpHandlerFunc
+		body    []byte
+		want    string
+	}{
+		{StreamWalletStakeHandler(ownerAuth(), walletKey(), backend), body, "tx-stake"},
+		{StreamWalletUnstakeHandler(ownerAuth(), walletKey(), backend), body, "tx-unstake"},
+		{StreamWalletWithdrawHandler(ownerAuth(), walletKey(), backend), nil, "tx-withdraw"},
+	} {
+		out, err := tt.handler(tt.body, nil)
+		if err != nil || out.(event.WalletStakeResponse).Tx != tt.want {
+			t.Fatalf("out = %+v, err = %v, want %s", out, err, tt.want)
+		}
+	}
+	if strings.Join(asked, ",") != "stake 5000000,unstake 5000000,withdraw " {
+		t.Fatalf("asked = %q", asked)
+	}
+
+	empty := marshalWallet(t, event.WalletStakeEvent{})
+	if _, err := StreamWalletStakeHandler(ownerAuth(), walletKey(), backend)(empty, nil); err == nil {
+		t.Fatal("staking nothing must be refused")
+	}
+	if _, err := StreamWalletUnstakeHandler(ownerAuth(), walletKey(), backend)(empty, nil); err == nil {
+		t.Fatal("unstaking nothing must be refused")
+	}
+	_, err := StreamWalletStakeHandler(ownerAuth(), walletKey(), backend)(marshalWallet(t, event.WalletStakeEvent{Amount: "999"}), nil)
+	if err == nil || err.Error() != "wallet: insufficient balance: have 1 sun" {
+		t.Fatalf("an engine refusal must reach the user: %v", err)
+	}
+	if _, err := StreamWalletWithdrawHandler(stubWalletOwner{}, walletKey(), backend)(nil, nil); err == nil {
+		t.Fatal("no owner, no wallet")
 	}
 }
 
@@ -422,7 +486,7 @@ func walletContactsBackend() stubWalletBackend {
 }
 
 func TestGetWalletAddressHandler(t *testing.T) {
-	out, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend(), stubOrders{}, stubSponsoredUsers{})([]byte(`{}`), nil)
+	out, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend(), stubOrders{}, stubSponsoredUsers{}, stubSponsoredSettings{MinStakeTRX: 500})([]byte(`{}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +504,7 @@ func TestGetWalletAddressHandler_RefusesABuyerPastTheOrderLimit(t *testing.T) {
 	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", NodeId: buyerNode.String()}}
 	ask := func(orders stubOrders) error {
 		_, s := stream.NewLoopbackStream(newTestPeerID(t), buyerNode, event.PUBLIC_GET_WALLET_ADDRESS)
-		_, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend(), orders, users)([]byte(`{}`), s)
+		_, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), walletContactsBackend(), orders, users, stubSponsoredSettings{})([]byte(`{}`), s)
 		return err
 	}
 
@@ -452,6 +516,56 @@ func TestGetWalletAddressHandler_RefusesABuyerPastTheOrderLimit(t *testing.T) {
 	}
 	if err := ask(confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-2*time.Hour))); err != nil {
 		t.Fatalf("an hour later: err = %v", err)
+	}
+}
+
+func TestGetWalletAddressHandler_AsksABuyerForTheAuthorsStake(t *testing.T) {
+	buyerNode := newTestPeerID(t)
+	users := stubSponsoredUsers{"buyer-1": {Id: "buyer-1", NodeId: buyerNode.String()}}
+	backend := walletContactsBackend()
+	var asked []string
+	backend.balanceFn = func(address string) (wallet.Account, error) {
+		asked = append(asked, address)
+		return wallet.Account{Staked: "500000000"}, nil
+	}
+	ask := func(b stubWalletBackend, orders stubOrders, minStakeTRX uint64, payer string) error {
+		_, s := stream.NewLoopbackStream(newTestPeerID(t), buyerNode, event.PUBLIC_GET_WALLET_ADDRESS)
+		body, _ := json.Marshal(event.WalletAddressEvent{Chain: "testnet", Payer: payer})
+		_, err := StreamGetWalletAddressHandler(ownerAuth(), walletKey(), b, orders, users, stubSponsoredSettings{MinStakeTRX: minStakeTRX})(body, s)
+		return err
+	}
+
+	if err := ask(backend, stubOrders{}, 500, testPayer); err != nil {
+		t.Fatalf("enough stake: err = %v", err)
+	}
+	if len(asked) != 1 || asked[0] != testPayer {
+		t.Fatalf("asked the chain about %v, want the payer", asked)
+	}
+	if err := ask(backend, stubOrders{}, 501, testPayer); err == nil || err.Error() != "order: the author sells only to wallets with at least 501 TRX staked" {
+		t.Fatalf("too little stake: err = %v", err)
+	}
+	taken := stubOrders{"tweet-0/buyer-0": {TweetId: "tweet-0", BuyerId: "buyer-0", BuyerNodeId: "other-node", Payer: testPayer, Confirmed: true}}
+	if err := ask(backend, taken, 500, testPayer); !errors.Is(err, ErrWalletPayerTaken) {
+		t.Fatalf("a wallet of another node: err = %v", err)
+	}
+	signedUpAgain := stubOrders{"tweet-0/buyer-old": {TweetId: "tweet-0", BuyerId: "buyer-old", BuyerNodeId: buyerNode.String(), Payer: testPayer, Confirmed: true}}
+	if err := ask(backend, signedUpAgain, 500, testPayer); err != nil {
+		t.Fatalf("the same node signed up again: err = %v", err)
+	}
+
+	if err := ask(backend, stubOrders{}, 500, "41ff21468791a710e549e6fbb3b7b6df5324b893c5"); !errors.Is(err, ErrWalletPayerAddress) {
+		t.Fatalf("the same wallet in hex: err = %v", err)
+	}
+
+	asked = nil
+	if err := ask(backend, stubOrders{}, 500, ""); err != nil {
+		t.Fatalf("a peer that names no payer only wants the address: err = %v", err)
+	}
+	if err := ask(backend, stubOrders{}, 0, testPayer); err != nil {
+		t.Fatalf("no stake asked: err = %v", err)
+	}
+	if len(asked) != 0 {
+		t.Fatalf("asked the chain about %v with nothing to check", asked)
 	}
 }
 

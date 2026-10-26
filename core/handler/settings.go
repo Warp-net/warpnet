@@ -28,6 +28,8 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"time"
+
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -46,6 +48,11 @@ type SettingsStorer interface {
 type GatewaySettingsStorer interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
+}
+
+type SponsoredSettingsStorer interface {
+	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
+	SetSponsoredSettings(userId string, s domain.SponsoredSettings) error
 }
 
 type RateLimitSettingsStorer interface {
@@ -129,6 +136,53 @@ func StreamUpdateGatewaySettingsHandler(
 			return nil, err
 		}
 		return event.GetGatewaySettingsResponse(ev), nil
+	}
+}
+
+func StreamGetSponsoredSettingsHandler(
+	repo SponsoredSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		owner := authRepo.GetOwner()
+		settings, err := repo.GetSponsoredSettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		return event.GetSponsoredSettingsResponse(settings), nil
+	}
+}
+
+func StreamUpdateSponsoredSettingsHandler(
+	repo SponsoredSettingsStorer,
+	authRepo SettingsAuthStorer,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.UpdateSponsoredSettingsEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		owner := authRepo.GetOwner()
+		if owner.UserId == "" {
+			return nil, warpnet.WarpError("update sponsored settings: empty owner")
+		}
+		current, err := repo.GetSponsoredSettings(owner.UserId)
+		if err != nil {
+			return nil, err
+		}
+		settings := current
+		if ev.MinStakeTRX != current.MinStakeTRX {
+			now := time.Now()
+			settings = domain.SponsoredSettings{
+				MinStakeTRX:         ev.MinStakeTRX,
+				PreviousMinStakeTRX: current.ClaimMinStakeTRX(now),
+				ChangedAt:           now,
+			}
+		}
+		if err := repo.SetSponsoredSettings(owner.UserId, settings); err != nil {
+			return nil, err
+		}
+		return event.GetSponsoredSettingsResponse(settings), nil
 	}
 }
 

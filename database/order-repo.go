@@ -36,7 +36,10 @@ import (
 	"github.com/Warp-net/warpnet/json"
 )
 
-const OrderRepoName = "/ORDERS"
+const (
+	OrderRepoName       = "/ORDERS"
+	orderPayersRepoName = "/ORDERPAYERS"
+)
 
 var ErrOrderNotFound = local_store.DBError("order not found")
 
@@ -72,6 +75,9 @@ func (repo *OrderRepo) Save(o domain.Order) error {
 	defer txn.Rollback()
 
 	if err := txn.Set(orderKey(o.TweetId, o.BuyerId), value); err != nil {
+		return err
+	}
+	if err := bindPayer(txn, o); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -170,6 +176,47 @@ func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, 
 		}
 	}
 	return count, txn.Commit()
+}
+
+func (repo *OrderRepo) IsPayerTaken(payer, buyerNodeId string) (bool, error) {
+	if payer == "" {
+		return false, local_store.DBError("empty payer")
+	}
+	if buyerNodeId == "" {
+		return false, local_store.DBError("empty buyer node id")
+	}
+
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return false, err
+	}
+	defer txn.Rollback()
+
+	boundNodeId, err := txn.Get(payerKey(payer))
+	if local_store.IsNotFoundError(err) {
+		return false, txn.Commit()
+	}
+	if err != nil {
+		return false, err
+	}
+	return string(boundNodeId) != buyerNodeId, txn.Commit()
+}
+
+func bindPayer(txn local_store.WarpTransactioner, o domain.Order) error {
+	if !o.Confirmed || o.Payer == "" || o.BuyerNodeId == "" {
+		return nil
+	}
+	_, err := txn.Get(payerKey(o.Payer))
+	if !local_store.IsNotFoundError(err) {
+		return err
+	}
+	return txn.Set(payerKey(o.Payer), []byte(o.BuyerNodeId))
+}
+
+func payerKey(payer string) local_store.DatabaseKey {
+	return local_store.NewPrefixBuilder(orderPayersRepoName).
+		AddRootID(payer).
+		Build()
 }
 
 func orderKey(tweetId, buyerId string) local_store.DatabaseKey {

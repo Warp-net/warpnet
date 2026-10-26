@@ -35,9 +35,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +56,7 @@ const (
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
 	NativeCoin     = "TRX"
+	sunPerTRX      = 1_000_000
 
 	testnetSplitter = "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy"
 	maxFeePercent   = 5
@@ -66,6 +69,8 @@ const (
 	paramAmount     = "amount"
 )
 
+var tronAddress = regexp.MustCompile(`^T[1-9A-HJ-NP-Za-km-z]{33}$`)
+
 var (
 	ErrUnavailable = errors.New("wallet: payment engine unavailable")
 	ErrNoAnswer    = errors.New("wallet: the payment engine never answered")
@@ -74,8 +79,44 @@ var (
 type Account struct {
 	TokenBalance string
 	TRX          string
+	Staked       string
+	Unstaking    []Unstaking
 	Activated    bool
 	CreatedAt    int64
+}
+
+type Unstaking struct {
+	Amount      string `json:"amount"`
+	AvailableAt int64  `json:"available_at"`
+}
+
+func (a Account) IsStakeEnough(minTRX uint64) bool {
+	staked, ok := new(big.Int).SetString(a.Staked, 10)
+	if !ok {
+		return minTRX == 0
+	}
+	return staked.Cmp(sunOf(minTRX)) >= 0
+}
+
+func (a Account) IsLockedEnough(minTRX uint64) bool {
+	locked, ok := new(big.Int).SetString(a.Staked, 10)
+	if !ok {
+		locked = new(big.Int)
+	}
+	for _, u := range a.Unstaking {
+		if amount, ok := new(big.Int).SetString(u.Amount, 10); ok {
+			locked.Add(locked, amount)
+		}
+	}
+	return locked.Cmp(sunOf(minTRX)) >= 0
+}
+
+func IsAddress(address string) bool {
+	return tronAddress.MatchString(address)
+}
+
+func sunOf(trx uint64) *big.Int {
+	return new(big.Int).Mul(new(big.Int).SetUint64(trx), big.NewInt(sunPerTRX))
 }
 
 type Config struct {
@@ -103,6 +144,7 @@ type Sponsorship struct {
 	Splitter      string
 	OrderId       string
 	Author        string
+	Buyer         string
 	Amount        string
 	MaxFeePercent uint64
 }
@@ -500,15 +542,55 @@ func (c *Client) Export(ctx context.Context, seed string) (address, privateKey s
 
 func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 	var out struct {
-		TokenBalance string `json:"token_balance"`
-		TRX          string `json:"trx"`
-		Activated    bool   `json:"activated"`
-		CreatedAt    int64  `json:"created_at"`
+		TokenBalance string      `json:"token_balance"`
+		TRX          string      `json:"trx"`
+		Staked       string      `json:"staked"`
+		Unstaking    []Unstaking `json:"unstaking"`
+		Activated    bool        `json:"activated"`
+		CreatedAt    int64       `json:"created_at"`
 	}
 	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
-	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
+	return Account{
+		TokenBalance: out.TokenBalance,
+		TRX:          out.TRX,
+		Staked:       out.Staked,
+		Unstaking:    out.Unstaking,
+		Activated:    out.Activated,
+		CreatedAt:    out.CreatedAt,
+	}, nil
+}
+
+func (c *Client) Stake(ctx context.Context, seed, amount string) (string, error) {
+	return c.sendStaking(ctx, "wallet.stake", seed, amount)
+}
+
+func (c *Client) Unstake(ctx context.Context, seed, amount string) (string, error) {
+	return c.sendStaking(ctx, "wallet.unstake", seed, amount)
+}
+
+func (c *Client) Withdraw(ctx context.Context, seed string) (string, error) {
+	return c.sendStaking(ctx, "wallet.withdraw", seed, "")
+}
+
+func (c *Client) sendStaking(ctx context.Context, method, seed, amount string) (string, error) {
+	var out struct {
+		Tx string `json:"tx"`
+	}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed}
+	if amount != "" {
+		params[paramAmount] = amount
+	}
+	if err := c.call(ctx, method, params, &out); err != nil {
+		return "", err
+	}
+	if amount == "" {
+		log.Infof("wallet: %s on %s, tx %s", method, c.cfg.Network, out.Tx)
+	} else {
+		log.Infof("wallet: %s %s sun on %s, tx %s", method, amount, c.cfg.Network, out.Tx)
+	}
+	return out.Tx, nil
 }
 
 func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (string, error) {
@@ -647,7 +729,7 @@ func quoteParams(network, payer string, s Sponsorship) map[string]any {
 }
 
 func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
-	return map[string]any{
+	params := map[string]any{
 		"chain":           "tron",
 		paramNetwork:      cfg.Network,
 		"tx_id":           txId,
@@ -660,6 +742,10 @@ func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
 			"decimals": cfg.Decimals,
 		}},
 	}
+	if s.Buyer != "" {
+		params["expected_buyer"] = s.Buyer
+	}
+	return params
 }
 
 func payParams(network, seed string, s Sponsorship) map[string]any {

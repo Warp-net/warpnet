@@ -236,14 +236,16 @@ func (p *Price) decimal() string {
 }
 
 type Order struct {
-	TweetId   string    `json:"tweet_id"`
-	AuthorId  string    `json:"author_id"`
-	BuyerId   string    `json:"buyer_id"`
-	Nonce     string    `json:"nonce"`
-	TxId      string    `json:"tx_id"`
-	Confirmed bool      `json:"confirmed"`
-	Tweet     *Tweet    `json:"tweet,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	TweetId     string    `json:"tweet_id"`
+	AuthorId    string    `json:"author_id"`
+	BuyerId     string    `json:"buyer_id"`
+	BuyerNodeId string    `json:"buyer_node_id,omitempty"`
+	Payer       string    `json:"payer,omitempty"`
+	Nonce       string    `json:"nonce"`
+	TxId        string    `json:"tx_id"`
+	Confirmed   bool      `json:"confirmed"`
+	Tweet       *Tweet    `json:"tweet,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (o *Order) ID() string {
@@ -254,6 +256,8 @@ func (o *Order) ID() string {
 const (
 	OrderLimit       = 10
 	OrderLimitWindow = time.Hour
+
+	MinStakeChangeWindow = 24 * time.Hour
 )
 
 type Poll struct {
@@ -403,6 +407,19 @@ type NotificationSettings struct {
 
 type GatewaySettings struct {
 	NodeID string `json:"node_id"`
+}
+
+type SponsoredSettings struct {
+	MinStakeTRX         uint64    `json:"min_stake_trx"`
+	PreviousMinStakeTRX uint64    `json:"previous_min_stake_trx,omitempty"`
+	ChangedAt           time.Time `json:"changed_at"`
+}
+
+func (s SponsoredSettings) ClaimMinStakeTRX(now time.Time) uint64 {
+	if now.Sub(s.ChangedAt) < MinStakeChangeWindow {
+		return min(s.MinStakeTRX, s.PreviousMinStakeTRX)
+	}
+	return s.MinStakeTRX
 }
 
 type ModerationResult bool

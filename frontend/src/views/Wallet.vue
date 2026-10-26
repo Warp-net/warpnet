@@ -142,6 +142,47 @@
         </div>
 
         <div class="bg-paper border border-lighter rounded-2xl p-5 card">
+          <p class="text-dark text-sm uppercase tracking-wide mb-2">Stake</p>
+          <p class="text-2xl font-bold">{{ loadingWallet ? '—' : format(wallet.staked, 6) }} <span class="text-lg text-dark">TRX staked</span></p>
+          <p class="text-dark text-sm mt-2 mb-3">
+            Some authors sell only to wallets that keep a stake. Staking also gives a little energy each day, far less than a payment burns,
+            so keep enough TRX unstaked for network fees. TRX you unstake stays locked for the network's unstaking period, 14 days on mainnet,
+            before you can take it back.
+          </p>
+          <input v-model="stakeAmount" inputmode="decimal" placeholder="TRX" aria-label="TRX to stake or unstake" class="w-full mono text-sm px-3 py-2 rounded-lg border border-lighter bg-lightest mb-3" />
+          <div class="flex flex-wrap gap-2">
+            <button @click="stake()" :disabled="staking || loadingWallet || !hasTrx" class="text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
+              {{ staking ? 'Sending…' : 'Stake' }}
+            </button>
+            <button @click="unstake()" :disabled="staking || loadingWallet || !hasStake" class="text-blue border border-blue rounded-full px-5 py-2 hover:bg-lightblue disabled:opacity-50">
+              Unstake
+            </button>
+          </div>
+          <div v-if="unstaking.length" class="mt-4">
+            <p class="text-dark text-sm mb-1">Unstaking</p>
+            <div v-for="u in unstaking" :key="u.available_at + '-' + u.amount" class="flex items-center justify-between border-b border-lighter py-2 last:border-0 text-sm">
+              <span>{{ format(u.amount, 6) }} TRX</span>
+              <span class="text-dark">{{ isReady(u) ? 'ready to take back' : 'available ' + when(u.available_at) }}</span>
+            </div>
+            <button v-if="hasReadyStake" @click="withdraw()" :disabled="staking" class="mt-3 text-white bg-blue rounded-full px-5 py-2 hover:bg-darkblue disabled:opacity-50">
+              Take back {{ format(readyAmount, 6) }} TRX
+            </button>
+          </div>
+          <ConfirmDialog
+            :show="!!unstakeAmount"
+            title="Unstake TRX?"
+            :message="unstakeMessage"
+            confirm-label="Unstake"
+            @confirm="confirmUnstake()"
+            @cancel="unstakeAmount = ''"
+          />
+          <p v-if="stakeError" class="text-red-700 mt-3">{{ stakeError }}</p>
+          <p v-if="stakeResult" class="text-green-700 mt-3 break-all">
+            Sent. Tx: <a :href="scan('tx', stakeResult)" target="_blank" rel="noopener" class="mono underline">{{ stakeResult }}</a>
+          </p>
+        </div>
+
+        <div class="bg-paper border border-lighter rounded-2xl p-5 card">
           <p class="text-dark text-sm uppercase tracking-wide mb-3">History</p>
           <Loader :loading="loadingHistory" />
           <p v-if="historyError" class="text-red-700">{{ historyError }}</p>
@@ -194,6 +235,9 @@ const historyPollEvery = 15000;
 const historyRows = 25;
 const nativeCoin = "TRX";
 const historyPollTries = 6;
+const minStake = 1000000n;
+const stakeSettleAfter = 6000;
+const feeReserve = { mainnet: 35000000n, testnet: 10000000n };
 
 const SCAN = {
   testnet: "https://nile.tronscan.org/#",
@@ -206,6 +250,7 @@ export default {
     SideNav: defineAsyncComponent(() => import('@/components/SideNav.vue')),
     DefaultRightBar: defineAsyncComponent(() => import('@/components/DefaultRightBar.vue')),
     Loader: defineAsyncComponent(() => import('@/components/Loader.vue')),
+    ConfirmDialog: defineAsyncComponent(() => import('@/components/ConfirmDialog.vue')),
   },
   data() {
     return {
@@ -215,7 +260,7 @@ export default {
       loadingContacts: true,
       loadError: "",
       ownerProfile: {},
-      wallet: {address: "", usdt_balance: "0", trx_balance: "0", decimals: 6, network: "", token: ""},
+      wallet: {address: "", usdt_balance: "0", trx_balance: "0", staked: "0", unstaking: [], decimals: 6, network: "", token: ""},
       qr: "",
       history: [],
       contacts: [],
@@ -231,6 +276,12 @@ export default {
       sending: false,
       sendError: "",
       sendResult: "",
+      stakeAmount: "",
+      unstakeAmount: "",
+      staking: false,
+      stakeError: "",
+      stakeResult: "",
+      stakeTimer: null,
       revealing: false,
       privateKey: "",
       keyError: "",
@@ -250,6 +301,28 @@ export default {
     },
     assets() {
       return [this.wallet.token || "USDT", nativeCoin];
+    },
+    unstaking() {
+      return this.wallet.unstaking || [];
+    },
+    hasStake() {
+      return this.units(this.wallet.staked) > 0n;
+    },
+    readyAmount() {
+      return this.unstaking
+        .filter((u) => this.isReady(u))
+        .reduce((sum, u) => sum + this.units(u.amount), 0n)
+        .toString();
+    },
+    stakeReserve() {
+      return feeReserve[this.wallet.network] || feeReserve.mainnet;
+    },
+    unstakeMessage() {
+      return `${this.format(this.unstakeAmount, 6)} TRX stops counting toward authors' stake requirements at once`
+        + " and stays locked for the network's unstaking period, 14 days on mainnet, before you can take it back.";
+    },
+    hasReadyStake() {
+      return this.units(this.readyAmount) > 0n;
     },
     asset() {
       return this.sendAsset || this.assets[0];
@@ -451,6 +524,73 @@ export default {
         this.sending = false;
       }
     },
+    isReady(unstaking) {
+      return unstaking.available_at <= Date.now();
+    },
+    async stake() {
+      this.stakeError = "";
+      this.stakeResult = "";
+      let amount;
+      try {
+        amount = this.parse(this.stakeAmount, 6);
+      } catch (err) {
+        this.stakeError = err.message;
+        return;
+      }
+      if (this.units(amount) < minStake) {
+        this.stakeError = "Stake at least 1 TRX.";
+        return;
+      }
+      if (this.units(amount) > this.units(this.wallet.trx_balance)) {
+        this.stakeError = "That is more TRX than this address holds.";
+        return;
+      }
+      if (this.units(amount) > this.units(this.wallet.trx_balance) - this.stakeReserve) {
+        this.stakeError = `Keep at least ${this.format(this.stakeReserve, 6)} TRX unstaked: a purchase burns about that much in network fees.`;
+        return;
+      }
+      await this.sendStaking(() => warpnetService.stakeTrx(amount));
+    },
+    async unstake() {
+      this.stakeError = "";
+      this.stakeResult = "";
+      let amount;
+      try {
+        amount = this.parse(this.stakeAmount, 6);
+      } catch (err) {
+        this.stakeError = err.message;
+        return;
+      }
+      if (this.units(amount) > this.units(this.wallet.staked)) {
+        this.stakeError = "That is more TRX than you have staked.";
+        return;
+      }
+      this.unstakeAmount = amount;
+    },
+    async confirmUnstake() {
+      const amount = this.unstakeAmount;
+      this.unstakeAmount = "";
+      await this.sendStaking(() => warpnetService.unstakeTrx(amount));
+    },
+    async withdraw() {
+      this.stakeError = "";
+      this.stakeResult = "";
+      await this.sendStaking(() => warpnetService.withdrawTrx());
+    },
+    async sendStaking(send) {
+      this.staking = true;
+      try {
+        const resp = await send();
+        this.stakeResult = resp.tx;
+        this.stakeAmount = "";
+        clearTimeout(this.stakeTimer);
+        this.stakeTimer = setTimeout(() => this.loadWallet(), stakeSettleAfter);
+      } catch (err) {
+        this.stakeError = (err && err.message) || "The network refused it.";
+      } finally {
+        this.staking = false;
+      }
+    },
     async revealKey() {
       this.keyError = "";
       this.revealing = true;
@@ -519,6 +659,7 @@ export default {
   beforeUnmount() {
     clearTimeout(this.contactsTimer);
     clearTimeout(this.historyTimer);
+    clearTimeout(this.stakeTimer);
     document.removeEventListener("click", this.onDocClick);
     window.removeEventListener("keyup", this.onDocKeyup);
   },

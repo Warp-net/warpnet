@@ -772,7 +772,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
-			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m.notifier, m),
+			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m.notifier, m, r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_BUYER,
@@ -813,6 +813,18 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 			handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient),
 		},
 		{
+			event.PRIVATE_POST_WALLET_STAKE,
+			handler.StreamWalletStakeHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_UNSTAKE,
+			handler.StreamWalletUnstakeHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_WITHDRAW,
+			handler.StreamWalletWithdrawHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
 			event.PRIVATE_GET_WALLET_CONTACTS,
 			handler.StreamGetWalletContactsHandler(
 				authRepo, m.privKey, m.walletClient, m.walletRepo, m.followRepo, m.userRepo, m,
@@ -820,7 +832,7 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 		},
 		{
 			event.PUBLIC_GET_WALLET_ADDRESS,
-			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo),
+			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, r.settingsRepo),
 		},
 	}
 }
@@ -847,6 +859,14 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		{
 			event.PRIVATE_GET_SETTINGS_RATELIMIT,
 			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_SETTINGS_SPONSORED,
+			handler.StreamGetSponsoredSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_SETTINGS_SPONSORED,
+			handler.StreamUpdateSponsoredSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_RATELIMIT,

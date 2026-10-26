@@ -3,6 +3,7 @@ package domain
 import (
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/assert"
@@ -105,4 +106,16 @@ func TestTweet_Teaser(t *testing.T) {
 
 	free := Tweet{Id: "t2", Text: "free", ImageKeys: []string{"i2"}}
 	assert.Equal(t, free, free.Teaser())
+}
+
+func TestSponsoredSettings_ClaimMinStakeTRX(t *testing.T) {
+	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	assert.Equal(t, uint64(500), SponsoredSettings{MinStakeTRX: 500}.ClaimMinStakeTRX(now), "a threshold that never changed holds")
+
+	raised := SponsoredSettings{MinStakeTRX: 500, PreviousMinStakeTRX: 100, ChangedAt: now.Add(-time.Hour)}
+	assert.Equal(t, uint64(100), raised.ClaimMinStakeTRX(now), "a claim within a day of a raise is held to the old threshold")
+	assert.Equal(t, uint64(500), raised.ClaimMinStakeTRX(now.Add(MinStakeChangeWindow)), "a day later the new one holds")
+
+	lowered := SponsoredSettings{MinStakeTRX: 100, PreviousMinStakeTRX: 500, ChangedAt: now.Add(-time.Hour)}
+	assert.Equal(t, uint64(100), lowered.ClaimMinStakeTRX(now), "a lowered threshold holds at once")
 }

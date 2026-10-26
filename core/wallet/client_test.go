@@ -456,11 +456,115 @@ func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	}
 }
 
+func TestVerifyParamsNameTheBuyerOnlyWhenKnown(t *testing.T) {
+	cfg := DefaultConfig("testnet", "")
+	s := Sponsorship{Splitter: cfg.Splitter, OrderId: "01", Author: "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143", Amount: "1500000"}
+	if _, ok := verifyParams(cfg, "ab12", s)["expected_buyer"]; ok {
+		t.Fatal("verify must not expect a buyer nobody named")
+	}
+	s.Buyer = "TMFCti1AJ7VYQ6QDetHHZu8AkfzMd3P5R6"
+	if got := verifyParams(cfg, "ab12", s)["expected_buyer"]; got != s.Buyer {
+		t.Fatalf("expected_buyer = %v, want %s", got, s.Buyer)
+	}
+}
+
+func TestIsStakeEnoughComparesWholeTRXWithSun(t *testing.T) {
+	cases := []struct {
+		staked string
+		min    uint64
+		want   bool
+	}{
+		{"", 0, true},
+		{"", 1, false},
+		{"0", 0, true},
+		{"499999999", 500, false},
+		{"500000000", 500, true},
+		{"18446744073709551615000000", 18446744073709551615, true},
+		{"garbage", 1, false},
+	}
+	for _, tc := range cases {
+		if got := (Account{Staked: tc.staked}).IsStakeEnough(tc.min); got != tc.want {
+			t.Fatalf("staked %q, min %d TRX: got %v, want %v", tc.staked, tc.min, got, tc.want)
+		}
+	}
+}
+
 func TestOnlyTestnetHasASplitter(t *testing.T) {
 	if DefaultConfig("testnet", "").Splitter == "" {
 		t.Fatal("testnet must pay through the Nile USDT splitter")
 	}
 	if DefaultConfig("warpnet", "").Splitter != "" {
 		t.Fatal("mainnet has no deployed splitter yet")
+	}
+}
+
+func TestStakingReachesTheEngine(t *testing.T) {
+	var asked []request
+	client := answeringEngine(t, func(req request) string {
+		asked = append(asked, req)
+		return `{"id":"` + req.ID + `","result":{"owner":"TOwner","tx":"tx-` + req.Method + `"}}`
+	})
+	ctx := context.Background()
+	for _, tt := range []struct {
+		method string
+		send   func() (string, error)
+		amount bool
+	}{
+		{"wallet.stake", func() (string, error) { return client.Stake(ctx, "seed", "5000000") }, true},
+		{"wallet.unstake", func() (string, error) { return client.Unstake(ctx, "seed", "2000000") }, true},
+		{"wallet.withdraw", func() (string, error) { return client.Withdraw(ctx, "seed") }, false},
+	} {
+		tx, err := tt.send()
+		if err != nil || tx != "tx-"+tt.method {
+			t.Fatalf("%s: tx = %q, err = %v", tt.method, tx, err)
+		}
+		last := asked[len(asked)-1]
+		if last.Method != tt.method || !strings.Contains(string(last.Params), `"seed":"seed"`) || !strings.Contains(string(last.Params), `"network":"testnet"`) {
+			t.Fatalf("asked %s %s", last.Method, last.Params)
+		}
+		if strings.Contains(string(last.Params), `"amount"`) != tt.amount {
+			t.Fatalf("%s params %s: amount sent = %v, want %v", tt.method, last.Params, !tt.amount, tt.amount)
+		}
+	}
+}
+
+func TestBalanceListsWhatIsBeingUnstaked(t *testing.T) {
+	client := answeringEngine(t, func(req request) string {
+		return `{"id":"` + req.ID + `","result":{"token_balance":"1","trx":"2","staked":"3","unstaking":[{"amount":"4","available_at":1758000000000}]}}`
+	})
+	account, err := client.Balance(context.Background(), "TAddr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if account.Staked != "3" || len(account.Unstaking) != 1 || account.Unstaking[0] != (Unstaking{Amount: "4", AvailableAt: 1758000000000}) {
+		t.Fatalf("account = %+v", account)
+	}
+}
+
+func TestIsAddressTakesOnlyTheBase58Form(t *testing.T) {
+	if !IsAddress("TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa") {
+		t.Fatal("a base58 address is refused")
+	}
+	for _, other := range []string{
+		"", " TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa", "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa\n",
+		"41ff21468791a710e549e6fbb3b7b6df5324b893c5", "0x41ff21468791a710e549e6fbb3b7b6df5324b893c5",
+		"ff21468791a710e549e6fbb3b7b6df5324b893c5", "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQ0", "TBuyerWallet",
+	} {
+		if IsAddress(other) {
+			t.Fatalf("%q passes as a base58 address: another spelling of one wallet would slip past a string compare", other)
+		}
+	}
+}
+
+func TestIsLockedEnoughCountsWhatIsBeingUnstaked(t *testing.T) {
+	account := Account{Staked: "100000000", Unstaking: []Unstaking{{Amount: "300000000"}, {Amount: "100000000"}}}
+	if account.IsStakeEnough(500) {
+		t.Fatal("TRX being unstaked is not a stake a new order may lean on")
+	}
+	if !account.IsLockedEnough(500) || account.IsLockedEnough(501) {
+		t.Fatal("staked and unstaking TRX are both locked")
+	}
+	if !(Account{}).IsLockedEnough(0) || (Account{}).IsLockedEnough(1) {
+		t.Fatal("an empty account locks nothing")
 	}
 }

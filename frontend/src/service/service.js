@@ -38,6 +38,9 @@ export const PRIVATE_GET_WALLET_CONTACTS = "/private/get/wallet/contacts/0.0.0"
 export const PRIVATE_GET_WALLET_HISTORY = "/private/get/wallet/history/0.0.0"
 export const PRIVATE_GET_WALLET_KEY = "/private/get/wallet/key/0.0.0"
 export const PRIVATE_POST_WALLET_SEND = "/private/post/wallet/send/0.0.0"
+export const PRIVATE_POST_WALLET_STAKE = "/private/post/wallet/stake/0.0.0"
+export const PRIVATE_POST_WALLET_UNSTAKE = "/private/post/wallet/unstake/0.0.0"
+export const PRIVATE_POST_WALLET_WITHDRAW = "/private/post/wallet/withdraw/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
@@ -49,6 +52,8 @@ export const PRIVATE_GET_SETTINGS_GATEWAY = "/private/get/settings/gateway/0.0.0
 export const PRIVATE_POST_SETTINGS_GATEWAY = "/private/post/settings/gateway/0.0.0"
 export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
+export const PRIVATE_GET_SETTINGS_SPONSORED = "/private/get/settings/sponsored/0.0.0"
+export const PRIVATE_POST_SETTINGS_SPONSORED = "/private/post/settings/sponsored/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -1295,6 +1300,25 @@ export const warpnetService = {
         return resp;
     },
 
+    async getSponsoredSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SETTINGS_SPONSORED,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    async updateSponsoredSettings(minStakeTrx) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SETTINGS_SPONSORED,
+            body: { min_stake_trx: Math.max(0, Math.floor(Number(minStakeTrx) || 0)) },
+        });
+        if (!resp || resp.code || !('min_stake_trx' in resp)) {
+            throw new Error(resp?.message || 'Failed to save sponsored settings');
+        }
+        return resp;
+    },
+
     async addFilterKeyword(filterId, keyword, wholeWord) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
@@ -1523,6 +1547,21 @@ export const warpnetService = {
     async sendFunds(to, amount, asset) {
         const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
         return await this.sendToNode(request)
+    },
+    async stakeTrx(amount) {
+        const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_STAKE, body: { amount } })
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't stake TRX.")
+        return resp
+    },
+    async unstakeTrx(amount) {
+        const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_UNSTAKE, body: { amount } })
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't unstake TRX.")
+        return resp
+    },
+    async withdrawTrx() {
+        const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_WITHDRAW, body: {} })
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't take the TRX back.")
+        return resp
     },
     async getWalletHistory(limit, asset, force) {
         const key = `${limit || 25}|${asset || ""}`
