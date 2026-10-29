@@ -78,6 +78,10 @@ type TimelinePeersRatings interface {
 	IsMediaAllowed(peerID warpnet.WarpPeerID) bool
 }
 
+type TimelineImageHashStorer interface {
+	SetImageHashes(h domain.TweetImageHashes) error
+}
+
 func StreamTimelineHandler(repo TimelineFetcher) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTimelineEvent
@@ -112,6 +116,7 @@ func StreamTimelineNewTweetHandler(
 	followRepo TimelineFollowChecker,
 	userRepo TimelineUserFetcher,
 	ratings TimelinePeersRatings,
+	hashRepo TimelineImageHashStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -152,6 +157,12 @@ func StreamTimelineNewTweetHandler(
 		}
 		if err := timelineRepo.AddTweetToTimeline(owner.UserId, tweet); err != nil {
 			log.Infof("fail adding tweet to timeline: %v", err)
+		}
+		if tweet.IsSponsored() && len(tweet.ImageHashes) > 0 {
+			hashes := domain.TweetImageHashes{UserId: tweet.UserId, TweetId: tweet.Id, Hashes: tweet.ImageHashes}
+			if err := hashRepo.SetImageHashes(hashes); err != nil {
+				log.Errorf("timeline: storing image hashes of %s: %v", tweet.Id, err)
+			}
 		}
 		return tweet, nil
 	}

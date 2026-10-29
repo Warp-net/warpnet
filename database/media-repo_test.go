@@ -34,6 +34,31 @@ func (s *MediaRepoTestSuite) TearDownSuite() {
 	s.db.Close()
 }
 
+func (s *MediaRepoTestSuite) TestImageHashes_SetAndList() {
+	repo := NewSponsoredMediaRepo(s.db)
+	empty, err := repo.ListImageHashes()
+	s.Require().NoError(err)
+	s.Empty(empty)
+
+	s.Require().NoError(repo.SetImageHashes(domain.TweetImageHashes{UserId: "author-1", TweetId: "t1", Hashes: []string{"d854389628e79c33"}}))
+	s.Require().NoError(repo.SetImageHashes(domain.TweetImageHashes{UserId: "author-2", TweetId: "t2", Hashes: []string{"0f0f0f0f0f0f0f0f", "f0f0f0f0f0f0f0f0"}}))
+	s.Require().NoError(repo.SetImageHashes(domain.TweetImageHashes{UserId: "author-1", TweetId: "t1", Hashes: []string{"d854389628e79c34"}}))
+
+	known, err := repo.ListImageHashes()
+	s.Require().NoError(err)
+	s.ElementsMatch([]domain.TweetImageHashes{
+		{UserId: "author-1", TweetId: "t1", Hashes: []string{"d854389628e79c34"}},
+		{UserId: "author-2", TweetId: "t2", Hashes: []string{"0f0f0f0f0f0f0f0f", "f0f0f0f0f0f0f0f0"}},
+	}, known, "one record per tweet, the last one wins")
+
+	s.Error(repo.SetImageHashes(domain.TweetImageHashes{UserId: "author-1", TweetId: "t3"}))
+	s.Error(repo.SetImageHashes(domain.TweetImageHashes{TweetId: "t3", Hashes: []string{"aa"}}))
+
+	plain, err := s.repo.ListImageHashes()
+	s.Require().NoError(err)
+	s.Empty(plain, "hashes live under the sponsored media prefix only")
+}
+
 func (s *MediaRepoTestSuite) TestSetImage_Success() {
 	key, err := s.repo.SetImage("user1", domain.Base64Image("data:image/png;base64,iVBOR..."))
 	assert.NoError(s.T(), err)

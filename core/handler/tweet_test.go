@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -1757,8 +1758,11 @@ func TestStreamNewTweetHandler_RejectsPrice(t *testing.T) {
 
 func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 	owner := "owner-1"
+	photo, _ := imageWithMetadata(t, owner)
+	images := stubSponsoredTweetImages{"img-1": domain.Base64Image(photo)}
+	hashes := &stubImageHashes{}
 	newHandler := func(b TweetBroadcaster, repo TweetsStorer, timeline TimelineUpdater) warpnet.WarpHandlerFunc {
-		return StreamNewSponsoredTweetHandler(b, stubAuth{owner: domain.Owner{UserId: owner}}, repo, timeline)
+		return StreamNewSponsoredTweetHandler(b, stubAuth{owner: domain.Owner{UserId: owner}}, repo, timeline, images, hashes)
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -1855,6 +1859,19 @@ func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 		assert.Nil(t, teaser.VideoKey)
 		require.NotNil(t, teaser.Price)
 		assert.Equal(t, "1.5", teaser.Price.Amount)
+
+		want, _, err := media_meta.HashImage(photo)
+		require.NoError(t, err)
+		assert.Equal(t, []string{want}, stored.ImageHashes, "the author's node hashes the photo itself")
+		assert.Equal(t, []string{want}, teaser.ImageHashes, "followers learn the hash from the teaser")
+		assert.Equal(t, []domain.TweetImageHashes{{UserId: owner, TweetId: "tweet-1", Hashes: []string{want}}}, hashes.saved)
+	})
+
+	t.Run("a photo the node does not hold is not sold", func(t *testing.T) {
+		_, err := newHandler(stubTweetBroadcaster{}, stubTweetRepo{}, stubTimelineRepo{})(marshal(t, event.NewTweetEvent{
+			UserId: owner, Text: "paid", ImageKeys: []string{"img-missing"}, Price: &domain.Price{Units: big.NewInt(1500000)},
+		}), nil)
+		assert.ErrorIs(t, err, database.ErrMediaNotFound)
 	})
 }
 

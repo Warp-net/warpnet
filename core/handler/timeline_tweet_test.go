@@ -33,7 +33,7 @@ func TestStreamTimelineTweetHandler(t *testing.T) {
 			}},
 			stubFollowChecker{following: following},
 			users,
-			stubPeersRatings{})
+			stubPeersRatings{}, &stubImageHashes{})
 	}
 
 	t.Run("sent by its author's node", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestStreamTimelineTweetHandler_FlooredPeerMedia(t *testing.T) {
 			stubTimelineRepo{},
 			stubFollowChecker{following: true},
 			users,
-			ratings,
+			ratings, &stubImageHashes{},
 		)(marshal(t, ev), conn)
 		require.NoError(t, err)
 		return stored

@@ -296,6 +296,8 @@ type MediaProvider interface {
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 	SetCopy(userId string, key string, c domain.MediaCopy) error
 	ListCopies(userId string, originalKey string) ([]domain.MediaCopy, error)
+	SetImageHashes(h domain.TweetImageHashes) error
+	ListImageHashes() ([]domain.TweetImageHashes, error)
 }
 
 type MutesProvider interface {

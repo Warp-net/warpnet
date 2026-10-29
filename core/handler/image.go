@@ -61,6 +61,7 @@ import (
 const (
 	ErrEmptyImageKey    warpnet.WarpError = "empty image key"
 	ErrNoImagesProvided warpnet.WarpError = "at least one image must be provided"
+	ErrSponsoredImage   warpnet.WarpError = "the photo belongs to another author's sponsored tweet"
 )
 
 type MediaNodeInformer interface {
@@ -82,11 +83,16 @@ type MediaStorer interface {
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
 }
 
+type ImageHashLister interface {
+	ListImageHashes() ([]domain.TweetImageHashes, error)
+}
+
 func StreamUploadImageHandler(
 	info MediaNodeInformer,
 	privKey ed25519.PrivateKey,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
+	hashRepo ImageHashLister,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UploadImageEvent
@@ -125,6 +131,13 @@ func StreamUploadImageHandler(
 				continue
 			}
 
+			authorId, err := findSponsoredAuthor(hashRepo, metadata.OwnerId, file)
+			if err != nil {
+				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
+			}
+			if authorId != "" {
+				return nil, fmt.Errorf("upload: image%d: %w", i+1, ErrSponsoredImage)
+			}
 			img, err := media_meta.SignUploadedImage(file, metadata)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
@@ -150,6 +163,7 @@ func StreamGetImageHandler(
 	streamer MediaStreamer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
+	hashRepo ImageHashLister,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
@@ -218,15 +232,46 @@ func StreamGetImageHandler(
 			log.Warnf("get image: refused media of %s from node %s: %v", u.Id, u.NodeId, err)
 			return event.GetImageResponse{File: ""}, nil
 		}
-
-		if imgResp.File != "" {
-			if err := mediaRepo.SetForeignImageWithTTL(
-				u.Id, ev.Key, domain.Base64Image(imgResp.File),
-			); err != nil {
-				log.Errorf("get image: storing foreign image: %v", err)
-			}
+		if imgResp.File == "" {
+			return imgResp, nil
 		}
 
+		authorId, err := findSponsoredAuthor(hashRepo, u.Id, imgResp.File)
+		if err != nil {
+			log.Warnf("get image: hashing media of %s: %v", u.Id, err)
+		}
+		if authorId != "" {
+			log.Warnf("get image: refused media of %s: it is a sponsored photo of %s", u.Id, authorId)
+			return event.GetImageResponse{File: ""}, nil
+		}
+
+		if err := mediaRepo.SetForeignImageWithTTL(
+			u.Id, ev.Key, domain.Base64Image(imgResp.File),
+		); err != nil {
+			log.Errorf("get image: storing foreign image: %v", err)
+		}
 		return imgResp, nil
 	}
+}
+
+func findSponsoredAuthor(hashRepo ImageHashLister, ownerId, file string) (string, error) {
+	known, err := hashRepo.ListImageHashes()
+	if err != nil || len(known) == 0 {
+		return "", err
+	}
+	hash, mirrored, err := media_meta.HashImage(file)
+	if err != nil {
+		return "", err
+	}
+	for _, tweet := range known {
+		if tweet.UserId == ownerId {
+			continue
+		}
+		for _, h := range tweet.Hashes {
+			if media_meta.IsSameImage(h, hash) || media_meta.IsSameImage(h, mirrored) {
+				return tweet.UserId, nil
+			}
+		}
+	}
+	return "", nil
 }
