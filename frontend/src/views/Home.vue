@@ -594,7 +594,7 @@ export default {
               if (key) this.imageKeys[slot] = key;
             } catch (err) {
               console.error('Failed to upload image:', err);
-              toast.error('Failed to upload image. Please try again.');
+              toast.error(err?.message || 'Failed to upload image. Please try again.');
             }
           }
           this.pendingReads--;
