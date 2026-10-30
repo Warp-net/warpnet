@@ -116,7 +116,7 @@ func StreamTimelineNewTweetHandler(
 	followRepo TimelineFollowChecker,
 	userRepo TimelineUserFetcher,
 	ratings TimelinePeersRatings,
-	hashRepo TimelineImageHashStorer,
+	copyRepo TimelineImageHashStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -160,7 +160,7 @@ func StreamTimelineNewTweetHandler(
 		}
 		if tweet.IsSponsored() && len(tweet.ImageHashes) > 0 {
 			hashes := domain.TweetImageHashes{UserId: tweet.UserId, TweetId: tweet.Id, Hashes: tweet.ImageHashes}
-			if err := hashRepo.SetImageHashes(hashes); err != nil {
+			if err := copyRepo.SetImageHashes(hashes); err != nil {
 				log.Errorf("timeline: storing image hashes of %s: %v", tweet.Id, err)
 			}
 		}

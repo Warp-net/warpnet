@@ -92,7 +92,7 @@ func StreamUploadImageHandler(
 	privKey ed25519.PrivateKey,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
-	hashRepo ImageHashLister,
+	copyRepo ImageHashLister,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UploadImageEvent
@@ -131,7 +131,7 @@ func StreamUploadImageHandler(
 				continue
 			}
 
-			authorId, err := findSponsoredAuthor(hashRepo, metadata.OwnerId, file)
+			authorId, err := findSponsoredAuthor(copyRepo, metadata.OwnerId, file)
 			if err != nil {
 				return nil, fmt.Errorf("upload: image%d: %w", i+1, err)
 			}
@@ -163,7 +163,7 @@ func StreamGetImageHandler(
 	streamer MediaStreamer,
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
-	hashRepo ImageHashLister,
+	copyRepo ImageHashLister,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
@@ -236,7 +236,7 @@ func StreamGetImageHandler(
 			return imgResp, nil
 		}
 
-		authorId, err := findSponsoredAuthor(hashRepo, u.Id, imgResp.File)
+		authorId, err := findSponsoredAuthor(copyRepo, u.Id, imgResp.File)
 		if err != nil {
 			log.Warnf("get image: hashing media of %s: %v", u.Id, err)
 		}
@@ -254,8 +254,8 @@ func StreamGetImageHandler(
 	}
 }
 
-func findSponsoredAuthor(hashRepo ImageHashLister, ownerId, file string) (string, error) {
-	known, err := hashRepo.ListImageHashes()
+func findSponsoredAuthor(copyRepo ImageHashLister, ownerId, file string) (string, error) {
+	known, err := copyRepo.ListImageHashes()
 	if err != nil || len(known) == 0 {
 		return "", err
 	}

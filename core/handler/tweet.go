@@ -185,7 +185,7 @@ func StreamNewSponsoredTweetHandler(
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	mediaRepo TweetImageFetcher,
-	hashRepo TweetImageHashStorer,
+	copyRepo TweetImageHashStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -218,7 +218,7 @@ func StreamNewSponsoredTweetHandler(
 		if err != nil || len(hashes) == 0 {
 			return tweet, err
 		}
-		if err := hashRepo.SetImageHashes(domain.TweetImageHashes{UserId: owner.UserId, TweetId: tweet.Id, Hashes: hashes}); err != nil {
+		if err := copyRepo.SetImageHashes(domain.TweetImageHashes{UserId: owner.UserId, TweetId: tweet.Id, Hashes: hashes}); err != nil {
 			log.Errorf("sponsored tweet: storing image hashes of %s: %v", tweet.Id, err)
 		}
 		return tweet, nil
