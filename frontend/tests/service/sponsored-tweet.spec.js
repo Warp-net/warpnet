@@ -100,3 +100,19 @@ describe('sponsored settings', () => {
     await expect(warpnetService.updateSponsoredSettings(500)).rejects.toThrow('empty owner');
   });
 });
+
+describe('uploadImages', () => {
+  it('passes on the node\'s refusal instead of handing back no keys', async () => {
+    Call.mockResolvedValue({ body: { code: 500, message: "upload: image1: the photo belongs to another author's sponsored tweet" } });
+
+    await expect(warpnetService.uploadImages(['data:image/png;base64,AAAA']))
+      .rejects.toThrow("another author's sponsored tweet");
+  });
+
+  it('returns the keys the node stored', async () => {
+    Call.mockResolvedValue({ body: { key1: 'k1', key2: '', key3: '', key4: '' } });
+
+    expect(await warpnetService.uploadImages(['data:image/png;base64,AAAA'])).toEqual(['k1']);
+  });
+});
+

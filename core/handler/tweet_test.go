@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -703,7 +704,7 @@ func TestStreamGetTweetsHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -711,7 +712,7 @@ func TestStreamGetTweetsHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{})
+		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{})
 		_, err := h(marshal(t, event.GetAllTweetsEvent{}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -721,7 +722,7 @@ func TestStreamGetTweetsHandler(t *testing.T) {
 	t.Run("tweets exist locally - returns immediately", func(t *testing.T) {
 		h := StreamGetTweetsHandler(stubTweetRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 			return []domain.Tweet{{Id: "t1", UserId: owner, Text: "hello"}}, "end", nil
-		}}, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})
+		}}, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}}, &stubImageHashes{})
 		resp, err := h(marshal(t, event.GetAllTweetsEvent{UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -736,7 +737,7 @@ func TestStreamGetTweetsHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetTweetsHandler(stubTweetRepo{listFn: func(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 			return nil, "", repoErr
-		}}, stubTweetUserRepo{}, stubStreamer{})
+		}}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{})
 		_, err := h(marshal(t, event.GetAllTweetsEvent{UserId: owner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -1757,8 +1758,11 @@ func TestStreamNewTweetHandler_RejectsPrice(t *testing.T) {
 
 func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 	owner := "owner-1"
+	photo, _ := imageWithMetadata(t, owner)
+	images := stubSponsoredTweetImages{"img-1": domain.Base64Image(photo)}
+	hashes := &stubImageHashes{}
 	newHandler := func(b TweetBroadcaster, repo TweetsStorer, timeline TimelineUpdater) warpnet.WarpHandlerFunc {
-		return StreamNewSponsoredTweetHandler(b, stubAuth{owner: domain.Owner{UserId: owner}}, repo, timeline)
+		return StreamNewSponsoredTweetHandler(b, stubAuth{owner: domain.Owner{UserId: owner}}, repo, timeline, images, hashes)
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -1855,6 +1859,19 @@ func TestStreamNewSponsoredTweetHandler(t *testing.T) {
 		assert.Nil(t, teaser.VideoKey)
 		require.NotNil(t, teaser.Price)
 		assert.Equal(t, "1.5", teaser.Price.Amount)
+
+		want, _, err := media_meta.HashImage(photo)
+		require.NoError(t, err)
+		assert.Equal(t, []string{want}, stored.ImageHashes, "the author's node hashes the photo itself")
+		assert.Equal(t, []string{want}, teaser.ImageHashes, "followers learn the hash from the teaser")
+		assert.Equal(t, []domain.TweetImageHashes{{UserId: owner, TweetId: "tweet-1", Hashes: []string{want}}}, hashes.saved)
+	})
+
+	t.Run("a photo the node does not hold is not sold", func(t *testing.T) {
+		_, err := newHandler(stubTweetBroadcaster{}, stubTweetRepo{}, stubTimelineRepo{})(marshal(t, event.NewTweetEvent{
+			UserId: owner, Text: "paid", ImageKeys: []string{"img-missing"}, Price: &domain.Price{Units: big.NewInt(1500000)},
+		}), nil)
+		assert.ErrorIs(t, err, database.ErrMediaNotFound)
 	})
 }
 
@@ -1890,7 +1907,7 @@ func TestStreamGetTweetsHandler_SponsoredTeaser(t *testing.T) {
 			{Id: "t2", UserId: userId, Text: "free"},
 		}, "end", nil
 	}}
-	h := StreamGetTweetsHandler(repo, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: owner}})
+	h := StreamGetTweetsHandler(repo, stubTweetUserRepo{}, stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: owner}}, &stubImageHashes{})
 	req := marshal(t, event.GetAllTweetsEvent{UserId: owner})
 
 	_, ownUI := stream.NewLoopbackStream(own, own, event.PUBLIC_GET_TWEETS)

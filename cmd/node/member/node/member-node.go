@@ -572,7 +572,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_POST_TIMELINE,
-			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.ratings),
+			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.ratings, r.copyRepo),
 		},
 		{
 			event.PUBLIC_DELETE_TIMELINE,
@@ -580,7 +580,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
-			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEET,
@@ -756,7 +756,7 @@ func (m *MemberNode) sponsoredHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_SPONSORED_TWEET,
-			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
+			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.mediaRepo, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
@@ -968,11 +968,11 @@ func (m *MemberNode) mediaHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_UPLOAD_IMAGE,
-			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
-			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo),
+			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
@@ -984,7 +984,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
-			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_CHAT_IMAGE,

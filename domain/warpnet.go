@@ -170,6 +170,7 @@ type Tweet struct {
 	UserId        string           `json:"user_id"`
 	Username      string           `json:"username"`
 	ImageKeys     []string         `json:"image_keys,omitempty"`
+	ImageHashes   []string         `json:"image_hashes,omitempty"`
 	VideoKey      *string          `json:"video_key,omitempty"`
 	Network       string           `json:"network"`
 	Moderation    *TweetModeration `json:"moderation,omitempty"`
@@ -178,6 +179,12 @@ type Tweet struct {
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
 	Poll          *Poll            `json:"poll,omitempty"`
 	Price         *Price           `json:"price,omitempty"`
+}
+
+type TweetImageHashes struct {
+	UserId  string   `json:"user_id"`
+	TweetId string   `json:"tweet_id"`
+	Hashes  []string `json:"hashes"`
 }
 
 func (t *Tweet) IsReply() bool {

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"math/big"
 	"testing"
 	"time"
 
@@ -283,21 +284,21 @@ func TestTweetsRefreshBackground(t *testing.T) {
 		repo := stubTweetUserRepo{getFn: func(string) (domain.User, error) {
 			return domain.User{}, database.ErrUserNotFound
 		}}
-		tweetsRefreshBackground(stubTweetRepo{}, repo, ev, stubStreamer{nodeInfo: selfInfo})
+		tweetsRefreshBackground(stubTweetRepo{}, repo, ev, stubStreamer{nodeInfo: selfInfo}, &stubImageHashes{})
 	})
 
 	t.Run("lookup failure is skipped", func(t *testing.T) {
 		repo := stubTweetUserRepo{getFn: func(string) (domain.User, error) {
 			return domain.User{}, errors.New("down")
 		}}
-		tweetsRefreshBackground(stubTweetRepo{}, repo, ev, stubStreamer{nodeInfo: selfInfo})
+		tweetsRefreshBackground(stubTweetRepo{}, repo, ev, stubStreamer{nodeInfo: selfInfo}, &stubImageHashes{})
 	})
 
 	t.Run("own node is skipped", func(t *testing.T) {
 		repo := stubTweetUserRepo{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: nodeId.String()}, nil
 		}}
-		tweetsRefreshBackground(stubTweetRepo{}, repo, ev, stubStreamer{nodeInfo: selfInfo})
+		tweetsRefreshBackground(stubTweetRepo{}, repo, ev, stubStreamer{nodeInfo: selfInfo}, &stubImageHashes{})
 	})
 
 	otherNodeRepo := stubTweetUserRepo{getFn: func(id string) (domain.User, error) {
@@ -308,21 +309,21 @@ func TestTweetsRefreshBackground(t *testing.T) {
 		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return nil, errors.New("offline")
 		}}
-		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer)
+		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer, &stubImageHashes{})
 	})
 
 	t.Run("error response is skipped", func(t *testing.T) {
 		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return json.Marshal(event.ResponseError{Message: "boom"})
 		}}
-		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer)
+		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer, &stubImageHashes{})
 	})
 
 	t.Run("garbage response is skipped", func(t *testing.T) {
 		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return []byte("{"), nil
 		}}
-		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer)
+		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer, &stubImageHashes{})
 	})
 
 	t.Run("caches fetched tweets and skips blocklisted ones", func(t *testing.T) {
@@ -340,8 +341,24 @@ func TestTweetsRefreshBackground(t *testing.T) {
 				{Id: "blocked", UserId: "other-user"},
 			}})
 		}}
-		tweetsRefreshBackground(repo, otherNodeRepo, ev, streamer)
+		tweetsRefreshBackground(repo, otherNodeRepo, ev, streamer, &stubImageHashes{})
 		require.Equal(t, []string{"ok"}, cached)
+	})
+
+	t.Run("keeps the image hashes of the profile owner's sponsored teasers", func(t *testing.T) {
+		price := &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}
+		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			return json.Marshal(event.TweetsResponse{Tweets: []domain.Tweet{
+				{Id: "sponsored", UserId: "other-user", ImageHashes: []string{"d854389628e79c33"}, Price: price},
+				{Id: "free", UserId: "other-user", ImageHashes: []string{"0f0f0f0f0f0f0f0f"}},
+				{Id: "foreign", UserId: "third-user", ImageHashes: []string{"00ff00ff00ff00ff"}, Price: price},
+			}})
+		}}
+		hashes := &stubImageHashes{}
+		tweetsRefreshBackground(stubTweetRepo{}, otherNodeRepo, ev, streamer, hashes)
+		require.Equal(t, []domain.TweetImageHashes{
+			{UserId: "other-user", TweetId: "sponsored", Hashes: []string{"d854389628e79c33"}},
+		}, hashes.saved)
 	})
 }
 
@@ -364,7 +381,7 @@ func TestStreamGetTweetsHandlerRefreshesWhenEmpty(t *testing.T) {
 		return json.Marshal(event.TweetsResponse{Tweets: []domain.Tweet{{Id: "t1", UserId: "other-user"}}})
 	}}
 
-	out, err := StreamGetTweetsHandler(repo, userRepo, streamer)(
+	out, err := StreamGetTweetsHandler(repo, userRepo, streamer, &stubImageHashes{})(
 		marshal(t, event.GetAllTweetsEvent{UserId: "other-user"}), nil)
 	require.NoError(t, err)
 

@@ -912,7 +912,7 @@ func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
 	_, err = get(h, imageKey, buyerNode)
 	assert.ErrorIs(t, err, database.ErrMediaNotFound, "the route gives no originals")
 
-	served, err := get(StreamGetImageHandler(streamer, media, users), "copy-1", buyerNode)
+	served, err := get(StreamGetImageHandler(streamer, media, users, &stubImageHashes{}), "copy-1", buyerNode)
 	require.NoError(t, err)
 	assert.Empty(t, served, "the image route gives no copies")
 }

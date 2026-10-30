@@ -594,6 +594,9 @@ export const warpnetService = {
         }
 
         const result = await this.sendToNode(request);
+        if (result?.code) {
+            throw new Error(result.message || "Couldn't upload the image.");
+        }
         const keys = [result.key1, result.key2, result.key3, result.key4]
             .filter(key => key && key.length > 0);
         return keys;
