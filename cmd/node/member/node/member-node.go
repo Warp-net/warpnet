@@ -580,7 +580,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
-			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEET,

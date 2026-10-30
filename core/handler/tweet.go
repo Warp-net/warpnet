@@ -589,6 +589,7 @@ func StreamGetTweetsHandler(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
+	copyRepo TweetImageHashStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllTweetsEvent
@@ -616,9 +617,9 @@ func StreamGetTweetsHandler(
 		}
 
 		if len(tweets) != 0 {
-			go tweetsRefreshBackground(repo, userRepo, ev, streamer)
+			go tweetsRefreshBackground(repo, userRepo, ev, streamer, copyRepo)
 		} else {
-			tweetsRefreshBackground(repo, userRepo, ev, streamer)
+			tweetsRefreshBackground(repo, userRepo, ev, streamer, copyRepo)
 
 			tweets, cursor, _ = repo.List(
 				ev.UserId, ev.Limit, ev.Cursor,
@@ -644,6 +645,7 @@ func tweetsRefreshBackground(
 	userRepo TweetUserFetcher,
 	ev event.GetAllTweetsEvent,
 	streamer TweetStreamer,
+	copyRepo TweetImageHashStorer,
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
@@ -692,6 +694,13 @@ func tweetsRefreshBackground(
 			continue
 		}
 		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30) //nolint:mnd
+		if tweet.UserId != ev.UserId || !tweet.IsSponsored() || len(tweet.ImageHashes) == 0 {
+			continue
+		}
+		hashes := domain.TweetImageHashes{UserId: tweet.UserId, TweetId: tweet.Id, Hashes: tweet.ImageHashes}
+		if err := copyRepo.SetImageHashes(hashes); err != nil {
+			log.Errorf("get tweets handler: storing image hashes of %s: %v", tweet.Id, err)
+		}
 	}
 }
 
