@@ -255,6 +255,9 @@ type Client struct {
 	pending  map[string]chan response
 	seq      uint64
 	failure  error
+	// tempDir is the private directory the engine was unpacked into for want of
+	// a user cache directory, removed on Close.
+	tempDir string
 }
 
 func New(cfg Config) *Client {
@@ -323,6 +326,10 @@ func (c *Client) Close() {
 		c.stop = nil
 	}
 	c.cmd = nil
+	if c.tempDir != "" {
+		_ = os.RemoveAll(c.tempDir)
+		c.tempDir = ""
+	}
 }
 
 func (c *Client) prefix() string {
@@ -412,12 +419,8 @@ func (c *Client) resolveBinary() (string, error) {
 
 	sum := sha256.Sum256(binary)
 	name := "payment-engine-" + hex.EncodeToString(sum[:6])
-	base, err := c.cacheDir()
+	dir, err := c.engineDir()
 	if err != nil {
-		base = os.TempDir()
-	}
-	dir := filepath.Join(base, "warpnet")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, name)
@@ -447,6 +450,25 @@ func (c *Client) resolveBinary() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// engineDir is where the embedded engine is unpacked: the user's cache, else a
+// fresh directory only this user can write, made once per client. A fixed name
+// under the shared temp directory could be made first by another user of the
+// machine, who could then swap the engine between its check and its start.
+func (c *Client) engineDir() (string, error) {
+	if base, err := c.cacheDir(); err == nil {
+		dir := filepath.Join(base, "warpnet")
+		return dir, os.MkdirAll(dir, 0o700)
+	}
+	if c.tempDir == "" {
+		dir, err := os.MkdirTemp("", "warpnet-")
+		if err != nil {
+			return "", err
+		}
+		c.tempDir = dir
+	}
+	return c.tempDir, nil
 }
 
 func matchesEmbedded(dir, name string, want [sha256.Size]byte) (bool, error) {

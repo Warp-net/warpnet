@@ -215,6 +215,35 @@ func TestResolveBinaryRefusesASymlinkedCache(t *testing.T) {
 	}
 }
 
+func TestResolveBinaryWithoutACacheDirUnpacksWhereNoOneElseCanWrite(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	shared := filepath.Join(os.TempDir(), "warpnet")
+	if err := os.MkdirAll(shared, 0o777); err != nil { //nolint:gosec // another user of the machine made it first
+		t.Fatal(err)
+	}
+	client, _ := engineIn(t, Config{Network: "testnet"}, []byte("embedded engine bytes"))
+	client.cacheDir = func() (string, error) { return "", errors.New("no home") }
+
+	path, err := client.resolveBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(path)
+	if dir == shared {
+		t.Fatal("unpacked into a directory another user could have made")
+	}
+	if info, err := os.Stat(dir); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
+		t.Fatalf("dir %s: %v, %v", dir, info, err)
+	}
+	if again, err := client.resolveBinary(); err != nil || again != path {
+		t.Fatalf("unpacked again into %s: %v", again, err)
+	}
+	client.Close()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("%s was left behind: %v", dir, err)
+	}
+}
+
 func TestResolveBinaryPrefersAConfiguredRegularFile(t *testing.T) {
 	own := filepath.Join(t.TempDir(), "payment-engine")
 	if err := os.WriteFile(own, []byte("operator build"), 0o700); err != nil {
