@@ -294,7 +294,7 @@ func TestStreamNewOrderHandler(t *testing.T) {
 		return json.Marshal(event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId})
 	}
 	newHandler := func(w SponsoredWallet, orders OrderStorer, streamer SponsoredStreamer) warpnet.WarpHandlerFunc {
-		return StreamNewOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, orders, users, streamer, NewQuotes())
+		return StreamNewOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, orders, users, streamer)
 	}
 	order := marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1", Amount: "1500000"})
 
@@ -605,20 +605,18 @@ func TestStreamNewOrderHandler(t *testing.T) {
 	})
 }
 
-// A modified author node can answer the quote with one price and the order a
-// moment later with another. The order is held to the quote even when the
-// client sends no amount.
-func TestOrderIsHeldToTheQuote(t *testing.T) {
+// A modified author node can show the buyer one price and answer the order a
+// moment later with another. The order is held to the amount the buyer's client
+// sends, the price the buyer saw.
+func TestOrderIsHeldToTheAmountTheBuyerSaw(t *testing.T) {
 	owner := domain.Owner{UserId: "buyer-1", Username: "bob"}
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
-	author := func(prices ...int64) stubStreamer {
-		served := 0
-		return stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	order := func(t *testing.T, w *stubSponsoredWallet, asked int64) error {
+		t.Helper()
+		author := stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
 			switch path {
 			case event.PUBLIC_GET_TWEET:
-				price := prices[min(served, len(prices)-1)]
-				served++
-				return json.Marshal(domain.Tweet{Id: "tweet-1", UserId: "author-1", Price: &domain.Price{Units: big.NewInt(price)}})
+				return json.Marshal(domain.Tweet{Id: "tweet-1", UserId: "author-1", Price: &domain.Price{Units: big.NewInt(asked)}})
 			case event.PUBLIC_GET_WALLET_ADDRESS:
 				return json.Marshal(event.WalletAddressResponse{Address: "TAuthorAddress", Chain: "testnet", UserId: "author-1", Splitter: "TSplitter"})
 			case event.PUBLIC_POST_SPONSORED_ORDER:
@@ -627,28 +625,22 @@ func TestOrderIsHeldToTheQuote(t *testing.T) {
 			}
 			return nil, nil
 		}}
-	}
-	quoteThenOrder := func(t *testing.T, w *stubSponsoredWallet, streamer stubStreamer) error {
-		t.Helper()
-		key := testIdentityKey(t)
-		quotes := NewQuotes()
-		_, err := StreamGetOrderQuoteHandler(stubAuth{owner: owner}, key, w, users, streamer, quotes)(marshal(t, event.GetOrderQuoteEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
-		require.NoError(t, err)
-		_, err = StreamNewOrderHandler(stubAuth{owner: owner}, key, w, stubOrders{}, users, streamer, quotes)(marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1"}), nil)
+		saw := marshal(t, event.NewOrderEvent{TweetId: "tweet-1", UserId: "author-1", Amount: "1000000"})
+		_, err := StreamNewOrderHandler(stubAuth{owner: owner}, testIdentityKey(t), w, stubOrders{}, users, author)(saw, nil)
 		return err
 	}
 
-	t.Run("a price raised after the quote is refused", func(t *testing.T) {
+	t.Run("a price raised after the buyer saw it is refused", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
-		err := quoteThenOrder(t, w, author(1_000_000, 950_000_000))
+		err := order(t, w, 950_000_000)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "now asks 950000000")
 		assert.Empty(t, w.pays)
 	})
 
-	t.Run("the quoted price is paid", func(t *testing.T) {
+	t.Run("the price the buyer saw is paid", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
-		require.NoError(t, quoteThenOrder(t, w, author(1_000_000)))
+		require.NoError(t, order(t, w, 1_000_000))
 		require.Len(t, w.pays, 1)
 		assert.Equal(t, "1000000", w.pays[0].Amount)
 		assert.Equal(t, "1050000", w.pays[0].MaxTotal)
@@ -659,7 +651,7 @@ func TestStreamGetOrderQuoteHandler(t *testing.T) {
 	owner := domain.Owner{UserId: "buyer-1", Username: "bob"}
 	users := stubSponsoredUsers{"author-1": {Id: "author-1", NodeId: "author-node"}}
 	newHandler := func(w SponsoredWallet, streamer SponsoredStreamer) warpnet.WarpHandlerFunc {
-		return StreamGetOrderQuoteHandler(stubAuth{owner: owner}, testIdentityKey(t), w, users, streamer, NewQuotes())
+		return StreamGetOrderQuoteHandler(stubAuth{owner: owner}, testIdentityKey(t), w, users, streamer)
 	}
 	noVerify := func(event.VerifyOrderEvent) ([]byte, error) {
 		t.Fatal("a quote must not claim anything")

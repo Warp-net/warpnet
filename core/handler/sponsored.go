@@ -60,7 +60,6 @@ const (
 	// A payment sent this long ago has landed or never will: its transaction
 	// expires a minute after it is signed.
 	paymentLifetime = 3 * time.Minute
-	quoteLifetime   = 30 * time.Minute
 
 	ErrChainUnavailable warpnet.WarpError = "order: the TRON network cannot be reached, nothing was paid; try again later"
 	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so nothing is sent again before the chain is checked; try again in a few minutes"
@@ -86,44 +85,6 @@ type SponsoredWallet interface {
 	Splitters() []string
 	MaxFeePercent() uint64
 	Network() string
-}
-
-// Quotes keeps what this node last quoted its owner for each tweet, so an order
-// is held to the price the owner was shown even when the client sends none.
-type Quotes struct {
-	mu    sync.Mutex
-	items map[string]quoted
-}
-
-type quoted struct {
-	sponsorship wallet.Sponsorship
-	at          time.Time
-}
-
-func NewQuotes() *Quotes {
-	return &Quotes{items: map[string]quoted{}}
-}
-
-func (q *Quotes) put(tweetId string, s wallet.Sponsorship) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	now := time.Now()
-	for id, old := range q.items {
-		if now.Sub(old.at) > quoteLifetime {
-			delete(q.items, id)
-		}
-	}
-	q.items[tweetId] = quoted{sponsorship: s, at: now}
-}
-
-func (q *Quotes) get(tweetId string) (wallet.Sponsorship, bool) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	found, ok := q.items[tweetId]
-	if !ok || time.Since(found.at) > quoteLifetime {
-		return wallet.Sponsorship{}, false
-	}
-	return found.sponsorship, true
 }
 
 type OrderCounter interface {
@@ -181,7 +142,6 @@ func StreamNewOrderHandler(
 	orders OrderStorer,
 	userRepo SponsoredUserFetcher,
 	streamer SponsoredStreamer,
-	quotes *Quotes,
 ) warpnet.WarpHandlerFunc {
 	var inFlight sync.Map
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
@@ -211,7 +171,7 @@ func StreamNewOrderHandler(
 
 		order, err := orders.Get(ev.TweetId, owner.UserId)
 		if errors.Is(err, database.ErrOrderNotFound) {
-			order, err = openOrder(owner, identityKey, backend, orders, streamer, quotes, author, ev)
+			order, err = openOrder(owner, identityKey, backend, orders, streamer, author, ev)
 		}
 		if err != nil {
 			return nil, err
@@ -240,7 +200,6 @@ func openOrder(
 	backend SponsoredWallet,
 	orders OrderStorer,
 	streamer SponsoredStreamer,
-	quotes *Quotes,
 	author domain.User,
 	ev event.NewOrderEvent,
 ) (domain.Order, error) {
@@ -259,8 +218,7 @@ func openOrder(
 	if err != nil {
 		return domain.Order{}, err
 	}
-	quote, isQuoted := quotes.get(ev.TweetId)
-	if err := agreePrice(sponsorship, ev.Amount, quote, isQuoted); err != nil {
+	if err := agreePrice(sponsorship, ev.Amount); err != nil {
 		return domain.Order{}, err
 	}
 
@@ -282,25 +240,15 @@ func openOrder(
 	return order, orders.Save(order)
 }
 
-// agreePrice holds an order to the price its buyer agreed to: the amount the
-// buyer's client sent and the one this node quoted. The author's node is asked
-// for the price again when the order is placed, and a node that then answers
-// higher than what the buyer saw would otherwise be paid its new price.
-func agreePrice(s wallet.Sponsorship, amount string, quote wallet.Sponsorship, isQuoted bool) error {
-	if amount == "" && !isQuoted {
+// agreePrice holds an order to the amount the buyer's client sent, the price the
+// buyer saw. The author's node is asked for the price again when the order is
+// placed, and a node that then answers higher would otherwise be paid its new price.
+func agreePrice(s wallet.Sponsorship, amount string) error {
+	if amount == "" {
 		return ErrPriceUnagreed
 	}
-	agreed := []string{amount}
-	if isQuoted {
-		agreed = append(agreed, quote.Amount)
-	}
-	for _, units := range agreed {
-		if units != "" && !sameUnits(s.Amount, units) {
-			return warpnet.WarpError(fmt.Sprintf("order: the author now asks %s for this tweet, not the %s agreed; nothing was paid", s.Amount, units))
-		}
-	}
-	if isQuoted && (s.Author != quote.Author || s.Splitter != quote.Splitter) {
-		return warpnet.WarpError("order: the author's wallet changed since the quote; nothing was paid")
+	if !sameUnits(s.Amount, amount) {
+		return warpnet.WarpError(fmt.Sprintf("order: the author now asks %s for this tweet, not the %s agreed; nothing was paid", s.Amount, amount))
 	}
 	return nil
 }
@@ -476,7 +424,6 @@ func StreamGetOrderQuoteHandler(
 	backend SponsoredWallet,
 	userRepo SponsoredUserFetcher,
 	streamer SponsoredStreamer,
-	quotes *Quotes,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetOrderQuoteEvent
@@ -515,7 +462,6 @@ func StreamGetOrderQuoteHandler(
 			log.Warnf("order quote: %s: %v", ev.TweetId, err)
 			return nil, err
 		}
-		quotes.put(ev.TweetId, sponsorship)
 
 		steps := make([]event.OrderQuoteStep, 0, len(quote.Steps))
 		for _, step := range quote.Steps {
