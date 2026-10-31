@@ -253,6 +253,12 @@ type Order struct {
 	Confirmed   bool      `json:"confirmed"`
 	Tweet       *Tweet    `json:"tweet,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
+	// What the buyer agreed to pay and where, kept so a retry pays the same
+	// thing, and when a payment of it was last sent.
+	Amount        string    `json:"amount,omitempty"`
+	AuthorAddress string    `json:"author_address,omitempty"`
+	Splitter      string    `json:"splitter,omitempty"`
+	SentAt        time.Time `json:"sent_at,omitzero"`
 }
 
 func (o *Order) ID() string {

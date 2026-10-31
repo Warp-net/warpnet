@@ -42,6 +42,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	paymentengine "github.com/Warp-net/payment-engine-lib"
 	"github.com/Warp-net/warpnet/json"
@@ -211,6 +212,35 @@ func TestResolveBinaryRefusesASymlinkedCache(t *testing.T) {
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		t.Fatal("a symlink was left in place of the engine")
+	}
+}
+
+func TestResolveBinaryWithoutACacheDirUnpacksWhereNoOneElseCanWrite(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	shared := filepath.Join(os.TempDir(), "warpnet")
+	if err := os.MkdirAll(shared, 0o777); err != nil { //nolint:gosec // another user of the machine made it first
+		t.Fatal(err)
+	}
+	client, _ := engineIn(t, Config{Network: "testnet"}, []byte("embedded engine bytes"))
+	client.cacheDir = func() (string, error) { return "", errors.New("no home") }
+
+	path, err := client.resolveBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(path)
+	if dir == shared {
+		t.Fatal("unpacked into a directory another user could have made")
+	}
+	if info, err := os.Stat(dir); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
+		t.Fatalf("dir %s: %v, %v", dir, info, err)
+	}
+	if again, err := client.resolveBinary(); err != nil || again != path {
+		t.Fatalf("unpacked again into %s: %v", again, err)
+	}
+	client.Close()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("%s was left behind: %v", dir, err)
 	}
 }
 
@@ -401,18 +431,31 @@ func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 		MaxFeePercent: 5,
 	}
 	params := payParams("testnet", "abcdef", sponsorship)
-	for _, key := range []string{"splitter", "order_id", "author", "amount", "network", "seed", "max_fee_percent"} {
+	for _, key := range []string{"splitter", "order_id", "author", "amount", "network", "seed", "max_fee_percent", "deadline"} {
 		if _, ok := params[key]; !ok {
 			t.Fatalf("wallet.pay needs %q, got %v", key, params)
 		}
 	}
-	if len(params) != 7 {
+	if len(params) != 8 {
 		t.Fatalf("wallet.pay was sent something it does not define: %v", params)
 	}
+	deadline := time.UnixMilli(params["deadline"].(int64))
+	if until := time.Until(deadline); until <= 0 || until > requestTimeout {
+		t.Fatalf("deadline in %v: the engine must give up before this node does", until)
+	}
 
-	sponsorship.MaxFeePercent = 0
-	if _, ok := payParams("testnet", "abcdef", sponsorship)["max_fee_percent"]; ok {
+	sponsorship.MaxTotal = "1050000"
+	if got := payParams("testnet", "abcdef", sponsorship)["max_total"]; got != "1050000" {
+		t.Fatalf("max_total = %v: the most the buyer agreed to pay must reach the engine", got)
+	}
+
+	sponsorship.MaxFeePercent, sponsorship.MaxTotal = 0, ""
+	params = payParams("testnet", "abcdef", sponsorship)
+	if _, ok := params["max_fee_percent"]; ok {
 		t.Fatal("a sponsorship that agreed no ceiling must not send one")
+	}
+	if _, ok := params["max_total"]; ok {
+		t.Fatal("a sponsorship that agreed no total must not send one")
 	}
 }
 
@@ -451,8 +494,20 @@ func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 	if !ok || len(assets) != 1 {
 		t.Fatalf("verify must allow exactly the configured splitter, got %v", params["allowed_assets"])
 	}
-	if assets[0]["contract"] != "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy" || assets[0]["token"] != "USDT" || assets[0]["decimals"] != uint8(6) {
+	if assets[0]["contract"] != "TKjWzAR6EBfsadKsqzRAZgtLLgwH9isCa9" || assets[0]["token"] != "USDT" || assets[0]["decimals"] != uint8(6) {
 		t.Fatalf("verify was pointed at another asset: %v", assets[0])
+	}
+	if assets[0]["token_contract"] != "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf" {
+		t.Fatalf("token_contract = %v: a splitter of another token must not pass for USDT", assets[0]["token_contract"])
+	}
+}
+
+func TestVerifyAcceptsPaymentsToRetiredSplitters(t *testing.T) {
+	cfg := DefaultConfig("testnet", "")
+	cfg.Retired = []string{"TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy", cfg.Splitter}
+	assets := verifyParams(cfg, "ab12", Sponsorship{Splitter: cfg.Splitter, OrderId: "01", Author: "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143", Amount: "1"})["allowed_assets"].([]map[string]any)
+	if len(assets) != 2 || assets[0]["contract"] != cfg.Splitter || assets[1]["contract"] != "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy" {
+		t.Fatalf("assets = %v: a buyer on an older node still pays through the retired splitter", assets)
 	}
 }
 
@@ -566,5 +621,57 @@ func TestIsLockedEnoughCountsWhatIsBeingUnstaked(t *testing.T) {
 	}
 	if !(Account{}).IsLockedEnough(0) || (Account{}).IsLockedEnough(1) {
 		t.Fatal("an empty account locks nothing")
+	}
+}
+
+func TestPayNamesTheEngineVerdictsACallerActsOn(t *testing.T) {
+	for code, want := range map[string]error{"reverted": ErrReverted, "already_paid": ErrAlreadyPaid} {
+		client := answeringEngine(t, func(req request) string {
+			return `{"id":"` + req.ID + `","error":{"code":"` + code + `","message":"wallet: ` + code + `","tx":"tx-1"}}`
+		})
+		payment, err := client.Pay(context.Background(), "seed", Sponsorship{Splitter: "TSplitter", Amount: "1"})
+		if !errors.Is(err, want) || payment.PayTx != "tx-1" {
+			t.Fatalf("%s: payment = %+v, err = %v", code, payment, err)
+		}
+	}
+}
+
+func TestPaymentAsksTheSplitterAboutTheOrder(t *testing.T) {
+	var asked request
+	client := answeringEngine(t, func(req request) string {
+		asked = req
+		return `{"id":"` + req.ID + `","result":{"paid":true,"tx":"tx-found"}}`
+	})
+	since := time.UnixMilli(1789073000000)
+	state, err := client.Payment(context.Background(), Sponsorship{Splitter: "TSplitter", Buyer: "TBuyer", OrderId: "ab"}, since)
+	if err != nil || !state.Paid || state.Tx != "tx-found" {
+		t.Fatalf("state = %+v, err = %v", state, err)
+	}
+	var params map[string]any
+	if err := json.Unmarshal(asked.Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if asked.Method != "wallet.payment" || params["splitter"] != "TSplitter" || params["buyer"] != "TBuyer" || params["order_id"] != "ab" || params["since"] != float64(1789073000000) {
+		t.Fatalf("request = %s %v", asked.Method, params)
+	}
+}
+
+func TestIsPaidReportsWhenThePaymentWasMade(t *testing.T) {
+	client := answeringEngine(t, func(req request) string {
+		return `{"id":"` + req.ID + `","result":{"confirmed":true,"block_time":1788984597000}}`
+	})
+	receipt, err := client.IsPaid(context.Background(), "tx", Sponsorship{Splitter: "TSplitter"})
+	if err != nil || !receipt.Confirmed || !receipt.BlockTime.Equal(time.UnixMilli(1788984597000)) {
+		t.Fatalf("receipt = %+v, err = %v", receipt, err)
+	}
+}
+
+func TestTransferKeepsTheTxOfATransferWhoseAnswerWasLost(t *testing.T) {
+	client := answeringEngine(t, func(req request) string {
+		return `{"id":"` + req.ID + `","error":{"code":"unavailable","message":"payments: unavailable: broadcast: 504","tx":"tx-maybe"}}`
+	})
+	tx, err := client.Transfer(context.Background(), "seed", "TRX", "TRecipient", "5")
+	if err == nil || tx != "tx-maybe" {
+		t.Fatalf("tx = %q, err = %v: the owner must learn the transfer may be on chain", tx, err)
 	}
 }

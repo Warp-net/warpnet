@@ -83,9 +83,10 @@ func (s stubWalletBackend) Unstake(_ context.Context, seed, amount string) (stri
 func (s stubWalletBackend) Withdraw(_ context.Context, seed string) (string, error) {
 	return s.stakeFn("withdraw", seed, "")
 }
-func (s stubWalletBackend) Token() string   { return "TXYZ" }
-func (s stubWalletBackend) Decimals() uint8 { return 6 }
-func (s stubWalletBackend) Network() string { return "testnet" }
+func (s stubWalletBackend) Token() string    { return "TXYZ" }
+func (s stubWalletBackend) Decimals() uint8  { return 6 }
+func (s stubWalletBackend) Network() string  { return "testnet" }
+func (s stubWalletBackend) Splitter() string { return "TSplitter" }
 
 func walletKey() ed25519.PrivateKey { return make(ed25519.PrivateKey, ed25519.PrivateKeySize) }
 
@@ -496,6 +497,20 @@ func TestGetWalletAddressHandler(t *testing.T) {
 	}
 	if resp.UserId == "" {
 		t.Fatal("a peer must learn which user the address belongs to")
+	}
+	if resp.Splitter != "TSplitter" {
+		t.Fatalf("splitter = %q: a buyer pays through the splitter this node confirms", resp.Splitter)
+	}
+}
+
+func TestWalletSendNamesTheTransactionOfAnUnansweredTransfer(t *testing.T) {
+	backend := stubWalletBackend{transferFn: func(seed, asset, to, amount string) (string, error) {
+		return "tx-maybe", errors.New("payments: unavailable: no answer to the broadcast")
+	}}
+	body := marshalWallet(t, event.WalletSendEvent{To: "TRecipient", Amount: "5", Asset: "TRX"})
+	_, err := StreamWalletSendHandler(ownerAuth(), walletKey(), backend)(body, nil)
+	if err == nil || !strings.Contains(err.Error(), "tx-maybe") || !strings.Contains(err.Error(), "check the history") {
+		t.Fatalf("err = %v: the owner must not be invited to send the same money twice", err)
 	}
 }
 

@@ -752,6 +752,7 @@ func (m *MemberNode) sponsoredHandlers(
 	userRepo UserProvider,
 	r *memberRepos,
 ) []warpnet.WarpStreamHandler {
+	quotes := handler.NewQuotes()
 	//nolint:govet
 	return []warpnet.WarpStreamHandler{
 		{
@@ -764,11 +765,11 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
-			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m),
+			handler.StreamNewOrderHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, m, quotes),
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_QUOTE,
-			handler.StreamGetOrderQuoteHandler(authRepo, m.privKey, m.walletClient, userRepo, m),
+			handler.StreamGetOrderQuoteHandler(authRepo, m.privKey, m.walletClient, userRepo, m, quotes),
 		},
 		{
 			event.PUBLIC_POST_SPONSORED_ORDER,

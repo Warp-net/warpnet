@@ -722,7 +722,11 @@ export default {
       if (this.unlocking) return;
       this.unlocking = true;
       try {
-        const order = await warpnetService.orderSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+        const order = await warpnetService.orderSponsoredTweet({
+          tweetId: this.tweet.id,
+          userId: this.tweet.user_id,
+          amount: bigUnits(this.tweet.price.units).toString(),
+        });
         if (!order.confirmed) {
           this.awaitConfirmation();
           return;
