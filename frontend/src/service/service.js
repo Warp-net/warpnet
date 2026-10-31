@@ -1848,10 +1848,12 @@ export const warpnetService = {
         return resp;
     },
 
-    async orderSponsoredTweet({tweetId, userId}) {
+    async orderSponsoredTweet({tweetId, userId, amount}) {
+        // amount is the price the buyer was shown, in token units: the node pays
+        // nothing if the author's node now asks for a different one.
         const resp = await this.sendToNode({
             path: PRIVATE_POST_SPONSORED_ORDER,
-            body: {tweet_id: tweetId, user_id: userId},
+            body: {tweet_id: tweetId, user_id: userId, amount},
         });
         if (!resp || resp.code || !resp.tx_id) {
             throw new Error(resp?.message || "Couldn't pay for the tweet.");
