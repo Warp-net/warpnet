@@ -775,6 +775,17 @@ func TestHandleVote_FinalFilesTheReference(t *testing.T) {
 		t.Fatalf("Ballot: %v ok=%t", err, ok)
 	}
 
+	// The chair's ballot reaches this node before its Final, so the round
+	// holds a vote from the announcer; without it the Final is treated as
+	// forged and ignored.
+	chairBallot := vote.Event{
+		ReportID: rep.ReportID(), Type: domain.ModerationTweetType,
+		Result: domain.OK, ModeratorID: "some-chair",
+	}
+	if err := m.handleVote(chairBallot); err != nil {
+		t.Fatalf("handleVote ballot: %v", err)
+	}
+
 	final := vote.Event{
 		ReportID: rep.ReportID(), Type: domain.ModerationTweetType,
 		Result: domain.OK, ModeratorID: "some-chair", Final: true,

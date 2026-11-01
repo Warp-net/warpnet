@@ -440,14 +440,44 @@ func TestRegistry_FinalAnnouncementIsNotABallot(t *testing.T) {
 	t.Cleanup(rs.StopAll)
 
 	id := subject("tweet-1").ReportID()
-	rs.MarkFinalized(id, "peer-a")
-
+	if rs.MarkFinalized(id, "peer-a") {
+		t.Fatal("a Final for a round never seen must not be honored")
+	}
 	if activeCount(rs) != 0 {
 		t.Fatal("an announcement must not open a round")
 	}
+
+	// The bogus announcement was ignored rather than recorded as finalized,
+	// so a genuine report for the same id is still free to open its round.
 	rs.AddVote(ballotFrom(id, "peer-b", domain.FAIL))
+	if activeCount(rs) != 1 {
+		t.Fatal("an unverified announcement must not suppress a genuine round")
+	}
+}
+
+// A Final is honored only from a peer that voted in the round. A stranger's
+// announcement — the shape of a forged Final — leaves the round untouched, so
+// the real chair still carries the decision.
+func TestMarkFinalized_RejectsForgedFinal(t *testing.T) {
+	member := newStubMember("self", domain.FAIL)
+	rs := NewRegistry("self", member, frozen())
+	t.Cleanup(rs.StopAll)
+
+	id := subject("tweet-1").ReportID()
+	rs.AddVote(ballotFrom(id, "chair", domain.FAIL))
+
+	if rs.MarkFinalized(id, "stranger") {
+		t.Fatal("a non-voter's Final must be rejected")
+	}
+	if activeCount(rs) != 1 {
+		t.Fatal("the round must stay open after a forged Final")
+	}
+
+	if !rs.MarkFinalized(id, "chair") {
+		t.Fatal("the chair voted, so its Final must be honored")
+	}
 	if activeCount(rs) != 0 {
-		t.Fatal("late ballots must not reopen a decided round")
+		t.Fatal("the chair's Final must clear the round")
 	}
 }
 

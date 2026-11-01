@@ -257,8 +257,12 @@ func (m *Moderator) handleVote(ev vote.Event) error {
 		return nil
 	}
 	if ev.Final {
-		m.rounds.MarkFinalized(ev.ReportID, ev.ModeratorID)
-		m.fileReference(ev.ReportID, ev.Result)
+		// Only file the quorum's verdict as an audit reference once the
+		// announcement is honored: a forged Final from a non-voter must not
+		// relabel this node's judged text.
+		if m.rounds.MarkFinalized(ev.ReportID, ev.ModeratorID) {
+			m.fileReference(ev.ReportID, ev.Result)
+		}
 		return nil
 	}
 	m.rounds.AddVote(ev)

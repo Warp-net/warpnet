@@ -107,24 +107,36 @@ func (rs *Registry) AddVote(v vote.Event) {
 	r.addVote(v)
 }
 
-// MarkFinalized records that some participant carried the round's decision
-// and drops this copy, cancelling its takeover timer.
-func (rs *Registry) MarkFinalized(id, by string) {
+// MarkFinalized records that a round participant carried the decision and
+// drops this copy, cancelling its takeover timer. It reports whether the
+// announcement was honored.
+//
+// A Final is honored only for a round this node is holding whose votes
+// include the announcer: the chair and every backup voted, so a legitimate
+// Final always comes from a voter. A Final from a non-voter — or for a round
+// this node never opened — is ignored and, crucially, is not recorded as
+// finalized. Report ids are a public hash of the report, so trusting an
+// unverified Final would let any node pre-seed the finalized set for an id it
+// can predict and silence the real report before it is ever judged.
+func (rs *Registry) MarkFinalized(id, by string) bool {
 	rs.mx.Lock()
 	rs.seenMods[by] = time.Now()
 	if rs.isFinalizedLocked(id) {
 		rs.mx.Unlock()
-		return
+		return true
+	}
+	r, ok := rs.active[id]
+	if !ok || !r.hasVoter(by) {
+		rs.mx.Unlock()
+		return false
 	}
 	rs.finalized[id] = time.Now()
-	r, ok := rs.active[id]
 	delete(rs.active, id)
 	rs.mx.Unlock()
 
-	if ok {
-		r.stop()
-	}
+	r.stop()
 	log.Infof("round %s decided by %s", id, by)
+	return true
 }
 
 // forget is the round's own completion callback: it is done with itself,
