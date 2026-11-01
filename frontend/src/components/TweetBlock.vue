@@ -165,7 +165,7 @@ resulting from the use or misuse of this software.
           :message="unlockMessage"
           confirm-label="Pay"
           cancel-label="Cancel"
-          :confirm-disabled="quoting || isShortOfTokens"
+          :confirm-disabled="quoting || isShortOfTokens || quoteRefused"
           @confirm="unlock"
           @cancel="showUnlockConfirm = false"
         >
@@ -529,6 +529,7 @@ export default {
       quote: null,
       quoting: false,
       quoteError: "",
+      quoteRefused: false,
       copyCheck: null,
       showRetweetMenu: false,
       quotedSourceText: '',
@@ -601,6 +602,9 @@ export default {
     unlockMessage() {
       const author = this.authorName || "the author";
       const marked = "\n\nYour copy is marked with your ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
+      if (this.quoteRefused) {
+        return "This tweet can't be bought from your wallet now, and nothing was paid.";
+      }
       if (this.quoteError) {
         return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.${marked}`;
       }
@@ -701,12 +705,18 @@ export default {
       this.showUnlockConfirm = true;
       this.quote = null;
       this.quoteError = "";
+      this.quoteRefused = false;
       this.quoting = true;
       try {
         this.quote = await warpnetService.quoteSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
       } catch (err) {
         console.warn(`failed to quote tweet [${this.tweet.id}]`, err);
-        this.quoteError = `Couldn't work out the network fee: ${err?.message || err}`;
+        const message = String(err?.message || err);
+        // The author's node, or this one, turned the order down, and would again at payment.
+        this.quoteRefused = message.startsWith("order: ");
+        this.quoteError = this.quoteRefused
+          ? message.charAt(7).toUpperCase() + message.slice(8)
+          : `Couldn't work out the network fee: ${message}`;
       } finally {
         this.quoting = false;
       }

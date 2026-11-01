@@ -208,6 +208,17 @@ describe('TweetBlock sponsored tweet', () => {
     expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledTimes(1);
   });
 
+  it('says why the author will not take the payment and does not offer to pay', async () => {
+    warpnetService.quoteSponsoredTweet.mockRejectedValue(new Error('order: the author sells only to wallets with at least 500 TRX staked'));
+    renderTweet(teaser());
+    await fireEvent.click(await screen.findByRole('button', { name: 'Unlock for 1.5 USDT' }));
+
+    expect(await screen.findByText('The author sells only to wallets with at least 500 TRX staked')).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't work out the network fee/)).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing was paid/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pay' })).toBeDisabled();
+  });
+
   it('comes back to a confirming payment without offering to pay again', async () => {
     warpnetService.getSponsoredTweet.mockResolvedValue({ pending: true });
     const unwatch = vi.fn();

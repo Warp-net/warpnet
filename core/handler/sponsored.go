@@ -171,14 +171,15 @@ func StreamNewOrderHandler(
 		}
 
 		order, err := orders.Get(ev.TweetId, owner.UserId)
-		if errors.Is(err, database.ErrOrderNotFound) {
+		opened := errors.Is(err, database.ErrOrderNotFound)
+		if opened {
 			order, err = openOrder(owner, identityKey, backend, orders, streamer, author, ev)
 		}
 		if err != nil {
 			return nil, err
 		}
 		if !order.Confirmed {
-			if order, err = settleOrder(owner, identityKey, backend, orders, order, ev.Amount); err != nil {
+			if order, err = settleOrder(owner, identityKey, backend, orders, streamer, author, order, ev.Amount, opened); err != nil {
 				return nil, err
 			}
 			claimed, err := claimOrder(orders, streamer, author, order)
@@ -264,14 +265,18 @@ func sameUnits(a, b string) bool {
 // splitter whether the order is paid and adopts the transaction that paid it,
 // and pays only when the order is unpaid and no earlier payment of it can still
 // land. Every attempt pays under the order's own id, which the splitter will not
-// let the same wallet pay twice.
+// let the same wallet pay twice. An order not opened just now, which asked the
+// author's node to check the buyer, is checked with it again before it is paid.
 func settleOrder(
 	owner domain.Owner,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	orders OrderStorer,
+	streamer SponsoredStreamer,
+	author domain.User,
 	order domain.Order,
 	amount string,
+	opened bool,
 ) (domain.Order, error) {
 	if order.Splitter == "" {
 		// Opened before orders kept what they pay, on a splitter that records nothing.
@@ -307,11 +312,30 @@ func settleOrder(
 		}
 		return order, nil
 	}
+	if !opened {
+		if err := recheckAuthor(streamer, author, backend.Network(), order); err != nil {
+			return order, err
+		}
+	}
 	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 	if err != nil {
 		return order, err
 	}
 	return payOrder(ctx, backend, orders, seed, order, sponsorship)
+}
+
+// recheckAuthor asks the author's node, right before an order opened earlier is
+// paid, whether it still takes the payment: its hourly limit, stake rule or
+// wallet may have changed since, and a payment it would now refuse is lost.
+func recheckAuthor(streamer SponsoredStreamer, author domain.User, network string, order domain.Order) error {
+	address, splitter, err := authorAddress(streamer, author, network, order.Payer)
+	if err != nil {
+		return err
+	}
+	if address != order.AuthorAddress || splitter != order.Splitter {
+		return warpnet.WarpError("order: the author's wallet changed since this order was opened; nothing was paid")
+	}
+	return nil
 }
 
 // payOrder sends an order's payment and records what came of it. The attempt is
@@ -606,19 +630,11 @@ func StreamVerifyOrderHandler(
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
 		}
-		now := time.Now()
-		count, err := orders.CountConfirmed(ev.UserId, now.Add(-domain.OrderLimitWindow), now)
-		if err != nil {
-			return nil, err
-		}
-		if count >= domain.OrderLimit {
-			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
+		if ev.Payer != "" && !wallet.IsAddress(ev.Payer) {
+			return nil, ErrPayerAddress
 		}
 		sponsored, err := settings.GetSponsoredSettings(owner.UserId)
 		if err != nil {
-			return nil, err
-		}
-		if err := checkBuyerPayer(orders, ev.Payer, buyer.NodeId, sponsored.ClaimMinStakeTRX(now)); err != nil {
 			return nil, err
 		}
 
@@ -653,15 +669,12 @@ func StreamVerifyOrderHandler(
 			return nil, err
 		}
 		if receipt.Confirmed {
-			// A buyer who paid under one stake rule is not refused for a stricter one
-			// set after the payment: the gentler of the rule then and the rule now applies.
-			paidAt := receipt.BlockTime
-			if paidAt.IsZero() {
-				paidAt = now
-			}
-			minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(now))
-			if err := checkPayerStake(backend, ev.Payer, minStake); err != nil {
+			admitted, err := admitPaidOrder(orders, backend, sponsored, order, receipt.BlockTime)
+			if err != nil {
 				return nil, err
+			}
+			if !admitted {
+				return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 			}
 			order.Confirmed = true
 			if err := orders.Save(order); err != nil {
@@ -673,6 +686,25 @@ func StreamVerifyOrderHandler(
 		}
 		return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId, Confirmed: receipt.Confirmed}, nil
 	}
+}
+
+// admitPaidOrder holds a paid order to the rules in force when it was paid: a
+// buyer let pay is not refused for a stricter stake rule or an hourly limit
+// reached later. It answers false for a payment made past the hourly limit.
+func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order, paidAt time.Time) (bool, error) {
+	now := time.Now()
+	if paidAt.IsZero() {
+		paidAt = now
+	}
+	count, err := orders.CountConfirmed(order.BuyerId, paidAt.Add(-domain.OrderLimitWindow), paidAt)
+	if err != nil || count >= domain.OrderLimit {
+		return false, err
+	}
+	minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(now))
+	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
+		return false, err
+	}
+	return true, checkPayerStake(backend, order.Payer, minStake)
 }
 
 func StreamGetSponsoredTweetHandler(

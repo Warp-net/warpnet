@@ -270,7 +270,9 @@ const (
 	OrderLimit       = 10
 	OrderLimitWindow = time.Hour
 
-	MinStakeChangeWindow = 24 * time.Hour
+	// A payment this soon after a stake change is held to the gentler threshold:
+	// the buyer was checked just before the change and was still paying.
+	MinStakeChangeWindow = 10 * time.Minute
 )
 
 type Poll struct {
