@@ -170,18 +170,16 @@ func StreamNewOrderHandler(
 			return nil, err
 		}
 
-		recheck := func(order domain.Order) error { return recheckAuthor(streamer, author, backend.Network(), order) }
 		order, err := orders.Get(ev.TweetId, owner.UserId)
-		if errors.Is(err, database.ErrOrderNotFound) {
-			// Opening asks the author's node to check the buyer, so paying now needs no second ask.
-			recheck = nil
+		opened := errors.Is(err, database.ErrOrderNotFound)
+		if opened {
 			order, err = openOrder(owner, identityKey, backend, orders, streamer, author, ev)
 		}
 		if err != nil {
 			return nil, err
 		}
 		if !order.Confirmed {
-			if order, err = settleOrder(owner, identityKey, backend, orders, order, ev.Amount, recheck); err != nil {
+			if order, err = settleOrder(owner, identityKey, backend, orders, streamer, author, order, ev.Amount, opened); err != nil {
 				return nil, err
 			}
 			claimed, err := claimOrder(orders, streamer, author, order)
@@ -267,15 +265,18 @@ func sameUnits(a, b string) bool {
 // splitter whether the order is paid and adopts the transaction that paid it,
 // and pays only when the order is unpaid and no earlier payment of it can still
 // land. Every attempt pays under the order's own id, which the splitter will not
-// let the same wallet pay twice. recheck, when set, runs right before paying.
+// let the same wallet pay twice. An order not opened just now, which asked the
+// author's node to check the buyer, is checked with it again before it is paid.
 func settleOrder(
 	owner domain.Owner,
 	identityKey ed25519.PrivateKey,
 	backend SponsoredWallet,
 	orders OrderStorer,
+	streamer SponsoredStreamer,
+	author domain.User,
 	order domain.Order,
 	amount string,
-	recheck func(domain.Order) error,
+	opened bool,
 ) (domain.Order, error) {
 	if order.Splitter == "" {
 		// Opened before orders kept what they pay, on a splitter that records nothing.
@@ -311,8 +312,8 @@ func settleOrder(
 		}
 		return order, nil
 	}
-	if recheck != nil {
-		if err := recheck(order); err != nil {
+	if !opened {
+		if err := recheckAuthor(streamer, author, backend.Network(), order); err != nil {
 			return order, err
 		}
 	}
