@@ -42,15 +42,16 @@ func TestRegistryLen(t *testing.T) {
 
 func TestMarkFinalizedIsIdempotent(t *testing.T) {
 	rs := NewRegistry("self", newStubMember("self", domain.OK), frozen())
-	rs.Open(subject("tweet-1"))
 	id := subject("tweet-1").ReportID()
+	rs.Open(subject("tweet-1"))
+	rs.AddVote(ballotFrom(id, "moderator-a", domain.OK)) // the announcer must have voted
 
-	rs.MarkFinalized(id, "moderator-a")
+	require.True(t, rs.MarkFinalized(id, "moderator-a"))
 	require.Zero(t, rs.Len(), "finalizing stops the live round")
 
 	// a second announcement for the same round is dropped rather than
 	// re-registering it
-	rs.MarkFinalized(id, "moderator-b")
+	require.True(t, rs.MarkFinalized(id, "moderator-b"))
 	require.Zero(t, rs.Len())
 	require.Contains(t, rs.Peers(), "moderator-b", "the announcer is still seen")
 }
@@ -58,8 +59,10 @@ func TestMarkFinalizedIsIdempotent(t *testing.T) {
 func TestFinalizedRoundsExpire(t *testing.T) {
 	rs := NewRegistry("self", newStubMember("self", domain.OK), frozen())
 	id := subject("tweet-1").ReportID()
+	rs.Open(subject("tweet-1"))
+	rs.AddVote(ballotFrom(id, "moderator-a", domain.OK)) // the announcer must have voted
 
-	rs.MarkFinalized(id, "moderator-a")
+	require.True(t, rs.MarkFinalized(id, "moderator-a"))
 
 	rs.mx.Lock()
 	require.True(t, rs.isFinalizedLocked(id))
