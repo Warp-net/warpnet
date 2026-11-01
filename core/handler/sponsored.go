@@ -606,19 +606,11 @@ func StreamVerifyOrderHandler(
 		if err == nil && known.Confirmed {
 			return event.OrderResponse{TweetId: ev.TweetId, TxId: known.TxId, Confirmed: true}, nil
 		}
-		now := time.Now()
-		count, err := orders.CountConfirmed(ev.UserId, now.Add(-domain.OrderLimitWindow), now)
-		if err != nil {
-			return nil, err
-		}
-		if count >= domain.OrderLimit {
-			return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
+		if ev.Payer != "" && !wallet.IsAddress(ev.Payer) {
+			return nil, ErrPayerAddress
 		}
 		sponsored, err := settings.GetSponsoredSettings(owner.UserId)
 		if err != nil {
-			return nil, err
-		}
-		if err := checkBuyerPayer(orders, ev.Payer, buyer.NodeId, sponsored.ClaimMinStakeTRX(now)); err != nil {
 			return nil, err
 		}
 
@@ -653,15 +645,12 @@ func StreamVerifyOrderHandler(
 			return nil, err
 		}
 		if receipt.Confirmed {
-			// A buyer who paid under one stake rule is not refused for a stricter one
-			// set after the payment: the gentler of the rule then and the rule now applies.
-			paidAt := receipt.BlockTime
-			if paidAt.IsZero() {
-				paidAt = now
-			}
-			minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(now))
-			if err := checkPayerStake(backend, ev.Payer, minStake); err != nil {
+			admitted, err := admitPaidOrder(orders, backend, sponsored, order, receipt.BlockTime)
+			if err != nil {
 				return nil, err
+			}
+			if !admitted {
+				return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId}, nil
 			}
 			order.Confirmed = true
 			if err := orders.Save(order); err != nil {
@@ -673,6 +662,25 @@ func StreamVerifyOrderHandler(
 		}
 		return event.OrderResponse{TweetId: ev.TweetId, TxId: ev.TxId, Confirmed: receipt.Confirmed}, nil
 	}
+}
+
+// admitPaidOrder holds a paid order to the rules in force when it was paid: a
+// buyer let pay is not refused for a stricter stake rule or an hourly limit
+// reached later. It answers false for a payment made past the hourly limit.
+func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order, paidAt time.Time) (bool, error) {
+	now := time.Now()
+	if paidAt.IsZero() {
+		paidAt = now
+	}
+	count, err := orders.CountConfirmed(order.BuyerId, paidAt.Add(-domain.OrderLimitWindow), paidAt)
+	if err != nil || count >= domain.OrderLimit {
+		return false, err
+	}
+	minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(now))
+	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
+		return false, err
+	}
+	return true, checkPayerStake(backend, order.Payer, minStake)
 }
 
 func StreamGetSponsoredTweetHandler(

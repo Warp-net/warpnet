@@ -773,7 +773,6 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		_, err := newDemandingHandler(w, stubOrders{})(marshal(t, claim), fromBuyer())
 		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked")
 		assert.Empty(t, w.balances)
-		assert.Empty(t, w.checks)
 	})
 
 	t.Run("a wallet that already paid for another node is refused", func(t *testing.T) {
@@ -781,7 +780,7 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		orders := stubOrders{"tweet-0/buyer-0": {TweetId: "tweet-0", BuyerId: "buyer-0", BuyerNodeId: "other-node", Payer: testPayer, Confirmed: true}}
 		_, err := newDemandingHandler(w, orders)(marshal(t, staking), fromBuyer())
 		assert.ErrorIs(t, err, ErrPayerTaken)
-		assert.Empty(t, w.checks)
+		assert.NotContains(t, orders, "tweet-1/buyer-1")
 	})
 
 	t.Run("a stake unstaked after paying is still locked, so the claim goes through", func(t *testing.T) {
@@ -791,16 +790,17 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		assert.True(t, resp.(event.OrderResponse).Confirmed)
 	})
 
-	t.Run("a threshold raised within a day holds claims to the old one", func(t *testing.T) {
-		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
-		raised := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: time.Now().Add(-time.Hour)}
-		resp, err := newChangedHandler(w, raised)(marshal(t, claim), fromBuyer())
+	t.Run("a stake first asked after the payment holds the claim to no stake", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, blockTime: time.Now().Add(-2 * time.Hour)}
+		enabled := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: time.Now().Add(-time.Hour)}
+		resp, err := newChangedHandler(w, enabled)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err, "a node that paid before the stake was asked must not lose its money")
 		assert.True(t, resp.(event.OrderResponse).Confirmed)
 
-		raised.ChangedAt = time.Now().Add(-domain.MinStakeChangeWindow)
-		_, err = newChangedHandler(w, raised)(marshal(t, claim), fromBuyer())
-		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked")
+		w.blockTime = time.Now()
+		enabled.ChangedAt = time.Now().Add(-domain.MinStakeChangeWindow - time.Minute)
+		_, err = newChangedHandler(w, enabled)(marshal(t, claim), fromBuyer())
+		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked", "a payment made once the change settled meets the new rule")
 	})
 
 	t.Run("a payer named in another form of the same address is refused", func(t *testing.T) {
@@ -887,8 +887,14 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err, "a node that paid past the limit is not an error, it waits")
 		assert.False(t, resp.(event.OrderResponse).Confirmed)
-		assert.Empty(t, w.checks)
 		assert.NotContains(t, orders, "tweet-1/buyer-1")
+
+		w.blockTime = time.Now().Add(-5 * time.Minute)
+		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed, "a payment made before the limit filled up is not refused for orders confirmed after it")
+		delete(orders, "tweet-1/buyer-1")
+		w.blockTime = time.Time{}
 
 		orders = confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-2*time.Hour))
 		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
