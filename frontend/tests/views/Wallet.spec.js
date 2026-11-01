@@ -90,6 +90,17 @@ describe('Wallet.vue', () => {
     expect(screen.getAllByText(line(/^— USDT$/)).length).toBe(1);
   });
 
+  it('warns that the wallet is only for small amounts, whatever the node answers', async () => {
+    warpnetService.getWallet.mockRejectedValue(new Error('node unreachable'));
+    warpnetService.getWalletAddress.mockRejectedValue(new Error('node unreachable'));
+    renderWallet();
+    const text = screen.getByRole('note').textContent.replace(/\s+/g, ' ');
+    expect(text).toMatch(/Keep only small amounts here\./);
+    expect(text).toMatch(/small payments between Warpnet members and for paying for sponsored tweets/);
+    expect(text).toMatch(/not for savings or large sums/);
+    expect(text).toMatch(/not liable for funds lost from this wallet/);
+  });
+
   it('shows the address while the balance is still loading', async () => {
     const slow = deferred();
     warpnetService.getWallet.mockReturnValue(slow.promise);
