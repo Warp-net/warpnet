@@ -98,7 +98,7 @@ describe("transport request timeouts", () => {
     ["/private/get/user/0.0.0", 30 * 1000],
     ["/private/get/sponsored/buyer/0.0.0", 2 * 60 * 1000],
     ["/private/get/sponsored/quote/0.0.0", 60 * 1000],
-    ["/private/post/sponsored/order/0.0.0", 3 * 60 * 1000],
+    ["/private/post/sponsored/order/0.0.0", 7 * 60 * 1000],
     ["/private/post/import/0.0.0", 10 * 60 * 1000],
   ])("gives %s %i ms before it gives up", async (path, timeoutMs) => {
     const transport = await connectedTransport();
