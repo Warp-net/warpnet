@@ -72,6 +72,7 @@ type WalletBackend interface {
 	Token() string
 	Decimals() uint8
 	Network() string
+	Splitter() string
 }
 
 func StreamGetWalletHandler(auth WalletOwnerStorer, identityKey ed25519.PrivateKey, backend WalletBackend) warpnet.WarpHandlerFunc {
@@ -165,6 +166,9 @@ func StreamWalletSendHandler(auth WalletOwnerStorer, identityKey ed25519.Private
 		tx, err := backend.Transfer(context.Background(), seed, asset, ev.To, ev.Amount)
 		if err != nil {
 			log.Errorf("wallet: transfer: %v", err)
+			if tx != "" {
+				return nil, warpnet.WarpError(fmt.Sprintf("wallet: %v; the transfer may still go through as %s, check the history before sending again", err, tx))
+			}
 			return nil, warpnet.WarpError("wallet: " + err.Error())
 		}
 		return event.WalletSendResponse{Tx: tx, Asset: asset, To: ev.To, Amount: ev.Amount}, nil
@@ -362,9 +366,10 @@ func StreamGetWalletAddressHandler(
 			return nil, err
 		}
 		return event.WalletAddressResponse{
-			Address: address,
-			Chain:   backend.Network(),
-			UserId:  owner.UserId,
+			Address:  address,
+			Chain:    backend.Network(),
+			UserId:   owner.UserId,
+			Splitter: backend.Splitter(),
 		}, nil
 	}
 }

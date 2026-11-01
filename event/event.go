@@ -1037,6 +1037,7 @@ type WalletStakeResponse struct {
 type NewOrderEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 	UserId  domain.ID `json:"user_id"`
+	Amount  string    `json:"amount,omitempty"`
 }
 
 // VerifyOrderEvent defines model for VerifyOrderEvent.
@@ -1107,9 +1108,10 @@ type WalletAddressEvent struct {
 
 // WalletAddressResponse defines model for WalletAddressResponse.
 type WalletAddressResponse struct {
-	Address string `json:"address"`
-	Chain   string `json:"chain"`
-	UserId  string `json:"user_id"`
+	Address  string `json:"address"`
+	Chain    string `json:"chain"`
+	UserId   string `json:"user_id"`
+	Splitter string `json:"splitter,omitempty"`
 }
 
 // WalletOwnAddressResponse defines model for WalletOwnAddressResponse.

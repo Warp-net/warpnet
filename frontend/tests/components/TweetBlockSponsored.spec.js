@@ -126,7 +126,7 @@ describe('TweetBlock sponsored tweet', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Pay' }));
 
     await waitFor(() => expect(screen.getByText('the paid words')).toBeInTheDocument());
-    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledWith({ tweetId: 't1', userId: 'author1' });
+    expect(warpnetService.orderSponsoredTweet).toHaveBeenCalledWith({ tweetId: 't1', userId: 'author1', amount: '1500000' });
     expect(screen.queryByRole('img', { name: 'Locked tweet' })).not.toBeInTheDocument();
   });
 

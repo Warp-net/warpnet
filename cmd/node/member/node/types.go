@@ -114,13 +114,15 @@ type WalletProvider interface {
 	Unstake(ctx context.Context, seed, amount string) (string, error)
 	Withdraw(ctx context.Context, seed string) (string, error)
 	Pay(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Payment, error)
+	Payment(ctx context.Context, s wallet.Sponsorship, since time.Time) (wallet.PaymentState, error)
 	Quote(ctx context.Context, seed string, s wallet.Sponsorship) (wallet.Quote, error)
-	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (bool, error)
+	IsPaid(ctx context.Context, txId string, s wallet.Sponsorship) (wallet.Receipt, error)
 	IsAvailable(ctx context.Context) bool
 	Token() string
 	Decimals() uint8
 	Network() string
 	Splitter() string
+	Splitters() []string
 	MaxFeePercent() uint64
 	Close()
 }
