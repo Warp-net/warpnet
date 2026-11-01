@@ -570,9 +570,53 @@ func TestStreamNewOrderHandler(t *testing.T) {
 		limited := answering(t, func() ([]byte, error) {
 			return json.Marshal(event.ResponseError{Code: 500, Message: ErrOrderLimit.Error()})
 		})
+		kept := orders["tweet-1/buyer-1"]
 		_, err := newHandler(w, orders, limited)(order, nil)
 		assert.EqualError(t, err, ErrOrderLimit.Error(), "the buyer reached the author's limit since the order was opened")
 		assert.Len(t, w.pays, 1, "the payment the author would refuse is never sent")
+		assert.Equal(t, kept, orders["tweet-1/buyer-1"], "the refused order is kept as it was")
+
+		_, err = newHandler(w, orders, authorNode(t, confirm))(order, nil)
+		require.NoError(t, err)
+		require.Len(t, w.pays, 2)
+		assert.Equal(t, w.pays[0].OrderId, w.pays[1].OrderId, "once the author takes it again, it is paid under the same id")
+	})
+
+	t.Run("a paid order is claimed even when the author would refuse a new payment now", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
+		orders := reopened(t, w)
+		w.onChain = wallet.PaymentState{Paid: true, Tx: "tx-1"}
+		claimed := false
+		limited := stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			switch path {
+			case event.PUBLIC_GET_WALLET_ADDRESS:
+				return json.Marshal(event.ResponseError{Code: 500, Message: ErrOrderLimit.Error()})
+			case event.PUBLIC_POST_SPONSORED_ORDER:
+				claimed = true
+			}
+			return authorNode(t, confirm).GenericStream(nodeId, path, data)
+		}}
+		resp, err := newHandler(w, orders, limited)(order, nil)
+		require.NoError(t, err, "a paid order needs only its claim, which the author judges by the time it was paid")
+		assert.True(t, claimed)
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
+		assert.Len(t, w.pays, 1, "nothing is paid again")
+	})
+
+	t.Run("a payment that may still land is waited for without asking the author again", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
+		orders := stubOrders{}
+		_, err := newHandler(w, orders, authorNode(t, pending))(order, nil)
+		require.NoError(t, err)
+		asked := 0
+		counting := answering(t, func() ([]byte, error) {
+			asked++
+			return json.Marshal(event.ResponseError{Code: 500, Message: ErrOrderLimit.Error()})
+		})
+		_, err = newHandler(w, orders, counting)(order, nil)
+		require.NoError(t, err, "an order whose payment can still land is waited for, not refused")
+		assert.Zero(t, asked)
+		assert.Len(t, w.pays, 1)
 	})
 
 	t.Run("an order opened earlier is not paid to a wallet the author left", func(t *testing.T) {
@@ -825,6 +869,14 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked", "a payment made after the change meets the new rule")
 	})
 
+	t.Run("a payment still landing when the stake was raised is held to the old one", func(t *testing.T) {
+		raised := domain.SponsoredSettings{MinStakeTRX: 500, PreviousMinStakeTRX: 100, ChangedAt: time.Now().Add(-time.Hour)}
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "100000000", blockTime: raised.ChangedAt.Add(domain.MinStakeChangeWindow / 2)}
+		resp, err := newChangedHandler(w, raised)(marshal(t, staking), fromBuyer())
+		require.NoError(t, err, "the author checked this buyer under 100 TRX just before raising it, and the payment landed minutes later")
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
+	})
+
 	t.Run("a claim that names no payer is refused when a stake is asked", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, staked: "500000000"}
 		_, err := newDemandingHandler(w, stubOrders{})(marshal(t, claim), fromBuyer())
@@ -936,6 +988,14 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 	t.Run("a free tweet is not for sale", func(t *testing.T) {
 		_, err := newHandler(&stubSponsoredWallet{splitter: "TSplitter"}, stubTweetRepo{}, stubOrders{})(marshal(t, claim), fromBuyer())
 		assert.EqualError(t, err, "order: tweet is not sponsored")
+	})
+
+	t.Run("a buyer one order short of the hourly limit is confirmed", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
+		orders := confirmedSales("buyer-1", domain.OrderLimit-1, time.Now().Add(-time.Minute))
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed)
 	})
 
 	t.Run("a buyer past the hourly limit waits", func(t *testing.T) {
