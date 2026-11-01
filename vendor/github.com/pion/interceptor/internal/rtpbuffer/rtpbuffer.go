@@ -5,7 +5,7 @@
 package rtpbuffer
 
 import (
-	"fmt"
+	"github.com/pion/interceptor/internal/validation"
 )
 
 const (
@@ -26,19 +26,8 @@ type RTPBuffer struct {
 
 // NewRTPBuffer constructs a new RTPBuffer.
 func NewRTPBuffer(size uint16) (*RTPBuffer, error) {
-	allowedSizes := make([]uint16, 0)
-	correctSize := false
-	for i := range 16 {
-		if size == 1<<i {
-			correctSize = true
-
-			break
-		}
-		allowedSizes = append(allowedSizes, 1<<i)
-	}
-
-	if !correctSize {
-		return nil, fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, size, allowedSizes)
+	if err := validation.IsPowerOfTwo(size); err != nil {
+		return nil, err
 	}
 
 	return &RTPBuffer{

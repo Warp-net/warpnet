@@ -23,6 +23,7 @@ func (p BasicTextPrinter) WithStyle(style *Style) *BasicTextPrinter {
 	return &p
 }
 
+// WithWriter sets the custom Writer.
 func (p BasicTextPrinter) WithWriter(writer io.Writer) *BasicTextPrinter {
 	p.Writer = writer
 	return &p
@@ -34,14 +35,14 @@ func (p BasicTextPrinter) Sprint(a ...any) string {
 	if p.Style == nil {
 		p.Style = NewStyle()
 	}
+
 	return p.Style.Sprint(a...)
 }
 
 // Sprintln formats using the default formats for its operands and returns the resulting string.
 // Spaces are always added between operands and a newline is appended.
 func (p BasicTextPrinter) Sprintln(a ...any) string {
-	str := fmt.Sprintln(a...)
-	return Sprintln(p.Sprint(str))
+	return p.Sprint(fmt.Sprintln(a...))
 }
 
 // Sprintf formats according to a format specifier and returns the resulting string.
@@ -61,6 +62,7 @@ func (p BasicTextPrinter) Sprintfln(format string, a ...any) string {
 func (p *BasicTextPrinter) Print(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprint(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -70,6 +72,7 @@ func (p *BasicTextPrinter) Print(a ...any) *TextPrinter {
 func (p *BasicTextPrinter) Println(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintln(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -78,6 +81,7 @@ func (p *BasicTextPrinter) Println(a ...any) *TextPrinter {
 func (p *BasicTextPrinter) Printf(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintf(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -87,6 +91,7 @@ func (p *BasicTextPrinter) Printf(format string, a ...any) *TextPrinter {
 func (p *BasicTextPrinter) Printfln(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintfln(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -94,15 +99,10 @@ func (p *BasicTextPrinter) Printfln(format string, a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *BasicTextPrinter) PrintOnError(a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(err)
-			}
-		}
-	}
+	printOnError(p, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -110,14 +110,9 @@ func (p *BasicTextPrinter) PrintOnError(a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *BasicTextPrinter) PrintOnErrorf(format string, a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(fmt.Errorf(format, err))
-			}
-		}
-	}
+	printOnErrorf(p, format, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }

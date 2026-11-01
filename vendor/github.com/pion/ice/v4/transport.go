@@ -9,8 +9,23 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
+	"github.com/pion/transport/v5/packetio"
 )
+
+type packetAttributeKey uint8
+
+const ecnAttributeKey packetAttributeKey = iota
+
+// ECN is the two-bit Explicit Congestion Notification codepoint in an IP header.
+type ECN uint8
+
+// ECNFromAttributes returns the received packet's ECN codepoint.
+func ECNFromAttributes(attrs packetio.Attributes) (ECN, bool) {
+	ecn, ok := attrs.Get(ecnAttributeKey).(ECN)
+
+	return ecn, ok
+}
 
 // AwaitConnect waits until a pair is selected.
 func (a *Agent) AwaitConnect(ctx context.Context) error {
@@ -110,15 +125,22 @@ func (a *Agent) startConnect(isControlling bool, remoteUfrag, remotePwd string) 
 
 // Read implements the Conn Read method.
 func (c *Conn) Read(p []byte) (int, error) {
-	err := c.agent.loop.Err()
-	if err != nil {
-		return 0, err
-	}
-
-	n, err := c.agent.buf.Read(p)
-	c.bytesReceived.Add(uint64(n)) //nolint:gosec // G115
+	var attrs [1]packetio.Attribute
+	n, _, err := c.ReadWithAttributes(p, attrs[:0])
 
 	return n, err
+}
+
+// ReadWithAttributes reads a packet and replaces attrs with its metadata.
+func (c *Conn) ReadWithAttributes(p []byte, attrs packetio.Attributes) (int, packetio.Attributes, error) {
+	if err := c.agent.loop.Err(); err != nil {
+		return 0, nil, err
+	}
+
+	n, attrs, err := c.agent.buf.Read(p, attrs)
+	c.bytesReceived.Add(uint64(n)) //nolint:gosec // G115
+
+	return n, attrs, err
 }
 
 // Write implements the Conn Write method.
@@ -134,14 +156,24 @@ func (c *Conn) Write(packet []byte) (int, error) {
 
 	pair := c.agent.getSelectedPair()
 	if pair == nil {
+		// Note: the closure must capture p and not pair. Whether a variable
+		// is heap-allocated is a static decision across all code paths, and
+		// the allocation happens where the variable is declared. If we were
+		// to capture pair directly in this closure, then pair would be heap
+		// allocated on every single packet write, even when there is already
+		// a selected pair. By declaring a new variable inside the fallback,
+		// we avoid allocating on most writes and only allocate when no pair
+		// is currently selected.
+		var p *CandidatePair
 		if err = c.agent.loop.Run(c.agent.loop, func(_ context.Context) {
-			pair = c.agent.getBestValidCandidatePair()
+			p = c.agent.getBestValidCandidatePair()
 		}); err != nil {
 			return 0, err
 		}
+		pair = p
 
 		if pair == nil {
-			return 0, err
+			return 0, ErrNoCandidatePairs
 		}
 	}
 

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/rtcp"
-	"github.com/pion/transport/v4/packetio"
+	"github.com/pion/transport/v5/packetio"
 )
 
 // Limit the buffer size to 100KB.
@@ -29,8 +29,8 @@ type ReadStreamSRTCP struct {
 	buffer io.ReadWriteCloser
 }
 
-func (r *ReadStreamSRTCP) write(buf []byte) (n int, err error) {
-	n, err = r.buffer.Write(buf)
+func (r *ReadStreamSRTCP) write(buf []byte, attrs packetio.Attributes) (n int, err error) {
+	n, err = writeWithAttributes(r.buffer, buf, attrs)
 
 	if errors.Is(err, packetio.ErrFull) {
 		// Silently drop data when the buffer is full.
@@ -64,6 +64,12 @@ func (r *ReadStreamSRTCP) ReadRTCP(buf []byte) (int, *rtcp.Header, error) {
 // Read reads and decrypts full RTCP packet from the nextConn.
 func (r *ReadStreamSRTCP) Read(buf []byte) (int, error) {
 	return r.buffer.Read(buf)
+}
+
+// ReadWithAttributes reads a decrypted RTCP packet and its attributes.
+// It replaces attrs with the packet's attributes, reusing its storage when possible.
+func (r *ReadStreamSRTCP) ReadWithAttributes(buf []byte, attrs packetio.Attributes) (int, packetio.Attributes, error) {
+	return readWithAttributes(r.buffer, buf, attrs)
 }
 
 // SetReadDeadline sets the deadline for the Read operation.
@@ -122,7 +128,7 @@ func (r *ReadStreamSRTCP) init(child streamSession, ssrc uint32) error {
 		r.buffer = r.session.bufferFactory(packetio.RTCPBufferPacket, ssrc)
 	} else {
 		// Create a buffer and limit it to 100KB
-		buff := packetio.NewBuffer()
+		buff := &packetBuffer{Buffer: packetio.NewBuffer()}
 		buff.SetLimitSize(srtcpBufferSize)
 		r.buffer = buff
 	}

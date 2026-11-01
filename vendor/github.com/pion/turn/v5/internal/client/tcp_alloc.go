@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,8 +12,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v4"
+	"github.com/pion/stun/v4"
+	"github.com/pion/transport/v5"
 	"github.com/pion/turn/v5/internal/proto"
 )
 
@@ -102,7 +103,7 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	}
 
 	a.log.Debugf("Send connect request (peer=%v)", peer)
-	trRes, err := a.client.PerformTransaction(msg, a.serverAddr, false)
+	trRes, err := a.client.PerformTransactionWithContext(msg, a.serverAddr, false, context.TODO())
 	if err != nil {
 		return 0, err
 	}
@@ -112,7 +113,10 @@ func (a *TCPAllocation) Connect(peer net.Addr) (proto.ConnectionID, error) {
 	if res.Type.Class == stun.ClassErrorResponse {
 		var code stun.ErrorCodeAttribute
 		if err = code.GetFrom(res); err == nil {
-			return 0, fmt.Errorf("%s (error %s)", res.Type, code) //nolint // dynamic errors
+			return 0, &stun.TurnError{
+				StunMessageType: res.Type,
+				ErrorCodeAttr:   code,
+			}
 		}
 
 		return 0, fmt.Errorf("%s", res.Type) //nolint // dynamic errors

@@ -2,6 +2,7 @@
 package slice
 
 import (
+	"iter"
 	"slices"
 )
 
@@ -117,4 +118,31 @@ func DeleteAt[T any](slice []T, index int) (element T, newSlice []T, ok bool) {
 	newSlice = slices.Delete(slices.Clone(slice), index, index+1)
 
 	return element, newSlice, true
+}
+
+// IsSubset checks if all elements of slice a are present in slice b.
+func IsSubset[T comparable](a, b []T) bool {
+	if len(a) > len(b) {
+		return false
+	}
+	set := make(map[T]struct{}, len(b))
+	for _, item := range b {
+		set[item] = struct{}{}
+	}
+	for _, item := range a {
+		if _, exists := set[item]; !exists {
+			return false
+		}
+	}
+	return true
+}
+
+// Map takes an iterator of type E and a mapping function, and returns an
+// iterator of type F.
+func Map[E any, F any](seq iter.Seq[E], fn func(e E) F) iter.Seq[F] {
+	return func(yield func(F) bool) {
+		for e := range seq {
+			yield(fn(e))
+		}
+	}
 }

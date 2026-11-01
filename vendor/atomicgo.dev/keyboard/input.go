@@ -163,6 +163,8 @@ var hexCodes = map[string]keys.Key{
 	"1b4f42": {Code: keys.Down, AltPressed: false},
 	"1b4f43": {Code: keys.Right, AltPressed: false},
 	"1b4f44": {Code: keys.Left, AltPressed: false},
+	"1b5b46": {Code: keys.End, AltPressed: false},
+	"1b5b48": {Code: keys.Home, AltPressed: false},
 }
 
 func getKeyPress() (keys.Key, error) {
@@ -214,6 +216,7 @@ func getKeyPress() (keys.Key, error) {
 		if r == utf8.RuneError {
 			return keys.Key{}, fmt.Errorf("could not decode rune: %w", err)
 		}
+
 		runes = append(runes, r)
 		w = width
 	}

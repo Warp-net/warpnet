@@ -1,0 +1,37 @@
+version: 3
+
+tasks:
+  lint:
+    cmds:
+      - golangci-lint run
+
+  fmt:
+    cmds:
+      - golangci-lint run --fix
+
+  test:
+    desc: Run tests with race detection
+    env:
+      CGO_ENABLED: 1
+    cmds:
+      - go test -race ./...
+
+  animations:
+    desc: Render and publish example animations with VHS
+    cmds:
+      - scripts/animate.sh
+
+  animations:dry:
+    desc: Render examples locally without publishing or updating docs
+    cmds:
+      - scripts/animate.sh --dry-run
+
+  animate:
+    desc: Render one example locally, e.g. task animate -- logger/default
+    cmds:
+      - scripts/animate.sh --example "{{.CLI_ARGS}}"
+
+  unittestcount:
+    desc: Update the README unit test count badge
+    cmds:
+      - scripts/update-unittestcount.sh

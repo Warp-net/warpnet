@@ -1,7 +1,6 @@
 package pterm
 
 import (
-	"fmt"
 	"io"
 	"strings"
 
@@ -64,13 +63,14 @@ func (p HeaderPrinter) WithWriter(writer io.Writer) *HeaderPrinter {
 // Sprint formats using the default formats for its operands and returns the resulting string.
 // Spaces are added between operands when neither is a string.
 func (p HeaderPrinter) Sprint(a ...any) string {
-	if RawOutput {
+	if rawOutput() {
 		return Sprint(a...)
 	}
 
 	if p.TextStyle == nil {
 		p.TextStyle = NewStyle()
 	}
+
 	if p.BackgroundStyle == nil {
 		p.BackgroundStyle = NewStyle()
 	}
@@ -107,15 +107,19 @@ func (p HeaderPrinter) Sprint(a ...any) string {
 
 	ret.WriteString(p.BackgroundStyle.Sprint(blankLine))
 	ret.WriteByte('\n')
-	for _, line := range strings.Split(text, "\n") {
+
+	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.ReplaceAll(line, "\n", "")
+
 		line = marginString + line + marginString
 		if runewidth.StringWidth(line) < runewidth.StringWidth(blankLine) {
 			line += strings.Repeat(" ", runewidth.StringWidth(blankLine)-runewidth.StringWidth(line))
 		}
+
 		ret.WriteString(p.BackgroundStyle.Sprint(p.TextStyle.Sprint(line)))
 		ret.WriteByte('\n')
 	}
+
 	ret.WriteString(p.BackgroundStyle.Sprint(blankLine))
 	ret.WriteByte('\n')
 
@@ -124,18 +128,23 @@ func (p HeaderPrinter) Sprint(a ...any) string {
 
 func splitText(text string, width int) string {
 	var lines []string
-	linesTmp := strings.Split(text, "\n")
-	for _, line := range linesTmp {
+
+	linesTmp := strings.SplitSeq(text, "\n")
+	for line := range linesTmp {
 		if runewidth.StringWidth(RemoveColorFromString(line)) > width {
 			extraLines := []string{""}
 			extraLinesCounter := 0
+
 			for i, letter := range line {
 				if i%width == 0 && i != 0 {
 					extraLinesCounter++
+
 					extraLines = append(extraLines, "")
 				}
+
 				extraLines[extraLinesCounter] += string(letter)
 			}
+
 			for _, extraLine := range extraLines {
 				extraLine += "\n"
 				lines = append(lines, extraLine)
@@ -146,12 +155,12 @@ func splitText(text string, width int) string {
 		}
 	}
 
-	var line string
+	var line strings.Builder
 	for _, s := range lines {
-		line += s
+		line.WriteString(s)
 	}
 
-	return strings.TrimSuffix(line, "\n")
+	return strings.TrimSuffix(line.String(), "\n")
 }
 
 // Sprintln formats using the default formats for its operands and returns the resulting string.
@@ -177,6 +186,7 @@ func (p HeaderPrinter) Sprintfln(format string, a ...any) string {
 func (p *HeaderPrinter) Print(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprint(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -186,6 +196,7 @@ func (p *HeaderPrinter) Print(a ...any) *TextPrinter {
 func (p *HeaderPrinter) Println(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintln(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -194,6 +205,7 @@ func (p *HeaderPrinter) Println(a ...any) *TextPrinter {
 func (p *HeaderPrinter) Printf(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintf(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -203,6 +215,7 @@ func (p *HeaderPrinter) Printf(format string, a ...any) *TextPrinter {
 func (p *HeaderPrinter) Printfln(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintfln(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -210,15 +223,10 @@ func (p *HeaderPrinter) Printfln(format string, a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *HeaderPrinter) PrintOnError(a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(err)
-			}
-		}
-	}
+	printOnError(p, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -226,14 +234,9 @@ func (p *HeaderPrinter) PrintOnError(a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *HeaderPrinter) PrintOnErrorf(format string, a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(fmt.Errorf(format, err))
-			}
-		}
-	}
+	printOnErrorf(p, format, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }

@@ -12,7 +12,7 @@ var DefaultSection = SectionPrinter{
 	Level:           1,
 	TopPadding:      1,
 	BottomPadding:   1,
-	IndentCharacter: "#",
+	IndentCharacter: "»",
 }
 
 // SectionPrinter prints a new section title.
@@ -76,7 +76,7 @@ func (p SectionPrinter) Sprint(a ...any) string {
 	}
 
 	if p.Level > 0 {
-		ret.WriteString(strings.Repeat(p.IndentCharacter, p.Level))
+		ret.WriteString(p.Style.Sprint(strings.Repeat(p.IndentCharacter, p.Level)))
 		ret.WriteByte(' ')
 	}
 
@@ -113,6 +113,7 @@ func (p SectionPrinter) Sprintfln(format string, a ...any) string {
 func (p *SectionPrinter) Print(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprint(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -122,6 +123,7 @@ func (p *SectionPrinter) Print(a ...any) *TextPrinter {
 func (p *SectionPrinter) Println(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintln(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -130,6 +132,7 @@ func (p *SectionPrinter) Println(a ...any) *TextPrinter {
 func (p *SectionPrinter) Printf(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintf(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -139,6 +142,7 @@ func (p *SectionPrinter) Printf(format string, a ...any) *TextPrinter {
 func (p *SectionPrinter) Printfln(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintfln(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -146,15 +150,10 @@ func (p *SectionPrinter) Printfln(format string, a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *SectionPrinter) PrintOnError(a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(err)
-			}
-		}
-	}
+	printOnError(p, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -162,14 +161,9 @@ func (p *SectionPrinter) PrintOnError(a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *SectionPrinter) PrintOnErrorf(format string, a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(fmt.Errorf(format, err))
-			}
-		}
-	}
+	printOnErrorf(p, format, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }

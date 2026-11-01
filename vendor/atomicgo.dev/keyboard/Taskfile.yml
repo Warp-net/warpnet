@@ -1,0 +1,78 @@
+# ! ┌───────────────────────────────────────────────────────────────────┐
+# ! │                                                                   │
+# ! │                          IMPORTANT NOTE                           │
+# ! │                                                                   │
+# ! │   This file is synced with https://github.com/atomicgo/template   │
+# ! │                                                                   │
+# ! │        Please apply all changes to the template repository        │
+# ! │                                                                   │
+# ! └───────────────────────────────────────────────────────────────────┘
+
+version: "3"
+
+tasks:
+  test:
+    desc: Run all tests
+    env:
+      CGO_ENABLED: 1
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    cmds:
+      - go test -race ./...
+
+  release:patch:
+    desc: Create and push the next patch release tag
+    deps: [test]
+    cmds:
+      - bash scripts/release-tag.sh --patch
+
+  release:minor:
+    desc: Create and push the next minor release tag
+    deps: [test]
+    cmds:
+      - bash scripts/release-tag.sh --minor
+
+  release:major:
+    desc: Create and push the next major release tag
+    deps: [test]
+    cmds:
+      - bash scripts/release-tag.sh --major
+
+  benchmark:
+    desc: Run all benchmarks
+    aliases: [bench]
+    cmds:
+      - go test -bench=. ./...
+
+  tdd:
+    desc: Test Driven Development - Watch tests
+    env:
+      CGO_ENABLED: 1
+    watch: true
+    sources:
+      - "**/*.go"
+    cmds:
+      - go test -race ./...
+
+  lint:
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - .golangci.yml
+    desc: Run all linters
+    cmds:
+      - golangci-lint run
+
+  lint:fix:
+    desc: Run all linters and apply automatic fixes
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - .golangci.yml
+    cmds:
+      - go mod tidy
+      - golangci-lint run --fix

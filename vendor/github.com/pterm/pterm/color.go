@@ -4,21 +4,34 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gookit/color"
+	"github.com/pterm/pterm/internal/color"
 )
 
 // PrintColor is false if PTerm should not print colored output.
-var PrintColor = true
+//
+// It defaults to true unless the environment opts out of color (NO_COLOR,
+// TERM=dumb, FORCE_COLOR=0) or the terminal cannot render ANSI sequences at
+// all (legacy Windows consoles). Initializing this variable also switches the
+// Windows console into virtual terminal mode, so colors work in classic
+// terminals like cmd.exe. Call EnableColor to force colors back on.
+//
+// Reading or writing this variable directly is not concurrency-safe; use
+// EnableColor/DisableColor from multiple goroutines.
+var PrintColor = color.SupportsANSI()
 
 // EnableColor enables colors.
 func EnableColor() {
-	color.Enable = true
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
 	PrintColor = true
 }
 
 // DisableColor disables colors.
 func DisableColor() {
-	color.Enable = false
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
 	PrintColor = false
 }
 
@@ -149,11 +162,14 @@ func (c Color) Sprintln(a ...any) string {
 // Input will be colored with the parent Color.
 func (c Color) Sprint(a ...any) string {
 	message := Sprint(a...)
+
 	messageLines := strings.Split(message, "\n")
 	for i, line := range messageLines {
-		messageLines[i] = color.RenderCode(c.String(), strings.ReplaceAll(line, color.ResetSet, Sprintf("\x1b[0m\u001B[%sm", c.String())))
+		messageLines[i] = renderCode(c.String(), strings.ReplaceAll(line, resetSequence, Sprintf("\x1b[0m\u001B[%sm", c.String())))
 	}
+
 	message = strings.Join(messageLines, "\n")
+
 	return message
 }
 
@@ -177,6 +193,7 @@ func (c Color) Sprintfln(format string, a ...any) string {
 func (c Color) Println(a ...any) *TextPrinter {
 	Print(c.Sprintln(a...))
 	tc := TextPrinter(c)
+
 	return &tc
 }
 
@@ -187,6 +204,7 @@ func (c Color) Println(a ...any) *TextPrinter {
 func (c Color) Print(a ...any) *TextPrinter {
 	Print(c.Sprint(a...))
 	tc := TextPrinter(c)
+
 	return &tc
 }
 
@@ -196,6 +214,7 @@ func (c Color) Print(a ...any) *TextPrinter {
 func (c Color) Printf(format string, a ...any) *TextPrinter {
 	Print(c.Sprintf(format, a...))
 	tc := TextPrinter(c)
+
 	return &tc
 }
 
@@ -206,6 +225,7 @@ func (c Color) Printf(format string, a ...any) *TextPrinter {
 func (c Color) Printfln(format string, a ...any) *TextPrinter {
 	Print(c.Sprintfln(format, a...))
 	tp := TextPrinter(c)
+
 	return &tp
 }
 
@@ -213,15 +233,10 @@ func (c Color) Printfln(format string, a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (c Color) PrintOnError(a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				c.Println(err)
-			}
-		}
-	}
+	printOnError(c, a...)
 
 	tp := TextPrinter(c)
+
 	return &tp
 }
 
@@ -229,15 +244,10 @@ func (c Color) PrintOnError(a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (c Color) PrintOnErrorf(format string, a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				c.Println(fmt.Errorf(format, err))
-			}
-		}
-	}
+	printOnErrorf(c, format, a...)
 
 	tp := TextPrinter(c)
+
 	return &tp
 }
 
@@ -258,10 +268,9 @@ type Style []Color
 // NewStyle returns a new Style.
 // Accepts multiple colors.
 func NewStyle(colors ...Color) *Style {
-	ret := Style{}
-	for _, c := range colors {
-		ret = append(ret, c)
-	}
+	ret := make(Style, 0, len(colors))
+	ret = append(ret, colors...)
+
 	return &ret
 }
 
@@ -298,12 +307,15 @@ func (s Style) RemoveColor(colors ...Color) Style {
 // Input will be colored with the parent Style.
 func (s Style) Sprint(a ...any) string {
 	message := Sprint(a...)
+
 	messageLines := strings.Split(message, "\n")
 	for i, line := range messageLines {
-		messageLines[i] = color.RenderCode(s.String(), strings.ReplaceAll(line, color.ResetSet, Sprintf("\x1b[0m\u001B[%sm", s.String())))
+		messageLines[i] = renderCode(s.String(), strings.ReplaceAll(line, resetSequence, Sprintf("\x1b[0m\u001B[%sm", s.String())))
 	}
-	message = strings.Join(messageLines, "\n")
-	return color.RenderCode(s.String(), message)
+
+	// Each line is wrapped individually above, so joining them is enough;
+	// wrapping the joined message again would duplicate every escape sequence.
+	return strings.Join(messageLines, "\n")
 }
 
 // Sprintln formats using the default formats for its operands and returns the resulting string.

@@ -6,6 +6,7 @@ package ice
 import (
 	"context"
 	"net"
+	"net/netip"
 	"time"
 )
 
@@ -87,6 +88,7 @@ type Candidate interface {
 	transportAddressEqual(other Candidate) bool
 
 	addr() net.Addr
+	addrPort() netip.AddrPort
 	filterForLocationTracking() bool
 	agent() *Agent
 	context() context.Context
@@ -96,6 +98,8 @@ type Candidate interface {
 	seen(outbound bool)
 	start(a *Agent, conn net.PacketConn, initializedCh <-chan struct{})
 	writeTo(raw []byte, dst Candidate) (int, error)
+	setPriority(uint32)
+	prflxPriority() uint32
 
 	replaceRemoteCandidateCacheValues(oldRemote, newRemote Candidate)
 }

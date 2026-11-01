@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 func newCandidatePair(local, remote Candidate, controlling bool) *CandidatePair {
@@ -41,8 +41,8 @@ type CandidatePair struct {
 	packetsReceived      uint32
 	bytesSent            uint64
 	bytesReceived        uint64
-	lastPacketSentAt     atomic.Value // time.Time
-	lastPacketReceivedAt atomic.Value // time.Time
+	lastPacketSentAt     atomic.Int64 // monotonic nanos since timeRef, see getMonoNanos
+	lastPacketReceivedAt atomic.Int64 // monotonic nanos since timeRef, see getMonoNanos
 
 	requestsReceived  uint64
 	requestsSent      uint64
@@ -110,22 +110,6 @@ func (p *CandidatePair) priority() uint64 {
 		d = p.Local.Priority()
 	}
 
-	// Just implement these here rather
-	// than fooling around with the math package
-	localMin := func(x, y uint32) uint64 {
-		if x < y {
-			return uint64(x)
-		}
-
-		return uint64(y)
-	}
-	localMax := func(x, y uint32) uint64 {
-		if x > y {
-			return uint64(x)
-		}
-
-		return uint64(y)
-	}
 	cmp := func(x, y uint32) uint64 {
 		if x > y {
 			return uint64(1)
@@ -136,7 +120,7 @@ func (p *CandidatePair) priority() uint64 {
 
 	// 1<<32 overflows uint32; and if both g && d are
 	// maxUint32, this result would overflow uint64
-	return (1<<32-1)*localMin(g, d) + 2*localMax(g, d) + cmp(g, d)
+	return (1<<32-1)*uint64(min(g, d)) + 2*uint64(max(g, d)) + cmp(g, d)
 }
 
 func (p *CandidatePair) Write(b []byte) (int, error) {
@@ -221,8 +205,8 @@ func (p *CandidatePair) BytesReceived() uint64 {
 
 // LastPacketSentAt returns the timestamp of the last application packet sent.
 func (p *CandidatePair) LastPacketSentAt() time.Time {
-	if v, ok := p.lastPacketSentAt.Load().(time.Time); ok {
-		return v
+	if nanos := p.lastPacketSentAt.Load(); nanos != 0 {
+		return getMonoTime(nanos)
 	}
 
 	return time.Time{}
@@ -230,8 +214,8 @@ func (p *CandidatePair) LastPacketSentAt() time.Time {
 
 // LastPacketReceivedAt returns the timestamp of the last application packet received.
 func (p *CandidatePair) LastPacketReceivedAt() time.Time {
-	if v, ok := p.lastPacketReceivedAt.Load().(time.Time); ok {
-		return v
+	if nanos := p.lastPacketReceivedAt.Load(); nanos != 0 {
+		return getMonoTime(nanos)
 	}
 
 	return time.Time{}
@@ -245,7 +229,7 @@ func (p *CandidatePair) UpdatePacketSent(n int) {
 
 	atomic.AddUint32(&p.packetsSent, 1)
 	atomic.AddUint64(&p.bytesSent, uint64(n)) // #nosec G115 -- n > 0 validated above
-	p.lastPacketSentAt.Store(time.Now())
+	p.lastPacketSentAt.Store(getMonoNanos(time.Now()))
 }
 
 // UpdatePacketReceived increments packet/byte counters and updates timestamp for a received application packet.
@@ -256,7 +240,7 @@ func (p *CandidatePair) UpdatePacketReceived(n int) {
 
 	atomic.AddUint32(&p.packetsReceived, 1)
 	atomic.AddUint64(&p.bytesReceived, uint64(n)) // #nosec G115 -- n > 0 validated above
-	p.lastPacketReceivedAt.Store(time.Now())
+	p.lastPacketReceivedAt.Store(getMonoNanos(time.Now()))
 }
 
 // FirstRequestSentAt returns the timestamp of the first connectivity check sent.

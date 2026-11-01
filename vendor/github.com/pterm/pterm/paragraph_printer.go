@@ -1,7 +1,6 @@
 package pterm
 
 import (
-	"fmt"
 	"io"
 	"strings"
 )
@@ -34,7 +33,7 @@ func (p ParagraphPrinter) WithWriter(writer io.Writer) *ParagraphPrinter {
 // Sprint formats using the default formats for its operands and returns the resulting string.
 // Spaces are added between operands when neither is a string.
 func (p ParagraphPrinter) Sprint(a ...any) string {
-	if RawOutput {
+	if rawOutput() {
 		return Sprint(a...)
 	}
 
@@ -42,7 +41,9 @@ func (p ParagraphPrinter) Sprint(a ...any) string {
 	if len(words) == 0 {
 		return ""
 	}
+
 	wrapped := words[0]
+
 	spaceLeft := p.MaxWidth - len(wrapped)
 	for _, word := range words[1:] {
 		if len(word)+1 > spaceLeft {
@@ -80,6 +81,7 @@ func (p ParagraphPrinter) Sprintfln(format string, a ...any) string {
 func (p *ParagraphPrinter) Print(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprint(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -89,6 +91,7 @@ func (p *ParagraphPrinter) Print(a ...any) *TextPrinter {
 func (p *ParagraphPrinter) Println(a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintln(a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -97,6 +100,7 @@ func (p *ParagraphPrinter) Println(a ...any) *TextPrinter {
 func (p *ParagraphPrinter) Printf(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintf(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -106,6 +110,7 @@ func (p *ParagraphPrinter) Printf(format string, a ...any) *TextPrinter {
 func (p *ParagraphPrinter) Printfln(format string, a ...any) *TextPrinter {
 	Fprint(p.Writer, p.Sprintfln(format, a...))
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -113,15 +118,10 @@ func (p *ParagraphPrinter) Printfln(format string, a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *ParagraphPrinter) PrintOnError(a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(err)
-			}
-		}
-	}
+	printOnError(p, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }
 
@@ -129,14 +129,9 @@ func (p *ParagraphPrinter) PrintOnError(a ...any) *TextPrinter {
 // If every error is nil, nothing will be printed.
 // This can be used for simple error checking.
 func (p *ParagraphPrinter) PrintOnErrorf(format string, a ...any) *TextPrinter {
-	for _, arg := range a {
-		if err, ok := arg.(error); ok {
-			if err != nil {
-				p.Println(fmt.Errorf(format, err))
-			}
-		}
-	}
+	printOnErrorf(p, format, a...)
 
 	tp := TextPrinter(p)
+
 	return &tp
 }

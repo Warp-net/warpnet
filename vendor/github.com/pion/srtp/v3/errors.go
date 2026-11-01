@@ -13,6 +13,8 @@ var (
 	ErrFailedToVerifyAuthTag = errors.New("failed to verify auth tag")
 	// ErrMKINotFound is returned when decryption fails due to unknown MKI value in packet.
 	ErrMKINotFound = errors.New("MKI not found")
+	// ErrContextOptionNotUpdatable indicates an option cannot be updated after construction.
+	ErrContextOptionNotUpdatable = errors.New("option can only be set during context construction")
 
 	errDuplicated                    = errors.New("duplicated packet")
 	errShortSrtpMasterKey            = errors.New("SRTP master key is not long enough")

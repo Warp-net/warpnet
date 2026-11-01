@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/internal/validation"
 	"github.com/pion/logging"
 	"github.com/pion/rtcp"
 )
@@ -45,7 +46,7 @@ func (g *GeneratorInterceptorFactory) NewInterceptor(_ string) (interceptor.Inte
 		generatorInterceptor.log = generatorInterceptor.loggerFactory.NewLogger("nack_generator")
 	}
 
-	if _, err := newReceiveLog(generatorInterceptor.size); err != nil {
+	if err := validation.IsPowerOfTwo(generatorInterceptor.size); err != nil {
 		return nil, err
 	}
 

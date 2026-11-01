@@ -1,3 +1,4 @@
+// Package internal contains keyboard control code constants.
 package internal
 
 // See: https://en.wikipedia.org/wiki/C0_and_C1_control_codes

@@ -6,6 +6,7 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -71,23 +72,20 @@ func goAndroidBind(gobind string, pkgs []*packages.Package, targets []targetInfo
 	return buildSrcJar(jsrc)
 }
 
-func buildSrcJar(src string) error {
-	var out io.Writer = io.Discard
-	if !buildN {
-		ext := filepath.Ext(buildO)
-		f, err := os.Create(buildO[:len(buildO)-len(ext)] + "-sources.jar")
-		if err != nil {
-			return err
-		}
-		defer func() {
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
-		}()
-		out = f
+func buildSrcJar(src string) (retErr error) {
+	if buildN {
+		return writeJar(io.Discard, src)
 	}
 
-	return writeJar(out, src)
+	ext := filepath.Ext(buildO)
+	f, err := os.Create(buildO[:len(buildO)-len(ext)] + "-sources.jar")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		retErr = errors.Join(retErr, f.Close())
+	}()
+	return writeJar(f, src)
 }
 
 // AAR is the format for the binary distribution of an Android Library Project
@@ -108,7 +106,7 @@ func buildSrcJar(src string) error {
 //	aidl (optional, not relevant)
 //
 // javac and jar commands are needed to build classes.jar.
-func buildAAR(srcDir, androidDir string, pkgs []*packages.Package, targets []targetInfo) (err error) {
+func buildAAR(srcDir, androidDir string, pkgs []*packages.Package, targets []targetInfo) (retErr error) {
 	var out io.Writer = io.Discard
 	if buildO == "" {
 		buildO = pkgs[0].Name + ".aar"
@@ -122,9 +120,7 @@ func buildAAR(srcDir, androidDir string, pkgs []*packages.Package, targets []tar
 			return err
 		}
 		defer func() {
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
+			retErr = errors.Join(retErr, f.Close())
 		}()
 		out = f
 	}
@@ -191,7 +187,11 @@ func buildAAR(srcDir, androidDir string, pkgs []*packages.Package, targets []tar
 						return err
 					}
 					defer f.Close()
-					name := "assets/" + path[len(assetsDir)+1:]
+					rel, err := filepath.Rel(assetsDir, path)
+					if err != nil {
+						return err
+					}
+					name := "assets/" + filepath.ToSlash(rel)
 					if orig, exists := files[name]; exists {
 						return fmt.Errorf("package %s asset name conflict: %s already added from package %s",
 							pkg.PkgPath, name, orig)
@@ -199,7 +199,7 @@ func buildAAR(srcDir, androidDir string, pkgs []*packages.Package, targets []tar
 					files[name] = pkg.PkgPath
 					w, err := aarwcreate(name)
 					if err != nil {
-						return nil
+						return err
 					}
 					_, err = io.Copy(w, f)
 					return err

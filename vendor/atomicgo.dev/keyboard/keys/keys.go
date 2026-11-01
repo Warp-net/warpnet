@@ -1,3 +1,4 @@
+// Package keys provides keyboard key types and constants.
 package keys
 
 import "atomicgo.dev/keyboard/internal"
@@ -21,6 +22,7 @@ func (k Key) String() (str string) {
 	if k.AltPressed {
 		str += "alt+"
 	}
+
 	if k.Code == RuneKey {
 		str += string(k.Runes)
 

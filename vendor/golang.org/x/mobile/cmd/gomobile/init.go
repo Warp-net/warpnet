@@ -28,7 +28,7 @@ var cmdInit = &command{
 	run:   runInit,
 	Name:  "init",
 	Usage: "[-openal dir]",
-	Short: "build OpenAL for Android",
+	Short: "initialize gomobile tools and optionally build OpenAL for Android",
 	Long: `
 If a OpenAL source directory is specified with -openal, init will
 build an Android version of OpenAL for use with gomobile build
@@ -232,7 +232,7 @@ func symlink(src, dst string) error {
 }
 
 func doCopyAll(dst, src string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, errin error) (err error) {
+	return filepath.Walk(src, func(path string, info os.FileInfo, errin error) (retErr error) {
 		if errin != nil {
 			return errin
 		}
@@ -254,9 +254,7 @@ func doCopyAll(dst, src string) error {
 			return err
 		}
 		defer func() {
-			if errc := out.Close(); err == nil {
-				err = errc
-			}
+			retErr = errors.Join(retErr, out.Close())
 		}()
 		_, err = io.Copy(out, in)
 		return err

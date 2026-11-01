@@ -13,6 +13,7 @@ func restoreInput() error {
 	if con != nil {
 		return con.Reset()
 	}
+
 	return nil
 }
 
@@ -21,6 +22,7 @@ func initInput() error {
 	if err != nil {
 		return err
 	}
+
 	con = c
 
 	return nil
@@ -31,5 +33,6 @@ func openInputTTY() (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return f, nil
 }

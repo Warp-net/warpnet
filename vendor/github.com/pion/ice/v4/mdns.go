@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pion/logging"
 	"github.com/pion/mdns/v2"
-	"github.com/pion/transport/v4"
+	"github.com/pion/transport/v5"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
@@ -123,6 +123,7 @@ func createMulticastDNS(
 
 	switch mDNSMode {
 	case MulticastDNSModeQueryOnly:
+		//nolint:staticcheck // NewServer is unavailable in the pinned mDNS version.
 		conn, err := mdns.Server(pktConnV4, pktConnV6, &mdns.Config{
 			Interfaces:      ifcs,
 			IncludeLoopback: includeLoopback,
@@ -132,6 +133,7 @@ func createMulticastDNS(
 
 		return conn, mDNSMode, err
 	case MulticastDNSModeQueryAndGather:
+		//nolint:staticcheck // NewServer is unavailable in the pinned mDNS version.
 		conn, err := mdns.Server(pktConnV4, pktConnV6, &mdns.Config{
 			Interfaces:      ifcs,
 			IncludeLoopback: includeLoopback,

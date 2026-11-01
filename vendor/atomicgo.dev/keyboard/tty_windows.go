@@ -11,6 +11,8 @@ import (
 	"github.com/containerd/console"
 )
 
+var windowsStdin *os.File
+
 func restoreInput() error {
 	if windowsStdin != nil {
 		os.Stdin = windowsStdin

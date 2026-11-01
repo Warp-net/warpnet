@@ -2,6 +2,7 @@ package pterm
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -16,35 +17,37 @@ import (
 var (
 	// DefaultInteractiveMultiselect is the default InteractiveMultiselect printer.
 	DefaultInteractiveMultiselect = InteractiveMultiselectPrinter{
-		TextStyle:      &ThemeDefault.PrimaryStyle,
-		DefaultText:    "Please select your options",
-		Options:        []string{},
-		OptionStyle:    &ThemeDefault.DefaultText,
-		DefaultOptions: []string{},
-		MaxHeight:      5,
-		Selector:       ">",
-		SelectorStyle:  &ThemeDefault.SecondaryStyle,
-		Filter:         true,
-		KeySelect:      keys.Enter,
-		KeyConfirm:     keys.Tab,
-		Checkmark:      &ThemeDefault.Checkmark,
+		TextStyle:              &ThemeDefault.PrimaryStyle,
+		DefaultText:            "Please select your options",
+		Options:                []string{},
+		OptionStyle:            &ThemeDefault.DefaultText,
+		DefaultOptions:         []string{},
+		MaxHeight:              5,
+		Selector:               "❯",
+		SelectorStyle:          &ThemeDefault.SecondaryStyle,
+		Filter:                 true,
+		KeySelect:              keys.Enter,
+		KeyConfirm:             keys.Tab,
+		Checkmark:              &ThemeDefault.Checkmark,
+		FilterInputPlaceholder: "[type to search]",
 	}
 )
 
 // InteractiveMultiselectPrinter is a printer for interactive multiselect menus.
 type InteractiveMultiselectPrinter struct {
-	DefaultText         string
-	TextStyle           *Style
-	Options             []string
-	OptionStyle         *Style
-	DefaultOptions      []string
-	MaxHeight           int
-	Selector            string
-	SelectorStyle       *Style
-	Filter              bool
-	Checkmark           *Checkmark
-	OnInterruptFunc     func()
-	ShowSelectedOptions bool
+	DefaultText            string
+	TextStyle              *Style
+	Options                []string
+	OptionStyle            *Style
+	DefaultOptions         []string
+	MaxHeight              int
+	Selector               string
+	SelectorStyle          *Style
+	Filter                 bool
+	Checkmark              *Checkmark
+	OnInterruptFunc        func()
+	ShowSelectedOptions    bool
+	FilterInputPlaceholder string
 
 	selectedOption        int
 	selectedOptions       []int
@@ -124,6 +127,12 @@ func (p InteractiveMultiselectPrinter) WithShowSelectedOptions(b ...bool) *Inter
 	return &p
 }
 
+// WithFilterInputPlaceholder sets the filter input placeholder text.
+func (p InteractiveMultiselectPrinter) WithFilterInputPlaceholder(text string) *InteractiveMultiselectPrinter {
+	p.FilterInputPlaceholder = text
+	return &p
+}
+
 // Show shows the interactive multiselect menu and returns the selected entry.
 func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 	// should be the first defer statement to make sure it is executed last
@@ -142,10 +151,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 		p.MaxHeight = DefaultInteractiveMultiselect.MaxHeight
 	}
 
-	maxHeight := p.MaxHeight
-	if maxHeight > len(p.fuzzySearchMatches) {
-		maxHeight = len(p.fuzzySearchMatches)
-	}
+	maxHeight := min(p.MaxHeight, len(p.fuzzySearchMatches))
 
 	if len(p.Options) == 0 {
 		return nil, fmt.Errorf("no options provided")
@@ -160,7 +166,9 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 	}
 
 	area, err := DefaultArea.Start(p.renderSelectMenu())
-	defer area.Stop()
+
+	defer func() { _ = area.Stop() }()
+
 	if err != nil {
 		return nil, fmt.Errorf("could not start area: %w", err)
 	}
@@ -172,29 +180,32 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 	area.Update(p.renderSelectMenu())
 
 	cursor.Hide()
+
 	defer cursor.Show()
+
 	err = keyboard.Listen(func(keyInfo keys.Key) (stop bool, err error) {
 		key := keyInfo.Code
 
-		if p.MaxHeight > len(p.fuzzySearchMatches) {
-			maxHeight = len(p.fuzzySearchMatches)
-		} else {
-			maxHeight = p.MaxHeight
-		}
+		maxHeight = min(p.MaxHeight, len(p.fuzzySearchMatches))
 
 		switch key {
 		case p.KeyConfirm:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
+
 			area.Update(p.renderFinishedMenu())
+
 			return true, nil
+
 		case p.KeySelect:
 			if len(p.fuzzySearchMatches) > 0 {
 				// Select option if not already selected
 				p.selectOption(p.fuzzySearchMatches[p.selectedOption])
 			}
+
 			area.Update(p.renderSelectMenu())
+
 		case keys.RuneKey:
 			if p.Filter {
 				// Fuzzy search for options
@@ -205,13 +216,16 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 				p.displayedOptionsEnd = maxHeight
 				p.displayedOptions = append([]string{}, p.fuzzySearchMatches[:maxHeight]...)
 			}
+
 			area.Update(p.renderSelectMenu())
+
 		case keys.Space:
 			if p.Filter {
 				p.fuzzySearchString += " "
 				p.selectedOption = 0
 				area.Update(p.renderSelectMenu())
 			}
+
 		case keys.Backspace:
 			// Remove last character from fuzzy search string
 			if p.fuzzySearchString != "" {
@@ -225,11 +239,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 
 			p.renderSelectMenu()
 
-			if len(p.fuzzySearchMatches) > p.MaxHeight {
-				maxHeight = p.MaxHeight
-			} else {
-				maxHeight = len(p.fuzzySearchMatches)
-			}
+			maxHeight = min(len(p.fuzzySearchMatches), p.MaxHeight)
 
 			p.selectedOption = 0
 			p.displayedOptionsStart = 0
@@ -237,30 +247,45 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 			p.displayedOptions = append([]string{}, p.fuzzySearchMatches[p.displayedOptionsStart:p.displayedOptionsEnd]...)
 
 			area.Update(p.renderSelectMenu())
+
 		case keys.Left:
-			// Unselect all options
-			p.selectedOptions = []int{}
-			area.Update(p.renderSelectMenu())
-		case keys.Right:
-			// Select all options
-			p.selectedOptions = []int{}
-			for i := 0; i < len(p.Options); i++ {
-				p.selectedOptions = append(p.selectedOptions, i)
+			// Deselect only the options visible under the current filter.
+			for _, match := range p.fuzzySearchMatches {
+				if p.isSelected(match) {
+					p.selectOption(match)
+				}
 			}
+
 			area.Update(p.renderSelectMenu())
+
+		case keys.Right:
+			// Select only the options visible under the current filter.
+			for _, match := range p.fuzzySearchMatches {
+				if !p.isSelected(match) {
+					p.selectOption(match)
+				}
+			}
+
+			// Keep the result in option order instead of selection order.
+			slices.Sort(p.selectedOptions)
+			area.Update(p.renderSelectMenu())
+
 		case keys.Up, keys.CtrlP:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
+
 			if p.selectedOption > 0 {
 				p.selectedOption--
 				if p.selectedOption < p.displayedOptionsStart {
 					p.displayedOptionsStart--
+
 					p.displayedOptionsEnd--
 					if p.displayedOptionsStart < 0 {
 						p.displayedOptionsStart = 0
 						p.displayedOptionsEnd = maxHeight
 					}
+
 					p.displayedOptions = append([]string{}, p.fuzzySearchMatches[p.displayedOptionsStart:p.displayedOptionsEnd]...)
 				}
 			} else {
@@ -271,10 +296,12 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 			}
 
 			area.Update(p.renderSelectMenu())
+
 		case keys.Down, keys.CtrlN:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
+
 			p.displayedOptions = p.fuzzySearchMatches[:maxHeight]
 			if p.selectedOption < len(p.fuzzySearchMatches)-1 {
 				p.selectedOption++
@@ -291,6 +318,7 @@ func (p *InteractiveMultiselectPrinter) Show(text ...string) ([]string, error) {
 			}
 
 			area.Update(p.renderSelectMenu())
+
 		case keys.CtrlC:
 			cancel()
 			return true, nil
@@ -317,6 +345,7 @@ func (p InteractiveMultiselectPrinter) findOptionByText(text string) int {
 			return i
 		}
 	}
+
 	return -1
 }
 
@@ -331,6 +360,11 @@ func (p *InteractiveMultiselectPrinter) isSelected(optionText string) bool {
 }
 
 func (p *InteractiveMultiselectPrinter) selectOption(optionText string) {
+	idx := p.findOptionByText(optionText)
+	if idx < 0 {
+		return
+	}
+
 	if p.isSelected(optionText) {
 		// Remove from selected options
 		for i, selectedOption := range p.selectedOptions {
@@ -341,13 +375,17 @@ func (p *InteractiveMultiselectPrinter) selectOption(optionText string) {
 		}
 	} else {
 		// Add to selected options
-		p.selectedOptions = append(p.selectedOptions, p.findOptionByText(optionText))
+		p.selectedOptions = append(p.selectedOptions, idx)
 	}
 }
 
 func (p *InteractiveMultiselectPrinter) renderSelectMenu() string {
 	var content strings.Builder
-	content.WriteString(Sprintf("%s: %s\n", p.text, p.fuzzySearchString))
+	if p.Filter {
+		content.WriteString(Sprintf("%s %s: %s\n", p.text, p.SelectorStyle.Sprint(p.FilterInputPlaceholder), p.fuzzySearchString))
+	} else {
+		content.WriteString(Sprintf("%s: %s\n", p.text, p.fuzzySearchString))
+	}
 
 	// find options that match fuzzy search string
 	rankedResults := fuzzy.RankFindFold(p.fuzzySearchString, p.Options)
@@ -356,6 +394,7 @@ func (p *InteractiveMultiselectPrinter) renderSelectMenu() string {
 	if len(rankedResults) != len(p.Options) {
 		sort.Sort(rankedResults)
 	}
+
 	for _, result := range rankedResults {
 		p.fuzzySearchMatches = append(p.fuzzySearchMatches, result.Target)
 	}
@@ -372,12 +411,14 @@ func (p *InteractiveMultiselectPrinter) renderSelectMenu() string {
 		if option == "" {
 			continue
 		}
+
 		var checkmark string
 		if p.isSelected(option) {
 			checkmark = fmt.Sprintf("[%s]", p.Checkmark.Checked)
 		} else {
 			checkmark = fmt.Sprintf("[%s]", p.Checkmark.Unchecked)
 		}
+
 		if i == p.selectedOption {
 			content.WriteString(Sprintf("%s %s %s\n", p.renderSelector(), checkmark, option))
 		} else {
@@ -389,7 +430,8 @@ func (p *InteractiveMultiselectPrinter) renderSelectMenu() string {
 	if p.Filter {
 		help += fmt.Sprintf(" | type to %s", Bold.Sprint("filter"))
 	}
-	content.WriteString(ThemeDefault.SecondaryStyle.Sprintfln(help))
+
+	content.WriteString(ThemeDefault.SecondaryStyle.Sprintln(help))
 
 	// Optionally, add selected options to the menu
 	if p.ShowSelectedOptions && len(p.selectedOptions) > 0 {
@@ -405,13 +447,15 @@ func (p *InteractiveMultiselectPrinter) renderSelectMenu() string {
 }
 
 func (p InteractiveMultiselectPrinter) renderFinishedMenu() string {
-	var content string
-	content += Sprintf("%s: %s\n", p.text, p.fuzzySearchString)
+	var content strings.Builder
+
+	content.WriteString(Sprintf("%s: %s\n", p.text, p.fuzzySearchString))
+
 	for _, option := range p.selectedOptions {
-		content += Sprintf("  %s %s\n", p.renderSelector(), p.Options[option])
+		content.WriteString(Sprintf("  %s %s\n", p.renderSelector(), p.Options[option]))
 	}
 
-	return content
+	return content.String()
 }
 
 func (p InteractiveMultiselectPrinter) renderSelector() string {

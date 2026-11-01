@@ -6,13 +6,14 @@ import (
 	"log/slog"
 )
 
+// SlogHandler is a slog.Handler that prints log records via a pterm Logger.
 type SlogHandler struct {
 	logger *Logger
 	attrs  []slog.Attr
 }
 
 // Enabled returns true if the given level is enabled.
-func (s *SlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
+func (s *SlogHandler) Enabled(_ context.Context, level slog.Level) bool {
 	switch level {
 	case slog.LevelDebug:
 		return s.logger.CanPrint(LogLevelDebug)
@@ -23,27 +24,30 @@ func (s *SlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	case slog.LevelError:
 		return s.logger.CanPrint(LogLevelError)
 	}
+
 	return false
 }
 
 // Handle handles the given record.
-func (s *SlogHandler) Handle(ctx context.Context, record slog.Record) error {
+func (s *SlogHandler) Handle(_ context.Context, record slog.Record) error {
 	level := record.Level
 	message := record.Message
 
-	// Convert slog Attrs to a map.
-	keyValsMap := make(map[string]any)
-
-	record.Attrs(func(attr slog.Attr) bool {
-		keyValsMap[attr.Key] = attr.Value
-		return true
-	})
+	// Collect the attrs in the order they were supplied, so the logger can print
+	// them predictably instead of in Go's randomized map order. Attrs bound via
+	// WithAttrs come first, followed by the record's own attrs, matching the
+	// behavior of slog's own text handler. Alphabetical ordering is available
+	// through the logger's SortArguments option.
+	args := make([]LoggerArgument, 0, len(s.attrs)+record.NumAttrs())
 
 	for _, attr := range s.attrs {
-		keyValsMap[attr.Key] = attr.Value
+		args = append(args, LoggerArgument{Key: attr.Key, Value: attr.Value})
 	}
 
-	args := s.logger.ArgsFromMap(keyValsMap)
+	record.Attrs(func(attr slog.Attr) bool {
+		args = append(args, LoggerArgument{Key: attr.Key, Value: attr.Value})
+		return true
+	})
 
 	// Wrapping args inside another slice to match [][]LoggerArgument
 	argsWrapped := [][]LoggerArgument{args}
@@ -75,16 +79,17 @@ func (s *SlogHandler) Handle(ctx context.Context, record slog.Record) error {
 func (s *SlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	newS := *s
 	newS.attrs = attrs
+
 	return &newS
 }
 
 // WithGroup is not yet supported.
-func (s *SlogHandler) WithGroup(name string) slog.Handler {
+func (s *SlogHandler) WithGroup(_ string) slog.Handler {
 	// Grouping is not yet supported by pterm.
 	return s
 }
 
-// NewSlogHandler returns a new logging handler that can be intrgrated with log/slog.
+// NewSlogHandler returns a new logging handler that can be integrated with log/slog.
 func NewSlogHandler(logger *Logger) *SlogHandler {
 	return &SlogHandler{logger: logger}
 }

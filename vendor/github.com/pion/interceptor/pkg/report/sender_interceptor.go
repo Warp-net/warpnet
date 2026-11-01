@@ -124,11 +124,20 @@ func (s *SenderInterceptor) loop(rtcpWriter interceptor.RTCPWriter) {
 		case <-ticker.Ch():
 			now := s.now()
 			s.streams.Range(func(_, value any) bool {
-				if stream, ok := value.(*senderStream); !ok {
+				stream, ok := value.(*senderStream)
+				if !ok {
 					s.log.Warnf("failed to cast SenderInterceptor stream")
-				} else if _, err := rtcpWriter.Write(
-					[]rtcp.Packet{stream.generateReport(now)}, interceptor.Attributes{},
-				); err != nil {
+
+					return true
+				}
+
+				report := stream.generateReport(now)
+				if report == nil {
+					// RFC 3550 6.4: a source that has not sent any RTP sends RR, not SR.
+					return true
+				}
+
+				if _, err := rtcpWriter.Write([]rtcp.Packet{report}, interceptor.Attributes{}); err != nil {
 					s.log.Warnf("failed sending: %+v", err)
 				}
 

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v4"
+	"github.com/pion/stun/v4"
+	"github.com/pion/transport/v5"
 	"golang.org/x/net/proxy"
 )
 
@@ -115,6 +115,10 @@ func appendAddressRewriteRules(agent *Agent, rules ...AddressRewriteRule) error 
 }
 
 func sanitizeAddressRewriteRule(rule AddressRewriteRule) (AddressRewriteRule, error) {
+	if !validPortMapping(rule.OriginalPort, rule.NewPort) {
+		return AddressRewriteRule{}, ErrInvalidNAT1To1IPMapping
+	}
+
 	cleaned, err := sanitizeExternalIPs(rule.External)
 	if err != nil {
 		return AddressRewriteRule{}, err
@@ -140,6 +144,10 @@ func sanitizeAddressRewriteRule(rule AddressRewriteRule) (AddressRewriteRule, er
 	}
 
 	return normalized, nil
+}
+
+func validPortMapping(original, mapped int) bool {
+	return original == 0 && mapped == 0 || original >= 0 && original <= 65535 && mapped > 0 && mapped <= 65535
 }
 
 func defaultAddressRewriteMode(candidateType CandidateType) AddressRewriteMode {
@@ -175,7 +183,6 @@ func sanitizeExternalIPs(ips []string) ([]string, error) {
 		seen[trimmed] = struct{}{}
 		sanitized = append(sanitized, trimmed)
 	}
-
 	if len(sanitized) == 0 {
 		return nil, ErrInvalidNAT1To1IPMapping
 	}
@@ -386,6 +393,7 @@ func WithDisconnectedTimeout(timeout time.Duration) AgentOption {
 		}
 
 		a.disconnectedTimeout = timeout
+		a.disconnectedTimeoutExplicit = true
 
 		return nil
 	}
@@ -562,11 +570,8 @@ func WithLocalCredentials(ufrag, pwd string) AgentOption {
 			return ErrAgentOptionNotUpdatable
 		}
 
-		if ufrag != "" && len([]rune(ufrag))*8 < 24 {
-			return ErrLocalUfragInsufficientBits
-		}
-		if pwd != "" && len([]rune(pwd))*8 < 128 {
-			return ErrLocalPwdInsufficientBits
+		if err := validateLocalCredentials(ufrag, pwd); err != nil {
+			return err
 		}
 
 		a.localUfrag = ufrag
@@ -1022,6 +1027,8 @@ func WithLoggerFactory(loggerFactory logging.LoggerFactory) AgentOption {
 			return ErrAgentOptionNotUpdatable
 		}
 
+		// Logger factory will be passed down to objects created by the agent
+		a.loggerFactory = loggerFactory
 		a.log = loggerFactory.NewLogger("ice")
 
 		return nil

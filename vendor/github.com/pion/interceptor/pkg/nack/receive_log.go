@@ -4,10 +4,10 @@
 package nack
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/pion/interceptor/internal/rtpbuffer"
+	"github.com/pion/interceptor/internal/validation"
 )
 
 type receiveLog struct {
@@ -20,19 +20,8 @@ type receiveLog struct {
 }
 
 func newReceiveLog(size uint16) (*receiveLog, error) {
-	allowedSizes := make([]uint16, 0)
-	correctSize := false
-	for i := 6; i < 16; i++ {
-		if size == 1<<i {
-			correctSize = true
-
-			break
-		}
-		allowedSizes = append(allowedSizes, 1<<i)
-	}
-
-	if !correctSize {
-		return nil, fmt.Errorf("%w: %d is not a valid size, allowed sizes: %v", ErrInvalidSize, size, allowedSizes)
+	if err := validation.IsPowerOfTwo(size); err != nil {
+		return nil, err
 	}
 
 	return &receiveLog{

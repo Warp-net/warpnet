@@ -3,13 +3,14 @@ package keyboard
 import (
 	"fmt"
 	"os"
+	"sync"
+	"sync/atomic"
 
 	"github.com/containerd/console"
 
 	"atomicgo.dev/keyboard/keys"
 )
 
-var windowsStdin *os.File
 var con console.Console
 var stdin = os.Stdin
 var inputTTY *os.File
@@ -28,8 +29,7 @@ func startListener() error {
 	}
 
 	if con != nil {
-		err := con.SetRaw()
-		if err != nil {
+		if err = con.SetRaw(); err != nil {
 			return fmt.Errorf("failed to set raw mode: %w", err)
 		}
 	}
@@ -46,7 +46,6 @@ func stopListener() error {
 	if con != nil {
 		err := con.Reset()
 		if err != nil {
-
 			return fmt.Errorf("failed to reset console: %w", err)
 		}
 	}
@@ -67,25 +66,39 @@ func stopListener() error {
 //		return false, nil // Return false to continue listening
 //	})
 func Listen(onKeyPress func(key keys.Key) (stop bool, err error)) error {
-	cancel := make(chan bool)
-	stopRoutine := false
+	var (
+		callbackMu  sync.Mutex
+		closeOnce   sync.Once
+		stopOnce    sync.Once
+		stopRoutine atomic.Bool
+	)
 
-	go func() {
-		for {
-			select {
-			case c := <-cancel:
-				if c {
-					return
+	stopped := make(chan struct{})
+	stop := func() {
+		stopOnce.Do(func() {
+			stopRoutine.Store(true)
+			closeOnce.Do(func() {
+				closeInput()
+
+				if inputTTY != nil {
+					_ = inputTTY.Close()
 				}
-			case keyInfo := <-mockChannel:
-				stopRoutine, _ = onKeyPress(keyInfo)
-				if stopRoutine {
-					closeInput()
-					inputTTY.Close()
-				}
-			}
+			})
+			close(stopped)
+		})
+	}
+
+	handleKeyPress := func(key keys.Key) (bool, error) {
+		callbackMu.Lock()
+		defer callbackMu.Unlock()
+
+		shouldStop, err := onKeyPress(key)
+		if shouldStop {
+			stop()
 		}
-	}()
+
+		return shouldStop, err
+	}
 
 	err := startListener()
 	if err != nil {
@@ -94,26 +107,53 @@ func Listen(onKeyPress func(key keys.Key) (stop bool, err error)) error {
 		}
 	}
 
-	for !stopRoutine {
-		key, err := getKeyPress()
-		if err != nil {
-			return err
+	cancel := make(chan struct{})
+	var mockWG sync.WaitGroup
+	mockWG.Add(1)
+
+	go func() {
+		defer mockWG.Done()
+
+		for {
+			select {
+			case <-cancel:
+				return
+
+			case keyInfo := <-mockChannel:
+				shouldStop, _ := handleKeyPress(keyInfo)
+				if shouldStop {
+					return
+				}
+			}
 		}
+	}()
 
-		// check if returned key is empty
-		// if reflect.DeepEqual(key, keys.Key{}) {
-		// 	return nil
-		// }
+	defer func() {
+		close(cancel)
+		mockWG.Wait()
+	}()
 
-		stop, err := onKeyPress(key)
-		if err != nil {
-			return err
-		}
+	if inputTTY == nil {
+		<-stopped
+	} else {
+		for !stopRoutine.Load() {
+			key, keyErr := getKeyPress()
+			if keyErr != nil {
+				return keyErr
+			}
 
-		if stop {
-			closeInput()
-			inputTTY.Close()
-			break
+			if stopRoutine.Load() {
+				break
+			}
+
+			shouldStop, stopErr := handleKeyPress(key)
+			if stopErr != nil {
+				return stopErr
+			}
+
+			if shouldStop {
+				break
+			}
 		}
 	}
 
@@ -121,8 +161,6 @@ func Listen(onKeyPress func(key keys.Key) (stop bool, err error)) error {
 	if err != nil {
 		return err
 	}
-
-	cancel <- true
 
 	return nil
 }
@@ -152,6 +190,7 @@ func SimulateKeyPress(input ...interface{}) error {
 				Code:  keys.RuneKey,
 				Runes: []rune{key},
 			}
+
 			return nil
 		}
 
@@ -163,6 +202,7 @@ func SimulateKeyPress(input ...interface{}) error {
 					Runes: []rune{r},
 				}
 			}
+
 			return nil
 		}
 
@@ -171,6 +211,7 @@ func SimulateKeyPress(input ...interface{}) error {
 			mockChannel <- keys.Key{
 				Code: key,
 			}
+
 			return nil
 		}
 	}
