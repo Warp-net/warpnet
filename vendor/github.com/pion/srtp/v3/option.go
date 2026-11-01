@@ -4,15 +4,24 @@
 package srtp
 
 import (
-	"github.com/pion/transport/v4/replaydetector"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
-// ContextOption represents option of Context using the functional options pattern.
+// ContextOption configures a Context using the functional options pattern.
+//
+// Context options are primarily intended to be passed to CreateContext during construction.
+// Whether an option may also be applied to an already-constructed Context depends on that
+// option's documentation; options that do not support runtime updates return
+// ErrContextOptionNotUpdatable.
 type ContextOption func(*Context) error
 
 // SRTPReplayProtection sets SRTP replay protection window size.
 func SRTPReplayProtection(windowSize uint) ContextOption { // nolint:revive
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.newSRTPReplayDetector = func() replaydetector.ReplayDetector {
 			return replaydetector.New(windowSize, maxROC<<16|maxSequenceNumber)
 		}
@@ -24,6 +33,10 @@ func SRTPReplayProtection(windowSize uint) ContextOption { // nolint:revive
 // SRTCPReplayProtection sets SRTCP replay protection window size.
 func SRTCPReplayProtection(windowSize uint) ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.newSRTCPReplayDetector = func() replaydetector.ReplayDetector {
 			return replaydetector.New(windowSize, maxSRTCPIndex)
 		}
@@ -35,6 +48,10 @@ func SRTCPReplayProtection(windowSize uint) ContextOption {
 // SRTPNoReplayProtection disables SRTP replay protection.
 func SRTPNoReplayProtection() ContextOption { // nolint:revive
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.newSRTPReplayDetector = func() replaydetector.ReplayDetector {
 			return &nopReplayDetector{}
 		}
@@ -46,6 +63,10 @@ func SRTPNoReplayProtection() ContextOption { // nolint:revive
 // SRTCPNoReplayProtection disables SRTCP replay protection.
 func SRTCPNoReplayProtection() ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.newSRTCPReplayDetector = func() replaydetector.ReplayDetector {
 			return &nopReplayDetector{}
 		}
@@ -57,6 +78,10 @@ func SRTCPNoReplayProtection() ContextOption {
 // SRTPReplayDetectorFactory sets custom SRTP replay detector.
 func SRTPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) ContextOption { // nolint:revive
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.newSRTPReplayDetector = fn
 
 		return nil
@@ -66,6 +91,10 @@ func SRTPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) ContextO
 // SRTCPReplayDetectorFactory sets custom SRTCP replay detector.
 func SRTCPReplayDetectorFactory(fn func() replaydetector.ReplayDetector) ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.newSRTCPReplayDetector = fn
 
 		return nil
@@ -83,6 +112,10 @@ func (s *nopReplayDetector) Check(uint64) (func() bool, bool) {
 // All MKIs added later using Context.AddCipherForMKI must have the same length as the one used here.
 func MasterKeyIndicator(mki []byte) ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		if len(mki) > 0 {
 			c.sendMKI = make([]byte, len(mki))
 			copy(c.sendMKI, mki)
@@ -95,6 +128,10 @@ func MasterKeyIndicator(mki []byte) ContextOption {
 // SRTPEncryption enables SRTP encryption.
 func SRTPEncryption() ContextOption { // nolint:revive
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.encryptSRTP = true
 
 		return nil
@@ -108,6 +145,10 @@ func SRTPEncryption() ContextOption { // nolint:revive
 // Note: you can also use SRTPAuthenticationTagLength(0) to disable authentication tag too.
 func SRTPNoEncryption() ContextOption { // nolint:revive
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.encryptSRTP = false
 
 		return nil
@@ -117,6 +158,10 @@ func SRTPNoEncryption() ContextOption { // nolint:revive
 // SRTCPEncryption enables SRTCP encryption.
 func SRTCPEncryption() ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.encryptSRTCP = true
 
 		return nil
@@ -128,6 +173,10 @@ func SRTCPEncryption() ContextOption {
 // It simplifies debugging and testing, but it is not recommended for production use.
 func SRTCPNoEncryption() ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.encryptSRTCP = false
 
 		return nil
@@ -152,6 +201,10 @@ func SRTCPNoEncryption() ContextOption {
 // to mitigate this issue.
 func RolloverCounterCarryingTransform(mode RCCMode, rocTransmitRate uint16) ContextOption {
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.rccMode = mode
 		c.rocTransmitRate = rocTransmitRate
 
@@ -168,6 +221,10 @@ func RolloverCounterCarryingTransform(mode RCCMode, rocTransmitRate uint16) Cont
 // This option is ignored for AEAD profiles.
 func SRTPAuthenticationTagLength(authTagRTPLen int) ContextOption { // nolint:revive
 	return func(c *Context) error {
+		if c.constructed {
+			return ErrContextOptionNotUpdatable
+		}
+
 		c.authTagRTPLen = &authTagRTPLen
 
 		return nil

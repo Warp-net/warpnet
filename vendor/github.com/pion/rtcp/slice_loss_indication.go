@@ -63,7 +63,7 @@ func (p SliceLossIndication) Marshal() ([]byte, error) {
 
 // Unmarshal decodes the SliceLossIndication from binary.
 func (p *SliceLossIndication) Unmarshal(rawPacket []byte) error {
-	if len(rawPacket) < (headerLength + ssrcLength) {
+	if len(rawPacket) < (headerLength + (ssrcLength * 2)) {
 		return errPacketTooShort
 	}
 
@@ -76,7 +76,7 @@ func (p *SliceLossIndication) Unmarshal(rawPacket []byte) error {
 		return errPacketTooShort
 	}
 
-	if header.Type != TypeTransportSpecificFeedback || header.Count != FormatSLI {
+	if header.Type != TypePayloadSpecificFeedback || header.Count != FormatSLI {
 		return errWrongType
 	}
 
@@ -103,7 +103,7 @@ func (p *SliceLossIndication) MarshalSize() int {
 func (p *SliceLossIndication) Header() Header {
 	return Header{
 		Count:  FormatSLI,
-		Type:   TypeTransportSpecificFeedback,
+		Type:   TypePayloadSpecificFeedback,
 		Length: uint16((p.MarshalSize() / 4) - 1), //nolint:gosec // G115
 	}
 }

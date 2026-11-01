@@ -7,7 +7,7 @@ import (
 	"crypto/cipher"
 	"sync"
 
-	"github.com/pion/transport/v4/utils/xor"
+	"github.com/pion/transport/v5/utils/xor"
 )
 
 // incrementCTR increments a big-endian integer of arbitrary size.

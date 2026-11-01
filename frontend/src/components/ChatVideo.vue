@@ -68,6 +68,7 @@ resulting from the use or misuse of this software.
 
 <script>
 import {warpnetService} from "@/service/service";
+import {createVideoURL, revokeVideoURL} from "@/lib/video";
 
 export default {
   name: "ChatVideo",
@@ -97,7 +98,7 @@ export default {
           this.error = "This video isn't available right now. The sender's node may be offline.";
           return;
         }
-        this.fetched = video.file;
+        this.fetched = createVideoURL(video.file);
       } catch (err) {
         console.error(`failed to load message video [${this.videoKey}]`, err);
         this.error = 'Failed to load the video.';
@@ -106,9 +107,13 @@ export default {
       }
     },
     onVideoError() {
+      revokeVideoURL(this.fetched);
       this.fetched = '';
       this.error = 'This video cannot be played. Your system may be missing the required video codec.';
     },
+  },
+  beforeUnmount() {
+    revokeVideoURL(this.fetched);
   },
 };
 </script>

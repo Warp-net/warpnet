@@ -568,11 +568,11 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, r.mediaRepo, m),
 		},
 		{
 			event.PUBLIC_POST_TIMELINE,
-			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.ratings),
+			handler.StreamTimelineNewTweetHandler(authRepo, r.tweetRepo, r.timelineRepo, m.followRepo, userRepo, m.ratings, r.copyRepo),
 		},
 		{
 			event.PUBLIC_DELETE_TIMELINE,
@@ -580,7 +580,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
-			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEET,
@@ -588,7 +588,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
-			handler.StreamGetTweetStatsHandler(r.tweetRepo, r.reactionRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
+			handler.StreamGetTweetStatsHandler(r.tweetRepo, authRepo, r.reactionRepo, r.tweetRepo, r.tweetRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
@@ -756,7 +756,7 @@ func (m *MemberNode) sponsoredHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_SPONSORED_TWEET,
-			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo),
+			handler.StreamNewSponsoredTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.mediaRepo, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
@@ -772,7 +772,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_POST_SPONSORED_ORDER,
-			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m.notifier, m),
+			handler.StreamVerifyOrderHandler(authRepo, m.privKey, m.walletClient, r.tweetRepo, r.orderRepo, userRepo, m.notifier, m, r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_BUYER,
@@ -813,6 +813,18 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 			handler.StreamWalletSendHandler(authRepo, m.privKey, m.walletClient),
 		},
 		{
+			event.PRIVATE_POST_WALLET_STAKE,
+			handler.StreamWalletStakeHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_UNSTAKE,
+			handler.StreamWalletUnstakeHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
+			event.PRIVATE_POST_WALLET_WITHDRAW,
+			handler.StreamWalletWithdrawHandler(authRepo, m.privKey, m.walletClient),
+		},
+		{
 			event.PRIVATE_GET_WALLET_CONTACTS,
 			handler.StreamGetWalletContactsHandler(
 				authRepo, m.privKey, m.walletClient, m.walletRepo, m.followRepo, m.userRepo, m,
@@ -820,7 +832,7 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 		},
 		{
 			event.PUBLIC_GET_WALLET_ADDRESS,
-			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo),
+			handler.StreamGetWalletAddressHandler(authRepo, m.privKey, m.walletClient, r.orderRepo, userRepo, r.settingsRepo),
 		},
 	}
 }
@@ -847,6 +859,14 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		{
 			event.PRIVATE_GET_SETTINGS_RATELIMIT,
 			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_GET_SETTINGS_SPONSORED,
+			handler.StreamGetSponsoredSettingsHandler(r.settingsRepo, authRepo),
+		},
+		{
+			event.PRIVATE_POST_SETTINGS_SPONSORED,
+			handler.StreamUpdateSponsoredSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_RATELIMIT,
@@ -948,11 +968,11 @@ func (m *MemberNode) mediaHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_UPLOAD_IMAGE,
-			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.mediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
-			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo),
+			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
@@ -964,7 +984,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
-			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo),
+			handler.StreamUploadImageHandler(m, m.privKey, r.chatMediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_CHAT_IMAGE,

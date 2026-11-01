@@ -4,19 +4,25 @@
 package ice
 
 import (
-	"net"
+	"net/netip"
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 type pairCandidateSelector interface {
 	Start()
 	ContactCandidates()
 	PingCandidate(local, remote Candidate)
-	HandleSuccessResponse(m *stun.Message, local, remote Candidate, remoteAddr net.Addr)
+	HandleSuccessResponse(m *stun.Message, local, remote Candidate, remoteAddr netip.AddrPort)
 	HandleBindingRequest(m *stun.Message, local, remote Candidate)
+}
+
+// responseSymmetric implements the transport-address check in RFC 8445 §7.2.5.2.1.
+func responseSymmetric(pendingRequest *bindingRequest, local Candidate, remoteAddr netip.AddrPort) bool {
+	return pendingRequest.networkType == local.NetworkType() &&
+		addrPortEqual(pendingRequest.destination, remoteAddr)
 }
 
 type controllingSelector struct {
@@ -90,7 +96,7 @@ func (s *controllingSelector) nominatePair(pair *CandidatePair) {
 		stun.NewUsername(s.agent.remoteUfrag + ":" + s.agent.localUfrag),
 		UseCandidate(),
 		AttrControlling(s.agent.tieBreaker),
-		PriorityAttr(pair.Local.Priority()),
+		PriorityAttr(pair.Local.prflxPriority()),
 	}
 	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
@@ -134,14 +140,31 @@ func (s *controllingSelector) HandleBindingRequest(message *stun.Message, local,
 		}
 	}
 
-	if s.agent.userBindingRequestHandler != nil {
-		if shouldSwitch := s.agent.userBindingRequestHandler(message, local, remote, pair); shouldSwitch {
-			s.agent.setSelectedPair(pair)
+	s.agent.handleBindingRequestWithCustomHandler(message, local, remote, pair)
+}
+
+func (a *Agent) handleBindingRequestWithCustomHandler(
+	message *stun.Message,
+	local, remote Candidate,
+	pair *CandidatePair,
+) {
+	if a.userBindingRequestHandler == nil {
+		return
+	}
+
+	if shouldSwitch := a.userBindingRequestHandler(message, local, remote, pair); shouldSwitch {
+		if a.lite {
+			// Lite agents do not send triggered checks, so a handler-approved
+			// custom selection must put the pair in the valid list directly.
+			pair.state = CandidatePairStateSucceeded
 		}
+		a.setSelectedPair(pair)
 	}
 }
 
-func (s *controllingSelector) HandleSuccessResponse(m *stun.Message, local, remote Candidate, remoteAddr net.Addr) {
+func (s *controllingSelector) HandleSuccessResponse(
+	m *stun.Message, local, remote Candidate, remoteAddr netip.AddrPort,
+) {
 	ok, pendingRequest, rtt := s.agent.handleInboundBindingSuccess(m.TransactionID)
 	if !ok {
 		s.log.Warnf("Discard success response from (%s), unknown TransactionID 0x%x", remote, m.TransactionID)
@@ -149,14 +172,12 @@ func (s *controllingSelector) HandleSuccessResponse(m *stun.Message, local, remo
 		return
 	}
 
-	transactionAddr := pendingRequest.destination
-
 	// Assert that NAT is not symmetric
 	// https://tools.ietf.org/html/rfc8445#section-7.2.5.2.1
-	if !addrEqual(transactionAddr, remoteAddr) {
+	if !responseSymmetric(pendingRequest, local, remoteAddr) {
 		s.log.Debugf(
 			"Discard message: transaction source and destination does not match expected(%s), actual(%s)",
-			transactionAddr,
+			pendingRequest.destination,
 			remote,
 		)
 
@@ -200,7 +221,7 @@ func (s *controllingSelector) PingCandidate(local, remote Candidate) {
 		stun.TransactionID,
 		stun.NewUsername(s.agent.remoteUfrag + ":" + s.agent.localUfrag),
 		AttrControlling(s.agent.tieBreaker),
-		PriorityAttr(local.Priority()),
+		PriorityAttr(local.prflxPriority()),
 	}
 	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
@@ -352,7 +373,7 @@ func (s *controlledSelector) PingCandidate(local, remote Candidate) {
 		stun.TransactionID,
 		stun.NewUsername(s.agent.remoteUfrag + ":" + s.agent.localUfrag),
 		AttrControlled(s.agent.tieBreaker),
-		PriorityAttr(local.Priority()),
+		PriorityAttr(local.prflxPriority()),
 	}
 	attributes = append(attributes,
 		stun.NewShortTermIntegrity(s.agent.remotePwd),
@@ -368,7 +389,9 @@ func (s *controlledSelector) PingCandidate(local, remote Candidate) {
 	s.agent.sendBindingRequest(msg, local, remote)
 }
 
-func (s *controlledSelector) HandleSuccessResponse(m *stun.Message, local, remote Candidate, remoteAddr net.Addr) {
+func (s *controlledSelector) HandleSuccessResponse(
+	m *stun.Message, local, remote Candidate, remoteAddr netip.AddrPort,
+) {
 	//nolint:godox
 	// TODO according to the standard we should specifically answer a failed nomination:
 	// https://tools.ietf.org/html/rfc8445#section-7.3.1.5
@@ -384,14 +407,12 @@ func (s *controlledSelector) HandleSuccessResponse(m *stun.Message, local, remot
 		return
 	}
 
-	transactionAddr := pendingRequest.destination
-
 	// Assert that NAT is not symmetric
 	// https://tools.ietf.org/html/rfc8445#section-7.2.5.2.1
-	if !addrEqual(transactionAddr, remoteAddr) {
+	if !responseSymmetric(pendingRequest, local, remoteAddr) {
 		s.log.Debugf(
 			"Discard message: transaction source and destination does not match expected(%s), actual(%s)",
-			transactionAddr,
+			pendingRequest.destination,
 			remote,
 		)
 
@@ -430,16 +451,20 @@ func (s *controlledSelector) HandleBindingRequest(message *stun.Message, local, 
 	}
 	pair.UpdateRequestReceived()
 
-	if message.Contains(stun.AttrUseCandidate) || message.Contains(s.agent.nominationAttribute) { //nolint:nestif
-		// https://tools.ietf.org/html/rfc8445#section-7.3.1.5
-
-		// Check for renomination attribute
-		var nominationValue *uint32
+	hasUseCandidate := message.Contains(stun.AttrUseCandidate)
+	hasValidNomination := false
+	var nominationValue *uint32
+	if message.Contains(s.agent.nominationAttribute) {
 		var nomination NominationAttribute
 		if err := nomination.GetFromWithType(message, s.agent.nominationAttribute); err == nil {
 			nominationValue = &nomination.Value
+			hasValidNomination = true
 			s.log.Tracef("Received nomination with value %d", nomination.Value)
 		}
+	}
+
+	if hasUseCandidate || hasValidNomination { //nolint:nestif
+		// https://tools.ietf.org/html/rfc8445#section-7.3.1.5
 
 		// Check if we should accept this nomination based on renomination rules
 		if !s.shouldAcceptNomination(nominationValue) {
@@ -449,11 +474,14 @@ func (s *controlledSelector) HandleBindingRequest(message *stun.Message, local, 
 			return
 		}
 
+		if s.agent.lite {
+			// Pion represents membership in the valid list as Succeeded. RFC 8445
+			// Section 7.3.2 puts an accepted lite nomination directly into the
+			// valid list without an outbound triggered check.
+			pair.state = CandidatePairStateSucceeded
+		}
+
 		if pair.state == CandidatePairStateSucceeded {
-			// If the state of this pair is Succeeded, it means that the check
-			// previously sent by this pair produced a successful response and
-			// generated a valid pair (Section 7.2.5.3.2).  The agent sets the
-			// nominated flag value of the valid pair to true.
 			selectedPair := s.agent.getSelectedPair()
 			if s.shouldSwitchSelectedPair(pair, selectedPair, nominationValue) {
 				s.log.Tracef("Accepting nomination for pair %s", pair)
@@ -476,35 +504,49 @@ func (s *controlledSelector) HandleBindingRequest(message *stun.Message, local, 
 
 	s.agent.sendBindingSuccess(message, local, remote)
 
-	// Only send a triggered check during ICE checking phase (RFC 8445 §7.3.1.4).
+	// Lite agents only act as STUN servers and MUST NOT generate connectivity checks (RFC 8445 §7).
+	// For full agents: only send a triggered check during ICE checking phase (RFC 8445 §7.3.1.4).
 	// Once the pair is established (succeeded + selected), sending a triggered check
 	// on every inbound request creates a ping-pong busy loop: the remote side responds
 	// and sends its own request, which triggers another check here, repeating at 1/RTT.
 	// After connection, consent freshness is maintained by checkKeepalive() on a timer.
-	if pair.state != CandidatePairStateSucceeded || s.agent.getSelectedPair() == nil {
+	if !s.agent.lite && (pair.state != CandidatePairStateSucceeded || s.agent.getSelectedPair() == nil) {
 		s.PingCandidate(local, remote)
 	}
 
-	if s.agent.userBindingRequestHandler != nil {
-		if shouldSwitch := s.agent.userBindingRequestHandler(message, local, remote, pair); shouldSwitch {
-			s.agent.setSelectedPair(pair)
-		}
-	}
+	s.agent.handleBindingRequestWithCustomHandler(message, local, remote, pair)
 }
 
 type liteSelector struct {
 	pairCandidateSelector
+	agent *Agent
 }
 
-// A lite selector should not contact candidates.
 func (s *liteSelector) ContactCandidates() {
-	if _, ok := s.pairCandidateSelector.(*controllingSelector); ok {
-		//nolint:godox
-		// https://github.com/pion/ice/issues/96
-		// TODO: implement lite controlling agent. For now falling back to full agent.
-		// This only happens if both peers are lite. See RFC 8445 S6.1.1 and S6.2
-		s.pairCandidateSelector.ContactCandidates()
-	} else if v, ok := s.pairCandidateSelector.(*controlledSelector); ok {
-		v.agent.validateSelectedPair()
+	if !s.agent.remoteLite {
+		s.agent.validateSelectedPair()
+
+		return
 	}
+	selectedPair := s.agent.getSelectedPair()
+	if selectedPair != nil {
+		s.agent.validateSelectedPair()
+		selectedPair = s.agent.getSelectedPair()
+	}
+
+	pair := s.agent.getBestAvailableCandidatePair()
+	if pair == nil || selectedPair == pair {
+		return
+	}
+
+	pair.state = CandidatePairStateSucceeded
+	// lite candidates pair becomes valid without a connectivity check. so we need to
+	// start its liveness window now so a later candidate update does not immediately
+	// fail a pair whose LastReceived timestamp is still zero.
+	pair.Remote.seen(false)
+	s.agent.setSelectedPair(pair)
 }
+
+func (s *liteSelector) PingCandidate(_, _ Candidate) {}
+
+func (s *liteSelector) HandleSuccessResponse(*stun.Message, Candidate, Candidate, netip.AddrPort) {}

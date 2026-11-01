@@ -25,7 +25,7 @@ func TestStreamTimelineNewTweetHandlerBranches(t *testing.T) {
 	newTweet := event.NewTweetEvent{Id: "tweet-1", UserId: author, Text: "hello", Username: "author"}
 
 	handler := func(repo stubTweetRepo, timeline stubTimelineRepo, follows stubFollowChecker) warpnet.WarpHandlerFunc {
-		return StreamTimelineNewTweetHandler(auth, repo, timeline, follows, authorRepo, stubPeersRatings{})
+		return StreamTimelineNewTweetHandler(auth, repo, timeline, follows, authorRepo, stubPeersRatings{}, &stubImageHashes{})
 	}
 
 	t.Run("invalid payload", func(t *testing.T) {
@@ -37,7 +37,7 @@ func TestStreamTimelineNewTweetHandlerBranches(t *testing.T) {
 		foreign := stubTweetUserRepo{getFn: func(id string) (domain.User, error) {
 			return domain.User{Id: id, NodeId: "another-node"}, nil
 		}}
-		_, err := StreamTimelineNewTweetHandler(auth, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, foreign, stubPeersRatings{})(
+		_, err := StreamTimelineNewTweetHandler(auth, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, foreign, stubPeersRatings{}, &stubImageHashes{})(
 			marshal(t, newTweet), s)
 		require.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 	})

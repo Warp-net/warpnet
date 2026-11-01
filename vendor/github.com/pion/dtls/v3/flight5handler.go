@@ -8,7 +8,9 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"slices"
 
+	"github.com/pion/dtls/v3/pkg/crypto/clientcertificate"
 	"github.com/pion/dtls/v3/pkg/crypto/prf"
 	"github.com/pion/dtls/v3/pkg/crypto/signaturehash"
 	"github.com/pion/dtls/v3/pkg/protocol"
@@ -58,10 +60,7 @@ func flight5Parse(
 	}
 
 	if len(state.SessionID) > 0 {
-		s := Session{
-			ID:     state.SessionID,
-			Secret: state.masterSecret,
-		}
+		s := state.session()
 		cfg.log.Tracef("[handshake] save new session: %x", s.ID)
 		if err := cfg.sessionStore.Set(conn.sessionKey(), s); err != nil {
 			return 0, &alert.Alert{Level: alert.Fatal, Description: alert.InternalError}, err
@@ -88,6 +87,7 @@ func flight5Generate(
 		}
 		reqInfo := CertificateRequestInfo{}
 		if r, ok2 := msgs[handshake.TypeCertificateRequest].(*handshake.MessageCertificateRequest); ok2 {
+			reqInfo.CertificateTypes = append([]clientcertificate.Type{}, r.CertificateTypes...)
 			reqInfo.AcceptableCAs = r.CertificateAuthoritiesNames
 		} else {
 			return nil, &alert.Alert{Level: alert.Fatal, Description: alert.HandshakeFailure}, errClientCertificateRequired
@@ -150,7 +150,7 @@ func flight5Generate(
 
 	// handshakeMessageServerKeyExchange is optional for PSK
 	if len(serverKeyExchangeData) == 0 {
-		alertPtr, err := handleServerKeyExchange(conn, state, cfg, &handshake.MessageServerKeyExchange{})
+		alertPtr, err := handleServerKeyExchange(cache, state, cfg, &handshake.MessageServerKeyExchange{})
 		if err != nil {
 			return nil, alertPtr, err
 		}
@@ -207,9 +207,11 @@ func flight5Generate(
 			handshakeCachePullRule{handshake.TypeClientKeyExchange, cfg.initialEpoch, true, false},
 		), merged...)
 
-		// Find compatible signature scheme
-
-		signatureHashAlgo, err := signaturehash.SelectSignatureScheme(state.remoteCertRequestAlgs, signer)
+		// Honor local policy while retaining the peer's preference order.
+		schemes := slices.DeleteFunc(slices.Clone(state.remoteCertRequestAlgs), func(scheme signaturehash.Algorithm) bool {
+			return !slices.Contains(cfg.localSignatureSchemes, scheme)
+		})
+		signatureHashAlgo, err := signaturehash.SelectSignatureScheme(schemes, signer)
 		if err != nil {
 			return nil, &alert.Alert{Level: alert.Fatal, Description: alert.InsufficientSecurity}, err
 		}
@@ -346,6 +348,9 @@ func initializeCipherSuite(
 	}
 
 	if state.cipherSuite.AuthenticationType() == CipherSuiteAuthenticationTypeCertificate { //nolint:nestif
+		if err = verifyCertificateKeyType(state.PeerCertificates, state.cipherSuite); err != nil {
+			return &alert.Alert{Level: alert.Fatal, Description: alert.BadCertificate}, err
+		}
 		// Verify that the pair of hash algorithm and signiture is listed.
 		var validSignatureScheme bool
 		for _, ss := range cfg.localSignatureSchemes {

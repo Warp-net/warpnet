@@ -170,6 +170,7 @@ type Tweet struct {
 	UserId        string           `json:"user_id"`
 	Username      string           `json:"username"`
 	ImageKeys     []string         `json:"image_keys,omitempty"`
+	ImageHashes   []string         `json:"image_hashes,omitempty"`
 	VideoKey      *string          `json:"video_key,omitempty"`
 	Network       string           `json:"network"`
 	Moderation    *TweetModeration `json:"moderation,omitempty"`
@@ -178,6 +179,12 @@ type Tweet struct {
 	QuotedUserId  *string          `json:"quoted_user_id,omitempty"`
 	Poll          *Poll            `json:"poll,omitempty"`
 	Price         *Price           `json:"price,omitempty"`
+}
+
+type TweetImageHashes struct {
+	UserId  string   `json:"user_id"`
+	TweetId string   `json:"tweet_id"`
+	Hashes  []string `json:"hashes"`
 }
 
 func (t *Tweet) IsReply() bool {
@@ -236,14 +243,22 @@ func (p *Price) decimal() string {
 }
 
 type Order struct {
-	TweetId   string    `json:"tweet_id"`
-	AuthorId  string    `json:"author_id"`
-	BuyerId   string    `json:"buyer_id"`
-	Nonce     string    `json:"nonce"`
-	TxId      string    `json:"tx_id"`
-	Confirmed bool      `json:"confirmed"`
-	Tweet     *Tweet    `json:"tweet,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	TweetId     string    `json:"tweet_id"`
+	AuthorId    string    `json:"author_id"`
+	BuyerId     string    `json:"buyer_id"`
+	BuyerNodeId string    `json:"buyer_node_id,omitempty"`
+	Payer       string    `json:"payer,omitempty"`
+	Nonce       string    `json:"nonce"`
+	TxId        string    `json:"tx_id"`
+	Confirmed   bool      `json:"confirmed"`
+	Tweet       *Tweet    `json:"tweet,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	// What the buyer agreed to pay and where, kept so a retry pays the same
+	// thing, and when a payment of it was last sent.
+	Amount        string    `json:"amount,omitempty"`
+	AuthorAddress string    `json:"author_address,omitempty"`
+	Splitter      string    `json:"splitter,omitempty"`
+	SentAt        time.Time `json:"sent_at,omitzero"`
 }
 
 func (o *Order) ID() string {
@@ -254,6 +269,10 @@ func (o *Order) ID() string {
 const (
 	OrderLimit       = 10
 	OrderLimitWindow = time.Hour
+
+	// A payment this soon after a stake change is held to the gentler threshold:
+	// the buyer was checked just before the change and was still paying.
+	MinStakeChangeWindow = 10 * time.Minute
 )
 
 type Poll struct {
@@ -403,6 +422,19 @@ type NotificationSettings struct {
 
 type GatewaySettings struct {
 	NodeID string `json:"node_id"`
+}
+
+type SponsoredSettings struct {
+	MinStakeTRX         uint64    `json:"min_stake_trx"`
+	PreviousMinStakeTRX uint64    `json:"previous_min_stake_trx,omitempty"`
+	ChangedAt           time.Time `json:"changed_at"`
+}
+
+func (s SponsoredSettings) ClaimMinStakeTRX(now time.Time) uint64 {
+	if now.Sub(s.ChangedAt) < MinStakeChangeWindow {
+		return min(s.MinStakeTRX, s.PreviousMinStakeTRX)
+	}
+	return s.MinStakeTRX
 }
 
 type ModerationResult bool

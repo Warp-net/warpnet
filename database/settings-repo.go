@@ -204,3 +204,54 @@ func (repo *SettingsRepo) SetRateLimitSettings(userId string, s ratelimit.Settin
 	}
 	return txn.Commit()
 }
+
+func (repo *SettingsRepo) GetSponsoredSettings(userId string) (domain.SponsoredSettings, error) {
+	if userId == "" {
+		return domain.SponsoredSettings{}, local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.SponsoredSettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("sponsored").
+		Build())
+	if local_store.IsNotFoundError(err) {
+		return domain.SponsoredSettings{}, nil
+	}
+	if err != nil {
+		return domain.SponsoredSettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.SponsoredSettings{}, err
+	}
+	var s domain.SponsoredSettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.SponsoredSettings{}, err
+	}
+	return s, nil
+}
+
+func (repo *SettingsRepo) SetSponsoredSettings(userId string, s domain.SponsoredSettings) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("sponsored").
+		Build(), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}

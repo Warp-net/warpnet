@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/Warp-net/warpnet"
@@ -60,7 +61,7 @@ func main() {
 		app.SetPendingDeepLink(link.Raw)
 	}
 
-	err = wails.Run(&options.App{
+	err = runWails(&options.App{
 		Title:            "warpnet", //nolint:goconst
 		Width:            1024,
 		Height:           1024,
@@ -146,4 +147,17 @@ func preferExistingTestnet(dbPath string) {
 	if _, err := os.Stat(lock); err == nil {
 		config.SetNetwork(testNetwork)
 	}
+}
+
+// gtk_main runs on goroutine 1, so Go callbacks from GTK share its stack with
+// JSC's SIGUSR1 handler, which has no SA_ONSTACK. The reserved frame keeps the
+// stack from shrinking, so the signal frame can't spill into a neighbouring
+// goroutine's stack.
+//
+//go:noinline
+func runWails(opts *options.App) error {
+	var headroom [64 << 10]byte
+	err := wails.Run(opts)
+	runtime.KeepAlive(&headroom)
+	return err
 }

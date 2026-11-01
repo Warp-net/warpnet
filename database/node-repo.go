@@ -29,13 +29,16 @@ package database
 
 import (
 	"context"
+	"encoding/base32"
 	"fmt"
 	"math"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/json"
@@ -168,6 +171,9 @@ func (d *NodeRepo) GetExpiration(ctx context.Context, key datastore.Key) (t time
 	if d.db.IsClosed() {
 		return t, local_store.ErrNotRunning
 	}
+	if d.isBlocklistedPeerKey(key) {
+		return t, datastore.ErrNotFound
+	}
 
 	rootKey := buildRootKey(key)
 
@@ -201,6 +207,9 @@ func (d *NodeRepo) Get(ctx context.Context, key datastore.Key) (value []byte, er
 	if d.db.IsClosed() {
 		return nil, local_store.ErrNotRunning
 	}
+	if d.isBlocklistedPeerKey(key) {
+		return nil, datastore.ErrNotFound
+	}
 
 	rootKey := buildRootKey(key)
 
@@ -228,6 +237,9 @@ func (d *NodeRepo) Has(ctx context.Context, key datastore.Key) (_ bool, err erro
 	}
 	if d.db.IsClosed() {
 		return false, local_store.ErrNotRunning
+	}
+	if d.isBlocklistedPeerKey(key) {
+		return false, nil
 	}
 
 	rootKey := buildRootKey(key)
@@ -257,6 +269,9 @@ func (d *NodeRepo) GetSize(ctx context.Context, key datastore.Key) (_ int, err e
 	}
 	if d.db.IsClosed() {
 		return size, local_store.ErrNotRunning
+	}
+	if d.isBlocklistedPeerKey(key) {
+		return 0, datastore.ErrNotFound
 	}
 
 	rootKey := buildRootKey(key)
@@ -326,6 +341,8 @@ func (d *NodeRepo) Query(ctx context.Context, q datastore.Query) (datastore.Resu
 	if d.db.IsClosed() {
 		return nil, local_store.ErrNotRunning
 	}
+
+	q.Filters = append(slices.Clip(q.Filters), blocklistedPeerFilter{repo: d})
 
 	tx := d.db.InnerDB().NewTransaction(true)
 	return d.query(tx, q)
@@ -825,6 +842,26 @@ func (d *NodeRepo) IsBlocklisted(peerId string) bool {
 		Build()
 	_, err := d.db.Get(blocklistUserKey)
 	return err == nil
+}
+
+func (d *NodeRepo) isBlocklistedPeerKey(key datastore.Key) bool {
+	namespaces := key.Namespaces()
+	if len(namespaces) < 3 {
+		return false
+	}
+	peerIdBytes, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(namespaces[2])
+	if err != nil {
+		return false
+	}
+	return d.IsBlocklisted(warpnet.FromBytesToPeerID(peerIdBytes).String())
+}
+
+type blocklistedPeerFilter struct {
+	repo *NodeRepo
+}
+
+func (f blocklistedPeerFilter) Filter(e datastore.DsEntry) bool {
+	return !f.repo.isBlocklistedPeerKey(datastore.NewKey(e.Key))
 }
 
 func (d *NodeRepo) BlocklistTerm(peerId string) (*BlocklistTerm, error) {

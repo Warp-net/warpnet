@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"golang.org/x/mobile/internal/sdkpath"
+	"golang.org/x/mod/semver"
 )
 
 // General mobile build environment. Initialized by envInit.
@@ -139,6 +140,11 @@ func buildEnvInit() (cleanup func(), err error) {
 		}
 		removeAll(tmpdir)
 	}
+	defer func() {
+		if err != nil {
+			cleanupFn()
+		}
+	}()
 	if buildN {
 		tmpdir = "$WORK"
 		cleanupFn = func() {}
@@ -170,25 +176,19 @@ func envInit() (err error) {
 			clang := toolchain.Path(ndkRoot, "clang")
 			clangpp := toolchain.Path(ndkRoot, "clang++")
 			if !buildN {
-				tools := []string{clang, clangpp}
-				if runtime.GOOS == "windows" {
-					// Because of https://github.com/android-ndk/ndk/issues/920,
-					// we require r19c, not just r19b. Fortunately, the clang++.cmd
-					// script only exists in r19c.
-					tools = append(tools, clangpp+".cmd")
-				}
-				for _, tool := range tools {
+				for _, tool := range []string{clang, clangpp} {
 					_, err = os.Stat(tool)
 					if err != nil {
-						return fmt.Errorf("No compiler for %s was found in the NDK (tried %s). Make sure your NDK version is >= r19c. Use `sdkmanager --update` to update it.", arch, tool)
+						return fmt.Errorf("No compiler for %s was found in the NDK (tried %s). Use `sdkmanager --update` to update it.", arch, tool)
 					}
 				}
 			}
+			flags := strings.Join(toolchain.ClangFlags(), " ")
 			androidEnv[arch] = []string{
 				"GOOS=android",
 				"GOARCH=" + arch,
-				"CC=" + clang,
-				"CXX=" + clangpp,
+				"CC=" + clang + " " + flags,
+				"CXX=" + clangpp + " " + flags,
 				"CGO_ENABLED=1",
 			}
 			if arch == "arm" {
@@ -418,7 +418,7 @@ func ndkRoot(targets ...targetInfo) (string, error) {
 		var selected string
 		for _, ndkRoot := range ndkRoots {
 			version := ndkVersion(ndkRoot)
-			if version >= maxVersion {
+			if semver.Compare("v"+version, "v"+maxVersion) >= 0 {
 				maxVersion = version
 				selected = ndkRoot
 			}
@@ -558,22 +558,47 @@ type ndkToolchain struct {
 	clangPrefix string
 }
 
-func (tc *ndkToolchain) ClangPrefix() string {
+// API returns the Android API level the toolchain builds against.
+func (tc *ndkToolchain) API() int {
 	if buildAndroidAPI < tc.minAPI {
-		return fmt.Sprintf("%s%d", tc.clangPrefix, tc.minAPI)
+		return tc.minAPI
 	}
-	return fmt.Sprintf("%s%d", tc.clangPrefix, buildAndroidAPI)
+	return buildAndroidAPI
+}
+
+func (tc *ndkToolchain) ClangPrefix() string {
+	return fmt.Sprintf("%s%d", tc.clangPrefix, tc.API())
+}
+
+// ClangFlags returns the flags that the NDK's <prefix>-clang wrapper scripts
+// add to the arguments they are given.
+func (tc *ndkToolchain) ClangFlags() []string {
+	flags := []string{"--target=" + tc.ClangPrefix()}
+	if tc.arch == "x86" && tc.API() < 24 {
+		// Android does not guarantee a 16-byte aligned stack on 32-bit x86
+		// before API level 24.
+		flags = append(flags, "-mstackrealign")
+	}
+	return flags
 }
 
 func (tc *ndkToolchain) Path(ndkRoot, toolName string) string {
+	binDir := filepath.Join(ndkRoot, "toolchains", "llvm", "prebuilt", archNDK(), "bin")
 	cmdFromPref := func(pref string) string {
-		return filepath.Join(ndkRoot, "toolchains", "llvm", "prebuilt", archNDK(), "bin", pref+"-"+toolName)
+		return filepath.Join(binDir, pref+"-"+toolName)
 	}
 
 	var cmd string
 	switch toolName {
 	case "clang", "clang++":
-		cmd = cmdFromPref(tc.ClangPrefix())
+		// Invoke Clang itself instead of the NDK's <prefix>-clang wrapper
+		// script, which on Windows is a .cmd file and therefore runs under
+		// cmd.exe and its 8191 character command line limit. ClangFlags
+		// supplies what the wrapper would have added.
+		if runtime.GOOS == "windows" {
+			toolName += ".exe"
+		}
+		cmd = filepath.Join(binDir, toolName)
 	default:
 		cmd = cmdFromPref(tc.toolPrefix)
 		// Starting from NDK 23, GNU binutils are fully migrated to LLVM binutils.

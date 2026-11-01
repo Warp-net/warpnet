@@ -56,6 +56,8 @@ var (
 	//nolint:err113
 	errCookieMismatch = &FatalError{Err: errors.New("client+server cookie does not match")}
 	//nolint:err113
+	errClientHelloChanged = &FatalError{Err: errors.New("client hello changed after hello verify request")}
+	//nolint:err113
 	errIdentityNoPSK = &FatalError{Err: errors.New("PSK Identity Hint provided but PSK is nil")}
 	//nolint:err113
 	errInvalidCertificate = &FatalError{Err: errors.New("no certificate provided")}
@@ -71,6 +73,8 @@ var (
 	errInvalidSignatureAlgorithm = &FatalError{Err: errors.New("invalid signature algorithm")}
 	//nolint:err113
 	errInvalidExtendedMasterSecretType = &FatalError{Err: errors.New("invalid extended master secret type")}
+	//nolint:err113
+	errSessionEMSMismatch = &FatalError{Err: errors.New("extended master secret does not match the resumed session")}
 	//nolint:err113
 	errInvalidCertificateSignatureAlgorithm = &FatalError{
 		Err: errors.New("certificate uses a signature algorithm that is not allowed"),
@@ -104,6 +108,12 @@ var (
 	//nolint:err113
 	errNoSupportedEllipticCurves = &FatalError{
 		Err: errors.New("client requested zero or more elliptic curves that are not supported by the server"),
+	}
+	//nolint:err113
+	errPeerRSAKeyTooLarge = &FatalError{Err: errors.New("peer RSA key exceeds 8192 bits")}
+	//nolint:err113
+	errServerSelectedUnofferedCurve = &FatalError{
+		Err: errors.New("server selected an elliptic curve not offered by the client"),
 	}
 	//nolint:err113
 	errUnsupportedProtocolVersion = &FatalError{Err: errors.New("unsupported protocol version")}
@@ -144,6 +154,8 @@ var (
 	errFailedToAccessPoolReadBuffer = &InternalError{Err: errors.New("failed to access pool read buffer")}
 	//nolint:err113
 	errFragmentBufferOverflow = &InternalError{Err: errors.New("fragment buffer overflow")}
+	//nolint:err113
+	errHandshakeCacheOverflow = &InternalError{Err: errors.New("handshake cache overflow")}
 
 	//nolint:err113
 	errEmptyCertificates = &FatalError{Err: errors.New("certificates option requires at least one certificate")}
@@ -306,3 +318,6 @@ func netError(err error) error {
 
 	return &FatalError{Err: err}
 }
+
+//nolint:err113
+var errInvalidExportedState = &FatalError{Err: errors.New("connection state is incomplete")}

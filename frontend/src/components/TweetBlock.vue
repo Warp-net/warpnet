@@ -165,7 +165,7 @@ resulting from the use or misuse of this software.
           :message="unlockMessage"
           confirm-label="Pay"
           cancel-label="Cancel"
-          :confirm-disabled="quoting || isShortOfTokens"
+          :confirm-disabled="quoting || isShortOfTokens || quoteRefused"
           @confirm="unlock"
           @cancel="showUnlockConfirm = false"
         >
@@ -467,6 +467,7 @@ import {warpnetService} from "@/service/service";
 import {toast} from "@/lib/toast";
 import {watchOrder} from "@/lib/order-worker";
 import {extractYoutubeId} from "@/lib/youtube";
+import {createVideoURL, revokeVideoURL} from "@/lib/video";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {acceptsReplies, bridgedInstance, decodeHtmlEntities, isBridgedTweet, tweetNetwork} from "@/lib/network";
 import NetworkIcon from "@/components/NetworkIcon.vue";
@@ -528,6 +529,7 @@ export default {
       quote: null,
       quoting: false,
       quoteError: "",
+      quoteRefused: false,
       copyCheck: null,
       showRetweetMenu: false,
       quotedSourceText: '',
@@ -600,6 +602,9 @@ export default {
     unlockMessage() {
       const author = this.authorName || "the author";
       const marked = "\n\nYour copy is marked with your ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
+      if (this.quoteRefused) {
+        return "This tweet can't be bought from your wallet now, and nothing was paid.";
+      }
       if (this.quoteError) {
         return `You pay ${this.tweet.price.amount} USDT to ${author}, plus a service fee of up to 5% and a TRX network fee. The payment can't be undone.${marked}`;
       }
@@ -700,12 +705,18 @@ export default {
       this.showUnlockConfirm = true;
       this.quote = null;
       this.quoteError = "";
+      this.quoteRefused = false;
       this.quoting = true;
       try {
         this.quote = await warpnetService.quoteSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
       } catch (err) {
         console.warn(`failed to quote tweet [${this.tweet.id}]`, err);
-        this.quoteError = `Couldn't work out the network fee: ${err?.message || err}`;
+        const message = String(err?.message || err);
+        // The author's node, or this one, turned the order down, and would again at payment.
+        this.quoteRefused = message.startsWith("order: ");
+        this.quoteError = this.quoteRefused
+          ? message.charAt(7).toUpperCase() + message.slice(8)
+          : `Couldn't work out the network fee: ${message}`;
       } finally {
         this.quoting = false;
       }
@@ -721,7 +732,11 @@ export default {
       if (this.unlocking) return;
       this.unlocking = true;
       try {
-        const order = await warpnetService.orderSponsoredTweet({tweetId: this.tweet.id, userId: this.tweet.user_id});
+        const order = await warpnetService.orderSponsoredTweet({
+          tweetId: this.tweet.id,
+          userId: this.tweet.user_id,
+          amount: bigUnits(this.tweet.price.units).toString(),
+        });
         if (!order.confirmed) {
           this.awaitConfirmation();
           return;
@@ -964,7 +979,7 @@ export default {
     },
     async onQuotePosted() {
       try {
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
@@ -985,7 +1000,7 @@ export default {
           this.videoError = "This video isn't available right now. The author's node may be offline.";
           return;
         }
-        this.videoSrc = video.file;
+        this.videoSrc = createVideoURL(video.file);
       } catch (err) {
         console.error(`failed to load tweet video [${this.tweet.id}]`, err);
         this.videoError = 'Failed to load the video.';
@@ -994,6 +1009,7 @@ export default {
       }
     },
     onVideoError() {
+      revokeVideoURL(this.videoSrc);
       this.videoSrc = '';
       this.videoError = 'This video cannot be played. Your system may be missing the required video codec.';
     },
@@ -1127,7 +1143,7 @@ export default {
         toast.error(err?.message || "Couldn't update retweet. Please try again.");
       }
       try {
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
@@ -1213,7 +1229,7 @@ export default {
         this.myReaction = previous.emoji;
         this.reactions = previous.reactions;
         this.reactionsCount.set(this.tweet.id, previous.count);
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
         return;
       }
       if (removing) {
@@ -1226,7 +1242,7 @@ export default {
       // counts only our reaction; the real breakdown comes from the author's
       // node, the way retweet() refreshes.
       try {
-        await this.loadTweetStats(this.tweet.id, this.tweet.user_id);
+        await this.loadTweetStats(this.tweet.id, this.tweet.user_id, true);
       } catch (err) {
         console.error(`failed to refresh tweet stats [${this.tweet.id}]`, err);
       }
@@ -1266,8 +1282,8 @@ export default {
     getViewsCount(tweetId) {
       return this.viewsCount.get(tweetId) || 0;
     },
-    async loadTweetStats(tweetId, userId) {
-      const stats = await warpnetService.getTweetStats(tweetId, userId);
+    async loadTweetStats(tweetId, userId, force) {
+      const stats = await warpnetService.getTweetStats(tweetId, userId, force);
       if (!stats || !stats.tweet_id) {
         // Transient handler/stream error surfaces as an empty body; a
         // single delayed retry keeps the counters from silently showing
@@ -1433,6 +1449,7 @@ export default {
     this.$nextTick(() => this.setupViewObserver());
   },
   beforeUnmount() {
+    revokeVideoURL(this.videoSrc);
     if (this.viewObserver) {
       this.viewObserver.disconnect();
       this.viewObserver = null;

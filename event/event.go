@@ -603,6 +603,8 @@ type ModerationEvent struct {
 // constant so they cannot drift.
 const ReportsTopic = "/warpnet/reports/1.0.0"
 
+const ModerationVotesTopic = "/warpnet/moderation/votes/1.0.0"
+
 // ReportEvent is published by a member node on the reports pubsub topic
 // when a user clicks Report in the UI. It carries enough for a moderator
 // to fetch the actual offending content (TargetNodeID is a routing hint
@@ -776,6 +778,15 @@ type GetGatewaySettingsResponse = domain.GatewaySettings
 
 // UpdateGatewaySettingsEvent defines model for UpdateGatewaySettingsEvent.
 type UpdateGatewaySettingsEvent = domain.GatewaySettings
+
+// GetSponsoredSettingsEvent defines model for GetSponsoredSettingsEvent.
+type GetSponsoredSettingsEvent struct{}
+
+// GetSponsoredSettingsResponse defines model for GetSponsoredSettingsResponse.
+type GetSponsoredSettingsResponse = domain.SponsoredSettings
+
+// UpdateSponsoredSettingsEvent defines model for UpdateSponsoredSettingsEvent.
+type UpdateSponsoredSettingsEvent = domain.SponsoredSettings
 
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
@@ -993,21 +1004,40 @@ type WalletEvent struct {
 
 // WalletResponse defines model for WalletResponse.
 type WalletResponse struct {
-	Address     string `json:"address"`
-	Token       string `json:"token"`
-	UsdtBalance string `json:"usdt_balance"`
-	TrxBalance  string `json:"trx_balance"`
-	Activated   bool   `json:"activated"`
-	CreatedAt   int64  `json:"created_at,omitempty"`
-	Derivation  string `json:"derivation"`
-	Decimals    uint8  `json:"decimals"`
-	Network     string `json:"network"`
+	Address     string            `json:"address"`
+	Token       string            `json:"token"`
+	UsdtBalance string            `json:"usdt_balance"`
+	TrxBalance  string            `json:"trx_balance"`
+	Staked      string            `json:"staked"`
+	Unstaking   []WalletUnstaking `json:"unstaking"`
+	Activated   bool              `json:"activated"`
+	CreatedAt   int64             `json:"created_at,omitempty"`
+	Derivation  string            `json:"derivation"`
+	Decimals    uint8             `json:"decimals"`
+	Network     string            `json:"network"`
+}
+
+// WalletUnstaking defines model for WalletUnstaking.
+type WalletUnstaking struct {
+	Amount      string `json:"amount"`
+	AvailableAt int64  `json:"available_at"`
+}
+
+// WalletStakeEvent defines model for WalletStakeEvent.
+type WalletStakeEvent struct {
+	Amount string `json:"amount"`
+}
+
+// WalletStakeResponse defines model for WalletStakeResponse.
+type WalletStakeResponse struct {
+	Tx string `json:"tx"`
 }
 
 // NewOrderEvent defines model for NewOrderEvent.
 type NewOrderEvent struct {
 	TweetId domain.ID `json:"tweet_id"`
 	UserId  domain.ID `json:"user_id"`
+	Amount  string    `json:"amount,omitempty"`
 }
 
 // VerifyOrderEvent defines model for VerifyOrderEvent.
@@ -1016,6 +1046,7 @@ type VerifyOrderEvent struct {
 	UserId  domain.ID `json:"user_id"`
 	TxId    string    `json:"tx_id"`
 	Nonce   string    `json:"nonce"`
+	Payer   string    `json:"payer,omitempty"`
 }
 
 // OrderResponse defines model for OrderResponse.
@@ -1072,13 +1103,15 @@ type OrderQuoteStep struct {
 // WalletAddressEvent defines model for WalletAddressEvent.
 type WalletAddressEvent struct {
 	Chain string `json:"chain"`
+	Payer string `json:"payer,omitempty"`
 }
 
 // WalletAddressResponse defines model for WalletAddressResponse.
 type WalletAddressResponse struct {
-	Address string `json:"address"`
-	Chain   string `json:"chain"`
-	UserId  string `json:"user_id"`
+	Address  string `json:"address"`
+	Chain    string `json:"chain"`
+	UserId   string `json:"user_id"`
+	Splitter string `json:"splitter,omitempty"`
 }
 
 // WalletOwnAddressResponse defines model for WalletOwnAddressResponse.

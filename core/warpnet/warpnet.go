@@ -33,7 +33,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/libp2p/go-libp2p/x/rate"
-	"io"
 	gonet "net"
 	"net/netip"
 	"runtime"
@@ -57,6 +56,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
+	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -87,7 +87,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var ErrAllDialsFailed = swarm.ErrAllDialsFailed
+var (
+	ErrAllDialsFailed = swarm.ErrAllDialsFailed
+	ErrLookupFailure  = kbucket.ErrLookupFailure
+)
 
 type relayStatus string
 
@@ -333,19 +336,6 @@ func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.Ba
 	)
 }
 
-func NewConfigurableLimiter(input io.Reader) rcmgr.Limiter {
-	defaults := rcmgr.DefaultLimits.AutoScale()
-	if input == nil {
-		return rcmgr.NewFixedLimiter(defaults)
-	}
-	limiter, err := rcmgr.NewLimiterFromJSON(input, defaults)
-	if err != nil {
-		log.Error("could not parse limiter config", err)
-		return rcmgr.NewFixedLimiter(defaults)
-	}
-	return limiter
-}
-
 func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {
 	perSubnet := subnetConnLimit(limiter)
 	return rcmgr.NewResourceManager(
@@ -358,6 +348,7 @@ func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) 
 			},
 		),
 		rcmgr.WithConnRateLimiters(newSubnetRateLimiter(perSubnet)),
+		rcmgr.WithMetricsDisabled(),
 	)
 }
 

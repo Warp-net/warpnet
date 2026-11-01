@@ -63,6 +63,8 @@ var CommonOptions = []libp2p.Option{
 	libp2p.EnableHolePunching(holepunch.WithTracer(holePunchTracer{})),
 	libp2p.EnableNATService(),
 	libp2p.NATPortMap(),
+	// the detector also refuses /ip6/ circuit addrs, though the relay may already be connected over IPv4
+	libp2p.IPv6BlackHoleSuccessCounter(nil),
 }
 
 func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {

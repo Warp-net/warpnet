@@ -129,6 +129,26 @@ func (s *SettingsRepoTestSuite) TestRateLimitEmptyUserId() {
 	s.Error(s.repo.SetRateLimitSettings("", ratelimit.Settings{}))
 }
 
+func (s *SettingsRepoTestSuite) TestSponsoredSetGet() {
+	user := uuid.New().String()
+	got, err := s.repo.GetSponsoredSettings(user)
+	s.Require().NoError(err)
+	s.Zero(got.MinStakeTRX, "an author who set nothing asks no stake")
+
+	s.Require().NoError(s.repo.SetSponsoredSettings(user, domain.SponsoredSettings{MinStakeTRX: 500}))
+	got, err = s.repo.GetSponsoredSettings(user)
+	s.Require().NoError(err)
+	s.Equal(uint64(500), got.MinStakeTRX)
+
+	gs, err := s.repo.GetGatewaySettings(user)
+	s.Require().NoError(err)
+	s.Empty(gs.NodeID)
+
+	_, err = s.repo.GetSponsoredSettings("")
+	s.Error(err)
+	s.Error(s.repo.SetSponsoredSettings("", domain.SponsoredSettings{}))
+}
+
 func TestSettingsRepoTestSuite(t *testing.T) {
 	suite.Run(t, new(SettingsRepoTestSuite))
 }

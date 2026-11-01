@@ -48,6 +48,7 @@ func TestSend_UnreachablePeerReportedOffline(t *testing.T) {
 	}{
 		{"all dials failed", warpnet.ErrAllDialsFailed, true},
 		{"wrapped all dials failed", fmt.Errorf("dial: %w", warpnet.ErrAllDialsFailed), true},
+		{"empty routing table", fmt.Errorf("routed: %w", warpnet.ErrLookupFailure), true},
 		{"unrelated error", errors.New("boom"), false},
 	}
 

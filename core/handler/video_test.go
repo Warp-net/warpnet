@@ -25,7 +25,9 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"strings"
 	"testing"
@@ -88,6 +90,29 @@ func TestUploadVideo_Success(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "video-key", resp.Key)
 	assert.True(t, strings.HasPrefix(string(repo.stored), "data:video/mp4;base64,"))
+}
+
+func videoBox(boxType string, payloads ...[]byte) []byte {
+	box := binary.BigEndian.AppendUint32(nil, uint32(8+len(bytes.Join(payloads, nil))))
+	return append(append(box, boxType...), bytes.Join(payloads, nil)...)
+}
+
+func TestUploadVideo_MovesMoovToFront(t *testing.T) {
+	chunkOffsets := []byte{0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 32}
+	moov := videoBox("moov", videoBox("trak", videoBox("mdia", videoBox("minf", videoBox("stbl", videoBox("stco", chunkOffsets))))))
+	file := bytes.Join([][]byte{minimalMP4(), videoBox("mdat", []byte("CHNK")), moov}, nil)
+
+	metadata, err := media_meta.BuildMetadata(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
+	require.NoError(t, err)
+
+	video, err := signUploadedVideo(mp4DataURL(file), metadata)
+	require.NoError(t, err)
+
+	stored := rawOf(t, string(video))
+	assert.Less(t, bytes.Index(stored, []byte("moov")), bytes.Index(stored, []byte("mdat")))
+	offset := binary.BigEndian.Uint32(stored[bytes.Index(stored, []byte("stco"))+12:])
+	assert.Equal(t, "CHNK", string(stored[offset:offset+4]))
+	assert.NoError(t, media_meta.VerifyVideo(stored, testSignerID.String(), "alice"))
 }
 
 func extractVideoMetaBox(t *testing.T, stored domain.Base64Video) []byte {

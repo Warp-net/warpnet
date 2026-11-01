@@ -55,6 +55,27 @@ describe('ChatVideo', () => {
       .toBe('data:video/mp4;base64,AAAA');
   });
 
+  it('plays the clip from a blob and frees it when the message goes away', async () => {
+    const {createObjectURL, revokeObjectURL} = URL;
+    URL.createObjectURL = vi.fn(() => 'blob:clip');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const {getByLabelText, container, unmount} = renderVideo();
+
+      await fireEvent.click(getByLabelText('Play video'));
+
+      await waitFor(() => expect(container.querySelector('video')).not.toBeNull());
+      expect(container.querySelector('video').getAttribute('src')).toBe('blob:clip');
+      expect(URL.createObjectURL.mock.calls[0][0].type).toBe('video/mp4');
+
+      unmount();
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
+    } finally {
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+    }
+  });
+
   it('shows the poster frame instead of a blank placeholder', () => {
     const {container} = renderVideo({poster: 'data:image/jpeg;base64,BBBB'});
 

@@ -360,14 +360,22 @@ type targets struct {
 // are calculated based on the size of the lowest level, typically L6. So, if L6 size is 1GB, then
 // L5 target size is 100MB, L4 target size is 10MB and so on.
 //
-// L0 files don't automatically go to L1. Instead, they get compacted to Lbase, where Lbase is
-// chosen based on the first level which is non-empty from top (check L1 through L6). For an empty
-// DB, that would be L6.  So, L0 compactions go to L6, then L5, L4 and so on.
+// L0 files don't automatically go to L1. Instead, they get compacted to Lbase. Lbase is chosen
+// in two steps (mirroring RocksDB's CalculateBaseBytes):
 //
-// Lbase is advanced to the upper levels when its target size exceeds BaseLevelSize. For
-// example, when L6 reaches 1.1GB, then L4 target sizes becomes 11MB, thus exceeding the
-// BaseLevelSize of 10MB. L3 would then become the new Lbase, with a target size of 1MB <
-// BaseLevelSize.
+//  1. The desired base level is the deepest level whose target size is still within
+//     BaseLevelSize, extended further down through empty levels. For an empty DB that is the
+//     last level; as the last level grows, the desired base level moves up (L6 at 1.1GB gives
+//     L4 a target of 11MB > BaseLevelSize, so the desired base becomes L3).
+//
+//  2. Lbase is then clamped to the first non-empty level (scanning L1 through L6) if that is
+//     shallower than the desired base level. Compacting L0 below a non-empty level would place
+//     newer versions of keys below older ones, resurrecting deleted data; compacting L0 *into*
+//     the first non-empty level instead merges the versions correctly. Crucially, L0 is never
+//     compacted into an *empty* level above a non-empty one: doing so makes that level non-empty
+//     and drags Lbase one level up on every compaction until it collapses to L1, forcing all
+//     data to cascade through every intermediate level (massive write-amplification, see
+//     issue #2327).
 func (s *levelsController) levelTargets() targets {
 	adjust := func(sz int64) int64 {
 		if sz < s.kv.opt.BaseLevelSize {
@@ -385,10 +393,49 @@ func (s *levelsController) levelTargets() targets {
 	for i := len(s.levels) - 1; i > 0; i-- {
 		ltarget := adjust(dbSize)
 		t.targetSz[i] = ltarget
+		// The desired base level is the deepest level whose target size is
+		// within BaseLevelSize.
 		if t.baseLevel == 0 && ltarget <= s.kv.opt.BaseLevelSize {
 			t.baseLevel = i
 		}
 		dbSize /= int64(s.kv.opt.LevelSizeMultiplier)
+	}
+	// For a very large LSM tree the loop above can fail to assign a base level:
+	// once the last level exceeds BaseLevelSize*multiplier^(MaxLevels-2), even
+	// L1's target is above BaseLevelSize. Clamp to L1 (see #2296).
+	if t.baseLevel == 0 {
+		t.baseLevel = 1
+	}
+
+	// Bring the base level further down through empty levels.
+	for i := t.baseLevel; i < len(s.levels)-1; i++ {
+		if s.levels[i].getTotalSize() > 0 {
+			break
+		}
+		t.baseLevel = i
+	}
+
+	// If the base level is empty and the next level size is less than the
+	// target size and less than base level size, pick the next level as the base level.
+	b := t.baseLevel
+	lvl := s.levels
+	baseLevelIsEmpty := lvl[b].getTotalSize() == 0
+	baseLevelIsNotLastLevel := b < len(lvl)-1
+	if baseLevelIsNotLastLevel && baseLevelIsEmpty && lvl[b+1].getTotalSize() < t.targetSz[b+1] && lvl[b+1].getTotalSize() < s.kv.opt.BaseLevelSize {
+		t.baseLevel++
+	}
+
+	// Safety clamp: the base level must never be below (deeper than) a non-empty
+	// level. Compacting L0 below existing data would place newer versions of keys
+	// under older ones, causing previously deleted data to reappear (#2278). If a
+	// shallower level holds data, compact L0 directly into that level instead:
+	// merging into it preserves version ordering, and the level then drains down
+	// via regular compactions until the base level recovers its desired depth.
+	for i := 1; i < t.baseLevel; i++ {
+		if s.levels[i].getTotalSize() > 0 {
+			t.baseLevel = i
+			break
+		}
 	}
 
 	tsz := s.kv.opt.BaseTableSize
@@ -407,30 +454,9 @@ func (s *levelsController) levelTargets() targets {
 		}
 	}
 
-	// Bring the base level down to the last empty level.
-	for i := t.baseLevel + 1; i < len(s.levels)-1; i++ {
-		if s.levels[i].getTotalSize() > 0 {
-			break
-		}
-		t.baseLevel = i
-	}
-
-	// If the base level is empty and the next level size is less than the
-	// target size, pick the next level as the base level.
-	b := t.baseLevel
-	lvl := s.levels
-	if b < len(lvl)-1 && lvl[b].getTotalSize() == 0 && lvl[b+1].getTotalSize() < t.targetSz[b+1] {
-		t.baseLevel++
-	}
-
-	// The base level must never be L0. For a very large LSM tree the size loop
-	// above can fail to assign a base level: it only sets baseLevel where
-	// adjust(dbSize) <= BaseLevelSize, and the smallest level it checks (L1)
-	// has dbSize = lastLevelSize / LevelSizeMultiplier^(MaxLevels-2). Once the
-	// last level exceeds that (~1TB with defaults), baseLevel stays 0, and a
-	// non-empty L1 prevents the "bring down" loop from fixing it. Clamp to L1
-	// (the topmost real level) so we never try to compact L0 into itself, which
-	// would otherwise panic in fillTablesL0ToLbase.
+	// The base level must never be L0. The selection above already guarantees
+	// baseLevel >= 1; this is a defensive guard (added in #2296) against ever
+	// compacting L0 into itself, which would panic in fillTablesL0ToLbase.
 	if t.baseLevel == 0 {
 		t.baseLevel = 1
 	}
@@ -1444,6 +1470,15 @@ func (s *levelsController) runCompactDef(id, l int, cd compactDef) (err error) {
 	if len(cd.t.fileSz) == 0 {
 		return errors.New("Filesizes cannot be zero. Targets are not set")
 	}
+
+	if cd.thisLevel.level == 0 {
+		for i := cd.nextLevel.level - 1; i > 0; i-- {
+			if s.levels[i].getTotalSize() > 0 {
+				return fmt.Errorf("there is a non-empty level %d above base level %d", i, cd.nextLevel.level)
+			}
+		}
+	}
+
 	timeStart := time.Now()
 
 	thisLevel := cd.thisLevel

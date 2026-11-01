@@ -55,9 +55,15 @@ func (stream *senderStream) processRTP(now time.Time, header *rtp.Header, payloa
 	stream.octetCount += uint32(len(payload)) //nolint:gosec // G115
 }
 
+// generateReport returns nil until the stream has sent at least one RTP packet, since
+// RTPTime cannot be derived before then and RFC 3550 6.4 says such a source sends RR, not SR.
 func (stream *senderStream) generateReport(now time.Time) *rtcp.SenderReport {
 	stream.m.Lock()
 	defer stream.m.Unlock()
+
+	if stream.packetCount == 0 {
+		return nil
+	}
 
 	return &rtcp.SenderReport{
 		SSRC:        stream.ssrc,

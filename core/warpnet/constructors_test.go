@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"strings"
 	"testing"
 
 	"github.com/ipfs/boxo/blockstore"
@@ -15,6 +14,7 @@ import (
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,15 +37,7 @@ func TestNewNoise(t *testing.T) {
 }
 
 func TestNewLimiterAndManagers(t *testing.T) {
-	limiter := NewConfigurableLimiter(nil)
-	require.NotNil(t, limiter)
-
-	fromJSON := NewConfigurableLimiter(strings.NewReader(`{}`))
-	require.NotNil(t, fromJSON)
-
-	// malformed config falls back to the defaults rather than failing startup
-	fallback := NewConfigurableLimiter(strings.NewReader(`{`))
-	require.NotNil(t, fallback)
+	limiter := rcmgr.NewFixedLimiter(rcmgr.DefaultLimits.AutoScale())
 
 	cm, err := NewConnManager(limiter, 20, 50)
 	require.NoError(t, err)
@@ -59,7 +51,7 @@ func TestNewLimiterAndManagers(t *testing.T) {
 }
 
 func TestNewConnManagerTakesTheOwnersWaterMarks(t *testing.T) {
-	limiter := NewConfigurableLimiter(nil)
+	limiter := rcmgr.NewFixedLimiter(rcmgr.DefaultLimits.AutoScale())
 
 	cm, err := NewConnManager(limiter, 30, 80)
 	require.NoError(t, err)

@@ -3,6 +3,7 @@ package domain
 import (
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/assert"
@@ -105,4 +106,21 @@ func TestTweet_Teaser(t *testing.T) {
 
 	free := Tweet{Id: "t2", Text: "free", ImageKeys: []string{"i2"}}
 	assert.Equal(t, free, free.Teaser())
+}
+
+func TestSponsoredSettings_ClaimMinStakeTRX(t *testing.T) {
+	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	assert.Equal(t, uint64(500), SponsoredSettings{MinStakeTRX: 500}.ClaimMinStakeTRX(now), "a threshold that never changed holds")
+
+	raised := SponsoredSettings{MinStakeTRX: 500, PreviousMinStakeTRX: 100, ChangedAt: now}
+	assert.Equal(t, uint64(100), raised.ClaimMinStakeTRX(now.Add(-time.Hour)), "a payment made before a raise is held to the old threshold")
+	assert.Equal(t, uint64(100), raised.ClaimMinStakeTRX(now.Add(MinStakeChangeWindow/2)), "so is one still being paid when the raise came")
+	assert.Equal(t, uint64(500), raised.ClaimMinStakeTRX(now.Add(MinStakeChangeWindow)), "once the change has settled the new one holds")
+
+	enabled := SponsoredSettings{MinStakeTRX: 500, ChangedAt: now}
+	assert.Equal(t, uint64(500), enabled.ClaimMinStakeTRX(now.Add(MinStakeChangeWindow)), "a stake first asked is not left at zero for long")
+	assert.LessOrEqual(t, MinStakeChangeWindow, 15*time.Minute, "a newly asked stake stays open only while a payment checked before it lands")
+
+	lowered := SponsoredSettings{MinStakeTRX: 100, PreviousMinStakeTRX: 500, ChangedAt: now.Add(-time.Hour)}
+	assert.Equal(t, uint64(100), lowered.ClaimMinStakeTRX(now), "a lowered threshold holds at once")
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
 /*
@@ -28,6 +29,7 @@ const (
 	srtcpEncryptionFlag = 0x80
 )
 
+// nolint:cyclop
 func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	authTagLen, err := c.cipher.AuthTagRTCPLen()
 	if err != nil {
@@ -50,15 +52,24 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 	// The SSRC is read from the unauthenticated RTCP header at this point.
 	// getSRTCPSSRCState is called in read-only mode so that no new map entry is
 	// inserted until after the auth tag has been verified. The state is committed
-	// to the map by setSRTCPSSRCState only after markAsValid() succeeds below.
+	// to the map by setSRTCPSSRCState only after Accept() succeeds below.
 	ssrcState, existingState := c.getSRTCPSSRCState(ssrc, false)
 
 	// The replay check is intentionally performed before authentication.
 	// Rejecting already-seen sequence numbers here avoids the CPU cost of
 	// AES decryption and HMAC/GCM verification on flooded duplicate packets.
 	// Safety relies on the replay detector only committing the index as "seen"
-	// when markAsValid() is explicitly called after successful authentication.
-	markAsValid, ok := ssrcState.replayDetector.Check(uint64(index))
+	// after successful authentication, when Accept() (or markAsValid, for
+	// detectors without CheckAccepter support) is explicitly called below.
+	var markAsValid func() bool
+	var tok replaydetector.Token
+	var ok bool
+	if ssrcState.checkAccepter != nil {
+		tok = ssrcState.checkAccepter.CheckSeq(uint64(index))
+		ok = tok.Passed()
+	} else {
+		markAsValid, ok = ssrcState.replayDetector.Check(uint64(index))
+	}
 	if !ok {
 		return nil, &duplicatedError{Proto: "srtcp", SSRC: ssrc, Index: index}
 	}
@@ -78,7 +89,11 @@ func (c *Context) decryptRTCP(dst, encrypted []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	markAsValid()
+	if ssrcState.checkAccepter != nil {
+		ssrcState.checkAccepter.Accept(tok)
+	} else {
+		markAsValid()
+	}
 
 	if !existingState {
 		c.setSRTCPSSRCState(ssrcState)

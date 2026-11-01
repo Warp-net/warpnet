@@ -35,9 +35,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,11 +54,16 @@ import (
 const (
 	requestTimeout = 90 * time.Second
 	engineTimeout  = 75 * time.Second
+	PayTimeout     = 4 * time.Minute
+	payAnswerWait  = PayTimeout + 2*time.Minute
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
 	NativeCoin     = "TRX"
+	sunPerTRX      = 1_000_000
 
-	testnetSplitter = "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy"
+	testnetSplitter = "TKjWzAR6EBfsadKsqzRAZgtLLgwH9isCa9"
+	mainnetUSDT     = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+	testnetUSDT     = "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf"
 	maxFeePercent   = 5
 	txNotFound      = "tx_not_found"
 
@@ -64,18 +72,67 @@ const (
 	paramSeed       = "seed"
 	paramPrivateKey = "private_key"
 	paramAmount     = "amount"
+	paramDeadline   = "deadline"
+	paramSplitter   = "splitter"
+	paramOrderId    = "order_id"
 )
+
+var tronAddress = regexp.MustCompile(`^T[1-9A-HJ-NP-Za-km-z]{33}$`)
 
 var (
 	ErrUnavailable = errors.New("wallet: payment engine unavailable")
 	ErrNoAnswer    = errors.New("wallet: the payment engine never answered")
+	ErrReverted    = errors.New("wallet: the payment reverted")
+	ErrAlreadyPaid = errors.New("wallet: the order is already paid")
 )
+
+// engineErrors are the engine's error codes a caller acts on rather than shows.
+var engineErrors = map[string]error{
+	"reverted":     ErrReverted,
+	"already_paid": ErrAlreadyPaid,
+}
 
 type Account struct {
 	TokenBalance string
 	TRX          string
+	Staked       string
+	Unstaking    []Unstaking
 	Activated    bool
 	CreatedAt    int64
+}
+
+type Unstaking struct {
+	Amount      string `json:"amount"`
+	AvailableAt int64  `json:"available_at"`
+}
+
+func (a Account) IsStakeEnough(minTRX uint64) bool {
+	staked, ok := new(big.Int).SetString(a.Staked, 10)
+	if !ok {
+		return minTRX == 0
+	}
+	return staked.Cmp(sunOf(minTRX)) >= 0
+}
+
+func (a Account) IsLockedEnough(minTRX uint64) bool {
+	locked, ok := new(big.Int).SetString(a.Staked, 10)
+	if !ok {
+		locked = new(big.Int)
+	}
+	for _, u := range a.Unstaking {
+		if amount, ok := new(big.Int).SetString(u.Amount, 10); ok {
+			locked.Add(locked, amount)
+		}
+	}
+	return locked.Cmp(sunOf(minTRX)) >= 0
+}
+
+func IsAddress(address string) bool {
+	return tronAddress.MatchString(address)
+}
+
+func sunOf(trx uint64) *big.Int {
+	return new(big.Int).Mul(new(big.Int).SetUint64(trx), big.NewInt(sunPerTRX))
 }
 
 type Config struct {
@@ -83,9 +140,14 @@ type Config struct {
 	Network       string
 	Endpoint      string
 	Token         string
+	TokenContract string
 	Decimals      uint8
 	RPS           float64
 	Splitter      string
+	// Retired are splitters this node no longer pays through but still accepts
+	// payments to, so a buyer on an older node is not left with a payment no
+	// author will confirm.
+	Retired       []string
 	MaxFeePercent uint64
 }
 
@@ -103,8 +165,24 @@ type Sponsorship struct {
 	Splitter      string
 	OrderId       string
 	Author        string
+	Buyer         string
 	Amount        string
 	MaxFeePercent uint64
+	MaxTotal      string
+}
+
+// Receipt is what verification says of a payment: whether it is confirmed, and
+// when the block that holds it was produced.
+type Receipt struct {
+	Confirmed bool
+	BlockTime time.Time
+}
+
+// PaymentState is what the splitter records of an order: whether it is paid,
+// and which transaction paid it once the indexer lists it.
+type PaymentState struct {
+	Paid bool   `json:"paid"`
+	Tx   string `json:"tx"`
 }
 
 type Payment struct {
@@ -155,7 +233,12 @@ type responseError struct {
 
 func (e *responseError) Error() string { return e.Message }
 
-func (e *responseError) Unwrap() error { return e.cause }
+func (e *responseError) Unwrap() error {
+	if e.cause != nil {
+		return e.cause
+	}
+	return engineErrors[e.Code]
+}
 
 type response struct {
 	ID     string          `json:"id"`
@@ -174,6 +257,9 @@ type Client struct {
 	pending  map[string]chan response
 	seq      uint64
 	failure  error
+	// tempDir is the private directory the engine was unpacked into for want of
+	// a user cache directory, removed on Close.
+	tempDir string
 }
 
 func New(cfg Config) *Client {
@@ -192,6 +278,7 @@ func DefaultConfig(network, binaryPath string) Config {
 			Network:       "mainnet",
 			Endpoint:      "https://api.trongrid.io",
 			Token:         tokenSymbol,
+			TokenContract: mainnetUSDT,
 			Decimals:      6,
 			MaxFeePercent: maxFeePercent,
 		}
@@ -201,6 +288,7 @@ func DefaultConfig(network, binaryPath string) Config {
 		Network:       "testnet",
 		Endpoint:      "https://nile.trongrid.io",
 		Token:         tokenSymbol,
+		TokenContract: testnetUSDT,
 		Decimals:      6,
 		Splitter:      testnetSplitter,
 		MaxFeePercent: maxFeePercent,
@@ -212,6 +300,18 @@ func (c *Client) Decimals() uint8       { return c.cfg.Decimals }
 func (c *Client) Network() string       { return c.cfg.Network }
 func (c *Client) Splitter() string      { return c.cfg.Splitter }
 func (c *Client) MaxFeePercent() uint64 { return c.cfg.MaxFeePercent }
+
+// Splitters are every splitter this node accepts payments to: the one it pays
+// through first, then the retired ones.
+func (c *Client) Splitters() []string {
+	out := make([]string, 0, 1+len(c.cfg.Retired))
+	for _, s := range append([]string{c.cfg.Splitter}, c.cfg.Retired...) {
+		if s != "" && !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 func (c *Client) Close() {
 	c.mu.Lock()
@@ -228,6 +328,10 @@ func (c *Client) Close() {
 		c.stop = nil
 	}
 	c.cmd = nil
+	if c.tempDir != "" {
+		_ = os.RemoveAll(c.tempDir)
+		c.tempDir = ""
+	}
 }
 
 func (c *Client) prefix() string {
@@ -317,12 +421,8 @@ func (c *Client) resolveBinary() (string, error) {
 
 	sum := sha256.Sum256(binary)
 	name := "payment-engine-" + hex.EncodeToString(sum[:6])
-	base, err := c.cacheDir()
+	dir, err := c.engineDir()
 	if err != nil {
-		base = os.TempDir()
-	}
-	dir := filepath.Join(base, "warpnet")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, name)
@@ -352,6 +452,25 @@ func (c *Client) resolveBinary() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// engineDir is where the embedded engine is unpacked: the user's cache, else a
+// fresh directory only this user can write, made once per client. A fixed name
+// under the shared temp directory could be made first by another user of the
+// machine, who could then swap the engine between its check and its start.
+func (c *Client) engineDir() (string, error) {
+	if base, err := c.cacheDir(); err == nil {
+		dir := filepath.Join(base, "warpnet")
+		return dir, os.MkdirAll(dir, 0o700)
+	}
+	if c.tempDir == "" {
+		dir, err := os.MkdirTemp("", "warpnet-")
+		if err != nil {
+			return "", err
+		}
+		c.tempDir = dir
+	}
+	return c.tempDir, nil
 }
 
 func matchesEmbedded(dir, name string, want [sha256.Size]byte) (bool, error) {
@@ -452,7 +571,12 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 		c.forget(id)
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	timer := time.NewTimer(requestTimeout)
+	wait := requestTimeout
+	if method == "wallet.pay" {
+		// A payment sends until its deadline and then waits for its receipt.
+		wait = payAnswerWait
+	}
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -500,15 +624,55 @@ func (c *Client) Export(ctx context.Context, seed string) (address, privateKey s
 
 func (c *Client) Balance(ctx context.Context, address string) (Account, error) {
 	var out struct {
-		TokenBalance string `json:"token_balance"`
-		TRX          string `json:"trx"`
-		Activated    bool   `json:"activated"`
-		CreatedAt    int64  `json:"created_at"`
+		TokenBalance string      `json:"token_balance"`
+		TRX          string      `json:"trx"`
+		Staked       string      `json:"staked"`
+		Unstaking    []Unstaking `json:"unstaking"`
+		Activated    bool        `json:"activated"`
+		CreatedAt    int64       `json:"created_at"`
 	}
 	if err := c.call(ctx, "wallet.balance", map[string]string{paramNetwork: c.cfg.Network, "address": address, paramToken: c.cfg.Token}, &out); err != nil {
 		return Account{}, err
 	}
-	return Account{TokenBalance: out.TokenBalance, TRX: out.TRX, Activated: out.Activated, CreatedAt: out.CreatedAt}, nil
+	return Account{
+		TokenBalance: out.TokenBalance,
+		TRX:          out.TRX,
+		Staked:       out.Staked,
+		Unstaking:    out.Unstaking,
+		Activated:    out.Activated,
+		CreatedAt:    out.CreatedAt,
+	}, nil
+}
+
+func (c *Client) Stake(ctx context.Context, seed, amount string) (string, error) {
+	return c.sendStaking(ctx, "wallet.stake", seed, amount)
+}
+
+func (c *Client) Unstake(ctx context.Context, seed, amount string) (string, error) {
+	return c.sendStaking(ctx, "wallet.unstake", seed, amount)
+}
+
+func (c *Client) Withdraw(ctx context.Context, seed string) (string, error) {
+	return c.sendStaking(ctx, "wallet.withdraw", seed, "")
+}
+
+func (c *Client) sendStaking(ctx context.Context, method, seed, amount string) (string, error) {
+	var out struct {
+		Tx string `json:"tx"`
+	}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed}
+	if amount != "" {
+		params[paramAmount] = amount
+	}
+	if err := c.call(ctx, method, params, &out); err != nil {
+		return "", err
+	}
+	if amount == "" {
+		log.Infof("wallet: %s on %s, tx %s", method, c.cfg.Network, out.Tx)
+	} else {
+		log.Infof("wallet: %s %s sun on %s, tx %s", method, amount, c.cfg.Network, out.Tx)
+	}
+	return out.Tx, nil
 }
 
 func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (string, error) {
@@ -516,8 +680,14 @@ func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (
 		Tx string `json:"tx"`
 	}
 	asset = c.assetOr(asset)
-	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, paramAmount: amount}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, paramAmount: amount, paramDeadline: deadline(engineTimeout)}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
+		// A transfer whose answer was lost may still be on chain; its id is what
+		// keeps the owner from sending the same money twice.
+		var engineErr *responseError
+		if errors.As(err, &engineErr) && engineErr.Tx != "" {
+			return engineErr.Tx, err
+		}
 		return "", err
 	}
 	log.Infof("wallet: sent %s of %s to %s on %s, tx %s", amount, asset, to, c.cfg.Network, out.Tx)
@@ -607,21 +777,42 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 	return err == nil && out.Available
 }
 
-func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, error) {
+// Payment asks the splitter whether the buyer's order is paid and which of the
+// buyer's transactions from since onwards paid it, so a payment whose answer was
+// lost is found rather than sent again.
+func (c *Client) Payment(ctx context.Context, s Sponsorship, since time.Time) (PaymentState, error) {
+	var out PaymentState
+	params := map[string]any{
+		paramNetwork:  c.cfg.Network,
+		paramSplitter: s.Splitter,
+		"buyer":       s.Buyer,
+		paramOrderId:  s.OrderId,
+		"since":       since.UnixMilli(),
+	}
+	err := c.call(ctx, "wallet.payment", params, &out)
+	return out, err
+}
+
+func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (Receipt, error) {
 	var out struct {
 		Confirmed     bool   `json:"confirmed"`
 		Buyer         string `json:"buyer"`
 		AuthorAmount  string `json:"author_amount"`
 		FeeAmount     string `json:"fee_amount"`
 		Confirmations uint64 `json:"confirmations"`
+		BlockTime     int64  `json:"block_time"`
 	}
 	err := c.call(ctx, "verify", verifyParams(c.cfg, txId, s), &out)
 	var engineErr *responseError
 	if errors.As(err, &engineErr) && engineErr.Code == txNotFound {
-		return false, nil
+		return Receipt{}, nil
 	}
 	if err != nil {
-		return false, err
+		return Receipt{}, err
+	}
+	receipt := Receipt{Confirmed: out.Confirmed}
+	if out.BlockTime > 0 {
+		receipt.BlockTime = time.UnixMilli(out.BlockTime)
 	}
 	if out.Confirmed {
 		log.Infof(
@@ -629,16 +820,16 @@ func (c *Client) IsPaid(ctx context.Context, txId string, s Sponsorship) (bool, 
 			out.Buyer, out.AuthorAmount, c.cfg.Token, s.Author, c.cfg.Network, out.FeeAmount, out.Confirmations, txId,
 		)
 	}
-	return out.Confirmed, nil
+	return receipt, nil
 }
 
 func quoteParams(network, payer string, s Sponsorship) map[string]any {
 	params := map[string]any{
-		paramNetwork: network,
-		"payer":      payer,
-		"splitter":   s.Splitter,
-		"author":     s.Author,
-		paramAmount:  s.Amount,
+		paramNetwork:  network,
+		"payer":       payer,
+		paramSplitter: s.Splitter,
+		"author":      s.Author,
+		paramAmount:   s.Amount,
 	}
 	if s.MaxFeePercent > 0 {
 		params["max_fee_percent"] = s.MaxFeePercent
@@ -647,32 +838,54 @@ func quoteParams(network, payer string, s Sponsorship) map[string]any {
 }
 
 func verifyParams(cfg Config, txId string, s Sponsorship) map[string]any {
-	return map[string]any{
+	splitters := (&Client{cfg: cfg}).Splitters()
+	if len(splitters) == 0 {
+		splitters = []string{s.Splitter}
+	}
+	assets := make([]map[string]any, 0, len(splitters))
+	for _, splitter := range splitters {
+		asset := map[string]any{paramToken: cfg.Token, "contract": splitter, "decimals": cfg.Decimals}
+		if cfg.TokenContract != "" {
+			asset["token_contract"] = cfg.TokenContract
+		}
+		assets = append(assets, asset)
+	}
+	params := map[string]any{
 		"chain":           "tron",
 		paramNetwork:      cfg.Network,
 		"tx_id":           txId,
-		"order_id":        s.OrderId,
+		paramOrderId:      s.OrderId,
 		"expected_author": s.Author,
 		"min_amount":      s.Amount,
-		"allowed_assets": []map[string]any{{
-			paramToken: cfg.Token,
-			"contract": s.Splitter,
-			"decimals": cfg.Decimals,
-		}},
+		"allowed_assets":  assets,
 	}
+	if s.Buyer != "" {
+		params["expected_buyer"] = s.Buyer
+	}
+	return params
 }
 
 func payParams(network, seed string, s Sponsorship) map[string]any {
 	params := map[string]any{
-		paramNetwork: network,
-		paramSeed:    seed,
-		"splitter":   s.Splitter,
-		"order_id":   s.OrderId,
-		"author":     s.Author,
-		paramAmount:  s.Amount,
+		paramNetwork:  network,
+		paramSeed:     seed,
+		paramSplitter: s.Splitter,
+		paramOrderId:  s.OrderId,
+		"author":      s.Author,
+		paramAmount:   s.Amount,
+		paramDeadline: deadline(PayTimeout),
 	}
 	if s.MaxFeePercent > 0 {
 		params["max_fee_percent"] = s.MaxFeePercent
 	}
+	if s.MaxTotal != "" {
+		params["max_total"] = s.MaxTotal
+	}
 	return params
+}
+
+// deadline is d from now: after it the engine sends nothing, so a payment
+// cannot go out once this node has given up waiting for it.
+func deadline(d time.Duration) int64 {
+	return time.Now().Add(d).UnixMilli()
 }

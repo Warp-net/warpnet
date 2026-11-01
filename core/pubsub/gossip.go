@@ -212,7 +212,9 @@ func (g *Gossip) runListener(sub *pubsub.Subscription) error {
 			continue
 		}
 
-		log.Debugf("gossip: received message: %s", string(msg.Data))
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.Debugf("gossip: received message: %s", string(msg.Data))
+		}
 
 		g.mx.RLock()
 		handlerF, ok := g.handlersMap[topicName]
@@ -688,6 +690,15 @@ func NewDiscoveryTopicHandler(discHandler discovery.DiscoveryHandler) TopicHandl
 func NewDiscoveryRelayTopicHandler() TopicHandler {
 	return TopicHandler{
 		TopicName: pubSubDiscoveryTopic,
+		Handler: func(_ []byte) error {
+			return nil
+		},
+	}
+}
+
+func NewRelayTopicHandler(topicName string) TopicHandler {
+	return TopicHandler{
+		TopicName: topicName,
 		Handler: func(_ []byte) error {
 			return nil
 		},

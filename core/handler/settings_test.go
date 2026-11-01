@@ -4,6 +4,7 @@ package handler
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/ratelimit"
@@ -379,4 +380,62 @@ func TestStreamUpdateRateLimitSettingsHandler(t *testing.T) {
 			t.Fatalf("expected repo error, got %v", err)
 		}
 	})
+}
+
+type stubSponsoredSettingsRepo struct {
+	saved map[string]domain.SponsoredSettings
+}
+
+func (s stubSponsoredSettingsRepo) GetSponsoredSettings(userId string) (domain.SponsoredSettings, error) {
+	return s.saved[userId], nil
+}
+
+func (s stubSponsoredSettingsRepo) SetSponsoredSettings(userId string, ss domain.SponsoredSettings) error {
+	s.saved[userId] = ss
+	return nil
+}
+
+func TestStreamSponsoredSettingsHandlers(t *testing.T) {
+	repo := stubSponsoredSettingsRepo{saved: map[string]domain.SponsoredSettings{}}
+	auth := stubAuth{owner: domain.Owner{UserId: "owner-1"}}
+
+	resp, err := StreamGetSponsoredSettingsHandler(repo, auth)([]byte("{}"), nil)
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 0 {
+		t.Fatalf("an author who set nothing asks no stake: %+v, %v", resp, err)
+	}
+
+	resp, err = StreamUpdateSponsoredSettingsHandler(repo, auth)(marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 500}), nil)
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 500 {
+		t.Fatalf("update = %+v, %v", resp, err)
+	}
+	saved := repo.saved["owner-1"]
+	if saved.MinStakeTRX != 500 || saved.PreviousMinStakeTRX != 0 || time.Since(saved.ChangedAt) > time.Minute {
+		t.Fatalf("saved = %+v, want 500 with the old 0 kept for claims", saved)
+	}
+
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, auth)(marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 800}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if again := repo.saved["owner-1"]; again.MinStakeTRX != 800 || again.PreviousMinStakeTRX != 0 {
+		t.Fatalf("saved = %+v: a second raise within the window keeps the lowest threshold a claim may still be held to", again)
+	}
+	before := repo.saved["owner-1"]
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, auth)(marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 800}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if repo.saved["owner-1"] != before {
+		t.Fatalf("saving the same threshold moved its history: %+v -> %+v", before, repo.saved["owner-1"])
+	}
+
+	resp, err = StreamGetSponsoredSettingsHandler(repo, auth)([]byte("{}"), nil)
+	if err != nil || resp.(event.GetSponsoredSettingsResponse).MinStakeTRX != 800 {
+		t.Fatalf("get after update = %+v, %v", resp, err)
+	}
+
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, auth)([]byte("{"), nil); err == nil {
+		t.Fatal("expected a payload error")
+	}
+	if _, err := StreamUpdateSponsoredSettingsHandler(repo, stubAuth{})(marshal(t, event.UpdateSponsoredSettingsEvent{}), nil); err == nil {
+		t.Fatal("expected an empty-owner error")
+	}
 }

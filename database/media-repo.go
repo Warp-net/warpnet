@@ -44,6 +44,7 @@ const (
 	ImageSubNamespace      = "IMAGES"
 	VideoSubNamespace      = "VIDEOS"
 	CopySubNamespace       = "COPIES"
+	HashSubNamespace       = "HASHES"
 )
 
 var (
@@ -55,6 +56,7 @@ type MediaStorer interface {
 	Set(key local_store.DatabaseKey, value []byte) error
 	Get(key local_store.DatabaseKey) ([]byte, error)
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
+	Delete(key local_store.DatabaseKey) error
 	NewReadTxn() (local_store.WarpTransactioner, error)
 }
 
@@ -137,6 +139,23 @@ func (repo *MediaRepo) SetForeignImageWithTTL(userId, key string, img domain.Bas
 	return repo.db.SetWithTTL(mediaKey, []byte(img), week)
 }
 
+func (repo *MediaRepo) DeleteImage(userId, key string) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if key == "" || userId == "" {
+		return ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(ImageSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	return repo.db.Delete(mediaKey)
+}
+
 func (repo *MediaRepo) GetVideo(userId, key string) (domain.Base64Video, error) {
 	if repo == nil {
 		return "", ErrMediaRepoNotInit
@@ -197,6 +216,23 @@ func (repo *MediaRepo) SetForeignVideoWithTTL(userId, key string, video domain.B
 
 	week := time.Hour * 24 * 7
 	return repo.db.SetWithTTL(mediaKey, []byte(video), week)
+}
+
+func (repo *MediaRepo) DeleteVideo(userId, key string) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if key == "" || userId == "" {
+		return ErrMediaNotFound
+	}
+
+	mediaKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(VideoSubNamespace).
+		AddParentId(userId).
+		AddId(key).
+		Build()
+
+	return repo.db.Delete(mediaKey)
 }
 
 func (repo *MediaRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
@@ -292,4 +328,64 @@ func (repo *MediaRepo) ListCopies(userId, originalKey string) ([]domain.MediaCop
 		}
 	}
 	return copies, nil
+}
+
+func (repo *MediaRepo) SetImageHashes(h domain.TweetImageHashes) error {
+	if repo == nil {
+		return ErrMediaRepoNotInit
+	}
+	if h.UserId == "" || h.TweetId == "" || len(h.Hashes) == 0 {
+		return local_store.DBError("no data for image hashes set")
+	}
+
+	data, err := json.Marshal(h)
+	if err != nil {
+		return err
+	}
+
+	hashKey := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(HashSubNamespace).
+		AddParentId(h.UserId).
+		AddId(h.TweetId).
+		Build()
+
+	return repo.db.Set(hashKey, data)
+}
+
+func (repo *MediaRepo) ListImageHashes() ([]domain.TweetImageHashes, error) {
+	if repo == nil {
+		return nil, ErrMediaRepoNotInit
+	}
+
+	txn, err := repo.db.NewReadTxn()
+	if err != nil {
+		return nil, err
+	}
+	defer txn.Rollback()
+
+	var keys []local_store.DatabaseKey
+	prefix := local_store.NewPrefixBuilder(repo.prefix).
+		AddRootID(HashSubNamespace).
+		Build() + local_store.Delimeter
+	err = txn.IterateKeys(prefix, func(key string) error {
+		keys = append(keys, local_store.DatabaseKey(key))
+		return nil
+	})
+	if err != nil || len(keys) == 0 {
+		return nil, err
+	}
+
+	items, err := txn.BatchGet(keys...)
+	if err != nil {
+		return nil, err
+	}
+	hashes := make([]domain.TweetImageHashes, 0, len(items))
+	for _, item := range items {
+		var h domain.TweetImageHashes
+		if err := json.Unmarshal(item.Value, &h); err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, h)
+	}
+	return hashes, nil
 }

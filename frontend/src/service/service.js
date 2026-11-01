@@ -38,6 +38,9 @@ export const PRIVATE_GET_WALLET_CONTACTS = "/private/get/wallet/contacts/0.0.0"
 export const PRIVATE_GET_WALLET_HISTORY = "/private/get/wallet/history/0.0.0"
 export const PRIVATE_GET_WALLET_KEY = "/private/get/wallet/key/0.0.0"
 export const PRIVATE_POST_WALLET_SEND = "/private/post/wallet/send/0.0.0"
+export const PRIVATE_POST_WALLET_STAKE = "/private/post/wallet/stake/0.0.0"
+export const PRIVATE_POST_WALLET_UNSTAKE = "/private/post/wallet/unstake/0.0.0"
+export const PRIVATE_POST_WALLET_WITHDRAW = "/private/post/wallet/withdraw/0.0.0"
 export const PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
 export const PRIVATE_GET_NOTIFICATIONS = "/private/get/notifications/0.0.0"
 export const PRIVATE_GET_NOTIFICATION = "/private/get/notification/0.0.0"
@@ -49,6 +52,8 @@ export const PRIVATE_GET_SETTINGS_GATEWAY = "/private/get/settings/gateway/0.0.0
 export const PRIVATE_POST_SETTINGS_GATEWAY = "/private/post/settings/gateway/0.0.0"
 export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0.0.0"
 export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
+export const PRIVATE_GET_SETTINGS_SPONSORED = "/private/get/settings/sponsored/0.0.0"
+export const PRIVATE_POST_SETTINGS_SPONSORED = "/private/post/settings/sponsored/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -188,6 +193,8 @@ const dedupSkipPaths = new Set([
 
 const walletHistoryWindow = 60000
 const walletHistoryReads = new Map()
+const tweetStatsWindow = 30000
+const tweetStatsReads = new Map()
 
 const retweetPrefix = "RT:"
 
@@ -451,6 +458,7 @@ export const warpnetService = {
         stopRefreshNotifications()
         stateMap.clear()
         walletHistoryReads.clear()
+        tweetStatsReads.clear()
         // The owner is dropped here rather than through setOwnerProfile, so
         // subscribers have to be told explicitly or they keep rendering the
         // signed-out owner.
@@ -586,6 +594,9 @@ export const warpnetService = {
         }
 
         const result = await this.sendToNode(request);
+        if (result?.code) {
+            throw new Error(result.message || "Couldn't upload the image.");
+        }
         const keys = [result.key1, result.key2, result.key3, result.key4]
             .filter(key => key && key.length > 0);
         return keys;
@@ -1292,6 +1303,25 @@ export const warpnetService = {
         return resp;
     },
 
+    async getSponsoredSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SETTINGS_SPONSORED,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    async updateSponsoredSettings(minStakeTrx) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SETTINGS_SPONSORED,
+            body: { min_stake_trx: Math.max(0, Math.floor(Number(minStakeTrx) || 0)) },
+        });
+        if (!resp || resp.code || !('min_stake_trx' in resp)) {
+            throw new Error(resp?.message || 'Failed to save sponsored settings');
+        }
+        return resp;
+    },
+
     async addFilterKeyword(filterId, keyword, wholeWord) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
@@ -1520,6 +1550,21 @@ export const warpnetService = {
     async sendFunds(to, amount, asset) {
         const request = { path: PRIVATE_POST_WALLET_SEND, body: { to, amount, asset: asset || "" } }
         return await this.sendToNode(request)
+    },
+    async stakeTrx(amount) {
+        const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_STAKE, body: { amount } })
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't stake TRX.")
+        return resp
+    },
+    async unstakeTrx(amount) {
+        const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_UNSTAKE, body: { amount } })
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't unstake TRX.")
+        return resp
+    },
+    async withdrawTrx() {
+        const resp = await this.sendToNode({ path: PRIVATE_POST_WALLET_WITHDRAW, body: {} })
+        if (!resp || resp.code || !resp.tx) throw new Error(resp?.message || "Couldn't take the TRX back.")
+        return resp
     },
     async getWalletHistory(limit, asset, force) {
         const key = `${limit || 25}|${asset || ""}`
@@ -1803,10 +1848,12 @@ export const warpnetService = {
         return resp;
     },
 
-    async orderSponsoredTweet({tweetId, userId}) {
+    async orderSponsoredTweet({tweetId, userId, amount}) {
+        // amount is the price the buyer was shown, in token units: the node pays
+        // nothing if the author's node now asks for a different one.
         const resp = await this.sendToNode({
             path: PRIVATE_POST_SPONSORED_ORDER,
-            body: {tweet_id: tweetId, user_id: userId},
+            body: {tweet_id: tweetId, user_id: userId, amount},
         });
         if (!resp || resp.code || !resp.tx_id) {
             throw new Error(resp?.message || "Couldn't pay for the tweet.");
@@ -2028,7 +2075,11 @@ export const warpnetService = {
         return ids;
     },
 
-    async getTweetStats(tweetId, userId) {
+    async getTweetStats(tweetId, userId, force) {
+        const held = tweetStatsReads.get(tweetId)
+        if (!force && held && Date.now() - held.at < tweetStatsWindow) {
+            return held.read
+        }
         const request = {
             path: PUBLIC_GET_TWEET_STATS,
             body: {
@@ -2036,8 +2087,13 @@ export const warpnetService = {
                 tweet_id: tweetId,
             },
         }
-
-        return await this.sendToNode(request);
+        const read = this.sendToNode(request)
+        tweetStatsReads.set(tweetId, { at: Date.now(), read })
+        const drop = () => {
+            if (tweetStatsReads.get(tweetId)?.read === read) tweetStatsReads.delete(tweetId)
+        }
+        read.then(stats => { if (!stats?.tweet_id) drop() }, drop)
+        return read
     },
 
     // create reply — a reply is a tweet with a parent, posted through the
@@ -2057,7 +2113,10 @@ export const warpnetService = {
                 created_at: new Date().toISOString(),
             },
         }
-        return await this.sendToNode(request);
+        const created = await this.sendToNode(request);
+        tweetStatsReads.delete(parentId)
+        tweetStatsReads.delete(rootId)
+        return created
     },
 
     async getReplies({rootId, parentId, rootUserId, cursorReset}) {
@@ -2121,7 +2180,10 @@ export const warpnetService = {
             },
         }
 
-        return await this.sendToNode(request);
+        const deleted = await this.sendToNode(request);
+        tweetStatsReads.delete(parentId)
+        tweetStatsReads.delete(rootId)
+        return deleted
     },
 
     // reactToTweet reacts to a tweet with `emoji` (the node defaults to a heart

@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/pion/transport/v4/replaydetector"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
 const (
@@ -32,6 +32,10 @@ type srtpSSRCState struct {
 	rolloverHasProcessed bool
 	index                uint64
 	replayDetector       replaydetector.ReplayDetector
+	// checkAccepter is non-nil when replayDetector also implements the
+	// allocation-free replaydetector.CheckAccepter API, which is then used
+	// instead of Check.
+	checkAccepter replaydetector.CheckAccepter
 }
 
 // Encrypt/Decrypt state for a single SRTCP SSRC.
@@ -39,6 +43,10 @@ type srtcpSSRCState struct {
 	srtcpIndex     uint32
 	ssrc           uint32
 	replayDetector replaydetector.ReplayDetector
+	// checkAccepter is non-nil when replayDetector also implements the
+	// allocation-free replaydetector.CheckAccepter API, which is then used
+	// instead of Check.
+	checkAccepter replaydetector.CheckAccepter
 }
 
 // RCCMode is the mode of Roll-over Counter Carrying Transform from RFC 4771.
@@ -80,6 +88,10 @@ const (
 // access to a Context from multiple goroutines requires external
 // synchronization.
 type Context struct {
+	// constructed is set to true after the Context is fully initialized.
+	// Options can check this flag to reject updates that are only valid during construction.
+	constructed bool
+
 	cipher srtpCipher
 
 	srtpSSRCStates  map[uint32]*srtpSSRCState
@@ -162,7 +174,26 @@ func CreateContext(
 		c.mkis[string(c.sendMKI)] = c.cipher
 	}
 
+	c.constructed = true
+
 	return c, nil
+}
+
+// contextWithKey creates a fresh context with the current settings.
+func (c *Context) contextWithKey(masterKey, masterSalt []byte, profile ProtectionProfile) (*Context, error) {
+	return CreateContext(masterKey, masterSalt, profile, func(next *Context) error {
+		next.newSRTPReplayDetector = c.newSRTPReplayDetector
+		next.newSRTCPReplayDetector = c.newSRTCPReplayDetector
+		next.sendMKI = bytes.Clone(c.sendMKI)
+		next.encryptSRTP = c.encryptSRTP
+		next.encryptSRTCP = c.encryptSRTCP
+		next.rccMode = c.rccMode
+		next.rocTransmitRate = c.rocTransmitRate
+		next.authTagRTPLen = c.authTagRTPLen
+		next.cryptexMode = c.cryptexMode
+
+		return nil
+	})
 }
 
 // AddCipherForMKI adds new MKI with associated masker key and salt.
@@ -201,7 +232,7 @@ func (c *Context) createCipher(mki, masterKey, masterSalt []byte, encryptSRTP, e
 	}
 
 	if masterKeyLen := len(masterKey); masterKeyLen != keyLen {
-		return nil, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterKey, keyLen, masterKey)
+		return nil, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterKey, keyLen, masterKeyLen)
 	} else if masterSaltLen := len(masterSalt); masterSaltLen != saltLen {
 		return nil, fmt.Errorf("%w expected(%d) actual(%d)", errShortSrtpMasterSalt, saltLen, masterSaltLen)
 	}
@@ -318,6 +349,7 @@ func (c *Context) getSRTPSSRCState(ssrc uint32, keepNew bool) (*srtpSSRCState, b
 		ssrc:           ssrc,
 		replayDetector: c.newSRTPReplayDetector(),
 	}
+	state.checkAccepter, _ = state.replayDetector.(replaydetector.CheckAccepter)
 	if keepNew {
 		c.srtpSSRCStates[ssrc] = state
 	}
@@ -335,6 +367,7 @@ func (c *Context) getSRTCPSSRCState(ssrc uint32, keepNew bool) (*srtcpSSRCState,
 		ssrc:           ssrc,
 		replayDetector: c.newSRTCPReplayDetector(),
 	}
+	state.checkAccepter, _ = state.replayDetector.(replaydetector.CheckAccepter)
 	if keepNew {
 		c.srtcpSSRCStates[ssrc] = state
 	}
@@ -427,4 +460,30 @@ func (c *Context) checkRCCMode() error {
 	}
 
 	return nil
+}
+
+// UpdateOptions updates Context options after it has been created.
+// This function is not thread-safe, you need to provide synchronization with encrypting/decrypting packets.
+func (c *Context) UpdateOptions(opts ...ContextOption) error {
+	for _, opt := range opts {
+		if err := opt(c); err != nil {
+			return err
+		}
+	}
+
+	c.updateCryptexForCiphers()
+
+	return nil
+}
+
+func (c *Context) updateCryptexForCiphers() {
+	useCryptex := c.cryptexMode != CryptexModeDisabled && c.encryptSRTP
+
+	if c.cipher != nil {
+		c.cipher.setCryptex(useCryptex)
+	}
+
+	for _, cipher := range c.mkis {
+		cipher.setCryptex(useCryptex)
+	}
 }

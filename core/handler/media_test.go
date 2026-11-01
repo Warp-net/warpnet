@@ -141,7 +141,7 @@ func TestUpload_StoresNothingWhenTheNodeCannotSign(t *testing.T) {
 		payload, err := json.Marshal(event.UploadImageEvent{Image1: testImagePNG})
 		require.NoError(t, err)
 
-		_, err = StreamUploadImageHandler(n{}, nil, repo, u{})(payload, s{})
+		_, err = StreamUploadImageHandler(n{}, nil, repo, u{}, &stubImageHashes{})(payload, s{})
 		assert.ErrorIs(t, err, media_meta.ErrNoSigningKey)
 		assert.Empty(t, repo.images)
 	})

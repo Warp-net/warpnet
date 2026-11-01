@@ -147,6 +147,12 @@ func TestNewDiscoveryRelayTopicHandler(t *testing.T) {
 	assert.NoError(t, th.Handler(nil))
 }
 
+func TestNewRelayTopicHandler(t *testing.T) {
+	th := NewRelayTopicHandler(event.ReportsTopic)
+	assert.Equal(t, event.ReportsTopic, th.TopicName)
+	assert.NoError(t, th.Handler([]byte("anything")))
+}
+
 func TestGossipErrors(t *testing.T) {
 	// Sanity-check the sentinel error strings so errors.Is targets stay stable.
 	assert.True(t, errors.Is(ErrPubsubNotInit, ErrPubsubNotInit))

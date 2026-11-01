@@ -147,6 +147,11 @@ func (stream *receiverStream) generateReport(now time.Time) *rtcp.ReceiverReport
 		stream.totalLost = 0xFFFFFF
 	}
 
+	fractionLost := uint8(0)
+	if totalSinceReport != 0 {
+		fractionLost = uint8(float64(totalLostSinceReport*256) / float64(totalSinceReport))
+	}
+
 	receiverReport := &rtcp.ReceiverReport{
 		SSRC: stream.receiverSSRC,
 		Reports: []rtcp.ReceptionReport{
@@ -154,7 +159,7 @@ func (stream *receiverStream) generateReport(now time.Time) *rtcp.ReceiverReport
 				SSRC:               stream.ssrc,
 				LastSequenceNumber: uint32(stream.seqnumCycles)<<16 | uint32(stream.lastSeqnum),
 				LastSenderReport:   stream.lastSenderReport,
-				FractionLost:       uint8(float64(totalLostSinceReport*256) / float64(totalSinceReport)),
+				FractionLost:       fractionLost,
 				TotalLost:          stream.totalLost,
 				Delay: func() uint32 {
 					if stream.lastSenderReportTime.IsZero() {

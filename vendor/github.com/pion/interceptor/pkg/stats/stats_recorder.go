@@ -54,6 +54,7 @@ type incomingRTP struct {
 	ts         time.Time
 	header     rtp.Header
 	payloadLen int
+	paddingLen int
 	attr       interceptor.Attributes
 }
 
@@ -67,6 +68,7 @@ type outgoingRTP struct {
 	ts         time.Time
 	header     rtp.Header
 	payloadLen int
+	paddingLen int
 	attr       interceptor.Attributes
 }
 
@@ -75,6 +77,12 @@ type outgoingRTCP struct {
 	pkts []rtcp.Packet
 	attr interceptor.Attributes
 }
+
+const (
+	recorderIdle uint32 = iota
+	recorderRunning
+	recorderStopped
+)
 
 type recorder struct {
 	logger logging.LeveledLogger
@@ -87,7 +95,7 @@ type recorder struct {
 
 	latestStats *internalStats
 	ms          *sync.Mutex // Locks latestStats
-	running     uint32
+	state       uint32
 }
 
 func newRecorder(ssrc uint32, clockRate float64, loggerFactory logging.LoggerFactory) *recorder {
@@ -103,7 +111,7 @@ func newRecorder(ssrc uint32, clockRate float64, loggerFactory logging.LoggerFac
 }
 
 func (r *recorder) Stop() {
-	atomic.StoreUint32(&r.running, 0)
+	atomic.StoreUint32(&r.state, recorderStopped)
 }
 
 func (r *recorder) GetStats() Stats {
@@ -157,8 +165,8 @@ func (r *recorder) recordIncomingRTP(latestStats internalStats, incoming *incomi
 	}
 
 	latestStats.LastPacketReceivedTimestamp = incoming.ts
-	latestStats.HeaderBytesReceived += uint64(incoming.header.MarshalSize())                 //nolint:gosec // G115
-	latestStats.BytesReceived += uint64(incoming.header.MarshalSize() + incoming.payloadLen) //nolint:gosec // G115
+	latestStats.HeaderBytesReceived += uint64(incoming.header.MarshalSize() + incoming.paddingLen) //nolint:gosec // G115
+	latestStats.BytesReceived += uint64(incoming.payloadLen)                                       //nolint:gosec // G115
 
 	return latestStats
 }
@@ -226,8 +234,8 @@ func (r *recorder) recordOutgoingRTP(latestStats internalStats, v *outgoingRTP) 
 	}
 	headerSize := v.header.MarshalSize()
 	latestStats.OutboundRTPStreamStats.PacketsSent++
-	latestStats.OutboundRTPStreamStats.BytesSent += uint64(headerSize + v.payloadLen) //nolint:gosec // G115
-	latestStats.HeaderBytesSent += uint64(headerSize)                                 //nolint:gosec // G115
+	latestStats.OutboundRTPStreamStats.BytesSent += uint64(v.payloadLen) //nolint:gosec // G115
+	latestStats.HeaderBytesSent += uint64(headerSize + v.paddingLen)     //nolint:gosec // G115
 	if !latestStats.remoteInboundFirstSequenceNumberInitialized {
 		latestStats.remoteInboundFirstSequenceNumber = int64(v.header.SequenceNumber)
 		latestStats.remoteInboundFirstSequenceNumberInitialized = true
@@ -236,8 +244,15 @@ func (r *recorder) recordOutgoingRTP(latestStats internalStats, v *outgoingRTP) 
 	return latestStats
 }
 
-func (r *recorder) recordIncomingRR(latestStats internalStats, pkt *rtcp.ReceiverReport, ts time.Time) internalStats {
-	for _, report := range pkt.Reports {
+func (r *recorder) recordIncomingRR(
+	latestStats internalStats,
+	reports []rtcp.ReceptionReport,
+	ts time.Time,
+) internalStats {
+	for _, report := range reports {
+		if report.SSRC != r.ssrc {
+			continue
+		}
 		if latestStats.remoteInboundFirstSequenceNumberInitialized {
 			cycles := uint64(report.LastSequenceNumber&0xFFFF0000) >> 16
 			nr := uint64(report.LastSequenceNumber & 0x0000FFFF)
@@ -274,7 +289,7 @@ func (r *recorder) recordIncomingXR(latestStats internalStats, pkt *rtcp.Extende
 	for _, report := range pkt.Reports {
 		if xr, ok := report.(*rtcp.DLRRReportBlock); ok {
 			for _, xrReport := range xr.Reports {
-				if xrReport.LastRR != 0 && xrReport.DLRR != 0 {
+				if xrReport.LastRR != 0 && xrReport.DLRR != 0 && xrReport.SSRC == r.ssrc {
 					for i := min(r.maxLastReceiverReferenceTimes, len(latestStats.lastReceiverReferenceTimes)) - 1; i >= 0; i-- {
 						lastRR := latestStats.lastReceiverReferenceTimes[i]
 						if (lastRR&0x0000FFFFFFFF0000)>>16 == uint64(xrReport.LastRR) {
@@ -297,6 +312,7 @@ func contains(ls []uint32, e uint32) bool {
 	return slices.Contains(ls, e)
 }
 
+//nolint:cyclop
 func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incomingRTCP) internalStats {
 	for _, pkt := range incoming.pkts {
 		if !contains(pkt.DestinationSSRC(), r.ssrc) {
@@ -306,18 +322,25 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incom
 		}
 		switch pkt := pkt.(type) {
 		case *rtcp.TransportLayerNack:
-			latestStats.OutboundRTPStreamStats.NACKCount++
+			if pkt.MediaSSRC == r.ssrc {
+				latestStats.OutboundRTPStreamStats.NACKCount++
+			}
 		case *rtcp.FullIntraRequest:
-			latestStats.OutboundRTPStreamStats.FIRCount++
+			if pkt.MediaSSRC == r.ssrc {
+				latestStats.OutboundRTPStreamStats.FIRCount++
+			}
 		case *rtcp.PictureLossIndication:
-			latestStats.OutboundRTPStreamStats.PLICount++
+			if pkt.MediaSSRC == r.ssrc {
+				latestStats.OutboundRTPStreamStats.PLICount++
+			}
 		case *rtcp.ReceiverReport:
-			latestStats = r.recordIncomingRR(latestStats, pkt, incoming.ts)
+			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 		case *rtcp.SenderReport:
 			latestStats.RemoteOutboundRTPStreamStats.PacketsSent = uint64(pkt.PacketCount)
 			latestStats.RemoteOutboundRTPStreamStats.BytesSent = uint64(pkt.OctetCount)
 			latestStats.RemoteTimeStamp = ntp.ToTime(pkt.NTPTime)
 			latestStats.ReportsSent++
+			latestStats = r.recordIncomingRR(latestStats, pkt.Reports, incoming.ts)
 
 		case *rtcp.ExtendedReport:
 			return r.recordIncomingXR(latestStats, pkt, incoming.ts)
@@ -328,11 +351,11 @@ func (r *recorder) recordIncomingRTCP(latestStats internalStats, incoming *incom
 }
 
 func (r *recorder) Start() {
-	atomic.StoreUint32(&r.running, 1)
+	atomic.CompareAndSwapUint32(&r.state, recorderIdle, recorderRunning)
 }
 
 func (r *recorder) QueueIncomingRTP(ts time.Time, buf []byte, attr interceptor.Attributes) {
-	if atomic.LoadUint32(&r.running) == 0 {
+	if atomic.LoadUint32(&r.state) != recorderRunning {
 		return
 	}
 	if attr == nil {
@@ -345,18 +368,24 @@ func (r *recorder) QueueIncomingRTP(ts time.Time, buf []byte, attr interceptor.A
 		return
 	}
 	hdr := header.Clone()
+	payloadLen := len(buf) - hdr.MarshalSize()
+	paddingLen := 0
+	if hdr.Padding && payloadLen > 0 {
+		paddingLen = min(int(buf[len(buf)-1]), payloadLen)
+	}
 	r.ms.Lock()
 	*r.latestStats = r.recordIncomingRTP(*r.latestStats, &incomingRTP{
 		ts:         ts,
 		header:     hdr,
-		payloadLen: len(buf) - hdr.MarshalSize(),
+		payloadLen: payloadLen - paddingLen,
+		paddingLen: paddingLen,
 		attr:       attr,
 	})
 	r.ms.Unlock()
 }
 
 func (r *recorder) QueueIncomingRTCP(ts time.Time, buf []byte, attr interceptor.Attributes) {
-	if atomic.LoadUint32(&r.running) == 0 {
+	if atomic.LoadUint32(&r.state) != recorderRunning {
 		return
 	}
 	if attr == nil {
@@ -378,22 +407,27 @@ func (r *recorder) QueueIncomingRTCP(ts time.Time, buf []byte, attr interceptor.
 }
 
 func (r *recorder) QueueOutgoingRTP(ts time.Time, header *rtp.Header, payload []byte, attr interceptor.Attributes) {
-	if atomic.LoadUint32(&r.running) == 0 {
+	if atomic.LoadUint32(&r.state) != recorderRunning {
 		return
 	}
 	hdr := header.Clone()
+	paddingLen := 0
+	if hdr.Padding {
+		paddingLen = int(hdr.PaddingSize)
+	}
 	r.ms.Lock()
 	*r.latestStats = r.recordOutgoingRTP(*r.latestStats, &outgoingRTP{
 		ts:         ts,
 		header:     hdr,
 		payloadLen: len(payload),
+		paddingLen: paddingLen,
 		attr:       attr,
 	})
 	r.ms.Unlock()
 }
 
 func (r *recorder) QueueOutgoingRTCP(ts time.Time, pkts []rtcp.Packet, attr interceptor.Attributes) {
-	if atomic.LoadUint32(&r.running) == 0 {
+	if atomic.LoadUint32(&r.state) != recorderRunning {
 		return
 	}
 	r.ms.Lock()

@@ -123,7 +123,7 @@ func TestStreamTimelineNewTweetHandler_AcceptsTeaser(t *testing.T) {
 		stubTimelineRepo{},
 		stubFollowChecker{following: true},
 		userRepo,
-		stubPeersRatings{},
+		stubPeersRatings{}, &stubImageHashes{},
 	)
 	_, err := h(marshal(t, event.NewTweetEvent{Id: "t1", UserId: "author-1", Price: &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}}), s)
 	if err != nil {
@@ -131,5 +131,34 @@ func TestStreamTimelineNewTweetHandler_AcceptsTeaser(t *testing.T) {
 	}
 	if stored.Id != "t1" || !stored.IsSponsored() {
 		t.Fatalf("the teaser must be stored, got %+v", stored)
+	}
+}
+
+func TestStreamTimelineNewTweetHandler_KeepsTheTeasersImageHashes(t *testing.T) {
+	userRepo, s := authorStream(t)
+	hashes := &stubImageHashes{}
+	h := StreamTimelineNewTweetHandler(
+		stubAuth{owner: domain.Owner{UserId: "owner-1"}},
+		stubTweetRepo{createFn: func(_ string, tweet domain.Tweet) (domain.Tweet, error) { return tweet, nil }},
+		stubTimelineRepo{},
+		stubFollowChecker{following: true},
+		userRepo,
+		stubPeersRatings{}, hashes,
+	)
+	teaser := event.NewTweetEvent{Id: "t1", UserId: "author-1", ImageHashes: []string{"d854389628e79c33"}, Price: &domain.Price{Amount: "1.5", Units: big.NewInt(1500000)}}
+	if _, err := h(marshal(t, teaser), s); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	want := []domain.TweetImageHashes{{UserId: "author-1", TweetId: "t1", Hashes: []string{"d854389628e79c33"}}}
+	if len(hashes.saved) != 1 || hashes.saved[0].TweetId != want[0].TweetId || hashes.saved[0].UserId != want[0].UserId || hashes.saved[0].Hashes[0] != want[0].Hashes[0] {
+		t.Fatalf("saved = %+v, want %+v", hashes.saved, want)
+	}
+
+	free := event.NewTweetEvent{Id: "t2", UserId: "author-1", Text: "free", ImageHashes: []string{"d854389628e79c33"}}
+	if _, err := h(marshal(t, free), s); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(hashes.saved) != 1 {
+		t.Fatalf("a free tweet's hashes claim nothing, saved = %+v", hashes.saved)
 	}
 }

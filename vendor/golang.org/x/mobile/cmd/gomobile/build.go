@@ -8,13 +8,11 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"golang.org/x/mobile/internal/sdkpath"
@@ -44,15 +42,12 @@ be selected by specifying target type with the architecture name. E.g.
 -target=android/arm,android/386.
 
 For Apple -target platforms, gomobile must be run on an OS X machine with
-Xcode installed.
-
-By default, -target ios will generate an XCFramework for both ios
-and iossimulator. Multiple Apple targets can be specified, creating a "fat"
-XCFramework with each slice. To generate a fat XCFramework that supports
-iOS, macOS, and macCatalyst for all supportec architectures (amd64 and arm64),
-specify -target ios,macos,maccatalyst. A subset of instruction sets can be
-selectged by specifying the platform with an architecture name. E.g.
--target=ios/arm64,maccatalyst/arm64.
+Xcode installed. The build command creates an .app bundle. The output name
+specified by -o must end in .app. By default, -target ios includes binaries
+for all supported iOS device and simulator architectures. A subset of
+instruction sets can be selected by specifying the platform with an
+architecture name. E.g. -target=ios/arm64,maccatalyst/arm64.
+Unlike gomobile build, gomobile bind creates an XCFramework.
 
 If the package directory contains an assets subdirectory, its contents
 are copied into the output.
@@ -74,7 +69,7 @@ output file name depends on the package built.
 
 The -v flag provides verbose output, including the list of packages built.
 
-The build flags -a, -i, -n, -x, -gcflags, -ldflags, -overlay, -tags, -trimpath,
+The build flags -a, -n, -x, -gcflags, -ldflags, -overlay, -tags, -trimpath,
 and -work are shared with the build command. For documentation, see
 'go help build'.
 `,
@@ -152,10 +147,8 @@ func runBuildImpl(cmd *command) (*packages.Package, error) {
 		}
 		if pkg.Name != "main" {
 			for _, t := range targets {
-				// Catalyst support requires iOS 13+
-				v, _ := strconv.ParseFloat(buildIOSVersion, 64)
-				if t.platform == "maccatalyst" && v < 13.0 {
-					return nil, errors.New("catalyst requires -iosversion=13 or higher")
+				if err := validateCatalystVersion(t.platform, buildIOSVersion); err != nil {
+					return nil, err
 				}
 				if err := goBuild(pkg.PkgPath, appleEnv[t.String()]); err != nil {
 					return nil, err
@@ -238,7 +231,6 @@ func printcmd(format string, args ...interface{}) {
 // "Build flags", used by multiple commands.
 var (
 	buildA            bool        // -a
-	buildI            bool        // -i
 	buildN            bool        // -n
 	buildV            bool        // -v
 	buildX            bool        // -x
@@ -268,7 +260,6 @@ func addBuildFlags(cmd *command) {
 	cmd.flag.IntVar(&buildAndroidAPI, "androidapi", minAndroidAPI, "")
 
 	cmd.flag.BoolVar(&buildA, "a", false, "")
-	cmd.flag.BoolVar(&buildI, "i", false, "")
 	cmd.flag.BoolVar(&buildTrimpath, "trimpath", false, "")
 	cmd.flag.Var(&buildTags, "tags", "")
 }
@@ -319,9 +310,6 @@ func goCmdAt(at string, subcmd string, srcs []string, env []string, args ...stri
 	}
 	if buildV {
 		cmd.Args = append(cmd.Args, "-v")
-	}
-	if subcmd != "install" && buildI {
-		cmd.Args = append(cmd.Args, "-i")
 	}
 	if buildX {
 		cmd.Args = append(cmd.Args, "-x")

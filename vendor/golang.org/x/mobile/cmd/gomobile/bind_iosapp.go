@@ -7,12 +7,10 @@ package main
 import (
 	"bytes"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -53,10 +51,8 @@ func goAppleBind(gobind string, pkgs []*packages.Package, targets []targetInfo) 
 		platform := platform
 		outDir := outDir
 		gobindWG.Go(func() error {
-			// Catalyst support requires iOS 13+
-			v, _ := strconv.ParseFloat(buildIOSVersion, 64)
-			if platform == "maccatalyst" && v < 13.0 {
-				return errors.New("catalyst requires -iosversion=13 or higher")
+			if err := validateCatalystVersion(platform, buildIOSVersion); err != nil {
+				return err
 			}
 
 			// Run gobind once per platform to generate the bindings

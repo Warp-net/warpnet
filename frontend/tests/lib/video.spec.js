@@ -1,4 +1,4 @@
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect, vi, afterEach} from 'vitest';
 import {
     isAcceptedVideo,
     validateVideoFile,
@@ -9,6 +9,8 @@ import {
     normalizeVideoDataUrl,
     mimeForFile,
     captureVideoPoster,
+    createVideoURL,
+    revokeVideoURL,
 } from '@/lib/video';
 
 const file = (type, name, size = 1024) => ({type, name, size});
@@ -210,5 +212,59 @@ describe('mimeForFile', () => {
         expect(mimeForFile(file('', 'clip.mov'))).toBe('video/quicktime');
         expect(mimeForFile(file('application/octet-stream', 'clip.m4v'))).toBe('video/x-m4v');
         expect(mimeForFile(file('', 'clip.webm'))).toBeNull();
+    });
+});
+
+describe('createVideoURL', () => {
+    const {createObjectURL, revokeObjectURL} = URL;
+    afterEach(() => {
+        URL.createObjectURL = createObjectURL;
+        URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    it('turns a data URL into a blob URL holding the decoded bytes', async () => {
+        URL.createObjectURL = vi.fn(() => 'blob:clip');
+
+        expect(createVideoURL('data:video/quicktime;base64,AAECAw==')).toBe('blob:clip');
+
+        const blob = URL.createObjectURL.mock.calls[0][0];
+        expect(blob.type).toBe('video/quicktime');
+        const bytes = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve([...new Uint8Array(reader.result)]);
+            reader.readAsArrayBuffer(blob);
+        });
+        expect(bytes).toEqual([0, 1, 2, 3]);
+    });
+
+    it('keeps the data URL where blob URLs are not available', () => {
+        URL.createObjectURL = undefined;
+
+        expect(createVideoURL('data:video/mp4;base64,AAAA')).toBe('data:video/mp4;base64,AAAA');
+    });
+
+    it('leaves anything but a data URL alone', () => {
+        URL.createObjectURL = vi.fn(() => 'blob:clip');
+
+        expect(createVideoURL('blob:other')).toBe('blob:other');
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+});
+
+describe('revokeVideoURL', () => {
+    const {revokeObjectURL} = URL;
+    afterEach(() => {
+        URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    it('revokes blob URLs only', () => {
+        URL.revokeObjectURL = vi.fn();
+
+        revokeVideoURL('data:video/mp4;base64,AAAA');
+        revokeVideoURL('');
+        revokeVideoURL('blob:clip');
+
+        expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
     });
 });

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+# SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 # SPDX-License-Identifier: MIT
 
 version: "2"
@@ -41,6 +41,7 @@ linters:
     - maintidx         # maintidx measures the maintainability index of each function.
     - makezero         # Finds slice declarations with non-zero initial length
     - misspell         # Finds commonly misspelled English words in comments
+    - modernize        # Replace and suggests simplifications to code
     - nakedret         # Finds naked returns in functions greater than a specified function length
     - nestif           # Reports deeply nested if statements
     - nilerr           # Finds the code that returns nil even if it checks that the error is not nil.
@@ -77,6 +78,8 @@ linters:
     - wrapcheck        # Checks that errors returned from external packages are wrapped
     - wsl              # Whitespace Linter - Forces you to use empty lines!
   settings:
+    lll:
+      line-length: 320
     staticcheck:
       checks:
         - all
@@ -104,10 +107,17 @@ linters:
     govet:
       enable:
         - shadow
+    gosec:
+      excludes:
+        - G117 # noisy secret/password field-name checks.
     revive:
       rules:
         # Prefer 'any' type alias over 'interface{}' for Go 1.18+ compatibility
         - name: use-any
+          severity: warning
+          disabled: false
+        # Keep package documentation consistent and avoid duplicate package comments.
+        - name: package-comments
           severity: warning
           disabled: false
     misspell:
@@ -145,3 +155,6 @@ formatters:
     - goimports        # Goimports does everything that gofmt does. Additionally it checks unused imports
   exclusions:
     generated: lax
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0

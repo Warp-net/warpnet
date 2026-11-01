@@ -102,7 +102,10 @@ type distributedHashTable struct {
 const (
 	bootstrapDrainTimeout = 5 * time.Second
 	ratingSweepInterval   = 30 * time.Second
+	rendezvousInterval    = 30 * time.Second
 )
+
+const errEmptyRoutingTable warpnet.WarpError = "dht: routing table is empty"
 
 func defaultNodeRemovedCallback(id warpnet.WarpPeerID) {
 	log.Debugln("dht: node removed", id)
@@ -204,6 +207,7 @@ func (d *distributedHashTable) StartRouting(n warpnet.P2PNode) (_ warpnet.WarpPe
 	if d.cfg.ratings != nil {
 		go d.sweepRatedPeers()
 	}
+	go d.startRendezvous(d.bootstrapped)
 	log.Infoln("dht: routing started")
 	return d.dht, nil
 }
@@ -267,7 +271,6 @@ func rendezvousNamespace(network string) string {
 	return "warpnet/rendezvous/" + network
 }
 
-// TODO fix leaks and then enable
 // startRendezvous uses libp2p RoutingDiscovery (backed by the DHT content
 // router) to advertise this node and discover peers under a shared
 // namespace. This is the standard libp2p approach for DHT-based
@@ -290,11 +293,12 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 	ns := rendezvousNamespace(d.cfg.network)
 	ownID := d.dht.Host().ID()
 
-	d.advertise(rd, ns)
-	d.findPeers(rd, ns, ownID)
+	advertiseTimer := time.NewTimer(0)
+	defer advertiseTimer.Stop()
+	findTicker := time.NewTicker(rendezvousInterval)
+	defer findTicker.Stop()
 
-	ticker := time.NewTicker(30 * time.Second) //nolint:mnd
-	defer ticker.Stop()
+	d.findPeers(rd, ns, ownID)
 
 	for {
 		select {
@@ -302,31 +306,34 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 			return
 		case <-d.stopChan:
 			return
-		case <-ticker.C:
-			d.advertise(rd, ns)
+		case <-advertiseTimer.C:
+			ttl, err := d.advertise(rd, ns)
+			if err != nil {
+				log.Debugf("dht: rendezvous: advertise: %v", err)
+				ttl = rendezvousInterval
+			}
+			advertiseTimer.Reset(ttl)
+		case <-findTicker.C:
 			d.findPeers(rd, ns, ownID)
 		}
 	}
 }
 
-// advertise announces this node as a provider for the rendezvous namespace.
-// Silently skips when the routing table has no peers (Provide needs
-// at least one peer to store the record).
-func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) {
+// advertise announces this node as a provider for the rendezvous namespace
+// and returns how long the record stands. Provide needs at least one peer
+// in the routing table to store the record.
+func (d *distributedHashTable) advertise(rd *drouting.RoutingDiscovery, ns string) (time.Duration, error) {
 	if d.dht.RoutingTable().Size() == 0 {
-		return
+		return 0, errEmptyRoutingTable
 	}
 	ctx, cancel := context.WithTimeout(d.ctx, 60*time.Second) //nolint:mnd
 	defer cancel()
-	if _, err := rd.Advertise(ctx, ns); err != nil {
-		log.Debugf("dht: rendezvous: advertise: %v", err)
-	} else {
-		log.Debugln("dht: rendezvous: advertised")
-	}
+	return rd.Advertise(ctx, ns)
 }
 
 // findPeers queries the DHT for providers of the rendezvous namespace
-// and feeds discovered peers into the add-peer callbacks.
+// and feeds the ones this node is not connected to into the add-peer
+// callbacks.
 func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns string, ownID warpnet.WarpPeerID) {
 	ctx, cancel := context.WithTimeout(d.ctx, 30*time.Second) //nolint:mnd
 	defer cancel()
@@ -337,6 +344,10 @@ func (d *distributedHashTable) findPeers(rd *drouting.RoutingDiscovery, ns strin
 	}
 	for pi := range ch {
 		if pi.ID == ownID || len(pi.Addrs) == 0 {
+			continue
+		}
+		state := d.dht.Host().Network().Connectedness(pi.ID)
+		if state == warpnet.Connected || state == warpnet.Limited || !d.isPeerAllowed(pi.ID) {
 			continue
 		}
 		log.Debugf("dht: rendezvous: found peer %s %v", pi.ID, pi.Addrs)

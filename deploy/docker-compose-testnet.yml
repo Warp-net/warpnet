@@ -89,7 +89,7 @@ services:
 #      - /root/.warpdata:/root/.warpdata:rw
 #      # The model path is hardcoded relative to the container CWD (/warpnet).
 #      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
-
+#
 #  warpnet-moderator-2-testnet:
 #    container_name: moderator-2-testnet
 #    image: ghcr.io/warp-net/warpnet-moderator:latest
@@ -111,7 +111,7 @@ services:
 #    volumes:
 #      - /root/.warpdata:/root/.warpdata:rw
 #      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
-
+#
 #  warpnet-moderator-3-testnet:
 #    container_name: moderator-3-testnet
 #    image: ghcr.io/warp-net/warpnet-moderator:latest

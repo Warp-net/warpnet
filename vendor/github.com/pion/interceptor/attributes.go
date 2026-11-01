@@ -33,7 +33,9 @@ func (a Attributes) Set(key any, val any) {
 }
 
 // GetRTPHeader gets the RTP header if present. If it is not present, it will be
-// unmarshalled from the raw byte slice and stored in the attributes.
+// unmarshalled from the raw byte slice and stored in the attributes. If the
+// provided attributes is nil, GetRTPHeader will always unmarshal but will not
+// cache the result.
 func (a Attributes) GetRTPHeader(raw []byte) (*rtp.Header, error) {
 	if val, ok := a[rtpHeaderKey]; ok {
 		if header, ok := val.(*rtp.Header); ok {
@@ -46,14 +48,17 @@ func (a Attributes) GetRTPHeader(raw []byte) (*rtp.Header, error) {
 	if _, err := header.Unmarshal(raw); err != nil {
 		return nil, err
 	}
-	a[rtpHeaderKey] = header
+	if a != nil {
+		a[rtpHeaderKey] = header
+	}
 
 	return header, nil
 }
 
 // GetRTCPPackets gets the RTCP packets if present. If the packet slice is not
 // present, it will be unmarshalled from the raw byte slice and stored in the
-// attributes.
+// attributes. If the provided attributes is nil, GetRTCPPackets will always
+// unmarshal but will not cache the result.
 func (a Attributes) GetRTCPPackets(raw []byte) ([]rtcp.Packet, error) {
 	if val, ok := a[rtcpPacketsKey]; ok {
 		if packets, ok := val.([]rtcp.Packet); ok {
@@ -66,7 +71,9 @@ func (a Attributes) GetRTCPPackets(raw []byte) ([]rtcp.Packet, error) {
 	if err != nil {
 		return nil, err
 	}
-	a[rtcpPacketsKey] = pkts
+	if a != nil {
+		a[rtcpPacketsKey] = pkts
+	}
 
 	return pkts, nil
 }

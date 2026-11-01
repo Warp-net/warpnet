@@ -222,6 +222,13 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/sponsored",
+    name: "SettingsSponsored",
+    component: () =>
+      import(/* webpackChunkName: "settings-sponsored" */ "../views/Settings/Sponsored.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/settings/rate-limiting",
     name: "SettingsRateLimiting",
     component: () =>

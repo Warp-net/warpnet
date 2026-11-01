@@ -362,9 +362,9 @@ type TransportLayerCC struct {
 // }
 // }
 
-func (t *TransportLayerCC) packetLen() uint16 {
+func (t *TransportLayerCC) packetLen() int {
 	//nolint:gocognit,cyclop
-	n := uint16(headerLength + packetChunkOffset + len(t.PacketChunks)*2) //nolint:gosec // G115
+	n := headerLength + packetChunkOffset + len(t.PacketChunks)*2
 	for _, d := range t.RecvDeltas {
 		if d.Type == TypeTCCPacketReceivedSmallDelta {
 			n++
@@ -376,7 +376,10 @@ func (t *TransportLayerCC) packetLen() uint16 {
 	return n
 }
 
-// Len return total bytes with padding.
+// Len returns the total bytes with padding, truncated to uint16.
+//
+// Deprecated: Use MarshalSize instead. Len cannot represent packet sizes
+// greater than the maximum uint16 value.
 func (t *TransportLayerCC) Len() uint16 {
 	return uint16(t.MarshalSize()) //nolint:gosec // G115
 }
@@ -389,7 +392,7 @@ func (t *TransportLayerCC) MarshalSize() int {
 		n = (n/4 + 1) * 4
 	}
 
-	return int(n)
+	return n
 }
 
 func (t TransportLayerCC) String() string {
@@ -416,12 +419,17 @@ func (t TransportLayerCC) String() string {
 
 // Marshal encodes the TransportLayerCC in binary.
 func (t TransportLayerCC) Marshal() ([]byte, error) {
+	size := t.MarshalSize()
+	if size > (math.MaxUint16+1)*4 {
+		return nil, errBadLength
+	}
+
 	header, err := t.Header.Marshal()
 	if err != nil {
 		return nil, err
 	}
 
-	payload := make([]byte, t.MarshalSize()-headerLength)
+	payload := make([]byte, size-headerLength)
 	binary.BigEndian.PutUint32(payload, t.SenderSSRC)
 	binary.BigEndian.PutUint32(payload[4:], t.MediaSSRC)
 	binary.BigEndian.PutUint16(payload[baseSequenceNumberOffset:], t.BaseSequenceNumber)
@@ -442,17 +450,18 @@ func (t TransportLayerCC) Marshal() ([]byte, error) {
 	var i int
 	for _, delta := range t.RecvDeltas {
 		b, err := delta.Marshal()
-		if err == nil {
-			copy(payload[recvDeltaOffset+i:], b)
+		if err != nil {
+			return nil, err
+		}
+		copy(payload[recvDeltaOffset+i:], b)
+		i++
+		if delta.Type == TypeTCCPacketReceivedLargeDelta {
 			i++
-			if delta.Type == TypeTCCPacketReceivedLargeDelta {
-				i++
-			}
 		}
 	}
 
 	if t.Header.Padding {
-		payload[len(payload)-1] = uint8(t.MarshalSize() - int(t.packetLen())) //nolint:gosec // G115
+		payload[len(payload)-1] = uint8(size - t.packetLen()) //nolint:gosec // G115
 	}
 
 	return append(header, payload...), nil
@@ -525,22 +534,23 @@ func (t *TransportLayerCC) Unmarshal(rawPacket []byte) error {
 			if err != nil {
 				return err
 			}
+			packetNumberToProcess := min(int(t.PacketStatusCount-processedPacketNum), len(packetStatus.SymbolList))
 			if packetStatus.SymbolSize == TypeTCCSymbolSizeOneBit {
-				for j := 0; j < len(packetStatus.SymbolList); j++ {
+				for j := range packetNumberToProcess {
 					if packetStatus.SymbolList[j] == TypeTCCPacketReceivedSmallDelta {
 						t.RecvDeltas = append(t.RecvDeltas, &RecvDelta{Type: TypeTCCPacketReceivedSmallDelta})
 					}
 				}
 			}
 			if packetStatus.SymbolSize == TypeTCCSymbolSizeTwoBit {
-				for j := 0; j < len(packetStatus.SymbolList); j++ {
+				for j := range packetNumberToProcess {
 					if packetStatus.SymbolList[j] == TypeTCCPacketReceivedSmallDelta ||
 						packetStatus.SymbolList[j] == TypeTCCPacketReceivedLargeDelta {
 						t.RecvDeltas = append(t.RecvDeltas, &RecvDelta{Type: packetStatus.SymbolList[j]})
 					}
 				}
 			}
-			processedPacketNum += uint16(len(packetStatus.SymbolList)) //nolint:gosec // G115
+			processedPacketNum += uint16(packetNumberToProcess) //nolint:gosec // bounded by remaining packet count
 		}
 		packetStatusPos += packetStatusChunkLength
 		t.PacketChunks = append(t.PacketChunks, iPacketStatus)

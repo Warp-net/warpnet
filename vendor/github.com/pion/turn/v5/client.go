@@ -4,6 +4,7 @@
 package turn
 
 import (
+	"context"
 	b64 "encoding/base64"
 	"fmt"
 	"math"
@@ -12,9 +13,9 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/stun/v3"
-	"github.com/pion/transport/v4"
-	"github.com/pion/transport/v4/stdnet"
+	"github.com/pion/stun/v4"
+	"github.com/pion/transport/v5"
+	"github.com/pion/transport/v5/stdnet"
 	"github.com/pion/turn/v5/internal/client"
 	"github.com/pion/turn/v5/internal/proto"
 )
@@ -332,7 +333,7 @@ func (c *Client) SendBindingRequestTo(to net.Addr) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	trRes, err := c.PerformTransaction(msg, to, false)
+	trRes, err := c.PerformTransactionWithContext(msg, to, false, context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,7 @@ func (c *Client) SendBindingRequest() (net.Addr, error) {
 	return c.SendBindingRequestTo(c.stunServerAddr)
 }
 
-func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
+func (c *Client) sendAllocateRequest(protocol proto.Protocol, ctx context.Context) ( //nolint:cyclop
 	relayed proto.RelayedAddress,
 	lifetime proto.Lifetime,
 	nonce stun.Nonce,
@@ -385,7 +386,7 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		return relayed, lifetime, nonce, reservationToken, err
 	}
 
-	trRes, err := c.PerformTransaction(msg, c.turnServerAddr, false)
+	trRes, err := c.PerformTransactionWithContext(msg, c.turnServerAddr, false, ctx)
 	if err != nil {
 		return relayed, lifetime, nonce, reservationToken, err
 	}
@@ -411,7 +412,6 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		&c.username,
 		&c.realm,
 		&nonce,
-		&c.integrity,
 	}
 
 	allocationSetters = appendRequestedAddressFamilyOrReservation(
@@ -421,6 +421,11 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		allocationSetters = append(allocationSetters, proto.EvenPort{ReservePort: true})
 	}
 
+	// MESSAGE-INTEGRITY must follow every attribute it protects. Receivers
+	// ignore ordinary attributes that appear after it.
+	// https://www.rfc-editor.org/rfc/rfc8489.html#section-9
+	allocationSetters = append(allocationSetters, &c.integrity)
+
 	// FINGERPRINT must be the last attribute per RFC 5389
 	allocationSetters = append(allocationSetters, stun.Fingerprint)
 
@@ -429,7 +434,7 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 		return relayed, lifetime, nonce, reservationToken, err
 	}
 
-	trRes, err = c.PerformTransaction(msg, c.turnServerAddr, false)
+	trRes, err = c.PerformTransactionWithContext(msg, c.turnServerAddr, false, ctx)
 	if err != nil {
 		return relayed, lifetime, nonce, reservationToken, err
 	}
@@ -469,8 +474,9 @@ func (c *Client) sendAllocateRequest(protocol proto.Protocol) ( //nolint:cyclop
 	return relayed, lifetime, nonce, reservationToken, nil
 }
 
-// Allocate sends a TURN allocation request to the given transport address.
-func (c *Client) Allocate() (net.PacketConn, error) {
+// AllocateWithContext sends a TURN allocation request to the given transport address.
+// The context controls the lifetime of the allocation request and its response.
+func (c *Client) AllocateWithContext(ctx context.Context) (net.PacketConn, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
 		return nil, fmt.Errorf("%w: %s", errOneAllocateOnly, err.Error())
 	}
@@ -481,7 +487,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, relayedConn.LocalAddr().String())
 	}
 
-	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoUDP)
+	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoUDP, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -491,6 +497,7 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 		Port: relayed.Port,
 	}
 
+	//nolint: contextcheck
 	relayedConn = client.NewUDPConn(&client.AllocationConfig{
 		Client:                    c,
 		RelayedAddr:               relayedAddr,
@@ -512,8 +519,14 @@ func (c *Client) Allocate() (net.PacketConn, error) {
 	return relayedConn, nil
 }
 
-// AllocateTCP creates a new TCP allocation at the TURN server.
-func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
+// Allocate sends a TURN allocation request to the given transport address.
+func (c *Client) Allocate() (net.PacketConn, error) {
+	return c.AllocateWithContext(context.TODO())
+}
+
+// AllocateTCPWithContext creates a new TCP allocation at the TURN server.
+// The context controls the lifetime of the allocation request and its response.
+func (c *Client) AllocateTCPWithContext(ctx context.Context) (*client.TCPAllocation, error) {
 	if err := c.allocTryLock.Lock(); err != nil {
 		return nil, fmt.Errorf("%w: %s", errOneAllocateOnly, err.Error())
 	}
@@ -524,7 +537,7 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 		return nil, fmt.Errorf("%w: %s", errAlreadyAllocated, allocation.Addr())
 	}
 
-	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoTCP)
+	relayed, lifetime, nonce, reservationToken, err := c.sendAllocateRequest(proto.ProtoTCP, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +566,11 @@ func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
 	return allocation, nil
 }
 
+// AllocateTCP creates a new TCP allocation at the TURN server.
+func (c *Client) AllocateTCP() (*client.TCPAllocation, error) {
+	return c.AllocateTCPWithContext(context.TODO())
+}
+
 // CreatePermission Issues a CreatePermission request for the supplied addresses
 // as described in https://datatracker.ietf.org/doc/html/rfc5766#section-9
 func (c *Client) CreatePermission(addrs ...net.Addr) error {
@@ -572,15 +590,29 @@ func (c *Client) CreatePermission(addrs ...net.Addr) error {
 }
 
 // PerformTransaction performs STUN transaction.
-func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult,
+func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult bool) (client.TransactionResult, error) {
+	return c.PerformTransactionWithContext(msg, to, ignoreResult, context.TODO())
+}
+
+// PerformTransactionWithContext performs a STUN transaction with a context.
+func (c *Client) PerformTransactionWithContext(msg *stun.Message, to net.Addr, ignoreResult bool, ctx context.Context) (client.TransactionResult,
 	error,
 ) {
+	if err := ctx.Err(); err != nil {
+		return client.TransactionResult{}, err
+	}
+
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
 
 	raw := make([]byte, len(msg.Raw))
 	copy(raw, msg.Raw)
 
+	var integrity stun.MessageIntegrity
+	if msg.Contains(stun.AttrMessageIntegrity) {
+		integrity = append(stun.MessageIntegrity{}, c.integrity...)
+	}
 	tr := client.NewTransaction(&client.TransactionConfig{
+		Integrity:    integrity,
 		Key:          trKey,
 		Raw:          raw,
 		To:           to,
@@ -593,6 +625,8 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 	c.log.Tracef("Start %s transaction %s to %s", msg.Type, trKey, tr.To)
 	_, err := c.conn.WriteTo(tr.Raw, to)
 	if err != nil {
+		c.removeTransaction(trKey)
+
 		return client.TransactionResult{}, err
 	}
 
@@ -603,12 +637,29 @@ func (c *Client) PerformTransaction(msg *stun.Message, to net.Addr, ignoreResult
 		return client.TransactionResult{}, nil
 	}
 
-	res := tr.WaitForResult()
+	defer c.removeTransaction(trKey)
+
+	res := tr.WaitForResult(ctx)
 	if res.Err != nil {
 		return res, res.Err
 	}
 
 	return res, nil
+}
+
+func (c *Client) removeTransaction(trKey string) (*client.Transaction, bool) {
+	c.mutexTrMap.Lock()
+	defer c.mutexTrMap.Unlock()
+
+	tr, ok := c.trMap.Find(trKey)
+	if !ok {
+		return nil, false
+	}
+
+	tr.StopRtxTimer()
+	c.trMap.Delete(trKey)
+
+	return tr, true
 }
 
 // OnDeallocated is called when de-allocation of relay address has been complete.
@@ -648,6 +699,10 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	case stun.IsMessage(data):
 		return true, c.handleSTUNMessage(data, from)
 	case proto.IsChannelData(data):
+		if !c.isTURNServer(from) {
+			return true, nil
+		}
+
 		return true, c.handleChannelData(data)
 	case c.stunServerAddr != nil && from.String() == c.stunServerAddr.String():
 		// Received from STUN server but it is not a STUN message
@@ -658,6 +713,15 @@ func (c *Client) HandleInbound(data []byte, from net.Addr) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (c *Client) isTURNServer(from net.Addr) bool {
+	server := c.turnServerAddr
+	if conn, ok := c.conn.(interface{ RemoteAddr() net.Addr }); ok && conn.RemoteAddr() != nil {
+		server = conn.RemoteAddr()
+	}
+
+	return from != nil && server != nil && from.String() == server.String()
 }
 
 func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:cyclop
@@ -674,6 +738,9 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:
 	}
 
 	if msg.Type.Class == stun.ClassIndication { // nolint:nestif
+		if !c.isTURNServer(from) {
+			return nil
+		}
 		switch msg.Type.Method {
 		case stun.MethodData:
 			var peerAddr proto.PeerAddress
@@ -739,20 +806,21 @@ func (c *Client) handleSTUNMessage(data []byte, from net.Addr) error { //nolint:
 
 	trKey := b64.StdEncoding.EncodeToString(msg.TransactionID[:])
 
-	c.mutexTrMap.Lock()
 	tr, ok := c.trMap.Find(trKey)
 	if !ok {
-		c.mutexTrMap.Unlock()
 		// Silently discard
 		c.log.Debugf("No transaction for %s", msg)
 
 		return nil
 	}
 
-	// End the transaction
-	tr.StopRtxTimer()
-	c.trMap.Delete(trKey)
-	c.mutexTrMap.Unlock()
+	if !tr.CheckIntegrity(msg) {
+		return nil
+	}
+	tr, ok = c.removeTransaction(trKey)
+	if !ok {
+		return nil
+	}
 
 	if !tr.WriteResult(client.TransactionResult{
 		Msg:     msg,

@@ -37,6 +37,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Warp-net/warpnet/core/authorship"
+	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -68,6 +69,14 @@ type OwnerTweetStorer interface {
 
 type TweetBroadcaster interface {
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
+}
+
+type TweetImageFetcher interface {
+	GetImage(userId, key string) (domain.Base64Image, error)
+}
+
+type TweetImageHashStorer interface {
+	SetImageHashes(h domain.TweetImageHashes) error
 }
 
 type TweetsStorer interface {
@@ -106,6 +115,11 @@ type TweetFollowChecker interface {
 
 type TweetNotifier interface {
 	Add(not domain.Notification) error
+}
+
+type TweetMediaDeleter interface {
+	DeleteImage(userId, key string) error
+	DeleteVideo(userId, key string) error
 }
 
 type TweetPeersRatings interface {
@@ -170,6 +184,8 @@ func StreamNewSponsoredTweetHandler(
 	authRepo OwnerTweetStorer,
 	tweetRepo TweetsStorer,
 	timelineRepo TimelineUpdater,
+	mediaRepo TweetImageFetcher,
+	copyRepo TweetImageHashStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.NewTweetEvent
@@ -193,7 +209,19 @@ func StreamNewSponsoredTweetHandler(
 		if ev.UserId != owner.UserId {
 			return nil, warpnet.WarpError("sponsored tweet: only the owner publishes one")
 		}
-		return addTweet(broadcaster, tweetRepo, timelineRepo, owner, ev)
+		hashes, err := hashTweetImages(mediaRepo, owner.UserId, ev.ImageKeys)
+		if err != nil {
+			return nil, fmt.Errorf("sponsored tweet: hashing images: %w", err)
+		}
+		ev.ImageHashes = hashes
+		tweet, err := addTweet(broadcaster, tweetRepo, timelineRepo, owner, ev)
+		if err != nil || len(hashes) == 0 {
+			return tweet, err
+		}
+		if err := copyRepo.SetImageHashes(domain.TweetImageHashes{UserId: owner.UserId, TweetId: tweet.Id, Hashes: hashes}); err != nil {
+			log.Errorf("sponsored tweet: storing image hashes of %s: %v", tweet.Id, err)
+		}
+		return tweet, nil
 	}
 }
 
@@ -222,17 +250,18 @@ func addTweet(
 
 	teaser := tweet.Teaser()
 	respTweetEvent := event.NewTweetEvent{
-		CreatedAt: teaser.CreatedAt,
-		Id:        teaser.Id,
-		ParentId:  teaser.ParentId,
-		RootId:    teaser.RootId,
-		Text:      teaser.Text,
-		UserId:    teaser.UserId,
-		Username:  teaser.Username,
-		ImageKeys: teaser.ImageKeys,
-		VideoKey:  teaser.VideoKey,
-		Poll:      teaser.Poll,
-		Price:     teaser.Price,
+		CreatedAt:   teaser.CreatedAt,
+		Id:          teaser.Id,
+		ParentId:    teaser.ParentId,
+		RootId:      teaser.RootId,
+		Text:        teaser.Text,
+		UserId:      teaser.UserId,
+		Username:    teaser.Username,
+		ImageKeys:   teaser.ImageKeys,
+		ImageHashes: teaser.ImageHashes,
+		VideoKey:    teaser.VideoKey,
+		Poll:        teaser.Poll,
+		Price:       teaser.Price,
 	}
 	bt, _ := json.Marshal(respTweetEvent)
 	if err := broadcaster.PublishUpdateToFollowers(owner.UserId, event.PUBLIC_POST_TIMELINE, bt); err != nil {
@@ -491,7 +520,7 @@ func StreamGetTweetHandler(
 			if err != nil {
 				return nil, err
 			}
-			if warpnet.VerifyAuthorship(s, streamer.NodeInfo().ID.String()) == nil {
+			if warpnet.VerifyAuthorship(s, owner.NodeId) == nil {
 				return tweet, nil
 			}
 			return tweet.Teaser(), nil
@@ -560,6 +589,7 @@ func StreamGetTweetsHandler(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
+	copyRepo TweetImageHashStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllTweetsEvent
@@ -587,9 +617,9 @@ func StreamGetTweetsHandler(
 		}
 
 		if len(tweets) != 0 {
-			go tweetsRefreshBackground(repo, userRepo, ev, streamer)
+			go tweetsRefreshBackground(repo, userRepo, ev, streamer, copyRepo)
 		} else {
-			tweetsRefreshBackground(repo, userRepo, ev, streamer)
+			tweetsRefreshBackground(repo, userRepo, ev, streamer, copyRepo)
 
 			tweets, cursor, _ = repo.List(
 				ev.UserId, ev.Limit, ev.Cursor,
@@ -615,6 +645,7 @@ func tweetsRefreshBackground(
 	userRepo TweetUserFetcher,
 	ev event.GetAllTweetsEvent,
 	streamer TweetStreamer,
+	copyRepo TweetImageHashStorer,
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
@@ -637,6 +668,10 @@ func tweetsRefreshBackground(
 		event.PUBLIC_GET_TWEETS,
 		ev,
 	)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		log.Debugf("get tweets handler: stream: %v", err)
+		return
+	}
 	if err != nil {
 		log.Errorf("get tweets handler: stream: %v", err)
 		return
@@ -659,6 +694,13 @@ func tweetsRefreshBackground(
 			continue
 		}
 		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30) //nolint:mnd
+		if tweet.UserId != ev.UserId || !tweet.IsSponsored() || len(tweet.ImageHashes) == 0 {
+			continue
+		}
+		hashes := domain.TweetImageHashes{UserId: tweet.UserId, TweetId: tweet.Id, Hashes: tweet.ImageHashes}
+		if err := copyRepo.SetImageHashes(hashes); err != nil {
+			log.Errorf("get tweets handler: storing image hashes of %s: %v", tweet.Id, err)
+		}
 	}
 }
 
@@ -730,6 +772,7 @@ func StreamDeleteTweetHandler(
 	repo TweetsStorer,
 	timelineRepo TimelineUpdater,
 	reactionRepo ReactionTweetStorer,
+	mediaRepo TweetMediaDeleter,
 	streamer TweetStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
@@ -764,6 +807,8 @@ func StreamDeleteTweetHandler(
 			_ = repo.UnRetweet(*t.RetweetedBy, t.Id, false)
 		}
 
+		deleted, _ := repo.Get(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
+
 		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
 			return nil, err
 		}
@@ -773,6 +818,13 @@ func StreamDeleteTweetHandler(
 
 		owner := authRepo.GetOwner()
 		isMyOwnTweet := owner.UserId == ev.UserId
+		isOwnMedia := isMyOwnTweet && deleted.UserId == owner.UserId && deleted.RetweetedBy == nil &&
+			!deleted.IsSponsored() && !strings.HasPrefix(ev.TweetId, domain.RetweetPrefix)
+		if isOwnMedia {
+			if err := deleteTweetMedia(mediaRepo, deleted); err != nil {
+				log.Errorf("delete tweet: media delete: %v", err)
+			}
+		}
 		if isMyOwnTweet {
 			respTweetEvent := event.DeleteTweetEvent{
 				UserId:  ev.UserId,
@@ -848,6 +900,7 @@ type CRDTRepliesCounter interface {
 
 func StreamGetTweetStatsHandler(
 	tweetRepo TweetsStorer,
+	authRepo OwnerTweetStorer,
 	reactionRepo ReactionTweetStorer,
 	retweetRepo RetweetsTweetStorer,
 	replyRepo RepliesTweetCounter,
@@ -867,16 +920,16 @@ func StreamGetTweetStatsHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		ownNodeInfo := streamer.NodeInfo()
+		owner := authRepo.GetOwner()
 
-		isMyOwnTweet := ev.UserId == ownNodeInfo.OwnerId
+		isMyOwnTweet := ev.UserId == owner.UserId
 		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
 			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 				return nil, err
 			}
 
-			if err == nil && ownNodeInfo.ID.String() != u.NodeId {
+			if err == nil && owner.NodeId != u.NodeId {
 				statsResp, err := streamer.GenericStream(
 					u.NodeId,
 					event.PUBLIC_GET_TWEET_STATS,
@@ -904,7 +957,7 @@ func StreamGetTweetStatsHandler(
 					stats.MyReaction = ownReaction(
 						reactionRepo,
 						strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix),
-						ownNodeInfo.OwnerId,
+						owner.UserId,
 					)
 					return stats, nil
 				}
@@ -972,7 +1025,7 @@ func StreamGetTweetStatsHandler(
 			ReactionsCount: reactionsCount,
 			RepliesCount:   repliesCount,
 			Reactions:      reactions,
-			MyReaction:     ownReaction(reactionRepo, tweetId, ownNodeInfo.OwnerId),
+			MyReaction:     ownReaction(reactionRepo, tweetId, owner.UserId),
 		}, nil
 	}
 }
@@ -1142,4 +1195,31 @@ func ownReaction(repo ReactionTweetStorer, tweetId, ownerId string) string {
 		return ""
 	}
 	return emoji
+}
+
+func deleteTweetMedia(mediaRepo TweetMediaDeleter, tweet domain.Tweet) error {
+	var errs []error
+	for _, key := range tweet.ImageKeys {
+		errs = append(errs, mediaRepo.DeleteImage(tweet.UserId, key))
+	}
+	if tweet.VideoKey != nil {
+		errs = append(errs, mediaRepo.DeleteVideo(tweet.UserId, *tweet.VideoKey))
+	}
+	return errors.Join(errs...)
+}
+
+func hashTweetImages(mediaRepo TweetImageFetcher, userId string, keys []string) ([]string, error) {
+	hashes := make([]string, 0, len(keys))
+	for _, key := range keys {
+		img, err := mediaRepo.GetImage(userId, key)
+		if err != nil {
+			return nil, err
+		}
+		hash, _, err := media_meta.HashImage(string(img))
+		if err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, hash)
+	}
+	return hashes, nil
 }

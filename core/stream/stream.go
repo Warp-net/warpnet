@@ -27,7 +27,6 @@ resulting from the use or misuse of this software.
 package stream
 
 import (
-	"bufio"
 	"context"
 	"crypto/ed25519"
 	"errors"
@@ -217,11 +216,12 @@ func (p *streamPool) send(
 	ctx = network.WithAllowLimitedConn(ctx, warpnet.WarpnetName)
 
 	stream, err := p.n.NewStream(ctx, serverInfo.ID, r.ProtocolID())
-	// No known addresses (routing.ErrNotFound), every dial failed
-	// (swarm.ErrAllDialsFailed), or the dial hanging past sendTimeout
-	// (context.DeadlineExceeded) all mean the peer is unreachable — offline.
-	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrAllDialsFailed) ||
-		errors.Is(err, context.DeadlineExceeded) {
+	// No known addresses (routing.ErrNotFound), an empty DHT routing table
+	// (kbucket.ErrLookupFailure), every dial failed (swarm.ErrAllDialsFailed),
+	// or the dial hanging past sendTimeout (context.DeadlineExceeded) all mean
+	// the peer is unreachable — offline.
+	if warpnet.IsNoAddressesError(err) || errors.Is(err, warpnet.ErrLookupFailure) ||
+		errors.Is(err, warpnet.ErrAllDialsFailed) || errors.Is(err, context.DeadlineExceeded) {
 		return nil, fmt.Errorf("%s %w", serverInfo.ID.String(), warpnet.ErrNodeIsOffline)
 	}
 	if err != nil {
@@ -245,12 +245,10 @@ func (p *streamPool) send(
 	msg.Signature = security.Sign(p.privKey, msg.SigningBytes())
 	data, _ := json.Marshal(msg)
 
-	var rw = bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 	if data != nil {
 		log.Debugf("stream: sent to %s data with size %d\n", r, len(data))
-		_, err = rw.Write(data)
+		_, err = stream.Write(data)
 	}
-	flush(rw)
 	closeWrite(stream)
 	if err != nil {
 		log.Errorf("stream: writing: %v", err)
@@ -258,7 +256,7 @@ func (p *streamPool) send(
 	}
 
 	_ = stream.SetReadDeadline(time.Now().Add(responseReadTimeout))
-	resp, err := readLimited(rw, maxResponseSize(r))
+	resp, err := readLimited(stream, maxResponseSize(r))
 	if err != nil {
 		log.Debugf("stream: reading response from %s: %v", serverInfo.ID.String(), err)
 		return nil, fmt.Errorf("%w: from %s: %w", ErrResponseRead, serverInfo.ID.String(), err)
@@ -270,12 +268,6 @@ func (p *streamPool) send(
 func closeStream(stream warpnet.WarpStream) {
 	if err := stream.Close(); err != nil {
 		log.Errorf("stream: closing: %s", err)
-	}
-}
-
-func flush(rw *bufio.ReadWriter) {
-	if err := rw.Flush(); err != nil {
-		log.Errorf("stream: flush: %s", err)
 	}
 }
 

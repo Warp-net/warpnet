@@ -157,6 +157,17 @@ func (r *round) addVote(v vote.Event) {
 	r.votes[v.ModeratorID] = v
 }
 
+// hasVoter reports whether a ballot from moderatorID entered this round. A
+// Final announcement is only legitimate from the chair or a backup, both of
+// which voted, so the registry consults this before honoring one: a Final
+// from a peer with no ballot here is forged.
+func (r *round) hasVoter(moderatorID string) bool {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	_, ok := r.votes[moderatorID]
+	return ok
+}
+
 // stop ends the round without finalizing: the owner is shutting down, or
 // somebody else announced the round finished.
 func (r *round) stop() {

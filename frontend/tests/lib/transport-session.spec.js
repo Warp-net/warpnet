@@ -109,3 +109,31 @@ describe("transport client identity", () => {
     expect(localStorage.getItem(CLIENT_KEY)).toBe(first);
   });
 });
+
+describe("transport request timeouts", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const requestTimeoutOf = async (path) => {
+    const transport = await loadTransport();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const call = transport.Call({ path, body: {} });
+    call.catch(() => {});
+    await openSocket();
+    const delays = setTimeoutSpy.mock.calls.map(([, delay]) => delay).filter((delay) => delay > 0);
+    setTimeoutSpy.mockRestore();
+    return Math.max(...delays);
+  };
+
+  it("gives video uploads and downloads minutes, not the default 30 s", async () => {
+    expect(await requestTimeoutOf("/private/post/video/0.0.0")).toBe(3 * 60 * 1000);
+    expect(await requestTimeoutOf("/public/get/video/0.0.0")).toBe(3 * 60 * 1000);
+    expect(await requestTimeoutOf("/private/post/chat/video/0.0.0")).toBe(3 * 60 * 1000);
+    expect(await requestTimeoutOf("/public/get/sponsored/video/0.0.0")).toBe(3 * 60 * 1000);
+  });
+
+  it("keeps the default timeout for ordinary calls", async () => {
+    expect(await requestTimeoutOf("/private/get/user/0.0.0")).toBe(30000);
+  });
+});

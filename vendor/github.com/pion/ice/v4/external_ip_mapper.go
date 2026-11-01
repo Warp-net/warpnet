@@ -20,15 +20,8 @@ const (
 
 // AddressRewriteRule represents a rule for remapping candidate addresses.
 type AddressRewriteRule struct {
-	// External are the 1:1 external addresses to advertise for this rule.
-	// For replace mode, an empty list is treated as "drop the matched local
-	// address" (no candidate emitted). For append mode, an empty list is a
-	// no-op: the original candidate is kept.
-	// Empty External rules are intentional:
-	//   - Mode AddressRewriteReplace drops the matched candidate (deny-list style).
-	//   - Mode AddressRewriteAppend keeps the original candidate and adds nothing,
-	//     which is useful when you combine a catch-all replace with per-interface
-	//     allow rules.
+	// External are the 1:1 external addresses to advertise for this rule. At
+	// least one valid, non-empty IP address is required.
 	External []string
 	// Local optionally pins this rule to a specific local address. When set,
 	// external IPs map to that address regardless of IP family. When empty,
@@ -48,12 +41,14 @@ type AddressRewriteRule struct {
 	// If Mode is zero, the default is:
 	//   - CandidateTypeHost           -> AddressRewriteReplace
 	//   - CandidateTypeServerReflexive, CandidateTypeRelay -> AddressRewriteAppend
-	// For replace mode, a match with zero external IPs removes the candidate.
-	// For append mode, a match with zero external IPs leaves the original
-	// candidate untouched.
 	Mode AddressRewriteMode
 	// Networks is the optional networks to limit the rule to, nil/empty = all.
 	Networks []NetworkType
+	// OriginalPort and NewPort optionally rewrite a gathered candidate's
+	// advertised port. Set OriginalPort to zero to rewrite every port. NewPort
+	// must be non-zero unless both fields are zero, which leaves ports unchanged.
+	OriginalPort int
+	NewPort      int
 }
 
 func validateIPString(ipStr string) (net.IP, bool, error) {
@@ -180,24 +175,6 @@ func cloneIPs(src []net.IP) []net.IP {
 	}
 
 	return cloned
-}
-
-func (m *ipMapping) findExternalIPs(locIP net.IP) []net.IP {
-	if !m.valid {
-		return nil
-	}
-
-	if m.ipMap != nil {
-		if extIPs, ok := m.ipMap[locIP.String()]; ok && len(extIPs) > 0 {
-			return cloneIPs(extIPs)
-		}
-	}
-
-	if len(m.ipSole) > 0 {
-		return cloneIPs(m.ipSole)
-	}
-
-	return nil
 }
 
 type addressRewriteRuleMapping struct {
@@ -375,6 +352,42 @@ func (m *addressRewriteMapper) findExternalIPs(
 	ips, matched, mode := evaluateRewriteRules(rules, locIP, isLocIPv4, iface)
 
 	return ips, matched, mode, nil
+}
+
+func (m *addressRewriteMapper) findExternalPort(
+	candidateType CandidateType,
+	localIP string,
+	iface string,
+	originalPort int,
+) int {
+	locIP, isLocIPv4, err := validateIPString(localIP)
+	if err != nil {
+		return originalPort
+	}
+
+	mappedPort := originalPort
+	bestSpec := -1
+	for _, rule := range m.rulesByCandidateType[candidateType] {
+		if rule.rule.NewPort == 0 || (rule.rule.OriginalPort != 0 && rule.rule.OriginalPort != originalPort) {
+			continue
+		}
+
+		ipMapping, ok := ruleMappingForLookup(rule, locIP, isLocIPv4, iface)
+		if !ok {
+			continue
+		}
+		if _, ok = ipMapping.ipMap[locIP.String()]; ok {
+			return rule.rule.NewPort
+		}
+		if ipMapping.catchAllSet {
+			if spec := catchAllSpecificity(rule, iface); spec > bestSpec {
+				mappedPort = rule.rule.NewPort
+				bestSpec = spec
+			}
+		}
+	}
+
+	return mappedPort
 }
 
 func ruleMappingForLookup(

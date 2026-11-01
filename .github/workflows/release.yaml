@@ -12,7 +12,6 @@ on:
         type: string
 
 env:
-  GO_VERSION: "1.26.0"
   RELEASE_TAG: ${{ github.event.inputs.tag }}
   CGO_ENABLED: "1"
 
@@ -46,7 +45,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Linux deps
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
@@ -72,7 +71,7 @@ jobs:
       - name: Build (Wails, Linux with compression)
         working-directory: cmd/node/member
         if: ${{ startsWith(matrix.os, 'ubuntu') }}
-        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="--best"
+        run: wails build -clean -platform ${{ matrix.platform }} -tags webkit2_41 -m -nosyncgomod -upx -upxflags="-7"
 
       - name: Build Relay (Linux with compression)
         working-directory: cmd/node/relay

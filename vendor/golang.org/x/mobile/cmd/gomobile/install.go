@@ -23,7 +23,7 @@ attached mobile device.
 
 Only -target android is supported. The 'adb' tool must be on the PATH.
 
-The build flags -a, -i, -n, -x, -gcflags, -ldflags, -overlay, -tags, -trimpath,
+The build flags -a, -n, -x, -gcflags, -ldflags, -overlay, -tags, -trimpath,
 and -work are shared with the build command.
 For documentation, see 'go help build'.
 `,
