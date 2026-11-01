@@ -11,17 +11,18 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v4/packetio"
+	"github.com/pion/transport/v5/packetio"
 )
 
 type streamSession interface {
 	Close() error
 	write([]byte) (int, error)
-	decrypt([]byte) error
+	decrypt([]byte, packetio.Attributes) error
 }
 
 type session struct {
 	localContextMutex           sync.Mutex
+	remoteContextMutex          sync.Mutex
 	localContext, remoteContext *Context
 	localOptions, remoteOptions []ContextOption
 
@@ -46,8 +47,9 @@ type session struct {
 // or directly pass the keys themselves.
 // After a Config is passed to a session it must not be modified.
 type Config struct {
-	Keys                SessionKeys
-	Profile             ProtectionProfile
+	Keys    SessionKeys
+	Profile ProtectionProfile
+
 	BufferFactory       func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser
 	LoggerFactory       logging.LoggerFactory
 	AcceptStreamTimeout time.Time
@@ -114,6 +116,7 @@ func (s *session) close() error {
 	return nil
 }
 
+//nolint:cyclop
 func (s *session) start(
 	localMasterKey, localMasterSalt, remoteMasterKey, remoteMasterSalt []byte,
 	profile ProtectionProfile,
@@ -145,9 +148,10 @@ func (s *session) start(
 		}()
 
 		b := make([]byte, 8192)
+		var attrs packetio.Attributes
 		for {
 			var i int
-			i, err = s.nextConn.Read(b)
+			i, attrs, err = readWithAttributes(s.nextConn, b, attrs)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
 					s.log.Error(err.Error())
@@ -156,13 +160,34 @@ func (s *session) start(
 				return
 			}
 
-			if err = child.decrypt(b[:i]); err != nil {
+			if err = child.decrypt(b[:i], attrs); err != nil {
 				s.log.Info(err.Error())
 			}
 		}
 	}()
 
 	close(s.started)
+
+	return nil
+}
+
+// updateKey validates both directions before replacing either context.
+func (s *session) updateKey(keys SessionKeys, profile ProtectionProfile) error {
+	s.localContextMutex.Lock()
+	defer s.localContextMutex.Unlock()
+	s.remoteContextMutex.Lock()
+	defer s.remoteContextMutex.Unlock()
+
+	local, err := s.localContext.contextWithKey(keys.LocalMasterKey, keys.LocalMasterSalt, profile)
+	if err != nil {
+		return err
+	}
+	remote, err := s.remoteContext.contextWithKey(keys.RemoteMasterKey, keys.RemoteMasterSalt, profile)
+	if err != nil {
+		return err
+	}
+
+	s.localContext, s.remoteContext = local, remote
 
 	return nil
 }

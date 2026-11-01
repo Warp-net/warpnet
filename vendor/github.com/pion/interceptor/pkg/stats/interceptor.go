@@ -81,7 +81,7 @@ func (r *InterceptorFactory) NewInterceptor(id string) (interceptor.Interceptor,
 		NoOp:      interceptor.NoOp{},
 		now:       time.Now,
 		lock:      sync.Mutex{},
-		recorders: map[uint32]Recorder{},
+		recorders: map[uint32]*streamRecorder{},
 		wg:        sync.WaitGroup{},
 	}
 	for _, opt := range r.opts {
@@ -120,13 +120,18 @@ type Recorder interface {
 // RecorderFactory creates new Recorders to be used by the interceptor.
 type RecorderFactory func(ssrc uint32, clockRate float64) Recorder
 
+type streamRecorder struct {
+	Recorder
+	bindings int
+}
+
 // Interceptor is the interceptor that collects stream stats.
 type Interceptor struct {
 	interceptor.NoOp
 	now             func() time.Time
 	lock            sync.Mutex
 	RecorderFactory RecorderFactory
-	recorders       map[uint32]Recorder
+	recorders       map[uint32]*streamRecorder
 	wg              sync.WaitGroup
 	loggerFactory   logging.LoggerFactory
 }
@@ -148,6 +153,8 @@ func (r *Interceptor) getRecorder(ssrc uint32, clockRate float64) Recorder {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	if rec, ok := r.recorders[ssrc]; ok {
+		rec.bindings++
+
 		return rec
 	}
 	rec := r.RecorderFactory(ssrc, clockRate)
@@ -156,9 +163,31 @@ func (r *Interceptor) getRecorder(ssrc uint32, clockRate float64) Recorder {
 		defer r.wg.Done()
 		rec.Start()
 	}()
-	r.recorders[ssrc] = rec
+	r.recorders[ssrc] = &streamRecorder{Recorder: rec, bindings: 1}
 
 	return rec
+}
+
+func (r *Interceptor) unbindStream(ssrc uint32) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	if rec, ok := r.recorders[ssrc]; ok {
+		rec.bindings--
+		if rec.bindings == 0 {
+			delete(r.recorders, ssrc)
+			rec.Stop()
+		}
+	}
+}
+
+// UnbindLocalStream releases the recorder binding for an outgoing stream.
+func (r *Interceptor) UnbindLocalStream(info *interceptor.StreamInfo) {
+	r.unbindStream(info.SSRC)
+}
+
+// UnbindRemoteStream releases the recorder binding for an incoming stream.
+func (r *Interceptor) UnbindRemoteStream(info *interceptor.StreamInfo) {
+	r.unbindStream(info.SSRC)
 }
 
 // Close closes the interceptor and associated stats recorders.
@@ -168,8 +197,9 @@ func (r *Interceptor) Close() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	for _, r := range r.recorders {
-		r.Stop()
+	for ssrc, recorder := range r.recorders {
+		delete(r.recorders, ssrc)
+		recorder.Stop()
 	}
 
 	return nil
@@ -180,19 +210,37 @@ func (r *Interceptor) Close() error {
 func (r *Interceptor) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RTCPReader {
 	return interceptor.RTCPReaderFunc(
 		func(bytes []byte, attributes interceptor.Attributes) (int, interceptor.Attributes, error) {
-			n, attattributes, err := reader.Read(bytes, attributes)
+			n, attributes, err := reader.Read(bytes, attributes)
 			if err != nil {
-				return 0, attattributes, err
+				return 0, attributes, err
 			}
-			r.lock.Lock()
-			for _, recorder := range r.recorders {
-				recorder.QueueIncomingRTCP(r.now(), bytes[:n], attributes)
+			if attributes == nil {
+				attributes = make(interceptor.Attributes)
 			}
-			r.lock.Unlock()
+			r.queueIncomingRTCP(bytes[:n], attributes)
 
-			return n, attattributes, err
+			return n, attributes, nil
 		},
 	)
+}
+
+func (r *Interceptor) queueIncomingRTCP(buf []byte, attributes interceptor.Attributes) {
+	pkts, err := attributes.GetRTCPPackets(buf)
+	if err != nil {
+		return
+	}
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	seen := make(map[uint32]bool)
+	now := r.now()
+	for _, pkt := range pkts {
+		for _, ssrc := range pkt.DestinationSSRC() {
+			if recorder, ok := r.recorders[ssrc]; ok && !seen[ssrc] {
+				seen[ssrc] = true
+				recorder.QueueIncomingRTCP(now, buf, attributes)
+			}
+		}
+	}
 }
 
 // BindRTCPWriter lets you modify any outgoing RTCP packets. It is called once per PeerConnection. The returned method

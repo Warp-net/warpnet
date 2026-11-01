@@ -23,9 +23,9 @@ import (
 	"github.com/pion/dtls/v3/pkg/protocol/handshake"
 	"github.com/pion/dtls/v3/pkg/protocol/recordlayer"
 	"github.com/pion/logging"
-	"github.com/pion/transport/v4/deadline"
-	"github.com/pion/transport/v4/netctx"
-	"github.com/pion/transport/v4/replaydetector"
+	"github.com/pion/transport/v5/deadline"
+	"github.com/pion/transport/v5/netctx"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
 const (
@@ -55,8 +55,9 @@ type addrPkt struct {
 }
 
 type recvHandshakeState struct {
-	done         chan struct{}
-	isRetransmit bool
+	done                    chan struct{}
+	isRetransmit            bool
+	isClientHelloRetransmit bool
 }
 
 // Conn represents a DTLS connection.
@@ -169,13 +170,6 @@ func createConn(
 		workerInterval = config.FlightInterval
 	}
 
-	serverName := config.ServerName
-	// Do not allow the use of an IP address literal as an SNI value.
-	// See RFC 6066, Section 3.
-	if net.ParseIP(serverName) != nil {
-		serverName = ""
-	}
-
 	curves := config.EllipticCurves
 	if len(curves) == 0 {
 		curves = defaultCurves
@@ -211,7 +205,7 @@ func createConn(
 		extendedMasterSecret:          config.ExtendedMasterSecret,
 		localSRTPProtectionProfiles:   config.SRTPProtectionProfiles,
 		localSRTPMasterKeyIdentifier:  config.SRTPMasterKeyIdentifier,
-		serverName:                    serverName,
+		serverName:                    config.ServerName,
 		supportedProtocols:            config.SupportedProtocols,
 		clientAuth:                    config.ClientAuth,
 		localCertificates:             config.Certificates,
@@ -265,7 +259,8 @@ func createConn(
 		replayProtectionWindow: uint(replayProtectionWindow), //nolint:gosec // G115
 
 		state: State{
-			isClient: isClient,
+			isClient:             isClient,
+			remoteSequenceNumber: &atomic.Uint64{},
 		},
 	}
 
@@ -310,17 +305,6 @@ func (c *Conn) HandshakeContext(ctx context.Context) error {
 	c.closeLock.Lock()
 	c.handshakeDone = handshakeDone
 	c.closeLock.Unlock()
-
-	// rfc5246#section-7.4.3
-	// In addition, the hash and signature algorithms MUST be compatible
-	// with the key in the server's end-entity certificate.
-	if !c.state.isClient {
-		cert, err := c.handshakeConfig.getCertificate(&ClientHelloInfo{})
-		if err != nil && !errors.Is(err, errNoCertificates) {
-			return err
-		}
-		c.handshakeConfig.localCipherSuites = filterCipherSuitesForCertificate(cert, c.handshakeConfig.localCipherSuites)
-	}
 
 	var initialFlight flightVal
 	var initialFSMState handshakeState
@@ -497,7 +481,7 @@ func (c *Conn) Write(payload []byte) (int, error) {
 		return 0, err
 	}
 
-	ctx, cancel := c.contextWithClose(c.writeDeadline)
+	ctx, cancel := c.contextWithClose(c.writeDeadline.Context())
 	defer cancel()
 
 	return len(payload), c.writePackets(ctx, []*packet{
@@ -532,6 +516,10 @@ func (c *Conn) Close() error {
 
 // ConnectionState returns basic DTLS details about the connection.
 // Note that this replaced the `Export` function of v1.
+//
+// This is a snapshot: the connection remains active. Restoring
+// it can reuse encryption nonces if the original sends any further records.
+// See ResumeWithOptions for the safety requirements for state restoration.
 func (c *Conn) ConnectionState() (State, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -559,7 +547,7 @@ func (c *Conn) RemoteSRTPMasterKeyIdentifier() ([]byte, bool) {
 		return nil, false
 	}
 
-	return c.state.remoteSRTPMasterKeyIdentifier, true
+	return bytes.Clone(c.state.remoteSRTPMasterKeyIdentifier), true
 }
 
 func (c *Conn) writePackets(ctx context.Context, pkts []*packet) error {
@@ -633,15 +621,13 @@ func (c *Conn) cacheHandshakePacket(pkt *packet, dtlsHandshake *handshake.Handsh
 		srvCliStr(c.state.isClient), dtlsHandshake.Header.Type.String(),
 		pkt.record.Header.Epoch, dtlsHandshake.Header.MessageSequence)
 
-	c.handshakeCache.push(
+	return c.handshakeCache.push(
 		handshakeRaw[recordlayer.FixedHeaderSize:],
 		pkt.record.Header.Epoch,
 		dtlsHandshake.Header.MessageSequence,
 		dtlsHandshake.Header.Type,
 		c.state.isClient,
 	)
-
-	return nil
 }
 
 type closeContext struct {
@@ -664,7 +650,7 @@ func (c *closeContext) Err() error {
 		return err
 	}
 
-	return c.Context.Err()
+	return context.Cause(c.Context)
 }
 
 func (c *closeContext) close(err error) {
@@ -687,7 +673,7 @@ func (c *Conn) contextWithClose(ctx context.Context) (context.Context, context.C
 		case <-c.closed.Done():
 			closeCtx.close(context.Canceled)
 		case <-ctx.Done():
-			err := ctx.Err()
+			err := context.Cause(ctx)
 			if err == nil {
 				err = context.DeadlineExceeded
 			}
@@ -936,9 +922,9 @@ func (c *Conn) readAndBuffer(ctx context.Context) error { //nolint:cyclop
 		return err
 	}
 
-	var hasHandshake, isRetransmit bool
-	for _, p := range pkts {
-		hs, rtx, alert, err := c.handleIncomingPacket(ctx, p, rAddr, true)
+	var hasHandshake, isRetransmit, isClientHelloRetransmit bool
+	for _, packet := range pkts {
+		hs, rtx, alert, err := c.handleIncomingPacket(ctx, packet, rAddr, true)
 		if alert != nil {
 			if alertErr := c.notify(ctx, alert.Level, alert.Description); alertErr != nil {
 				if err == nil {
@@ -956,6 +942,7 @@ func (c *Conn) readAndBuffer(ctx context.Context) error { //nolint:cyclop
 		}
 		if hs {
 			hasHandshake = true
+			isClientHelloRetransmit = isClientHelloRetransmit || c.handshakeCache.isClientHelloRetransmit(packet)
 		}
 		if rtx {
 			isRetransmit = true
@@ -963,8 +950,9 @@ func (c *Conn) readAndBuffer(ctx context.Context) error { //nolint:cyclop
 	}
 	if hasHandshake {
 		s := recvHandshakeState{
-			done:         make(chan struct{}),
-			isRetransmit: isRetransmit,
+			done:                    make(chan struct{}),
+			isRetransmit:            isRetransmit,
+			isClientHelloRetransmit: isClientHelloRetransmit,
 		}
 		select {
 		case c.handshakeRecv <- s:
@@ -1010,6 +998,7 @@ func (c *Conn) enqueueEncryptedPackets(packet addrPkt) bool {
 	defer c.lock.Unlock()
 
 	if len(c.encryptedPackets) < maxAppDataPacketQueueSize {
+		packet.data = bytes.Clone(packet.data) // the read buffer comes from poolReadBuffer and is reused
 		c.encryptedPackets = append(c.encryptedPackets, packet)
 
 		return true
@@ -1040,6 +1029,19 @@ func (c *Conn) handleIncomingPacket(
 	}
 	// Validate epoch
 	remoteEpoch := c.state.getRemoteEpoch()
+	// DTLS 1.2 accepts old epochs until the handshake completes (RFC 6347, Section 4.1).
+	if header.Epoch == 0 && header.ContentType == protocol.ContentTypeAlert && remoteEpoch != 0 &&
+		c.isHandshakeCompletedSuccessfully() {
+		c.log.Debug("discarded alert from the old plaintext epoch")
+
+		return false, false, nil, nil
+	}
+	if header.Epoch > 1 {
+		return false, false, nil, nil
+	}
+	if header.Epoch > 0 && header.SequenceNumber < c.state.remoteReplayCutoff {
+		return false, false, nil, nil
+	}
 	if header.Epoch > remoteEpoch {
 		if header.Epoch > remoteEpoch+1 {
 			c.log.Debugf("discarded future packet (epoch: %d, seq: %d)",
@@ -1070,6 +1072,22 @@ func (c *Conn) handleIncomingPacket(
 		)
 
 		return false, false, nil, nil
+	}
+
+	markReplay := markPacketAsValid
+	markPacketAsValid = func() bool {
+		latest := markReplay()
+		if header.Epoch > 0 {
+			next := header.SequenceNumber + 1
+			for previous := c.state.remoteSequenceNumber.Load(); next > previous; {
+				if c.state.remoteSequenceNumber.CompareAndSwap(previous, next) {
+					break
+				}
+				previous = c.state.remoteSequenceNumber.Load()
+			}
+		}
+
+		return latest
 	}
 
 	// originalCID indicates whether the original record had content type
@@ -1158,7 +1176,9 @@ func (c *Conn) handleIncomingPacket(
 
 				continue
 			}
-			c.handshakeCache.push(out, epoch, header.MessageSequence, header.Type, !c.state.isClient)
+			if err := c.handshakeCache.push(out, epoch, header.MessageSequence, header.Type, !c.state.isClient); err != nil {
+				return false, false, &alert.Alert{Level: alert.Fatal, Description: alert.InternalError}, err
+			}
 		}
 
 		return true, isRetransmit, nil, nil
@@ -1182,6 +1202,9 @@ func (c *Conn) handleIncomingPacket(
 
 		return false, false, a, &alertError{content}
 	case *protocol.ChangeCipherSpec:
+		if header.Epoch != 0 {
+			return false, false, nil, nil
+		}
 		if c.state.cipherSuite == nil || !c.state.cipherSuite.IsInitialized() {
 			if enqueue {
 				if ok := c.enqueueEncryptedPackets(addrPkt{rAddr, buf}); ok {
@@ -1208,10 +1231,19 @@ func (c *Conn) handleIncomingPacket(
 
 		isLatestSeqNum = markPacketAsValid()
 
-		select {
-		case c.decrypted <- content.Data:
-		case <-c.closed.Done():
-		case <-ctx.Done():
+		if !c.isHandshakeCompletedSuccessfully() {
+			// Read waits for the handshake to complete. Never block its packet
+			// reader on early application data: Finished may still be pending.
+			select {
+			case c.decrypted <- content.Data:
+			default:
+			}
+		} else {
+			select {
+			case c.decrypted <- content.Data:
+			case <-c.closed.Done():
+			case <-ctx.Done():
+			}
 		}
 
 	default:
@@ -1269,7 +1301,18 @@ func (c *Conn) notify(ctx context.Context, level alert.Level, desc alert.Descrip
 }
 
 func (c *Conn) setHandshakeCompletedSuccessfully() bool {
-	return c.handshakeCompletedSuccessfully.CompareAndSwap(false, true)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	if c.isHandshakeCompletedSuccessfully() {
+		return false
+	}
+	c.state.handshakeComplete = true
+	if !c.handshakeCompletedSuccessfully.CompareAndSwap(false, true) {
+		return false
+	}
+	c.handshakeCache.finish()
+
+	return true
 }
 
 func (c *Conn) isHandshakeCompletedSuccessfully() bool {

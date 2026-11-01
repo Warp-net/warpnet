@@ -77,16 +77,9 @@ func (r ReceiverReport) Marshal() ([]byte, error) {
 		return nil, errTooManyReports
 	}
 
-	pe := make([]byte, len(r.ProfileExtensions))
-	copy(pe, r.ProfileExtensions)
-
-	// if the length of the profile extensions isn't devisible
-	// by 4, we need to pad the end.
-	for (len(pe) & 0x3) != 0 {
-		pe = append(pe, 0) //nolint:makezero
-	}
-
-	rawPacket = append(rawPacket, pe...) //nolint:makezero
+	// The buffer is already sized for the profile extensions and their padding,
+	// so any trailing pad bytes are left as the zeroes MarshalSize allocated.
+	copy(packetBody[ssrcLength+receptionReportLength*len(r.Reports):], r.ProfileExtensions)
 
 	hData, err := r.Header().Marshal()
 	if err != nil {
@@ -159,6 +152,30 @@ func (r *ReceiverReport) Unmarshal(rawPacket []byte) error {
 	return nil
 }
 
+func appendReceiverReportSSRCs(dst []uint32, header Header, pkt []byte) ([]uint32, error) {
+	if header.Type != TypeReceiverReport {
+		return dst, errWrongType
+	}
+	if len(pkt) < (headerLength + ssrcLength) {
+		return dst, errPacketTooShort
+	}
+
+	reports := 0
+	for i := rrReportOffset; i < len(pkt) && reports < int(header.Count); i += receptionReportLength {
+		var rr ReceptionReport
+		if err := rr.Unmarshal(pkt[i:]); err != nil {
+			return dst, err
+		}
+		dst = append(dst, rr.SSRC)
+		reports++
+	}
+	if reports != int(header.Count) {
+		return dst, errInvalidHeader
+	}
+
+	return dst, nil
+}
+
 // MarshalSize returns the size of the packet once marshaled.
 func (r *ReceiverReport) MarshalSize() int {
 	repsLength := 0
@@ -166,7 +183,9 @@ func (r *ReceiverReport) MarshalSize() int {
 		repsLength += rep.len()
 	}
 
-	return headerLength + ssrcLength + repsLength
+	extLength := len(r.ProfileExtensions)
+
+	return headerLength + ssrcLength + repsLength + extLength + getPadding(extLength)
 }
 
 // Header returns the Header associated with this packet.
@@ -174,7 +193,7 @@ func (r *ReceiverReport) Header() Header {
 	return Header{
 		Count:  uint8(len(r.Reports)), //nolint:gosec // G115
 		Type:   TypeReceiverReport,
-		Length: uint16((r.MarshalSize()/4)-1) + uint16(getPadding(len(r.ProfileExtensions))), //nolint:gosec // G115
+		Length: uint16((r.MarshalSize() / 4) - 1), //nolint:gosec // G115
 	}
 }
 

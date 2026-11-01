@@ -23,7 +23,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-func goAndroidBuild(pkg *packages.Package, targets []targetInfo) (map[string]bool, error) {
+func goAndroidBuild(pkg *packages.Package, targets []targetInfo) (_ map[string]bool, retErr error) {
 	ndkRoot, err := ndkRoot(targets...)
 	if err != nil {
 		return nil, err
@@ -112,9 +112,7 @@ func goAndroidBuild(pkg *packages.Package, targets []targetInfo) (map[string]boo
 			return nil, err
 		}
 		defer func() {
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
+			retErr = errors.Join(retErr, f.Close())
 		}()
 		out = f
 	}
@@ -216,7 +214,11 @@ func goAndroidBuild(pkg *packages.Package, targets []targetInfo) (map[string]boo
 				return nil
 			}
 
-			if rel, err := filepath.Rel(assetsDir, path); rel == "icon.png" && err == nil {
+			rel, err := filepath.Rel(assetsDir, path)
+			if err != nil {
+				return err
+			}
+			if rel == "icon.png" {
 				arsc.iconPath = path
 				// TODO returning here does not write the assets/icon.png to the final assets output,
 				// making it unavailable via the assets API. Should the file be duplicated into assets
@@ -224,7 +226,7 @@ func goAndroidBuild(pkg *packages.Package, targets []targetInfo) (map[string]boo
 				return nil
 			}
 
-			name := "assets/" + path[len(assetsDir)+1:]
+			name := "assets/" + filepath.ToSlash(rel)
 			return apkwWriteFile(name, path)
 		})
 		if err != nil {

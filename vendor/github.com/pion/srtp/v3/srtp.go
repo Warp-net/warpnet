@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/pion/rtp"
+	"github.com/pion/transport/v5/replaydetector"
 )
 
 /*
@@ -43,7 +44,7 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 	// The SSRC in the RTP header is unauthenticated at this point. getSRTPSSRCState is
 	// called in read-only mode (existingState tracks whether it was pre-existing) so that
 	// no new map entry is inserted until after the auth tag has been verified. The state
-	// is committed to the map by setSRTPSSRCState only after markAsValid() succeeds below.
+	// is committed to the map by setSRTPSSRCState only after Accept() succeeds below.
 	ssrcState, existingState := c.getSRTPSSRCState(header.SSRC, false)
 
 	var roc uint32
@@ -64,8 +65,17 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 	// Rejecting already-seen sequence numbers here avoids the CPU cost of
 	// AES decryption and HMAC/GCM verification on flooded duplicate packets.
 	// Safety relies on the replay detector only committing the index as "seen"
-	// when markAsValid() is explicitly called after successful authentication.
-	markAsValid, ok := ssrcState.replayDetector.Check(index)
+	// after successful authentication, when Accept() (or markAsValid, for
+	// detectors without CheckAccepter support) is explicitly called below.
+	var markAsValid func() bool
+	var tok replaydetector.Token
+	var ok bool
+	if ssrcState.checkAccepter != nil {
+		tok = ssrcState.checkAccepter.CheckSeq(index)
+		ok = tok.Passed()
+	} else {
+		markAsValid, ok = ssrcState.replayDetector.Check(index)
+	}
 	if !ok {
 		return nil, &duplicatedError{
 			Proto: "srtp", SSRC: header.SSRC, Index: uint32(header.SequenceNumber),
@@ -94,7 +104,11 @@ func (c *Context) decryptRTP(dst, ciphertext []byte, header *rtp.Header, headerL
 		return nil, err
 	}
 
-	markAsValid()
+	if ssrcState.checkAccepter != nil {
+		ssrcState.checkAccepter.Accept(tok)
+	} else {
+		markAsValid()
+	}
 	ssrcState.updateRolloverCount(header.SequenceNumber, diff, hasRocInPacket, roc)
 
 	if !existingState {

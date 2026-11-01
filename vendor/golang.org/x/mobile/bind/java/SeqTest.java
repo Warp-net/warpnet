@@ -7,6 +7,7 @@ package go;
 import android.test.InstrumentationTestCase;
 import android.test.MoreAsserts;
 
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -81,6 +82,17 @@ public class SeqTest extends InstrumentationTestCase {
     String want = "Hello, Assets.\n";
     String got = Testpkg.readAsset();
     assertEquals("Asset read", want, got);
+
+    try {
+      InputStream nested = getInstrumentation().getContext().getAssets().open("nested/hello.txt");
+      try {
+        assertEquals("Nested asset read", 'H', nested.read());
+      } finally {
+        nested.close();
+      }
+    } catch (Exception e) {
+      fail(e.getMessage());
+    }
   }
 
   public void testAdd() {

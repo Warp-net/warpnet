@@ -140,6 +140,9 @@ func (t *ICETransport) StartContext(
 	}); err != nil {
 		return err
 	}
+	if err := agent.SetRemoteICELite(params.ICELite); err != nil {
+		return err
+	}
 
 	if role == nil {
 		controlled := ICERoleControlled
@@ -444,12 +447,6 @@ func (t *ICETransport) Stats() TransportStats {
 	}
 
 	return stats
-}
-
-func (t *ICETransport) collectStats(collector *statsReportCollector) {
-	collector.Collecting()
-	stats := t.Stats()
-	collector.Collect(stats.ID, stats)
 }
 
 func (t *ICETransport) haveRemoteCredentialsChange(newUfrag, newPwd string) bool {

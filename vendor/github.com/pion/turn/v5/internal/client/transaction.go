@@ -4,11 +4,12 @@
 package client
 
 import (
+	"context"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/pion/stun/v3"
+	"github.com/pion/stun/v4"
 )
 
 const (
@@ -25,6 +26,7 @@ type TransactionResult struct {
 
 // TransactionConfig is a set of config params used by NewTransaction.
 type TransactionConfig struct {
+	Integrity    stun.MessageIntegrity
 	Key          string
 	Raw          []byte
 	To           net.Addr
@@ -34,21 +36,24 @@ type TransactionConfig struct {
 
 // Transaction represents a transaction.
 type Transaction struct {
-	Key      string                 // Read-only
-	Raw      []byte                 // Read-only
-	To       net.Addr               // Read-only
-	nRtx     int                    // Modified only by the timer thread
-	interval time.Duration          // Modified only by the timer thread
-	timer    *time.Timer            // Thread-safe, set only by the creator, and stopper
-	resultCh chan TransactionResult // Thread-safe
-	mutex    sync.RWMutex
+	Key        string        // Read-only
+	Raw        []byte        // Read-only
+	To         net.Addr      // Read-only
+	nRtx       int           // Modified only by the timer thread
+	interval   time.Duration // Modified only by the timer thread
+	timer      *time.Timer   // Thread-safe, set only by the creator, and stopper
+	resultCh   chan TransactionResult
+	resultOnce sync.Once
+	mutex      sync.RWMutex
+
+	integrity stun.MessageIntegrity // Read-only
 }
 
 // NewTransaction creates a new instance of Transaction.
 func NewTransaction(config *TransactionConfig) *Transaction {
 	var resultCh chan TransactionResult
 	if !config.IgnoreResult {
-		resultCh = make(chan TransactionResult)
+		resultCh = make(chan TransactionResult, 1)
 	}
 
 	return &Transaction{
@@ -57,7 +62,26 @@ func NewTransaction(config *TransactionConfig) *Transaction {
 		To:       config.To,       // Read-only
 		interval: config.Interval, // Modified only by the timer thread
 		resultCh: resultCh,        // Thread-safe
+
+		integrity: config.Integrity,
 	}
+}
+
+// CheckIntegrity validates responses to authenticated requests.
+func (t *Transaction) CheckIntegrity(msg *stun.Message) bool {
+	if t.integrity == nil {
+		return true
+	}
+	if !msg.Contains(stun.AttrMessageIntegrity) && msg.Type.Class == stun.ClassErrorResponse {
+		var code stun.ErrorCodeAttribute
+		if code.GetFrom(msg) == nil && (code.Code == stun.CodeUnauthorized || code.Code == stun.CodeStaleNonce) {
+			return true
+		}
+	}
+	// MESSAGE-INTEGRITY carries a 20-byte HMAC-SHA1.
+	value, err := msg.Get(stun.AttrMessageIntegrity)
+
+	return err == nil && len(value) == 20 && t.integrity.Check(msg) == nil
 }
 
 // StartRtxTimer starts the transaction timer.
@@ -94,32 +118,45 @@ func (t *Transaction) WriteResult(res TransactionResult) bool {
 		return false
 	}
 
-	t.resultCh <- res
+	written := false
+	t.resultOnce.Do(func() {
+		t.resultCh <- res
+		close(t.resultCh)
+		written = true
+	})
 
-	return true
+	return written
 }
 
 // WaitForResult waits for the transaction result.
-func (t *Transaction) WaitForResult() TransactionResult {
+func (t *Transaction) WaitForResult(ctx context.Context) TransactionResult {
 	if t.resultCh == nil {
 		return TransactionResult{
 			Err: errWaitForResultOnNonResultTransaction,
 		}
 	}
 
-	result, ok := <-t.resultCh
-	if !ok {
-		result.Err = errTransactionClosed
-	}
+	select {
+	case <-ctx.Done():
+		t.Close()
 
-	return result
+		return TransactionResult{Err: ctx.Err()}
+	case result, ok := <-t.resultCh:
+		if !ok {
+			result.Err = errTransactionClosed
+		}
+
+		return result
+	}
 }
 
 // Close closes the transaction.
 func (t *Transaction) Close() {
-	if t.resultCh != nil {
-		close(t.resultCh)
+	if t.resultCh == nil {
+		return
 	}
+
+	t.resultOnce.Do(func() { close(t.resultCh) })
 }
 
 // Retries returns the number of retransmission it has made.

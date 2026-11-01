@@ -29,12 +29,16 @@ var (
 	ErrPort = errors.New("invalid port")
 
 	// ErrLocalUfragInsufficientBits indicates local username fragment insufficient bits are provided.
-	// Have to be at least 24 bits long.
-	ErrLocalUfragInsufficientBits = errors.New("local username fragment is less than 24 bits long")
+	// Have to be at least 4 ice-chars, carrying the 24 bits of randomness RFC 8445 §5.3 requires.
+	ErrLocalUfragInsufficientBits = errors.New(
+		"local username fragment must be at least 4 ice-chars for 24 bits of randomness",
+	)
 
 	// ErrLocalPwdInsufficientBits indicates local password insufficient bits are provided.
-	// Have to be at least 128 bits long.
-	ErrLocalPwdInsufficientBits = errors.New("local password is less than 128 bits long")
+	// Have to be at least 22 ice-chars, carrying the 128 bits of randomness RFC 8445 §5.3 requires.
+	ErrLocalPwdInsufficientBits = errors.New(
+		"local password must be at least 22 ice-chars for 128 bits of randomness",
+	)
 
 	// ErrProtoType indicates an unsupported transport type was provided.
 	ErrProtoType = errors.New("invalid transport protocol type")
@@ -173,14 +177,14 @@ var (
 	ErrAgentOptionNotUpdatable = errors.New("option can only be set during agent construction")
 
 	errAttributeTooShortICECandidate = errors.New("attribute not long enough to be ICE candidate")
+	errCandidatePacketConnNil        = errors.New("candidate packet connection is nil")
+	errDuplicateCandidate            = errors.New("candidate already added")
 	errClosingConnection             = errors.New("failed to close connection")
 	errConnectionAddrAlreadyExist    = errors.New("connection with same remote address already exists")
-	errGetXorMappedAddrResponse      = errors.New("failed to get XOR-MAPPED-ADDRESS response")
 	errInvalidAddress                = errors.New("invalid address")
 	errNoTCPMuxAvailable             = errors.New("no TCP mux is available")
 	errNotImplemented                = errors.New("not implemented yet")
 	errNoUDPMuxAvailable             = errors.New("no UDP mux is available")
-	errNoXorAddrMapping              = errors.New("no address mapping")
 	errParseFoundation               = errors.New("failed to parse foundation")
 	errParseComponent                = errors.New("failed to parse component")
 	errParsePort                     = errors.New("failed to parse port")

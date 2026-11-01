@@ -27,7 +27,10 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		packetChan: make(chan packet),
 		close:      make(chan struct{}),
 		interval:   100 * time.Millisecond,
-		startTime:  time.Now(),
+		now:        time.Now,
+		newTicker: func(d time.Duration) Ticker {
+			return &timeTicker{time.NewTicker(d)}
+		},
 	}
 
 	for _, opt := range s.opts {
@@ -36,6 +39,8 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 			return nil, err
 		}
 	}
+
+	senderInterceptor.startTime = senderInterceptor.now()
 
 	if senderInterceptor.loggerFactory == nil {
 		senderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
@@ -66,6 +71,8 @@ type SenderInterceptor struct {
 
 	interval  time.Duration
 	startTime time.Time
+	now       func() time.Time
+	newTicker TickerFactory
 
 	recorder   *Recorder
 	packetChan chan packet
@@ -88,6 +95,24 @@ func SendInterval(interval time.Duration) Option {
 func WithLoggerFactory(loggerFactory logging.LoggerFactory) Option {
 	return func(s *SenderInterceptor) error {
 		s.loggerFactory = loggerFactory
+
+		return nil
+	}
+}
+
+// SendNow sets an alternative for the time.Now function.
+func SendNow(f func() time.Time) Option {
+	return func(s *SenderInterceptor) error {
+		s.now = f
+
+		return nil
+	}
+}
+
+// SendTicker sets an alternative for the time.NewTicker function.
+func SendTicker(f TickerFactory) Option {
+	return func(s *SenderInterceptor) error {
+		s.newTicker = f
 
 		return nil
 	}
@@ -163,7 +188,7 @@ func (s *SenderInterceptor) BindRemoteStream(
 				p := packet{
 					hdr:            header,
 					sequenceNumber: tccExt.TransportSequence,
-					arrivalTime:    time.Since(s.startTime).Microseconds(),
+					arrivalTime:    s.now().Sub(s.startTime).Microseconds(),
 					ssrc:           info.SSRC,
 				}
 				select {
@@ -210,7 +235,7 @@ func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 		s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime)
 	}
 
-	ticker := time.NewTicker(s.interval)
+	ticker := s.newTicker(s.interval)
 	for {
 		select {
 		case <-s.close:
@@ -220,7 +245,7 @@ func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 		case p := <-s.packetChan:
 			s.recorder.Record(p.ssrc, p.sequenceNumber, p.arrivalTime)
 
-		case <-ticker.C:
+		case <-ticker.Ch():
 			// build and send twcc
 			pkts := s.recorder.BuildFeedbackPacket()
 			if len(pkts) == 0 {

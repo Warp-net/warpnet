@@ -129,7 +129,7 @@ func (pl *Pool) UnmarshalBinary(bin []byte) error {
 
 			data := bin[offset : offset+nbytes]
 			if x := uint8(bin[offset+nbytes]); x != 0 {
-				return fmt.Errorf("expected zero terminator, got 0x%02X for nchars=%v nbytes=%v data=%q", x, nchars, nbytes, data)
+				return fmt.Errorf("expected zero terminator, got 0x%02X for nchars=%v nbytes=%v data=%v", x, nchars, nbytes, data)
 			}
 			pl.strings[i] = string(data)
 		}
@@ -153,7 +153,7 @@ func (pl *Pool) UnmarshalBinary(bin []byte) error {
 			}
 
 			if x := btou16(bin[offset+nchars*2:]); x != 0 {
-				return fmt.Errorf("expected zero terminator, got 0x%04X for nchars=%v data=%q", x, nchars, data)
+				return fmt.Errorf("expected zero terminator, got 0x%04X for nchars=%v data=%v", x, nchars, data)
 			}
 			pl.strings[i] = string(utf16.Decode(data))
 		}

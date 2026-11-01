@@ -16,30 +16,35 @@ import (
 var (
 	// DefaultInteractiveSelect is the default InteractiveSelect printer.
 	DefaultInteractiveSelect = InteractiveSelectPrinter{
-		TextStyle:     &ThemeDefault.PrimaryStyle,
-		DefaultText:   "Please select an option",
-		Options:       []string{},
-		OptionStyle:   &ThemeDefault.DefaultText,
-		DefaultOption: "",
-		MaxHeight:     5,
-		Selector:      ">",
-		SelectorStyle: &ThemeDefault.SecondaryStyle,
-		Filter:        true,
+		TextStyle:              &ThemeDefault.PrimaryStyle,
+		DefaultText:            "Please select an option",
+		Options:                []string{},
+		OptionStyle:            &ThemeDefault.DefaultText,
+		DefaultOption:          "",
+		MaxHeight:              5,
+		Selector:               "❯",
+		SelectorStyle:          &ThemeDefault.SecondaryStyle,
+		Filter:                 true,
+		FilterInputPlaceholder: "[type to search]",
 	}
 )
 
 // InteractiveSelectPrinter is a printer for interactive select menus.
 type InteractiveSelectPrinter struct {
-	TextStyle       *Style
-	DefaultText     string
-	Options         []string
-	OptionStyle     *Style
-	DefaultOption   string
-	MaxHeight       int
-	Selector        string
-	SelectorStyle   *Style
-	OnInterruptFunc func()
-	Filter          bool
+	TextStyle   *Style
+	DefaultText string
+	Options     []string
+	OptionStyle *Style
+	// SelectedOptionStyle styles the highlighted option. When nil, OptionStyle
+	// is used.
+	SelectedOptionStyle    *Style
+	DefaultOption          string
+	MaxHeight              int
+	Selector               string
+	SelectorStyle          *Style
+	OnInterruptFunc        func()
+	Filter                 bool
+	FilterInputPlaceholder string
 
 	selectedOption        int
 	result                string
@@ -75,7 +80,7 @@ func (p InteractiveSelectPrinter) WithMaxHeight(maxHeight int) *InteractiveSelec
 	return &p
 }
 
-// OnInterrupt sets the function to execute on exit of the input reader
+// WithOnInterruptFunc sets the function to execute on exit of the input reader.
 func (p InteractiveSelectPrinter) WithOnInterruptFunc(exitFunc func()) *InteractiveSelectPrinter {
 	p.OnInterruptFunc = exitFunc
 	return &p
@@ -84,6 +89,18 @@ func (p InteractiveSelectPrinter) WithOnInterruptFunc(exitFunc func()) *Interact
 // WithFilter sets the Filter option
 func (p InteractiveSelectPrinter) WithFilter(b ...bool) *InteractiveSelectPrinter {
 	p.Filter = internal.WithBoolean(b)
+	return &p
+}
+
+// WithSelectedOptionStyle sets the style of the highlighted option.
+func (p InteractiveSelectPrinter) WithSelectedOptionStyle(style *Style) *InteractiveSelectPrinter {
+	p.SelectedOptionStyle = style
+	return &p
+}
+
+// WithFilterInputPlaceholder sets the filter input placeholder text.
+func (p InteractiveSelectPrinter) WithFilterInputPlaceholder(text string) *InteractiveSelectPrinter {
+	p.FilterInputPlaceholder = text
 	return &p
 }
 
@@ -105,10 +122,7 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 		p.MaxHeight = DefaultInteractiveSelect.MaxHeight
 	}
 
-	maxHeight := p.MaxHeight
-	if maxHeight > len(p.fuzzySearchMatches) {
-		maxHeight = len(p.fuzzySearchMatches)
-	}
+	maxHeight := min(p.MaxHeight, len(p.fuzzySearchMatches))
 
 	if len(p.Options) == 0 {
 		return "", fmt.Errorf("no options provided")
@@ -130,14 +144,18 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 					p.displayedOptionsStart = 0
 					p.displayedOptionsEnd = maxHeight
 				}
+
 				p.displayedOptions = p.Options[p.displayedOptionsStart:p.displayedOptionsEnd]
+
 				break
 			}
 		}
 	}
 
 	area, err := DefaultArea.Start(p.renderSelectMenu())
-	defer area.Stop()
+
+	defer func() { _ = area.Stop() }()
+
 	if err != nil {
 		return "", fmt.Errorf("could not start area: %w", err)
 	}
@@ -145,16 +163,13 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 	area.Update(p.renderSelectMenu())
 
 	cursor.Hide()
+
 	defer cursor.Show()
 
 	err = keyboard.Listen(func(keyInfo keys.Key) (stop bool, err error) {
 		key := keyInfo.Code
 
-		if p.MaxHeight > len(p.fuzzySearchMatches) {
-			maxHeight = len(p.fuzzySearchMatches)
-		} else {
-			maxHeight = p.MaxHeight
-		}
+		maxHeight = min(p.MaxHeight, len(p.fuzzySearchMatches))
 
 		switch key {
 		case keys.RuneKey:
@@ -168,10 +183,14 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 				p.displayedOptions = append([]string{}, p.fuzzySearchMatches[:maxHeight]...)
 				area.Update(p.renderSelectMenu())
 			}
+
 		case keys.Space:
-			p.fuzzySearchString += " "
-			p.selectedOption = 0
-			area.Update(p.renderSelectMenu())
+			if p.Filter {
+				p.fuzzySearchString += " "
+				p.selectedOption = 0
+				area.Update(p.renderSelectMenu())
+			}
+
 		case keys.Backspace:
 			// Remove last character from fuzzy search string
 			if p.fuzzySearchString != "" {
@@ -185,11 +204,7 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 
 			p.renderSelectMenu()
 
-			if len(p.fuzzySearchMatches) > p.MaxHeight {
-				maxHeight = p.MaxHeight
-			} else {
-				maxHeight = len(p.fuzzySearchMatches)
-			}
+			maxHeight = min(len(p.fuzzySearchMatches), p.MaxHeight)
 
 			p.selectedOption = 0
 			p.displayedOptionsStart = 0
@@ -197,19 +212,23 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 			p.displayedOptions = append([]string{}, p.fuzzySearchMatches[p.displayedOptionsStart:p.displayedOptionsEnd]...)
 
 			area.Update(p.renderSelectMenu())
+
 		case keys.Up, keys.CtrlP:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
+
 			if p.selectedOption > 0 {
 				p.selectedOption--
 				if p.selectedOption < p.displayedOptionsStart {
 					p.displayedOptionsStart--
+
 					p.displayedOptionsEnd--
 					if p.displayedOptionsStart < 0 {
 						p.displayedOptionsStart = 0
 						p.displayedOptionsEnd = maxHeight
 					}
+
 					p.displayedOptions = append([]string{}, p.fuzzySearchMatches[p.displayedOptionsStart:p.displayedOptionsEnd]...)
 				}
 			} else {
@@ -220,10 +239,12 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 			}
 
 			area.Update(p.renderSelectMenu())
+
 		case keys.Down, keys.CtrlN:
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
+
 			p.displayedOptions = p.fuzzySearchMatches[:maxHeight]
 			if p.selectedOption < len(p.fuzzySearchMatches)-1 {
 				p.selectedOption++
@@ -240,6 +261,7 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 			}
 
 			area.Update(p.renderSelectMenu())
+
 		case keys.CtrlC:
 			cancel()
 			return true, nil
@@ -247,7 +269,9 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 			if len(p.fuzzySearchMatches) == 0 {
 				return false, nil
 			}
+
 			area.Update(p.renderFinishedMenu())
+
 			return true, nil
 		}
 
@@ -261,10 +285,18 @@ func (p *InteractiveSelectPrinter) Show(text ...string) (string, error) {
 	return p.result, nil
 }
 
+func (p *InteractiveSelectPrinter) selectedOptionStyle() *Style {
+	if p.SelectedOptionStyle == nil {
+		return p.OptionStyle
+	}
+
+	return p.SelectedOptionStyle
+}
+
 func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 	var content strings.Builder
 	if p.Filter {
-		content.WriteString(Sprintf("%s %s: %s\n", p.text, p.SelectorStyle.Sprint("[type to search]"), p.fuzzySearchString))
+		content.WriteString(Sprintf("%s %s: %s\n", p.text, p.SelectorStyle.Sprint(p.FilterInputPlaceholder), p.fuzzySearchString))
 	} else {
 		content.WriteString(Sprintf("%s:\n", p.text))
 	}
@@ -276,6 +308,7 @@ func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 	if len(rankedResults) != len(p.Options) {
 		sort.Sort(rankedResults)
 	}
+
 	for _, result := range rankedResults {
 		p.fuzzySearchMatches = append(p.fuzzySearchMatches, result.Target)
 	}
@@ -296,8 +329,9 @@ func (p *InteractiveSelectPrinter) renderSelectMenu() string {
 		if option == "" {
 			continue
 		}
+
 		if i == p.selectedOption {
-			content.WriteString(Sprintf("%s %s\n", p.renderSelector(), p.OptionStyle.Sprint(option)))
+			content.WriteString(Sprintf("%s %s\n", p.renderSelector(), p.selectedOptionStyle().Sprint(option)))
 		} else {
 			content.WriteString(Sprintf("  %s\n", p.OptionStyle.Sprint(option)))
 		}

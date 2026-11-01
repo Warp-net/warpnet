@@ -7,6 +7,7 @@
 package ghw
 
 import (
+	"github.com/jaypipes/ghw/internal/config"
 	"github.com/jaypipes/ghw/pkg/accelerator"
 	"github.com/jaypipes/ghw/pkg/baseboard"
 	"github.com/jaypipes/ghw/pkg/bios"
@@ -21,24 +22,31 @@ import (
 	pciaddress "github.com/jaypipes/ghw/pkg/pci/address"
 	"github.com/jaypipes/ghw/pkg/product"
 	"github.com/jaypipes/ghw/pkg/topology"
+	"github.com/jaypipes/ghw/pkg/tpm"
 	"github.com/jaypipes/ghw/pkg/usb"
+	"github.com/jaypipes/ghw/pkg/watchdog"
 )
-
-// DEPRECATED: Please use Option
-type WithOption = option.Option
-type Option = option.Option
 
 var (
-	WithChroot      = option.WithChroot
-	WithAlerter     = option.WithAlerter
-	WithNullAlerter = option.WithNullAlerter
-	// match the existing environ variable to minimize surprises
-	WithDisableWarnings = option.WithNullAlerter
-	WithDisableTools    = option.WithDisableTools
-	WithPathOverrides   = option.WithPathOverrides
+	ContextFromEnv = config.ContextFromEnv
+
+	WithChroot = config.WithChroot
+	// DEPRECATED: Please use WithLogger
+	WithAlerter = option.WithAlerter
+	// DEPRECATED: Please use WithDisableWarnings
+	WithNullAlerter     = option.WithNullAlerter
+	WithDisableWarnings = config.WithDisableWarnings
+	WithDisableTools    = config.WithDisableTools
+	WithDisableTopology = config.WithDisableTopology
+	WithPathOverrides   = config.WithPathOverrides
+	WithLogLevel        = config.WithLogLevel
+	WithDebug           = config.WithDebug
+	WithLogger          = config.WithLogger
 )
 
-type PathOverrides = option.PathOverrides
+type Modifier = config.Modifier
+
+type PathOverrides map[string]string
 
 type CPUInfo = cpu.Info
 
@@ -194,4 +202,17 @@ type AcceleratorDevice = accelerator.AcceleratorDevice
 
 var (
 	Accelerator = accelerator.New
+)
+
+type WatchdogInfo = watchdog.Info
+
+var (
+	Watchdog = watchdog.New
+)
+
+type TPMInfo = tpm.Info
+type TPMDevice = tpm.Device
+
+var (
+	TPM = tpm.New
 )

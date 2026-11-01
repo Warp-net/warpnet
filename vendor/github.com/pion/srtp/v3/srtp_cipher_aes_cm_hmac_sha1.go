@@ -37,6 +37,10 @@ type srtpCipherAesCmHmacSha1 struct {
 	rtcpAuthBuf [sha1.Size]byte
 }
 
+func (s *srtpCipherAesCmHmacSha1) setCryptex(useCryptex bool) {
+	s.useCryptex = useCryptex
+}
+
 //nolint:cyclop
 func newSrtpCipherAesCmHmacSha1(
 	profile protectionProfileWithArgs,

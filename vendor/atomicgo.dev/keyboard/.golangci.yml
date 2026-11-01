@@ -1,71 +1,68 @@
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-      - exitAfterDefer
-      - hugeParam
-      - ptrToRefParam
-      - paramTypeCombine
-      - unnamedResult
-  misspell:
-    locale: US
+# ! ┌───────────────────────────────────────────────────────────────────┐
+# ! │                                                                   │
+# ! │                          IMPORTANT NOTE                           │
+# ! │                                                                   │
+# ! │   This file is synced with https://github.com/atomicgo/template   │
+# ! │                                                                   │
+# ! │        Please apply all changes to the template repository        │
+# ! │                                                                   │
+# ! └───────────────────────────────────────────────────────────────────┘
+
+version: "2"
+
+run:
+  timeout: 3m
+
 linters:
-  disable-all: true
+  default: standard
+
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - asciicheck
+    # Correctness and bug finding
     - bodyclose
-    - dupl
     - durationcheck
+    - errchkjson
     - errorlint
-    - exhaustive
-    - gci
-    - gocognit
+    - gosec
+    - nilerr
+    - nilnesserr
+    - wastedassign
+
+    # Maintainability and common hygiene
+    - asasalint
+    - bidichk
     - gocritic
-    - godot
-    - godox
-    - goerr113
+    - makezero
+    - misspell
+    - nolintlint
+    - prealloc
+    - reassign
+    - revive
+    - unconvert
+    - usestdlibvars
+    - whitespace
+    - wsl_v5
+
+  settings:
+    govet:
+      enable:
+        - shadow
+
+    wsl_v5:
+      case-max-lines: 3
+      default: default
+      disable:
+        - decl
+
+  exclusions:
+    generated: strict
+    paths:
+      - '(^|/)examples_test\.go$'
+    rules:
+      - path: "_test(_[^/]+)?\\.go"
+        linters:
+          - errcheck
+
+formatters:
+  enable:
     - gofmt
     - goimports
-    - goprintffuncname
-    - misspell
-    - nilerr
-    - nlreturn
-    - noctx
-    - prealloc
-    - predeclared
-    - thelper
-    - unconvert
-    - unparam
-    - wastedassign
-    - wrapcheck
-issues:
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - dupl
-        - gocritic
-        - wrapcheck
-        - goerr113
-    # https://github.com/go-critic/go-critic/issues/926
-    - linters:
-        - gocritic
-      text: "unnecessaryDefer:"
-service:
-  golangci-lint-version: 1.39.x # use the fixed version to not introduce new linters unexpectedly

@@ -12,9 +12,9 @@ import (
 var DefaultTable = TablePrinter{
 	Style:                   &ThemeDefault.TableStyle,
 	HeaderStyle:             &ThemeDefault.TableHeaderStyle,
-	HeaderRowSeparator:      "",
+	HeaderRowSeparator:      "─",
 	HeaderRowSeparatorStyle: &ThemeDefault.TableSeparatorStyle,
-	Separator:               " | ",
+	Separator:               " │ ",
 	SeparatorStyle:          &ThemeDefault.TableSeparatorStyle,
 	RowSeparator:            "",
 	RowSeparatorStyle:       &ThemeDefault.TableSeparatorStyle,
@@ -37,11 +37,19 @@ type TablePrinter struct {
 	RowSeparator            string
 	RowSeparatorStyle       *Style
 	Data                    TableData
-	Boxed                   bool
-	LeftAlignment           bool
-	RightAlignment          bool
-	Writer                  io.Writer
-	AlternateRowStyle       *Style
+	// ColumnMinWidths sets a minimum display width per column, indexed from the
+	// left. A column is still widened to fit its content, but never rendered
+	// narrower than its minimum. Columns without an entry (or with a zero or
+	// negative minimum) keep the default content-based width.
+	ColumnMinWidths []int
+	Boxed           bool
+	// BoxPrinter draws the box around the table when Boxed is set. The zero
+	// value uses DefaultBox.
+	BoxPrinter        BoxPrinter
+	LeftAlignment     bool
+	RightAlignment    bool
+	Writer            io.Writer
+	AlternateRowStyle *Style
 }
 
 // WithStyle returns a new TablePrinter with a specific Style.
@@ -104,11 +112,31 @@ func (p TablePrinter) WithData(data [][]string) *TablePrinter {
 	return &p
 }
 
+// WithColumnMinWidths returns a new TablePrinter with a minimum display width
+// set for each column, indexed from the left. A column is still widened to fit
+// its content, but never rendered narrower than its minimum. Passing the same
+// widths to several tables keeps their columns aligned even when their content
+// differs.
+func (p TablePrinter) WithColumnMinWidths(widths ...int) *TablePrinter {
+	p.ColumnMinWidths = widths
+	return &p
+}
+
 // WithCSVReader returns a new TablePrinter with specified Data extracted from CSV.
 func (p TablePrinter) WithCSVReader(reader *csv.Reader) *TablePrinter {
 	if records, err := reader.ReadAll(); err == nil {
 		p.Data = records
 	}
+
+	return &p
+}
+
+// WithBoxPrinter returns a new TablePrinter that draws its box with the given
+// BoxPrinter. It also enables Boxed; WithBoxed(false) turns the box off again.
+func (p TablePrinter) WithBoxPrinter(boxPrinter BoxPrinter) *TablePrinter {
+	p.BoxPrinter = boxPrinter
+	p.Boxed = true
+
 	return &p
 }
 
@@ -123,6 +151,7 @@ func (p TablePrinter) WithLeftAlignment(b ...bool) *TablePrinter {
 	b2 := internal.WithBoolean(b)
 	p.LeftAlignment = b2
 	p.RightAlignment = false
+
 	return &p
 }
 
@@ -131,6 +160,7 @@ func (p TablePrinter) WithRightAlignment(b ...bool) *TablePrinter {
 	b2 := internal.WithBoolean(b)
 	p.LeftAlignment = false
 	p.RightAlignment = b2
+
 	return &p
 }
 
@@ -167,15 +197,19 @@ func (p TablePrinter) Srender() (string, error) {
 	if p.Style == nil {
 		p.Style = NewStyle()
 	}
+
 	if p.SeparatorStyle == nil {
 		p.SeparatorStyle = NewStyle()
 	}
+
 	if p.HeaderStyle == nil {
 		p.HeaderStyle = NewStyle()
 	}
+
 	if p.HeaderRowSeparatorStyle == nil {
 		p.HeaderRowSeparatorStyle = NewStyle()
 	}
+
 	if p.RowSeparatorStyle == nil {
 		p.RowSeparatorStyle = NewStyle()
 	}
@@ -185,15 +219,18 @@ func (p TablePrinter) Srender() (string, error) {
 	// convert data to table and calculate values
 	for _, rRaw := range p.Data {
 		var r row
+
 		for _, cRaw := range rRaw {
 			var c cell
 			c.lines = strings.Split(cRaw, "\n")
+
 			c.height = len(c.lines)
 			for _, l := range c.lines {
 				if maxWidth := internal.GetStringMaxWidth(l); maxWidth > c.width {
 					c.width = maxWidth
 				}
 			}
+
 			r.cells = append(r.cells, c)
 			if c.height > r.height {
 				r.height = c.height
@@ -212,33 +249,44 @@ func (p TablePrinter) Srender() (string, error) {
 		t.rows = append(t.rows, r)
 	}
 
-	var maxRowWidth int
-	for _, r := range t.rows {
-		rowWidth := internal.GetStringMaxWidth(p.renderRow(t, r))
-		if rowWidth > maxRowWidth {
-			maxRowWidth = rowWidth
+	// Widen any column that is narrower than its configured minimum. Content
+	// still wins when it is wider, so this only ever grows a column.
+	for i := range t.maxColumnWidths {
+		if i < len(p.ColumnMinWidths) && p.ColumnMinWidths[i] > t.maxColumnWidths[i] {
+			t.maxColumnWidths[i] = p.ColumnMinWidths[i]
 		}
+	}
+
+	// Render every row once and reuse the result for measuring and output.
+	renderedRows := make([]string, len(t.rows))
+
+	var maxRowWidth int
+
+	for i, r := range t.rows {
+		renderedRows[i] = p.renderRow(t, r)
+		maxRowWidth = max(maxRowWidth, internal.GetStringMaxWidth(renderedRows[i]))
 	}
 
 	// render table
 	var ret strings.Builder
 
-	for i, r := range t.rows {
+	for i, renderedRow := range renderedRows {
 		if i == 0 && p.HasHeader {
-			ret.WriteString(p.HeaderStyle.Sprint(p.renderRow(t, r)))
+			ret.WriteString(p.HeaderStyle.Sprint(renderedRow))
 
 			if p.HeaderRowSeparator != "" {
 				ret.WriteString(strings.Repeat(p.HeaderRowSeparatorStyle.Sprint(p.HeaderRowSeparator), maxRowWidth))
 				ret.WriteByte('\n')
 			}
+
 			continue
 		}
 
 		// Apply AlternateRowStyle if needed
 		if i%2 == 1 && p.AlternateRowStyle != nil {
-			ret.WriteString(p.AlternateRowStyle.Sprint(p.renderRow(t, r)))
+			ret.WriteString(p.AlternateRowStyle.Sprint(renderedRow))
 		} else {
-			ret.WriteString(p.renderRow(t, r))
+			ret.WriteString(renderedRow)
 		}
 
 		if p.RowSeparator != "" && i < len(t.rows)-1 {
@@ -247,7 +295,12 @@ func (p TablePrinter) Srender() (string, error) {
 	}
 
 	if p.Boxed {
-		return DefaultBox.Sprint(strings.TrimSuffix(ret.String(), "\n")), nil
+		box := p.BoxPrinter
+		if box == (BoxPrinter{}) {
+			box = DefaultBox
+		}
+
+		return box.Sprint(strings.TrimSuffix(ret.String(), "\n")), nil
 	}
 
 	return ret.String(), nil
@@ -257,7 +310,7 @@ func (p TablePrinter) Srender() (string, error) {
 // It merges the cells of a row into one string.
 // Each line of each cell is merged with the same line of the other cells.
 func (p TablePrinter) renderRow(t table, r row) string {
-	var s string
+	var s strings.Builder
 
 	// Merge lines of cells and add separator
 	// Use t.maxColumnWidths to add padding to corresponding cell
@@ -268,38 +321,45 @@ func (p TablePrinter) renderRow(t table, r row) string {
 			if i < len(c.lines) {
 				currentLine = c.lines[i]
 			}
+
 			paddingForLine := t.maxColumnWidths[j] - internal.GetStringMaxWidth(currentLine)
 
 			// Add right alignment if necessary
 			if p.RightAlignment {
-				s += strings.Repeat(" ", paddingForLine)
+				s.WriteString(strings.Repeat(" ", paddingForLine))
 			}
 
 			// Add line content
 			if i < len(c.lines) {
-				s += c.lines[i]
+				s.WriteString(c.lines[i])
 			}
 
 			// Add padding for left alignment, except for last column
 			if j < len(r.cells)-1 {
 				if p.LeftAlignment {
-					s += strings.Repeat(" ", paddingForLine)
+					s.WriteString(strings.Repeat(" ", paddingForLine))
 				}
-				s += p.SeparatorStyle.Sprint(p.Separator)
+
+				s.WriteString(p.SeparatorStyle.Sprint(p.Separator))
 			} else if p.LeftAlignment {
 				// Add padding after last column
-				s += strings.Repeat(" ", paddingForLine)
+				s.WriteString(strings.Repeat(" ", paddingForLine))
 			}
 		}
-		s += "\n"
+
+		s.WriteString("\n")
 	}
 
-	return s
+	return s.String()
 }
 
 // Render prints the TablePrinter to the terminal.
 func (p TablePrinter) Render() error {
-	s, _ := p.Srender()
+	s, err := p.Srender()
+	if err != nil {
+		return err
+	}
+
 	Fprintln(p.Writer, s)
 
 	return nil

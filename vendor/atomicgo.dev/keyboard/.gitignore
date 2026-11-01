@@ -1,33 +1,38 @@
-### Go template
-# Binaries for programs and plugins
+# ! ┌───────────────────────────────────────────────────────────────────┐
+# ! │                                                                   │
+# ! │                          IMPORTANT NOTE                           │
+# ! │                                                                   │
+# ! │   This file is synced with https://github.com/atomicgo/template   │
+# ! │                                                                   │
+# ! │        Please apply all changes to the template repository        │
+# ! │                                                                   │
+# ! └───────────────────────────────────────────────────────────────────┘
+
+# Build artifacts and binaries
 *.exe
 *.exe~
-*.dll
 *.so
-*.dylib
-
-# Test binary, built with `go test -c`
 *.test
+.templates/
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Coverage
 *.out
 
-# Dependency directories (remove the comment below to include it)
+# Dependencies
 vendor/
 
-### IntelliJ
-.idea
-*.iml
-out
-gen
-
-### VisualStudioCode
-.vscode
+# Editors and IDEs
 *.code-workspace
+*.iml
+.cursor
+.idea
+.vscode
+gen
+out
 
-### macOS
-# General
+# Operating system files
 .DS_Store
 
-# Experimenting folder
+# Project-specific files
+.task
 experimenting

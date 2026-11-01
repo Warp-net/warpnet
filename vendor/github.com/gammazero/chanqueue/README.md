@@ -1,8 +1,7 @@
 # chanqueue
 [![GoDoc](https://pkg.go.dev/badge/github.com/gammazero/chanqueue)](https://pkg.go.dev/github.com/gammazero/chanqueue)
 [![Build Status](https://github.com/gammazero/chanqueue/actions/workflows/go.yml/badge.svg)](https://github.com/gammazero/chanqueue/actions/workflows/go.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gammazero/chanqueue)](https://goreportcard.com/report/github.com/gammazero/chanqueue)
-[![codecov](https://codecov.io/gh/gammazero/chanqueue/branch/master/graph/badge.svg)](https://codecov.io/gh/gammazero/chanqueue)
+[![codecov](https://codecov.io/gh/gammazero/chanqueue/graph/badge.svg?token=P8FWN4K0ZP)](https://codecov.io/gh/gammazero/chanqueue)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > Concurrently access a dynamic queue using channels.
@@ -40,13 +39,13 @@ cq := chanqueue.New[int]()
 result := make(chan int)
 
 // Start consumer.
-go func(r <-chan int) {
+go func() {
     var sum int
-    for i := range r {
+    for i := range cq.Out() {
         sum += i
     }
     result <- sum
-}(cq.Out())
+}()
 
 // Write numbers to queue.
 for i := 1; i <= 10; i++ {

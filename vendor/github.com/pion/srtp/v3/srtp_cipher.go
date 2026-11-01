@@ -22,6 +22,7 @@ type srtpCipher interface {
 
 	decryptRTP([]byte, []byte, *rtp.Header, int, uint32, bool) ([]byte, error)
 	decryptRTCP([]byte, []byte, uint32, uint32) ([]byte, error)
+	setCryptex(bool)
 }
 
 /*
