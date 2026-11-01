@@ -57,9 +57,10 @@ import (
 const (
 	orderNonceSize    = 16
 	dailyOrdersWindow = 24 * time.Hour
-	// A payment sent this long ago has landed or never will: its transaction
-	// expires a minute after it is signed.
-	paymentLifetime = 3 * time.Minute
+	// A payment sent this long ago has landed or never will: the engine sends
+	// nothing after its deadline, and a transaction expires a minute after it
+	// is signed.
+	paymentLifetime = wallet.PayTimeout + 2*time.Minute
 
 	ErrChainUnavailable warpnet.WarpError = "order: the TRON network cannot be reached, nothing was paid; try again later"
 	ErrPaymentUnknown   warpnet.WarpError = "order: the payment got no answer and may have gone through, so nothing is sent again before the chain is checked; try again in a few minutes"

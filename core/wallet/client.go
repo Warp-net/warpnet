@@ -54,6 +54,8 @@ import (
 const (
 	requestTimeout = 90 * time.Second
 	engineTimeout  = 75 * time.Second
+	PayTimeout     = 4 * time.Minute
+	payAnswerWait  = PayTimeout + 2*time.Minute
 	maxLineSize    = 1 << 20
 	tokenSymbol    = "USDT"
 	NativeCoin     = "TRX"
@@ -569,7 +571,12 @@ func (c *Client) invoke(ctx context.Context, method string, params, out any) err
 		c.forget(id)
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	timer := time.NewTimer(requestTimeout)
+	wait := requestTimeout
+	if method == "wallet.pay" {
+		// A payment sends until its deadline and then waits for its receipt.
+		wait = payAnswerWait
+	}
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -673,7 +680,7 @@ func (c *Client) Transfer(ctx context.Context, seed, asset, to, amount string) (
 		Tx string `json:"tx"`
 	}
 	asset = c.assetOr(asset)
-	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, paramAmount: amount, paramDeadline: deadline()}
+	params := map[string]any{paramNetwork: c.cfg.Network, paramSeed: seed, paramToken: asset, "to": to, paramAmount: amount, paramDeadline: deadline(engineTimeout)}
 	if err := c.call(ctx, "wallet.transfer", params, &out); err != nil {
 		// A transfer whose answer was lost may still be on chain; its id is what
 		// keeps the owner from sending the same money twice.
@@ -866,7 +873,7 @@ func payParams(network, seed string, s Sponsorship) map[string]any {
 		paramOrderId:  s.OrderId,
 		"author":      s.Author,
 		paramAmount:   s.Amount,
-		paramDeadline: deadline(),
+		paramDeadline: deadline(PayTimeout),
 	}
 	if s.MaxFeePercent > 0 {
 		params["max_fee_percent"] = s.MaxFeePercent
@@ -877,8 +884,8 @@ func payParams(network, seed string, s Sponsorship) map[string]any {
 	return params
 }
 
-// deadline is when this node stops waiting for the engine: after it the engine
-// sends nothing, so a payment cannot go out once its caller has given up on it.
-func deadline() int64 {
-	return time.Now().Add(engineTimeout).UnixMilli()
+// deadline is d from now: after it the engine sends nothing, so a payment
+// cannot go out once this node has given up waiting for it.
+func deadline(d time.Duration) int64 {
+	return time.Now().Add(d).UnixMilli()
 }

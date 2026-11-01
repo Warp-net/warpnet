@@ -440,8 +440,11 @@ func TestPayParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 		t.Fatalf("wallet.pay was sent something it does not define: %v", params)
 	}
 	deadline := time.UnixMilli(params["deadline"].(int64))
-	if until := time.Until(deadline); until <= 0 || until > requestTimeout {
+	if until := time.Until(deadline); until <= 0 || until > PayTimeout {
 		t.Fatalf("deadline in %v: the engine must give up before this node does", until)
+	}
+	if payAnswerWait < PayTimeout+90*time.Second {
+		t.Fatalf("this node waits %v for a payment the engine may send until %v and then wait 90s for", payAnswerWait, PayTimeout)
 	}
 
 	sponsorship.MaxTotal = "1050000"
