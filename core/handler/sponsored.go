@@ -170,15 +170,18 @@ func StreamNewOrderHandler(
 			return nil, err
 		}
 
+		recheck := func(order domain.Order) error { return recheckAuthor(streamer, author, backend.Network(), order) }
 		order, err := orders.Get(ev.TweetId, owner.UserId)
 		if errors.Is(err, database.ErrOrderNotFound) {
+			// Opening asks the author's node to check the buyer, so paying now needs no second ask.
+			recheck = nil
 			order, err = openOrder(owner, identityKey, backend, orders, streamer, author, ev)
 		}
 		if err != nil {
 			return nil, err
 		}
 		if !order.Confirmed {
-			if order, err = settleOrder(owner, identityKey, backend, orders, order, ev.Amount); err != nil {
+			if order, err = settleOrder(owner, identityKey, backend, orders, order, ev.Amount, recheck); err != nil {
 				return nil, err
 			}
 			claimed, err := claimOrder(orders, streamer, author, order)
@@ -264,7 +267,7 @@ func sameUnits(a, b string) bool {
 // splitter whether the order is paid and adopts the transaction that paid it,
 // and pays only when the order is unpaid and no earlier payment of it can still
 // land. Every attempt pays under the order's own id, which the splitter will not
-// let the same wallet pay twice.
+// let the same wallet pay twice. recheck, when set, runs right before paying.
 func settleOrder(
 	owner domain.Owner,
 	identityKey ed25519.PrivateKey,
@@ -272,6 +275,7 @@ func settleOrder(
 	orders OrderStorer,
 	order domain.Order,
 	amount string,
+	recheck func(domain.Order) error,
 ) (domain.Order, error) {
 	if order.Splitter == "" {
 		// Opened before orders kept what they pay, on a splitter that records nothing.
@@ -307,11 +311,30 @@ func settleOrder(
 		}
 		return order, nil
 	}
+	if recheck != nil {
+		if err := recheck(order); err != nil {
+			return order, err
+		}
+	}
 	seed, err := wallet.DeriveSeed(owner, identityKey, backend.Network())
 	if err != nil {
 		return order, err
 	}
 	return payOrder(ctx, backend, orders, seed, order, sponsorship)
+}
+
+// recheckAuthor asks the author's node, right before an order opened earlier is
+// paid, whether it still takes the payment: its hourly limit, stake rule or
+// wallet may have changed since, and a payment it would now refuse is lost.
+func recheckAuthor(streamer SponsoredStreamer, author domain.User, network string, order domain.Order) error {
+	address, splitter, err := authorAddress(streamer, author, network, order.Payer)
+	if err != nil {
+		return err
+	}
+	if address != order.AuthorAddress || splitter != order.Splitter {
+		return warpnet.WarpError("order: the author's wallet changed since this order was opened; nothing was paid")
+	}
+	return nil
 }
 
 // payOrder sends an order's payment and records what came of it. The attempt is

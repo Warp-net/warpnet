@@ -529,6 +529,63 @@ func TestStreamNewOrderHandler(t *testing.T) {
 		assert.Empty(t, orders)
 	})
 
+	t.Run("a new order asks the author's node about the buyer once", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
+		asks := 0
+		counting := stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			if path == event.PUBLIC_GET_WALLET_ADDRESS {
+				asks++
+			}
+			return authorNode(t, confirm).GenericStream(nodeId, path, data)
+		}}
+		_, err := newHandler(w, stubOrders{}, counting)(order, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 1, asks)
+	})
+
+	// reopened opens an order whose first payment can no longer land, so the next
+	// attempt pays again unless something stops it.
+	reopened := func(t *testing.T, w *stubSponsoredWallet) stubOrders {
+		orders := stubOrders{}
+		_, err := newHandler(w, orders, authorNode(t, pending))(order, nil)
+		require.NoError(t, err)
+		require.Len(t, w.pays, 1)
+		expired := orders["tweet-1/buyer-1"]
+		expired.SentAt = time.Now().Add(-paymentLifetime - time.Second)
+		orders["tweet-1/buyer-1"] = expired
+		return orders
+	}
+	answering := func(t *testing.T, address func() ([]byte, error)) stubStreamer {
+		return stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			if path == event.PUBLIC_GET_WALLET_ADDRESS {
+				return address()
+			}
+			return authorNode(t, pending).GenericStream(nodeId, path, data)
+		}}
+	}
+
+	t.Run("an order opened earlier is checked with the author again before it is paid", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
+		orders := reopened(t, w)
+		limited := answering(t, func() ([]byte, error) {
+			return json.Marshal(event.ResponseError{Code: 500, Message: ErrOrderLimit.Error()})
+		})
+		_, err := newHandler(w, orders, limited)(order, nil)
+		assert.EqualError(t, err, ErrOrderLimit.Error(), "the buyer reached the author's limit since the order was opened")
+		assert.Len(t, w.pays, 1, "the payment the author would refuse is never sent")
+	})
+
+	t.Run("an order opened earlier is not paid to a wallet the author left", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
+		orders := reopened(t, w)
+		moved := answering(t, func() ([]byte, error) {
+			return json.Marshal(event.WalletAddressResponse{Address: "TNewAuthorAddress", Chain: "testnet", UserId: "author-1", Splitter: "TSplitter"})
+		})
+		_, err := newHandler(w, orders, moved)(order, nil)
+		assert.EqualError(t, err, "order: the author's wallet changed since this order was opened; nothing was paid")
+		assert.Len(t, w.pays, 1)
+	})
+
 	t.Run("a price other than the one the buyer agreed to is never paid", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter", payTx: "tx-1"}
 		orders := stubOrders{}
