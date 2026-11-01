@@ -16,6 +16,16 @@
       <div class="p-5 flex flex-col gap-5">
         <p v-if="loadError" class="text-red-700 bg-red-100 rounded-lg px-4 py-3">{{ loadError }}</p>
 
+        <div role="note" class="bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-lg px-4 py-3 text-sm flex items-start">
+          <i class="fas fa-exclamation-triangle mt-1 mr-2" aria-hidden="true"></i>
+          <p>
+            <b>Keep only small amounts here.</b> This wallet is for small payments between Warpnet members
+            and for paying for sponsored tweets, not for savings or large sums. Its key lives in your Warpnet node,
+            so anyone who breaks into the node or this device can spend everything in it. Keep larger amounts
+            in a wallet of your own. Warpnet and its developers are not liable for funds lost from this wallet.
+          </p>
+        </div>
+
         <div class="bg-paper border border-lighter rounded-2xl p-5 card">
           <p class="text-dark text-sm uppercase tracking-wide">Balance</p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
