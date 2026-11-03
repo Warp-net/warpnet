@@ -46,6 +46,8 @@ const (
 	userUpdateTopicPrefix = "user-update"
 )
 
+type CoreGossip = pubsub.Gossip
+
 type PubsubServerNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
@@ -53,7 +55,7 @@ type PubsubServerNodeConnector interface {
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-var NewRelayDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
+var NewMemberDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
 
 // MemberPubSub provides pubsub functionality for member nodes
 type MemberPubSub struct {

@@ -183,7 +183,7 @@ func NewRelayNode(
 
 	// WebRTC and QUIC don't support private networks yet
 	opts := []warpnet.WarpOption{ //nolint:prealloc
-		node.WarpIdentity(privKey),
+		warpnet.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings(
@@ -191,7 +191,7 @@ func NewRelayNode(
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
+		warpnet.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
 		// A relay serves circuit v2 only after AutoNAT reports public
 		// reachability, and until then peers reject it as "doesn't speak circuit
 		// v2". This node is deployed on a static public address by definition,
@@ -199,7 +199,7 @@ func NewRelayNode(
 		// relay before they can help confirm it.
 		libp2p.ForceReachabilityPublic(),
 	}
-	opts = append(opts, node.CommonOptions...)
+	opts = append(opts, warpnet.CommonOptions...)
 
 	rn := &RelayNode{
 		ctx:               ctx,

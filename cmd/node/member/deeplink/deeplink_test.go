@@ -12,11 +12,11 @@ func TestParse(t *testing.T) {
 		want Link
 		err  error
 	}{
-		{"user happy path", "warpnet://user/01HZX7K8", Link{Kind: KindUser, ID: "01HZX7K8", Raw: "warpnet://user/01HZX7K8"}, nil},
-		{"user trailing slash", "warpnet://user/abc/", Link{Kind: KindUser, ID: "abc", Raw: "warpnet://user/abc/"}, nil},
-		{"missing slashes (shell-stripped)", "warpnet:user/abc", Link{Kind: KindUser, ID: "abc", Raw: "warpnet:user/abc"}, nil},
-		{"uppercase scheme tolerated", "WARPNET://user/abc", Link{Kind: KindUser, ID: "abc", Raw: "WARPNET://user/abc"}, nil},
-		{"surrounded by whitespace", "  warpnet://user/abc  ", Link{Kind: KindUser, ID: "abc", Raw: "warpnet://user/abc"}, nil},
+		{"user happy path", "warpnet://user/01HZX7K8", Link{Kind: kindUser, ID: "01HZX7K8", Raw: "warpnet://user/01HZX7K8"}, nil},
+		{"user trailing slash", "warpnet://user/abc/", Link{Kind: kindUser, ID: "abc", Raw: "warpnet://user/abc/"}, nil},
+		{"missing slashes (shell-stripped)", "warpnet:user/abc", Link{Kind: kindUser, ID: "abc", Raw: "warpnet:user/abc"}, nil},
+		{"uppercase scheme tolerated", "WARPNET://user/abc", Link{Kind: kindUser, ID: "abc", Raw: "WARPNET://user/abc"}, nil},
+		{"surrounded by whitespace", "  warpnet://user/abc  ", Link{Kind: kindUser, ID: "abc", Raw: "warpnet://user/abc"}, nil},
 		{"missing id", "warpnet://user/", Link{}, ErrMissingID},
 		{"unknown kind", "warpnet://tweet/123", Link{}, ErrUnsupportedKind},
 		{"different scheme", "https://example.com/", Link{}, ErrNotWarpnetURL},
@@ -51,7 +51,7 @@ func TestFromArgs(t *testing.T) {
 		t.Fatal("non-deeplink args should return ok=false")
 	}
 	l, ok := FromArgs([]string{"warpnet", "warpnet://user/01HQ"})
-	if !ok || l.Kind != KindUser || l.ID != "01HQ" {
+	if !ok || l.Kind != kindUser || l.ID != "01HQ" {
 		t.Fatalf("expected to parse the deep-link arg, got ok=%v link=%+v", ok, l)
 	}
 	// Garbage warpnet:// arg surrounded by good args should yield ok=false

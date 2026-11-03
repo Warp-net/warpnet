@@ -26,23 +26,19 @@ package node
 
 import (
 	"context"
-	"github.com/Warp-net/warpnet/core/ratelimit"
-	"github.com/Warp-net/warpnet/domain"
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/core/discovery"
 	"github.com/Warp-net/warpnet/core/mdns"
-	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
+	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
-	"github.com/ipfs/go-cid"
-	ds "github.com/ipfs/go-datastore"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type DiscoveryHandler interface {
@@ -64,7 +60,7 @@ type PubSubProvider interface {
 	PublishUpdateToFollowers(ownerId, dest string, bt []byte) (err error)
 	PublishReport(ev event.ReportEvent) error
 	Close() error
-	Gossip() *corePubsub.Gossip
+	Gossip() *pubsub.CoreGossip
 }
 
 type UserFetcher interface {
@@ -74,7 +70,7 @@ type UserFetcher interface {
 }
 
 type DistributedHashTableCloser interface {
-	FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo)
+	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	BootstrapNodes() []warpnet.WarpAddrInfo
 	Close()
 }
@@ -233,9 +229,9 @@ type Storer interface {
 }
 
 type StatsStorer interface {
-	Increment(key ds.Key) error
-	Decrement(key ds.Key) error
-	GetAggregatedStat(key ds.Key) (uint64, error)
+	Increment(key datastore.Key) error
+	Decrement(key datastore.Key) error
+	GetAggregatedStat(key datastore.Key) (uint64, error)
 	Close() error
 }
 

@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/ipfs/go-cid"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p-kad-dht/records"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -402,7 +401,7 @@ func (d *distributedHashTable) ClosestPeers() []warpnet.WarpPeerID {
 	return closest
 }
 
-func (d *distributedHashTable) FindProvidersAsync(ctx context.Context, key cid.Cid, count int) (ch <-chan peer.AddrInfo) {
+func (d *distributedHashTable) FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan peer.AddrInfo) {
 	return d.dht.FindProvidersAsync(ctx, key, count)
 }
 

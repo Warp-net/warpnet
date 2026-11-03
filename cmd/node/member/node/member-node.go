@@ -53,7 +53,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
-	"github.com/libp2p/go-libp2p"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -142,7 +141,7 @@ func NewMemberNode(
 	pubSubHandlers := memberPubSub.PrefollowHandlers(followingIds...)
 	pubSubHandlers = append(
 		pubSubHandlers,
-		memberPubSub.NewRelayDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
+		memberPubSub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, ratings, pubSubHandlers...)
 
@@ -158,18 +157,18 @@ func NewMemberNode(
 	)
 
 	opts := []warpnet.WarpOption{ //nolint:prealloc
-		node.WarpIdentity(privKey),
-		libp2p.Peerstore(store),
-		libp2p.PrivateNetwork(warpnet.PSK(psk)),
-		libp2p.ListenAddrStrings(
+		warpnet.WarpIdentity(privKey),
+		warpnet.NewWarpPeerstoreOption(store),
+		warpnet.NewWarpPrivateNetworkOption(warpnet.PSK(psk)),
+		warpnet.NewListenAddrStringsOption(
 			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
 			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
 		),
-		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
+		warpnet.NewRoutingOption(dHashTable.StartRouting),
+		warpnet.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
 	}
 
-	opts = append(opts, node.CommonOptions...)
+	opts = append(opts, warpnet.CommonOptions...)
 
 	walletConfig := wallet.DefaultConfig(warpNetwork, os.Getenv("WARPNET_WALLET_BIN"))
 	walletClient := wallet.New(walletConfig)

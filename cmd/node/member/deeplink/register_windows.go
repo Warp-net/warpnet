@@ -18,7 +18,7 @@ func registerPlatform() error {
 
 	root, _, err := registry.CreateKey(
 		registry.CURRENT_USER,
-		`Software\Classes\`+Scheme,
+		`Software\Classes\`+scheme,
 		registry.WRITE,
 	)
 	if err != nil {
@@ -35,7 +35,7 @@ func registerPlatform() error {
 
 	cmdKey, _, err := registry.CreateKey(
 		registry.CURRENT_USER,
-		`Software\Classes\`+Scheme+`\shell\open\command`,
+		`Software\Classes\`+scheme+`\shell\open\command`,
 		registry.WRITE,
 	)
 	if err != nil {

@@ -1,5 +1,5 @@
 //nolint:all
-package node
+package warpnet
 
 import (
 	"testing"

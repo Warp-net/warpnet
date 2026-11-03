@@ -63,7 +63,7 @@ func TestRegisterWritesTheDesktopEntry(t *testing.T) {
 
 	contents, readErr := os.ReadFile(desktop)
 	require.NoError(t, readErr)
-	require.Contains(t, string(contents), "x-scheme-handler/"+Scheme)
+	require.Contains(t, string(contents), "x-scheme-handler/"+scheme)
 	require.Contains(t, string(contents), "StartupWMClass=warpnet")
 
 	if err != nil {

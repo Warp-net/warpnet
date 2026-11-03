@@ -30,6 +30,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/holepunch"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
@@ -146,23 +147,23 @@ func TestWarpIdentity_IsDeterministicAndSingular(t *testing.T) {
 
 	ctx := t.Context()
 
-	first, err := NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	first, err := NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, warpnet.WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	id := first.Node().ID()
 	first.StopNode()
 
-	second, err := NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	second, err := NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, warpnet.WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer second.StopNode()
 
 	assert.Equal(t, id, second.Node().ID(), "the same key must yield the same peer id")
 
-	_, err = NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, WarpIdentity(priv), WarpIdentity(priv))
-	assert.ErrorIs(t, err, ErrMultipleIdentities)
+	_, err = NewWarpNode(ctx, nil, ratelimit.Settings{}, nil, warpnet.WarpIdentity(priv), warpnet.WarpIdentity(priv))
+	assert.ErrorIs(t, err, warpnet.ErrMultipleIdentities)
 }
 
 func TestWarpIdentity_PanicsOnMalformedKey(t *testing.T) {
-	assert.Panics(t, func() { WarpIdentity(make(ed25519.PrivateKey, 7)) },
+	assert.Panics(t, func() { warpnet.WarpIdentity(make(ed25519.PrivateKey, 7)) },
 		"a malformed node key must fail loudly at startup, not produce a random identity")
 }
 
@@ -423,7 +424,7 @@ func TestEnableAutoRelayWithStaticRelays_DropsSelf(t *testing.T) {
 	self := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 	other := warpnet.FromStringToPeerID("12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU")
 
-	opt := EnableAutoRelayWithStaticRelays(
+	opt := warpnet.EnableAutoRelayWithStaticRelays(
 		[]warpnet.WarpAddrInfo{{ID: self}, {ID: other}}, self,
 	)
 	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -436,21 +437,21 @@ func TestEnableAutoRelayWithStaticRelays_DropsSelf(t *testing.T) {
 func TestEnableAutoRelayWithStaticRelays_EmptyListIsInert(t *testing.T) {
 	self := warpnet.FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
 
-	opt := EnableAutoRelayWithStaticRelays([]warpnet.WarpAddrInfo{{ID: self}}, self)
+	opt := warpnet.EnableAutoRelayWithStaticRelays([]warpnet.WarpAddrInfo{{ID: self}}, self)
 	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, opt(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 }
 
 func TestEmptyOption_IsANoOp(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, EmptyOption()(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, warpnet.EmptyOption()(), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer n.StopNode()
 	assert.NotNil(t, n.Node())
 }
 
 func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, libp2p.SwarmOpts(WithDialTimeout(3*time.Second), WithDialTimeoutLocal(2*time.Second)),
+	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, libp2p.SwarmOpts(warpnet.WithDialTimeout(3*time.Second), warpnet.WithDialTimeoutLocal(2*time.Second)),
 		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
 	)
 	require.NoError(t, err, "a renamed libp2p field must not break node startup")
@@ -459,8 +460,8 @@ func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
 	sw, ok := n.Node().Network().(*warpnet.Swarm)
 	require.True(t, ok)
 
-	assert.NoError(t, WithDialTimeout(time.Second)(sw))
-	assert.NoError(t, WithDialTimeoutLocal(time.Second)(sw))
+	assert.NoError(t, warpnet.WithDialTimeout(time.Second)(sw))
+	assert.NoError(t, warpnet.WithDialTimeoutLocal(time.Second)(sw))
 }
 
 func TestSetPrivateDurationField_ReportsMissingField(t *testing.T) {
@@ -471,22 +472,22 @@ func TestSetPrivateDurationField_ReportsMissingField(t *testing.T) {
 	sw, ok := n.Node().Network().(*warpnet.Swarm)
 	require.True(t, ok)
 
-	err = setPrivateDurationField(sw, "thisFieldDoesNotExist", time.Second)
-	assert.ErrorIs(t, err, ErrFieldNotFound)
+	err = warpnet.setPrivateDurationField(sw, "thisFieldDoesNotExist", time.Second)
+	assert.ErrorIs(t, err, warpnet.ErrFieldNotFound)
 }
 
 func TestWithDefaultTCPConnectionTimeout_ReportsMissingField(t *testing.T) {
 	tr := &warpnet.TCPTransport{}
-	assert.NoError(t, WithDefaultTCPConnectionTimeout(5*time.Second)(tr))
+	assert.NoError(t, warpnet.WithDefaultTCPConnectionTimeout(5*time.Second)(tr))
 }
 
 func TestHolePunchTracer_ToleratesNilAndUnknownEvents(t *testing.T) {
-	tr := holePunchTracer{}
+	tr := holepunch.holePunchTracer{}
 	assert.NotPanics(t, func() { tr.Trace(nil) })
 }
 
 func TestConnTracer_ToleratesNilConnections(t *testing.T) {
-	tr := connTracer{}
+	tr := holepunch.connTracer{}
 	assert.NotPanics(t, func() {
 		tr.Listen(nil, nil)
 		tr.ListenClose(nil, nil)
@@ -506,9 +507,9 @@ func TestConnTracer_ClassifiesRealConnections(t *testing.T) {
 	conns := client.Node().Network().ConnsToPeer(server.Node().ID())
 	require.NotEmpty(t, conns)
 
-	assert.False(t, isRelayed(conns[0]), "a direct TCP dial is not relayed")
+	assert.False(t, holepunch.isRelayed(conns[0]), "a direct TCP dial is not relayed")
 
-	tr := connTracer{}
+	tr := holepunch.connTracer{}
 	assert.NotPanics(t, func() {
 		tr.Connected(client.Node().Network(), conns[0])
 		tr.Disconnected(client.Node().Network(), conns[0])

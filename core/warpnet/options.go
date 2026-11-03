@@ -22,20 +22,21 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package node
+package warpnet
 
 import (
 	"crypto/ed25519"
 	"fmt"
 	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
 	"github.com/libp2p/go-libp2p/p2p/host/observedaddrs"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
+	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"reflect"
 	"slices"
 	"time"
 	"unsafe"
 
-	"github.com/Warp-net/warpnet/core/relay"
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/libp2p/go-libp2p"
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -44,30 +45,85 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const defaultTimeout = 60 * time.Second
+
 func init() {
 	observedaddrs.ActivationThresh = 2 // TODO increase if there more than 1 user
 }
 
 var CommonOptions = []libp2p.Option{
-	libp2p.WithDialTimeout(DefaultTimeout),
+	libp2p.WithDialTimeout(defaultTimeout),
 	libp2p.SwarmOpts(
-		WithDialTimeout(DefaultTimeout),
-		WithDialTimeoutLocal(DefaultTimeout),
+		WithDialTimeout(defaultTimeout),
+		WithDialTimeoutLocal(defaultTimeout),
 	),
 	libp2p.Transport(camouflage.NewCamouflageTransport),
 	libp2p.Ping(true),
-	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
+	libp2p.Security(NoiseID, NewNoise),
 	libp2p.EnableAutoNATv2(),
 	libp2p.EnableRelay(),
-	libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
-	libp2p.EnableHolePunching(holepunch.WithTracer(holePunchTracer{})),
+	libp2p.EnableRelayService(WithDefaultResourcesOption()), // for member nodes that have static IP
 	libp2p.EnableNATService(),
 	libp2p.NATPortMap(),
 	// the detector also refuses /ip6/ circuit addrs, though the relay may already be connected over IPv4
 	libp2p.IPv6BlackHoleSuccessCounter(nil),
 }
 
-func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {
+func NewEnableHolePunchingOption(tracer holepunch.EventTracer) WarpOption {
+	return libp2p.EnableHolePunching(holepunch.WithTracer(tracer))
+}
+
+func NewWarpPeerstoreOption(ps WarpPeerstore) WarpOption {
+	return libp2p.Peerstore(ps)
+}
+
+func NewWarpPrivateNetworkOption(psk PSK) WarpOption {
+	return libp2p.PrivateNetwork(psk)
+}
+
+func NewListenAddrStringsOption(s ...string) WarpOption {
+	return libp2p.ListenAddrStrings(s...)
+}
+
+func NewRoutingOption(cfg libp2pConfig.RoutingC) WarpOption {
+	return libp2p.Routing(cfg)
+}
+
+var DefaultResources = relayv2.Resources{
+	Limit: &relayv2.RelayLimit{
+		Duration: DefaultRelayDurationLimit,
+		Data:     DefaultRelayDataLimit,
+	},
+
+	ReservationTTL: time.Hour,
+
+	MaxReservations: 128,
+	MaxCircuits:     16,
+	BufferSize:      4096,
+
+	MaxReservationsPerIP:  8,
+	MaxReservationsPerASN: 32,
+}
+
+const (
+	DefaultRelayDataLimit     = 1 << 30 // 1 GiB
+	DefaultRelayDurationLimit = time.Hour
+)
+
+func WithDefaultResourcesOption() relayv2.Option {
+	return relayv2.WithResources(DefaultResources)
+}
+
+func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.BasicConnMgr, error) {
+	high := min(highWater, limiter.GetSystemLimits().GetConnTotalLimit())
+	return connmgr.NewConnManager(
+		min(lowWater, high/2),
+		high,
+		connmgr.WithGracePeriod(time.Hour),
+	)
+}
+
+func EnableAutoRelayWithStaticRelays(static []WarpAddrInfo, currentNodeID WarpPeerID) func() libp2p.Option {
 	for i, info := range static {
 		if info.ID == currentNodeID {
 			static = slices.Delete(static, i, i+1)
@@ -99,7 +155,7 @@ func EmptyOption() func() libp2p.Option {
 	}
 }
 
-const ErrMultipleIdentities warpnet.WarpError = "cannot specify multiple identities"
+const ErrMultipleIdentities WarpError = "cannot specify multiple identities"
 
 func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {
 	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
@@ -115,23 +171,23 @@ func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {
 	}
 }
 
-func WithDialTimeout(t time.Duration) warpnet.SwarmOption {
-	return func(s *warpnet.Swarm) error {
+func WithDialTimeout(t time.Duration) SwarmOption {
+	return func(s *Swarm) error {
 		return setPrivateDurationField(s, "dialTimeout", t)
 	}
 }
 
-func WithDialTimeoutLocal(t time.Duration) warpnet.SwarmOption {
-	return func(s *warpnet.Swarm) error {
+func WithDialTimeoutLocal(t time.Duration) SwarmOption {
+	return func(s *Swarm) error {
 		return setPrivateDurationField(s, "dialTimeoutLocal", t)
 	}
 }
 
-const ErrFieldNotFound warpnet.WarpError = "field not found"
+const ErrFieldNotFound WarpError = "field not found"
 
-func WithDefaultTCPConnectionTimeout(t time.Duration) warpnet.TCPOption {
+func WithDefaultTCPConnectionTimeout(t time.Duration) TCPOption {
 	fieldName := "connectTimeout"
-	return func(tr *warpnet.TCPTransport) error {
+	return func(tr *TCPTransport) error {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Errorf("options: reflection error setting %s: %v", fieldName, r)
@@ -153,7 +209,7 @@ func WithDefaultTCPConnectionTimeout(t time.Duration) warpnet.TCPOption {
 	}
 }
 
-func setPrivateDurationField(s *warpnet.Swarm, fieldName string, t time.Duration) error {
+func setPrivateDurationField(s *Swarm, fieldName string, t time.Duration) error {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Errorf("options: reflection error setting %s: %v", fieldName, r)

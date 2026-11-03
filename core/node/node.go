@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/holepunch"
 	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
 	"io"
@@ -53,7 +54,6 @@ import (
 )
 
 const (
-	DefaultTimeout                          = 60 * time.Second
 	ErrPrivateKeyRequired warpnet.WarpError = "private key is required"
 )
 
@@ -135,8 +135,9 @@ func NewWarpNode(
 	managersOpts := []libp2p.Option{
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(manager),
-		libp2p.DisableMetrics(), // TODO move to settings
+		libp2p.DisableMetrics(),
 		libp2p.Muxer(yamux.ID, &ya),
+		warpnet.NewEnableHolePunchingOption(holepunch.NewHolepunchTracer()),
 	}
 
 	opts = append(opts, managersOpts...)
@@ -146,7 +147,7 @@ func NewWarpNode(
 		return nil, fmt.Errorf("node: failed to init node: %w", err)
 	}
 
-	node.Network().Notify(connTracer{})
+	node.Network().Notify(holepunch.NewHolepunchNotifier())
 
 	pool, err := stream.NewStreamPool(ctx, node)
 	if err != nil {

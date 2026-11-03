@@ -22,13 +22,12 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 */
 
-package node
+package holepunch
 
 import (
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
 )
@@ -43,6 +42,10 @@ import (
 // at info, individual attempts at debug: a punch normally takes up to three
 // attempts, and only the outcome is interesting once it works.
 type holePunchTracer struct{}
+
+func NewHolepunchTracer() holePunchTracer {
+	return holePunchTracer{}
+}
 
 func (holePunchTracer) Trace(evt *holepunch.Event) {
 	if evt == nil {
@@ -77,15 +80,16 @@ func (holePunchTracer) Trace(evt *holepunch.Event) {
 	}
 }
 
-// connTracer logs how we are connected to a peer rather than merely that we are.
-// Only relay usage and relay-to-direct upgrades reach info level; the rest is
-// debug, because a busy node opens connections constantly.
-type connTracer struct{}
+type holepunchNotifier struct{}
 
-func (connTracer) Listen(network.Network, warpnet.WarpAddress)      {}
-func (connTracer) ListenClose(network.Network, warpnet.WarpAddress) {}
+func NewHolepunchNotifier() holepunchNotifier {
+	return holepunchNotifier{}
+}
 
-func (connTracer) Connected(n network.Network, c network.Conn) {
+func (holepunchNotifier) Listen(warpnet.WarpNetwork, warpnet.WarpAddress)      {}
+func (holepunchNotifier) ListenClose(warpnet.WarpNetwork, warpnet.WarpAddress) {}
+
+func (holepunchNotifier) Connected(n warpnet.WarpNetwork, c warpnet.WarpConn) {
 	if c == nil {
 		return
 	}
@@ -109,7 +113,7 @@ func (connTracer) Connected(n network.Network, c network.Conn) {
 	log.Debugf("holepunch: connected directly: peer %s, address %s", peer, addr)
 }
 
-func (connTracer) Disconnected(n network.Network, c network.Conn) {
+func (holepunchNotifier) Disconnected(n warpnet.WarpNetwork, c warpnet.WarpConn) {
 	if c == nil {
 		return
 	}
@@ -130,6 +134,6 @@ func (connTracer) Disconnected(n network.Network, c network.Conn) {
 	log.Debugf("holepunch: relayed connection closed: peer %s", c.RemotePeer().String())
 }
 
-func isRelayed(c network.Conn) bool {
+func isRelayed(c warpnet.WarpConn) bool {
 	return c.Stat().Limited || warpnet.IsRelayMultiaddress(c.RemoteMultiaddr())
 }

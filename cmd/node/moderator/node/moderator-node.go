@@ -159,7 +159,7 @@ func NewModeratorNode(
 	)
 
 	opts := []libp2p.Option{ //nolint:prealloc
-		node.WarpIdentity(privKey),
+		warpnet.WarpIdentity(privKey),
 		libp2p.Peerstore(memoryStore),
 		libp2p.PrivateNetwork(warpnet.PSK(psk)),
 		libp2p.ListenAddrStrings(
@@ -169,10 +169,10 @@ func NewModeratorNode(
 			}...,
 		),
 		libp2p.Routing(dHashTable.StartRouting),
-		node.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
+		warpnet.EnableAutoRelayWithStaticRelays(infos, ownNodeId)(),
 	}
 
-	opts = append(opts, node.CommonOptions...)
+	opts = append(opts, warpnet.CommonOptions...)
 
 	mn := &ModeratorNode{
 		ctx:               ctx,

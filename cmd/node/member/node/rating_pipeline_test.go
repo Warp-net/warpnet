@@ -38,7 +38,6 @@ import (
 	ratingdb "github.com/Warp-net/warpnet/core/crdt/rating"
 	"github.com/Warp-net/warpnet/core/handler"
 	"github.com/Warp-net/warpnet/core/middleware"
-	corenode "github.com/Warp-net/warpnet/core/node"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -91,7 +90,7 @@ func newRatingStack(t *testing.T, db *local_store.DB, priv ed25519.PrivateKey, l
 	self, err := warpnet.IDFromPublicKey(priv.Public().(ed25519.PublicKey))
 	require.NoError(t, err)
 
-	host, err := libp2p.New(corenode.WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	host, err := libp2p.New(warpnet.WarpIdentity(priv), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = host.Close() })
 

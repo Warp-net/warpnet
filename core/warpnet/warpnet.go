@@ -76,7 +76,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
-	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
@@ -325,15 +324,6 @@ func NewP2PNode(opts ...libp2p.Option) (P2PNode, error) {
 
 func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*noise.Transport, error) {
 	return noise.New(id, pk, mxs)
-}
-
-func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.BasicConnMgr, error) {
-	high := min(highWater, limiter.GetSystemLimits().GetConnTotalLimit())
-	return connmgr.NewConnManager(
-		min(lowWater, high/2),
-		high,
-		connmgr.WithGracePeriod(time.Hour),
-	)
 }
 
 func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {

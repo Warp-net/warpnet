@@ -161,15 +161,15 @@ func TestValidatePassword_RejectsWeakSecrets(t *testing.T) {
 		pw   string
 		want error
 	}{
-		{"", ErrEmptyPassword},
-		{"Ab1!", ErrMinPasswordLength},
-		{"Abcdefg1", ErrPasswordSpecialRequired},
-		{"abcdefg1!", ErrPasswordUpperCaseRequired},
-		{"ABCDEFG1!", ErrPasswordLowerCaseRequired},
-		{"Abcdefgh!", ErrPasswordDigitRequired},
-		{strings.Repeat("Aa1!", 9), ErrMaxPasswordLength},
-		{"ПАРОЛЬ1A!", ErrPasswordLowerCaseRequired},
-		{"пароль1a!", ErrPasswordUpperCaseRequired},
+		{"", errEmptyPassword},
+		{"Ab1!", errMinPasswordLength},
+		{"Abcdefg1", errPasswordSpecialRequired},
+		{"abcdefg1!", errPasswordUpperCaseRequired},
+		{"ABCDEFG1!", errPasswordLowerCaseRequired},
+		{"Abcdefgh!", errPasswordDigitRequired},
+		{strings.Repeat("Aa1!", 9), errMaxPasswordLength},
+		{"ПАРОЛЬ1A!", errPasswordLowerCaseRequired},
+		{"пароль1a!", errPasswordUpperCaseRequired},
 	}
 
 	for _, c := range cases {
@@ -193,7 +193,7 @@ func TestAuthLogin_TrimsPasswordBeforeValidating(t *testing.T) {
 	as := newService(t, repo, &fakeUserRepo{}, nil)
 
 	_, err := as.AuthLogin(event.LoginEvent{Username: "u", Password: "            "}, security.PSK{})
-	assert.ErrorIs(t, err, ErrEmptyPassword, "whitespace is not a password")
+	assert.ErrorIs(t, err, errEmptyPassword, "whitespace is not a password")
 }
 
 func TestAuthLogin_SurroundingWhitespaceIsIgnored(t *testing.T) {
@@ -237,7 +237,7 @@ func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 
 	created, updated := users.snapshot()
 	require.Len(t, created, 1)
-	assert.Equal(t, DefaultUsername, created[0].Username, "the login must not become the public name")
+	assert.Equal(t, defaultUsername, created[0].Username, "the login must not become the public name")
 	assert.NotEmpty(t, created[0].Id)
 
 	require.Len(t, updated, 1)
@@ -253,7 +253,7 @@ func TestAuthLogin_UsernameMismatchIsRejected(t *testing.T) {
 	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
 
 	_, err := as.AuthLogin(event.LoginEvent{Username: "mallory", Password: "Claude1234$"}, security.PSK{})
-	assert.ErrorIs(t, err, ErrUsernamesMismatch)
+	assert.ErrorIs(t, err, errUsernamesMismatch)
 	assert.False(t, as.IsAuthenticated())
 
 	created, _ := users.snapshot()
@@ -326,7 +326,7 @@ func TestAuthLogin_SecondLoginIsRefusedUntilReset(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
-	assert.ErrorIs(t, err, ErrAlreadyAuthenticated)
+	assert.ErrorIs(t, err, errAlreadyAuthenticated)
 
 	as.Reset()
 	assert.False(t, as.IsAuthenticated())
