@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 type WhoToFollowAuthStorer interface {
@@ -15,6 +18,8 @@ type WhoToFollowAuthStorer interface {
 }
 
 type WhoToFollowUserFetcher interface {
+	Create(user domain.User) (domain.User, error)
+	Update(userId string, user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
 }
@@ -27,6 +32,7 @@ func StreamGetWhoToFollowHandler(
 	authRepo WhoToFollowAuthStorer,
 	userRepo WhoToFollowUserFetcher,
 	followRepo WhoToFollowFollowsLister,
+	streamers ...UserStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
@@ -37,6 +43,11 @@ func StreamGetWhoToFollowHandler(
 
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
+		}
+
+		owner := authRepo.GetOwner()
+		if len(streamers) > 0 && streamers[0] != nil && ev.UserId == owner.UserId && (ev.Cursor == nil || *ev.Cursor == "") {
+			refreshGatewayRecommendations(userRepo, streamers[0], owner)
 		}
 
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
@@ -54,8 +65,6 @@ func StreamGetWhoToFollowHandler(
 		for _, followingId := range followings {
 			followedUsers[followingId] = struct{}{}
 		}
-
-		owner := authRepo.GetOwner()
 
 		profile, err := userRepo.Get(ev.UserId)
 		if err != nil {
@@ -107,5 +116,50 @@ func StreamGetWhoToFollowHandler(
 			Cursor: cursor,
 			Users:  whotofollow,
 		}, nil
+	}
+}
+
+// Store discovery candidates on the user node so profile and media requests can route them.
+func refreshGatewayRecommendations(repo WhoToFollowUserFetcher, streamer UserStreamer, owner domain.Owner) {
+	gatewayID := fediverse.GatewayNodeID()
+	if gatewayID == owner.NodeId {
+		return
+	}
+	limit := uint64(80)
+	data, err := streamer.GenericStream(gatewayID, event.PUBLIC_GET_WHOTOFOLLOW, event.GetAllUsersEvent{UserId: owner.UserId, Limit: &limit})
+	if err != nil {
+		log.Warnf("who to follow: gateway discovery: %v", err)
+		return
+	}
+	var remoteError event.ResponseError
+	if err := json.Unmarshal(data, &remoteError); err != nil {
+		log.Warnf("who to follow: gateway response: %v", err)
+		return
+	}
+	if remoteError.Message != "" {
+		log.Warnf("who to follow: gateway discovery: %s", remoteError.Message)
+		return
+	}
+	var response event.UsersResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		log.Warnf("who to follow: gateway users: %v", err)
+		return
+	}
+	for _, user := range response.Users[:min(len(response.Users), int(limit))] {
+		if !fediverse.IsBridged(user.Network) || user.NodeId != gatewayID || user.Id == owner.UserId || user.IsOffline || fediverse.IsFederatedWarpnet(user) {
+			continue
+		}
+		name, host, ok := strings.Cut(user.Id, "@")
+		if !ok || name == "" || host == "" {
+			continue
+		}
+		if _, err := repo.Create(user); errors.Is(err, database.ErrUserAlreadyExists) {
+			_, err = repo.Update(user.Id, user)
+			if err != nil {
+				log.Warnf("who to follow: update discovered user: %v", err)
+			}
+		} else if err != nil {
+			log.Warnf("who to follow: store discovered user: %v", err)
+		}
 	}
 }
