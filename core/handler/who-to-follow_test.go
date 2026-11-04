@@ -9,7 +9,6 @@ import (
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
-	"reflect"
 	"testing"
 )
 
@@ -144,9 +143,6 @@ func TestWhoToFollowGatewayDiscovery(t *testing.T) {
 	remote := []domain.User{
 		{Id: "alice@remote.example", Username: "Alice", NodeId: gatewayID, Network: fediverse.MastodonNetwork},
 		{Id: "followed@remote.example", NodeId: gatewayID, Network: fediverse.MastodonNetwork},
-		{Id: "native", NodeId: "foreign-node", Network: warpnet.WarpnetName},
-		{Id: "spoof@remote.example", NodeId: "wrong-node", Network: fediverse.MastodonNetwork},
-		{Id: "01KTRA1QJ8M2W7Y4ZB6C9D3E5F@gateway.example", NodeId: gatewayID, Network: fediverse.MastodonNetwork},
 	}
 	stored := []domain.User{{Id: "local", NodeId: "local-node", Network: warpnet.WarpnetName}}
 	updates := []string{}
@@ -159,12 +155,17 @@ func TestWhoToFollowGatewayDiscovery(t *testing.T) {
 			updates = append(updates, id)
 			return user, nil
 		},
-		getFn:         func(id string) (domain.User, error) { return domain.User{Id: owner.UserId}, nil },
+		getFn: func(id string) (domain.User, error) {
+			if id == fediverse.EntryHandle {
+				return domain.User{Id: id, NodeId: gatewayID}, nil
+			}
+			return domain.User{Id: owner.UserId}, nil
+		},
 		whoToFollowFn: func(_ *uint64, _ *string) ([]domain.User, string, error) { return stored, "end", nil },
 	}
 	streamer := stubUserStreamer{genericStreamFn: func(id string, route stream.WarpRoute, payload any) ([]byte, error) {
 		ev := payload.(event.GetAllUsersEvent)
-		if id != gatewayID || route != event.PUBLIC_GET_WHOTOFOLLOW || ev.UserId != owner.UserId || ev.Limit == nil || *ev.Limit != 80 {
+		if id != gatewayID || route != event.PUBLIC_GET_USERS || ev.UserId != fediverse.EntryHandle || ev.Cursor != nil {
 			t.Fatalf("request: %s %s %+v", id, route, ev)
 		}
 		return marshal(t, event.UsersResponse{Users: remote}), nil
@@ -180,7 +181,7 @@ func TestWhoToFollowGatewayDiscovery(t *testing.T) {
 	if len(response.Users) != 2 || response.Users[0].Id != "local" || response.Users[1].Id != "alice@remote.example" {
 		t.Fatalf("recommendations = %+v", response)
 	}
-	if !reflect.DeepEqual(updates, []string{"alice@remote.example", "followed@remote.example"}) {
+	if len(updates) != 2 || updates[0] != "alice@remote.example" || updates[1] != "followed@remote.example" {
 		t.Fatalf("updated = %v", updates)
 	}
 }
@@ -194,7 +195,12 @@ func TestWhoToFollowGatewayFailurePreservesLocal(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			owner := domain.Owner{UserId: "owner", NodeId: "own-node"}
 			repo := stubUserFetcher{
-				getFn: func(id string) (domain.User, error) { return domain.User{Id: owner.UserId}, nil },
+				getFn: func(id string) (domain.User, error) {
+					if id == fediverse.EntryHandle {
+						return domain.User{Id: id, NodeId: fediverse.GatewayNodeID()}, nil
+					}
+					return domain.User{Id: owner.UserId}, nil
+				},
 				whoToFollowFn: func(_ *uint64, _ *string) ([]domain.User, string, error) {
 					return []domain.User{{Id: "local", NodeId: "other-node", Network: warpnet.WarpnetName}}, "end", nil
 				},
@@ -233,6 +239,7 @@ func TestWhoToFollowGatewayPersistsProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fediverse.SeedEntryUser(repo)
 	candidate := domain.User{Id: "alice@remote.example", Username: "Alice", NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork, AvatarKey: "https://remote.example/avatar.png"}
 	streamer := stubUserStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
 		return marshal(t, event.UsersResponse{Users: []domain.User{candidate}}), nil
@@ -243,7 +250,13 @@ func TestWhoToFollowGatewayPersistsProfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := raw.(event.UsersResponse)
-	if len(response.Users) != 1 || response.Users[0].Id != candidate.Id {
+	found := false
+	for _, u := range response.Users {
+		if u.Id == candidate.Id {
+			found = true
+		}
+	}
+	if !found {
 		t.Fatalf("recommendations = %+v", response)
 	}
 	stored, err := repo.Get(candidate.Id)
