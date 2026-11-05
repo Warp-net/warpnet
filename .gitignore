@@ -60,3 +60,8 @@ frontend/node_modules
 *.p12
 *.p8
 *.keystore
+
+# Local agent configuration
+/.agents/
+/.codex/
+/AGENTS.md
