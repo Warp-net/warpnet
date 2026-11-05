@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
@@ -48,35 +49,18 @@ func StreamGetWhoToFollowHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		owner := authRepo.GetOwner()
-		isOwnRequest := ev.UserId == owner.UserId
-		isFirstPage := ev.Cursor == nil ||
-			*ev.Cursor == ""
-		page, continuing, err := decodeWhoToFollowCursor(ev.Cursor)
+		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
 		}
-		if continuing && !isOwnRequest {
-			return nil, warpnet.WarpError("recommendation cursor belongs to the owner")
-		}
 
-		var users []domain.User
-		var cursor string
-		if !continuing {
-			users, cursor, err = userRepo.WhoToFollow(ev.Limit, ev.Cursor)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		var remote event.UsersResponse
-		remoteAvailable := false
+		owner := authRepo.GetOwner()
+		gatewayID := fediverse.GatewayNodeID()
+		isOwnRequest := ev.UserId == owner.UserId
+		isFirstPage := ev.Cursor == nil ||
+			*ev.Cursor == ""
 		if isOwnRequest && isFirstPage {
-			remote, err = refreshWhoToFollow(userRepo, streamer, fediverse.GatewayNodeID(), ev)
-			remoteAvailable = err == nil
-			if err != nil {
-				log.Warnf("who to follow: gateway discovery: %v", err)
-			}
+			refreshWhoToFollow(userRepo, streamer, gatewayID, event.GetAllUsersEvent{UserId: owner.UserId})
 			users, cursor, err = userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 			if err != nil {
 				return nil, err
@@ -105,79 +89,68 @@ func StreamGetWhoToFollowHandler(
 			}
 		}
 
-		filter := func(candidates []domain.User) []domain.User {
-			return filterWhoToFollow(candidates, owner, profile, followedUsers)
-		}
-		if continuing {
-			return nextWhoToFollowPage(userRepo, streamer, ev, page, filter)
-		}
-		users = filter(users)
-		if remoteAvailable {
-			page = firstWhoToFollowPage(remote, users, filter)
-			cursor = page.encode()
-			if len(users) == 0 && cursor != whoToFollowEndCursor {
-				return nextWhoToFollowPage(userRepo, streamer, ev, page, filter)
-			}
-		}
-		return event.UsersResponse{Cursor: cursor, Users: users}, nil
-	}
-}
-
-func filterWhoToFollow(users []domain.User, owner domain.Owner, profile domain.User, followedUsers map[string]struct{}) []domain.User {
-	whotofollow := make([]domain.User, 0, len(users))
-	latestByNode := make(map[string]int, len(users))
-	for _, user := range users {
-		if user.IsOffline { // exclude offline
-			continue
-		}
-		if fediverse.IsFederatedWarpnet(user) {
-			continue
-		}
-
-		if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
-			continue
-		}
-		// if profile from Warpnet - don't show other network recommendations
-		if profile.Id != owner.UserId && profile.Network != user.Network {
-			continue
-		}
-		if _, ok := followedUsers[user.Id]; ok { // exclude already followed
-			continue
-		}
-
-		if user.NodeId != "" && !fediverse.IsBridged(user.Network) {
-			if idx, ok := latestByNode[user.NodeId]; ok {
-				if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
-					whotofollow[idx] = user
-				}
+		whotofollow := make([]domain.User, 0, len(users))
+		latestByNode := make(map[string]int, len(users))
+		for _, user := range users {
+			if user.IsOffline { // exclude offline
 				continue
 			}
+			if fediverse.IsFederatedWarpnet(user) {
+				continue
+			}
+
+			if strings.Contains(user.Id, owner.UserId) || user.NodeId == owner.NodeId { // exclude me
+				continue
+			}
+			// if profile from Warpnet - don't show other network recommendations
+			if profile.Id != owner.UserId && profile.Network != user.Network {
+				continue
+			}
+			if _, ok := followedUsers[user.Id]; ok { // exclude already followed
+				continue
+			}
+
+			if user.NodeId != "" && !fediverse.IsBridged(user.Network) {
+				if idx, ok := latestByNode[user.NodeId]; ok {
+					if user.CreatedAt.After(whotofollow[idx].CreatedAt) {
+						whotofollow[idx] = user
+					}
+					continue
+				}
+			}
+
+			latestByNode[user.NodeId] = len(whotofollow)
+
+			whotofollow = append(whotofollow, user)
 		}
 
-		latestByNode[user.NodeId] = len(whotofollow)
-
-		whotofollow = append(whotofollow, user)
+		return event.UsersResponse{
+			Cursor: cursor,
+			Users:  whotofollow,
+		}, nil
 	}
-
-	return whotofollow
 }
 
-func refreshWhoToFollow(repo WhoToFollowUserFetcher, streamer WhoToFollowStreamer, nodeID string, ev event.GetAllUsersEvent) (event.UsersResponse, error) {
+func refreshWhoToFollow(repo WhoToFollowUserFetcher, streamer WhoToFollowStreamer, nodeID string, ev event.GetAllUsersEvent) {
 	data, err := streamer.GenericStream(nodeID, event.PUBLIC_GET_WHOTOFOLLOW, ev)
 	if err != nil {
-		return event.UsersResponse{}, err
+		if !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			log.Warnf("who to follow: stream to node %s: %v", nodeID, err)
+		}
+		return
 	}
 	var remoteError event.ResponseError
 	if _ = json.Unmarshal(data, &remoteError); remoteError.Message != "" {
-		return event.UsersResponse{}, warpnet.WarpError(remoteError.Message)
+		log.Warnf("who to follow: remote response: %v", remoteError)
+		return
 	}
 	var response event.UsersResponse
 	if err := json.Unmarshal(data, &response); err != nil {
-		return response, err
+		log.Warnf("who to follow: unmarshal response: %v", err)
+		return
 	}
 	for _, candidate := range response.Users {
 		_, _ = repo.Create(candidate)
 		_, _ = repo.Update(candidate.Id, candidate)
 	}
-	return response, nil
 }

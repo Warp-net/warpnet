@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
@@ -310,111 +309,5 @@ func TestWhoToFollowChecksRepositoryBeforeFetching(t *testing.T) {
 	_, err := h(marshal(t, event.GetAllUsersEvent{UserId: "owner"}), nil)
 	if !errors.Is(err, repoErr) {
 		t.Fatalf("error = %v", err)
-	}
-}
-
-func TestWhoToFollowGatewayPagination(t *testing.T) {
-	for _, followed := range []string{"", "bob@remote.example"} {
-		t.Run("followed="+followed, func(t *testing.T) {
-			db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { db.Close() })
-			if err := database.NewAuthRepo(db, "test").Authenticate("test", "test"); err != nil {
-				t.Fatal(err)
-			}
-			repo := database.NewUserRepo(db)
-			owner := domain.Owner{UserId: "owner", NodeId: "own-node"}
-			_, err = repo.Create(domain.User{Id: owner.UserId, NodeId: owner.NodeId, Network: warpnet.WarpnetName})
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = repo.Create(domain.User{Id: "local", NodeId: "local-node", Network: warpnet.WarpnetName})
-			if err != nil {
-				t.Fatal(err)
-			}
-			ids := []string{"alice@remote.example", "bob@remote.example", "carol@remote.example", "dave@remote.example"}
-			requests := 0
-			gatewayErr := errors.New("directory temporarily unavailable")
-			failedOnce := false
-			retried := false
-			streamer := stubWhoToFollowStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, payload any) ([]byte, error) {
-				ev := payload.(event.GetAllUsersEvent)
-				offset := 0
-				if ev.Cursor != nil && *ev.Cursor != "" {
-					if _, err := fmt.Sscanf(*ev.Cursor, "directory:%d", &offset); err != nil {
-						t.Fatal(err)
-					}
-				}
-				if ev.Limit == nil || *ev.Limit == 0 {
-					t.Fatal("missing page limit")
-				}
-				if requests == 1 && !failedOnce {
-					failedOnce = true
-					return nil, gatewayErr
-				}
-				end := min(offset+int(*ev.Limit), len(ids))
-				response := event.UsersResponse{Cursor: "end"}
-				for _, id := range ids[offset:end] {
-					response.Users = append(response.Users, domain.User{Id: id, NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork})
-				}
-				if end < len(ids) {
-					response.Cursor = fmt.Sprintf("directory:%d", end)
-				}
-				requests++
-				return marshal(t, response), nil
-			}}
-			h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{getFollowingsFn: func(string, *uint64, *string) ([]string, string, error) {
-				return []string{followed}, "end", nil
-			}}, streamer)
-			cursor := ""
-			limit := uint64(2)
-			seen := map[string]bool{}
-			pages := 0
-			for cursor != "end" && pages < 10 {
-				raw, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId, Limit: &limit, Cursor: &cursor}), nil)
-				if errors.Is(err, gatewayErr) && !retried {
-					retried = true
-					continue
-				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				response := raw.(event.UsersResponse)
-				if len(response.Users) > int(limit) {
-					t.Fatalf("oversized page: %+v", response)
-				}
-				if len(response.Users) == 0 && response.Cursor != "end" {
-					t.Fatalf("empty intermediate page: %+v", response)
-				}
-				for _, user := range response.Users {
-					if seen[user.Id] {
-						t.Fatalf("duplicate recommendation %s", user.Id)
-					}
-					if user.Id == followed {
-						t.Fatalf("recommended a followed user: %s", user.Id)
-					}
-					seen[user.Id] = true
-				}
-				cursor = response.Cursor
-				pages++
-			}
-			if !retried {
-				t.Error("did not retry the failed gateway page")
-			}
-			if cursor != "end" || requests < 2 {
-				t.Fatalf("pagination did not complete: cursor=%s requests=%d", cursor, requests)
-			}
-			for _, id := range ids {
-				if id != followed && !seen[id] {
-					t.Errorf("lost recommendation %s", id)
-				}
-				stored, err := repo.Get(id)
-				if err != nil || stored.NodeId != fediverse.GatewayNodeID() {
-					t.Errorf("profile not persisted: %s, %v", id, err)
-				}
-			}
-		})
 	}
 }
