@@ -47,7 +47,10 @@ func TestRefreshUsersGatewayDiscovery(t *testing.T) {
 	}}
 	localCursor := "local-page"
 	localLimit := uint64(5)
-	refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId, Cursor: &localCursor, Limit: &localLimit}, streamer)
+	_, err := StreamGetUsersHandler(repo, streamer)(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId, Cursor: &localCursor, Limit: &localLimit}), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{getFollowingsFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 		return []string{"followed@remote.example"}, "end", nil
 	}})
@@ -90,7 +93,7 @@ func TestRefreshUsersGatewayFailurePreservesLocal(t *testing.T) {
 				}
 				return data, nil
 			}}
-			refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId}, streamer)
+			refreshUsers(repo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
 			h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{})
 			raw, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId}), nil)
 			if err != nil {
@@ -123,7 +126,7 @@ func TestRefreshUsersGatewayPersistsProfiles(t *testing.T) {
 	streamer := stubUserStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner.UserId}, genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
 		return marshal(t, event.UsersResponse{Users: []domain.User{candidate}}), nil
 	}}
-	refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId}, streamer)
+	refreshUsers(repo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
 	h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{})
 	raw, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId}), nil)
 	if err != nil {

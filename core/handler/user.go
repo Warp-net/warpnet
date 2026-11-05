@@ -226,8 +226,14 @@ func StreamGetUsersHandler(
 		if err != nil {
 			return nil, err
 		}
+		refresh := func() {
+			refreshUsers(userRepo, ev, streamer)
+			if ev.UserId == streamer.NodeInfo().OwnerId {
+				refreshUsers(userRepo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
+			}
+		}
 		if len(users) != 0 {
-			go refreshUsers(userRepo, ev, streamer)
+			go refresh()
 
 			return event.UsersResponse{
 				Cursor: cursor,
@@ -235,7 +241,7 @@ func StreamGetUsersHandler(
 			}, nil
 		}
 
-		refreshUsers(userRepo, ev, streamer)
+		refresh()
 
 		users, cursor, _ = userRepo.List(ev.Limit, ev.Cursor)
 
@@ -253,7 +259,7 @@ func refreshUsers(
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
-		ev = event.GetAllUsersEvent{UserId: fediverse.EntryHandle}
+		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
 	if errors.Is(err, database.ErrUserNotFound) {
