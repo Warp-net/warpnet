@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/stream"
@@ -148,8 +149,16 @@ func TestRefreshUsers(t *testing.T) {
 	selfInfo := warpnet.NodeInfo{ID: nodeId, OwnerId: "owner-1"}
 	ev := event.GetAllUsersEvent{UserId: "other-user"}
 
-	t.Run("own owner id is skipped", func(t *testing.T) {
-		refreshUsers(stubUserFetcher{}, event.GetAllUsersEvent{UserId: selfInfo.OwnerId}, stubUserStreamer{nodeInfo: selfInfo})
+	t.Run("missing gateway entry is skipped", func(t *testing.T) {
+		repo := stubUserFetcher{getFn: func(id string) (domain.User, error) {
+			require.Equal(t, fediverse.EntryHandle, id)
+			return domain.User{}, database.ErrUserNotFound
+		}}
+		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			t.Fatal("streamed without a gateway entry")
+			return nil, nil
+		}}
+		refreshUsers(repo, event.GetAllUsersEvent{UserId: selfInfo.OwnerId}, streamer)
 	})
 
 	t.Run("unknown user is skipped", func(t *testing.T) {

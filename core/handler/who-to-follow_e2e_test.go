@@ -37,7 +37,7 @@ func TestWhoToFollow_RecommendsAUserAnotherNodeSeesOnline(t *testing.T) {
 	require.NoError(t, err)
 
 	recommended := func() []string {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: "me", NodeId: "node-1"}}, users, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: "me", NodeId: "node-1"}}, users, stubUserFollowsCounter{})
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: "me"}), nil)
 		require.NoError(t, err)
 		var ids []string

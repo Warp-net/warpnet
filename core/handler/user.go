@@ -253,7 +253,7 @@ func refreshUsers(
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
-		return
+		ev = event.GetAllUsersEvent{UserId: fediverse.EntryHandle}
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
 	if errors.Is(err, database.ErrUserNotFound) {
