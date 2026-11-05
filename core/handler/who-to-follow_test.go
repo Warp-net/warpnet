@@ -273,17 +273,15 @@ func TestWhoToFollowGatewayPersistsProfiles(t *testing.T) {
 
 func TestWhoToFollowSkipsRemoteFetch(t *testing.T) {
 	for _, test := range []struct {
-		name      string
-		userID    string
-		cursor    string
-		ownerNode string
+		name   string
+		userID string
+		cursor string
 	}{
-		{name: "other profile", userID: "other", ownerNode: "own-node"},
-		{name: "later page", userID: "owner", cursor: "end", ownerNode: "own-node"},
-		{name: "self gateway", userID: "owner", ownerNode: fediverse.GatewayNodeID()},
+		{name: "other profile", userID: "other"},
+		{name: "later page", userID: "owner", cursor: "end"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			owner := domain.Owner{UserId: "owner", NodeId: test.ownerNode}
+			owner := domain.Owner{UserId: "owner", NodeId: "own-node"}
 			h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, stubUserFetcher{}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{
 				genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 					t.Fatal("unexpected remote fetch")
