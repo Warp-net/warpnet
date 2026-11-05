@@ -56,7 +56,11 @@ func StreamGetWhoToFollowHandler(
 
 		owner := authRepo.GetOwner()
 		gatewayID := fediverse.GatewayNodeID()
-		if ev.UserId == owner.UserId && gatewayID != owner.NodeId && (ev.Cursor == nil || *ev.Cursor == "") {
+		isOwnRequest := ev.UserId == owner.UserId
+		isRemoteGateway := gatewayID != owner.NodeId
+		isFirstPage := ev.Cursor == nil ||
+			*ev.Cursor == ""
+		if isOwnRequest && isRemoteGateway && isFirstPage {
 			refreshWhoToFollow(userRepo, streamer, gatewayID, event.GetAllUsersEvent{UserId: owner.UserId})
 			users, cursor, err = userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 			if err != nil {
