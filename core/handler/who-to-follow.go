@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
+	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -16,8 +18,14 @@ type WhoToFollowAuthStorer interface {
 }
 
 type WhoToFollowUserFetcher interface {
-	UserRefresher
+	Get(userId string) (domain.User, error)
+	Create(user domain.User) (domain.User, error)
+	Update(userId string, user domain.User) (domain.User, error)
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
+}
+
+type WhoToFollowStreamer interface {
+	GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
 }
 
 type WhoToFollowFollowsLister interface {
@@ -28,7 +36,7 @@ func StreamGetWhoToFollowHandler(
 	authRepo WhoToFollowAuthStorer,
 	userRepo WhoToFollowUserFetcher,
 	followRepo WhoToFollowFollowsLister,
-	streamers ...UserStreamer,
+	streamer WhoToFollowStreamer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllUsersEvent
@@ -41,14 +49,19 @@ func StreamGetWhoToFollowHandler(
 			return nil, warpnet.WarpError("empty user id")
 		}
 
-		owner := authRepo.GetOwner()
-		if len(streamers) > 0 && streamers[0] != nil && ev.UserId == owner.UserId && (ev.Cursor == nil || *ev.Cursor == "") {
-			refreshUsers(userRepo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamers[0])
-		}
-
 		users, cursor, err := userRepo.WhoToFollow(ev.Limit, ev.Cursor)
 		if err != nil {
 			return nil, err
+		}
+
+		owner := authRepo.GetOwner()
+		gatewayID := fediverse.GatewayNodeID()
+		if ev.UserId == owner.UserId && gatewayID != owner.NodeId && (ev.Cursor == nil || *ev.Cursor == "") {
+			refreshWhoToFollow(userRepo, streamer, gatewayID, event.GetAllUsersEvent{UserId: owner.UserId})
+			users, cursor, err = userRepo.WhoToFollow(ev.Limit, ev.Cursor)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		followingsLimit := uint64(80) //nolint:mnd    // TODO limit?
@@ -112,5 +125,29 @@ func StreamGetWhoToFollowHandler(
 			Cursor: cursor,
 			Users:  whotofollow,
 		}, nil
+	}
+}
+
+func refreshWhoToFollow(repo WhoToFollowUserFetcher, streamer WhoToFollowStreamer, nodeID string, ev event.GetAllUsersEvent) {
+	data, err := streamer.GenericStream(nodeID, event.PUBLIC_GET_WHOTOFOLLOW, ev)
+	if err != nil {
+		if !errors.Is(err, warpnet.ErrNodeIsOffline) {
+			log.Warnf("who to follow: stream to node %s: %v", nodeID, err)
+		}
+		return
+	}
+	var remoteError event.ResponseError
+	if _ = json.Unmarshal(data, &remoteError); remoteError.Message != "" {
+		log.Warnf("who to follow: remote response: %v", remoteError)
+		return
+	}
+	var response event.UsersResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		log.Warnf("who to follow: unmarshal response: %v", err)
+		return
+	}
+	for _, candidate := range response.Users {
+		_, _ = repo.Create(candidate)
+		_, _ = repo.Update(candidate.Id, candidate)
 	}
 }

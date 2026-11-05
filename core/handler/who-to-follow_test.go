@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -9,14 +11,24 @@ import (
 	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
-	"testing"
 )
+
+type stubWhoToFollowStreamer struct {
+	genericStreamFn func(nodeID string, path stream.WarpRoute, data any) ([]byte, error)
+}
+
+func (s stubWhoToFollowStreamer) GenericStream(nodeID string, path stream.WarpRoute, data any) ([]byte, error) {
+	if s.genericStreamFn != nil {
+		return s.genericStreamFn(nodeID, path, data)
+	}
+	return nil, warpnet.ErrNodeIsOffline
+}
 
 func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	owner := "owner-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -24,7 +36,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty user id", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{}), nil)
 		if err == nil || err.Error() != "empty user id" {
 			t.Fatalf("unexpected err: %v", err)
@@ -48,7 +60,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 			},
 			stubUserFollowsCounter{getFollowingsFn: func(userId string, limit *uint64, cursor *string) ([]string, string, error) {
 				return []string{"already-followed"}, "", nil
-			}},
+			}}, stubWhoToFollowStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -74,7 +86,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 					return domain.User{Id: owner, Network: warpnet.WarpnetName}, nil
 				},
 			},
-			stubUserFollowsCounter{},
+			stubUserFollowsCounter{}, stubWhoToFollowStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -101,7 +113,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 					return domain.User{Id: owner, Network: warpnet.WarpnetName}, nil
 				},
 			},
-			stubUserFollowsCounter{},
+			stubUserFollowsCounter{}, stubWhoToFollowStreamer{},
 		)
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
@@ -117,7 +129,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 		repoErr := errors.New("db error")
 		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{whoToFollowFn: func(limit *uint64, cursor *string) ([]domain.User, string, error) {
 			return nil, "", repoErr
-		}}, stubUserFollowsCounter{})
+		}}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})
 		_, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
@@ -125,7 +137,7 @@ func TestStreamGetWhoToFollowHandler(t *testing.T) {
 	})
 
 	t.Run("empty results", func(t *testing.T) {
-		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{})
+		h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: owner}}, stubUserFetcher{}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})
 		resp, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -156,16 +168,13 @@ func TestWhoToFollowGatewayDiscovery(t *testing.T) {
 			return user, nil
 		},
 		getFn: func(id string) (domain.User, error) {
-			if id == fediverse.EntryHandle {
-				return domain.User{Id: id, NodeId: gatewayID}, nil
-			}
 			return domain.User{Id: owner.UserId}, nil
 		},
 		whoToFollowFn: func(_ *uint64, _ *string) ([]domain.User, string, error) { return stored, "end", nil },
 	}
-	streamer := stubUserStreamer{genericStreamFn: func(id string, route stream.WarpRoute, payload any) ([]byte, error) {
+	streamer := stubWhoToFollowStreamer{genericStreamFn: func(id string, route stream.WarpRoute, payload any) ([]byte, error) {
 		ev := payload.(event.GetAllUsersEvent)
-		if id != gatewayID || route != event.PUBLIC_GET_USERS || ev.UserId != fediverse.EntryHandle || ev.Cursor != nil {
+		if id != gatewayID || route != event.PUBLIC_GET_WHOTOFOLLOW || ev.UserId != owner.UserId || ev.Cursor != nil {
 			t.Fatalf("request: %s %s %+v", id, route, ev)
 		}
 		return marshal(t, event.UsersResponse{Users: remote}), nil
@@ -196,9 +205,6 @@ func TestWhoToFollowGatewayFailurePreservesLocal(t *testing.T) {
 			owner := domain.Owner{UserId: "owner", NodeId: "own-node"}
 			repo := stubUserFetcher{
 				getFn: func(id string) (domain.User, error) {
-					if id == fediverse.EntryHandle {
-						return domain.User{Id: id, NodeId: fediverse.GatewayNodeID()}, nil
-					}
 					return domain.User{Id: owner.UserId}, nil
 				},
 				whoToFollowFn: func(_ *uint64, _ *string) ([]domain.User, string, error) {
@@ -206,7 +212,7 @@ func TestWhoToFollowGatewayFailurePreservesLocal(t *testing.T) {
 				},
 				createFn: func(user domain.User) (domain.User, error) { t.Fatal("stored a failed response"); return user, nil },
 			}
-			streamer := stubUserStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
+			streamer := stubWhoToFollowStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
 				if data == nil {
 					return nil, warpnet.ErrNodeIsOffline
 				}
@@ -241,7 +247,7 @@ func TestWhoToFollowGatewayPersistsProfiles(t *testing.T) {
 	}
 	fediverse.SeedEntryUser(repo)
 	candidate := domain.User{Id: "alice@remote.example", Username: "Alice", NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork, AvatarKey: "https://remote.example/avatar.png"}
-	streamer := stubUserStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
+	streamer := stubWhoToFollowStreamer{genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
 		return marshal(t, event.UsersResponse{Users: []domain.User{candidate}}), nil
 	}}
 	h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{}, streamer)
@@ -262,5 +268,48 @@ func TestWhoToFollowGatewayPersistsProfiles(t *testing.T) {
 	stored, err := repo.Get(candidate.Id)
 	if err != nil || stored.NodeId != candidate.NodeId || stored.AvatarKey != candidate.AvatarKey {
 		t.Fatalf("persisted profile = %+v, err=%v", stored, err)
+	}
+}
+
+func TestWhoToFollowSkipsRemoteFetch(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		userID    string
+		cursor    string
+		ownerNode string
+	}{
+		{name: "other profile", userID: "other", ownerNode: "own-node"},
+		{name: "later page", userID: "owner", cursor: "end", ownerNode: "own-node"},
+		{name: "self gateway", userID: "owner", ownerNode: fediverse.GatewayNodeID()},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			owner := domain.Owner{UserId: "owner", NodeId: test.ownerNode}
+			h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, stubUserFetcher{}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{
+				genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+					t.Fatal("unexpected remote fetch")
+					return nil, nil
+				},
+			})
+			_, err := h(marshal(t, event.GetAllUsersEvent{UserId: test.userID, Cursor: &test.cursor}), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestWhoToFollowChecksRepositoryBeforeFetching(t *testing.T) {
+	repoErr := errors.New("database unavailable")
+	h := StreamGetWhoToFollowHandler(stubAuth{owner: domain.Owner{UserId: "owner"}}, stubUserFetcher{
+		whoToFollowFn: func(*uint64, *string) ([]domain.User, string, error) { return nil, "", repoErr },
+	}, stubUserFollowsCounter{}, stubWhoToFollowStreamer{
+		genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			t.Fatal("fetch after repository failure")
+			return nil, nil
+		},
+	})
+	_, err := h(marshal(t, event.GetAllUsersEvent{UserId: "owner"}), nil)
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("error = %v", err)
 	}
 }

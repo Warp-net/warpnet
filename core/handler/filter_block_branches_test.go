@@ -155,7 +155,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 		follows := stubUserFollowsCounter{getFollowingsFn: func(string, *uint64, *string) ([]string, string, error) {
 			return nil, "", errors.New("down")
 		}}
-		_, err := StreamGetWhoToFollowHandler(auth, stubUserFetcher{}, follows)(
+		_, err := StreamGetWhoToFollowHandler(auth, stubUserFetcher{}, follows, stubWhoToFollowStreamer{})(
 			marshal(t, event.GetAllUsersEvent{UserId: ownerId}), nil)
 		require.NoError(t, err)
 	})
@@ -167,7 +167,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 				return []domain.User{{Id: "cand-1", NodeId: "far-node", Network: warpnet.WarpnetName}}, "", nil
 			},
 		}
-		out, err := StreamGetWhoToFollowHandler(auth, users, stubUserFollowsCounter{})(
+		out, err := StreamGetWhoToFollowHandler(auth, users, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})(
 			marshal(t, event.GetAllUsersEvent{UserId: ownerId}), nil)
 		require.NoError(t, err)
 		require.Len(t, out.(event.UsersResponse).Users, 1)
@@ -196,7 +196,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 			return []string{"already-followed"}, "", nil
 		}}
 
-		out, err := StreamGetWhoToFollowHandler(auth, users, follows)(
+		out, err := StreamGetWhoToFollowHandler(auth, users, follows, stubWhoToFollowStreamer{})(
 			marshal(t, event.GetAllUsersEvent{UserId: ownerId}), nil)
 		require.NoError(t, err)
 
@@ -223,7 +223,7 @@ func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 				return []domain.User{{Id: "warp-1", NodeId: "n1", Network: warpnet.WarpnetName}}, "", nil
 			},
 		}
-		out, err := StreamGetWhoToFollowHandler(auth, users, stubUserFollowsCounter{})(
+		out, err := StreamGetWhoToFollowHandler(auth, users, stubUserFollowsCounter{}, stubWhoToFollowStreamer{})(
 			marshal(t, event.GetAllUsersEvent{UserId: "someone-else"}), nil)
 		require.NoError(t, err)
 		require.Empty(t, out.(event.UsersResponse).Users)

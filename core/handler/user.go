@@ -65,17 +65,13 @@ type UserFollowsCounter interface {
 	GetFollowings(userId string, limit *uint64, cursor *string) ([]string, string, error)
 }
 
-type UserRefresher interface {
+type UserFetcher interface {
 	Create(user domain.User) (domain.User, error)
 	Get(userId string) (user domain.User, err error)
-	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
-}
-
-type UserFetcher interface {
-	UserRefresher
 	List(limit *uint64, cursor *string) ([]domain.User, string, error)
 	Search(query string, limit *uint64, cursor *string) ([]domain.User, string, error)
 	WhoToFollow(limit *uint64, cursor *string) ([]domain.User, string, error)
+	Update(userId string, newUser domain.User) (updatedUser domain.User, err error)
 	CreateWithTTL(user domain.User, ttl time.Duration) (domain.User, error)
 }
 
@@ -251,7 +247,7 @@ func StreamGetUsersHandler(
 }
 
 func refreshUsers(
-	userRepo UserRefresher,
+	userRepo UserFetcher,
 	ev event.GetAllUsersEvent,
 	streamer UserStreamer,
 ) {
