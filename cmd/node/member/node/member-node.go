@@ -101,7 +101,7 @@ func NewMemberNode(
 	if len(privKey) == 0 {
 		return nil, node.ErrPrivateKeyRequired
 	}
-	nodeRepo := database.NewNodeRepo(db)
+	nodeRepo := &memberBlocklist{NodeRepo: database.NewNodeRepo(db)}
 	store, err := warpnet.NewPeerstore(ctx, nodeRepo)
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func NewMemberNode(
 	dHashTable := dht.NewDHTable(
 		ctx,
 		dht.RoutingStore(nodeRepo),
-		dht.Ratings(ratings),
+		dht.Ratings(memberRoutingRatings{PeersRatings: ratings, blocklist: nodeRepo}),
 		dht.AddPeerCallbacks(discService.DiscoveryHandlerDHT),
 		dht.BootstrapNodes(bootstrapNodes...),
 		dht.Network(warpNetwork),
@@ -170,6 +170,7 @@ func NewMemberNode(
 	}
 
 	opts = append(opts, node.CommonOptions...)
+	opts = append(opts, libp2p.ConnectionGater(nodeRepo))
 
 	walletConfig := wallet.DefaultConfig(warpNetwork, os.Getenv("WARPNET_WALLET_BIN"))
 	walletClient := wallet.New(walletConfig)
@@ -199,6 +200,15 @@ func NewMemberNode(
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 		rateLimits:    rateLimits,
+	}
+
+	nodeRepo.onBlock = func(id warpnet.WarpPeerID) {
+		dHashTable.RemovePeer(id)
+		if mn.node != nil {
+			if err := mn.node.Node().Network().ClosePeer(id); err != nil {
+				log.Warnf("member: disconnect blocked peer %s: %v", id, err)
+			}
+		}
 	}
 
 	return mn, nil
