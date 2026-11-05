@@ -1,1 +1,6 @@
 cmd/node/member/build/bin/**
+
+# Local agent configuration
+.agents/
+.codex/
+AGENTS.md
