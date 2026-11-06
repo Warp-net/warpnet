@@ -40,17 +40,14 @@ func TestRefreshUsersGatewayDiscovery(t *testing.T) {
 	}
 	streamer := stubUserStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner.UserId}, genericStreamFn: func(id string, route stream.WarpRoute, payload any) ([]byte, error) {
 		ev := payload.(event.GetAllUsersEvent)
-		if id != gatewayID || route != event.PUBLIC_GET_USERS || ev.UserId != fediverse.EntryHandle || ev.Cursor != nil || ev.Limit != nil {
+		if id != gatewayID || route != event.PUBLIC_GET_WHOTOFOLLOW || ev.UserId != owner.UserId || ev.Cursor != nil || ev.Limit != nil {
 			t.Fatalf("request: %s %s %+v", id, route, ev)
 		}
 		return marshal(t, event.UsersResponse{Users: remote}), nil
 	}}
 	localCursor := "local-page"
 	localLimit := uint64(5)
-	_, err := StreamGetUsersHandler(repo, streamer)(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId, Cursor: &localCursor, Limit: &localLimit}), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId, Cursor: &localCursor, Limit: &localLimit}, streamer)
 	h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{getFollowingsFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 		return []string{"followed@remote.example"}, "end", nil
 	}})
@@ -93,7 +90,7 @@ func TestRefreshUsersGatewayFailurePreservesLocal(t *testing.T) {
 				}
 				return data, nil
 			}}
-			refreshUsers(repo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
+			refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId}, streamer)
 			h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{})
 			raw, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId}), nil)
 			if err != nil {
@@ -126,7 +123,7 @@ func TestRefreshUsersGatewayPersistsProfiles(t *testing.T) {
 	streamer := stubUserStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner.UserId}, genericStreamFn: func(_ string, _ stream.WarpRoute, _ any) ([]byte, error) {
 		return marshal(t, event.UsersResponse{Users: []domain.User{candidate}}), nil
 	}}
-	refreshUsers(repo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
+	refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId}, streamer)
 	h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{})
 	raw, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner.UserId}), nil)
 	if err != nil {

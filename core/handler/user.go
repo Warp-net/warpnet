@@ -226,14 +226,8 @@ func StreamGetUsersHandler(
 		if err != nil {
 			return nil, err
 		}
-		refresh := func() {
-			refreshUsers(userRepo, ev, streamer)
-			if ev.UserId == streamer.NodeInfo().OwnerId {
-				refreshUsers(userRepo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
-			}
-		}
 		if len(users) != 0 {
-			go refresh()
+			go refreshUsers(userRepo, ev, streamer)
 
 			return event.UsersResponse{
 				Cursor: cursor,
@@ -241,7 +235,7 @@ func StreamGetUsersHandler(
 			}, nil
 		}
 
-		refresh()
+		refreshUsers(userRepo, ev, streamer)
 
 		users, cursor, _ = userRepo.List(ev.Limit, ev.Cursor)
 
@@ -258,26 +252,29 @@ func refreshUsers(
 	streamer UserStreamer,
 ) {
 	ownNodeInfo := streamer.NodeInfo()
+	var sourceNodeID string
+	path := stream.WarpRoute(event.PUBLIC_GET_USERS)
+	request := ev
 	if ownNodeInfo.OwnerId == ev.UserId {
-		return
-	}
-	otherUser, err := userRepo.Get(ev.UserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return
-	}
-	if err != nil {
-		log.Errorf("get users handler: get user %v", err)
-		return
-	}
-	if ownNodeInfo.ID.String() == otherUser.NodeId {
-		return
+		sourceNodeID = fediverse.GatewayNodeID()
+		path = event.PUBLIC_GET_WHOTOFOLLOW
+		request = event.GetAllUsersEvent{UserId: ev.UserId}
+	} else {
+		otherUser, err := userRepo.Get(ev.UserId)
+		if errors.Is(err, database.ErrUserNotFound) {
+			return
+		}
+		if err != nil {
+			log.Errorf("get users handler: get user %v", err)
+			return
+		}
+		if ownNodeInfo.ID.String() == otherUser.NodeId {
+			return
+		}
+		sourceNodeID = otherUser.NodeId
 	}
 
-	usersDataResp, err := streamer.GenericStream(
-		otherUser.NodeId,
-		event.PUBLIC_GET_USERS,
-		ev,
-	)
+	usersDataResp, err := streamer.GenericStream(sourceNodeID, path, request)
 	if err != nil {
 		log.Errorf("get users handler: stream %v", err)
 		return
@@ -313,7 +310,7 @@ func refreshUsers(
 		_, _ = userRepo.Create(user)
 		// Only the node's own owner is first-hand; its copies of others may be
 		// stale and would roll back a profile this node already refreshed.
-		if user.NodeId == otherUser.NodeId {
+		if user.NodeId == sourceNodeID {
 			_, _ = userRepo.Update(user.Id, user)
 			continue
 		}

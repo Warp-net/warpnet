@@ -15,6 +15,7 @@ package handler
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -78,17 +79,6 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		}
 		h := StreamGetUserHandler(stubUserTweetsCounter{}, stubUserFollowsCounter{}, ownerUserRepo, auth, streamer)
 		if _, err := h(marshal(t, event.GetUserEvent{UserId: owner}), nil); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-	})
-
-	t.Run("StreamGetUsersHandler - owner refresh skipped", func(t *testing.T) {
-		streamer := stubUserStreamer{
-			nodeInfo:        ownerInfo,
-			genericStreamFn: failOnStream(t),
-		}
-		h := StreamGetUsersHandler(ownerUserRepo, streamer)
-		if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	})
@@ -409,5 +399,37 @@ func TestStreamNewReplyHandler_OwnTweet_NodeIdFormatDrift(t *testing.T) {
 	h := StreamNewTweetHandler(stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetRepo{}, stubTimelineRepo{}, stubFollowChecker{}, userRepo, stubModerationNotifier{}, streamer)
 	if _, err := h(marshal(t, ev), nil); err != nil {
 		t.Fatalf("unexpected err: %v", err)
+	}
+}
+
+func TestStreamGetUsersHandler_OwnerRefreshQueriesGateway(t *testing.T) {
+	ownerPeerID := warpnet.WarpPeerID("owner-node")
+	ownerInfo := warpnet.NodeInfo{OwnerId: "owner", ID: ownerPeerID}
+	calls := 0
+	streamer := stubUserStreamer{
+		nodeInfo: ownerInfo,
+		genericStreamFn: func(nodeID string, path stream.WarpRoute, payload any) ([]byte, error) {
+			if nodeID == ownerPeerID.String() {
+				t.Fatal("dialed the owner's own node")
+			}
+			if nodeID != fediverse.GatewayNodeID() {
+				t.Fatalf("unexpected node: %s", nodeID)
+			}
+			if path != event.PUBLIC_GET_WHOTOFOLLOW {
+				t.Fatalf("unexpected route: %s", path)
+			}
+			if payload.(event.GetAllUsersEvent).UserId != ownerInfo.OwnerId {
+				t.Fatal("replaced the requested user")
+			}
+			calls++
+			return marshal(t, event.UsersResponse{}), nil
+		},
+	}
+	h := StreamGetUsersHandler(stubUserFetcher{}, streamer)
+	if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: ownerInfo.OwnerId}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("gateway requests: %d", calls)
 	}
 }

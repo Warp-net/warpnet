@@ -149,14 +149,16 @@ func TestRefreshUsers(t *testing.T) {
 	selfInfo := warpnet.NodeInfo{ID: nodeId, OwnerId: "owner-1"}
 	ev := event.GetAllUsersEvent{UserId: "other-user"}
 
-	t.Run("own owner is not replaced with another user", func(t *testing.T) {
+	t.Run("owner refresh requests gateway recommendations without replacing the user", func(t *testing.T) {
 		repo := stubUserFetcher{getFn: func(string) (domain.User, error) {
 			t.Fatal("looked up a different user for the owner")
 			return domain.User{}, nil
 		}}
-		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
-			t.Fatal("streamed for the owner")
-			return nil, nil
+		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeID string, path stream.WarpRoute, payload any) ([]byte, error) {
+			require.Equal(t, fediverse.GatewayNodeID(), nodeID)
+			require.Equal(t, stream.WarpRoute(event.PUBLIC_GET_WHOTOFOLLOW), path)
+			require.Equal(t, selfInfo.OwnerId, payload.(event.GetAllUsersEvent).UserId)
+			return json.Marshal(event.UsersResponse{})
 		}}
 		refreshUsers(repo, event.GetAllUsersEvent{UserId: selfInfo.OwnerId}, streamer)
 	})
