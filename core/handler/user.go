@@ -252,32 +252,35 @@ func refreshUsers(
 	streamer UserStreamer,
 ) {
 	ownNodeInfo := streamer.NodeInfo()
-	var sourceNodeID string
-	path := stream.WarpRoute(event.PUBLIC_GET_USERS)
-	request := ev
-	if ownNodeInfo.OwnerId == ev.UserId {
-		sourceNodeID = fediverse.GatewayNodeID()
-		path = event.PUBLIC_GET_WHOTOFOLLOW
-		request = event.GetAllUsersEvent{UserId: ev.UserId}
-	} else {
-		otherUser, err := userRepo.Get(ev.UserId)
-		if errors.Is(err, database.ErrUserNotFound) {
-			return
-		}
-		if err != nil {
-			log.Errorf("get users handler: get user %v", err)
-			return
-		}
-		if ownNodeInfo.ID.String() == otherUser.NodeId {
-			return
-		}
-		sourceNodeID = otherUser.NodeId
+
+	otherUser, err := userRepo.Get(ev.UserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
+	if err != nil {
+		log.Errorf("get users handler: get user %v", err)
+		return
+	}
+	if ownNodeInfo.ID.String() == otherUser.NodeId {
+		return
 	}
 
-	usersDataResp, err := streamer.GenericStream(sourceNodeID, path, request)
+	usersDataResp, err := streamer.GenericStream(otherUser.NodeId, event.PUBLIC_GET_USERS, ev)
 	if err != nil {
 		log.Errorf("get users handler: stream %v", err)
 		return
+	}
+	if ownNodeInfo.OwnerId == ev.UserId {
+		fediverseUsersDataResp, err := streamer.GenericStream(
+			fediverse.GatewayNodeID(),
+			event.PUBLIC_GET_WHOTOFOLLOW,
+			ev,
+		)
+		if err != nil {
+			log.Errorf("get fediverse users handler: stream %v", err)
+		} else {
+			usersDataResp = append(usersDataResp, fediverseUsersDataResp...)
+		}
 	}
 
 	var possibleError event.ResponseError
@@ -310,7 +313,7 @@ func refreshUsers(
 		_, _ = userRepo.Create(user)
 		// Only the node's own owner is first-hand; its copies of others may be
 		// stale and would roll back a profile this node already refreshed.
-		if user.NodeId == sourceNodeID {
+		if user.NodeId == otherUser.NodeId {
 			_, _ = userRepo.Update(user.Id, user)
 			continue
 		}
