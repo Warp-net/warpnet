@@ -252,23 +252,17 @@ func refreshUsers(
 	streamer UserStreamer,
 ) {
 	ownNodeInfo := streamer.NodeInfo()
-	isOwnRequest := ownNodeInfo.OwnerId == ev.UserId
+
+	otherUser, err := userRepo.Get(ev.UserId)
+	if errors.Is(err, database.ErrUserNotFound) {
+		return
+	}
+	if err != nil {
+		log.Errorf("get users handler: get user %v", err)
+		return
+	}
 	var usersResp event.UsersResponse
-	var sourceNodeID string
-
-	if !isOwnRequest {
-		otherUser, err := userRepo.Get(ev.UserId)
-		switch {
-		case errors.Is(err, database.ErrUserNotFound):
-			return
-		case err != nil:
-			log.Errorf("get users handler: get user %v", err)
-			return
-		}
-		if ownNodeInfo.ID.String() == otherUser.NodeId {
-			return
-		}
-
+	if ownNodeInfo.ID.String() != otherUser.NodeId {
 		usersDataResp, err := streamer.GenericStream(otherUser.NodeId, event.PUBLIC_GET_USERS, ev)
 		if err != nil {
 			log.Errorf("get users handler: stream %v", err)
@@ -280,35 +274,26 @@ func refreshUsers(
 			return
 		}
 		if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
-			log.Errorf("unmarshal users response: %v", err)
+			log.Errorf("ummarshal users response: %v %s", err, usersDataResp)
 			return
 		}
-		sourceNodeID = otherUser.NodeId
 	}
-
-	if isOwnRequest {
-		gatewayID := fediverse.GatewayNodeID()
+	if ownNodeInfo.OwnerId == ev.UserId {
 		fediverseUsersDataResp, err := streamer.GenericStream(
-			gatewayID,
+			fediverse.GatewayNodeID(),
 			event.PUBLIC_GET_WHOTOFOLLOW,
-			event.GetAllUsersEvent{UserId: ev.UserId},
+			ev,
 		)
 		if err != nil {
 			log.Errorf("get fediverse users handler: stream %v", err)
-			return
+		} else {
+			var fediverseUsersResp event.UsersResponse
+			if err := json.Unmarshal(fediverseUsersDataResp, &fediverseUsersResp); err != nil {
+				log.Errorf("unmarshal fediverse users response: %v", err)
+				return
+			}
+			usersResp.Users = append(usersResp.Users, fediverseUsersResp.Users...)
 		}
-		var possibleError event.ResponseError
-		if _ = json.Unmarshal(fediverseUsersDataResp, &possibleError); possibleError.Message != "" {
-			log.Errorf("unmarshal fediverse users error response: %s", possibleError.Message)
-			return
-		}
-		var fediverseUsersResp event.UsersResponse
-		if err := json.Unmarshal(fediverseUsersDataResp, &fediverseUsersResp); err != nil {
-			log.Errorf("unmarshal fediverse users response: %v", err)
-			return
-		}
-		usersResp.Users = append(usersResp.Users, fediverseUsersResp.Users...)
-		sourceNodeID = gatewayID
 	}
 
 	selfNodeID := streamer.NodeInfo().ID.String()
@@ -329,7 +314,7 @@ func refreshUsers(
 		_, _ = userRepo.Create(user)
 		// Only the node's own owner is first-hand; its copies of others may be
 		// stale and would roll back a profile this node already refreshed.
-		if user.NodeId == sourceNodeID {
+		if user.NodeId == otherUser.NodeId {
 			_, _ = userRepo.Update(user.Id, user)
 			continue
 		}

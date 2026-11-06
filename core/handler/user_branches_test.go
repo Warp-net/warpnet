@@ -150,9 +150,9 @@ func TestRefreshUsers(t *testing.T) {
 	ev := event.GetAllUsersEvent{UserId: "other-user"}
 
 	t.Run("owner refresh requests gateway recommendations without replacing the user", func(t *testing.T) {
-		repo := stubUserFetcher{getFn: func(string) (domain.User, error) {
-			t.Fatal("looked up a different user for the owner")
-			return domain.User{}, nil
+		repo := stubUserFetcher{getFn: func(id string) (domain.User, error) {
+			require.Equal(t, selfInfo.OwnerId, id)
+			return domain.User{Id: id, NodeId: selfInfo.ID.String()}, nil
 		}}
 		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeID string, path stream.WarpRoute, payload any) ([]byte, error) {
 			require.Equal(t, fediverse.GatewayNodeID(), nodeID)

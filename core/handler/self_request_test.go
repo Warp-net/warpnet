@@ -425,7 +425,10 @@ func TestStreamGetUsersHandler_OwnerRefreshQueriesGateway(t *testing.T) {
 			return marshal(t, event.UsersResponse{}), nil
 		},
 	}
-	h := StreamGetUsersHandler(stubUserFetcher{}, streamer)
+	repo := stubUserFetcher{getFn: func(id string) (domain.User, error) {
+		return domain.User{Id: id, NodeId: ownerPeerID.String()}, nil
+	}}
+	h := StreamGetUsersHandler(repo, streamer)
 	if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: ownerInfo.OwnerId}), nil); err != nil {
 		t.Fatal(err)
 	}

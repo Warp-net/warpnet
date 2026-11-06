@@ -20,15 +20,10 @@ func TestRefreshUsersGatewayDiscovery(t *testing.T) {
 		{Id: "followed@remote.example", NodeId: gatewayID, Network: fediverse.MastodonNetwork},
 	}
 	stored := []domain.User{{Id: "local", NodeId: "local-node", Network: warpnet.WarpnetName}}
-	updates := []string{}
 	repo := stubUserFetcher{
 		createFn: func(user domain.User) (domain.User, error) {
 			stored = append(stored, user)
 			return user, database.ErrUserAlreadyExists
-		},
-		updateFn: func(id string, user domain.User) (domain.User, error) {
-			updates = append(updates, id)
-			return user, nil
 		},
 		getFn: func(id string) (domain.User, error) {
 			if id == fediverse.EntryHandle {
@@ -38,15 +33,15 @@ func TestRefreshUsersGatewayDiscovery(t *testing.T) {
 		},
 		whoToFollowFn: func(_ *uint64, _ *string) ([]domain.User, string, error) { return stored, "end", nil },
 	}
+	localCursor := "local-page"
+	localLimit := uint64(5)
 	streamer := stubUserStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner.UserId}, genericStreamFn: func(id string, route stream.WarpRoute, payload any) ([]byte, error) {
 		ev := payload.(event.GetAllUsersEvent)
-		if id != gatewayID || route != event.PUBLIC_GET_WHOTOFOLLOW || ev.UserId != owner.UserId || ev.Cursor != nil || ev.Limit != nil {
+		if id != gatewayID || route != event.PUBLIC_GET_WHOTOFOLLOW || ev.UserId != owner.UserId || ev.Cursor == nil || *ev.Cursor != localCursor || ev.Limit == nil || *ev.Limit != localLimit {
 			t.Fatalf("request: %s %s %+v", id, route, ev)
 		}
 		return marshal(t, event.UsersResponse{Users: remote}), nil
 	}}
-	localCursor := "local-page"
-	localLimit := uint64(5)
 	refreshUsers(repo, event.GetAllUsersEvent{UserId: owner.UserId, Cursor: &localCursor, Limit: &localLimit}, streamer)
 	h := StreamGetWhoToFollowHandler(stubAuth{owner: owner}, repo, stubUserFollowsCounter{getFollowingsFn: func(_ string, _ *uint64, _ *string) ([]string, string, error) {
 		return []string{"followed@remote.example"}, "end", nil
@@ -58,9 +53,6 @@ func TestRefreshUsersGatewayDiscovery(t *testing.T) {
 	response := raw.(event.UsersResponse)
 	if len(response.Users) != 2 || response.Users[0].Id != "local" || response.Users[1].Id != "alice@remote.example" {
 		t.Fatalf("recommendations = %+v", response)
-	}
-	if len(updates) != 2 || updates[0] != "alice@remote.example" || updates[1] != "followed@remote.example" {
-		t.Fatalf("updated = %v", updates)
 	}
 }
 
@@ -142,5 +134,36 @@ func TestRefreshUsersGatewayPersistsProfiles(t *testing.T) {
 	stored, err := repo.Get(candidate.Id)
 	if err != nil || stored.NodeId != candidate.NodeId || stored.AvatarKey != candidate.AvatarKey {
 		t.Fatalf("persisted profile = %+v, err=%v", stored, err)
+	}
+}
+
+func TestRefreshUsersMergesDecodedResponses(t *testing.T) {
+	created := map[string]bool{}
+	repo := stubUserFetcher{
+		getFn: func(id string) (domain.User, error) {
+			return domain.User{Id: id, NodeId: "other-node"}, nil
+		},
+		createFn: func(user domain.User) (domain.User, error) {
+			created[user.Id] = true
+			return user, nil
+		},
+	}
+	streamer := stubUserStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: "owner"},
+		genericStreamFn: func(nodeID string, path stream.WarpRoute, _ any) ([]byte, error) {
+			switch path {
+			case event.PUBLIC_GET_USERS:
+				return marshal(t, event.UsersResponse{Users: []domain.User{{Id: "native", NodeId: nodeID}}}), nil
+			case event.PUBLIC_GET_WHOTOFOLLOW:
+				return marshal(t, event.UsersResponse{Users: []domain.User{{Id: "alice@remote.example", NodeId: nodeID}}}), nil
+			default:
+				t.Fatalf("unexpected route: %s", path)
+				return nil, nil
+			}
+		},
+	}
+	refreshUsers(repo, event.GetAllUsersEvent{UserId: "owner"}, streamer)
+	if !created["native"] || !created["alice@remote.example"] {
+		t.Fatalf("users from both responses must be saved: %v", created)
 	}
 }
