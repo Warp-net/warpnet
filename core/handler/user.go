@@ -252,47 +252,63 @@ func refreshUsers(
 	streamer UserStreamer,
 ) {
 	ownNodeInfo := streamer.NodeInfo()
+	isOwnRequest := ownNodeInfo.OwnerId == ev.UserId
+	var usersResp event.UsersResponse
+	var sourceNodeID string
 
-	otherUser, err := userRepo.Get(ev.UserId)
-	if errors.Is(err, database.ErrUserNotFound) {
-		return
-	}
-	if err != nil {
-		log.Errorf("get users handler: get user %v", err)
-		return
-	}
-	if ownNodeInfo.ID.String() == otherUser.NodeId {
-		return
+	if !isOwnRequest {
+		otherUser, err := userRepo.Get(ev.UserId)
+		switch {
+		case errors.Is(err, database.ErrUserNotFound):
+			return
+		case err != nil:
+			log.Errorf("get users handler: get user %v", err)
+			return
+		}
+		if ownNodeInfo.ID.String() == otherUser.NodeId {
+			return
+		}
+
+		usersDataResp, err := streamer.GenericStream(otherUser.NodeId, event.PUBLIC_GET_USERS, ev)
+		if err != nil {
+			log.Errorf("get users handler: stream %v", err)
+			return
+		}
+		var possibleError event.ResponseError
+		if _ = json.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal other users error response: %s", possibleError.Message)
+			return
+		}
+		if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
+			log.Errorf("unmarshal users response: %v", err)
+			return
+		}
+		sourceNodeID = otherUser.NodeId
 	}
 
-	usersDataResp, err := streamer.GenericStream(otherUser.NodeId, event.PUBLIC_GET_USERS, ev)
-	if err != nil {
-		log.Errorf("get users handler: stream %v", err)
-		return
-	}
-	if ownNodeInfo.OwnerId == ev.UserId {
+	if isOwnRequest {
+		gatewayID := fediverse.GatewayNodeID()
 		fediverseUsersDataResp, err := streamer.GenericStream(
-			fediverse.GatewayNodeID(),
+			gatewayID,
 			event.PUBLIC_GET_WHOTOFOLLOW,
-			ev,
+			event.GetAllUsersEvent{UserId: ev.UserId},
 		)
 		if err != nil {
 			log.Errorf("get fediverse users handler: stream %v", err)
-		} else {
-			usersDataResp = append(usersDataResp, fediverseUsersDataResp...)
+			return
 		}
-	}
-
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
-		log.Errorf("unmarshal other users error response: %s", possibleError.Message)
-		return
-	}
-
-	var usersResp event.UsersResponse
-	if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
-		log.Errorf("ummarshal users response: %v %s", err, usersDataResp)
-		return
+		var possibleError event.ResponseError
+		if _ = json.Unmarshal(fediverseUsersDataResp, &possibleError); possibleError.Message != "" {
+			log.Errorf("unmarshal fediverse users error response: %s", possibleError.Message)
+			return
+		}
+		var fediverseUsersResp event.UsersResponse
+		if err := json.Unmarshal(fediverseUsersDataResp, &fediverseUsersResp); err != nil {
+			log.Errorf("unmarshal fediverse users response: %v", err)
+			return
+		}
+		usersResp.Users = append(usersResp.Users, fediverseUsersResp.Users...)
+		sourceNodeID = gatewayID
 	}
 
 	selfNodeID := streamer.NodeInfo().ID.String()
@@ -313,7 +329,7 @@ func refreshUsers(
 		_, _ = userRepo.Create(user)
 		// Only the node's own owner is first-hand; its copies of others may be
 		// stale and would roll back a profile this node already refreshed.
-		if user.NodeId == otherUser.NodeId {
+		if user.NodeId == sourceNodeID {
 			_, _ = userRepo.Update(user.Id, user)
 			continue
 		}
