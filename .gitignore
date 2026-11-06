@@ -63,5 +63,6 @@ frontend/node_modules
 
 # Local agent configuration
 /.agents/
+/.claude/
 /.codex/
 /AGENTS.md
