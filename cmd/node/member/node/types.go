@@ -192,10 +192,6 @@ type AliasesProvider interface {
 	GetNodeIDs() (ids []string, err error)
 }
 
-type Keepaliver interface {
-	Release() error
-}
-
 type ClientNodeStreamer interface {
 	ClientStream(nodeId string, path string, data any) (_ []byte, err error)
 	IsRunning() bool

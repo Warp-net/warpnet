@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	testNetNetwork = "testnet"
+	testnetNetwork = "testnet"
 	mainnetNetwork = "mainnet"
 )
 
@@ -102,7 +102,7 @@ func init() {
 	if network == mainnetNetwork && len(bootstrapAddrList) == 0 {
 		bootstrapAddrList = append(bootstrapAddrList, warpnetBootstrapNodes...)
 	}
-	if network == testNetNetwork && len(bootstrapAddrList) == 0 {
+	if network == testnetNetwork && len(bootstrapAddrList) == 0 {
 		bootstrapAddrList = append(bootstrapAddrList, testnetBootstrapNodes...)
 	}
 
@@ -123,9 +123,10 @@ func init() {
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
 
 	walletEndpoint := viper.GetString("wallet.endpoint")
-	if network == testNetNetwork {
+	if network == testnetNetwork && walletEndpoint == "" {
 		walletEndpoint = "https://nile.trongrid.io"
-	} else {
+	}
+	if network == mainnetNetwork && walletEndpoint == "" {
 		walletEndpoint = "https://api.trongrid.io"
 	}
 
@@ -175,7 +176,7 @@ func SetNetwork(network string) {
 	if network == mainnetNetwork {
 		configSingleton.Node.Bootstrap = warpnetBootstrapNodes
 	}
-	if network == testNetNetwork {
+	if network == testnetNetwork {
 		configSingleton.Node.Bootstrap = testnetBootstrapNodes
 	}
 	dbPath := configSingleton.Database.Path // <app>/<network>/<dir>
@@ -230,7 +231,7 @@ type logging struct {
 }
 
 func (n node) IsTestnet() bool {
-	return n.Network == testNetNetwork
+	return n.Network == testnetNetwork
 }
 
 func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
