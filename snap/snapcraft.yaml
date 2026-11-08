@@ -1,7 +1,7 @@
 name: warpnet
 title: Warpnet
 base: core24
-version: 0.8.85
+version: 0.8.86
 epoch: 1
 license: AGPL-3.0-or-later
 summary: Decentralized, peer-to-peer social network
@@ -43,6 +43,7 @@ apps:
     plugs:
       - system-observe
       - network
+      - screen-inhibit-control
 
 layout:
   /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1:

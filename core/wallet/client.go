@@ -271,12 +271,12 @@ func New(cfg Config) *Client {
 	}
 }
 
-func DefaultConfig(network, binaryPath string) Config {
+func DefaultConfig(network, binaryPath, endpoint string) Config {
 	if network != "testnet" {
 		return Config{
 			BinaryPath:    binaryPath,
 			Network:       "mainnet",
-			Endpoint:      "https://api.trongrid.io",
+			Endpoint:      endpoint,
 			Token:         tokenSymbol,
 			TokenContract: mainnetUSDT,
 			Decimals:      6,
@@ -285,8 +285,8 @@ func DefaultConfig(network, binaryPath string) Config {
 	}
 	return Config{
 		BinaryPath:    binaryPath,
-		Network:       "testnet",
-		Endpoint:      "https://nile.trongrid.io",
+		Network:       network,
+		Endpoint:      endpoint,
 		Token:         tokenSymbol,
 		TokenContract: testnetUSDT,
 		Decimals:      6,

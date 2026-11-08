@@ -9,6 +9,7 @@ tool (
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/Warp-net/keepalive v0.0.0-20261108115934-582f57fecb24
 	github.com/Warp-net/libp2p-camouflage-transport v0.0.3
 	github.com/Warp-net/payment-engine-lib v0.0.8
 	github.com/dgraph-io/badger/v4 v4.9.6

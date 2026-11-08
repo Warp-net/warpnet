@@ -1,0 +1,68 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+*.deb
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+cmd/node/member/build/bin/**
+var
+*.tmp
+*.gguf
+*.pprof
+*.log
+.idea
+*.pem
+*.sig
+licensor.yml
+
+# snapcraft dirs
+prime
+stage
+parts
+overlay
+.craft
+*.snap
+
+# moderation submodule
+core/moderation
+!core/moderation/.git
+
+frontend/node_modules
+
+# scripts
+*.py
+
+# Serena MCP (gopls LSP) project cache/memory - see .claude/SERENA.md
+.serena/
+
+# Secrets
+*.key
+*.csr
+*.cer
+*.crt
+*.p12
+*.p8
+*.keystore
+
+# Local agent configuration
+/.agents/
+/.claude/
+/.codex/
+/AGENTS.md

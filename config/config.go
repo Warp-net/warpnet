@@ -41,7 +41,7 @@ import (
 
 const (
 	testNetNetwork = "testnet"
-	warpnetNetwork = "warpnet"
+	mainnetNetwork = "mainnet"
 )
 
 const noticeTemplate = " %s version %s. Copyright (C) <%s> <%s>. This program comes with ABSOLUTELY NO WARRANTY; This is free software, and you are welcome to redistribute it under certain conditions.\n\n\n"
@@ -77,6 +77,9 @@ func init() {
 	pflag.String("logging.format", "text", "'text' or 'json'")
 	pflag.String("database.dir", "storage", "Database directory name")
 
+	pflag.String("wallet.binary-path", "", "Path of Payment engine binary")
+	pflag.String("wallet.endpoint", "", "Blockchain API endpoint")
+
 	pflag.Parse()
 
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
@@ -93,10 +96,10 @@ func init() {
 	}
 
 	network := strings.TrimSpace(viper.GetString("node.network"))
-	if network == "mainnet" {
-		network = warpnetNetwork
+	if network == "warpnet" {
+		network = mainnetNetwork
 	}
-	if network == warpnetNetwork && len(bootstrapAddrList) == 0 {
+	if network == mainnetNetwork && len(bootstrapAddrList) == 0 {
 		bootstrapAddrList = append(bootstrapAddrList, warpnetBootstrapNodes...)
 	}
 	if network == testNetNetwork && len(bootstrapAddrList) == 0 {
@@ -118,6 +121,13 @@ func init() {
 	appPath := getAppPath()
 
 	dbPath := filepath.Join(appPath, strings.TrimSpace(network), strings.TrimSpace(dbDir))
+
+	walletEndpoint := viper.GetString("wallet.endpoint")
+	if network == testNetNetwork {
+		walletEndpoint = "https://nile.trongrid.io"
+	} else {
+		walletEndpoint = "https://api.trongrid.io"
+	}
 
 	configSingleton = config{
 		Version: semver.MustParse(strings.TrimSpace(string(version))),
@@ -142,6 +152,10 @@ func init() {
 			Level:  strings.TrimSpace(viper.GetString("logging.level")),
 			Format: logFormat(strings.TrimSpace(strings.ToLower(viper.GetString("logging.format")))),
 		},
+		Wallet: wallet{
+			BinaryPath: viper.GetString("wallet.binary-path"),
+			Endpoint:   walletEndpoint,
+		},
 	}
 }
 
@@ -158,7 +172,7 @@ func IsNetworkPinned() bool {
 func SetNetwork(network string) {
 	configSingleton.Node.Network = network
 	configSingleton.Node.Bootstrap = nil
-	if network == warpnetNetwork {
+	if network == mainnetNetwork {
 		configSingleton.Node.Bootstrap = warpnetBootstrapNodes
 	}
 	if network == testNetNetwork {
@@ -174,6 +188,7 @@ type config struct {
 	Node     node
 	Database database
 	Logging  logging
+	Wallet   wallet
 }
 
 type node struct {
@@ -195,6 +210,11 @@ type server struct {
 
 type database struct {
 	Path string
+}
+
+type wallet struct {
+	BinaryPath string
+	Endpoint   string
 }
 
 type logFormat string

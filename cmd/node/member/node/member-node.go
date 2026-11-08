@@ -29,8 +29,9 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"os"
+	"time"
 
+	"github.com/Warp-net/keepalive"
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
@@ -63,6 +64,7 @@ type MemberNode struct {
 	opts []warpnet.WarpOption
 	mw   *middleware.WarpMiddleware
 
+	hold             Keepaliver
 	discService      DiscoveryHandler
 	mdnsService      MDNSStarterCloser
 	pubsubService    PubSubProvider
@@ -170,7 +172,9 @@ func NewMemberNode(
 
 	opts = append(opts, warpnet.CommonOptions...)
 
-	walletConfig := wallet.DefaultConfig(warpNetwork, os.Getenv("WARPNET_WALLET_BIN"))
+	walletConfig := wallet.DefaultConfig(
+		warpNetwork, config.Config().Wallet.BinaryPath, config.Config().Wallet.Endpoint,
+	)
 	walletClient := wallet.New(walletConfig)
 	walletRepo := database.NewWalletRepo(db)
 
@@ -281,6 +285,29 @@ func (m *MemberNode) Start() (err error) {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+
+	keepaliveCtx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	defer cancel()
+	m.hold, err = keepalive.New().Acquire(keepaliveCtx, keepalive.Options{
+		KeepDisplay: false,
+		Reason:      "serving paired devices",
+	})
+
+	go func() {
+		for {
+			if m.ctx.Err() != nil {
+				return
+			}
+			if watcher, ok := m.hold.(keepalive.Watcher); ok {
+				lost := <-watcher.Lost()
+				fmt.Println("lost ", lost)
+			}
+		}
+
+	}()
+	if err != nil {
+		log.Errorf("member: cannot prevent sleep: %v; %s", err, keepalive.Hint(err))
+	}
 	return nil
 }
 
@@ -1120,6 +1147,11 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
+	if m.hold != nil {
+		if err := m.hold.Release(); err != nil {
+			log.Printf("member: keepalive release failed: %v", err)
+		}
+	}
 	if m.walletClient != nil {
 		m.walletClient.Close()
 	}
@@ -1146,7 +1178,6 @@ func (m *MemberNode) Stop() {
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()
 	}
-
 	if m.nodeRepo != nil {
 		if err := m.nodeRepo.Close(); err != nil {
 			log.Errorf("member: failed to close node repo: %v", err)
