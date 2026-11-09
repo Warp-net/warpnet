@@ -140,7 +140,6 @@ func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, 
 	return len(times), err
 }
 
-// ConfirmedTimes lists when the buyer's confirmed orders between from and to were made.
 func (repo *OrderRepo) ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error) {
 	if buyerId == "" {
 		return nil, local_store.DBError("empty buyer id")

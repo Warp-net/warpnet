@@ -18,8 +18,6 @@ func init() {
 	inhibitorSingleton = keepalive.New()
 }
 
-// Acquire holds the machine awake; it does nothing while a hold is already
-// taken, so pairing a second device does not leak the first hold.
 func Acquire() error {
 	holdMx.Lock()
 	defer holdMx.Unlock()
@@ -39,7 +37,6 @@ func Acquire() error {
 	return nil
 }
 
-// Release drops the hold, if one was taken since the node started.
 func Release() error {
 	holdMx.Lock()
 	defer holdMx.Unlock()

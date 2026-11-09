@@ -708,16 +708,12 @@ func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domai
 	return true, checkPayerStake(backend, order.Payer, minStake)
 }
 
-// isPastOrderLimit reports whether a payment made at paidAt would put more than
-// OrderLimit of the buyer's confirmed orders within one hour, whatever order
-// their claims arrive in.
 func isPastOrderLimit(orders OrderStorer, buyerId string, paidAt time.Time) (bool, error) {
 	window := domain.OrderLimitWindow
 	paid, err := orders.ConfirmedTimes(buyerId, paidAt.Add(-window), paidAt.Add(window))
 	if err != nil {
 		return false, err
 	}
-	// The fullest hour holding paidAt starts at paidAt or at an order before it.
 	starts := append([]time.Time{paidAt}, paid...)
 	for _, start := range starts {
 		if start.After(paidAt) {
