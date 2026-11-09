@@ -478,7 +478,7 @@ func (n *WarpNode) BaseNodeInfo() warpnet.NodeInfo {
 
 	relayState := warpnet.RelayStatusWaiting
 
-	addrs := n.node.Peerstore().Addrs(n.node.ID())
+	addrs := n.node.Addrs()
 	addresses := make([]string, 0, len(addrs))
 	for _, ma := range addrs {
 		if warpnet.IsRelayMultiaddress(ma) {
