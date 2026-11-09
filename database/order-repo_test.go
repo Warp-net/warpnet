@@ -131,6 +131,46 @@ func (s *OrderRepoTestSuite) TestCountConfirmed() {
 	s.Error(err)
 }
 
+func (s *OrderRepoTestSuite) TestConfirmedTimes() {
+	at := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	for _, o := range []domain.Order{
+		{TweetId: "ct-from", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(-time.Hour)},
+		{TweetId: "ct-in", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(time.Nanosecond)},
+		{TweetId: "ct-to", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(time.Hour)},
+		{TweetId: "ct-early", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(-time.Hour - time.Nanosecond)},
+		{TweetId: "ct-late", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(time.Hour + time.Nanosecond)},
+		{TweetId: "ct-pending", BuyerId: "ct1", CreatedAt: at},
+		{TweetId: "ct-in", BuyerId: "xct1", Confirmed: true, CreatedAt: at},
+	} {
+		s.Require().NoError(s.repo.Save(o))
+	}
+	from, to := at.Add(-time.Hour), at.Add(time.Hour)
+
+	times, err := s.repo.ConfirmedTimes("ct1", from, to)
+	s.Require().NoError(err)
+	got := make([]int64, 0, len(times))
+	for _, t := range times {
+		got = append(got, t.UnixNano())
+	}
+	s.ElementsMatch([]int64{from.UnixNano(), at.Add(time.Nanosecond).UnixNano(), to.UnixNano()}, got,
+		"both ends are inclusive, to the nanosecond; pending orders and a buyer whose id ends the same are left out")
+
+	count, err := s.repo.CountConfirmed("ct1", from, to)
+	s.Require().NoError(err)
+	s.Equal(len(times), count, "the count is the number of times listed")
+
+	times, err = s.repo.ConfirmedTimes("nobody", from, to)
+	s.Require().NoError(err)
+	s.Empty(times)
+
+	times, err = s.repo.ConfirmedTimes("ct1", to.Add(time.Minute), to.Add(2*time.Minute))
+	s.Require().NoError(err)
+	s.Empty(times, "a window holding none of the orders lists nothing")
+
+	_, err = s.repo.ConfirmedTimes("", from, to)
+	s.Error(err)
+}
+
 func (s *OrderRepoTestSuite) TestIsPayerTaken() {
 	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t7", BuyerId: "p1", BuyerNodeId: "node-1", Payer: "TPayerOne", Confirmed: true}))
 	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t8", BuyerId: "p2", BuyerNodeId: "node-2", Payer: "TPayerTwo"}))

@@ -1035,6 +1035,50 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		assert.True(t, resp.(event.OrderResponse).Confirmed, "an hour later the order goes through")
 	})
 
+	t.Run("an order is kept at its block time", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, blockTime: time.Now().Add(-20 * time.Minute).Truncate(time.Second)}
+		orders := stubOrders{}
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		require.True(t, resp.(event.OrderResponse).Confirmed)
+		assert.True(t, orders["tweet-1/buyer-1"].CreatedAt.Equal(w.blockTime))
+
+		count, err := orders.CountConfirmed("buyer-1", w.blockTime, w.blockTime)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "the hourly limit counts it when it was paid, not when it was claimed")
+	})
+
+	t.Run("an order without a block time is kept at the claim", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true}
+		orders := stubOrders{}
+		before := time.Now()
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		require.True(t, resp.(event.OrderResponse).Confirmed)
+		createdAt := orders["tweet-1/buyer-1"].CreatedAt
+		assert.False(t, createdAt.Before(before))
+		assert.False(t, createdAt.After(time.Now()))
+	})
+
+	t.Run("an unpaid claim keeps nothing, whatever its block time", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", blockTime: time.Now().Add(-time.Minute)}
+		orders := stubOrders{}
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.False(t, resp.(event.OrderResponse).Confirmed)
+		assert.Empty(t, orders)
+	})
+
+	t.Run("a claim paid within the hour of a full limit, claimed after it, waits", func(t *testing.T) {
+		orders := confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-10*time.Minute))
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, blockTime: time.Now().Add(-40 * time.Minute)}
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.False(t, resp.(event.OrderResponse).Confirmed)
+		assert.NotContains(t, orders, "tweet-1/buyer-1")
+		assert.Empty(t, notified, "a waiting claim tells the author nothing")
+	})
+
 	t.Run("a confirmed order is not verified again", func(t *testing.T) {
 		w := &stubSponsoredWallet{splitter: "TSplitter"}
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Confirmed: true}}
@@ -1476,4 +1520,126 @@ func TestAPaymentIsJudgedByEveryHourHoldingIt(t *testing.T) {
 	isPast, err = isPastOrderLimit(sales(30*time.Minute, 30*time.Minute), "buyer-1", paidAt)
 	require.NoError(t, err)
 	assert.True(t, isPast, "the hour from 30 minutes before to 30 after holds the payment and all the orders")
+}
+
+type failingConfirmedTimes struct{ stubOrders }
+
+func (failingConfirmedTimes) ConfirmedTimes(string, time.Time, time.Time) ([]time.Time, error) {
+	return nil, errors.New("db down")
+}
+
+func TestIsPastOrderLimit(t *testing.T) {
+	paidAt := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	repeat := func(n int, offset time.Duration) []time.Duration {
+		offsets := make([]time.Duration, n)
+		for i := range offsets {
+			offsets[i] = offset
+		}
+		return offsets
+	}
+	both := func(a, b []time.Duration) []time.Duration { return append(append([]time.Duration{}, a...), b...) }
+	limit, half := domain.OrderLimit, domain.OrderLimit/2
+
+	for _, tt := range []struct {
+		name    string
+		offsets []time.Duration
+		isPast  bool
+	}{
+		{"no orders", nil, false},
+		{"one short of the limit in the hour before", repeat(limit-1, -30*time.Minute), false},
+		{"the limit filled in the hour before", repeat(limit, -30*time.Minute), true},
+		{"the limit filled in the hour after, claimed first", repeat(limit, 30*time.Minute), true},
+		{"the limit filled at the payment's own instant", repeat(limit, 0), true},
+		{"orders exactly an hour before still share its hour", repeat(limit, -time.Hour), true},
+		{"orders just over an hour before do not", repeat(limit, -time.Hour-time.Nanosecond), false},
+		{"orders exactly an hour after still share its hour", repeat(limit, time.Hour), true},
+		{"orders just over an hour after do not", repeat(limit, time.Hour+time.Nanosecond), false},
+		{"an hour straddling the payment holds the limit", both(repeat(half, -30*time.Minute), repeat(limit-half, 30*time.Minute)), true},
+		{"an hour spanning exactly from the earliest to the payment", both(repeat(half, -time.Hour), repeat(limit-half, 0)), true},
+		{"orders split so no hour holding the payment has them all", both(repeat(half, -time.Hour), repeat(limit-half, time.Nanosecond)), false},
+		{"orders 50 minutes either side share no hour", both(repeat(half, -50*time.Minute), repeat(limit-half, 50*time.Minute)), false},
+		{"a full hour that ended before the payment's", repeat(limit, -90*time.Minute), false},
+		{"one short on each side of a long gap", both(repeat(limit-1, -59*time.Minute), repeat(limit-1, 59*time.Minute)), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			orders := stubOrders{}
+			for i, offset := range tt.offsets {
+				tweetId := "sold-" + strconv.Itoa(i)
+				orders[tweetId+"/buyer-1"] = domain.Order{TweetId: tweetId, BuyerId: "buyer-1", Confirmed: true, CreatedAt: paidAt.Add(offset)}
+			}
+			isPast, err := isPastOrderLimit(orders, "buyer-1", paidAt)
+			require.NoError(t, err)
+			assert.Equal(t, tt.isPast, isPast)
+		})
+	}
+
+	t.Run("pending orders and other buyers' orders do not count", func(t *testing.T) {
+		orders := stubOrders{}
+		for i := range limit {
+			tweetId := "sold-" + strconv.Itoa(i)
+			orders[tweetId+"/buyer-1"] = domain.Order{TweetId: tweetId, BuyerId: "buyer-1", CreatedAt: paidAt}
+			orders[tweetId+"/buyer-2"] = domain.Order{TweetId: tweetId, BuyerId: "buyer-2", Confirmed: true, CreatedAt: paidAt}
+		}
+		isPast, err := isPastOrderLimit(orders, "buyer-1", paidAt)
+		require.NoError(t, err)
+		assert.False(t, isPast)
+	})
+
+	t.Run("a store failure is an error, not a verdict", func(t *testing.T) {
+		isPast, err := isPastOrderLimit(failingConfirmedTimes{}, "buyer-1", paidAt)
+		assert.EqualError(t, err, "db down")
+		assert.False(t, isPast)
+	})
+}
+
+func TestAdmitPaidOrder(t *testing.T) {
+	now := time.Now()
+	demanding := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: now.Add(-48 * time.Hour)}
+	order := domain.Order{TweetId: "tweet-1", BuyerId: "buyer-1", BuyerNodeId: "buyer-node", Payer: testPayer, CreatedAt: now.Add(-time.Minute)}
+
+	t.Run("a payment past the limit is refused before its stake is looked up", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "0"}
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit, now.Add(-30*time.Minute)), w, demanding, order)
+		require.NoError(t, err, "a payment past the limit waits, it is not an error")
+		assert.False(t, isAdmitted)
+		assert.Empty(t, w.balances)
+	})
+
+	t.Run("a payment under the limit is held to the stake", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "0"}
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit-1, now.Add(-30*time.Minute)), w, demanding, order)
+		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked")
+		assert.False(t, isAdmitted)
+		assert.Equal(t, []string{testPayer}, w.balances)
+	})
+
+	t.Run("a payment under the limit with the stake is admitted", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "500000000"}
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit-1, now.Add(-30*time.Minute)), w, demanding, order)
+		require.NoError(t, err)
+		assert.True(t, isAdmitted)
+	})
+
+	t.Run("a payment is judged at its own time, not when it is claimed", func(t *testing.T) {
+		early := order
+		early.CreatedAt = now.Add(-3 * time.Hour)
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit, now.Add(-30*time.Minute)), &stubSponsoredWallet{}, domain.SponsoredSettings{}, early)
+		require.NoError(t, err)
+		assert.True(t, isAdmitted, "the full hour came two hours after this payment")
+	})
+
+	t.Run("a store failure is an error", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "500000000"}
+		isAdmitted, err := admitPaidOrder(failingConfirmedTimes{stubOrders{}}, w, demanding, order)
+		assert.EqualError(t, err, "db down")
+		assert.False(t, isAdmitted)
+		assert.Empty(t, w.balances)
+	})
+
+	t.Run("a payer bound to another node is refused under the limit", func(t *testing.T) {
+		orders := stubOrders{"tweet-0/buyer-0": {TweetId: "tweet-0", BuyerId: "buyer-0", BuyerNodeId: "other-node", Payer: testPayer, Confirmed: true, CreatedAt: now.Add(-48 * time.Hour)}}
+		isAdmitted, err := admitPaidOrder(orders, &stubSponsoredWallet{staked: "500000000"}, demanding, order)
+		assert.ErrorIs(t, err, ErrPayerTaken)
+		assert.False(t, isAdmitted)
+	})
 }

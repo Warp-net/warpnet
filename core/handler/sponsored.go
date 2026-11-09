@@ -705,7 +705,10 @@ func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domai
 	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
 		return false, err
 	}
-	return true, checkPayerStake(backend, order.Payer, minStake)
+	if err := checkPayerStake(backend, order.Payer, minStake); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func isPastOrderLimit(orders OrderStorer, buyerId string, paidAt time.Time) (bool, error) {
