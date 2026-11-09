@@ -481,7 +481,7 @@ func TestQuoteParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 }
 
 func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
-	cfg := DefaultConfig("testnet", "")
+	cfg := DefaultConfig("testnet", "", "")
 	params := verifyParams(cfg, "ab12", Sponsorship{
 		Splitter: cfg.Splitter,
 		OrderId:  "0000000000000000000000000000000000000000000000000000000000000001",
@@ -506,7 +506,7 @@ func TestVerifyParamsCarryEveryFieldTheEngineRequires(t *testing.T) {
 }
 
 func TestVerifyAcceptsPaymentsToRetiredSplitters(t *testing.T) {
-	cfg := DefaultConfig("testnet", "")
+	cfg := DefaultConfig("testnet", "", "")
 	cfg.Retired = []string{"TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy", cfg.Splitter}
 	assets := verifyParams(cfg, "ab12", Sponsorship{Splitter: cfg.Splitter, OrderId: "01", Author: "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143", Amount: "1"})["allowed_assets"].([]map[string]any)
 	if len(assets) != 2 || assets[0]["contract"] != cfg.Splitter || assets[1]["contract"] != "TBuRiiib6EqsezQMMihnBsq2wrAZscxbDy" {
@@ -515,7 +515,7 @@ func TestVerifyAcceptsPaymentsToRetiredSplitters(t *testing.T) {
 }
 
 func TestVerifyParamsNameTheBuyerOnlyWhenKnown(t *testing.T) {
-	cfg := DefaultConfig("testnet", "")
+	cfg := DefaultConfig("testnet", "", "")
 	s := Sponsorship{Splitter: cfg.Splitter, OrderId: "01", Author: "THXiCmfr6D4mqAfd4La9EQ5THCx7WsR143", Amount: "1500000"}
 	if _, ok := verifyParams(cfg, "ab12", s)["expected_buyer"]; ok {
 		t.Fatal("verify must not expect a buyer nobody named")
@@ -548,10 +548,10 @@ func TestIsStakeEnoughComparesWholeTRXWithSun(t *testing.T) {
 }
 
 func TestOnlyTestnetHasASplitter(t *testing.T) {
-	if DefaultConfig("testnet", "").Splitter == "" {
+	if DefaultConfig("testnet", "", "").Splitter == "" {
 		t.Fatal("testnet must pay through the Nile USDT splitter")
 	}
-	if DefaultConfig("warpnet", "").Splitter != "" {
+	if DefaultConfig("warpnet", "", "").Splitter != "" {
 		t.Fatal("mainnet has no deployed splitter yet")
 	}
 }
