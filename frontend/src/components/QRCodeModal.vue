@@ -28,7 +28,7 @@ resulting from the use or misuse of this software.
     @click.self="close"
   >
     <div
-      class="bg-white rounded-lg shadow-lg p-6 w-[40rem] max-w-[95vw] max-h-[95vh] overflow-y-auto relative"
+      class="bg-white rounded-lg shadow-lg p-6 w-[64rem] max-w-[95vw] max-h-[95vh] overflow-y-auto relative"
       role="dialog"
       aria-modal="true"
       aria-label="Pair your phone"
@@ -42,96 +42,100 @@ resulting from the use or misuse of this software.
         <i class="fas fa-times" aria-hidden="true"></i>
       </button>
 
-      <h3 class="text-xl font-semibold text-center mb-1">Pair your phone</h3>
-      <p class="text-sm text-gray-600 text-center mb-4">
-        Connect the Warpnet mobile app to this node by scanning the QR code below.
-      </p>
+      <div class="flex flex-col md:flex-row md:items-center gap-6">
+        <!-- The QR itself -->
+        <div v-if="qrData" class="flex justify-center shrink-0">
+          <img :src="qrData" alt="Warpnet pairing QR code" class="w-[min(36rem,calc(95vh_-_3rem))] max-w-full h-auto" />
+        </div>
+        <div v-else class="text-center text-gray-500 md:w-72">
+          <p>No QR code is currently available. Please try again later.</p>
+        </div>
 
-      <!-- Visual: laptop on the left shows this QR, phone on the right
-           scans it. The single arrow connects the two sides so users
-           grasp the direction of the handshake at a glance. -->
-      <svg
-        class="w-full h-32 mb-4"
-        viewBox="0 0 480 140"
-        role="img"
-        aria-label="Diagram: a laptop displays a QR code, an arrow points right to a phone that scans it"
-      >
-        <!-- Laptop -->
-        <rect x="20" y="20" width="160" height="92" rx="6" fill="#1f2937" />
-        <rect x="30" y="30" width="140" height="72" rx="3" fill="#f9fafb" />
-        <rect x="65" y="42" width="70" height="48" rx="2" fill="#1f2937" />
-        <!-- QR-ish pattern on the laptop -->
-        <g fill="#f9fafb">
-          <rect x="68" y="45" width="10" height="10" />
-          <rect x="122" y="45" width="10" height="10" />
-          <rect x="68" y="77" width="10" height="10" />
-          <rect x="82" y="55" width="4" height="4" />
-          <rect x="92" y="55" width="4" height="4" />
-          <rect x="102" y="55" width="4" height="4" />
-          <rect x="112" y="55" width="4" height="4" />
-          <rect x="82" y="65" width="4" height="4" />
-          <rect x="92" y="65" width="4" height="4" />
-          <rect x="102" y="65" width="4" height="4" />
-          <rect x="82" y="75" width="4" height="4" />
-          <rect x="102" y="75" width="4" height="4" />
-          <rect x="112" y="75" width="4" height="4" />
-        </g>
-        <rect x="10" y="112" width="180" height="6" rx="2" fill="#9ca3af" />
+        <div class="flex-1 min-w-0">
+          <h3 class="text-xl font-semibold text-center mb-1">Pair your phone</h3>
+          <p class="text-sm text-gray-600 text-center mb-4">
+            Connect the Warpnet mobile app to this node by scanning the QR code.
+          </p>
 
-        <!-- Arrow -->
-        <g stroke="#3b82f6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="205" y1="66" x2="290" y2="66" />
-          <polyline points="280,58 290,66 280,74" />
-        </g>
-        <text x="247" y="55" text-anchor="middle" font-size="11" fill="#3b82f6" font-family="sans-serif">scan</text>
+          <!-- Visual: laptop on the left shows this QR, phone on the right
+               scans it. The single arrow connects the two sides so users
+               grasp the direction of the handshake at a glance. -->
+          <svg
+            class="w-full h-32 mb-4"
+            viewBox="0 0 480 140"
+            role="img"
+            aria-label="Diagram: a laptop displays a QR code, an arrow points right to a phone that scans it"
+          >
+            <!-- Laptop -->
+            <rect x="20" y="20" width="160" height="92" rx="6" fill="#1f2937" />
+            <rect x="30" y="30" width="140" height="72" rx="3" fill="#f9fafb" />
+            <rect x="65" y="42" width="70" height="48" rx="2" fill="#1f2937" />
+            <!-- QR-ish pattern on the laptop -->
+            <g fill="#f9fafb">
+              <rect x="68" y="45" width="10" height="10" />
+              <rect x="122" y="45" width="10" height="10" />
+              <rect x="68" y="77" width="10" height="10" />
+              <rect x="82" y="55" width="4" height="4" />
+              <rect x="92" y="55" width="4" height="4" />
+              <rect x="102" y="55" width="4" height="4" />
+              <rect x="112" y="55" width="4" height="4" />
+              <rect x="82" y="65" width="4" height="4" />
+              <rect x="92" y="65" width="4" height="4" />
+              <rect x="102" y="65" width="4" height="4" />
+              <rect x="82" y="75" width="4" height="4" />
+              <rect x="102" y="75" width="4" height="4" />
+              <rect x="112" y="75" width="4" height="4" />
+            </g>
+            <rect x="10" y="112" width="180" height="6" rx="2" fill="#9ca3af" />
 
-        <!-- Phone -->
-        <rect x="310" y="10" width="80" height="120" rx="12" fill="#1f2937" />
-        <rect x="316" y="20" width="68" height="100" rx="4" fill="#f9fafb" />
-        <!-- Scanner viewfinder corners on the phone screen -->
-        <g stroke="#3b82f6" stroke-width="2" fill="none">
-          <polyline points="326,40 326,32 334,32" />
-          <polyline points="374,32 382,32 382,40" />
-          <polyline points="326,100 326,108 334,108" />
-          <polyline points="374,108 382,108 382,100" />
-        </g>
-        <circle cx="354" cy="70" r="6" fill="none" stroke="#3b82f6" stroke-width="2" />
-      </svg>
+            <!-- Arrow -->
+            <g stroke="#3b82f6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="205" y1="66" x2="290" y2="66" />
+              <polyline points="280,58 290,66 280,74" />
+            </g>
+            <text x="247" y="55" text-anchor="middle" font-size="11" fill="#3b82f6" font-family="sans-serif">scan</text>
 
-      <!-- The QR itself -->
-      <div v-if="qrData" class="flex justify-center mb-4">
-        <img :src="qrData" alt="Warpnet pairing QR code" class="w-72 h-72 max-w-full" />
+            <!-- Phone -->
+            <rect x="310" y="10" width="80" height="120" rx="12" fill="#1f2937" />
+            <rect x="316" y="20" width="68" height="100" rx="4" fill="#f9fafb" />
+            <!-- Scanner viewfinder corners on the phone screen -->
+            <g stroke="#3b82f6" stroke-width="2" fill="none">
+              <polyline points="326,40 326,32 334,32" />
+              <polyline points="374,32 382,32 382,40" />
+              <polyline points="326,100 326,108 334,108" />
+              <polyline points="374,108 382,108 382,100" />
+            </g>
+            <circle cx="354" cy="70" r="6" fill="none" stroke="#3b82f6" stroke-width="2" />
+          </svg>
+
+          <!-- Fallback for when scanning isn't possible: copy the connection data
+               the QR carries, as plain uncompressed AuthNodeInfo JSON. -->
+          <div v-if="qrPayload" class="flex justify-center mb-4">
+            <button
+              type="button"
+              @click="copyPayload"
+              class="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              :aria-label="copied ? 'Connection data copied to clipboard' : 'Copy connection data to clipboard'"
+            >
+              <i :class="copied ? 'fas fa-check text-green-600' : 'far fa-copy'" aria-hidden="true"></i>
+              {{ copied ? "Copied!" : "Copy connection data" }}
+            </button>
+          </div>
+
+          <!-- Step-by-step. Kept terse so the modal stays glanceable; the
+               SVG above carries most of the "what is happening" message. -->
+          <ol class="text-sm text-gray-700 space-y-2 list-decimal list-inside">
+            <li>Install the <strong>Warpnet</strong> mobile app on the phone you want to pair.</li>
+            <li>Open the app — it starts on the QR scanner screen on first launch.</li>
+            <li>Point the phone at this QR code until it focuses; pairing is automatic.</li>
+            <li>The phone keeps a reference to <em>this</em> node — keep this app running for it to connect.</li>
+          </ol>
+
+          <p class="text-xs text-gray-500 text-center mt-4">
+            You can reopen this dialog any time from the side-nav menu.
+          </p>
+        </div>
       </div>
-      <div v-else class="text-center text-gray-500 mb-4">
-        <p>No QR code is currently available. Please try again later.</p>
-      </div>
-
-      <!-- Fallback for when scanning isn't possible: copy the connection data
-           the QR carries, as plain uncompressed AuthNodeInfo JSON. -->
-      <div v-if="qrPayload" class="flex justify-center mb-4">
-        <button
-          type="button"
-          @click="copyPayload"
-          class="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-          :aria-label="copied ? 'Connection data copied to clipboard' : 'Copy connection data to clipboard'"
-        >
-          <i :class="copied ? 'fas fa-check text-green-600' : 'far fa-copy'" aria-hidden="true"></i>
-          {{ copied ? "Copied!" : "Copy connection data" }}
-        </button>
-      </div>
-
-      <!-- Step-by-step. Kept terse so the modal stays glanceable; the
-           SVG above carries most of the "what is happening" message. -->
-      <ol class="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-        <li>Install the <strong>Warpnet</strong> mobile app on the phone you want to pair.</li>
-        <li>Open the app — it starts on the QR scanner screen on first launch.</li>
-        <li>Point the phone at this QR code until it focuses; pairing is automatic.</li>
-        <li>The phone keeps a reference to <em>this</em> node — keep this app running for it to connect.</li>
-      </ol>
-
-      <p class="text-xs text-gray-500 text-center mt-4">
-        You can reopen this dialog any time from the side-nav menu.
-      </p>
     </div>
   </div>
 </template>
