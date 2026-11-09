@@ -639,7 +639,7 @@ func TestACountOnTheHourBoundaryKeepsTheHoursTotal(t *testing.T) {
 	other := newIdentity(t)
 	clock.once(func() {
 		clock.advance(time.Hour)
-		require.NoError(t, e.record(other.id, KindDialFailure))
+		require.NoError(t, e.record(other.id, KindConnectionFlap))
 		require.NoError(t, e.flush())
 	})
 	require.NoError(t, e.record(peer.id, KindBadSignature))
@@ -796,8 +796,9 @@ func observeN(t *testing.T, e *Engine, id warpnet.WarpPeerID, evType warpnet.Pee
 // or a module would be reporting into the void.
 func TestEveryOffenceEventIsAKind(t *testing.T) {
 	facts := map[warpnet.PeerEventType]bool{
-		warpnet.PeerConnected:  true,
-		warpnet.PeerDiscovered: true,
+		warpnet.PeerConnected:   true,
+		warpnet.PeerDiscovered:  true,
+		warpnet.PeerDialFailure: true,
 	}
 	for _, evType := range []warpnet.PeerEventType{
 		warpnet.PeerBadSignature, warpnet.PeerMissingSignature, warpnet.PeerMalformedFrame,
@@ -826,6 +827,20 @@ func TestObservedOffenceIsCharged(t *testing.T) {
 	flushNow(t, e)
 
 	assert.Equal(t, MaxScore-Score(KindBadSignature.Weight()), e.Score(other.id))
+}
+
+func TestOfflinePeerIsNotCharged(t *testing.T) {
+	self := newIdentity(t)
+	other := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e := newMemberEngine(t, self, store, clock)
+
+	observeN(t, e, other.id, warpnet.PeerDialFailure, "", 500)
+	flushNow(t, e)
+
+	assert.Equal(t, MaxScore, e.Score(other.id))
+	assert.Empty(t, store.records())
 }
 
 func TestUnknownAndSelfObservationsAreRefused(t *testing.T) {

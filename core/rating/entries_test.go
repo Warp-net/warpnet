@@ -58,8 +58,8 @@ func TestKindCeilingCaps(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	b := bucketAt(now)
 
-	capped := entries{testEntry("obs", Network, b, genA, kindCount{KindDialFailure, 100})}
-	assert.EqualValues(t, KindDialFailure.Ceiling(), capped.penalty(Network, now))
+	capped := entries{testEntry("obs", Network, b, genA, kindCount{KindConnectionFlap, 100})}
+	assert.EqualValues(t, KindConnectionFlap.Ceiling(), capped.penalty(Network, now))
 
 	uncapped := entries{testEntry("obs", Network, b, genA, kindCount{KindBadSignature, 4})}
 	assert.InDelta(t, 1000, float64(uncapped.penalty(Network, now)), 1, "an uncapped kind keeps accumulating")

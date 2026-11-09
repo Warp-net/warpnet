@@ -101,7 +101,8 @@ type distributedHashTable struct {
 const (
 	bootstrapDrainTimeout = 5 * time.Second
 	ratingSweepInterval   = 30 * time.Second
-	rendezvousInterval    = 30 * time.Second
+	rendezvousInterval    = 10 * time.Minute
+	advertiseRetryDelay   = 30 * time.Second
 )
 
 const errEmptyRoutingTable warpnet.WarpError = "dht: routing table is empty"
@@ -309,7 +310,7 @@ func (d *distributedHashTable) startRendezvous(bootstrapped <-chan struct{}) {
 			ttl, err := d.advertise(rd, ns)
 			if err != nil {
 				log.Debugf("dht: rendezvous: advertise: %v", err)
-				ttl = rendezvousInterval
+				ttl = advertiseRetryDelay
 			}
 			advertiseTimer.Reset(ttl)
 		case <-findTicker.C:
