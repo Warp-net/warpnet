@@ -314,6 +314,7 @@ func (e *Engine) observe(ev warpnet.PeerEvent) error {
 		if e.discoveries.reached(ev.PeerID, e.now()) {
 			return e.record(peerID, KindDiscoveryFlood)
 		}
+	case warpnet.PeerDialFailure:
 	case warpnet.PeerRateLimited:
 		if err := e.record(peerID, KindRateLimitHit); err != nil {
 			return err
