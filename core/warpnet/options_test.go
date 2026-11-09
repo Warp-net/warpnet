@@ -3,6 +3,7 @@ package warpnet
 
 import (
 	"testing"
+	"time"
 
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
 	"github.com/stretchr/testify/require"
@@ -15,4 +16,9 @@ func TestCommonOptionsDisableIPv6BlackHoleDetector(t *testing.T) {
 	require.NoError(t, cfg.Apply(CommonOptions...))
 	require.True(t, cfg.CustomIPv6BlackHoleSuccessCounter)
 	require.Nil(t, cfg.IPv6BlackHoleSuccessCounter)
+}
+
+func TestSetPrivateDurationFieldReportsMissingField(t *testing.T) {
+	err := setPrivateDurationField(&Swarm{}, "thisFieldDoesNotExist", time.Second)
+	require.ErrorIs(t, err, ErrFieldNotFound)
 }
