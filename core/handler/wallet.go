@@ -318,7 +318,7 @@ type WalletStreamer interface {
 }
 
 type WalletOrderStorer interface {
-	CountConfirmed(buyerId string, from, to time.Time) (int, error)
+	ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error)
 	IsPayerTaken(payer, buyerNodeId string) (bool, error)
 }
 
@@ -386,8 +386,8 @@ func isPeerOrderLimitReached(s warpnet.WarpStream, users WalletPeerFetcher, orde
 		return false, err
 	}
 	now := time.Now()
-	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
-	return count >= domain.OrderLimit, err
+	confirmed, err := orders.ConfirmedTimes(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	return len(confirmed) >= domain.OrderLimit, err
 }
 
 func StreamGetWalletContactsHandler(

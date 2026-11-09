@@ -112,25 +112,6 @@ func (s *OrderRepoTestSuite) TestEmptyValidation() {
 	s.Error(err)
 }
 
-func (s *OrderRepoTestSuite) TestCountConfirmed() {
-	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "c1", TxId: "tx3", Confirmed: true, CreatedAt: at}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t4", BuyerId: "c1", TxId: "tx4", Confirmed: true, CreatedAt: at.Add(2 * time.Hour)}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t5", BuyerId: "c1", TxId: "tx5", CreatedAt: at}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "xc1", TxId: "tx6", Confirmed: true, CreatedAt: at}))
-
-	count, err := s.repo.CountConfirmed("c1", at.Add(-time.Hour), at.Add(time.Hour))
-	s.Require().NoError(err)
-	s.Equal(1, count, "only the buyer's own confirmed orders inside the window count")
-
-	count, err = s.repo.CountConfirmed("nobody", at.Add(-time.Hour), at.Add(time.Hour))
-	s.Require().NoError(err)
-	s.Zero(count)
-
-	_, err = s.repo.CountConfirmed("", at, at)
-	s.Error(err)
-}
-
 func (s *OrderRepoTestSuite) TestConfirmedTimes() {
 	at := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	for _, o := range []domain.Order{
@@ -154,10 +135,6 @@ func (s *OrderRepoTestSuite) TestConfirmedTimes() {
 	}
 	s.ElementsMatch([]int64{from.UnixNano(), at.Add(time.Nanosecond).UnixNano(), to.UnixNano()}, got,
 		"both ends are inclusive, to the nanosecond; pending orders and a buyer whose id ends the same are left out")
-
-	count, err := s.repo.CountConfirmed("ct1", from, to)
-	s.Require().NoError(err)
-	s.Equal(len(times), count, "the count is the number of times listed")
 
 	times, err = s.repo.ConfirmedTimes("nobody", from, to)
 	s.Require().NoError(err)

@@ -88,12 +88,7 @@ type SponsoredWallet interface {
 	Network() string
 }
 
-type OrderCounter interface {
-	CountConfirmed(buyerId string, from, to time.Time) (int, error)
-}
-
 type OrderStorer interface {
-	OrderCounter
 	ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error)
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
@@ -907,10 +902,10 @@ func copyTweetMedia(
 	return tweet, nil
 }
 
-func notifyOrderLimit(notifier SponsoredNotifier, orders OrderCounter, authorId string, buyer domain.User) error {
+func notifyOrderLimit(notifier SponsoredNotifier, orders OrderStorer, authorId string, buyer domain.User) error {
 	now := time.Now()
-	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
-	if err != nil || count != domain.OrderLimit {
+	confirmed, err := orders.ConfirmedTimes(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	if err != nil || len(confirmed) != domain.OrderLimit {
 		return err
 	}
 	name := buyer.Username
@@ -983,8 +978,8 @@ func StreamGetCopyBuyerHandler(
 	}
 }
 
-func buildCopyBuyerResponse(orders OrderCounter, order domain.Order) (event.CopyBuyerResponse, error) {
-	dailyOrdersCount, err := orders.CountConfirmed(
+func buildCopyBuyerResponse(orders OrderStorer, order domain.Order) (event.CopyBuyerResponse, error) {
+	dailyOrders, err := orders.ConfirmedTimes(
 		order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
 	)
 	if err != nil {
@@ -996,7 +991,7 @@ func buildCopyBuyerResponse(orders OrderCounter, order domain.Order) (event.Copy
 		OrderId:          order.ID(),
 		TxId:             order.TxId,
 		SoldAt:           order.CreatedAt,
-		DailyOrdersCount: dailyOrdersCount,
+		DailyOrdersCount: len(dailyOrders),
 	}, nil
 }
 

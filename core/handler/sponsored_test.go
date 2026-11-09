@@ -128,11 +128,6 @@ func (o stubOrders) Delete(tweetId, buyerId string) error {
 	return nil
 }
 
-func (o stubOrders) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
-	times, err := o.ConfirmedTimes(buyerId, from, to)
-	return len(times), err
-}
-
 func (o stubOrders) ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error) {
 	var times []time.Time
 	for _, order := range o {
@@ -1043,9 +1038,9 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		require.True(t, resp.(event.OrderResponse).Confirmed)
 		assert.True(t, orders["tweet-1/buyer-1"].CreatedAt.Equal(w.blockTime))
 
-		count, err := orders.CountConfirmed("buyer-1", w.blockTime, w.blockTime)
+		confirmed, err := orders.ConfirmedTimes("buyer-1", w.blockTime, w.blockTime)
 		require.NoError(t, err)
-		assert.Equal(t, 1, count, "the hourly limit counts it when it was paid, not when it was claimed")
+		assert.Len(t, confirmed, 1, "the hourly limit counts it when it was paid, not when it was claimed")
 	})
 
 	t.Run("an order without a block time is kept at the claim", func(t *testing.T) {

@@ -135,11 +135,6 @@ func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 	return o, nil
 }
 
-func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
-	times, err := repo.ConfirmedTimes(buyerId, from, to)
-	return len(times), err
-}
-
 func (repo *OrderRepo) ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error) {
 	if buyerId == "" {
 		return nil, local_store.DBError("empty buyer id")
