@@ -129,18 +129,13 @@ func (o stubOrders) Delete(tweetId, buyerId string) error {
 }
 
 func (o stubOrders) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
-	times, err := o.ConfirmedTimes(buyerId, from, to)
-	return len(times), err
-}
-
-func (o stubOrders) ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error) {
-	var times []time.Time
+	var count int
 	for _, order := range o {
 		if order.BuyerId == buyerId && order.Confirmed && !order.CreatedAt.Before(from) && !order.CreatedAt.After(to) {
-			times = append(times, order.CreatedAt)
+			count++
 		}
 	}
-	return times, nil
+	return count, nil
 }
 
 func (o stubOrders) IsPayerTaken(payer, buyerNodeId string) (bool, error) {
@@ -1019,13 +1014,7 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		w.blockTime = time.Now().Add(-5 * time.Minute)
 		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err)
-		assert.False(t, resp.(event.OrderResponse).Confirmed, "a payment within the hour of a full limit waits, though claimed after it")
-
-		w.blockTime = time.Now().Add(-62 * time.Minute)
-		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
-		require.NoError(t, err)
-		assert.True(t, resp.(event.OrderResponse).Confirmed, "a payment more than an hour before the full limit goes through")
-		assert.True(t, orders["tweet-1/buyer-1"].CreatedAt.Equal(w.blockTime), "an order counts at its block time")
+		assert.True(t, resp.(event.OrderResponse).Confirmed, "a payment made before the limit filled up is not refused for orders confirmed after it")
 		delete(orders, "tweet-1/buyer-1")
 		w.blockTime = time.Time{}
 
@@ -1430,50 +1419,4 @@ func pixelsOf(t *testing.T, file string) []byte {
 	canvas := image.NewRGBA(decoded.Bounds())
 	draw.Draw(canvas, canvas.Bounds(), decoded, decoded.Bounds().Min, draw.Src)
 	return canvas.Pix
-}
-
-func TestOrdersPaidAtOnceAreHeldToTheHourlyLimitWhateverTheClaimOrder(t *testing.T) {
-	for _, reversed := range []bool{false, true} {
-		orders := stubOrders{}
-		paidAt := time.Now().Add(-time.Minute)
-		var admitted int
-		for i := range 2 * domain.OrderLimit {
-			if reversed {
-				i = 2*domain.OrderLimit - 1 - i
-			}
-			o := domain.Order{TweetId: "tweet-" + strconv.Itoa(i), BuyerId: "buyer-1", CreatedAt: paidAt.Add(time.Duration(i) * time.Second)}
-			ok, err := admitPaidOrder(orders, &stubSponsoredWallet{}, domain.SponsoredSettings{}, o)
-			require.NoError(t, err)
-			if ok {
-				admitted++
-				o.Confirmed = true
-				require.NoError(t, orders.Save(o))
-			}
-		}
-		assert.Equal(t, domain.OrderLimit, admitted, "reversed=%v", reversed)
-	}
-}
-
-func TestAPaymentIsJudgedByEveryHourHoldingIt(t *testing.T) {
-	paidAt := time.Now().Add(-2 * time.Hour)
-	sales := func(before, after time.Duration) stubOrders {
-		orders := stubOrders{}
-		for i := range domain.OrderLimit {
-			at := paidAt.Add(-before)
-			if i%2 == 1 {
-				at = paidAt.Add(after)
-			}
-			tweetId := "sold-" + strconv.Itoa(i)
-			orders[tweetId+"/buyer-1"] = domain.Order{TweetId: tweetId, BuyerId: "buyer-1", Confirmed: true, CreatedAt: at}
-		}
-		return orders
-	}
-
-	isPast, err := isPastOrderLimit(sales(50*time.Minute, 50*time.Minute), "buyer-1", paidAt)
-	require.NoError(t, err)
-	assert.False(t, isPast, "no hour holding the payment holds all the orders 50 minutes before and after it")
-
-	isPast, err = isPastOrderLimit(sales(30*time.Minute, 30*time.Minute), "buyer-1", paidAt)
-	require.NoError(t, err)
-	assert.True(t, isPast, "the hour from 30 minutes before to 30 after holds the payment and all the orders")
 }

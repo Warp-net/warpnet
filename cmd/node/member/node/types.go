@@ -169,7 +169,6 @@ type OrderProvider interface {
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	CountConfirmed(buyerId string, from, to time.Time) (int, error)
-	ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error)
 	Delete(tweetId, buyerId string) error
 	IsPayerTaken(payer, buyerNodeId string) (bool, error)
 }
