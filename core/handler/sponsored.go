@@ -669,10 +669,10 @@ func StreamVerifyOrderHandler(
 			log.Errorf("order: verify %s for %s: %v", ev.TxId, ev.TweetId, err)
 			return nil, err
 		}
+		if !receipt.BlockTime.IsZero() {
+			order.CreatedAt = receipt.BlockTime
+		}
 		if receipt.Confirmed {
-			if !receipt.BlockTime.IsZero() {
-				order.CreatedAt = receipt.BlockTime
-			}
 			admitted, err := admitPaidOrder(orders, backend, sponsored, order)
 			if err != nil {
 				return nil, err
