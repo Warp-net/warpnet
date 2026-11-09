@@ -135,14 +135,14 @@ func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 	return o, nil
 }
 
-func (repo *OrderRepo) ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error) {
+func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
 	if buyerId == "" {
-		return nil, local_store.DBError("empty buyer id")
+		return 0, local_store.DBError("empty buyer id")
 	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer txn.Rollback()
 
@@ -155,27 +155,27 @@ func (repo *OrderRepo) ConfirmedTimes(buyerId string, from, to time.Time) ([]tim
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if len(keys) == 0 {
-		return nil, txn.Commit()
+		return 0, txn.Commit()
 	}
 
 	items, err := txn.BatchGet(keys...)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	var times []time.Time
+	var count int
 	for _, item := range items {
 		var o domain.Order
 		if err := json.Unmarshal(item.Value, &o); err != nil {
-			return nil, err
+			return 0, err
 		}
 		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
-			times = append(times, o.CreatedAt)
+			count++
 		}
 	}
-	return times, txn.Commit()
+	return count, txn.Commit()
 }
 
 func (repo *OrderRepo) IsPayerTaken(payer, buyerNodeId string) (bool, error) {

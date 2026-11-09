@@ -112,39 +112,34 @@ func (s *OrderRepoTestSuite) TestEmptyValidation() {
 	s.Error(err)
 }
 
-func (s *OrderRepoTestSuite) TestConfirmedTimes() {
-	at := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+func (s *OrderRepoTestSuite) TestCountConfirmed() {
+	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
 	for _, o := range []domain.Order{
-		{TweetId: "ct-from", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(-time.Hour)},
-		{TweetId: "ct-in", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(time.Nanosecond)},
-		{TweetId: "ct-to", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(time.Hour)},
-		{TweetId: "ct-early", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(-time.Hour - time.Nanosecond)},
-		{TweetId: "ct-late", BuyerId: "ct1", Confirmed: true, CreatedAt: at.Add(time.Hour + time.Nanosecond)},
-		{TweetId: "ct-pending", BuyerId: "ct1", CreatedAt: at},
-		{TweetId: "ct-in", BuyerId: "xct1", Confirmed: true, CreatedAt: at},
+		{TweetId: "t3", BuyerId: "c1", TxId: "tx3", Confirmed: true, CreatedAt: at},
+		{TweetId: "t4", BuyerId: "c1", TxId: "tx4", Confirmed: true, CreatedAt: at.Add(2 * time.Hour)},
+		{TweetId: "t5", BuyerId: "c1", TxId: "tx5", CreatedAt: at},
+		{TweetId: "t3", BuyerId: "xc1", TxId: "tx6", Confirmed: true, CreatedAt: at},
+		{TweetId: "t10", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(-time.Hour)},
+		{TweetId: "t11", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(time.Hour)},
+		{TweetId: "t12", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(-time.Hour - time.Nanosecond)},
+		{TweetId: "t13", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(time.Hour + time.Nanosecond)},
 	} {
 		s.Require().NoError(s.repo.Save(o))
 	}
-	from, to := at.Add(-time.Hour), at.Add(time.Hour)
 
-	times, err := s.repo.ConfirmedTimes("ct1", from, to)
+	count, err := s.repo.CountConfirmed("c1", at.Add(-time.Hour), at.Add(time.Hour))
 	s.Require().NoError(err)
-	got := make([]int64, 0, len(times))
-	for _, t := range times {
-		got = append(got, t.UnixNano())
-	}
-	s.ElementsMatch([]int64{from.UnixNano(), at.Add(time.Nanosecond).UnixNano(), to.UnixNano()}, got,
-		"both ends are inclusive, to the nanosecond; pending orders and a buyer whose id ends the same are left out")
+	s.Equal(3, count, "both ends count, to the nanosecond; pending orders and a buyer whose id ends the same do not")
 
-	times, err = s.repo.ConfirmedTimes("nobody", from, to)
+	count, err = s.repo.CountConfirmed("c1", at.Add(3*time.Hour), at.Add(4*time.Hour))
 	s.Require().NoError(err)
-	s.Empty(times)
+	s.Zero(count, "a window holding none of the orders counts nothing")
 
-	times, err = s.repo.ConfirmedTimes("ct1", to.Add(time.Minute), to.Add(2*time.Minute))
+	count, err = s.repo.CountConfirmed("nobody", at.Add(-time.Hour), at.Add(time.Hour))
 	s.Require().NoError(err)
-	s.Empty(times, "a window holding none of the orders lists nothing")
+	s.Zero(count)
 
-	_, err = s.repo.ConfirmedTimes("", from, to)
+	_, err = s.repo.CountConfirmed("", at, at)
 	s.Error(err)
 }
 

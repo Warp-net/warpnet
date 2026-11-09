@@ -89,7 +89,7 @@ type SponsoredWallet interface {
 }
 
 type OrderStorer interface {
-	ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error)
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	Delete(tweetId, buyerId string) error
@@ -664,11 +664,8 @@ func StreamVerifyOrderHandler(
 			log.Errorf("order: verify %s for %s: %v", ev.TxId, ev.TweetId, err)
 			return nil, err
 		}
-		if !receipt.BlockTime.IsZero() {
-			order.CreatedAt = receipt.BlockTime
-		}
 		if receipt.Confirmed {
-			admitted, err := admitPaidOrder(orders, backend, sponsored, order)
+			admitted, err := admitPaidOrder(orders, backend, sponsored, order, receipt.BlockTime)
 			if err != nil {
 				return nil, err
 			}
@@ -687,16 +684,19 @@ func StreamVerifyOrderHandler(
 	}
 }
 
-// admitPaidOrder holds a paid order, made at its CreatedAt, to the rules in force
-// when it was paid: a buyer let pay is not refused for a stricter stake rule
-// later. It answers false for a payment that puts the buyer past the hourly limit.
-func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order) (bool, error) {
-	paidAt := order.CreatedAt
-	isPast, err := isPastOrderLimit(orders, order.BuyerId, paidAt)
-	if err != nil || isPast {
+// admitPaidOrder holds a paid order to the stake rules in force when it was paid:
+// a buyer let pay is not refused for a stricter rule later. A buyer with the
+// hourly limit of confirmed orders reached waits: it answers false until the hour frees.
+func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order, paidAt time.Time) (bool, error) {
+	now := time.Now()
+	if paidAt.IsZero() {
+		paidAt = now
+	}
+	count, err := orders.CountConfirmed(order.BuyerId, now.Add(-domain.OrderLimitWindow), now)
+	if err != nil || count >= domain.OrderLimit {
 		return false, err
 	}
-	minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(time.Now()))
+	minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(now))
 	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
 		return false, err
 	}
@@ -704,30 +704,6 @@ func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domai
 		return false, err
 	}
 	return true, nil
-}
-
-func isPastOrderLimit(orders OrderStorer, buyerId string, paidAt time.Time) (bool, error) {
-	window := domain.OrderLimitWindow
-	paid, err := orders.ConfirmedTimes(buyerId, paidAt.Add(-window), paidAt.Add(window))
-	if err != nil {
-		return false, err
-	}
-	starts := append([]time.Time{paidAt}, paid...)
-	for _, start := range starts {
-		if start.After(paidAt) {
-			continue
-		}
-		var count int
-		for _, t := range paid {
-			if !t.Before(start) && !t.After(start.Add(window)) {
-				count++
-			}
-		}
-		if count >= domain.OrderLimit {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func StreamGetSponsoredTweetHandler(
@@ -904,8 +880,8 @@ func copyTweetMedia(
 
 func notifyOrderLimit(notifier SponsoredNotifier, orders OrderStorer, authorId string, buyer domain.User) error {
 	now := time.Now()
-	confirmed, err := orders.ConfirmedTimes(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
-	if err != nil || len(confirmed) != domain.OrderLimit {
+	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
+	if err != nil || count != domain.OrderLimit {
 		return err
 	}
 	name := buyer.Username
@@ -979,7 +955,7 @@ func StreamGetCopyBuyerHandler(
 }
 
 func buildCopyBuyerResponse(orders OrderStorer, order domain.Order) (event.CopyBuyerResponse, error) {
-	dailyOrders, err := orders.ConfirmedTimes(
+	dailyOrdersCount, err := orders.CountConfirmed(
 		order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
 	)
 	if err != nil {
@@ -991,7 +967,7 @@ func buildCopyBuyerResponse(orders OrderStorer, order domain.Order) (event.CopyB
 		OrderId:          order.ID(),
 		TxId:             order.TxId,
 		SoldAt:           order.CreatedAt,
-		DailyOrdersCount: len(dailyOrders),
+		DailyOrdersCount: dailyOrdersCount,
 	}, nil
 }
 

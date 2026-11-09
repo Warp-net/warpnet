@@ -168,7 +168,7 @@ type AuthProvider interface {
 type OrderProvider interface {
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
-	ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error)
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 	Delete(tweetId, buyerId string) error
 	IsPayerTaken(payer, buyerNodeId string) (bool, error)
 }
