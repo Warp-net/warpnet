@@ -94,6 +94,7 @@ type OrderCounter interface {
 
 type OrderStorer interface {
 	OrderCounter
+	ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error)
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	Delete(tweetId, buyerId string) error
@@ -669,7 +670,10 @@ func StreamVerifyOrderHandler(
 			return nil, err
 		}
 		if receipt.Confirmed {
-			admitted, err := admitPaidOrder(orders, backend, sponsored, order, receipt.BlockTime)
+			if !receipt.BlockTime.IsZero() {
+				order.CreatedAt = receipt.BlockTime
+			}
+			admitted, err := admitPaidOrder(orders, backend, sponsored, order)
 			if err != nil {
 				return nil, err
 			}
@@ -688,23 +692,48 @@ func StreamVerifyOrderHandler(
 	}
 }
 
-// admitPaidOrder holds a paid order to the rules in force when it was paid: a
-// buyer let pay is not refused for a stricter stake rule or an hourly limit
-// reached later. It answers false for a payment made past the hourly limit.
-func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order, paidAt time.Time) (bool, error) {
-	now := time.Now()
-	if paidAt.IsZero() {
-		paidAt = now
-	}
-	count, err := orders.CountConfirmed(order.BuyerId, paidAt.Add(-domain.OrderLimitWindow), paidAt)
-	if err != nil || count >= domain.OrderLimit {
+// admitPaidOrder holds a paid order, made at its CreatedAt, to the rules in force
+// when it was paid: a buyer let pay is not refused for a stricter stake rule
+// later. It answers false for a payment that puts the buyer past the hourly limit.
+func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order) (bool, error) {
+	paidAt := order.CreatedAt
+	isPast, err := isPastOrderLimit(orders, order.BuyerId, paidAt)
+	if err != nil || isPast {
 		return false, err
 	}
-	minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(now))
+	minStake := min(sponsored.ClaimMinStakeTRX(paidAt), sponsored.ClaimMinStakeTRX(time.Now()))
 	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
 		return false, err
 	}
 	return true, checkPayerStake(backend, order.Payer, minStake)
+}
+
+// isPastOrderLimit reports whether a payment made at paidAt would put more than
+// OrderLimit of the buyer's confirmed orders within one hour, whatever order
+// their claims arrive in.
+func isPastOrderLimit(orders OrderStorer, buyerId string, paidAt time.Time) (bool, error) {
+	window := domain.OrderLimitWindow
+	paid, err := orders.ConfirmedTimes(buyerId, paidAt.Add(-window), paidAt.Add(window))
+	if err != nil {
+		return false, err
+	}
+	// The fullest hour holding paidAt starts at paidAt or at an order before it.
+	starts := append([]time.Time{paidAt}, paid...)
+	for _, start := range starts {
+		if start.After(paidAt) {
+			continue
+		}
+		var count int
+		for _, t := range paid {
+			if !t.Before(start) && !t.After(start.Add(window)) {
+				count++
+			}
+		}
+		if count >= domain.OrderLimit {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func StreamGetSponsoredTweetHandler(

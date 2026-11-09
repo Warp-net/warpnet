@@ -136,13 +136,19 @@ func (repo *OrderRepo) Get(tweetId, buyerId string) (domain.Order, error) {
 }
 
 func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, error) {
+	times, err := repo.ConfirmedTimes(buyerId, from, to)
+	return len(times), err
+}
+
+// ConfirmedTimes lists when the buyer's confirmed orders between from and to were made.
+func (repo *OrderRepo) ConfirmedTimes(buyerId string, from, to time.Time) ([]time.Time, error) {
 	if buyerId == "" {
-		return 0, local_store.DBError("empty buyer id")
+		return nil, local_store.DBError("empty buyer id")
 	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer txn.Rollback()
 
@@ -155,27 +161,27 @@ func (repo *OrderRepo) CountConfirmed(buyerId string, from, to time.Time) (int, 
 		return nil
 	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if len(keys) == 0 {
-		return 0, txn.Commit()
+		return nil, txn.Commit()
 	}
 
 	items, err := txn.BatchGet(keys...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	var count int
+	var times []time.Time
 	for _, item := range items {
 		var o domain.Order
 		if err := json.Unmarshal(item.Value, &o); err != nil {
-			return 0, err
+			return nil, err
 		}
 		if o.Confirmed && !o.CreatedAt.Before(from) && !o.CreatedAt.After(to) {
-			count++
+			times = append(times, o.CreatedAt)
 		}
 	}
-	return count, txn.Commit()
+	return times, txn.Commit()
 }
 
 func (repo *OrderRepo) IsPayerTaken(payer, buyerNodeId string) (bool, error) {
