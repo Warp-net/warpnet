@@ -195,7 +195,7 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, "0.0.0.0", c.HostV4)
 	assert.Equal(t, "::", c.HostV6)
 	assert.Equal(t, "4001", c.Port)
-	assert.Equal(t, warpnetNetwork, c.Network)
+	assert.Equal(t, mainnetNetwork, c.Network)
 	assert.False(t, c.IsPskPrinted)
 	assert.Equal(t, "0.0.0.0", c.ServerHost)
 	assert.Equal(t, "4999", c.ServerPort)
@@ -215,7 +215,7 @@ func TestDefaultSeedIsDerivedAndStable(t *testing.T) {
 	other := withFlags(t, "--node.port", "4002")
 	assert.NotEqual(t, first.Seed, other.Seed, "a different port must not reuse the identity")
 
-	assert.Contains(t, first.Seed, warpnetNetwork)
+	assert.Contains(t, first.Seed, mainnetNetwork)
 	assert.Contains(t, first.Seed, "4001")
 }
 
@@ -225,7 +225,7 @@ func TestFlagsAreApplied(t *testing.T) {
 		"--node.host.v6", "::1",
 		"--node.port", "4002",
 		"--node.seed", "my-seed",
-		"--node.network", testNetNetwork,
+		"--node.network", testnetNetwork,
 		"--node.print-psk",
 		"--node.server.host", "127.0.0.1",
 		"--node.server.port", "5099",
@@ -238,20 +238,20 @@ func TestFlagsAreApplied(t *testing.T) {
 	assert.Equal(t, "::1", c.HostV6)
 	assert.Equal(t, "4002", c.Port)
 	assert.Equal(t, "my-seed", c.Seed)
-	assert.Equal(t, testNetNetwork, c.Network)
+	assert.Equal(t, testnetNetwork, c.Network)
 	assert.True(t, c.IsPskPrinted)
 	assert.Equal(t, "127.0.0.1", c.ServerHost)
 	assert.Equal(t, "5099", c.ServerPort)
 	assert.Equal(t, "debug", c.LoggingLevel)
 	assert.Equal(t, string(JSONFormat), c.LoggingFormat)
 	assert.True(t, c.IsTestnet)
-	assert.Contains(t, c.DatabasePath, filepath.Join(testNetNetwork, "mydb"))
+	assert.Contains(t, c.DatabasePath, filepath.Join(testnetNetwork, "mydb"))
 }
 
 func TestFlagsAcceptEqualsForm(t *testing.T) {
 	c := withFlags(t, "--node.network=testnet", "--node.port=4444")
 
-	assert.Equal(t, testNetNetwork, c.Network)
+	assert.Equal(t, testnetNetwork, c.Network)
 	assert.Equal(t, "4444", c.Port)
 }
 
@@ -261,7 +261,7 @@ func TestEnvVarsAreApplied(t *testing.T) {
 		"NODE_HOST_V6":         "fe80::1",
 		"NODE_PORT":            "4003",
 		"NODE_SEED":            "env-seed",
-		"NODE_NETWORK":         testNetNetwork,
+		"NODE_NETWORK":         testnetNetwork,
 		"NODE_PRINT_PSK":       "true",
 		"NODE_SERVER_HOST":     "127.0.0.2",
 		"NODE_SERVER_PORT":     "6000",
@@ -274,14 +274,14 @@ func TestEnvVarsAreApplied(t *testing.T) {
 	assert.Equal(t, "fe80::1", c.HostV6)
 	assert.Equal(t, "4003", c.Port)
 	assert.Equal(t, "env-seed", c.Seed)
-	assert.Equal(t, testNetNetwork, c.Network)
+	assert.Equal(t, testnetNetwork, c.Network)
 	assert.True(t, c.IsPskPrinted)
 	assert.Equal(t, "127.0.0.2", c.ServerHost)
 	assert.Equal(t, "6000", c.ServerPort)
 	assert.Equal(t, "warn", c.LoggingLevel)
 	assert.Equal(t, string(JSONFormat), c.LoggingFormat)
 	assert.True(t, c.IsTestnet)
-	assert.Contains(t, c.DatabasePath, filepath.Join(testNetNetwork, "envdb"))
+	assert.Contains(t, c.DatabasePath, filepath.Join(testnetNetwork, "envdb"))
 }
 
 func TestDashedSettingIsReachableThroughEnv(t *testing.T) {
@@ -293,9 +293,9 @@ func TestDashedSettingIsReachableThroughEnv(t *testing.T) {
 }
 
 func TestEnvVarAloneDoesNotDisturbTheRest(t *testing.T) {
-	c := withEnv(t, map[string]string{"NODE_NETWORK": testNetNetwork})
+	c := withEnv(t, map[string]string{"NODE_NETWORK": testnetNetwork})
 
-	assert.Equal(t, testNetNetwork, c.Network)
+	assert.Equal(t, testnetNetwork, c.Network)
 	assert.Equal(t, "4001", c.Port)
 	assert.Equal(t, "0.0.0.0", c.HostV4)
 	assert.Equal(t, "info", c.LoggingLevel)
@@ -303,15 +303,15 @@ func TestEnvVarAloneDoesNotDisturbTheRest(t *testing.T) {
 
 func TestFlagOverridesEnv(t *testing.T) {
 	c := run(t, helperModeConfig,
-		[]string{"--node.network", testNetNetwork, "--node.port", "4002", "--logging.level", "debug"},
+		[]string{"--node.network", testnetNetwork, "--node.port", "4002", "--logging.level", "debug"},
 		map[string]string{
-			"NODE_NETWORK":  warpnetNetwork,
+			"NODE_NETWORK":  mainnetNetwork,
 			"NODE_PORT":     "9999",
 			"LOGGING_LEVEL": "error",
 		},
 	)
 
-	assert.Equal(t, testNetNetwork, c.Network)
+	assert.Equal(t, testnetNetwork, c.Network)
 	assert.Equal(t, "4002", c.Port)
 	assert.Equal(t, "debug", c.LoggingLevel)
 }
@@ -319,7 +319,7 @@ func TestFlagOverridesEnv(t *testing.T) {
 func TestMainnetAliasesToWarpnet(t *testing.T) {
 	c := withFlags(t, "--node.network", "mainnet")
 
-	assert.Equal(t, warpnetNetwork, c.Network)
+	assert.Equal(t, mainnetNetwork, c.Network)
 	assert.False(t, c.IsTestnet)
 	assert.Equal(t, warpnetBootstrapNodes, c.Bootstrap)
 }
@@ -328,7 +328,7 @@ func TestBootstrapListFollowsTheNetwork(t *testing.T) {
 	main := withFlags(t)
 	assert.Equal(t, warpnetBootstrapNodes, main.Bootstrap)
 
-	test := withFlags(t, "--node.network", testNetNetwork)
+	test := withFlags(t, "--node.network", testnetNetwork)
 	assert.Equal(t, testnetBootstrapNodes, test.Bootstrap)
 
 	assert.NotEqual(t, main.Bootstrap, test.Bootstrap,
@@ -356,31 +356,31 @@ func TestUnknownNetworkGetsNoBootstrapPeers(t *testing.T) {
 
 func TestDatabasePathIsSeparatedPerNetworkAndDir(t *testing.T) {
 	main := withFlags(t)
-	test := withFlags(t, "--node.network", testNetNetwork)
+	test := withFlags(t, "--node.network", testnetNetwork)
 
 	assert.NotEqual(t, main.DatabasePath, test.DatabasePath)
-	assert.Contains(t, main.DatabasePath, filepath.Join(warpnetNetwork, "storage"))
-	assert.Contains(t, test.DatabasePath, filepath.Join(testNetNetwork, "storage"))
+	assert.Contains(t, main.DatabasePath, filepath.Join(mainnetNetwork, "storage"))
+	assert.Contains(t, test.DatabasePath, filepath.Join(testnetNetwork, "storage"))
 
 	custom := withFlags(t, "--database.dir", "second")
-	assert.Contains(t, custom.DatabasePath, filepath.Join(warpnetNetwork, "second"))
+	assert.Contains(t, custom.DatabasePath, filepath.Join(mainnetNetwork, "second"))
 	assert.NotEqual(t, main.DatabasePath, custom.DatabasePath)
 }
 
 func TestSurroundingWhitespaceIsTrimmed(t *testing.T) {
 	c := withFlags(t,
-		"--node.network", "  "+testNetNetwork+"  ",
+		"--node.network", "  "+testnetNetwork+"  ",
 		"--database.dir", "  spaced  ",
 		"--logging.level", "  debug  ",
 		"--node.seed", "  seeded  ",
 		"--node.server.port", "  5099  ",
 	)
 
-	assert.Equal(t, testNetNetwork, c.Network)
+	assert.Equal(t, testnetNetwork, c.Network)
 	assert.Equal(t, "debug", c.LoggingLevel)
 	assert.Equal(t, "seeded", c.Seed)
 	assert.Equal(t, "5099", c.ServerPort)
-	assert.Contains(t, c.DatabasePath, filepath.Join(testNetNetwork, "spaced"))
+	assert.Contains(t, c.DatabasePath, filepath.Join(testnetNetwork, "spaced"))
 	assert.NotContains(t, c.DatabasePath, " ")
 }
 
@@ -393,8 +393,8 @@ func TestLoggingFormatIsCaseInsensitive(t *testing.T) {
 }
 
 func TestIsTestnet(t *testing.T) {
-	assert.True(t, node{Network: testNetNetwork}.IsTestnet())
-	assert.False(t, node{Network: warpnetNetwork}.IsTestnet())
+	assert.True(t, node{Network: testnetNetwork}.IsTestnet())
+	assert.False(t, node{Network: mainnetNetwork}.IsTestnet())
 	assert.False(t, node{}.IsTestnet())
 }
 
@@ -402,12 +402,12 @@ func TestSetNetworkRepointsDerivedFields(t *testing.T) {
 	orig := Config()
 	defer SetNetwork(orig.Node.Network)
 
-	SetNetwork(testNetNetwork)
+	SetNetwork(testnetNetwork)
 	c := Config()
-	assert.Equal(t, testNetNetwork, c.Node.Network)
+	assert.Equal(t, testnetNetwork, c.Node.Network)
 	assert.True(t, c.Node.IsTestnet())
 	assert.Equal(t, testnetBootstrapNodes, c.Node.Bootstrap)
-	assert.Contains(t, c.Database.Path, filepath.Join(testNetNetwork, filepath.Base(orig.Database.Path)))
+	assert.Contains(t, c.Database.Path, filepath.Join(testnetNetwork, filepath.Base(orig.Database.Path)))
 
 	SetNetwork(orig.Node.Network)
 	assert.Equal(t, orig.Database.Path, Config().Database.Path)

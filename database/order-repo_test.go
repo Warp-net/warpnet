@@ -114,14 +114,26 @@ func (s *OrderRepoTestSuite) TestEmptyValidation() {
 
 func (s *OrderRepoTestSuite) TestCountConfirmed() {
 	at := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "c1", TxId: "tx3", Confirmed: true, CreatedAt: at}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t4", BuyerId: "c1", TxId: "tx4", Confirmed: true, CreatedAt: at.Add(2 * time.Hour)}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t5", BuyerId: "c1", TxId: "tx5", CreatedAt: at}))
-	s.Require().NoError(s.repo.Save(domain.Order{TweetId: "t3", BuyerId: "xc1", TxId: "tx6", Confirmed: true, CreatedAt: at}))
+	for _, o := range []domain.Order{
+		{TweetId: "t3", BuyerId: "c1", TxId: "tx3", Confirmed: true, CreatedAt: at},
+		{TweetId: "t4", BuyerId: "c1", TxId: "tx4", Confirmed: true, CreatedAt: at.Add(2 * time.Hour)},
+		{TweetId: "t5", BuyerId: "c1", TxId: "tx5", CreatedAt: at},
+		{TweetId: "t3", BuyerId: "xc1", TxId: "tx6", Confirmed: true, CreatedAt: at},
+		{TweetId: "t10", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(-time.Hour)},
+		{TweetId: "t11", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(time.Hour)},
+		{TweetId: "t12", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(-time.Hour - time.Nanosecond)},
+		{TweetId: "t13", BuyerId: "c1", Confirmed: true, CreatedAt: at.Add(time.Hour + time.Nanosecond)},
+	} {
+		s.Require().NoError(s.repo.Save(o))
+	}
 
 	count, err := s.repo.CountConfirmed("c1", at.Add(-time.Hour), at.Add(time.Hour))
 	s.Require().NoError(err)
-	s.Equal(1, count, "only the buyer's own confirmed orders inside the window count")
+	s.Equal(3, count, "both ends count, to the nanosecond; pending orders and a buyer whose id ends the same do not")
+
+	count, err = s.repo.CountConfirmed("c1", at.Add(3*time.Hour), at.Add(4*time.Hour))
+	s.Require().NoError(err)
+	s.Zero(count, "a window holding none of the orders counts nothing")
 
 	count, err = s.repo.CountConfirmed("nobody", at.Add(-time.Hour), at.Add(time.Hour))
 	s.Require().NoError(err)

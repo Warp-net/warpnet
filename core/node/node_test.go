@@ -30,7 +30,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/Warp-net/warpnet/core/holepunch"
 	"github.com/Warp-net/warpnet/core/middleware"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
@@ -464,56 +463,9 @@ func TestPrivateFieldOptionsStillMatchUpstream(t *testing.T) {
 	assert.NoError(t, warpnet.WithDialTimeoutLocal(time.Second)(sw))
 }
 
-func TestSetPrivateDurationField_ReportsMissingField(t *testing.T) {
-	n, err := NewWarpNode(t.Context(), nil, ratelimit.Settings{}, nil, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
-	require.NoError(t, err)
-	defer n.StopNode()
-
-	sw, ok := n.Node().Network().(*warpnet.Swarm)
-	require.True(t, ok)
-
-	err = warpnet.setPrivateDurationField(sw, "thisFieldDoesNotExist", time.Second)
-	assert.ErrorIs(t, err, warpnet.ErrFieldNotFound)
-}
-
 func TestWithDefaultTCPConnectionTimeout_ReportsMissingField(t *testing.T) {
 	tr := &warpnet.TCPTransport{}
 	assert.NoError(t, warpnet.WithDefaultTCPConnectionTimeout(5*time.Second)(tr))
-}
-
-func TestHolePunchTracer_ToleratesNilAndUnknownEvents(t *testing.T) {
-	tr := holepunch.holePunchTracer{}
-	assert.NotPanics(t, func() { tr.Trace(nil) })
-}
-
-func TestConnTracer_ToleratesNilConnections(t *testing.T) {
-	tr := holepunch.connTracer{}
-	assert.NotPanics(t, func() {
-		tr.Listen(nil, nil)
-		tr.ListenClose(nil, nil)
-		tr.Connected(nil, nil)
-		tr.Disconnected(nil, nil)
-	})
-}
-
-func TestConnTracer_ClassifiesRealConnections(t *testing.T) {
-	server := newTestNode(t)
-	client := newTestNode(t)
-
-	require.NoError(t, client.Connect(warpnet.WarpAddrInfo{
-		ID: server.Node().ID(), Addrs: server.Node().Addrs(),
-	}))
-
-	conns := client.Node().Network().ConnsToPeer(server.Node().ID())
-	require.NotEmpty(t, conns)
-
-	assert.False(t, holepunch.isRelayed(conns[0]), "a direct TCP dial is not relayed")
-
-	tr := holepunch.connTracer{}
-	assert.NotPanics(t, func() {
-		tr.Connected(client.Node().Network(), conns[0])
-		tr.Disconnected(client.Node().Network(), conns[0])
-	})
 }
 
 // A self-stream must report the node that actually sent the payload, so a

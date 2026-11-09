@@ -38,7 +38,7 @@ func TestHolePunchTracerCoversEveryEvent(t *testing.T) {
 }
 
 func TestConnTracerListenHooksAreInert(t *testing.T) {
-	tr := connTracer{}
+	tr := holepunchNotifier{}
 	require.NotPanics(t, func() {
 		tr.Listen(nil, nil)
 		tr.ListenClose(nil, nil)
@@ -64,12 +64,13 @@ func TestConnTracerOnLiveConnections(t *testing.T) {
 
 	conns := a.Network().ConnsToPeer(b.ID())
 	require.NotEmpty(t, conns)
+	require.False(t, isRelayed(conns[0]), "a direct TCP dial is not relayed")
 
-	tr := connTracer{}
+	tr := holepunchNotifier{}
 	require.NotPanics(t, func() {
 		tr.Connected(a.Network(), conns[0])
 		tr.Disconnected(a.Network(), conns[0])
 	})
 }
 
-var _ network.Notifiee = connTracer{}
+var _ network.Notifiee = holepunchNotifier{}

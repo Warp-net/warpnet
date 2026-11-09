@@ -4,42 +4,46 @@ import (
 	"context"
 	"github.com/Warp-net/keepalive"
 	"runtime"
+	"sync"
 	"time"
 )
 
 var (
 	inhibitorSingleton keepalive.Inhibitor
 	holdSingleton      keepalive.Hold
+	holdMx             sync.Mutex
 )
 
 func init() {
 	inhibitorSingleton = keepalive.New()
 }
 
-func Acquire() (err error) {
+func Acquire() error {
+	holdMx.Lock()
+	defer holdMx.Unlock()
+	if holdSingleton != nil {
+		return nil
+	}
 	keepaliveCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-
-	holdSingleton, err = inhibitorSingleton.Acquire(keepaliveCtx, keepalive.Options{
+	hold, err := inhibitorSingleton.Acquire(keepaliveCtx, keepalive.Options{
 		KeepDisplay: runtime.GOOS == "linux",
 		Reason:      "serving paired devices",
 	})
 	if err != nil {
-		holdSingleton = holdNoOp{}
+		return err
 	}
-	return err
-}
-
-func Release() (err error) {
-	return holdSingleton.Release()
-}
-
-type holdNoOp struct{}
-
-func (h holdNoOp) Release() error {
+	holdSingleton = hold
 	return nil
 }
 
-func (h holdNoOp) Describe() string {
-	return "no-op"
+func Release() error {
+	holdMx.Lock()
+	defer holdMx.Unlock()
+	if holdSingleton == nil {
+		return nil
+	}
+	err := holdSingleton.Release()
+	holdSingleton = nil
+	return err
 }

@@ -88,12 +88,8 @@ type SponsoredWallet interface {
 	Network() string
 }
 
-type OrderCounter interface {
-	CountConfirmed(buyerId string, from, to time.Time) (int, error)
-}
-
 type OrderStorer interface {
-	OrderCounter
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	Delete(tweetId, buyerId string) error
@@ -688,15 +684,15 @@ func StreamVerifyOrderHandler(
 	}
 }
 
-// admitPaidOrder holds a paid order to the rules in force when it was paid: a
-// buyer let pay is not refused for a stricter stake rule or an hourly limit
-// reached later. It answers false for a payment made past the hourly limit.
+// admitPaidOrder holds a paid order to the stake rules in force when it was paid:
+// a buyer let pay is not refused for a stricter rule later. A buyer with the
+// hourly limit of confirmed orders reached waits: it answers false until the hour frees.
 func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order, paidAt time.Time) (bool, error) {
 	now := time.Now()
 	if paidAt.IsZero() {
 		paidAt = now
 	}
-	count, err := orders.CountConfirmed(order.BuyerId, paidAt.Add(-domain.OrderLimitWindow), paidAt)
+	count, err := orders.CountConfirmed(order.BuyerId, now.Add(-domain.OrderLimitWindow), now)
 	if err != nil || count >= domain.OrderLimit {
 		return false, err
 	}
@@ -704,7 +700,10 @@ func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domai
 	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
 		return false, err
 	}
-	return true, checkPayerStake(backend, order.Payer, minStake)
+	if err := checkPayerStake(backend, order.Payer, minStake); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func StreamGetSponsoredTweetHandler(
@@ -879,7 +878,7 @@ func copyTweetMedia(
 	return tweet, nil
 }
 
-func notifyOrderLimit(notifier SponsoredNotifier, orders OrderCounter, authorId string, buyer domain.User) error {
+func notifyOrderLimit(notifier SponsoredNotifier, orders OrderStorer, authorId string, buyer domain.User) error {
 	now := time.Now()
 	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
 	if err != nil || count != domain.OrderLimit {
@@ -955,7 +954,7 @@ func StreamGetCopyBuyerHandler(
 	}
 }
 
-func buildCopyBuyerResponse(orders OrderCounter, order domain.Order) (event.CopyBuyerResponse, error) {
+func buildCopyBuyerResponse(orders OrderStorer, order domain.Order) (event.CopyBuyerResponse, error) {
 	dailyOrdersCount, err := orders.CountConfirmed(
 		order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
 	)
