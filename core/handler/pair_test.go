@@ -48,6 +48,10 @@ type stubAliasRepo struct {
 	setAliasFn func(alias domain.Alias) error
 }
 
+func (s *stubAliasRepo) GetAliases() ([]domain.Alias, error) { return nil, nil }
+
+func (s *stubAliasRepo) DeleteAlias(string) error { return nil }
+
 func (s *stubAliasRepo) SetAlias(alias domain.Alias) error {
 	if s.setAliasFn == nil {
 		s.saved++
