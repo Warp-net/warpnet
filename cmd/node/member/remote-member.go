@@ -82,12 +82,6 @@ func main() {
 		return
 	}
 
-	infos, err := config.Config().Node.AddrInfos()
-	if err != nil {
-		log.Errorf("remote: bootstrap infos: %v", err)
-		return
-	}
-
 	db, err := localstore.New(config.Config().Database.Path, localstore.DefaultOptions())
 	if err != nil {
 		log.Errorf("remote: open db: %v", err)
@@ -152,7 +146,10 @@ func main() {
 		security.NoiseFingerprint(staticKey.Public),
 	)
 
-	var n *node.MemberNode
+	var (
+		n              *node.MemberNode
+		bootstrapPeers []string
+	)
 	defer func() {
 		if n != nil {
 			n.Stop()
@@ -178,6 +175,19 @@ func main() {
 				log.Errorf("remote: node ID: %v", err)
 				return
 			}
+
+			networkSettings, err := node.LoadNetworkSettings(db, authRepo.GetOwner().UserId)
+			if err != nil {
+				log.Errorf("remote: network settings: %v", err)
+				return
+			}
+
+			infos, err := warpnet.AddrInfosFromStrings(networkSettings.Bootstrap)
+			if err != nil {
+				log.Errorf("remote: bootstrap infos: %v", err)
+				return
+			}
+			bootstrapPeers = networkSettings.Bootstrap
 
 			n, err = node.NewMemberNode(
 				ctx,
@@ -205,7 +215,7 @@ func main() {
 		info.ID = ni.ID.String()
 		info.Network = network
 		info.Addresses = ni.Addresses
-		info.BootstrapPeers = config.Config().Node.Bootstrap
+		info.BootstrapPeers = bootstrapPeers
 		readyChan <- info
 	}
 }

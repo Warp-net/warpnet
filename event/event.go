@@ -788,6 +788,24 @@ type GetSponsoredSettingsResponse = domain.SponsoredSettings
 // UpdateSponsoredSettingsEvent defines model for UpdateSponsoredSettingsEvent.
 type UpdateSponsoredSettingsEvent = domain.SponsoredSettings
 
+// GetNetworkSettingsEvent defines model for GetNetworkSettingsEvent.
+type GetNetworkSettingsEvent struct{}
+
+// GetNetworkSettingsResponse defines model for GetNetworkSettingsResponse.
+type GetNetworkSettingsResponse = domain.NetworkSettings
+
+// UpdateNetworkSettingsEvent defines model for UpdateNetworkSettingsEvent.
+type UpdateNetworkSettingsEvent = domain.NetworkSettings
+
+// GetWalletSettingsEvent defines model for GetWalletSettingsEvent.
+type GetWalletSettingsEvent struct{}
+
+// GetWalletSettingsResponse defines model for GetWalletSettingsResponse.
+type GetWalletSettingsResponse = domain.WalletSettings
+
+// UpdateWalletSettingsEvent defines model for UpdateWalletSettingsEvent.
+type UpdateWalletSettingsEvent = domain.WalletSettings
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`

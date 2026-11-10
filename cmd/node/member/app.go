@@ -84,6 +84,8 @@ type App struct {
 	updater   NodeUpdater
 	mx        *sync.RWMutex
 
+	bootstrapPeers []string
+
 	// deepLink: latest pending warpnet:// payload for the frontend. Guarded by mx.
 	deepLink string
 }
@@ -271,7 +273,7 @@ func (a *App) serveLogins(network string, startNode func() (NodeServer, error)) 
 			info.ID = nodeInfo.ID.String()
 			info.Network = network
 			info.Addresses = nodeInfo.Addresses
-			info.BootstrapPeers = config.Config().Node.Bootstrap
+			info.BootstrapPeers = a.bootstrapPeers
 			a.readyChan <- info
 		}
 	}
@@ -283,10 +285,16 @@ func (a *App) startMemberNode() (NodeServer, error) {
 		return nil, fmt.Errorf("current node ID: %w", err)
 	}
 
-	infos, err := config.Config().Node.AddrInfos()
+	networkSettings, err := member.LoadNetworkSettings(a.db, a.auth.Storage().GetOwner().UserId)
+	if err != nil {
+		return nil, fmt.Errorf("network settings: %w", err)
+	}
+
+	infos, err := warpnet.AddrInfosFromStrings(networkSettings.Bootstrap)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap nodes infos: %w", err)
 	}
+	a.bootstrapPeers = networkSettings.Bootstrap
 
 	node, err := member.NewMemberNode(
 		a.ctx,

@@ -44,6 +44,7 @@ import (
 	corePubsub "github.com/Warp-net/warpnet/core/pubsub"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
@@ -651,4 +652,54 @@ func TestStopClosesTheRatingBeforeTheGossip(t *testing.T) {
 	m.Stop()
 
 	require.Equal(t, []string{"rating", "pubsub"}, order.closed)
+}
+
+func TestLoadNetworkSettings(t *testing.T) {
+	db := testDB(t)
+	settingsRepo := database.NewSettingsRepo(db)
+	defaults := config.Config()
+
+	t.Setenv("NODE_PORT", "")
+	t.Setenv("NODE_HOST_V4", "")
+
+	got, err := LoadNetworkSettings(db, "owner-1")
+	require.NoError(t, err)
+	require.Equal(t, defaults.Node.Port, got.Port, "nothing saved: the config value")
+	require.Equal(t, defaults.Node.Bootstrap, got.Bootstrap)
+
+	require.NoError(t, settingsRepo.SetNetworkSettings("owner-1", domain.NetworkSettings{
+		Port:   "4555",
+		HostV4: "127.0.0.1",
+	}))
+	got, err = LoadNetworkSettings(db, "owner-1")
+	require.NoError(t, err)
+	require.Equal(t, "4555", got.Port, "a saved value beats the config default")
+	require.Equal(t, "127.0.0.1", got.HostV4)
+	require.Equal(t, defaults.Node.Bootstrap, got.Bootstrap, "unsaved fields keep the config value")
+
+	t.Setenv("NODE_PORT", "4777")
+	got, err = LoadNetworkSettings(db, "owner-1")
+	require.NoError(t, err)
+	require.Equal(t, defaults.Node.Port, got.Port, "an explicit env var beats the saved value")
+	require.Equal(t, "127.0.0.1", got.HostV4, "pinning one key leaves the others alone")
+}
+
+func TestLoadWalletSettings(t *testing.T) {
+	db := testDB(t)
+	defaults := config.Config()
+
+	t.Setenv("WALLET_ENDPOINT", "")
+
+	require.NoError(t, database.NewSettingsRepo(db).SetWalletSettings("owner-1", domain.WalletSettings{
+		Endpoint: "https://nile.example",
+	}))
+	got, err := loadWalletSettings(db, "owner-1")
+	require.NoError(t, err)
+	require.Equal(t, "https://nile.example", got.Endpoint)
+	require.Equal(t, defaults.Wallet.BinaryPath, got.BinaryPath)
+
+	t.Setenv("WALLET_ENDPOINT", "https://pinned.example")
+	got, err = loadWalletSettings(db, "owner-1")
+	require.NoError(t, err)
+	require.Equal(t, defaults.Wallet.Endpoint, got.Endpoint, "an explicit env var beats the saved value")
 }

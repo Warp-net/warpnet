@@ -255,3 +255,105 @@ func (repo *SettingsRepo) SetSponsoredSettings(userId string, s domain.Sponsored
 	}
 	return txn.Commit()
 }
+
+func (repo *SettingsRepo) GetNetworkSettings(userId string) (domain.NetworkSettings, error) {
+	if userId == "" {
+		return domain.NetworkSettings{}, local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("network").
+		Build())
+	if local_store.IsNotFoundError(err) {
+		return domain.NetworkSettings{}, nil
+	}
+	if err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	var s domain.NetworkSettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	return s, nil
+}
+
+func (repo *SettingsRepo) SetNetworkSettings(userId string, s domain.NetworkSettings) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("network").
+		Build(), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *SettingsRepo) GetWalletSettings(userId string) (domain.WalletSettings, error) {
+	if userId == "" {
+		return domain.WalletSettings{}, local_store.DBError("empty user id")
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.WalletSettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("wallet").
+		Build())
+	if local_store.IsNotFoundError(err) {
+		return domain.WalletSettings{}, nil
+	}
+	if err != nil {
+		return domain.WalletSettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.WalletSettings{}, err
+	}
+	var s domain.WalletSettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.WalletSettings{}, err
+	}
+	return s, nil
+}
+
+func (repo *SettingsRepo) SetWalletSettings(userId string, s domain.WalletSettings) error {
+	if userId == "" {
+		return local_store.DBError("empty user id")
+	}
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddRootID(userId).
+		AddParentId("wallet").
+		Build(), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}

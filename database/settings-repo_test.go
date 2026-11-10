@@ -149,6 +149,44 @@ func (s *SettingsRepoTestSuite) TestSponsoredSetGet() {
 	s.Error(s.repo.SetSponsoredSettings("", domain.SponsoredSettings{}))
 }
 
+func (s *SettingsRepoTestSuite) TestNetworkSetGet() {
+	user := uuid.New().String()
+	got, err := s.repo.GetNetworkSettings(user)
+	s.Require().NoError(err)
+	s.Equal(domain.NetworkSettings{}, got)
+
+	want := domain.NetworkSettings{Port: "4555", Bootstrap: []string{"/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"}}
+	s.Require().NoError(s.repo.SetNetworkSettings(user, want))
+	got, err = s.repo.GetNetworkSettings(user)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+
+	ws, err := s.repo.GetWalletSettings(user)
+	s.Require().NoError(err)
+	s.Equal(domain.WalletSettings{}, ws, "network and wallet settings live under separate keys")
+
+	_, err = s.repo.GetNetworkSettings("")
+	s.Error(err)
+	s.Error(s.repo.SetNetworkSettings("", domain.NetworkSettings{}))
+}
+
+func (s *SettingsRepoTestSuite) TestWalletSetGet() {
+	user := uuid.New().String()
+	want := domain.WalletSettings{Endpoint: "https://nile.example"}
+	s.Require().NoError(s.repo.SetWalletSettings(user, want))
+	got, err := s.repo.GetWalletSettings(user)
+	s.Require().NoError(err)
+	s.Equal(want, got)
+
+	ns, err := s.repo.GetNetworkSettings(user)
+	s.Require().NoError(err)
+	s.Equal(domain.NetworkSettings{}, ns)
+
+	_, err = s.repo.GetWalletSettings("")
+	s.Error(err)
+	s.Error(s.repo.SetWalletSettings("", domain.WalletSettings{}))
+}
+
 func TestSettingsRepoTestSuite(t *testing.T) {
 	suite.Run(t, new(SettingsRepoTestSuite))
 }

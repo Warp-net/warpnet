@@ -321,13 +321,17 @@ type PollProvider interface {
 
 type SettingsProvider interface {
 	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
+	GetNetworkSettings(userId string) (domain.NetworkSettings, error)
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
 	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
 	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
+	GetWalletSettings(userId string) (domain.WalletSettings, error)
 	SetGatewaySettings(userId string, s domain.GatewaySettings) error
+	SetNetworkSettings(userId string, s domain.NetworkSettings) error
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
 	SetRateLimitSettings(userId string, s ratelimit.Settings) error
 	SetSponsoredSettings(userId string, s domain.SponsoredSettings) error
+	SetWalletSettings(userId string, s domain.WalletSettings) error
 }
 
 type SubscriptionProvider interface {

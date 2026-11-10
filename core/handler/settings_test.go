@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -437,5 +438,187 @@ func TestStreamSponsoredSettingsHandlers(t *testing.T) {
 	}
 	if _, err := StreamUpdateSponsoredSettingsHandler(repo, stubAuth{})(marshal(t, event.UpdateSponsoredSettingsEvent{}), nil); err == nil {
 		t.Fatal("expected an empty-owner error")
+	}
+}
+
+type stubNetworkSettingsRepo struct {
+	saved domain.NetworkSettings
+	err   error
+}
+
+func (s *stubNetworkSettingsRepo) GetNetworkSettings(string) (domain.NetworkSettings, error) {
+	return s.saved, s.err
+}
+
+func (s *stubNetworkSettingsRepo) SetNetworkSettings(_ string, ns domain.NetworkSettings) error {
+	s.saved = ns
+	return s.err
+}
+
+func TestStreamNetworkSettingsHandlers(t *testing.T) {
+	const bootstrapAddr = "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
+	defaults := domain.NetworkSettings{
+		HostV4:    "0.0.0.0",
+		HostV6:    "::",
+		Port:      "4001",
+		Bootstrap: []string{bootstrapAddr},
+	}
+	auth := stubAuth{owner: domain.Owner{UserId: "owner-1"}}
+
+	t.Run("get falls back to defaults", func(t *testing.T) {
+		repo := &stubNetworkSettingsRepo{saved: domain.NetworkSettings{Port: "4555"}}
+		resp, err := StreamGetNetworkSettingsHandler(repo, auth, defaults)([]byte("{}"), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		got := resp.(event.GetNetworkSettingsResponse)
+		if got.Port != "4555" || got.HostV4 != "0.0.0.0" || len(got.Bootstrap) != 1 {
+			t.Fatalf("unexpected settings: %+v", got)
+		}
+	})
+
+	t.Run("get repo error", func(t *testing.T) {
+		repoErr := errors.New("db failed")
+		repo := &stubNetworkSettingsRepo{err: repoErr}
+		if _, err := StreamGetNetworkSettingsHandler(repo, auth, defaults)([]byte("{}"), nil); !errors.Is(err, repoErr) {
+			t.Fatalf("expected repo error, got %v", err)
+		}
+	})
+
+	t.Run("update stores only what differs from defaults", func(t *testing.T) {
+		repo := &stubNetworkSettingsRepo{}
+		in := defaults
+		in.Port = "4555"
+		resp, err := StreamUpdateNetworkSettingsHandler(repo, auth, defaults)(marshal(t, in), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if repo.saved.Port != "4555" || repo.saved.HostV4 != "" || repo.saved.Bootstrap != nil {
+			t.Fatalf("unexpected saved: %+v", repo.saved)
+		}
+		got := resp.(event.GetNetworkSettingsResponse)
+		if got.Port != "4555" || got.HostV4 != "0.0.0.0" {
+			t.Fatalf("expected effective settings, got %+v", got)
+		}
+	})
+
+	t.Run("dns bootstrap peer", func(t *testing.T) {
+		repo := &stubNetworkSettingsRepo{}
+		in := domain.NetworkSettings{Bootstrap: []string{"/dns/relay.example.org/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"}}
+		if _, err := StreamUpdateNetworkSettingsHandler(repo, auth, defaults)(marshal(t, in), nil); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if len(repo.saved.Bootstrap) != 1 {
+			t.Fatalf("unexpected saved: %+v", repo.saved)
+		}
+	})
+
+	t.Run("empty update resets to defaults", func(t *testing.T) {
+		repo := &stubNetworkSettingsRepo{saved: domain.NetworkSettings{Port: "4555"}}
+		resp, err := StreamUpdateNetworkSettingsHandler(repo, auth, defaults)([]byte("{}"), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if repo.saved.Port != "" || resp.(event.GetNetworkSettingsResponse).Port != "4001" {
+			t.Fatalf("expected defaults, saved %+v", repo.saved)
+		}
+	})
+
+	t.Run("empty owner", func(t *testing.T) {
+		h := StreamUpdateNetworkSettingsHandler(&stubNetworkSettingsRepo{}, stubAuth{owner: domain.Owner{}}, defaults)
+		if _, err := h([]byte("{}"), nil); err == nil {
+			t.Fatal("expected empty-owner error")
+		}
+	})
+
+	t.Run("invalid payload", func(t *testing.T) {
+		if _, err := StreamUpdateNetworkSettingsHandler(&stubNetworkSettingsRepo{}, auth, defaults)([]byte("{"), nil); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	invalid := map[string]domain.NetworkSettings{
+		"ipv6 in the ipv4 field": {HostV4: "::1"},
+		"ipv4 in the ipv6 field": {HostV6: "127.0.0.1"},
+		"garbage host":           {HostV4: "localhost"},
+		"port zero":              {Port: "0"},
+		"port too big":           {Port: "65536"},
+		"port not a number":      {Port: "abc"},
+		"bootstrap without id":   {Bootstrap: []string{"/ip4/1.2.3.4/tcp/4001"}},
+	}
+	for name, in := range invalid {
+		t.Run(name, func(t *testing.T) {
+			repo := &stubNetworkSettingsRepo{}
+			if _, err := StreamUpdateNetworkSettingsHandler(repo, auth, defaults)(marshal(t, in), nil); err == nil {
+				t.Fatalf("expected validation error for %+v", in)
+			}
+			if !reflect.DeepEqual(repo.saved, domain.NetworkSettings{}) {
+				t.Fatalf("invalid settings must not be saved, got %+v", repo.saved)
+			}
+		})
+	}
+}
+
+type stubWalletSettingsRepo struct {
+	saved domain.WalletSettings
+	err   error
+}
+
+func (s *stubWalletSettingsRepo) GetWalletSettings(string) (domain.WalletSettings, error) {
+	return s.saved, s.err
+}
+
+func (s *stubWalletSettingsRepo) SetWalletSettings(_ string, ws domain.WalletSettings) error {
+	s.saved = ws
+	return s.err
+}
+
+func TestStreamWalletSettingsHandlers(t *testing.T) {
+	defaults := domain.WalletSettings{Endpoint: "https://api.trongrid.io"}
+	auth := stubAuth{owner: domain.Owner{UserId: "owner-1"}}
+
+	t.Run("get falls back to defaults", func(t *testing.T) {
+		resp, err := StreamGetWalletSettingsHandler(&stubWalletSettingsRepo{}, auth, defaults)([]byte("{}"), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp.(event.GetWalletSettingsResponse).Endpoint != defaults.Endpoint {
+			t.Fatalf("unexpected settings: %+v", resp)
+		}
+	})
+
+	t.Run("update stores only what differs from defaults", func(t *testing.T) {
+		repo := &stubWalletSettingsRepo{}
+		in := domain.WalletSettings{Endpoint: defaults.Endpoint, BinaryPath: "/opt/engine"}
+		resp, err := StreamUpdateWalletSettingsHandler(repo, auth, defaults)(marshal(t, in), nil)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if repo.saved.Endpoint != "" || repo.saved.BinaryPath != "/opt/engine" {
+			t.Fatalf("unexpected saved: %+v", repo.saved)
+		}
+		if resp.(event.GetWalletSettingsResponse).Endpoint != defaults.Endpoint {
+			t.Fatalf("expected effective settings, got %+v", resp)
+		}
+	})
+
+	t.Run("empty owner", func(t *testing.T) {
+		h := StreamUpdateWalletSettingsHandler(&stubWalletSettingsRepo{}, stubAuth{owner: domain.Owner{}}, defaults)
+		if _, err := h([]byte("{}"), nil); err == nil {
+			t.Fatal("expected empty-owner error")
+		}
+	})
+
+	for name, endpoint := range map[string]string{"without host": "https://", "not http": "ftp://api.trongrid.io"} {
+		t.Run(name, func(t *testing.T) {
+			repo := &stubWalletSettingsRepo{}
+			in := domain.WalletSettings{Endpoint: endpoint}
+			if _, err := StreamUpdateWalletSettingsHandler(repo, auth, defaults)(marshal(t, in), nil); err == nil {
+				t.Fatalf("expected validation error for %q", endpoint)
+			}
+			if repo.saved != (domain.WalletSettings{}) {
+				t.Fatalf("invalid settings must not be saved, got %+v", repo.saved)
+			}
+		})
 	}
 }
