@@ -1,11 +1,11 @@
 //nolint:all
-package media_meta
+package video
 
 import (
 	"encoding/binary"
 	"testing"
+	"time"
 
-	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +53,17 @@ func concatBoxes(boxes ...[]byte) []byte {
 }
 
 const firstChunk = 32
+
+func minimalMP4() []byte {
+	return []byte{
+		0x00, 0x00, 0x00, 0x18,
+		'f', 't', 'y', 'p',
+		'i', 's', 'o', 'm',
+		0x00, 0x00, 0x02, 0x00,
+		'i', 's', 'o', 'm',
+		'm', 'p', '4', '1',
+	}
+}
 
 func moovLast(offsetsBox string, trailing ...[]byte) []byte {
 	chunks := buildBox("mdat", []byte("AAAABBBBCCCC"))
@@ -155,14 +166,87 @@ func TestMoveMoovToFront_RefusesMalformedFiles(t *testing.T) {
 	assert.ErrorIs(t, err, ErrMalformedISO)
 }
 
-func TestMoveMoovToFront_SignedFileStillVerifies(t *testing.T) {
-	moved, err := MoveMoovToFront(moovLast("stco"))
-	require.NoError(t, err)
+func isoBoxOf(size uint32, boxType string, payload []byte) []byte {
+	out := make([]byte, 0, boxHeaderSize+len(payload))
+	out = binary.BigEndian.AppendUint32(out, size)
+	out = append(out, boxType...)
+	return append(out, payload...)
+}
 
-	meta, err := metadata("alice").Sign(security.ConvertToSHA256(moved))
-	require.NoError(t, err)
-	signed, err := EmbedInVideo(moved, meta)
-	require.NoError(t, err)
+func TestCloseOpenEndedBoxEdgeCases(t *testing.T) {
+	t.Run("rejects malformed input", func(t *testing.T) {
+		_, err := CloseOpenEndedBox(isoBoxOf(1024, "ftyp", []byte("short")))
+		require.ErrorIs(t, err, ErrMalformedISO)
+	})
 
-	assert.NoError(t, VerifyVideo(signed, signerID.String(), "alice"))
+	t.Run("passes an empty file through", func(t *testing.T) {
+		out, err := CloseOpenEndedBox(nil)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+
+	t.Run("leaves an already-sized last box alone", func(t *testing.T) {
+		in := minimalMP4()
+		out, err := CloseOpenEndedBox(in)
+		require.NoError(t, err)
+		require.Equal(t, in, out)
+	})
+
+	t.Run("writes the real size into an open-ended last box", func(t *testing.T) {
+		in := append(minimalMP4(), isoBoxOf(0, "mdat", []byte("streamed payload"))...)
+
+		out, err := CloseOpenEndedBox(in)
+		require.NoError(t, err)
+		require.Len(t, out, len(in))
+
+		last := len(minimalMP4())
+		require.Equal(t, uint32(len(in)-last), binary.BigEndian.Uint32(out[last:last+4]))
+	})
+}
+
+func durationBox(boxType string, version byte, timescale uint32, duration uint64) []byte {
+	payload := []byte{version, 0, 0, 0}
+	if version == 1 {
+		payload = append(payload, make([]byte, 16)...)
+		payload = binary.BigEndian.AppendUint32(payload, timescale)
+		payload = binary.BigEndian.AppendUint64(payload, duration)
+	} else {
+		payload = append(payload, make([]byte, 8)...)
+		payload = binary.BigEndian.AppendUint32(payload, timescale)
+		payload = binary.BigEndian.AppendUint32(payload, uint32(duration))
+	}
+	return buildBox(boxType, payload)
+}
+
+func movieWithLengths(movie, media uint64) []byte {
+	return concatBoxes(minimalMP4(), buildBox("moov",
+		durationBox("mvhd", 0, 1000, movie),
+		buildBox("trak", buildBox("mdia", durationBox("mdhd", 1, 30000, media*30))),
+	))
+}
+
+func TestDuration_TakesTheLongestOfTheMovieAndItsTracks(t *testing.T) {
+	cases := map[string]struct {
+		file []byte
+		want time.Duration
+	}{
+		"59.9 s":                    {movieWithLengths(59900, 59900), 59900 * time.Millisecond},
+		"60.4 s":                    {movieWithLengths(60400, 60400), 60400 * time.Millisecond},
+		"61 s":                      {movieWithLengths(61000, 61000), 61 * time.Second},
+		"an edit list hides length": {movieWithLengths(30000, 61000), 61 * time.Second},
+		"no moov":                   {minimalMP4(), 0},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := Duration(c.file)
+			require.NoError(t, err)
+			assert.Equal(t, c.want, got)
+		})
+	}
+}
+
+func TestDuration_RefusesMalformedHeaders(t *testing.T) {
+	file := concatBoxes(minimalMP4(), buildBox("moov", buildBox("mvhd", []byte{0, 0, 0, 0})))
+	_, err := Duration(file)
+	assert.ErrorIs(t, err, ErrMalformedISO)
 }

@@ -207,6 +207,24 @@ func TestUploadVideo_UnsupportedFormatRejected(t *testing.T) {
 	}
 }
 
+func movieLasting(milliseconds uint32) []byte {
+	mvhd := binary.BigEndian.AppendUint32(make([]byte, 12), 1000)
+	mvhd = binary.BigEndian.AppendUint32(mvhd, milliseconds)
+	return bytes.Join([][]byte{minimalMP4(), videoBox("moov", videoBox("mvhd", mvhd))}, nil)
+}
+
+func TestUploadVideo_OneMinuteIsTheMaximum(t *testing.T) {
+	metadata, err := media_meta.BuildMetadata(signingInformer{"alice"}.NodeInfo(), testSignerKey, ownerOf("alice"))
+	require.NoError(t, err)
+
+	for _, ms := range []uint32{59900, 60400} {
+		_, err := signUploadedVideo(mp4DataURL(movieLasting(ms)), metadata)
+		assert.NoError(t, err, ms)
+	}
+	_, err = signUploadedVideo(mp4DataURL(movieLasting(61000)), metadata)
+	assert.ErrorIs(t, err, ErrTooLongVideo)
+}
+
 func TestUploadVideo_TooLarge(t *testing.T) {
 	if testing.Short() {
 		t.Skip("allocates >50 MiB")

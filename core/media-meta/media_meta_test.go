@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -308,7 +309,7 @@ func TestCloseOpenEndedBox(t *testing.T) {
 		0xAA, 0xBB, 0xCC, 0xDD,
 	}...)
 
-	closed, err := CloseOpenEndedBox(openEnded)
+	closed, err := video.CloseOpenEndedBox(openEnded)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(12), binary.BigEndian.Uint32(closed[24:28]))
 

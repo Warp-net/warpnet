@@ -53,6 +53,7 @@ require (
 	filippo.io/bigmod v0.1.1-0.20260103110540-f8a47775ebe5 // indirect
 	filippo.io/keygen v1.0.0 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
+	github.com/Warp-net/ffmpeg-stripped v0.1.0
 	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -216,3 +217,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
+
+replace github.com/Warp-net/ffmpeg-stripped => /home/vadim/go/src/github.com/Warp-net/ffmpeg-stripped

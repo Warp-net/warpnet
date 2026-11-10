@@ -69,37 +69,6 @@ func TestVerifyVideoRejectsMalformedInput(t *testing.T) {
 	)
 }
 
-func TestCloseOpenEndedBoxEdgeCases(t *testing.T) {
-	t.Run("rejects malformed input", func(t *testing.T) {
-		_, err := CloseOpenEndedBox(isoBoxOf(1024, "ftyp", []byte("short")))
-		require.ErrorIs(t, err, ErrMalformedISO)
-	})
-
-	t.Run("passes an empty file through", func(t *testing.T) {
-		out, err := CloseOpenEndedBox(nil)
-		require.NoError(t, err)
-		require.Nil(t, out)
-	})
-
-	t.Run("leaves an already-sized last box alone", func(t *testing.T) {
-		in := minimalMP4()
-		out, err := CloseOpenEndedBox(in)
-		require.NoError(t, err)
-		require.Equal(t, in, out)
-	})
-
-	t.Run("writes the real size into an open-ended last box", func(t *testing.T) {
-		in := append(minimalMP4(), isoBoxOf(0, "mdat", []byte("streamed payload"))...)
-
-		out, err := CloseOpenEndedBox(in)
-		require.NoError(t, err)
-		require.Len(t, out, len(in))
-
-		last := len(minimalMP4())
-		require.Equal(t, uint32(len(in)-last), binary.BigEndian.Uint32(out[last:last+4]))
-	})
-}
-
 func TestStripJPEGExifRejectsMalformedInput(t *testing.T) {
 	t.Run("a segment size below the minimum", func(t *testing.T) {
 		b := []byte{jpegMarker, 0xD8, jpegMarker, 0xE1, 0x00, 0x01}

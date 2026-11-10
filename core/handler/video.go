@@ -29,9 +29,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
@@ -43,9 +45,11 @@ import (
 )
 
 const (
-	maxVideoSize = units.MiB * 36
+	maxVideoSize   = units.MiB * 36
+	maxVideoLength = time.Minute + 500*time.Millisecond
 
 	ErrTooLargeVideo    warpnet.WarpError = "video is too large: 36 MiB is the maximum"
+	ErrTooLongVideo     warpnet.WarpError = "video is too long: 1 minute is the maximum"
 	ErrEmptyVideoKey    warpnet.WarpError = "empty video key"
 	ErrNoVideoProvided  warpnet.WarpError = "a video must be provided"
 	ErrUnsupportedVideo warpnet.WarpError = "unsupported video format: only MP4 and MOV (QuickTime) files are accepted"
@@ -243,6 +247,14 @@ func signUploadedVideo(file string, metadata media_meta.Metadata) (domain.Base64
 		return "", ErrUnsupportedVideo
 	}
 
+	length, err := video.Duration(videoBytes)
+	if err != nil {
+		return "", fmt.Errorf("reading length: %w", err)
+	}
+	if length > maxVideoLength {
+		return "", ErrTooLongVideo
+	}
+
 	signed, err := signVideo(videoBytes, metadata)
 	if err != nil {
 		return "", err
@@ -258,12 +270,12 @@ func signVideo(videoBytes []byte, metadata media_meta.Metadata) ([]byte, error) 
 		return nil, fmt.Errorf("meta data stripping: %w", err)
 	}
 
-	raw, err = media_meta.CloseOpenEndedBox(raw)
+	raw, err = video.CloseOpenEndedBox(raw)
 	if err != nil {
 		return nil, fmt.Errorf("meta data stripping: %w", err)
 	}
 
-	raw, err = media_meta.MoveMoovToFront(raw)
+	raw, err = video.MoveMoovToFront(raw)
 	if err != nil {
 		return nil, fmt.Errorf("moov moving: %w", err)
 	}
