@@ -95,36 +95,39 @@ func (f *FFmpeg) ScoreFrames(original, suspect []byte, sales [][]domain.VideoFra
 
 	places := findSoldPlaces(originals, om.video.rankByPresentation(), sales, size)
 	nearest := findNearestOriginals(originals, suspects, size)
-	presence := make(map[int]float64, len(places))
 	for at, marks := range places {
-		key := originals.frames[at]
-		best := 0.0
-		for _, j := range findCandidates(nearest, at) {
-			residual := buildResidual(suspects.frames[j], key, size)
-			for _, mark := range marks {
-				best = max(best, correlate(residual, mark.residual))
+		corrs := measureMarks(suspects, nearest, originals.frames[at], at, marks, size)
+		best := slices.Max(corrs)
+		if best < minFrameCorr {
+			continue
+		}
+		owners := make(map[int]bool, len(marks))
+		for i, mark := range marks {
+			if corrs[i] == best {
+				owners[mark.sale] = true
 			}
-		}
-		if best >= minFrameCorr {
-			presence[at] = best
-		}
-	}
-
-	for at, corr := range presence {
-		owners := make(map[int]bool, len(places[at]))
-		for _, mark := range places[at] {
-			owners[mark.sale] = true
 		}
 		for sale := range matches {
 			if owners[sale] {
-				matches[sale].Score += corr
+				matches[sale].Score += best
 				matches[sale].FramesCount++
 				continue
 			}
-			matches[sale].Score -= corr
+			matches[sale].Score -= best
 		}
 	}
 	return matches, nil
+}
+
+func measureMarks(suspects thumbnails, nearest []int, key []byte, at int, marks []soldMark, size image.Point) []float64 {
+	corrs := make([]float64, len(marks))
+	for _, j := range findCandidates(nearest, at) {
+		residual := buildResidual(suspects.frames[j], key, size)
+		for i, mark := range marks {
+			corrs[i] = max(corrs[i], correlate(residual, mark.residual))
+		}
+	}
+	return corrs
 }
 
 type soldMark struct {

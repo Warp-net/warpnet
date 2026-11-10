@@ -150,3 +150,32 @@ func TestScoreFrames_FindsTheBuyer(t *testing.T) {
 		assert.Less(t, score.Score, MinFrameScore)
 	}
 }
+
+func TestScoreFrames_TellsBuyersApartAtTheSamePlaces(t *testing.T) {
+	f := newTestFFmpeg(t)
+	size := image.Pt(320, 180)
+	original := buildClip(t, f, size, 120, 15, 0)
+
+	samples, err := PickFrames(original, []byte("shared"), 3)
+	require.NoError(t, err)
+	sales := make([][]domain.VideoFrame, 0, 2)
+	copies := make([][]byte, 0, 2)
+	for _, shift := range []int{0, 3} {
+		frames, err := f.EncodeFrames(original, samples, buildOverlay(t, size, shift))
+		require.NoError(t, err)
+		sold, err := InsertFrames(original, frames)
+		require.NoError(t, err)
+		sales = append(sales, frames)
+		copies = append(copies, sold)
+	}
+
+	for buyer, sold := range copies {
+		scores, err := f.ScoreFrames(original, sold, sales)
+		require.NoError(t, err)
+		t.Logf("buyer %d scores %v", buyer, scores)
+		other := 1 - buyer
+		assert.Equal(t, 3, scores[buyer].FramesCount)
+		assert.Zero(t, scores[other].FramesCount)
+		assert.GreaterOrEqual(t, scores[buyer].Score-scores[other].Score, MinFrameScore)
+	}
+}
