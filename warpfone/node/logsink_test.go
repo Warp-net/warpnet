@@ -158,21 +158,6 @@ func TestGoLogPipeForwardsToSink(t *testing.T) {
 	}
 }
 
-func TestGoLogLineKeepsFields(t *testing.T) {
-	resetLogSink(t)
-	sink := newStubSink()
-	SetLogSink(sink)
-
-	forwardGoLogLine(`{"level":"warn","ts":"2026-11-10T11:43:21Z","logger":"dht","caller":"rt_persistence.go:458","msg":"failed to bootstrap","peer":"12D3KooWMKZF","error":"dial backoff"}`)
-
-	if !sink.contains("dht: failed to bootstrap error=dial backoff peer=12D3KooWMKZF") {
-		t.Fatalf("expected the reason in the line, got: %v", sink.snapshot())
-	}
-	if sink.contains("rt_persistence.go") {
-		t.Fatalf("caller must not be forwarded, got: %v", sink.snapshot())
-	}
-}
-
 func TestGoLogSinkLevelMapping(t *testing.T) {
 	cases := map[string]int{
 		"debug":  LogLevelDebug,

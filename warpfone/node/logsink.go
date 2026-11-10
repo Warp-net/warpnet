@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,34 +124,22 @@ func startGoLogPipe() {
 }
 
 // forwardGoLogLine parses one JSON entry produced by go-log's zap encoder
-// and mirrors it into the sink with component "libp2p". Structured fields
-// such as "peer" and "error" are appended, otherwise a warning like
-// "failed to bootstrap" arrives without its reason.
+// and mirrors it into the sink with component "libp2p".
 func forwardGoLogLine(line string) {
-	var entry map[string]any
+	var entry struct {
+		Level  string `json:"level"`
+		Logger string `json:"logger"`
+		Msg    string `json:"msg"`
+	}
 	if err := json.Unmarshal([]byte(line), &entry); err != nil {
 		sinkWrite(LogLevelInfo, "libp2p", line)
 		return
 	}
-	level, _ := entry["level"].(string)
-	logger, _ := entry["logger"].(string)
-	msg, _ := entry["msg"].(string)
-	if logger != "" {
-		msg = logger + ": " + msg
+	msg := entry.Msg
+	if entry.Logger != "" {
+		msg = entry.Logger + ": " + msg
 	}
-	fields := make([]string, 0, len(entry))
-	for key, value := range entry {
-		switch key {
-		case "level", "logger", "msg", "ts", "caller", "stacktrace":
-			continue
-		}
-		fields = append(fields, fmt.Sprintf("%s=%v", key, value))
-	}
-	sort.Strings(fields)
-	if len(fields) > 0 {
-		msg += " " + strings.Join(fields, " ")
-	}
-	sinkWrite(goLogSinkLevel(level), "libp2p", msg)
+	sinkWrite(goLogSinkLevel(entry.Level), "libp2p", msg)
 }
 
 func goLogSinkLevel(level string) int {
