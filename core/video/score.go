@@ -76,7 +76,7 @@ func (f *FFmpeg) ScoreFrames(original, suspect []byte, sales [][]domain.VideoFra
 		return matches, nil
 	}
 
-	dir, err := f.makeWorkDir()
+	dir, err := makeWorkDir()
 	if err != nil {
 		return nil, err
 	}

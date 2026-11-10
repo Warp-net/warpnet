@@ -21,7 +21,7 @@ import (
 
 func newTestFFmpeg(t *testing.T) *FFmpeg {
 	t.Helper()
-	f := NewFFmpeg(t.TempDir(), ratelimit.NewSemaphore(1))
+	f := NewFFmpeg(ratelimit.NewSemaphore(1))
 	if _, err := f.unpack(); errors.Is(err, ErrUnsupportedPlatform) {
 		t.Skip("no ffmpeg for this platform")
 	} else {

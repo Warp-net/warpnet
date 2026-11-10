@@ -29,7 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"path/filepath"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -199,7 +198,7 @@ func NewMemberNode(
 		privKey:       privKey,
 		walletClient:  walletClient,
 		walletRepo:    walletRepo,
-		videoEditor:   video.NewFFmpeg(filepath.Join(filepath.Dir(config.Config().Database.Path), "video"), ratelimit.NewSemaphore(1)),
+		videoEditor:   video.NewFFmpeg(ratelimit.NewSemaphore(1)),
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 		rateLimits:    rateLimits,

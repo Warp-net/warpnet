@@ -17,11 +17,15 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	ffmpeg "github.com/Warp-net/ffmpeg-stripped"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
@@ -1269,12 +1273,8 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 }
 
 func TestSponsoredVideoCopy_FramesNameTheBuyer(t *testing.T) {
-	clip, err := os.ReadFile("testdata/clip.mp4")
-	require.NoError(t, err)
-	editor := video.NewFFmpeg(t.TempDir(), ratelimit.NewSemaphore(1))
-	if _, err := editor.ScoreFrames(clip, clip, nil); errors.Is(err, video.ErrUnsupportedPlatform) {
-		t.Skip("no ffmpeg for this platform")
-	}
+	clip := buildTestClip(t)
+	editor := video.NewFFmpeg(ratelimit.NewSemaphore(1))
 	metadata, err := media_meta.BuildMetadata(signingInformer{"author-1"}.NodeInfo(), testSignerKey, ownerOf("author-1"))
 	require.NoError(t, err)
 	original, err := signUploadedVideo(mp4DataURL(clip), metadata)
@@ -1669,4 +1669,45 @@ func (stubVideoEditor) EncodeFrames([]byte, []int, []byte) ([]domain.VideoFrame,
 
 func (stubVideoEditor) ScoreFrames([]byte, []byte, [][]domain.VideoFrame) ([]video.FrameMatch, error) {
 	return nil, nil
+}
+
+func buildTestClip(t *testing.T) []byte {
+	t.Helper()
+	binary, err := ffmpeg.GetFFmpeg()
+	if errors.Is(err, ffmpeg.ErrUnsupported) {
+		t.Skip("no ffmpeg for this platform")
+	}
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	name := filepath.Join(dir, "ffmpeg")
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	require.NoError(t, os.WriteFile(name, binary, 0o700))
+	for i := range 150 {
+		img := image.NewRGBA(image.Rect(0, 0, 320, 180))
+		for y := range 180 {
+			for x := range 320 {
+				v := uint8((x*7 + y*13 + i*5) % 256)
+				if (x/16+y/16+i/4)%2 == 0 {
+					v = 255 - v
+				}
+				img.Set(x, y, color.RGBA{R: v, G: uint8((x + i*3) % 256), B: uint8(y % 256), A: 255})
+			}
+		}
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("frame%03d.png", i)), buf.Bytes(), 0o600))
+	}
+	clip := filepath.Join(dir, "clip.mp4")
+	out, err := exec.Command(name, "-nostdin", "-loglevel", "error",
+		"-framerate", "30", "-i", filepath.Join(dir, "frame%03d.png"),
+		"-vf", "format=yuv420p", "-c:v", "libx264", "-crf", "28",
+		"-x264-params", "keyint=10:min-keyint=10:scenecut=0:bframes=0", "-f", "mp4", "-y", clip,
+	).CombinedOutput()
+	require.NoError(t, err, string(out))
+	b, err := os.ReadFile(clip)
+	require.NoError(t, err)
+	return b
 }

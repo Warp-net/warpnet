@@ -60,7 +60,6 @@ type ProcessLimiter interface {
 }
 
 type FFmpeg struct {
-	dir     string
 	limiter ProcessLimiter
 
 	mu   sync.Mutex
@@ -68,8 +67,8 @@ type FFmpeg struct {
 	sum  [sha256.Size]byte
 }
 
-func NewFFmpeg(dir string, limiter ProcessLimiter) *FFmpeg {
-	return &FFmpeg{dir: dir, limiter: limiter}
+func NewFFmpeg(limiter ProcessLimiter) *FFmpeg {
+	return &FFmpeg{limiter: limiter}
 }
 
 func (f *FFmpeg) run(ctx context.Context, args ...string) error {
@@ -109,47 +108,43 @@ func (f *FFmpeg) unpack() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(f.dir, 0o700); err != nil {
-		return "", err
-	}
 	sum := sha256.Sum256(binary)
-	name := "ffmpeg-" + hex.EncodeToString(sum[:6])
+	name := "warpnet-ffmpeg-" + hex.EncodeToString(sum[:6])
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	path := filepath.Join(f.dir, name)
+	path := filepath.Join(os.TempDir(), name)
 	if err := matchesBinary(path, sum); err == nil {
 		f.path, f.sum = path, sum
 		return path, nil
 	}
 
-	tmp, err := os.CreateTemp(f.dir, name+".*")
+	tmp, err := os.CreateTemp("", name+".*")
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
 	if _, err := tmp.Write(binary); err != nil {
 		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return "", err
 	}
 	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
 		return "", err
 	}
 	if err := os.Chmod(tmp.Name(), 0o700); err != nil { //nolint:gosec // ffmpeg has to stay executable
+		_ = os.Remove(tmp.Name())
 		return "", err
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
-		return "", err
+		path = tmp.Name()
 	}
 	f.path, f.sum = path, sum
 	return path, nil
 }
 
-func (f *FFmpeg) makeWorkDir() (string, error) {
-	if err := os.MkdirAll(f.dir, 0o700); err != nil {
-		return "", err
-	}
-	return os.MkdirTemp(f.dir, "work-")
+func makeWorkDir() (string, error) {
+	return os.MkdirTemp("", "warpnet-video-")
 }
 
 func matchesBinary(path string, want [sha256.Size]byte) error {
@@ -157,7 +152,7 @@ func matchesBinary(path string, want [sha256.Size]byte) error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o022 != 0 || !isOwnFile(info) {
 		return ErrChangedBinary
 	}
 	file, err := os.Open(path) //nolint:gosec // our own data directory

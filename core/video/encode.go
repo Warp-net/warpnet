@@ -132,7 +132,7 @@ func (f *FFmpeg) EncodeFrames(b []byte, samples []int, watermark []byte) ([]doma
 		return nil, err
 	}
 
-	dir, err := f.makeWorkDir()
+	dir, err := makeWorkDir()
 	if err != nil {
 		return nil, err
 	}
