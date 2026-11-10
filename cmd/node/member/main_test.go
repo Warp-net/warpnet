@@ -41,9 +41,9 @@ func TestPreferExistingTestnetFollowsTheDataFolder(t *testing.T) {
 
 	tmp := t.TempDir()
 	dbPath := filepath.Join(tmp, orig, "storage")
-	location := filepath.Join(tmp, "testnet", "storage", databaseLocationFile)
-	require.NoError(t, os.MkdirAll(filepath.Dir(location), 0o750))
-	require.NoError(t, os.WriteFile(location, []byte(filepath.Join(tmp, "custom", "testnet")), 0o600))
+	pathFile := filepath.Join(tmp, "testnet", "storage", dbPathFile)
+	require.NoError(t, os.MkdirAll(filepath.Dir(pathFile), 0o750))
+	require.NoError(t, os.WriteFile(pathFile, []byte(filepath.Join(tmp, "custom", "testnet")), 0o600))
 
 	preferExistingTestnet(dbPath)
 	assert.Equal(t, "testnet", config.Config().Node.Network)

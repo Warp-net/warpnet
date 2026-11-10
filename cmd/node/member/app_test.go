@@ -554,9 +554,9 @@ func TestUseDatabaseDir(t *testing.T) {
 
 		require.Equal(t, filepath.Join(dir, network), path)
 		require.Equal(t, path, a.DatabaseDir())
-		location, err := os.ReadFile(filepath.Join(defaultPath, databaseLocationFile))
+		bt, err := os.ReadFile(filepath.Join(defaultPath, dbPathFile))
 		require.NoError(t, err)
-		require.Equal(t, path, string(location))
+		require.Equal(t, path, string(bt))
 		require.True(t, a.IsFirstRun())
 		require.NotSame(t, oldAuth, a.auth)
 		entries, err := os.ReadDir(path)
@@ -578,7 +578,7 @@ func TestUseDatabaseDir(t *testing.T) {
 		require.Error(t, err)
 
 		require.Equal(t, defaultPath, a.DatabaseDir())
-		require.NoFileExists(t, filepath.Join(defaultPath, databaseLocationFile))
+		require.NoFileExists(t, filepath.Join(defaultPath, dbPathFile))
 	})
 
 	t.Run("folder with a database", func(t *testing.T) {

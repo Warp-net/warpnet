@@ -186,9 +186,9 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 
 	dbPath := config.Config().Database.Path
-	location, err := os.ReadFile(filepath.Join(dbPath, databaseLocationFile)) //#nosec
-	if err == nil && len(location) > 0 {
-		dbPath = string(location)
+	bt, err := os.ReadFile(filepath.Join(dbPath, dbPathFile)) //#nosec
+	if err == nil && len(bt) > 0 {
+		dbPath = string(bt)
 	}
 
 	db, err := local_store.New(dbPath, local_store.DefaultOptions())
@@ -259,7 +259,7 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	if err := os.MkdirAll(defaultPath, 0750); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(defaultPath, databaseLocationFile), []byte(path), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(defaultPath, dbPathFile), []byte(path), 0600); err != nil {
 		return "", err
 	}
 
@@ -272,7 +272,7 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	return path, nil
 }
 
-const databaseLocationFile = "location"
+const dbPathFile = "db.path"
 
 func (a *App) startSelfUpdate(version *semver.Version) {
 	if !config.Config().Node.IsSelfUpdate {

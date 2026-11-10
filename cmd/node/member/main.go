@@ -138,14 +138,14 @@ func main() {
 
 // preferExistingTestnet re-points the default network at a testnet database
 // that already exists (run.lock appears after the first successful login,
-// location after a data folder is chosen);
+// db.path after a data folder is chosen);
 // an explicit --node.network flag or NODE_NETWORK env var wins.
 func preferExistingTestnet(dbPath string) {
 	if config.IsNetworkPinned() {
 		return
 	}
 	testnetPath := filepath.Join(filepath.Dir(filepath.Dir(dbPath)), testNetwork, filepath.Base(dbPath))
-	for _, name := range []string{"run.lock", databaseLocationFile} {
+	for _, name := range []string{"run.lock", dbPathFile} {
 		if _, err := os.Stat(filepath.Join(testnetPath, name)); err == nil {
 			config.SetNetwork(testNetwork)
 			return
