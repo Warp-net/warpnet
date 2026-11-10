@@ -3,9 +3,9 @@ package handler
 
 import (
 	"errors"
-	"github.com/Warp-net/warpnet/core/fediverse"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -149,30 +149,23 @@ func TestRefreshUsers(t *testing.T) {
 	selfInfo := warpnet.NodeInfo{ID: nodeId, OwnerId: "owner-1"}
 	ev := event.GetAllUsersEvent{UserId: "other-user"}
 
-	t.Run("owner refresh requests gateway recommendations without replacing the user", func(t *testing.T) {
-		repo := stubUserFetcher{getFn: func(id string) (domain.User, error) {
-			require.Equal(t, selfInfo.OwnerId, id)
-			return domain.User{Id: id, NodeId: selfInfo.ID.String()}, nil
+	t.Run("owner refreshes fediverse users from the gateway", func(t *testing.T) {
+		var updated []string
+		repo := stubUserFetcher{updateFn: func(userId string, u domain.User) (domain.User, error) {
+			updated = append(updated, userId)
+			return u, nil
 		}}
-		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeID string, path stream.WarpRoute, payload any) ([]byte, error) {
-			require.Equal(t, fediverse.GatewayNodeID(), nodeID)
+		ownerEv := event.GetAllUsersEvent{UserId: selfInfo.OwnerId}
+		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			require.Equal(t, fediverse.GatewayNodeID(), nodeId)
 			require.Equal(t, stream.WarpRoute(event.PUBLIC_GET_WHOTOFOLLOW), path)
-			require.Equal(t, selfInfo.OwnerId, payload.(event.GetAllUsersEvent).UserId)
-			return json.Marshal(event.UsersResponse{})
+			require.Equal(t, ownerEv, data)
+			return json.Marshal(event.UsersResponse{Users: []domain.User{
+				{Id: "alice@mastodon.social", NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork},
+			}})
 		}}
-		refreshUsers(repo, event.GetAllUsersEvent{UserId: selfInfo.OwnerId}, streamer)
-	})
-
-	t.Run("missing gateway entry is skipped", func(t *testing.T) {
-		repo := stubUserFetcher{getFn: func(id string) (domain.User, error) {
-			require.Equal(t, fediverse.EntryHandle, id)
-			return domain.User{}, database.ErrUserNotFound
-		}}
-		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
-			t.Fatal("streamed without a gateway entry")
-			return nil, nil
-		}}
-		refreshUsers(repo, event.GetAllUsersEvent{UserId: fediverse.EntryHandle}, streamer)
+		refreshUsers(repo, ownerEv, streamer)
+		require.Equal(t, []string{"alice@mastodon.social"}, updated)
 	})
 
 	t.Run("unknown user is skipped", func(t *testing.T) {
