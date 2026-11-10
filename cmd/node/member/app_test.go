@@ -549,15 +549,12 @@ func TestUseDatabaseDir(t *testing.T) {
 		a := appWithDatabase(t, defaultPath)
 		oldAuth := a.auth
 
-		chosen, err := a.useDatabaseDir(defaultPath, dir)
+		chosen, err := a.useDatabaseDir(dir)
 		require.NoError(t, err)
 
 		require.Equal(t, dir, chosen)
 		require.Equal(t, dir, a.DatabaseDir())
-		path := filepath.Join(dir, network, "storage")
-		bt, err := os.ReadFile(filepath.Join(defaultPath, "v0", "run.lock"))
-		require.NoError(t, err)
-		require.Equal(t, path, string(bt))
+		path := filepath.Join(dir, network, filepath.Base(config.Config().Database.Path))
 		require.True(t, a.IsFirstRun())
 		require.NotSame(t, oldAuth, a.auth)
 		entries, err := os.ReadDir(path)
@@ -575,39 +572,22 @@ func TestUseDatabaseDir(t *testing.T) {
 		t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
 		a := appWithDatabase(t, defaultPath)
 
-		_, err := a.useDatabaseDir(defaultPath, dir)
+		_, err := a.useDatabaseDir(dir)
 		require.Error(t, err)
 
 		require.Equal(t, filepath.Dir(filepath.Dir(defaultPath)), a.DatabaseDir())
-		require.NoFileExists(t, filepath.Join(defaultPath, "v0", "run.lock"))
-	})
-
-	t.Run("back to the default folder", func(t *testing.T) {
-		root := t.TempDir()
-		defaultPath := filepath.Join(root, network, "storage")
-		a := appWithDatabase(t, defaultPath)
-		_, err := a.useDatabaseDir(defaultPath, t.TempDir())
-		require.NoError(t, err)
-		require.True(t, a.IsFirstRun())
-
-		_, err = a.useDatabaseDir(defaultPath, root)
-		require.NoError(t, err)
-
-		require.Equal(t, root, a.DatabaseDir())
-		require.True(t, a.IsFirstRun())
-		require.NoFileExists(t, filepath.Join(defaultPath, "v0", "run.lock"))
 	})
 
 	t.Run("folder with a database", func(t *testing.T) {
 		defaultPath := filepath.Join(t.TempDir(), network, "storage")
 		dir := t.TempDir()
-		lock := filepath.Join(dir, network, "storage", "v0", "run.lock")
+		lock := filepath.Join(dir, network, filepath.Base(config.Config().Database.Path), "v0", "run.lock")
 		require.NoError(t, os.MkdirAll(filepath.Dir(lock), 0750))
 		require.NoError(t, os.WriteFile(lock, nil, 0600))
 		a := appWithDatabase(t, defaultPath)
 		require.True(t, a.IsFirstRun())
 
-		_, err := a.useDatabaseDir(defaultPath, dir)
+		_, err := a.useDatabaseDir(dir)
 		require.NoError(t, err)
 
 		require.False(t, a.IsFirstRun())

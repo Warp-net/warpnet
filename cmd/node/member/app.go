@@ -233,14 +233,14 @@ func (a *App) ChooseDatabaseDir() (string, error) {
 	if err != nil || dir == "" {
 		return "", err
 	}
-	return a.useDatabaseDir(config.Config().Database.Path, dir)
+	return a.useDatabaseDir(dir)
 }
 
 var errDatabaseRunning = errors.New("database is already running")
 
-func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
+func (a *App) useDatabaseDir(dir string) (string, error) {
 	network := config.Config().Node.Network
-	path := filepath.Join(dir, network, filepath.Base(defaultPath))
+	path := filepath.Join(dir, network, filepath.Base(config.Config().Database.Path))
 	if err := os.MkdirAll(path, 0750); err != nil {
 		return "", err
 	}
@@ -256,20 +256,6 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	if a.db != nil && !a.db.IsClosed() {
 		return "", errDatabaseRunning
 	}
-	lock := filepath.Join(defaultPath, "v0", "run.lock")
-	if path == defaultPath {
-		if err := os.Remove(lock); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return "", err
-		}
-	} else {
-		if err := os.MkdirAll(filepath.Dir(lock), 0750); err != nil {
-			return "", err
-		}
-		if err := os.WriteFile(lock, []byte(path), 0600); err != nil {
-			return "", err
-		}
-	}
-
 	db, err := local_store.New(path, local_store.DefaultOptions())
 	if err != nil {
 		return "", err
@@ -433,6 +419,15 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			log.Errorf("auth: %v \n", err)
 			response.Body = newErrorResp(err.Error())
 			return response
+		}
+
+		dbPath := config.Config().Database.Path
+		lock := filepath.Join(dbPath, "v0", "run.lock")
+		if a.db != nil && filepath.Dir(a.db.Path()) != dbPath {
+			_ = os.MkdirAll(filepath.Dir(lock), 0750)
+			if err := os.WriteFile(lock, []byte(filepath.Dir(a.db.Path())), 0600); err != nil {
+				log.Errorf("database path: %v \n", err)
+			}
 		}
 
 		bt, err := json.Marshal(loginResp)
