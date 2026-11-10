@@ -457,23 +457,25 @@ func (s *stubNetworkSettingsRepo) SetNetworkSettings(_ string, ns domain.Network
 
 func TestStreamNetworkSettingsHandlers(t *testing.T) {
 	const bootstrapAddr = "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"
+	defaults := domain.NetworkSettings{HostV4: "0.0.0.0", HostV6: "::", Port: "4001", Bootstrap: []string{bootstrapAddr}}
 	auth := stubAuth{owner: domain.Owner{UserId: "owner-1"}}
 
 	t.Run("get", func(t *testing.T) {
 		repo := &stubNetworkSettingsRepo{saved: domain.NetworkSettings{Port: "4555"}}
-		resp, err := StreamGetNetworkSettingsHandler(repo, auth)([]byte("{}"), nil)
+		resp, err := StreamGetNetworkSettingsHandler(repo, auth, defaults)([]byte("{}"), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if resp.(event.GetNetworkSettingsResponse).Port != "4555" {
-			t.Fatalf("unexpected settings: %+v", resp)
+		got := resp.(event.GetNetworkSettingsResponse)
+		if got.Port != "4555" || got.HostV4 != defaults.HostV4 || len(got.Bootstrap) != 1 {
+			t.Fatalf("expected the saved port and default rest, got %+v", got)
 		}
 	})
 
 	t.Run("get repo error", func(t *testing.T) {
 		repoErr := errors.New("db failed")
 		repo := &stubNetworkSettingsRepo{err: repoErr}
-		if _, err := StreamGetNetworkSettingsHandler(repo, auth)([]byte("{}"), nil); !errors.Is(err, repoErr) {
+		if _, err := StreamGetNetworkSettingsHandler(repo, auth, defaults)([]byte("{}"), nil); !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error, got %v", err)
 		}
 	})
@@ -554,15 +556,16 @@ func (s *stubWalletSettingsRepo) SetWalletSettings(_ string, ws domain.WalletSet
 }
 
 func TestStreamWalletSettingsHandlers(t *testing.T) {
+	defaults := domain.WalletSettings{Endpoint: "https://api.trongrid.io"}
 	auth := stubAuth{owner: domain.Owner{UserId: "owner-1"}}
 
 	t.Run("get", func(t *testing.T) {
-		repo := &stubWalletSettingsRepo{saved: domain.WalletSettings{Endpoint: "https://api.trongrid.io"}}
-		resp, err := StreamGetWalletSettingsHandler(repo, auth)([]byte("{}"), nil)
+		repo := &stubWalletSettingsRepo{saved: domain.WalletSettings{BinaryPath: "/opt/engine"}}
+		resp, err := StreamGetWalletSettingsHandler(repo, auth, defaults)([]byte("{}"), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if resp.(event.GetWalletSettingsResponse).Endpoint != "https://api.trongrid.io" {
+		if got := resp.(event.GetWalletSettingsResponse); got.Endpoint != defaults.Endpoint || got.BinaryPath != "/opt/engine" {
 			t.Fatalf("unexpected settings: %+v", resp)
 		}
 	})

@@ -240,12 +240,25 @@ func StreamUpdateRateLimitSettingsHandler(
 func StreamGetNetworkSettingsHandler(
 	repo NetworkSettingsStorer,
 	authRepo SettingsAuthStorer,
+	defaults domain.NetworkSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		owner := authRepo.GetOwner()
 		settings, err := repo.GetNetworkSettings(owner.UserId)
 		if err != nil {
 			return nil, err
+		}
+		if settings.HostV4 == "" {
+			settings.HostV4 = defaults.HostV4
+		}
+		if settings.HostV6 == "" {
+			settings.HostV6 = defaults.HostV6
+		}
+		if settings.Port == "" {
+			settings.Port = defaults.Port
+		}
+		if len(settings.Bootstrap) == 0 {
+			settings.Bootstrap = defaults.Bootstrap
 		}
 		return event.GetNetworkSettingsResponse(settings), nil
 	}
@@ -281,23 +294,26 @@ func StreamUpdateNetworkSettingsHandler(
 		if err := repo.SetNetworkSettings(owner.UserId, ev); err != nil {
 			return nil, err
 		}
-		settings, err := repo.GetNetworkSettings(owner.UserId)
-		if err != nil {
-			return nil, err
-		}
-		return event.GetNetworkSettingsResponse(settings), nil
+		return event.GetNetworkSettingsResponse(ev), nil
 	}
 }
 
 func StreamGetWalletSettingsHandler(
 	repo WalletSettingsStorer,
 	authRepo SettingsAuthStorer,
+	defaults domain.WalletSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		owner := authRepo.GetOwner()
 		settings, err := repo.GetWalletSettings(owner.UserId)
 		if err != nil {
 			return nil, err
+		}
+		if settings.Endpoint == "" {
+			settings.Endpoint = defaults.Endpoint
+		}
+		if settings.BinaryPath == "" {
+			settings.BinaryPath = defaults.BinaryPath
 		}
 		return event.GetWalletSettingsResponse(settings), nil
 	}
@@ -322,10 +338,6 @@ func StreamUpdateWalletSettingsHandler(
 		if err := repo.SetWalletSettings(owner.UserId, ev); err != nil {
 			return nil, err
 		}
-		settings, err := repo.GetWalletSettings(owner.UserId)
-		if err != nil {
-			return nil, err
-		}
-		return event.GetWalletSettingsResponse(settings), nil
+		return event.GetWalletSettingsResponse(ev), nil
 	}
 }

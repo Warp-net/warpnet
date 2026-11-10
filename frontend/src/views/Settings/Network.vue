@@ -173,7 +173,8 @@ export default {
       this.saveError = false;
       this.saving = true;
       try {
-        this.apply(await warpnetService.updateNetworkSettings(settings));
+        await warpnetService.updateNetworkSettings(settings);
+        this.apply(await warpnetService.getNetworkSettings());
         this.savedMessage = message;
       } catch (err) {
         console.error('Failed to save network settings:', err);

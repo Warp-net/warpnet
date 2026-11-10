@@ -28,7 +28,6 @@ resulting from the use or misuse of this software.
 package database
 
 import (
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
@@ -270,30 +269,18 @@ func (repo *SettingsRepo) GetNetworkSettings(userId string) (domain.NetworkSetti
 		AddRootID(userId).
 		AddParentId("network").
 		Build())
-	if err != nil && !local_store.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
+		return domain.NetworkSettings{}, nil
+	}
+	if err != nil {
 		return domain.NetworkSettings{}, err
 	}
 	if err := txn.Commit(); err != nil {
 		return domain.NetworkSettings{}, err
 	}
 	var s domain.NetworkSettings
-	if len(bt) > 0 {
-		if err := json.Unmarshal(bt, &s); err != nil {
-			return domain.NetworkSettings{}, err
-		}
-	}
-	node := config.Config().Node
-	if s.HostV4 == "" {
-		s.HostV4 = node.HostV4
-	}
-	if s.HostV6 == "" {
-		s.HostV6 = node.HostV6
-	}
-	if s.Port == "" {
-		s.Port = node.Port
-	}
-	if len(s.Bootstrap) == 0 {
-		s.Bootstrap = node.Bootstrap
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.NetworkSettings{}, err
 	}
 	return s, nil
 }
@@ -333,24 +320,18 @@ func (repo *SettingsRepo) GetWalletSettings(userId string) (domain.WalletSetting
 		AddRootID(userId).
 		AddParentId("wallet").
 		Build())
-	if err != nil && !local_store.IsNotFoundError(err) {
+	if local_store.IsNotFoundError(err) {
+		return domain.WalletSettings{}, nil
+	}
+	if err != nil {
 		return domain.WalletSettings{}, err
 	}
 	if err := txn.Commit(); err != nil {
 		return domain.WalletSettings{}, err
 	}
 	var s domain.WalletSettings
-	if len(bt) > 0 {
-		if err := json.Unmarshal(bt, &s); err != nil {
-			return domain.WalletSettings{}, err
-		}
-	}
-	wallet := config.Config().Wallet
-	if s.Endpoint == "" {
-		s.Endpoint = wallet.Endpoint
-	}
-	if s.BinaryPath == "" {
-		s.BinaryPath = wallet.BinaryPath
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.WalletSettings{}, err
 	}
 	return s, nil
 }

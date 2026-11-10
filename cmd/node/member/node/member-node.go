@@ -123,9 +123,24 @@ func NewMemberNode(
 	if err != nil {
 		return nil, err
 	}
+	if networkSettings.HostV4 == "" {
+		networkSettings.HostV4 = config.Config().Node.HostV4
+	}
+	if networkSettings.HostV6 == "" {
+		networkSettings.HostV6 = config.Config().Node.HostV6
+	}
+	if networkSettings.Port == "" {
+		networkSettings.Port = config.Config().Node.Port
+	}
 	walletSettings, err := database.NewSettingsRepo(db).GetWalletSettings(owner.UserId)
 	if err != nil {
 		return nil, err
+	}
+	if walletSettings.Endpoint == "" {
+		walletSettings.Endpoint = config.Config().Wallet.Endpoint
+	}
+	if walletSettings.BinaryPath == "" {
+		walletSettings.BinaryPath = config.Config().Wallet.BinaryPath
 	}
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
@@ -849,6 +864,16 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 
 //nolint:govet
 func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
+	networkDefaults := domain.NetworkSettings{
+		HostV4:    config.Config().Node.HostV4,
+		HostV6:    config.Config().Node.HostV6,
+		Port:      config.Config().Node.Port,
+		Bootstrap: config.Config().Node.Bootstrap,
+	}
+	walletDefaults := domain.WalletSettings{
+		Endpoint:   config.Config().Wallet.Endpoint,
+		BinaryPath: config.Config().Wallet.BinaryPath,
+	}
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_GET_SETTINGS_NOTIFICATION,
@@ -884,7 +909,7 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_NETWORK,
-			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, authRepo, networkDefaults),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_NETWORK,
@@ -892,7 +917,7 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_WALLET,
-			handler.StreamGetWalletSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetWalletSettingsHandler(r.settingsRepo, authRepo, walletDefaults),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_WALLET,

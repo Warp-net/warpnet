@@ -88,7 +88,8 @@ export default {
       this.saveError = false;
       this.saving = true;
       try {
-        this.settings = { ...(await warpnetService.updateWalletSettings(settings)) };
+        await warpnetService.updateWalletSettings(settings);
+        this.settings = { ...(await warpnetService.getWalletSettings()) };
         this.savedMessage = message;
       } catch (err) {
         console.error('Failed to save wallet settings:', err);

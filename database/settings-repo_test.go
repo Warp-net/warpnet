@@ -4,7 +4,6 @@ package database
 import (
 	"testing"
 
-	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
@@ -151,28 +150,20 @@ func (s *SettingsRepoTestSuite) TestSponsoredSetGet() {
 }
 
 func (s *SettingsRepoTestSuite) TestNetworkSetGet() {
-	defaults := config.Config().Node
 	user := uuid.New().String()
 	got, err := s.repo.GetNetworkSettings(user)
 	s.Require().NoError(err)
-	s.Equal(domain.NetworkSettings{
-		HostV4:    defaults.HostV4,
-		HostV6:    defaults.HostV6,
-		Port:      defaults.Port,
-		Bootstrap: defaults.Bootstrap,
-	}, got, "nothing saved: the config values")
+	s.Equal(domain.NetworkSettings{}, got)
 
-	bootstrap := []string{"/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"}
-	s.Require().NoError(s.repo.SetNetworkSettings(user, domain.NetworkSettings{Port: "4555", Bootstrap: bootstrap}))
+	want := domain.NetworkSettings{Port: "4555", Bootstrap: []string{"/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"}}
+	s.Require().NoError(s.repo.SetNetworkSettings(user, want))
 	got, err = s.repo.GetNetworkSettings(user)
 	s.Require().NoError(err)
-	s.Equal("4555", got.Port)
-	s.Equal(bootstrap, got.Bootstrap)
-	s.Equal(defaults.HostV4, got.HostV4, "an empty field falls back to the config value")
+	s.Equal(want, got)
 
 	ws, err := s.repo.GetWalletSettings(user)
 	s.Require().NoError(err)
-	s.Equal(config.Config().Wallet.Endpoint, ws.Endpoint, "network and wallet settings live under separate keys")
+	s.Equal(domain.WalletSettings{}, ws, "network and wallet settings live under separate keys")
 
 	_, err = s.repo.GetNetworkSettings("")
 	s.Error(err)
@@ -180,16 +171,16 @@ func (s *SettingsRepoTestSuite) TestNetworkSetGet() {
 }
 
 func (s *SettingsRepoTestSuite) TestWalletSetGet() {
-	defaults := config.Config().Wallet
 	user := uuid.New().String()
+	want := domain.WalletSettings{Endpoint: "https://nile.example"}
+	s.Require().NoError(s.repo.SetWalletSettings(user, want))
 	got, err := s.repo.GetWalletSettings(user)
 	s.Require().NoError(err)
-	s.Equal(domain.WalletSettings{Endpoint: defaults.Endpoint, BinaryPath: defaults.BinaryPath}, got)
+	s.Equal(want, got)
 
-	s.Require().NoError(s.repo.SetWalletSettings(user, domain.WalletSettings{BinaryPath: "/opt/engine"}))
-	got, err = s.repo.GetWalletSettings(user)
+	ns, err := s.repo.GetNetworkSettings(user)
 	s.Require().NoError(err)
-	s.Equal(domain.WalletSettings{Endpoint: defaults.Endpoint, BinaryPath: "/opt/engine"}, got)
+	s.Equal(domain.NetworkSettings{}, ns)
 
 	_, err = s.repo.GetWalletSettings("")
 	s.Error(err)

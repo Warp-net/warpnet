@@ -182,6 +182,10 @@ func main() {
 				return
 			}
 
+			if len(networkSettings.Bootstrap) == 0 {
+				networkSettings.Bootstrap = config.Config().Node.Bootstrap
+			}
+
 			var infos []warpnet.WarpAddrInfo
 			for _, addr := range networkSettings.Bootstrap {
 				info, err := warpnet.AddrInfoFromString(addr)

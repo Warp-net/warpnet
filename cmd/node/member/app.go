@@ -290,6 +290,10 @@ func (a *App) startMemberNode() (NodeServer, error) {
 		return nil, fmt.Errorf("network settings: %w", err)
 	}
 
+	if len(networkSettings.Bootstrap) == 0 {
+		networkSettings.Bootstrap = config.Config().Node.Bootstrap
+	}
+
 	var infos []warpnet.WarpAddrInfo
 	for _, addr := range networkSettings.Bootstrap {
 		info, err := warpnet.AddrInfoFromString(addr)
