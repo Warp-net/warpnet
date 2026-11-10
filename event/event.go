@@ -1089,6 +1089,9 @@ type CopyBuyerResponse struct {
 	DailyOrdersCount int       `json:"daily_orders_count"`
 	IsPixelMatch     bool      `json:"is_pixel_match"`
 	PixelScore       float64   `json:"pixel_score"`
+	IsFrameMatch     bool      `json:"is_frame_match"`
+	FrameScore       float64   `json:"frame_score"`
+	FramesCount      int       `json:"frames_count"`
 }
 
 // OrderQuoteStep defines model for OrderQuoteStep.

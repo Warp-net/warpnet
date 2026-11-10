@@ -30,8 +30,15 @@ package media_meta
 import (
 	"encoding/base64"
 
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/domain"
 )
+
+const videoFramesCount = 5
+
+type VideoFrameEncoder interface {
+	EncodeFrames(b []byte, samples []int, watermark []byte) ([]domain.VideoFrame, error)
+}
 
 func BuildImageCopy(original string, c domain.MediaCopy, signer Metadata) (string, error) {
 	header, raw, err := SplitDataURI(original)
@@ -58,12 +65,49 @@ func BuildImageCopy(original string, c domain.MediaCopy, signer Metadata) (strin
 	return header + "," + base64.StdEncoding.EncodeToString(marked), nil
 }
 
-func BuildVideoCopy(original string, c domain.MediaCopy) (string, error) {
-	header, raw, err := SplitDataURI(original)
+func BuildVideoFrames(original string, c domain.MediaCopy, signer Metadata, encoder VideoFrameEncoder) ([]domain.VideoFrame, error) {
+	_, b, err := SplitDataURI(original)
+	if err != nil {
+		return nil, err
+	}
+	raw, _, err := SplitVideo(b)
+	if err != nil {
+		return nil, err
+	}
+	size, err := video.DisplaySize(raw)
+	if err != nil {
+		return nil, err
+	}
+	watermark, err := DrawVideoWatermark(size, c.BuyerId)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := video.PickFrames(raw, BuildPixelMarkSeed(signer.PrivKey, c.OriginalKey, c.BuyerId), videoFramesCount)
+	if err != nil {
+		return nil, err
+	}
+	return encoder.EncodeFrames(raw, samples, watermark)
+}
+
+func BuildVideoCopy(original string, c domain.MediaCopy, signer Metadata) (string, error) {
+	header, b, err := SplitDataURI(original)
 	if err != nil {
 		return "", err
 	}
-	marked, err := EmbedOrderInVideo(raw, c.EncryptedOrder)
+	if len(c.Frames) != 0 {
+		raw, _, err := SplitVideo(b)
+		if err != nil {
+			return "", err
+		}
+		spliced, err := video.InsertFrames(raw, c.Frames)
+		if err != nil {
+			return "", err
+		}
+		if b, err = signer.SignChangedVideo(b, spliced); err != nil {
+			return "", err
+		}
+	}
+	marked, err := EmbedOrderInVideo(b, c.EncryptedOrder)
 	if err != nil {
 		return "", err
 	}

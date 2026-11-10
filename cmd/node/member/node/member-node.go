@@ -29,6 +29,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -46,6 +47,7 @@ import (
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -83,6 +85,7 @@ type MemberNode struct {
 	privKey          ed25519.PrivateKey
 	walletClient     WalletProvider
 	walletRepo       WalletAddressProvider
+	videoEditor      VideoEditor
 	ownerId, network string
 	rateLimits       ratelimit.Settings
 }
@@ -196,6 +199,7 @@ func NewMemberNode(
 		privKey:       privKey,
 		walletClient:  walletClient,
 		walletRepo:    walletRepo,
+		videoEditor:   video.NewFFmpeg(filepath.Join(filepath.Dir(config.Config().Database.Path), "video"), ratelimit.NewSemaphore(1)),
 		ownerId:       owner.UserId,
 		network:       warpNetwork,
 		rateLimits:    rateLimits,
@@ -761,7 +765,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_TWEET,
-			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo, userRepo, m),
+			handler.StreamGetSponsoredTweetHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo, userRepo, m, m.videoEditor),
 		},
 		{
 			event.PRIVATE_POST_SPONSORED_ORDER,
@@ -777,7 +781,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PRIVATE_GET_SPONSORED_BUYER,
-			handler.StreamGetCopyBuyerHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo),
+			handler.StreamGetCopyBuyerHandler(authRepo, m.privKey, r.tweetRepo, r.orderRepo, r.mediaRepo, r.copyRepo, m.videoEditor),
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_IMAGE,
@@ -785,7 +789,7 @@ func (m *MemberNode) sponsoredHandlers(
 		},
 		{
 			event.PUBLIC_GET_SPONSORED_VIDEO,
-			handler.StreamGetSponsoredVideoHandler(m, r.mediaRepo, r.copyRepo, userRepo),
+			handler.StreamGetSponsoredVideoHandler(m, m.privKey, r.mediaRepo, r.copyRepo, userRepo),
 		},
 	}
 }
@@ -1122,7 +1126,7 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
-	
+
 	if m.walletClient != nil {
 		m.walletClient.Close()
 	}

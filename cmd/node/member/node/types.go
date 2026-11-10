@@ -33,6 +33,7 @@ import (
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database/datastore"
@@ -100,6 +101,11 @@ type RatingProvider interface {
 
 // WalletProvider is the payment engine as this node holds it: what the
 // wallet handlers ask of it, and the process it has to stop.
+type VideoEditor interface {
+	EncodeFrames(b []byte, samples []int, watermark []byte) ([]domain.VideoFrame, error)
+	ScoreFrames(original, suspect []byte, sales [][]domain.VideoFrame) ([]video.FrameMatch, error)
+}
+
 type WalletProvider interface {
 	Address(ctx context.Context, seed string) (string, error)
 	Balance(ctx context.Context, address string) (wallet.Account, error)
