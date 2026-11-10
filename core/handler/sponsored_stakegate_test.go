@@ -11,12 +11,12 @@ import (
 )
 
 func TestAStakeFirstAskedHoldsOnceThePaymentsCheckedBeforeItHaveLanded(t *testing.T) {
-	repo := stubSponsoredSettingsRepo{saved: map[string]domain.SponsoredSettings{}}
-	_, err := StreamUpdateSponsoredSettingsHandler(repo, stubAuth{owner: domain.Owner{UserId: "author-1"}})(
+	repo := &stubSponsoredSettingsRepo{}
+	_, err := StreamUpdateSponsoredSettingsHandler(repo)(
 		marshal(t, event.UpdateSponsoredSettingsEvent{MinStakeTRX: 500}), nil,
 	)
 	require.NoError(t, err)
-	settings := repo.saved["author-1"]
+	settings := repo.saved
 
 	gate := settings.ClaimMinStakeTRX(settings.ChangedAt.Add(domain.MinStakeChangeWindow))
 	assert.Equal(t, uint64(500), gate, "the stake holds for payments made once the change settled")

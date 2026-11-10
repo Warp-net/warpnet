@@ -151,7 +151,7 @@ const testPayer = "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa"
 
 type stubSponsoredSettings domain.SponsoredSettings
 
-func (s stubSponsoredSettings) GetSponsoredSettings(string) (domain.SponsoredSettings, error) {
+func (s stubSponsoredSettings) GetSponsoredSettings() (domain.SponsoredSettings, error) {
 	return domain.SponsoredSettings(s), nil
 }
 

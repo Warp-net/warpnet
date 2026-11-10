@@ -176,7 +176,7 @@ func main() {
 				return
 			}
 
-			networkSettings, err := database.NewSettingsRepo(db).GetNetworkSettings(authRepo.GetOwner().UserId)
+			networkSettings, err := database.NewSettingsRepo(db).GetNetworkSettings()
 			if err != nil {
 				log.Errorf("remote: network settings: %v", err)
 				return

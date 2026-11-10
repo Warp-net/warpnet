@@ -206,7 +206,7 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 	seedSettings := func(t *testing.T, s *faultStore) {
 		repo := NewSettingsRepo(s)
 		require.NoError(t, repo.SetNotificationSettings(userId, domain.NotificationSettings{Recipient: "a@b.c"}))
-		require.NoError(t, repo.SetGatewaySettings(userId, domain.GatewaySettings{NodeID: "node-1"}))
+		require.NoError(t, repo.SetGatewaySettings(domain.GatewaySettings{NodeID: "node-1"}))
 	}
 
 	runFaultCases(t, []faultCase{
@@ -229,7 +229,7 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 		{
 			name: "SetGatewaySettings",
 			run: func(s *faultStore) error {
-				return NewSettingsRepo(s).SetGatewaySettings(userId, domain.GatewaySettings{})
+				return NewSettingsRepo(s).SetGatewaySettings(domain.GatewaySettings{})
 			},
 			ops: []faultOp{op("Set"), op("Commit")},
 		},
@@ -237,7 +237,7 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 			name: "GetGatewaySettings",
 			seed: seedSettings,
 			run: func(s *faultStore) error {
-				_, err := NewSettingsRepo(s).GetGatewaySettings(userId)
+				_, err := NewSettingsRepo(s).GetGatewaySettings()
 				return err
 			},
 			ops: []faultOp{op("Get"), op("Commit")},
@@ -249,9 +249,6 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 		_, err := repo.GetNotificationSettings("")
 		require.Error(t, err)
 		require.Error(t, repo.SetNotificationSettings("", domain.NotificationSettings{}))
-		_, err = repo.GetGatewaySettings("")
-		require.Error(t, err)
-		require.Error(t, repo.SetGatewaySettings("", domain.GatewaySettings{}))
 	})
 
 	t.Run("CorruptPayload", func(t *testing.T) {
@@ -260,14 +257,13 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 			AddRootID(userId).
 			Build(), []byte("{not-json")))
 		require.NoError(t, s.db.Set(local_store.NewPrefixBuilder(SettingsRepoName).
-			AddRootID(userId).
-			AddParentId("gateway").
+			AddSubPrefix("gateway").
 			Build(), []byte("{not-json")))
 
 		repo := NewSettingsRepo(s)
 		_, err := repo.GetNotificationSettings(userId)
 		require.Error(t, err)
-		_, err = repo.GetGatewaySettings(userId)
+		_, err = repo.GetGatewaySettings()
 		require.Error(t, err)
 	})
 
@@ -277,7 +273,7 @@ func TestSettingsRepoErrorPaths(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, domain.NotificationSettings{}, ns)
 
-		gs, err := repo.GetGatewaySettings("absent-user")
+		gs, err := repo.GetGatewaySettings()
 		require.NoError(t, err)
 		require.Equal(t, domain.GatewaySettings{}, gs)
 	})

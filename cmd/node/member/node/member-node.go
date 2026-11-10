@@ -113,13 +113,13 @@ func NewMemberNode(
 
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
 	// the built-in default) before seeding the entry user and starting discovery.
-	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(owner.UserId); err == nil {
+	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(); err == nil {
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
-	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
+	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings()
 
-	networkSettings, err := database.NewSettingsRepo(db).GetNetworkSettings(owner.UserId)
+	networkSettings, err := database.NewSettingsRepo(db).GetNetworkSettings()
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func NewMemberNode(
 	if networkSettings.Port == "" {
 		networkSettings.Port = config.Config().Node.Port
 	}
-	walletSettings, err := database.NewSettingsRepo(db).GetWalletSettings(owner.UserId)
+	walletSettings, err := database.NewSettingsRepo(db).GetWalletSettings()
 	if err != nil {
 		return nil, err
 	}
@@ -885,43 +885,43 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_GATEWAY,
-			handler.StreamGetGatewaySettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetGatewaySettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_GATEWAY,
-			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_RATELIMIT,
-			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_SPONSORED,
-			handler.StreamGetSponsoredSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetSponsoredSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_SPONSORED,
-			handler.StreamUpdateSponsoredSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateSponsoredSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_RATELIMIT,
-			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_NETWORK,
-			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, authRepo, networkDefaults),
+			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, networkDefaults),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_NETWORK,
-			handler.StreamUpdateNetworkSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateNetworkSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_WALLET,
-			handler.StreamGetWalletSettingsHandler(r.settingsRepo, authRepo, walletDefaults),
+			handler.StreamGetWalletSettingsHandler(r.settingsRepo, walletDefaults),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_WALLET,
-			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo),
 		},
 	}
 }

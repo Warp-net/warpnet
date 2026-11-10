@@ -285,7 +285,7 @@ func (a *App) startMemberNode() (NodeServer, error) {
 		return nil, fmt.Errorf("current node ID: %w", err)
 	}
 
-	networkSettings, err := database.NewSettingsRepo(a.db).GetNetworkSettings(a.auth.Storage().GetOwner().UserId)
+	networkSettings, err := database.NewSettingsRepo(a.db).GetNetworkSettings()
 	if err != nil {
 		return nil, fmt.Errorf("network settings: %w", err)
 	}

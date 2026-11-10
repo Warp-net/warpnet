@@ -49,28 +49,28 @@ type SettingsStorer interface {
 
 // GatewaySettingsStorer is the narrow surface the gateway-settings handlers need.
 type GatewaySettingsStorer interface {
-	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
-	SetGatewaySettings(userId string, s domain.GatewaySettings) error
+	GetGatewaySettings() (domain.GatewaySettings, error)
+	SetGatewaySettings(s domain.GatewaySettings) error
 }
 
 type SponsoredSettingsStorer interface {
-	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
-	SetSponsoredSettings(userId string, s domain.SponsoredSettings) error
+	GetSponsoredSettings() (domain.SponsoredSettings, error)
+	SetSponsoredSettings(s domain.SponsoredSettings) error
 }
 
 type RateLimitSettingsStorer interface {
-	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
-	SetRateLimitSettings(userId string, s ratelimit.Settings) error
+	GetRateLimitSettings() (ratelimit.Settings, error)
+	SetRateLimitSettings(s ratelimit.Settings) error
 }
 
 type NetworkSettingsStorer interface {
-	GetNetworkSettings(userId string) (domain.NetworkSettings, error)
-	SetNetworkSettings(userId string, s domain.NetworkSettings) error
+	GetNetworkSettings() (domain.NetworkSettings, error)
+	SetNetworkSettings(s domain.NetworkSettings) error
 }
 
 type WalletSettingsStorer interface {
-	GetWalletSettings(userId string) (domain.WalletSettings, error)
-	SetWalletSettings(userId string, s domain.WalletSettings) error
+	GetWalletSettings() (domain.WalletSettings, error)
+	SetWalletSettings(s domain.WalletSettings) error
 }
 
 // SettingsAuthStorer resolves the local node owner.
@@ -114,11 +114,9 @@ func StreamUpdateNotificationSettingsHandler(
 
 func StreamGetGatewaySettingsHandler(
 	repo GatewaySettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		owner := authRepo.GetOwner()
-		settings, err := repo.GetGatewaySettings(owner.UserId)
+		settings, err := repo.GetGatewaySettings()
 		if err != nil {
 			return nil, err
 		}
@@ -131,21 +129,16 @@ func StreamGetGatewaySettingsHandler(
 
 func StreamUpdateGatewaySettingsHandler(
 	repo GatewaySettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateGatewaySettingsEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		owner := authRepo.GetOwner()
-		if owner.UserId == "" {
-			return nil, warpnet.WarpError("update gateway settings: empty owner")
-		}
 		if ev.NodeID == "" {
 			ev.NodeID = fediverse.DefaultGatewayNodeID
 		}
-		if err := repo.SetGatewaySettings(owner.UserId, ev); err != nil {
+		if err := repo.SetGatewaySettings(ev); err != nil {
 			return nil, err
 		}
 		return event.GetGatewaySettingsResponse(ev), nil
@@ -154,11 +147,9 @@ func StreamUpdateGatewaySettingsHandler(
 
 func StreamGetSponsoredSettingsHandler(
 	repo SponsoredSettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		owner := authRepo.GetOwner()
-		settings, err := repo.GetSponsoredSettings(owner.UserId)
+		settings, err := repo.GetSponsoredSettings()
 		if err != nil {
 			return nil, err
 		}
@@ -168,18 +159,13 @@ func StreamGetSponsoredSettingsHandler(
 
 func StreamUpdateSponsoredSettingsHandler(
 	repo SponsoredSettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateSponsoredSettingsEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		owner := authRepo.GetOwner()
-		if owner.UserId == "" {
-			return nil, warpnet.WarpError("update sponsored settings: empty owner")
-		}
-		current, err := repo.GetSponsoredSettings(owner.UserId)
+		current, err := repo.GetSponsoredSettings()
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +178,7 @@ func StreamUpdateSponsoredSettingsHandler(
 				ChangedAt:           now,
 			}
 		}
-		if err := repo.SetSponsoredSettings(owner.UserId, settings); err != nil {
+		if err := repo.SetSponsoredSettings(settings); err != nil {
 			return nil, err
 		}
 		return event.GetSponsoredSettingsResponse(settings), nil
@@ -201,11 +187,9 @@ func StreamUpdateSponsoredSettingsHandler(
 
 func StreamGetRateLimitSettingsHandler(
 	repo RateLimitSettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		owner := authRepo.GetOwner()
-		settings, err := repo.GetRateLimitSettings(owner.UserId)
+		settings, err := repo.GetRateLimitSettings()
 		if err != nil {
 			return nil, err
 		}
@@ -215,22 +199,17 @@ func StreamGetRateLimitSettingsHandler(
 
 func StreamUpdateRateLimitSettingsHandler(
 	repo RateLimitSettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev ratelimit.Settings
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		owner := authRepo.GetOwner()
-		if owner.UserId == "" {
-			return nil, warpnet.WarpError("update rate limit settings: empty owner")
-		}
 		settings := ev.WithDefaults()
 		if settings.NetworkLowWater >= settings.NetworkHighWater {
 			return nil, warpnet.WarpError("update rate limit settings: network low water must be below high water")
 		}
-		if err := repo.SetRateLimitSettings(owner.UserId, settings); err != nil {
+		if err := repo.SetRateLimitSettings(settings); err != nil {
 			return nil, err
 		}
 		return settings, nil
@@ -239,12 +218,10 @@ func StreamUpdateRateLimitSettingsHandler(
 
 func StreamGetNetworkSettingsHandler(
 	repo NetworkSettingsStorer,
-	authRepo SettingsAuthStorer,
 	defaults domain.NetworkSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		owner := authRepo.GetOwner()
-		settings, err := repo.GetNetworkSettings(owner.UserId)
+		settings, err := repo.GetNetworkSettings()
 		if err != nil {
 			return nil, err
 		}
@@ -266,16 +243,11 @@ func StreamGetNetworkSettingsHandler(
 
 func StreamUpdateNetworkSettingsHandler(
 	repo NetworkSettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateNetworkSettingsEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
-		}
-		owner := authRepo.GetOwner()
-		if owner.UserId == "" {
-			return nil, warpnet.WarpError("update network settings: empty owner")
 		}
 		if ip := net.ParseIP(ev.HostV4); ev.HostV4 != "" && (ip == nil || ip.To4() == nil) {
 			return nil, warpnet.WarpError("update network settings: invalid IPv4 host")
@@ -291,7 +263,7 @@ func StreamUpdateNetworkSettingsHandler(
 				return nil, warpnet.WarpError("update network settings: invalid bootstrap peer " + addr)
 			}
 		}
-		if err := repo.SetNetworkSettings(owner.UserId, ev); err != nil {
+		if err := repo.SetNetworkSettings(ev); err != nil {
 			return nil, err
 		}
 		return event.GetNetworkSettingsResponse(ev), nil
@@ -300,12 +272,10 @@ func StreamUpdateNetworkSettingsHandler(
 
 func StreamGetWalletSettingsHandler(
 	repo WalletSettingsStorer,
-	authRepo SettingsAuthStorer,
 	defaults domain.WalletSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		owner := authRepo.GetOwner()
-		settings, err := repo.GetWalletSettings(owner.UserId)
+		settings, err := repo.GetWalletSettings()
 		if err != nil {
 			return nil, err
 		}
@@ -321,21 +291,16 @@ func StreamGetWalletSettingsHandler(
 
 func StreamUpdateWalletSettingsHandler(
 	repo WalletSettingsStorer,
-	authRepo SettingsAuthStorer,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateWalletSettingsEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		owner := authRepo.GetOwner()
-		if owner.UserId == "" {
-			return nil, warpnet.WarpError("update wallet settings: empty owner")
-		}
 		if u, err := url.Parse(ev.Endpoint); ev.Endpoint != "" && (err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https")) {
 			return nil, warpnet.WarpError("update wallet settings: endpoint must be an http(s) URL")
 		}
-		if err := repo.SetWalletSettings(owner.UserId, ev); err != nil {
+		if err := repo.SetWalletSettings(ev); err != nil {
 			return nil, err
 		}
 		return event.GetWalletSettingsResponse(ev), nil

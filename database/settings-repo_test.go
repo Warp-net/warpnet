@@ -18,7 +18,7 @@ type SettingsRepoTestSuite struct {
 	repo *SettingsRepo
 }
 
-func (s *SettingsRepoTestSuite) SetupSuite() {
+func (s *SettingsRepoTestSuite) SetupTest() {
 	var err error
 	s.db, err = local_store.New("", local_store.DefaultOptions().WithInMemory(true))
 	s.Require().NoError(err)
@@ -27,7 +27,7 @@ func (s *SettingsRepoTestSuite) SetupSuite() {
 	s.repo = NewSettingsRepo(s.db)
 }
 
-func (s *SettingsRepoTestSuite) TearDownSuite() {
+func (s *SettingsRepoTestSuite) TearDownTest() {
 	s.db.Close()
 }
 
@@ -74,117 +74,85 @@ func (s *SettingsRepoTestSuite) TestEmptyUserId() {
 }
 
 func (s *SettingsRepoTestSuite) TestGatewayDefaultsWhenUnset() {
-	user := uuid.New().String()
-	got, err := s.repo.GetGatewaySettings(user)
+	got, err := s.repo.GetGatewaySettings()
 	s.Require().NoError(err)
 	s.Empty(got.NodeID)
 }
 
 func (s *SettingsRepoTestSuite) TestGatewaySetGet() {
-	user := uuid.New().String()
 	want := domain.GatewaySettings{NodeID: "12D3KooWCustomGateway"}
-	s.Require().NoError(s.repo.SetGatewaySettings(user, want))
+	s.Require().NoError(s.repo.SetGatewaySettings(want))
 
-	got, err := s.repo.GetGatewaySettings(user)
+	got, err := s.repo.GetGatewaySettings()
 	s.Require().NoError(err)
 	s.Equal(want.NodeID, got.NodeID)
 
-	// Gateway settings must not collide with notification settings for the same user.
-	ns, err := s.repo.GetNotificationSettings(user)
+	ns, err := s.repo.GetNotificationSettings(uuid.New().String())
 	s.Require().NoError(err)
 	s.False(ns.EmailEnabled)
 }
 
-func (s *SettingsRepoTestSuite) TestGatewayEmptyUserId() {
-	_, err := s.repo.GetGatewaySettings("")
-	s.Error(err)
-	s.Error(s.repo.SetGatewaySettings("", domain.GatewaySettings{}))
-}
-
 func (s *SettingsRepoTestSuite) TestRateLimitDefaultsWhenUnset() {
-	user := uuid.New().String()
-	got, err := s.repo.GetRateLimitSettings(user)
+	got, err := s.repo.GetRateLimitSettings()
 	s.Require().NoError(err)
 	s.Equal(ratelimit.Settings{}, got)
 }
 
 func (s *SettingsRepoTestSuite) TestRateLimitSetGet() {
-	user := uuid.New().String()
 	want := ratelimit.Defaults
 	want.NetworkHighWater = 500
-	s.Require().NoError(s.repo.SetRateLimitSettings(user, want))
+	s.Require().NoError(s.repo.SetRateLimitSettings(want))
 
-	got, err := s.repo.GetRateLimitSettings(user)
+	got, err := s.repo.GetRateLimitSettings()
 	s.Require().NoError(err)
 	s.Equal(want, got)
 
-	gs, err := s.repo.GetGatewaySettings(user)
+	gs, err := s.repo.GetGatewaySettings()
 	s.Require().NoError(err)
 	s.Empty(gs.NodeID)
-}
-
-func (s *SettingsRepoTestSuite) TestRateLimitEmptyUserId() {
-	_, err := s.repo.GetRateLimitSettings("")
-	s.Error(err)
-	s.Error(s.repo.SetRateLimitSettings("", ratelimit.Settings{}))
 }
 
 func (s *SettingsRepoTestSuite) TestSponsoredSetGet() {
-	user := uuid.New().String()
-	got, err := s.repo.GetSponsoredSettings(user)
+	got, err := s.repo.GetSponsoredSettings()
 	s.Require().NoError(err)
 	s.Zero(got.MinStakeTRX, "an author who set nothing asks no stake")
 
-	s.Require().NoError(s.repo.SetSponsoredSettings(user, domain.SponsoredSettings{MinStakeTRX: 500}))
-	got, err = s.repo.GetSponsoredSettings(user)
+	s.Require().NoError(s.repo.SetSponsoredSettings(domain.SponsoredSettings{MinStakeTRX: 500}))
+	got, err = s.repo.GetSponsoredSettings()
 	s.Require().NoError(err)
 	s.Equal(uint64(500), got.MinStakeTRX)
 
-	gs, err := s.repo.GetGatewaySettings(user)
+	gs, err := s.repo.GetGatewaySettings()
 	s.Require().NoError(err)
 	s.Empty(gs.NodeID)
-
-	_, err = s.repo.GetSponsoredSettings("")
-	s.Error(err)
-	s.Error(s.repo.SetSponsoredSettings("", domain.SponsoredSettings{}))
 }
 
 func (s *SettingsRepoTestSuite) TestNetworkSetGet() {
-	user := uuid.New().String()
-	got, err := s.repo.GetNetworkSettings(user)
+	got, err := s.repo.GetNetworkSettings()
 	s.Require().NoError(err)
 	s.Equal(domain.NetworkSettings{}, got)
 
 	want := domain.NetworkSettings{Port: "4555", Bootstrap: []string{"/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j"}}
-	s.Require().NoError(s.repo.SetNetworkSettings(user, want))
-	got, err = s.repo.GetNetworkSettings(user)
+	s.Require().NoError(s.repo.SetNetworkSettings(want))
+	got, err = s.repo.GetNetworkSettings()
 	s.Require().NoError(err)
 	s.Equal(want, got)
 
-	ws, err := s.repo.GetWalletSettings(user)
+	ws, err := s.repo.GetWalletSettings()
 	s.Require().NoError(err)
 	s.Equal(domain.WalletSettings{}, ws, "network and wallet settings live under separate keys")
-
-	_, err = s.repo.GetNetworkSettings("")
-	s.Error(err)
-	s.Error(s.repo.SetNetworkSettings("", domain.NetworkSettings{}))
 }
 
 func (s *SettingsRepoTestSuite) TestWalletSetGet() {
-	user := uuid.New().String()
 	want := domain.WalletSettings{Endpoint: "https://nile.example"}
-	s.Require().NoError(s.repo.SetWalletSettings(user, want))
-	got, err := s.repo.GetWalletSettings(user)
+	s.Require().NoError(s.repo.SetWalletSettings(want))
+	got, err := s.repo.GetWalletSettings()
 	s.Require().NoError(err)
 	s.Equal(want, got)
 
-	ns, err := s.repo.GetNetworkSettings(user)
+	ns, err := s.repo.GetNetworkSettings()
 	s.Require().NoError(err)
 	s.Equal(domain.NetworkSettings{}, ns)
-
-	_, err = s.repo.GetWalletSettings("")
-	s.Error(err)
-	s.Error(s.repo.SetWalletSettings("", domain.WalletSettings{}))
 }
 
 func TestSettingsRepoTestSuite(t *testing.T) {
