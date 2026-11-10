@@ -24,6 +24,7 @@ vi.mock('@/service/service', () => ({
 vi.mock('@/lib/video', async (importOriginal) => ({
   ...(await importOriginal()),
   captureVideoPoster: vi.fn().mockResolvedValue(null),
+  checkVideoLength: vi.fn().mockResolvedValue(null),
 }));
 
 import Messages from '@/views/Messages.vue';
