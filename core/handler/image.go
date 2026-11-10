@@ -83,6 +83,10 @@ type MediaStorer interface {
 	SetForeignImageWithTTL(userId, key string, img domain.Base64Image) error
 }
 
+type ImageBlockChecker interface {
+	IsBlocked(blockerId, blockeeId string) (bool, error)
+}
+
 type ImageHashLister interface {
 	ListImageHashes() ([]domain.TweetImageHashes, error)
 }
@@ -164,6 +168,7 @@ func StreamGetImageHandler(
 	mediaRepo MediaStorer,
 	userRepo MediaUserFetcher,
 	copyRepo ImageHashLister,
+	blocksRepo ImageBlockChecker,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetImageEvent
@@ -192,6 +197,10 @@ func StreamGetImageHandler(
 				return nil, fmt.Errorf("get image: fetching media: %w", err)
 			}
 			return event.GetImageResponse{File: string(img)}, nil
+		}
+
+		if isBlocked, _ := blocksRepo.IsBlocked(ownerId, ev.UserId); isBlocked {
+			return event.GetImageResponse{File: ""}, nil
 		}
 
 		u, err := userRepo.Get(ev.UserId)

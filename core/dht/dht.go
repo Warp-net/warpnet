@@ -230,6 +230,13 @@ func (d *distributedHashTable) sweepRatedPeers() {
 	}
 }
 
+func (d *distributedHashTable) RemovePeer(id warpnet.WarpPeerID) {
+	if d == nil || d.dht == nil {
+		return
+	}
+	d.dht.RoutingTable().RemovePeer(id)
+}
+
 // removeDisallowedPeers removes from the routing table every peer the
 // rating does not allow in it.
 func (d *distributedHashTable) removeDisallowedPeers() {

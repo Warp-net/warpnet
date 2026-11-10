@@ -72,6 +72,7 @@ type UserFetcher interface {
 type DistributedHashTableCloser interface {
 	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	BootstrapNodes() []warpnet.WarpAddrInfo
+	RemovePeer(id warpnet.WarpPeerID)
 	Close()
 }
 
@@ -80,6 +81,7 @@ type NodeProvider interface {
 	BlocklistExponential(peerId string) error
 	BlocklistPermanent(peerId string) error
 	BlocklistRemove(peerId string) error
+	IsBlocklisted(peerId string) bool
 }
 
 type StatsProvider interface {
@@ -239,6 +241,7 @@ type BlocksProvider interface {
 	Block(blockerId string, blockeeId string) error
 	List(blockerId string, limit *uint64, cursor *string) ([]string, string, error)
 	Unblock(blockerId string, blockeeId string) error
+	IsBlocked(blockerId string, blockeeId string) (bool, error)
 }
 
 type BookmarkProvider interface {
@@ -291,6 +294,7 @@ type MediaProvider interface {
 	SetVideo(userId string, video domain.Base64Video) (_ domain.VideoKey, err error)
 	DeleteImage(userId string, key string) error
 	DeleteVideo(userId string, key string) error
+	DeleteUserMedia(userId string) error
 	GetCopy(userId string, key string) (domain.MediaCopy, error)
 	SetCopy(userId string, key string, c domain.MediaCopy) error
 	ListCopies(userId string, originalKey string) ([]domain.MediaCopy, error)

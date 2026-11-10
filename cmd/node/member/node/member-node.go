@@ -143,6 +143,7 @@ func NewMemberNode(
 		memberPubSub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, ratings, pubSubHandlers...)
+	pubsubService.Gossip().SetBlocklist(nodeRepo)
 
 	warpNetwork := config.Config().Node.Network
 
@@ -165,6 +166,7 @@ func NewMemberNode(
 		),
 		warpnet.NewRoutingOption(dHashTable.StartRouting),
 		warpnet.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
+		warpnet.NewConnectionGaterOption(nodeRepo),
 	}
 
 	opts = append(opts, warpnet.CommonOptions...)
@@ -423,6 +425,29 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	}
 }
 
+func (m *MemberNode) BlocklistPermanent(peerId string) error {
+	if err := m.nodeRepo.BlocklistPermanent(peerId); err != nil {
+		return err
+	}
+	id := warpnet.FromStringToPeerID(peerId)
+	if id == "" {
+		return nil
+	}
+	m.dHashTable.RemovePeer(id)
+	host := m.node.Node()
+	if host == nil {
+		return nil
+	}
+	err := host.Network().ClosePeer(id)
+	host.Peerstore().RemovePeer(id)
+	host.Peerstore().ClearAddrs(id)
+	return err
+}
+
+func (m *MemberNode) BlocklistRemove(peerId string) error {
+	return m.nodeRepo.BlocklistRemove(peerId)
+}
+
 // memberRepos bundles every repo the member node's handlers need.
 // Built once in setupHandlers and threaded through the per-feature
 // handler-list builders below so the registration func itself stays
@@ -581,11 +606,11 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
-			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo),
+			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo, r.blocksRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEET,
-			handler.StreamGetTweetHandler(r.tweetRepo, authRepo, userRepo, m),
+			handler.StreamGetTweetHandler(r.tweetRepo, authRepo, userRepo, m, r.blocksRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
@@ -973,7 +998,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
-			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.copyRepo),
+			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.copyRepo, r.blocksRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
@@ -981,7 +1006,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_VIDEO,
-			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
+			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo, r.blocksRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
@@ -1039,11 +1064,13 @@ func (m *MemberNode) socialFilterHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_SETTINGS_BLOCK,
-			handler.StreamBlockHandler(r.blocksRepo, userRepo, m.nodeRepo),
+			handler.StreamBlockHandler(
+				r.blocksRepo, userRepo, m, m.followRepo, m.pubsubService, r.tweetRepo, r.timelineRepo, r.mediaRepo,
+			),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_UNBLOCK,
-			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m.nodeRepo),
+			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_BLOCKS,

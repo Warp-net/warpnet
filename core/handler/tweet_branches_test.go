@@ -381,7 +381,7 @@ func TestStreamGetTweetsHandlerRefreshesWhenEmpty(t *testing.T) {
 		return json.Marshal(event.TweetsResponse{Tweets: []domain.Tweet{{Id: "t1", UserId: "other-user"}}})
 	}}
 
-	out, err := StreamGetTweetsHandler(repo, userRepo, streamer, &stubImageHashes{})(
+	out, err := StreamGetTweetsHandler(repo, userRepo, streamer, &stubImageHashes{}, stubBlockChecker{})(
 		marshal(t, event.GetAllTweetsEvent{UserId: "other-user"}), nil)
 	require.NoError(t, err)
 
@@ -402,7 +402,7 @@ func TestStreamGetTweetHandlerFallsBackToLocal(t *testing.T) {
 		repo := stubTweetUserRepo{getFn: func(string) (domain.User, error) {
 			return domain.User{}, errors.New("down")
 		}}
-		_, err := StreamGetTweetHandler(stubTweetRepo{}, auth, repo, stubStreamer{})(marshal(t, ev), nil)
+		_, err := StreamGetTweetHandler(stubTweetRepo{}, auth, repo, stubStreamer{}, stubBlockChecker{})(marshal(t, ev), nil)
 		require.Error(t, err)
 	})
 
@@ -410,7 +410,7 @@ func TestStreamGetTweetHandlerFallsBackToLocal(t *testing.T) {
 		streamer := stubStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return nil, errors.New("boom")
 		}}
-		_, err := StreamGetTweetHandler(stubTweetRepo{}, auth, otherNodeRepo, streamer)(marshal(t, ev), nil)
+		_, err := StreamGetTweetHandler(stubTweetRepo{}, auth, otherNodeRepo, streamer, stubBlockChecker{})(marshal(t, ev), nil)
 		require.Error(t, err)
 	})
 
@@ -418,7 +418,7 @@ func TestStreamGetTweetHandlerFallsBackToLocal(t *testing.T) {
 		streamer := stubStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return []byte("{"), nil
 		}}
-		out, err := StreamGetTweetHandler(stubTweetRepo{}, auth, otherNodeRepo, streamer)(marshal(t, ev), nil)
+		out, err := StreamGetTweetHandler(stubTweetRepo{}, auth, otherNodeRepo, streamer, stubBlockChecker{})(marshal(t, ev), nil)
 		require.NoError(t, err)
 		require.Equal(t, "cached", out.(domain.Tweet).Text)
 	})
@@ -477,5 +477,50 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 			stubTweetRepo{}, stubTimelineRepo{}, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
 		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweetId}), nil)
 		require.NoError(t, err)
+	})
+}
+
+func TestTweetsOfABlockedAuthorAreNotServed(t *testing.T) {
+	const owner, blocked = "owner-1", "blocked-1"
+	blocks := stubBlockChecker{blocked: map[string]bool{blocked: true}}
+	streamed := false
+	streamer := stubStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+		genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+			streamed = true
+			return nil, errors.New("must not stream")
+		},
+	}
+	repo := stubTweetRepo{
+		listFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
+			return []domain.Tweet{{Id: "cached", UserId: blocked}}, "end", nil
+		},
+		repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
+			return []domain.Tweet{{Id: "r1", UserId: blocked}, {Id: "r2", UserId: "friend"}}, "end", nil
+		},
+	}
+
+	t.Run("profile tweets", func(t *testing.T) {
+		out, err := StreamGetTweetsHandler(repo, stubTweetUserRepo{}, streamer, &stubImageHashes{}, blocks)(
+			marshal(t, event.GetAllTweetsEvent{UserId: blocked}), nil)
+		require.NoError(t, err)
+		require.Empty(t, out.(event.TweetsResponse).Tweets)
+		require.False(t, streamed)
+	})
+
+	t.Run("thread replies", func(t *testing.T) {
+		out, err := StreamGetTweetsHandler(repo, stubTweetUserRepo{}, streamer, &stubImageHashes{}, blocks)(
+			marshal(t, event.GetAllTweetsEvent{RootId: "root", ParentId: "root"}), nil)
+		require.NoError(t, err)
+		replies := out.(event.TweetsResponse).Tweets
+		require.Len(t, replies, 1)
+		require.Equal(t, "r2", replies[0].Id)
+	})
+
+	t.Run("single tweet", func(t *testing.T) {
+		_, err := StreamGetTweetHandler(repo, stubAuth{owner: domain.Owner{UserId: owner}}, stubTweetUserRepo{}, streamer, blocks)(
+			marshal(t, event.GetTweetEvent{UserId: blocked, TweetId: "cached"}), nil)
+		require.Error(t, err)
+		require.False(t, streamed)
 	})
 }

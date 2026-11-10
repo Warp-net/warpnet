@@ -350,3 +350,32 @@ func (s *MediaRepoTestSuite) TestListCopies() {
 	_, err = repo.ListCopies(alice, "original-a")
 	s.ErrorIs(err, ErrMediaRepoNotInit)
 }
+
+func (s *MediaRepoTestSuite) TestDeleteUserMedia_TakesOnlyThatUsersMedia() {
+	blocked := "user-" + uuid.NewString()
+	neighbour := blocked + "x"
+
+	imageKey, err := s.repo.SetImage(blocked, "data:image/jpeg;base64,AAAA")
+	s.Require().NoError(err)
+	videoKey, err := s.repo.SetVideo(blocked, "data:video/mp4;base64,AAAA")
+	s.Require().NoError(err)
+	s.Require().NoError(s.repo.SetForeignImageWithTTL(blocked, "avatar", "data:image/jpeg;base64,BBBB"))
+	neighbourKey, err := s.repo.SetImage(neighbour, "data:image/jpeg;base64,CCCC")
+	s.Require().NoError(err)
+
+	s.Require().NoError(s.repo.DeleteUserMedia(blocked))
+
+	_, err = s.repo.GetImage(blocked, string(imageKey))
+	s.ErrorIs(err, ErrMediaNotFound)
+	_, err = s.repo.GetImage(blocked, "avatar")
+	s.ErrorIs(err, ErrMediaNotFound)
+	_, err = s.repo.GetVideo(blocked, string(videoKey))
+	s.ErrorIs(err, ErrMediaNotFound)
+	img, err := s.repo.GetImage(neighbour, string(neighbourKey))
+	s.NoError(err)
+	s.NotEmpty(img)
+
+	s.ErrorIs(s.repo.DeleteUserMedia(""), ErrMediaNotFound)
+	var repo *MediaRepo
+	s.ErrorIs(repo.DeleteUserMedia(blocked), ErrMediaRepoNotInit)
+}

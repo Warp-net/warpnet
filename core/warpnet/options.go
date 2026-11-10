@@ -39,7 +39,9 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
+	"github.com/libp2p/go-libp2p/core/control"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
@@ -87,6 +89,38 @@ func NewListenAddrStringsOption(s ...string) WarpOption {
 
 func NewRoutingOption(cfg libp2pConfig.RoutingC) WarpOption {
 	return libp2p.Routing(cfg)
+}
+
+type Blocklister interface {
+	IsBlocklisted(peerId string) bool
+}
+
+func NewConnectionGaterOption(blocklist Blocklister) WarpOption {
+	return libp2p.ConnectionGater(blocklistGater{blocklist: blocklist})
+}
+
+type blocklistGater struct {
+	blocklist Blocklister
+}
+
+func (g blocklistGater) InterceptPeerDial(id WarpPeerID) bool {
+	return !g.blocklist.IsBlocklisted(id.String())
+}
+
+func (g blocklistGater) InterceptAddrDial(id WarpPeerID, _ WarpAddress) bool {
+	return g.InterceptPeerDial(id)
+}
+
+func (g blocklistGater) InterceptAccept(network.ConnMultiaddrs) bool {
+	return true
+}
+
+func (g blocklistGater) InterceptSecured(_ network.Direction, id WarpPeerID, _ network.ConnMultiaddrs) bool {
+	return g.InterceptPeerDial(id)
+}
+
+func (g blocklistGater) InterceptUpgraded(network.Conn) (bool, control.DisconnectReason) {
+	return true, 0
 }
 
 var DefaultResources = relayv2.Resources{

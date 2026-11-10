@@ -3,8 +3,10 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -70,6 +72,83 @@ func (s stubBlocksRepo) List(b string, l *uint64, c *string) ([]string, string, 
 	return nil, "end", nil
 }
 
+type stubBlockChecker struct {
+	blocked map[string]bool
+}
+
+func (s stubBlockChecker) IsBlocked(_, blockeeId string) (bool, error) {
+	return s.blocked[blockeeId], nil
+}
+
+type stubBlockFollows struct {
+	isFollowing, isFollower bool
+	unfollowed              *[]string
+}
+
+func (s stubBlockFollows) IsFollowing(string, string) bool { return s.isFollowing }
+func (s stubBlockFollows) IsFollower(string, string) bool  { return s.isFollower }
+func (s stubBlockFollows) Unfollow(from, to string) error {
+	if s.unfollowed != nil {
+		*s.unfollowed = append(*s.unfollowed, from+"->"+to)
+	}
+	return nil
+}
+
+type stubBlockUnsubscriber struct {
+	unsubscribed *[]string
+}
+
+func (s stubBlockUnsubscriber) UnsubscribeUserUpdate(userId string) error {
+	if s.unsubscribed != nil {
+		*s.unsubscribed = append(*s.unsubscribed, userId)
+	}
+	return nil
+}
+
+type stubBlockTweets struct {
+	tweets  []domain.Tweet
+	deleted *[]string
+}
+
+func (s stubBlockTweets) List(_ string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
+	from := 0
+	if cursor != nil && *cursor != "" {
+		_, _ = fmt.Sscan(*cursor, &from)
+	}
+	to := min(from+int(*limit), len(s.tweets))
+	return s.tweets[from:to], fmt.Sprint(to), nil
+}
+
+func (s stubBlockTweets) Delete(userId, tweetId string) error {
+	if s.deleted != nil {
+		*s.deleted = append(*s.deleted, userId+"/"+tweetId)
+	}
+	return nil
+}
+
+type stubBlockTimeline struct {
+	deleted *[]string
+}
+
+func (s stubBlockTimeline) DeleteTweetFromTimeline(userId, tweetId string) error {
+	if s.deleted != nil {
+		*s.deleted = append(*s.deleted, userId+"/"+tweetId)
+	}
+	return nil
+}
+
+type stubBlockMedia struct {
+	deleted *[]string
+	err     error
+}
+
+func (s stubBlockMedia) DeleteUserMedia(userId string) error {
+	if s.deleted != nil {
+		*s.deleted = append(*s.deleted, userId)
+	}
+	return s.err
+}
+
 type stubMutesRepo struct {
 	muteFn   func(muterId, muteeId string) error
 	unmuteFn func(muterId, muteeId string) error
@@ -99,32 +178,32 @@ func (s stubMutesRepo) List(m string, l *uint64, c *string) ([]string, string, e
 
 func TestStreamBlockHandler(t *testing.T) {
 	t.Run("invalid payload", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})([]byte("{"), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{}, stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{})([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty blocker", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{}, stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{})(marshal(t, event.BlockEvent{BlockeeId: "b"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("empty blockee", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{}, stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{})(marshal(t, event.BlockEvent{BlockerId: "a"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("self block", func(t *testing.T) {
-		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "a"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{}, stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "a"}), nil)
 		if err == nil {
 			t.Fatal("expected error")
 		}
 	})
 	t.Run("repo error", func(t *testing.T) {
 		repoErr := errors.New("boom")
-		_, err := StreamBlockHandler(stubBlocksRepo{blockFn: func(_, _ string) error { return repoErr }}, stubBlockUserResolver{}, &stubPeerBlocklister{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+		_, err := StreamBlockHandler(stubBlocksRepo{blockFn: func(_, _ string) error { return repoErr }}, stubBlockUserResolver{}, &stubPeerBlocklister{}, stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
 		if !errors.Is(err, repoErr) {
 			t.Fatalf("expected repo error: %v", err)
 		}
@@ -139,7 +218,7 @@ func TestStreamBlockHandler(t *testing.T) {
 			gotBlocker = blocker
 			gotBlockee = blockee
 			return nil
-		}}, userResolver, peerBl)(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+		}}, userResolver, peerBl, stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{})(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -412,4 +491,83 @@ func TestRemovePeerBlocklist(t *testing.T) {
 		removePeerBlocklist(users, peers, "bridged")
 		assert.Empty(t, peers.removed)
 	})
+}
+
+func TestStreamBlockHandlerFreesBlockeeData(t *testing.T) {
+	tweets := make([]domain.Tweet, 25)
+	for i := range tweets {
+		tweets[i] = domain.Tweet{Id: fmt.Sprint("t", i), UserId: "b"}
+	}
+	retweeter := "b"
+	tweets[3] = domain.Tweet{Id: "t3", UserId: "someone", RetweetedBy: &retweeter}
+	tweets = append(tweets, domain.Tweet{Id: "of-b2", UserId: "b2"})
+	var unfollowed, unsubscribed, deletedTweets, deletedTimeline, deletedMedia []string
+	peerBl := &stubPeerBlocklister{}
+
+	resp, err := StreamBlockHandler(
+		stubBlocksRepo{}, stubBlockUserResolver{}, peerBl,
+		stubBlockFollows{isFollowing: true, isFollower: true, unfollowed: &unfollowed},
+		stubBlockUnsubscriber{unsubscribed: &unsubscribed},
+		stubBlockTweets{tweets: tweets, deleted: &deletedTweets},
+		stubBlockTimeline{deleted: &deletedTimeline},
+		stubBlockMedia{deleted: &deletedMedia},
+	)(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, event.Accepted, resp)
+
+	assert.Equal(t, []string{"node-b"}, peerBl.captured)
+	assert.Equal(t, []string{"a->b", "b->a"}, unfollowed)
+	assert.Equal(t, []string{"b"}, unsubscribed)
+	assert.Len(t, deletedTweets, 25)
+	assert.Contains(t, deletedTweets, "b/t24")
+	assert.Contains(t, deletedTweets, "b/t3", "a retweet by the blockee lives in their partition")
+	assert.NotContains(t, deletedTweets, "b/of-b2", "a user whose id only starts the same is left alone")
+	assert.Len(t, deletedTimeline, 25)
+	assert.Contains(t, deletedTimeline, "a/t0")
+	assert.Equal(t, []string{"b"}, deletedMedia)
+}
+
+func TestStreamBlockHandlerKeepsUnrelatedFollowsAlone(t *testing.T) {
+	var unfollowed, unsubscribed []string
+	_, err := StreamBlockHandler(
+		stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{},
+		stubBlockFollows{unfollowed: &unfollowed},
+		stubBlockUnsubscriber{unsubscribed: &unsubscribed},
+		stubBlockTweets{}, stubBlockTimeline{}, stubBlockMedia{},
+	)(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+	require.NoError(t, err)
+	assert.Empty(t, unfollowed)
+	assert.Empty(t, unsubscribed)
+}
+
+func TestStreamBlockHandlerFailsWhenMediaStaysOnDisk(t *testing.T) {
+	mediaErr := errors.New("disk down")
+	_, err := StreamBlockHandler(
+		stubBlocksRepo{}, stubBlockUserResolver{}, &stubPeerBlocklister{},
+		stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{},
+		stubBlockMedia{err: mediaErr},
+	)(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "b"}), nil)
+	require.ErrorIs(t, err, mediaErr)
+}
+
+func TestBlockingABridgedUserLeavesTheGatewayConnected(t *testing.T) {
+	users := stubBlockUserResolver{getFn: func(id string) (domain.User, error) {
+		return domain.User{Id: id, NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork}, nil
+	}}
+	peerBl := &stubPeerBlocklister{}
+	var deletedMedia []string
+
+	_, err := StreamBlockHandler(
+		stubBlocksRepo{}, users, peerBl,
+		stubBlockFollows{}, stubBlockUnsubscriber{}, stubBlockTweets{}, stubBlockTimeline{},
+		stubBlockMedia{deleted: &deletedMedia},
+	)(marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "ap:alice@mastodon.social"}), nil)
+	require.NoError(t, err)
+	assert.Empty(t, peerBl.captured, "the gateway serves every bridged user")
+	assert.Equal(t, []string{"ap:alice@mastodon.social"}, deletedMedia)
+
+	_, err = StreamUnblockHandler(stubBlocksRepo{}, users, peerBl)(
+		marshal(t, event.UnblockEvent{BlockerId: "a", BlockeeId: "ap:alice@mastodon.social"}), nil)
+	require.NoError(t, err)
+	assert.Empty(t, peerBl.removed)
 }

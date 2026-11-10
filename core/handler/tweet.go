@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -77,6 +78,10 @@ type TweetImageFetcher interface {
 
 type TweetImageHashStorer interface {
 	SetImageHashes(h domain.TweetImageHashes) error
+}
+
+type TweetBlockChecker interface {
+	IsBlocked(blockerId, blockeeId string) (bool, error)
 }
 
 type TweetsStorer interface {
@@ -494,6 +499,7 @@ func StreamGetTweetHandler(
 	authRepo OwnerTweetStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
+	blocksRepo TweetBlockChecker,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetEvent
@@ -513,6 +519,9 @@ func StreamGetTweetHandler(
 		}
 
 		owner := authRepo.GetOwner()
+		if isBlocked, _ := blocksRepo.IsBlocked(owner.UserId, ev.UserId); isBlocked {
+			return nil, warpnet.WarpError("tweet author is blocked")
+		}
 
 		isMyOwnTweet := ev.UserId == owner.UserId
 		if isMyOwnTweet {
@@ -590,6 +599,7 @@ func StreamGetTweetsHandler(
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
 	copyRepo TweetImageHashStorer,
+	blocksRepo TweetBlockChecker,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetAllTweetsEvent
@@ -602,11 +612,14 @@ func StreamGetTweetsHandler(
 		// tweet": replies are tweets with a parent, served from the thread
 		// index. A plain timeline/profile request carries only UserId.
 		if ev.RootId != "" || ev.ParentId != "" {
-			return getThreadReplies(repo, userRepo, streamer, ev)
+			return getThreadReplies(repo, userRepo, streamer, blocksRepo, ev)
 		}
 
 		if ev.UserId == "" {
 			return nil, warpnet.WarpError("empty user id")
+		}
+		if isBlocked, _ := blocksRepo.IsBlocked(streamer.NodeInfo().OwnerId, ev.UserId); isBlocked {
+			return event.TweetsResponse{Tweets: []domain.Tweet{}, UserId: ev.UserId}, nil
 		}
 
 		tweets, cursor, err := repo.List(
@@ -711,6 +724,7 @@ func getThreadReplies(
 	repo TweetsStorer,
 	userRepo TweetUserFetcher,
 	streamer TweetStreamer,
+	blocksRepo TweetBlockChecker,
 	ev event.GetAllTweetsEvent,
 ) (any, error) {
 	// The replies are partitioned by their parent tweet. Clients may name it
@@ -720,7 +734,14 @@ func getThreadReplies(
 	// The parent author's node holds the whole thread (every reply is
 	// forwarded there on creation); the local index only has this node's own
 	// replies, so it serves as the fallback when that node is unreachable.
+	ownerId := streamer.NodeInfo().OwnerId
+	isBlockedAuthor := func(reply domain.Tweet) bool {
+		isBlocked, _ := blocksRepo.IsBlocked(ownerId, reply.UserId)
+		return isBlocked
+	}
+
 	if resp, ok := forwardThreadReplies(userRepo, streamer, ev); ok {
+		resp.Tweets = slices.DeleteFunc(resp.Tweets, isBlockedAuthor)
 		return resp, nil
 	}
 
@@ -728,6 +749,7 @@ func getThreadReplies(
 	if err != nil {
 		return nil, err
 	}
+	replies = slices.DeleteFunc(replies, isBlockedAuthor)
 	return event.TweetsResponse{
 		Cursor: cursor,
 		Tweets: replies,

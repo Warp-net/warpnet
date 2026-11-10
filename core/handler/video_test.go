@@ -224,7 +224,7 @@ func TestUploadVideo_TooLarge(t *testing.T) {
 }
 
 func TestGetVideo_EmptyKey(t *testing.T) {
-	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{}, u{})
+	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{}, u{}, stubBlockChecker{})
 
 	bt, err := json.Marshal(event.GetVideoEvent{UserId: "owner-id", Key: ""})
 	assert.NoError(t, err)
@@ -249,7 +249,7 @@ func (v videoStreamerStub) NodeInfo() warpnet.NodeInfo {
 
 func TestGetVideo_ServesOwnVideo(t *testing.T) {
 	stored := domain.Base64Video("data:video/mp4;base64,STORED")
-	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{})
+	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{}, stubBlockChecker{})
 
 	bt, err := json.Marshal(event.GetVideoEvent{UserId: "owner-id", Key: "abc"})
 	assert.NoError(t, err)
@@ -266,7 +266,7 @@ func TestGetVideo_ServesOwnVideo(t *testing.T) {
 
 func TestGetVideo_DeferredWithholdsBytes(t *testing.T) {
 	stored := domain.Base64Video("data:video/mp4;base64,STORED")
-	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{})
+	h := StreamGetVideoHandler(videoStreamerStub{}, &videoRepoStub{stored: stored}, u{}, stubBlockChecker{})
 
 	bt, err := json.Marshal(event.GetVideoEvent{UserId: "owner-id", Key: "abc", Deferred: true})
 	assert.NoError(t, err)
@@ -287,6 +287,7 @@ func TestGetVideo_DeferredSkipsRemoteFetch(t *testing.T) {
 		videoStreamerStub{streamed: &streamed},
 		&videoRepoStub{},
 		foreignUserRepo{},
+		stubBlockChecker{},
 	)
 
 	bt, err := json.Marshal(event.GetVideoEvent{UserId: "someone-else", Key: "abc", Deferred: true})
@@ -350,19 +351,19 @@ func TestStreamGetVideoHandler(t *testing.T) {
 	}}
 
 	t.Run("malformed payload", func(t *testing.T) {
-		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{}, stubBlockChecker{})
 		_, err := h([]byte("{"), nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("empty key is rejected", func(t *testing.T) {
-		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{}, stubBlockChecker{})
 		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID}), nil)
 		assert.ErrorIs(t, err, ErrEmptyVideoKey)
 	})
 
 	t.Run("own missing video answers empty", func(t *testing.T) {
-		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{})
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(), mediaUserDouble{}, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "gone"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
@@ -372,7 +373,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		repo := newVideoRepoDouble()
 		repo.getErr = errors.New("disk on fire")
 
-		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{}, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
@@ -383,7 +384,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		repo.getErr = errors.New("disk on fire")
 		repo.getPartial = "data:video/mp4;base64,TRUNCATED"
 
-		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{}, stubBlockChecker{})
 		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip"}), nil)
 		assert.Error(t, err)
 	})
@@ -392,7 +393,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		repo := newVideoRepoDouble()
 		repo.videos[ownerID+"/clip"] = "data:video/mp4;base64,PAYLOAD"
 
-		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{})
+		h := StreamGetVideoHandler(&mediaStreamerDouble{}, repo, mediaUserDouble{}, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: ownerID, Key: "clip", Deferred: true}), nil)
 		require.NoError(t, err)
 
@@ -407,7 +408,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		repo.videos["stranger/clip"] = "data:video/mp4;base64,CACHED"
 
 		streamer := &mediaStreamerDouble{}
-		h := StreamGetVideoHandler(streamer, repo, mediaUserDouble{})
+		h := StreamGetVideoHandler(streamer, repo, mediaUserDouble{}, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "stranger", Key: "clip"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, "data:video/mp4;base64,CACHED", out.(event.GetVideoResponse).File)
@@ -416,7 +417,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 
 	t.Run("user lookup failure surfaces", func(t *testing.T) {
 		h := StreamGetVideoHandler(&mediaStreamerDouble{}, newVideoRepoDouble(),
-			mediaUserDouble{err: errors.New("db down")})
+			mediaUserDouble{err: errors.New("db down")}, stubBlockChecker{})
 		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "someone", Key: "clip"}), nil)
 		assert.Error(t, err)
 	})
@@ -427,7 +428,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 			"alias": {Id: "alias", NodeId: selfNodeID},
 		}}
 
-		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), users)
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), users, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "alias", Key: "clip"}), nil)
 		require.NoError(t, err)
 		assert.Equal(t, event.GetVideoResponse{File: ""}, out)
@@ -436,7 +437,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 
 	t.Run("deferred remote video does not hit the network", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{}
-		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers, stubBlockChecker{})
 
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip", Deferred: true}), nil)
 		require.NoError(t, err)
@@ -446,7 +447,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 
 	t.Run("offline peer degrades to an empty video", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{err: warpnet.ErrNodeIsOffline}
-		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers, stubBlockChecker{})
 
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
 		require.NoError(t, err)
@@ -455,7 +456,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 
 	t.Run("transport failure surfaces", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{err: errors.New("reset")}
-		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers, stubBlockChecker{})
 
 		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
 		assert.Error(t, err)
@@ -463,7 +464,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 
 	t.Run("garbage from the peer is rejected", func(t *testing.T) {
 		streamer := &mediaStreamerDouble{response: []byte("not json")}
-		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers)
+		h := StreamGetVideoHandler(streamer, newVideoRepoDouble(), remoteUsers, stubBlockChecker{})
 
 		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
 		assert.Error(t, err)
@@ -479,7 +480,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 			response: mustJSON(t, event.GetVideoResponse{File: file}),
 		}
 
-		h := StreamGetVideoHandler(streamer, repo, signerUsers)
+		h := StreamGetVideoHandler(streamer, repo, signerUsers, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: key}), nil)
 		require.NoError(t, err)
 
@@ -493,7 +494,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 			response: mustJSON(t, event.GetVideoResponse{File: "data:video/mp4;base64,REMOTE"}),
 		}
 
-		h := StreamGetVideoHandler(streamer, repo, remoteUsers)
+		h := StreamGetVideoHandler(streamer, repo, remoteUsers, stubBlockChecker{})
 		out, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
 		require.NoError(t, err)
 
@@ -505,7 +506,7 @@ func TestStreamGetVideoHandler(t *testing.T) {
 		repo := newVideoRepoDouble()
 		streamer := &mediaStreamerDouble{response: mustJSON(t, event.GetVideoResponse{File: ""})}
 
-		h := StreamGetVideoHandler(streamer, repo, remoteUsers)
+		h := StreamGetVideoHandler(streamer, repo, remoteUsers, stubBlockChecker{})
 		_, err := h(mustJSON(t, event.GetVideoEvent{UserId: "remote", Key: "clip"}), nil)
 		require.NoError(t, err)
 		assert.Empty(t, repo.foreignStored)
@@ -528,4 +529,20 @@ func TestNewVideoResponse(t *testing.T) {
 	empty := newVideoResponse("", false)
 	assert.Empty(t, empty.File)
 	assert.Zero(t, empty.Size)
+}
+
+func TestGetVideo_BlockedAuthorIsNotServed(t *testing.T) {
+	streamed := false
+	stored := domain.Base64Video("data:video/mp4;base64,CACHED")
+	h := StreamGetVideoHandler(
+		videoStreamerStub{streamed: &streamed}, &videoRepoStub{stored: stored}, u{},
+		stubBlockChecker{blocked: map[string]bool{"blocked": true}},
+	)
+
+	bt, err := json.Marshal(event.GetVideoEvent{UserId: "blocked", Key: "abc"})
+	assert.NoError(t, err)
+
+	out, err := h(bt, s{})
+	assert.NoError(t, err)
+	assert.Equal(t, event.GetVideoResponse{File: ""}, out)
 }

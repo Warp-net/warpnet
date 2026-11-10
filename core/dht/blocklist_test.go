@@ -94,3 +94,14 @@ func TestAPeerBlocklistedInsideTheRoutingTableIsDroppedOnReconnect(t *testing.T)
 		admitTimeout, pollTick, "the blocklisted peer is dropped from the table")
 	require.True(t, node.holds(other.host.ID()), "and every other peer stays in it")
 }
+
+func TestARemovedPeerLeavesTheRoutingTableAtOnce(t *testing.T) {
+	skipWithoutHosts(t)
+
+	node, blocked := newRepoTable(t), newRatedTable(t)
+	connectHosts(t, node.host, blocked.host)
+	require.Eventually(t, func() bool { return node.holds(blocked.host.ID()) }, admitTimeout, pollTick)
+
+	node.table.RemovePeer(blocked.host.ID())
+	require.False(t, node.holds(blocked.host.ID()))
+}
