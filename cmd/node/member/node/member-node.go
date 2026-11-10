@@ -165,7 +165,7 @@ func NewMemberNode(
 		),
 		warpnet.NewRoutingOption(dHashTable.StartRouting),
 		warpnet.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
-		warpnet.NewConnectionGaterOption(nodeRepo),
+		node.NewBlocklistOption(nodeRepo),
 	}
 
 	opts = append(opts, warpnet.CommonOptions...)

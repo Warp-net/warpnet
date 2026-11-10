@@ -25,7 +25,6 @@ resulting from the use or misuse of this software.
 package warpnet
 
 import (
-	"context"
 	"crypto/ed25519"
 	"fmt"
 	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
@@ -40,9 +39,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	libp2pConfig "github.com/libp2p/go-libp2p/config"
-	"github.com/libp2p/go-libp2p/core/control"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
@@ -93,86 +90,16 @@ func NewRoutingOption(cfg libp2pConfig.RoutingC) WarpOption {
 	return libp2p.Routing(cfg)
 }
 
-type Blocklister interface {
-	IsBlocklisted(peerId string) bool
+func NewConnectionGaterOption(gater WarpConnectionGater) WarpOption {
+	return libp2p.ConnectionGater(gater)
 }
 
-const blocklistSweepInterval = 10 * time.Second
-
-func NewConnectionGaterOption(blocklist Blocklister) WarpOption {
-	return newConnectionGaterOption(blocklist, blocklistSweepInterval)
+func NewSwarmInvokeOption(invoke func(WarpLifecycle, *Swarm)) WarpOption {
+	return libp2p.WithFxOption(fx.Invoke(invoke))
 }
 
-func newConnectionGaterOption(blocklist Blocklister, sweepInterval time.Duration) WarpOption {
-	g := blocklistGater{blocklist: blocklist}
-	return libp2p.ChainOptions(
-		libp2p.ConnectionGater(g),
-		libp2p.WithFxOption(fx.Invoke(func(lc fx.Lifecycle, s *Swarm) {
-			s.Notify(&network.NotifyBundle{ConnectedF: g.closeBlocked})
-			stop := make(chan struct{})
-			lc.Append(fx.Hook{
-				OnStart: func(context.Context) error {
-					go g.sweepBlocked(s, sweepInterval, stop)
-					return nil
-				},
-				OnStop: func(context.Context) error {
-					close(stop)
-					return nil
-				},
-			})
-		})),
-	)
-}
-
-type blocklistGater struct {
-	blocklist Blocklister
-}
-
-func (g blocklistGater) InterceptPeerDial(id WarpPeerID) bool {
-	return !g.blocklist.IsBlocklisted(id.String())
-}
-
-func (g blocklistGater) InterceptAddrDial(id WarpPeerID, _ WarpAddress) bool {
-	return g.InterceptPeerDial(id)
-}
-
-func (g blocklistGater) InterceptAccept(network.ConnMultiaddrs) bool {
-	return true
-}
-
-func (g blocklistGater) InterceptSecured(_ network.Direction, id WarpPeerID, _ network.ConnMultiaddrs) bool {
-	return g.InterceptPeerDial(id)
-}
-
-func (g blocklistGater) InterceptUpgraded(c network.Conn) (bool, control.DisconnectReason) {
-	return g.InterceptPeerDial(c.RemotePeer()), 0
-}
-
-func (g blocklistGater) closeBlocked(_ network.Network, c network.Conn) {
-	if g.InterceptPeerDial(c.RemotePeer()) {
-		return
-	}
-	go func() { _ = c.Close() }()
-}
-
-func (g blocklistGater) sweepBlocked(s *Swarm, interval time.Duration, stop <-chan struct{}) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-ticker.C:
-			for _, id := range s.Peers() {
-				if g.InterceptPeerDial(id) {
-					continue
-				}
-				_ = s.ClosePeer(id)
-				s.Peerstore().RemovePeer(id)
-				s.Peerstore().ClearAddrs(id)
-			}
-		}
-	}
+func NewChainOption(opts ...WarpOption) WarpOption {
+	return libp2p.ChainOptions(opts...)
 }
 
 var DefaultResources = relayv2.Resources{

@@ -59,6 +59,7 @@ import (
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/control"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -86,6 +87,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/fx"
 )
 
 var (
@@ -192,6 +194,16 @@ type (
 	WarpAutoNAT        = autonat.AutoNAT
 	P2PNode            = host.Host
 	Discovery          = discovery.Discovery
+)
+
+type (
+	WarpConnectionGater  = coreconnmgr.ConnectionGater
+	WarpDirection        = network.Direction
+	WarpConnMultiaddrs   = network.ConnMultiaddrs
+	WarpDisconnectReason = control.DisconnectReason
+	WarpNotifyBundle     = network.NotifyBundle
+	WarpLifecycle        = fx.Lifecycle
+	WarpHook             = fx.Hook
 )
 
 type WarpStreamBody struct {

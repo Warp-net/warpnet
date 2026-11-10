@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/control"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -23,7 +24,21 @@ import (
 
 type blocklist map[string]bool
 
-func (b blocklist) IsBlocklisted(peerId string) bool { return b[peerId] }
+func (b blocklist) InterceptPeerDial(id WarpPeerID) bool { return !b[id.String()] }
+
+func (b blocklist) InterceptAddrDial(id WarpPeerID, _ WarpAddress) bool {
+	return b.InterceptPeerDial(id)
+}
+
+func (b blocklist) InterceptAccept(network.ConnMultiaddrs) bool { return true }
+
+func (b blocklist) InterceptSecured(_ network.Direction, id WarpPeerID, _ network.ConnMultiaddrs) bool {
+	return b.InterceptPeerDial(id)
+}
+
+func (b blocklist) InterceptUpgraded(c network.Conn) (bool, control.DisconnectReason) {
+	return b.InterceptPeerDial(c.RemotePeer()), 0
+}
 
 func noiseIdentity(t *testing.T) (p2pCrypto.PrivKey, WarpPeerID) {
 	t.Helper()
@@ -64,7 +79,7 @@ func TestABlockedPeerIsRefusedInTheHandshake(t *testing.T) {
 	defer cancel()
 
 	t.Run("inbound", func(t *testing.T) {
-		server, err := NewNoise(NoiseID, serverKey, nil, blocklistGater{blocklist: blocklist{clientID.String(): true}})
+		server, err := NewNoise(NoiseID, serverKey, nil, blocklist{clientID.String(): true})
 		require.NoError(t, err)
 		client, err := NewNoise(NoiseID, clientKey, nil, nil)
 		require.NoError(t, err)
@@ -76,7 +91,7 @@ func TestABlockedPeerIsRefusedInTheHandshake(t *testing.T) {
 	})
 
 	t.Run("outbound", func(t *testing.T) {
-		client, err := NewNoise(NoiseID, clientKey, nil, blocklistGater{blocklist: blocklist{serverID.String(): true}})
+		client, err := NewNoise(NoiseID, clientKey, nil, blocklist{serverID.String(): true})
 		require.NoError(t, err)
 		c, s := tcpPair(t)
 
@@ -89,7 +104,7 @@ func TestABlockedPeerIsRefusedInTheHandshake(t *testing.T) {
 	})
 
 	t.Run("allowed", func(t *testing.T) {
-		server, err := NewNoise(NoiseID, serverKey, nil, blocklistGater{blocklist: blocklist{}})
+		server, err := NewNoise(NoiseID, serverKey, nil, blocklist{})
 		require.NoError(t, err)
 		client, err := NewNoise(NoiseID, clientKey, nil, nil)
 		require.NoError(t, err)
@@ -108,7 +123,7 @@ func TestABlockedPeerIsRefusedInTheHandshake(t *testing.T) {
 }
 
 type securedCounter struct {
-	blocklistGater
+	blocklist
 	mx      sync.Mutex
 	secured map[WarpPeerID]int
 }
@@ -117,7 +132,7 @@ func (c *securedCounter) InterceptSecured(dir network.Direction, id WarpPeerID, 
 	c.mx.Lock()
 	c.secured[id]++
 	c.mx.Unlock()
-	return c.blocklistGater.InterceptSecured(dir, id, addrs)
+	return c.blocklist.InterceptSecured(dir, id, addrs)
 }
 
 func (c *securedCounter) count(id WarpPeerID) int {
@@ -127,7 +142,7 @@ func (c *securedCounter) count(id WarpPeerID) int {
 }
 
 func TestTheHostHandsItsGaterToTheHandshake(t *testing.T) {
-	gater := &securedCounter{blocklistGater: blocklistGater{blocklist: blocklist{}}, secured: map[WarpPeerID]int{}}
+	gater := &securedCounter{blocklist: blocklist{}, secured: map[WarpPeerID]int{}}
 	opts := append([]libp2p.Option{}, CommonOptions...)
 	member, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), libp2p.ConnectionGater(gater))...)
 	require.NoError(t, err)
@@ -140,95 +155,4 @@ func TestTheHostHandsItsGaterToTheHandshake(t *testing.T) {
 	defer cancel()
 	require.NoError(t, remote.Connect(ctx, peer.AddrInfo{ID: member.ID(), Addrs: member.Addrs()}))
 	require.Equal(t, 2, gater.count(remote.ID()), "the handshake asks the gater before the upgrader does")
-}
-
-type lateBlock struct {
-	mx      sync.Mutex
-	id      string
-	allowed int
-}
-
-func (b *lateBlock) IsBlocklisted(peerId string) bool {
-	b.mx.Lock()
-	defer b.mx.Unlock()
-	if peerId != b.id {
-		return false
-	}
-	if b.allowed > 0 {
-		b.allowed--
-		return false
-	}
-	return true
-}
-
-func TestABlockThatLandsMidConnectionStillCutsThePeer(t *testing.T) {
-	for name, checksPassed := range map[string]int{
-		"after the handshake, before the upgrade": 2,
-		"after the upgrade, before registration":  3,
-	} {
-		t.Run(name, func(t *testing.T) {
-			opts := append([]libp2p.Option{}, CommonOptions...)
-			remote, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))...)
-			require.NoError(t, err)
-			t.Cleanup(func() { _ = remote.Close() })
-			block := &lateBlock{id: remote.ID().String(), allowed: checksPassed}
-			member, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), NewConnectionGaterOption(block))...)
-			require.NoError(t, err)
-			t.Cleanup(func() { _ = member.Close() })
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			_ = remote.Connect(ctx, peer.AddrInfo{ID: member.ID(), Addrs: member.Addrs()})
-			require.Eventually(t, func() bool {
-				return len(member.Network().ConnsToPeer(remote.ID())) == 0 &&
-					len(remote.Network().ConnsToPeer(member.ID())) == 0
-			}, 5*time.Second, 20*time.Millisecond, "the peer blocked mid-connection is left with no connection")
-		})
-	}
-}
-
-type mutableBlocklist struct {
-	mx  sync.Mutex
-	ids map[string]bool
-}
-
-func (b *mutableBlocklist) IsBlocklisted(peerId string) bool {
-	b.mx.Lock()
-	defer b.mx.Unlock()
-	return b.ids[peerId]
-}
-
-func (b *mutableBlocklist) add(peerId string) {
-	b.mx.Lock()
-	defer b.mx.Unlock()
-	b.ids[peerId] = true
-}
-
-func TestTheGaterCutsAPeerBlockedWhileConnected(t *testing.T) {
-	opts := append([]libp2p.Option{}, CommonOptions...)
-	block := &mutableBlocklist{ids: map[string]bool{}}
-	member, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), newConnectionGaterOption(block, 20*time.Millisecond))...)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = member.Close() })
-	blocked, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))...)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = blocked.Close() })
-	other, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))...)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = other.Close() })
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	memberInfo := peer.AddrInfo{ID: member.ID(), Addrs: member.Addrs()}
-	require.NoError(t, blocked.Connect(ctx, memberInfo))
-	require.NoError(t, other.Connect(ctx, memberInfo))
-
-	block.add(blocked.ID().String())
-	require.Eventually(t, func() bool {
-		return len(member.Network().ConnsToPeer(blocked.ID())) == 0
-	}, 5*time.Second, 20*time.Millisecond, "the gater closes what the blocked peer already had open")
-	require.Eventually(t, func() bool {
-		return len(member.Peerstore().Addrs(blocked.ID())) == 0
-	}, 5*time.Second, 20*time.Millisecond, "and the peerstore forgets it")
-	require.NotEmpty(t, member.Network().ConnsToPeer(other.ID()), "and leaves every other peer connected")
 }
