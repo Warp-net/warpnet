@@ -544,16 +544,17 @@ func TestUseDatabaseDir(t *testing.T) {
 	network := config.Config().Node.Network
 
 	t.Run("writable folder", func(t *testing.T) {
-		defaultPath := filepath.Join(t.TempDir(), "storage")
+		defaultPath := filepath.Join(t.TempDir(), network, "storage")
 		dir := t.TempDir()
 		a := appWithDatabase(t, defaultPath)
 		oldAuth := a.auth
 
-		path, err := a.useDatabaseDir(defaultPath, dir)
+		chosen, err := a.useDatabaseDir(defaultPath, dir)
 		require.NoError(t, err)
 
-		require.Equal(t, filepath.Join(dir, network), path)
-		require.Equal(t, path, a.DatabaseDir())
+		require.Equal(t, dir, chosen)
+		require.Equal(t, dir, a.DatabaseDir())
+		path := filepath.Join(dir, network, "storage")
 		bt, err := os.ReadFile(filepath.Join(defaultPath, dbPathFile))
 		require.NoError(t, err)
 		require.Equal(t, path, string(bt))
@@ -568,7 +569,7 @@ func TestUseDatabaseDir(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("root writes anywhere")
 		}
-		defaultPath := filepath.Join(t.TempDir(), "storage")
+		defaultPath := filepath.Join(t.TempDir(), network, "storage")
 		dir := t.TempDir()
 		require.NoError(t, os.Chmod(dir, 0500))
 		t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
@@ -577,14 +578,14 @@ func TestUseDatabaseDir(t *testing.T) {
 		_, err := a.useDatabaseDir(defaultPath, dir)
 		require.Error(t, err)
 
-		require.Equal(t, defaultPath, a.DatabaseDir())
+		require.Equal(t, filepath.Dir(filepath.Dir(defaultPath)), a.DatabaseDir())
 		require.NoFileExists(t, filepath.Join(defaultPath, dbPathFile))
 	})
 
 	t.Run("folder with a database", func(t *testing.T) {
-		defaultPath := filepath.Join(t.TempDir(), "storage")
+		defaultPath := filepath.Join(t.TempDir(), network, "storage")
 		dir := t.TempDir()
-		lock := filepath.Join(dir, network, "v0", "run.lock")
+		lock := filepath.Join(dir, network, "storage", "v0", "run.lock")
 		require.NoError(t, os.MkdirAll(filepath.Dir(lock), 0750))
 		require.NoError(t, os.WriteFile(lock, nil, 0600))
 		a := appWithDatabase(t, defaultPath)
@@ -594,6 +595,6 @@ func TestUseDatabaseDir(t *testing.T) {
 		require.NoError(t, err)
 
 		require.False(t, a.IsFirstRun())
-		require.Equal(t, filepath.Join(dir, network), a.DatabaseDir())
+		require.Equal(t, dir, a.DatabaseDir())
 	})
 }

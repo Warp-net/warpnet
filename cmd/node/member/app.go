@@ -222,7 +222,7 @@ func (a *App) DatabaseDir() string {
 	if a.db == nil {
 		return ""
 	}
-	return filepath.Dir(a.db.Path())
+	return filepath.Dir(filepath.Dir(filepath.Dir(a.db.Path())))
 }
 
 func (a *App) ChooseDatabaseDir() (string, error) {
@@ -240,7 +240,7 @@ var errDatabaseRunning = errors.New("database is already running")
 
 func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	network := config.Config().Node.Network
-	path := filepath.Join(dir, network)
+	path := filepath.Join(dir, network, filepath.Base(defaultPath))
 	if err := os.MkdirAll(path, 0750); err != nil {
 		return "", err
 	}
@@ -269,7 +269,7 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	}
 	a.db = db
 	a.auth = auth.NewAuthService(a.ctx, database.NewAuthRepo(db, network), database.NewUserRepo(db), a.readyChan)
-	return path, nil
+	return dir, nil
 }
 
 const dbPathFile = "db.path"

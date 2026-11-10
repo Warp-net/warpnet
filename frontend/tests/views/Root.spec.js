@@ -64,8 +64,8 @@ beforeEach(() => {
   warpnetService.isDesktopNode.mockReturnValue(true);
   warpnetService.selectNetwork.mockResolvedValue(undefined);
   warpnetService.network.mockResolvedValue('warpnet');
-  warpnetService.databaseDir.mockResolvedValue('/home/u/.warpdata/warpnet/storage');
-  warpnetService.chooseDatabaseDir.mockResolvedValue('/mnt/data/warpnet');
+  warpnetService.databaseDir.mockResolvedValue('/home/u/.warpdata');
+  warpnetService.chooseDatabaseDir.mockResolvedValue('/mnt/data');
   sessionStorage.clear();
 });
 
@@ -195,12 +195,12 @@ describe('Root.vue', () => {
   it('shows the data folder and moves it on Change', async () => {
     renderRoot({ firstRun: true });
 
-    expect(await screen.findByText(/Data folder: \/home\/u\/\.warpdata\/warpnet\/storage/)).toBeInTheDocument();
+    expect(await screen.findByText(/Data folder: \/home\/u\/\.warpdata$/)).toBeInTheDocument();
 
     warpnetService.isFirstRun.mockClear();
     await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
 
-    expect(await screen.findByText(/Data folder: \/mnt\/data\/warpnet/)).toBeInTheDocument();
+    expect(await screen.findByText(/Data folder: \/mnt\/data$/)).toBeInTheDocument();
     expect(warpnetService.isFirstRun).toHaveBeenCalled();
   });
 
@@ -225,7 +225,7 @@ describe('Root.vue', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
 
     await waitFor(() => expect(warpnetService.chooseDatabaseDir).toHaveBeenCalled());
-    expect(screen.getByText(/Data folder: \/home\/u\/\.warpdata\/warpnet\/storage/)).toBeInTheDocument();
+    expect(screen.getByText(/Data folder: \/home\/u\/\.warpdata$/)).toBeInTheDocument();
     expect(warpnetService.isFirstRun).not.toHaveBeenCalled();
   });
 
@@ -238,7 +238,7 @@ describe('Root.vue', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/permission denied/);
-    expect(screen.getByText(/Data folder: \/home\/u\/\.warpdata\/warpnet\/storage/)).toBeInTheDocument();
+    expect(screen.getByText(/Data folder: \/home\/u\/\.warpdata$/)).toBeInTheDocument();
     expect(warpnetService.isFirstRun).not.toHaveBeenCalled();
   });
 
