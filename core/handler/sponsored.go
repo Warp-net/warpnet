@@ -97,7 +97,7 @@ type OrderStorer interface {
 }
 
 type OrderSettingsFetcher interface {
-	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
+	GetSponsoredSettings() (domain.SponsoredSettings, error)
 }
 
 type SponsoredTweetFetcher interface {
@@ -629,7 +629,7 @@ func StreamVerifyOrderHandler(
 		if ev.Payer != "" && !wallet.IsAddress(ev.Payer) {
 			return nil, ErrPayerAddress
 		}
-		sponsored, err := settings.GetSponsoredSettings(owner.UserId)
+		sponsored, err := settings.GetSponsoredSettings()
 		if err != nil {
 			return nil, err
 		}

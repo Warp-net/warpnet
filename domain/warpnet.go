@@ -424,6 +424,18 @@ type GatewaySettings struct {
 	NodeID string `json:"node_id"`
 }
 
+type NetworkSettings struct {
+	HostV4    string   `json:"host_v4"`
+	HostV6    string   `json:"host_v6"`
+	Port      string   `json:"port"`
+	Bootstrap []string `json:"bootstrap"`
+}
+
+type WalletSettings struct {
+	Endpoint   string `json:"endpoint"`
+	BinaryPath string `json:"binary_path"`
+}
+
 type SponsoredSettings struct {
 	MinStakeTRX         uint64    `json:"min_stake_trx"`
 	PreviousMinStakeTRX uint64    `json:"previous_min_stake_trx,omitempty"`

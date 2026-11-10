@@ -113,11 +113,35 @@ func NewMemberNode(
 
 	// Apply the owner's configured ActivityPub gateway id (empty falls back to
 	// the built-in default) before seeding the entry user and starting discovery.
-	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(owner.UserId); err == nil {
+	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(); err == nil {
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
 
-	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
+	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings()
+
+	networkSettings, err := database.NewSettingsRepo(db).GetNetworkSettings()
+	if err != nil {
+		return nil, err
+	}
+	if networkSettings.HostV4 == "" {
+		networkSettings.HostV4 = config.Config().Node.HostV4
+	}
+	if networkSettings.HostV6 == "" {
+		networkSettings.HostV6 = config.Config().Node.HostV6
+	}
+	if networkSettings.Port == "" {
+		networkSettings.Port = config.Config().Node.Port
+	}
+	walletSettings, err := database.NewSettingsRepo(db).GetWalletSettings()
+	if err != nil {
+		return nil, err
+	}
+	if walletSettings.Endpoint == "" {
+		walletSettings.Endpoint = config.Config().Wallet.Endpoint
+	}
+	if walletSettings.BinaryPath == "" {
+		walletSettings.BinaryPath = config.Config().Wallet.BinaryPath
+	}
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
@@ -160,8 +184,8 @@ func NewMemberNode(
 		warpnet.NewWarpPeerstoreOption(store),
 		warpnet.NewWarpPrivateNetworkOption(warpnet.PSK(psk)),
 		warpnet.NewListenAddrStringsOption(
-			fmt.Sprintf("/ip6/%s/tcp/%s", config.Config().Node.HostV6, config.Config().Node.Port),
-			fmt.Sprintf("/ip4/%s/tcp/%s", config.Config().Node.HostV4, config.Config().Node.Port),
+			fmt.Sprintf("/ip6/%s/tcp/%s", networkSettings.HostV6, networkSettings.Port),
+			fmt.Sprintf("/ip4/%s/tcp/%s", networkSettings.HostV4, networkSettings.Port),
 		),
 		warpnet.NewRoutingOption(dHashTable.StartRouting),
 		warpnet.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
@@ -170,7 +194,7 @@ func NewMemberNode(
 	opts = append(opts, warpnet.CommonOptions...)
 
 	walletConfig := wallet.DefaultConfig(
-		warpNetwork, config.Config().Wallet.BinaryPath, config.Config().Wallet.Endpoint,
+		warpNetwork, walletSettings.BinaryPath, walletSettings.Endpoint,
 	)
 	walletClient := wallet.New(walletConfig)
 	walletRepo := database.NewWalletRepo(db)
@@ -840,6 +864,16 @@ func (m *MemberNode) walletHandlers(authRepo AuthProvider, userRepo UserProvider
 
 //nolint:govet
 func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []warpnet.WarpStreamHandler {
+	networkDefaults := domain.NetworkSettings{
+		HostV4:    config.Config().Node.HostV4,
+		HostV6:    config.Config().Node.HostV6,
+		Port:      config.Config().Node.Port,
+		Bootstrap: config.Config().Node.Bootstrap,
+	}
+	walletDefaults := domain.WalletSettings{
+		Endpoint:   config.Config().Wallet.Endpoint,
+		BinaryPath: config.Config().Wallet.BinaryPath,
+	}
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_GET_SETTINGS_NOTIFICATION,
@@ -851,27 +885,43 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_GATEWAY,
-			handler.StreamGetGatewaySettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetGatewaySettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_GATEWAY,
-			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateGatewaySettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_RATELIMIT,
-			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetRateLimitSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_SPONSORED,
-			handler.StreamGetSponsoredSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamGetSponsoredSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_SPONSORED,
-			handler.StreamUpdateSponsoredSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateSponsoredSettingsHandler(r.settingsRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_RATELIMIT,
-			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo, authRepo),
+			handler.StreamUpdateRateLimitSettingsHandler(r.settingsRepo),
+		},
+		{
+			event.PRIVATE_GET_SETTINGS_NETWORK,
+			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, networkDefaults),
+		},
+		{
+			event.PRIVATE_POST_SETTINGS_NETWORK,
+			handler.StreamUpdateNetworkSettingsHandler(r.settingsRepo),
+		},
+		{
+			event.PRIVATE_GET_SETTINGS_WALLET,
+			handler.StreamGetWalletSettingsHandler(r.settingsRepo, walletDefaults),
+		},
+		{
+			event.PRIVATE_POST_SETTINGS_WALLET,
+			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo),
 		},
 	}
 }
@@ -1122,7 +1172,7 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
-	
+
 	if m.walletClient != nil {
 		m.walletClient.Close()
 	}

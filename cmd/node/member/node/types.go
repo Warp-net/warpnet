@@ -320,14 +320,18 @@ type PollProvider interface {
 }
 
 type SettingsProvider interface {
-	GetGatewaySettings(userId string) (domain.GatewaySettings, error)
+	GetGatewaySettings() (domain.GatewaySettings, error)
+	GetNetworkSettings() (domain.NetworkSettings, error)
 	GetNotificationSettings(userId string) (domain.NotificationSettings, error)
-	GetRateLimitSettings(userId string) (ratelimit.Settings, error)
-	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
-	SetGatewaySettings(userId string, s domain.GatewaySettings) error
+	GetRateLimitSettings() (ratelimit.Settings, error)
+	GetSponsoredSettings() (domain.SponsoredSettings, error)
+	GetWalletSettings() (domain.WalletSettings, error)
+	SetGatewaySettings(s domain.GatewaySettings) error
+	SetNetworkSettings(s domain.NetworkSettings) error
 	SetNotificationSettings(userId string, s domain.NotificationSettings) error
-	SetRateLimitSettings(userId string, s ratelimit.Settings) error
-	SetSponsoredSettings(userId string, s domain.SponsoredSettings) error
+	SetRateLimitSettings(s ratelimit.Settings) error
+	SetSponsoredSettings(s domain.SponsoredSettings) error
+	SetWalletSettings(s domain.WalletSettings) error
 }
 
 type SubscriptionProvider interface {
