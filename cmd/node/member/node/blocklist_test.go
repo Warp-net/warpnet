@@ -29,7 +29,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const blockeeId = "blockee-1"
+const (
+	blockeeId      = "blockee-1"
+	blocklistSweep = 10 * time.Second
+)
 
 func TestABlockedUserLosesEveryWayIntoTheMemberNode(t *testing.T) {
 	if testing.Short() {
@@ -55,7 +58,7 @@ func TestABlockedUserLosesEveryWayIntoTheMemberNode(t *testing.T) {
 	_, err = userRepo.Create(domain.User{Id: blockeeId, NodeId: remote.ID().String(), Network: "testnet"})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	remoteInfo := peer.AddrInfo{ID: remote.ID(), Addrs: remote.Addrs()}
 	memberInfo := peer.AddrInfo{ID: m.Node().ID(), Addrs: m.Node().Addrs()}
@@ -82,10 +85,11 @@ func TestABlockedUserLosesEveryWayIntoTheMemberNode(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return len(m.Network().ConnsToPeer(remote.ID())) == 0 && len(remote.Network().ConnsToPeer(m.Node().ID())) == 0
-	}, 5*time.Second, 10*time.Millisecond, "every connection to the blocked peer is closed")
+	}, 3*blocklistSweep, 50*time.Millisecond, "every connection to the blocked peer is closed")
 	_, err = s.Read(make([]byte, 1))
 	require.Error(t, err, "open streams die with the connection")
-	require.Empty(t, m.Peerstore().Addrs(remote.ID()), "the peerstore forgets the blocked peer")
+	require.Eventually(t, func() bool { return len(m.Peerstore().Addrs(remote.ID())) == 0 },
+		blocklistSweep, 50*time.Millisecond, "the peerstore forgets the blocked peer")
 
 	require.Error(t, m.SimpleConnect(remoteInfo), "the member does not dial the blocked peer")
 	_, err = remote.NewStream(ctx, m.Node().ID(), path)
@@ -157,7 +161,7 @@ func TestABlockedAuthorIsNotReadThroughAnotherPeer(t *testing.T) {
 	require.Eventually(t, func() bool { publish(authorTopic, "before"); return isRead("before") },
 		30*time.Second, 200*time.Millisecond, "the relayed author is read before the block")
 
-	require.NoError(t, m.BlocklistPermanent(author.ID().String()))
+	require.NoError(t, m.nodeRepo.BlocklistPermanent(author.ID().String()))
 	require.Never(t, func() bool { publish(authorTopic, "after"); return isRead("after") },
 		3*time.Second, 200*time.Millisecond, "a blocked author is dropped whoever relays it")
 	require.Eventually(t, func() bool { publish(relayTopic, "relay"); return isRead("relay") },

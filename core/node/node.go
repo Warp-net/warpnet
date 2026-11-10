@@ -211,20 +211,6 @@ func (n *WarpNode) Connect(p warpnet.WarpAddrInfo) error {
 	return nil
 }
 
-func (n *WarpNode) RemovePeer(id warpnet.WarpPeerID) error {
-	if n == nil || n.node == nil {
-		return nil
-	}
-	err := n.node.Network().ClosePeer(id)
-	if s, ok := n.node.Network().(*warpnet.Swarm); ok {
-		s.Backoff().Clear(id)
-	}
-	n.node.Peerstore().RemovePeer(id)
-	n.node.Peerstore().ClearAddrs(id)
-	n.backoff.Reset(id)
-	return err
-}
-
 func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	if n == nil || store == nil {
 		return

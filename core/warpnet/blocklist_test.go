@@ -186,3 +186,49 @@ func TestABlockThatLandsMidConnectionStillCutsThePeer(t *testing.T) {
 		})
 	}
 }
+
+type mutableBlocklist struct {
+	mx  sync.Mutex
+	ids map[string]bool
+}
+
+func (b *mutableBlocklist) IsBlocklisted(peerId string) bool {
+	b.mx.Lock()
+	defer b.mx.Unlock()
+	return b.ids[peerId]
+}
+
+func (b *mutableBlocklist) add(peerId string) {
+	b.mx.Lock()
+	defer b.mx.Unlock()
+	b.ids[peerId] = true
+}
+
+func TestTheGaterCutsAPeerBlockedWhileConnected(t *testing.T) {
+	opts := append([]libp2p.Option{}, CommonOptions...)
+	block := &mutableBlocklist{ids: map[string]bool{}}
+	member, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), newConnectionGaterOption(block, 20*time.Millisecond))...)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = member.Close() })
+	blocked, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))...)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = blocked.Close() })
+	other, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))...)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = other.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	memberInfo := peer.AddrInfo{ID: member.ID(), Addrs: member.Addrs()}
+	require.NoError(t, blocked.Connect(ctx, memberInfo))
+	require.NoError(t, other.Connect(ctx, memberInfo))
+
+	block.add(blocked.ID().String())
+	require.Eventually(t, func() bool {
+		return len(member.Network().ConnsToPeer(blocked.ID())) == 0
+	}, 5*time.Second, 20*time.Millisecond, "the gater closes what the blocked peer already had open")
+	require.Eventually(t, func() bool {
+		return len(member.Peerstore().Addrs(blocked.ID())) == 0
+	}, 5*time.Second, 20*time.Millisecond, "and the peerstore forgets it")
+	require.NotEmpty(t, member.Network().ConnsToPeer(other.ID()), "and leaves every other peer connected")
+}

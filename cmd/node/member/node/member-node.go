@@ -424,22 +424,6 @@ func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	}
 }
 
-func (m *MemberNode) BlocklistPermanent(peerId string) error {
-	if err := m.nodeRepo.BlocklistPermanent(peerId); err != nil {
-		return err
-	}
-	id := warpnet.FromStringToPeerID(peerId)
-	if id == "" {
-		return nil
-	}
-	m.dHashTable.RemovePeer(id)
-	return m.node.RemovePeer(id)
-}
-
-func (m *MemberNode) BlocklistRemove(peerId string) error {
-	return m.nodeRepo.BlocklistRemove(peerId)
-}
-
 // memberRepos bundles every repo the member node's handlers need.
 // Built once in setupHandlers and threaded through the per-feature
 // handler-list builders below so the registration func itself stays
@@ -1056,11 +1040,11 @@ func (m *MemberNode) socialFilterHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_SETTINGS_BLOCK,
-			handler.StreamBlockHandler(r.blocksRepo, userRepo, m),
+			handler.StreamBlockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_UNBLOCK,
-			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m),
+			handler.StreamUnblockHandler(r.blocksRepo, userRepo, m.nodeRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_BLOCKS,

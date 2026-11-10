@@ -72,7 +72,6 @@ type UserFetcher interface {
 type DistributedHashTableCloser interface {
 	FindProvidersAsync(ctx context.Context, key warpnet.WarpCID, count int) (ch <-chan warpnet.WarpAddrInfo)
 	BootstrapNodes() []warpnet.WarpAddrInfo
-	RemovePeer(id warpnet.WarpPeerID)
 	Close()
 }
 
@@ -81,7 +80,6 @@ type NodeProvider interface {
 	BlocklistExponential(peerId string) error
 	BlocklistPermanent(peerId string) error
 	BlocklistRemove(peerId string) error
-	IsBlocklisted(peerId string) bool
 }
 
 type StatsProvider interface {
