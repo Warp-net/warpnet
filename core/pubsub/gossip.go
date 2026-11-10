@@ -91,7 +91,7 @@ type Gossip struct {
 
 type Option func(*Gossip)
 
-type Blacklist = pubsub.Blacklist
+type Blocklist = pubsub.Blacklist
 
 func WithTopicHandlers(handlers ...TopicHandler) Option {
 	return func(g *Gossip) {
@@ -101,9 +101,9 @@ func WithTopicHandlers(handlers ...TopicHandler) Option {
 	}
 }
 
-func WithBlacklist(blacklist Blacklist) Option {
+func WithBlocklist(blocklist Blocklist) Option {
 	return func(g *Gossip) {
-		g.options = append(g.options, pubsub.WithBlacklist(blacklist))
+		g.options = append(g.options, pubsub.WithBlacklist(blocklist))
 	}
 }
 

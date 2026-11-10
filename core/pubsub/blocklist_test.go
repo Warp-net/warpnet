@@ -14,19 +14,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type peerBlacklist struct {
+type peerBlocklist struct {
 	mx  sync.Mutex
 	ids map[warpnet.WarpPeerID]bool
 }
 
-func (b *peerBlacklist) Add(id warpnet.WarpPeerID) bool {
+func (b *peerBlocklist) Add(id warpnet.WarpPeerID) bool {
 	b.mx.Lock()
 	defer b.mx.Unlock()
 	b.ids[id] = true
 	return true
 }
 
-func (b *peerBlacklist) Contains(id warpnet.WarpPeerID) bool {
+func (b *peerBlocklist) Contains(id warpnet.WarpPeerID) bool {
 	b.mx.Lock()
 	defer b.mx.Unlock()
 	return b.ids[id]
@@ -37,9 +37,9 @@ func TestABlockedAuthorIsNotReadEvenThroughAnotherPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	blacklist := &peerBlacklist{ids: map[warpnet.WarpPeerID]bool{}}
+	blocklist := &peerBlocklist{ids: map[warpnet.WarpPeerID]bool{}}
 	readerNode := newLiveNode(t)
-	reader := NewGossip(ctx, rating.NewPeersRatings(), WithBlacklist(blacklist))
+	reader := NewGossip(ctx, rating.NewPeersRatings(), WithBlocklist(blocklist))
 	require.NoError(t, reader.Run(readerNode))
 	t.Cleanup(func() { _ = reader.Close() })
 	timeline := &postInbox{}
@@ -52,7 +52,7 @@ func TestABlockedAuthorIsNotReadEvenThroughAnotherPeer(t *testing.T) {
 	connect(t, authorNode, relayNode)
 	requireRead(t, timeline, author, timelineTopic, "before", "the author is read through the relay before the block")
 
-	blacklist.Add(authorNode.host.ID())
+	blocklist.Add(authorNode.host.ID())
 	requireNotRead(t, timeline, author, timelineTopic, "after", "a blocked author is dropped whoever relays it")
 	requireRead(t, timeline, relay, timelineTopic, "relay", "the relay itself is still read")
 }

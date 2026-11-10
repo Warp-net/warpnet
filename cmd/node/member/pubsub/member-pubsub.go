@@ -67,15 +67,15 @@ type PeerBlocklister interface {
 	IsBlocklisted(peerId string) bool
 }
 
-type peerBlacklist struct {
+type peerBlocklist struct {
 	blocklist PeerBlocklister
 }
 
-func (b peerBlacklist) Add(warpnet.WarpPeerID) bool {
+func (b peerBlocklist) Add(warpnet.WarpPeerID) bool {
 	return false
 }
 
-func (b peerBlacklist) Contains(id warpnet.WarpPeerID) bool {
+func (b peerBlocklist) Contains(id warpnet.WarpPeerID) bool {
 	return b.blocklist.IsBlocklisted(id.String())
 }
 
@@ -88,7 +88,7 @@ func NewPubSub(
 
 	opts := []pubsub.Option{pubsub.WithTopicHandlers(handlers...)}
 	if blocklist != nil {
-		opts = append(opts, pubsub.WithBlacklist(peerBlacklist{blocklist: blocklist}))
+		opts = append(opts, pubsub.WithBlocklist(peerBlocklist{blocklist: blocklist}))
 	}
 	mps.pubsub = pubsub.NewGossip(ctx, ratings, opts...)
 	return mps
