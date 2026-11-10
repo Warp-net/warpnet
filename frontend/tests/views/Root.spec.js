@@ -216,6 +216,19 @@ describe('Root.vue', () => {
     });
   });
 
+  it('keeps the data folder when the dialog is cancelled', async () => {
+    renderRoot({ firstRun: true });
+
+    await screen.findByText(/Data folder:/);
+    warpnetService.isFirstRun.mockClear();
+    warpnetService.chooseDatabaseDir.mockResolvedValueOnce('');
+    await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
+
+    await waitFor(() => expect(warpnetService.chooseDatabaseDir).toHaveBeenCalled());
+    expect(screen.getByText(/Data folder: \/home\/u\/\.warpdata\/warpnet\/storage/)).toBeInTheDocument();
+    expect(warpnetService.isFirstRun).not.toHaveBeenCalled();
+  });
+
   it('keeps the data folder when the chosen one is not writable', async () => {
     renderRoot({ firstRun: true });
 

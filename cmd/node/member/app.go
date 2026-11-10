@@ -12,7 +12,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -186,11 +185,23 @@ func (a *App) startup(ctx context.Context) {
 	version := config.Config().Version
 	network := config.Config().Node.Network
 
-	a.readyChan = make(chan domain.AuthNodeInfo, 1)
-	if err := a.openDatabase(readDatabaseLocation(config.Config().Database.Path), network); err != nil {
+	dbPath := config.Config().Database.Path
+	location, err := os.ReadFile(filepath.Join(dbPath, databaseLocationFile)) //#nosec
+	if err == nil && len(location) > 0 {
+		dbPath = string(location)
+	}
+
+	db, err := local_store.New(dbPath, local_store.DefaultOptions())
+	if err != nil {
 		log.Errorf("failed to init db: %v \n", err)
 		return
 	}
+
+	authRepo := database.NewAuthRepo(db, network)
+	userRepo := database.NewUserRepo(db)
+	a.db = db
+	a.readyChan = make(chan domain.AuthNodeInfo, 1)
+	a.auth = auth.NewAuthService(ctx, authRepo, userRepo, a.readyChan)
 
 	psk, err := security.GeneratePSK(network, version)
 	if err != nil {
@@ -200,16 +211,6 @@ func (a *App) startup(ctx context.Context) {
 	a.psk = psk
 	go a.serveLogins(network, a.startMemberNode)
 	a.startSelfUpdate(version)
-}
-
-func (a *App) openDatabase(path, network string) error {
-	db, err := local_store.New(path, local_store.DefaultOptions())
-	if err != nil {
-		return err
-	}
-	a.db = db
-	a.auth = auth.NewAuthService(a.ctx, database.NewAuthRepo(db, network), database.NewUserRepo(db), a.readyChan)
-	return nil
 }
 
 func (a *App) DatabaseDir() string {
@@ -230,25 +231,22 @@ func (a *App) ChooseDatabaseDir() (string, error) {
 		CanCreateDirectories: true,
 	})
 	if err != nil || dir == "" {
-		return a.DatabaseDir(), err
-	}
-	if err := a.useDatabaseDir(config.Config().Database.Path, dir); err != nil {
 		return "", err
 	}
-	return a.DatabaseDir(), nil
+	return a.useDatabaseDir(config.Config().Database.Path, dir)
 }
 
 var errDatabaseRunning = errors.New("database is already running")
 
-func (a *App) useDatabaseDir(defaultPath, dir string) error {
+func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	network := config.Config().Node.Network
 	path := filepath.Join(dir, network)
 	if err := os.MkdirAll(path, 0750); err != nil {
-		return err
+		return "", err
 	}
 	f, err := os.CreateTemp(path, "write-check")
 	if err != nil {
-		return err
+		return "", err
 	}
 	_ = f.Close()
 	_ = os.Remove(f.Name())
@@ -256,33 +254,25 @@ func (a *App) useDatabaseDir(defaultPath, dir string) error {
 	a.mx.Lock()
 	defer a.mx.Unlock()
 	if a.db != nil && !a.db.IsClosed() {
-		return errDatabaseRunning
+		return "", errDatabaseRunning
 	}
-	if err := writeDatabaseLocation(defaultPath, path); err != nil {
-		return err
+	if err := os.MkdirAll(defaultPath, 0750); err != nil {
+		return "", err
 	}
-	return a.openDatabase(path, network)
+	if err := os.WriteFile(filepath.Join(defaultPath, databaseLocationFile), []byte(path), 0600); err != nil {
+		return "", err
+	}
+
+	db, err := local_store.New(path, local_store.DefaultOptions())
+	if err != nil {
+		return "", err
+	}
+	a.db = db
+	a.auth = auth.NewAuthService(a.ctx, database.NewAuthRepo(db, network), database.NewUserRepo(db), a.readyChan)
+	return path, nil
 }
 
 const databaseLocationFile = "location"
-
-func readDatabaseLocation(defaultPath string) string {
-	bt, err := os.ReadFile(filepath.Join(defaultPath, databaseLocationFile)) //#nosec
-	if err != nil {
-		return defaultPath
-	}
-	if path := strings.TrimSpace(string(bt)); path != "" {
-		return path
-	}
-	return defaultPath
-}
-
-func writeDatabaseLocation(defaultPath, path string) error {
-	if err := os.MkdirAll(defaultPath, 0750); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(defaultPath, databaseLocationFile), []byte(path), 0600)
-}
 
 func (a *App) startSelfUpdate(version *semver.Version) {
 	if !config.Config().Node.IsSelfUpdate {

@@ -530,17 +530,6 @@ func callWithin(t *testing.T, a *App, msg AppMessage) AppMessage {
 	}
 }
 
-func TestDatabaseLocation(t *testing.T) {
-	defaultPath := filepath.Join(t.TempDir(), "storage")
-	require.Equal(t, defaultPath, readDatabaseLocation(defaultPath))
-
-	require.NoError(t, writeDatabaseLocation(defaultPath, "/data/warpnet"))
-	require.Equal(t, "/data/warpnet", readDatabaseLocation(defaultPath))
-
-	require.NoError(t, writeDatabaseLocation(defaultPath, " \n"))
-	require.Equal(t, defaultPath, readDatabaseLocation(defaultPath))
-}
-
 func appWithDatabase(t *testing.T, defaultPath string) *App {
 	t.Helper()
 	a := liveApp(t, &stubAuthService{}, nil)
@@ -560,11 +549,14 @@ func TestUseDatabaseDir(t *testing.T) {
 		a := appWithDatabase(t, defaultPath)
 		oldAuth := a.auth
 
-		require.NoError(t, a.useDatabaseDir(defaultPath, dir))
+		path, err := a.useDatabaseDir(defaultPath, dir)
+		require.NoError(t, err)
 
-		path := filepath.Join(dir, network)
+		require.Equal(t, filepath.Join(dir, network), path)
 		require.Equal(t, path, a.DatabaseDir())
-		require.Equal(t, path, readDatabaseLocation(defaultPath))
+		location, err := os.ReadFile(filepath.Join(defaultPath, databaseLocationFile))
+		require.NoError(t, err)
+		require.Equal(t, path, string(location))
 		require.True(t, a.IsFirstRun())
 		require.NotSame(t, oldAuth, a.auth)
 		entries, err := os.ReadDir(path)
@@ -582,10 +574,11 @@ func TestUseDatabaseDir(t *testing.T) {
 		t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
 		a := appWithDatabase(t, defaultPath)
 
-		require.Error(t, a.useDatabaseDir(defaultPath, dir))
+		_, err := a.useDatabaseDir(defaultPath, dir)
+		require.Error(t, err)
 
 		require.Equal(t, defaultPath, a.DatabaseDir())
-		require.Equal(t, defaultPath, readDatabaseLocation(defaultPath))
+		require.NoFileExists(t, filepath.Join(defaultPath, databaseLocationFile))
 	})
 
 	t.Run("folder with a database", func(t *testing.T) {
@@ -597,7 +590,8 @@ func TestUseDatabaseDir(t *testing.T) {
 		a := appWithDatabase(t, defaultPath)
 		require.True(t, a.IsFirstRun())
 
-		require.NoError(t, a.useDatabaseDir(defaultPath, dir))
+		_, err := a.useDatabaseDir(defaultPath, dir)
+		require.NoError(t, err)
 
 		require.False(t, a.IsFirstRun())
 		require.Equal(t, filepath.Join(dir, network), a.DatabaseDir())
