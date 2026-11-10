@@ -25,7 +25,7 @@ resulting from the use or misuse of this software.
 import {buildQRCode} from "@/lib/qr";
 import {encodeQRPayload} from "@/lib/qr-payload";
 import {generateUUID} from "@/lib/uuid";
-import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, SelectNetwork, Network} from "@/lib/transport";
+import {Call, ConsumePendingDeepLink, IsFirstRun, IsDesktop, SelectNetwork, Network, DatabaseDir, ChooseDatabaseDir} from "@/lib/transport";
 import {DEFAULT_REACTION} from "@/lib/emoji";
 import {isOwnTweetEcho} from "@/lib/network";
 
@@ -347,6 +347,14 @@ export const warpnetService = {
 
     async network() {
         return Network();
+    },
+
+    async databaseDir() {
+        return DatabaseDir();
+    },
+
+    async chooseDatabaseDir() {
+        return ChooseDatabaseDir();
     },
 
     // Returns the pending warpnet:// URL and clears it on the Go side.

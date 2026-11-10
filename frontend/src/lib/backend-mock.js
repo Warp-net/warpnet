@@ -79,6 +79,8 @@ if (process.env.NODE_ENV === 'development') {
                 IsFirstRun: () => Promise.resolve(true),
                 SelectNetwork: () => Promise.resolve(),
                 Network: () => Promise.resolve("warpnet"),
+                DatabaseDir: () => Promise.resolve("/home/user/.warpdata/warpnet/storage"),
+                ChooseDatabaseDir: () => Promise.resolve("/home/user/warpnet-data/warpnet"),
                 ConsumePendingDeepLink: () => Promise.resolve(""),
             }
         }

@@ -83,6 +83,22 @@ resulting from the use or misuse of this software.
                 <option value="testnet">Testnet</option>
               </select>
             </div>
+            <div
+              v-if="isDesktop"
+              class="mt-2 text-sm font-normal text-dark flex items-center gap-2 min-w-0"
+            >
+              <span class="truncate" :title="databaseDir">Data folder: {{ databaseDir }}</span>
+              <button
+                type="button"
+                @click.prevent="changeDatabaseDir"
+                class="shrink-0 underline hover:text-blue"
+              >
+                Change…
+              </button>
+            </div>
+            <p v-if="databaseDirError" class="mt-1 text-red-600 text-sm font-medium" role="alert">
+              {{ databaseDirError }}
+            </p>
           </template>
           <LogInComponent v-else-if="isFirstRun === false"></LogInComponent>
           <!-- first-run probe failed (node unreachable): offer a retry rather
@@ -369,6 +385,8 @@ export default {
       showModal: "",
       network: "warpnet",
       activeNetwork: "warpnet",
+      databaseDir: "",
+      databaseDirError: "",
       isDesktop: false,
 
       userResponsibility: false,
@@ -409,6 +427,7 @@ export default {
       try {
         this.activeNetwork = await warpnetService.network();
         this.network = this.activeNetwork;
+        this.databaseDir = await warpnetService.databaseDir();
       } catch (e) {
         console.warn("failed to get active network:", e);
       }
@@ -441,6 +460,17 @@ export default {
         console.error("failed to switch network:", e);
         this.network = this.activeNetwork;
       }
+    },
+    async changeDatabaseDir() {
+      this.databaseDirError = "";
+      try {
+        this.databaseDir = await warpnetService.chooseDatabaseDir();
+      } catch (e) {
+        console.error("failed to change data folder:", e);
+        this.databaseDirError = `Can't use this folder: ${(e && e.message) || e}`;
+        return;
+      }
+      await this.resolveFirstRun();
     },
     async signMeUp() {
       try {

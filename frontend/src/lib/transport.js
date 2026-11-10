@@ -321,6 +321,20 @@ export async function Network() {
   return "warpnet";
 }
 
+export async function DatabaseDir() {
+  if (hasWails()) {
+    return Wails.DatabaseDir();
+  }
+  return "";
+}
+
+export async function ChooseDatabaseDir() {
+  if (hasWails()) {
+    return Wails.ChooseDatabaseDir();
+  }
+  return "";
+}
+
 // ConsumePendingDeepLink only has meaning under Wails (OS deep-link handoff);
 // the browser dashboard has no pending link, so it resolves to "".
 export async function ConsumePendingDeepLink() {

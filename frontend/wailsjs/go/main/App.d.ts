@@ -4,7 +4,11 @@ import {main} from '../models';
 
 export function Call(arg1:main.AppMessage):Promise<main.AppMessage>;
 
+export function ChooseDatabaseDir():Promise<string>;
+
 export function ConsumePendingDeepLink():Promise<string>;
+
+export function DatabaseDir():Promise<string>;
 
 export function IsFirstRun():Promise<boolean>;
 

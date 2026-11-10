@@ -9,6 +9,8 @@ vi.mock('@/service/service', () => ({
     isDesktopNode: vi.fn(),
     selectNetwork: vi.fn(),
     network: vi.fn(),
+    databaseDir: vi.fn(),
+    chooseDatabaseDir: vi.fn(),
     resumeSession: vi.fn(),
   },
 }));
@@ -62,6 +64,8 @@ beforeEach(() => {
   warpnetService.isDesktopNode.mockReturnValue(true);
   warpnetService.selectNetwork.mockResolvedValue(undefined);
   warpnetService.network.mockResolvedValue('warpnet');
+  warpnetService.databaseDir.mockResolvedValue('/home/u/.warpdata/warpnet/storage');
+  warpnetService.chooseDatabaseDir.mockResolvedValue('/mnt/data/warpnet');
   sessionStorage.clear();
 });
 
@@ -188,12 +192,50 @@ describe('Root.vue', () => {
     expect(warpnetService.selectNetwork).not.toHaveBeenCalled();
   });
 
+  it('shows the data folder and moves it on Change', async () => {
+    renderRoot({ firstRun: true });
+
+    expect(await screen.findByText(/Data folder: \/home\/u\/\.warpdata\/warpnet\/storage/)).toBeInTheDocument();
+
+    warpnetService.isFirstRun.mockClear();
+    await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
+
+    expect(await screen.findByText(/Data folder: \/mnt\/data\/warpnet/)).toBeInTheDocument();
+    expect(warpnetService.isFirstRun).toHaveBeenCalled();
+  });
+
+  it('shows login when the chosen data folder already holds a database', async () => {
+    renderRoot({ firstRun: true });
+
+    await screen.findByText(/Data folder:/);
+    warpnetService.isFirstRun.mockResolvedValue(false);
+    await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^Sign up$/ })).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the data folder when the chosen one is not writable', async () => {
+    renderRoot({ firstRun: true });
+
+    await screen.findByText(/Data folder:/);
+    warpnetService.isFirstRun.mockClear();
+    warpnetService.chooseDatabaseDir.mockRejectedValueOnce('permission denied');
+    await fireEvent.click(screen.getByRole('button', { name: /Change/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/permission denied/);
+    expect(screen.getByText(/Data folder: \/home\/u\/\.warpdata\/warpnet\/storage/)).toBeInTheDocument();
+    expect(warpnetService.isFirstRun).not.toHaveBeenCalled();
+  });
+
   it('hides the network selector and the loader on the browser dashboard (remote node)', async () => {
     warpnetService.isDesktopNode.mockReturnValue(false);
     renderRoot({ firstRun: true });
 
     await screen.findByRole('button', { name: /^Sign up$/ });
     expect(screen.queryByLabelText(/Network/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Data folder:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
   });
 

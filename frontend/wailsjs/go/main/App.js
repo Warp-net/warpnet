@@ -6,8 +6,16 @@ export function Call(arg1) {
   return window['go']['main']['App']['Call'](arg1);
 }
 
+export function ChooseDatabaseDir() {
+  return window['go']['main']['App']['ChooseDatabaseDir']();
+}
+
 export function ConsumePendingDeepLink() {
   return window['go']['main']['App']['ConsumePendingDeepLink']();
+}
+
+export function DatabaseDir() {
+  return window['go']['main']['App']['DatabaseDir']();
 }
 
 export function IsFirstRun() {
