@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -149,10 +150,9 @@ func TestABlockedAuthorIsNotReadThroughAnotherPeer(t *testing.T) {
 	require.NoError(t, author.Connect(ctx, peer.AddrInfo{ID: relay.ID(), Addrs: relay.Addrs()}))
 	require.Empty(t, m.Network().ConnsToPeer(author.ID()), "the author reaches the member only through the relay")
 
-	seq := 0
+	var seq atomic.Int64
 	publish := func(topic *pubsub.Topic, label string) {
-		seq++
-		_ = topic.Publish(ctx, []byte(fmt.Sprintf("%s#%d", label, seq)))
+		_ = topic.Publish(ctx, []byte(fmt.Sprintf("%s#%d", label, seq.Add(1))))
 	}
 	require.Eventually(t, func() bool { publish(authorTopic, "before"); return isRead("before") },
 		30*time.Second, 200*time.Millisecond, "the relayed author is read before the block")
