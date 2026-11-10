@@ -7,8 +7,6 @@ import (
 	"crypto/rand"
 	stdjson "encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +16,6 @@ import (
 	"github.com/Warp-net/warpnet/core/selfupdate"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -528,69 +525,4 @@ func callWithin(t *testing.T, a *App, msg AppMessage) AppMessage {
 		t.Fatalf("app call %q hung", msg.Path)
 		return AppMessage{}
 	}
-}
-
-func appWithDatabase(t *testing.T, defaultPath string) *App {
-	t.Helper()
-	a := liveApp(t, &stubAuthService{}, nil)
-	a.ctx = context.Background()
-	db, err := local_store.New(defaultPath, local_store.DefaultOptions())
-	require.NoError(t, err)
-	a.db = db
-	return a
-}
-
-func TestUseDatabaseDir(t *testing.T) {
-	network := config.Config().Node.Network
-
-	t.Run("writable folder", func(t *testing.T) {
-		defaultPath := filepath.Join(t.TempDir(), network, "storage")
-		dir := t.TempDir()
-		a := appWithDatabase(t, defaultPath)
-		oldAuth := a.auth
-
-		chosen, err := a.useDatabaseDir(dir)
-		require.NoError(t, err)
-
-		require.Equal(t, dir, chosen)
-		require.Equal(t, dir, a.DatabaseDir())
-		path := filepath.Join(dir, network, filepath.Base(config.Config().Database.Path))
-		require.True(t, a.IsFirstRun())
-		require.NotSame(t, oldAuth, a.auth)
-		entries, err := os.ReadDir(path)
-		require.NoError(t, err)
-		require.Empty(t, entries)
-	})
-
-	t.Run("unwritable folder", func(t *testing.T) {
-		if os.Geteuid() == 0 {
-			t.Skip("root writes anywhere")
-		}
-		defaultPath := filepath.Join(t.TempDir(), network, "storage")
-		dir := t.TempDir()
-		require.NoError(t, os.Chmod(dir, 0500))
-		t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
-		a := appWithDatabase(t, defaultPath)
-
-		_, err := a.useDatabaseDir(dir)
-		require.Error(t, err)
-
-		require.Equal(t, filepath.Dir(filepath.Dir(defaultPath)), a.DatabaseDir())
-	})
-
-	t.Run("folder with a database", func(t *testing.T) {
-		defaultPath := filepath.Join(t.TempDir(), network, "storage")
-		dir := t.TempDir()
-		lock := filepath.Join(dir, network, filepath.Base(config.Config().Database.Path), "v0", "run.lock")
-		require.NoError(t, os.MkdirAll(filepath.Dir(lock), 0750))
-		require.NoError(t, os.WriteFile(lock, nil, 0600))
-		a := appWithDatabase(t, defaultPath)
-		require.True(t, a.IsFirstRun())
-
-		_, err := a.useDatabaseDir(dir)
-		require.NoError(t, err)
-
-		require.False(t, a.IsFirstRun())
-		require.Equal(t, dir, a.DatabaseDir())
-	})
 }
