@@ -929,6 +929,13 @@ func (db *DB) Path() string {
 	return db.dbPath
 }
 
+func (db *DB) SetPath(dbPath string) {
+	dbPath = filepath.Join(dbPath, version0)
+	db.dbPath = dbPath
+	db.badgerOpts = db.badgerOpts.WithDir(dbPath).WithValueDir(dbPath)
+	db.hasFirstRunFlag = findFirstRunFlag(dbPath)
+}
+
 func (db *DB) IsClosed() bool {
 	if db == nil {
 		return true

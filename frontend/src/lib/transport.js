@@ -332,6 +332,7 @@ export async function ChooseDatabaseDir() {
   if (hasWails()) {
     return Wails.ChooseDatabaseDir();
   }
+  return "";
 }
 
 // ConsumePendingDeepLink only has meaning under Wails (OS deep-link handoff);

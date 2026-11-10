@@ -463,12 +463,17 @@ export default {
     },
     async changeDatabaseDir() {
       this.databaseDirError = "";
+      let dir;
       try {
-        await warpnetService.chooseDatabaseDir();
+        dir = await warpnetService.chooseDatabaseDir();
       } catch (e) {
         console.error("failed to change data folder:", e);
         this.databaseDirError = `Can't use this folder: ${(e && e.message) || e}`;
+        return;
       }
+      if (!dir) return;
+      this.databaseDir = dir;
+      await this.resolveFirstRun();
     },
     async signMeUp() {
       try {

@@ -80,7 +80,7 @@ if (process.env.NODE_ENV === 'development') {
                 SelectNetwork: () => Promise.resolve(),
                 Network: () => Promise.resolve("warpnet"),
                 DatabaseDir: () => Promise.resolve("/home/user/.warpdata"),
-                ChooseDatabaseDir: () => Promise.resolve(),
+                ChooseDatabaseDir: () => Promise.resolve("/home/user/warpnet-data"),
                 ConsumePendingDeepLink: () => Promise.resolve(""),
             }
         }

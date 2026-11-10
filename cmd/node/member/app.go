@@ -46,6 +46,7 @@ type AppStorer interface {
 	Set(key local_store.DatabaseKey, value []byte) error
 	Delete(key local_store.DatabaseKey) error
 	Path() string
+	SetPath(dbPath string)
 	Stats() map[string]string
 	IsFirstRun() bool
 	Close()
@@ -186,13 +187,9 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 
 	dbPath := config.Config().Database.Path
-	dataDir := os.Getenv(dataDirEnv)
-	if dataDir == "" {
-		bt, _ := os.ReadFile(filepath.Join(dbPath, "v0", "run.lock")) //#nosec
-		dataDir = string(bt)
-	}
-	if dataDir != "" {
-		dbPath = filepath.Join(dataDir, network, filepath.Base(dbPath))
+	bt, err := os.ReadFile(filepath.Join(dbPath, "v0", "run.lock")) //#nosec
+	if err == nil && len(bt) > 0 {
+		dbPath = string(bt)
 	}
 
 	db, err := local_store.New(dbPath, local_store.DefaultOptions())
@@ -229,31 +226,30 @@ func (a *App) DatabaseDir() string {
 	return filepath.Dir(filepath.Dir(filepath.Dir(a.db.Path())))
 }
 
-const dataDirEnv = "WARPNET_DATA_DIR"
+var errDatabaseRunning = errors.New("database is already running")
 
-func (a *App) ChooseDatabaseDir() error {
+func (a *App) ChooseDatabaseDir() (string, error) {
 	dir, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title:                "Data folder",
 		CanCreateDirectories: true,
 	})
 	if err != nil || dir == "" {
-		return err
+		return "", err
 	}
 	f, err := os.CreateTemp(dir, "write-check")
 	if err != nil {
-		return err
+		return "", err
 	}
 	_ = f.Close()
 	_ = os.Remove(f.Name())
 
-	//#nosec
-	cmd := exec.CommandContext(context.Background(), os.Args[0], os.Args[1:]...)
-	cmd.Env = append(os.Environ(), dataDirEnv+"="+dir)
-	if err := cmd.Start(); err != nil {
-		return err
+	a.mx.Lock()
+	defer a.mx.Unlock()
+	if a.db == nil || !a.db.IsClosed() {
+		return "", errDatabaseRunning
 	}
-	os.Exit(0)
-	return nil
+	a.db.SetPath(filepath.Join(dir, config.Config().Node.Network, filepath.Base(config.Config().Database.Path)))
+	return dir, nil
 }
 
 func (a *App) startSelfUpdate(version *semver.Version) {
@@ -412,10 +408,11 @@ func (a *App) Call(request AppMessage) (response AppMessage) {
 			return response
 		}
 
-		if dataDir := os.Getenv(dataDirEnv); dataDir != "" {
-			lock := filepath.Join(config.Config().Database.Path, "v0", "run.lock")
+		dbPath := config.Config().Database.Path
+		if a.db != nil && filepath.Dir(a.db.Path()) != dbPath {
+			lock := filepath.Join(dbPath, "v0", "run.lock")
 			_ = os.MkdirAll(filepath.Dir(lock), 0750)
-			if err := os.WriteFile(lock, []byte(dataDir), 0600); err != nil { //#nosec
+			if err := os.WriteFile(lock, []byte(filepath.Dir(a.db.Path())), 0600); err != nil { //#nosec
 				log.Errorf("data folder: %v \n", err)
 			}
 		}

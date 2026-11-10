@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package local_store
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -198,4 +199,26 @@ func TestNewPrefixBuilderRejectsBadNamespace(t *testing.T) {
 	require.Panics(t, func() { NewPrefixBuilder("") })
 	require.Panics(t, func() { NewPrefixBuilder("NO-LEADING-SLASH") })
 	require.NotPanics(t, func() { NewPrefixBuilder("/OK") })
+}
+
+func TestSetPathBeforeRun(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions())
+	require.NoError(t, err)
+
+	used := t.TempDir()
+	first, err := New(used, DefaultOptions())
+	require.NoError(t, err)
+	require.NoError(t, first.Run("user", "pass"))
+	first.Close()
+
+	db.SetPath(used)
+	require.Equal(t, filepath.Join(used, version0), db.Path())
+	require.False(t, db.IsFirstRun())
+
+	fresh := t.TempDir()
+	db.SetPath(fresh)
+	require.True(t, db.IsFirstRun())
+	require.NoError(t, db.Run("user", "pass"))
+	defer db.Close()
+	require.FileExists(t, filepath.Join(fresh, version0, firstRunLockFile))
 }
