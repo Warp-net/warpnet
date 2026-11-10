@@ -3874,66 +3874,6 @@
         }
       }
     },
-    "warpnet.logs.autoscroll" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autoscroll"
-          }
-        }
-      }
-    },
-    "warpnet.logs.clear" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clear"
-          }
-        }
-      }
-    },
-    "warpnet.logs.copy-all" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy all"
-          }
-        }
-      }
-    },
-    "warpnet.logs.empty" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No node logs yet"
-          }
-        }
-      }
-    },
-    "warpnet.logs.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Logs"
-          }
-        }
-      }
-    },
-    "warpnet.logs.verbose" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbose node logs"
-          }
-        }
-      }
-    },
     "warpnet.notifications.label.message" : {
       "localizations" : {
         "en" : {
@@ -4439,16 +4379,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reports go to moderators on the network. The reported user is not notified."
-          }
-        }
-      }
-    },
-    "warpnet.settings.section.developer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Developer tools"
           }
         }
       }

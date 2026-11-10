@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 import WarpnetTransport
 
 #if canImport(Warpnet)
@@ -53,54 +52,15 @@ import WarpnetTransport
     func refreshPeerAddrs(_ addrs: String) -> String {
       NodeRefreshPeerAddrs(addrs)
     }
-
-    func setLogSink(_ sink: WarpnetTransport.NodeLogSink?) {
-      NodeSetLogSink(sink.map { GoLogSink($0) })
-    }
-
-    func setLogSinkMinLevel(_ level: NodeLogLevel) {
-      NodeSetLogSinkMinLevel(level.rawValue)
-    }
-  }
-
-  private final class GoLogSink: NSObject, NodeLogSinkProtocol {
-    private let sink: WarpnetTransport.NodeLogSink
-
-    init(_ sink: WarpnetTransport.NodeLogSink) {
-      self.sink = sink
-    }
-
-    func write(_ level: Int, component: String?, msg: String?) {
-      sink.write(level: NodeLogLevel(rawValue: level) ?? .info, component: component ?? "", message: msg ?? "")
-    }
   }
 #endif
 
 func makeWarpnetSession() -> WarpnetSession? {
   #if canImport(Warpnet)
     return WarpnetSession(binding: GoBinding(),
-                          nodeLogSink: NodeLogger(),
                           keychainService: "\(Bundle.main.bundleIdentifier ?? "warpfone").pairing",
                           accessGroup: nil)
   #else
     return nil
   #endif
-}
-
-struct NodeLogger: WarpnetTransport.NodeLogSink {
-  private let logger = Logger(subsystem: "site.warpnet.warpfone", category: "node")
-
-  func write(level: NodeLogLevel, component: String, message: String) {
-    NodeLogBuffer.shared.append(level: level, component: component, message: message)
-    switch level {
-    case .debug:
-      logger.debug("\(component, privacy: .public): \(message, privacy: .public)")
-    case .info:
-      logger.info("\(component, privacy: .public): \(message, privacy: .public)")
-    case .warn:
-      logger.warning("\(component, privacy: .public): \(message, privacy: .public)")
-    case .error:
-      logger.error("\(component, privacy: .public): \(message, privacy: .public)")
-    }
-  }
 }

@@ -136,9 +136,9 @@ public actor WarpnetSession {
 
 #if canImport(CryptoKit) && canImport(Security)
   public extension WarpnetSession {
-    init(binding: WarpnetBinding, nodeLogSink: NodeLogSink?, keychainService: String, accessGroup: String?) {
+    init(binding: WarpnetBinding, keychainService: String, accessGroup: String?) {
       self.init(binding: binding,
-                client: WarpnetClient(binding: binding, nodeLogSink: nodeLogSink),
+                client: WarpnetClient(binding: binding),
                 store: .keychain(service: keychainService, accessGroup: accessGroup),
                 derivePrivateKeyHex: { try DeviceIdentity.privateKeyHex(memberPeerId: $0, seeds: $1) })
     }

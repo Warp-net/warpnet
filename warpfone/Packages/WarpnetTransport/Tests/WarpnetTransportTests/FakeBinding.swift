@@ -158,10 +158,6 @@ final class FakeBinding: WarpnetBinding, @unchecked Sendable {
       return _refreshResult
     }
   }
-
-  func setLogSink(_: NodeLogSink?) {}
-
-  func setLogSinkMinLevel(_: NodeLogLevel) {}
 }
 
 final class MemoryStorage: SecretStorage, @unchecked Sendable {

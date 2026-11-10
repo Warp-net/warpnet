@@ -11,18 +11,15 @@ public actor WarpnetClient {
   public private(set) var state: ConnectionState = .uninitialised
 
   private let binding: WarpnetBinding
-  private let nodeLogSink: NodeLogSink?
   private let retryBackoffs: [Duration]
   private var isControlBusy = false
   private var controlWaiters: [CheckedContinuation<Void, Never>] = []
   private var isPaused = false
 
   public init(binding: WarpnetBinding,
-              nodeLogSink: NodeLogSink? = nil,
               retryBackoffs: [Duration] = WarpnetClient.defaultRetryBackoffs)
   {
     self.binding = binding
-    self.nodeLogSink = nodeLogSink
     self.retryBackoffs = retryBackoffs
   }
 
@@ -34,16 +31,11 @@ public actor WarpnetClient {
       throw WarpnetError.transportFailure("bootstrap nodes required")
     }
     let binding = binding
-    let sink = nodeLogSink
     let failure = await runBlocking {
-      let err = binding.initialize(privKeyHex: config.privKeyHex,
-                                   warpNetwork: config.network,
-                                   pskHex: config.pskHex,
-                                   bootstrapNodes: config.bootstrapAddrs.joined(separator: ","))
-      if err.isEmpty, let sink {
-        binding.setLogSink(sink)
-      }
-      return err
+      binding.initialize(privKeyHex: config.privKeyHex,
+                         warpNetwork: config.network,
+                         pskHex: config.pskHex,
+                         bootstrapNodes: config.bootstrapAddrs.joined(separator: ","))
     }
     guard failure.isEmpty else {
       let error = WarpnetError.transportFailure(failure)
@@ -51,11 +43,6 @@ public actor WarpnetClient {
       throw error
     }
     state = .disconnected
-  }
-
-  public func setNodeLogMinLevel(_ level: NodeLogLevel) async {
-    let binding = binding
-    await runBlocking { binding.setLogSinkMinLevel(level) }
   }
 
   public func peerId() async -> String {

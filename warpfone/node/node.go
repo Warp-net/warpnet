@@ -115,7 +115,7 @@ func (c *clientNode) flushEvents() {
 	c.events = nil
 	c.eventsMu.Unlock()
 	for _, line := range events {
-		logf(LogLevelInfo, "%s", line)
+		fmt.Println(line)
 	}
 }
 
@@ -232,7 +232,7 @@ func newClient(
 
 	for _, addr := range bootstrapNodes {
 		if _, err := cn.dial(addr); err != nil {
-			logf(LogLevelWarn, "failed to connect to bootstrap node %s: %v", addr, err)
+			fmt.Printf("failed to connect to bootstrap node %s: %v\n", addr, err)
 			continue
 		}
 	}
@@ -346,7 +346,7 @@ func (c *clientNode) dial(peerInfo string) (peer.ID, error) {
 	defer cancel()
 
 	if err := c.host.Connect(ctx, peer.AddrInfo{ID: peerID, Addrs: addrs}); err != nil {
-		logf(LogLevelWarn, "dial %s: %v", peerID, err)
+		fmt.Printf("dial %s: %v\n", peerID, err)
 		return "", fmt.Errorf("connection failed: %w", err)
 	}
 	return peerID, nil
@@ -456,13 +456,13 @@ func readResponse(rw io.Reader, s readDeadliner) ([]byte, error) {
 
 func flush(rw *bufio.ReadWriter) {
 	if err := rw.Flush(); err != nil {
-		logf(LogLevelWarn, "stream: flush: %s", err)
+		fmt.Printf("stream: flush: %s\n", err)
 	}
 }
 
 func closeWrite(s network.Stream) {
 	if err := s.CloseWrite(); err != nil {
-		logf(LogLevelWarn, "stream: close write: %s", err)
+		fmt.Printf("stream: close write: %s\n", err)
 	}
 }
 
