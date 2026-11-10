@@ -6,6 +6,9 @@ package node
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +19,8 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/libp2p/go-libp2p"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -91,4 +96,70 @@ func TestABlockedUserLosesEveryWayIntoTheMemberNode(t *testing.T) {
 	require.Contains(t, string(resp), "Accepted")
 	m.Peerstore().AddAddrs(remote.ID(), remote.Addrs(), time.Hour)
 	require.NoError(t, m.SimpleConnect(remoteInfo), "unblocking lets the peer back in")
+}
+
+func newGossipHost(t *testing.T, psk []byte, topicName string) (host.Host, *pubsub.Topic) {
+	t.Helper()
+	opts := append([]libp2p.Option{}, warpnet.CommonOptions...)
+	h, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), libp2p.PrivateNetwork(psk))...)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	ps, err := pubsub.NewGossipSub(ctx, h)
+	require.NoError(t, err)
+	topic, err := ps.Join(topicName)
+	require.NoError(t, err)
+	_, err = topic.Relay()
+	require.NoError(t, err)
+	return h, topic
+}
+
+func TestABlockedAuthorIsNotReadThroughAnotherPeer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs live libp2p hosts")
+	}
+	const topicName = "blocklist-relayed-author"
+
+	m, _, _ := newTestMemberNode(t)
+	m.opts = append(m.opts, libp2p.NoListenAddrs, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, m.Start())
+
+	var mx sync.Mutex
+	read := map[string]bool{}
+	require.NoError(t, m.pubsubService.Gossip().SubscribeRaw(topicName, func(data []byte) error {
+		mx.Lock()
+		defer mx.Unlock()
+		read[strings.SplitN(string(data), "#", 2)[0]] = true
+		return nil
+	}))
+	isRead := func(label string) bool {
+		mx.Lock()
+		defer mx.Unlock()
+		return read[label]
+	}
+
+	psk, err := security.GeneratePSK("testnet", semver.MustParse("0.0.0"))
+	require.NoError(t, err)
+	relay, relayTopic := newGossipHost(t, psk, topicName)
+	author, authorTopic := newGossipHost(t, psk, topicName)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	require.NoError(t, m.SimpleConnect(peer.AddrInfo{ID: relay.ID(), Addrs: relay.Addrs()}))
+	require.NoError(t, author.Connect(ctx, peer.AddrInfo{ID: relay.ID(), Addrs: relay.Addrs()}))
+	require.Empty(t, m.Network().ConnsToPeer(author.ID()), "the author reaches the member only through the relay")
+
+	seq := 0
+	publish := func(topic *pubsub.Topic, label string) {
+		seq++
+		_ = topic.Publish(ctx, []byte(fmt.Sprintf("%s#%d", label, seq)))
+	}
+	require.Eventually(t, func() bool { publish(authorTopic, "before"); return isRead("before") },
+		30*time.Second, 200*time.Millisecond, "the relayed author is read before the block")
+
+	require.NoError(t, m.BlocklistPermanent(author.ID().String()))
+	require.Never(t, func() bool { publish(authorTopic, "after"); return isRead("after") },
+		3*time.Second, 200*time.Millisecond, "a blocked author is dropped whoever relays it")
+	require.Eventually(t, func() bool { publish(relayTopic, "relay"); return isRead("relay") },
+		30*time.Second, 200*time.Millisecond, "the relay itself is still read")
 }
