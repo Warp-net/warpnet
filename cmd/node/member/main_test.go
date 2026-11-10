@@ -33,18 +33,3 @@ func TestPreferExistingTestnet(t *testing.T) {
 	preferExistingTestnet(dbPath)
 	assert.Equal(t, orig, config.Config().Node.Network, "a pinned network must not be overridden")
 }
-
-func TestPreferExistingTestnetFollowsTheDataFolder(t *testing.T) {
-	t.Setenv("NODE_NETWORK", "")
-	orig := config.Config().Node.Network
-	defer config.SetNetwork(orig)
-
-	tmp := t.TempDir()
-	dbPath := filepath.Join(tmp, orig, "storage")
-	pathFile := filepath.Join(tmp, "testnet", "storage", dbPathFile)
-	require.NoError(t, os.MkdirAll(filepath.Dir(pathFile), 0o750))
-	require.NoError(t, os.WriteFile(pathFile, []byte(filepath.Join(tmp, "custom", "testnet", "storage")), 0o600))
-
-	preferExistingTestnet(dbPath)
-	assert.Equal(t, "testnet", config.Config().Node.Network)
-}

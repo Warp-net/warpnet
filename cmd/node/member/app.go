@@ -186,7 +186,7 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 
 	dbPath := config.Config().Database.Path
-	bt, err := os.ReadFile(filepath.Join(dbPath, dbPathFile)) //#nosec
+	bt, err := os.ReadFile(filepath.Join(dbPath, "run.lock")) //#nosec
 	if err == nil && len(bt) > 0 {
 		dbPath = string(bt)
 	}
@@ -259,7 +259,7 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	if err := os.MkdirAll(defaultPath, 0750); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(defaultPath, dbPathFile), []byte(path), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(defaultPath, "run.lock"), []byte(path), 0600); err != nil {
 		return "", err
 	}
 
@@ -271,8 +271,6 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	a.auth = auth.NewAuthService(a.ctx, database.NewAuthRepo(db, network), database.NewUserRepo(db), a.readyChan)
 	return dir, nil
 }
-
-const dbPathFile = "db.path"
 
 func (a *App) startSelfUpdate(version *semver.Version) {
 	if !config.Config().Node.IsSelfUpdate {
