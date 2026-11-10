@@ -79,10 +79,10 @@ func TestRunPreSubscribesHandlers(t *testing.T) {
 	t.Cleanup(cancel)
 
 	node := newLiveNode(t)
-	g := NewGossip(ctx, scoring{}, TopicHandler{
+	g := NewGossip(ctx, scoring{}, WithTopicHandlers(TopicHandler{
 		TopicName: "preloaded-topic",
 		Handler:   func([]byte) error { return nil },
-	})
+	}))
 	require.NoError(t, g.Run(node))
 	t.Cleanup(func() { _ = g.Close() })
 
@@ -97,7 +97,7 @@ func TestRunRejectsAnInvalidPreSubscription(t *testing.T) {
 	t.Cleanup(cancel)
 
 	node := newLiveNode(t)
-	g := NewGossip(ctx, scoring{}, TopicHandler{TopicName: "", Handler: func([]byte) error { return nil }})
+	g := NewGossip(ctx, scoring{}, WithTopicHandlers(TopicHandler{TopicName: "", Handler: func([]byte) error { return nil }}))
 
 	err := g.Run(node)
 	require.Error(t, err)

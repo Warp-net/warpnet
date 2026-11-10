@@ -63,7 +63,7 @@ type moderatorPubSub struct {
 func NewPubSub(ctx context.Context, ratings pubsub.PeersRatings) *moderatorPubSub {
 	mps := &moderatorPubSub{}
 
-	mps.pubsub = pubsub.NewGossip(ctx, ratings, pubsub.NewDiscoveryRelayTopicHandler())
+	mps.pubsub = pubsub.NewGossip(ctx, ratings, pubsub.WithTopicHandlers(pubsub.NewDiscoveryRelayTopicHandler()))
 	return mps
 }
 

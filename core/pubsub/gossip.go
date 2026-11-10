@@ -85,24 +85,26 @@ type Gossip struct {
 	stop       chan struct{}
 	publishing sync.WaitGroup
 
-	ratings   PeersRatings
-	blocklist Blocklister
+	ratings PeersRatings
+	options []pubsub.Option
 }
 
-type Blocklister interface {
-	IsBlocklisted(peerId string) bool
+type Option func(*Gossip)
+
+type Blacklist = pubsub.Blacklist
+
+func WithTopicHandlers(handlers ...TopicHandler) Option {
+	return func(g *Gossip) {
+		for _, h := range handlers {
+			g.handlersMap[h.TopicName] = h.Handler
+		}
+	}
 }
 
-type blacklist struct {
-	blocklist Blocklister
-}
-
-func (b blacklist) Add(warpnet.WarpPeerID) bool {
-	return false
-}
-
-func (b blacklist) Contains(id warpnet.WarpPeerID) bool {
-	return b.blocklist.IsBlocklisted(id.String())
+func WithBlacklist(blacklist Blacklist) Option {
+	return func(g *Gossip) {
+		g.options = append(g.options, pubsub.WithBlacklist(blacklist))
+	}
 }
 
 // PeersRatings answers what gossipsub should weigh a peer by, which is
@@ -157,27 +159,22 @@ type TopicHandler struct {
 func NewGossip(
 	ctx context.Context,
 	ratings PeersRatings,
-	handlers ...TopicHandler,
+	opts ...Option,
 ) *Gossip {
-	handlersMap := make(map[string]topicHandler)
-	for _, h := range handlers {
-		handlersMap[h.TopicName] = h.Handler
-	}
-
-	return &Gossip{
+	g := &Gossip{
 		ctx:              ctx,
 		ratings:          ratings,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
-		handlersMap:      handlersMap,
+		handlersMap:      map[string]topicHandler{},
 		topics:           map[string]*pubsub.Topic{},
 		relayCancelFuncs: map[string]pubsub.RelayCancelFunc{},
 		isRunning:        new(atomic.Bool),
 	}
-}
-
-func (g *Gossip) SetBlocklist(blocklist Blocklister) {
-	g.blocklist = blocklist
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 func (g *Gossip) Run(node GossipNodeConnector) (err error) {
@@ -268,11 +265,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	opts := g.scoreOptions()
-	if g.blocklist != nil {
-		opts = append(opts, pubsub.WithBlacklist(blacklist{blocklist: g.blocklist}))
-	}
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), opts...)
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), append(g.scoreOptions(), g.options...)...)
 	if err != nil {
 		return err
 	}

@@ -63,14 +63,34 @@ type MemberPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
+type PeerBlocklister interface {
+	IsBlocklisted(peerId string) bool
+}
+
+type peerBlacklist struct {
+	blocklist PeerBlocklister
+}
+
+func (b peerBlacklist) Add(warpnet.WarpPeerID) bool {
+	return false
+}
+
+func (b peerBlacklist) Contains(id warpnet.WarpPeerID) bool {
+	return b.blocklist.IsBlocklisted(id.String())
+}
+
 func NewPubSub(
-	ctx context.Context, ratings pubsub.PeersRatings, handlers ...pubsub.TopicHandler,
+	ctx context.Context, ratings pubsub.PeersRatings, blocklist PeerBlocklister, handlers ...pubsub.TopicHandler,
 ) *MemberPubSub {
 	mps := &MemberPubSub{
 		ctx: ctx,
 	}
 
-	mps.pubsub = pubsub.NewGossip(ctx, ratings, handlers...)
+	opts := []pubsub.Option{pubsub.WithTopicHandlers(handlers...)}
+	if blocklist != nil {
+		opts = append(opts, pubsub.WithBlacklist(peerBlacklist{blocklist: blocklist}))
+	}
+	mps.pubsub = pubsub.NewGossip(ctx, ratings, opts...)
 	return mps
 }
 

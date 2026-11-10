@@ -10,24 +10,26 @@ import (
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/rating"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/stretchr/testify/require"
 )
 
-type peerBlocklist struct {
+type peerBlacklist struct {
 	mx  sync.Mutex
-	ids map[string]bool
+	ids map[warpnet.WarpPeerID]bool
 }
 
-func (b *peerBlocklist) IsBlocklisted(peerId string) bool {
+func (b *peerBlacklist) Add(id warpnet.WarpPeerID) bool {
 	b.mx.Lock()
 	defer b.mx.Unlock()
-	return b.ids[peerId]
+	b.ids[id] = true
+	return true
 }
 
-func (b *peerBlocklist) add(peerId string) {
+func (b *peerBlacklist) Contains(id warpnet.WarpPeerID) bool {
 	b.mx.Lock()
 	defer b.mx.Unlock()
-	b.ids[peerId] = true
+	return b.ids[id]
 }
 
 func TestABlockedAuthorIsNotReadEvenThroughAnotherPeer(t *testing.T) {
@@ -35,10 +37,9 @@ func TestABlockedAuthorIsNotReadEvenThroughAnotherPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	blocklist := &peerBlocklist{ids: map[string]bool{}}
+	blacklist := &peerBlacklist{ids: map[warpnet.WarpPeerID]bool{}}
 	readerNode := newLiveNode(t)
-	reader := NewGossip(ctx, rating.NewPeersRatings())
-	reader.SetBlocklist(blocklist)
+	reader := NewGossip(ctx, rating.NewPeersRatings(), WithBlacklist(blacklist))
 	require.NoError(t, reader.Run(readerNode))
 	t.Cleanup(func() { _ = reader.Close() })
 	timeline := &postInbox{}
@@ -51,7 +52,7 @@ func TestABlockedAuthorIsNotReadEvenThroughAnotherPeer(t *testing.T) {
 	connect(t, authorNode, relayNode)
 	requireRead(t, timeline, author, timelineTopic, "before", "the author is read through the relay before the block")
 
-	blocklist.add(authorNode.host.ID().String())
+	blacklist.Add(authorNode.host.ID())
 	requireNotRead(t, timeline, author, timelineTopic, "after", "a blocked author is dropped whoever relays it")
 	requireRead(t, timeline, relay, timelineTopic, "relay", "the relay itself is still read")
 }

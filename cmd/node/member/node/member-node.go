@@ -142,8 +142,7 @@ func NewMemberNode(
 		pubSubHandlers,
 		memberPubSub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
-	pubsubService := memberPubSub.NewPubSub(ctx, ratings, pubSubHandlers...)
-	pubsubService.Gossip().SetBlocklist(nodeRepo)
+	pubsubService := memberPubSub.NewPubSub(ctx, ratings, nodeRepo, pubSubHandlers...)
 
 	warpNetwork := config.Config().Node.Network
 

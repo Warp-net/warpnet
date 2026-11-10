@@ -126,7 +126,7 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	memberHost := newTroikaHost(t)
 	hosts = append(hosts, memberHost)
 	memberConn := &troikaConnector{host: memberHost, ownerId: "reporter-owner"}
-	memberPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings())
+	memberPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings(), nil)
 	memberPS.Run(memberConn)
 	t.Cleanup(func() { _ = memberPS.Close() })
 	require.True(t, memberPS.Gossip().IsGossipRunning())
