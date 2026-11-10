@@ -235,43 +235,6 @@ func (repo *MediaRepo) DeleteVideo(userId, key string) error {
 	return repo.db.Delete(mediaKey)
 }
 
-func (repo *MediaRepo) DeleteUserMedia(userId string) error {
-	if repo == nil {
-		return ErrMediaRepoNotInit
-	}
-	if userId == "" {
-		return ErrMediaNotFound
-	}
-
-	txn, err := repo.db.NewReadTxn()
-	if err != nil {
-		return err
-	}
-	defer txn.Rollback()
-
-	var keys []local_store.DatabaseKey
-	for _, namespace := range []string{ImageSubNamespace, VideoSubNamespace} {
-		prefix := local_store.NewPrefixBuilder(repo.prefix).
-			AddRootID(namespace).
-			AddParentId(userId).
-			Build() + local_store.Delimeter
-		err := txn.IterateKeys(prefix, func(key string) error {
-			keys = append(keys, local_store.DatabaseKey(key))
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, key := range keys {
-		if err := repo.db.Delete(key); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (repo *MediaRepo) GetCopy(userId, key string) (domain.MediaCopy, error) {
 	if repo == nil {
 		return domain.MediaCopy{}, ErrMediaRepoNotInit

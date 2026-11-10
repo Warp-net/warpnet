@@ -71,10 +71,6 @@ type VideoUserFetcher interface {
 	Get(userId string) (user domain.User, err error)
 }
 
-type VideoBlockChecker interface {
-	IsBlocked(blockerId, blockeeId string) (bool, error)
-}
-
 type VideoStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
 	NodeInfo() warpnet.NodeInfo
@@ -125,7 +121,6 @@ func StreamGetVideoHandler(
 	streamer VideoStreamer,
 	mediaRepo VideoStorer,
 	userRepo VideoUserFetcher,
-	blocksRepo VideoBlockChecker,
 ) warpnet.WarpHandlerFunc {
 	return func(input []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetVideoEvent
@@ -154,10 +149,6 @@ func StreamGetVideoHandler(
 				return nil, fmt.Errorf("get video: fetching media: %w", err)
 			}
 			return newVideoResponse(video, ev.Deferred), nil
-		}
-
-		if isBlocked, _ := blocksRepo.IsBlocked(ownerId, ev.UserId); isBlocked {
-			return event.GetVideoResponse{File: ""}, nil
 		}
 
 		u, err := userRepo.Get(ev.UserId)

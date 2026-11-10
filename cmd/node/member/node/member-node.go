@@ -143,7 +143,6 @@ func NewMemberNode(
 		memberPubSub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
 	pubsubService := memberPubSub.NewPubSub(ctx, ratings, pubSubHandlers...)
-	pubsubService.Gossip().SetBlocklist(nodeRepo)
 
 	warpNetwork := config.Config().Node.Network
 
@@ -434,14 +433,7 @@ func (m *MemberNode) BlocklistPermanent(peerId string) error {
 		return nil
 	}
 	m.dHashTable.RemovePeer(id)
-	host := m.node.Node()
-	if host == nil {
-		return nil
-	}
-	err := host.Network().ClosePeer(id)
-	host.Peerstore().RemovePeer(id)
-	host.Peerstore().ClearAddrs(id)
-	return err
+	return m.node.RemovePeer(id)
 }
 
 func (m *MemberNode) BlocklistRemove(peerId string) error {
@@ -606,11 +598,11 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PUBLIC_GET_TWEETS,
-			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo, r.blocksRepo),
+			handler.StreamGetTweetsHandler(r.tweetRepo, userRepo, m, r.copyRepo),
 		},
 		{
 			event.PUBLIC_GET_TWEET,
-			handler.StreamGetTweetHandler(r.tweetRepo, authRepo, userRepo, m, r.blocksRepo),
+			handler.StreamGetTweetHandler(r.tweetRepo, authRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_GET_TWEET_STATS,
@@ -998,7 +990,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_IMAGE,
-			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.copyRepo, r.blocksRepo),
+			handler.StreamGetImageHandler(m, r.mediaRepo, userRepo, r.copyRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_VIDEO,
@@ -1006,7 +998,7 @@ func (m *MemberNode) mediaHandlers(
 		},
 		{
 			event.PUBLIC_GET_VIDEO,
-			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo, r.blocksRepo),
+			handler.StreamGetVideoHandler(m, r.mediaRepo, userRepo),
 		},
 		{
 			event.PRIVATE_POST_UPLOAD_CHAT_IMAGE,
@@ -1064,9 +1056,7 @@ func (m *MemberNode) socialFilterHandlers(
 	return []warpnet.WarpStreamHandler{
 		{
 			event.PRIVATE_POST_SETTINGS_BLOCK,
-			handler.StreamBlockHandler(
-				r.blocksRepo, userRepo, m, m.followRepo, m.pubsubService, r.tweetRepo, r.timelineRepo, r.mediaRepo,
-			),
+			handler.StreamBlockHandler(r.blocksRepo, userRepo, m),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_UNBLOCK,

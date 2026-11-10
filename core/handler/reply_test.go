@@ -241,7 +241,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 	parentId := "parent-1"
 
 	t.Run("invalid payload", func(t *testing.T) {
-		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{}, stubBlockChecker{})
+		h := StreamGetTweetsHandler(stubTweetRepo{}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{})
 		_, err := h([]byte("{"), nil)
 		if err == nil {
 			t.Fatal("expected error")
@@ -258,7 +258,6 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 				return nil, "", nil
 			}},
 			stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{},
-			stubBlockChecker{},
 		)
 		_, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId}), nil)
 		if err != nil {
@@ -273,7 +272,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		replies := []domain.Tweet{{Id: "r1", Text: "reply"}}
 		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error) {
 			return replies, "end", nil
-		}}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{}, stubBlockChecker{})
+		}}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{})
 		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, ParentId: parentId}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -291,7 +290,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		boom := errors.New("db down")
 		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
 			return nil, "", boom
-		}}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{}, stubBlockChecker{})
+		}}, stubTweetUserRepo{}, stubStreamer{}, &stubImageHashes{})
 		_, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, ParentId: parentId}), nil)
 		if !errors.Is(err, boom) {
 			t.Fatalf("expected db error, got %v", err)
@@ -311,7 +310,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 			}
 			return marshal(t, forwarded), nil
 		}}
-		h := StreamGetTweetsHandler(stubTweetRepo{}, userRepo, streamer, &stubImageHashes{}, stubBlockChecker{})
+		h := StreamGetTweetsHandler(stubTweetRepo{}, userRepo, streamer, &stubImageHashes{})
 		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -335,7 +334,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}}
 		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
 			return local, "", nil
-		}}, userRepo, streamer, &stubImageHashes{}, stubBlockChecker{})
+		}}, userRepo, streamer, &stubImageHashes{})
 		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -356,7 +355,7 @@ func TestStreamGetRepliesHandler(t *testing.T) {
 		}}
 		h := StreamGetTweetsHandler(stubTweetRepo{repliesFn: func(string, *uint64, *string) ([]domain.Tweet, string, error) {
 			return local, "", nil
-		}}, userRepo, streamer, &stubImageHashes{}, stubBlockChecker{})
+		}}, userRepo, streamer, &stubImageHashes{})
 		resp, err := h(marshal(t, event.GetAllTweetsEvent{RootId: rootId, RootUserId: "author-1"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)

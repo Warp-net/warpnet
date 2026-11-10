@@ -31,7 +31,7 @@ func TestNewNoise(t *testing.T) {
 	key, err := p2pCrypto.UnmarshalEd25519PrivateKey(priv)
 	require.NoError(t, err)
 
-	tr, err := NewNoise("/noise", key, nil)
+	tr, err := NewNoise("/noise", key, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, tr)
 }

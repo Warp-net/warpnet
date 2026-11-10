@@ -85,24 +85,7 @@ type Gossip struct {
 	stop       chan struct{}
 	publishing sync.WaitGroup
 
-	ratings   PeersRatings
-	blocklist Blocklister
-}
-
-type Blocklister interface {
-	IsBlocklisted(peerId string) bool
-}
-
-type blacklist struct {
-	blocklist Blocklister
-}
-
-func (b blacklist) Add(warpnet.WarpPeerID) bool {
-	return false
-}
-
-func (b blacklist) Contains(id warpnet.WarpPeerID) bool {
-	return b.blocklist.IsBlocklisted(id.String())
+	ratings PeersRatings
 }
 
 // PeersRatings answers what gossipsub should weigh a peer by, which is
@@ -174,10 +157,6 @@ func NewGossip(
 		relayCancelFuncs: map[string]pubsub.RelayCancelFunc{},
 		isRunning:        new(atomic.Bool),
 	}
-}
-
-func (g *Gossip) SetBlocklist(blocklist Blocklister) {
-	g.blocklist = blocklist
 }
 
 func (g *Gossip) Run(node GossipNodeConnector) (err error) {
@@ -268,11 +247,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	opts := g.scoreOptions()
-	if g.blocklist != nil {
-		opts = append(opts, pubsub.WithBlacklist(blacklist{blocklist: g.blocklist}))
-	}
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), opts...)
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
 	if err != nil {
 		return err
 	}

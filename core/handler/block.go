@@ -29,7 +29,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -72,39 +71,7 @@ type PeerBlocklister interface {
 	BlocklistRemove(peerId string) error
 }
 
-type BlockFollowStorer interface {
-	IsFollowing(ownerId, otherUserId string) bool
-	IsFollower(ownerId, otherUserId string) bool
-	Unfollow(fromUserId, toUserId string) error
-}
-
-type BlockUnsubscriber interface {
-	UnsubscribeUserUpdate(userId string) error
-}
-
-type BlockTweetDeleter interface {
-	List(userId string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
-	Delete(userID, tweetID string) error
-}
-
-type BlockTimelineDeleter interface {
-	DeleteTweetFromTimeline(userID, tweetID string) error
-}
-
-type BlockMediaDeleter interface {
-	DeleteUserMedia(userId string) error
-}
-
-func StreamBlockHandler(
-	repo BlocksStorer,
-	userRepo BlockUserFetcher,
-	nodeRepo PeerBlocklister,
-	followRepo BlockFollowStorer,
-	broadcaster BlockUnsubscriber,
-	tweetRepo BlockTweetDeleter,
-	timelineRepo BlockTimelineDeleter,
-	mediaRepo BlockMediaDeleter,
-) warpnet.WarpHandlerFunc {
+func StreamBlockHandler(repo BlocksStorer, userRepo BlockUserFetcher, nodeRepo PeerBlocklister) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.BlockEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -124,16 +91,6 @@ func StreamBlockHandler(
 		}
 
 		escalateToPeerBlocklist(userRepo, nodeRepo, ev.BlockeeId)
-
-		if err := unfollowBlockee(followRepo, broadcaster, ev.BlockerId, ev.BlockeeId); err != nil {
-			return nil, fmt.Errorf("block: unfollow %s: %w", ev.BlockeeId, err)
-		}
-		if err := deleteBlockeeTweets(tweetRepo, timelineRepo, ev.BlockerId, ev.BlockeeId); err != nil {
-			return nil, fmt.Errorf("block: delete tweets of %s: %w", ev.BlockeeId, err)
-		}
-		if err := mediaRepo.DeleteUserMedia(ev.BlockeeId); err != nil {
-			return nil, fmt.Errorf("block: delete media of %s: %w", ev.BlockeeId, err)
-		}
 		return event.Accepted, nil
 	}
 }
@@ -285,53 +242,4 @@ func removePeerBlocklist(userRepo BlockUserFetcher, nodeRepo PeerBlocklister, bl
 	if err := nodeRepo.BlocklistRemove(u.NodeId); err != nil {
 		log.Warnf("unblock: peer blocklist remove for %s (%s): %v", blockeeId, u.NodeId, err)
 	}
-}
-
-func unfollowBlockee(followRepo BlockFollowStorer, broadcaster BlockUnsubscriber, blockerId, blockeeId string) error {
-	if followRepo.IsFollowing(blockerId, blockeeId) {
-		if err := followRepo.Unfollow(blockerId, blockeeId); err != nil {
-			return err
-		}
-		if err := broadcaster.UnsubscribeUserUpdate(blockeeId); err != nil {
-			log.Infof("block: unsubscribe from %s: %v", blockeeId, err)
-		}
-	}
-	if followRepo.IsFollower(blockerId, blockeeId) {
-		return followRepo.Unfollow(blockeeId, blockerId)
-	}
-	return nil
-}
-
-func deleteBlockeeTweets(tweetRepo BlockTweetDeleter, timelineRepo BlockTimelineDeleter, blockerId, blockeeId string) error {
-	var (
-		ids    []string
-		cursor string
-		limit  = uint64(20)
-	)
-	for {
-		tweets, cur, err := tweetRepo.List(blockeeId, &limit, &cursor)
-		if err != nil {
-			return err
-		}
-		for _, tweet := range tweets {
-			isRetweetedByBlockee := tweet.RetweetedBy != nil && *tweet.RetweetedBy == blockeeId
-			if tweet.UserId == blockeeId || isRetweetedByBlockee {
-				ids = append(ids, tweet.Id)
-			}
-		}
-		if uint64(len(tweets)) < limit {
-			break
-		}
-		cursor = cur
-	}
-
-	for _, id := range ids {
-		if err := timelineRepo.DeleteTweetFromTimeline(blockerId, id); err != nil {
-			return err
-		}
-		if err := tweetRepo.Delete(blockeeId, id); err != nil {
-			return err
-		}
-	}
-	return nil
 }

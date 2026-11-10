@@ -25,12 +25,13 @@ import (
 
 const blockeeId = "blockee-1"
 
-func TestABlockedUserLosesTheMemberNodeAndItsCopies(t *testing.T) {
+func TestABlockedUserLosesEveryWayIntoTheMemberNode(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs live libp2p hosts")
 	}
 
 	m, db, _ := newTestMemberNode(t)
+	userRepo := database.NewUserRepo(db)
 	m.opts = append(m.opts, libp2p.NoListenAddrs, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, m.Start())
 
@@ -45,20 +46,8 @@ func TestABlockedUserLosesTheMemberNodeAndItsCopies(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = remote.Close() })
 
-	userRepo := database.NewUserRepo(db)
-	followRepo := database.NewFollowRepo(db)
-	tweetRepo := database.NewTweetRepo(db, nil)
-	timelineRepo := database.NewTimelineRepo(db)
-	mediaRepo := database.NewMediaRepo(db)
-
 	_, err = userRepo.Create(domain.User{Id: blockeeId, NodeId: remote.ID().String(), Network: "testnet"})
 	require.NoError(t, err)
-	require.NoError(t, followRepo.Follow(m.ownerId, blockeeId))
-	require.NoError(t, followRepo.Follow(blockeeId, m.ownerId))
-	tweet, err := tweetRepo.Create(blockeeId, domain.Tweet{Id: "tweet-1", UserId: blockeeId, Text: "hi", CreatedAt: time.Now()})
-	require.NoError(t, err)
-	require.NoError(t, timelineRepo.AddTweetToTimeline(m.ownerId, tweet))
-	require.NoError(t, mediaRepo.SetForeignImageWithTTL(blockeeId, "avatar", "data:image/jpeg;base64,AAAA"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -97,17 +86,6 @@ func TestABlockedUserLosesTheMemberNodeAndItsCopies(t *testing.T) {
 	require.Error(t, err, "the blocked peer cannot open a stream")
 	_, err = relayclient.Reserve(ctx, remote, memberInfo)
 	require.Error(t, err, "the blocked peer cannot renew its relay reservation")
-
-	require.False(t, followRepo.IsFollowing(m.ownerId, blockeeId))
-	require.False(t, followRepo.IsFollower(m.ownerId, blockeeId))
-	tweets, _, err := tweetRepo.List(blockeeId, nil, nil)
-	require.NoError(t, err)
-	require.Empty(t, tweets, "the blocked author's tweets are deleted")
-	timeline, _, err := timelineRepo.GetTimeline(m.ownerId, nil, nil)
-	require.NoError(t, err)
-	require.Empty(t, timeline, "and taken off the timeline")
-	_, err = mediaRepo.GetImage(blockeeId, "avatar")
-	require.ErrorIs(t, err, database.ErrMediaNotFound, "and so is their media")
 
 	resp = ownerStream(t, m, event.PRIVATE_POST_SETTINGS_UNBLOCK, event.UnblockEvent{BlockerId: m.ownerId, BlockeeId: blockeeId})
 	require.Contains(t, string(resp), "Accepted")
