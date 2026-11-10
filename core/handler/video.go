@@ -243,7 +243,7 @@ func signUploadedVideo(file string, metadata media_meta.Metadata) (domain.Base64
 		return "", ErrTooLargeVideo
 	}
 
-	if !media_meta.IsISOBaseMediaFile(videoBytes) {
+	if !video.IsISOBaseMediaFile(videoBytes) {
 		return "", ErrUnsupportedVideo
 	}
 

@@ -950,7 +950,7 @@ func StreamGetCopyBuyerHandler(
 		if isUnmarked && ev.TweetId == "" {
 			return event.CopyBuyerResponse{}, nil
 		}
-		if isUnmarked && media_meta.IsISOBaseMediaFile(raw) {
+		if isUnmarked && video.IsISOBaseMediaFile(raw) {
 			tweet, err := tweetRepo.Get(auth.GetOwner().UserId, ev.TweetId)
 			if err != nil {
 				return nil, err

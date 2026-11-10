@@ -250,3 +250,80 @@ func TestDuration_RefusesMalformedHeaders(t *testing.T) {
 	_, err := Duration(file)
 	assert.ErrorIs(t, err, ErrMalformedISO)
 }
+
+func TestBoxBoundsRejectsMalformedBoxes(t *testing.T) {
+	t.Run("a size smaller than the header", func(t *testing.T) {
+		_, _, err := boxBounds(isoBoxOf(4, "ftyp", nil), 0)
+		require.ErrorIs(t, err, ErrMalformedISO)
+	})
+
+	t.Run("a size past the end of the file", func(t *testing.T) {
+		_, _, err := boxBounds(isoBoxOf(1024, "ftyp", []byte("short")), 0)
+		require.ErrorIs(t, err, ErrMalformedISO)
+	})
+
+	t.Run("a truncated 64-bit largesize header", func(t *testing.T) {
+		_, _, err := boxBounds(isoBoxOf(1, "ftyp", nil), 0)
+		require.ErrorIs(t, err, ErrMalformedISO)
+	})
+
+	t.Run("a 64-bit largesize past the end of the file", func(t *testing.T) {
+		b := isoBoxOf(1, "ftyp", binary.BigEndian.AppendUint64(nil, 1<<40))
+		_, _, err := boxBounds(b, 0)
+		require.ErrorIs(t, err, ErrMalformedISO)
+	})
+
+	t.Run("a valid 64-bit largesize", func(t *testing.T) {
+		payload := binary.BigEndian.AppendUint64(nil, uint64(boxLargeHeadLen))
+		b := isoBoxOf(1, "ftyp", payload)
+
+		size, headerSize, err := boxBounds(b, 0)
+		require.NoError(t, err)
+		require.Equal(t, boxLargeHeadLen, size)
+		require.Equal(t, boxLargeHeadLen, headerSize)
+	})
+
+	t.Run("an open-ended box runs to the end", func(t *testing.T) {
+		b := isoBoxOf(0, "mdat", []byte("payload"))
+		size, headerSize, err := boxBounds(b, 0)
+		require.NoError(t, err)
+		require.Equal(t, len(b), size)
+		require.Equal(t, boxHeaderSize, headerSize)
+	})
+}
+
+func TestWalkBoxes_RejectsMalformed(t *testing.T) {
+	_, err := walkBoxes([]byte{0x00, 0x00, 0xFF, 0xFF, 'f', 't', 'y', 'p'})
+	assert.ErrorIs(t, err, ErrMalformedISO)
+}
+
+func TestIsISOBaseMedia(t *testing.T) {
+	leadingFree := append([]byte{
+		0x00, 0x00, 0x00, 0x08, 'f', 'r', 'e', 'e',
+	}, minimalMP4()...)
+
+	assert.True(t, IsISOBaseMediaFile(minimalMP4()))
+	assert.True(t, IsISOBaseMediaFile(leadingFree))
+	signed, err := AppendUUIDBox(minimalMP4(), [uuidSize]byte{1}, []byte("meta"))
+	require.NoError(t, err)
+	assert.True(t, IsISOBaseMediaFile(signed), "a file with a uuid box is still a container")
+	assert.False(t, IsISOBaseMediaFile([]byte{0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0}))
+	assert.False(t, IsISOBaseMediaFile([]byte("short")))
+	assert.False(t, IsISOBaseMediaFile(nil))
+	assert.False(t, IsISOBaseMediaFile([]byte{0x00, 0x00, 0x00, 0x00, 'f', 'r', 'e', 'e'}))
+}
+
+func TestCutUUIDBoxes_TakesOutOnlyTheBoxesWithThatId(t *testing.T) {
+	id, other := [uuidSize]byte{1}, [uuidSize]byte{2}
+	file, err := AppendUUIDBox(minimalMP4(), other, []byte("keep"))
+	require.NoError(t, err)
+	file, err = AppendUUIDBox(file, id, []byte("cut"))
+	require.NoError(t, err)
+
+	rest, payloads, err := CutUUIDBoxes(file, id)
+	require.NoError(t, err)
+	assert.Equal(t, [][]byte{[]byte("cut")}, payloads)
+	kept, err := AppendUUIDBox(minimalMP4(), other, []byte("keep"))
+	require.NoError(t, err)
+	assert.Equal(t, kept, rest)
+}
