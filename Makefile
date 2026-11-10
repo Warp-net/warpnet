@@ -9,7 +9,7 @@ echo-android:
 
 run-main:
 	go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
-	cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet
+	cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4000
 
 run-second:
 	 cd cmd/node/member && wails build -m -nosyncgomod -devtools -tags webkit2_41 && ./build/bin/warpnet --node.network testnet --node.port 4002 --node.seed backendtest --database.dir backend1

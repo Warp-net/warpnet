@@ -41,7 +41,6 @@ const (
 	KindRateLimitHit
 	KindDiscoveryFlood
 	KindConnectionFlap
-	KindDialFailure
 	KindForgedRecord
 
 	// application — member nodes
@@ -77,7 +76,6 @@ var catalogue = map[Kind]offence{
 	KindRateLimitHit:   {"rate_limit_hit", Network, 15, 300},
 	KindDiscoveryFlood: {"discovery_flood", Network, 25, 300},
 	KindConnectionFlap: {"connection_flap", Network, 10, 200},
-	KindDialFailure:    {"dial_failure", Network, 2, 100},
 
 	KindModerationUpheld:  {"moderation_upheld", Application, 300, 0},
 	KindForeignAuthorship: {"foreign_authorship", Application, 350, 0},

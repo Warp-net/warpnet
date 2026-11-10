@@ -43,6 +43,8 @@ type stubDeviceRepo struct {
 	deleteFn   func(nodeId string) error
 }
 
+func (s *stubDeviceRepo) SetAlias(domain.Alias) error { return nil }
+
 func (s *stubDeviceRepo) GetAliases() ([]domain.Alias, error) {
 	if s.getAliasFn != nil {
 		return s.getAliasFn()

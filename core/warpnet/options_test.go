@@ -18,7 +18,7 @@ func TestCommonOptionsDisableIPv6BlackHoleDetector(t *testing.T) {
 	require.Nil(t, cfg.IPv6BlackHoleSuccessCounter)
 }
 
-func TestSetPrivateDurationField_ReportsMissingField(t *testing.T) {
+func TestSetPrivateDurationFieldReportsMissingField(t *testing.T) {
 	err := setPrivateDurationField(&Swarm{}, "thisFieldDoesNotExist", time.Second)
 	require.ErrorIs(t, err, ErrFieldNotFound)
 }

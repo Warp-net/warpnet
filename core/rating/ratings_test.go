@@ -240,7 +240,7 @@ func TestAPeerRecoversAfterARecordAboutItIsDeleted(t *testing.T) {
 	require.Equal(t, TierFloor, ratings.Tier(peer.id))
 
 	// Another observer's GC tombstones its own record about the peer.
-	e.onDelete(signedRecord(remote, peer.id, Network, bucketAt(clock.Now()), genB, kindCount{KindDialFailure, 1}))
+	e.onDelete(signedRecord(remote, peer.id, Network, bucketAt(clock.Now()), genB, kindCount{KindConnectionFlap, 1}))
 
 	clock.advance(4 * Network.HalfLife()) // 1250 decays to 78: trusted again
 	require.NoError(t, e.ratePeers())

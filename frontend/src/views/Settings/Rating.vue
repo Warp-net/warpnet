@@ -102,7 +102,6 @@ const OFFENCE_LABELS = {
   rate_limit_hit: "Requests over the rate limit",
   discovery_flood: "Excessive peer discovery",
   connection_flap: "Repeated reconnections",
-  dial_failure: "Failed connection attempts",
   forged_observation: "Invalid rating records",
   moderation_upheld: "Moderated content",
   foreign_authorship: "Posts on behalf of another user",

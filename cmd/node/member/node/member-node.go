@@ -29,7 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"os"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -170,7 +169,9 @@ func NewMemberNode(
 
 	opts = append(opts, warpnet.CommonOptions...)
 
-	walletConfig := wallet.DefaultConfig(warpNetwork, os.Getenv("WARPNET_WALLET_BIN"))
+	walletConfig := wallet.DefaultConfig(
+		warpNetwork, config.Config().Wallet.BinaryPath, config.Config().Wallet.Endpoint,
+	)
 	walletClient := wallet.New(walletConfig)
 	walletRepo := database.NewWalletRepo(db)
 
@@ -281,6 +282,7 @@ func (m *MemberNode) Start() (err error) {
 		nodeInfo.ID.String(), nodeInfo.Addresses,
 	)
 	println()
+
 	return nil
 }
 
@@ -1120,6 +1122,7 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
+	
 	if m.walletClient != nil {
 		m.walletClient.Close()
 	}
@@ -1146,7 +1149,6 @@ func (m *MemberNode) Stop() {
 	if m.statsDb != nil {
 		_ = m.statsDb.Close()
 	}
-
 	if m.nodeRepo != nil {
 		if err := m.nodeRepo.Close(); err != nil {
 			log.Errorf("member: failed to close node repo: %v", err)

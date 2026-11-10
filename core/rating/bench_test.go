@@ -75,7 +75,7 @@ func history(b *testing.B, store *fakeStore, peer identity, clock *fixedClock, o
 		o := benchIdentity(b)
 		for h := range hours {
 			store.seed(signedRecord(o, peer.id, Network, bucketAt(clock.Now().Add(-time.Duration(h)*time.Hour)),
-				genA, kindCount{KindRateLimitHit, 3}, kindCount{KindDialFailure, 1}))
+				genA, kindCount{KindRateLimitHit, 3}, kindCount{KindConnectionFlap, 1}))
 		}
 	}
 }
@@ -218,7 +218,7 @@ func BenchmarkRatePeers(b *testing.B) {
 		b.Run(fmt.Sprintf("peers=%d", n), func(b *testing.B) {
 			e, _, _ := benchEngine(b, WithRatings(NewPeersRatings()))
 			for range n {
-				_ = e.record(benchIdentity(b).id, KindDialFailure)
+				_ = e.record(benchIdentity(b).id, KindConnectionFlap)
 			}
 			if err := e.flush(); err != nil {
 				b.Fatal(err)
