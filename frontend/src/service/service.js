@@ -54,6 +54,10 @@ export const PRIVATE_GET_SETTINGS_RATELIMIT = "/private/get/settings/ratelimit/0
 export const PRIVATE_POST_SETTINGS_RATELIMIT = "/private/post/settings/ratelimit/0.0.0"
 export const PRIVATE_GET_SETTINGS_SPONSORED = "/private/get/settings/sponsored/0.0.0"
 export const PRIVATE_POST_SETTINGS_SPONSORED = "/private/post/settings/sponsored/0.0.0"
+export const PRIVATE_GET_SETTINGS_NETWORK = "/private/get/settings/network/0.0.0"
+export const PRIVATE_POST_SETTINGS_NETWORK = "/private/post/settings/network/0.0.0"
+export const PRIVATE_GET_SETTINGS_WALLET = "/private/get/settings/wallet/0.0.0"
+export const PRIVATE_POST_SETTINGS_WALLET = "/private/post/settings/wallet/0.0.0"
 export const PRIVATE_POST_BOOKMARK = "/private/post/bookmark/0.0.0"
 export const PRIVATE_POST_UNBOOKMARK = "/private/post/unbookmark/0.0.0"
 export const PRIVATE_GET_BOOKMARKS = "/private/get/bookmarks/0.0.0"
@@ -1299,6 +1303,52 @@ export const warpnetService = {
         });
         if (!resp || resp.code || !('network_low_water' in resp)) {
             throw new Error(resp?.message || 'Failed to save rate limit settings');
+        }
+        return resp;
+    },
+
+    async getNetworkSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SETTINGS_NETWORK,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    async updateNetworkSettings(settings) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SETTINGS_NETWORK,
+            body: {
+                host_v4: String(settings.host_v4 ?? '').trim(),
+                host_v6: String(settings.host_v6 ?? '').trim(),
+                port: String(settings.port ?? '').trim(),
+                bootstrap: (settings.bootstrap || []).map((a) => String(a).trim()).filter(Boolean),
+            },
+        });
+        if (!resp || resp.code || !('port' in resp)) {
+            throw new Error(resp?.message || 'Failed to save network settings');
+        }
+        return resp;
+    },
+
+    async getWalletSettings() {
+        const resp = await this.sendToNode({
+            path: PRIVATE_GET_SETTINGS_WALLET,
+            body: {},
+        });
+        return resp || {};
+    },
+
+    async updateWalletSettings(settings) {
+        const resp = await this.sendToNode({
+            path: PRIVATE_POST_SETTINGS_WALLET,
+            body: {
+                endpoint: String(settings.endpoint ?? '').trim(),
+                binary_path: String(settings.binary_path ?? '').trim(),
+            },
+        });
+        if (!resp || resp.code || !('endpoint' in resp)) {
+            throw new Error(resp?.message || 'Failed to save wallet settings');
         }
         return resp;
     },
