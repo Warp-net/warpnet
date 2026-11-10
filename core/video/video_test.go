@@ -4,6 +4,7 @@ package video
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -11,6 +12,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/Warp-net/warpnet/core/ratelimit"
@@ -177,5 +179,27 @@ func TestScoreFrames_TellsBuyersApartAtTheSamePlaces(t *testing.T) {
 		assert.Equal(t, 3, scores[buyer].FramesCount)
 		assert.Zero(t, scores[other].FramesCount)
 		assert.GreaterOrEqual(t, scores[buyer].Score-scores[other].Score, MinFrameScore)
+	}
+}
+
+func TestDisplaySize_RefusesAnOversizedTrackHeader(t *testing.T) {
+	f := newTestFFmpeg(t)
+	clip := buildClip(t, f, image.Pt(64, 36), 10, 5, 0)
+	at := bytes.Index(clip, []byte("tkhd")) - 4
+	require.GreaterOrEqual(t, at, 0)
+	end := at + int(binary.BigEndian.Uint32(clip[at:]))
+
+	size, err := DisplaySize(clip)
+	require.NoError(t, err)
+	assert.Equal(t, image.Pt(64, 36), size)
+
+	for _, wh := range [][2]uint32{{65535, 65535}, {8193, 16}, {8192, 8192}, {0, 36}} {
+		bad := slices.Clone(clip)
+		binary.BigEndian.PutUint32(bad[end-8:], wh[0]<<16)
+		binary.BigEndian.PutUint32(bad[end-4:], wh[1]<<16)
+		_, err := DisplaySize(bad)
+		assert.ErrorIs(t, err, ErrUnsupportedVideo, "%dx%d", wh[0], wh[1])
+		_, err = PickFrames(bad, []byte("seed"), 3)
+		assert.ErrorIs(t, err, ErrUnsupportedVideo, "%dx%d", wh[0], wh[1])
 	}
 }

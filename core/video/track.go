@@ -36,7 +36,9 @@ import (
 )
 
 const (
-	fixedOne = 0x10000
+	fixedOne       = 0x10000
+	maxFrameSide   = 8192
+	maxFramePixels = 8192 * 4320
 
 	ErrUnsupportedVideo warpnet.WarpError = "video: only MP4 files with one H.264 track can be marked"
 )
@@ -303,6 +305,9 @@ func readTrackHeader(head []byte) (image.Point, int, error) {
 	width, height := int(r.u32()>>16), int(r.u32()>>16)
 	if r.err != nil {
 		return image.Point{}, 0, r.err
+	}
+	if width <= 0 || height <= 0 || width > maxFrameSide || height > maxFrameSide || width*height > maxFramePixels {
+		return image.Point{}, 0, ErrUnsupportedVideo
 	}
 	return image.Pt(width, height), readRotation(matrix), nil
 }
