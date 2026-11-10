@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 export const MAX_VIDEO_BYTES = 36 * 1024 * 1024;
+export const MAX_VIDEO_SECONDS = 60.5;
+export const TOO_LONG_VIDEO = "Video is too long: 1 minute is the maximum.";
+export const UNMARKED_VIDEO = "Only H.264 videos get the buyer's ID in their frames. Buyers of this one get only the hidden order in the file.";
+
+const MARKED_PROFILES = [66, 77, 100];
 
 export const ACCEPTED_VIDEO_MIME = ["video/mp4", "video/quicktime", "video/x-m4v"];
 export const ACCEPTED_VIDEO_EXT = [".mp4", ".m4v", ".mov"];
@@ -155,4 +160,53 @@ export function validateVideoFile(file) {
         return `Video is too large (${mb} MB). The maximum size is 36 MB.`;
     }
     return null;
+}
+
+export function checkVideoLength(file, opts = {}) {
+    const {
+        timeoutMs = POSTER_TIMEOUT_MS,
+        createElement = tag => (typeof document === "undefined" ? null : document.createElement(tag)),
+        createObjectURL = f => (typeof URL === "undefined" || !URL.createObjectURL ? null : URL.createObjectURL(f)),
+        revokeObjectURL = url => {
+            if (typeof URL !== "undefined" && URL.revokeObjectURL) URL.revokeObjectURL(url);
+        },
+    } = opts;
+
+    return new Promise(resolve => {
+        const video = file ? createElement("video") : null;
+        const url = video ? createObjectURL(file) : null;
+        if (!url) {
+            resolve(null);
+            return;
+        }
+        let settled = false;
+        const finish = problem => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            video.onloadedmetadata = null;
+            video.onerror = null;
+            revokeObjectURL(url);
+            resolve(problem);
+        };
+        const timer = setTimeout(() => finish(null), timeoutMs);
+        video.onerror = () => finish(null);
+        video.onloadedmetadata = () => {
+            const duration = Number(video.duration);
+            finish(Number.isFinite(duration) && duration > MAX_VIDEO_SECONDS ? TOO_LONG_VIDEO : null);
+        };
+        video.muted = true;
+        video.preload = "metadata";
+        video.src = url;
+    });
+}
+
+export function checkVideoMarks(bytes) {
+    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    for (let i = 4; i + 5 < b.length; i++) {
+        if (b[i] === 0x61 && b[i + 1] === 0x76 && b[i + 2] === 0x63 && b[i + 3] === 0x43) {
+            return MARKED_PROFILES.includes(b[i + 5]) ? null : UNMARKED_VIDEO;
+        }
+    }
+    return UNMARKED_VIDEO;
 }

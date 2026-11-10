@@ -16,13 +16,20 @@ import (
 	"image/png"
 	"math"
 	"math/big"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	ffmpeg "github.com/Warp-net/ffmpeg-stripped"
 	"github.com/Warp-net/warpnet/core/media-meta"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -1118,7 +1125,7 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		image, _ := imageWithMetadata(t, "author-1")
 		media.images["author-1/img-1"] = domain.Base64Image(image)
 		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, newStubSponsoredMedia(), users,
-			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}})
+			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}, stubVideoEditor{})
 
 		resp, err := h(req, streamFrom(own))
 		require.NoError(t, err)
@@ -1156,19 +1163,19 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 			},
 		}
 
-		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer, stubVideoEditor{})(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "nothing bought, nothing shown")
 		assert.Empty(t, paths, "nothing bought, nothing asked")
 
 		paying := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Nonce: "n1"}}
-		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer, stubVideoEditor{})(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "an order without a tx has nothing to claim yet")
 		assert.Empty(t, paths, "an order without a tx asks the author nothing")
 
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Nonce: "n1"}}
-		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)
+		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer, stubVideoEditor{})
 
 		confirmed = false
 		resp, err = h(req, streamFrom(own))
@@ -1222,7 +1229,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 		"tweet-3/buyer-1": {TweetId: "tweet-3", BuyerId: "buyer-1", Confirmed: true, CreatedAt: order.CreatedAt.Add(-72 * time.Hour)},
 	}
 	resp, err := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets,
-		orders, media, copies, users, streamer,
+		orders, media, copies, users, streamer, stubVideoEditor{},
 	)(marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), fromBuyer(event.PUBLIC_GET_SPONSORED_TWEET))
 	require.NoError(t, err)
 	bought := resp.(domain.Tweet)
@@ -1236,7 +1243,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	assert.Equal(t, watermark, copies.copies["author-1/"+bought.ImageKeys[0]].Watermark, "the watermark names the buyer by id")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
-	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies)
+	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies, stubVideoEditor{})
 	want := event.CopyBuyerResponse{
 		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, DailyOrdersCount: 2,
 	}
@@ -1255,7 +1262,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, copied, served.(event.GetImageResponse).File, "a rebuilt copy is the same file")
 
-	served, err = StreamGetSponsoredVideoHandler(streamer, media, copies, users)(
+	served, err = StreamGetSponsoredVideoHandler(streamer, testSignerKey, media, copies, users)(
 		marshal(t, event.GetVideoEvent{UserId: "author-1", Key: *bought.VideoKey}), fromBuyer(event.PUBLIC_GET_SPONSORED_VIDEO))
 	require.NoError(t, err)
 	copied = served.(event.GetVideoResponse).File
@@ -1263,6 +1270,77 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	traced, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, traced)
+}
+
+func TestSponsoredVideoCopy_FramesNameTheBuyer(t *testing.T) {
+	clip := buildTestClip(t)
+	editor := video.NewFFmpeg(ratelimit.NewSemaphore(1))
+	metadata, err := media_meta.BuildMetadata(signingInformer{"author-1"}.NodeInfo(), testSignerKey, ownerOf("author-1"))
+	require.NoError(t, err)
+	original, err := signUploadedVideo(mp4DataURL(clip), metadata)
+	require.NoError(t, err)
+	videoKey := contentKeyOf(string(original))
+
+	own := testSignerID
+	media := newStubSponsoredMedia()
+	media.videos["author-1/"+videoKey] = original
+	copies := newStubSponsoredMedia()
+	full := domain.Tweet{Id: "tweet-1", UserId: "author-1", Text: "paid", VideoKey: &videoKey, Price: sponsoredPrice()}
+	tweets := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) { return full, nil }}
+	auth := stubAuth{owner: domain.Owner{UserId: "author-1"}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
+	orders := stubOrders{}
+	users := stubSponsoredUsers{}
+	bought := map[string]string{}
+	for i, buyerId := range []string{"buyer-1", "buyer-2", "buyer-3"} {
+		buyerNode := newTestPeerID(t)
+		users[buyerId] = domain.User{Id: buyerId, NodeId: buyerNode.String()}
+		orders["tweet-1/"+buyerId] = domain.Order{
+			TweetId: "tweet-1", AuthorId: "author-1", BuyerId: buyerId, Nonce: buyerId, TxId: "tx-" + buyerId,
+			Confirmed: true, CreatedAt: time.Date(2026, 11, 10, 12, i, 0, 0, time.UTC),
+		}
+		_, s := stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
+		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer, editor)(
+			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
+		require.NoError(t, err)
+		key := *resp.(domain.Tweet).VideoKey
+		require.NotEmpty(t, copies.copies["author-1/"+key].Frames, "the copy carries frames with the buyer's id")
+
+		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_VIDEO)
+		served, err := StreamGetSponsoredVideoHandler(streamer, testSignerKey, media, copies, users)(
+			marshal(t, event.GetVideoEvent{UserId: "author-1", Key: key}), s)
+		require.NoError(t, err)
+		file := served.(event.GetVideoResponse).File
+		author := domain.User{Id: "author-1", NodeId: own.String()}
+		require.NoError(t, media_meta.VerifyForeignVideo(author, key, file), "the buyer's node takes the copy with frames")
+		bought[buyerId] = file
+
+		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
+		again, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer, editor)(
+			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
+		require.NoError(t, err)
+		assert.Equal(t, copies.copies["author-1/"+key].Frames, copies.copies["author-1/"+*again.(domain.Tweet).VideoKey].Frames,
+			"a second ask reuses the stored frames")
+	}
+
+	stripped, _, err := media_meta.SplitVideo(rawOf(t, bought["buyer-2"]))
+	require.NoError(t, err)
+	traced, err := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies, editor)(
+		marshal(t, event.GetCopyBuyerEvent{File: mp4DataURL(stripped), TweetId: "tweet-1"}), nil)
+	require.NoError(t, err)
+	resp := traced.(event.CopyBuyerResponse)
+	assert.Equal(t, domain.ID("buyer-2"), resp.BuyerId, "frames name the buyer once the hidden order is gone")
+	assert.True(t, resp.IsFrameMatch)
+	assert.Positive(t, resp.FramesCount)
+
+	_, rawOriginal, err := media_meta.SplitDataURI(string(original))
+	require.NoError(t, err)
+	unsold, _, err := media_meta.SplitVideo(rawOriginal)
+	require.NoError(t, err)
+	traced, err = StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies, editor)(
+		marshal(t, event.GetCopyBuyerEvent{File: mp4DataURL(unsold), TweetId: "tweet-1"}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, event.CopyBuyerResponse{}, traced, "the original names nobody")
 }
 
 func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
@@ -1346,7 +1424,7 @@ func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 
 func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 	image, _ := imageWithMetadata(t, "author-1")
-	h := StreamGetCopyBuyerHandler(stubAuth{}, testSignerKey, stubTweetRepo{}, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia())
+	h := StreamGetCopyBuyerHandler(stubAuth{}, testSignerKey, stubTweetRepo{}, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), stubVideoEditor{})
 
 	resp, err := h(marshal(t, event.GetCopyBuyerEvent{File: image}), nil)
 	require.NoError(t, err)
@@ -1382,7 +1460,7 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 			TweetId: "tweet-1", AuthorId: "author-1", BuyerId: buyerId, Nonce: buyerId, TxId: "tx-" + buyerId, Confirmed: true, CreatedAt: soldAt,
 		}
 		_, s := stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
-		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer)(
+		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer, stubVideoEditor{})(
 			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
 		require.NoError(t, err)
 		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_IMAGE)
@@ -1398,7 +1476,7 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 	require.NoError(t, png.Encode(&clipboard, decoded))
 	pasted := "data:image/png;base64," + base64.StdEncoding.EncodeToString(clipboard.Bytes())
 
-	traceBuyer := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies)
+	traceBuyer := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies, stubVideoEditor{})
 	resp, err := traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: pasted}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, event.CopyBuyerResponse{}, resp, "without the tweet there is no original to compare the pixels with")
@@ -1581,4 +1659,55 @@ func TestAdmitPaidOrder(t *testing.T) {
 		assert.False(t, isAdmitted)
 		assert.Empty(t, w.balances)
 	})
+}
+
+type stubVideoEditor struct{}
+
+func (stubVideoEditor) EncodeFrames([]byte, []int, []byte) ([]domain.VideoFrame, error) {
+	return nil, video.ErrUnsupportedPlatform
+}
+
+func (stubVideoEditor) ScoreFrames([]byte, []byte, [][]domain.VideoFrame) ([]video.FrameMatch, error) {
+	return nil, nil
+}
+
+func buildTestClip(t *testing.T) []byte {
+	t.Helper()
+	binary, err := ffmpeg.GetFFmpeg()
+	if errors.Is(err, ffmpeg.ErrUnsupported) {
+		t.Skip("no ffmpeg for this platform")
+	}
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	name := filepath.Join(dir, "ffmpeg")
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	require.NoError(t, os.WriteFile(name, binary, 0o700))
+	for i := range 150 {
+		img := image.NewRGBA(image.Rect(0, 0, 320, 180))
+		for y := range 180 {
+			for x := range 320 {
+				v := uint8((x*7 + y*13 + i*5) % 256)
+				if (x/16+y/16+i/4)%2 == 0 {
+					v = 255 - v
+				}
+				img.Set(x, y, color.RGBA{R: v, G: uint8((x + i*3) % 256), B: uint8(y % 256), A: 255})
+			}
+		}
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("frame%03d.png", i)), buf.Bytes(), 0o600))
+	}
+	clip := filepath.Join(dir, "clip.mp4")
+	out, err := exec.Command(name, "-nostdin", "-loglevel", "error",
+		"-framerate", "30", "-i", filepath.Join(dir, "frame%03d.png"),
+		"-vf", "format=yuv420p", "-c:v", "libx264", "-crf", "28",
+		"-x264-params", "keyint=10:min-keyint=10:scenecut=0:bframes=0", "-f", "mp4", "-y", clip,
+	).CombinedOutput()
+	require.NoError(t, err, string(out))
+	b, err := os.ReadFile(clip)
+	require.NoError(t, err)
+	return b
 }

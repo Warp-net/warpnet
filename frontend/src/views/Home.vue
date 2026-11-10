@@ -104,6 +104,7 @@ resulting from the use or misuse of this software.
             </button>
             <div v-if="videoUploading" class="text-xs text-dark mt-1">Uploading video…</div>
             <p v-if="isVideoUndecodable" class="text-xs text-red-600 mt-1">This browser can't play this video, so most readers won't either. Try an H.264 MP4.</p>
+            <p v-if="sponsored && videoMarkWarning" class="text-xs text-red-600 mt-1">{{ videoMarkWarning }}</p>
           </div>
           <div v-if="poll" class="mt-2 mb-2 border border-lighter rounded p-3">
             <div v-for="(option, index) in poll.options" :key="index" class="flex items-center mb-2">
@@ -331,7 +332,7 @@ import {defineAsyncComponent} from "vue";
 import {warpnetService} from "@/service/service";
 import {parseDeepLink} from "@/lib/deeplink";
 import {toast} from "@/lib/toast";
-import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
+import {acceptedVideoAccept, captureVideoPoster, checkVideoLength, checkVideoMarks, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 import {byteLength, clampBytes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {pastedFiles} from "@/lib/clipboard";
 import {createTimelineMerger} from "@/lib/unified-timeline";
@@ -401,6 +402,7 @@ export default {
       videoKey: '',
       videoPosterKey: '',
       isVideoUndecodable: false,
+      videoMarkWarning: '',
       videoUploading: false,
       posting: false,
       loadingMore: false,
@@ -620,7 +622,7 @@ export default {
       await this.addVideoFile(file);
     },
     async addVideoFile(file) {
-      const problem = validateVideoFile(file);
+      const problem = validateVideoFile(file) || await checkVideoLength(file);
       if (problem) {
         toast.error(problem);
         return;
@@ -630,6 +632,11 @@ export default {
       const url = URL.createObjectURL(file);
       this.videoAttachment = {url, name: file.name, file};
       this._videoPoster = captureVideoPoster(file).catch(() => null);
+      Promise.resolve(file.arrayBuffer ? file.arrayBuffer() : null).then(bytes => {
+        if (this.videoAttachment && this.videoAttachment.url === url) {
+          this.videoMarkWarning = checkVideoMarks(bytes) || '';
+        }
+      }).catch(() => {});
 
       const poster = await this._videoPoster;
       if (this.videoAttachment && this.videoAttachment.url === url) {
@@ -677,6 +684,7 @@ export default {
         URL.revokeObjectURL(this.videoAttachment.url);
       }
       this.videoAttachment = null;
+      this.videoMarkWarning = '';
       this.videoKey = '';
       this.videoPosterKey = '';
       this.isVideoUndecodable = false;

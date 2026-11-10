@@ -342,7 +342,7 @@ import {isBridgedUser} from "@/lib/network";
 import UserStatusDot from "@/components/UserStatusDot.vue";
 import {clampRunes, focusCaret, insertEmoji} from "@/lib/emoji";
 import {pastedFiles} from "@/lib/clipboard";
-import {acceptedVideoAccept, captureVideoPoster, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
+import {acceptedVideoAccept, captureVideoPoster, checkVideoLength, normalizeVideoDataUrl, validateVideoFile} from "@/lib/video";
 
 // Mirrors messageLimit in core/handler/chat.go.
 const messageCharLimit = 5000;
@@ -526,7 +526,7 @@ export default {
       }
       if (!file) return;
 
-      const problem = validateVideoFile(file);
+      const problem = validateVideoFile(file) || await checkVideoLength(file);
       if (problem) {
         toast.error(problem);
         return;

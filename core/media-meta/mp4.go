@@ -24,28 +24,10 @@ resulting from the use or misuse of this software.
 package media_meta
 
 import (
-	"bytes"
 	"encoding/base64"
-	"encoding/binary"
-	"math"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/security"
-)
-
-const (
-	boxHeaderSize   = 8
-	boxUUIDSize     = 16
-	boxLargeHeadLen = 16 // 8-byte header + 64-bit largesize
-
-	uuidBoxType = "uuid"
-
-	chunkOffsetsHeaderSize = 8
-
-	ErrMalformedISO     warpnet.WarpError = "malformed ISO base media file"
-	ErrMetadataTooLarge warpnet.WarpError = "media meta: metadata box too large"
-
-	errUnmovableMoov warpnet.WarpError = "media meta: moov cannot be moved"
 )
 
 var warpnetUUID = [16]byte{
@@ -53,58 +35,28 @@ var warpnetUUID = [16]byte{
 	0x6d, 0x65, 0x74, 0x61, 0x00, 0x00, 0x00, 0x01, // "meta\0\0\0\1"
 }
 
-func IsISOBaseMediaFile(b []byte) bool {
-	for offset := 0; offset+boxHeaderSize <= len(b); {
-		size := int(binary.BigEndian.Uint32(b[offset : offset+4]))
-		boxType := string(b[offset+4 : offset+boxHeaderSize])
-
-		if boxType == "ftyp" {
-			return true
-		}
-		if boxType != "wide" && boxType != "free" && boxType != "skip" {
-			return false
-		}
-		if size < boxHeaderSize {
-			return false
-		}
-		offset += size
-	}
-	return false
-}
-
 func EmbedInVideo(videoBytes, metadataBytes []byte) ([]byte, error) {
-	box, err := newWarpnetBox(metadataBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	buf := bytes.NewBuffer(make([]byte, 0, len(videoBytes)+len(box)))
-	buf.Write(videoBytes)
-	buf.Write(box)
-	return buf.Bytes(), nil
+	return video.AppendUUIDBox(videoBytes, warpnetUUID, []byte(base64.StdEncoding.EncodeToString(metadataBytes)))
 }
 
 func SplitVideo(b []byte) (raw, metadataBytes []byte, err error) {
-	boxes, err := walkBoxes(b)
+	raw, payloads, err := video.CutUUIDBoxes(b, warpnetUUID)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	raw, encoded, found := partitionBoxes(b, boxes)
-	if found > 1 {
+	switch len(payloads) {
+	case 0:
+		return raw, nil, nil
+	case 1:
+	default:
 		return nil, nil, ErrAmbiguousMetadata
 	}
-	if found == 0 {
-		return raw, nil, nil
-	}
-
-	metadataBytes, err = base64.StdEncoding.DecodeString(encoded)
+	metadataBytes, err = base64.StdEncoding.DecodeString(string(payloads[0]))
 	if err != nil {
 		return nil, nil, ErrNoMetadata
 	}
 	return raw, metadataBytes, nil
 }
-
 func EmbedOrderInVideo(videoBytes, encryptedOrder []byte) ([]byte, error) {
 	raw, metadataBytes, err := SplitVideo(videoBytes)
 	if err != nil {
@@ -117,69 +69,21 @@ func EmbedOrderInVideo(videoBytes, encryptedOrder []byte) ([]byte, error) {
 	return EmbedInVideo(raw, marked)
 }
 
-func CloseOpenEndedBox(b []byte) ([]byte, error) {
-	boxes, err := walkBoxes(b)
+func (m Metadata) SignChangedVideo(original, changed []byte) ([]byte, error) {
+	_, metadataBytes, err := SplitVideo(original)
 	if err != nil {
 		return nil, err
 	}
-	if len(boxes) == 0 {
-		return b, nil
-	}
-
-	last := boxes[len(boxes)-1]
-	if binary.BigEndian.Uint32(b[last.offset:last.offset+4]) != 0 {
-		return b, nil
-	}
-	if uint64(last.size) > math.MaxUint32 { //nolint:gosec // sizes are file offsets, never negative
-		return nil, ErrMalformedISO
-	}
-
-	out := make([]byte, len(b))
-	copy(out, b)
-	binary.BigEndian.PutUint32(out[last.offset:last.offset+4], uint32(last.size)) //nolint:gosec
-	return out, nil
-}
-
-func MoveMoovToFront(b []byte) ([]byte, error) {
-	boxes, err := walkBoxes(b)
+	signed, err := parseSignedMetadata(metadataBytes)
 	if err != nil {
 		return nil, err
 	}
-
-	moovIdx, mdatIdx := -1, -1
-	for i, box := range boxes {
-		switch box.boxType {
-		case "moof":
-			return b, nil
-		case "moov":
-			if moovIdx < 0 {
-				moovIdx = i
-			}
-		case "mdat":
-			if mdatIdx < 0 {
-				mdatIdx = i
-			}
-		}
+	m.EncryptedMeta = signed.EncryptedMeta
+	block, err := m.signAt(security.ConvertToSHA256(changed), signed.CreatedAt)
+	if err != nil {
+		return nil, err
 	}
-	if moovIdx < 0 || mdatIdx < 0 || moovIdx < mdatIdx {
-		return b, nil
-	}
-
-	moov := boxes[moovIdx]
-	from, to := boxes[mdatIdx].offset, moov.offset
-
-	movedMoov := make([]byte, moov.size)
-	copy(movedMoov, b[moov.offset:moov.offset+moov.size])
-	if err := shiftChunkOffsets(movedMoov, from, to, moov.size); err != nil {
-		return b, nil //nolint:nilerr // a file whose offsets cannot be moved stays as it was
-	}
-
-	out := make([]byte, 0, len(b))
-	out = append(out, b[:from]...)
-	out = append(out, movedMoov...)
-	out = append(out, b[from:moov.offset]...)
-	out = append(out, b[moov.offset+moov.size:]...)
-	return out, nil
+	return EmbedInVideo(changed, block)
 }
 
 func VerifyVideo(videoBytes []byte, nodeId, ownerId string) error {
@@ -188,151 +92,4 @@ func VerifyVideo(videoBytes []byte, nodeId, ownerId string) error {
 		return err
 	}
 	return verify(metadataBytes, security.ConvertToSHA256(raw), nodeId, ownerId)
-}
-
-type isoBox struct {
-	offset, size int
-	boxType      string
-	payload      []byte
-}
-
-func walkBoxes(b []byte) ([]isoBox, error) {
-	boxes := make([]isoBox, 0, 8) //nolint:mnd
-	for offset := 0; offset+boxHeaderSize <= len(b); {
-		size, headerSize, err := boxBounds(b, offset)
-		if err != nil {
-			return nil, err
-		}
-
-		boxes = append(boxes, isoBox{
-			offset:  offset,
-			size:    size,
-			boxType: string(b[offset+4 : offset+boxHeaderSize]),
-			payload: b[offset+headerSize : offset+size],
-		})
-		offset += size
-	}
-	return boxes, nil
-}
-
-func boxBounds(b []byte, offset int) (size, headerSize int, err error) {
-	size = int(binary.BigEndian.Uint32(b[offset : offset+4]))
-	headerSize = boxHeaderSize
-
-	switch size {
-	case 1: // a 64-bit largesize follows the header
-		if offset+boxLargeHeadLen > len(b) {
-			return 0, 0, ErrMalformedISO
-		}
-		large := binary.BigEndian.Uint64(b[offset+boxHeaderSize : offset+boxLargeHeadLen])
-		if large > uint64(len(b)-offset) { //nolint:gosec // offset is bounded by len(b)
-			return 0, 0, ErrMalformedISO
-		}
-		size = int(large) //nolint:gosec // bounded by the file length just above
-		headerSize = boxLargeHeadLen
-	case 0: // the box runs to the end of the file
-		size = len(b) - offset
-	}
-
-	if size < headerSize || offset+size > len(b) {
-		return 0, 0, ErrMalformedISO
-	}
-	return size, headerSize, nil
-}
-
-func shiftChunkOffsets(b []byte, from, to, shift int) error {
-	boxes, err := walkBoxes(b)
-	if err != nil {
-		return err
-	}
-	for _, box := range boxes {
-		switch box.boxType {
-		case "moov", "trak", "mdia", "minf", "stbl":
-			if err := shiftChunkOffsets(box.payload, from, to, shift); err != nil {
-				return err
-			}
-		case "stco":
-			if err := shiftOffsets(box.payload, 4, from, to, shift); err != nil { //nolint:mnd
-				return err
-			}
-		case "co64":
-			if err := shiftOffsets(box.payload, 8, from, to, shift); err != nil { //nolint:mnd
-				return err
-			}
-		case "saio":
-			return errUnmovableMoov
-		}
-	}
-	return nil
-}
-
-func shiftOffsets(payload []byte, entrySize, from, to, shift int) error {
-	if len(payload) < chunkOffsetsHeaderSize {
-		return ErrMalformedISO
-	}
-	count := int(binary.BigEndian.Uint32(payload[4:chunkOffsetsHeaderSize]))
-	if count > (len(payload)-chunkOffsetsHeaderSize)/entrySize {
-		return ErrMalformedISO
-	}
-
-	for i := range count {
-		entry := payload[chunkOffsetsHeaderSize+i*entrySize : chunkOffsetsHeaderSize+(i+1)*entrySize]
-		if entrySize == 4 { //nolint:mnd
-			offset := uint64(binary.BigEndian.Uint32(entry))
-			if offset < uint64(from) || offset >= uint64(to) { //nolint:gosec // file offsets are never negative
-				continue
-			}
-			offset += uint64(shift) //nolint:gosec // file offsets are never negative
-			if offset > math.MaxUint32 {
-				return errUnmovableMoov
-			}
-			binary.BigEndian.PutUint32(entry, uint32(offset))
-			continue
-		}
-		offset := binary.BigEndian.Uint64(entry)
-		if offset < uint64(from) || offset >= uint64(to) { //nolint:gosec // file offsets are never negative
-			continue
-		}
-		binary.BigEndian.PutUint64(entry, offset+uint64(shift)) //nolint:gosec // file offsets are never negative
-	}
-	return nil
-}
-
-func isWarpnetBox(box isoBox) bool {
-	return box.boxType == uuidBoxType &&
-		len(box.payload) >= boxUUIDSize &&
-		bytes.Equal(box.payload[:boxUUIDSize], warpnetUUID[:])
-}
-
-func newWarpnetBox(metadataBytes []byte) ([]byte, error) {
-	encoded := base64.StdEncoding.EncodeToString(metadataBytes)
-
-	boxSize := boxHeaderSize + boxUUIDSize + len(encoded)
-	if boxSize > math.MaxUint32 {
-		return nil, ErrMetadataTooLarge
-	}
-
-	buf := bytes.NewBuffer(make([]byte, 0, boxSize))
-
-	header := make([]byte, boxHeaderSize)
-	binary.BigEndian.PutUint32(header, uint32(boxSize)) //nolint:gosec
-	copy(header[4:], uuidBoxType)
-
-	buf.Write(header)
-	buf.Write(warpnetUUID[:])
-	buf.WriteString(encoded)
-	return buf.Bytes(), nil
-}
-
-func partitionBoxes(b []byte, boxes []isoBox) (raw []byte, encoded string, found int) {
-	buf := bytes.NewBuffer(make([]byte, 0, len(b)))
-	for _, box := range boxes {
-		if isWarpnetBox(box) {
-			found++
-			encoded = string(box.payload[boxUUIDSize:])
-			continue
-		}
-		buf.Write(b[box.offset : box.offset+box.size])
-	}
-	return buf.Bytes(), encoded, found
 }

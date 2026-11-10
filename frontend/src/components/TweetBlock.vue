@@ -601,7 +601,7 @@ export default {
     },
     unlockMessage() {
       const author = this.authorName || "the author";
-      const marked = "\n\nYour copy is marked with your ID: drawn over its images and hidden in every file, so a leaked copy leads back to you.";
+      const marked = "\n\nYour copy is marked with your ID: drawn over its images and over a few frames of its video and hidden in every file, so a leaked copy leads back to you.";
       if (this.quoteRefused) {
         return "This tweet can't be bought from your wallet now, and nothing was paid.";
       }
@@ -616,7 +616,7 @@ export default {
       if (check.checking) return "Reading the file…";
       if (check.error) return check.error;
       if (!check.sale) {
-        return "This file names no buyer. It is your original, an image from another tweet, or the marks are gone: rotation or heavy editing hides them.";
+        return "This file names no buyer. It is your original, a file from another tweet, or the marks are gone: rotation or heavy editing hides them. In a video, step through the frames next to keyframes to read the buyer's ID by eye.";
       }
       const soldAt = new Date(check.sale.sold_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
       const dailyOrders = check.sale.daily_orders_count > 1
@@ -625,7 +625,10 @@ export default {
       const pixelMatch = check.sale.is_pixel_match
         ? `\nFound by the hidden pattern in the pixels (score ${Math.round(check.sale.pixel_score)}; 8 or more is a match).`
         : "";
-      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}${pixelMatch}`;
+      const frameMatch = check.sale.is_frame_match
+        ? `\nFound by ${check.sale.frames_count} marked video frame${check.sale.frames_count === 1 ? "" : "s"} (score ${check.sale.frame_score.toFixed(2)}).`
+        : "";
+      return `Sold to ${check.buyerName} (@${check.sale.buyer_id}) on ${soldAt}.\nOrder ${check.sale.order_id}\nTransaction ${check.sale.tx_id}${dailyOrders}${pixelMatch}${frameMatch}`;
     },
     isShortOfTokens() {
       return !!this.quote && bigUnits(this.quote.balance) < bigUnits(this.quote.total);
