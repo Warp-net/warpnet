@@ -285,14 +285,18 @@ func (a *App) startMemberNode() (NodeServer, error) {
 		return nil, fmt.Errorf("current node ID: %w", err)
 	}
 
-	networkSettings, err := member.LoadNetworkSettings(a.db, a.auth.Storage().GetOwner().UserId)
+	networkSettings, err := database.NewSettingsRepo(a.db).GetNetworkSettings(a.auth.Storage().GetOwner().UserId)
 	if err != nil {
 		return nil, fmt.Errorf("network settings: %w", err)
 	}
 
-	infos, err := warpnet.AddrInfosFromStrings(networkSettings.Bootstrap)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap nodes infos: %w", err)
+	var infos []warpnet.WarpAddrInfo
+	for _, addr := range networkSettings.Bootstrap {
+		info, err := warpnet.AddrInfoFromString(addr)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap nodes infos: %w", err)
+		}
+		infos = append(infos, *info)
 	}
 	a.bootstrapPeers = networkSettings.Bootstrap
 

@@ -476,18 +476,6 @@ func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
 }
 
-func AddrInfosFromStrings(addrs []string) ([]WarpAddrInfo, error) {
-	infos := make([]WarpAddrInfo, 0, len(addrs))
-	for _, addr := range addrs {
-		info, err := peer.AddrInfoFromString(addr)
-		if err != nil {
-			return nil, err
-		}
-		infos = append(infos, *info)
-	}
-	return infos, nil
-}
-
 func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {
 	store, err := pstoreds.NewPeerstore(ctx, db, pstoreds.DefaultOpts())
 	return WarpPeerstore(store), err

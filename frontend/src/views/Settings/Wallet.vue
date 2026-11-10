@@ -19,8 +19,7 @@
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
         <p class="text-sm text-dark">
           Which blockchain API and payment engine the wallet uses. Changes take
-          effect after the node restarts. A flag or an environment variable set
-          at launch overrides the value saved here.
+          effect after the node restarts.
         </p>
 
         <label v-for="f in fields" :key="f.key" class="block">

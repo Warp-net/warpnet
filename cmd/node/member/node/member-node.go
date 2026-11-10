@@ -29,8 +29,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 
 	memberPubSub "github.com/Warp-net/warpnet/cmd/node/member/pubsub"
 	"github.com/Warp-net/warpnet/config"
@@ -55,7 +53,6 @@ import (
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/pflag"
 )
 
 type MemberNode struct {
@@ -122,11 +119,11 @@ func NewMemberNode(
 
 	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings(owner.UserId)
 
-	networkSettings, err := LoadNetworkSettings(db, owner.UserId)
+	networkSettings, err := database.NewSettingsRepo(db).GetNetworkSettings(owner.UserId)
 	if err != nil {
 		return nil, err
 	}
-	walletSettings, err := loadWalletSettings(db, owner.UserId)
+	walletSettings, err := database.NewSettingsRepo(db).GetWalletSettings(owner.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -887,19 +884,19 @@ func (m *MemberNode) settingsHandlers(authRepo AuthProvider, r *memberRepos) []w
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_NETWORK,
-			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, authRepo, buildDefaultNetworkSettings()),
+			handler.StreamGetNetworkSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_NETWORK,
-			handler.StreamUpdateNetworkSettingsHandler(r.settingsRepo, authRepo, buildDefaultNetworkSettings()),
+			handler.StreamUpdateNetworkSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_GET_SETTINGS_WALLET,
-			handler.StreamGetWalletSettingsHandler(r.settingsRepo, authRepo, buildDefaultWalletSettings()),
+			handler.StreamGetWalletSettingsHandler(r.settingsRepo, authRepo),
 		},
 		{
 			event.PRIVATE_POST_SETTINGS_WALLET,
-			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo, authRepo, buildDefaultWalletSettings()),
+			handler.StreamUpdateWalletSettingsHandler(r.settingsRepo, authRepo),
 		},
 	}
 }
@@ -1150,7 +1147,7 @@ func (m *MemberNode) Stop() {
 	if m == nil {
 		return
 	}
-	
+
 	if m.walletClient != nil {
 		m.walletClient.Close()
 	}
@@ -1186,61 +1183,4 @@ func (m *MemberNode) Stop() {
 		m.mw.Close()
 	}
 	m.node.StopNode()
-}
-
-func LoadNetworkSettings(db database.SettingsStorer, ownerId string) (domain.NetworkSettings, error) {
-	saved, err := database.NewSettingsRepo(db).GetNetworkSettings(ownerId)
-	if err != nil {
-		return domain.NetworkSettings{}, err
-	}
-	if isPinned("node.host.v4") {
-		saved.HostV4 = ""
-	}
-	if isPinned("node.host.v6") {
-		saved.HostV6 = ""
-	}
-	if isPinned("node.port") {
-		saved.Port = ""
-	}
-	if isPinned("node.bootstrap") {
-		saved.Bootstrap = nil
-	}
-	return saved.WithDefaults(buildDefaultNetworkSettings()), nil
-}
-
-func loadWalletSettings(db database.SettingsStorer, ownerId string) (domain.WalletSettings, error) {
-	saved, err := database.NewSettingsRepo(db).GetWalletSettings(ownerId)
-	if err != nil {
-		return domain.WalletSettings{}, err
-	}
-	if isPinned("wallet.endpoint") {
-		saved.Endpoint = ""
-	}
-	if isPinned("wallet.binary-path") {
-		saved.BinaryPath = ""
-	}
-	return saved.WithDefaults(buildDefaultWalletSettings()), nil
-}
-
-func buildDefaultNetworkSettings() domain.NetworkSettings {
-	cfg := config.Config()
-	return domain.NetworkSettings{
-		HostV4:    cfg.Node.HostV4,
-		HostV6:    cfg.Node.HostV6,
-		Port:      cfg.Node.Port,
-		Bootstrap: cfg.Node.Bootstrap,
-	}
-}
-
-func buildDefaultWalletSettings() domain.WalletSettings {
-	cfg := config.Config()
-	return domain.WalletSettings{
-		Endpoint:   cfg.Wallet.Endpoint,
-		BinaryPath: cfg.Wallet.BinaryPath,
-	}
-}
-
-func isPinned(key string) bool {
-	env := strings.ToUpper(strings.NewReplacer(".", "_", "-", "_").Replace(key))
-	return pflag.CommandLine.Changed(key) || os.Getenv(env) != ""
 }

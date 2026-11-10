@@ -19,8 +19,7 @@
       <form v-if="!loading" @submit.prevent="save" class="p-5 space-y-4 max-w-xl">
         <p class="text-sm text-dark">
           Where this node listens and which peers it joins the network through.
-          Changes take effect after the node restarts. A flag or an environment
-          variable set at launch overrides the value saved here.
+          Changes take effect after the node restarts.
         </p>
 
         <fieldset class="border border-lighter rounded p-4 space-y-3">

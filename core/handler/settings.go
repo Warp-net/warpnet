@@ -240,7 +240,6 @@ func StreamUpdateRateLimitSettingsHandler(
 func StreamGetNetworkSettingsHandler(
 	repo NetworkSettingsStorer,
 	authRepo SettingsAuthStorer,
-	defaults domain.NetworkSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		owner := authRepo.GetOwner()
@@ -248,14 +247,13 @@ func StreamGetNetworkSettingsHandler(
 		if err != nil {
 			return nil, err
 		}
-		return event.GetNetworkSettingsResponse(settings.WithDefaults(defaults)), nil
+		return event.GetNetworkSettingsResponse(settings), nil
 	}
 }
 
 func StreamUpdateNetworkSettingsHandler(
 	repo NetworkSettingsStorer,
 	authRepo SettingsAuthStorer,
-	defaults domain.NetworkSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateNetworkSettingsEvent
@@ -266,21 +264,34 @@ func StreamUpdateNetworkSettingsHandler(
 		if owner.UserId == "" {
 			return nil, warpnet.WarpError("update network settings: empty owner")
 		}
-		if err := validateNetworkSettings(ev); err != nil {
+		if ip := net.ParseIP(ev.HostV4); ev.HostV4 != "" && (ip == nil || ip.To4() == nil) {
+			return nil, warpnet.WarpError("update network settings: invalid IPv4 host")
+		}
+		if ip := net.ParseIP(ev.HostV6); ev.HostV6 != "" && (ip == nil || ip.To4() != nil) {
+			return nil, warpnet.WarpError("update network settings: invalid IPv6 host")
+		}
+		if port, err := strconv.Atoi(ev.Port); ev.Port != "" && (err != nil || port < 1 || port > 65535) {
+			return nil, warpnet.WarpError("update network settings: port must be between 1 and 65535")
+		}
+		for _, addr := range ev.Bootstrap {
+			if _, err := warpnet.AddrInfoFromString(addr); err != nil {
+				return nil, warpnet.WarpError("update network settings: invalid bootstrap peer " + addr)
+			}
+		}
+		if err := repo.SetNetworkSettings(owner.UserId, ev); err != nil {
 			return nil, err
 		}
-		settings := ev.WithoutDefaults(defaults)
-		if err := repo.SetNetworkSettings(owner.UserId, settings); err != nil {
+		settings, err := repo.GetNetworkSettings(owner.UserId)
+		if err != nil {
 			return nil, err
 		}
-		return event.GetNetworkSettingsResponse(settings.WithDefaults(defaults)), nil
+		return event.GetNetworkSettingsResponse(settings), nil
 	}
 }
 
 func StreamGetWalletSettingsHandler(
 	repo WalletSettingsStorer,
 	authRepo SettingsAuthStorer,
-	defaults domain.WalletSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		owner := authRepo.GetOwner()
@@ -288,14 +299,13 @@ func StreamGetWalletSettingsHandler(
 		if err != nil {
 			return nil, err
 		}
-		return event.GetWalletSettingsResponse(settings.WithDefaults(defaults)), nil
+		return event.GetWalletSettingsResponse(settings), nil
 	}
 }
 
 func StreamUpdateWalletSettingsHandler(
 	repo WalletSettingsStorer,
 	authRepo SettingsAuthStorer,
-	defaults domain.WalletSettings,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.UpdateWalletSettingsEvent
@@ -306,36 +316,16 @@ func StreamUpdateWalletSettingsHandler(
 		if owner.UserId == "" {
 			return nil, warpnet.WarpError("update wallet settings: empty owner")
 		}
-		if err := validateWalletSettings(ev); err != nil {
+		if u, err := url.Parse(ev.Endpoint); ev.Endpoint != "" && (err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https")) {
+			return nil, warpnet.WarpError("update wallet settings: endpoint must be an http(s) URL")
+		}
+		if err := repo.SetWalletSettings(owner.UserId, ev); err != nil {
 			return nil, err
 		}
-		settings := ev.WithoutDefaults(defaults)
-		if err := repo.SetWalletSettings(owner.UserId, settings); err != nil {
+		settings, err := repo.GetWalletSettings(owner.UserId)
+		if err != nil {
 			return nil, err
 		}
-		return event.GetWalletSettingsResponse(settings.WithDefaults(defaults)), nil
+		return event.GetWalletSettingsResponse(settings), nil
 	}
-}
-
-func validateNetworkSettings(s domain.NetworkSettings) error {
-	if ip := net.ParseIP(s.HostV4); s.HostV4 != "" && (ip == nil || ip.To4() == nil) {
-		return warpnet.WarpError("update network settings: invalid IPv4 host")
-	}
-	if ip := net.ParseIP(s.HostV6); s.HostV6 != "" && (ip == nil || ip.To4() != nil) {
-		return warpnet.WarpError("update network settings: invalid IPv6 host")
-	}
-	if port, err := strconv.Atoi(s.Port); s.Port != "" && (err != nil || port < 1 || port > 65535) {
-		return warpnet.WarpError("update network settings: port must be between 1 and 65535")
-	}
-	if _, err := warpnet.AddrInfosFromStrings(s.Bootstrap); err != nil {
-		return warpnet.WarpError("update network settings: invalid bootstrap peer: " + err.Error())
-	}
-	return nil
-}
-
-func validateWalletSettings(s domain.WalletSettings) error {
-	if u, err := url.Parse(s.Endpoint); s.Endpoint != "" && (err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https")) {
-		return warpnet.WarpError("update wallet settings: endpoint must be an http(s) URL")
-	}
-	return nil
 }

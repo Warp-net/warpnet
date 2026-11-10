@@ -31,7 +31,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"math/big"
-	"slices"
 	"strings"
 	"time"
 
@@ -432,61 +431,9 @@ type NetworkSettings struct {
 	Bootstrap []string `json:"bootstrap"`
 }
 
-func (s NetworkSettings) WithDefaults(d NetworkSettings) NetworkSettings {
-	if s.HostV4 == "" {
-		s.HostV4 = d.HostV4
-	}
-	if s.HostV6 == "" {
-		s.HostV6 = d.HostV6
-	}
-	if s.Port == "" {
-		s.Port = d.Port
-	}
-	if len(s.Bootstrap) == 0 {
-		s.Bootstrap = d.Bootstrap
-	}
-	return s
-}
-
-func (s NetworkSettings) WithoutDefaults(d NetworkSettings) NetworkSettings {
-	if s.HostV4 == d.HostV4 {
-		s.HostV4 = ""
-	}
-	if s.HostV6 == d.HostV6 {
-		s.HostV6 = ""
-	}
-	if s.Port == d.Port {
-		s.Port = ""
-	}
-	if slices.Equal(s.Bootstrap, d.Bootstrap) {
-		s.Bootstrap = nil
-	}
-	return s
-}
-
 type WalletSettings struct {
 	Endpoint   string `json:"endpoint"`
 	BinaryPath string `json:"binary_path"`
-}
-
-func (s WalletSettings) WithDefaults(d WalletSettings) WalletSettings {
-	if s.Endpoint == "" {
-		s.Endpoint = d.Endpoint
-	}
-	if s.BinaryPath == "" {
-		s.BinaryPath = d.BinaryPath
-	}
-	return s
-}
-
-func (s WalletSettings) WithoutDefaults(d WalletSettings) WalletSettings {
-	if s.Endpoint == d.Endpoint {
-		s.Endpoint = ""
-	}
-	if s.BinaryPath == d.BinaryPath {
-		s.BinaryPath = ""
-	}
-	return s
 }
 
 type SponsoredSettings struct {
