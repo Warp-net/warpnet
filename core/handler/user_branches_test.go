@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -148,8 +149,23 @@ func TestRefreshUsers(t *testing.T) {
 	selfInfo := warpnet.NodeInfo{ID: nodeId, OwnerId: "owner-1"}
 	ev := event.GetAllUsersEvent{UserId: "other-user"}
 
-	t.Run("own owner id is skipped", func(t *testing.T) {
-		refreshUsers(stubUserFetcher{}, event.GetAllUsersEvent{UserId: selfInfo.OwnerId}, stubUserStreamer{nodeInfo: selfInfo})
+	t.Run("owner refreshes fediverse users from the gateway", func(t *testing.T) {
+		var updated []string
+		repo := stubUserFetcher{updateFn: func(userId string, u domain.User) (domain.User, error) {
+			updated = append(updated, userId)
+			return u, nil
+		}}
+		ownerEv := event.GetAllUsersEvent{UserId: selfInfo.OwnerId}
+		streamer := stubUserStreamer{nodeInfo: selfInfo, genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			require.Equal(t, fediverse.GatewayNodeID(), nodeId)
+			require.Equal(t, stream.WarpRoute(event.PUBLIC_GET_WHOTOFOLLOW), path)
+			require.Equal(t, ownerEv, data)
+			return json.Marshal(event.UsersResponse{Users: []domain.User{
+				{Id: "alice@mastodon.social", NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork},
+			}})
+		}}
+		refreshUsers(repo, ownerEv, streamer)
+		require.Equal(t, []string{"alice@mastodon.social"}, updated)
 	})
 
 	t.Run("unknown user is skipped", func(t *testing.T) {

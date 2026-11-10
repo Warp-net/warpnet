@@ -15,6 +15,7 @@ package handler
 import (
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
@@ -82,10 +83,15 @@ func TestOwnerSelfRequest_NoOutboundStream(t *testing.T) {
 		}
 	})
 
-	t.Run("StreamGetUsersHandler - owner refresh skipped", func(t *testing.T) {
+	t.Run("StreamGetUsersHandler - owner refresh goes to the gateway", func(t *testing.T) {
 		streamer := stubUserStreamer{
-			nodeInfo:        ownerInfo,
-			genericStreamFn: failOnStream(t),
+			nodeInfo: ownerInfo,
+			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+				if nodeId != fediverse.GatewayNodeID() {
+					t.Fatalf("owner self request: unexpected stream (nodeId=%q path=%q)", nodeId, path)
+				}
+				return marshal(t, event.UsersResponse{}), nil
+			},
 		}
 		h := StreamGetUsersHandler(ownerUserRepo, streamer)
 		if _, err := h(marshal(t, event.GetAllUsersEvent{UserId: owner}), nil); err != nil {
