@@ -141,3 +141,48 @@ func TestTheHostHandsItsGaterToTheHandshake(t *testing.T) {
 	require.NoError(t, remote.Connect(ctx, peer.AddrInfo{ID: member.ID(), Addrs: member.Addrs()}))
 	require.Equal(t, 2, gater.count(remote.ID()), "the handshake asks the gater before the upgrader does")
 }
+
+type lateBlock struct {
+	mx      sync.Mutex
+	id      string
+	allowed int
+}
+
+func (b *lateBlock) IsBlocklisted(peerId string) bool {
+	b.mx.Lock()
+	defer b.mx.Unlock()
+	if peerId != b.id {
+		return false
+	}
+	if b.allowed > 0 {
+		b.allowed--
+		return false
+	}
+	return true
+}
+
+func TestABlockThatLandsMidConnectionStillCutsThePeer(t *testing.T) {
+	for name, checksPassed := range map[string]int{
+		"after the handshake, before the upgrade": 2,
+		"after the upgrade, before registration":  3,
+	} {
+		t.Run(name, func(t *testing.T) {
+			opts := append([]libp2p.Option{}, CommonOptions...)
+			remote, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))...)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = remote.Close() })
+			block := &lateBlock{id: remote.ID().String(), allowed: checksPassed}
+			member, err := libp2p.New(append(opts, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"), NewConnectionGaterOption(block))...)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = member.Close() })
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = remote.Connect(ctx, peer.AddrInfo{ID: member.ID(), Addrs: member.Addrs()})
+			require.Eventually(t, func() bool {
+				return len(member.Network().ConnsToPeer(remote.ID())) == 0 &&
+					len(remote.Network().ConnsToPeer(member.ID())) == 0
+			}, 5*time.Second, 20*time.Millisecond, "the peer blocked mid-connection is left with no connection")
+		})
+	}
+}

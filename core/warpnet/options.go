@@ -45,6 +45,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/fx"
 )
 
 const defaultTimeout = 60 * time.Second
@@ -96,7 +97,13 @@ type Blocklister interface {
 }
 
 func NewConnectionGaterOption(blocklist Blocklister) WarpOption {
-	return libp2p.ConnectionGater(blocklistGater{blocklist: blocklist})
+	g := blocklistGater{blocklist: blocklist}
+	return libp2p.ChainOptions(
+		libp2p.ConnectionGater(g),
+		libp2p.WithFxOption(fx.Invoke(func(s *Swarm) {
+			s.Notify(&network.NotifyBundle{ConnectedF: g.closeBlocked})
+		})),
+	)
 }
 
 type blocklistGater struct {
@@ -119,8 +126,15 @@ func (g blocklistGater) InterceptSecured(_ network.Direction, id WarpPeerID, _ n
 	return g.InterceptPeerDial(id)
 }
 
-func (g blocklistGater) InterceptUpgraded(network.Conn) (bool, control.DisconnectReason) {
-	return true, 0
+func (g blocklistGater) InterceptUpgraded(c network.Conn) (bool, control.DisconnectReason) {
+	return g.InterceptPeerDial(c.RemotePeer()), 0
+}
+
+func (g blocklistGater) closeBlocked(_ network.Network, c network.Conn) {
+	if g.InterceptPeerDial(c.RemotePeer()) {
+		return
+	}
+	go func() { _ = c.Close() }()
 }
 
 var DefaultResources = relayv2.Resources{
