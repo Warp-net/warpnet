@@ -37,6 +37,7 @@ struct SettingsTabs: View {
         accountsSection
         generalSection
         otherSections
+        developerSection
         cacheSection
       }
       .scrollContentBackground(.hidden)
@@ -186,6 +187,15 @@ struct SettingsTabs: View {
     } footer: {
       if let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
         Text("settings.section.app.footer \(appVersion)").frame(maxWidth: .infinity, alignment: .center)
+      }
+    }
+    .listRowBackground(theme.primaryBackgroundColor)
+  }
+
+  private var developerSection: some View {
+    Section("warpnet.settings.section.developer") {
+      NavigationLink(destination: LogsView()) {
+        Label("warpnet.logs.title", systemImage: "doc.text.magnifyingglass")
       }
     }
     .listRowBackground(theme.primaryBackgroundColor)

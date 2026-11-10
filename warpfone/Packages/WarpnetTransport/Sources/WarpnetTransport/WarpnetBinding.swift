@@ -11,4 +11,6 @@ public protocol WarpnetBinding: Sendable {
   func shutdown() -> String
   func sign(body: String) -> String
   func refreshPeerAddrs(_ addrs: String) -> String
+  func setLogSink(_ sink: NodeLogSink?)
+  func setLogSinkMinLevel(_ level: NodeLogLevel)
 }

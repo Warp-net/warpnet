@@ -127,6 +127,11 @@ final class PairingModel {
 
   private func finish(_ info: AuthNodeInfo) {
     accounts.setPaired(info)
+    if UserDefaults.standard.bool(forKey: LogsView.verboseKey), let session {
+      Task {
+        await session.client.setNodeLogMinLevel(.debug)
+      }
+    }
     monitor?.start()
     notice = nil
     phase = .scanning

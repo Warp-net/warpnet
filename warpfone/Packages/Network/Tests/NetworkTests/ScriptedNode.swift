@@ -47,6 +47,8 @@ final class ScriptedBinding: WarpnetBinding, @unchecked Sendable {
   func shutdown() -> String { "" }
   func sign(body _: String) -> String { "c2ln" }
   func refreshPeerAddrs(_: String) -> String { "" }
+  func setLogSink(_: NodeLogSink?) {}
+  func setLogSinkMinLevel(_: NodeLogLevel) {}
 }
 
 private final class MemoryStorage: SecretStorage, @unchecked Sendable {
