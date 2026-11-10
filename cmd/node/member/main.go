@@ -143,7 +143,7 @@ func preferExistingTestnet(dbPath string) {
 	if config.IsNetworkPinned() {
 		return
 	}
-	lock := filepath.Join(filepath.Dir(filepath.Dir(dbPath)), testNetwork, filepath.Base(dbPath), "run.lock")
+	lock := filepath.Join(filepath.Dir(filepath.Dir(dbPath)), testNetwork, filepath.Base(dbPath), "v0", "run.lock")
 	if _, err := os.Stat(lock); err == nil {
 		config.SetNetwork(testNetwork)
 	}

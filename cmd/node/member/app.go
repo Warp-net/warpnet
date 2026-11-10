@@ -186,7 +186,7 @@ func (a *App) startup(ctx context.Context) {
 	network := config.Config().Node.Network
 
 	dbPath := config.Config().Database.Path
-	bt, err := os.ReadFile(filepath.Join(dbPath, "run.lock")) //#nosec
+	bt, err := os.ReadFile(filepath.Join(dbPath, "v0", "run.lock")) //#nosec
 	if err == nil && len(bt) > 0 {
 		dbPath = string(bt)
 	}
@@ -256,11 +256,18 @@ func (a *App) useDatabaseDir(defaultPath, dir string) (string, error) {
 	if a.db != nil && !a.db.IsClosed() {
 		return "", errDatabaseRunning
 	}
-	if err := os.MkdirAll(defaultPath, 0750); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(defaultPath, "run.lock"), []byte(path), 0600); err != nil {
-		return "", err
+	lock := filepath.Join(defaultPath, "v0", "run.lock")
+	if path == defaultPath {
+		if err := os.Remove(lock); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(lock), 0750); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(lock, []byte(path), 0600); err != nil {
+			return "", err
+		}
 	}
 
 	db, err := local_store.New(path, local_store.DefaultOptions())

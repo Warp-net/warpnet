@@ -21,7 +21,7 @@ func TestPreferExistingTestnet(t *testing.T) {
 	preferExistingTestnet(dbPath)
 	assert.Equal(t, orig, config.Config().Node.Network, "no testnet database — nothing changes")
 
-	lock := filepath.Join(tmp, "testnet", "storage", "run.lock")
+	lock := filepath.Join(tmp, "testnet", "storage", "v0", "run.lock")
 	require.NoError(t, os.MkdirAll(filepath.Dir(lock), 0o750))
 	require.NoError(t, os.WriteFile(lock, nil, 0o600))
 

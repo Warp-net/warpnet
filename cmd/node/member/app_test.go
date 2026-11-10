@@ -555,7 +555,7 @@ func TestUseDatabaseDir(t *testing.T) {
 		require.Equal(t, dir, chosen)
 		require.Equal(t, dir, a.DatabaseDir())
 		path := filepath.Join(dir, network, "storage")
-		bt, err := os.ReadFile(filepath.Join(defaultPath, "run.lock"))
+		bt, err := os.ReadFile(filepath.Join(defaultPath, "v0", "run.lock"))
 		require.NoError(t, err)
 		require.Equal(t, path, string(bt))
 		require.True(t, a.IsFirstRun())
@@ -579,7 +579,23 @@ func TestUseDatabaseDir(t *testing.T) {
 		require.Error(t, err)
 
 		require.Equal(t, filepath.Dir(filepath.Dir(defaultPath)), a.DatabaseDir())
-		require.NoFileExists(t, filepath.Join(defaultPath, "run.lock"))
+		require.NoFileExists(t, filepath.Join(defaultPath, "v0", "run.lock"))
+	})
+
+	t.Run("back to the default folder", func(t *testing.T) {
+		root := t.TempDir()
+		defaultPath := filepath.Join(root, network, "storage")
+		a := appWithDatabase(t, defaultPath)
+		_, err := a.useDatabaseDir(defaultPath, t.TempDir())
+		require.NoError(t, err)
+		require.True(t, a.IsFirstRun())
+
+		_, err = a.useDatabaseDir(defaultPath, root)
+		require.NoError(t, err)
+
+		require.Equal(t, root, a.DatabaseDir())
+		require.True(t, a.IsFirstRun())
+		require.NoFileExists(t, filepath.Join(defaultPath, "v0", "run.lock"))
 	})
 
 	t.Run("folder with a database", func(t *testing.T) {
