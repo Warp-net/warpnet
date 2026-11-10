@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/muxer/yamux"
+	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	relayclient "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/multiformats/go-multiaddr"
@@ -174,6 +175,87 @@ func TestStreamRidesTheRelayedConnectionItDials(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
 		t.Fatalf("the stream waited %s for a direct connection", elapsed)
+	}
+}
+
+// Dials that failed while the phone had no network leave swarm dial backoff
+// on the relay and the paired node. Once the network is back, a reconnect
+// must dial again instead of failing on that backoff until the app restarts.
+func TestReconnectIgnoresBackoffFromOutage(t *testing.T) {
+	psk := freshPSK(t)
+	muxer := *yamux.DefaultTransport // newClient tunes the shared default
+	host := func(opts ...libp2p.Option) []libp2p.Option {
+		return append([]libp2p.Option{
+			libp2p.NoTransports,
+			libp2p.Transport(camouflage.NewCamouflageTransport),
+			libp2p.PrivateNetwork(psk),
+			libp2p.Security(noise.ID, noise.New),
+			libp2p.Muxer(yamux.ID, &muxer),
+		}, opts...)
+	}
+	relay, err := libp2p.New(host(
+		libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		libp2p.EnableRelayService(),
+		libp2p.ForceReachabilityPublic(),
+	)...)
+	if err != nil {
+		t.Fatalf("relay host: %v", err)
+	}
+	defer relay.Close()
+	desktop, err := libp2p.New(host(libp2p.NoListenAddrs, libp2p.EnableRelay())...)
+	if err != nil {
+		t.Fatalf("desktop host: %v", err)
+	}
+	defer desktop.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	relayInfo := peer.AddrInfo{ID: relay.ID(), Addrs: relay.Addrs()}
+	if err := desktop.Connect(ctx, relayInfo); err != nil {
+		t.Fatalf("desktop to relay: %v", err)
+	}
+	if _, err := relayclient.Reserve(ctx, desktop, relayInfo); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+
+	relayAddr := relay.Addrs()[0].String() + "/p2p/" + relay.ID().String()
+	circuitAddr := relayAddr + "/p2p-circuit/p2p/" + desktop.ID().String()
+	cn, err := newClient(freshKey(t), psk, "testnet", []string{relayAddr})
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
+	defer cn.close()
+	if err := cn.connect(circuitAddr); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+
+	cn.pause()
+	backoff := cn.host.Network().(*swarm.Swarm).Backoff()
+	for _, addr := range relay.Addrs() {
+		backoff.AddBackoff(relay.ID(), addr)
+	}
+	for _, addr := range cn.host.Peerstore().Addrs(desktop.ID()) {
+		backoff.AddBackoff(desktop.ID(), addr)
+	}
+
+	if err := cn.connect(circuitAddr); err != nil {
+		t.Fatalf("reconnect after the outage: %v", err)
+	}
+	if !cn.isConnected() {
+		t.Fatal("expected the paired node to be reachable again")
+	}
+
+	cn.pause()
+	for _, addr := range relay.Addrs() {
+		backoff.AddBackoff(relay.ID(), addr)
+	}
+	cn.resume()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cn.isConnected() {
+		if time.Now().After(deadline) {
+			t.Fatal("resume did not reach the paired node again")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
