@@ -217,5 +217,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
-
-replace github.com/Warp-net/ffmpeg-stripped => /home/vadim/go/src/github.com/Warp-net/ffmpeg-stripped

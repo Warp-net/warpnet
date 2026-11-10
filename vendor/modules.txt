@@ -14,7 +14,7 @@ git.sr.ht/~jackmordaunt/go-toast/v2/wintoast
 # github.com/Masterminds/semver/v3 v3.5.0
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
-# github.com/Warp-net/ffmpeg-stripped v0.1.0 => /home/vadim/go/src/github.com/Warp-net/ffmpeg-stripped
+# github.com/Warp-net/ffmpeg-stripped v0.1.0
 ## explicit; go 1.26.3
 github.com/Warp-net/ffmpeg-stripped
 # github.com/Warp-net/keepalive v0.0.0-20261108115934-582f57fecb24
@@ -1212,4 +1212,3 @@ gopkg.in/yaml.v2
 lukechampine.com/blake3
 lukechampine.com/blake3/bao
 lukechampine.com/blake3/guts
-# github.com/Warp-net/ffmpeg-stripped => /home/vadim/go/src/github.com/Warp-net/ffmpeg-stripped
