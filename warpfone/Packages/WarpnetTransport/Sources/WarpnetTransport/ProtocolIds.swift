@@ -10,6 +10,7 @@ public enum ProtocolIds {
   public static let PUBLIC_GET_RATING = "/public/get/admin/rating/0.0.0"
   public static let PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
   public static let PUBLIC_POST_REPORT = "/public/post/report/0.0.0"
+  public static let PUBLIC_POST_RELAY_REFUSE_RESERVATION = "/public/post/relay/refuse/reservation/0.0.0"
   public static let PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
   public static let PUBLIC_GET_SPONSORED_TWEET = "/public/get/sponsored/tweet/0.0.0"
   public static let PRIVATE_POST_SPONSORED_ORDER = "/private/post/sponsored/order/0.0.0"

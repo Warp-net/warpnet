@@ -63,7 +63,6 @@ var CommonOptions = []libp2p.Option{
 	libp2p.Security(NoiseID, NewNoise),
 	libp2p.EnableAutoNATv2(),
 	libp2p.EnableRelay(),
-	libp2p.EnableRelayService(WithDefaultResourcesOption()), // for member nodes that have static IP
 	libp2p.EnableNATService(),
 	libp2p.NATPortMap(),
 	// the detector also refuses /ip6/ circuit addrs, though the relay may already be connected over IPv4
@@ -98,6 +97,10 @@ func NewSwarmInvokeOption(invoke func(WarpLifecycle, *Swarm)) WarpOption {
 	return libp2p.WithFxOption(fx.Invoke(invoke))
 }
 
+func NewEventBusInvokeOption(invoke func(WarpEventBus)) WarpOption {
+	return libp2p.WithFxOption(fx.Invoke(invoke))
+}
+
 func NewChainOption(opts ...WarpOption) WarpOption {
 	return libp2p.ChainOptions(opts...)
 }
@@ -125,6 +128,22 @@ const (
 
 func WithDefaultResourcesOption() relayv2.Option {
 	return relayv2.WithResources(DefaultResources)
+}
+
+func WithRelayACLOption(acl relayv2.ACLFilter) relayv2.Option {
+	return relayv2.WithACL(acl)
+}
+
+func NewEnableRelayServiceOption(opts ...relayv2.Option) WarpOption {
+	return libp2p.EnableRelayService(opts...)
+}
+
+func NewRelayService(node P2PNode, opts ...relayv2.Option) (WarpRelayCloser, error) {
+	relay, err := relayv2.New(node, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return relay, nil
 }
 
 func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.BasicConnMgr, error) {

@@ -80,6 +80,10 @@ type PeersRatings interface {
 	ConnTag(peerID warpnet.WarpPeerID) int
 }
 
+type ReservationRefuser interface {
+	RefuseReservation(dest, src warpnet.WarpPeerID) error
+}
+
 type Prioritizer interface {
 	SetPriority(pid warpnet.WarpPeerID, r warpnet.WarpReachability)
 	SetRatingPriority(pid warpnet.WarpPeerID, tag int)
@@ -91,6 +95,7 @@ type WarpNode struct {
 	ctx      context.Context
 	node     warpnet.P2PNode
 	relay    warpnet.WarpRelayCloser
+	refusals ReservationRefuser
 	streamer Streamer
 	outbox   OfflineOutbox
 	backoff  BackoffEnabler
@@ -128,6 +133,8 @@ func NewWarpNode(
 		return nil, err
 	}
 
+	refusals := relay.NewReservationRefusals(manager)
+
 	ya := *yamux.DefaultTransport
 	ya.KeepAliveInterval = 15 * time.Second
 	ya.ConnectionWriteTimeout = 30 * time.Second
@@ -138,6 +145,7 @@ func NewWarpNode(
 		libp2p.DisableMetrics(),
 		libp2p.Muxer(yamux.ID, &ya),
 		warpnet.NewEnableHolePunchingOption(holepunch.NewHolepunchTracer()),
+		relay.NewRelayServiceOption(refusals),
 	}
 
 	opts = append(opts, managersOpts...)
@@ -160,7 +168,7 @@ func NewWarpNode(
 		return nil, fmt.Errorf("node: failed to subscribe: %w", err)
 	}
 
-	relayService, err := relay.NewRelay(node)
+	relayService, err := relay.NewRelay(node, refusals)
 	if err != nil {
 		return nil, fmt.Errorf("node: failed to create relay: %w", err)
 	}
@@ -170,6 +178,7 @@ func NewWarpNode(
 		ctx:              ctx,
 		node:             node,
 		relay:            relayService,
+		refusals:         refusals,
 		streamer:         pool,
 		isClosed:         new(atomic.Bool),
 		version:          version,
@@ -218,6 +227,13 @@ func (n *WarpNode) SetOutbox(store stream.OutboxStore) {
 	outbox := stream.NewOutbox(n.ctx, store)
 	outbox.Run(n.streamer)
 	n.outbox = outbox
+}
+
+func (n *WarpNode) RefuseReservation(dest, src warpnet.WarpPeerID) error {
+	if n == nil || n.refusals == nil {
+		return warpnet.WarpError("node is not initialized")
+	}
+	return n.refusals.RefuseReservation(dest, src)
 }
 
 type StreamMiddleware func(next warpnet.WarpHandlerFunc) warpnet.WarpHandlerFunc
@@ -355,6 +371,20 @@ func (n *WarpNode) trackIncomingEvents() {
 				} else {
 					log.Infof("node: event: protocol removed: %v", typedEvent.Removed)
 				}
+			case warpnet.EvtReservationRefused:
+				go func() {
+					_, err := n.Stream(
+						typedEvent.RelayNodeId,
+						warpevent.PUBLIC_POST_RELAY_REFUSE_RESERVATION,
+						warpevent.RefuseReservationEvent{PeerId: typedEvent.PeerId.String()},
+					)
+					if err != nil {
+						log.Warnf(
+							"node: refuse reservation to %s on relay %s: %v",
+							typedEvent.PeerId, typedEvent.RelayNodeId, err,
+						)
+					}
+				}()
 			case event.EvtPeerConnectednessChanged:
 				pid := typedEvent.Peer.String()
 				log.Infof(
