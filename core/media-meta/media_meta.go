@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -121,7 +122,7 @@ func ExtractOrder(b []byte) ([]byte, error) {
 }
 
 func extractMetadata(b []byte) ([]byte, error) {
-	if !IsISOBaseMediaFile(b) {
+	if !video.IsISOBaseMediaFile(b) {
 		return extractFromJPEG(b)
 	}
 	_, metadataBytes, err := SplitVideo(b)

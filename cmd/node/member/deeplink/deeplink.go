@@ -8,16 +8,16 @@ import (
 	"strings"
 )
 
-const Scheme = "warpnet"
+const scheme = "warpnet"
 
-type Kind string
+type kind string
 
 const (
-	KindUser Kind = "user"
+	kindUser kind = "user"
 )
 
 type Link struct {
-	Kind Kind
+	Kind kind
 	ID   string
 	Raw  string
 }
@@ -34,26 +34,26 @@ func Parse(raw string) (Link, error) {
 	// Canonicalise "warpnet:user/x" -> "warpnet://user/x"; keep Raw as the original.
 	parseable := original
 	lower := strings.ToLower(parseable)
-	if strings.HasPrefix(lower, Scheme+":") && !strings.HasPrefix(lower, Scheme+"://") {
-		parseable = Scheme + "://" + parseable[len(Scheme)+1:]
+	if strings.HasPrefix(lower, scheme+":") && !strings.HasPrefix(lower, scheme+"://") {
+		parseable = scheme + "://" + parseable[len(scheme)+1:]
 	}
 
 	u, err := url.Parse(parseable)
 	if err != nil {
 		return Link{}, ErrNotWarpnetURL
 	}
-	if !strings.EqualFold(u.Scheme, Scheme) {
+	if !strings.EqualFold(u.Scheme, scheme) {
 		return Link{}, ErrNotWarpnetURL
 	}
 
 	host := strings.ToLower(u.Host)
-	switch Kind(host) {
-	case KindUser:
+	switch kind(host) {
+	case kindUser:
 		id := strings.Trim(path.Clean("/"+u.Path), "/")
 		if id == "" || id == "." {
 			return Link{}, ErrMissingID
 		}
-		return Link{Kind: KindUser, ID: id, Raw: original}, nil
+		return Link{Kind: kindUser, ID: id, Raw: original}, nil
 	default:
 		return Link{}, ErrUnsupportedKind
 	}
@@ -63,7 +63,7 @@ func Parse(raw string) (Link, error) {
 func FromArgs(args []string) (Link, bool) {
 	for _, a := range args {
 		candidate := strings.TrimLeft(strings.TrimSpace(a), "-")
-		if !strings.HasPrefix(strings.ToLower(candidate), Scheme+":") {
+		if !strings.HasPrefix(strings.ToLower(candidate), scheme+":") {
 			continue
 		}
 		l, err := Parse(candidate)

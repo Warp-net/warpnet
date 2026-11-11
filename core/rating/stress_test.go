@@ -104,7 +104,7 @@ func TestConcurrentUseLosesNoCount(t *testing.T) {
 	helper(func(rng *rand.Rand) {
 		o := observers[rng.IntN(len(observers))]
 		store.merge(signedRecord(o, targets[rng.IntN(peers)].id, Network, bucketAt(clock.Now()),
-			genB, kindCount{KindDialFailure, uint32(1 + rng.IntN(5))}))
+			genB, kindCount{KindConnectionFlap, uint32(1 + rng.IntN(5))}))
 	})
 	helper(func(rng *rand.Rand) {
 		if rng.IntN(50) == 0 {

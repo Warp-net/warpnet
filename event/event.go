@@ -283,6 +283,11 @@ type GetRatingEvent struct {
 // GetRatingResponse defines model for GetRatingResponse.
 type GetRatingResponse = domain.NodeRating
 
+// RefuseReservationEvent defines model for RefuseReservationEvent.
+type RefuseReservationEvent struct {
+	PeerId string `json:"peer_id"`
+}
+
 // ReactionEvent defines model for ReactionEvent.
 //
 // Emoji names the reaction. Clients that predate reactions omit it and
@@ -788,6 +793,24 @@ type GetSponsoredSettingsResponse = domain.SponsoredSettings
 // UpdateSponsoredSettingsEvent defines model for UpdateSponsoredSettingsEvent.
 type UpdateSponsoredSettingsEvent = domain.SponsoredSettings
 
+// GetNetworkSettingsEvent defines model for GetNetworkSettingsEvent.
+type GetNetworkSettingsEvent struct{}
+
+// GetNetworkSettingsResponse defines model for GetNetworkSettingsResponse.
+type GetNetworkSettingsResponse = domain.NetworkSettings
+
+// UpdateNetworkSettingsEvent defines model for UpdateNetworkSettingsEvent.
+type UpdateNetworkSettingsEvent = domain.NetworkSettings
+
+// GetWalletSettingsEvent defines model for GetWalletSettingsEvent.
+type GetWalletSettingsEvent struct{}
+
+// GetWalletSettingsResponse defines model for GetWalletSettingsResponse.
+type GetWalletSettingsResponse = domain.WalletSettings
+
+// UpdateWalletSettingsEvent defines model for UpdateWalletSettingsEvent.
+type UpdateWalletSettingsEvent = domain.WalletSettings
+
 // BookmarkEvent defines model for BookmarkEvent.
 type BookmarkEvent struct {
 	UserId      domain.ID `json:"user_id"`
@@ -1089,6 +1112,9 @@ type CopyBuyerResponse struct {
 	DailyOrdersCount int       `json:"daily_orders_count"`
 	IsPixelMatch     bool      `json:"is_pixel_match"`
 	PixelScore       float64   `json:"pixel_score"`
+	IsFrameMatch     bool      `json:"is_frame_match"`
+	FrameScore       float64   `json:"frame_score"`
+	FramesCount      int       `json:"frames_count"`
 }
 
 // OrderQuoteStep defines model for OrderQuoteStep.

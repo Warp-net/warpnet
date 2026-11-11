@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/Warp-net/warpnet/security"
@@ -245,16 +246,9 @@ func TestVerifyVideo_TamperedPayloadIsRefused(t *testing.T) {
 func TestEmbedInVideo_AppendsOneUUIDBox(t *testing.T) {
 	signedFile := mp4WithMetadata(t, "alice")
 
-	boxes, err := walkBoxes(signedFile)
+	_, payloads, err := video.CutUUIDBoxes(signedFile, warpnetUUID)
 	require.NoError(t, err)
-
-	var metaBoxes int
-	for _, box := range boxes {
-		if isWarpnetBox(box) {
-			metaBoxes++
-		}
-	}
-	assert.Equal(t, 1, metaBoxes, "exactly one claim of responsibility per file")
+	assert.Len(t, payloads, 1, "exactly one claim of responsibility per file")
 	assert.True(t, bytes.HasPrefix(signedFile, minimalMP4()), "the video itself is untouched")
 }
 
@@ -273,31 +267,17 @@ func TestSplitVideo_SeparatesWhatTheSignatureCovers(t *testing.T) {
 func TestSplitVideo_RefusesTwoMetaBoxes(t *testing.T) {
 	signedFile := mp4WithMetadata(t, "alice")
 
-	boxes, err := walkBoxes(signedFile)
-	require.NoError(t, err)
+	metaBox := signedFile[len(minimalMP4()):]
 
-	var metaBox []byte
-	for _, box := range boxes {
-		if isWarpnetBox(box) {
-			metaBox = signedFile[box.offset : box.offset+box.size]
-		}
-	}
-	require.NotNil(t, metaBox)
-
-	_, _, err = SplitVideo(append(signedFile, metaBox...))
+	_, _, err := SplitVideo(append(signedFile, metaBox...))
 	assert.ErrorIs(t, err, ErrAmbiguousMetadata)
 }
 
 func TestSplitVideo_UnreadableBoxPayloadIsMissingMeta(t *testing.T) {
-	header := make([]byte, boxHeaderSize)
-	binary.BigEndian.PutUint32(header, uint32(boxHeaderSize+boxUUIDSize+4))
-	copy(header[4:], uuidBoxType)
+	file, err := video.AppendUUIDBox(minimalMP4(), warpnetUUID, []byte("!!!!"))
+	require.NoError(t, err)
 
-	file := append(minimalMP4(), header...)
-	file = append(file, warpnetUUID[:]...)
-	file = append(file, []byte("!!!!")...) // not base64
-
-	_, _, err := SplitVideo(file)
+	_, _, err = SplitVideo(file)
 	assert.ErrorIs(t, err, ErrNoMetadata)
 }
 
@@ -308,7 +288,7 @@ func TestCloseOpenEndedBox(t *testing.T) {
 		0xAA, 0xBB, 0xCC, 0xDD,
 	}...)
 
-	closed, err := CloseOpenEndedBox(openEnded)
+	closed, err := video.CloseOpenEndedBox(openEnded)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(12), binary.BigEndian.Uint32(closed[24:28]))
 
@@ -318,25 +298,6 @@ func TestCloseOpenEndedBox(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NoError(t, VerifyVideo(signedFile, signerID.String(), "alice"))
-}
-
-func TestWalkBoxes_RejectsMalformed(t *testing.T) {
-	_, err := walkBoxes([]byte{0x00, 0x00, 0xFF, 0xFF, 'f', 't', 'y', 'p'})
-	assert.ErrorIs(t, err, ErrMalformedISO)
-}
-
-func TestIsISOBaseMedia(t *testing.T) {
-	leadingFree := append([]byte{
-		0x00, 0x00, 0x00, 0x08, 'f', 'r', 'e', 'e',
-	}, minimalMP4()...)
-
-	assert.True(t, IsISOBaseMediaFile(minimalMP4()))
-	assert.True(t, IsISOBaseMediaFile(leadingFree))
-	assert.True(t, IsISOBaseMediaFile(mp4WithMetadata(t, "alice")), "a signed file is still a container")
-	assert.False(t, IsISOBaseMediaFile([]byte{0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0}))
-	assert.False(t, IsISOBaseMediaFile([]byte("short")))
-	assert.False(t, IsISOBaseMediaFile(nil))
-	assert.False(t, IsISOBaseMediaFile([]byte{0x00, 0x00, 0x00, 0x00, 'f', 'r', 'e', 'e'}))
 }
 
 func TestEmbedInVideo_RoundTripsThroughBase64(t *testing.T) {

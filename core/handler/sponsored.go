@@ -44,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/media-meta"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -88,12 +89,8 @@ type SponsoredWallet interface {
 	Network() string
 }
 
-type OrderCounter interface {
-	CountConfirmed(buyerId string, from, to time.Time) (int, error)
-}
-
 type OrderStorer interface {
-	OrderCounter
+	CountConfirmed(buyerId string, from, to time.Time) (int, error)
 	Get(tweetId, buyerId string) (domain.Order, error)
 	Save(o domain.Order) error
 	Delete(tweetId, buyerId string) error
@@ -101,7 +98,7 @@ type OrderStorer interface {
 }
 
 type OrderSettingsFetcher interface {
-	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
+	GetSponsoredSettings() (domain.SponsoredSettings, error)
 }
 
 type SponsoredTweetFetcher interface {
@@ -130,6 +127,12 @@ type SponsoredMediaStorer interface {
 
 type SponsoredCopyStorer interface {
 	SetCopy(userId, key string, c domain.MediaCopy) error
+	ListCopies(userId, originalKey string) ([]domain.MediaCopy, error)
+}
+
+type SponsoredVideoEditor interface {
+	EncodeFrames(b []byte, samples []int, watermark []byte) ([]domain.VideoFrame, error)
+	ScoreFrames(original, suspect []byte, sales [][]domain.VideoFrame) ([]video.FrameMatch, error)
 }
 
 type SponsoredCopyLister interface {
@@ -633,7 +636,7 @@ func StreamVerifyOrderHandler(
 		if ev.Payer != "" && !wallet.IsAddress(ev.Payer) {
 			return nil, ErrPayerAddress
 		}
-		sponsored, err := settings.GetSponsoredSettings(owner.UserId)
+		sponsored, err := settings.GetSponsoredSettings()
 		if err != nil {
 			return nil, err
 		}
@@ -688,15 +691,15 @@ func StreamVerifyOrderHandler(
 	}
 }
 
-// admitPaidOrder holds a paid order to the rules in force when it was paid: a
-// buyer let pay is not refused for a stricter stake rule or an hourly limit
-// reached later. It answers false for a payment made past the hourly limit.
+// admitPaidOrder holds a paid order to the stake rules in force when it was paid:
+// a buyer let pay is not refused for a stricter rule later. A buyer with the
+// hourly limit of confirmed orders reached waits: it answers false until the hour frees.
 func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domain.SponsoredSettings, order domain.Order, paidAt time.Time) (bool, error) {
 	now := time.Now()
 	if paidAt.IsZero() {
 		paidAt = now
 	}
-	count, err := orders.CountConfirmed(order.BuyerId, paidAt.Add(-domain.OrderLimitWindow), paidAt)
+	count, err := orders.CountConfirmed(order.BuyerId, now.Add(-domain.OrderLimitWindow), now)
 	if err != nil || count >= domain.OrderLimit {
 		return false, err
 	}
@@ -704,7 +707,10 @@ func admitPaidOrder(orders OrderStorer, backend SponsoredWallet, sponsored domai
 	if err := checkBuyerPayer(orders, order.Payer, order.BuyerNodeId, minStake); err != nil {
 		return false, err
 	}
-	return true, checkPayerStake(backend, order.Payer, minStake)
+	if err := checkPayerStake(backend, order.Payer, minStake); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func StreamGetSponsoredTweetHandler(
@@ -716,6 +722,7 @@ func StreamGetSponsoredTweetHandler(
 	copyRepo SponsoredCopyStorer,
 	userRepo SponsoredUserFetcher,
 	streamer SponsoredStreamer,
+	editor SponsoredVideoEditor,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.GetTweetEvent
@@ -751,7 +758,7 @@ func StreamGetSponsoredTweetHandler(
 				return nil, err
 			}
 			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: streamer.NodeInfo().ID.String(), OwnerId: owner.UserId}
-			return copyTweetMedia(signer, mediaRepo, copyRepo, tweet, buyer, order)
+			return copyTweetMedia(signer, mediaRepo, copyRepo, editor, tweet, buyer, order)
 		}
 		if !isOwn {
 			return domain.Tweet{}, nil
@@ -818,6 +825,7 @@ func copyTweetMedia(
 	signer media_meta.Metadata,
 	mediaRepo SponsoredMediaStorer,
 	copyRepo SponsoredCopyStorer,
+	editor SponsoredVideoEditor,
 	tweet domain.Tweet,
 	buyer domain.User,
 	order domain.Order,
@@ -867,7 +875,15 @@ func copyTweetMedia(
 		return domain.Tweet{}, err
 	}
 	c := domain.MediaCopy{OriginalKey: *tweet.VideoKey, BuyerId: order.BuyerId, EncryptedOrder: encryptedOrder}
-	copied, err := media_meta.BuildVideoCopy(string(video), c)
+	if c.Frames, err = findSoldFrames(copyRepo, tweet.UserId, c); err != nil {
+		return domain.Tweet{}, err
+	}
+	if len(c.Frames) == 0 {
+		if c.Frames, err = media_meta.BuildVideoFrames(string(video), c, signer, editor); err != nil {
+			log.Warnf("sponsored tweet: video %s of %s is sold without frames: %v", c.OriginalKey, tweet.Id, err)
+		}
+	}
+	copied, err := media_meta.BuildVideoCopy(string(video), c, signer)
 	if err != nil {
 		return domain.Tweet{}, err
 	}
@@ -879,7 +895,20 @@ func copyTweetMedia(
 	return tweet, nil
 }
 
-func notifyOrderLimit(notifier SponsoredNotifier, orders OrderCounter, authorId string, buyer domain.User) error {
+func findSoldFrames(copyRepo SponsoredCopyStorer, userId string, c domain.MediaCopy) ([]domain.VideoFrame, error) {
+	copies, err := copyRepo.ListCopies(userId, c.OriginalKey)
+	if err != nil {
+		return nil, err
+	}
+	for _, sold := range copies {
+		if sold.BuyerId == c.BuyerId && len(sold.Frames) != 0 {
+			return sold.Frames, nil
+		}
+	}
+	return nil, nil
+}
+
+func notifyOrderLimit(notifier SponsoredNotifier, orders OrderStorer, authorId string, buyer domain.User) error {
 	now := time.Now()
 	count, err := orders.CountConfirmed(buyer.Id, now.Add(-domain.OrderLimitWindow), now)
 	if err != nil || count != domain.OrderLimit {
@@ -904,6 +933,7 @@ func StreamGetCopyBuyerHandler(
 	orders OrderStorer,
 	mediaRepo SponsoredMediaStorer,
 	copyRepo SponsoredCopyLister,
+	editor SponsoredVideoEditor,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, _ warpnet.WarpStream) (any, error) {
 		var ev event.GetCopyBuyerEvent
@@ -917,8 +947,27 @@ func StreamGetCopyBuyerHandler(
 
 		encryptedOrder, err := media_meta.ExtractOrder(raw)
 		isUnmarked := errors.Is(err, media_meta.ErrNoMetadata) || errors.Is(err, media_meta.ErrNoOrder)
-		if isUnmarked && (ev.TweetId == "" || media_meta.IsISOBaseMediaFile(raw)) {
+		if isUnmarked && ev.TweetId == "" {
 			return event.CopyBuyerResponse{}, nil
+		}
+		if isUnmarked && video.IsISOBaseMediaFile(raw) {
+			tweet, err := tweetRepo.Get(auth.GetOwner().UserId, ev.TweetId)
+			if err != nil {
+				return nil, err
+			}
+			order, match, err := findOrderByVideoFrames(tweet, raw, orders, mediaRepo, copyRepo, editor)
+			if err != nil {
+				return nil, err
+			}
+			if match.Score < video.MinFrameScore {
+				return event.CopyBuyerResponse{}, nil
+			}
+			resp, err := buildCopyBuyerResponse(orders, order)
+			if err != nil {
+				return nil, err
+			}
+			resp.IsFrameMatch, resp.FrameScore, resp.FramesCount = true, match.Score, match.FramesCount
+			return resp, nil
 		}
 		if isUnmarked {
 			tweet, err := tweetRepo.Get(auth.GetOwner().UserId, ev.TweetId)
@@ -955,7 +1004,7 @@ func StreamGetCopyBuyerHandler(
 	}
 }
 
-func buildCopyBuyerResponse(orders OrderCounter, order domain.Order) (event.CopyBuyerResponse, error) {
+func buildCopyBuyerResponse(orders OrderStorer, order domain.Order) (event.CopyBuyerResponse, error) {
 	dailyOrdersCount, err := orders.CountConfirmed(
 		order.BuyerId, order.CreatedAt.Add(-dailyOrdersWindow), order.CreatedAt.Add(dailyOrdersWindow),
 	)
@@ -1015,6 +1064,77 @@ func findOrderByPixelMark(
 		}
 	}
 	return best, bestScore, nil
+}
+
+func findOrderByVideoFrames(
+	tweet domain.Tweet,
+	suspect []byte,
+	orders OrderStorer,
+	mediaRepo SponsoredMediaStorer,
+	copyRepo SponsoredCopyLister,
+	editor SponsoredVideoEditor,
+) (domain.Order, video.FrameMatch, error) {
+	if tweet.VideoKey == nil {
+		return domain.Order{}, video.FrameMatch{}, nil
+	}
+	copies, err := copyRepo.ListCopies(tweet.UserId, *tweet.VideoKey)
+	if err != nil {
+		return domain.Order{}, video.FrameMatch{}, err
+	}
+	sold := make([]domain.Order, 0, len(copies))
+	sales := make([][]domain.VideoFrame, 0, len(copies))
+	isListed := make(map[string]bool, len(copies))
+	for _, c := range copies {
+		if len(c.Frames) == 0 || isListed[c.BuyerId] {
+			continue
+		}
+		isListed[c.BuyerId] = true
+		order, err := orders.Get(tweet.Id, c.BuyerId)
+		if errors.Is(err, database.ErrOrderNotFound) {
+			continue
+		}
+		if err != nil {
+			return domain.Order{}, video.FrameMatch{}, err
+		}
+		sold = append(sold, order)
+		sales = append(sales, c.Frames)
+	}
+	if len(sales) == 0 {
+		return domain.Order{}, video.FrameMatch{}, nil
+	}
+	original, err := mediaRepo.GetVideo(tweet.UserId, *tweet.VideoKey)
+	if err != nil {
+		return domain.Order{}, video.FrameMatch{}, err
+	}
+	_, b, err := media_meta.SplitDataURI(string(original))
+	if err != nil {
+		return domain.Order{}, video.FrameMatch{}, err
+	}
+	raw, _, err := media_meta.SplitVideo(b)
+	if err != nil {
+		return domain.Order{}, video.FrameMatch{}, err
+	}
+	matches, err := editor.ScoreFrames(raw, suspect, sales)
+	if err != nil {
+		return domain.Order{}, video.FrameMatch{}, err
+	}
+	var (
+		best        domain.Order
+		bestMatch   video.FrameMatch
+		secondScore float64
+	)
+	for i, match := range matches {
+		if match.Score > bestMatch.Score {
+			secondScore = bestMatch.Score
+			best, bestMatch = sold[i], match
+			continue
+		}
+		secondScore = max(secondScore, match.Score)
+	}
+	if bestMatch.Score-secondScore < video.MinFrameScore {
+		return domain.Order{}, video.FrameMatch{}, nil
+	}
+	return best, bestMatch, nil
 }
 
 func listPixelMarkedOrders(tweet domain.Tweet, originalKey string, orders OrderStorer, copyRepo SponsoredCopyLister) ([]domain.Order, error) {

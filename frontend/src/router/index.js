@@ -236,6 +236,20 @@ const routes = [
     meta: { protected: true },
   },
   {
+    path: "/settings/network",
+    name: "SettingsNetwork",
+    component: () =>
+      import(/* webpackChunkName: "settings-network" */ "../views/Settings/Network.vue"),
+    meta: { protected: true },
+  },
+  {
+    path: "/settings/wallet",
+    name: "SettingsWallet",
+    component: () =>
+      import(/* webpackChunkName: "settings-wallet" */ "../views/Settings/Wallet.vue"),
+    meta: { protected: true },
+  },
+  {
     path: "/who-to-follow",
     name: "WhoToFollow",
     component: () =>

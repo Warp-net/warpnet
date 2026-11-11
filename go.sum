@@ -12,6 +12,10 @@ github.com/RaduBerinde/axisds v0.1.0 h1:YItk/RmU5nvlsv/awo2Fjx97Mfpt4JfgtEVAGPrL
 github.com/RaduBerinde/axisds v0.1.0/go.mod h1:UHGJonU9z4YYGKJxSaC6/TNcLOBptpmM5m2Cksbnw0Y=
 github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 h1:bsU8Tzxr/PNz75ayvCnxKZWEYdLMPDkUgticP4a4Bvk=
 github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54/go.mod h1:0tr7FllbE9gJkHq7CVeeDDFAFKQVy5RnCSSNBOvdqbc=
+github.com/Warp-net/ffmpeg-stripped v0.1.0 h1:AMsz8qxRepD7WBYJUYodKbRIfbMJlvuB56FGUqiksZc=
+github.com/Warp-net/ffmpeg-stripped v0.1.0/go.mod h1:9KhuqJK8NDzFvgBjHzO/U+G7hpxMEQZxKMq4H8xvPac=
+github.com/Warp-net/keepalive v0.0.0-20261108115934-582f57fecb24 h1:m8paJWDzvGixT3gzJfT6qBNT8LEnWpzBR20psTn16LA=
+github.com/Warp-net/keepalive v0.0.0-20261108115934-582f57fecb24/go.mod h1:n8euKyIV+7lD9OyqfAoH8Agby51oibOEP7+i80KCKA4=
 github.com/Warp-net/libp2p-camouflage-transport v0.0.3 h1:rmkVl3+zHQqduXIAf6KEhM/4Y1eb1lXiIkHt4j7YgBY=
 github.com/Warp-net/libp2p-camouflage-transport v0.0.3/go.mod h1:Ki1TfLYtJgF4vxRYfZwfk8m4FJOVxP8eVmr6VemVkpQ=
 github.com/Warp-net/payment-engine-lib v0.0.8 h1:2zGx4T4rKc9RzPmvAoUo2Oe4q995RE1NYxh0twl7gbw=

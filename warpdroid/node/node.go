@@ -340,14 +340,39 @@ func (c *clientNode) dial(peerInfo string) (peer.ID, error) {
 	// don't hold c.mu across either, or pause/resume/disconnect would
 	// block on the dial.
 	c.host.Peerstore().AddAddrs(peerID, addrs, 8*time.Hour)
+	c.clearDialBackoff(peerID, addrs)
 
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 
 	if err := c.host.Connect(ctx, peer.AddrInfo{ID: peerID, Addrs: addrs}); err != nil {
+		logf(LogLevelWarn, "dial %s: %v", peerID, err)
 		return "", fmt.Errorf("connection failed: %w", err)
 	}
 	return peerID, nil
+}
+
+// clearDialBackoff forgets the swarm dial backoff of p and of the relays its
+// circuit addrs go through: dials failed while offline would otherwise block
+// reconnects for up to five minutes. ConnectionMonitor owns reconnect pacing.
+func (c *clientNode) clearDialBackoff(p peer.ID, addrs []multiaddr.Multiaddr) {
+	sw, ok := c.host.Network().(*swarm.Swarm)
+	if !ok {
+		return
+	}
+	sw.Backoff().Clear(p)
+	for _, addr := range addrs {
+		if !isRelayAddr(addr) {
+			continue
+		}
+		relay, err := addr.ValueForProtocol(multiaddr.P_P2P)
+		if err != nil {
+			continue
+		}
+		if relayID, err := peer.Decode(relay); err == nil {
+			sw.Backoff().Clear(relayID)
+		}
+	}
 }
 
 func (c *clientNode) stream(protocolID string, data []byte) ([]byte, error) {
@@ -537,6 +562,7 @@ func (c *clientNode) resume() {
 		return
 	}
 	info := c.host.Peerstore().PeerInfo(desktopPeerID)
+	c.clearDialBackoff(desktopPeerID, info.Addrs)
 	go func() {
 		// Parent off c.ctx so close() / cancel() reliably tears down
 		// in-flight resume dials instead of letting them outlive the

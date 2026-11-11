@@ -531,7 +531,7 @@ func serveStreams(t *testing.T, m *MemberNode) {
 
 	n, err := corenode.NewWarpNode(
 		m.ctx, m.ratings, m.rateLimits,
-		corenode.WarpIdentity(m.privKey), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+		warpnet.WarpIdentity(m.privKey), libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
 	)
 	require.NoError(t, err)
 	m.node = n

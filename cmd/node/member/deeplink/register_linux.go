@@ -44,7 +44,7 @@ Type=Application
 Categories=Network;Social;
 MimeType=x-scheme-handler/%s;
 StartupWMClass=warpnet
-`, exe, Scheme)
+`, exe, scheme)
 
 	if err := os.WriteFile(desktopPath, []byte(contents), 0o644); err != nil { //nolint:mnd,gosec
 		return fmt.Errorf("deeplink: write .desktop: %w", err)
@@ -58,19 +58,19 @@ StartupWMClass=warpnet
 		log.Warnf("deeplink: update-desktop-database: %v", err)
 	}
 
-	if err := runShort("xdg-mime", "default", "warpnet.desktop", "x-scheme-handler/"+Scheme); err != nil {
+	if err := runShort("xdg-mime", "default", "warpnet.desktop", "x-scheme-handler/"+scheme); err != nil {
 		return fmt.Errorf("deeplink: xdg-mime default: %w", err)
 	}
 
-	out, err := runShortOut("xdg-mime", "query", "default", "x-scheme-handler/"+Scheme)
+	out, err := runShortOut("xdg-mime", "query", "default", "x-scheme-handler/"+scheme)
 	if err != nil {
 		return fmt.Errorf("deeplink: xdg-mime query: %w", err)
 	}
 	got := strings.TrimSpace(out)
 	if got != "warpnet.desktop" {
-		return fmt.Errorf("deeplink: x-scheme-handler/%s resolves to %q, expected warpnet.desktop", Scheme, got) //nolint:err113 // diagnostic, not matched by callers
+		return fmt.Errorf("deeplink: x-scheme-handler/%s resolves to %q, expected warpnet.desktop", scheme, got) //nolint:err113 // diagnostic, not matched by callers
 	}
-	log.Infof("deeplink: x-scheme-handler/%s -> %s", Scheme, got)
+	log.Infof("deeplink: x-scheme-handler/%s -> %s", scheme, got)
 	return nil
 }
 

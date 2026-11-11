@@ -39,21 +39,26 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 )
 
+type authError string
+
+func (e authError) Error() string {
+	return string(e)
+}
+
 const (
-	ErrUsernamesMismatch    warpnet.WarpError = "username doesn't exist"
-	ErrAlreadyAuthenticated warpnet.WarpError = "already authenticated"
+	errUsernamesMismatch    authError = "username doesn't exist"
+	errAlreadyAuthenticated authError = "already authenticated"
 )
 
-// DefaultUsername is the public name of a new profile: the login is half of the
+// defaultUsername is the public name of a new profile: the login is half of the
 // database and identity key secret, so it never becomes the profile name.
-const DefaultUsername = "Anonymous"
+const defaultUsername = "Anonymous"
 
 type UserPersistencyLayer interface {
 	Create(user domain.User) (domain.User, error)
@@ -107,7 +112,7 @@ func (as *AuthService) IsAuthenticated() bool {
 func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (authInfo event.LoginResponse, err error) {
 	if as.isAuthenticated.Load() {
 		log.Error("auth: already authenticated")
-		return authInfo, ErrAlreadyAuthenticated
+		return authInfo, errAlreadyAuthenticated
 	}
 
 	log.Infoln("authenticating user")
@@ -145,7 +150,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 			CreatedAt:     owner.CreatedAt,
 			Id:            id,
 			NodeId:        "none",
-			Username:      DefaultUsername,
+			Username:      defaultUsername,
 			RoundTripTime: math.MaxInt64, // put your user at the end of a who-to-follow list
 		})
 		if err != nil {
@@ -163,7 +168,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 
 	if owner.Username != message.Username {
 		log.Errorln("username mismatch")
-		return authInfo, ErrUsernamesMismatch
+		return authInfo, errUsernamesMismatch
 	}
 	as.authReady <- domain.AuthNodeInfo{
 		UserId: owner.UserId,
@@ -185,7 +190,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		// owner.Username stays the immutable login name.
 		user.Id = owner.UserId
 		user.CreatedAt = owner.CreatedAt
-		user.RoundTripTime = math.MaxInt64 // put your user at the end of a who-to-follow list
+		user.RoundTripTime = math.MaxInt64 // put your own user at the end of a who-to-follow list
 		user.NodeId = authInfo.ID
 		owner.NodeId = authInfo.ID
 
@@ -233,27 +238,27 @@ func (as *AuthService) Reset() {
 }
 
 const (
-	MinPasswordLength = 8
-	MaxPasswordLength = 32
+	minPasswordLength = 8
+	maxPasswordLength = 32
 
-	ErrEmptyPassword             warpnet.WarpError = "empty password"
-	ErrMinPasswordLength         warpnet.WarpError = "password must be at least 8 characters"
-	ErrMaxPasswordLength         warpnet.WarpError = "password must be at least 32 characters"
-	ErrPasswordUpperCaseRequired warpnet.WarpError = "password must have at least one uppercase letter"
-	ErrPasswordLowerCaseRequired warpnet.WarpError = "password must have at least one lowercase letter"
-	ErrPasswordDigitRequired     warpnet.WarpError = "password must have at least one digit"
-	ErrPasswordSpecialRequired   warpnet.WarpError = "password must have at least one special character"
+	errEmptyPassword             authError = "empty password"
+	errMinPasswordLength         authError = "password must be at least 8 characters"
+	errMaxPasswordLength         authError = "password must be at least 32 characters"
+	errPasswordUpperCaseRequired authError = "password must have at least one uppercase letter"
+	errPasswordLowerCaseRequired authError = "password must have at least one lowercase letter"
+	errPasswordDigitRequired     authError = "password must have at least one digit"
+	errPasswordSpecialRequired   authError = "password must have at least one special character"
 )
 
 func validatePassword(pw string) error {
 	if pw == "" {
-		return ErrEmptyPassword
+		return errEmptyPassword
 	}
-	if len(pw) < MinPasswordLength {
-		return ErrMinPasswordLength
+	if len(pw) < minPasswordLength {
+		return errMinPasswordLength
 	}
-	if len(pw) > MaxPasswordLength {
-		return ErrMaxPasswordLength
+	if len(pw) > maxPasswordLength {
+		return errMaxPasswordLength
 	}
 
 	var (
@@ -265,13 +270,13 @@ func validatePassword(pw string) error {
 
 	switch {
 	case !hasUpper(pw):
-		return ErrPasswordUpperCaseRequired
+		return errPasswordUpperCaseRequired
 	case !hasLower(pw):
-		return ErrPasswordLowerCaseRequired
+		return errPasswordLowerCaseRequired
 	case !hasNumber(pw):
-		return ErrPasswordDigitRequired
+		return errPasswordDigitRequired
 	case !hasSpecial(pw):
-		return ErrPasswordSpecialRequired
+		return errPasswordSpecialRequired
 	}
 	return nil
 }

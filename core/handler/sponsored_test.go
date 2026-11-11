@@ -16,13 +16,20 @@ import (
 	"image/png"
 	"math"
 	"math/big"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	ffmpeg "github.com/Warp-net/ffmpeg-stripped"
 	"github.com/Warp-net/warpnet/core/media-meta"
+	"github.com/Warp-net/warpnet/core/ratelimit"
 	"github.com/Warp-net/warpnet/core/stream"
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -151,7 +158,7 @@ const testPayer = "TZEDAzs41eK4ipB9gaUnKbaWLvjyn2paQa"
 
 type stubSponsoredSettings domain.SponsoredSettings
 
-func (s stubSponsoredSettings) GetSponsoredSettings(string) (domain.SponsoredSettings, error) {
+func (s stubSponsoredSettings) GetSponsoredSettings() (domain.SponsoredSettings, error) {
 	return domain.SponsoredSettings(s), nil
 }
 
@@ -1011,17 +1018,65 @@ func TestStreamVerifyOrderHandler(t *testing.T) {
 		assert.False(t, resp.(event.OrderResponse).Confirmed)
 		assert.NotContains(t, orders, "tweet-1/buyer-1")
 
-		w.blockTime = time.Now().Add(-5 * time.Minute)
-		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
-		require.NoError(t, err)
-		assert.True(t, resp.(event.OrderResponse).Confirmed, "a payment made before the limit filled up is not refused for orders confirmed after it")
-		delete(orders, "tweet-1/buyer-1")
-		w.blockTime = time.Time{}
-
 		orders = confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-2*time.Hour))
 		resp, err = newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
 		require.NoError(t, err)
 		assert.True(t, resp.(event.OrderResponse).Confirmed, "an hour later the order goes through")
+	})
+
+	t.Run("a payment whose claim was held up waits for the hour, it is not lost", func(t *testing.T) {
+		paidAt := time.Now().Add(-48 * time.Hour)
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, blockTime: paidAt}
+		orders := confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-10*time.Minute))
+		for range 3 {
+			resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+			require.NoError(t, err)
+			assert.False(t, resp.(event.OrderResponse).Confirmed, "ten orders were confirmed in the last hour")
+		}
+		assert.NotContains(t, orders, "tweet-1/buyer-1")
+
+		for key, sold := range orders {
+			sold.CreatedAt = sold.CreatedAt.Add(-domain.OrderLimitWindow)
+			orders[key] = sold
+		}
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.True(t, resp.(event.OrderResponse).Confirmed, "the same transaction, its block time unchanged, goes through once the hour frees")
+		assert.Equal(t, "tx-1", orders["tweet-1/buyer-1"].TxId)
+	})
+
+	t.Run("orders paid long before the limit filled wait as well", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, blockTime: time.Now().Add(-3 * time.Hour)}
+		orders := confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-30*time.Minute))
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.False(t, resp.(event.OrderResponse).Confirmed, "the limit caps what a buyer gets in an hour, whenever it paid")
+		assert.Empty(t, notified, "a waiting claim tells the author nothing")
+	})
+
+	t.Run("an order is kept at the moment it is confirmed, not at its block time", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", isPaid: true, blockTime: time.Now().Add(-3 * time.Hour)}
+		orders := stubOrders{}
+		before := time.Now()
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		require.True(t, resp.(event.OrderResponse).Confirmed)
+		createdAt := orders["tweet-1/buyer-1"].CreatedAt
+		assert.False(t, createdAt.Before(before))
+		assert.False(t, createdAt.After(time.Now()))
+
+		count, err := orders.CountConfirmed("buyer-1", before, time.Now())
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "the hour counts it from when it was delivered")
+	})
+
+	t.Run("an unpaid claim keeps nothing", func(t *testing.T) {
+		w := &stubSponsoredWallet{splitter: "TSplitter", blockTime: time.Now().Add(-time.Minute)}
+		orders := stubOrders{}
+		resp, err := newHandler(w, paidTweet, orders)(marshal(t, claim), fromBuyer())
+		require.NoError(t, err)
+		assert.False(t, resp.(event.OrderResponse).Confirmed)
+		assert.Empty(t, orders)
 	})
 
 	t.Run("a confirmed order is not verified again", func(t *testing.T) {
@@ -1070,7 +1125,7 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 		image, _ := imageWithMetadata(t, "author-1")
 		media.images["author-1/img-1"] = domain.Base64Image(image)
 		h := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, newStubSponsoredMedia(), users,
-			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}})
+			stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}, stubVideoEditor{})
 
 		resp, err := h(req, streamFrom(own))
 		require.NoError(t, err)
@@ -1108,19 +1163,19 @@ func TestStreamGetSponsoredTweetHandler(t *testing.T) {
 			},
 		}
 
-		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer, stubVideoEditor{})(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "nothing bought, nothing shown")
 		assert.Empty(t, paths, "nothing bought, nothing asked")
 
 		paying := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", Nonce: "n1"}}
-		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)(req, streamFrom(own))
+		resp, err = StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, paying, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer, stubVideoEditor{})(req, streamFrom(own))
 		require.NoError(t, err)
 		assert.Equal(t, domain.Tweet{}, resp, "an order without a tx has nothing to claim yet")
 		assert.Empty(t, paths, "an order without a tx asks the author nothing")
 
 		orders := stubOrders{"tweet-1/buyer-1": {TweetId: "tweet-1", BuyerId: "buyer-1", TxId: "tx-1", Nonce: "n1"}}
-		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer)
+		h := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, newStubSponsoredMedia(), newStubSponsoredMedia(), users, streamer, stubVideoEditor{})
 
 		confirmed = false
 		resp, err = h(req, streamFrom(own))
@@ -1174,7 +1229,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 		"tweet-3/buyer-1": {TweetId: "tweet-3", BuyerId: "buyer-1", Confirmed: true, CreatedAt: order.CreatedAt.Add(-72 * time.Hour)},
 	}
 	resp, err := StreamGetSponsoredTweetHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets,
-		orders, media, copies, users, streamer,
+		orders, media, copies, users, streamer, stubVideoEditor{},
 	)(marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), fromBuyer(event.PUBLIC_GET_SPONSORED_TWEET))
 	require.NoError(t, err)
 	bought := resp.(domain.Tweet)
@@ -1188,7 +1243,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	assert.Equal(t, watermark, copies.copies["author-1/"+bought.ImageKeys[0]].Watermark, "the watermark names the buyer by id")
 
 	author := domain.User{Id: "author-1", NodeId: testSignerID.String()}
-	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies)
+	traceBuyer := StreamGetCopyBuyerHandler(stubAuth{owner: domain.Owner{UserId: "author-1"}}, testSignerKey, tweets, orders, media, copies, stubVideoEditor{})
 	want := event.CopyBuyerResponse{
 		TweetId: "tweet-1", BuyerId: "buyer-1", OrderId: order.ID(), TxId: "tx-1", SoldAt: order.CreatedAt, DailyOrdersCount: 2,
 	}
@@ -1207,7 +1262,7 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, copied, served.(event.GetImageResponse).File, "a rebuilt copy is the same file")
 
-	served, err = StreamGetSponsoredVideoHandler(streamer, media, copies, users)(
+	served, err = StreamGetSponsoredVideoHandler(streamer, testSignerKey, media, copies, users)(
 		marshal(t, event.GetVideoEvent{UserId: "author-1", Key: *bought.VideoKey}), fromBuyer(event.PUBLIC_GET_SPONSORED_VIDEO))
 	require.NoError(t, err)
 	copied = served.(event.GetVideoResponse).File
@@ -1215,6 +1270,77 @@ func TestSponsoredCopy_NamesItsBuyer(t *testing.T) {
 	traced, err = traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: copied}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, want, traced)
+}
+
+func TestSponsoredVideoCopy_FramesNameTheBuyer(t *testing.T) {
+	clip := buildTestClip(t)
+	editor := video.NewFFmpeg(ratelimit.NewSemaphore(1))
+	metadata, err := media_meta.BuildMetadata(signingInformer{"author-1"}.NodeInfo(), testSignerKey, ownerOf("author-1"))
+	require.NoError(t, err)
+	original, err := signUploadedVideo(mp4DataURL(clip), metadata)
+	require.NoError(t, err)
+	videoKey := contentKeyOf(string(original))
+
+	own := testSignerID
+	media := newStubSponsoredMedia()
+	media.videos["author-1/"+videoKey] = original
+	copies := newStubSponsoredMedia()
+	full := domain.Tweet{Id: "tweet-1", UserId: "author-1", Text: "paid", VideoKey: &videoKey, Price: sponsoredPrice()}
+	tweets := stubTweetRepo{getFn: func(userID, tweetID string) (domain.Tweet, error) { return full, nil }}
+	auth := stubAuth{owner: domain.Owner{UserId: "author-1"}}
+	streamer := stubStreamer{nodeInfo: warpnet.NodeInfo{ID: own, OwnerId: "author-1"}}
+	orders := stubOrders{}
+	users := stubSponsoredUsers{}
+	bought := map[string]string{}
+	for i, buyerId := range []string{"buyer-1", "buyer-2", "buyer-3"} {
+		buyerNode := newTestPeerID(t)
+		users[buyerId] = domain.User{Id: buyerId, NodeId: buyerNode.String()}
+		orders["tweet-1/"+buyerId] = domain.Order{
+			TweetId: "tweet-1", AuthorId: "author-1", BuyerId: buyerId, Nonce: buyerId, TxId: "tx-" + buyerId,
+			Confirmed: true, CreatedAt: time.Date(2026, 11, 10, 12, i, 0, 0, time.UTC),
+		}
+		_, s := stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
+		resp, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer, editor)(
+			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
+		require.NoError(t, err)
+		key := *resp.(domain.Tweet).VideoKey
+		require.NotEmpty(t, copies.copies["author-1/"+key].Frames, "the copy carries frames with the buyer's id")
+
+		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_VIDEO)
+		served, err := StreamGetSponsoredVideoHandler(streamer, testSignerKey, media, copies, users)(
+			marshal(t, event.GetVideoEvent{UserId: "author-1", Key: key}), s)
+		require.NoError(t, err)
+		file := served.(event.GetVideoResponse).File
+		author := domain.User{Id: "author-1", NodeId: own.String()}
+		require.NoError(t, media_meta.VerifyForeignVideo(author, key, file), "the buyer's node takes the copy with frames")
+		bought[buyerId] = file
+
+		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
+		again, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer, editor)(
+			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
+		require.NoError(t, err)
+		assert.Equal(t, copies.copies["author-1/"+key].Frames, copies.copies["author-1/"+*again.(domain.Tweet).VideoKey].Frames,
+			"a second ask reuses the stored frames")
+	}
+
+	stripped, _, err := media_meta.SplitVideo(rawOf(t, bought["buyer-2"]))
+	require.NoError(t, err)
+	traced, err := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies, editor)(
+		marshal(t, event.GetCopyBuyerEvent{File: mp4DataURL(stripped), TweetId: "tweet-1"}), nil)
+	require.NoError(t, err)
+	resp := traced.(event.CopyBuyerResponse)
+	assert.Equal(t, domain.ID("buyer-2"), resp.BuyerId, "frames name the buyer once the hidden order is gone")
+	assert.True(t, resp.IsFrameMatch)
+	assert.Positive(t, resp.FramesCount)
+
+	_, rawOriginal, err := media_meta.SplitDataURI(string(original))
+	require.NoError(t, err)
+	unsold, _, err := media_meta.SplitVideo(rawOriginal)
+	require.NoError(t, err)
+	traced, err = StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies, editor)(
+		marshal(t, event.GetCopyBuyerEvent{File: mp4DataURL(unsold), TweetId: "tweet-1"}), nil)
+	require.NoError(t, err)
+	assert.Equal(t, event.CopyBuyerResponse{}, traced, "the original names nobody")
 }
 
 func TestGetSponsoredImage_OnlyForItsBuyer(t *testing.T) {
@@ -1298,7 +1424,7 @@ func TestGetSponsoredImage_OnTheBuyersNode(t *testing.T) {
 
 func TestStreamGetCopyBuyerHandler_UnmarkedFile(t *testing.T) {
 	image, _ := imageWithMetadata(t, "author-1")
-	h := StreamGetCopyBuyerHandler(stubAuth{}, testSignerKey, stubTweetRepo{}, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia())
+	h := StreamGetCopyBuyerHandler(stubAuth{}, testSignerKey, stubTweetRepo{}, stubOrders{}, newStubSponsoredMedia(), newStubSponsoredMedia(), stubVideoEditor{})
 
 	resp, err := h(marshal(t, event.GetCopyBuyerEvent{File: image}), nil)
 	require.NoError(t, err)
@@ -1334,7 +1460,7 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 			TweetId: "tweet-1", AuthorId: "author-1", BuyerId: buyerId, Nonce: buyerId, TxId: "tx-" + buyerId, Confirmed: true, CreatedAt: soldAt,
 		}
 		_, s := stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_TWEET)
-		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer)(
+		bought, err := StreamGetSponsoredTweetHandler(auth, testSignerKey, tweets, orders, media, copies, users, streamer, stubVideoEditor{})(
 			marshal(t, event.GetTweetEvent{UserId: "author-1", TweetId: "tweet-1"}), s)
 		require.NoError(t, err)
 		_, s = stream.NewLoopbackStream(own, buyerNode, event.PUBLIC_GET_SPONSORED_IMAGE)
@@ -1350,7 +1476,7 @@ func TestSponsoredCopy_NamesItsBuyerByPixels(t *testing.T) {
 	require.NoError(t, png.Encode(&clipboard, decoded))
 	pasted := "data:image/png;base64," + base64.StdEncoding.EncodeToString(clipboard.Bytes())
 
-	traceBuyer := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies)
+	traceBuyer := StreamGetCopyBuyerHandler(auth, testSignerKey, tweets, orders, media, copies, stubVideoEditor{})
 	resp, err := traceBuyer(marshal(t, event.GetCopyBuyerEvent{File: pasted}), nil)
 	require.NoError(t, err)
 	assert.Equal(t, event.CopyBuyerResponse{}, resp, "without the tweet there is no original to compare the pixels with")
@@ -1419,4 +1545,169 @@ func pixelsOf(t *testing.T, file string) []byte {
 	canvas := image.NewRGBA(decoded.Bounds())
 	draw.Draw(canvas, canvas.Bounds(), decoded, decoded.Bounds().Min, draw.Src)
 	return canvas.Pix
+}
+
+type failingOrderCount struct{ stubOrders }
+
+func (failingOrderCount) CountConfirmed(string, time.Time, time.Time) (int, error) {
+	return 0, errors.New("db down")
+}
+
+func TestOrdersPaidAtOnceAreDeliveredAtTheHourlyLimitWhateverTheClaimOrder(t *testing.T) {
+	for _, isReversed := range []bool{false, true} {
+		orders := stubOrders{}
+		paidAt := time.Now().Add(-time.Minute)
+		var admitted int
+		for i := range 2 * domain.OrderLimit {
+			if isReversed {
+				i = 2*domain.OrderLimit - 1 - i
+			}
+			o := domain.Order{TweetId: "tweet-" + strconv.Itoa(i), BuyerId: "buyer-1", CreatedAt: time.Now()}
+			isAdmitted, err := admitPaidOrder(orders, &stubSponsoredWallet{}, domain.SponsoredSettings{}, o, paidAt.Add(time.Duration(i)*time.Second))
+			require.NoError(t, err)
+			if isAdmitted {
+				admitted++
+				o.Confirmed = true
+				require.NoError(t, orders.Save(o))
+			}
+		}
+		assert.Equal(t, domain.OrderLimit, admitted, "isReversed=%v", isReversed)
+	}
+}
+
+func TestAdmitPaidOrder(t *testing.T) {
+	now := time.Now()
+	demanding := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: now.Add(-48 * time.Hour)}
+	order := domain.Order{TweetId: "tweet-1", BuyerId: "buyer-1", BuyerNodeId: "buyer-node", Payer: testPayer}
+	paidAt := now.Add(-time.Minute)
+
+	t.Run("a buyer at the limit waits before its stake is looked up", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "0"}
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit, now.Add(-30*time.Minute)), w, demanding, order, paidAt)
+		require.NoError(t, err, "waiting is not an error")
+		assert.False(t, isAdmitted)
+		assert.Empty(t, w.balances)
+	})
+
+	t.Run("orders confirmed within the last hour count", func(t *testing.T) {
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit, time.Now().Add(-domain.OrderLimitWindow+time.Second)), &stubSponsoredWallet{}, domain.SponsoredSettings{}, order, paidAt)
+		require.NoError(t, err)
+		assert.False(t, isAdmitted)
+	})
+
+	t.Run("orders confirmed over an hour ago free the limit", func(t *testing.T) {
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit, now.Add(-domain.OrderLimitWindow-time.Second)), &stubSponsoredWallet{}, domain.SponsoredSettings{}, order, paidAt)
+		require.NoError(t, err)
+		assert.True(t, isAdmitted)
+	})
+
+	t.Run("pending orders and other buyers' orders do not count", func(t *testing.T) {
+		orders := stubOrders{}
+		for i := range domain.OrderLimit {
+			tweetId := "sold-" + strconv.Itoa(i)
+			orders[tweetId+"/buyer-1"] = domain.Order{TweetId: tweetId, BuyerId: "buyer-1", CreatedAt: now}
+			orders[tweetId+"/buyer-2"] = domain.Order{TweetId: tweetId, BuyerId: "buyer-2", Confirmed: true, CreatedAt: now}
+		}
+		isAdmitted, err := admitPaidOrder(orders, &stubSponsoredWallet{}, domain.SponsoredSettings{}, order, paidAt)
+		require.NoError(t, err)
+		assert.True(t, isAdmitted)
+	})
+
+	t.Run("a buyer under the limit is held to the stake", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "0"}
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit-1, now.Add(-30*time.Minute)), w, demanding, order, paidAt)
+		assert.EqualError(t, err, "order: the author sells only to wallets with at least 500 TRX staked")
+		assert.False(t, isAdmitted)
+		assert.Equal(t, []string{testPayer}, w.balances)
+	})
+
+	t.Run("a buyer under the limit with the stake is admitted", func(t *testing.T) {
+		isAdmitted, err := admitPaidOrder(confirmedSales("buyer-1", domain.OrderLimit-1, now.Add(-30*time.Minute)), &stubSponsoredWallet{staked: "500000000"}, demanding, order, paidAt)
+		require.NoError(t, err)
+		assert.True(t, isAdmitted)
+	})
+
+	t.Run("the stake is the one asked when the payment was made", func(t *testing.T) {
+		enabled := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: now.Add(-time.Hour)}
+		isAdmitted, err := admitPaidOrder(stubOrders{}, &stubSponsoredWallet{staked: "0"}, enabled, order, now.Add(-2*time.Hour))
+		require.NoError(t, err, "paid before any stake was asked")
+		assert.True(t, isAdmitted)
+
+		isAdmitted, err = admitPaidOrder(stubOrders{}, &stubSponsoredWallet{staked: "0"}, enabled, order, now)
+		assert.Error(t, err, "paid once the stake rule had settled")
+		assert.False(t, isAdmitted)
+	})
+
+	t.Run("no block time is judged as paid now", func(t *testing.T) {
+		enabled := domain.SponsoredSettings{MinStakeTRX: 500, ChangedAt: now.Add(-time.Hour)}
+		isAdmitted, err := admitPaidOrder(stubOrders{}, &stubSponsoredWallet{staked: "0"}, enabled, order, time.Time{})
+		assert.Error(t, err)
+		assert.False(t, isAdmitted)
+	})
+
+	t.Run("a payer bound to another node is refused", func(t *testing.T) {
+		orders := stubOrders{"tweet-0/buyer-0": {TweetId: "tweet-0", BuyerId: "buyer-0", BuyerNodeId: "other-node", Payer: testPayer, Confirmed: true, CreatedAt: now.Add(-48 * time.Hour)}}
+		isAdmitted, err := admitPaidOrder(orders, &stubSponsoredWallet{staked: "500000000"}, demanding, order, paidAt)
+		assert.ErrorIs(t, err, ErrPayerTaken)
+		assert.False(t, isAdmitted)
+	})
+
+	t.Run("a store failure is an error", func(t *testing.T) {
+		w := &stubSponsoredWallet{staked: "500000000"}
+		isAdmitted, err := admitPaidOrder(failingOrderCount{stubOrders{}}, w, demanding, order, paidAt)
+		assert.EqualError(t, err, "db down")
+		assert.False(t, isAdmitted)
+		assert.Empty(t, w.balances)
+	})
+}
+
+type stubVideoEditor struct{}
+
+func (stubVideoEditor) EncodeFrames([]byte, []int, []byte) ([]domain.VideoFrame, error) {
+	return nil, video.ErrUnsupportedPlatform
+}
+
+func (stubVideoEditor) ScoreFrames([]byte, []byte, [][]domain.VideoFrame) ([]video.FrameMatch, error) {
+	return nil, nil
+}
+
+func buildTestClip(t *testing.T) []byte {
+	t.Helper()
+	binary, err := ffmpeg.GetFFmpeg()
+	if errors.Is(err, ffmpeg.ErrUnsupported) {
+		t.Skip("no ffmpeg for this platform")
+	}
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	name := filepath.Join(dir, "ffmpeg")
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	require.NoError(t, os.WriteFile(name, binary, 0o700))
+	for i := range 150 {
+		img := image.NewRGBA(image.Rect(0, 0, 320, 180))
+		for y := range 180 {
+			for x := range 320 {
+				v := uint8((x*7 + y*13 + i*5) % 256)
+				if (x/16+y/16+i/4)%2 == 0 {
+					v = 255 - v
+				}
+				img.Set(x, y, color.RGBA{R: v, G: uint8((x + i*3) % 256), B: uint8(y % 256), A: 255})
+			}
+		}
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, img))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("frame%03d.png", i)), buf.Bytes(), 0o600))
+	}
+	clip := filepath.Join(dir, "clip.mp4")
+	out, err := exec.Command(name, "-nostdin", "-loglevel", "error",
+		"-framerate", "30", "-i", filepath.Join(dir, "frame%03d.png"),
+		"-vf", "format=yuv420p", "-c:v", "libx264", "-crf", "28",
+		"-x264-params", "keyint=10:min-keyint=10:scenecut=0:bframes=0", "-f", "mp4", "-y", clip,
+	).CombinedOutput()
+	require.NoError(t, err, string(out))
+	b, err := os.ReadFile(clip)
+	require.NoError(t, err)
+	return b
 }

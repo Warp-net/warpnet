@@ -28,10 +28,7 @@ resulting from the use or misuse of this software.
 package relay
 
 import (
-	"time"
-
 	"github.com/Warp-net/warpnet/core/warpnet"
-	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 )
 
 /*
@@ -64,35 +61,17 @@ import (
   - **DCUtR is used** to attempt NAT traversal before falling back to a relay.
 */
 
-var DefaultResources = relayv2.Resources{
-	Limit: &relayv2.RelayLimit{
-		Duration: DefaultRelayDurationLimit,
-		Data:     DefaultRelayDataLimit,
-	},
-
-	ReservationTTL: time.Hour,
-
-	MaxReservations: 128,
-	MaxCircuits:     16,
-	BufferSize:      4096,
-
-	MaxReservationsPerIP:  8,
-	MaxReservationsPerASN: 32,
-}
-
-const (
-	DefaultRelayDataLimit     = 1 << 30 // 1 GiB
-	DefaultRelayDurationLimit = time.Hour
-)
-
-func NewRelay(node warpnet.P2PNode) (*relayv2.Relay, error) {
-	relay, err := relayv2.New(
+func NewRelay(node warpnet.P2PNode, refusals *ReservationRefusals) (warpnet.WarpRelayCloser, error) {
+	return warpnet.NewRelayService(
 		node,
-		relayv2.WithResources(DefaultResources),
+		warpnet.WithDefaultResourcesOption(),
+		warpnet.WithRelayACLOption(refusals),
 	)
-	return relay, err
 }
 
-func WithDefaultResources() relayv2.Option {
-	return relayv2.WithResources(DefaultResources)
+func NewRelayServiceOption(refusals *ReservationRefusals) warpnet.WarpOption {
+	return warpnet.NewEnableRelayServiceOption(
+		warpnet.WithDefaultResourcesOption(),
+		warpnet.WithRelayACLOption(refusals),
+	)
 }

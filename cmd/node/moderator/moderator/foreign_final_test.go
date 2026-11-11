@@ -63,7 +63,7 @@ func TestTroikaIntegration_ForeignFinalRejected(t *testing.T) {
 
 	reporterHost := newTroikaHost(t)
 	hosts = append(hosts, reporterHost)
-	reporterPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings())
+	reporterPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings(), nil)
 	reporterPS.Run(&troikaConnector{host: reporterHost, ownerId: "reporter-owner"})
 	t.Cleanup(func() { _ = reporterPS.Close() })
 	require.NoError(t, reporterPS.Gossip().SubscribeRaw(event.ReportsTopic, func([]byte) error { return nil }))
@@ -72,7 +72,7 @@ func TestTroikaIntegration_ForeignFinalRejected(t *testing.T) {
 	// It only listens to the two moderation topics to learn the round id.
 	attackerHost := newTroikaHost(t)
 	hosts = append(hosts, attackerHost)
-	attackerPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings())
+	attackerPS := memberpubsub.NewPubSub(ctx, rating.NewPeersRatings(), nil)
 	attackerPS.Run(&troikaConnector{host: attackerHost, ownerId: "attacker-owner"})
 	t.Cleanup(func() { _ = attackerPS.Close() })
 

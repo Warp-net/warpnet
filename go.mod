@@ -9,6 +9,7 @@ tool (
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/Warp-net/keepalive v0.0.0-20261108115934-582f57fecb24
 	github.com/Warp-net/libp2p-camouflage-transport v0.0.3
 	github.com/Warp-net/payment-engine-lib v0.0.8
 	github.com/dgraph-io/badger/v4 v4.9.6
@@ -40,6 +41,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/tcpipuk/llama-go v0.0.0-20260511172544-0690ee1ff408
 	github.com/wailsapp/wails/v2 v2.17.1
+	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
@@ -52,6 +54,7 @@ require (
 	filippo.io/bigmod v0.1.1-0.20260103110540-f8a47775ebe5 // indirect
 	filippo.io/keygen v1.0.0 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
+	github.com/Warp-net/ffmpeg-stripped v0.1.0
 	github.com/andybalholm/brotli v1.2.7 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -198,7 +201,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
-	go.uber.org/fx v1.24.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect

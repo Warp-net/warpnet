@@ -39,6 +39,8 @@ const (
 	// moderation
 	PUBLIC_POST_MODERATION_RESULT = "/public/post/moderate/result/0.0.0"
 	PUBLIC_POST_REPORT            = "/public/post/report/0.0.0"
+	// relay
+	PUBLIC_POST_RELAY_REFUSE_RESERVATION = "/public/post/relay/refuse/reservation/0.0.0"
 	// sponsored
 	PRIVATE_POST_SPONSORED_TWEET = "/private/post/sponsored/tweet/0.0.0"
 	PUBLIC_GET_SPONSORED_TWEET   = "/public/get/sponsored/tweet/0.0.0"
@@ -67,6 +69,10 @@ const (
 	PRIVATE_POST_SETTINGS_RATELIMIT    = "/private/post/settings/ratelimit/0.0.0"
 	PRIVATE_GET_SETTINGS_SPONSORED     = "/private/get/settings/sponsored/0.0.0"
 	PRIVATE_POST_SETTINGS_SPONSORED    = "/private/post/settings/sponsored/0.0.0"
+	PRIVATE_GET_SETTINGS_NETWORK       = "/private/get/settings/network/0.0.0"
+	PRIVATE_POST_SETTINGS_NETWORK      = "/private/post/settings/network/0.0.0"
+	PRIVATE_GET_SETTINGS_WALLET        = "/private/get/settings/wallet/0.0.0"
+	PRIVATE_POST_SETTINGS_WALLET       = "/private/post/settings/wallet/0.0.0"
 	PRIVATE_GET_MESSAGE                = "/private/get/message/0.0.0"
 	PRIVATE_GET_MESSAGES               = "/private/get/messages/0.0.0"
 	PRIVATE_GET_TIMELINE               = "/private/get/timeline/0.0.0"

@@ -25,151 +25,126 @@ resulting from the use or misuse of this software.
 package node
 
 import (
-	"crypto/ed25519"
-	"fmt"
-	camouflage "github.com/Warp-net/libp2p-camouflage-transport"
-	"github.com/libp2p/go-libp2p/p2p/host/observedaddrs"
-	"reflect"
-	"slices"
+	"context"
 	"time"
-	"unsafe"
 
-	"github.com/Warp-net/warpnet/core/relay"
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/libp2p/go-libp2p"
-	libp2pConfig "github.com/libp2p/go-libp2p/config"
-	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
-	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
 )
 
-func init() {
-	observedaddrs.ActivationThresh = 2 // TODO increase if there more than 1 user
+type Blocklister interface {
+	IsBlocklisted(peerId string) bool
 }
 
-var CommonOptions = []libp2p.Option{
-	libp2p.WithDialTimeout(DefaultTimeout),
-	libp2p.SwarmOpts(
-		WithDialTimeout(DefaultTimeout),
-		WithDialTimeoutLocal(DefaultTimeout),
-	),
-	libp2p.Transport(camouflage.NewCamouflageTransport),
-	libp2p.Ping(true),
-	libp2p.Security(warpnet.NoiseID, warpnet.NewNoise),
-	libp2p.EnableAutoNATv2(),
-	libp2p.EnableRelay(),
-	libp2p.EnableRelayService(relay.WithDefaultResources()), // for member nodes that have static IP
-	libp2p.EnableHolePunching(holepunch.WithTracer(holePunchTracer{})),
-	libp2p.EnableNATService(),
-	libp2p.NATPortMap(),
-	// the detector also refuses /ip6/ circuit addrs, though the relay may already be connected over IPv4
-	libp2p.IPv6BlackHoleSuccessCounter(nil),
+const blocklistSweepInterval = 10 * time.Second
+
+func NewBlocklistOption(blocklist Blocklister) warpnet.WarpOption {
+	return newBlocklistOption(blocklist, blocklistSweepInterval)
 }
 
-func EnableAutoRelayWithStaticRelays(static []warpnet.WarpAddrInfo, currentNodeID warpnet.WarpPeerID) func() libp2p.Option {
-	for i, info := range static {
-		if info.ID == currentNodeID {
-			static = slices.Delete(static, i, i+1)
-			break
-		}
-	}
-	return func() libp2p.Option {
-		return func(cfg *libp2pConfig.Config) error {
-			if len(static) == 0 {
-				return nil
+func newBlocklistOption(blocklist Blocklister, sweepInterval time.Duration) warpnet.WarpOption {
+	g := &blocklistGater{blocklist: blocklist}
+	return warpnet.NewChainOption(
+		warpnet.NewConnectionGaterOption(g),
+		warpnet.NewEventBusInvokeOption(func(bus warpnet.WarpEventBus) {
+			emitter, err := bus.Emitter(new(warpnet.EvtReservationRefused))
+			if err != nil {
+				log.Errorf("node: blocklist: reservation refusal emitter: %v", err)
+				return
 			}
-			opts := []autorelay.Option{
-				autorelay.WithBackoff(time.Minute * 5),
-				autorelay.WithMaxCandidateAge(time.Minute * 5),
-			}
-
-			cfg.EnableAutoRelay = true
-			cfg.AutoRelayOpts = append([]autorelay.Option{autorelay.WithStaticRelays(static)}, opts...)
-			return nil
-		}
-	}
+			g.emitter = emitter
+		}),
+		warpnet.NewSwarmInvokeOption(func(lc warpnet.WarpLifecycle, s *warpnet.Swarm) {
+			s.Notify(&warpnet.WarpNotifyBundle{ConnectedF: g.closeBlocked})
+			stop := make(chan struct{})
+			lc.Append(warpnet.WarpHook{
+				OnStart: func(context.Context) error {
+					go g.sweepBlocked(s, sweepInterval, stop)
+					return nil
+				},
+				OnStop: func(context.Context) error {
+					close(stop)
+					return nil
+				},
+			})
+		}),
+	)
 }
 
-func EmptyOption() func() libp2p.Option {
-	return func() libp2p.Option {
-		return func(cfg *libp2pConfig.Config) error {
-			return nil
-		}
-	}
+type blocklistGater struct {
+	blocklist Blocklister
+	emitter   warpnet.WarpEmitter
 }
 
-const ErrMultipleIdentities warpnet.WarpError = "cannot specify multiple identities"
-
-func WarpIdentity(privKey ed25519.PrivateKey) libp2p.Option {
-	p2pPrivKey, err := p2pCrypto.UnmarshalEd25519PrivateKey(privKey)
-	if err != nil {
-		panic(err)
-	}
-	return func(cfg *libp2pConfig.Config) error {
-		if cfg.PeerKey != nil {
-			return ErrMultipleIdentities
-		}
-		cfg.PeerKey = p2pPrivKey
-		return nil
-	}
+func (g *blocklistGater) InterceptPeerDial(id warpnet.WarpPeerID) bool {
+	return !g.blocklist.IsBlocklisted(id.String())
 }
 
-func WithDialTimeout(t time.Duration) warpnet.SwarmOption {
-	return func(s *warpnet.Swarm) error {
-		return setPrivateDurationField(s, "dialTimeout", t)
-	}
+func (g *blocklistGater) InterceptAddrDial(id warpnet.WarpPeerID, _ warpnet.WarpAddress) bool {
+	return g.InterceptPeerDial(id)
 }
 
-func WithDialTimeoutLocal(t time.Duration) warpnet.SwarmOption {
-	return func(s *warpnet.Swarm) error {
-		return setPrivateDurationField(s, "dialTimeoutLocal", t)
-	}
+func (g *blocklistGater) InterceptAccept(warpnet.WarpConnMultiaddrs) bool {
+	return true
 }
 
-const ErrFieldNotFound warpnet.WarpError = "field not found"
-
-func WithDefaultTCPConnectionTimeout(t time.Duration) warpnet.TCPOption {
-	fieldName := "connectTimeout"
-	return func(tr *warpnet.TCPTransport) error {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Errorf("options: reflection error setting %s: %v", fieldName, r)
-			}
-		}()
-		v := reflect.ValueOf(tr).Elem()
-		field := v.FieldByName(fieldName)
-		if !field.IsValid() {
-			return fmt.Errorf("options: %w: %s", ErrFieldNotFound, fieldName)
-		}
-		if field.CanSet() {
-			field.Set(reflect.ValueOf(t))
-			return nil
-		}
-		ptr := unsafe.Pointer(field.UnsafeAddr()) //#nosec
-		typedPtr := (*time.Duration)(ptr)
-		*typedPtr = t
-		return nil
+func (g *blocklistGater) InterceptSecured(dir warpnet.WarpDirection, id warpnet.WarpPeerID, addrs warpnet.WarpConnMultiaddrs) bool {
+	if g.InterceptPeerDial(id) {
+		return true
 	}
-}
-
-func setPrivateDurationField(s *warpnet.Swarm, fieldName string, t time.Duration) error {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Errorf("options: reflection error setting %s: %v", fieldName, r)
-		}
+	if dir != warpnet.DirInbound || g.emitter == nil {
+		return false
+	}
+	relayNodeId, ok := findRelayNodeId(addrs.RemoteMultiaddr())
+	if !ok {
+		return false
+	}
+	go func() {
+		_ = g.emitter.Emit(warpnet.EvtReservationRefused{RelayNodeId: relayNodeId, PeerId: id})
 	}()
-	v := reflect.ValueOf(s).Elem()
-	field := v.FieldByName(fieldName)
-	if !field.IsValid() {
-		return fmt.Errorf("options: %w: %s", ErrFieldNotFound, fieldName)
+	return false
+}
+
+func (g *blocklistGater) InterceptUpgraded(c warpnet.WarpConn) (bool, warpnet.WarpDisconnectReason) {
+	return g.InterceptPeerDial(c.RemotePeer()), 0
+}
+
+func (g *blocklistGater) closeBlocked(_ warpnet.WarpNetwork, c warpnet.WarpConn) {
+	if g.InterceptPeerDial(c.RemotePeer()) {
+		return
 	}
-	if field.CanSet() {
-		field.Set(reflect.ValueOf(t))
-		return nil
+	go func() { _ = c.Close() }()
+}
+
+func (g *blocklistGater) sweepBlocked(s *warpnet.Swarm, interval time.Duration, stop <-chan struct{}) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			for _, id := range s.Peers() {
+				if g.InterceptPeerDial(id) {
+					continue
+				}
+				_ = s.ClosePeer(id)
+				s.Peerstore().RemovePeer(id)
+				s.Peerstore().ClearAddrs(id)
+			}
+		}
 	}
-	ptr := unsafe.Pointer(field.UnsafeAddr()) //#nosec
-	typedPtr := (*time.Duration)(ptr)
-	*typedPtr = t
-	return nil
+}
+
+func findRelayNodeId(addr warpnet.WarpAddress) (warpnet.WarpPeerID, bool) {
+	var relayNodeId warpnet.WarpPeerID
+	for _, c := range addr {
+		switch c.Code() {
+		case warpnet.P_P2P:
+			relayNodeId = warpnet.FromBytesToPeerID(c.RawValue())
+		case warpnet.P_CIRCUIT:
+			return relayNodeId, relayNodeId != ""
+		}
+	}
+	return "", false
 }

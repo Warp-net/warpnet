@@ -48,10 +48,10 @@ import (
 )
 
 func TestNewGossip(t *testing.T) {
-	g := NewGossip(context.Background(), scoring{}, TopicHandler{
+	g := NewGossip(context.Background(), scoring{}, WithTopicHandlers(TopicHandler{
 		TopicName: "topic-a",
 		Handler:   func([]byte) error { return nil },
-	})
+	}))
 	assert.NotNil(t, g)
 	assert.False(t, g.IsGossipRunning())
 	assert.Contains(t, g.handlersMap, "topic-a")
@@ -208,7 +208,7 @@ func runningGossip(t *testing.T, handlers ...TopicHandler) (*Gossip, *liveNode) 
 	t.Cleanup(cancel)
 
 	node := newLiveNode(t)
-	g := NewGossip(ctx, scoring{}, handlers...)
+	g := NewGossip(ctx, scoring{}, WithTopicHandlers(handlers...))
 	require.NoError(t, g.Run(node))
 	t.Cleanup(func() { _ = g.Close() })
 

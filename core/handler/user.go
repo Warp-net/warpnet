@@ -253,6 +253,13 @@ func refreshUsers(
 ) {
 	ownNodeInfo := streamer.NodeInfo()
 	if ownNodeInfo.OwnerId == ev.UserId {
+		gatewayNodeId := fediverse.GatewayNodeID()
+		users, err := requestUsers(streamer, gatewayNodeId, event.PUBLIC_GET_WHOTOFOLLOW, ev)
+		if err != nil {
+			log.Errorf("get users handler: fediverse users: %v", err)
+			return
+		}
+		storeUsers(userRepo, users, gatewayNodeId, ownNodeInfo)
 		return
 	}
 	otherUser, err := userRepo.Get(ev.UserId)
@@ -267,55 +274,12 @@ func refreshUsers(
 		return
 	}
 
-	usersDataResp, err := streamer.GenericStream(
-		otherUser.NodeId,
-		event.PUBLIC_GET_USERS,
-		ev,
-	)
+	users, err := requestUsers(streamer, otherUser.NodeId, event.PUBLIC_GET_USERS, ev)
 	if err != nil {
-		log.Errorf("get users handler: stream %v", err)
+		log.Errorf("get users handler: %v", err)
 		return
 	}
-
-	var possibleError event.ResponseError
-	if _ = json.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
-		log.Errorf("unmarshal other users error response: %s", possibleError.Message)
-		return
-	}
-
-	var usersResp event.UsersResponse
-	if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
-		log.Errorf("ummarshal users response: %v %s", err, usersDataResp)
-		return
-	}
-
-	selfNodeID := streamer.NodeInfo().ID.String()
-	selfOwnerID := streamer.NodeInfo().OwnerId
-	for _, user := range usersResp.Users {
-		if user.IsOffline {
-			continue
-		}
-		// Skip records pointing back to this node — persisting them would
-		// later route fetches through GenericStream and trigger
-		// node.ErrSelfRequest.
-		if selfNodeID != "" && user.NodeId == selfNodeID {
-			continue
-		}
-		if selfOwnerID != "" && user.Id == selfOwnerID {
-			continue
-		}
-		_, _ = userRepo.Create(user)
-		// Only the node's own owner is first-hand; its copies of others may be
-		// stale and would roll back a profile this node already refreshed.
-		if user.NodeId == otherUser.NodeId {
-			_, _ = userRepo.Update(user.Id, user)
-			continue
-		}
-		local, err := userRepo.Get(user.Id)
-		if err == nil && local.IsOffline {
-			_, _ = userRepo.Update(user.Id, domain.User{IsOffline: false, RoundTripTime: local.RoundTripTime})
-		}
-	}
+	storeUsers(userRepo, users, otherUser.NodeId, ownNodeInfo)
 }
 
 func StreamUpdateProfileHandler(authRepo UserAuthStorer, userRepo UserFetcher) warpnet.WarpHandlerFunc {
@@ -418,4 +382,57 @@ func requestNodeOwner(streamer UserStreamer, nodeId string) (string, error) {
 		return "", fmt.Errorf("node info unmarshal: %w", err)
 	}
 	return info.OwnerId, nil
+}
+
+func requestUsers(
+	streamer UserStreamer,
+	nodeId string,
+	path stream.WarpRoute,
+	ev event.GetAllUsersEvent,
+) ([]domain.User, error) {
+	usersDataResp, err := streamer.GenericStream(nodeId, path, ev)
+	if err != nil {
+		return nil, fmt.Errorf("stream: %w", err)
+	}
+
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(usersDataResp, &possibleError); possibleError.Message != "" {
+		return nil, fmt.Errorf("error response: %w", possibleError)
+	}
+
+	var usersResp event.UsersResponse
+	if err := json.Unmarshal(usersDataResp, &usersResp); err != nil {
+		return nil, fmt.Errorf("unmarshal users response: %w %s", err, usersDataResp)
+	}
+	return usersResp.Users, nil
+}
+
+func storeUsers(userRepo UserFetcher, users []domain.User, sourceNodeId string, ownNodeInfo warpnet.NodeInfo) {
+	selfNodeID := ownNodeInfo.ID.String()
+	selfOwnerID := ownNodeInfo.OwnerId
+	for _, user := range users {
+		if user.IsOffline {
+			continue
+		}
+		// Skip records pointing back to this node — persisting them would
+		// later route fetches through GenericStream and trigger
+		// node.ErrSelfRequest.
+		if selfNodeID != "" && user.NodeId == selfNodeID {
+			continue
+		}
+		if selfOwnerID != "" && user.Id == selfOwnerID {
+			continue
+		}
+		_, _ = userRepo.Create(user)
+		// Only the node's own owner is first-hand; its copies of others may be
+		// stale and would roll back a profile this node already refreshed.
+		if user.NodeId == sourceNodeId {
+			_, _ = userRepo.Update(user.Id, user)
+			continue
+		}
+		local, err := userRepo.Get(user.Id)
+		if err == nil && local.IsOffline {
+			_, _ = userRepo.Update(user.Id, domain.User{IsOffline: false, RoundTripTime: local.RoundTripTime})
+		}
+	}
 }

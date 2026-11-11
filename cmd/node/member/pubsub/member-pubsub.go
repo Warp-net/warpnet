@@ -46,6 +46,8 @@ const (
 	userUpdateTopicPrefix = "user-update"
 )
 
+type CoreGossip = pubsub.Gossip
+
 type PubsubServerNodeConnector interface {
 	Node() warpnet.P2PNode
 	NodeInfo() warpnet.NodeInfo
@@ -53,7 +55,7 @@ type PubsubServerNodeConnector interface {
 	GenericStream(nodeIdStr string, path stream.WarpRoute, data any) (_ []byte, err error)
 }
 
-var NewRelayDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
+var NewMemberDiscoveryTopicHandler = pubsub.NewDiscoveryTopicHandler
 
 // MemberPubSub provides pubsub functionality for member nodes
 type MemberPubSub struct {
@@ -61,14 +63,34 @@ type MemberPubSub struct {
 	pubsub *pubsub.Gossip
 }
 
+type PeerBlocklister interface {
+	IsBlocklisted(peerId string) bool
+}
+
+type peerBlocklist struct {
+	blocklist PeerBlocklister
+}
+
+func (b peerBlocklist) Add(warpnet.WarpPeerID) bool {
+	return false
+}
+
+func (b peerBlocklist) Contains(id warpnet.WarpPeerID) bool {
+	return b.blocklist.IsBlocklisted(id.String())
+}
+
 func NewPubSub(
-	ctx context.Context, ratings pubsub.PeersRatings, handlers ...pubsub.TopicHandler,
+	ctx context.Context, ratings pubsub.PeersRatings, blocklist PeerBlocklister, handlers ...pubsub.TopicHandler,
 ) *MemberPubSub {
 	mps := &MemberPubSub{
 		ctx: ctx,
 	}
 
-	mps.pubsub = pubsub.NewGossip(ctx, ratings, handlers...)
+	opts := []pubsub.Option{pubsub.WithTopicHandlers(handlers...)}
+	if blocklist != nil {
+		opts = append(opts, pubsub.WithBlocklist(peerBlocklist{blocklist: blocklist}))
+	}
+	mps.pubsub = pubsub.NewGossip(ctx, ratings, opts...)
 	return mps
 }
 

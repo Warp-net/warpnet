@@ -161,6 +161,7 @@ func StreamGetSponsoredImageHandler(
 
 func StreamGetSponsoredVideoHandler(
 	streamer SponsoredMediaStreamer,
+	identityKey ed25519.PrivateKey,
 	mediaRepo SponsoredMediaFetcher,
 	copyRepo SponsoredMediaCopyStorer,
 	userRepo SponsoredMediaUserFetcher,
@@ -192,7 +193,8 @@ func StreamGetSponsoredVideoHandler(
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: fetching original: %w", err)
 			}
-			video, err := media_meta.BuildVideoCopy(string(original), c)
+			signer := media_meta.Metadata{PrivKey: identityKey, NodeId: ownNodeInfo.ID.String(), OwnerId: ownerId}
+			video, err := media_meta.BuildVideoCopy(string(original), c, signer)
 			if err != nil {
 				return nil, fmt.Errorf("get sponsored video: building copy: %w", err)
 			}

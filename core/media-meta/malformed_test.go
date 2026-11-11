@@ -5,99 +5,28 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/video"
 	"github.com/stretchr/testify/require"
 )
 
 // isoBoxOf builds one ISO-BMFF box with the given 32-bit size field.
 func isoBoxOf(size uint32, boxType string, payload []byte) []byte {
-	out := make([]byte, 0, boxHeaderSize+len(payload))
+	out := make([]byte, 0, 8+len(payload))
 	out = binary.BigEndian.AppendUint32(out, size)
 	out = append(out, boxType...)
 	return append(out, payload...)
 }
 
-func TestBoxBoundsRejectsMalformedBoxes(t *testing.T) {
-	t.Run("a size smaller than the header", func(t *testing.T) {
-		_, _, err := boxBounds(isoBoxOf(4, "ftyp", nil), 0)
-		require.ErrorIs(t, err, ErrMalformedISO)
-	})
-
-	t.Run("a size past the end of the file", func(t *testing.T) {
-		_, _, err := boxBounds(isoBoxOf(1024, "ftyp", []byte("short")), 0)
-		require.ErrorIs(t, err, ErrMalformedISO)
-	})
-
-	t.Run("a truncated 64-bit largesize header", func(t *testing.T) {
-		_, _, err := boxBounds(isoBoxOf(1, "ftyp", nil), 0)
-		require.ErrorIs(t, err, ErrMalformedISO)
-	})
-
-	t.Run("a 64-bit largesize past the end of the file", func(t *testing.T) {
-		b := isoBoxOf(1, "ftyp", binary.BigEndian.AppendUint64(nil, 1<<40))
-		_, _, err := boxBounds(b, 0)
-		require.ErrorIs(t, err, ErrMalformedISO)
-	})
-
-	t.Run("a valid 64-bit largesize", func(t *testing.T) {
-		payload := binary.BigEndian.AppendUint64(nil, uint64(boxLargeHeadLen))
-		b := isoBoxOf(1, "ftyp", payload)
-
-		size, headerSize, err := boxBounds(b, 0)
-		require.NoError(t, err)
-		require.Equal(t, boxLargeHeadLen, size)
-		require.Equal(t, boxLargeHeadLen, headerSize)
-	})
-
-	t.Run("an open-ended box runs to the end", func(t *testing.T) {
-		b := isoBoxOf(0, "mdat", []byte("payload"))
-		size, headerSize, err := boxBounds(b, 0)
-		require.NoError(t, err)
-		require.Equal(t, len(b), size)
-		require.Equal(t, boxHeaderSize, headerSize)
-	})
-}
-
 func TestSplitVideoRejectsMalformedInput(t *testing.T) {
 	_, _, err := SplitVideo(isoBoxOf(1024, "ftyp", []byte("short")))
-	require.ErrorIs(t, err, ErrMalformedISO)
+	require.ErrorIs(t, err, video.ErrMalformedISO)
 }
 
 func TestVerifyVideoRejectsMalformedInput(t *testing.T) {
 	require.ErrorIs(t,
 		VerifyVideo(isoBoxOf(1024, "ftyp", []byte("short")), "node", "owner"),
-		ErrMalformedISO,
+		video.ErrMalformedISO,
 	)
-}
-
-func TestCloseOpenEndedBoxEdgeCases(t *testing.T) {
-	t.Run("rejects malformed input", func(t *testing.T) {
-		_, err := CloseOpenEndedBox(isoBoxOf(1024, "ftyp", []byte("short")))
-		require.ErrorIs(t, err, ErrMalformedISO)
-	})
-
-	t.Run("passes an empty file through", func(t *testing.T) {
-		out, err := CloseOpenEndedBox(nil)
-		require.NoError(t, err)
-		require.Nil(t, out)
-	})
-
-	t.Run("leaves an already-sized last box alone", func(t *testing.T) {
-		in := minimalMP4()
-		out, err := CloseOpenEndedBox(in)
-		require.NoError(t, err)
-		require.Equal(t, in, out)
-	})
-
-	t.Run("writes the real size into an open-ended last box", func(t *testing.T) {
-		in := append(minimalMP4(), isoBoxOf(0, "mdat", []byte("streamed payload"))...)
-
-		out, err := CloseOpenEndedBox(in)
-		require.NoError(t, err)
-		require.Len(t, out, len(in))
-
-		last := len(minimalMP4())
-		require.Equal(t, uint32(len(in)-last), binary.BigEndian.Uint32(out[last:last+4]))
-	})
 }
 
 func TestStripJPEGExifRejectsMalformedInput(t *testing.T) {

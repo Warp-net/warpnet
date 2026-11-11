@@ -424,6 +424,18 @@ type GatewaySettings struct {
 	NodeID string `json:"node_id"`
 }
 
+type NetworkSettings struct {
+	HostV4    string   `json:"host_v4"`
+	HostV6    string   `json:"host_v6"`
+	Port      string   `json:"port"`
+	Bootstrap []string `json:"bootstrap"`
+}
+
+type WalletSettings struct {
+	Endpoint   string `json:"endpoint"`
+	BinaryPath string `json:"binary_path"`
+}
+
 type SponsoredSettings struct {
 	MinStakeTRX         uint64    `json:"min_stake_trx"`
 	PreviousMinStakeTRX uint64    `json:"previous_min_stake_trx,omitempty"`
@@ -476,11 +488,20 @@ type (
 )
 
 type MediaCopy struct {
-	OriginalKey    string `json:"original_key"`
-	BuyerId        string `json:"buyer_id"`
-	EncryptedOrder []byte `json:"encrypted_order"`
-	Watermark      []byte `json:"watermark,omitempty"`
-	IsPixelMarked  bool   `json:"is_pixel_marked,omitempty"`
+	OriginalKey    string       `json:"original_key"`
+	BuyerId        string       `json:"buyer_id"`
+	EncryptedOrder []byte       `json:"encrypted_order"`
+	Watermark      []byte       `json:"watermark,omitempty"`
+	IsPixelMarked  bool         `json:"is_pixel_marked,omitempty"`
+	Frames         []VideoFrame `json:"frames,omitempty"`
+}
+
+type VideoFrame struct {
+	SampleIndex int    `json:"sample_index"`
+	SPS         []byte `json:"sps"`
+	PPS         []byte `json:"pps"`
+	Data        []byte `json:"data"`
+	Thumbnail   []byte `json:"thumbnail"`
 }
 
 type Alias struct {

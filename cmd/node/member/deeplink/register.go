@@ -7,6 +7,6 @@ func Register() error {
 	if err := registerPlatform(); err != nil {
 		return err
 	}
-	log.Infof("deeplink: scheme %q registered", Scheme)
+	log.Infof("deeplink: scheme %q registered", scheme)
 	return nil
 }

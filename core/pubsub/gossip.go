@@ -86,6 +86,25 @@ type Gossip struct {
 	publishing sync.WaitGroup
 
 	ratings PeersRatings
+	options []pubsub.Option
+}
+
+type Option func(*Gossip)
+
+type Blocklist = pubsub.Blacklist
+
+func WithTopicHandlers(handlers ...TopicHandler) Option {
+	return func(g *Gossip) {
+		for _, h := range handlers {
+			g.handlersMap[h.TopicName] = h.Handler
+		}
+	}
+}
+
+func WithBlocklist(blocklist Blocklist) Option {
+	return func(g *Gossip) {
+		g.options = append(g.options, pubsub.WithBlacklist(blocklist))
+	}
 }
 
 // PeersRatings answers what gossipsub should weigh a peer by, which is
@@ -140,23 +159,22 @@ type TopicHandler struct {
 func NewGossip(
 	ctx context.Context,
 	ratings PeersRatings,
-	handlers ...TopicHandler,
+	opts ...Option,
 ) *Gossip {
-	handlersMap := make(map[string]topicHandler)
-	for _, h := range handlers {
-		handlersMap[h.TopicName] = h.Handler
-	}
-
-	return &Gossip{
+	g := &Gossip{
 		ctx:              ctx,
 		ratings:          ratings,
 		mx:               new(sync.RWMutex),
 		subs:             []*pubsub.Subscription{},
-		handlersMap:      handlersMap,
+		handlersMap:      map[string]topicHandler{},
 		topics:           map[string]*pubsub.Topic{},
 		relayCancelFuncs: map[string]pubsub.RelayCancelFunc{},
 		isRunning:        new(atomic.Bool),
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 func (g *Gossip) Run(node GossipNodeConnector) (err error) {
@@ -247,7 +265,7 @@ func (g *Gossip) runGossip() (err error) {
 		return warpnet.WarpError("gossip: service not initialized properly")
 	}
 
-	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), g.scoreOptions()...)
+	g.pubsub, err = pubsub.NewGossipSub(g.ctx, g.node.Node(), append(g.scoreOptions(), g.options...)...)
 	if err != nil {
 		return err
 	}

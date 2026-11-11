@@ -11,6 +11,10 @@ import {
     captureVideoPoster,
     createVideoURL,
     revokeVideoURL,
+    checkVideoLength,
+    checkVideoMarks,
+    TOO_LONG_VIDEO,
+    UNMARKED_VIDEO,
 } from '@/lib/video';
 
 const file = (type, name, size = 1024) => ({type, name, size});
@@ -266,5 +270,51 @@ describe('revokeVideoURL', () => {
 
         expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
         expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
+    });
+});
+
+describe('checkVideoLength', () => {
+    const probe = (duration) => {
+        const video = {};
+        const opts = {
+            createElement: () => video,
+            createObjectURL: () => 'blob:clip',
+            revokeObjectURL: vi.fn(),
+        };
+        const result = checkVideoLength(file('video/mp4', 'clip.mp4'), opts);
+        video.duration = duration;
+        video.onloadedmetadata();
+        return {result, opts};
+    };
+
+    it('lets a one-minute clip through, with the slack phones need', async () => {
+        await expect(probe(60.4).result).resolves.toBeNull();
+    });
+
+    it('refuses a clip longer than a minute', async () => {
+        const {result, opts} = probe(61);
+        await expect(result).resolves.toBe(TOO_LONG_VIDEO);
+        expect(opts.revokeObjectURL).toHaveBeenCalledWith('blob:clip');
+    });
+
+    it('leaves a clip the browser cannot read to the node', async () => {
+        await expect(probe(NaN).result).resolves.toBeNull();
+        await expect(checkVideoLength(file('video/mp4', 'clip.mp4'), {createObjectURL: () => null})).resolves.toBeNull();
+    });
+});
+
+describe('checkVideoMarks', () => {
+    const withProfile = (profile) => new Uint8Array([0, 0, 0, 20, 0x61, 0x76, 0x63, 0x43, 1, profile, 0, 31]);
+
+    it('accepts the H.264 profiles the node can mark', () => {
+        for (const profile of [66, 77, 100]) {
+            expect(checkVideoMarks(withProfile(profile))).toBeNull();
+        }
+    });
+
+    it('warns about 10-bit and 4:2:2 H.264 and about other codecs', () => {
+        expect(checkVideoMarks(withProfile(110))).toBe(UNMARKED_VIDEO);
+        expect(checkVideoMarks(new TextEncoder().encode('ftypqt  hvc1hvcC'))).toBe(UNMARKED_VIDEO);
+        expect(checkVideoMarks(null)).toBe(UNMARKED_VIDEO);
     });
 });

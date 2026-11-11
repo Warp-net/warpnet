@@ -96,6 +96,38 @@ func DrawWatermark(jpegBytes, watermark, pixelMarkSeed []byte) ([]byte, error) {
 	canvas := image.NewRGBA(bounds)
 	draw.Draw(canvas, bounds, src, bounds.Min, draw.Src)
 
+	drawWatermarkTiles(canvas, mask, fontSize)
+	if len(pixelMarkSeed) != 0 {
+		drawPixelMark(canvas, pixelMarkSeed)
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, canvas, &jpeg.Options{Quality: 100}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func DrawVideoWatermark(size image.Point, text string) ([]byte, error) {
+	if size.X <= 0 || size.Y <= 0 {
+		return nil, ErrBadWatermark
+	}
+	fontSize := watermarkFontSize(size)
+	mask, err := textMask(text, fontSize)
+	if err != nil {
+		return nil, err
+	}
+	canvas := image.NewNRGBA(image.Rect(0, 0, size.X, size.Y))
+	drawWatermarkTiles(canvas, rotate(mask), fontSize)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, canvas); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func drawWatermarkTiles(canvas draw.Image, mask *image.Alpha, fontSize int) {
+	bounds := canvas.Bounds()
 	size := mask.Rect.Size()
 	shadow := image.Pt(1, 1).Mul(max(fontSize/16, 1))
 	along := image.Pt(2, -1).Mul(size.X/2 + size.Y/4)
@@ -109,15 +141,6 @@ func DrawWatermark(jpegBytes, watermark, pixelMarkSeed []byte) ([]byte, error) {
 			draw.DrawMask(canvas, place, image.NewUniform(watermarkColor), image.Point{}, mask, image.Point{}, draw.Over)
 		}
 	}
-	if len(pixelMarkSeed) != 0 {
-		drawPixelMark(canvas, pixelMarkSeed)
-	}
-
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, canvas, &jpeg.Options{Quality: 100}); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }
 
 func watermarkFontSize(size image.Point) int {

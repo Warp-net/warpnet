@@ -100,20 +100,16 @@ func (repo *SettingsRepo) SetNotificationSettings(userId string, s domain.Notifi
 	return txn.Commit()
 }
 
-// GetGatewaySettings returns the user's gateway settings, or a zero-value
+// GetGatewaySettings returns the node's gateway settings, or a zero-value
 // (empty NodeID) record when none has been saved yet.
-func (repo *SettingsRepo) GetGatewaySettings(userId string) (domain.GatewaySettings, error) {
-	if userId == "" {
-		return domain.GatewaySettings{}, local_store.DBError("empty user id")
-	}
+func (repo *SettingsRepo) GetGatewaySettings() (domain.GatewaySettings, error) {
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return domain.GatewaySettings{}, err
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("gateway").
+		AddSubPrefix("gateway").
 		Build())
 	if local_store.IsNotFoundError(err) {
 		return domain.GatewaySettings{}, nil
@@ -131,11 +127,8 @@ func (repo *SettingsRepo) GetGatewaySettings(userId string) (domain.GatewaySetti
 	return s, nil
 }
 
-// SetGatewaySettings persists the user's gateway settings.
-func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySettings) error {
-	if userId == "" {
-		return local_store.DBError("empty user id")
-	}
+// SetGatewaySettings persists the node's gateway settings.
+func (repo *SettingsRepo) SetGatewaySettings(s domain.GatewaySettings) error {
 	bt, err := json.Marshal(s)
 	if err != nil {
 		return err
@@ -146,26 +139,21 @@ func (repo *SettingsRepo) SetGatewaySettings(userId string, s domain.GatewaySett
 	}
 	defer txn.Rollback()
 	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("gateway").
+		AddSubPrefix("gateway").
 		Build(), bt); err != nil {
 		return err
 	}
 	return txn.Commit()
 }
 
-func (repo *SettingsRepo) GetRateLimitSettings(userId string) (ratelimit.Settings, error) {
-	if userId == "" {
-		return ratelimit.Settings{}, local_store.DBError("empty user id")
-	}
+func (repo *SettingsRepo) GetRateLimitSettings() (ratelimit.Settings, error) {
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return ratelimit.Settings{}, err
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("ratelimit").
+		AddSubPrefix("ratelimit").
 		Build())
 	if local_store.IsNotFoundError(err) {
 		return ratelimit.Settings{}, nil
@@ -183,10 +171,7 @@ func (repo *SettingsRepo) GetRateLimitSettings(userId string) (ratelimit.Setting
 	return s, nil
 }
 
-func (repo *SettingsRepo) SetRateLimitSettings(userId string, s ratelimit.Settings) error {
-	if userId == "" {
-		return local_store.DBError("empty user id")
-	}
+func (repo *SettingsRepo) SetRateLimitSettings(s ratelimit.Settings) error {
 	bt, err := json.Marshal(s)
 	if err != nil {
 		return err
@@ -197,26 +182,21 @@ func (repo *SettingsRepo) SetRateLimitSettings(userId string, s ratelimit.Settin
 	}
 	defer txn.Rollback()
 	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("ratelimit").
+		AddSubPrefix("ratelimit").
 		Build(), bt); err != nil {
 		return err
 	}
 	return txn.Commit()
 }
 
-func (repo *SettingsRepo) GetSponsoredSettings(userId string) (domain.SponsoredSettings, error) {
-	if userId == "" {
-		return domain.SponsoredSettings{}, local_store.DBError("empty user id")
-	}
+func (repo *SettingsRepo) GetSponsoredSettings() (domain.SponsoredSettings, error) {
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return domain.SponsoredSettings{}, err
 	}
 	defer txn.Rollback()
 	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("sponsored").
+		AddSubPrefix("sponsored").
 		Build())
 	if local_store.IsNotFoundError(err) {
 		return domain.SponsoredSettings{}, nil
@@ -234,10 +214,7 @@ func (repo *SettingsRepo) GetSponsoredSettings(userId string) (domain.SponsoredS
 	return s, nil
 }
 
-func (repo *SettingsRepo) SetSponsoredSettings(userId string, s domain.SponsoredSettings) error {
-	if userId == "" {
-		return local_store.DBError("empty user id")
-	}
+func (repo *SettingsRepo) SetSponsoredSettings(s domain.SponsoredSettings) error {
 	bt, err := json.Marshal(s)
 	if err != nil {
 		return err
@@ -248,8 +225,93 @@ func (repo *SettingsRepo) SetSponsoredSettings(userId string, s domain.Sponsored
 	}
 	defer txn.Rollback()
 	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
-		AddRootID(userId).
-		AddParentId("sponsored").
+		AddSubPrefix("sponsored").
+		Build(), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *SettingsRepo) GetNetworkSettings() (domain.NetworkSettings, error) {
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddSubPrefix("network").
+		Build())
+	if local_store.IsNotFoundError(err) {
+		return domain.NetworkSettings{}, nil
+	}
+	if err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	var s domain.NetworkSettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.NetworkSettings{}, err
+	}
+	return s, nil
+}
+
+func (repo *SettingsRepo) SetNetworkSettings(s domain.NetworkSettings) error {
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddSubPrefix("network").
+		Build(), bt); err != nil {
+		return err
+	}
+	return txn.Commit()
+}
+
+func (repo *SettingsRepo) GetWalletSettings() (domain.WalletSettings, error) {
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return domain.WalletSettings{}, err
+	}
+	defer txn.Rollback()
+	bt, err := txn.Get(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddSubPrefix("wallet").
+		Build())
+	if local_store.IsNotFoundError(err) {
+		return domain.WalletSettings{}, nil
+	}
+	if err != nil {
+		return domain.WalletSettings{}, err
+	}
+	if err := txn.Commit(); err != nil {
+		return domain.WalletSettings{}, err
+	}
+	var s domain.WalletSettings
+	if err := json.Unmarshal(bt, &s); err != nil {
+		return domain.WalletSettings{}, err
+	}
+	return s, nil
+}
+
+func (repo *SettingsRepo) SetWalletSettings(s domain.WalletSettings) error {
+	bt, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	txn, err := repo.db.NewTxn()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	if err := txn.Set(local_store.NewPrefixBuilder(SettingsRepoName).
+		AddSubPrefix("wallet").
 		Build(), bt); err != nil {
 		return err
 	}

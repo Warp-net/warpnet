@@ -323,7 +323,7 @@ type WalletOrderStorer interface {
 }
 
 type WalletSettingsFetcher interface {
-	GetSponsoredSettings(userId string) (domain.SponsoredSettings, error)
+	GetSponsoredSettings() (domain.SponsoredSettings, error)
 }
 
 type WalletPeerFetcher interface {
@@ -352,7 +352,7 @@ func StreamGetWalletAddressHandler(
 		}
 		owner := auth.GetOwner()
 		if ev.Payer != "" {
-			if err := verifyPeerPayer(s, orders, settings, backend, owner.UserId, ev.Payer); err != nil {
+			if err := verifyPeerPayer(s, orders, settings, backend, ev.Payer); err != nil {
 				return nil, err
 			}
 		}
@@ -601,9 +601,9 @@ func verifyPeerPayer(
 	orders WalletOrderStorer,
 	settings WalletSettingsFetcher,
 	backend WalletBackend,
-	ownerId, payer string,
+	payer string,
 ) error {
-	sponsored, err := settings.GetSponsoredSettings(ownerId)
+	sponsored, err := settings.GetSponsoredSettings()
 	if err != nil {
 		return err
 	}

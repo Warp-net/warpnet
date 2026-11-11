@@ -28,22 +28,79 @@ resulting from the use or misuse of this software.
 package handler
 
 import (
+	"fmt"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
+	"github.com/Warp-net/warpnet/keepalive"
 	log "github.com/sirupsen/logrus"
 )
 
-// DeviceStorer is the paired-device list as the Settings screen reads and
-// edits it.
-type DeviceStorer interface {
+type NodeAddresser interface {
+	Addrs() []warpnet.WarpAddress
+}
+
+type AliasStorer interface {
+	SetAlias(a domain.Alias) error
 	GetAliases() (aliases []domain.Alias, err error)
 	DeleteAlias(nodeId string) error
 }
 
+type PairAuthStorer interface {
+	SessionToken() string
+}
+
+func StreamNodesPairingHandler(
+	authRepo PairAuthStorer,
+	aliasesRepo AliasStorer,
+	n NodeAddresser,
+) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var clientInfo domain.AuthNodeInfo
+		if err := json.Unmarshal(buf, &clientInfo); err != nil {
+			log.Errorf("pair: unmarshaling from stream: %s %v", buf, err)
+			return nil, err
+		}
+		if clientInfo.Token == "" {
+			return nil, warpnet.WarpError("empty token")
+		}
+
+		if authRepo.SessionToken() != clientInfo.Token {
+			log.Errorf("pair: token does not match server identity")
+			return nil, warpnet.WarpError("token mismatch")
+		}
+
+		if err := aliasesRepo.SetAlias(domain.Alias{
+			NodeId: s.Conn().RemotePeer().String(),
+			Token:  clientInfo.Token,
+		}); err != nil {
+			return nil, err
+		}
+
+		if err := keepalive.Acquire(); err != nil {
+			log.Errorf("pair: keepalive acquire: %v", err)
+		}
+
+		println()
+		fmt.Printf(
+			"\033[1mPAIRED %s\033[0m\n",
+			s.Conn().RemotePeer().String(),
+		)
+		println()
+
+		nodeAddrs := n.Addrs()
+		addrs := make([]string, 0, len(nodeAddrs))
+		for _, addr := range nodeAddrs {
+			addrs = append(addrs, addr.String())
+		}
+
+		return addrs, nil
+	}
+}
+
 // StreamGetDevicesHandler answers with the devices paired to this node.
-func StreamGetDevicesHandler(aliasesRepo DeviceStorer) warpnet.WarpHandlerFunc {
+func StreamGetDevicesHandler(aliasesRepo AliasStorer) warpnet.WarpHandlerFunc {
 	return func(_ []byte, _ warpnet.WarpStream) (any, error) {
 		aliases, err := aliasesRepo.GetAliases()
 		if err != nil {
@@ -72,7 +129,7 @@ func toDeviceInfos(aliases []domain.Alias) []event.DeviceInfo {
 // StreamDeleteDeviceHandler unpairs a device. The device keeps its copy of
 // the pairing payload, but its peer id no longer authorizes anything on
 // this node.
-func StreamDeleteDeviceHandler(aliasesRepo DeviceStorer) warpnet.WarpHandlerFunc {
+func StreamDeleteDeviceHandler(aliasesRepo AliasStorer) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteDeviceEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -85,8 +142,9 @@ func StreamDeleteDeviceHandler(aliasesRepo DeviceStorer) warpnet.WarpHandlerFunc
 
 		// A paired device may unpair itself and nothing else. The owner's
 		// own UI reaches this over a loopback stream, which is no alias.
-		if p, ok := s.(warpnet.PairedAliasStream); ok && p.IsPairedAlias() &&
-			string(ev.NodeId) != s.Conn().RemotePeer().String() {
+		if p, ok := s.(warpnet.PairedAliasStream); ok &&
+			p.IsPairedAlias() &&
+			ev.NodeId != s.Conn().RemotePeer().String() {
 			return nil, warpnet.WarpError("devices: a device may only unpair itself")
 		}
 
@@ -99,6 +157,11 @@ func StreamDeleteDeviceHandler(aliasesRepo DeviceStorer) warpnet.WarpHandlerFunc
 		if err != nil {
 			log.Errorf("devices: listing: %v", err)
 			return nil, err
+		}
+		if len(aliases) == 0 {
+			if err := keepalive.Release(); err != nil {
+				log.Errorf("devices: keepalive release: %v", err)
+			}
 		}
 		return event.GetDevicesResponse{Devices: toDeviceInfos(aliases)}, nil
 	}
