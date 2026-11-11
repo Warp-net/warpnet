@@ -307,8 +307,8 @@ func (rn *RelayNode) setupHandlers() {
 			handler.StreamGetInfoHandler(rn, rn.discService.DiscoveryHandlerStream),
 		},
 		warpnet.WarpStreamHandler{ //nolint:govet
-			event.PUBLIC_POST_RELAY_REFUSE,
-			handler.StreamRefusePeerHandler(rn.node),
+			event.PUBLIC_POST_RELAY_REFUSE_RESERVATION,
+			handler.StreamRefuseReservationHandler(rn.node),
 		},
 	)
 }

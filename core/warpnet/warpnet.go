@@ -190,6 +190,7 @@ type (
 	WarpDHT              = dht.IpfsDHT
 	WarpAddress          = multiaddr.Multiaddr
 	WarpConnManager      = coreconnmgr.ConnManager
+	WarpTagInfo          = coreconnmgr.TagInfo
 	WarpEventBus         = event.Bus
 	WarpEmitter          = event.Emitter
 	WarpIDService        = identify.IDService
@@ -531,9 +532,9 @@ func IsRelayAddress(addr string) bool {
 	return strings.Contains(addr, "p2p-circuit")
 }
 
-type EvtRelayedPeerRefused struct {
-	Relay WarpPeerID
-	Peer  WarpPeerID
+type EvtReservationRefused struct {
+	RelayNodeId WarpPeerID
+	PeerId      WarpPeerID
 }
 
 func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {

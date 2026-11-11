@@ -130,6 +130,22 @@ func WithDefaultResourcesOption() relayv2.Option {
 	return relayv2.WithResources(DefaultResources)
 }
 
+func WithRelayACLOption(acl relayv2.ACLFilter) relayv2.Option {
+	return relayv2.WithACL(acl)
+}
+
+func NewEnableRelayServiceOption(opts ...relayv2.Option) WarpOption {
+	return libp2p.EnableRelayService(opts...)
+}
+
+func NewRelayService(node P2PNode, opts ...relayv2.Option) (WarpRelayCloser, error) {
+	relay, err := relayv2.New(node, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return relay, nil
+}
+
 func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.BasicConnMgr, error) {
 	high := min(highWater, limiter.GetSystemLimits().GetConnTotalLimit())
 	return connmgr.NewConnManager(

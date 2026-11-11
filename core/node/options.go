@@ -47,9 +47,9 @@ func newBlocklistOption(blocklist Blocklister, sweepInterval time.Duration) warp
 	return warpnet.NewChainOption(
 		warpnet.NewConnectionGaterOption(g),
 		warpnet.NewEventBusInvokeOption(func(bus warpnet.WarpEventBus) {
-			emitter, err := bus.Emitter(new(warpnet.EvtRelayedPeerRefused))
+			emitter, err := bus.Emitter(new(warpnet.EvtReservationRefused))
 			if err != nil {
-				log.Errorf("node: blocklist: relay refusal emitter: %v", err)
+				log.Errorf("node: blocklist: reservation refusal emitter: %v", err)
 				return
 			}
 			g.emitter = emitter
@@ -95,12 +95,12 @@ func (g *blocklistGater) InterceptSecured(dir warpnet.WarpDirection, id warpnet.
 	if dir != warpnet.DirInbound || g.emitter == nil {
 		return false
 	}
-	relayID, ok := findRelay(addrs.RemoteMultiaddr())
+	relayNodeId, ok := findRelayNodeId(addrs.RemoteMultiaddr())
 	if !ok {
 		return false
 	}
 	go func() {
-		_ = g.emitter.Emit(warpnet.EvtRelayedPeerRefused{Relay: relayID, Peer: id})
+		_ = g.emitter.Emit(warpnet.EvtReservationRefused{RelayNodeId: relayNodeId, PeerId: id})
 	}()
 	return false
 }
@@ -136,14 +136,14 @@ func (g *blocklistGater) sweepBlocked(s *warpnet.Swarm, interval time.Duration, 
 	}
 }
 
-func findRelay(addr warpnet.WarpAddress) (warpnet.WarpPeerID, bool) {
-	var relayID warpnet.WarpPeerID
+func findRelayNodeId(addr warpnet.WarpAddress) (warpnet.WarpPeerID, bool) {
+	var relayNodeId warpnet.WarpPeerID
 	for _, c := range addr {
 		switch c.Code() {
 		case warpnet.P_P2P:
-			relayID = warpnet.FromBytesToPeerID(c.RawValue())
+			relayNodeId = warpnet.FromBytesToPeerID(c.RawValue())
 		case warpnet.P_CIRCUIT:
-			return relayID, relayID != ""
+			return relayNodeId, relayNodeId != ""
 		}
 	}
 	return "", false

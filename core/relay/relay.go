@@ -29,8 +29,6 @@ package relay
 
 import (
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/libp2p/go-libp2p"
-	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 )
 
 /*
@@ -63,15 +61,17 @@ import (
   - **DCUtR is used** to attempt NAT traversal before falling back to a relay.
 */
 
-func NewRelay(node warpnet.P2PNode, refused *RefusedPeers) (*relayv2.Relay, error) {
-	relay, err := relayv2.New(
+func NewRelay(node warpnet.P2PNode, refusals *ReservationRefusals) (warpnet.WarpRelayCloser, error) {
+	return warpnet.NewRelayService(
 		node,
 		warpnet.WithDefaultResourcesOption(),
-		relayv2.WithACL(refused),
+		warpnet.WithRelayACLOption(refusals),
 	)
-	return relay, err
 }
 
-func NewRelayServiceOption(refused *RefusedPeers) warpnet.WarpOption {
-	return libp2p.EnableRelayService(warpnet.WithDefaultResourcesOption(), relayv2.WithACL(refused))
+func NewRelayServiceOption(refusals *ReservationRefusals) warpnet.WarpOption {
+	return warpnet.NewEnableRelayServiceOption(
+		warpnet.WithDefaultResourcesOption(),
+		warpnet.WithRelayACLOption(refusals),
+	)
 }

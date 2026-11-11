@@ -33,25 +33,25 @@ import (
 	"github.com/Warp-net/warpnet/json"
 )
 
-type RelayedPeerRefuser interface {
-	RefuseRelayedPeer(dest, src warpnet.WarpPeerID) error
+type ReservationRefuser interface {
+	RefuseReservation(dest, src warpnet.WarpPeerID) error
 }
 
-func StreamRefusePeerHandler(refuser RelayedPeerRefuser) warpnet.WarpHandlerFunc {
+func StreamRefuseReservationHandler(refuser ReservationRefuser) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
-		var ev event.RefusePeerEvent
+		var ev event.RefuseReservationEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
 		src := warpnet.FromStringToPeerID(ev.PeerId)
 		if src == "" {
-			return nil, warpnet.WarpError("refuse peer: invalid peer id")
+			return nil, warpnet.WarpError("refuse reservation: invalid peer id")
 		}
 		dest := s.Conn().RemotePeer()
 		if src == dest {
-			return nil, warpnet.WarpError("refuse peer: cannot refuse yourself")
+			return nil, warpnet.WarpError("refuse reservation: cannot refuse yourself")
 		}
-		if err := refuser.RefuseRelayedPeer(dest, src); err != nil {
+		if err := refuser.RefuseReservation(dest, src); err != nil {
 			return nil, err
 		}
 		return event.Accepted, nil

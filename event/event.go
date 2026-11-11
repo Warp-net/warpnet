@@ -283,8 +283,8 @@ type GetRatingEvent struct {
 // GetRatingResponse defines model for GetRatingResponse.
 type GetRatingResponse = domain.NodeRating
 
-// RefusePeerEvent defines model for RefusePeerEvent.
-type RefusePeerEvent struct {
+// RefuseReservationEvent defines model for RefuseReservationEvent.
+type RefuseReservationEvent struct {
 	PeerId string `json:"peer_id"`
 }
 

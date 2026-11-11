@@ -78,7 +78,7 @@ func dialThroughRelay(h host.Host, relayAddr ma.Multiaddr, dest peer.ID) error {
 	return h.Connect(ctx, peer.AddrInfo{ID: dest, Addrs: []ma.Multiaddr{relayAddr}})
 }
 
-func TestRelayRefusesAPeerTheDestinationBlocked(t *testing.T) {
+func TestRelayRefusesReservationToAPeerTheDestinationBlocked(t *testing.T) {
 	relayNode := newRelayTestNode(t)
 	mw := middleware.NewWarpMiddleware(
 		relayNode.Node().ID(), nil, ratelimit.NewStreamLimiter(ratelimit.Settings{}, rating.NewPeersRatings()),
@@ -86,8 +86,8 @@ func TestRelayRefusesAPeerTheDestinationBlocked(t *testing.T) {
 	t.Cleanup(mw.Close)
 	relayNode.SetStreamMiddlewares(mw.AuthMiddleware)
 	relayNode.SetStreamHandlers(warpnet.WarpStreamHandler{
-		Path:    event.PUBLIC_POST_RELAY_REFUSE,
-		Handler: handler.StreamRefusePeerHandler(relayNode),
+		Path:    event.PUBLIC_POST_RELAY_REFUSE_RESERVATION,
+		Handler: handler.StreamRefuseReservationHandler(relayNode),
 	})
 
 	blocked, allowed := newPlainHost(t), newPlainHost(t)

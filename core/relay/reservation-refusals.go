@@ -32,49 +32,48 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	"github.com/libp2p/go-libp2p/core/connmgr"
 )
 
 const (
-	ErrNoReservation       warpnet.WarpError = "relay: peer holds no reservation"
-	ErrTooManyRefusedPeers warpnet.WarpError = "relay: too many refused peers"
+	ErrNoReservation              warpnet.WarpError = "relay: peer holds no reservation"
+	ErrTooManyReservationRefusals warpnet.WarpError = "relay: too many reservation refusals"
 
-	maxRefusedPeers = 256
-	reservationTag  = "relay-reservation"
+	maxReservationRefusals = 256
+	reservationTag         = "relay-reservation"
 )
 
 type TagInfoReader interface {
-	GetTagInfo(p warpnet.WarpPeerID) *connmgr.TagInfo
+	GetTagInfo(p warpnet.WarpPeerID) *warpnet.WarpTagInfo
 }
 
-type RefusedPeers struct {
-	mx      sync.Mutex
-	tags    TagInfoReader
-	ttl     time.Duration
-	refused map[warpnet.WarpPeerID]map[warpnet.WarpPeerID]time.Time
+type ReservationRefusals struct {
+	mx       sync.Mutex
+	tags     TagInfoReader
+	ttl      time.Duration
+	refusals map[warpnet.WarpPeerID]map[warpnet.WarpPeerID]time.Time
 }
 
-func NewRefusedPeers(tags TagInfoReader) *RefusedPeers {
-	return &RefusedPeers{
-		tags:    tags,
-		ttl:     warpnet.DefaultResources.ReservationTTL,
-		refused: make(map[warpnet.WarpPeerID]map[warpnet.WarpPeerID]time.Time),
+func NewReservationRefusals(tags TagInfoReader) *ReservationRefusals {
+	return &ReservationRefusals{
+		tags:     tags,
+		ttl:      warpnet.DefaultResources.ReservationTTL,
+		refusals: make(map[warpnet.WarpPeerID]map[warpnet.WarpPeerID]time.Time),
 	}
 }
 
-func (r *RefusedPeers) AllowReserve(_ warpnet.WarpPeerID, _ warpnet.WarpAddress) bool {
+func (r *ReservationRefusals) AllowReserve(_ warpnet.WarpPeerID, _ warpnet.WarpAddress) bool {
 	return true
 }
 
-func (r *RefusedPeers) AllowConnect(src warpnet.WarpPeerID, _ warpnet.WarpAddress, dest warpnet.WarpPeerID) bool {
+func (r *ReservationRefusals) AllowConnect(src warpnet.WarpPeerID, _ warpnet.WarpAddress, dest warpnet.WarpPeerID) bool {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	expiry, ok := r.refused[dest][src]
+	expiry, ok := r.refusals[dest][src]
 	return !ok || time.Now().After(expiry)
 }
 
-func (r *RefusedPeers) Refuse(dest, src warpnet.WarpPeerID) error {
+func (r *ReservationRefusals) RefuseReservation(dest, src warpnet.WarpPeerID) error {
 	if !r.isReserved(dest) {
 		return ErrNoReservation
 	}
@@ -85,19 +84,19 @@ func (r *RefusedPeers) Refuse(dest, src warpnet.WarpPeerID) error {
 	now := time.Now()
 	r.dropExpired(now)
 
-	peers, ok := r.refused[dest]
+	peers, ok := r.refusals[dest]
 	if !ok {
 		peers = make(map[warpnet.WarpPeerID]time.Time)
-		r.refused[dest] = peers
+		r.refusals[dest] = peers
 	}
-	if _, ok := peers[src]; !ok && len(peers) >= maxRefusedPeers {
-		return ErrTooManyRefusedPeers
+	if _, ok := peers[src]; !ok && len(peers) >= maxReservationRefusals {
+		return ErrTooManyReservationRefusals
 	}
 	peers[src] = now.Add(r.ttl)
 	return nil
 }
 
-func (r *RefusedPeers) isReserved(p warpnet.WarpPeerID) bool {
+func (r *ReservationRefusals) isReserved(p warpnet.WarpPeerID) bool {
 	info := r.tags.GetTagInfo(p)
 	if info == nil {
 		return false
@@ -106,15 +105,15 @@ func (r *RefusedPeers) isReserved(p warpnet.WarpPeerID) bool {
 	return ok
 }
 
-func (r *RefusedPeers) dropExpired(now time.Time) {
-	for dest, peers := range r.refused {
+func (r *ReservationRefusals) dropExpired(now time.Time) {
+	for dest, peers := range r.refusals {
 		for src, expiry := range peers {
 			if now.After(expiry) {
 				delete(peers, src)
 			}
 		}
 		if len(peers) == 0 || !r.isReserved(dest) {
-			delete(r.refused, dest)
+			delete(r.refusals, dest)
 		}
 	}
 }
