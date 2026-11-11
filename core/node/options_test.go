@@ -105,3 +105,20 @@ func TestTheGaterCutsAPeerBlockedWhileConnected(t *testing.T) {
 	}, 5*time.Second, 20*time.Millisecond, "and the peerstore forgets it")
 	require.NotEmpty(t, member.Network().ConnsToPeer(other.ID()), "and leaves every other peer connected")
 }
+
+func TestFindRelayReadsTheRelayFromACircuitAddress(t *testing.T) {
+	relayHost, err := libp2p.New(libp2p.NoListenAddrs)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = relayHost.Close() })
+
+	circuit, err := warpnet.NewMultiaddr("/ip4/1.2.3.4/tcp/4001/p2p/" + relayHost.ID().String() + "/p2p-circuit")
+	require.NoError(t, err)
+	relayID, ok := findRelay(circuit)
+	require.True(t, ok)
+	require.Equal(t, relayHost.ID(), relayID)
+
+	direct, err := warpnet.NewMultiaddr("/ip4/1.2.3.4/tcp/4001/p2p/" + relayHost.ID().String())
+	require.NoError(t, err)
+	_, ok = findRelay(direct)
+	require.False(t, ok)
+}

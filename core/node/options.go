@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	log "github.com/sirupsen/logrus"
 )
 
 type Blocklister interface {
@@ -42,9 +43,17 @@ func NewBlocklistOption(blocklist Blocklister) warpnet.WarpOption {
 }
 
 func newBlocklistOption(blocklist Blocklister, sweepInterval time.Duration) warpnet.WarpOption {
-	g := blocklistGater{blocklist: blocklist}
+	g := &blocklistGater{blocklist: blocklist}
 	return warpnet.NewChainOption(
 		warpnet.NewConnectionGaterOption(g),
+		warpnet.NewEventBusInvokeOption(func(bus warpnet.WarpEventBus) {
+			emitter, err := bus.Emitter(new(warpnet.EvtRelayedPeerRefused))
+			if err != nil {
+				log.Errorf("node: blocklist: relay refusal emitter: %v", err)
+				return
+			}
+			g.emitter = emitter
+		}),
 		warpnet.NewSwarmInvokeOption(func(lc warpnet.WarpLifecycle, s *warpnet.Swarm) {
 			s.Notify(&warpnet.WarpNotifyBundle{ConnectedF: g.closeBlocked})
 			stop := make(chan struct{})
@@ -64,36 +73,50 @@ func newBlocklistOption(blocklist Blocklister, sweepInterval time.Duration) warp
 
 type blocklistGater struct {
 	blocklist Blocklister
+	emitter   warpnet.WarpEmitter
 }
 
-func (g blocklistGater) InterceptPeerDial(id warpnet.WarpPeerID) bool {
+func (g *blocklistGater) InterceptPeerDial(id warpnet.WarpPeerID) bool {
 	return !g.blocklist.IsBlocklisted(id.String())
 }
 
-func (g blocklistGater) InterceptAddrDial(id warpnet.WarpPeerID, _ warpnet.WarpAddress) bool {
+func (g *blocklistGater) InterceptAddrDial(id warpnet.WarpPeerID, _ warpnet.WarpAddress) bool {
 	return g.InterceptPeerDial(id)
 }
 
-func (g blocklistGater) InterceptAccept(warpnet.WarpConnMultiaddrs) bool {
+func (g *blocklistGater) InterceptAccept(warpnet.WarpConnMultiaddrs) bool {
 	return true
 }
 
-func (g blocklistGater) InterceptSecured(_ warpnet.WarpDirection, id warpnet.WarpPeerID, _ warpnet.WarpConnMultiaddrs) bool {
-	return g.InterceptPeerDial(id)
+func (g *blocklistGater) InterceptSecured(dir warpnet.WarpDirection, id warpnet.WarpPeerID, addrs warpnet.WarpConnMultiaddrs) bool {
+	if g.InterceptPeerDial(id) {
+		return true
+	}
+	if dir != warpnet.DirInbound || g.emitter == nil {
+		return false
+	}
+	relayID, ok := findRelay(addrs.RemoteMultiaddr())
+	if !ok {
+		return false
+	}
+	go func() {
+		_ = g.emitter.Emit(warpnet.EvtRelayedPeerRefused{Relay: relayID, Peer: id})
+	}()
+	return false
 }
 
-func (g blocklistGater) InterceptUpgraded(c warpnet.WarpConn) (bool, warpnet.WarpDisconnectReason) {
+func (g *blocklistGater) InterceptUpgraded(c warpnet.WarpConn) (bool, warpnet.WarpDisconnectReason) {
 	return g.InterceptPeerDial(c.RemotePeer()), 0
 }
 
-func (g blocklistGater) closeBlocked(_ warpnet.WarpNetwork, c warpnet.WarpConn) {
+func (g *blocklistGater) closeBlocked(_ warpnet.WarpNetwork, c warpnet.WarpConn) {
 	if g.InterceptPeerDial(c.RemotePeer()) {
 		return
 	}
 	go func() { _ = c.Close() }()
 }
 
-func (g blocklistGater) sweepBlocked(s *warpnet.Swarm, interval time.Duration, stop <-chan struct{}) {
+func (g *blocklistGater) sweepBlocked(s *warpnet.Swarm, interval time.Duration, stop <-chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -111,4 +134,17 @@ func (g blocklistGater) sweepBlocked(s *warpnet.Swarm, interval time.Duration, s
 			}
 		}
 	}
+}
+
+func findRelay(addr warpnet.WarpAddress) (warpnet.WarpPeerID, bool) {
+	var relayID warpnet.WarpPeerID
+	for _, c := range addr {
+		switch c.Code() {
+		case warpnet.P_P2P:
+			relayID = warpnet.FromBytesToPeerID(c.RawValue())
+		case warpnet.P_CIRCUIT:
+			return relayID, relayID != ""
+		}
+	}
+	return "", false
 }

@@ -63,7 +63,6 @@ var CommonOptions = []libp2p.Option{
 	libp2p.Security(NoiseID, NewNoise),
 	libp2p.EnableAutoNATv2(),
 	libp2p.EnableRelay(),
-	libp2p.EnableRelayService(WithDefaultResourcesOption()), // for member nodes that have static IP
 	libp2p.EnableNATService(),
 	libp2p.NATPortMap(),
 	// the detector also refuses /ip6/ circuit addrs, though the relay may already be connected over IPv4
@@ -95,6 +94,10 @@ func NewConnectionGaterOption(gater WarpConnectionGater) WarpOption {
 }
 
 func NewSwarmInvokeOption(invoke func(WarpLifecycle, *Swarm)) WarpOption {
+	return libp2p.WithFxOption(fx.Invoke(invoke))
+}
+
+func NewEventBusInvokeOption(invoke func(WarpEventBus)) WarpOption {
 	return libp2p.WithFxOption(fx.Invoke(invoke))
 }
 

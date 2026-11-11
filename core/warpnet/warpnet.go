@@ -106,9 +106,13 @@ const (
 	Limited      = network.Limited
 	Disconnected = network.NotConnected
 
-	P_IP4 = multiaddr.P_IP4
-	P_IP6 = multiaddr.P_IP6
-	P_TCP = multiaddr.P_TCP
+	P_IP4     = multiaddr.P_IP4
+	P_IP6     = multiaddr.P_IP6
+	P_TCP     = multiaddr.P_TCP
+	P_P2P     = multiaddr.P_P2P
+	P_CIRCUIT = multiaddr.P_CIRCUIT
+
+	DirInbound = network.DirInbound
 
 	PermanentTTL = peerstore.PermanentAddrTTL
 
@@ -187,6 +191,7 @@ type (
 	WarpAddress          = multiaddr.Multiaddr
 	WarpConnManager      = coreconnmgr.ConnManager
 	WarpEventBus         = event.Bus
+	WarpEmitter          = event.Emitter
 	WarpIDService        = identify.IDService
 	WarpAutoNAT          = autonat.AutoNAT
 	P2PNode              = host.Host
@@ -524,6 +529,11 @@ func IsPublicMultiAddress(maddr WarpAddress) bool {
 
 func IsRelayAddress(addr string) bool {
 	return strings.Contains(addr, "p2p-circuit")
+}
+
+type EvtRelayedPeerRefused struct {
+	Relay WarpPeerID
+	Peer  WarpPeerID
 }
 
 func IsRelayMultiaddress(maddr multiaddr.Multiaddr) bool {
