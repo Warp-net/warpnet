@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
@@ -82,7 +81,7 @@ type Participant interface {
 	Broadcast(v vote.Event) error
 	// Decided is invoked exactly once per round, on the single
 	// participant that carries the decision.
-	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
+	Decided(subject event.ReportEvent, outcome vote.Event, ballots []event.VerdictBallot)
 }
 
 // round is one subject's vote round, self-contained: it collects ballots,
@@ -114,7 +113,7 @@ type round struct {
 type pendingOutcome struct {
 	subject event.ReportEvent
 	outcome vote.Event
-	voters  []domain.ID
+	ballots []event.VerdictBallot
 }
 
 // newRound starts a round: the tally timer runs from creation, because a
@@ -240,7 +239,7 @@ func (r *round) tally() {
 		r.onDone(r.id)
 
 	case roleBackup:
-		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, voters: p.voters}
+		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, ballots: p.ballots}
 		r.finalTimer = time.AfterFunc(time.Duration(p.rank)*r.schedule.Failover, r.takeOver)
 		r.mx.Unlock()
 		log.Infof("round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
@@ -252,7 +251,7 @@ func (r *round) tally() {
 		r.onDone(r.id)
 		log.Infof("round %s closed votes=%d result=%t chair=%s",
 			r.id, p.counted, bool(p.outcome.Result), p.chair)
-		r.decide(*subject, p.outcome, p.voters)
+		r.decide(*subject, p.outcome, p.ballots)
 	}
 }
 
@@ -271,13 +270,13 @@ func (r *round) takeOver() {
 	r.onDone(r.id)
 
 	log.Warnf("round %s: chair stayed silent, taking over the decision", r.id)
-	r.decide(p.subject, p.outcome, p.voters)
+	r.decide(p.subject, p.outcome, p.ballots)
 }
 
 // decide hands the outcome to the participant and then announces the round
 // finished, so the other voters cancel their takeover timers.
-func (r *round) decide(subject event.ReportEvent, outcome vote.Event, voters []domain.ID) {
-	r.member.Decided(subject, outcome, voters)
+func (r *round) decide(subject event.ReportEvent, outcome vote.Event, ballots []event.VerdictBallot) {
+	r.member.Decided(subject, outcome, ballots)
 
 	final := outcome
 	final.ReportID = r.id

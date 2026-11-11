@@ -40,8 +40,8 @@ import (
 // on it without an import cycle.
 
 // Topic carries one Event per moderator per report round. Voter
-// authenticity rides on the envelope (event.Message) signature, so the vote
-// payload itself is unsigned.
+// authenticity among moderators rides on the envelope (event.Message)
+// signature; Signature is for the members that recount the verdict.
 const Topic = event.ModerationVotesTopic
 
 // Event is a single moderator's verdict on one report round. Every
@@ -61,4 +61,7 @@ type Event struct {
 	// was finalized. It cancels the deterministic takeover chain on every
 	// other voter and is never counted as a vote.
 	Final bool `json:"final,omitempty"`
+	// Signature is the voter's event.VerdictBallot signature, shipped
+	// inside the verdict.
+	Signature string `json:"signature,omitempty"`
 }

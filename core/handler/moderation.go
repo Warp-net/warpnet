@@ -115,6 +115,12 @@ func StreamModerationResultHandler(
 			log.Warnf("moderation: dropping verdict from %s: signature invalid: %v", ev.ModeratorID, err)
 			return nil, ErrBadModeratorSignature
 		}
+		// A key of one's own is free, so the chair signature proves
+		// nothing on its own: the verdict must recount from its ballots.
+		if err := ev.VerifyQuorum(); err != nil {
+			log.Warnf("moderation: dropping verdict from %s: %v", ev.ModeratorID, err)
+			return nil, err
+		}
 		moderatorId := ev.ModeratorID
 
 		log.Infof("moderation: result type=%s user=%s result=%t reporter=%s",

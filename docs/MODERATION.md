@@ -4,8 +4,8 @@ Warpnet has no company, no instance admins and no moderation team. So who
 takes down a death threat?
 
 Short answer: **you report it, a handful of independent machines each judge it
-with an AI model, and they vote.** No human sees your report, no one person can
-force an outcome, and nobody can fake the result. This page explains how that
+with an AI model, and they vote.** No human sees your report, and no single
+machine can force an outcome or fake the result. This page explains how that
 works, what you can expect from it, and — just as importantly — what it does
 not promise.
 
@@ -74,7 +74,8 @@ default".
 ### 5. One of them announces the result
 
 Only one moderator delivers the outcome, so you get exactly one answer rather
-than three copies. Which one is decided by the same unpredictable ordering. If
+than three copies. The outcome carries every counted vote, each signed by the
+moderator that cast it. Which one is decided by the same unpredictable ordering. If
 that machine crashes or goes offline at that moment, the next one in line
 notices the silence and steps in — a report does not get lost because one
 computer died.
@@ -122,21 +123,31 @@ someone to look again.
 
 ---
 
-## Why a fake moderator cannot ban you
+## Why one fake moderator cannot ban you
 
 The obvious attack on a system like this is to pretend to be a moderator and
-publish "verdicts" against people you dislike. That does not work here:
+publish "verdicts" against people you dislike. A single machine cannot do it:
 
-- **Every verdict is signed.** Each moderator has a cryptographic key that is
-  built into its network identity. A verdict carries a signature that can only
-  have been produced by the holder of that key.
-- **Every app checks the signature before applying anything.** A verdict with a
-  missing, broken or borrowed signature is discarded on the spot, before it can
-  touch anything you see. Claiming to be someone else fails, because the
-  signature will not match the identity being claimed.
+- **Every vote is signed.** Each moderator has a cryptographic key that is
+  built into its network identity, and signs its own vote with it. A verdict
+  carries the signed votes it was counted from.
+- **Every app recounts the votes before applying anything.** It throws out any
+  vote whose signature does not match the identity that claims it, counts each
+  moderator once, and applies the verdict only if at least three distinct
+  moderators voted and a strict majority of them agrees with it. Otherwise the
+  verdict is discarded on the spot, before it can touch anything you see — and
+  that includes the notification to the reporter.
 - **One machine cannot decide alone.** Even a real moderator that turns
   malicious is only one vote out of an odd number, and it takes a strict
   majority to act.
+
+What this does **not** stop: a moderator identity is just a key, and keys cost
+nothing. Anyone who generates three throwaway keys can sign three votes and
+build a verdict every app will accept, without running a moderator or ever
+seeing a report. The recount turns "one fake signature" into "three fake
+signatures" — it raises the bar, it does not close the door. There is no list
+of approved moderators to check against, on purpose: nobody owns the network,
+so nobody is in a position to hand out moderator badges.
 
 There is a second layer, newly added: moderators **spot-check each other**.
 Every few minutes a moderator picks another one at random and asks it to judge
@@ -199,16 +210,20 @@ Worth reading, because these are real:
   to follow the protocol. Someone running modified software can ignore verdicts
   on their own screen. No decentralized system can prevent that, and any that
   claims otherwise is not being straight with you.
-- **A determined attacker with many machines is still a problem.** Running a
+- **A determined attacker with a few keys is still a problem.** Running a
   moderator costs nothing but a computer, so someone patient could stand up
-  several and try to swing votes. This is the hardest unsolved problem in the
-  design, and it is being worked on.
+  several and try to swing votes. Worse, three throwaway moderator keys are
+  enough to sign a verdict apps will accept, with no real review behind it.
+  This is the hardest unsolved problem in the design, and it is being worked
+  on.
 - **Coverage is only what is reported.** Nothing scans the network proactively.
   Content nobody reports is never reviewed.
 - **No moderators online means no moderation.** Moderators are volunteers. If
   none are running, your report is accepted and then simply goes nowhere — you
   will not even get a notification. This was verified, and it is the honest
-  failure mode of a network with no company behind it.
+  failure mode of a network with no company behind it. The same goes for fewer
+  than three moderators: they still vote, but apps discard a verdict with fewer
+  than three signed votes, so nothing is hidden and nobody is notified.
 
 ---
 
@@ -239,6 +254,11 @@ what happened, including the awkward parts.
 | Left only two moderators running (an even number) | The tie-avoidance rule set one vote aside, the remaining verdict stood, and the moderator whose vote was set aside stayed on standby in case the announcer failed. |
 | Left only one moderator running | It reviewed and decided alone. A lone moderator is weaker — nobody double-checks it — but reports do not pile up unanswered. |
 | Took every moderator offline, then reported | The report was accepted by the app and then nothing happened: no review, no verdict, **and no notification**. If nobody is running a moderator, reports go nowhere. |
+
+The two- and one-moderator rows predate the vote recount. Apps now need at
+least three signed votes before applying a verdict, so with only one or two
+moderators running the round still decides, but apps discard its result and
+the reporter hears nothing.
 
 **The mutual spot-checks**
 
@@ -282,10 +302,10 @@ roles and how to build and run each one.
 
 You report a post. The report reaches every moderator at once, and an
 unpredictable few of them judge it independently with an AI model. They vote, a
-strict majority is required to act, and the result comes back to you signed
-with a key your app verifies before it applies anything. Moderated content is
+strict majority is required to act, and the result comes back to you with every
+vote signed, which your app recounts before it applies anything. Moderated content is
 hidden from other people's feeds, not deleted, and the author is never
-notified. No human reads your report, no single machine can decide alone, and
-nobody can forge a verdict.
+notified. No human reads your report and no single machine can decide alone or
+forge a verdict — though three throwaway moderator keys still can.
 
 ---

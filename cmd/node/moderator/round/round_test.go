@@ -33,7 +33,7 @@ type stubMember struct {
 type decision struct {
 	subject event.ReportEvent
 	outcome vote.Event
-	voters  []domain.ID
+	ballots []event.VerdictBallot
 }
 
 func newStubMember(id string, result domain.ModerationResult) *stubMember {
@@ -70,9 +70,9 @@ func (s *stubMember) Broadcast(v vote.Event) error {
 	return nil
 }
 
-func (s *stubMember) Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+func (s *stubMember) Decided(subject event.ReportEvent, outcome vote.Event, ballots []event.VerdictBallot) {
 	s.mu.Lock()
-	s.decisions = append(s.decisions, decision{subject, outcome, voters})
+	s.decisions = append(s.decisions, decision{subject, outcome, ballots})
 	s.mu.Unlock()
 }
 
@@ -200,8 +200,8 @@ func TestRound_SoleVoterDecides(t *testing.T) {
 	if d.outcome.Result != domain.FAIL {
 		t.Fatalf("expected the FAIL ballot to carry, got %+v", d.outcome)
 	}
-	if len(d.voters) != 1 || d.voters[0] != "self" {
-		t.Fatalf("expected a single voter, got %v", d.voters)
+	if len(d.ballots) != 1 || d.ballots[0].ModeratorID != "self" {
+		t.Fatalf("expected a single voter, got %v", d.ballots)
 	}
 	if finals := member.finals(); len(finals) != 1 {
 		t.Fatalf("the decision must be announced exactly once, got %d", len(finals))
@@ -232,8 +232,8 @@ func TestRound_MajorityDecides(t *testing.T) {
 	if d.outcome.Result != domain.FAIL {
 		t.Fatal("2 of 3 FAIL must decide FAIL")
 	}
-	if len(d.voters) != 3 {
-		t.Fatalf("expected 3 voters, got %v", d.voters)
+	if len(d.ballots) != 3 {
+		t.Fatalf("expected 3 voters, got %v", d.ballots)
 	}
 }
 
@@ -612,7 +612,7 @@ func TestPlanTally_Roles(t *testing.T) {
 	if p.role != roleChair || p.rank != 0 || p.chair != order[0] {
 		t.Fatalf("the lowest-ranked voter chairs, got %+v", p)
 	}
-	if p.counted != 3 || len(p.voters) != 3 {
+	if p.counted != 3 || len(p.ballots) != 3 {
 		t.Fatalf("all three ballots must count, got %+v", p)
 	}
 

@@ -33,7 +33,7 @@ import (
 	"sort"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
-	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 )
 
 // Pure tally math: no state, no I/O. Every participant runs these over the
@@ -106,7 +106,7 @@ type plan struct {
 	rank    int
 	chair   string
 	outcome vote.Event
-	voters  []domain.ID
+	ballots []event.VerdictBallot
 	// counted is how many ballots entered the tally, for the log line.
 	counted int
 	// orphaned marks a participant that voted on a subject it never saw,
@@ -130,12 +130,12 @@ func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool)
 		return plan{role: roleBystander, orphaned: true}
 	}
 
-	outcome, voters := aggregate(kept)
+	outcome, signed := aggregate(kept)
 	p := plan{
 		rank:    rank,
 		chair:   kept[0].ModeratorID,
 		outcome: outcome,
-		voters:  voters,
+		ballots: signed,
 		counted: len(kept),
 	}
 	if rank == 0 {
@@ -149,27 +149,26 @@ func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool)
 // aggregate reduces the kept ballots to the round outcome: FAIL on strict
 // majority, returning the lowest-ranked ballot of the winning side so every
 // participant aggregates identically.
-func aggregate(kept []vote.Event) (vote.Event, []domain.ID) {
+func aggregate(kept []vote.Event) (vote.Event, []event.VerdictBallot) {
 	failCount := 0
 	for _, v := range kept {
 		if !bool(v.Result) {
 			failCount++
 		}
 	}
-	majority := domain.OK
-	if failCount*2 > len(kept) {
-		majority = domain.FAIL
-	}
+	majority := event.MajorityResult(failCount, len(kept))
 
-	voters := make([]domain.ID, 0, len(kept))
+	ballots := make([]event.VerdictBallot, 0, len(kept))
 	for _, v := range kept {
-		voters = append(voters, domain.ID(v.ModeratorID))
+		ballots = append(ballots, event.VerdictBallot{
+			ModeratorID: v.ModeratorID, Result: v.Result, Signature: v.Signature,
+		})
 	}
 
 	for _, v := range kept {
 		if v.Result == majority {
-			return v, voters
+			return v, ballots
 		}
 	}
-	return vote.Event{Result: majority}, voters
+	return vote.Event{Result: majority}, ballots
 }

@@ -304,6 +304,8 @@ func (m *Moderator) Ballot(reportID string, rep event.ReportEvent) (vote.Event, 
 	ballot.ReportID = reportID
 	ballot.Type = rep.Type
 	ballot.ModeratorID = m.selfID()
+	subject := event.ModerationVerdictEvent{Type: rep.Type, UserID: ballot.UserID, ObjectID: ballot.ObjectID}
+	ballot.Signature = subject.SignBallot(m.privKey, ballot.ModeratorID, ballot.Result)
 	return ballot, true, nil
 }
 
@@ -312,7 +314,7 @@ func (m *Moderator) Ballot(reportID string, rep event.ReportEvent) (vote.Event, 
 // Unlike the followers broadcast (FAIL-only, shadow-ban), the reporter is
 // told about both outcomes — silence on an OK verdict reads as "the report
 // was lost". Best-effort: a delivery failure must not abort moderation.
-func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, ballots []event.VerdictBallot) {
 	if rep.ReporterNodeID == "" || rep.ReporterID == "" {
 		return
 	}
@@ -325,7 +327,7 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 		ObjectID:    outcome.ObjectID,
 		ModeratorID: m.selfID(),
 		ReporterID:  rep.ReporterID,
-		Voters:      voters,
+		Ballots:     ballots,
 	}).Signed(m.privKey)
 	if _, err := m.node.GenericStream(
 		rep.ReporterNodeID,
@@ -477,9 +479,9 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (assessment, bool, er
 // bad verdicts go on the followers broadcast. Called by the round that
 // picked this node to carry the decision — as chair, or as the backup that
 // took over.
-func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, ballots []event.VerdictBallot) {
 	m.fileReference(rep.ReportID(), outcome.Result)
-	m.notifyReporter(rep, outcome, voters)
+	m.notifyReporter(rep, outcome, ballots)
 
 	if bool(outcome.Result) {
 		return
@@ -507,7 +509,7 @@ func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []
 				Reason:      outcome.Reason,
 				TimeAt:      time.Now(),
 			},
-			voters,
+			ballots,
 		)
 	case domain.ModerationUserType:
 		m.isolation.IsolateUser(
@@ -520,7 +522,7 @@ func (m *Moderator) Decided(rep event.ReportEvent, outcome vote.Event, voters []
 				Reason:      outcome.Reason,
 				TimeAt:      time.Now(),
 			},
-			voters,
+			ballots,
 		)
 	}
 }
