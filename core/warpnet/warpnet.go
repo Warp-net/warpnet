@@ -70,7 +70,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/pnet"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
-	"github.com/libp2p/go-libp2p/core/sec"
 	"github.com/libp2p/go-libp2p/p2p/host/autonat"
 	// "github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" is deprecated: The database-backed peerstore will be removed from go-libp2p in the future. Use the memory peerstore (pstoremem) instead. For more details see https://github.com/libp2p/go-libp2p/issues/2329 and https://github.com/libp2p/go-libp2p/issues/2355.
 	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds" //nolint:staticcheck
@@ -79,11 +78,9 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
-	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 	log "github.com/sirupsen/logrus"
@@ -162,41 +159,38 @@ type (
 	WarpPrivateKey  p2pCrypto.PrivKey
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
-	WarpMessage        = pubsub.Message
-	WarpReachability   = network.Reachability
-	WarpOption         = libp2p.Option
-	WarpLimiterConfig  = rcmgr.PartialLimitConfig
-	TCPTransport       = tcp.TcpTransport
-	TCPOption          = tcp.Option
-	Swarm              = swarm.Swarm
-	SwarmOption        = swarm.Option
-	PSK                = pnet.PSK
-	WarpProtocolID     = protocol.ID
-	WarpStream         = network.Stream
-	StreamHandler      = network.StreamHandler
-	WarpBatching       = datastore.Batching
-	WarpProviderStore  = records.ProviderStore
-	WarpAddrInfo       = peer.AddrInfo
-	WarpConn           = network.Conn
-	WarpConnStats      = network.ConnStats
-	WarpCID            = cid.Cid
-	WarpStreamStats    = network.Stats
-	WarpPeerRouting    = routing.PeerRouting
-	WarpPeerstore      = peerstore.Peerstore
-	WarpProtocolSwitch = protocol.Switch
-	WarpNetwork        = network.Network
-	WarpPeerID         = peer.ID
-	WarpDHT            = dht.IpfsDHT
-	WarpAddress        = multiaddr.Multiaddr
-	WarpConnManager    = coreconnmgr.ConnManager
-	WarpEventBus       = event.Bus
-	WarpIDService      = identify.IDService
-	WarpAutoNAT        = autonat.AutoNAT
-	P2PNode            = host.Host
-	Discovery          = discovery.Discovery
-)
-
-type (
+	WarpMessage          = pubsub.Message
+	WarpReachability     = network.Reachability
+	WarpOption           = libp2p.Option
+	WarpLimiterConfig    = rcmgr.PartialLimitConfig
+	TCPTransport         = tcp.TcpTransport
+	TCPOption            = tcp.Option
+	Swarm                = swarm.Swarm
+	SwarmOption          = swarm.Option
+	PSK                  = pnet.PSK
+	WarpProtocolID       = protocol.ID
+	WarpStream           = network.Stream
+	StreamHandler        = network.StreamHandler
+	WarpBatching         = datastore.Batching
+	WarpProviderStore    = records.ProviderStore
+	WarpAddrInfo         = peer.AddrInfo
+	WarpConn             = network.Conn
+	WarpConnStats        = network.ConnStats
+	WarpCID              = cid.Cid
+	WarpStreamStats      = network.Stats
+	WarpPeerRouting      = routing.PeerRouting
+	WarpPeerstore        = peerstore.Peerstore
+	WarpProtocolSwitch   = protocol.Switch
+	WarpNetwork          = network.Network
+	WarpPeerID           = peer.ID
+	WarpDHT              = dht.IpfsDHT
+	WarpAddress          = multiaddr.Multiaddr
+	WarpConnManager      = coreconnmgr.ConnManager
+	WarpEventBus         = event.Bus
+	WarpIDService        = identify.IDService
+	WarpAutoNAT          = autonat.AutoNAT
+	P2PNode              = host.Host
+	Discovery            = discovery.Discovery
 	WarpConnectionGater  = coreconnmgr.ConnectionGater
 	WarpDirection        = network.Direction
 	WarpConnMultiaddrs   = network.ConnMultiaddrs
@@ -335,53 +329,6 @@ type NodeMetrics struct {
 
 func NewP2PNode(opts ...libp2p.Option) (P2PNode, error) {
 	return libp2p.New(opts...)
-}
-
-func NewNoise(
-	id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer, gater coreconnmgr.ConnectionGater,
-) (*gatedNoise, error) {
-	tpt, err := noise.New(id, pk, mxs)
-	if err != nil {
-		return nil, err
-	}
-	return &gatedNoise{Transport: tpt, gater: gater}, nil
-}
-
-type gatedNoise struct {
-	*noise.Transport
-
-	gater coreconnmgr.ConnectionGater
-}
-
-func (n *gatedNoise) SecureOutbound(ctx context.Context, insecure gonet.Conn, p WarpPeerID) (sec.SecureConn, error) {
-	if !n.isAllowed(network.DirOutbound, p, insecure) {
-		_ = insecure.Close()
-		return nil, ErrPeerBlocked
-	}
-	return n.Transport.SecureOutbound(ctx, insecure, p)
-}
-
-func (n *gatedNoise) SecureInbound(ctx context.Context, insecure gonet.Conn, p WarpPeerID) (sec.SecureConn, error) {
-	conn, err := n.Transport.SecureInbound(ctx, insecure, p)
-	if err != nil {
-		return conn, err
-	}
-	if !n.isAllowed(network.DirInbound, conn.RemotePeer(), insecure) {
-		_ = conn.Close()
-		return nil, ErrPeerBlocked
-	}
-	return conn, nil
-}
-
-func (n *gatedNoise) isAllowed(dir network.Direction, id WarpPeerID, conn gonet.Conn) bool {
-	if n.gater == nil {
-		return true
-	}
-	addrs, err := manet.WrapNetConn(conn)
-	if err != nil {
-		return true
-	}
-	return n.gater.InterceptSecured(dir, id, addrs)
 }
 
 func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {
