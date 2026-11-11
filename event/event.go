@@ -671,10 +671,11 @@ type ModerationVerdictEvent struct {
 	// ReporterID is set only on the reporter-bound delivery; empty on the
 	// isolation broadcast. The handler keys on it to notify only the reporter.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
-	// Voters lists every moderator whose vote entered the round's tally.
-	// Informational for now: receivers verify the chair's signature only.
-	Voters []domain.ID `json:"voters,omitempty"`
-	TimeAt time.Time   `json:"time_at,omitzero"`
+	// Ballots are the round's tallied votes, each signed by its own voter,
+	// so a receiver recounts the round instead of trusting the chair.
+	// The chair signature leaves them out: every ballot carries its own.
+	Ballots []VerdictBallot `json:"ballots,omitempty"`
+	TimeAt  time.Time       `json:"time_at,omitzero"`
 	// Signature is base64(ed25519) over SigningBytes, produced with the
 	// chair moderator's node key. The verifying pubkey is recovered from
 	// ModeratorID, so a verdict is only valid for the peer that claims it.
@@ -694,7 +695,7 @@ func (e ModerationVerdictEvent) signingBytes() []byte {
 	if e.ObjectID != nil {
 		objectID = string(*e.ObjectID)
 	}
-	parts := make([]string, 0, 9+len(e.Voters))
+	parts := make([]string, 0, 9)
 	parts = append(parts,
 		e.Type.String(),
 		strconv.FormatBool(bool(e.Verdict)),
@@ -706,9 +707,10 @@ func (e ModerationVerdictEvent) signingBytes() []byte {
 		string(e.ReporterID),
 		strconv.FormatInt(e.TimeAt.UnixNano(), 10),
 	)
-	for _, v := range e.Voters {
-		parts = append(parts, string(v))
-	}
+	return lengthPrefixed(parts)
+}
+
+func lengthPrefixed(parts []string) []byte {
 	buf := make([]byte, 0, 256)
 	for _, p := range parts {
 		buf = append(buf, strconv.Itoa(len(p))...)
@@ -733,12 +735,102 @@ func (e ModerationVerdictEvent) Signed(privKey ed25519.PrivateKey) ModerationVer
 // Verify checks the verdict signature against pubKey. It is the mirror of
 // Sign, so the canonical signing bytes stay private to this package.
 func (e ModerationVerdictEvent) Verify(pubKey ed25519.PublicKey) error {
-	sig, err := base64.StdEncoding.DecodeString(e.Signature)
+	return verifySignature(pubKey, e.signingBytes(), e.Signature)
+}
+
+func verifySignature(pubKey ed25519.PublicKey, msg []byte, signature string) error {
+	// ed25519.Verify panics on a key of the wrong size, which a peer id of
+	// another key type yields.
+	if len(pubKey) != ed25519.PublicKeySize {
+		return ErrVerdictSignatureInvalid
+	}
+	sig, err := base64.StdEncoding.DecodeString(signature)
 	if err != nil {
 		return err
 	}
-	if !ed25519.Verify(pubKey, e.signingBytes(), sig) {
+	if !ed25519.Verify(pubKey, msg, sig) {
 		return ErrVerdictSignatureInvalid
+	}
+	return nil
+}
+
+// VerdictQuorum is the fewest distinct signed ballots a verdict must carry
+// before a member applies it.
+const VerdictQuorum = 3
+
+const ErrVerdictNoQuorum warpnet.WarpError = "moderation verdict lacks a quorum of signed ballots"
+
+// VerdictBallot is one voter's signed result on the verdict's subject.
+type VerdictBallot struct {
+	ModeratorID domain.ID               `json:"moderator_id"`
+	Result      domain.ModerationResult `json:"result"`
+	Signature   string                  `json:"signature"`
+}
+
+// MajorityResult is the tally rule moderator rounds and members share:
+// FAIL only on a strict majority.
+func MajorityResult(failCount, total int) domain.ModerationResult {
+	if failCount*2 > total {
+		return domain.FAIL
+	}
+	return domain.OK
+}
+
+// ballotSigningBytes binds a ballot to the verdict's subject, not to the
+// round id: that id hashes the reporter, whom the followers broadcast hides.
+func (e ModerationVerdictEvent) ballotSigningBytes(moderatorID domain.ID, result domain.ModerationResult) []byte {
+	objectID := ""
+	if e.ObjectID != nil {
+		objectID = string(*e.ObjectID)
+	}
+	return lengthPrefixed([]string{
+		"ballot",
+		e.Type.String(),
+		string(e.UserID),
+		objectID,
+		string(moderatorID),
+		strconv.FormatBool(bool(result)),
+	})
+}
+
+// SignBallot signs moderatorID's result on the subject (Type, UserID,
+// ObjectID) of e.
+func (e ModerationVerdictEvent) SignBallot(
+	privKey ed25519.PrivateKey, moderatorID domain.ID, result domain.ModerationResult,
+) string {
+	if len(privKey) == 0 {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(privKey, e.ballotSigningBytes(moderatorID, result)))
+}
+
+// VerifyQuorum recounts the verdict from its ballots: at least
+// VerdictQuorum distinct voters, each verified against its own peer id, and
+// their strict-majority result equal to the verdict. Duplicate and
+// unverifiable ballots do not count. The publisher need not be among them:
+// a backup cut by the odd-count trim may carry the round.
+func (e ModerationVerdictEvent) VerifyQuorum() error {
+	counted := make(map[domain.ID]struct{}, len(e.Ballots))
+	failCount := 0
+	for _, b := range e.Ballots {
+		if _, dup := counted[b.ModeratorID]; dup {
+			continue
+		}
+		voter := warpnet.FromStringToPeerID(b.ModeratorID)
+		if voter == "" {
+			continue
+		}
+		msg := e.ballotSigningBytes(b.ModeratorID, b.Result)
+		if verifySignature(warpnet.FromIDToPubKey(voter), msg, b.Signature) != nil {
+			continue
+		}
+		counted[b.ModeratorID] = struct{}{}
+		if !bool(b.Result) {
+			failCount++
+		}
+	}
+	if len(counted) < VerdictQuorum || MajorityResult(failCount, len(counted)) != e.Verdict {
+		return ErrVerdictNoQuorum
 	}
 	return nil
 }

@@ -188,7 +188,8 @@ func TestTroikaIntegration_RealGossip(t *testing.T) {
 	require.Equal(t, memberHost.ID().String(), deliveredTo, "the verdict must go to the reporter's node")
 	require.Equal(t, domain.FAIL, got.Verdict)
 	require.Equal(t, memberPS.OwnerID(), got.ReporterID, "the reporter identity must be the one the member node stamped")
-	require.Len(t, got.Voters, 3, "all three moderators must have voted")
+	require.Len(t, got.Ballots, 3, "all three moderators must have voted")
+	require.NoError(t, got.VerifyQuorum(), "members must be able to recount the verdict")
 
 	// The signature must verify against the pubkey recovered from the
 	// chair's peer id — the exact check member nodes run.

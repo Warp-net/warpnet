@@ -46,11 +46,11 @@ func TestIsolateTweet(t *testing.T) {
 		IsOk:        domain.FAIL,
 		Reason:      &reason,
 	}
-	voters := []domain.ID{"moderator-1", "moderator-2"}
+	ballots := []event.VerdictBallot{{ModeratorID: "moderator-1"}, {ModeratorID: "moderator-2"}}
 
 	t.Run("publishes a signed verdict to the author's followers", func(t *testing.T) {
 		pub := &recordingPublisher{}
-		NewIsolationProtocol(pub, testKey(t)).IsolateTweet(tweet, moderation, voters)
+		NewIsolationProtocol(pub, testKey(t)).IsolateTweet(tweet, moderation, ballots)
 
 		require.Equal(t, 1, pub.callsCount)
 		require.Equal(t, []string{"author-1"}, pub.ownerIds)
@@ -62,21 +62,21 @@ func TestIsolateTweet(t *testing.T) {
 		require.Equal(t, domain.ID("author-1"), got.UserID)
 		require.NotNil(t, got.ObjectID)
 		require.Equal(t, domain.ID("tweet-1"), *got.ObjectID)
-		require.Equal(t, voters, got.Voters)
+		require.Equal(t, ballots, got.Ballots)
 		require.NotEmpty(t, got.Signature, "the verdict must carry the moderator's signature")
 	})
 
 	t.Run("nil inputs publish nothing", func(t *testing.T) {
 		pub := &recordingPublisher{}
 		ip := NewIsolationProtocol(pub, testKey(t))
-		ip.IsolateTweet(nil, moderation, voters)
-		ip.IsolateTweet(tweet, nil, voters)
+		ip.IsolateTweet(nil, moderation, ballots)
+		ip.IsolateTweet(tweet, nil, ballots)
 		require.Zero(t, pub.callsCount)
 	})
 
 	t.Run("a publish failure is logged, not returned", func(t *testing.T) {
 		pub := &recordingPublisher{err: errors.New("no subscribers")}
-		NewIsolationProtocol(pub, testKey(t)).IsolateTweet(tweet, moderation, voters)
+		NewIsolationProtocol(pub, testKey(t)).IsolateTweet(tweet, moderation, ballots)
 		require.Equal(t, 1, pub.callsCount)
 	})
 }
@@ -89,11 +89,11 @@ func TestIsolateUser(t *testing.T) {
 		IsOk:   false,
 		Reason: &reason,
 	}
-	voters := []domain.ID{"moderator-1"}
+	ballots := []event.VerdictBallot{{ModeratorID: "moderator-1"}}
 
 	t.Run("publishes a signed verdict on the user's own topic", func(t *testing.T) {
 		pub := &recordingPublisher{}
-		NewIsolationProtocol(pub, testKey(t)).IsolateUser("moderator-1", user, moderation, voters)
+		NewIsolationProtocol(pub, testKey(t)).IsolateUser("moderator-1", user, moderation, ballots)
 
 		require.Equal(t, 1, pub.callsCount)
 		require.Equal(t, []string{"user-1"}, pub.ownerIds)
@@ -110,14 +110,14 @@ func TestIsolateUser(t *testing.T) {
 	t.Run("nil inputs publish nothing", func(t *testing.T) {
 		pub := &recordingPublisher{}
 		ip := NewIsolationProtocol(pub, testKey(t))
-		ip.IsolateUser("moderator-1", nil, moderation, voters)
-		ip.IsolateUser("moderator-1", user, nil, voters)
+		ip.IsolateUser("moderator-1", nil, moderation, ballots)
+		ip.IsolateUser("moderator-1", user, nil, ballots)
 		require.Zero(t, pub.callsCount)
 	})
 
 	t.Run("a publish failure is logged, not returned", func(t *testing.T) {
 		pub := &recordingPublisher{err: errors.New("no subscribers")}
-		NewIsolationProtocol(pub, testKey(t)).IsolateUser("moderator-1", user, moderation, voters)
+		NewIsolationProtocol(pub, testKey(t)).IsolateUser("moderator-1", user, moderation, ballots)
 		require.Equal(t, 1, pub.callsCount)
 	})
 }

@@ -645,9 +645,9 @@ func TestDecided_FailNotifiesReporterAndIsolates(t *testing.T) {
 	rep := tweetReport("tweet-1")
 	rep.ReporterID = "reporter-1"
 	rep.ReporterNodeID = "reporter-node-1"
-	voters := []domain.ID{"mod-a", "mod-b", "mod-c"}
+	ballots := []event.VerdictBallot{{ModeratorID: "mod-a"}, {ModeratorID: "mod-b"}, {ModeratorID: "mod-c"}}
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), voters)
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), ballots)
 
 	if len(*delivered) != 1 {
 		t.Fatalf("expected exactly one reporter delivery, got %d", len(*delivered))
@@ -656,8 +656,8 @@ func TestDecided_FailNotifiesReporterAndIsolates(t *testing.T) {
 	if (*deliveredTo)[0] != "reporter-node-1" || got.ReporterID != "reporter-1" {
 		t.Fatalf("the verdict must be addressed to the reporter, got %q / %+v", (*deliveredTo)[0], got)
 	}
-	if got.Verdict != domain.FAIL || len(got.Voters) != 3 {
-		t.Fatalf("the verdict must carry the outcome and its voters, got %+v", got)
+	if got.Verdict != domain.FAIL || len(got.Ballots) != 3 {
+		t.Fatalf("the verdict must carry the outcome and its ballots, got %+v", got)
 	}
 	// The verdict goes out under THIS node's identity, not the ballot's.
 	if got.ModeratorID != m.selfID() {
@@ -678,7 +678,7 @@ func TestDecided_OkNotifiesReporterWithoutIsolation(t *testing.T) {
 	rep.ReporterID = "reporter-1"
 	rep.ReporterNodeID = "reporter-node-1"
 
-	m.Decided(rep, decidedBallot(domain.OK, ""), []domain.ID{"mod-a"})
+	m.Decided(rep, decidedBallot(domain.OK, ""), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	if len(*delivered) != 1 || (*delivered)[0].Verdict != domain.OK {
 		t.Fatalf("the reporter must hear the OK verdict, got %+v", *delivered)
@@ -693,7 +693,7 @@ func TestDecided_OkNotifiesReporterWithoutIsolation(t *testing.T) {
 func TestDecided_NoReporterStillIsolates(t *testing.T) {
 	m, pub, delivered, _ := decidedFixture(t, nil)
 
-	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.FAIL, "Hate"), []domain.ID{"mod-a"})
+	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.FAIL, "Hate"), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	if len(*delivered) != 0 {
 		t.Fatalf("without a reporter node there is nobody to notify, got %+v", *delivered)
@@ -711,7 +711,7 @@ func TestDecided_UserVerdictIsolatesProfile(t *testing.T) {
 		ReportID: "round-1", Type: domain.ModerationUserType,
 		Result: domain.FAIL, UserID: "offender",
 	}
-	m.Decided(rep, outcome, []domain.ID{"mod-a"})
+	m.Decided(rep, outcome, []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	if len(*delivered) != 1 || (*delivered)[0].Type != domain.ModerationUserType {
 		t.Fatalf("the reporter must hear a profile verdict, got %+v", *delivered)
@@ -739,7 +739,7 @@ func TestDecided_FilesTheJudgedTextAsReference(t *testing.T) {
 		t.Fatalf("Ballot: %v ok=%t", err, ok)
 	}
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []domain.ID{"mod-a"})
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	_, unsafe := m.corpus.Len()
 	if unsafe != 1 {
@@ -811,7 +811,7 @@ func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
 	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
 		t.Fatalf("Ballot: %v ok=%t", err, ok)
 	}
-	m.Decided(rep, decidedBallot(domain.OK, ""), []domain.ID{"mod-a"})
+	m.Decided(rep, decidedBallot(domain.OK, ""), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	if safe, unsafe := m.corpus.Len(); safe != 0 || unsafe != 0 {
 		t.Fatalf("nothing was judged, so nothing may be referenced: %d/%d", safe, unsafe)

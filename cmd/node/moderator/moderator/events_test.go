@@ -9,6 +9,7 @@ import (
 	"github.com/Warp-net/warpnet/cmd/node/moderator/audit"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestAnUpheldReportChargesTheNodeThatHostsTheOffender(t *testing.T) {
 	m := decidedModerator(t)
 	rep := tweetReport("tweet-1")
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []domain.ID{"mod-a"})
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	events := ruled(t, m)
 	require.Len(t, events, 1)
@@ -54,7 +55,7 @@ func TestAnUpheldReportChargesTheNodeThatHostsTheOffender(t *testing.T) {
 func TestAClearedReportChargesNobody(t *testing.T) {
 	m := decidedModerator(t)
 
-	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.OK, ""), []domain.ID{"mod-a"})
+	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.OK, ""), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	assert.Empty(t, ruled(t, m), "a report the quorum cleared is not an offence")
 }
@@ -64,7 +65,7 @@ func TestAReportThatNamesNoNodeChargesNobody(t *testing.T) {
 	rep := tweetReport("tweet-1")
 	rep.TargetNodeID = ""
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []domain.ID{"mod-a"})
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictBallot{{ModeratorID: "mod-a"}})
 
 	assert.Empty(t, ruled(t, m))
 }

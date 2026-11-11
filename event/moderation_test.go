@@ -21,13 +21,12 @@ func baseResultEvent() ModerationVerdictEvent {
 		ObjectID:    &objectID,
 		ModeratorID: "moderator-1",
 		ReporterID:  "reporter-1",
-		Voters:      []domain.ID{"moderator-1", "moderator-2", "moderator-3"},
 		TimeAt:      time.Unix(1700000000, 42).UTC(),
 	}
 }
 
 // Every signed field must change the signing bytes: a verdict altered after
-// signing (result flipped, reporter redirected, voters trimmed) must not
+// signing (result flipped, reporter redirected) must not
 // verify against the original signature.
 func TestModerationResultSigningBytes_CoversEveryField(t *testing.T) {
 	baseEvent := baseResultEvent()
@@ -42,7 +41,6 @@ func TestModerationResultSigningBytes_CoversEveryField(t *testing.T) {
 		"object":   func(e *ModerationVerdictEvent) { o := domain.ID("tweet-2"); e.ObjectID = &o },
 		"moder":    func(e *ModerationVerdictEvent) { e.ModeratorID = "moderator-x" },
 		"reporter": func(e *ModerationVerdictEvent) { e.ReporterID = "reporter-x" },
-		"voters":   func(e *ModerationVerdictEvent) { e.Voters = e.Voters[:2] },
 		"time":     func(e *ModerationVerdictEvent) { e.TimeAt = e.TimeAt.Add(time.Nanosecond) },
 	}
 	for name, mutate := range mutations {
@@ -66,7 +64,7 @@ func TestModerationResultSigningBytes_StableAndNilSafe(t *testing.T) {
 
 	minimal := ModerationVerdictEvent{Type: domain.ModerationUserType, UserID: "u"}
 	if len(minimal.signingBytes()) == 0 {
-		t.Fatal("nil reason/object/voters must still produce signing bytes")
+		t.Fatal("nil reason/object must still produce signing bytes")
 	}
 }
 
