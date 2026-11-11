@@ -56,7 +56,7 @@ func NewPubSubRelay(
 	bps := &relayPubSub{
 		ctx: ctx,
 	}
-	bps.pubsub = pubsub.NewGossip(ctx, ratings, handlers...)
+	bps.pubsub = pubsub.NewGossip(ctx, ratings, pubsub.WithTopicHandlers(handlers...))
 	return bps
 }
 

@@ -59,6 +59,7 @@ import (
 	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	coreconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/control"
 	p2pCrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/event"
@@ -77,13 +78,13 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
-	tptu "github.com/libp2p/go-libp2p/p2p/net/upgrader"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/fx"
 )
 
 var (
@@ -115,6 +116,7 @@ const (
 	ErrEmptyNodeId     WarpError = "node id is empty"
 	ErrMalformedNodeId WarpError = "node id is malformed"
 	ErrNotImplemented  WarpError = "not implemented"
+	ErrPeerBlocked     WarpError = "peer is blocked"
 
 	ReachabilityPublic  WarpReachability = network.ReachabilityPublic
 	ReachabilityPrivate WarpReachability = network.ReachabilityPrivate
@@ -157,38 +159,45 @@ type (
 	WarpPrivateKey  p2pCrypto.PrivKey
 	WarpRoutingFunc func(node P2PNode) (WarpPeerRouting, error)
 
-	WarpMessage        = pubsub.Message
-	WarpReachability   = network.Reachability
-	WarpOption         = libp2p.Option
-	WarpLimiterConfig  = rcmgr.PartialLimitConfig
-	TCPTransport       = tcp.TcpTransport
-	TCPOption          = tcp.Option
-	Swarm              = swarm.Swarm
-	SwarmOption        = swarm.Option
-	PSK                = pnet.PSK
-	WarpProtocolID     = protocol.ID
-	WarpStream         = network.Stream
-	StreamHandler      = network.StreamHandler
-	WarpBatching       = datastore.Batching
-	WarpProviderStore  = records.ProviderStore
-	WarpAddrInfo       = peer.AddrInfo
-	WarpConn           = network.Conn
-	WarpConnStats      = network.ConnStats
-	WarpCID            = cid.Cid
-	WarpStreamStats    = network.Stats
-	WarpPeerRouting    = routing.PeerRouting
-	WarpPeerstore      = peerstore.Peerstore
-	WarpProtocolSwitch = protocol.Switch
-	WarpNetwork        = network.Network
-	WarpPeerID         = peer.ID
-	WarpDHT            = dht.IpfsDHT
-	WarpAddress        = multiaddr.Multiaddr
-	WarpConnManager    = coreconnmgr.ConnManager
-	WarpEventBus       = event.Bus
-	WarpIDService      = identify.IDService
-	WarpAutoNAT        = autonat.AutoNAT
-	P2PNode            = host.Host
-	Discovery          = discovery.Discovery
+	WarpMessage          = pubsub.Message
+	WarpReachability     = network.Reachability
+	WarpOption           = libp2p.Option
+	WarpLimiterConfig    = rcmgr.PartialLimitConfig
+	TCPTransport         = tcp.TcpTransport
+	TCPOption            = tcp.Option
+	Swarm                = swarm.Swarm
+	SwarmOption          = swarm.Option
+	PSK                  = pnet.PSK
+	WarpProtocolID       = protocol.ID
+	WarpStream           = network.Stream
+	StreamHandler        = network.StreamHandler
+	WarpBatching         = datastore.Batching
+	WarpProviderStore    = records.ProviderStore
+	WarpAddrInfo         = peer.AddrInfo
+	WarpConn             = network.Conn
+	WarpConnStats        = network.ConnStats
+	WarpCID              = cid.Cid
+	WarpStreamStats      = network.Stats
+	WarpPeerRouting      = routing.PeerRouting
+	WarpPeerstore        = peerstore.Peerstore
+	WarpProtocolSwitch   = protocol.Switch
+	WarpNetwork          = network.Network
+	WarpPeerID           = peer.ID
+	WarpDHT              = dht.IpfsDHT
+	WarpAddress          = multiaddr.Multiaddr
+	WarpConnManager      = coreconnmgr.ConnManager
+	WarpEventBus         = event.Bus
+	WarpIDService        = identify.IDService
+	WarpAutoNAT          = autonat.AutoNAT
+	P2PNode              = host.Host
+	Discovery            = discovery.Discovery
+	WarpConnectionGater  = coreconnmgr.ConnectionGater
+	WarpDirection        = network.Direction
+	WarpConnMultiaddrs   = network.ConnMultiaddrs
+	WarpDisconnectReason = control.DisconnectReason
+	WarpNotifyBundle     = network.NotifyBundle
+	WarpLifecycle        = fx.Lifecycle
+	WarpHook             = fx.Hook
 )
 
 type WarpStreamBody struct {
@@ -320,10 +329,6 @@ type NodeMetrics struct {
 
 func NewP2PNode(opts ...libp2p.Option) (P2PNode, error) {
 	return libp2p.New(opts...)
-}
-
-func NewNoise(id protocol.ID, pk p2pCrypto.PrivKey, mxs []tptu.StreamMuxer) (*noise.Transport, error) {
-	return noise.New(id, pk, mxs)
 }
 
 func NewResourceManager(limiter rcmgr.Limiter) (network.ResourceManager, error) {

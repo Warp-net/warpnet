@@ -43,6 +43,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/fx"
 )
 
 const defaultTimeout = 60 * time.Second
@@ -87,6 +88,18 @@ func NewListenAddrStringsOption(s ...string) WarpOption {
 
 func NewRoutingOption(cfg libp2pConfig.RoutingC) WarpOption {
 	return libp2p.Routing(cfg)
+}
+
+func NewConnectionGaterOption(gater WarpConnectionGater) WarpOption {
+	return libp2p.ConnectionGater(gater)
+}
+
+func NewSwarmInvokeOption(invoke func(WarpLifecycle, *Swarm)) WarpOption {
+	return libp2p.WithFxOption(fx.Invoke(invoke))
+}
+
+func NewChainOption(opts ...WarpOption) WarpOption {
+	return libp2p.ChainOptions(opts...)
 }
 
 var DefaultResources = relayv2.Resources{

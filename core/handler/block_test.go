@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
@@ -412,4 +413,21 @@ func TestRemovePeerBlocklist(t *testing.T) {
 		removePeerBlocklist(users, peers, "bridged")
 		assert.Empty(t, peers.removed)
 	})
+}
+
+func TestBlockingABridgedUserLeavesTheGatewayConnected(t *testing.T) {
+	users := stubBlockUserResolver{getFn: func(id string) (domain.User, error) {
+		return domain.User{Id: id, NodeId: fediverse.GatewayNodeID(), Network: fediverse.MastodonNetwork}, nil
+	}}
+	peerBl := &stubPeerBlocklister{}
+
+	_, err := StreamBlockHandler(stubBlocksRepo{}, users, peerBl)(
+		marshal(t, event.BlockEvent{BlockerId: "a", BlockeeId: "ap:alice@mastodon.social"}), nil)
+	require.NoError(t, err)
+	assert.Empty(t, peerBl.captured, "the gateway serves every bridged user")
+
+	_, err = StreamUnblockHandler(stubBlocksRepo{}, users, peerBl)(
+		marshal(t, event.UnblockEvent{BlockerId: "a", BlockeeId: "ap:alice@mastodon.social"}), nil)
+	require.NoError(t, err)
+	assert.Empty(t, peerBl.removed)
 }

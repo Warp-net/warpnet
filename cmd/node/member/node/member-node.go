@@ -168,7 +168,7 @@ func NewMemberNode(
 		pubSubHandlers,
 		memberPubSub.NewMemberDiscoveryTopicHandler(discService.DiscoveryHandlerPubSub),
 	)
-	pubsubService := memberPubSub.NewPubSub(ctx, ratings, pubSubHandlers...)
+	pubsubService := memberPubSub.NewPubSub(ctx, ratings, nodeRepo, pubSubHandlers...)
 
 	warpNetwork := config.Config().Node.Network
 
@@ -191,6 +191,7 @@ func NewMemberNode(
 		),
 		warpnet.NewRoutingOption(dHashTable.StartRouting),
 		warpnet.EnableAutoRelayWithStaticRelays(bootstrapNodes, ownNodeId)(),
+		node.NewBlocklistOption(nodeRepo),
 	}
 
 	opts = append(opts, warpnet.CommonOptions...)
