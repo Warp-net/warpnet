@@ -11,6 +11,7 @@ Warpnet is a fully decentralized, peer-to-peer social network built in Go. Every
 [![Build](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml/badge.svg)](https://github.com/Warp-net/warpnet/actions/workflows/build.yaml)
 [![codecov](https://codecov.io/github/Warp-net/warpnet/graph/badge.svg)](https://codecov.io/github/Warp-net/warpnet)
 [![Snap](https://snapcraft.io/warpnet/badge.svg)](https://snapcraft.io/warpnet)
+[![F-Droid](https://img.shields.io/f-droid/v/site.warpnet.warpdroid)](https://f-droid.org/packages/site.warpnet.warpdroid/)
 [![Telegram](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/warpnetdev)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#-contributing)
 [![GitGem](https://gitgem.org/api/badge/github/Warp-net/warpnet.svg)](https://gitgem.org/github/Warp-net/warpnet)
