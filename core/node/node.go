@@ -65,6 +65,7 @@ type Streamer interface {
 
 type OfflineOutbox interface {
 	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte) error
+	Deliver(nodeIdStr, messageId string) ([]byte, error)
 	NotifyOnline(nodeIdStr string)
 	Close()
 }
@@ -633,6 +634,16 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		}
 	}
 	return resp, err
+}
+
+// DeliverQueued sends nodeId's outbox queue now and returns the outcome for
+// messageId, an entry already committed to the outbox store. An error wrapping
+// stream.ErrQueuedInOutbox means the entry stays queued for redelivery.
+func (n *WarpNode) DeliverQueued(nodeId warpnet.WarpPeerID, messageId string) ([]byte, error) {
+	if n == nil || n.outbox == nil {
+		return nil, warpnet.WarpError("node: outbox is not initialized")
+	}
+	return n.outbox.Deliver(nodeId.String(), messageId)
 }
 
 func (n *WarpNode) StopNode() {

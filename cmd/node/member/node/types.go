@@ -36,6 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/core/video"
 	"github.com/Warp-net/warpnet/core/wallet"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/database/datastore"
 	"github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
@@ -256,6 +257,7 @@ type BookmarkProvider interface {
 type ChatProvider interface {
 	CreateChat(chatId *string, ownerId string, otherUserId string) (domain.Chat, error)
 	CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error)
+	CreateMessageWithDelivery(msg domain.ChatMessage, delivery database.OutboxEntry) (domain.ChatMessage, string, error)
 	DeleteChat(chatId string) error
 	DeleteMessage(chatId string, id string) error
 	GetChat(chatId string) (chat domain.Chat, err error)

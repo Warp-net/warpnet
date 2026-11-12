@@ -372,3 +372,129 @@ func TestFlushNoSenderKeepsEntries(t *testing.T) {
 func mustEnqueue(store OutboxStore, node, route string) {
 	_, _ = store.Enqueue(node, route, []byte(`{}`))
 }
+
+func TestDeliverSendsCommittedEntryAndRemovesIt(t *testing.T) {
+	store := newFakeStore()
+	sender := &fakeSender{responses: [][]byte{[]byte(`{"ok":true}`)}}
+	o := newTestOutbox(t, store, sender)
+
+	// Committed by the caller, e.g. together with the chat message it delivers.
+	entry, _ := store.Enqueue(testPeerA, string(routeMessage), []byte(`{}`))
+
+	resp, err := o.Deliver(testPeerA, entry.MessageId)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"ok":true}`, string(resp))
+	entries, _ := store.ListByNode(testPeerA)
+	require.Empty(t, entries)
+	require.False(t, o.isPending(testPeerA))
+}
+
+func TestDeliverKeepsEntryQueuedWhenPeerIsOffline(t *testing.T) {
+	store := newFakeStore()
+	sender := &fakeSender{results: []error{warpnet.ErrNodeIsOffline}}
+	o := newTestOutbox(t, store, sender)
+
+	entry, _ := store.Enqueue(testPeerA, string(routeMessage), []byte(`{}`))
+
+	_, err := o.Deliver(testPeerA, entry.MessageId)
+	require.ErrorIs(t, err, ErrQueuedInOutbox)
+	require.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
+	entries, _ := store.ListByNode(testPeerA)
+	require.Len(t, entries, 1)
+	require.True(t, o.isPending(testPeerA), "the next flush must still pick it up")
+}
+
+func TestDeliverKeepsEntryQueuedOnSendFailure(t *testing.T) {
+	// A timeout or reset used to mark the message undelivered and forget it.
+	store := newFakeStore()
+	sendErr := warpnet.WarpError("stream reset")
+	sender := &fakeSender{results: []error{sendErr}}
+	o := newTestOutbox(t, store, sender)
+
+	entry, _ := store.Enqueue(testPeerA, string(routeMessage), []byte(`{}`))
+
+	_, err := o.Deliver(testPeerA, entry.MessageId)
+	require.ErrorIs(t, err, ErrQueuedInOutbox)
+	require.ErrorIs(t, err, sendErr)
+	entries, _ := store.ListByNode(testPeerA)
+	require.Len(t, entries, 1)
+}
+
+func TestDeliverSendsEarlierQueuedEntriesFirst(t *testing.T) {
+	store := newFakeStore()
+	sender := &fakeSender{}
+	o := newTestOutbox(t, store, sender)
+
+	store.Enqueue(testPeerA, string(routeReaction), []byte(`{"n":1}`))
+	entry, _ := store.Enqueue(testPeerA, string(routeMessage), []byte(`{"n":2}`))
+
+	_, err := o.Deliver(testPeerA, entry.MessageId)
+	require.NoError(t, err)
+	require.Equal(t, []WarpRoute{routeReaction, routeMessage}, sender.routes())
+}
+
+func TestDeliverReportsEntryBehindOfflineStopAsQueued(t *testing.T) {
+	store := newFakeStore()
+	sender := &fakeSender{results: []error{warpnet.ErrNodeIsOffline}}
+	o := newTestOutbox(t, store, sender)
+
+	store.Enqueue(testPeerA, string(routeReaction), []byte(`{"n":1}`))
+	entry, _ := store.Enqueue(testPeerA, string(routeMessage), []byte(`{"n":2}`))
+
+	_, err := o.Deliver(testPeerA, entry.MessageId)
+	require.ErrorIs(t, err, ErrQueuedInOutbox)
+	require.ErrorIs(t, err, warpnet.ErrNodeIsOffline)
+	require.Equal(t, 1, sender.callCount(), "an offline peer stops the flush")
+}
+
+func TestDeliverRejectsEmptyIds(t *testing.T) {
+	o := newTestOutbox(t, newFakeStore(), &fakeSender{})
+	_, err := o.Deliver("", "id")
+	require.ErrorIs(t, err, errNotQueued)
+	_, err = o.Deliver(testPeerA, "")
+	require.ErrorIs(t, err, errNotQueued)
+}
+
+type blockingSender struct {
+	fakeSender
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (s *blockingSender) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
+	s.once.Do(func() {
+		close(s.entered)
+		<-s.release
+	})
+	return s.fakeSender.Send(peerAddr, r, data)
+}
+
+func TestDeliverJoinsFlushThatListedQueueBeforeEntry(t *testing.T) {
+	store := newFakeStore()
+	sender := &blockingSender{entered: make(chan struct{}), release: make(chan struct{})}
+	o := newTestOutbox(t, store, sender)
+
+	store.Enqueue(testPeerA, string(routeReaction), []byte(`{"n":1}`))
+	go o.flushNode(testPeerA)
+	<-sender.entered // that flush has listed the queue and is sending
+
+	entry, _ := store.Enqueue(testPeerA, string(routeMessage), []byte(`{"n":2}`))
+	done := make(chan error, 1)
+	go func() {
+		_, err := o.Deliver(testPeerA, entry.MessageId)
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond) // let Deliver join the in-flight flush
+	close(sender.release)
+
+	select {
+	case err := <-done:
+		require.NoError(t, err, "the entry missed by the shared flush is sent by a second one")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Deliver did not return")
+	}
+	entries, _ := store.ListByNode(testPeerA)
+	require.Empty(t, entries)
+	require.Equal(t, []WarpRoute{routeReaction, routeMessage}, sender.routes())
+}

@@ -263,11 +263,32 @@ func (repo *ChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 }
 
 func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error) {
+	msg, _, err := repo.createMessage(msg, nil)
+	return msg, err
+}
+
+// CreateMessageWithDelivery stores msg and queues delivery in the outbox in one
+// transaction, so the message is never stored without a way to reach the
+// receiver. It returns the outbox entry id; it is empty when msg was already
+// stored, because the delivery queued by that earlier call still owns it.
+func (repo *ChatRepo) CreateMessageWithDelivery(
+	msg domain.ChatMessage, delivery OutboxEntry,
+) (domain.ChatMessage, string, error) {
+	return repo.createMessage(msg, &delivery)
+}
+
+func (repo *ChatRepo) createMessage(
+	msg domain.ChatMessage, delivery *OutboxEntry,
+) (domain.ChatMessage, string, error) {
 	if msg.IsEmpty() {
-		return msg, local_store.DBError("empty message")
+		return msg, "", local_store.DBError("empty message")
 	}
 	if msg.ChatId == "" {
-		return msg, local_store.DBError("chat ID is empty")
+		return msg, "", local_store.DBError("chat ID is empty")
+	}
+	if delivery != nil && msg.Id == "" {
+		// The queued payload carries the message id the receiver dedups on.
+		return msg, "", local_store.DBError("message ID is required to queue delivery")
 	}
 
 	repo.mx.Lock()
@@ -294,43 +315,50 @@ func (repo *ChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage,
 
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return msg, fmt.Errorf("message: marshal: %w", err)
+		return msg, "", fmt.Errorf("message: marshal: %w", err)
 	}
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return msg, err
+		return msg, "", err
 	}
 	defer txn.Rollback()
 
 	existingSortable, err := txn.Get(fixedKey)
 	if err != nil && !local_store.IsNotFoundError(err) {
-		return msg, err
+		return msg, "", err
 	}
 	if len(existingSortable) > 0 {
 		bt, getErr := txn.Get(local_store.DatabaseKey(existingSortable))
 		if getErr != nil && !local_store.IsNotFoundError(getErr) {
-			return msg, getErr
+			return msg, "", getErr
 		}
 		var existing domain.ChatMessage
 		if getErr == nil {
 			if unmErr := json.Unmarshal(bt, &existing); unmErr == nil {
-				return existing, txn.Commit()
+				return existing, "", txn.Commit()
 			}
 		}
 	}
 
 	if err = txn.Set(fixedKey, sortableKey.Bytes()); err != nil {
-		return msg, err
+		return msg, "", err
 	}
 	err = txn.Set(sortableKey, data)
 	if err != nil {
-		return msg, err
+		return msg, "", err
 	}
 	if err = repo.bumpChatPreview(txn, msg); err != nil {
-		return msg, err
+		return msg, "", err
 	}
-	return msg, txn.Commit()
+	if delivery == nil {
+		return msg, "", txn.Commit()
+	}
+	queued, err := putOutboxEntry(txn, *delivery)
+	if err != nil {
+		return msg, "", err
+	}
+	return msg, queued.MessageId, txn.Commit()
 }
 
 const lastMessagePreviewLimit = 128

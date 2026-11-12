@@ -259,6 +259,63 @@ func (s *ChatRepoSuite) TestDeleteMessage() {
 	s.Empty(got.Text)
 }
 
+func (s *ChatRepoSuite) TestCreateMessageWithDeliveryQueuesInSameTransaction() {
+	outbox := NewOutboxRepo(s.db)
+	destNode := ulid.Make().String()
+	msg := domain.ChatMessage{
+		Id: ulid.Make().String(), ChatId: "chat:" + destNode,
+		SenderId: testUserID, ReceiverId: ulid.Make().String(), Text: "hi",
+	}
+
+	stored, queuedId, err := s.repo.CreateMessageWithDelivery(msg, OutboxEntry{
+		DestNodeId: destNode, Route: "/public/post/message/0.0.0", Payload: []byte(`{"id":"x"}`),
+	})
+	s.Require().NoError(err)
+	s.NotEmpty(queuedId)
+	s.Equal(msg.Id, stored.Id)
+
+	queued, err := outbox.ListByNode(destNode)
+	s.Require().NoError(err)
+	s.Require().Len(queued, 1)
+	s.Equal(queuedId, queued[0].MessageId)
+	s.Equal("/public/post/message/0.0.0", queued[0].Destination)
+	s.JSONEq(`{"id":"x"}`, string(queued[0].Body))
+
+	// A repeated request for the stored message queues nothing new: the entry
+	// above still owns its delivery.
+	_, againId, err := s.repo.CreateMessageWithDelivery(msg, OutboxEntry{
+		DestNodeId: destNode, Route: "/public/post/message/0.0.0", Payload: []byte(`{"id":"x"}`),
+	})
+	s.Require().NoError(err)
+	s.Empty(againId)
+	queued, err = outbox.ListByNode(destNode)
+	s.Require().NoError(err)
+	s.Len(queued, 1)
+}
+
+func (s *ChatRepoSuite) TestCreateMessageWithDeliveryRollsBackMessageWhenQueueingFails() {
+	msg := domain.ChatMessage{
+		Id: ulid.Make().String(), ChatId: "chat:" + ulid.Make().String(),
+		SenderId: testUserID, ReceiverId: ulid.Make().String(), Text: "hi",
+	}
+
+	// An entry without a destination fails after the message keys are written
+	// in the transaction, so the message must not be committed either.
+	_, queuedId, err := s.repo.CreateMessageWithDelivery(msg, OutboxEntry{Route: "/public/post/message/0.0.0"})
+	s.Error(err)
+	s.Empty(queuedId)
+
+	_, err = s.repo.GetMessage(msg.ChatId, msg.Id)
+	s.ErrorIs(err, ErrMessageNotFound)
+}
+
+func (s *ChatRepoSuite) TestCreateMessageWithDeliveryRequiresMessageId() {
+	_, _, err := s.repo.CreateMessageWithDelivery(domain.ChatMessage{
+		ChatId: "chat:x", SenderId: testUserID, ReceiverId: "other", Text: "hi",
+	}, OutboxEntry{DestNodeId: "node", Route: "/route"})
+	s.Error(err)
+}
+
 func TestChatRepoSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

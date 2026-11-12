@@ -3,6 +3,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ type stubChatRepo struct {
 	deleteChatFn    func(chatId string) error
 	getUserChatsFn  func(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error)
 	createMessageFn func(msg domain.ChatMessage) (domain.ChatMessage, error)
+	createQueuedFn  func(msg domain.ChatMessage, delivery database.OutboxEntry) (domain.ChatMessage, string, error)
 	listMessagesFn  func(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error)
 	getMessageFn    func(chatId, id string) (domain.ChatMessage, error)
 	deleteMessageFn func(chatId, id string) error
@@ -48,6 +50,17 @@ func (s stubChatRepo) GetUserChats(userId string, limit *uint64, cursor *string)
 		return s.getUserChatsFn(userId, limit, cursor)
 	}
 	return nil, "", nil
+}
+
+func (s stubChatRepo) CreateMessageWithDelivery(msg domain.ChatMessage, delivery database.OutboxEntry) (domain.ChatMessage, string, error) {
+	if s.createQueuedFn != nil {
+		return s.createQueuedFn(msg, delivery)
+	}
+	msg, err := s.CreateMessage(msg)
+	if err != nil {
+		return msg, "", err
+	}
+	return msg, "queued-1", nil
 }
 
 func (s stubChatRepo) CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error) {
@@ -115,7 +128,15 @@ func senderConn(t *testing.T) warpnet.WarpStream {
 
 type stubStreamer struct {
 	genericStreamFn func(nodeId string, path stream.WarpRoute, data any) ([]byte, error)
+	deliverQueuedFn func(nodeId, queuedId string) ([]byte, error)
 	nodeInfo        warpnet.NodeInfo
+}
+
+func (s stubStreamer) DeliverQueued(nodeId, queuedId string) ([]byte, error) {
+	if s.deliverQueuedFn != nil {
+		return s.deliverQueuedFn(nodeId, queuedId)
+	}
+	return nil, nil
 }
 
 func (s stubStreamer) GenericStream(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -508,8 +529,8 @@ func TestStreamNewMessageHandler(t *testing.T) {
 
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
-	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-		return nil, warpnet.ErrNodeIsOffline
+	}}, stubUserRepo{}, stubStreamer{deliverQueuedFn: func(nodeId, queuedId string) ([]byte, error) {
+		return nil, fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, warpnet.ErrNodeIsOffline)
 	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
 		t.Fatalf("expected undelivered offline: %#v err=%v", resp, err)
@@ -517,7 +538,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
-	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	}}, stubUserRepo{}, stubStreamer{deliverQueuedFn: func(nodeId, queuedId string) ([]byte, error) {
 		return nil, repoErr
 	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
@@ -527,7 +548,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 	remoteErr, _ := json.Marshal(event.ResponseError{Message: "remote failed", Code: 400})
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
-	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	}}, stubUserRepo{}, stubStreamer{deliverQueuedFn: func(nodeId, queuedId string) ([]byte, error) {
 		return remoteErr, nil
 	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "undelivered" {
@@ -536,7 +557,7 @@ func TestStreamNewMessageHandler(t *testing.T) {
 
 	resp, err = makeHandler(stubChatRepo{getChatFn: func(chatId string) (domain.Chat, error) {
 		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
-	}}, stubUserRepo{}, stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+	}}, stubUserRepo{}, stubStreamer{deliverQueuedFn: func(nodeId, queuedId string) ([]byte, error) {
 		return []byte("{}"), nil
 	}})(marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "ok", SenderId: owner, ReceiverId: receiver}), conn)
 	if err != nil || resp.(event.NewMessageResponse).Status != "" {
@@ -561,13 +582,15 @@ func TestStreamNewMessageHandlerAttachments(t *testing.T) {
 	posterKey, videoKey := "poster-key", "video-key"
 
 	capture := func(stored *domain.ChatMessage, forwarded *event.NewMessageEvent) (stubChatRepo, stubStreamer) {
-		return stubChatRepo{getChatFn: ownChat, createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) {
+		// What reaches the recipient's node is the payload queued with the message.
+		return stubChatRepo{getChatFn: ownChat, createQueuedFn: func(msg domain.ChatMessage, delivery database.OutboxEntry) (domain.ChatMessage, string, error) {
 				*stored = msg
-				msg.Id = "msg-1"
-				return msg, nil
+				if err := json.Unmarshal(delivery.Payload, forwarded); err != nil {
+					t.Fatalf("queued payload: %v", err)
+				}
+				return msg, "queued-1", nil
 			}},
-			stubStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				*forwarded, _ = data.(event.NewMessageEvent)
+			stubStreamer{deliverQueuedFn: func(nodeId, queuedId string) ([]byte, error) {
 				return []byte("{}"), nil
 			}}
 	}
@@ -710,4 +733,77 @@ func TestMessageReadDeleteHandlers(t *testing.T) {
 			t.Fatal("expected auth error for get")
 		}
 	})
+}
+
+func TestStreamNewMessageHandlerQueuesDeliveryWithMessage(t *testing.T) {
+	owner := "owner-1"
+	receiver := "receiver-1"
+	chatID := "owner-1:receiver-1"
+	conn := senderConn(t)
+	ownChat := func(chatId string) (domain.Chat, error) {
+		return domain.Chat{Id: chatID, OwnerId: owner, OtherUserId: receiver}, nil
+	}
+
+	var (
+		queued     database.OutboxEntry
+		storedId   string
+		deliveries []string
+	)
+	repo := stubChatRepo{
+		getChatFn: ownChat,
+		createMessageFn: func(msg domain.ChatMessage) (domain.ChatMessage, error) {
+			t.Fatal("an outgoing message must be stored together with its delivery")
+			return msg, nil
+		},
+		createQueuedFn: func(msg domain.ChatMessage, delivery database.OutboxEntry) (domain.ChatMessage, string, error) {
+			queued, storedId = delivery, msg.Id
+			return msg, "queued-7", nil
+		},
+	}
+	streamer := stubStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: owner},
+		deliverQueuedFn: func(nodeId, queuedId string) ([]byte, error) {
+			deliveries = append(deliveries, nodeId+"/"+queuedId)
+			return []byte("{}"), nil
+		},
+	}
+
+	resp, err := StreamNewMessageHandler(repo, stubUserRepo{}, stubModerationNotifier{}, streamer)(
+		marshal(t, event.NewMessageEvent{ChatId: chatID, Text: "hi", SenderId: owner, ReceiverId: receiver}), conn,
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if queued.DestNodeId != senderNodeId || queued.Route != event.PUBLIC_POST_MESSAGE {
+		t.Fatalf("queued to %q %q", queued.DestNodeId, queued.Route)
+	}
+	var payload domain.ChatMessage
+	if err := json.Unmarshal(queued.Payload, &payload); err != nil {
+		t.Fatalf("queued payload: %v", err)
+	}
+	// The receiver dedups redeliveries on this id.
+	if storedId == "" || payload.Id != storedId || payload.Text != "hi" || payload.SenderId != owner {
+		t.Fatalf("queued payload %#v does not match stored message %q", payload, storedId)
+	}
+	if !slices.Equal(deliveries, []string{senderNodeId + "/queued-7"}) {
+		t.Fatalf("deliveries = %v", deliveries)
+	}
+	if status := resp.(event.NewMessageResponse).Status; status != "" {
+		t.Fatalf("expected delivered, got %q", status)
+	}
+
+	// A repeated request for an already stored message queues nothing, so it
+	// must not send anything either.
+	deliveries = nil
+	repo.createQueuedFn = func(msg domain.ChatMessage, _ database.OutboxEntry) (domain.ChatMessage, string, error) {
+		return msg, "", nil
+	}
+	if _, err := StreamNewMessageHandler(repo, stubUserRepo{}, stubModerationNotifier{}, streamer)(
+		marshal(t, event.NewMessageEvent{Id: storedId, ChatId: chatID, Text: "hi", SenderId: owner, ReceiverId: receiver}), conn,
+	); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(deliveries) != 0 {
+		t.Fatalf("already stored message was sent again: %v", deliveries)
+	}
 }
