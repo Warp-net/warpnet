@@ -61,7 +61,7 @@ type OutboxStore interface {
 }
 
 type Sender interface {
-	Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error)
+	SendMessage(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error)
 }
 
 type Outbox struct {
@@ -291,9 +291,13 @@ func (o *Outbox) flush(nodeId string) map[string]deliveryResult {
 			continue
 		}
 
-		response, err := sender.Send(warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body)
+		// The entry id goes on the wire as the message id, so every redelivery
+		// of this entry is the same request to the peer's idempotency cache.
+		response, err := sender.SendMessage(
+			warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body, msg.MessageId,
+		)
 		switch {
-		case err == nil, errors.Is(err, ErrResponseRead):
+		case err == nil:
 			if isRateLimited(response) {
 				log.Infof("outbox: %s rate limited %s, keeping it queued", nodeId, msg.Destination)
 				limitedRoutes[msg.Destination] = struct{}{}
@@ -305,13 +309,16 @@ func (o *Outbox) flush(nodeId string) map[string]deliveryResult {
 			if delErr := o.store.Delete(nodeId, msg.MessageId); delErr != nil {
 				log.Errorf("outbox: delete delivered %s/%s: %v", nodeId, msg.MessageId, delErr)
 			}
-			results[msg.MessageId] = deliveryResult{response: response, err: err}
+			results[msg.MessageId] = deliveryResult{response: response}
 		case errors.Is(err, warpnet.ErrNodeIsOffline):
 			for _, rest := range messages[i:] {
 				results[rest.MessageId] = stillQueued(err)
 			}
 			return results
 		default:
+			// ErrResponseRead lands here too: the request reached the peer, but
+			// nothing says the peer applied it, so the entry is not delivered.
+			// Redelivering it is safe because the peer dedups on its id.
 			log.Warnf("outbox: redeliver %s/%s: %v", nodeId, msg.MessageId, err)
 			results[msg.MessageId] = stillQueued(err)
 		}

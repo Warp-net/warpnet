@@ -59,6 +59,7 @@ const (
 
 type Streamer interface {
 	Send(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte) ([]byte, error)
+	SendMessage(peerAddr warpnet.WarpAddrInfo, r stream.WarpRoute, data []byte, msgID string) ([]byte, error)
 	SetStreamable(id warpnet.WarpPeerID)
 	SetUnstreamable(id warpnet.WarpPeerID)
 }

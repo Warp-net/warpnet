@@ -105,14 +105,16 @@ type fakeSender struct {
 	results   []error
 	responses [][]byte
 	sentTo    []WarpRoute
+	msgIDs    []string
 	calls     int
 }
 
-func (s *fakeSender) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
+func (s *fakeSender) SendMessage(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
 	s.sentTo = append(s.sentTo, r)
+	s.msgIDs = append(s.msgIDs, msgID)
 	var err error
 	if len(s.results) > 0 {
 		err = s.results[0]
@@ -280,17 +282,27 @@ func TestFlushStopsOnOfflinePreservingFIFO(t *testing.T) {
 	require.Equal(t, 2, sender.callCount(), "stopped after offline, third not attempted")
 }
 
-func TestFlushTreatsResponseReadAsDelivered(t *testing.T) {
+func TestFlushKeepsResponseReadQueuedAndRedeliversWithSameId(t *testing.T) {
+	// A lost response says the request reached the peer, not that the peer
+	// applied it, so the entry stays until a response confirms delivery.
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeMessage))
+	queued, _ := store.ListByNode(testPeerA)
 
-	sender := &fakeSender{results: []error{ErrResponseRead}}
+	sender := &fakeSender{results: []error{ErrResponseRead, nil}}
 	o := newTestOutbox(t, store, sender)
 
 	o.flushNode(testPeerA)
-
 	entries, _ := store.ListByNode(testPeerA)
-	require.Empty(t, entries, "delivered-but-response-lost entry dropped")
+	require.Len(t, entries, 1, "delivered-but-response-lost entry kept")
+
+	o.flushNode(testPeerA)
+	entries, _ = store.ListByNode(testPeerA)
+	require.Empty(t, entries, "confirmed on redelivery")
+
+	// The same wire id both times lets the peer's idempotency cache answer the
+	// redelivery instead of applying the request again.
+	require.Equal(t, []string{queued[0].MessageId, queued[0].MessageId}, sender.msgIDs)
 }
 
 func TestFlushKeepsRejectedForTTL(t *testing.T) {
@@ -462,12 +474,12 @@ type blockingSender struct {
 	release chan struct{}
 }
 
-func (s *blockingSender) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
+func (s *blockingSender) SendMessage(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error) {
 	s.once.Do(func() {
 		close(s.entered)
 		<-s.release
 	})
-	return s.fakeSender.Send(peerAddr, r, data)
+	return s.fakeSender.SendMessage(peerAddr, r, data, msgID)
 }
 
 func TestDeliverJoinsFlushThatListedQueueBeforeEntry(t *testing.T) {

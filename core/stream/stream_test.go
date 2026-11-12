@@ -490,3 +490,29 @@ func TestHashBody_IsStableAndDiscriminating(t *testing.T) {
 	assert.NotEmpty(t, hashBody(nil))
 	assert.Equal(t, hashBody(nil), hashBody([]byte{}))
 }
+
+func TestSendMessage_UsesCallerMessageIdOnTheWire(t *testing.T) {
+	client := newStreamHost(t)
+	server := newStreamHost(t)
+	received := echoServer(t, server, []byte(`{}`))
+	linkHosts(t, client, server)
+
+	pool := newPool(t, client)
+	info := addrOf(server)
+
+	// Two sends of one logical request carry one id, which is what the peer's
+	// idempotency cache keys on.
+	const id = "01JOUTBOXENTRY0000000000AA"
+	for range 2 {
+		_, err := pool.SendMessage(info, testRoute, []byte(`{"n":1}`), id)
+		require.NoError(t, err)
+	}
+	_, err := pool.Send(info, testRoute, []byte(`{"n":1}`))
+	require.NoError(t, err)
+
+	require.Len(t, *received, 3)
+	assert.Equal(t, id, (*received)[0].MessageId)
+	assert.Equal(t, id, (*received)[1].MessageId)
+	assert.NotEqual(t, id, (*received)[2].MessageId, "plain Send gets a fresh id")
+	assert.NotEmpty(t, (*received)[2].MessageId)
+}
