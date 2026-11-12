@@ -41,7 +41,7 @@ import (
 
 const (
 	testnetNetwork = "testnet"
-	mainnetNetwork = "mainnet"
+	mainnetNetwork = "warpnet"
 )
 
 const noticeTemplate = " %s version %s. Copyright (C) <%s> <%s>. This program comes with ABSOLUTELY NO WARRANTY; This is free software, and you are welcome to redistribute it under certain conditions.\n\n\n"
@@ -96,7 +96,7 @@ func init() {
 	}
 
 	network := strings.TrimSpace(viper.GetString("node.network"))
-	if network == "warpnet" {
+	if network == "mainnet" {
 		network = mainnetNetwork
 	}
 	if network == mainnetNetwork && len(bootstrapAddrList) == 0 {

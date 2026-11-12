@@ -319,7 +319,7 @@ func TestFlagOverridesEnv(t *testing.T) {
 func TestMainnetAliasesToWarpnet(t *testing.T) {
 	c := withFlags(t, "--node.network", "mainnet")
 
-	assert.Equal(t, mainnetNetwork, c.Network)
+	assert.Equal(t, "warpnet", c.Network, "the database path, identity key and DHT namespace are named after it")
 	assert.False(t, c.IsTestnet)
 	assert.Equal(t, warpnetBootstrapNodes, c.Bootstrap)
 }
