@@ -59,6 +59,8 @@ const (
 	recordPrefix   = "/record"
 	recordKeyParts = 5
 
+	maxDeltaSize = 1 << 18
+
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
 	ErrMalformedRecord = warpnet.WarpError("rating store: record key part is empty or contains a slash")
@@ -68,7 +70,7 @@ const (
 // Store replicates signed rating records. A node writes and deletes only
 // its own records; everyone else's arrive through the DAG.
 type Store struct {
-	crdt   *crdt.Datastore
+	crdt   *crdt.MerkleCRDT
 	ctx    context.Context
 	cancel context.CancelFunc
 	nodeID string
@@ -112,21 +114,71 @@ func New(
 	return s, nil
 }
 
-func (s *Store) Put(rec domain.RatingRecord) error {
-	if rec.ObserverID != s.nodeID {
-		return ErrForeignRecord
+// Put writes records in as few DAG blocks as maxDeltaSize allows.
+func (s *Store) Put(recs ...domain.RatingRecord) error {
+	deltas := make([]crdt.Delta, 0, len(recs))
+	for _, rec := range recs {
+		if rec.ObserverID != s.nodeID {
+			return ErrForeignRecord
+		}
+		key, err := recordKey(rec)
+		if err != nil {
+			return err
+		}
+		value, err := json.Marshal(rec)
+		if err != nil {
+			return fmt.Errorf("rating store: marshal record %s: %w", key, err)
+		}
+		delta, err := s.crdt.Set().Add(s.ctx, key.String(), value)
+		if err != nil {
+			return fmt.Errorf("rating store: add record %s: %w", key, err)
+		}
+		deltas = append(deltas, delta)
 	}
-	key, err := recordKey(rec)
+	if err := s.publish(deltas); err != nil {
+		return fmt.Errorf("rating store: write %d records: %w", len(recs), err)
+	}
+	return nil
+}
+
+func (s *Store) publish(deltas []crdt.Delta) error {
+	var (
+		block crdt.Delta
+		size  int
+	)
+	for _, delta := range deltas {
+		if block != nil && size+delta.Size() > maxDeltaSize {
+			if _, err := s.crdt.Publish(s.ctx, block); err != nil {
+				return err
+			}
+			block = nil
+		}
+		if block == nil {
+			block, size = delta, delta.Size()
+			continue
+		}
+		if err := joinDelta(block, delta); err != nil {
+			return err
+		}
+		size += delta.Size()
+	}
+	if block == nil {
+		return nil
+	}
+	_, err := s.crdt.Publish(s.ctx, block)
+	return err
+}
+
+func joinDelta(block, delta crdt.Delta) error {
+	elems, err := block.GetElements()
 	if err != nil {
 		return err
 	}
-	value, err := json.Marshal(rec)
+	moreElems, err := delta.GetElements()
 	if err != nil {
-		return fmt.Errorf("rating store: marshal record %s: %w", key, err)
+		return err
 	}
-	if err := s.crdt.Put(s.ctx, key, value); err != nil {
-		return fmt.Errorf("rating store: write record %s: %w", key, err)
-	}
+	block.SetElements(append(elems, moreElems...))
 	return nil
 }
 

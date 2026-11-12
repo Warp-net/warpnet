@@ -75,7 +75,7 @@ type Config struct {
 	DeleteHook  func(k ds.Key)
 }
 
-func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
+func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
 	baseStore := ds.MutexWrap(cfg.Datastore)
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
@@ -100,12 +100,13 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
-	crdtStore, err := crdt.New(
+	crdtStore, err := crdt.NewMerkleCRDT(
 		baseStore,
 		ds.NewKey(""),
 		dagService,
 		cfg.Broadcaster,
 		opts,
+		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)

@@ -154,6 +154,21 @@ func TestFailedWriteStaysDirtyAndRetries(t *testing.T) {
 	assert.Equal(t, 1, store.len(), "a failed write must be retried, not dropped")
 }
 
+func TestFlushWritesAllDirtyRecordsAtOnce(t *testing.T) {
+	self := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e := newMemberEngine(t, self, store, clock)
+
+	for range 5 {
+		require.NoError(t, e.record(newIdentity(t).id, KindBadSignature))
+	}
+	flushNow(t, e)
+
+	assert.Equal(t, 5, store.len())
+	assert.Equal(t, 1, store.putCalls, "one write per flush keeps the DAG one block deep per flush")
+}
+
 func TestScoreDropsOnFirstHandEvidence(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)

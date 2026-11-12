@@ -98,7 +98,7 @@ type Rater interface {
 
 // Storer is the replicated record store; the crdt rating store satisfies it.
 type Storer interface {
-	Put(rec domain.RatingRecord) error
+	Put(recs ...domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
 	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
@@ -751,6 +751,8 @@ func (e *Engine) flush() error {
 
 	var errs []error
 	now := e.now().UTC()
+	signed := make(map[pendingKey]record, len(pending))
+	recs := make([]domain.RatingRecord, 0, len(pending))
 	for key, offences := range pending {
 		rec := record{
 			PeerID:     key.peerID,
@@ -766,10 +768,14 @@ func (e *Engine) flush() error {
 			errs = append(errs, fmt.Errorf("sign record for %s: %w", key.peerID, err))
 			continue
 		}
-		if err := e.store.Put(domain.RatingRecord(rec)); err != nil {
-			errs = append(errs, fmt.Errorf("write record for %s: %w", key.peerID, err))
-			continue
-		}
+		signed[key] = rec
+		recs = append(recs, domain.RatingRecord(rec))
+	}
+	if err := e.store.Put(recs...); err != nil {
+		errs = append(errs, fmt.Errorf("write %d records: %w", len(recs), err))
+		clear(signed)
+	}
+	for key, rec := range signed {
 		// A peer we have just written about is read into the index, so
 		// that its standing is re-evaluated and announced. The first
 		// write loads its whole history; later ones only add to it.
@@ -779,7 +785,7 @@ func (e *Engine) flush() error {
 			}
 		}
 		e.index.update(rec.PeerID, rec.entry())
-		e.clearIfUnchanged(key, offences)
+		e.clearIfUnchanged(key, pending[key])
 	}
 	e.dropSettledBuckets()
 	return errors.Join(errs...)

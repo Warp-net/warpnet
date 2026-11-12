@@ -76,7 +76,7 @@ type counter struct {
 // Store is a PN-counter replicated over go-ds-crdt: every process owns
 // the keys of its own generation, and a read sums them all.
 type Store struct {
-	crdt       *crdt.Datastore
+	crdt       *crdt.MerkleCRDT
 	ctx        context.Context
 	cancel     context.CancelFunc
 	nodeID     string

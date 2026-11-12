@@ -157,7 +157,7 @@ type PeerRater interface {
 
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
-	Put(rec domain.RatingRecord) error
+	Put(recs ...domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
 	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error

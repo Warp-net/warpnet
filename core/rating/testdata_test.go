@@ -37,12 +37,13 @@ type expiry struct {
 // fakeStore is an in-memory Storer with the CRDT store's contract: one
 // key per record tuple, hooks on every put and delete, own-only deletes.
 type fakeStore struct {
-	mu      sync.Mutex
-	self    string
-	data    map[string]domain.RatingRecord
-	putErr  error
-	listErr error
-	expired []expiry
+	mu       sync.Mutex
+	self     string
+	data     map[string]domain.RatingRecord
+	putErr   error
+	putCalls int
+	listErr  error
+	expired  []expiry
 
 	puts    []func(domain.RatingRecord)
 	deletes []func(domain.RatingRecord)
@@ -56,17 +57,22 @@ func recordKey(rec domain.RatingRecord) string {
 	return fmt.Sprintf("%s/%s/%s/%d/%s", rec.PeerID, rec.ObserverID, rec.Dimension, rec.Bucket, rec.Generation)
 }
 
-func (s *fakeStore) Put(rec domain.RatingRecord) error {
+func (s *fakeStore) Put(recs ...domain.RatingRecord) error {
 	s.mu.Lock()
+	s.putCalls++
 	if s.putErr != nil {
 		s.mu.Unlock()
 		return s.putErr
 	}
-	s.data[recordKey(rec)] = rec
+	for _, rec := range recs {
+		s.data[recordKey(rec)] = rec
+	}
 	hooks := s.puts
 	s.mu.Unlock()
-	for _, hook := range hooks {
-		hook(rec)
+	for _, rec := range recs {
+		for _, hook := range hooks {
+			hook(rec)
+		}
 	}
 	return nil
 }

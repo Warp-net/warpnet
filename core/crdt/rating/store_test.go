@@ -6,6 +6,8 @@ package rating
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -155,6 +157,49 @@ func TestStore_PutOverwritesTheSameKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1, "one (peer, observer, dimension, bucket, generation) tuple is one key")
 	assert.EqualValues(t, 7, got[0].Offences[0].Count)
+}
+
+func TestStore_PutWritesOneBlockForManyRecords(t *testing.T) {
+	store, bc := newLiveStore(t)
+
+	recs := make([]domain.RatingRecord, 0, 50)
+	for i := range 50 {
+		recs = append(recs, ratingRecord(store.nodeID, fmt.Sprintf("peer-%d", i), "net", 10))
+	}
+	require.NoError(t, store.Put(recs...))
+	assert.EqualValues(t, 1, store.crdt.InternalStats(context.Background()).MaxHeight, "the whole write is one DAG block")
+	assert.Equal(t, 1, bc.count())
+
+	ids, err := store.PeerIDs()
+	require.NoError(t, err)
+	assert.Len(t, ids, 50)
+}
+
+func TestStore_PutSplitsBlocksAtMaxDeltaSize(t *testing.T) {
+	store, _ := newLiveStore(t)
+
+	recs := make([]domain.RatingRecord, 0, 10)
+	for i := range 10 {
+		rec := ratingRecord(store.nodeID, fmt.Sprintf("peer-%d", i), "net", 10)
+		rec.Signature = strings.Repeat("s", 100<<10)
+		recs = append(recs, rec)
+	}
+	require.NoError(t, store.Put(recs...))
+
+	height := store.crdt.InternalStats(context.Background()).MaxHeight
+	assert.EqualValues(t, 5, height, "1 MiB of records is five blocks of at most 256 KiB")
+	ids, err := store.PeerIDs()
+	require.NoError(t, err)
+	assert.Len(t, ids, 10)
+}
+
+func TestStore_PutRefusesTheWholeCallOnOneBadRecord(t *testing.T) {
+	store, bc := newLiveStore(t)
+
+	good := ratingRecord(store.nodeID, "peer-a", "net", 10)
+	foreign := ratingRecord("some-other-node", "peer-b", "net", 10)
+	assert.ErrorIs(t, store.Put(good, foreign), ErrForeignRecord)
+	assert.Zero(t, bc.count(), "nothing of a refused call reaches the network")
 }
 
 func TestStore_PutRefusesForeignRecords(t *testing.T) {
