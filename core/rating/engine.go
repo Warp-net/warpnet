@@ -817,11 +817,10 @@ func (e *Engine) dropSettledBuckets() {
 	}
 }
 
-// gc drops this node's own records that fell out of retention. Foreign
-// records are the store's to keep: only their author may delete them.
+// gc drops the records of every dimension that fell out of retention.
 func (e *Engine) gc() {
 	now := e.now()
-	for _, dim := range e.dims {
+	for _, dim := range []Dimension{Network, Application, Moderation} {
 		cutoff := bucketAt(now.Add(-dim.Retention()))
 		if err := e.store.DeleteExpired(dim.String(), int64(cutoff)); err != nil {
 			log.Warnf("rating: gc %s: %v", dim, err)

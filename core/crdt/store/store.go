@@ -73,6 +73,7 @@ type Config struct {
 	Prefix      string
 	PutHook     func(k ds.Key, v []byte)
 	DeleteHook  func(k ds.Key)
+	PurgeDAGs   []string
 }
 
 func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
@@ -113,6 +114,11 @@ func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
 	}
 
 	go func() {
+		for _, name := range cfg.PurgeDAGs {
+			if _, err := crdtStore.PurgeDAG(ctx, name); err != nil {
+				log.Errorf("failed to purge DAG %q: %v", name, err)
+			}
+		}
 		// Unconditional: a clean Close() mid-sync can leave a hole with the dirty bit unset.
 		if err := crdtStore.Repair(ctx); err != nil {
 			log.Errorf("failed to repair store: %v", err)

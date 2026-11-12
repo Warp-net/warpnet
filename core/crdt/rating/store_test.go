@@ -17,9 +17,11 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	datastore "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
+	"github.com/ipfs/go-ds-crdt/pb"
 	"github.com/libp2p/go-libp2p"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 type silentBroadcaster struct {
@@ -102,7 +104,16 @@ func putReplicated(t *testing.T, s *Store, rec domain.RatingRecord) {
 	require.NoError(t, err)
 	value, err := json.Marshal(rec)
 	require.NoError(t, err)
-	require.NoError(t, s.crdt.Put(context.Background(), key, value))
+	publishInEpoch(t, s, key.String(), value, epochDAGName(rec.Dimension, rec.Bucket))
+}
+
+func publishInEpoch(t *testing.T, s *Store, key string, value []byte, dagName string) {
+	t.Helper()
+	delta, err := s.crdt.Set().Add(context.Background(), key, value)
+	require.NoError(t, err)
+	delta.SetDagName(dagName)
+	_, err = s.crdt.Publish(context.Background(), delta)
+	require.NoError(t, err)
 }
 
 type recordLog struct {
@@ -161,18 +172,25 @@ func TestStore_PutOverwritesTheSameKey(t *testing.T) {
 
 func TestStore_PutWritesOneBlockForManyRecords(t *testing.T) {
 	store, bc := newLiveStore(t)
+	ctx := context.Background()
 
 	recs := make([]domain.RatingRecord, 0, 50)
 	for i := range 50 {
 		recs = append(recs, ratingRecord(store.nodeID, fmt.Sprintf("peer-%d", i), "net", 10))
 	}
 	require.NoError(t, store.Put(recs...))
-	assert.EqualValues(t, 1, store.crdt.InternalStats(context.Background()).MaxHeight, "the whole write is one DAG block")
+	assert.EqualValues(t, 1, store.crdt.InternalStats(ctx).MaxHeight, "the whole write is one DAG block")
 	assert.Equal(t, 1, bc.count())
 
 	ids, err := store.PeerIDs()
 	require.NoError(t, err)
 	assert.Len(t, ids, 50)
+
+	require.NoError(t, store.DeleteExpired("net", 24))
+	assert.Empty(t, store.crdt.InternalStats(ctx).Heads, "the expired day goes as a whole")
+	ids, err = store.PeerIDs()
+	require.NoError(t, err)
+	assert.Empty(t, ids)
 }
 
 func TestStore_PutSplitsBlocksAtMaxDeltaSize(t *testing.T) {
@@ -241,7 +259,7 @@ func TestStore_HooksSeeLocalPutsAndDeletes(t *testing.T) {
 	assert.Eventually(t, func() bool { return len(puts.snapshot()) == 1 }, time.Second, 10*time.Millisecond)
 	assert.Equal(t, rec, puts.snapshot()[0], "the put hook carries the whole decoded record")
 
-	require.NoError(t, store.DeleteExpired("net", 11))
+	require.NoError(t, store.DeleteExpired("net", 24))
 
 	assert.Eventually(t, func() bool { return len(deletes.snapshot()) == 1 }, time.Second, 10*time.Millisecond)
 	want := domain.RatingRecord{
@@ -268,24 +286,83 @@ func TestStore_HooksSeeReplicatedRecords(t *testing.T) {
 	assert.Equal(t, []domain.RatingRecord{foreign}, got, "foreign records are readable, just not writable")
 }
 
-func TestStore_DeleteExpiredRemovesOnlyOwnOlderRecordsOfThatDimension(t *testing.T) {
+func TestStore_DeleteExpiredDropsWholeDaysOfThatDimension(t *testing.T) {
 	store, _ := newLiveStore(t)
 
 	oldNet := ratingRecord(store.nodeID, "peer-a", "net", 10)
-	newNet := ratingRecord(store.nodeID, "peer-a", "net", 20)
+	lateNet := ratingRecord(store.nodeID, "peer-a", "net", 23)
+	newNet := ratingRecord(store.nodeID, "peer-a", "net", 24)
 	oldApp := ratingRecord(store.nodeID, "peer-a", "app", 10)
-	for _, rec := range []domain.RatingRecord{oldNet, newNet, oldApp} {
-		require.NoError(t, store.Put(rec))
-	}
+	require.NoError(t, store.Put(oldNet, lateNet, newNet, oldApp))
 	foreignOldNet := ratingRecord("some-other-node", "peer-a", "net", 10)
 	putReplicated(t, store, foreignOldNet)
 
-	require.NoError(t, store.DeleteExpired("net", 15))
-
+	require.NoError(t, store.DeleteExpired("net", 23))
 	got, err := store.List("peer-a")
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []domain.RatingRecord{newNet, oldApp, foreignOldNet}, got,
-		"only our own network record from before the cutoff may go; another node's evidence is never ours to prune")
+	assert.Len(t, got, 5, "a day goes only once all of its buckets are past the cutoff")
+
+	require.NoError(t, store.DeleteExpired("net", 24))
+	got, err = store.List("peer-a")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []domain.RatingRecord{newNet, oldApp}, got,
+		"the expired network day goes whole, foreign evidence included; other days and dimensions stay")
+}
+
+func TestStore_BroadcastsCarryOnlyLiveDays(t *testing.T) {
+	store, _ := newLiveStore(t)
+	require.NoError(t, store.DeleteExpired("net", 48))
+
+	encode := func(names ...string) []byte {
+		msg := &pb.CRDTBroadcast{}
+		for i, name := range names {
+			msg.Heads = append(msg.Heads, &pb.Head{Cid: []byte{byte(i)}, DagName: name})
+		}
+		data, err := proto.Marshal(msg)
+		require.NoError(t, err)
+		return data
+	}
+	names := func(data []byte) []string {
+		var msg pb.CRDTBroadcast
+		require.NoError(t, proto.Unmarshal(data, &msg))
+		var out []string
+		for _, h := range msg.Heads {
+			out = append(out, h.GetDagName())
+		}
+		return out
+	}
+
+	live, ok := store.liveHeads(encode("", "net-1", "net-2", "app-1", "bogus", "net-x"))
+	require.True(t, ok)
+	assert.Equal(t, []string{"net-2", "app-1"}, names(live),
+		"the legacy DAG, expired days and malformed names never travel")
+
+	_, ok = store.liveHeads(encode("", "net-0"))
+	assert.False(t, ok, "a broadcast left without heads is dropped")
+}
+
+func TestStore_StartupPurgesTheLegacyDAG(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	data := dssync.MutexWrap(datastore.NewMapDatastore())
+
+	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{})
+	require.NoError(t, err)
+	legacy := ratingRecord(first.nodeID, "peer-a", "net", currentBucket())
+	key, err := recordKey(legacy)
+	require.NoError(t, err)
+	value, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	require.NoError(t, first.crdt.Put(ctx, key, value))
+	require.NoError(t, first.Close())
+
+	second, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = second.Close() })
+	require.Eventually(t, func() bool {
+		got, err := second.List("peer-a")
+		return err == nil && len(got) == 0 && len(second.crdt.InternalStats(ctx).Heads) == 0
+	}, 5*time.Second, 10*time.Millisecond, "the history from before epochs is dropped on start")
 }
 
 func TestStore_ListDropsRecordsStoredUnderAForeignKey(t *testing.T) {
