@@ -113,6 +113,7 @@ func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
 	}
 
 	go func() {
+		// Unconditional: a clean Close() mid-sync can leave a hole with the dirty bit unset.
 		if err := crdtStore.Repair(ctx); err != nil {
 			log.Errorf("failed to repair store: %v", err)
 		}
