@@ -57,8 +57,8 @@ type ReactionStorer interface {
 
 type ReactionStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
-	Increment(key ds.Key) error
-	Decrement(key ds.Key) error
+	Increment(postID string, key ds.Key) error
+	Decrement(postID string, key ds.Key) error
 }
 
 type ReactionRepo struct {
@@ -120,7 +120,7 @@ func (repo *ReactionRepo) addReaction(
 	if repo.statsDb == nil || !isTransitive {
 		return reactionsCount, nil
 	}
-	if err := repo.statsDb.Increment(reactionKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Increment(tweetId, reactionKey.DatastoreKey()); err != nil {
 		log.Warnf("react: stats db increment: %v", err)
 	}
 	return reactionsCount, nil
@@ -196,7 +196,7 @@ func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (re
 		return reactionsCount, nil
 	}
 
-	if err := repo.statsDb.Decrement(unreactionKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Decrement(tweetId, unreactionKey.DatastoreKey()); err != nil {
 		log.Warnf("unreact: stats db decrement: %v", err)
 	}
 

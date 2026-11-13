@@ -589,14 +589,14 @@ func (f *fakeTweetStats) GetAggregatedStat(key ds.Key) (uint64, error) {
 	return f.vals[key.String()], nil
 }
 
-func (f *fakeTweetStats) Increment(key ds.Key) error {
+func (f *fakeTweetStats) Increment(_ string, key ds.Key) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.vals[key.String()]++
 	return nil
 }
 
-func (f *fakeTweetStats) Decrement(key ds.Key) error {
+func (f *fakeTweetStats) Decrement(_ string, key ds.Key) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.vals[key.String()] > 0 {
@@ -631,8 +631,8 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	// Simulate replies aggregated from other nodes via the CRDT that never
 	// touched this node's local counter.
 	countKey := tweetsCountKey(parentID).DatastoreKey()
-	s.Require().NoError(stats.Increment(countKey))
-	s.Require().NoError(stats.Increment(countKey))
+	s.Require().NoError(stats.Increment(parentID, countKey))
+	s.Require().NoError(stats.Increment(parentID, countKey))
 
 	// Local count is 3, aggregated CRDT count is 5: RepliesCount must report 5.
 	localCount, err := repo.TweetsCount(parentID)
@@ -642,6 +642,36 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	count, err := repo.RepliesCount(parentID)
 	s.Require().NoError(err)
 	s.Equal(uint64(5), count)
+}
+
+// TestCountsFallBackToLocalPastNetworkRetention covers a post whose day DAG
+// was purged: the network reads zero and the local counts must still show.
+func (s *TweetRepoTestSuite) TestCountsFallBackToLocalPastNetworkRetention() {
+	repo := NewTweetRepo(s.db, newFakeTweetStats())
+	parentID := ulid.Make().String()
+
+	_, err := repo.AddReply(domain.Tweet{
+		Id: ulid.Make().String(), RootId: parentID, ParentId: &parentID,
+		UserId: "user123", Text: "reply", CreatedAt: time.Now(),
+	}, false)
+	s.Require().NoError(err)
+	_, err = repo.RecordView(parentID, "viewer-1")
+	s.Require().NoError(err)
+	_, err = repo.NewRetweet(domain.Tweet{
+		Id: parentID, UserId: "author", RetweetedBy: func() *string { v := "retweeter"; return &v }(),
+		CreatedAt: time.Now(),
+	}, false)
+	s.Require().NoError(err)
+
+	replies, err := repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.EqualValues(1, replies)
+	views, err := repo.GetViewsCount(parentID)
+	s.Require().NoError(err)
+	s.EqualValues(1, views)
+	retweets, err := repo.RetweetsCount(parentID)
+	s.Require().NoError(err)
+	s.EqualValues(1, retweets)
 }
 
 func (s *TweetRepoTestSuite) TestDeleteReply() {

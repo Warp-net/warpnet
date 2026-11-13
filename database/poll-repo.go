@@ -58,7 +58,7 @@ type PollStorer interface {
 
 type PollStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
-	Increment(key ds.Key) error
+	Increment(postID string, key ds.Key) error
 }
 
 type PollRepo struct {
@@ -136,7 +136,7 @@ func (repo *PollRepo) Vote(tweetId, userId string, option int, isTransitive bool
 	if repo.statsDb == nil || !isTransitive {
 		return nil
 	}
-	if err := repo.statsDb.Increment(votesKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Increment(tweetId, votesKey.DatastoreKey()); err != nil {
 		log.Warnf("poll: stats db increment: %v", err)
 	}
 	return nil
@@ -187,12 +187,13 @@ func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, e
 func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 	incrKey := pollVotesKey(tweetId, option, VotesIncrSubNamespace)
 
+	var network uint64
 	if repo.statsDb != nil {
 		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey())
-		if err == nil {
-			return total, nil
+		if err != nil {
+			log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
 		}
-		log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
+		network = total
 	}
 
 	incr, err := repo.localCounter(incrKey)
@@ -204,9 +205,9 @@ func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 		return 0, err
 	}
 	if decr >= incr {
-		return 0, nil
+		return network, nil
 	}
-	return incr - decr, nil
+	return max(incr-decr, network), nil
 }
 
 // localCounter reads a counter this node keeps. A missing key means nothing

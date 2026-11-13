@@ -76,8 +76,8 @@ type tweetGetter interface {
 }
 type TweetStatsStorer interface {
 	GetAggregatedStat(key ds.Key) (uint64, error)
-	Increment(key ds.Key) error
-	Decrement(key ds.Key) error
+	Increment(postID string, key ds.Key) error
+	Decrement(postID string, key ds.Key) error
 }
 
 const viewLockShards = 64
@@ -529,7 +529,7 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet, isTransitive bool) (domain.T
 		return reply, err
 	}
 	if repo.statsDb != nil && isTransitive {
-		if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Increment(parentID, countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db increment: %v", err)
 		}
 	}
@@ -547,14 +547,25 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(tweetsCountKey(tweetId).DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt replies count not found for %s - %s", tweetId, err)
+	localCount, err := repo.TweetsCount(tweetId)
+	if err != nil {
+		return 0, err
 	}
-	return repo.TweetsCount(tweetId)
+	return max(localCount, repo.networkCount(tweetsCountKey(tweetId))), nil
+}
+
+// networkCount is the replicated count of a post, zero once the post is past
+// network retention; readers take the larger of it and their local count.
+func (repo *TweetRepo) networkCount(key local.DatabaseKey) uint64 {
+	if repo.statsDb == nil {
+		return 0
+	}
+	total, err := repo.statsDb.GetAggregatedStat(key.DatastoreKey())
+	if err != nil {
+		log.Warnf("crdt count %s: %v", key, err)
+		return 0
+	}
+	return total
 }
 
 func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) (domain.Tweet, error) {
@@ -584,7 +595,7 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) 
 		return reply, err
 	}
 	if repo.statsDb != nil && isTransitive {
-		if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Decrement(parentID, countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db decrement: %v", err)
 		}
 	}
@@ -680,7 +691,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	if repo.statsDb == nil || !isTransitive {
 		return newTweet, nil
 	}
-	if err := repo.statsDb.Increment(retweetCountKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Increment(sourceTweetId, retweetCountKey.DatastoreKey()); err != nil {
 		log.Warnf("retweet: stats db increment: %v", err)
 	}
 	return newTweet, nil
@@ -744,7 +755,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive
 	if repo.statsDb == nil || !isTransitive {
 		return nil
 	}
-	if err := repo.statsDb.Decrement(retweetCountKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Decrement(sourceTweetId, retweetCountKey.DatastoreKey()); err != nil {
 		log.Warnf("retweet: stats db decrement: %v", err)
 	}
 	return nil
@@ -759,23 +770,18 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(retweetCountKey.DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt retweets count not found for %s - %s", tweetId, err)
-	}
-
+	network := repo.networkCount(retweetCountKey)
 	bt, err := repo.db.Get(retweetCountKey)
 	if local.IsNotFoundError(err) {
-		return 0, ErrTweetNotFound
+		if network == 0 {
+			return 0, ErrTweetNotFound
+		}
+		return network, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	count := binary.BigEndian.Uint64(bt)
-	return count, nil
+	return max(binary.BigEndian.Uint64(bt), network), nil
 }
 
 type retweetersIDs = []string
@@ -876,7 +882,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 		return 0, err
 	}
 	if repo.statsDb != nil {
-		if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Increment(tweetId, viewsKey.DatastoreKey()); err != nil {
 			log.Warnf("view: stats db increment: %v", err)
 		}
 	}
@@ -897,20 +903,16 @@ func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(viewsKey.DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt views count not found for %s - %s", tweetId, err)
-	}
-
+	network := repo.networkCount(viewsKey)
 	bt, err := repo.db.Get(viewsKey)
 	if local.IsNotFoundError(err) {
-		return 0, ErrViewsNotFound
+		if network == 0 {
+			return 0, ErrViewsNotFound
+		}
+		return network, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	return binary.BigEndian.Uint64(bt), nil
+	return max(binary.BigEndian.Uint64(bt), network), nil
 }

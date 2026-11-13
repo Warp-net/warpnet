@@ -326,12 +326,12 @@ type crdtSkew struct {
 
 func (c *crdtSkew) GetAggregatedStat(key ds.Key) (uint64, error) { return c.vals[key.String()], nil }
 
-func (c *crdtSkew) Increment(key ds.Key) error {
+func (c *crdtSkew) Increment(_ string, key ds.Key) error {
 	c.vals[key.String()]++
 	return nil
 }
 
-func (c *crdtSkew) Decrement(key ds.Key) error {
+func (c *crdtSkew) Decrement(_ string, key ds.Key) error {
 	if c.vals[key.String()] > 0 {
 		c.vals[key.String()]--
 	}
