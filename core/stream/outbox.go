@@ -111,9 +111,11 @@ func (o *Outbox) getSender() Sender {
 	return o.sender
 }
 
-func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) error {
+// Enqueue stores a write for redelivery and returns its outbox id. A write
+// identical to the last queued one is not stored twice: its id is returned.
+func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) (string, error) {
 	if o == nil || nodeIdStr == "" || route.IsGet() {
-		return errNotQueued
+		return "", errNotQueued
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -121,21 +123,32 @@ func (o *Outbox) Enqueue(nodeIdStr string, route WarpRoute, payload []byte) erro
 	queued, err := o.store.ListByNode(nodeIdStr)
 	if err != nil {
 		log.Warnf("outbox: enqueue: list queued for %s: %v", nodeIdStr, err)
-		return err
+		return "", err
 	}
 	if n := len(queued); n > 0 {
 		last := queued[n-1]
 		if last.Destination == string(route) && bytes.Equal(last.Body, payload) {
-			return nil
+			return last.MessageId, nil
 		}
 	}
 
-	if _, err := o.store.Enqueue(nodeIdStr, string(route), payload); err != nil {
+	msg, err := o.store.Enqueue(nodeIdStr, string(route), payload)
+	if err != nil {
 		log.Warnf("outbox: enqueue for %s: %v", nodeIdStr, err)
-		return err
+		return "", err
 	}
 	o.pending[nodeIdStr] = struct{}{}
-	return nil
+	return msg.MessageId, nil
+}
+
+// Delete removes a write the peer confirmed.
+func (o *Outbox) Delete(nodeIdStr, messageId string) error {
+	if o == nil {
+		return nil
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.store.Delete(nodeIdStr, messageId)
 }
 
 func (o *Outbox) NotifyOnline(nodeId string) {
@@ -246,8 +259,8 @@ func (o *Outbox) flush(nodeId string) {
 
 		response, err := sender.Send(warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body)
 		switch {
-		case err == nil, errors.Is(err, ErrResponseRead):
-			if isRateLimited(response) {
+		case err == nil:
+			if IsRateLimited(response) {
 				log.Infof("outbox: %s rate limited %s, keeping it queued", nodeId, msg.Destination)
 				limitedRoutes[msg.Destination] = struct{}{}
 				continue
@@ -257,7 +270,7 @@ func (o *Outbox) flush(nodeId string) {
 			}
 		case errors.Is(err, warpnet.ErrNodeIsOffline):
 			return
-		default:
+		default: // ErrResponseRead too: the request may never have reached the peer's handler
 			log.Warnf("outbox: redeliver %s/%s: %v", nodeId, msg.MessageId, err)
 		}
 	}
@@ -265,7 +278,8 @@ func (o *Outbox) flush(nodeId string) {
 	o.clearIfDrained(nodeId)
 }
 
-func isRateLimited(response []byte) bool {
+// IsRateLimited reports whether a peer answered with a rate limit error.
+func IsRateLimited(response []byte) bool {
 	if len(response) == 0 {
 		return false
 	}
