@@ -644,3 +644,31 @@ func TestReplication_ARecordOutsideItsDayDAGIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, has, "a record filed under another day's DAG would outlive its own day")
 }
+
+func TestReplication_AReplayedOlderRecordCannotWinTheKey(t *testing.T) {
+	rs := newCluster(t, "A", "B", "C")
+	a, b, c := rs[0], rs[1], rs[2]
+	now := currentBucket()
+
+	first := ratingRecord(a.id(), observedPeer, "net", now)
+	require.NoError(t, a.store.Put(first))
+	latest := first
+	latest.Offences = []domain.OffenceCount{{Kind: "bad_signature", Count: 5}}
+	latest.UpdatedAt = first.UpdatedAt.Add(time.Minute)
+	require.NoError(t, a.store.Put(latest))
+	b.eventuallyLists(t, observedPeer, latest)
+	c.eventuallyLists(t, observedPeer, latest)
+
+	key, err := recordKey(first)
+	require.NoError(t, err)
+	replay, err := json.Marshal(first)
+	require.NoError(t, err)
+	publishInEpoch(t, b.store, key.String(), replay, dayDAG("net", now))
+	marker := ratingRecord(b.id(), otherPeer, "net", now)
+	require.NoError(t, b.store.Put(marker))
+	c.eventuallyLists(t, otherPeer, marker)
+
+	got, err := c.store.List(observedPeer)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.RatingRecord{latest}, got, "an observer's earlier record, replayed at a higher priority, does not undo its latest")
+}

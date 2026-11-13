@@ -36,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-ds-crdt/pb"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -113,6 +114,11 @@ func (m *MerkleCRDT) liveHeads(data []byte) ([]byte, bool) {
 	heads := slices.DeleteFunc(slices.Clone(msg.GetHeads()), func(h *pb.Head) bool {
 		return !m.IsLive(h.GetDagName())
 	})
+	for _, h := range heads {
+		if c, err := cid.Cast(h.GetCid()); err == nil {
+			m.lineage.announce(c, h.GetDagName())
+		}
+	}
 	if len(heads) == 0 {
 		return nil, false
 	}

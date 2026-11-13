@@ -40,12 +40,14 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	datastore "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
+	"github.com/ipfs/go-ds-crdt/pb"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 var testTweet = ulid.Make().String()
@@ -394,6 +396,14 @@ func TestCRDTStats_CloseStopsTheFlushWorker(t *testing.T) {
 
 func newStatsPair(t *testing.T) (*Store, *Store) {
 	t.Helper()
+	a, b, _ := newStatsPairWire(t)
+	return a, b
+}
+
+// newStatsPairWire also hands back the inbox of the first store, to deliver
+// a broadcast the second store would never send itself.
+func newStatsPairWire(t *testing.T) (*Store, *Store, chan<- []byte) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -407,7 +417,7 @@ func newStatsPair(t *testing.T) (*Store, *Store) {
 	bStore, err := New(ctx, bBc, dssync.MutexWrap(datastore.NewMapDatastore()), b, idleRouter{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = bStore.Close() })
-	return aStore, bStore
+	return aStore, bStore, aBc.inbox
 }
 
 func tweetAt(t time.Time) string {
@@ -607,4 +617,68 @@ func TestCRDTStats_ACounterOutsideItsTweetsDayIsRefused(t *testing.T) {
 	got, err := honest.GetAggregatedStat(old, 1)
 	require.NoError(t, err)
 	assert.Zero(t, got)
+}
+
+func TestCRDTStats_ABlockAnnouncedUnderAnotherDayIsRefused(t *testing.T) {
+	honest, attacker, honestInbox := newStatsPairWire(t)
+	created := time.Now().Add(-60 * 24 * time.Hour)
+	old := datastore.NewKey("/REACTIONS/INCR/" + tweetAt(created))
+	oldDAG := store.DayAt(created).DAG(dagPrefix)
+
+	oldKey := attacker.counterKey(incrNamespace, old).String()
+	publishRaw(t, attacker, oldKey, attacker.signedValue(oldKey, 1), oldDAG)
+	var block []byte
+	for _, head := range attacker.crdt.InternalStats(context.Background()).Heads {
+		if head.DAGName == oldDAG {
+			block = head.Cid.Bytes()
+		}
+	}
+	require.NotNil(t, block)
+	today := store.DayAt(time.Now()).DAG(dagPrefix)
+	announced, err := proto.Marshal(&pb.CRDTBroadcast{Heads: []*pb.Head{{Cid: block, DagName: today}}})
+	require.NoError(t, err)
+	honestInbox <- announced
+
+	marker := tweetKey("/REACTIONS/INCR/marker")
+	require.NoError(t, attacker.Increment(marker))
+	require.NoError(t, attacker.flush())
+	require.Eventually(t, func() bool {
+		got, err := honest.GetAggregatedStat(marker, 1)
+		return err == nil && got == 1
+	}, 20*time.Second, 100*time.Millisecond)
+
+	has, err := honest.crdt.Has(context.Background(), datastore.NewKey(oldKey))
+	require.NoError(t, err)
+	assert.False(t, has, "a block filed under an expired day and announced under today's is refused")
+}
+
+func TestCRDTStats_AReplayedOlderTotalCannotWinTheKey(t *testing.T) {
+	honest, attacker := newStatsPair(t)
+	likes := tweetKey("/REACTIONS/INCR/replayed")
+	dag, ok := tweetDAG(likes)
+	require.True(t, ok)
+	honestKey := honest.counterKey(incrNamespace, likes).String()
+
+	require.NoError(t, honest.Increment(likes))
+	require.NoError(t, honest.flush())
+	replay := honest.signedValue(honestKey, 1)
+	require.NoError(t, honest.Increment(likes))
+	require.NoError(t, honest.flush())
+	require.Eventually(t, func() bool {
+		got, err := attacker.GetAggregatedStat(likes, 0)
+		return err == nil && got == 2
+	}, 20*time.Second, 100*time.Millisecond)
+
+	publishRaw(t, attacker, honestKey, replay, dag)
+	marker := tweetKey("/REACTIONS/INCR/marker")
+	require.NoError(t, attacker.Increment(marker))
+	require.NoError(t, attacker.flush())
+	require.Eventually(t, func() bool {
+		got, err := honest.GetAggregatedStat(marker, 1)
+		return err == nil && got == 1
+	}, 20*time.Second, 100*time.Millisecond)
+
+	got, err := honest.GetAggregatedStat(likes, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, got, "the node's own older total, replayed at a higher priority, does not roll the count back")
 }

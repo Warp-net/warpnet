@@ -109,6 +109,7 @@ func New(
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
 		IsValid:     s.isValid,
+		IsOlder:     isOlderRecord,
 	})
 	if err != nil {
 		cancel()
@@ -280,6 +281,15 @@ func (s *Store) isValid(dagName, key string, value []byte) bool {
 		return false
 	}
 	return s.verify(rec) == nil
+}
+
+// isOlderRecord reports a record its observer has since rewritten: a replay.
+func isOlderRecord(_ string, value, current []byte) bool {
+	var rec, cur domain.RatingRecord
+	if json.Unmarshal(value, &rec) != nil || json.Unmarshal(current, &cur) != nil {
+		return false
+	}
+	return rec.UpdatedAt.Before(cur.UpdatedAt)
 }
 
 // recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.

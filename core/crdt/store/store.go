@@ -34,6 +34,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -90,6 +91,9 @@ type Config struct {
 	// its writes belongs in the store: signed by its author and kept in
 	// the DAG of its own day.
 	IsValid func(dagName, key string, value []byte) bool
+	// IsOlder reports a received value that an earlier write by the same
+	// author superseded: a replay, never merged.
+	IsOlder func(key string, value, current []byte) bool
 }
 
 // MerkleCRDT is a Merkle-CRDT kept in day DAGs: it publishes writes in
@@ -100,15 +104,21 @@ type MerkleCRDT struct {
 	prefixes  map[string]struct{}
 	mu        sync.RWMutex
 	firstLive map[string]Day
+
+	data         datastore.Datastore
+	lineage      *lineage
+	isValid      func(dagName, key string, value []byte) bool
+	isOlder      func(key string, value, current []byte) bool
+	setNamespace atomic.Pointer[datastore.Key]
 }
 
 const ErrNoValidator = warpnet.WarpError("crdt store: no write validator")
 
 func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
-	if cfg.IsValid == nil {
+	if cfg.IsValid == nil || cfg.IsOlder == nil {
 		return nil, ErrNoValidator
 	}
-	m := &MerkleCRDT{firstLive: make(map[string]Day)}
+	m := &MerkleCRDT{firstLive: make(map[string]Day), isValid: cfg.IsValid, isOlder: cfg.IsOlder}
 	if len(cfg.DAGPrefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))
 		for _, p := range cfg.DAGPrefixes {
@@ -144,14 +154,16 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 		log.Errorf("failed to purge DAGs that are not live: %v", err)
 	}
 
+	m.data = baseStore
+	m.lineage = newLineage(dagService)
 	crdtStore, err := crdt.NewMerkleCRDT(
 		baseStore,
 		ds.NewKey(""),
-		dagService,
+		m.lineage,
 		liveBroadcaster{Broadcaster: cfg.Broadcaster, crdt: m},
 		opts,
 		&crdt.MerkleCRDTOptions{DeltaFactory: func() crdt.Delta {
-			return &checkedDelta{Delta: &pb.Delta{}, isValid: cfg.IsValid}
+			return &checkedDelta{Delta: &pb.Delta{}, crdt: m}
 		}},
 	)
 	if err != nil {
@@ -159,6 +171,14 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	}
 
 	m.MerkleCRDT = crdtStore
+	if ns, ok := m.readSetNamespace(); ok {
+		m.setNamespace.Store(&ns)
+	} else {
+		log.Warnf("crdt store %s: go-ds-crdt layout changed, replayed old values are not refused", cfg.Prefix)
+	}
+	for _, head := range crdtStore.InternalStats(ctx).Heads {
+		m.lineage.announce(head.Cid, head.DAGName)
+	}
 
 	go func() {
 		// Unconditional: a clean Close() mid-sync can leave a hole with the dirty bit unset.

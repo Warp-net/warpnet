@@ -28,21 +28,29 @@ resulting from the use or misuse of this software.
 package store
 
 import (
+	"bytes"
+	"math"
 	"slices"
 
+	"github.com/Warp-net/warpnet/core/warpnet"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
 	"google.golang.org/protobuf/proto"
 )
 
-// checkedDelta is the delta every received block is read into: before the
-// block is merged it keeps only the elements isValid accepts for the
-// block's own DAG, and no tombstones, since these stores never delete. A
-// write that fails the check never takes part in choosing a key's value.
+const ErrForeignRoot = warpnet.WarpError("crdt store: block is not filed under the DAG it was announced in")
+
+// checkedDelta is the delta every received block is read into. Before the
+// block is merged it is refused if its DAG is not the one it was reached
+// from, and it keeps no tombstones, since these stores never delete, and
+// only the writes the store accepts that are not older than the key's
+// current value. If a kept write is newer, the block's priority is raised
+// above the current one, so a replayed old version announced with a high
+// priority cannot hold the key.
 type checkedDelta struct {
 	*pb.Delta
 
-	isValid func(dagName, key string, value []byte) bool
+	crdt *MerkleCRDT
 }
 
 var _ crdt.Delta = (*checkedDelta)(nil)
@@ -51,10 +59,28 @@ func (d *checkedDelta) Unmarshal(b []byte) error {
 	if err := proto.Unmarshal(b, d.Delta); err != nil {
 		return err
 	}
+	if !d.crdt.lineage.isRootedIn(b, d.GetDagName()) {
+		return ErrForeignRoot
+	}
 	d.Tombstones = nil
+	priority := d.Priority
 	d.Elements = slices.DeleteFunc(d.Elements, func(e *pb.Element) bool {
-		return !d.isValid(d.GetDagName(), e.GetKey(), e.GetValue())
+		if !d.crdt.isValid(d.GetDagName(), e.GetKey(), e.GetValue()) {
+			return true
+		}
+		current, currentPriority, ok := d.crdt.current(e.GetKey())
+		if !ok || bytes.Equal(current, e.GetValue()) {
+			return false
+		}
+		if d.crdt.isOlder(e.GetKey(), e.GetValue(), current) {
+			return true
+		}
+		if currentPriority >= priority && currentPriority < math.MaxUint64 {
+			priority = currentPriority + 1
+		}
+		return false
 	})
+	d.Priority = priority
 	return nil
 }
 

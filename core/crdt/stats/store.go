@@ -154,6 +154,7 @@ func New(
 		Prefix:      bitswapPrefix,
 		DAGPrefixes: []string{dagPrefix},
 		IsValid:     s.isValid,
+		IsOlder:     isOlderTotal,
 	})
 	if err != nil {
 		cancel()
@@ -389,6 +390,15 @@ func (s *Store) isValid(dagName, key string, value []byte) bool {
 	}
 	_, ok := s.verifiedNode(key, value)
 	return ok
+}
+
+// isOlderTotal reports a counter value below the one already chosen: a node's
+// running total only grows, so a smaller one is a replay.
+func isOlderTotal(_ string, value, current []byte) bool {
+	if len(value) < counterSize || len(current) < counterSize {
+		return false
+	}
+	return binary.BigEndian.Uint64(value[:counterSize]) < binary.BigEndian.Uint64(current[:counterSize])
 }
 
 // verifiedNode returns the node a component belongs to if the component

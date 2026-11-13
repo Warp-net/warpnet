@@ -36,7 +36,7 @@ func headNames(t *testing.T, data []byte) []string {
 }
 
 func newEpochs(prefixes ...string) *MerkleCRDT {
-	m := &MerkleCRDT{firstLive: make(map[string]Day)}
+	m := &MerkleCRDT{firstLive: make(map[string]Day), lineage: newLineage(nil)}
 	if len(prefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(prefixes))
 		for _, p := range prefixes {
