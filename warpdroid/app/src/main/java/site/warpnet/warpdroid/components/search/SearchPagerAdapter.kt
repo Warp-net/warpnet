@@ -19,17 +19,16 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import site.warpnet.warpdroid.components.search.fragments.SearchAccountsFragment
-import site.warpnet.warpdroid.components.search.fragments.SearchStatusesFragment
 
 class SearchPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
     override fun createFragment(position: Int): Fragment {
+        // Warpnet has no tweet search, so accounts are the only page.
         return when (position) {
-            0 -> SearchStatusesFragment.newInstance()
-            1 -> SearchAccountsFragment.newInstance()
+            0 -> SearchAccountsFragment.newInstance()
             else -> throw IllegalArgumentException("Unknown page index: $position")
         }
     }
 
-    override fun getItemCount() = 2
+    override fun getItemCount() = 1
 }

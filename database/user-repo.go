@@ -510,7 +510,7 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 			return nil, "", err
 		}
 
-		for _, item := range items {
+		for i, item := range items {
 			var u domain.User
 			if err := json.Unmarshal(item.Value, &u); err != nil {
 				return nil, "", err
@@ -520,6 +520,10 @@ func (repo *UserRepo) Search(query string, limit *uint64, cursor *string) ([]dom
 			}
 			hits = append(hits, u)
 			if uint64(len(hits)) >= want {
+				// Resume right after this hit: `next` skips the rest of the scanned chunk.
+				if i+1 < len(items) {
+					return hits, items[i+1].Key, nil
+				}
 				return hits, next, nil
 			}
 		}

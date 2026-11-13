@@ -223,7 +223,10 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         // cold install (or after "Forget this node").
         val paired = pairedNodeStore.load()
         if (paired == null) {
-            startActivity(Intent(this, site.warpnet.warpdroid.components.pairing.PairingActivity::class.java))
+            startActivity(
+                Intent(this, site.warpnet.warpdroid.components.pairing.PairingActivity::class.java)
+                    .apply { if (intent.action == Intent.ACTION_VIEW) setAction(Intent.ACTION_VIEW).setData(intent.data) },
+            )
             finish()
             return
         }
@@ -436,6 +439,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
         val accountRequested = warpdroidAccountId != -1L
         if (accountRequested && warpdroidAccountId != activeAccount.id) {
             changeAccount(warpdroidAccountId, intent)
+            return false
+        }
+
+        val deepLink = intent.data
+        if (intent.action == Intent.ACTION_VIEW && deepLink?.scheme == "warpnet" && deepLink.host == "user") {
+            deepLink.pathSegments.firstOrNull()?.takeIf { it.isNotBlank() }?.let { userId ->
+                startActivityWithSlideInAnimation(AccountActivity.newIntent(this, userId))
+            }
             return false
         }
 
