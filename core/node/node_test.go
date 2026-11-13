@@ -604,3 +604,105 @@ func TestStream_OfflineWriteIsQueuedInOutbox(t *testing.T) {
 	queued, _ := store.ListByNode(offline.String())
 	require.Len(t, queued, 1)
 }
+
+type stubStreamer struct {
+	resp []byte
+	err  error
+}
+
+func (s stubStreamer) Send(warpnet.WarpAddrInfo, stream.WarpRoute, []byte) ([]byte, error) {
+	return s.resp, s.err
+}
+func (stubStreamer) SetStreamable(warpnet.WarpPeerID)   {}
+func (stubStreamer) SetUnstreamable(warpnet.WarpPeerID) {}
+
+type stubOutbox struct {
+	err     error
+	queued  []stream.WarpRoute
+	deleted []string
+}
+
+func (o *stubOutbox) Enqueue(_ string, route stream.WarpRoute, _ []byte) (string, error) {
+	if o.err != nil {
+		return "", o.err
+	}
+	o.queued = append(o.queued, route)
+	return "id", nil
+}
+func (o *stubOutbox) Delete(_, id string) error {
+	o.deleted = append(o.deleted, id)
+	return nil
+}
+func (*stubOutbox) NotifyOnline(string) {}
+func (*stubOutbox) Close()              {}
+
+func TestStream_WriteStaysQueuedUntilConfirmed(t *testing.T) {
+	limited, err := json.Marshal(warpevent.ResponseError{Code: warpevent.RateLimitErrorCode, Message: "slow down"})
+	require.NoError(t, err)
+	reset := warpnet.WarpError("stream reset")
+	write := stream.WarpRoute(warpevent.PUBLIC_POST_REACT)
+
+	cases := []struct {
+		name     string
+		send     stubStreamer
+		route    stream.WarpRoute
+		queued   bool
+		kept     bool
+		wantErrs []error
+	}{
+		{"delivered", stubStreamer{resp: []byte(warpevent.Accepted)}, write, true, false, nil},
+		{"read is never queued", stubStreamer{err: reset}, echoRoute, false, false, []error{reset}},
+		{"offline", stubStreamer{err: warpnet.ErrNodeIsOffline}, write, true, true,
+			[]error{stream.ErrQueuedInOutbox, warpnet.ErrNodeIsOffline}},
+		{"transport failure", stubStreamer{err: reset}, write, true, true, []error{stream.ErrQueuedInOutbox, reset}},
+		{"lost response", stubStreamer{err: stream.ErrResponseRead}, write, true, true,
+			[]error{stream.ErrQueuedInOutbox, stream.ErrResponseRead}},
+		{"rate limited", stubStreamer{resp: limited}, write, true, true, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := newTestNode(t)
+			box := &stubOutbox{}
+			n.streamer, n.outbox = tc.send, box
+
+			resp, err := n.Stream(otherPeerID(t), tc.route, []byte(`{}`))
+			require.Equal(t, tc.queued, len(box.queued) == 1, "queued before sending")
+			require.Equal(t, tc.queued && !tc.kept, len(box.deleted) == 1, "removed only once confirmed")
+			if len(tc.wantErrs) == 0 {
+				require.NoError(t, err)
+				require.Equal(t, tc.send.resp, resp, "the caller still sees the peer's answer")
+			}
+			for _, want := range tc.wantErrs {
+				require.ErrorIs(t, err, want)
+			}
+		})
+	}
+}
+
+func TestStream_DeliveredWithoutQueueIsNotAnError(t *testing.T) {
+	n := newTestNode(t)
+	n.streamer, n.outbox = stubStreamer{resp: []byte(warpevent.Accepted)}, &stubOutbox{err: warpnet.WarpError("db closed")}
+
+	_, err := n.Stream(otherPeerID(t), stream.WarpRoute(warpevent.PUBLIC_POST_MESSAGE), []byte(`{}`))
+	require.NoError(t, err)
+}
+
+func TestStream_FailedQueueIsNotReportedAsOffline(t *testing.T) {
+	n := newTestNode(t)
+	dbErr := warpnet.WarpError("db closed")
+	n.streamer, n.outbox = stubStreamer{err: warpnet.ErrNodeIsOffline}, &stubOutbox{err: dbErr}
+
+	_, err := n.Stream(otherPeerID(t), stream.WarpRoute(warpevent.PUBLIC_POST_MESSAGE), []byte(`{}`))
+	require.ErrorIs(t, err, dbErr)
+	require.NotErrorIs(t, err, warpnet.ErrNodeIsOffline, "callers take offline as queued")
+	require.NotErrorIs(t, err, stream.ErrQueuedInOutbox)
+}
+
+func otherPeerID(t *testing.T) warpnet.WarpPeerID {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	id, err := warpnet.IDFromPublicKey(pub)
+	require.NoError(t, err)
+	return id
+}
