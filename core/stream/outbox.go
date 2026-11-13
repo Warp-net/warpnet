@@ -31,7 +31,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -50,7 +49,6 @@ const (
 const (
 	ErrQueuedInOutbox = warpnet.WarpError("queued in outbox")
 	errNotQueued      = warpnet.WarpError("outbox: not queued")
-	errRateLimited    = warpnet.WarpError("outbox: rate limited")
 )
 
 type OutboxStore interface {
@@ -61,7 +59,7 @@ type OutboxStore interface {
 }
 
 type Sender interface {
-	SendMessage(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error)
+	Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error)
 }
 
 type Outbox struct {
@@ -209,123 +207,62 @@ func (o *Outbox) flushNode(nodeId string) {
 		return
 	}
 	_, _, _ = o.sf.Do(nodeId, func() (any, error) {
-		return o.flush(nodeId), nil
+		o.flush(nodeId)
+		return nil, nil
 	})
 }
 
-// deliveryResult is the outcome of one queued entry in a flush. A nil err means
-// the entry left the queue; ErrQueuedInOutbox means it stays queued for redelivery.
-type deliveryResult struct {
-	response []byte
-	err      error
-}
-
-func stillQueued(cause error) deliveryResult {
-	return deliveryResult{err: fmt.Errorf("%w: %w", ErrQueuedInOutbox, cause)}
-}
-
-const errFlushInterrupted = warpnet.WarpError("outbox: flush interrupted")
-
-// Deliver flushes nodeId's queue now and reports the outcome for messageId, an
-// entry the caller already committed to the store. It flushes the whole queue
-// rather than sending the one entry, so per-node order holds and a concurrent
-// flush cannot send the entry twice.
-func (o *Outbox) Deliver(nodeId, messageId string) ([]byte, error) {
-	if o == nil || nodeId == "" || messageId == "" {
-		return nil, errNotQueued
-	}
-	o.mu.Lock()
-	o.pending[nodeId] = struct{}{}
-	o.mu.Unlock()
-
-	// A flush already in progress may have listed the queue before the entry
-	// was committed; the second pass then starts a flush that sees it.
-	for range 2 {
-		v, _, _ := o.sf.Do(nodeId, func() (any, error) {
-			return o.flush(nodeId), nil
-		})
-		results, _ := v.(map[string]deliveryResult)
-		if res, ok := results[messageId]; ok {
-			return res.response, res.err
-		}
-	}
-	return nil, fmt.Errorf("%w: %w", ErrQueuedInOutbox, errFlushInterrupted)
-}
-
-func (o *Outbox) flush(nodeId string) map[string]deliveryResult {
-	results := make(map[string]deliveryResult)
-
+func (o *Outbox) flush(nodeId string) {
 	sender := o.getSender()
 	if sender == nil {
-		return results
+		return
 	}
 	peerID := warpnet.FromStringToPeerID(nodeId)
 	if peerID == "" {
 		log.Errorf("outbox: malformed queued node id: %s", nodeId)
-		return results
+		return
 	}
 
 	messages, err := o.store.ListByNode(nodeId)
 	if err != nil {
 		log.Errorf("outbox: list queued for %s: %v", nodeId, err)
-		return results
-	}
-	// Entries the loop does not reach stay queued.
-	for _, msg := range messages {
-		results[msg.MessageId] = stillQueued(errFlushInterrupted)
+		return
 	}
 
 	limitedRoutes := make(map[string]struct{})
 
-	for i, msg := range messages {
+	for _, msg := range messages {
 		select {
 		case <-o.stop:
-			return results
+			return
 		default:
 		}
 		if o.ctx.Err() != nil {
-			return results
+			return
 		}
 		if _, ok := limitedRoutes[msg.Destination]; ok {
-			results[msg.MessageId] = stillQueued(errRateLimited)
 			continue
 		}
 
-		// The entry id goes on the wire as the message id, so every redelivery
-		// of this entry is the same request to the peer's idempotency cache.
-		response, err := sender.SendMessage(
-			warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body, msg.MessageId,
-		)
+		response, err := sender.Send(warpnet.WarpAddrInfo{ID: peerID}, WarpRoute(msg.Destination), msg.Body)
 		switch {
-		case err == nil:
+		case err == nil, errors.Is(err, ErrResponseRead):
 			if isRateLimited(response) {
 				log.Infof("outbox: %s rate limited %s, keeping it queued", nodeId, msg.Destination)
 				limitedRoutes[msg.Destination] = struct{}{}
-				res := stillQueued(errRateLimited)
-				res.response = response
-				results[msg.MessageId] = res
 				continue
 			}
 			if delErr := o.store.Delete(nodeId, msg.MessageId); delErr != nil {
 				log.Errorf("outbox: delete delivered %s/%s: %v", nodeId, msg.MessageId, delErr)
 			}
-			results[msg.MessageId] = deliveryResult{response: response}
 		case errors.Is(err, warpnet.ErrNodeIsOffline):
-			for _, rest := range messages[i:] {
-				results[rest.MessageId] = stillQueued(err)
-			}
-			return results
+			return
 		default:
-			// ErrResponseRead lands here too: the request reached the peer, but
-			// nothing says the peer applied it, so the entry is not delivered.
-			// Redelivering it is safe because the peer dedups on its id.
 			log.Warnf("outbox: redeliver %s/%s: %v", nodeId, msg.MessageId, err)
-			results[msg.MessageId] = stillQueued(err)
 		}
 	}
 
 	o.clearIfDrained(nodeId)
-	return results
 }
 
 func isRateLimited(response []byte) bool {

@@ -56,40 +56,11 @@ func NewOutboxRepo(db OutboxStorer) *OutboxRepo {
 	return &OutboxRepo{db: db, mx: new(sync.Mutex)}
 }
 
-func outboxMessageKey(destNodeId, messageId string) local_store.DatabaseKey {
+func (repo *OutboxRepo) messageKey(destNodeId, messageId string) local_store.DatabaseKey {
 	return local_store.NewPrefixBuilder(OutboxNamespace).
 		AddRootID(destNodeId).
 		AddParentId(messageId).
 		Build()
-}
-
-// OutboxEntry is a delivery to queue in the same transaction as the record it
-// delivers, so a crash between storing the record and queueing it cannot lose it.
-type OutboxEntry struct {
-	DestNodeId string
-	Route      string
-	Payload    []byte
-}
-
-// putOutboxEntry writes e into txn; the caller commits.
-func putOutboxEntry(txn local_store.WarpTransactioner, e OutboxEntry) (event.Message, error) {
-	if e.DestNodeId == "" || e.Route == "" {
-		return event.Message{}, local_store.DBError("outbox: dest node id or route is empty")
-	}
-
-	msg := event.Message{
-		MessageId:   ulid.Make().String(),
-		Destination: e.Route,
-		Body:        e.Payload,
-		Timestamp:   time.Now(),
-	}
-
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return msg, fmt.Errorf("outbox: marshal: %w", err)
-	}
-
-	return msg, txn.SetWithTTL(outboxMessageKey(e.DestNodeId, msg.MessageId), data, outboxTTL)
 }
 
 func (repo *OutboxRepo) Enqueue(destNodeId, route string, payload []byte) (event.Message, error) {
@@ -100,14 +71,25 @@ func (repo *OutboxRepo) Enqueue(destNodeId, route string, payload []byte) (event
 	repo.mx.Lock()
 	defer repo.mx.Unlock()
 
+	msg := event.Message{
+		MessageId:   ulid.Make().String(),
+		Destination: route,
+		Body:        payload,
+		Timestamp:   time.Now(),
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return msg, fmt.Errorf("outbox: marshal: %w", err)
+	}
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
-		return event.Message{}, err
+		return msg, err
 	}
 	defer txn.Rollback()
 
-	msg, err := putOutboxEntry(txn, OutboxEntry{DestNodeId: destNodeId, Route: route, Payload: payload})
-	if err != nil {
+	if err = txn.SetWithTTL(repo.messageKey(destNodeId, string(msg.MessageId)), data, outboxTTL); err != nil {
 		return msg, err
 	}
 	return msg, txn.Commit()
@@ -169,7 +151,7 @@ func (repo *OutboxRepo) Delete(destNodeId, messageId string) error {
 	}
 	defer txn.Rollback()
 
-	if err = txn.Delete(outboxMessageKey(destNodeId, messageId)); err != nil {
+	if err = txn.Delete(repo.messageKey(destNodeId, messageId)); err != nil {
 		return err
 	}
 	return txn.Commit()
