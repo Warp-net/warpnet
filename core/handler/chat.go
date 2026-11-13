@@ -42,7 +42,6 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -59,9 +58,6 @@ type ChatAuthStorer interface {
 
 type ChatStreamer interface {
 	GenericStream(nodeId string, path stream.WarpRoute, data any) (_ []byte, err error)
-	// DeliverQueued sends the outbox entry queuedId to nodeId now. An error
-	// wrapping stream.ErrQueuedInOutbox means the entry stays queued.
-	DeliverQueued(nodeId, queuedId string) ([]byte, error)
 	NodeInfo() warpnet.NodeInfo
 }
 
@@ -75,7 +71,6 @@ type ChatStorer interface {
 	DeleteChat(chatId string) error
 	GetUserChats(userId string, limit *uint64, cursor *string) ([]domain.Chat, string, error)
 	CreateMessage(msg domain.ChatMessage) (domain.ChatMessage, error)
-	CreateMessageWithDelivery(msg domain.ChatMessage, delivery database.OutboxEntry) (domain.ChatMessage, string, error)
 	ListMessages(chatId string, limit *uint64, cursor *string) ([]domain.ChatMessage, string, error)
 	GetMessage(chatId, id string) (domain.ChatMessage, error)
 	DeleteMessage(chatId, id string) error
@@ -376,48 +371,53 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			CreatedAt:  now,
 		}
 
-		isOutgoing := !isSelfChat && !isOwnerReceiver && otherUserErr == nil &&
-			otherUser.NodeId != "" && otherUser.NodeId != ownNodeInfo.ID.String()
-		if !isOutgoing {
-			return storeLocalMessage(repo, notifyRepo, msg, sender, ownerId, isSelfChat, isOwnerReceiver, otherUser, otherUserErr)
-		}
-
-		// The receiver dedups on the message id, so it has to be in the payload
-		// queued together with the message.
-		if msg.Id == "" {
-			msg.Id = ulid.Make().String()
-		}
-		payload, err := json.Marshal(domain.ChatMessage{
-			Id:         msg.Id,
-			ChatId:     ev.ChatId,
-			SenderId:   ownerId,
-			ReceiverId: ev.ReceiverId,
-			Text:       ev.Text,
-			ImageKeys:  imageKeys,
-			VideoKey:   videoKey,
-			CreatedAt:  now,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("chat message: marshal delivery: %w", err)
-		}
-
-		// Storing the message and queueing its delivery in one transaction means
-		// a crash or a failed send can no longer leave a message that is never
-		// delivered: whatever the send below does, the outbox retries it.
-		msg, queuedId, err := repo.CreateMessageWithDelivery(msg, database.OutboxEntry{
-			DestNodeId: otherUser.NodeId,
-			Route:      event.PUBLIC_POST_MESSAGE,
-			Payload:    payload,
-		})
+		msg, err = repo.CreateMessage(msg)
 		if err != nil {
 			return nil, err
 		}
-		if queuedId == "" {
-			// Already stored by an earlier request; its queued delivery owns it.
+
+		if isSelfChat {
+			return event.NewMessageResponse(msg), nil
+		}
+		if isOwnerReceiver { // the other user sent a message
+			log.Infoln("received new message!")
+			if err := notifyRepo.Add(domain.Notification{
+				Type:        domain.NotificationMessageType,
+				Text:        sender.Username + " sent you a message",
+				RecepientId: ownerId,
+				ActorId:     ev.SenderId,
+			}); err != nil {
+				log.Errorf("chat message: adding notification: %v", err)
+			}
+			return event.NewMessageResponse(msg), nil
+		}
+
+		if errors.Is(otherUserErr, database.ErrUserNotFound) {
+			return msg, nil
+		}
+		if otherUserErr != nil {
+			log.Errorf("chat message: resolve receiver %s: %v", ev.ReceiverId, otherUserErr)
+			msg.Status = statusUndelivered
 			return msg, nil
 		}
 
-		otherMsgData, err := streamer.DeliverQueued(otherUser.NodeId, queuedId)
+		if ownNodeInfo.ID.String() == otherUser.NodeId {
+			return msg, nil
+		}
+		otherMsgData, err := streamer.GenericStream(
+			otherUser.NodeId,
+			event.PUBLIC_POST_MESSAGE,
+			domain.ChatMessage{
+				Id:         msg.Id,
+				ChatId:     ev.ChatId,
+				SenderId:   ownerId,
+				ReceiverId: ev.ReceiverId,
+				Text:       ev.Text,
+				ImageKeys:  imageKeys,
+				VideoKey:   videoKey,
+				CreatedAt:  now,
+			},
+		)
 		if err != nil {
 			log.Warnf("chat message not delivered to node %s: %v", otherUser.NodeId, err)
 			msg.Status = statusUndelivered
@@ -430,53 +430,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			msg.Status = statusUndelivered
 		}
 
-		return msg, nil
-	}
-}
-
-// storeLocalMessage stores a message that does not leave this node: a self
-// chat, an incoming message, or one whose receiver cannot be reached.
-func storeLocalMessage(
-	repo ChatStorer,
-	notifyRepo ChatNotifier,
-	msg domain.ChatMessage,
-	sender domain.User,
-	ownerId string,
-	isSelfChat, isOwnerReceiver bool,
-	otherUser domain.User,
-	otherUserErr error,
-) (any, error) {
-	msg, err := repo.CreateMessage(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	switch {
-	case isSelfChat:
-		return event.NewMessageResponse(msg), nil
-	case isOwnerReceiver: // the other user sent a message
-		log.Infoln("received new message!")
-		if err := notifyRepo.Add(domain.Notification{
-			Type:        domain.NotificationMessageType,
-			Text:        sender.Username + " sent you a message",
-			RecepientId: ownerId,
-			ActorId:     msg.SenderId,
-		}); err != nil {
-			log.Errorf("chat message: adding notification: %v", err)
-		}
-		return event.NewMessageResponse(msg), nil
-	case errors.Is(otherUserErr, database.ErrUserNotFound):
-		return msg, nil
-	case otherUserErr != nil:
-		log.Errorf("chat message: resolve receiver %s: %v", msg.ReceiverId, otherUserErr)
-		msg.Status = statusUndelivered
-		return msg, nil
-	case otherUser.NodeId == "":
-		log.Errorf("chat message: receiver %s has no node id", msg.ReceiverId)
-		msg.Status = statusUndelivered
-		return msg, nil
-	default: // the receiver is on this node
-		return msg, nil
+		return msg, err
 	}
 }
 

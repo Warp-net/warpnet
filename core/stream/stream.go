@@ -103,15 +103,6 @@ func NewStreamPool(
 }
 
 func (p *streamPool) Send(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte) ([]byte, error) {
-	return p.SendMessage(peerAddr, r, data, "")
-}
-
-// SendMessage is Send with the wire message id chosen by the caller; an empty
-// msgID gets a fresh one. A caller repeating one logical request, as the outbox
-// does when it redelivers a queued entry, passes the same id each time, so the
-// peer's idempotency cache answers a /post/ it already handled instead of
-// applying it twice.
-func (p *streamPool) SendMessage(peerAddr warpnet.WarpAddrInfo, r WarpRoute, data []byte, msgID string) ([]byte, error) {
 	if p == nil {
 		return nil, warpnet.WarpError("nil stream pool")
 	}
@@ -126,9 +117,9 @@ func (p *streamPool) SendMessage(peerAddr warpnet.WarpAddrInfo, r WarpRoute, dat
 		return nil, warpnet.ErrNodeIsOffline
 	}
 
-	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data) + "\x00" + msgID
+	key := string(r) + "\x00" + peerAddr.ID.String() + "\x00" + hashBody(data)
 	v, err, _ := p.sf.Do(key, func() (any, error) {
-		return p.sendWithRetry(peerAddr, r, data, msgID)
+		return p.sendWithRetry(peerAddr, r, data)
 	})
 	switch {
 	case errors.Is(err, warpnet.ErrNodeIsOffline):
@@ -170,10 +161,8 @@ func (p *streamPool) isUnstreamable(id warpnet.WarpPeerID) bool {
 	return p.unstreamablePeers.Contains(id.String())
 }
 
-func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte, msgID string) ([]byte, error) {
-	if msgID == "" {
-		msgID = ulid.Make().String()
-	}
+func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute, bodyBytes []byte) ([]byte, error) {
+	msgID := ulid.Make().String()
 
 	bt, err := p.send(serverInfo, r, bodyBytes, msgID)
 	if errors.Is(err, ErrResponseRead) {

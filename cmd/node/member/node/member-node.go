@@ -428,24 +428,6 @@ func (m *MemberNode) GenericStream(nodeIdStr streamNodeID, path stream.WarpRoute
 	return bt, err
 }
 
-// DeliverQueued sends the outbox entry messageId, queued for nodeIdStr in the
-// same transaction as the record it delivers, and returns the peer's response.
-func (m *MemberNode) DeliverQueued(nodeIdStr streamNodeID, messageId string) ([]byte, error) {
-	if m == nil {
-		return nil, nil
-	}
-	nodeId := warpnet.FromStringToPeerID(nodeIdStr)
-	if nodeId == "" {
-		return nil, fmt.Errorf("member: deliver queued: %w: %s", warpnet.ErrMalformedNodeId, nodeIdStr)
-	}
-
-	bt, err := m.node.DeliverQueued(nodeId, messageId)
-	if errors.Is(err, warpnet.ErrNodeIsOffline) {
-		m.setUserOffline(nodeIdStr)
-	}
-	return bt, err
-}
-
 func (m *MemberNode) setUserOffline(nodeIdStr streamNodeID) {
 	if m == nil {
 		return
