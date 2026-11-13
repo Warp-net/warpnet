@@ -54,14 +54,14 @@ func newTestCRDT(t *testing.T) *MerkleCRDT {
 
 func total(n uint64) []byte { return binary.BigEndian.AppendUint64(nil, n) }
 
-func TestStale_TheSetNamespaceIsFound(t *testing.T) {
+func TestCheckedDelta_TheSetNamespaceIsFound(t *testing.T) {
 	m := newTestCRDT(t)
 	ns := m.setNamespace.Load()
 	require.NotNil(t, ns, "reflection must find go-ds-crdt's set namespace")
 	assert.Equal(t, "/s", ns.String())
 }
 
-func TestStale_ANewerValueOutranksTheCurrentOneAndAnOlderIsDropped(t *testing.T) {
+func TestCheckedDelta_ANewerValueOutranksTheCurrentOneAndAnOlderIsDropped(t *testing.T) {
 	m := newTestCRDT(t)
 	ctx := context.Background()
 	dagName := DayAt(time.Now()).DAG("test")
@@ -96,7 +96,7 @@ func TestStale_ANewerValueOutranksTheCurrentOneAndAnOlderIsDropped(t *testing.T)
 	assert.Empty(t, older.Elements, "an older value never takes part in choosing the key's value")
 }
 
-func TestStale_ALayoutSurpriseIsRecovered(t *testing.T) {
+func TestCheckedDelta_ALayoutSurpriseIsRecovered(t *testing.T) {
 	m := &MerkleCRDT{MerkleCRDT: &crdt.MerkleCRDT{}}
 	var (
 		ok  bool

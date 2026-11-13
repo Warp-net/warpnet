@@ -29,12 +29,17 @@ package store
 
 import (
 	"bytes"
+	"context"
+	"encoding/binary"
 	"math"
+	"reflect"
 	"slices"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
+	datastore "github.com/ipfs/go-datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -116,4 +121,57 @@ func (d *checkedDelta) IsEmpty() bool {
 
 func (d *checkedDelta) Marshal() ([]byte, error) {
 	return proto.Marshal(d.Delta)
+}
+
+// go-ds-crdt keeps, under its set namespace, each key's winning value at
+// k/<key>/v and that value's priority at k/<key>/p (vendored set.go).
+const (
+	setKeysNs      = "k"
+	setValueSuffix = "v"
+	setPrioSuffix  = "p"
+)
+
+// readSetNamespace finds where go-ds-crdt keeps the set: the namespace is an
+// unexported field, so it is read by reflection. Any surprise in the
+// library's layout only turns the stale-version check off.
+func (m *MerkleCRDT) readSetNamespace() (ns datastore.Key, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("crdt: reading the set namespace: %v", r)
+			ns, ok = datastore.Key{}, false
+		}
+	}()
+	set := reflect.ValueOf(m.MerkleCRDT.Datastore).Elem().FieldByName("set")
+	if !set.IsValid() || set.Kind() != reflect.Pointer || set.IsNil() {
+		return ns, false
+	}
+	field := set.Elem().FieldByName("namespace")
+	if !field.IsValid() || field.Type() != reflect.TypeFor[datastore.Key]() || field.NumField() != 1 {
+		return ns, false
+	}
+	return datastore.RawKey(field.Field(0).String()), true
+}
+
+// current is the value go-ds-crdt has chosen for key and the priority it
+// was chosen with.
+func (m *MerkleCRDT) current(key string) (value []byte, priority uint64, ok bool) {
+	ns := m.setNamespace.Load()
+	if ns == nil {
+		return nil, 0, false
+	}
+	keyNs := ns.ChildString(setKeysNs).ChildString(key)
+	ctx := context.Background()
+	value, err := m.data.Get(ctx, keyNs.ChildString(setValueSuffix))
+	if err != nil {
+		return nil, 0, false
+	}
+	raw, err := m.data.Get(ctx, keyNs.ChildString(setPrioSuffix))
+	if err != nil {
+		return nil, 0, false
+	}
+	stored, n := binary.Uvarint(raw)
+	if n <= 0 || stored == 0 {
+		return nil, 0, false
+	}
+	return value, stored - 1, true
 }
