@@ -4,6 +4,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"testing"
@@ -42,9 +43,9 @@ func newTestCRDT(t *testing.T) *MerkleCRDT {
 		Node:        host,
 		Router:      noRouter{},
 		Prefix:      "/test",
-		IsValid:     func(string, string, []byte) bool { return true },
-		IsOlder: func(_ string, value, current []byte) bool {
-			return binary.BigEndian.Uint64(value) < binary.BigEndian.Uint64(current)
+		Validate:    func(string, string, []byte) error { return nil },
+		Compare: func(value, current []byte) int {
+			return cmp.Compare(binary.BigEndian.Uint64(value), binary.BigEndian.Uint64(current))
 		},
 	})
 	require.NoError(t, err)

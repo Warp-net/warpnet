@@ -68,14 +68,14 @@ func (d *checkedDelta) Unmarshal(b []byte) error {
 	d.Tombstones = nil
 	priority := d.Priority
 	d.Elements = slices.DeleteFunc(d.Elements, func(e *pb.Element) bool {
-		if !d.crdt.isValid(d.GetDagName(), e.GetKey(), e.GetValue()) {
+		if d.crdt.validate(d.GetDagName(), e.GetKey(), e.GetValue()) != nil {
 			return true
 		}
 		current, currentPriority, ok := d.crdt.current(e.GetKey())
 		if !ok || bytes.Equal(current, e.GetValue()) {
 			return false
 		}
-		if d.crdt.isOlder(e.GetKey(), e.GetValue(), current) {
+		if d.crdt.compare(e.GetValue(), current) < 0 {
 			return true
 		}
 		if currentPriority >= priority && currentPriority < math.MaxUint64 {

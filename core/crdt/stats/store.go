@@ -29,6 +29,7 @@
 package stats
 
 import (
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -81,6 +82,8 @@ const (
 	signedValueSize = counterSize + ed25519.SignatureSize
 
 	ErrNoSigningKey = warpnet.WarpError("crdt stats: node has no ed25519 private key")
+	ErrForeignDAG   = warpnet.WarpError("crdt stats: counter is not in the DAG of its tweet's day")
+	ErrBadSignature = warpnet.WarpError("crdt stats: counter is not signed by its node")
 )
 
 type counter struct {
@@ -151,8 +154,8 @@ func New(
 		Router:      router,
 		Prefix:      bitswapPrefix,
 		DAGPrefixes: []string{dagPrefix},
-		IsValid:     s.isValid,
-		IsOlder:     isOlderTotal,
+		Validate:    validateCounter,
+		Compare:     compareTotals,
 	})
 	if err != nil {
 		cancel()
@@ -354,29 +357,30 @@ func (s *Store) signedValue(key string, total uint64) []byte {
 	return append(value, ed25519.Sign(s.privKey, signingBytes(key, value[:counterSize]))...)
 }
 
-// isValid accepts a received counter only if the node in its key signed
-// it and it sits in the DAG of its tweet's day.
-func (s *Store) isValid(dagName, key string, value []byte) bool {
+// validateCounter refuses a received counter the node in its key did not
+// sign or that is not in the DAG of its tweet's day.
+func validateCounter(dagName, key string, value []byte) error {
 	if dag, ok := tweetDAG(ds.NewKey(key)); !ok || dag != dagName {
-		return false
+		return ErrForeignDAG
 	}
 	if len(value) != signedValueSize {
-		return false
+		return ErrBadSignature
 	}
 	pubKey := warpnet.FromIDToPubKey(warpnet.FromStringToPeerID(counterNode(key)))
-	if len(pubKey) != ed25519.PublicKeySize {
-		return false
+	if len(pubKey) != ed25519.PublicKeySize ||
+		!ed25519.Verify(pubKey, signingBytes(key, value[:counterSize]), value[counterSize:]) {
+		return ErrBadSignature
 	}
-	return ed25519.Verify(pubKey, signingBytes(key, value[:counterSize]), value[counterSize:])
+	return nil
 }
 
-// isOlderTotal reports a counter value below the one already chosen: a node's
-// running total only grows, so a smaller one is a replay.
-func isOlderTotal(_ string, value, current []byte) bool {
+// compareTotals orders two running totals of one counter: a node's total
+// only grows, so a smaller one is a replay.
+func compareTotals(value, current []byte) int {
 	if len(value) < counterSize || len(current) < counterSize {
-		return false
+		return 0
 	}
-	return binary.BigEndian.Uint64(value[:counterSize]) < binary.BigEndian.Uint64(current[:counterSize])
+	return cmp.Compare(binary.BigEndian.Uint64(value[:counterSize]), binary.BigEndian.Uint64(current[:counterSize]))
 }
 
 // counterNode is the node a counter key belongs to: keys end in

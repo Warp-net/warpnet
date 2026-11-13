@@ -64,6 +64,7 @@ const (
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
 	ErrMalformedRecord = warpnet.WarpError("rating store: record key part is empty or contains a slash")
 	ErrKeyMismatch     = warpnet.WarpError("rating store: record content does not match its key")
+	ErrForeignDAG      = warpnet.WarpError("rating store: record is not in the DAG of its own day")
 )
 
 // Store replicates signed rating records in one DAG per dimension and
@@ -108,8 +109,8 @@ func New(
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
-		IsValid:     s.isValid,
-		IsOlder:     isOlderRecord,
+		Validate:    s.validateRecord,
+		Compare:     compareRecords,
 	})
 	if err != nil {
 		cancel()
@@ -273,23 +274,27 @@ func dayDAG(dimension string, bucket int64) string {
 	return store.Day(bucket / bucketsPerDay).DAG(dimension)
 }
 
-// isValid accepts a received record only if its observer signed it and it
-// sits in the DAG of its own dimension and day.
-func (s *Store) isValid(dagName, key string, value []byte) bool {
+// validateRecord refuses a received record its observer did not sign or
+// that is not in the DAG of its own dimension and day.
+func (s *Store) validateRecord(dagName, key string, value []byte) error {
 	rec, err := decodeRecord(key, value)
-	if err != nil || dayDAG(rec.Dimension, rec.Bucket) != dagName {
-		return false
+	if err != nil {
+		return err
 	}
-	return s.verify(rec) == nil
+	if dayDAG(rec.Dimension, rec.Bucket) != dagName {
+		return ErrForeignDAG
+	}
+	return s.verify(rec)
 }
 
-// isOlderRecord reports a record its observer has since rewritten: a replay.
-func isOlderRecord(_ string, value, current []byte) bool {
+// compareRecords orders two versions of one record by when its observer
+// wrote them.
+func compareRecords(value, current []byte) int {
 	var rec, cur domain.RatingRecord
 	if json.Unmarshal(value, &rec) != nil || json.Unmarshal(current, &cur) != nil {
-		return false
+		return 0
 	}
-	return rec.UpdatedAt.Before(cur.UpdatedAt)
+	return rec.UpdatedAt.Compare(cur.UpdatedAt)
 }
 
 // recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.

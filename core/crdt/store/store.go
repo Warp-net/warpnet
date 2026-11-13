@@ -87,13 +87,14 @@ type Config struct {
 	// DAGPrefixes limits the live day DAGs to these prefixes; with none,
 	// any prefix is live until it is expired.
 	DAGPrefixes []string
-	// IsValid decides, before a received block is merged, whether one of
-	// its writes belongs in the store: signed by its author and kept in
-	// the DAG of its own day.
-	IsValid func(dagName, key string, value []byte) bool
-	// IsOlder reports a received value that an earlier write by the same
-	// author superseded: a replay, never merged.
-	IsOlder func(key string, value, current []byte) bool
+	// Validate refuses, before a received block is merged, a write that
+	// does not belong in the store: not signed by its author or not kept
+	// in the DAG of its own day.
+	Validate func(dagName, key string, value []byte) error
+	// Compare orders two versions of one key by the same author, like
+	// cmp.Compare: a received version below the current one is a replay
+	// and is never merged.
+	Compare func(value, current []byte) int
 }
 
 // MerkleCRDT is a Merkle-CRDT kept in day DAGs: it publishes writes in
@@ -107,13 +108,13 @@ type MerkleCRDT struct {
 
 	data         datastore.Datastore
 	lineage      *lineage
-	isValid      func(dagName, key string, value []byte) bool
-	isOlder      func(key string, value, current []byte) bool
+	validate     func(dagName, key string, value []byte) error
+	compare      func(value, current []byte) int
 	setNamespace atomic.Pointer[datastore.Key]
 }
 
 func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
-	m := &MerkleCRDT{firstLive: make(map[string]Day), isValid: cfg.IsValid, isOlder: cfg.IsOlder}
+	m := &MerkleCRDT{firstLive: make(map[string]Day), validate: cfg.Validate, compare: cfg.Compare}
 	if len(cfg.DAGPrefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))
 		for _, p := range cfg.DAGPrefixes {
