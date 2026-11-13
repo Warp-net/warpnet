@@ -20,15 +20,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type quietBroadcaster struct{}
-
-func (quietBroadcaster) Broadcast(context.Context, []byte) error { return nil }
-
-func (quietBroadcaster) Next(ctx context.Context) ([]byte, error) {
-	<-ctx.Done()
-	return nil, ctx.Err()
-}
-
 type noRouter struct{}
 
 func (noRouter) FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo {
@@ -46,7 +37,7 @@ func newTestCRDT(t *testing.T) *MerkleCRDT {
 	t.Cleanup(func() { _ = host.Close() })
 
 	m, err := New(ctx, Config{
-		Broadcaster: quietBroadcaster{},
+		Broadcaster: idleBroadcaster{},
 		Datastore:   dssync.MutexWrap(datastore.NewMapDatastore()),
 		Node:        host,
 		Router:      noRouter{},

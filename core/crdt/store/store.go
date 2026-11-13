@@ -112,12 +112,7 @@ type MerkleCRDT struct {
 	setNamespace atomic.Pointer[datastore.Key]
 }
 
-const ErrNoValidator = warpnet.WarpError("crdt store: no write validator")
-
 func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
-	if cfg.IsValid == nil || cfg.IsOlder == nil {
-		return nil, ErrNoValidator
-	}
 	m := &MerkleCRDT{firstLive: make(map[string]Day), isValid: cfg.IsValid, isOlder: cfg.IsOlder}
 	if len(cfg.DAGPrefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))

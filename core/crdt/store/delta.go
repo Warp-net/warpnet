@@ -41,12 +41,10 @@ import (
 const ErrForeignRoot = warpnet.WarpError("crdt store: block is not filed under the DAG it was announced in")
 
 // checkedDelta is the delta every received block is read into. Before the
-// block is merged it is refused if its DAG is not the one it was reached
-// from, and it keeps no tombstones, since these stores never delete, and
-// only the writes the store accepts that are not older than the key's
-// current value. If a kept write is newer, the block's priority is raised
-// above the current one, so a replayed old version announced with a high
-// priority cannot hold the key.
+// merge it refuses a block not filed under the DAG it was reached from, and
+// keeps no tombstones and only the writes the store accepts that are not
+// older than the key's current value; a newer write raises the block's
+// priority above the current one, so a replay cannot hold the key.
 type checkedDelta struct {
 	*pb.Delta
 
@@ -105,14 +103,7 @@ func (d *checkedDelta) SetPriority(p uint64) {
 }
 
 func (d *checkedDelta) Size() int {
-	if d == nil {
-		return 0
-	}
 	return proto.Size(d.Delta)
-}
-
-func (d *checkedDelta) GetDagName() string {
-	return d.Delta.GetDagName()
 }
 
 func (d *checkedDelta) SetDagName(n string) {
@@ -120,12 +111,9 @@ func (d *checkedDelta) SetDagName(n string) {
 }
 
 func (d *checkedDelta) IsEmpty() bool {
-	return d == nil || (len(d.Tombstones)+len(d.Elements) == 0)
+	return len(d.Tombstones)+len(d.Elements) == 0
 }
 
 func (d *checkedDelta) Marshal() ([]byte, error) {
-	if d != nil {
-		return proto.Marshal(d.Delta)
-	}
-	return nil, nil
+	return proto.Marshal(d.Delta)
 }

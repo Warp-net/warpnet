@@ -32,7 +32,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -43,7 +42,6 @@ import (
 	"github.com/Warp-net/warpnet/core/crdt/store"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
@@ -79,10 +77,8 @@ const (
 	// are counted from local data only.
 	retentionDays = 30
 
-	counterSize      = 8
-	signedValueSize  = counterSize + ed25519.SignatureSize
-	verifiedCapacity = 1 << 16
-	verifiedTTL      = time.Hour
+	counterSize     = 8
+	signedValueSize = counterSize + ed25519.SignatureSize
 
 	ErrNoSigningKey = warpnet.WarpError("crdt stats: node has no ed25519 private key")
 )
@@ -103,7 +99,6 @@ type Store struct {
 	nodeID     string
 	privKey    ed25519.PrivateKey
 	generation string
-	verified   *expirable.LRU[[sha256.Size]byte, bool]
 	stopChan   chan struct{}
 	stopOnce   sync.Once
 	wg         sync.WaitGroup
@@ -122,9 +117,13 @@ func New(
 	node warpnet.P2PNode,
 	router store.Router,
 ) (*Store, error) {
-	privKey, err := nodePrivateKey(node)
-	if err != nil {
-		return nil, err
+	key := node.Peerstore().PrivKey(node.ID())
+	if key == nil {
+		return nil, ErrNoSigningKey
+	}
+	privKey, err := key.Raw()
+	if err != nil || len(privKey) != ed25519.PrivateKeySize {
+		return nil, ErrNoSigningKey
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -141,7 +140,6 @@ func New(
 		nodeID:     node.ID().String(),
 		privKey:    privKey,
 		generation: generation,
-		verified:   expirable.NewLRU[[sha256.Size]byte, bool](verifiedCapacity, nil, verifiedTTL),
 		stopChan:   make(chan struct{}),
 		counters:   make(map[string]*counter),
 	}
@@ -167,18 +165,6 @@ func New(
 	go s.run()
 
 	return s, nil
-}
-
-func nodePrivateKey(node warpnet.P2PNode) (ed25519.PrivateKey, error) {
-	key := node.Peerstore().PrivKey(node.ID())
-	if key == nil {
-		return nil, ErrNoSigningKey
-	}
-	raw, err := key.Raw()
-	if err != nil || len(raw) != ed25519.PrivateKeySize {
-		return nil, ErrNoSigningKey
-	}
-	return raw, nil
 }
 
 func (s *Store) run() {
@@ -212,40 +198,27 @@ func (s *Store) run() {
 // cap is not zero, so no node can lower another's count or stand for more
 // than one owner.
 func (s *Store) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
-	if dag, ok := tweetDAG(key); !ok || !s.crdt.IsLive(dag) {
-		return 0, nil
+	positive, err := s.sumByNode(incrNamespace, key)
+	if err != nil {
+		return 0, err
 	}
-	byNode, err := s.netByNode(key)
+	negative, err := s.sumByNode(decrNamespace, key)
 	if err != nil {
 		return 0, err
 	}
 	var total uint64
-	for _, count := range byNode {
+	for node, plus := range positive {
+		minus := negative[node]
+		if plus <= minus {
+			continue
+		}
+		count := plus - minus
 		if perNodeCap > 0 {
 			count = min(count, perNodeCap)
 		}
 		total += count
 	}
 	return total, nil
-}
-
-func (s *Store) netByNode(key ds.Key) (map[string]uint64, error) {
-	positive, err := s.sumByNode(incrNamespace, key)
-	if err != nil {
-		return nil, err
-	}
-	negative, err := s.sumByNode(decrNamespace, key)
-	if err != nil {
-		return nil, err
-	}
-	for node, plus := range positive {
-		if minus := negative[node]; plus > minus {
-			positive[node] = plus - minus
-			continue
-		}
-		delete(positive, node)
-	}
-	return positive, nil
 }
 
 // Increment counts one event on the tweet whose ULID is in key. A tweet
@@ -341,8 +314,8 @@ func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {
 	))
 }
 
-// sumByNode adds up the validly signed components of one counter per
-// writing node, this process's unflushed count included.
+// sumByNode adds up the components of one counter per writing node, this
+// process's unflushed count included. Only checked writes reach the set.
 func (s *Store) sumByNode(namespace string, key ds.Key) (map[string]uint64, error) {
 	prefix := ds.NewKey(
 		fmt.Sprintf("%s/%s/%s", counterPrefix, namespace, key.String()),
@@ -358,11 +331,10 @@ func (s *Store) sumByNode(namespace string, key ds.Key) (map[string]uint64, erro
 		if r.Error != nil {
 			return nil, fmt.Errorf("crdt stats: iterate %s: %w", prefix, r.Error)
 		}
-		node, ok := s.verifiedNode(r.Key, r.Value)
-		if !ok {
+		if len(r.Value) < counterSize {
 			continue
 		}
-		byNode[node] += binary.BigEndian.Uint64(r.Value[:counterSize])
+		byNode[counterNode(r.Key)] += binary.BigEndian.Uint64(r.Value[:counterSize])
 	}
 
 	s.mu.Lock()
@@ -388,8 +360,14 @@ func (s *Store) isValid(dagName, key string, value []byte) bool {
 	if dag, ok := tweetDAG(ds.NewKey(key)); !ok || dag != dagName {
 		return false
 	}
-	_, ok := s.verifiedNode(key, value)
-	return ok
+	if len(value) != signedValueSize {
+		return false
+	}
+	pubKey := warpnet.FromIDToPubKey(warpnet.FromStringToPeerID(counterNode(key)))
+	if len(pubKey) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(pubKey, signingBytes(key, value[:counterSize]), value[counterSize:])
 }
 
 // isOlderTotal reports a counter value below the one already chosen: a node's
@@ -401,37 +379,14 @@ func isOlderTotal(_ string, value, current []byte) bool {
 	return binary.BigEndian.Uint64(value[:counterSize]) < binary.BigEndian.Uint64(current[:counterSize])
 }
 
-// verifiedNode returns the node a component belongs to if the component
-// is signed by that node's key.
-func (s *Store) verifiedNode(key string, value []byte) (string, bool) {
+// counterNode is the node a counter key belongs to: keys end in
+// /<node>/<generation>.
+func counterNode(key string) string {
 	parts := strings.Split(key, "/")
 	if len(parts) < 2 {
-		return "", false
+		return ""
 	}
-	node := parts[len(parts)-2]
-
-	digest := sha256.Sum256(append(append([]byte(key), 0), value...))
-	if valid, ok := s.verified.Get(digest); ok {
-		return node, valid
-	}
-	valid := isSigned(node, key, value)
-	s.verified.Add(digest, valid)
-	return node, valid
-}
-
-func isSigned(node, key string, value []byte) bool {
-	if len(value) != signedValueSize {
-		return false
-	}
-	peerID := warpnet.FromStringToPeerID(node)
-	if peerID == "" {
-		return false
-	}
-	pubKey := warpnet.FromIDToPubKey(peerID)
-	if len(pubKey) != ed25519.PublicKeySize {
-		return false
-	}
-	return ed25519.Verify(pubKey, signingBytes(key, value[:counterSize]), value[counterSize:])
+	return parts[len(parts)-2]
 }
 
 func signingBytes(key string, total []byte) []byte {
