@@ -336,6 +336,9 @@ func (u *SelfUpdater) checkAndUpdate(shutdownF func()) error {
 		u.announce(rel)
 		return nil
 	}
+	if err := u.verifyAssets(rel); err != nil {
+		return err
+	}
 	if !u.isAllowed(rel) {
 		return nil
 	}
@@ -468,6 +471,28 @@ func (u *SelfUpdater) install(rel Release) (func(), error) {
 	defer func() { _ = os.Remove(path) }() // no-op once installed
 
 	return u.binary.Install(path)
+}
+
+// verifyAssets checks that rel carries everything install reads. The release
+// is published before CI uploads its signature, so the owner is asked only
+// once the upload is over.
+func (u *SelfUpdater) verifyAssets(rel Release) error {
+	for _, name := range []string{u.artifact.AssetName, u.artifact.ChecksumName} {
+		if _, err := rel.AssetURL(name); err != nil {
+			return err
+		}
+	}
+	key, err := releaseKey()
+	if err != nil {
+		return err
+	}
+	if key == nil {
+		return nil
+	}
+	if _, err := rel.AssetURL(u.artifact.SignatureName); err != nil {
+		return fmt.Errorf("%w: %w", ErrReleaseUnsigned, err)
+	}
+	return nil
 }
 
 func (u *SelfUpdater) verifyListing(rel Release, listing []byte) error {
