@@ -76,6 +76,7 @@ data class WarpnetUser(
     val website: String? = null,
     // Locked = "manually-approve followers"; gates the follow-request UI.
     val locked: Boolean = false,
+    val metadata: Map<String, String>? = null,
 )
 
 // Wire shape mirrors domain.Notification on the fat node. The actor is
@@ -603,6 +604,27 @@ data class GetImageResponse(
     val file: String = "",
 )
 
+// Wire shape mirrors event.UserStatusResponse.
+@JsonClass(generateAdapter = true)
+data class UserStatusResponse(
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "is_online") val isOnline: Boolean = false,
+    @Json(name = "last_seen") val lastSeen: String? = null,
+)
+
+// Body of PRIVATE_POST_USER. Null fields are omitted, so the node keeps them;
+// an empty bio clears it, metadata merges key by key.
+@JsonClass(generateAdapter = true)
+data class UpdateProfileEvent(
+    val username: String? = null,
+    val bio: String? = null,
+    @Json(name = "avatar_key") val avatarKey: String? = null,
+    @Json(name = "background_image_key") val backgroundImageKey: String? = null,
+    val website: String? = null,
+    val birthdate: String? = null,
+    val metadata: Map<String, String>? = null,
+)
+
 @JsonClass(generateAdapter = true)
 data class UploadImageEvent(
     val image1: String = "",
@@ -674,6 +696,9 @@ data class WarpnetMessage(
     val text: String = "",
     @Json(name = "created_at") val createdAt: String = "",
     val status: String = "",
+    // A video message carries its still frame as the only image key.
+    @Json(name = "image_keys") val imageKeys: List<String>? = null,
+    @Json(name = "video_key") val videoKey: String? = null,
 )
 
 // Send-only body for PUBLIC_POST_MESSAGE: just the fields the node reads. The
@@ -685,6 +710,8 @@ data class NewMessageEvent(
     @Json(name = "sender_id") val senderId: String,
     @Json(name = "receiver_id") val receiverId: String,
     val text: String,
+    @Json(name = "image_keys") val imageKeys: List<String>? = null,
+    @Json(name = "video_key") val videoKey: String? = null,
 )
 
 // Wire shape mirrors event.DeleteMessageEvent = GetMessageEvent.

@@ -26,6 +26,7 @@ import site.warpnet.warpdroid.appstore.EventHub
 import site.warpnet.warpdroid.appstore.MuteEvent
 import site.warpnet.warpdroid.appstore.TweetChangedEvent
 import site.warpnet.warpdroid.appstore.TweetDeletedEvent
+import site.warpnet.warpdroid.components.search.paging.SearchAccountsPagingSource
 import site.warpnet.warpdroid.components.search.paging.SearchPagingSource
 import site.warpnet.warpdroid.components.search.paging.SearchTweetPagingSource
 import site.warpnet.warpdroid.components.search.paging.SearchTweetRemoteMediator
@@ -120,13 +121,7 @@ class SearchViewModel @Inject constructor(
                 initialLoadSize = DEFAULT_LOAD_SIZE
             ),
             pagingSourceFactory = {
-                SearchPagingSource(
-                    warpnetApi,
-                    SearchType.User,
-                    searchRequest = query
-                ) {
-                    it.accounts
-                }
+                SearchAccountsPagingSource(warpnetApi, searchRequest = query)
             }
         ).flow
     }

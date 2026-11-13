@@ -69,6 +69,9 @@ class AccountManager @Inject constructor() {
                 profileHeaderUrl = account.header,
                 emojis = account.emojis,
                 locked = account.locked,
+                defaultPostPrivacy = account.source?.privacy ?: defaultPostPrivacy,
+                defaultMediaSensitivity = account.source?.sensitive ?: defaultMediaSensitivity,
+                defaultPostLanguage = account.source?.language ?: defaultPostLanguage,
             )
         }
     }

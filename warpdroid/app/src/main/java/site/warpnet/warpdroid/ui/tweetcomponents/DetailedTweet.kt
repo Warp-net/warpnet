@@ -74,7 +74,6 @@ import site.warpnet.warpdroid.ui.tweetcomponents.text.linkStyles
 import site.warpnet.warpdroid.ui.tweetcomponents.text.toInlineContent
 import site.warpnet.warpdroid.ui.warpdroidColors
 import site.warpnet.warpdroid.util.showFavs
-import site.warpnet.warpdroid.util.showQuotes
 import site.warpnet.warpdroid.util.showRetweets
 import site.warpnet.warpdroid.viewdata.TweetViewData
 import java.text.DateFormat
@@ -285,15 +284,6 @@ private fun DetailedStatistics(
             modifier = Modifier
                 .clickable {
                     context.showRetweets(statusViewData)
-                }
-        )
-        Text(
-            text = getMetaDataText(R.plurals.quotes, statusViewData.status.quotesCount),
-            style = LocalPreferences.current.statusTextStyles.medium,
-            color = warpdroidColors.tertiaryTextColor,
-            modifier = Modifier
-                .clickable {
-                    context.showQuotes(statusViewData)
                 }
         )
         Text(

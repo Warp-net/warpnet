@@ -111,6 +111,7 @@
 
                 <com.google.android.material.checkbox.MaterialCheckBox
                     android:id="@+id/lockedCheckBox"
+                    android:visibility="gone"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
@@ -127,6 +128,7 @@
                     android:layout_marginStart="16dp"
                     android:layout_marginEnd="16dp"
                     android:layout_marginBottom="24dp"
+                    android:visibility="gone"
                     android:paddingStart="40dp"
                     android:paddingEnd="0dp"
                     android:text="@string/lock_account_label_description"

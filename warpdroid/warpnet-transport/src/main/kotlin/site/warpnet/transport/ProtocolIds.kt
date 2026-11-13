@@ -39,6 +39,8 @@ object ProtocolIds {
     const val PUBLIC_GET_IMAGE = "/public/get/image/0.0.0"
     const val PUBLIC_GET_VIDEO = "/public/get/video/0.0.0"
     const val PUBLIC_GET_POLL = "/public/get/poll/0.0.0"
+    const val PUBLIC_GET_CHAT_IMAGE = "/public/get/chat/image/0.0.0"
+    const val PUBLIC_GET_CHAT_VIDEO = "/public/get/chat/video/0.0.0"
 
     // public writes
     const val PUBLIC_POST_REACT = "/public/post/react/0.0.0"
@@ -84,6 +86,7 @@ object ProtocolIds {
     const val PRIVATE_POST_UNSUBSCRIBE_USER = "/private/post/unsubscribe/user/0.0.0"
     const val PUBLIC_GET_USERS_SEARCH = "/public/get/users/search/0.0.0"
     const val PRIVATE_POST_TWEET_EDIT = "/private/post/tweet/edit/0.0.0"
+    const val PRIVATE_GET_USER_STATUS = "/private/get/user/status/0.0.0"
     const val PRIVATE_GET_FOLLOW_REQUESTS = "/private/get/follow/requests/0.0.0"
     const val PRIVATE_POST_FOLLOW_REQUEST_AUTHORIZE = "/private/post/follow/request/authorize/0.0.0"
     const val PRIVATE_POST_FOLLOW_REQUEST_REJECT = "/private/post/follow/request/reject/0.0.0"
@@ -106,6 +109,8 @@ object ProtocolIds {
     const val PRIVATE_POST_USER = "/private/post/user/0.0.0"
     const val PRIVATE_POST_UPLOAD_IMAGE = "/private/post/image/0.0.0"
     const val PRIVATE_POST_UPLOAD_VIDEO = "/private/post/video/0.0.0"
+    const val PRIVATE_POST_UPLOAD_CHAT_IMAGE = "/private/post/chat/image/0.0.0"
+    const val PRIVATE_POST_UPLOAD_CHAT_VIDEO = "/private/post/chat/video/0.0.0"
     const val PRIVATE_DELETE_CHAT = "/private/delete/chat/0.0.0"
     const val PRIVATE_DELETE_MESSAGE = "/private/delete/message/0.0.0"
 }

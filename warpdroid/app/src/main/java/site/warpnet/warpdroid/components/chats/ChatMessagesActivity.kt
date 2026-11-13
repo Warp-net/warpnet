@@ -12,9 +12,15 @@ package site.warpnet.warpdroid.components.chats
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.ImageView
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +30,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,16 +60,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.bumptech.glide.Glide
 import dagger.hilt.android.AndroidEntryPoint
+import site.warpnet.transport.WarpnetLimits
 import site.warpnet.transport.dto.WarpnetMessage
 import site.warpnet.warpdroid.BaseActivity
 import site.warpnet.warpdroid.R
+import site.warpnet.warpdroid.ViewMediaActivity
+import site.warpnet.warpdroid.entity.Attachment
 import site.warpnet.warpdroid.ui.WarpdroidTheme
+import site.warpnet.warpdroid.viewdata.AttachmentViewData
+import site.warpnet.warpdroid.warpnet.WarpnetMapper
 
 @AndroidEntryPoint
 class ChatMessagesActivity : BaseActivity() {
@@ -85,6 +101,20 @@ class ChatMessagesActivity : BaseActivity() {
         var draft by remember { mutableStateOf("") }
         var messageToDelete by remember { mutableStateOf<WarpnetMessage?>(null) }
         val listState = rememberLazyListState()
+        val pickMedia = rememberLauncherForActivityResult(
+            ActivityResultContracts.PickMultipleVisualMedia(WarpnetLimits.MAX_IMAGES_PER_TWEET),
+        ) { uris ->
+            if (!viewModel.attach(uris)) {
+                Toast.makeText(this, R.string.error_media_upload_image_or_video, Toast.LENGTH_LONG).show()
+            }
+        }
+
+        LaunchedEffect(state.sendFailed) {
+            if (state.sendFailed) {
+                Toast.makeText(this@ChatMessagesActivity, R.string.error_media_upload_sending, Toast.LENGTH_LONG).show()
+                viewModel.consumeSendFailure()
+            }
+        }
 
         messageToDelete?.let { pending ->
             AlertDialog(
@@ -125,7 +155,12 @@ class ChatMessagesActivity : BaseActivity() {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 TopAppBar(
-                    title = { Text(otherName.ifEmpty { stringResource(R.string.title_direct_messages) }) },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(otherName.ifEmpty { stringResource(R.string.title_direct_messages) })
+                            UserStatusDot(intent.getStringExtra(EXTRA_OTHER_USER_ID).orEmpty(), viewModel::isOnline)
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = ::finish) {
                             Icon(
@@ -141,6 +176,7 @@ class ChatMessagesActivity : BaseActivity() {
                 modifier = Modifier
                     .padding(contentPadding)
                     .fillMaxSize()
+                    .navigationBarsPadding()
                     .imePadding(),
             ) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -177,9 +213,14 @@ class ChatMessagesActivity : BaseActivity() {
                 Composer(
                     text = draft,
                     sending = state.sending,
+                    attachments = state.attachments.size,
                     onChange = { draft = it },
+                    onAttach = {
+                        pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                    },
+                    onClearAttachments = viewModel::clearAttachments,
                     onSend = {
-                        if (draft.isNotBlank()) {
+                        if (draft.isNotBlank() || state.attachments.isNotEmpty()) {
                             viewModel.send(draft)
                             draft = ""
                         }
@@ -214,27 +255,121 @@ class ChatMessagesActivity : BaseActivity() {
                     .then(longPressModifier)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Text(
-                    text = msg.text,
-                    color = if (isOwn) colorScheme.onPrimary else colorScheme.onSurface,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MessageMedia(msg)
+                    if (msg.text.isNotEmpty()) {
+                        Text(
+                            text = msg.text,
+                            color = if (isOwn) colorScheme.onPrimary else colorScheme.onSurface,
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // A video message carries its still frame as the only image key.
+    @Composable
+    private fun MessageMedia(msg: WarpnetMessage) {
+        val imageKeys = msg.imageKeys.orEmpty().filter { it.isNotBlank() }
+        val videoKey = msg.videoKey?.takeIf { it.isNotBlank() }
+        val attachments = if (videoKey != null) {
+            listOf(
+                Attachment(
+                    id = videoKey,
+                    url = WarpnetMapper.warpnetChatVideoUrl(msg.senderId, videoKey),
+                    previewUrl = imageKeys.firstOrNull()?.let { WarpnetMapper.warpnetChatImageUrl(msg.senderId, it) },
+                    type = Attachment.Type.VIDEO,
+                ),
+            )
+        } else {
+            imageKeys.map { key ->
+                val url = WarpnetMapper.warpnetChatImageUrl(msg.senderId, key)
+                Attachment(id = key, url = url, previewUrl = url, type = Attachment.Type.IMAGE)
+            }
+        }
+        attachments.forEachIndexed { index, attachment ->
+            Box(
+                modifier = Modifier
+                    .size(240.dp, 180.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { openMedia(attachments, index) },
+                contentAlignment = Alignment.Center,
+            ) {
+                AndroidView(
+                    factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                    update = { view ->
+                        Glide.with(view)
+                            .load(attachment.previewUrl)
+                            .placeholder(R.drawable.card_image_placeholder)
+                            .error(R.drawable.card_image_placeholder)
+                            .into(view)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+                if (attachment.type == Attachment.Type.VIDEO) {
+                    Icon(
+                        painterResource(R.drawable.ic_play_arrow_24dp),
+                        stringResource(R.string.post_media_video),
+                        tint = colorScheme.onPrimary,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(colorScheme.scrim.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun openMedia(attachments: List<Attachment>, index: Int) {
+        val viewData = attachments.map {
+            AttachmentViewData(
+                attachment = it,
+                statusId = null,
+                statusUrl = null,
+                statusAuthorId = null,
+                sensitive = false,
+                isRevealed = true,
+            )
+        }
+        startActivity(ViewMediaActivity.newIntent(this, viewData, index))
     }
 
     @Composable
     private fun Composer(
         text: String,
         sending: Boolean,
+        attachments: Int,
         onChange: (String) -> Unit,
+        onAttach: () -> Unit,
+        onClearAttachments: () -> Unit,
         onSend: () -> Unit,
     ) {
+        if (attachments > 0) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.title_media) + ": $attachments",
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onClearAttachments, enabled = !sending) {
+                    Icon(painterResource(R.drawable.ic_close_24dp), stringResource(R.string.action_remove))
+                }
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = onAttach, enabled = !sending) {
+                Icon(painterResource(R.drawable.ic_attach_file_24dp), stringResource(R.string.action_add_media))
+            }
             OutlinedTextField(
                 value = text,
                 onValueChange = onChange,
@@ -245,7 +380,7 @@ class ChatMessagesActivity : BaseActivity() {
             )
             Button(
                 onClick = onSend,
-                enabled = !sending && text.isNotBlank(),
+                enabled = !sending && (text.isNotBlank() || attachments > 0),
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .wrapContentSize(),

@@ -153,13 +153,15 @@ class PairingActivity : AppCompatActivity() {
         }
     }
 
+    // Carries a deep link MainActivity bounced here on a cold start back to it.
+    private fun mainIntent() = Intent(this, MainActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        .apply { if (intent.action == Intent.ACTION_VIEW) setAction(Intent.ACTION_VIEW).setData(intent.data) }
+
     private fun handleAutoPairOutcome(outcome: PairingOutcome) {
         when (outcome) {
             is PairingOutcome.Success -> {
-                startActivity(
-                    Intent(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
+                startActivity(mainIntent())
                 finish()
             }
             is PairingOutcome.Rejected,
@@ -364,10 +366,7 @@ class PairingActivity : AppCompatActivity() {
     private fun handleOutcome(outcome: PairingOutcome) {
         when (outcome) {
             is PairingOutcome.Success -> {
-                startActivity(
-                    Intent(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
+                startActivity(mainIntent())
                 finish()
             }
             is PairingOutcome.Rejected -> showFatalMessage(

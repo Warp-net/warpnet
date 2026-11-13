@@ -185,7 +185,10 @@ class EditProfileViewModel @Inject constructor(
                 },
                 { throwable ->
                     Timber.tag(TAG).d(throwable, "failed updating profile")
-                    _saveData.value = Error(errorMessage = throwable.getServerErrorMessage())
+                    _saveData.value = Error(
+                        errorMessage = throwable.getServerErrorMessage()
+                            ?: (throwable as? IllegalArgumentException)?.message
+                    )
                 }
             )
         }
