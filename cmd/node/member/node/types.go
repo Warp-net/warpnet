@@ -235,8 +235,8 @@ type Storer interface {
 }
 
 type StatsStorer interface {
-	Increment(postID string, key datastore.Key) error
-	Decrement(postID string, key datastore.Key) error
+	Increment(key datastore.Key) error
+	Decrement(key datastore.Key) error
 	GetAggregatedStat(key datastore.Key, perNodeCap uint64) (uint64, error)
 	Close() error
 }

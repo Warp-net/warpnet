@@ -102,7 +102,7 @@ func putReplicated(t *testing.T, s *Store, rec domain.RatingRecord) {
 	require.NoError(t, err)
 	value, err := json.Marshal(rec)
 	require.NoError(t, err)
-	publishInEpoch(t, s, key.String(), value, epochDAGName(rec.Dimension, rec.Bucket))
+	publishInEpoch(t, s, key.String(), value, dayDAG(rec.Dimension, rec.Bucket))
 }
 
 func publishInEpoch(t *testing.T, s *Store, key string, value []byte, dagName string) {
@@ -327,7 +327,7 @@ func TestStore_StartupPurgesTheLegacyDAG(t *testing.T) {
 	require.Eventually(t, func() bool {
 		got, err := second.List("peer-a")
 		return err == nil && len(got) == 0 && len(second.crdt.InternalStats(ctx).Heads) == 0
-	}, 5*time.Second, 10*time.Millisecond, "the history from before epochs is dropped on start")
+	}, 5*time.Second, 10*time.Millisecond, "the history from before day DAGs is dropped on start")
 }
 
 func TestStore_ListDropsRecordsStoredUnderAForeignKey(t *testing.T) {

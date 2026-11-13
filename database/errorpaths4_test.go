@@ -45,8 +45,8 @@ import (
 type brokenStats struct{}
 
 func (brokenStats) GetAggregatedStat(ds.Key, uint64) (uint64, error) { return 0, errFault }
-func (brokenStats) Increment(string, ds.Key) error                   { return errFault }
-func (brokenStats) Decrement(string, ds.Key) error                   { return errFault }
+func (brokenStats) Increment(ds.Key) error                           { return errFault }
+func (brokenStats) Decrement(ds.Key) error                           { return errFault }
 
 func TestTweetRepoErrorPaths(t *testing.T) {
 	userId := ulid.Make().String()

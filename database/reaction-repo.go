@@ -55,10 +55,14 @@ type ReactionStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
+// reactionsPerNode is the most one node adds to a tweet's replicated
+// reactions: its owner reacts once.
+const reactionsPerNode = 1
+
 type ReactionStatsStorer interface {
 	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
-	Increment(postID string, key ds.Key) error
-	Decrement(postID string, key ds.Key) error
+	Increment(key ds.Key) error
+	Decrement(key ds.Key) error
 }
 
 type ReactionRepo struct {
@@ -120,7 +124,7 @@ func (repo *ReactionRepo) addReaction(
 	if repo.statsDb == nil || !isTransitive {
 		return reactionsCount, nil
 	}
-	if err := repo.statsDb.Increment(tweetId, reactionKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Increment(reactionKey.DatastoreKey()); err != nil {
 		log.Warnf("react: stats db increment: %v", err)
 	}
 	return reactionsCount, nil
@@ -196,7 +200,7 @@ func (repo *ReactionRepo) Unreact(tweetId, userId string, isTransitive bool) (re
 		return reactionsCount, nil
 	}
 
-	if err := repo.statsDb.Decrement(tweetId, unreactionKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Decrement(unreactionKey.DatastoreKey()); err != nil {
 		log.Warnf("unreact: stats db decrement: %v", err)
 	}
 
@@ -289,7 +293,7 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 
 	var networkTotal uint64
 	if repo.statsDb != nil {
-		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey(), oncePerNode)
+		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey(), reactionsPerNode)
 		if statErr != nil {
 			log.Warnf("get reactions stat: %v", statErr)
 		} else {

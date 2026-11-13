@@ -785,7 +785,7 @@ func (e *Engine) flush() error {
 			}
 		}
 		e.index.update(rec.PeerID, rec.entry())
-		e.clearIfUnchanged(key, pending[key])
+		e.clearIfUnchanged(key, rec.Offences)
 	}
 	e.dropSettledBuckets()
 	return errors.Join(errs...)

@@ -589,14 +589,14 @@ func (f *fakeTweetStats) GetAggregatedStat(key ds.Key, _ uint64) (uint64, error)
 	return f.vals[key.String()], nil
 }
 
-func (f *fakeTweetStats) Increment(_ string, key ds.Key) error {
+func (f *fakeTweetStats) Increment(key ds.Key) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.vals[key.String()]++
 	return nil
 }
 
-func (f *fakeTweetStats) Decrement(_ string, key ds.Key) error {
+func (f *fakeTweetStats) Decrement(key ds.Key) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.vals[key.String()] > 0 {
@@ -631,8 +631,8 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	// Simulate replies aggregated from other nodes via the CRDT that never
 	// touched this node's local counter.
 	countKey := tweetsCountKey(parentID).DatastoreKey()
-	s.Require().NoError(stats.Increment(parentID, countKey))
-	s.Require().NoError(stats.Increment(parentID, countKey))
+	s.Require().NoError(stats.Increment(countKey))
+	s.Require().NoError(stats.Increment(countKey))
 
 	// Local count is 3, aggregated CRDT count is 5: RepliesCount must report 5.
 	localCount, err := repo.TweetsCount(parentID)
@@ -644,7 +644,7 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	s.Equal(uint64(5), count)
 }
 
-// TestCountsFallBackToLocalPastNetworkRetention covers a post whose day DAG
+// TestCountsFallBackToLocalPastNetworkRetention covers a tweet whose day DAG
 // was purged: the network reads zero and the local counts must still show.
 func (s *TweetRepoTestSuite) TestCountsFallBackToLocalPastNetworkRetention() {
 	repo := NewTweetRepo(s.db, newFakeTweetStats())
@@ -684,7 +684,7 @@ func (c *capRecordingStats) GetAggregatedStat(key ds.Key, perNodeCap uint64) (ui
 	return 0, nil
 }
 
-// TestCountsReadWithTheirPerNodeRule pins which rule each post counter is
+// TestCountsReadWithTheirPerNodeRule pins which rule each tweet counter is
 // read with: retweets and views once per node, replies unlimited.
 func (s *TweetRepoTestSuite) TestCountsReadWithTheirPerNodeRule() {
 	stats := &capRecordingStats{caps: map[string]uint64{}}
@@ -697,9 +697,9 @@ func (s *TweetRepoTestSuite) TestCountsReadWithTheirPerNodeRule() {
 
 	retweets := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(reTweetsCountSubspace).AddRootID(tweetID).Build()
 	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
-	s.EqualValues(oncePerNode, stats.caps[retweets.DatastoreKey().String()])
-	s.EqualValues(unlimitedPerNode, stats.caps[tweetsCountKey(tweetID).DatastoreKey().String()])
-	s.EqualValues(oncePerNode, stats.caps[views.DatastoreKey().String()])
+	s.EqualValues(retweetsPerNode, stats.caps[retweets.DatastoreKey().String()])
+	s.EqualValues(repliesPerNode, stats.caps[tweetsCountKey(tweetID).DatastoreKey().String()])
+	s.EqualValues(viewsPerNode, stats.caps[views.DatastoreKey().String()])
 }
 
 func (s *TweetRepoTestSuite) TestDeleteReply() {

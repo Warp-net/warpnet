@@ -73,9 +73,11 @@ const (
 	flushInterval = 30 * time.Second
 	purgeInterval = time.Hour
 
-	// dagPrefix names the day DAGs: one per day of post creation.
+	// dagPrefix names the day DAGs: one per day of tweet creation.
 	dagPrefix = "stats"
-	// retentionDays is how long a post's counters travel; older posts
+	// legacyDAG is the unnamed DAG every counter went to before day DAGs.
+	legacyDAG = ""
+	// retentionDays is how long a tweet's counters travel; older tweets
 	// are counted from local data only.
 	retentionDays = 30
 
@@ -97,13 +99,12 @@ type counter struct {
 // the keys of its own generation and signs them with its node key, and a
 // read sums each node's own increments less its own decrements.
 type Store struct {
-	crdt       *store.Store
+	crdt       *store.MerkleCRDT
 	ctx        context.Context
 	cancel     context.CancelFunc
 	nodeID     string
 	privKey    ed25519.PrivateKey
 	generation string
-	epochs     *store.Epochs
 	verified   *expirable.LRU[[sha256.Size]byte, bool]
 	stopChan   chan struct{}
 	stopOnce   sync.Once
@@ -136,22 +137,20 @@ func New(
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
-	epochs := store.NewEpochs(dagPrefix)
-	epochs.Expire(dagPrefix, firstLiveDay(time.Now()))
-
 	crdtStore, err := store.New(ctx, store.Config{
 		Broadcaster: broadcaster,
 		Datastore:   datastore,
 		Node:        node,
 		Router:      router,
 		Prefix:      bitswapPrefix,
-		PurgeDAGs:   []string{store.LegacyDAG},
-		Epochs:      epochs,
+		PurgeDAGs:   []string{legacyDAG},
+		DAGPrefixes: []string{dagPrefix},
 	})
 	if err != nil {
 		cancel()
 		return nil, err
 	}
+	crdtStore.Expire(dagPrefix, firstLiveDay(time.Now()))
 
 	s := &Store{
 		crdt:       crdtStore,
@@ -160,7 +159,6 @@ func New(
 		nodeID:     node.ID().String(),
 		privKey:    privKey,
 		generation: generation,
-		epochs:     epochs,
 		verified:   expirable.NewLRU[[sha256.Size]byte, bool](verifiedCapacity, nil, verifiedTTL),
 		stopChan:   make(chan struct{}),
 		counters:   make(map[string]*counter),
@@ -248,25 +246,22 @@ func (s *Store) netByNode(key ds.Key) (map[string]uint64, error) {
 	return positive, nil
 }
 
-// Increment counts one event on a post. Posts past retention or without a
-// ULID id are counted only by the caller's local data.
-func (s *Store) Increment(postID string, key ds.Key) error {
-	s.bump(incrNamespace, postID, key)
+// Increment counts one event on the tweet whose ULID is in key. A tweet
+// past retention, or one without a ULID id, is counted only by the
+// caller's local data.
+func (s *Store) Increment(key ds.Key) error {
+	s.bump(incrNamespace, key)
 	return nil
 }
 
-func (s *Store) Decrement(postID string, key ds.Key) error {
-	s.bump(decrNamespace, postID, key)
+func (s *Store) Decrement(key ds.Key) error {
+	s.bump(decrNamespace, key)
 	return nil
 }
 
-func (s *Store) bump(namespace, postID string, dataKey ds.Key) {
-	id, err := ulid.ParseStrict(postID)
-	if err != nil {
-		return
-	}
-	dag := store.DayDAG(dagPrefix, store.DayOf(ulid.Time(id.Time())))
-	if !s.epochs.IsLive(dag) {
+func (s *Store) bump(namespace string, dataKey ds.Key) {
+	dag, ok := tweetDAG(dataKey)
+	if !ok || !s.crdt.IsLive(dag) {
 		return
 	}
 
@@ -320,16 +315,16 @@ func (s *Store) flush() error {
 	return nil
 }
 
-// purge drops the day DAGs of posts past retention and forgets their
+// purge drops the day DAGs of tweets past retention and forgets their
 // counters once flushed.
 func (s *Store) purge(now time.Time) error {
 	s.flushMu.Lock()
 	defer s.flushMu.Unlock()
 
-	s.epochs.Expire(dagPrefix, firstLiveDay(now))
+	s.crdt.Expire(dagPrefix, firstLiveDay(now))
 	s.mu.Lock()
 	for key, c := range s.counters {
-		if c.total == c.flushed && !s.epochs.IsLive(c.dag) {
+		if c.total == c.flushed && !s.crdt.IsLive(c.dag) {
 			delete(s.counters, key)
 		}
 	}
@@ -422,8 +417,19 @@ func signingBytes(key string, total []byte) []byte {
 	return append(append([]byte(key), 0), total...)
 }
 
-func firstLiveDay(now time.Time) int64 {
-	return store.DayOf(now) - retentionDays
+// tweetDAG is the day DAG of the tweet a counter key belongs to: the only
+// ULID among the key's parts is the tweet id.
+func tweetDAG(key ds.Key) (string, bool) {
+	for _, part := range key.List() {
+		if id, err := ulid.ParseStrict(part); err == nil {
+			return store.DayAt(ulid.Time(id.Time())).DAG(dagPrefix), true
+		}
+	}
+	return "", false
+}
+
+func firstLiveDay(now time.Time) store.Day {
+	return store.DayAt(now) - retentionDays
 }
 
 // newGenerationID returns a hex-encoded 128-bit random nonce that

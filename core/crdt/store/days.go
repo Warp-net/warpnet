@@ -34,7 +34,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ipfs/go-ds-crdt/pb"
@@ -42,85 +41,61 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	// LegacyDAG is the unnamed DAG every write went to before day DAGs.
-	LegacyDAG = ""
+const day = 24 * time.Hour
 
-	day = 24 * time.Hour
-)
+// Day is a UTC day number since the Unix epoch.
+type Day int64
 
-// Epochs names one DAG per prefix and UTC day and tells live days from
-// expired ones, so a store drops whole days and refuses their heads.
-type Epochs struct {
-	known map[string]struct{}
-
-	mu        sync.RWMutex
-	firstLive map[string]int64
+// DayAt is the UTC day t falls on.
+func DayAt(t time.Time) Day {
+	return Day(t.UTC().Unix() / int64(day/time.Second))
 }
 
-// NewEpochs limits the live DAGs to the given prefixes; with none, any
-// prefix is live until it gets a cutoff.
-func NewEpochs(prefixes ...string) *Epochs {
-	e := &Epochs{firstLive: make(map[string]int64)}
-	if len(prefixes) > 0 {
-		e.known = make(map[string]struct{}, len(prefixes))
-		for _, p := range prefixes {
-			e.known[p] = struct{}{}
-		}
-	}
-	return e
+// DAG is the name of the DAG holding one prefix's writes of this day.
+func (d Day) DAG(prefix string) string {
+	return prefix + "-" + strconv.FormatInt(int64(d), 10)
 }
 
-// DayOf is the UTC day number of t.
-func DayOf(t time.Time) int64 {
-	return t.UTC().Unix() / int64(day/time.Second)
+// Expire makes every day of prefix before firstLive expired.
+func (m *MerkleCRDT) Expire(prefix string, firstLive Day) {
+	m.mu.Lock()
+	m.firstLive[prefix] = firstLive
+	m.mu.Unlock()
 }
 
-// DayDAG is the name of the DAG holding one prefix's writes of one day.
-func DayDAG(prefix string, dayNum int64) string {
-	return prefix + "-" + strconv.FormatInt(dayNum, 10)
-}
-
-// Expire makes every day of prefix before firstLiveDay expired.
-func (e *Epochs) Expire(prefix string, firstLiveDay int64) {
-	e.mu.Lock()
-	e.firstLive[prefix] = firstLiveDay
-	e.mu.Unlock()
-}
-
-// IsLive reports a well-formed day DAG of a known prefix that is neither
+// IsLive reports a well-formed day DAG of an allowed prefix that is neither
 // expired nor more than a day ahead of this clock.
-func (e *Epochs) IsLive(dagName string) bool {
+func (m *MerkleCRDT) IsLive(dagName string) bool {
 	i := strings.LastIndexByte(dagName, '-')
 	if i <= 0 {
 		return false
 	}
 	prefix := dagName[:i]
 	dayNum, err := strconv.ParseInt(dagName[i+1:], 10, 64)
-	if err != nil || dayNum < 0 || dayNum > DayOf(time.Now())+1 {
+	if err != nil || dayNum < 0 || Day(dayNum) > DayAt(time.Now())+1 {
 		return false
 	}
-	if e.known != nil {
-		if _, ok := e.known[prefix]; !ok {
+	if m.prefixes != nil {
+		if _, ok := m.prefixes[prefix]; !ok {
 			return false
 		}
 	}
-	e.mu.RLock()
-	firstLive, ok := e.firstLive[prefix]
-	e.mu.RUnlock()
-	return !ok || dayNum >= firstLive
+	m.mu.RLock()
+	firstLive, ok := m.firstLive[prefix]
+	m.mu.RUnlock()
+	return !ok || Day(dayNum) >= firstLive
 }
 
 // PurgeExpired drops every DAG with a head that is no longer live.
-func (s *Store) PurgeExpired(ctx context.Context) error {
+func (m *MerkleCRDT) PurgeExpired(ctx context.Context) error {
 	seen := make(map[string]struct{})
 	var errs []error
-	for _, head := range s.InternalStats(ctx).Heads {
-		if _, ok := seen[head.DAGName]; ok || s.epochs.IsLive(head.DAGName) {
+	for _, head := range m.InternalStats(ctx).Heads {
+		if _, ok := seen[head.DAGName]; ok || m.IsLive(head.DAGName) {
 			continue
 		}
 		seen[head.DAGName] = struct{}{}
-		removed, err := s.PurgeDAG(ctx, head.DAGName)
+		removed, err := m.PurgeDAG(ctx, head.DAGName)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("purge %q: %w", head.DAGName, err))
 			continue
@@ -130,19 +105,13 @@ func (s *Store) PurgeExpired(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Broadcaster wraps b so that heads of DAGs that are not live travel in
-// neither direction.
-func (e *Epochs) Broadcaster(b Broadcaster) Broadcaster {
-	return epochBroadcaster{Broadcaster: b, epochs: e}
-}
-
-func (e *Epochs) liveHeads(data []byte) ([]byte, bool) {
+func (m *MerkleCRDT) liveHeads(data []byte) ([]byte, bool) {
 	var msg pb.CRDTBroadcast
 	if err := proto.Unmarshal(data, &msg); err != nil {
 		return nil, false
 	}
 	heads := slices.DeleteFunc(slices.Clone(msg.GetHeads()), func(h *pb.Head) bool {
-		return !e.IsLive(h.GetDagName())
+		return !m.IsLive(h.GetDagName())
 	})
 	if len(heads) == 0 {
 		return nil, false
@@ -155,27 +124,29 @@ func (e *Epochs) liveHeads(data []byte) ([]byte, bool) {
 	return live, err == nil
 }
 
-type epochBroadcaster struct {
+// liveBroadcaster lets heads of DAGs that are not live travel in neither
+// direction.
+type liveBroadcaster struct {
 	Broadcaster
 
-	epochs *Epochs
+	crdt *MerkleCRDT
 }
 
-func (b epochBroadcaster) Broadcast(ctx context.Context, data []byte) error {
-	live, ok := b.epochs.liveHeads(data)
+func (b liveBroadcaster) Broadcast(ctx context.Context, data []byte) error {
+	live, ok := b.crdt.liveHeads(data)
 	if !ok {
 		return nil
 	}
 	return b.Broadcaster.Broadcast(ctx, live)
 }
 
-func (b epochBroadcaster) Next(ctx context.Context) ([]byte, error) {
+func (b liveBroadcaster) Next(ctx context.Context) ([]byte, error) {
 	for {
 		data, err := b.Broadcaster.Next(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if live, ok := b.epochs.liveHeads(data); ok {
+		if live, ok := b.crdt.liveHeads(data); ok {
 			return live, nil
 		}
 	}

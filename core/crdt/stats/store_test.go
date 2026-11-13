@@ -48,7 +48,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testPost = ulid.Make().String()
+var testTweet = ulid.Make().String()
+
+// tweetKey is a counter key of the test tweet: stats finds the tweet by
+// the ULID among the key's parts.
+func tweetKey(path string) datastore.Key {
+	return datastore.NewKey(path + "/" + testTweet)
+}
 
 type silentBroadcaster struct {
 	mu        sync.Mutex
@@ -112,17 +118,17 @@ func newLiveStatsStore(t *testing.T) (*Store, *silentBroadcaster) {
 func TestCRDTStats_FreshKeyIsZeroNotAnError(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 
-	got, err := store.GetAggregatedStat(datastore.NewKey("/TWEETS/LIKES/never-touched"), 0)
+	got, err := store.GetAggregatedStat(tweetKey("/TWEETS/LIKES/never-touched"), 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got, "an unseen counter reads as zero, not as a missing-key error")
 }
 
 func TestCRDTStats_IncrementAccumulates(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
-	key := datastore.NewKey("/TWEETS/LIKES/tweet-1")
+	key := tweetKey("/TWEETS/LIKES/tweet-1")
 
 	for i := 1; i <= 5; i++ {
-		require.NoError(t, store.Increment(testPost, key))
+		require.NoError(t, store.Increment(key))
 
 		got, err := store.GetAggregatedStat(key, 0)
 		require.NoError(t, err)
@@ -132,23 +138,23 @@ func TestCRDTStats_IncrementAccumulates(t *testing.T) {
 
 func TestCRDTStats_DecrementClampsAtZero(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
-	key := datastore.NewKey("/TWEETS/LIKES/tweet-clamp")
+	key := tweetKey("/TWEETS/LIKES/tweet-clamp")
 
-	require.NoError(t, store.Increment(testPost, key))
-	require.NoError(t, store.Decrement(testPost, key))
+	require.NoError(t, store.Increment(key))
+	require.NoError(t, store.Decrement(key))
 
 	got, err := store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got)
 
 	for i := 0; i < 3; i++ {
-		require.NoError(t, store.Decrement(testPost, key))
+		require.NoError(t, store.Decrement(key))
 		got, err = store.GetAggregatedStat(key, 0)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(0), got, "extra unlike %d must not underflow", i+1)
 	}
 
-	require.NoError(t, store.Increment(testPost, key))
+	require.NoError(t, store.Increment(key))
 	got, err = store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got,
@@ -158,13 +164,13 @@ func TestCRDTStats_DecrementClampsAtZero(t *testing.T) {
 func TestCRDTStats_CountersAreIsolatedPerKey(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 
-	likes := datastore.NewKey("/TWEETS/LIKES/tweet-a")
-	retweets := datastore.NewKey("/TWEETS/RETWEETS/tweet-a")
-	otherTweet := datastore.NewKey("/TWEETS/LIKES/tweet-b")
+	likes := tweetKey("/TWEETS/LIKES/tweet-a")
+	retweets := tweetKey("/TWEETS/RETWEETS/tweet-a")
+	otherTweet := tweetKey("/TWEETS/LIKES/tweet-b")
 
-	require.NoError(t, store.Increment(testPost, likes))
-	require.NoError(t, store.Increment(testPost, likes))
-	require.NoError(t, store.Increment(testPost, retweets))
+	require.NoError(t, store.Increment(likes))
+	require.NoError(t, store.Increment(likes))
+	require.NoError(t, store.Increment(retweets))
 
 	got, err := store.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
@@ -182,11 +188,11 @@ func TestCRDTStats_CountersAreIsolatedPerKey(t *testing.T) {
 func TestCRDTStats_PrefixSiblingsDoNotBleed(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 
-	short := datastore.NewKey("/TWEETS/LIKES/tweet")
-	long := datastore.NewKey("/TWEETS/LIKES/tweet-with-longer-id")
+	short := tweetKey("/TWEETS/LIKES/tweet")
+	long := tweetKey("/TWEETS/LIKES/tweet-with-longer-id")
 
-	require.NoError(t, store.Increment(testPost, long))
-	require.NoError(t, store.Increment(testPost, long))
+	require.NoError(t, store.Increment(long))
+	require.NoError(t, store.Increment(long))
 
 	got, err := store.GetAggregatedStat(short, 0)
 	require.NoError(t, err)
@@ -199,7 +205,7 @@ func TestCRDTStats_PrefixSiblingsDoNotBleed(t *testing.T) {
 
 func TestCRDTStats_ConcurrentBumpsAreNotLost(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
-	key := datastore.NewKey("/TWEETS/VIEWS/viral")
+	key := tweetKey("/TWEETS/VIEWS/viral")
 
 	const workers, perWorker = 8, 25
 
@@ -209,7 +215,7 @@ func TestCRDTStats_ConcurrentBumpsAreNotLost(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < perWorker; i++ {
-				_ = store.Increment(testPost, key)
+				_ = store.Increment(key)
 			}
 		}()
 	}
@@ -223,13 +229,13 @@ func TestCRDTStats_ConcurrentBumpsAreNotLost(t *testing.T) {
 
 func TestCRDTStats_AFlushIsBroadcastOnce(t *testing.T) {
 	store, bc := newLiveStatsStore(t)
-	likes := datastore.NewKey("/TWEETS/LIKES/broadcast")
-	views := datastore.NewKey("/TWEETS/VIEWS/broadcast")
+	likes := tweetKey("/TWEETS/LIKES/broadcast")
+	views := tweetKey("/TWEETS/VIEWS/broadcast")
 
 	for i := 0; i < 5; i++ {
-		require.NoError(t, store.Increment(testPost, likes))
+		require.NoError(t, store.Increment(likes))
 	}
-	require.NoError(t, store.Increment(testPost, views))
+	require.NoError(t, store.Increment(views))
 
 	assert.Zero(t, bc.count(), "a bump on its own must not reach the network")
 
@@ -243,12 +249,12 @@ func TestCRDTStats_AFlushIsBroadcastOnce(t *testing.T) {
 
 func TestCRDTStats_FlushedCountersSurviveTheBuffer(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
-	key := datastore.NewKey("/TWEETS/LIKES/flushed")
+	key := tweetKey("/TWEETS/LIKES/flushed")
 
-	require.NoError(t, store.Increment(testPost, key))
-	require.NoError(t, store.Increment(testPost, key))
+	require.NoError(t, store.Increment(key))
+	require.NoError(t, store.Increment(key))
 	require.NoError(t, store.flush())
-	require.NoError(t, store.Increment(testPost, key))
+	require.NoError(t, store.Increment(key))
 
 	got, err := store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
@@ -307,12 +313,12 @@ func TestCRDTStats_AFlushReachesTheOtherReplica(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = readerStore.Close() })
 
-	likes := datastore.NewKey("/TWEETS/LIKES/converge")
-	views := datastore.NewKey("/TWEETS/VIEWS/converge")
+	likes := tweetKey("/TWEETS/LIKES/converge")
+	views := tweetKey("/TWEETS/VIEWS/converge")
 	for i := 0; i < 3; i++ {
-		require.NoError(t, authorStore.Increment(testPost, likes))
+		require.NoError(t, authorStore.Increment(likes))
 	}
-	require.NoError(t, authorStore.Increment(testPost, views))
+	require.NoError(t, authorStore.Increment(views))
 	require.NoError(t, authorStore.flush())
 
 	require.Eventually(t, func() bool {
@@ -372,7 +378,7 @@ func TestCRDTStats_CloseStopsTheFlushWorker(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.NoError(t, store.Increment(testPost, datastore.NewKey("/TWEETS/LIKES/closing")))
+	require.NoError(t, store.Increment(tweetKey("/TWEETS/LIKES/closing")))
 
 	closed := make(chan error, 1)
 	go func() { closed <- store.Close() }()
@@ -404,7 +410,7 @@ func newStatsPair(t *testing.T) (*Store, *Store) {
 	return aStore, bStore
 }
 
-func postAt(t time.Time) string {
+func tweetAt(t time.Time) string {
 	return ulid.MustNew(ulid.Timestamp(t), rand.Reader).String()
 }
 
@@ -418,10 +424,10 @@ func publishRaw(t *testing.T, s *Store, key string, value []byte, dag string) {
 
 func TestCRDTStats_ACounterNotSignedByItsNodeIsIgnored(t *testing.T) {
 	honest, attacker := newStatsPair(t)
-	likes := datastore.NewKey("/REACTIONS/INCR/forged")
-	day := store.DayDAG(dagPrefix, store.DayOf(time.Now()))
+	likes := tweetKey("/REACTIONS/INCR/forged")
+	day := store.DayAt(time.Now()).DAG(dagPrefix)
 
-	require.NoError(t, honest.Increment(testPost, likes))
+	require.NoError(t, honest.Increment(likes))
 	require.NoError(t, honest.flush())
 
 	base := counterPrefix + "/" + incrNamespace + likes.String()
@@ -441,13 +447,13 @@ func TestCRDTStats_ACounterNotSignedByItsNodeIsIgnored(t *testing.T) {
 
 func TestCRDTStats_ANodeCannotLowerAnotherNodesCount(t *testing.T) {
 	honest, attacker := newStatsPair(t)
-	likes := datastore.NewKey("/REACTIONS/INCR/zeroing")
+	likes := tweetKey("/REACTIONS/INCR/zeroing")
 
-	require.NoError(t, honest.Increment(testPost, likes))
-	require.NoError(t, honest.Increment(testPost, likes))
+	require.NoError(t, honest.Increment(likes))
+	require.NoError(t, honest.Increment(likes))
 	require.NoError(t, honest.flush())
 	for range 100 {
-		require.NoError(t, attacker.Decrement(testPost, likes))
+		require.NoError(t, attacker.Decrement(likes))
 	}
 	require.NoError(t, attacker.flush())
 
@@ -460,38 +466,41 @@ func TestCRDTStats_ANodeCannotLowerAnotherNodesCount(t *testing.T) {
 	assert.EqualValues(t, 2, got, "a node's decrements only cancel its own increments")
 }
 
-func TestCRDTStats_OldAndNonULIDPostsStayLocal(t *testing.T) {
+func TestCRDTStats_OldAndNonULIDTweetsStayLocal(t *testing.T) {
 	store, bc := newLiveStatsStore(t)
-	likes := datastore.NewKey("/REACTIONS/INCR/old")
+	old := datastore.NewKey("/REACTIONS/INCR/" + tweetAt(time.Now().Add(-(retentionDays+1)*24*time.Hour)))
+	fediverse := datastore.NewKey("/REACTIONS/INCR/mastodon-note-1")
 
-	require.NoError(t, store.Increment(postAt(time.Now().Add(-(retentionDays+1)*24*time.Hour)), likes))
-	require.NoError(t, store.Increment("https://mastodon.example/notes/1", likes))
+	require.NoError(t, store.Increment(old))
+	require.NoError(t, store.Increment(fediverse))
 	require.NoError(t, store.flush())
 
-	got, err := store.GetAggregatedStat(likes, 0)
-	require.NoError(t, err)
-	assert.Zero(t, got)
-	assert.Zero(t, bc.count(), "nothing about such posts reaches the network")
+	for _, key := range []datastore.Key{old, fediverse} {
+		got, err := store.GetAggregatedStat(key, 0)
+		require.NoError(t, err)
+		assert.Zero(t, got)
+	}
+	assert.Zero(t, bc.count(), "nothing about such tweets reaches the network")
 }
 
-func TestCRDTStats_CountersGoToTheDAGOfThePostsDay(t *testing.T) {
+func TestCRDTStats_CountersGoToTheDAGOfTheTweetsDay(t *testing.T) {
 	s, _ := newLiveStatsStore(t)
 	created := time.Now().Add(-3 * 24 * time.Hour)
-	likes := datastore.NewKey("/REACTIONS/INCR/dated")
+	likes := datastore.NewKey("/REACTIONS/INCR/" + tweetAt(created))
 
-	require.NoError(t, s.Increment(postAt(created), likes))
+	require.NoError(t, s.Increment(likes))
 	require.NoError(t, s.flush())
 
 	heads := s.crdt.InternalStats(context.Background()).Heads
 	require.Len(t, heads, 1)
-	assert.Equal(t, store.DayDAG(dagPrefix, store.DayOf(created)), heads[0].DAGName)
+	assert.Equal(t, store.DayAt(created).DAG(dagPrefix), heads[0].DAGName)
 }
 
-func TestCRDTStats_PurgeDropsPostsPastRetention(t *testing.T) {
+func TestCRDTStats_PurgeDropsTweetsPastRetention(t *testing.T) {
 	s, _ := newLiveStatsStore(t)
-	likes := datastore.NewKey("/REACTIONS/INCR/aging")
+	likes := datastore.NewKey("/REACTIONS/INCR/" + tweetAt(time.Now().Add(-(retentionDays-1)*24*time.Hour)))
 
-	require.NoError(t, s.Increment(postAt(time.Now().Add(-(retentionDays-1)*24*time.Hour)), likes))
+	require.NoError(t, s.Increment(likes))
 	require.NoError(t, s.flush())
 	got, err := s.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
@@ -524,17 +533,17 @@ func TestCRDTStats_StartupPurgesTheLegacyDAG(t *testing.T) {
 	t.Cleanup(func() { _ = second.Close() })
 	require.Eventually(t, func() bool {
 		return len(second.crdt.InternalStats(ctx).Heads) == 0
-	}, 5*time.Second, 10*time.Millisecond, "unsigned pre-epoch counters are dropped on start")
+	}, 5*time.Second, 10*time.Millisecond, "unsigned counters from before day DAGs are dropped on start")
 }
 
 func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
 	honest, attacker := newStatsPair(t)
-	likes := datastore.NewKey("/REACTIONS/INCR/capped")
+	likes := tweetKey("/REACTIONS/INCR/capped")
 
-	require.NoError(t, honest.Increment(testPost, likes))
+	require.NoError(t, honest.Increment(likes))
 	require.NoError(t, honest.flush())
 	for range 1000 {
-		require.NoError(t, attacker.Increment(testPost, likes))
+		require.NoError(t, attacker.Increment(likes))
 	}
 	require.NoError(t, attacker.flush())
 

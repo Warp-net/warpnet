@@ -58,7 +58,9 @@ const (
 	recordPrefix   = "/record"
 	recordKeyParts = 5
 
-	epochBuckets = 24
+	bucketsPerDay = 24
+	// legacyDAG is the unnamed DAG every record went to before day DAGs.
+	legacyDAG = ""
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -70,7 +72,7 @@ const (
 // day. A node writes only its own records; everyone else's arrive through
 // the DAGs, and every node drops whole expired days locally.
 type Store struct {
-	crdt   *store.Store
+	crdt   *store.MerkleCRDT
 	ctx    context.Context
 	cancel context.CancelFunc
 	nodeID string
@@ -78,8 +80,6 @@ type Store struct {
 	mu          sync.RWMutex
 	putHooks    []func(domain.RatingRecord)
 	deleteHooks []func(domain.RatingRecord)
-
-	epochs *store.Epochs
 }
 
 // New creates a new CRDT-based rating records store
@@ -96,7 +96,6 @@ func New(
 		ctx:    ctx,
 		cancel: cancel,
 		nodeID: node.ID().String(),
-		epochs: store.NewEpochs(),
 	}
 
 	crdtStore, err := store.New(ctx, store.Config{
@@ -107,8 +106,7 @@ func New(
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
-		PurgeDAGs:   []string{store.LegacyDAG},
-		Epochs:      s.epochs,
+		PurgeDAGs:   []string{legacyDAG},
 	})
 	if err != nil {
 		cancel()
@@ -138,7 +136,7 @@ func (s *Store) Put(recs ...domain.RatingRecord) error {
 		if err != nil {
 			return fmt.Errorf("rating store: add record %s: %w", key, err)
 		}
-		delta.SetDagName(epochDAGName(rec.Dimension, rec.Bucket))
+		delta.SetDagName(dayDAG(rec.Dimension, rec.Bucket))
 		deltas = append(deltas, delta)
 	}
 	if err := s.crdt.Publish(s.ctx, deltas...); err != nil {
@@ -205,7 +203,7 @@ func (s *Store) PeerIDs() ([]string, error) {
 // beforeBucket, own records and foreign alike, and refuses their heads from
 // then on.
 func (s *Store) DeleteExpired(dimension string, beforeBucket int64) error {
-	s.epochs.Expire(dimension, beforeBucket/epochBuckets)
+	s.crdt.Expire(dimension, store.Day(beforeBucket/bucketsPerDay))
 	if err := s.crdt.PurgeExpired(s.ctx); err != nil {
 		return fmt.Errorf("rating store: %w", err)
 	}
@@ -268,8 +266,8 @@ func (s *Store) Close() error {
 	return s.crdt.Close()
 }
 
-func epochDAGName(dimension string, bucket int64) string {
-	return store.DayDAG(dimension, bucket/epochBuckets)
+func dayDAG(dimension string, bucket int64) string {
+	return store.Day(bucket / bucketsPerDay).DAG(dimension)
 }
 
 // recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.

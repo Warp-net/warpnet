@@ -74,10 +74,19 @@ type tweetGetter interface {
 	Get(key local.DatabaseKey) ([]byte, error)
 	GetExpiration(key local.DatabaseKey) (uint64, error)
 }
+
+// The most one node adds to a tweet's replicated counters: its owner
+// retweets and views once, and may reply any number of times.
+const (
+	retweetsPerNode = 1
+	viewsPerNode    = 1
+	repliesPerNode  = 0 // no limit
+)
+
 type TweetStatsStorer interface {
 	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
-	Increment(postID string, key ds.Key) error
-	Decrement(postID string, key ds.Key) error
+	Increment(key ds.Key) error
+	Decrement(key ds.Key) error
 }
 
 const viewLockShards = 64
@@ -529,7 +538,7 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet, isTransitive bool) (domain.T
 		return reply, err
 	}
 	if repo.statsDb != nil && isTransitive {
-		if err := repo.statsDb.Increment(parentID, countKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Increment(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db increment: %v", err)
 		}
 	}
@@ -551,10 +560,11 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return max(localCount, repo.replicatedCount(tweetsCountKey(tweetId), unlimitedPerNode)), nil
+	replicated := repo.replicatedCount(tweetsCountKey(tweetId), repliesPerNode)
+	return max(localCount, replicated), nil
 }
 
-// replicatedCount is the CRDT count of a post, zero once the post is past
+// replicatedCount is the CRDT count of a tweet, zero once the tweet is past
 // retention; readers take the larger of it and their local count.
 func (repo *TweetRepo) replicatedCount(key local.DatabaseKey, perNodeCap uint64) uint64 {
 	if repo.statsDb == nil {
@@ -595,7 +605,7 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) 
 		return reply, err
 	}
 	if repo.statsDb != nil && isTransitive {
-		if err := repo.statsDb.Decrement(parentID, countKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Decrement(countKey.DatastoreKey()); err != nil {
 			log.Warnf("reply: stats db decrement: %v", err)
 		}
 	}
@@ -691,7 +701,7 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	if repo.statsDb == nil || !isTransitive {
 		return newTweet, nil
 	}
-	if err := repo.statsDb.Increment(sourceTweetId, retweetCountKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Increment(retweetCountKey.DatastoreKey()); err != nil {
 		log.Warnf("retweet: stats db increment: %v", err)
 	}
 	return newTweet, nil
@@ -755,7 +765,7 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive
 	if repo.statsDb == nil || !isTransitive {
 		return nil
 	}
-	if err := repo.statsDb.Decrement(sourceTweetId, retweetCountKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Decrement(retweetCountKey.DatastoreKey()); err != nil {
 		log.Warnf("retweet: stats db decrement: %v", err)
 	}
 	return nil
@@ -770,7 +780,7 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	replicated := repo.replicatedCount(retweetCountKey, oncePerNode)
+	replicated := repo.replicatedCount(retweetCountKey, retweetsPerNode)
 	bt, err := repo.db.Get(retweetCountKey)
 	if local.IsNotFoundError(err) {
 		if replicated == 0 {
@@ -882,7 +892,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string, isTransitive bool) (
 		return 0, err
 	}
 	if repo.statsDb != nil && isTransitive {
-		if err := repo.statsDb.Increment(tweetId, viewsKey.DatastoreKey()); err != nil {
+		if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
 			log.Warnf("view: stats db increment: %v", err)
 		}
 	}
@@ -903,7 +913,7 @@ func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	replicated := repo.replicatedCount(viewsKey, oncePerNode)
+	replicated := repo.replicatedCount(viewsKey, viewsPerNode)
 	bt, err := repo.db.Get(viewsKey)
 	if local.IsNotFoundError(err) {
 		if replicated == 0 {

@@ -22,13 +22,6 @@ type StatsStorer interface {
 
 const crdtPrefix = "CRDT"
 
-// Per-node limits on a replicated counter: a node has one owner, who likes,
-// retweets or votes at most once; replies have no such limit.
-const (
-	oncePerNode      = 1
-	unlimitedPerNode = 0
-)
-
 func NewStatsRepo(db StatsStorer) ds.Datastore {
 	prefix := crdtPrefix
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {

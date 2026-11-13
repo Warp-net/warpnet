@@ -80,20 +80,28 @@ type Config struct {
 	PutHook     func(k ds.Key, v []byte)
 	DeleteHook  func(k ds.Key)
 	PurgeDAGs   []string
-	Epochs      *Epochs
+	// DAGPrefixes limits the live day DAGs to these prefixes; with none,
+	// any prefix is live until it is expired.
+	DAGPrefixes []string
 }
 
-// Store is a Merkle-CRDT kept in day DAGs: it publishes writes in capped
-// blocks, drops expired days and refuses their heads.
-type Store struct {
+// MerkleCRDT is a Merkle-CRDT kept in day DAGs: it publishes writes in
+// capped blocks, drops expired days and refuses their heads.
+type MerkleCRDT struct {
 	*crdt.MerkleCRDT
 
-	epochs *Epochs
+	prefixes  map[string]struct{}
+	mu        sync.RWMutex
+	firstLive map[string]Day
 }
 
-func New(ctx context.Context, cfg Config) (*Store, error) {
-	if cfg.Epochs == nil {
-		cfg.Epochs = NewEpochs()
+func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
+	m := &MerkleCRDT{firstLive: make(map[string]Day)}
+	if len(cfg.DAGPrefixes) > 0 {
+		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))
+		for _, p := range cfg.DAGPrefixes {
+			m.prefixes[p] = struct{}{}
+		}
 	}
 
 	baseStore := ds.MutexWrap(cfg.Datastore)
@@ -124,7 +132,7 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 		baseStore,
 		ds.NewKey(""),
 		dagService,
-		cfg.Epochs.Broadcaster(cfg.Broadcaster),
+		liveBroadcaster{Broadcaster: cfg.Broadcaster, crdt: m},
 		opts,
 		nil,
 	)
@@ -144,13 +152,14 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 		}
 	}()
 
-	return &Store{MerkleCRDT: crdtStore, epochs: cfg.Epochs}, nil
+	m.MerkleCRDT = crdtStore
+	return m, nil
 }
 
 // Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per
 // block. It never shares a delta with crdt.Batch, whose pending delta
 // survives a failed commit.
-func (s *Store) Publish(ctx context.Context, deltas ...crdt.Delta) error {
+func (m *MerkleCRDT) Publish(ctx context.Context, deltas ...crdt.Delta) error {
 	slices.SortStableFunc(deltas, func(a, b crdt.Delta) int {
 		return strings.Compare(a.GetDagName(), b.GetDagName())
 	})
@@ -160,7 +169,7 @@ func (s *Store) Publish(ctx context.Context, deltas ...crdt.Delta) error {
 	)
 	for _, delta := range deltas {
 		if block != nil && (block.GetDagName() != delta.GetDagName() || size+delta.Size() > maxDeltaSize) {
-			if _, err := s.MerkleCRDT.Publish(ctx, block); err != nil {
+			if _, err := m.MerkleCRDT.Publish(ctx, block); err != nil {
 				return err
 			}
 			block = nil
@@ -183,7 +192,7 @@ func (s *Store) Publish(ctx context.Context, deltas ...crdt.Delta) error {
 	if block == nil {
 		return nil
 	}
-	_, err := s.MerkleCRDT.Publish(ctx, block)
+	_, err := m.MerkleCRDT.Publish(ctx, block)
 	return err
 }
 

@@ -56,9 +56,13 @@ type PollStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
+// votesPerNode is the most one node adds to an option's replicated votes:
+// its owner votes once.
+const votesPerNode = 1
+
 type PollStatsStorer interface {
 	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
-	Increment(postID string, key ds.Key) error
+	Increment(key ds.Key) error
 }
 
 type PollRepo struct {
@@ -136,7 +140,7 @@ func (repo *PollRepo) Vote(tweetId, userId string, option int, isTransitive bool
 	if repo.statsDb == nil || !isTransitive {
 		return nil
 	}
-	if err := repo.statsDb.Increment(tweetId, votesKey.DatastoreKey()); err != nil {
+	if err := repo.statsDb.Increment(votesKey.DatastoreKey()); err != nil {
 		log.Warnf("poll: stats db increment: %v", err)
 	}
 	return nil
@@ -189,7 +193,7 @@ func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 
 	var replicated uint64
 	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey(), oncePerNode)
+		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey(), votesPerNode)
 		if err != nil {
 			log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
 		}

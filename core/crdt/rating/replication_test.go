@@ -442,7 +442,7 @@ func TestReplication_ARecordUnderAForeignKeyNeverSurfacesOnOtherReplicas(t *test
 	require.NoError(t, err)
 	forged, err := json.Marshal(ratingRecord(a.id(), otherPeer, "net", now))
 	require.NoError(t, err)
-	publishInEpoch(t, a.store, key.String(), forged, epochDAGName("net", now))
+	publishInEpoch(t, a.store, key.String(), forged, dayDAG("net", now))
 
 	marker := ratingRecord(a.id(), observedPeer, "app", now)
 	require.NoError(t, a.store.Put(marker))

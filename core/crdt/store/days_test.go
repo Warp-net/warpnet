@@ -35,8 +35,19 @@ func headNames(t *testing.T, data []byte) []string {
 	return out
 }
 
-func TestEpochs_BroadcastsCarryOnlyLiveDays(t *testing.T) {
-	e := NewEpochs()
+func newDays(prefixes ...string) *MerkleCRDT {
+	m := &MerkleCRDT{firstLive: make(map[string]Day)}
+	if len(prefixes) > 0 {
+		m.prefixes = make(map[string]struct{}, len(prefixes))
+		for _, p := range prefixes {
+			m.prefixes[p] = struct{}{}
+		}
+	}
+	return m
+}
+
+func TestDays_BroadcastsCarryOnlyLiveDays(t *testing.T) {
+	e := newDays()
 	e.Expire("net", 2)
 
 	live, ok := e.liveHeads(encodeHeads(t, "", "net-1", "net-2", "app-1", "bogus", "net-x"))
@@ -48,18 +59,18 @@ func TestEpochs_BroadcastsCarryOnlyLiveDays(t *testing.T) {
 	assert.False(t, ok, "a broadcast left without heads is dropped")
 }
 
-func TestEpochs_RefuseDaysFromTheFuture(t *testing.T) {
-	e := NewEpochs()
-	today := DayOf(time.Now())
+func TestDays_RefuseDaysFromTheFuture(t *testing.T) {
+	e := newDays()
+	today := DayAt(time.Now())
 
-	assert.True(t, e.IsLive(DayDAG("stats", today+1)), "one day of clock skew is tolerated")
-	assert.False(t, e.IsLive(DayDAG("stats", today+2)), "a day ahead of the clock would never expire")
+	assert.True(t, e.IsLive((today + 1).DAG("stats")), "one day of clock skew is tolerated")
+	assert.False(t, e.IsLive((today + 2).DAG("stats")), "a day ahead of the clock would never expire")
 }
 
-func TestEpochs_KnownPrefixesOnly(t *testing.T) {
-	e := NewEpochs("stats")
-	today := DayOf(time.Now())
+func TestDays_AllowedPrefixesOnly(t *testing.T) {
+	e := newDays("stats")
+	today := DayAt(time.Now())
 
-	assert.True(t, e.IsLive(DayDAG("stats", today)))
-	assert.False(t, e.IsLive(DayDAG("net", today)), "another store's DAG is not this store's")
+	assert.True(t, e.IsLive(today.DAG("stats")))
+	assert.False(t, e.IsLive(today.DAG("net")), "another store's DAG is not this store's")
 }
