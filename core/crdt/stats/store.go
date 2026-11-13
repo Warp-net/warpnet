@@ -215,23 +215,51 @@ func (s *Store) run() {
 }
 
 // GetAggregatedStat sums, over every node with a validly signed counter,
-// its increments less its decrements, so no node can lower another's.
-func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
-	positive, err := s.sumByNode(incrNamespace, key)
-	if err != nil {
-		return 0, err
-	}
-	negative, err := s.sumByNode(decrNamespace, key)
+// its increments less its decrements, at most perNodeCap per node when the
+// cap is not zero, so no node can lower another's count or stand for more
+// than one owner.
+func (s *Store) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
+	byNode, err := s.netByNode(key)
 	if err != nil {
 		return 0, err
 	}
 	var total uint64
-	for node, plus := range positive {
-		if minus := negative[node]; plus > minus {
-			total += plus - minus
+	for _, count := range byNode {
+		if perNodeCap > 0 {
+			count = min(count, perNodeCap)
 		}
+		total += count
 	}
 	return total, nil
+}
+
+// GetNodeStat is the count one node signed for, for counters only that
+// node may keep.
+func (s *Store) GetNodeStat(key ds.Key, nodeID string) (uint64, error) {
+	byNode, err := s.netByNode(key)
+	if err != nil {
+		return 0, err
+	}
+	return byNode[nodeID], nil
+}
+
+func (s *Store) netByNode(key ds.Key) (map[string]uint64, error) {
+	positive, err := s.sumByNode(incrNamespace, key)
+	if err != nil {
+		return nil, err
+	}
+	negative, err := s.sumByNode(decrNamespace, key)
+	if err != nil {
+		return nil, err
+	}
+	for node, plus := range positive {
+		if minus := negative[node]; plus > minus {
+			positive[node] = plus - minus
+			continue
+		}
+		delete(positive, node)
+	}
+	return positive, nil
 }
 
 // Increment counts one event on a post. Posts past retention or without a

@@ -112,7 +112,7 @@ func newLiveStatsStore(t *testing.T) (*Store, *silentBroadcaster) {
 func TestCRDTStats_FreshKeyIsZeroNotAnError(t *testing.T) {
 	store, _ := newLiveStatsStore(t)
 
-	got, err := store.GetAggregatedStat(datastore.NewKey("/TWEETS/LIKES/never-touched"))
+	got, err := store.GetAggregatedStat(datastore.NewKey("/TWEETS/LIKES/never-touched"), 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got, "an unseen counter reads as zero, not as a missing-key error")
 }
@@ -124,7 +124,7 @@ func TestCRDTStats_IncrementAccumulates(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		require.NoError(t, store.Increment(testPost, key))
 
-		got, err := store.GetAggregatedStat(key)
+		got, err := store.GetAggregatedStat(key, 0)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(i), got, "after %d likes", i)
 	}
@@ -137,19 +137,19 @@ func TestCRDTStats_DecrementClampsAtZero(t *testing.T) {
 	require.NoError(t, store.Increment(testPost, key))
 	require.NoError(t, store.Decrement(testPost, key))
 
-	got, err := store.GetAggregatedStat(key)
+	got, err := store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got)
 
 	for i := 0; i < 3; i++ {
 		require.NoError(t, store.Decrement(testPost, key))
-		got, err = store.GetAggregatedStat(key)
+		got, err = store.GetAggregatedStat(key, 0)
 		require.NoError(t, err)
 		assert.Equal(t, uint64(0), got, "extra unlike %d must not underflow", i+1)
 	}
 
 	require.NoError(t, store.Increment(testPost, key))
-	got, err = store.GetAggregatedStat(key)
+	got, err = store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got,
 		"decrements already banked stay banked — this is a PN-counter, not a floor")
@@ -166,15 +166,15 @@ func TestCRDTStats_CountersAreIsolatedPerKey(t *testing.T) {
 	require.NoError(t, store.Increment(testPost, likes))
 	require.NoError(t, store.Increment(testPost, retweets))
 
-	got, err := store.GetAggregatedStat(likes)
+	got, err := store.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), got)
 
-	got, err = store.GetAggregatedStat(retweets)
+	got, err = store.GetAggregatedStat(retweets, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), got, "retweets must not pick up likes")
 
-	got, err = store.GetAggregatedStat(otherTweet)
+	got, err = store.GetAggregatedStat(otherTweet, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got, "another tweet must stay untouched")
 }
@@ -188,11 +188,11 @@ func TestCRDTStats_PrefixSiblingsDoNotBleed(t *testing.T) {
 	require.NoError(t, store.Increment(testPost, long))
 	require.NoError(t, store.Increment(testPost, long))
 
-	got, err := store.GetAggregatedStat(short)
+	got, err := store.GetAggregatedStat(short, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(0), got, "a prefix key must not sum its siblings")
 
-	got, err = store.GetAggregatedStat(long)
+	got, err = store.GetAggregatedStat(long, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(2), got)
 }
@@ -215,7 +215,7 @@ func TestCRDTStats_ConcurrentBumpsAreNotLost(t *testing.T) {
 	}
 	wg.Wait()
 
-	got, err := store.GetAggregatedStat(key)
+	got, err := store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(workers*perWorker), got,
 		"a viral tweet must not lose views to a read-modify-write race")
@@ -250,7 +250,7 @@ func TestCRDTStats_FlushedCountersSurviveTheBuffer(t *testing.T) {
 	require.NoError(t, store.flush())
 	require.NoError(t, store.Increment(testPost, key))
 
-	got, err := store.GetAggregatedStat(key)
+	got, err := store.GetAggregatedStat(key, 0)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(3), got,
 		"a read must sum what the CRDT holds and what is still buffered")
@@ -316,11 +316,11 @@ func TestCRDTStats_AFlushReachesTheOtherReplica(t *testing.T) {
 	require.NoError(t, authorStore.flush())
 
 	require.Eventually(t, func() bool {
-		gotLikes, err := readerStore.GetAggregatedStat(likes)
+		gotLikes, err := readerStore.GetAggregatedStat(likes, 0)
 		if err != nil || gotLikes != 3 {
 			return false
 		}
-		gotViews, err := readerStore.GetAggregatedStat(views)
+		gotViews, err := readerStore.GetAggregatedStat(views, 0)
 		return err == nil && gotViews == 1
 	}, 20*time.Second, 100*time.Millisecond,
 		"counters batched into one delta must still arrive at their own keys")
@@ -434,7 +434,7 @@ func TestCRDTStats_ACounterNotSignedByItsNodeIsIgnored(t *testing.T) {
 	publishRaw(t, attacker, signed, attacker.signedValue(signed, 1), day)
 
 	require.Eventually(t, func() bool {
-		got, err := honest.GetAggregatedStat(likes)
+		got, err := honest.GetAggregatedStat(likes, 0)
 		return err == nil && got == 2
 	}, 20*time.Second, 100*time.Millisecond,
 		"only the honest like and the attacker's own signed one count; unsigned and impersonated values do not")
@@ -453,10 +453,10 @@ func TestCRDTStats_ANodeCannotLowerAnotherNodesCount(t *testing.T) {
 	require.NoError(t, attacker.flush())
 
 	require.Eventually(t, func() bool {
-		got, err := attacker.GetAggregatedStat(likes)
+		got, err := attacker.GetAggregatedStat(likes, 0)
 		return err == nil && got == 2
 	}, 20*time.Second, 100*time.Millisecond)
-	got, err := honest.GetAggregatedStat(likes)
+	got, err := honest.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, got, "a node's decrements only cancel its own increments")
 }
@@ -469,7 +469,7 @@ func TestCRDTStats_OldAndNonULIDPostsStayLocal(t *testing.T) {
 	require.NoError(t, store.Increment("https://mastodon.example/notes/1", likes))
 	require.NoError(t, store.flush())
 
-	got, err := store.GetAggregatedStat(likes)
+	got, err := store.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
 	assert.Zero(t, got)
 	assert.Zero(t, bc.count(), "nothing about such posts reaches the network")
@@ -494,14 +494,14 @@ func TestCRDTStats_PurgeDropsPostsPastRetention(t *testing.T) {
 
 	require.NoError(t, s.Increment(postAt(time.Now().Add(-(retentionDays-1)*24*time.Hour)), likes))
 	require.NoError(t, s.flush())
-	got, err := s.GetAggregatedStat(likes)
+	got, err := s.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, got)
 
 	require.NoError(t, s.purge(time.Now().Add(2*24*time.Hour)))
 
 	assert.Empty(t, s.crdt.InternalStats(context.Background()).Heads)
-	got, err = s.GetAggregatedStat(likes)
+	got, err = s.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
 	assert.Zero(t, got)
 	s.mu.Lock()
@@ -526,4 +526,46 @@ func TestCRDTStats_StartupPurgesTheLegacyDAG(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return len(second.crdt.InternalStats(ctx).Heads) == 0
 	}, 5*time.Second, 10*time.Millisecond, "unsigned pre-epoch counters are dropped on start")
+}
+
+func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
+	honest, attacker := newStatsPair(t)
+	likes := datastore.NewKey("/REACTIONS/INCR/capped")
+
+	require.NoError(t, honest.Increment(testPost, likes))
+	require.NoError(t, honest.flush())
+	for range 1000 {
+		require.NoError(t, attacker.Increment(testPost, likes))
+	}
+	require.NoError(t, attacker.flush())
+
+	require.Eventually(t, func() bool {
+		got, err := honest.GetAggregatedStat(likes, 0)
+		return err == nil && got == 1001
+	}, 20*time.Second, 100*time.Millisecond)
+	got, err := honest.GetAggregatedStat(likes, 1)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, got, "a thousand self-signed likes from one node are one like")
+}
+
+func TestCRDTStats_ANodeStatIsOnlyThatNodesCount(t *testing.T) {
+	author, attacker := newStatsPair(t)
+	views := datastore.NewKey("/TWEETS/VIEWS/authored")
+
+	for range 3 {
+		require.NoError(t, author.Increment(testPost, views))
+	}
+	require.NoError(t, author.flush())
+	for range 1000 {
+		require.NoError(t, attacker.Increment(testPost, views))
+	}
+	require.NoError(t, attacker.flush())
+
+	require.Eventually(t, func() bool {
+		got, err := author.GetAggregatedStat(views, 0)
+		return err == nil && got == 1003
+	}, 20*time.Second, 100*time.Millisecond)
+	got, err := author.GetNodeStat(views, author.nodeID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, got, "views only the author's node records are read from it alone")
 }

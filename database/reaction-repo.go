@@ -56,7 +56,7 @@ type ReactionStorer interface {
 }
 
 type ReactionStatsStorer interface {
-	GetAggregatedStat(key ds.Key) (uint64, error)
+	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
 	Increment(postID string, key ds.Key) error
 	Decrement(postID string, key ds.Key) error
 }
@@ -289,7 +289,7 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 
 	var networkTotal uint64
 	if repo.statsDb != nil {
-		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())
+		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey(), oncePerNode)
 		if statErr != nil {
 			log.Warnf("get reactions stat: %v", statErr)
 		} else {

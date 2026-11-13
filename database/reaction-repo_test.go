@@ -324,7 +324,9 @@ type crdtSkew struct {
 	vals map[string]uint64
 }
 
-func (c *crdtSkew) GetAggregatedStat(key ds.Key) (uint64, error) { return c.vals[key.String()], nil }
+func (c *crdtSkew) GetAggregatedStat(key ds.Key, _ uint64) (uint64, error) {
+	return c.vals[key.String()], nil
+}
 
 func (c *crdtSkew) Increment(_ string, key ds.Key) error {
 	c.vals[key.String()]++

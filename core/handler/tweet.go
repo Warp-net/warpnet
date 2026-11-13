@@ -81,7 +81,7 @@ type TweetImageHashStorer interface {
 
 type TweetsStorer interface {
 	TweetsCount(userId string) (uint64, error)
-	GetViewsCount(tweetId string) (uint64, error)
+	GetViewsCount(tweetId, authorNodeID string) (uint64, error)
 	IsBlocklisted(tweetId string) bool
 	Blocklist(tweetId string) error
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
@@ -923,11 +923,13 @@ func StreamGetTweetStatsHandler(
 		owner := authRepo.GetOwner()
 
 		isMyOwnTweet := ev.UserId == owner.UserId
+		authorNodeID := owner.NodeId
 		if !isMyOwnTweet { //nolint:nestif
 			u, err := userRepo.Get(ev.UserId)
 			if err != nil && !errors.Is(err, database.ErrUserNotFound) {
 				return nil, err
 			}
+			authorNodeID = u.NodeId
 
 			if err == nil && owner.NodeId != u.NodeId {
 				statsResp, err := streamer.GenericStream(
@@ -1009,7 +1011,7 @@ func StreamGetTweetStatsHandler(
 			return repliesErr
 		})
 		g.Go(func() (viewsErr error) {
-			viewsCount, viewsErr = tweetRepo.GetViewsCount(tweetId)
+			viewsCount, viewsErr = tweetRepo.GetViewsCount(tweetId, authorNodeID)
 			if errors.Is(viewsErr, database.ErrViewsNotFound) {
 				return nil
 			}

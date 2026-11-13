@@ -16,14 +16,14 @@ type stubViewRepo struct {
 	getFn    func(tweetId string) (uint64, error)
 }
 
-func (s stubViewRepo) RecordView(tweetId, viewerId string) (uint64, error) {
+func (s stubViewRepo) RecordView(tweetId, viewerId, _ string) (uint64, error) {
 	if s.recordFn != nil {
 		return s.recordFn(tweetId, viewerId)
 	}
 	return 1, nil
 }
 
-func (s stubViewRepo) GetViewsCount(tweetId string) (uint64, error) {
+func (s stubViewRepo) GetViewsCount(tweetId, _ string) (uint64, error) {
 	if s.getFn != nil {
 		return s.getFn(tweetId)
 	}

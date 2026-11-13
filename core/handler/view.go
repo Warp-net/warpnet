@@ -42,8 +42,8 @@ import (
 )
 
 type ViewsStorer interface {
-	RecordView(tweetId, viewerId string) (uint64, error)
-	GetViewsCount(tweetId string) (uint64, error)
+	RecordView(tweetId, viewerId, authorNodeID string) (uint64, error)
+	GetViewsCount(tweetId, authorNodeID string) (uint64, error)
 }
 
 type ViewUserFetcher interface {
@@ -84,7 +84,7 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 		// other node, so non-author nodes only forward the event and
 		// read back the count.
 		if ev.UserId == streamer.NodeInfo().OwnerId {
-			count, err := repo.RecordView(tweetId, ev.ViewerId)
+			count, err := repo.RecordView(tweetId, ev.ViewerId, streamer.NodeInfo().ID.String())
 			if err != nil {
 				log.Errorf("view handler failed: %v", err)
 				return nil, err
@@ -95,7 +95,11 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 		count := forwardViewToAuthor(ev, userRepo, streamer)
 		if count == 0 {
 			// Fall back to whatever the CRDT has propagated locally.
-			if local, err := repo.GetViewsCount(tweetId); err == nil {
+			var authorNodeID string
+			if author, err := userRepo.Get(ev.UserId); err == nil {
+				authorNodeID = author.NodeId
+			}
+			if local, err := repo.GetViewsCount(tweetId, authorNodeID); err == nil {
 				count = local
 			}
 		}

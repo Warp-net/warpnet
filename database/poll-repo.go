@@ -57,7 +57,7 @@ type PollStorer interface {
 }
 
 type PollStatsStorer interface {
-	GetAggregatedStat(key ds.Key) (uint64, error)
+	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
 	Increment(postID string, key ds.Key) error
 }
 
@@ -189,7 +189,7 @@ func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 
 	var network uint64
 	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey())
+		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey(), oncePerNode)
 		if err != nil {
 			log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
 		}
