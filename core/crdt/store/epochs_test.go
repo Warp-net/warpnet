@@ -35,7 +35,7 @@ func headNames(t *testing.T, data []byte) []string {
 	return out
 }
 
-func newDays(prefixes ...string) *MerkleCRDT {
+func newEpochs(prefixes ...string) *MerkleCRDT {
 	m := &MerkleCRDT{firstLive: make(map[string]Day)}
 	if len(prefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(prefixes))
@@ -46,8 +46,8 @@ func newDays(prefixes ...string) *MerkleCRDT {
 	return m
 }
 
-func TestDays_BroadcastsCarryOnlyLiveDays(t *testing.T) {
-	e := newDays()
+func TestEpochs_BroadcastsCarryOnlyLiveDays(t *testing.T) {
+	e := newEpochs()
 	e.Expire("net", 2)
 
 	live, ok := e.liveHeads(encodeHeads(t, "", "net-1", "net-2", "app-1", "bogus", "net-x"))
@@ -59,16 +59,16 @@ func TestDays_BroadcastsCarryOnlyLiveDays(t *testing.T) {
 	assert.False(t, ok, "a broadcast left without heads is dropped")
 }
 
-func TestDays_RefuseDaysFromTheFuture(t *testing.T) {
-	e := newDays()
+func TestEpochs_RefuseDaysFromTheFuture(t *testing.T) {
+	e := newEpochs()
 	today := DayAt(time.Now())
 
 	assert.True(t, e.IsLive((today + 1).DAG("stats")), "one day of clock skew is tolerated")
 	assert.False(t, e.IsLive((today + 2).DAG("stats")), "a day ahead of the clock would never expire")
 }
 
-func TestDays_AllowedPrefixesOnly(t *testing.T) {
-	e := newDays("stats")
+func TestEpochs_AllowedPrefixesOnly(t *testing.T) {
+	e := newEpochs("stats")
 	today := DayAt(time.Now())
 
 	assert.True(t, e.IsLive(today.DAG("stats")))
