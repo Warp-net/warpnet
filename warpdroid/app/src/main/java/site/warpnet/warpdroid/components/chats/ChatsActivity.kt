@@ -189,7 +189,10 @@ class ChatsActivity : BaseActivity() {
                 .clickable(onClick = onClick)
                 .padding(vertical = 10.dp),
         ) {
-            Text(text = user.name, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = user.name, fontWeight = FontWeight.SemiBold)
+                UserStatusDot(user.id, viewModel::isOnline)
+            }
             if (user.username.isNotBlank()) {
                 Text(text = "@" + user.username, color = Color.Gray, maxLines = 1)
             }
@@ -221,7 +224,10 @@ class ChatsActivity : BaseActivity() {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(text = name, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = name, fontWeight = FontWeight.SemiBold)
+                    UserStatusDot(row.otherUserId, viewModel::isOnline)
+                }
                 if (row.chat.lastMessage.isNotBlank()) {
                     Text(text = row.chat.lastMessage, color = Color.Gray, maxLines = 1)
                 }

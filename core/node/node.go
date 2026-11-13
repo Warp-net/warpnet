@@ -64,7 +64,8 @@ type Streamer interface {
 }
 
 type OfflineOutbox interface {
-	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte) error
+	Enqueue(nodeIdStr string, route stream.WarpRoute, payload []byte) (string, error)
+	Delete(nodeIdStr, messageId string) error
 	NotifyOnline(nodeIdStr string)
 	Close()
 }
@@ -626,11 +627,36 @@ func (n *WarpNode) Stream(nodeId warpnet.WarpPeerID, path stream.WarpRoute, data
 		}
 	}
 
+	// A write is queued before it is sent and leaves the queue only once the
+	// peer confirms it, so a failed send is redelivered by the outbox.
+	isQueueable := n.outbox != nil && !path.IsGet()
+	var (
+		queuedId string
+		qErr     error
+	)
+	if isQueueable {
+		queuedId, qErr = n.outbox.Enqueue(nodeId.String(), path, bt)
+	}
+
 	resp, err := n.streamer.Send(n.node.Peerstore().PeerInfo(nodeId), path, bt)
-	if n.outbox != nil && errors.Is(err, warpnet.ErrNodeIsOffline) {
-		if qErr := n.outbox.Enqueue(nodeId.String(), path, bt); qErr == nil {
-			err = fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, err)
+	if !isQueueable {
+		return resp, err
+	}
+
+	isDelivered := err == nil && !stream.IsRateLimited(resp)
+	switch {
+	case isDelivered && qErr == nil:
+		if dErr := n.outbox.Delete(nodeId.String(), queuedId); dErr != nil {
+			log.Errorf("node: stream: delete delivered %s/%s: %v", nodeId, queuedId, dErr)
 		}
+	case isDelivered:
+	case qErr != nil:
+		// The send error is logged, not wrapped: callers take a wrapped
+		// ErrNodeIsOffline as "queued".
+		log.Warnf("node: stream: %s to %s not delivered: %v", path, nodeId, err)
+		return resp, fmt.Errorf("node: stream: %s not delivered and not queued: %w", path, qErr)
+	case err != nil:
+		err = fmt.Errorf("%w: %w", stream.ErrQueuedInOutbox, err)
 	}
 	return resp, err
 }

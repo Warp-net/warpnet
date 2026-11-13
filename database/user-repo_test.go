@@ -236,6 +236,33 @@ func (s *UserRepoTestSuite) TestSearch_CaseInsensitive() {
 	s.True(found, "search should be case-insensitive")
 }
 
+func (s *UserRepoTestSuite) TestSearch_PagesReturnEveryMatch() {
+	want := map[string]bool{}
+	for i := range 5 {
+		id := fmt.Sprintf("u-paged-%d", i)
+		_, err := s.repo.Create(domain.User{Id: id, Username: "paged"})
+		s.Require().NoError(err)
+		want[id] = true
+	}
+
+	limit := uint64(2)
+	cursor := ""
+	got := map[string]bool{}
+	for range 10 {
+		hits, next, err := s.repo.Search("paged", &limit, &cursor)
+		s.Require().NoError(err)
+		for _, u := range hits {
+			s.False(got[u.Id], "duplicate hit %s", u.Id)
+			got[u.Id] = true
+		}
+		if next == local_store.EndCursor {
+			break
+		}
+		cursor = next
+	}
+	s.Equal(want, got)
+}
+
 func (s *UserRepoTestSuite) TestSearch_EmptyQuery() {
 	_, _, err := s.repo.Search("", nil, nil)
 	s.Error(err)

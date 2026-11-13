@@ -18,18 +18,20 @@ import kotlinx.coroutines.runBlocking
 import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 private const val WARPNET_VIDEO_PREFIX = "warpnet://video/"
+private const val WARPNET_CHAT_VIDEO_PREFIX = "warpnet://chatvideo/"
 
-internal data class WarpnetVideoRef(val userId: String, val key: String) {
+internal data class WarpnetVideoRef(val userId: String, val key: String, val chat: Boolean = false) {
     companion object {
         fun parse(model: String): WarpnetVideoRef? {
-            if (!model.startsWith(WARPNET_VIDEO_PREFIX)) return null
-            val tail = model.removePrefix(WARPNET_VIDEO_PREFIX)
+            val chat = model.startsWith(WARPNET_CHAT_VIDEO_PREFIX)
+            if (!chat && !model.startsWith(WARPNET_VIDEO_PREFIX)) return null
+            val tail = model.removePrefix(if (chat) WARPNET_CHAT_VIDEO_PREFIX else WARPNET_VIDEO_PREFIX)
             val slash = tail.indexOf('/')
             if (slash <= 0 || slash >= tail.length - 1) return null
             val userId = tail.substring(0, slash)
             val key = tail.substring(slash + 1)
             if (userId.isBlank() || key.isBlank()) return null
-            return WarpnetVideoRef(userId, key)
+            return WarpnetVideoRef(userId, key, chat)
         }
     }
 }
@@ -51,7 +53,7 @@ class WarpnetVideoDataSource(
             ?: throw IOException("not a warpnet video uri: ${dataSpec.uri}")
 
         val bytes = try {
-            runBlocking { repo.getVideoBytes(ref.userId, ref.key) }
+            runBlocking { repo.getVideoBytes(ref.userId, ref.key, ref.chat) }
         } catch (e: Exception) {
             throw IOException("warpnet video ${ref.key} could not be fetched", e)
         } ?: throw IOException("warpnet video not found: ${ref.key}")
@@ -107,7 +109,7 @@ class WarpnetVideoDataSource(
         private var active: DataSource = fallback
 
         override fun open(dataSpec: DataSpec): Long {
-            active = if (dataSpec.uri.toString().startsWith(WARPNET_VIDEO_PREFIX)) warpnet else fallback
+            active = if (WarpnetVideoRef.parse(dataSpec.uri.toString()) != null) warpnet else fallback
             return active.open(dataSpec)
         }
 

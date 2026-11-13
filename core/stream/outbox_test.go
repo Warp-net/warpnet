@@ -43,6 +43,8 @@ import (
 
 const testPeerA = "12D3KooWT37h7ojLbHwwFdzHeRakaP8cyakXYPspK7kVsWYNCY1x"
 
+const testPeerB = "12D3KooWRqJrnUdkzB6YaPaJ5oxtBVsqZ3XpH1FkMkFg2nNYk7ws"
+
 const (
 	routeMessage  = WarpRoute("/public/post/message/0.0.0")
 	routeReaction = WarpRoute("/public/post/react/0.0.0")
@@ -154,12 +156,13 @@ func TestEnqueueQueuesWriteAndMarksPending(t *testing.T) {
 	store := newFakeStore()
 	o := newTestOutbox(t, store, nil)
 
-	require.NoError(t, o.Enqueue(testPeerA, routeMessage, []byte(`{}`)))
+	require.NoError(t, enqueueErr(o.Enqueue(testPeerA, routeMessage, []byte(`{}`))))
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Len(t, entries, 1)
 	require.Equal(t, string(routeMessage), entries[0].Destination)
 	require.True(t, o.isPending(testPeerA))
+	require.False(t, o.isPending(testPeerB), "only the enqueued peer is pending")
 }
 
 func TestEnqueueQueuesFollowAgainAfterUnfollow(t *testing.T) {
@@ -167,9 +170,9 @@ func TestEnqueueQueuesFollowAgainAfterUnfollow(t *testing.T) {
 	o := newTestOutbox(t, store, nil)
 	payload := []byte(`{"follower_id":"a","following_id":"b"}`)
 
-	require.NoError(t, o.Enqueue(testPeerA, routeFollow, payload))
-	require.NoError(t, o.Enqueue(testPeerA, routeUnfollow, payload))
-	require.NoError(t, o.Enqueue(testPeerA, routeFollow, payload))
+	require.NoError(t, enqueueErr(o.Enqueue(testPeerA, routeFollow, payload)))
+	require.NoError(t, enqueueErr(o.Enqueue(testPeerA, routeUnfollow, payload)))
+	require.NoError(t, enqueueErr(o.Enqueue(testPeerA, routeFollow, payload)))
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Len(t, entries, 3)
@@ -180,12 +183,17 @@ func TestEnqueueDedupesIdenticalPending(t *testing.T) {
 	store := newFakeStore()
 	o := newTestOutbox(t, store, nil)
 
-	o.Enqueue(testPeerA, routeMessage, []byte(`{"n":1}`))
-	o.Enqueue(testPeerA, routeMessage, []byte(`{"n":1}`))
+	first, _ := o.Enqueue(testPeerA, routeMessage, []byte(`{"n":1}`))
+	again, _ := o.Enqueue(testPeerA, routeMessage, []byte(`{"n":1}`))
 	o.Enqueue(testPeerA, routeMessage, []byte(`{"n":2}`))
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Len(t, entries, 2, "identical (route, payload) queued once")
+	require.Equal(t, first, again, "the repeat gets the queued entry's id")
+
+	require.NoError(t, o.Delete(testPeerA, first))
+	entries, _ = store.ListByNode(testPeerA)
+	require.Len(t, entries, 1)
 }
 
 func TestNotifyOnlineFlushesQueued(t *testing.T) {
@@ -206,7 +214,8 @@ func TestEnqueueSkipsReads(t *testing.T) {
 	store := newFakeStore()
 	o := newTestOutbox(t, store, nil)
 
-	require.Error(t, o.Enqueue(testPeerA, routeGetUser, []byte(`{}`)))
+	_, err := o.Enqueue(testPeerA, routeGetUser, []byte(`{}`))
+	require.Error(t, err)
 
 	entries, _ := store.ListByNode(testPeerA)
 	require.Empty(t, entries, "GET reads are never queued")
@@ -228,7 +237,6 @@ func TestRunReplaysQueuedFromPreviousRun(t *testing.T) {
 }
 
 func TestFlushQueuedNodesDeliversToEveryNode(t *testing.T) {
-	const testPeerB = "12D3KooWRqJrnUdkzB6YaPaJ5oxtBVsqZ3XpH1FkMkFg2nNYk7ws"
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeFollow))
 	mustEnqueue(store, testPeerB, string(routeMessage))
@@ -280,7 +288,7 @@ func TestFlushStopsOnOfflinePreservingFIFO(t *testing.T) {
 	require.Equal(t, 2, sender.callCount(), "stopped after offline, third not attempted")
 }
 
-func TestFlushTreatsResponseReadAsDelivered(t *testing.T) {
+func TestFlushKeepsResponseReadQueued(t *testing.T) {
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeMessage))
 
@@ -290,7 +298,7 @@ func TestFlushTreatsResponseReadAsDelivered(t *testing.T) {
 	o.flushNode(testPeerA)
 
 	entries, _ := store.ListByNode(testPeerA)
-	require.Empty(t, entries, "delivered-but-response-lost entry dropped")
+	require.Len(t, entries, 1, "a lost response does not confirm delivery")
 }
 
 func TestFlushKeepsRejectedForTTL(t *testing.T) {
@@ -341,21 +349,21 @@ func TestFlushKeepsRateLimitedQueued(t *testing.T) {
 	require.True(t, o.hasQueued(testPeerA), "peer still has work for the next flush")
 }
 
-func TestIsRateLimited(t *testing.T) {
+func TestIsRateLimitedResponse(t *testing.T) {
 	limited, err := json.Marshal(event.ResponseError{
 		Code: event.RateLimitErrorCode, Message: "too many requests",
 	})
 	require.NoError(t, err)
-	require.True(t, isRateLimited(limited))
+	require.True(t, IsRateLimited(limited))
 
 	internal, err := json.Marshal(event.ResponseError{Code: 5000, Message: "internal node error"})
 	require.NoError(t, err)
-	require.False(t, isRateLimited(internal))
+	require.False(t, IsRateLimited(internal))
 
-	require.False(t, isRateLimited([]byte(event.Accepted)))
-	require.False(t, isRateLimited([]byte(`{"tweet_id":"tweet-1"}`)))
-	require.False(t, isRateLimited([]byte("not json")))
-	require.False(t, isRateLimited(nil))
+	require.False(t, IsRateLimited([]byte(event.Accepted)))
+	require.False(t, IsRateLimited([]byte(`{"tweet_id":"tweet-1"}`)))
+	require.False(t, IsRateLimited([]byte("not json")))
+	require.False(t, IsRateLimited(nil))
 }
 
 func TestFlushNoSenderKeepsEntries(t *testing.T) {
@@ -372,3 +380,5 @@ func TestFlushNoSenderKeepsEntries(t *testing.T) {
 func mustEnqueue(store OutboxStore, node, route string) {
 	_, _ = store.Enqueue(node, route, []byte(`{}`))
 }
+
+func enqueueErr(_ string, err error) error { return err }

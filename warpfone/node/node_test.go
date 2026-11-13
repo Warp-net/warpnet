@@ -178,6 +178,64 @@ func TestStreamRidesTheRelayedConnectionItDials(t *testing.T) {
 	}
 }
 
+// The connection manager must never trim the paired node: once DHT peers
+// push the client past its high-water mark, an untagged relayed connection
+// to it was the first to go. A re-pair moves the protection to the new node
+// and disconnect drops it.
+func TestPairedNodeIsProtectedFromTrims(t *testing.T) {
+	psk := freshPSK(t)
+	muxer := *yamux.DefaultTransport // newClient tunes the shared default
+	newPeer := func() (string, peer.ID) {
+		h, err := libp2p.New(
+			libp2p.NoTransports,
+			libp2p.Transport(camouflage.NewCamouflageTransport),
+			libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+			libp2p.PrivateNetwork(psk),
+			libp2p.Security(noise.ID, noise.New),
+			libp2p.Muxer(yamux.ID, &muxer),
+		)
+		if err != nil {
+			t.Fatalf("host: %v", err)
+		}
+		t.Cleanup(func() { _ = h.Close() })
+		return h.Addrs()[0].String() + "/p2p/" + h.ID().String(), h.ID()
+	}
+	bootstrapAddr, _ := newPeer()
+	firstAddr, first := newPeer()
+	secondAddr, second := newPeer()
+
+	cn, err := newClient(freshKey(t), psk, "testnet", []string{bootstrapAddr})
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
+	defer cn.close()
+	cm := cn.host.ConnManager()
+
+	if err := cn.connect(firstAddr); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	if !cm.IsProtected(first, pairedPeerTag) {
+		t.Fatal("expected the paired node to be protected")
+	}
+
+	if err := cn.connect(secondAddr); err != nil {
+		t.Fatalf("re-pair: %v", err)
+	}
+	if cm.IsProtected(first, pairedPeerTag) {
+		t.Fatal("the previous paired node must lose its protection")
+	}
+	if !cm.IsProtected(second, pairedPeerTag) {
+		t.Fatal("expected the new paired node to be protected")
+	}
+
+	if err := cn.disconnect(); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+	if cm.IsProtected(second, pairedPeerTag) {
+		t.Fatal("disconnect must drop the protection")
+	}
+}
+
 // Dials that failed while the phone had no network leave swarm dial backoff
 // on the relay and the paired node. Once the network is back, a reconnect
 // must dial again instead of failing on that backoff until the app restarts.

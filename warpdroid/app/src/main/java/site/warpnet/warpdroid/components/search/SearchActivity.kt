@@ -69,6 +69,7 @@ class SearchActivity : BottomSheetActivity(), MenuProvider, SearchView.OnQueryTe
         TabLayoutMediator(binding.tabs, binding.pages) { tab, position ->
             tab.text = getPageTitle(position)
         }.attach()
+        binding.tabs.visibility = android.view.View.GONE
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -91,8 +92,7 @@ class SearchActivity : BottomSheetActivity(), MenuProvider, SearchView.OnQueryTe
 
     private fun getPageTitle(position: Int): CharSequence {
         return when (position) {
-            0 -> getString(R.string.title_posts)
-            1 -> getString(R.string.title_accounts)
+            0 -> getString(R.string.title_accounts)
             else -> throw IllegalArgumentException("Unknown page index: $position")
         }
     }

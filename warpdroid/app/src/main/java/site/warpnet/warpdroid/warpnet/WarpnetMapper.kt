@@ -7,6 +7,8 @@ package site.warpnet.warpdroid.warpnet
 
 import site.warpnet.warpdroid.entity.AccountSource
 import site.warpnet.warpdroid.entity.Attachment
+import site.warpnet.warpdroid.entity.Field
+import site.warpnet.warpdroid.entity.StringField
 import site.warpnet.warpdroid.entity.User
 import site.warpnet.warpdroid.entity.Notification
 import site.warpnet.warpdroid.entity.Poll
@@ -51,7 +53,15 @@ object WarpnetMapper {
         // Warpnet bios are plain text, so mirror [note] into [source.note];
         // Edit Profile prefills its Bio field from source.note (the editable
         // plaintext), which would otherwise be null and silently blank it.
-        source = AccountSource(note = bio),
+        source = AccountSource(
+            privacy = metadata?.get("privacy")?.let(Tweet.Visibility::fromStringValue)
+                ?: Tweet.Visibility.PUBLIC,
+            sensitive = metadata?.get("sensitive")?.let { it == "true" },
+            note = bio,
+            fields = profileFields().map { (name, value) -> StringField(name, value) },
+            language = metadata?.get("language"),
+        ),
+        fields = profileFields().map { (name, value) -> Field(name, value) },
         url = "$FAKE_BASE_URL/users/$id",
         avatar = warpnetImageUrl(id, avatarKey),
         header = warpnetImageUrl(id, backgroundImageKey),
@@ -61,6 +71,15 @@ object WarpnetMapper {
         statusesCount = tweetsCount.toInt(),
         network = network,
         nodeId = nodeId,
+    )
+
+    // Warpnet has fixed profile fields instead of free-form name/value pairs.
+    const val FIELD_WEBSITE = "Website"
+    const val FIELD_BIRTHDATE = "Birthdate"
+
+    private fun WarpnetUser.profileFields(): List<Pair<String, String>> = listOfNotNull(
+        website?.takeIf { it.isNotBlank() }?.let { FIELD_WEBSITE to it },
+        birthdate.takeIf { it.isNotBlank() }?.let { FIELD_BIRTHDATE to it },
     )
 
     fun WarpnetUser.toTimelineUser(): TimelineUser = TimelineUser(
@@ -88,6 +107,10 @@ object WarpnetMapper {
     fun warpnetVideoUrl(userId: String, key: String?): String =
         if (userId.isBlank() || key.isNullOrBlank()) ""
         else "warpnet://video/$userId/$key"
+
+    fun warpnetChatImageUrl(userId: String, key: String): String = "warpnet://chatimage/$userId/$key"
+
+    fun warpnetChatVideoUrl(userId: String, key: String): String = "warpnet://chatvideo/$userId/$key"
 
     private fun WarpnetTweet.toAttachments(): List<Attachment> {
         val images = imageKeys.orEmpty().filter { it.isNotBlank() }.map { key ->

@@ -1,7 +1,6 @@
 package site.warpnet.warpdroid.util
 
 import android.content.Context
-import site.warpnet.warpdroid.TweetListActivity
 import site.warpnet.warpdroid.ViewMediaActivity
 import site.warpnet.warpdroid.components.account.AccountActivity
 import site.warpnet.warpdroid.components.accountlist.AccountListActivity
@@ -87,10 +86,5 @@ fun Context.showFavs(viewData: TweetViewData.Concrete) {
 
 fun Context.showRetweets(viewData: TweetViewData.Concrete) {
     val intent = AccountListActivity.newIntent(this, AccountListActivity.Type.RETWEETED, viewData.actionableId)
-    startActivityWithSlideInAnimation(intent)
-}
-
-fun Context.showQuotes(viewData: TweetViewData.Concrete) {
-    val intent = TweetListActivity.newQuotesIntent(this, viewData.actionableId)
     startActivityWithSlideInAnimation(intent)
 }
