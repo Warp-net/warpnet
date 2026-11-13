@@ -59,8 +59,6 @@ const (
 	recordKeyParts = 5
 
 	bucketsPerDay = 24
-	// legacyDAG is the unnamed DAG every record went to before day DAGs.
-	legacyDAG = ""
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -106,7 +104,6 @@ func New(
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
-		PurgeDAGs:   []string{legacyDAG},
 	})
 	if err != nil {
 		cancel()

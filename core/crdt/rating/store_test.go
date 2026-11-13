@@ -306,17 +306,36 @@ func TestStore_DeleteExpiredDropsWholeDaysOfThatDimension(t *testing.T) {
 		"the expired network day goes whole, foreign evidence included; other days and dimensions stay")
 }
 
-func TestStore_StartupPurgesTheLegacyDAG(t *testing.T) {
+func TestStore_DeleteExpiredDropsTheUnnamedDAG(t *testing.T) {
+	store, _ := newLiveStore(t)
+	ctx := context.Background()
+
+	old := ratingRecord(store.nodeID, "peer-a", "net", currentBucket())
+	key, err := recordKey(old)
+	require.NoError(t, err)
+	value, err := json.Marshal(old)
+	require.NoError(t, err)
+	require.NoError(t, store.crdt.Put(ctx, key, value))
+
+	require.NoError(t, store.DeleteExpired("net", 0))
+
+	got, err := store.List("peer-a")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	assert.Empty(t, store.crdt.InternalStats(ctx).Heads, "the DAG from before day DAGs is never live")
+}
+
+func TestStore_StartupDropsTheUnnamedDAG(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	data := dssync.MutexWrap(datastore.NewMapDatastore())
 
 	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{})
 	require.NoError(t, err)
-	legacy := ratingRecord(first.nodeID, "peer-a", "net", currentBucket())
-	key, err := recordKey(legacy)
+	old := ratingRecord(first.nodeID, "peer-a", "net", currentBucket())
+	key, err := recordKey(old)
 	require.NoError(t, err)
-	value, err := json.Marshal(legacy)
+	value, err := json.Marshal(old)
 	require.NoError(t, err)
 	require.NoError(t, first.crdt.Put(ctx, key, value))
 	require.NoError(t, first.Close())
@@ -327,7 +346,7 @@ func TestStore_StartupPurgesTheLegacyDAG(t *testing.T) {
 	require.Eventually(t, func() bool {
 		got, err := second.List("peer-a")
 		return err == nil && len(got) == 0 && len(second.crdt.InternalStats(ctx).Heads) == 0
-	}, 5*time.Second, 10*time.Millisecond, "the history from before day DAGs is dropped on start")
+	}, 5*time.Second, 10*time.Millisecond, "a DAG that is not live is dropped before the startup repair walks it")
 }
 
 func TestStore_ListDropsRecordsStoredUnderAForeignKey(t *testing.T) {

@@ -79,7 +79,6 @@ type Config struct {
 	Prefix      string
 	PutHook     func(k ds.Key, v []byte)
 	DeleteHook  func(k ds.Key)
-	PurgeDAGs   []string
 	// DAGPrefixes limits the live day DAGs to these prefixes; with none,
 	// any prefix is live until it is expired.
 	DAGPrefixes []string
@@ -140,11 +139,11 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
 
+	m.MerkleCRDT = crdtStore
+
 	go func() {
-		for _, name := range cfg.PurgeDAGs {
-			if _, err := crdtStore.PurgeDAG(ctx, name); err != nil {
-				log.Errorf("failed to purge DAG %q: %v", name, err)
-			}
+		if err := m.PurgeExpired(ctx); err != nil {
+			log.Errorf("failed to purge expired DAGs: %v", err)
 		}
 		// Unconditional: a clean Close() mid-sync can leave a hole with the dirty bit unset.
 		if err := crdtStore.Repair(ctx); err != nil {
@@ -152,7 +151,6 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 		}
 	}()
 
-	m.MerkleCRDT = crdtStore
 	return m, nil
 }
 

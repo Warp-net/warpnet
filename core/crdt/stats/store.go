@@ -75,8 +75,6 @@ const (
 
 	// dagPrefix names the day DAGs: one per day of tweet creation.
 	dagPrefix = "stats"
-	// legacyDAG is the unnamed DAG every counter went to before day DAGs.
-	legacyDAG = ""
 	// retentionDays is how long a tweet's counters travel; older tweets
 	// are counted from local data only.
 	retentionDays = 30
@@ -143,7 +141,6 @@ func New(
 		Node:        node,
 		Router:      router,
 		Prefix:      bitswapPrefix,
-		PurgeDAGs:   []string{legacyDAG},
 		DAGPrefixes: []string{dagPrefix},
 	})
 	if err != nil {

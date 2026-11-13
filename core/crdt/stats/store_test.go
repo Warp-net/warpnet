@@ -517,23 +517,16 @@ func TestCRDTStats_PurgeDropsTweetsPastRetention(t *testing.T) {
 	s.mu.Unlock()
 }
 
-func TestCRDTStats_StartupPurgesTheLegacyDAG(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	data := dssync.MutexWrap(datastore.NewMapDatastore())
+func TestCRDTStats_PurgeDropsTheUnnamedDAG(t *testing.T) {
+	s, _ := newLiveStatsStore(t)
+	ctx := context.Background()
 
-	first, err := New(ctx, &silentBroadcaster{}, data, newStatsHost(t), idleRouter{})
-	require.NoError(t, err)
-	legacy := counterPrefix + "/" + incrNamespace + "/REACTIONS/INCR/legacy/" + first.nodeID + "/old"
-	require.NoError(t, first.crdt.Put(ctx, datastore.NewKey(legacy), binary.BigEndian.AppendUint64(nil, 7)))
-	require.NoError(t, first.Close())
+	old := counterPrefix + "/" + incrNamespace + "/REACTIONS/INCR/" + testTweet + "/" + s.nodeID + "/old"
+	require.NoError(t, s.crdt.Put(ctx, datastore.NewKey(old), binary.BigEndian.AppendUint64(nil, 7)))
 
-	second, err := New(ctx, &silentBroadcaster{}, data, newStatsHost(t), idleRouter{})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = second.Close() })
-	require.Eventually(t, func() bool {
-		return len(second.crdt.InternalStats(ctx).Heads) == 0
-	}, 5*time.Second, 10*time.Millisecond, "unsigned counters from before day DAGs are dropped on start")
+	require.NoError(t, s.purge(time.Now()))
+
+	assert.Empty(t, s.crdt.InternalStats(ctx).Heads, "unsigned counters from before day DAGs are never live")
 }
 
 func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
