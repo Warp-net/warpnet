@@ -43,6 +43,8 @@ import (
 
 const testPeerA = "12D3KooWT37h7ojLbHwwFdzHeRakaP8cyakXYPspK7kVsWYNCY1x"
 
+const testPeerB = "12D3KooWRqJrnUdkzB6YaPaJ5oxtBVsqZ3XpH1FkMkFg2nNYk7ws"
+
 const (
 	routeMessage  = WarpRoute("/public/post/message/0.0.0")
 	routeReaction = WarpRoute("/public/post/react/0.0.0")
@@ -162,6 +164,7 @@ func TestEnqueueQueuesWriteAndMarksPending(t *testing.T) {
 	require.Len(t, entries, 1)
 	require.Equal(t, string(routeMessage), entries[0].Destination)
 	require.True(t, o.isPending(testPeerA))
+	require.False(t, o.isPending(testPeerB), "only the enqueued peer is pending")
 }
 
 func TestEnqueueQueuesFollowAgainAfterUnfollow(t *testing.T) {
@@ -230,7 +233,6 @@ func TestRunReplaysQueuedFromPreviousRun(t *testing.T) {
 }
 
 func TestFlushQueuedNodesDeliversToEveryNode(t *testing.T) {
-	const testPeerB = "12D3KooWRqJrnUdkzB6YaPaJ5oxtBVsqZ3XpH1FkMkFg2nNYk7ws"
 	store := newFakeStore()
 	mustEnqueue(store, testPeerA, string(routeFollow))
 	mustEnqueue(store, testPeerB, string(routeMessage))

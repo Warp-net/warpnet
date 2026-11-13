@@ -41,6 +41,11 @@ const (
 	maxResponseSize = 64 << 20
 
 	lanHeadStart = 250 * time.Millisecond
+
+	// pairedPeerTag protects the paired node from connection manager trims.
+	// A relayed connection to it carries no other tag, so DHT peers would
+	// outrank it once the client is over the high-water mark.
+	pairedPeerTag = "warpnet-paired-node"
 )
 
 type clientNode struct {
@@ -286,9 +291,14 @@ func (c *clientNode) connect(peerInfo string) error {
 		return err
 	}
 
+	cm := c.host.ConnManager()
 	c.mu.Lock()
+	if c.desktopPeerID != "" && c.desktopPeerID != peerID {
+		cm.Unprotect(c.desktopPeerID, pairedPeerTag)
+	}
 	c.desktopPeerID = peerID
 	c.mu.Unlock()
+	cm.Protect(peerID, pairedPeerTag)
 	return nil
 }
 
@@ -525,6 +535,7 @@ func (c *clientNode) disconnect() error {
 	defer c.mu.Unlock()
 
 	if c.desktopPeerID != "" {
+		c.host.ConnManager().Unprotect(c.desktopPeerID, pairedPeerTag)
 		if err := c.host.Network().ClosePeer(c.desktopPeerID); err != nil {
 			return fmt.Errorf("failed to close peer connection: %w", err)
 		}
