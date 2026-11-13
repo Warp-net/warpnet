@@ -45,7 +45,6 @@ import (
 type brokenStats struct{}
 
 func (brokenStats) GetAggregatedStat(ds.Key, uint64) (uint64, error) { return 0, errFault }
-func (brokenStats) GetNodeStat(ds.Key, string) (uint64, error)       { return 0, errFault }
 func (brokenStats) Increment(string, ds.Key) error                   { return errFault }
 func (brokenStats) Decrement(string, ds.Key) error                   { return errFault }
 
@@ -186,7 +185,7 @@ func TestTweetRepoErrorPaths(t *testing.T) {
 		{
 			name: "RecordView",
 			run: func(s *faultStore) error {
-				_, err := NewTweetRepo(s, nil).RecordView(tweetId, "viewer-1", "")
+				_, err := NewTweetRepo(s, nil).RecordView(tweetId, "viewer-1", true)
 				return err
 			},
 			ops: []faultOp{op("Get"), op("Set"), op("Increment"), op("Commit")},
@@ -289,11 +288,11 @@ func TestTweetRepoErrorPaths(t *testing.T) {
 		_, _, err = repo.Retweeters("", nil, nil)
 		require.Error(t, err)
 
-		_, err = repo.RecordView("", "viewer", "")
+		_, err = repo.RecordView("", "viewer", true)
 		require.Error(t, err)
-		_, err = repo.RecordView(tweetId, "", "")
+		_, err = repo.RecordView(tweetId, "", true)
 		require.Error(t, err)
-		_, err = repo.GetViewsCount("", "")
+		_, err = repo.GetViewsCount("")
 		require.Error(t, err)
 	})
 
@@ -453,15 +452,15 @@ func TestTweetRepoErrorPaths(t *testing.T) {
 		s := newFaultStore(t)
 		repo := NewTweetRepo(s, nil)
 
-		first, err := repo.RecordView(tweetId, "viewer-1", "")
+		first, err := repo.RecordView(tweetId, "viewer-1", true)
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), first)
 
-		second, err := repo.RecordView(tweetId, "viewer-1", "")
+		second, err := repo.RecordView(tweetId, "viewer-1", true)
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), second)
 
-		third, err := repo.RecordView(tweetId, "viewer-2", "")
+		third, err := repo.RecordView(tweetId, "viewer-2", true)
 		require.NoError(t, err)
 		require.Equal(t, uint64(2), third)
 	})
@@ -469,17 +468,17 @@ func TestTweetRepoErrorPaths(t *testing.T) {
 	t.Run("RecordViewRepeatCommitFails", func(t *testing.T) {
 		s := newFaultStore(t)
 		repo := NewTweetRepo(s, nil)
-		_, err := repo.RecordView(tweetId, "viewer-1", "")
+		_, err := repo.RecordView(tweetId, "viewer-1", true)
 		require.NoError(t, err)
 
 		s.arm("Commit", 1)
-		_, err = repo.RecordView(tweetId, "viewer-1", "")
+		_, err = repo.RecordView(tweetId, "viewer-1", true)
 		require.ErrorIs(t, err, errFault)
 	})
 
 	t.Run("RecordViewWithBrokenStats", func(t *testing.T) {
 		s := newFaultStore(t)
-		count, err := NewTweetRepo(s, brokenStats{}).RecordView(tweetId, "viewer-1", "")
+		count, err := NewTweetRepo(s, brokenStats{}).RecordView(tweetId, "viewer-1", true)
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), count)
 	})
@@ -488,18 +487,18 @@ func TestTweetRepoErrorPaths(t *testing.T) {
 		s := newFaultStore(t)
 		repo := NewTweetRepo(s, nil)
 
-		_, err := repo.GetViewsCount(tweetId, "")
+		_, err := repo.GetViewsCount(tweetId)
 		require.ErrorIs(t, err, ErrViewsNotFound)
 
-		_, err = repo.RecordView(tweetId, "viewer-1", "")
+		_, err = repo.RecordView(tweetId, "viewer-1", true)
 		require.NoError(t, err)
 
-		count, err := repo.GetViewsCount(tweetId, "")
+		count, err := repo.GetViewsCount(tweetId)
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), count)
 
 		s.arm("db.Get", 1)
-		_, err = repo.GetViewsCount(tweetId, "")
+		_, err = repo.GetViewsCount(tweetId)
 		require.ErrorIs(t, err, errFault)
 	})
 

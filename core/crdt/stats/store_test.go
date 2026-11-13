@@ -547,25 +547,3 @@ func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, got, "a thousand self-signed likes from one node are one like")
 }
-
-func TestCRDTStats_ANodeStatIsOnlyThatNodesCount(t *testing.T) {
-	author, attacker := newStatsPair(t)
-	views := datastore.NewKey("/TWEETS/VIEWS/authored")
-
-	for range 3 {
-		require.NoError(t, author.Increment(testPost, views))
-	}
-	require.NoError(t, author.flush())
-	for range 1000 {
-		require.NoError(t, attacker.Increment(testPost, views))
-	}
-	require.NoError(t, attacker.flush())
-
-	require.Eventually(t, func() bool {
-		got, err := author.GetAggregatedStat(views, 0)
-		return err == nil && got == 1003
-	}, 20*time.Second, 100*time.Millisecond)
-	got, err := author.GetNodeStat(views, author.nodeID)
-	require.NoError(t, err)
-	assert.EqualValues(t, 3, got, "views only the author's node records are read from it alone")
-}

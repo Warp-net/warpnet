@@ -187,13 +187,13 @@ func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, e
 func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 	incrKey := pollVotesKey(tweetId, option, VotesIncrSubNamespace)
 
-	var network uint64
+	var replicated uint64
 	if repo.statsDb != nil {
 		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey(), oncePerNode)
 		if err != nil {
 			log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
 		}
-		network = total
+		replicated = total
 	}
 
 	incr, err := repo.localCounter(incrKey)
@@ -205,9 +205,9 @@ func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 		return 0, err
 	}
 	if decr >= incr {
-		return network, nil
+		return replicated, nil
 	}
-	return max(incr-decr, network), nil
+	return max(incr-decr, replicated), nil
 }
 
 // localCounter reads a counter this node keeps. A missing key means nothing

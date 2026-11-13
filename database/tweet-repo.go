@@ -76,7 +76,6 @@ type tweetGetter interface {
 }
 type TweetStatsStorer interface {
 	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
-	GetNodeStat(key ds.Key, nodeID string) (uint64, error)
 	Increment(postID string, key ds.Key) error
 	Decrement(postID string, key ds.Key) error
 }
@@ -552,12 +551,12 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return max(localCount, repo.networkCount(tweetsCountKey(tweetId), unlimitedPerNode)), nil
+	return max(localCount, repo.replicatedCount(tweetsCountKey(tweetId), unlimitedPerNode)), nil
 }
 
-// networkCount is the replicated count of a post, zero once the post is past
-// network retention; readers take the larger of it and their local count.
-func (repo *TweetRepo) networkCount(key local.DatabaseKey, perNodeCap uint64) uint64 {
+// replicatedCount is the CRDT count of a post, zero once the post is past
+// retention; readers take the larger of it and their local count.
+func (repo *TweetRepo) replicatedCount(key local.DatabaseKey, perNodeCap uint64) uint64 {
 	if repo.statsDb == nil {
 		return 0
 	}
@@ -771,18 +770,18 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	network := repo.networkCount(retweetCountKey, oncePerNode)
+	replicated := repo.replicatedCount(retweetCountKey, oncePerNode)
 	bt, err := repo.db.Get(retweetCountKey)
 	if local.IsNotFoundError(err) {
-		if network == 0 {
+		if replicated == 0 {
 			return 0, ErrTweetNotFound
 		}
-		return network, nil
+		return replicated, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	return max(binary.BigEndian.Uint64(bt), network), nil
+	return max(binary.BigEndian.Uint64(bt), replicated), nil
 }
 
 type retweetersIDs = []string
@@ -827,9 +826,9 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 // views from the same viewer — across sessions, restarts, days — are
 // no-ops. The first call wins; the counter is incremented exactly once
 // per unique viewer. The increment is atomic via the underlying
-// transaction and replicated through the CRDT stats store, so it is
-// safe under concurrent calls across nodes.
-func (repo *TweetRepo) RecordView(tweetId, viewerId, authorNodeID string) (uint64, error) {
+// transaction. isTransitive puts the view into the replicated counter too;
+// the handler sets it only on the viewer's own node.
+func (repo *TweetRepo) RecordView(tweetId, viewerId string, isTransitive bool) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("view: empty tweet id")
 	}
@@ -865,7 +864,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId, authorNodeID string) (uint6
 		if err := txn.Commit(); err != nil {
 			return 0, err
 		}
-		return repo.GetViewsCount(tweetId, authorNodeID)
+		return repo.GetViewsCount(tweetId)
 	case local.IsNotFoundError(err):
 		// fall through and record the new view
 	default:
@@ -882,21 +881,19 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId, authorNodeID string) (uint6
 	if err := txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb != nil {
+	if repo.statsDb != nil && isTransitive {
 		if err := repo.statsDb.Increment(tweetId, viewsKey.DatastoreKey()); err != nil {
 			log.Warnf("view: stats db increment: %v", err)
 		}
 	}
 
-	if crdtCount, err := repo.GetViewsCount(tweetId, authorNodeID); err == nil && crdtCount > localCount {
+	if crdtCount, err := repo.GetViewsCount(tweetId); err == nil && crdtCount > localCount {
 		return crdtCount, nil
 	}
 	return localCount, nil
 }
 
-// GetViewsCount counts only views the post author's node signed for: it is
-// the only node that records them. With no author node, it is local only.
-func (repo *TweetRepo) GetViewsCount(tweetId, authorNodeID string) (uint64, error) {
+func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("views: empty tweet id")
 	}
@@ -906,23 +903,16 @@ func (repo *TweetRepo) GetViewsCount(tweetId, authorNodeID string) (uint64, erro
 		AddRootID(tweetId).
 		Build()
 
-	var network uint64
-	if repo.statsDb != nil && authorNodeID != "" {
-		total, err := repo.statsDb.GetNodeStat(viewsKey.DatastoreKey(), authorNodeID)
-		if err != nil {
-			log.Warnf("crdt views %s: %v", tweetId, err)
-		}
-		network = total
-	}
+	replicated := repo.replicatedCount(viewsKey, oncePerNode)
 	bt, err := repo.db.Get(viewsKey)
 	if local.IsNotFoundError(err) {
-		if network == 0 {
+		if replicated == 0 {
 			return 0, ErrViewsNotFound
 		}
-		return network, nil
+		return replicated, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	return max(binary.BigEndian.Uint64(bt), network), nil
+	return max(binary.BigEndian.Uint64(bt), replicated), nil
 }

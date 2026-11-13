@@ -45,7 +45,7 @@ func (s stubTweetRepo) TweetsCount(userId string) (uint64, error) {
 	}
 	return 0, nil
 }
-func (s stubTweetRepo) GetViewsCount(tweetId, _ string) (uint64, error) {
+func (s stubTweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 	if s.getViewsCountFn != nil {
 		return s.getViewsCountFn(tweetId)
 	}
@@ -1181,7 +1181,7 @@ func (m *mockTweetsStorer) UnRetweet(u, id string, _ bool) error {
 	return nil
 }
 
-func (m *mockTweetsStorer) GetViewsCount(id, _ string) (uint64, error) {
+func (m *mockTweetsStorer) GetViewsCount(id string) (uint64, error) {
 	if m.GetViewsCountFunc != nil {
 		return m.GetViewsCountFunc(id)
 	}

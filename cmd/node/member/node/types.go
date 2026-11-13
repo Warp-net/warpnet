@@ -238,7 +238,6 @@ type StatsStorer interface {
 	Increment(postID string, key datastore.Key) error
 	Decrement(postID string, key datastore.Key) error
 	GetAggregatedStat(key datastore.Key, perNodeCap uint64) (uint64, error)
-	GetNodeStat(key datastore.Key, nodeID string) (uint64, error)
 	Close() error
 }
 
@@ -363,12 +362,12 @@ type TweetsProvider interface {
 	Get(userID string, tweetID string) (tweet domain.Tweet, err error)
 	GetReplies(parentID string, limit *uint64, cursor *string) ([]domain.Tweet, string, error)
 	GetReply(parentID string, replyID string) (domain.Tweet, error)
-	GetViewsCount(tweetId, authorNodeID string) (uint64, error)
+	GetViewsCount(tweetId string) (uint64, error)
 	IsBlocklisted(tweetId string) bool
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
 	Pin(userId string, tweetId string) (domain.Tweet, error)
-	RecordView(tweetId, viewerId, authorNodeID string) (uint64, error)
+	RecordView(tweetId, viewerId string, isTransitive bool) (uint64, error)
 	RepliesCount(tweetId string) (reactionsNum uint64, err error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	RetweetsCount(tweetId string) (uint64, error)

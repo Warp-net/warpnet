@@ -447,41 +447,41 @@ func (s *TweetRepoTestSuite) TestRecordView_IncrementsAndDedupes() {
 	viewerA := ulid.Make().String()
 	viewerB := ulid.Make().String()
 
-	count, err := s.repo.RecordView(tweetId, viewerA, "")
+	count, err := s.repo.RecordView(tweetId, viewerA, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), count)
 
 	// Same viewer within TTL is a no-op.
-	count, err = s.repo.RecordView(tweetId, viewerA, "")
+	count, err = s.repo.RecordView(tweetId, viewerA, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), count)
 
 	// Different viewer increments.
-	count, err = s.repo.RecordView(tweetId, viewerB, "")
+	count, err = s.repo.RecordView(tweetId, viewerB, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(2), count)
 
-	got, err := s.repo.GetViewsCount(tweetId, "")
+	got, err := s.repo.GetViewsCount(tweetId)
 	s.Require().NoError(err)
 	s.Equal(uint64(2), got)
 }
 
 func (s *TweetRepoTestSuite) TestRecordView_InvalidParams() {
-	_, err := s.repo.RecordView("", "viewer", "")
+	_, err := s.repo.RecordView("", "viewer", true)
 	s.Error(err)
 
-	_, err = s.repo.RecordView("tweet", "", "")
+	_, err = s.repo.RecordView("tweet", "", true)
 	s.Error(err)
 }
 
 func (s *TweetRepoTestSuite) TestGetViewsCount_NotFound() {
 	tweetId := ulid.Make().String()
-	_, err := s.repo.GetViewsCount(tweetId, "")
+	_, err := s.repo.GetViewsCount(tweetId)
 	s.EqualError(err, ErrViewsNotFound.Error())
 }
 
 func (s *TweetRepoTestSuite) TestGetViewsCount_EmptyId() {
-	_, err := s.repo.GetViewsCount("", "")
+	_, err := s.repo.GetViewsCount("")
 	s.Error(err)
 }
 
@@ -496,7 +496,7 @@ func (s *TweetRepoTestSuite) TestRecordView_ConcurrentSafe() {
 		viewerId := ulid.Make().String()
 		go func() {
 			defer wg.Done()
-			if _, err := s.repo.RecordView(tweetId, viewerId, ""); err != nil {
+			if _, err := s.repo.RecordView(tweetId, viewerId, true); err != nil {
 				errCh <- err
 			}
 		}()
@@ -507,7 +507,7 @@ func (s *TweetRepoTestSuite) TestRecordView_ConcurrentSafe() {
 		s.Require().NoError(err)
 	}
 
-	count, err := s.repo.GetViewsCount(tweetId, "")
+	count, err := s.repo.GetViewsCount(tweetId)
 	s.Require().NoError(err)
 	s.Equal(uint64(viewers), count)
 }
@@ -519,11 +519,11 @@ func (s *TweetRepoTestSuite) TestRecordView_DifferentTweetsLockIndependently() {
 	tweetB := ulid.Make().String()
 	viewer := ulid.Make().String()
 
-	a, err := s.repo.RecordView(tweetA, viewer, "")
+	a, err := s.repo.RecordView(tweetA, viewer, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), a)
 
-	b, err := s.repo.RecordView(tweetB, viewer, "")
+	b, err := s.repo.RecordView(tweetB, viewer, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), b)
 }
@@ -581,10 +581,6 @@ type fakeTweetStats struct {
 
 func newFakeTweetStats() *fakeTweetStats {
 	return &fakeTweetStats{vals: make(map[string]uint64)}
-}
-
-func (f *fakeTweetStats) GetNodeStat(key ds.Key, _ string) (uint64, error) {
-	return f.GetAggregatedStat(key, 0)
 }
 
 func (f *fakeTweetStats) GetAggregatedStat(key ds.Key, _ uint64) (uint64, error) {
@@ -659,7 +655,7 @@ func (s *TweetRepoTestSuite) TestCountsFallBackToLocalPastNetworkRetention() {
 		UserId: "user123", Text: "reply", CreatedAt: time.Now(),
 	}, false)
 	s.Require().NoError(err)
-	_, err = repo.RecordView(parentID, "viewer-1", "")
+	_, err = repo.RecordView(parentID, "viewer-1", false)
 	s.Require().NoError(err)
 	_, err = repo.NewRetweet(domain.Tweet{
 		Id: parentID, UserId: "author", RetweetedBy: func() *string { v := "retweeter"; return &v }(),
@@ -670,7 +666,7 @@ func (s *TweetRepoTestSuite) TestCountsFallBackToLocalPastNetworkRetention() {
 	replies, err := repo.RepliesCount(parentID)
 	s.Require().NoError(err)
 	s.EqualValues(1, replies)
-	views, err := repo.GetViewsCount(parentID, "")
+	views, err := repo.GetViewsCount(parentID)
 	s.Require().NoError(err)
 	s.EqualValues(1, views)
 	retweets, err := repo.RetweetsCount(parentID)
@@ -680,8 +676,7 @@ func (s *TweetRepoTestSuite) TestCountsFallBackToLocalPastNetworkRetention() {
 
 type capRecordingStats struct {
 	fakeTweetStats
-	caps      map[string]uint64
-	nodeReads map[string]string
+	caps map[string]uint64
 }
 
 func (c *capRecordingStats) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
@@ -689,28 +684,22 @@ func (c *capRecordingStats) GetAggregatedStat(key ds.Key, perNodeCap uint64) (ui
 	return 0, nil
 }
 
-func (c *capRecordingStats) GetNodeStat(key ds.Key, nodeID string) (uint64, error) {
-	c.nodeReads[key.String()] = nodeID
-	return 0, nil
-}
-
 // TestCountsReadWithTheirPerNodeRule pins which rule each post counter is
-// read with: retweets once per node, replies unlimited, views from the
-// author's node alone.
+// read with: retweets and views once per node, replies unlimited.
 func (s *TweetRepoTestSuite) TestCountsReadWithTheirPerNodeRule() {
-	stats := &capRecordingStats{caps: map[string]uint64{}, nodeReads: map[string]string{}}
+	stats := &capRecordingStats{caps: map[string]uint64{}}
 	repo := NewTweetRepo(s.db, stats)
 	tweetID := ulid.Make().String()
 
 	_, _ = repo.RetweetsCount(tweetID)
 	_, _ = repo.RepliesCount(tweetID)
-	_, _ = repo.GetViewsCount(tweetID, "author-node")
+	_, _ = repo.GetViewsCount(tweetID)
 
 	retweets := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(reTweetsCountSubspace).AddRootID(tweetID).Build()
 	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
 	s.EqualValues(oncePerNode, stats.caps[retweets.DatastoreKey().String()])
 	s.EqualValues(unlimitedPerNode, stats.caps[tweetsCountKey(tweetID).DatastoreKey().String()])
-	s.Equal("author-node", stats.nodeReads[views.DatastoreKey().String()])
+	s.EqualValues(oncePerNode, stats.caps[views.DatastoreKey().String()])
 }
 
 func (s *TweetRepoTestSuite) TestDeleteReply() {

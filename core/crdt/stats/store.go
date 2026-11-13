@@ -43,7 +43,7 @@ import (
 	"github.com/Warp-net/warpnet/core/crdt/store"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
@@ -82,6 +82,7 @@ const (
 	counterSize      = 8
 	signedValueSize  = counterSize + ed25519.SignatureSize
 	verifiedCapacity = 1 << 16
+	verifiedTTL      = time.Hour
 
 	ErrNoSigningKey = warpnet.WarpError("crdt stats: node has no ed25519 private key")
 )
@@ -103,7 +104,7 @@ type Store struct {
 	privKey    ed25519.PrivateKey
 	generation string
 	epochs     *store.Epochs
-	verified   *lru.Cache[[sha256.Size]byte, bool]
+	verified   *expirable.LRU[[sha256.Size]byte, bool]
 	stopChan   chan struct{}
 	stopOnce   sync.Once
 	wg         sync.WaitGroup
@@ -135,12 +136,6 @@ func New(
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
-	verified, err := lru.New[[sha256.Size]byte, bool](verifiedCapacity)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-
 	epochs := store.NewEpochs(dagPrefix)
 	epochs.Expire(dagPrefix, firstLiveDay(time.Now()))
 
@@ -165,7 +160,7 @@ func New(
 		privKey:    privKey,
 		generation: generation,
 		epochs:     epochs,
-		verified:   verified,
+		verified:   expirable.NewLRU[[sha256.Size]byte, bool](verifiedCapacity, nil, verifiedTTL),
 		stopChan:   make(chan struct{}),
 		counters:   make(map[string]*counter),
 	}
@@ -231,16 +226,6 @@ func (s *Store) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
 		total += count
 	}
 	return total, nil
-}
-
-// GetNodeStat is the count one node signed for, for counters only that
-// node may keep.
-func (s *Store) GetNodeStat(key ds.Key, nodeID string) (uint64, error) {
-	byNode, err := s.netByNode(key)
-	if err != nil {
-		return 0, err
-	}
-	return byNode[nodeID], nil
 }
 
 func (s *Store) netByNode(key ds.Key) (map[string]uint64, error) {

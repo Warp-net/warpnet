@@ -42,8 +42,8 @@ import (
 )
 
 type ViewsStorer interface {
-	RecordView(tweetId, viewerId, authorNodeID string) (uint64, error)
-	GetViewsCount(tweetId, authorNodeID string) (uint64, error)
+	RecordView(tweetId, viewerId string, isTransitive bool) (uint64, error)
+	GetViewsCount(tweetId string) (uint64, error)
 }
 
 type ViewUserFetcher interface {
@@ -78,30 +78,24 @@ func StreamViewHandler(repo ViewsStorer, userRepo ViewUserFetcher, streamer View
 		}
 
 		tweetId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+		ownNodeInfo := streamer.NodeInfo()
 
-		// Author's node is the sole authority for incrementing the view
-		// counter. The CRDT stats store replicates the value to every
-		// other node, so non-author nodes only forward the event and
-		// read back the count.
-		if ev.UserId == streamer.NodeInfo().OwnerId {
-			count, err := repo.RecordView(tweetId, ev.ViewerId, streamer.NodeInfo().ID.String())
-			if err != nil {
-				log.Errorf("view handler failed: %v", err)
-				return nil, err
-			}
+		// As with reactions, only the viewer's own node puts a view into the
+		// replicated counter; every other node keeps it locally.
+		count, err := repo.RecordView(tweetId, ev.ViewerId, ev.ViewerId == ownNodeInfo.OwnerId)
+		if err != nil {
+			log.Errorf("view handler failed: %v", err)
+			return nil, err
+		}
+
+		isOwnTweetView := ev.UserId == ownNodeInfo.OwnerId
+		isSomeoneElsesView := ev.ViewerId != ownNodeInfo.OwnerId
+		if isOwnTweetView || isSomeoneElsesView {
 			return event.ViewsCountResponse{Count: count}, nil
 		}
 
-		count := forwardViewToAuthor(ev, userRepo, streamer)
-		if count == 0 {
-			// Fall back to whatever the CRDT has propagated locally.
-			var authorNodeID string
-			if author, err := userRepo.Get(ev.UserId); err == nil {
-				authorNodeID = author.NodeId
-			}
-			if local, err := repo.GetViewsCount(tweetId, authorNodeID); err == nil {
-				count = local
-			}
+		if remote := forwardViewToAuthor(ev, userRepo, streamer); remote > count {
+			count = remote
 		}
 		return event.ViewsCountResponse{Count: count}, nil
 	}
