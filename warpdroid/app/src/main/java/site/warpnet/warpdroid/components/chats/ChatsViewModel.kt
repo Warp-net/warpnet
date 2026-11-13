@@ -28,6 +28,8 @@ class ChatsViewModel @Inject constructor(
     private val accountManager: AccountManager,
 ) : ViewModel() {
 
+    suspend fun isOnline(userId: String): Boolean? = repo.isUserOnline(userId)
+
     data class ChatRow(
         val chat: WarpnetChat,
         // The counterpart's user id from the owner's perspective. GetUserChats

@@ -94,6 +94,8 @@ class WarpnetRepository @Inject constructor(
     private val isFollowerRespAdapter = moshi.adapter<IsFollowerResponse>()
 
     private val getUserAdapter = moshi.adapter<GetUserEvent>()
+    private val updateProfileAdapter = moshi.adapter<site.warpnet.transport.dto.UpdateProfileEvent>()
+    private val userStatusAdapter = moshi.adapter<site.warpnet.transport.dto.UserStatusResponse>()
     private val getAllTweetsAdapter = moshi.adapter<GetAllTweetsEvent>()
     private val getAllUsersAdapter = moshi.adapter<GetAllUsersEvent>()
     private val getTweetAdapter = moshi.adapter<GetTweetEvent>()
@@ -185,6 +187,33 @@ class WarpnetRepository @Inject constructor(
         return userAdapter.fromJson(raw)
             ?: throw IllegalStateException("getUser returned empty body for $userId")
     }
+
+    suspend fun updateProfile(ev: site.warpnet.transport.dto.UpdateProfileEvent): User {
+        val raw = client.request(ProtocolIds.PRIVATE_POST_USER, updateProfileAdapter.toJson(ev))
+        val updated = userAdapter.fromJson(raw)
+            ?: throw IllegalStateException("updateProfile returned empty body")
+        // The node fills the counters only on GET user, so the update reply carries zeros.
+        val counted = userCache.get(updated.id) ?: getUser(updated.id)
+        val user = updated.copy(
+            followingsCount = counted.followingsCount,
+            followersCount = counted.followersCount,
+            tweetsCount = counted.tweetsCount,
+        )
+        userCache.put(user.id, user)
+        return user.toAccount()
+    }
+
+    // Each status costs the node a round-trip to the user's own node, so a
+    // list scrolling past the same rows reuses the answer for a minute.
+    suspend fun isUserOnline(userId: String): Boolean? = if (userId.isBlank()) null else userStatusCache.getOrLoad(userId) {
+        val raw = client.request(
+            ProtocolIds.PRIVATE_GET_USER_STATUS,
+            getUserAdapter.toJson(GetUserEvent(userId = userId)),
+        )
+        userStatusAdapter.fromJson(raw)?.isOnline
+    }
+
+    private val userStatusCache = TtlLruCache<String, Boolean>(maxSize = 256, ttlMillis = 60_000L)
 
     // -----------------------------------------------------------------
     // Timelines
@@ -467,28 +496,28 @@ class WarpnetRepository @Inject constructor(
     }
 
 
-    suspend fun uploadImage(file: String): String {
+    suspend fun uploadImage(file: String, chat: Boolean = false): String {
         if (file.isBlank()) return ""
         val raw = client.request(
-            ProtocolIds.PRIVATE_POST_UPLOAD_IMAGE,
+            if (chat) ProtocolIds.PRIVATE_POST_UPLOAD_CHAT_IMAGE else ProtocolIds.PRIVATE_POST_UPLOAD_IMAGE,
             uploadImageAdapter.toJson(site.warpnet.transport.dto.UploadImageEvent(image1 = file)),
         )
         return uploadImageRespAdapter.fromJson(raw)?.keys?.firstOrNull().orEmpty()
     }
 
-    suspend fun uploadVideo(file: String): String {
+    suspend fun uploadVideo(file: String, chat: Boolean = false): String {
         if (file.isBlank()) return ""
         val raw = client.request(
-            ProtocolIds.PRIVATE_POST_UPLOAD_VIDEO,
+            if (chat) ProtocolIds.PRIVATE_POST_UPLOAD_CHAT_VIDEO else ProtocolIds.PRIVATE_POST_UPLOAD_VIDEO,
             uploadVideoAdapter.toJson(site.warpnet.transport.dto.UploadVideoEvent(video = file)),
         )
         return uploadVideoRespAdapter.fromJson(raw)?.key.orEmpty()
     }
 
-    suspend fun getVideoBytes(userId: String, key: String): ByteArray? {
+    suspend fun getVideoBytes(userId: String, key: String, chat: Boolean = false): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_VIDEO,
+            if (chat) ProtocolIds.PUBLIC_GET_CHAT_VIDEO else ProtocolIds.PUBLIC_GET_VIDEO,
             getVideoEventAdapter.toJson(
                 site.warpnet.transport.dto.GetVideoEvent(userId = userId, key = key),
             ),
@@ -1211,6 +1240,8 @@ class WarpnetRepository @Inject constructor(
         senderId: String,
         receiverId: String,
         text: String,
+        imageKeys: List<String>? = null,
+        videoKey: String? = null,
     ): site.warpnet.transport.dto.WarpnetMessage? {
         val raw = client.request(
             ProtocolIds.PUBLIC_POST_MESSAGE,
@@ -1220,6 +1251,8 @@ class WarpnetRepository @Inject constructor(
                     senderId = senderId,
                     receiverId = receiverId,
                     text = text,
+                    imageKeys = imageKeys?.ifEmpty { null },
+                    videoKey = videoKey,
                 ),
             ),
         )
@@ -1243,12 +1276,12 @@ class WarpnetRepository @Inject constructor(
      * bytes to Glide. Returns null on empty key or decode failure; the
      * Glide pipeline falls back to the placeholder drawable.
      */
-    suspend fun getImageBytes(userId: String, key: String): ByteArray? {
+    suspend fun getImageBytes(userId: String, key: String, chat: Boolean = false): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
-        val cacheKey = "$userId/$key"
+        val cacheKey = if (chat) "chat/$userId/$key" else "$userId/$key"
         imageCache.get(cacheKey)?.let { return it }
         val raw = client.request(
-            ProtocolIds.PUBLIC_GET_IMAGE,
+            if (chat) ProtocolIds.PUBLIC_GET_CHAT_IMAGE else ProtocolIds.PUBLIC_GET_IMAGE,
             getImageEventAdapter.toJson(
                 site.warpnet.transport.dto.GetImageEvent(userId = userId, key = key),
             ),

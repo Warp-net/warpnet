@@ -56,6 +56,8 @@ import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okio.Buffer
+import site.warpnet.transport.dto.UpdateProfileEvent
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.Response
 import timber.log.Timber
@@ -685,7 +687,14 @@ class WarpnetApi @Inject constructor(
         sensitive: Boolean?,
         language: String?,
         quotePolicy: String?,
-    ): NetworkResult<User> = stubFailure("accountUpdateSource")
+    ): NetworkResult<User> = result {
+        val metadata = buildMap {
+            privacy?.let { put("privacy", it) }
+            sensitive?.let { put("sensitive", it.toString()) }
+            language?.let { put("language", it) }
+        }
+        warpnet.updateProfile(UpdateProfileEvent(metadata = metadata.ifEmpty { null }))
+    }
 
     suspend fun accountUpdateCredentials(
         displayName: RequestBody?,
@@ -694,7 +703,49 @@ class WarpnetApi @Inject constructor(
         avatar: MultipartBody.Part?,
         header: MultipartBody.Part?,
         fields: Map<String, RequestBody>,
-    ): NetworkResult<User> = stubFailure("accountUpdateCredentials")
+    ): NetworkResult<User> = result {
+        var website: String? = null
+        var birthdate: String? = null
+        if (fields.isNotEmpty()) {
+            // A full field list arrives on any field change; a missing
+            // Website field means the user removed it.
+            website = ""
+            val count = fields.keys.count { it.endsWith("[name]") }
+            for (i in 0 until count) {
+                val name = fields["fields_attributes[$i][name]"]?.readText().orEmpty().trim()
+                val value = fields["fields_attributes[$i][value]"]?.readText().orEmpty().trim()
+                if (name.isEmpty() && value.isEmpty()) continue
+                when {
+                    name.equals(WarpnetMapper.FIELD_WEBSITE, ignoreCase = true) -> website = value
+                    name.equals(WarpnetMapper.FIELD_BIRTHDATE, ignoreCase = true) -> birthdate = value
+                    else -> throw IllegalArgumentException(
+                        "Warpnet profiles only have ${WarpnetMapper.FIELD_WEBSITE} and ${WarpnetMapper.FIELD_BIRTHDATE} fields",
+                    )
+                }
+            }
+        }
+        warpnet.updateProfile(
+            UpdateProfileEvent(
+                username = displayName?.readText(),
+                bio = note?.readText(),
+                avatarKey = avatar?.let { uploadProfileImage(it) },
+                backgroundImageKey = header?.let { uploadProfileImage(it) },
+                website = website,
+                birthdate = birthdate,
+            ),
+        )
+    }
+
+    private fun RequestBody.readText(): String = Buffer().also { writeTo(it) }.readUtf8()
+
+    private suspend fun uploadProfileImage(part: MultipartBody.Part): String {
+        val bytes = Buffer().also { part.body.writeTo(it) }.readByteArray()
+        val mime = part.body.contentType()?.toString() ?: "image/png"
+        val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        return warpnet.uploadImage("$mime,$base64").ifBlank {
+            throw IllegalStateException("the node stored no image key")
+        }
+    }
 
     /**
      * Warpnet has no server-side text search, so we page through
@@ -942,18 +993,31 @@ class WarpnetApi @Inject constructor(
             return NetworkResult.success(SearchResult(emptyList(), emptyList(), emptyList()))
         }
         return result {
-            val (hits, _) = warpnet.searchAccounts(
+            val (accounts, _) = searchAccountsPage(
                 query = trimmed,
+                cursor = "",
                 limit = (limit ?: 40).coerceAtLeast(1),
+                resolve = resolve == true && type == "accounts",
             )
-            val found = if (resolve == true && type == "accounts") {
-                runCatching { warpnet.lookupFediverseUser(trimmed) }.getOrNull()
-            } else {
-                null
-            }
-            val accounts = if (found == null) hits else listOf(found) + hits.filterNot { it.id == found.id }
             SearchResult(accounts = accounts, statuses = emptyList(), hashtags = emptyList())
         }
+    }
+
+    /** One cursor page of user search; the fediverse match leads the first page. */
+    suspend fun searchAccountsPage(
+        query: String,
+        cursor: String,
+        limit: Int,
+        resolve: Boolean,
+    ): Pair<List<TimelineUser>, String> {
+        val (hits, next) = warpnet.searchAccounts(query = query, cursor = cursor, limit = limit)
+        val found = if (resolve && cursor.isEmpty()) {
+            runCatching { warpnet.lookupFediverseUser(query) }.getOrNull()
+        } else {
+            null
+        }
+        val accounts = if (found == null) hits else listOf(found) + hits.filterNot { it.id == found.id }
+        return accounts to next.takeUnless { it == END_CURSOR }.orEmpty()
     }
 
     // ---------------------------------------------------------------

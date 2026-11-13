@@ -92,6 +92,15 @@
 
                 <data android:mimeType="audio/*" />
             </intent-filter>
+            <!-- Profile links shared from the desktop: warpnet://user/<id> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="warpnet" android:host="user" />
+            </intent-filter>
 
             <meta-data
                 android:name="android.app.shortcuts"
