@@ -30,6 +30,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,6 +65,10 @@ const (
 	rebroadcastInterval = 5 * time.Minute
 	dagSyncerTimeout    = 1 * time.Minute
 	numWorkers          = 16
+
+	// maxDeltaSize keeps a block well below the 1 MiB value limit of the
+	// echo node's in-memory Badger.
+	maxDeltaSize = 1 << 18
 )
 
 type Config struct {
@@ -74,9 +80,22 @@ type Config struct {
 	PutHook     func(k ds.Key, v []byte)
 	DeleteHook  func(k ds.Key)
 	PurgeDAGs   []string
+	Epochs      *Epochs
 }
 
-func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
+// Store is a Merkle-CRDT kept in day DAGs: it publishes writes in capped
+// blocks, drops expired days and refuses their heads.
+type Store struct {
+	*crdt.MerkleCRDT
+
+	epochs *Epochs
+}
+
+func New(ctx context.Context, cfg Config) (*Store, error) {
+	if cfg.Epochs == nil {
+		cfg.Epochs = NewEpochs()
+	}
+
 	baseStore := ds.MutexWrap(cfg.Datastore)
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
@@ -105,7 +124,7 @@ func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
 		baseStore,
 		ds.NewKey(""),
 		dagService,
-		cfg.Broadcaster,
+		cfg.Epochs.Broadcaster(cfg.Broadcaster),
 		opts,
 		nil,
 	)
@@ -125,7 +144,47 @@ func New(ctx context.Context, cfg Config) (*crdt.MerkleCRDT, error) {
 		}
 	}()
 
-	return crdtStore, nil
+	return &Store{MerkleCRDT: crdtStore, epochs: cfg.Epochs}, nil
+}
+
+// Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per
+// block. It never shares a delta with crdt.Batch, whose pending delta
+// survives a failed commit.
+func (s *Store) Publish(ctx context.Context, deltas ...crdt.Delta) error {
+	slices.SortStableFunc(deltas, func(a, b crdt.Delta) int {
+		return strings.Compare(a.GetDagName(), b.GetDagName())
+	})
+	var (
+		block crdt.Delta
+		size  int
+	)
+	for _, delta := range deltas {
+		if block != nil && (block.GetDagName() != delta.GetDagName() || size+delta.Size() > maxDeltaSize) {
+			if _, err := s.MerkleCRDT.Publish(ctx, block); err != nil {
+				return err
+			}
+			block = nil
+		}
+		if block == nil {
+			block, size = delta, delta.Size()
+			continue
+		}
+		elems, err := block.GetElements()
+		if err != nil {
+			return err
+		}
+		moreElems, err := delta.GetElements()
+		if err != nil {
+			return err
+		}
+		block.SetElements(append(elems, moreElems...))
+		size += delta.Size()
+	}
+	if block == nil {
+		return nil
+	}
+	_, err := s.MerkleCRDT.Publish(ctx, block)
+	return err
 }
 
 type dedupLogger struct {

@@ -37,7 +37,6 @@ import (
 	"sync"
 	"time"
 
-	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
@@ -46,10 +45,6 @@ import (
 const (
 	// LegacyDAG is the unnamed DAG every write went to before day DAGs.
 	LegacyDAG = ""
-
-	// maxDeltaSize keeps a block well below the 1 MiB value limit of the
-	// echo node's in-memory Badger.
-	maxDeltaSize = 1 << 18
 
 	day = 24 * time.Hour
 )
@@ -116,16 +111,16 @@ func (e *Epochs) IsLive(dagName string) bool {
 	return !ok || dayNum >= firstLive
 }
 
-// Purge drops every DAG with a head that is no longer live.
-func (e *Epochs) Purge(ctx context.Context, store *crdt.MerkleCRDT) error {
+// PurgeExpired drops every DAG with a head that is no longer live.
+func (s *Store) PurgeExpired(ctx context.Context) error {
 	seen := make(map[string]struct{})
 	var errs []error
-	for _, head := range store.InternalStats(ctx).Heads {
-		if _, ok := seen[head.DAGName]; ok || e.IsLive(head.DAGName) {
+	for _, head := range s.InternalStats(ctx).Heads {
+		if _, ok := seen[head.DAGName]; ok || s.epochs.IsLive(head.DAGName) {
 			continue
 		}
 		seen[head.DAGName] = struct{}{}
-		removed, err := store.PurgeDAG(ctx, head.DAGName)
+		removed, err := s.PurgeDAG(ctx, head.DAGName)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("purge %q: %w", head.DAGName, err))
 			continue
@@ -184,44 +179,4 @@ func (b epochBroadcaster) Next(ctx context.Context) ([]byte, error) {
 			return live, nil
 		}
 	}
-}
-
-// Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per
-// block. It never shares a delta with crdt.Batch, whose pending delta
-// survives a failed commit.
-func Publish(ctx context.Context, store *crdt.MerkleCRDT, deltas []crdt.Delta) error {
-	slices.SortStableFunc(deltas, func(a, b crdt.Delta) int {
-		return strings.Compare(a.GetDagName(), b.GetDagName())
-	})
-	var (
-		block crdt.Delta
-		size  int
-	)
-	for _, delta := range deltas {
-		if block != nil && (block.GetDagName() != delta.GetDagName() || size+delta.Size() > maxDeltaSize) {
-			if _, err := store.Publish(ctx, block); err != nil {
-				return err
-			}
-			block = nil
-		}
-		if block == nil {
-			block, size = delta, delta.Size()
-			continue
-		}
-		elems, err := block.GetElements()
-		if err != nil {
-			return err
-		}
-		moreElems, err := delta.GetElements()
-		if err != nil {
-			return err
-		}
-		block.SetElements(append(elems, moreElems...))
-		size += delta.Size()
-	}
-	if block == nil {
-		return nil
-	}
-	_, err := store.Publish(ctx, block)
-	return err
 }

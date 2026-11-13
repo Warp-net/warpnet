@@ -70,7 +70,7 @@ const (
 // day. A node writes only its own records; everyone else's arrive through
 // the DAGs, and every node drops whole expired days locally.
 type Store struct {
-	crdt   *crdt.MerkleCRDT
+	crdt   *store.Store
 	ctx    context.Context
 	cancel context.CancelFunc
 	nodeID string
@@ -100,7 +100,7 @@ func New(
 	}
 
 	crdtStore, err := store.New(ctx, store.Config{
-		Broadcaster: s.epochs.Broadcaster(broadcaster),
+		Broadcaster: broadcaster,
 		Datastore:   datastore,
 		Node:        node,
 		Router:      router,
@@ -108,6 +108,7 @@ func New(
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
 		PurgeDAGs:   []string{store.LegacyDAG},
+		Epochs:      s.epochs,
 	})
 	if err != nil {
 		cancel()
@@ -140,7 +141,7 @@ func (s *Store) Put(recs ...domain.RatingRecord) error {
 		delta.SetDagName(epochDAGName(rec.Dimension, rec.Bucket))
 		deltas = append(deltas, delta)
 	}
-	if err := store.Publish(s.ctx, s.crdt, deltas); err != nil {
+	if err := s.crdt.Publish(s.ctx, deltas...); err != nil {
 		return fmt.Errorf("rating store: write %d records: %w", len(recs), err)
 	}
 	return nil
@@ -205,7 +206,7 @@ func (s *Store) PeerIDs() ([]string, error) {
 // then on.
 func (s *Store) DeleteExpired(dimension string, beforeBucket int64) error {
 	s.epochs.Expire(dimension, beforeBucket/epochBuckets)
-	if err := s.epochs.Purge(s.ctx, s.crdt); err != nil {
+	if err := s.crdt.PurgeExpired(s.ctx); err != nil {
 		return fmt.Errorf("rating store: %w", err)
 	}
 	return nil

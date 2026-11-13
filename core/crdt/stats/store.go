@@ -97,7 +97,7 @@ type counter struct {
 // the keys of its own generation and signs them with its node key, and a
 // read sums each node's own increments less its own decrements.
 type Store struct {
-	crdt       *crdt.MerkleCRDT
+	crdt       *store.Store
 	ctx        context.Context
 	cancel     context.CancelFunc
 	nodeID     string
@@ -140,12 +140,13 @@ func New(
 	epochs.Expire(dagPrefix, firstLiveDay(time.Now()))
 
 	crdtStore, err := store.New(ctx, store.Config{
-		Broadcaster: epochs.Broadcaster(broadcaster),
+		Broadcaster: broadcaster,
 		Datastore:   datastore,
 		Node:        node,
 		Router:      router,
 		Prefix:      bitswapPrefix,
 		PurgeDAGs:   []string{store.LegacyDAG},
+		Epochs:      epochs,
 	})
 	if err != nil {
 		cancel()
@@ -307,7 +308,7 @@ func (s *Store) flush() error {
 		delta.SetDagName(c.dag)
 		deltas = append(deltas, delta)
 	}
-	if err := store.Publish(s.ctx, s.crdt, deltas); err != nil {
+	if err := s.crdt.Publish(s.ctx, deltas...); err != nil {
 		return fmt.Errorf("commit %d counters: %w", len(pending), err)
 	}
 
@@ -333,7 +334,7 @@ func (s *Store) purge(now time.Time) error {
 		}
 	}
 	s.mu.Unlock()
-	return s.epochs.Purge(s.ctx, s.crdt)
+	return s.crdt.PurgeExpired(s.ctx)
 }
 
 func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {

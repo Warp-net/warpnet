@@ -110,8 +110,7 @@ func publishInEpoch(t *testing.T, s *Store, key string, value []byte, dagName st
 	delta, err := s.crdt.Set().Add(context.Background(), key, value)
 	require.NoError(t, err)
 	delta.SetDagName(dagName)
-	_, err = s.crdt.Publish(context.Background(), delta)
-	require.NoError(t, err)
+	require.NoError(t, s.crdt.Publish(context.Background(), delta))
 }
 
 type recordLog struct {
