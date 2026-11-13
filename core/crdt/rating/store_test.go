@@ -17,11 +17,9 @@ import (
 	"github.com/Warp-net/warpnet/json"
 	datastore "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
-	"github.com/ipfs/go-ds-crdt/pb"
 	"github.com/libp2p/go-libp2p"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
 type silentBroadcaster struct {
@@ -307,38 +305,6 @@ func TestStore_DeleteExpiredDropsWholeDaysOfThatDimension(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []domain.RatingRecord{newNet, oldApp}, got,
 		"the expired network day goes whole, foreign evidence included; other days and dimensions stay")
-}
-
-func TestStore_BroadcastsCarryOnlyLiveDays(t *testing.T) {
-	store, _ := newLiveStore(t)
-	require.NoError(t, store.DeleteExpired("net", 48))
-
-	encode := func(names ...string) []byte {
-		msg := &pb.CRDTBroadcast{}
-		for i, name := range names {
-			msg.Heads = append(msg.Heads, &pb.Head{Cid: []byte{byte(i)}, DagName: name})
-		}
-		data, err := proto.Marshal(msg)
-		require.NoError(t, err)
-		return data
-	}
-	names := func(data []byte) []string {
-		var msg pb.CRDTBroadcast
-		require.NoError(t, proto.Unmarshal(data, &msg))
-		var out []string
-		for _, h := range msg.Heads {
-			out = append(out, h.GetDagName())
-		}
-		return out
-	}
-
-	live, ok := store.liveHeads(encode("", "net-1", "net-2", "app-1", "bogus", "net-x"))
-	require.True(t, ok)
-	assert.Equal(t, []string{"net-2", "app-1"}, names(live),
-		"the legacy DAG, expired days and malformed names never travel")
-
-	_, ok = store.liveHeads(encode("", "net-0"))
-	assert.False(t, ok, "a broadcast left without heads is dropped")
 }
 
 func TestStore_StartupPurgesTheLegacyDAG(t *testing.T) {

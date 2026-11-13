@@ -30,7 +30,6 @@ package rating
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -43,9 +42,7 @@ import (
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
 	crdt "github.com/ipfs/go-ds-crdt"
-	"github.com/ipfs/go-ds-crdt/pb"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 )
 
 // GossipTopic is the pubsub topic this store's replicas converge on.
@@ -61,9 +58,7 @@ const (
 	recordPrefix   = "/record"
 	recordKeyParts = 5
 
-	maxDeltaSize = 1 << 18
 	epochBuckets = 24
-	legacyDAG    = ""
 
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
@@ -83,7 +78,8 @@ type Store struct {
 	mu          sync.RWMutex
 	putHooks    []func(domain.RatingRecord)
 	deleteHooks []func(domain.RatingRecord)
-	cutoffs     map[string]int64
+
+	epochs *store.Epochs
 }
 
 // New creates a new CRDT-based rating records store
@@ -97,21 +93,21 @@ func New(
 	ctx, cancel := context.WithCancel(ctx)
 
 	s := &Store{
-		ctx:     ctx,
-		cancel:  cancel,
-		nodeID:  node.ID().String(),
-		cutoffs: make(map[string]int64),
+		ctx:    ctx,
+		cancel: cancel,
+		nodeID: node.ID().String(),
+		epochs: store.NewEpochs(),
 	}
 
 	crdtStore, err := store.New(ctx, store.Config{
-		Broadcaster: epochBroadcaster{Broadcaster: broadcaster, records: s},
+		Broadcaster: s.epochs.Broadcaster(broadcaster),
 		Datastore:   datastore,
 		Node:        node,
 		Router:      router,
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
-		PurgeDAGs:   []string{legacyDAG},
+		PurgeDAGs:   []string{store.LegacyDAG},
 	})
 	if err != nil {
 		cancel()
@@ -122,7 +118,7 @@ func New(
 	return s, nil
 }
 
-// Put writes records in as few DAG blocks as maxDeltaSize allows.
+// Put writes records in as few DAG blocks as the block size cap allows.
 func (s *Store) Put(recs ...domain.RatingRecord) error {
 	deltas := make([]crdt.Delta, 0, len(recs))
 	for _, rec := range recs {
@@ -144,53 +140,9 @@ func (s *Store) Put(recs ...domain.RatingRecord) error {
 		delta.SetDagName(epochDAGName(rec.Dimension, rec.Bucket))
 		deltas = append(deltas, delta)
 	}
-	if err := s.publish(deltas); err != nil {
+	if err := store.Publish(s.ctx, s.crdt, deltas); err != nil {
 		return fmt.Errorf("rating store: write %d records: %w", len(recs), err)
 	}
-	return nil
-}
-
-func (s *Store) publish(deltas []crdt.Delta) error {
-	slices.SortStableFunc(deltas, func(a, b crdt.Delta) int {
-		return strings.Compare(a.GetDagName(), b.GetDagName())
-	})
-	var (
-		block crdt.Delta
-		size  int
-	)
-	for _, delta := range deltas {
-		if block != nil && (block.GetDagName() != delta.GetDagName() || size+delta.Size() > maxDeltaSize) {
-			if _, err := s.crdt.Publish(s.ctx, block); err != nil {
-				return err
-			}
-			block = nil
-		}
-		if block == nil {
-			block, size = delta, delta.Size()
-			continue
-		}
-		if err := joinDelta(block, delta); err != nil {
-			return err
-		}
-		size += delta.Size()
-	}
-	if block == nil {
-		return nil
-	}
-	_, err := s.crdt.Publish(s.ctx, block)
-	return err
-}
-
-func joinDelta(block, delta crdt.Delta) error {
-	elems, err := block.GetElements()
-	if err != nil {
-		return err
-	}
-	moreElems, err := delta.GetElements()
-	if err != nil {
-		return err
-	}
-	block.SetElements(append(elems, moreElems...))
 	return nil
 }
 
@@ -252,59 +204,11 @@ func (s *Store) PeerIDs() ([]string, error) {
 // beforeBucket, own records and foreign alike, and refuses their heads from
 // then on.
 func (s *Store) DeleteExpired(dimension string, beforeBucket int64) error {
-	s.mu.Lock()
-	s.cutoffs[dimension] = beforeBucket
-	s.mu.Unlock()
-
-	seen := make(map[string]struct{})
-	var errs []error
-	for _, head := range s.crdt.InternalStats(s.ctx).Heads {
-		if _, ok := seen[head.DAGName]; ok || s.isLiveEpoch(head.DAGName) {
-			continue
-		}
-		seen[head.DAGName] = struct{}{}
-		removed, err := s.crdt.PurgeDAG(s.ctx, head.DAGName)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("rating store: purge %q: %w", head.DAGName, err))
-			continue
-		}
-		log.Infof("rating store: dropped expired DAG %q of %d blocks", head.DAGName, removed)
+	s.epochs.Expire(dimension, beforeBucket/epochBuckets)
+	if err := s.epochs.Purge(s.ctx, s.crdt); err != nil {
+		return fmt.Errorf("rating store: %w", err)
 	}
-	return errors.Join(errs...)
-}
-
-func (s *Store) isLiveEpoch(dagName string) bool {
-	i := strings.LastIndexByte(dagName, '-')
-	if i <= 0 {
-		return false
-	}
-	epoch, err := strconv.ParseInt(dagName[i+1:], 10, 64)
-	if err != nil || epoch < 0 {
-		return false
-	}
-	s.mu.RLock()
-	cutoff, ok := s.cutoffs[dagName[:i]]
-	s.mu.RUnlock()
-	return !ok || (epoch+1)*epochBuckets > cutoff
-}
-
-func (s *Store) liveHeads(data []byte) ([]byte, bool) {
-	var msg pb.CRDTBroadcast
-	if err := proto.Unmarshal(data, &msg); err != nil {
-		return nil, false
-	}
-	heads := slices.DeleteFunc(slices.Clone(msg.GetHeads()), func(h *pb.Head) bool {
-		return !s.isLiveEpoch(h.GetDagName())
-	})
-	if len(heads) == 0 {
-		return nil, false
-	}
-	if len(heads) == len(msg.GetHeads()) {
-		return data, true
-	}
-	msg.Heads = heads
-	live, err := proto.Marshal(&msg)
-	return live, err == nil
+	return nil
 }
 
 // OnPut registers a hook fired for every record merged into the store, own or foreign.
@@ -364,7 +268,7 @@ func (s *Store) Close() error {
 }
 
 func epochDAGName(dimension string, bucket int64) string {
-	return dimension + "-" + strconv.FormatInt(bucket/epochBuckets, 10)
+	return store.DayDAG(dimension, bucket/epochBuckets)
 }
 
 // recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.
@@ -419,30 +323,4 @@ func decodeRecord(key string, value []byte) (domain.RatingRecord, error) {
 		return rec, ErrKeyMismatch
 	}
 	return rec, nil
-}
-
-type epochBroadcaster struct {
-	store.Broadcaster
-
-	records *Store
-}
-
-func (b epochBroadcaster) Broadcast(ctx context.Context, data []byte) error {
-	live, ok := b.records.liveHeads(data)
-	if !ok {
-		return nil
-	}
-	return b.Broadcaster.Broadcast(ctx, live)
-}
-
-func (b epochBroadcaster) Next(ctx context.Context) ([]byte, error) {
-	for {
-		data, err := b.Broadcaster.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if live, ok := b.records.liveHeads(data); ok {
-			return live, nil
-		}
-	}
 }
