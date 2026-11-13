@@ -213,7 +213,7 @@ func (r *replica) open(t *testing.T) {
 	t.Helper()
 	bc, err := broadcast.NewGossip(r.ctx, r.gossip, GossipTopic)
 	require.NoError(t, err)
-	s, err := New(r.ctx, bc, r.data, r.host, idleRouter{})
+	s, err := New(r.ctx, bc, r.data, r.host, idleRouter{}, acceptRecords)
 	require.NoError(t, err)
 	r.puts, r.deletes = &recordLog{}, &recordLog{}
 	s.OnPut(r.puts.hook)
@@ -448,12 +448,10 @@ func TestReplication_ARecordUnderAForeignKeyNeverSurfacesOnOtherReplicas(t *test
 	require.NoError(t, a.store.Put(marker))
 
 	for _, r := range []*replica{b, c} {
-		require.EventuallyWithT(t, func(collect *assert.CollectT) {
-			value, err := r.store.crdt.Get(context.Background(), key)
-			assert.NoError(collect, err)
-			assert.Equal(collect, forged, value)
-		}, replicationTimeout, replicationTick, "%s never received the forged value", r.name)
 		r.eventuallyHooked(t, r.puts, marker)
+		has, err := r.store.crdt.Has(context.Background(), key)
+		require.NoError(t, err)
+		assert.False(t, has, "%s: a value whose content does not match its key is refused before the merge", r.name)
 
 		got, err := r.store.List(observedPeer)
 		require.NoError(t, err)
@@ -596,4 +594,53 @@ func TestReplication_ARestartedReplicaKeepsItsRecordsAndReplicatesBothWays(t *te
 			a.eventuallyHooked(t, a.puts, bNext)
 		})
 	}
+}
+
+func TestReplication_AForgedRecordCannotDisplaceTheObserversOwn(t *testing.T) {
+	rs := newCluster(t, "A", "B", "C")
+	a, b, c := rs[0], rs[1], rs[2]
+	now := currentBucket()
+
+	honest := ratingRecord(a.id(), observedPeer, "net", now)
+	require.NoError(t, a.store.Put(honest))
+	b.eventuallyLists(t, observedPeer, honest)
+
+	forged := honest
+	forged.Offences = []domain.OffenceCount{{Kind: "bad_signature", Count: 1000}}
+	forged.Signature = forgedSignature
+	key, err := recordKey(forged)
+	require.NoError(t, err)
+	value, err := json.Marshal(forged)
+	require.NoError(t, err)
+	publishInEpoch(t, b.store, key.String(), value, dayDAG("net", now))
+
+	marker := ratingRecord(b.id(), otherPeer, "net", now)
+	require.NoError(t, b.store.Put(marker))
+	c.eventuallyLists(t, otherPeer, marker)
+
+	got, err := c.store.List(observedPeer)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.RatingRecord{honest}, got,
+		"a record its observer did not sign is refused before it can win the key")
+}
+
+func TestReplication_ARecordOutsideItsDayDAGIsRefused(t *testing.T) {
+	rs := newCluster(t, "A", "B")
+	a, b := rs[0], rs[1]
+	now := currentBucket()
+
+	old := ratingRecord(a.id(), observedPeer, "net", now-60*bucketsPerDay)
+	key, err := recordKey(old)
+	require.NoError(t, err)
+	value, err := json.Marshal(old)
+	require.NoError(t, err)
+	publishInEpoch(t, a.store, key.String(), value, dayDAG("net", now))
+
+	marker := ratingRecord(a.id(), otherPeer, "net", now)
+	require.NoError(t, a.store.Put(marker))
+	b.eventuallyLists(t, otherPeer, marker)
+
+	has, err := b.store.crdt.Has(context.Background(), key)
+	require.NoError(t, err)
+	assert.False(t, has, "a record filed under another day's DAG would outlive its own day")
 }

@@ -78,6 +78,8 @@ type Store struct {
 	mu          sync.RWMutex
 	putHooks    []func(domain.RatingRecord)
 	deleteHooks []func(domain.RatingRecord)
+
+	verify func(domain.RatingRecord) error
 }
 
 // New creates a new CRDT-based rating records store
@@ -87,6 +89,7 @@ func New(
 	datastore store.Datastore,
 	node warpnet.P2PNode,
 	router store.Router,
+	verify func(domain.RatingRecord) error,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -94,6 +97,7 @@ func New(
 		ctx:    ctx,
 		cancel: cancel,
 		nodeID: node.ID().String(),
+		verify: verify,
 	}
 
 	crdtStore, err := store.New(ctx, store.Config{
@@ -104,6 +108,7 @@ func New(
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
+		IsValid:     s.isValid,
 	})
 	if err != nil {
 		cancel()
@@ -265,6 +270,16 @@ func (s *Store) Close() error {
 
 func dayDAG(dimension string, bucket int64) string {
 	return store.Day(bucket / bucketsPerDay).DAG(dimension)
+}
+
+// isValid accepts a received record only if its observer signed it and it
+// sits in the DAG of its own dimension and day.
+func (s *Store) isValid(dagName, key string, value []byte) bool {
+	rec, err := decodeRecord(key, value)
+	if err != nil || dayDAG(rec.Dimension, rec.Bucket) != dagName {
+		return false
+	}
+	return s.verify(rec) == nil
 }
 
 // recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.

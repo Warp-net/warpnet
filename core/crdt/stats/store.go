@@ -135,22 +135,7 @@ func New(
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
-	crdtStore, err := store.New(ctx, store.Config{
-		Broadcaster: broadcaster,
-		Datastore:   datastore,
-		Node:        node,
-		Router:      router,
-		Prefix:      bitswapPrefix,
-		DAGPrefixes: []string{dagPrefix},
-	})
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	crdtStore.Expire(dagPrefix, firstLiveDay(time.Now()))
-
 	s := &Store{
-		crdt:       crdtStore,
 		ctx:        ctx,
 		cancel:     cancel,
 		nodeID:     node.ID().String(),
@@ -160,6 +145,22 @@ func New(
 		stopChan:   make(chan struct{}),
 		counters:   make(map[string]*counter),
 	}
+
+	crdtStore, err := store.New(ctx, store.Config{
+		Broadcaster: broadcaster,
+		Datastore:   datastore,
+		Node:        node,
+		Router:      router,
+		Prefix:      bitswapPrefix,
+		DAGPrefixes: []string{dagPrefix},
+		IsValid:     s.isValid,
+	})
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	crdtStore.Expire(dagPrefix, firstLiveDay(time.Now()))
+	s.crdt = crdtStore
 
 	s.wg.Add(1)
 	go s.run()
@@ -210,6 +211,9 @@ func (s *Store) run() {
 // cap is not zero, so no node can lower another's count or stand for more
 // than one owner.
 func (s *Store) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
+	if dag, ok := tweetDAG(key); !ok || !s.crdt.IsLive(dag) {
+		return 0, nil
+	}
 	byNode, err := s.netByNode(key)
 	if err != nil {
 		return 0, err
@@ -375,6 +379,16 @@ func (s *Store) sumByNode(namespace string, key ds.Key) (map[string]uint64, erro
 func (s *Store) signedValue(key string, total uint64) []byte {
 	value := binary.BigEndian.AppendUint64(make([]byte, 0, signedValueSize), total)
 	return append(value, ed25519.Sign(s.privKey, signingBytes(key, value[:counterSize]))...)
+}
+
+// isValid accepts a received counter only if the node in its key signed
+// it and it sits in the DAG of its tweet's day.
+func (s *Store) isValid(dagName, key string, value []byte) bool {
+	if dag, ok := tweetDAG(ds.NewKey(key)); !ok || dag != dagName {
+		return false
+	}
+	_, ok := s.verifiedNode(key, value)
+	return ok
 }
 
 // verifiedNode returns the node a component belongs to if the component

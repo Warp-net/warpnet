@@ -517,16 +517,24 @@ func TestCRDTStats_PurgeDropsTweetsPastRetention(t *testing.T) {
 	s.mu.Unlock()
 }
 
-func TestCRDTStats_PurgeDropsTheUnnamedDAG(t *testing.T) {
-	s, _ := newLiveStatsStore(t)
-	ctx := context.Background()
+func TestCRDTStats_StartupDropsTheUnnamedDAG(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	data := dssync.MutexWrap(datastore.NewMapDatastore())
 
-	old := counterPrefix + "/" + incrNamespace + "/REACTIONS/INCR/" + testTweet + "/" + s.nodeID + "/old"
-	require.NoError(t, s.crdt.Put(ctx, datastore.NewKey(old), binary.BigEndian.AppendUint64(nil, 7)))
+	first, err := New(ctx, &silentBroadcaster{}, data, newStatsHost(t), idleRouter{})
+	require.NoError(t, err)
+	old := datastore.NewKey(counterPrefix + "/" + incrNamespace + "/REACTIONS/INCR/" + testTweet + "/" + first.nodeID + "/old")
+	require.NoError(t, first.crdt.Put(ctx, old, binary.BigEndian.AppendUint64(nil, 7)))
+	require.NoError(t, first.Close())
 
-	require.NoError(t, s.purge(time.Now()))
-
-	assert.Empty(t, s.crdt.InternalStats(ctx).Heads, "unsigned counters from before day DAGs are never live")
+	second, err := New(ctx, &silentBroadcaster{}, data, newStatsHost(t), idleRouter{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = second.Close() })
+	has, err := second.crdt.Has(ctx, old)
+	require.NoError(t, err)
+	assert.False(t, has, "unsigned counters from before day DAGs are gone, not just unread")
+	assert.Empty(t, second.crdt.InternalStats(ctx).Heads)
 }
 
 func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
@@ -547,4 +555,56 @@ func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
 	got, err := honest.GetAggregatedStat(likes, 1)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, got, "a thousand self-signed likes from one node are one like")
+}
+
+func TestCRDTStats_AnInvalidValueCannotDisplaceAnHonestOne(t *testing.T) {
+	honest, attacker := newStatsPair(t)
+	likes := tweetKey("/REACTIONS/INCR/displaced")
+	dag, ok := tweetDAG(likes)
+	require.True(t, ok)
+
+	require.NoError(t, honest.Increment(likes))
+	require.NoError(t, honest.flush())
+	require.Eventually(t, func() bool {
+		got, err := attacker.GetAggregatedStat(likes, 1)
+		return err == nil && got == 1
+	}, 20*time.Second, 100*time.Millisecond)
+
+	honestKey := honest.counterKey(incrNamespace, likes).String()
+	publishRaw(t, attacker, honestKey, make([]byte, signedValueSize), dag)
+	marker := tweetKey("/REACTIONS/INCR/marker")
+	require.NoError(t, attacker.Increment(marker))
+	require.NoError(t, attacker.flush())
+	require.Eventually(t, func() bool {
+		got, err := honest.GetAggregatedStat(marker, 1)
+		return err == nil && got == 1
+	}, 20*time.Second, 100*time.Millisecond)
+
+	got, err := honest.GetAggregatedStat(likes, 1)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, got, "a value its node did not sign is refused before it can win the key")
+}
+
+func TestCRDTStats_ACounterOutsideItsTweetsDayIsRefused(t *testing.T) {
+	honest, attacker := newStatsPair(t)
+	old := datastore.NewKey("/REACTIONS/INCR/" + tweetAt(time.Now().Add(-60*24*time.Hour)))
+	today := store.DayAt(time.Now()).DAG(dagPrefix)
+
+	oldKey := attacker.counterKey(incrNamespace, old).String()
+	publishRaw(t, attacker, oldKey, attacker.signedValue(oldKey, 1), today)
+	marker := tweetKey("/REACTIONS/INCR/marker")
+	require.NoError(t, attacker.Increment(marker))
+	require.NoError(t, attacker.flush())
+	require.Eventually(t, func() bool {
+		got, err := honest.GetAggregatedStat(marker, 1)
+		return err == nil && got == 1
+	}, 20*time.Second, 100*time.Millisecond)
+
+	has, err := honest.crdt.Has(context.Background(), datastore.NewKey(oldKey))
+	require.NoError(t, err)
+	assert.False(t, has, "a signed counter filed under another day's DAG would outlive its tweet")
+	require.NoError(t, honest.purge(time.Now()))
+	got, err := honest.GetAggregatedStat(old, 1)
+	require.NoError(t, err)
+	assert.Zero(t, got)
 }

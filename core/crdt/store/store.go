@@ -29,6 +29,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -37,7 +38,10 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
+	datastore "github.com/ipfs/go-datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
+	"github.com/ipfs/go-ds-crdt/pb"
+	ipld "github.com/ipfs/go-ipld-format"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -82,6 +86,10 @@ type Config struct {
 	// DAGPrefixes limits the live day DAGs to these prefixes; with none,
 	// any prefix is live until it is expired.
 	DAGPrefixes []string
+	// IsValid decides, before a received block is merged, whether one of
+	// its writes belongs in the store: signed by its author and kept in
+	// the DAG of its own day.
+	IsValid func(dagName, key string, value []byte) bool
 }
 
 // MerkleCRDT is a Merkle-CRDT kept in day DAGs: it publishes writes in
@@ -94,7 +102,12 @@ type MerkleCRDT struct {
 	firstLive map[string]Day
 }
 
+const ErrNoValidator = warpnet.WarpError("crdt store: no write validator")
+
 func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
+	if cfg.IsValid == nil {
+		return nil, ErrNoValidator
+	}
 	m := &MerkleCRDT{firstLive: make(map[string]Day)}
 	if len(cfg.DAGPrefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))
@@ -127,13 +140,19 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
+	if err := m.purgeNotLive(ctx, baseStore, dagService, opts); err != nil {
+		log.Errorf("failed to purge DAGs that are not live: %v", err)
+	}
+
 	crdtStore, err := crdt.NewMerkleCRDT(
 		baseStore,
 		ds.NewKey(""),
 		dagService,
 		liveBroadcaster{Broadcaster: cfg.Broadcaster, crdt: m},
 		opts,
-		nil,
+		&crdt.MerkleCRDTOptions{DeltaFactory: func() crdt.Delta {
+			return &checkedDelta{Delta: &pb.Delta{}, isValid: cfg.IsValid}
+		}},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
@@ -142,9 +161,6 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	m.MerkleCRDT = crdtStore
 
 	go func() {
-		if err := m.PurgeExpired(ctx); err != nil {
-			log.Errorf("failed to purge expired DAGs: %v", err)
-		}
 		// Unconditional: a clean Close() mid-sync can leave a hole with the dirty bit unset.
 		if err := crdtStore.Repair(ctx); err != nil {
 			log.Errorf("failed to repair store: %v", err)
@@ -152,6 +168,38 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	}()
 
 	return m, nil
+}
+
+// purgeNotLive drops, before the checked store starts, every DAG that is
+// not live: its writes may predate the checks, and only the stock delta
+// sees all of them, so nothing it merged is left behind. It reads local
+// blocks only and talks to no one.
+func (m *MerkleCRDT) purgeNotLive(ctx context.Context, data datastore.Datastore, dags ipld.DAGService, opts *crdt.Options) error {
+	plain, err := crdt.NewMerkleCRDT(data, ds.NewKey(""), dags, idleBroadcaster{}, opts, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = plain.Close() }()
+
+	var errs []error
+	for _, head := range plain.InternalStats(ctx).Heads {
+		if m.IsLive(head.DAGName) {
+			continue
+		}
+		if _, err := plain.PurgeDAG(ctx, head.DAGName); err != nil {
+			errs = append(errs, fmt.Errorf("purge %q: %w", head.DAGName, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+type idleBroadcaster struct{}
+
+func (idleBroadcaster) Broadcast(context.Context, []byte) error { return nil }
+
+func (idleBroadcaster) Next(ctx context.Context) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 // Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per

@@ -6,6 +6,7 @@ package rating
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -21,6 +22,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// forgedSignature marks a record acceptRecords treats as not signed by its
+// observer; every other placeholder signature passes.
+const forgedSignature = "forged"
+
+// acceptRecords stands in for the engine's signature check: these tests sign
+// records with placeholder signatures.
+func acceptRecords(rec domain.RatingRecord) error {
+	if rec.Signature == forgedSignature {
+		return errors.New("forged signature")
+	}
+	return nil
+}
 
 type silentBroadcaster struct {
 	mu        sync.Mutex
@@ -74,6 +88,7 @@ func newLiveStore(t *testing.T) (*Store, *silentBroadcaster) {
 		dssync.MutexWrap(datastore.NewMapDatastore()),
 		newHost(t),
 		idleRouter{},
+		acceptRecords,
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
@@ -306,31 +321,12 @@ func TestStore_DeleteExpiredDropsWholeDaysOfThatDimension(t *testing.T) {
 		"the expired network day goes whole, foreign evidence included; other days and dimensions stay")
 }
 
-func TestStore_DeleteExpiredDropsTheUnnamedDAG(t *testing.T) {
-	store, _ := newLiveStore(t)
-	ctx := context.Background()
-
-	old := ratingRecord(store.nodeID, "peer-a", "net", currentBucket())
-	key, err := recordKey(old)
-	require.NoError(t, err)
-	value, err := json.Marshal(old)
-	require.NoError(t, err)
-	require.NoError(t, store.crdt.Put(ctx, key, value))
-
-	require.NoError(t, store.DeleteExpired("net", 0))
-
-	got, err := store.List("peer-a")
-	require.NoError(t, err)
-	assert.Empty(t, got)
-	assert.Empty(t, store.crdt.InternalStats(ctx).Heads, "the DAG from before day DAGs is never live")
-}
-
 func TestStore_StartupDropsTheUnnamedDAG(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	data := dssync.MutexWrap(datastore.NewMapDatastore())
 
-	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{})
+	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords)
 	require.NoError(t, err)
 	old := ratingRecord(first.nodeID, "peer-a", "net", currentBucket())
 	key, err := recordKey(old)
@@ -340,7 +336,7 @@ func TestStore_StartupDropsTheUnnamedDAG(t *testing.T) {
 	require.NoError(t, first.crdt.Put(ctx, key, value))
 	require.NoError(t, first.Close())
 
-	second, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{})
+	second, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = second.Close() })
 	require.Eventually(t, func() bool {
