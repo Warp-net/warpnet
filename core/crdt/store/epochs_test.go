@@ -10,11 +10,8 @@ import (
 	"time"
 
 	datastore "github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-datastore/query"
-	dssync "github.com/ipfs/go-datastore/sync"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
-	"github.com/libp2p/go-libp2p"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -249,119 +246,4 @@ func TestEpochs_PublishSplitsABlockAtTheSizeCap(t *testing.T) {
 	require.NoError(t, m.Publish(ctx, deltas...))
 
 	assert.EqualValues(t, 3, m.InternalStats(ctx).MaxHeight, "two third-cap writes fit a block, three do not")
-}
-
-func TestEpochs_TheWholeStoreExpiresWithTheUnnamedDAGOrNothingLive(t *testing.T) {
-	e := newEpochs("test")
-	today := DayAt(time.Now())
-	e.Expire("test", today-1)
-	head := func(name string) crdt.Head {
-		h := crdt.Head{}
-		h.DAGName = name
-		return h
-	}
-
-	assert.False(t, e.isWholeStoreExpired(nil), "an empty store has nothing to clear")
-	assert.False(t, e.isWholeStoreExpired([]crdt.Head{head(today.DAG("test")), head((today - 9).DAG("test"))}),
-		"with a live day, expired days are purged one by one")
-	assert.True(t, e.isWholeStoreExpired([]crdt.Head{head((today - 9).DAG("test")), head((today - 5).DAG("test"))}),
-		"nothing live is left")
-	assert.True(t, e.isWholeStoreExpired([]crdt.Head{head(today.DAG("test")), head("")}),
-		"the unnamed DAG from before day DAGs is too big to walk")
-}
-
-// clearedStore is a map datastore that drops all its keys at once, like
-// database.NodeRepo.
-type clearedStore struct {
-	datastore.Batching
-
-	cleared int
-}
-
-func (c *clearedStore) Clear() error {
-	c.cleared++
-	results, err := c.Query(context.Background(), query.Query{KeysOnly: true})
-	if err != nil {
-		return err
-	}
-	entries, err := results.Rest()
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if err := c.Delete(context.Background(), datastore.NewKey(e.Key)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func TestEpochs_StartupClearsAStoreWithTheUnnamedDAGAtOnce(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	data := &clearedStore{Batching: dssync.MutexWrap(datastore.NewMapDatastore())}
-	host, err := libp2p.New(libp2p.NoListenAddrs)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = host.Close() })
-	cfg := Config{
-		Broadcaster: idleBroadcaster{},
-		Datastore:   data,
-		Node:        host,
-		Router:      noRouter{},
-		Prefix:      "/test",
-		DAGPrefixes: []string{"test"},
-		Validate:    func(string, string, []byte) error { return nil },
-		Compare:     func([]byte, []byte) int { return 0 },
-	}
-
-	first, err := New(ctx, cfg)
-	require.NoError(t, err)
-	require.NoError(t, first.Put(ctx, datastore.NewKey("/old"), total(1)), "a write to the unnamed DAG, as before day DAGs")
-	require.NoError(t, first.Close())
-	require.Zero(t, data.cleared)
-
-	second, err := New(ctx, cfg)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = second.Close() })
-	assert.Equal(t, 1, data.cleared, "the unnamed DAG is cleared with the store, never walked")
-	assert.Empty(t, second.InternalStats(ctx).Heads)
-	has, err := second.Has(ctx, datastore.NewKey("/old"))
-	require.NoError(t, err)
-	assert.False(t, has)
-}
-
-func TestEpochs_StartupNeverClearsAStoreOfDayDAGs(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	data := &clearedStore{Batching: dssync.MutexWrap(datastore.NewMapDatastore())}
-	host, err := libp2p.New(libp2p.NoListenAddrs)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = host.Close() })
-	today := DayAt(time.Now())
-	cfg := Config{
-		Broadcaster: idleBroadcaster{},
-		Datastore:   data,
-		Node:        host,
-		Router:      noRouter{},
-		Prefix:      "/test",
-		DAGPrefixes: []string{"test"},
-		Validate:    func(string, string, []byte) error { return nil },
-		Compare:     func([]byte, []byte) int { return 0 },
-	}
-
-	first, err := New(ctx, cfg)
-	require.NoError(t, err)
-	for i, day := range []Day{today, today - 10} {
-		delta, err := first.Set().Add(ctx, "/d"+strconv.Itoa(i), total(1))
-		require.NoError(t, err)
-		delta.SetDagName(day.DAG("test"))
-		require.NoError(t, first.Publish(ctx, delta))
-	}
-	require.NoError(t, first.Close())
-
-	second, err := New(ctx, cfg)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = second.Close() })
-	assert.Zero(t, data.cleared, "day DAGs are expired by the store's own cutoffs, not cleared at start")
-	assert.Len(t, second.InternalStats(ctx).Heads, 2)
 }

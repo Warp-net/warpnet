@@ -33,6 +33,7 @@ import (
 
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	local_store "github.com/Warp-net/warpnet/database/local-store"
+	log "github.com/sirupsen/logrus"
 )
 
 type RatingStorer interface {
@@ -46,13 +47,22 @@ type RatingStorer interface {
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
 	Set(key local_store.DatabaseKey, value []byte) error
 	Delete(key local_store.DatabaseKey) error
+	DropPrefix(prefix local_store.DatabaseKey) error
 }
 
-const ratingPrefix = "RATING"
+const (
+	ratingPrefix = "RATING_DAYS"
+	// oldRatingPrefix held the rating CRDT before it kept a DAG per day.
+	oldRatingPrefix = "/RATING/"
+)
 
 // NewRatingRepo backs the rating CRDT. It is kept apart from the stats
-// CRDT because each go-ds-crdt instance owns its whole namespace.
+// CRDT because each go-ds-crdt instance owns its whole namespace. It drops
+// the old single-DAG rating history, which no one reads any more.
 func NewRatingRepo(db RatingStorer) ds.Datastore {
+	if err := db.DropPrefix(oldRatingPrefix); err != nil {
+		log.Errorf("rating repo: drop old history: %v", err)
+	}
 	prefix := ratingPrefix
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
 		prefix = requiredPrefixSlash + prefix

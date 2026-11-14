@@ -229,6 +229,7 @@ type Storer interface {
 	SetWithTTL(key local_store.DatabaseKey, value []byte, ttl time.Duration) error
 	Set(key local_store.DatabaseKey, value []byte) error
 	Delete(key local_store.DatabaseKey) error
+	DropPrefix(prefix local_store.DatabaseKey) error
 	Path() string
 	Stats() map[string]string
 	IsFirstRun() bool

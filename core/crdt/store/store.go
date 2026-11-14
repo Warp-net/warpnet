@@ -31,7 +31,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -43,7 +42,6 @@ import (
 	datastore "github.com/ipfs/go-datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
-	ipld "github.com/ipfs/go-ipld-format"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -144,10 +142,6 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
-	if err := m.purgeNotLive(ctx, cfg.Datastore, baseStore, dagService, opts); err != nil {
-		log.Errorf("failed to purge DAGs that are not live: %v", err)
-	}
-
 	if putHook := opts.PutHook; putHook != nil {
 		opts.PutHook = func(k ds.Key, v []byte) {
 			if current, err := baseStore.Get(ctx, setValueKey(k.String())); err == nil && bytes.Equal(current, v) {
@@ -232,68 +226,6 @@ func (v versionedStore) Put(ctx context.Context, key datastore.Key, value []byte
 		}
 	}
 	return v.Datastore.Put(ctx, key, value)
-}
-
-// purgeNotLive drops, before the checked store starts, every DAG that is
-// not live: its writes may predate the checks, and only the stock delta
-// sees all of them, so nothing it merged is left behind. It reads local
-// blocks only and talks to no one. Walking the unnamed DAG from before day
-// DAGs takes minutes, so when it is there, or no DAG is live at all, the
-// whole store is cleared at once instead: whatever was live is fetched
-// again.
-func (m *MerkleCRDT) purgeNotLive(ctx context.Context, owner Datastore, data datastore.Datastore, dags ipld.DAGService, opts *crdt.Options) error {
-	plain, err := crdt.NewMerkleCRDT(data, ds.NewKey(""), dags, idleBroadcaster{}, opts, nil)
-	if err != nil {
-		return err
-	}
-	heads := plain.InternalStats(ctx).Heads
-
-	store, canClear := owner.(clearer)
-	if canClear && m.isWholeStoreExpired(heads) {
-		if err := plain.Close(); err != nil {
-			return err
-		}
-		log.Infof("crdt: clearing a store with no live DAG or with the unnamed one")
-		return store.Clear()
-	}
-	defer func() { _ = plain.Close() }()
-
-	var errs []error
-	for _, head := range heads {
-		if m.IsLive(head.DAGName) {
-			continue
-		}
-		if _, err := plain.PurgeDAG(ctx, head.DAGName); err != nil {
-			errs = append(errs, fmt.Errorf("purge %q: %w", head.DAGName, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// clearer is a datastore that drops all of its keys at once.
-type clearer interface {
-	Clear() error
-}
-
-func (m *MerkleCRDT) isWholeStoreExpired(heads []crdt.Head) bool {
-	if len(heads) == 0 {
-		return false
-	}
-	for _, head := range heads {
-		if head.DAGName == "" {
-			return true
-		}
-	}
-	return !slices.ContainsFunc(heads, func(h crdt.Head) bool { return m.IsLive(h.DAGName) })
-}
-
-type idleBroadcaster struct{}
-
-func (idleBroadcaster) Broadcast(context.Context, []byte) error { return nil }
-
-func (idleBroadcaster) Next(ctx context.Context) ([]byte, error) {
-	<-ctx.Done()
-	return nil, ctx.Err()
 }
 
 // Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per

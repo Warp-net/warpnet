@@ -53,28 +53,28 @@ func (s *RatingRepoTestSuite) TestRatingRepoIsSeparateFromStats() {
 	assert.ErrorIs(s.T(), err, ds.ErrNotFound, "the two CRDTs must not see each other's keys")
 }
 
-func (s *RatingRepoTestSuite) TestClearDropsOnlyThisRepo() {
+func (s *RatingRepoTestSuite) TestNewReposDropTheOldSingleDAGHistory() {
 	ctx := context.Background()
+	for _, key := range []string{"/RATING/h/head", "/RATING/s/k/record/v", "/CRDT/s/k/counter/v"} {
+		s.Require().NoError(s.db.Set(local_store.DatabaseKey(key), []byte("old")))
+	}
 	rating := NewRatingRepo(s.db)
 	stats := NewStatsRepo(s.db)
-	for _, key := range []string{"/s/k/record/a/v", "/blocks/abc", "/h/head"} {
-		s.Require().NoError(rating.Put(ctx, ds.NewKey(key), []byte("x")))
+	s.Require().NoError(rating.Put(ctx, ds.NewKey("/h/day"), []byte("new")))
+	s.Require().NoError(stats.Put(ctx, ds.NewKey("/h/day"), []byte("new")))
+
+	for _, key := range []string{"/RATING/h/head", "/RATING/s/k/record/v", "/CRDT/s/k/counter/v"} {
+		_, err := s.db.Get(local_store.DatabaseKey(key))
+		assert.True(s.T(), local_store.IsNotFoundError(err), "%s is old history and goes", key)
 	}
-	kept := ds.NewKey("/s/k/counter/v")
-	s.Require().NoError(stats.Put(ctx, kept, []byte("y")))
 
-	s.Require().NoError(rating.(*NodeRepo).Clear())
-
-	results, err := rating.Query(ctx, ds.Query{KeysOnly: true})
-	s.Require().NoError(err)
-	left, err := results.Rest()
-	s.Require().NoError(err)
-	assert.Empty(s.T(), left, "every key of the repo goes")
-	got, err := stats.Get(ctx, kept)
-	s.Require().NoError(err)
-	assert.Equal(s.T(), []byte("y"), got, "another repo in the same database is untouched")
-
-	s.Require().NoError(rating.Put(ctx, ds.NewKey("/after"), []byte("z")), "the repo is usable after a clear")
+	NewRatingRepo(s.db)
+	NewStatsRepo(s.db)
+	for _, repo := range []ds.Datastore{rating, stats} {
+		got, err := repo.Get(ctx, ds.NewKey("/h/day"))
+		s.Require().NoError(err, "a later start must not drop the day DAGs")
+		assert.Equal(s.T(), []byte("new"), got)
+	}
 }
 
 func TestRatingRepoTestSuite(t *testing.T) {

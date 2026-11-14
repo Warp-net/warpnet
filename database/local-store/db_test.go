@@ -346,6 +346,25 @@ func (s *DBTestSuite) TestRun_EmptyCredentials() {
 	assert.Error(s.T(), err)
 }
 
+func (s *DBTestSuite) TestDropPrefixDeletesOnlyKeysUnderIt() {
+	for _, key := range []string{"/DROP/a", "/DROP/b/c", "/DROPPED/x", "/KEEP/y"} {
+		s.Require().NoError(s.db.Set(DatabaseKey(key), []byte("v")))
+	}
+
+	s.Require().NoError(s.db.DropPrefix("/DROP/"))
+
+	for _, key := range []string{"/DROP/a", "/DROP/b/c"} {
+		_, err := s.db.Get(DatabaseKey(key))
+		s.True(IsNotFoundError(err), "%s must be gone", key)
+	}
+	for _, key := range []string{"/DROPPED/x", "/KEEP/y"} {
+		_, err := s.db.Get(DatabaseKey(key))
+		s.NoError(err, "%s shares no prefix with /DROP/ and stays", key)
+	}
+	s.NoError(s.db.DropPrefix("/NOTHING/"), "a prefix with no keys is not an error")
+	s.Require().NoError(s.db.Set("/DROP/again", []byte("v")), "the database takes writes after a drop")
+}
+
 func TestDBTestSuite(t *testing.T) {
 	// IgnoreCurrent snapshots at test start: badger leaks a cache monitor when
 	// Open rejects a wrong encryption key, and that earlier test's goroutine
@@ -397,6 +416,13 @@ func deadDB(t *testing.T) *DB {
 	require.NoError(t, err)
 	require.True(t, db.IsClosed())
 	return db
+}
+
+func TestDB_DropPrefixNeedsARunningDatabase(t *testing.T) {
+	db, err := New("", DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	assert.ErrorIs(t, db.DropPrefix("/X/"), ErrNotRunning)
+	assert.ErrorIs(t, (*DB)(nil).DropPrefix("/X/"), ErrNotRunning)
 }
 
 func TestDB_RunRequiresCredentials(t *testing.T) {

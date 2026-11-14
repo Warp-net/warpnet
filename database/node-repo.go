@@ -311,17 +311,6 @@ func (d *NodeRepo) Delete(ctx context.Context, key datastore.Key) error {
 	return d.db.Delete(prefix)
 }
 
-// Clear drops every key of this repo at once, without reading them.
-func (d *NodeRepo) Clear() error {
-	if d == nil || d.db == nil {
-		return ErrNilNodeRepo
-	}
-	if d.db.IsClosed() {
-		return local_store.ErrNotRunning
-	}
-	return d.db.InnerDB().DropPrefix([]byte(d.prefix + requiredPrefixSlash))
-}
-
 // DiskUsage implements the PersistentDatastore interface.
 // It returns the sum of lsm and value log files sizes in bytes.
 func (d *NodeRepo) DiskUsage(ctx context.Context) (uint64, error) {

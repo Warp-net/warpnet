@@ -529,26 +529,6 @@ func TestCRDTStats_PurgeDropsTweetsPastRetention(t *testing.T) {
 	s.mu.Unlock()
 }
 
-func TestCRDTStats_StartupDropsTheUnnamedDAG(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	data := dssync.MutexWrap(datastore.NewMapDatastore())
-
-	first, err := New(ctx, &silentBroadcaster{}, data, newStatsHost(t), idleRouter{})
-	require.NoError(t, err)
-	old := datastore.NewKey(counterPrefix + "/" + incrNamespace + "/REACTIONS/INCR/" + testTweet + "/" + first.nodeID + "/old")
-	require.NoError(t, first.crdt.Put(ctx, old, binary.BigEndian.AppendUint64(nil, 7)))
-	require.NoError(t, first.Close())
-
-	second, err := New(ctx, &silentBroadcaster{}, data, newStatsHost(t), idleRouter{})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = second.Close() })
-	has, err := second.crdt.Has(ctx, old)
-	require.NoError(t, err)
-	assert.False(t, has, "unsigned counters from before day DAGs are gone, not just unread")
-	assert.Empty(t, second.crdt.InternalStats(ctx).Heads)
-}
-
 func TestCRDTStats_ANodeCountsOnceWhereAnOwnerActsOnce(t *testing.T) {
 	honest, attacker := newStatsPair(t)
 	likes := tweetKey("/REACTIONS/INCR/capped")
