@@ -73,7 +73,7 @@ func (m *MerkleCRDT) IsLive(dagName string) bool {
 	}
 	prefix := dagName[:i]
 	dayNum, err := strconv.ParseInt(dagName[i+1:], 10, 64)
-	if err != nil || dayNum < 0 || Day(dayNum) > DayAt(time.Now())+1 {
+	if err != nil || dayNum < 0 || strconv.FormatInt(dayNum, 10) != dagName[i+1:] || Day(dayNum) > DayAt(time.Now())+1 {
 		return false
 	}
 	if m.prefixes != nil {

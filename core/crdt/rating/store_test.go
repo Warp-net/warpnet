@@ -23,6 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testDimensions are the dimensions these tests write.
+var testDimensions = []string{"net", "app", "mod"}
+
 // forgedSignature marks a record acceptRecords treats as not signed by its
 // observer; every other placeholder signature passes.
 const forgedSignature = "forged"
@@ -89,6 +92,7 @@ func newLiveStore(t *testing.T) (*Store, *silentBroadcaster) {
 		newHost(t),
 		idleRouter{},
 		acceptRecords,
+		testDimensions,
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
@@ -326,7 +330,7 @@ func TestStore_StartupDropsTheUnnamedDAG(t *testing.T) {
 	t.Cleanup(cancel)
 	data := dssync.MutexWrap(datastore.NewMapDatastore())
 
-	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords)
+	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords, testDimensions)
 	require.NoError(t, err)
 	old := ratingRecord(first.nodeID, "peer-a", "net", currentBucket())
 	key, err := recordKey(old)
@@ -336,7 +340,7 @@ func TestStore_StartupDropsTheUnnamedDAG(t *testing.T) {
 	require.NoError(t, first.crdt.Put(ctx, key, value))
 	require.NoError(t, first.Close())
 
-	second, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords)
+	second, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords, testDimensions)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = second.Close() })
 	require.Eventually(t, func() bool {
@@ -419,4 +423,81 @@ func TestStore_PeerIDsListsEveryPeerOnRecordOnce(t *testing.T) {
 	got, err := store.PeerIDs()
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"peer-a", "peer-b", "peer-c"}, got, "own and foreign records alike, each peer once")
+}
+
+func TestStore_ValidateRecord(t *testing.T) {
+	s, _ := newLiveStore(t)
+	now := currentBucket()
+	rec := ratingRecord("some-other-node", "peer-a", "net", now)
+	key, err := recordKey(rec)
+	require.NoError(t, err)
+	value, err := json.Marshal(rec)
+	require.NoError(t, err)
+
+	assert.NoError(t, s.validateRecord(dayDAG("net", now), key.String(), value))
+	assert.ErrorIs(t, s.validateRecord(dayDAG("net", now-bucketsPerDay), key.String(), value), ErrForeignDAG, "filed under another day")
+	assert.ErrorIs(t, s.validateRecord(dayDAG("app", now), key.String(), value), ErrForeignDAG, "filed under another dimension")
+
+	other := ratingRecord("some-other-node", "peer-b", "net", now)
+	otherKey, err := recordKey(other)
+	require.NoError(t, err)
+	assert.ErrorIs(t, s.validateRecord(dayDAG("net", now), otherKey.String(), value), ErrKeyMismatch, "content under another record's key")
+	assert.Error(t, s.validateRecord(dayDAG("net", now), key.String(), []byte("{not json")))
+
+	forged := rec
+	forged.Signature = forgedSignature
+	forgedValue, err := json.Marshal(forged)
+	require.NoError(t, err)
+	assert.Error(t, s.validateRecord(dayDAG("net", now), key.String(), forgedValue), "a record its observer did not sign")
+}
+
+func TestStore_CompareRecordsByWhenTheyWereWritten(t *testing.T) {
+	older := ratingRecord("obs", "peer-a", "net", 10)
+	newer := older
+	newer.UpdatedAt = older.UpdatedAt.Add(time.Second)
+	encode := func(rec domain.RatingRecord) []byte {
+		b, err := json.Marshal(rec)
+		require.NoError(t, err)
+		return b
+	}
+
+	assert.Negative(t, compareRecords(encode(older), encode(newer)))
+	assert.Positive(t, compareRecords(encode(newer), encode(older)))
+	assert.Zero(t, compareRecords(encode(older), encode(older)))
+	assert.Zero(t, compareRecords([]byte("garbage"), encode(older)), "an unreadable version is not ordered")
+}
+
+func TestStore_ADayIsTwentyFourBuckets(t *testing.T) {
+	assert.Equal(t, dayDAG("net", 0), dayDAG("net", bucketsPerDay-1))
+	assert.NotEqual(t, dayDAG("net", bucketsPerDay-1), dayDAG("net", bucketsPerDay))
+	assert.Equal(t, "net-1", dayDAG("net", bucketsPerDay))
+}
+
+func TestStore_OnlyKnownDimensionsHaveLiveDAGs(t *testing.T) {
+	s, _ := newLiveStore(t)
+	now := currentBucket()
+
+	for _, dim := range testDimensions {
+		assert.True(t, s.crdt.IsLive(dayDAG(dim, now)), dim)
+	}
+	assert.False(t, s.crdt.IsLive(dayDAG("bogus", now)), "a dimension nobody expires would keep its records forever")
+}
+
+func TestStore_PutPublishesEachDayOfOneCallInItsOwnDAG(t *testing.T) {
+	s, _ := newLiveStore(t)
+	now := currentBucket()
+
+	require.NoError(t, s.Put(
+		ratingRecord(s.nodeID, "peer-a", "net", now),
+		ratingRecord(s.nodeID, "peer-a", "net", now-bucketsPerDay),
+		ratingRecord(s.nodeID, "peer-a", "app", now),
+	))
+
+	names := map[string]bool{}
+	for _, h := range s.crdt.InternalStats(context.Background()).Heads {
+		names[h.DAGName] = true
+	}
+	assert.Equal(t, map[string]bool{
+		dayDAG("net", now): true, dayDAG("net", now-bucketsPerDay): true, dayDAG("app", now): true,
+	}, names)
 }

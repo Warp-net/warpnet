@@ -35,7 +35,8 @@ type expiry struct {
 }
 
 // fakeStore is an in-memory Storer with the CRDT store's contract: one
-// key per record tuple, hooks on every put and delete, own-only deletes.
+// key per record tuple, hooks on every put and delete, expiry of every
+// record of a dimension, own and foreign.
 type fakeStore struct {
 	mu       sync.Mutex
 	self     string
@@ -127,7 +128,7 @@ func (s *fakeStore) DeleteExpired(dimension string, beforeBucket int64) error {
 	s.expired = append(s.expired, expiry{dimension: dimension, beforeBucket: beforeBucket})
 	var removed []domain.RatingRecord
 	for key, rec := range s.data {
-		if rec.ObserverID == s.self && rec.Dimension == dimension && rec.Bucket < beforeBucket {
+		if rec.Dimension == dimension && rec.Bucket < beforeBucket {
 			delete(s.data, key)
 			removed = append(removed, rec)
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDimensionsPerRole(t *testing.T) {
@@ -99,4 +100,13 @@ func TestScoreClamps(t *testing.T) {
 	assert.Equal(t, MaxScore, Score(5000).clamp())
 	assert.Equal(t, MinScore, Score(-5000).clamp())
 	assert.Equal(t, Score(742), Score(742).clamp())
+}
+
+func TestDimensionNamesListEveryDimension(t *testing.T) {
+	assert.Equal(t, []string{"net", "app", "mod"}, DimensionNames())
+	for _, name := range DimensionNames() {
+		dim, ok := ParseDimension(name)
+		require.True(t, ok, name)
+		assert.Equal(t, name, dim.String())
+	}
 }

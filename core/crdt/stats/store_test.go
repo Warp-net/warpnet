@@ -32,6 +32,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -681,4 +683,107 @@ func TestCRDTStats_AReplayedOlderTotalCannotWinTheKey(t *testing.T) {
 	got, err := honest.GetAggregatedStat(likes, 0)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, got, "the node's own older total, replayed at a higher priority, does not roll the count back")
+}
+
+func TestCRDTStats_ValidateCounter(t *testing.T) {
+	s, _ := newLiveStatsStore(t)
+	likes := tweetKey("/REACTIONS/INCR/validated")
+	dag, ok := tweetDAG(likes)
+	require.True(t, ok)
+	key := s.counterKey(incrNamespace, likes).String()
+	signed := s.signedValue(key, 3)
+
+	assert.NoError(t, validateCounter(dag, key, signed))
+
+	assert.ErrorIs(t, validateCounter(store.DayAt(time.Now().Add(-48*time.Hour)).DAG(dagPrefix), key, signed), ErrForeignDAG,
+		"a counter filed under another day")
+	noULID := counterPrefix + "/" + incrNamespace + "/REACTIONS/INCR/mastodon/" + s.nodeID + "/" + s.generation
+	assert.ErrorIs(t, validateCounter(dag, noULID, s.signedValue(noULID, 1)), ErrForeignDAG, "a key with no tweet id has no day")
+	assert.ErrorIs(t, validateCounter(dag, key, signed[:counterSize]), ErrBadSignature, "an unsigned total")
+	assert.ErrorIs(t, validateCounter(dag, key, signed[:3]), ErrBadSignature, "a value too short to hold a total")
+	assert.ErrorIs(t, validateCounter(dag, key, append(slices.Clone(signed), 0)), ErrBadSignature, "a value of the wrong size")
+
+	tampered := slices.Clone(signed)
+	tampered[counterSize-1]++
+	assert.ErrorIs(t, validateCounter(dag, key, tampered), ErrBadSignature, "a total the signature does not cover")
+	other := s.counterKey(incrNamespace, tweetKey("/REACTIONS/INCR/other")).String()
+	assert.ErrorIs(t, validateCounter(dag, other, signed), ErrBadSignature, "a signature moved to another key")
+	badNode := strings.Replace(key, s.nodeID, "not-a-peer-id", 1)
+	assert.ErrorIs(t, validateCounter(dag, badNode, signed), ErrBadSignature, "a key naming no node")
+}
+
+func TestCRDTStats_CompareTotals(t *testing.T) {
+	assert.Negative(t, compareTotals(binary.BigEndian.AppendUint64(nil, 1), binary.BigEndian.AppendUint64(nil, 2)))
+	assert.Zero(t, compareTotals(binary.BigEndian.AppendUint64(nil, 2), binary.BigEndian.AppendUint64(nil, 2)))
+	assert.Positive(t, compareTotals(binary.BigEndian.AppendUint64(nil, 3), binary.BigEndian.AppendUint64(nil, 2)))
+	assert.Zero(t, compareTotals([]byte{1}, binary.BigEndian.AppendUint64(nil, 2)), "a value too short to read is not ordered")
+}
+
+func TestCRDTStats_TweetDAGTakesTheULIDInTheKey(t *testing.T) {
+	created := time.Now().Add(-5 * 24 * time.Hour)
+	id := tweetAt(created)
+
+	for _, key := range []string{"/REACTIONS/INCR/" + id, "/TWEETS/VIEWS/" + id + "/extra", "/POLL/VOTES/INCR/" + id + "/2"} {
+		dag, ok := tweetDAG(datastore.NewKey(key))
+		require.True(t, ok, key)
+		assert.Equal(t, store.DayAt(created).DAG(dagPrefix), dag, key)
+	}
+	_, ok := tweetDAG(datastore.NewKey("/REACTIONS/INCR/https:--mastodon.example-notes-1"))
+	assert.False(t, ok)
+}
+
+func TestCRDTStats_ACapOfZeroCountsEveryEvent(t *testing.T) {
+	s, _ := newLiveStatsStore(t)
+	replies := tweetKey("/TWEETS/REPLIES/uncapped")
+	for range 4 {
+		require.NoError(t, s.Increment(replies))
+	}
+	got, err := s.GetAggregatedStat(replies, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 4, got)
+	got, err = s.GetAggregatedStat(replies, 1)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, got)
+}
+
+func TestCRDTStats_ANodeBelowZeroTakesNothingFromOthers(t *testing.T) {
+	honest, other := newStatsPair(t)
+	likes := tweetKey("/REACTIONS/INCR/netted")
+
+	require.NoError(t, honest.Increment(likes))
+	require.NoError(t, honest.flush())
+	require.NoError(t, other.Increment(likes))
+	for range 5 {
+		require.NoError(t, other.Decrement(likes))
+	}
+	require.NoError(t, other.flush())
+
+	require.Eventually(t, func() bool {
+		got, err := honest.GetAggregatedStat(likes, 0)
+		return err == nil && got == 1
+	}, 20*time.Second, 100*time.Millisecond, "a node with more unlikes than likes adds zero, not a negative")
+}
+
+func TestCRDTStats_PurgeKeepsCountersNotYetFlushed(t *testing.T) {
+	s, _ := newLiveStatsStore(t)
+	aging := datastore.NewKey("/REACTIONS/INCR/" + tweetAt(time.Now().Add(-(retentionDays-1)*24*time.Hour)))
+	require.NoError(t, s.Increment(aging))
+
+	require.NoError(t, s.purge(time.Now().Add(2*24*time.Hour)))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assert.Len(t, s.counters, 1, "an unflushed count is never dropped by a purge")
+}
+
+func TestCRDTStats_ANodeWithoutAnEd25519KeyIsRefused(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	h, err := libp2p.New(libp2p.NoListenAddrs, libp2p.Identity(nil))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	h.Peerstore().RemovePeer(h.ID())
+
+	_, err = New(ctx, &silentBroadcaster{}, dssync.MutexWrap(datastore.NewMapDatastore()), h, idleRouter{})
+	assert.ErrorIs(t, err, ErrNoSigningKey)
 }

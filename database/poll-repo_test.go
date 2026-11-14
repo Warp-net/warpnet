@@ -29,6 +29,7 @@ resulting from the use or misuse of this software.
 package database
 
 import (
+	ds "github.com/Warp-net/warpnet/database/datastore"
 	"testing"
 
 	"go.uber.org/goleak"
@@ -155,4 +156,41 @@ func TestPollRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	suite.Run(t, new(PollRepoTestSuite))
+}
+
+type pollStats struct {
+	vals map[string]uint64
+	caps map[string]uint64
+}
+
+func (p *pollStats) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
+	p.caps[key.String()] = perNodeCap
+	return p.vals[key.String()], nil
+}
+
+func (p *pollStats) Increment(key ds.Key) error {
+	p.vals[key.String()]++
+	return nil
+}
+
+func (s *PollRepoTestSuite) TestResults_ReadOneVotePerNodeAndTheLargerCount() {
+	stats := &pollStats{vals: map[string]uint64{}, caps: map[string]uint64{}}
+	repo := NewPollRepo(s.db, stats)
+	tweetId := ulid.Make().String()
+	key := pollVotesKey(tweetId, 0, VotesIncrSubNamespace).DatastoreKey().String()
+
+	s.Require().NoError(repo.Vote(tweetId, ulid.Make().String(), 0, false))
+	s.Require().NoError(repo.Vote(tweetId, ulid.Make().String(), 0, false))
+	s.Zero(stats.vals[key], "votes received from other nodes are not counted again")
+
+	votes, err := repo.Results(tweetId, 1)
+	s.Require().NoError(err)
+	s.Equal([]uint64{2}, votes, "with nothing replicated, the local count shows")
+	s.EqualValues(votesPerNode, stats.caps[key])
+	s.EqualValues(1, votesPerNode, "a node's owner votes once")
+
+	stats.vals[key] = 5
+	votes, err = repo.Results(tweetId, 1)
+	s.Require().NoError(err)
+	s.Equal([]uint64{5}, votes, "votes that never reached this node still count")
 }

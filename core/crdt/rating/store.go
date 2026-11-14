@@ -91,6 +91,7 @@ func New(
 	node warpnet.P2PNode,
 	router store.Router,
 	verify func(domain.RatingRecord) error,
+	dimensions []string,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -109,6 +110,7 @@ func New(
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
+		DAGPrefixes: dimensions,
 		Validate:    s.validateRecord,
 		Compare:     compareRecords,
 	})

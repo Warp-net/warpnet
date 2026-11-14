@@ -322,9 +322,13 @@ func (s *ReactionRepoTestSuite) TestReactions_InvalidParams() {
 
 type crdtSkew struct {
 	vals map[string]uint64
+	caps map[string]uint64
 }
 
-func (c *crdtSkew) GetAggregatedStat(key ds.Key, _ uint64) (uint64, error) {
+func (c *crdtSkew) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
+	if c.caps != nil {
+		c.caps[key.String()] = perNodeCap
+	}
 	return c.vals[key.String()], nil
 }
 
@@ -417,4 +421,57 @@ func (s *ReactionRepoTestSuite) TestReactionsCount_CountsPropagatedReactions() {
 	s.Require().NoError(err)
 	s.Equal(map[string]uint64{"👍": 1, "🔥": 1}, reactions)
 	s.Equal(total, sumCounts(reactions), "the count must match the chips")
+}
+
+func (s *ReactionRepoTestSuite) TestReactionsCount_ReadsOneReactionPerNode() {
+	skew := &crdtSkew{vals: map[string]uint64{}, caps: map[string]uint64{}}
+	repo := NewReactionRepo(s.db, skew)
+	tweetId := ulid.Make().String()
+
+	_, _ = repo.ReactionsCount(tweetId)
+
+	key := local_store.NewPrefixBuilder(ReactionRepoName).AddSubPrefix(IncrSubNamespace).AddRootID(tweetId).Build()
+	s.EqualValues(reactionsPerNode, s.capOf(skew, key.DatastoreKey().String()))
+	s.EqualValues(1, reactionsPerNode, "a node's owner reacts once")
+}
+
+func (s *ReactionRepoTestSuite) capOf(skew *crdtSkew, key string) uint64 {
+	limit, ok := skew.caps[key]
+	s.Require().True(ok, "the replicated count was never read")
+	return limit
+}
+
+func (s *ReactionRepoTestSuite) TestReactionsCount_TakesTheLargerOfLocalAndReplicated() {
+	skew := &crdtSkew{vals: map[string]uint64{}}
+	repo := NewReactionRepo(s.db, skew)
+	tweetId := ulid.Make().String()
+	key := local_store.NewPrefixBuilder(ReactionRepoName).AddSubPrefix(IncrSubNamespace).AddRootID(tweetId).Build()
+
+	for range 3 {
+		_, err := repo.React(tweetId, ulid.Make().String(), "👍", false)
+		s.Require().NoError(err)
+	}
+	skew.vals[key.DatastoreKey().String()] = 1
+	total, err := repo.ReactionsCount(tweetId)
+	s.Require().NoError(err)
+	s.EqualValues(3, total, "past retention the replicated count shrinks, the local one stays")
+
+	skew.vals[key.DatastoreKey().String()] = 7
+	total, err = repo.ReactionsCount(tweetId)
+	s.Require().NoError(err)
+	s.EqualValues(7, total, "reactions that never reached this node still count")
+}
+
+func (s *ReactionRepoTestSuite) TestReact_OnlyTheReactorsNodeCountsInTheNetwork() {
+	skew := &crdtSkew{vals: map[string]uint64{}}
+	repo := NewReactionRepo(s.db, skew)
+	tweetId := ulid.Make().String()
+	key := local_store.NewPrefixBuilder(ReactionRepoName).AddSubPrefix(IncrSubNamespace).AddRootID(tweetId).Build()
+
+	_, err := repo.React(tweetId, ulid.Make().String(), "👍", false)
+	s.Require().NoError(err)
+	s.Zero(skew.vals[key.DatastoreKey().String()], "a reaction received from another node is not counted again")
+	_, err = repo.React(tweetId, ulid.Make().String(), "👍", true)
+	s.Require().NoError(err)
+	s.EqualValues(1, skew.vals[key.DatastoreKey().String()])
 }

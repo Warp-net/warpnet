@@ -702,6 +702,57 @@ func (s *TweetRepoTestSuite) TestCountsReadWithTheirPerNodeRule() {
 	s.EqualValues(viewsPerNode, stats.caps[views.DatastoreKey().String()])
 }
 
+func (s *TweetRepoTestSuite) TestRecordView_OnlyTheViewersNodeCountsInTheNetwork() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+	tweetID := ulid.Make().String()
+	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
+
+	_, err := repo.RecordView(tweetID, "remote-viewer", false)
+	s.Require().NoError(err)
+	s.Zero(stats.vals[views.DatastoreKey().String()], "a view received from the viewer's node is not counted again")
+
+	_, err = repo.RecordView(tweetID, "own-viewer", true)
+	s.Require().NoError(err)
+	_, err = repo.RecordView(tweetID, "own-viewer", true)
+	s.Require().NoError(err)
+	s.EqualValues(1, stats.vals[views.DatastoreKey().String()], "a viewer counts once")
+
+	count, err := repo.GetViewsCount(tweetID)
+	s.Require().NoError(err)
+	s.EqualValues(2, count, "both views are on this node")
+}
+
+func (s *TweetRepoTestSuite) TestCountsTakeTheReplicatedCountWhenItIsLarger() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+	tweetID := ulid.Make().String()
+	retweets := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(reTweetsCountSubspace).AddRootID(tweetID).Build()
+	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
+	stats.vals[retweets.DatastoreKey().String()] = 4
+	stats.vals[views.DatastoreKey().String()] = 9
+
+	got, err := repo.RetweetsCount(tweetID)
+	s.Require().NoError(err)
+	s.EqualValues(4, got, "retweets known only from the network still count")
+	got, err = repo.GetViewsCount(tweetID)
+	s.Require().NoError(err)
+	s.EqualValues(9, got)
+}
+
+func (s *TweetRepoTestSuite) TestCountsOfAnUnknownTweetAreNotFound() {
+	repo := NewTweetRepo(s.db, newFakeTweetStats())
+	tweetID := ulid.Make().String()
+
+	_, err := repo.RetweetsCount(tweetID)
+	s.ErrorIs(err, ErrTweetNotFound)
+	_, err = repo.GetViewsCount(tweetID)
+	s.ErrorIs(err, ErrViewsNotFound)
+	replies, err := repo.RepliesCount(tweetID)
+	s.Require().NoError(err)
+	s.Zero(replies)
+}
+
 func (s *TweetRepoTestSuite) TestDeleteReply() {
 	parentID := ulid.Make().String()
 	rootID := ulid.Make().String()

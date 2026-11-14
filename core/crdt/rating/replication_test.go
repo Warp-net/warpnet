@@ -213,7 +213,7 @@ func (r *replica) open(t *testing.T) {
 	t.Helper()
 	bc, err := broadcast.NewGossip(r.ctx, r.gossip, GossipTopic)
 	require.NoError(t, err)
-	s, err := New(r.ctx, bc, r.data, r.host, idleRouter{}, acceptRecords)
+	s, err := New(r.ctx, bc, r.data, r.host, idleRouter{}, acceptRecords, testDimensions)
 	require.NoError(t, err)
 	r.puts, r.deletes = &recordLog{}, &recordLog{}
 	s.OnPut(r.puts.hook)
