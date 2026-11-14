@@ -30,7 +30,6 @@ package rating
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -59,16 +58,20 @@ const (
 	recordPrefix   = "/record"
 	recordKeyParts = 5
 
+	bucketsPerDay = 24
+
 	// Errors a record is refused for.
 	ErrForeignRecord   = warpnet.WarpError("rating store: record is not authored by this node")
 	ErrMalformedRecord = warpnet.WarpError("rating store: record key part is empty or contains a slash")
 	ErrKeyMismatch     = warpnet.WarpError("rating store: record content does not match its key")
+	ErrForeignDAG      = warpnet.WarpError("rating store: record is not in the DAG of its own day")
 )
 
-// Store replicates signed rating records. A node writes and deletes only
-// its own records; everyone else's arrive through the DAG.
+// Store replicates signed rating records in one DAG per dimension and
+// day. A node writes only its own records; everyone else's arrive through
+// the DAGs, and every node drops whole expired days locally.
 type Store struct {
-	crdt   *crdt.Datastore
+	crdt   *store.MerkleCRDT
 	ctx    context.Context
 	cancel context.CancelFunc
 	nodeID string
@@ -76,6 +79,8 @@ type Store struct {
 	mu          sync.RWMutex
 	putHooks    []func(domain.RatingRecord)
 	deleteHooks []func(domain.RatingRecord)
+
+	verify func(domain.RatingRecord) error
 }
 
 // New creates a new CRDT-based rating records store
@@ -85,6 +90,8 @@ func New(
 	datastore store.Datastore,
 	node warpnet.P2PNode,
 	router store.Router,
+	verify func(domain.RatingRecord) error,
+	dimensions []string,
 ) (*Store, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -92,6 +99,7 @@ func New(
 		ctx:    ctx,
 		cancel: cancel,
 		nodeID: node.ID().String(),
+		verify: verify,
 	}
 
 	crdtStore, err := store.New(ctx, store.Config{
@@ -102,6 +110,9 @@ func New(
 		Prefix:      bitswapPrefix,
 		PutHook:     s.onPut,
 		DeleteHook:  s.onDelete,
+		DAGPrefixes: dimensions,
+		Validate:    s.validateRecord,
+		Compare:     compareRecords,
 	})
 	if err != nil {
 		cancel()
@@ -112,20 +123,30 @@ func New(
 	return s, nil
 }
 
-func (s *Store) Put(rec domain.RatingRecord) error {
-	if rec.ObserverID != s.nodeID {
-		return ErrForeignRecord
+// Put writes records in as few DAG blocks as the block size cap allows.
+func (s *Store) Put(recs ...domain.RatingRecord) error {
+	deltas := make([]crdt.Delta, 0, len(recs))
+	for _, rec := range recs {
+		if rec.ObserverID != s.nodeID {
+			return ErrForeignRecord
+		}
+		key, err := recordKey(rec)
+		if err != nil {
+			return err
+		}
+		value, err := json.Marshal(rec)
+		if err != nil {
+			return fmt.Errorf("rating store: marshal record %s: %w", key, err)
+		}
+		delta, err := s.crdt.Set().Add(s.ctx, key.String(), value)
+		if err != nil {
+			return fmt.Errorf("rating store: add record %s: %w", key, err)
+		}
+		delta.SetDagName(dayDAG(rec.Dimension, rec.Bucket))
+		deltas = append(deltas, delta)
 	}
-	key, err := recordKey(rec)
-	if err != nil {
-		return err
-	}
-	value, err := json.Marshal(rec)
-	if err != nil {
-		return fmt.Errorf("rating store: marshal record %s: %w", key, err)
-	}
-	if err := s.crdt.Put(s.ctx, key, value); err != nil {
-		return fmt.Errorf("rating store: write record %s: %w", key, err)
+	if err := s.crdt.Publish(s.ctx, deltas...); err != nil {
+		return fmt.Errorf("rating store: write %d records: %w", len(recs), err)
 	}
 	return nil
 }
@@ -184,39 +205,15 @@ func (s *Store) PeerIDs() ([]string, error) {
 	return peerIDs, nil
 }
 
-// DeleteExpired removes this node's own records of one dimension with a
-// bucket before beforeBucket. Foreign records are never deleted: a CRDT
-// delete is a tombstone that propagates to every replica.
+// DeleteExpired drops every DAG of one dimension whose days all end before
+// beforeBucket, own records and foreign alike, and refuses their heads from
+// then on.
 func (s *Store) DeleteExpired(dimension string, beforeBucket int64) error {
-	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: recordPrefix, KeysOnly: true})
-	if err != nil {
-		return fmt.Errorf("rating store: query records: %w", err)
+	s.crdt.Expire(dimension, store.Day(beforeBucket/bucketsPerDay))
+	if err := s.crdt.PurgeExpired(s.ctx); err != nil {
+		return fmt.Errorf("rating store: %w", err)
 	}
-
-	var expired []string
-	for r := range results.Next() {
-		if r.Error != nil {
-			_ = results.Close()
-			return fmt.Errorf("rating store: iterate records: %w", r.Error)
-		}
-		rec, ok := parseRecordKey(r.Key)
-		if !ok || rec.ObserverID != s.nodeID || rec.Dimension != dimension || rec.Bucket >= beforeBucket {
-			continue
-		}
-		expired = append(expired, r.Key)
-	}
-	_ = results.Close()
-
-	var errs []error
-	for _, key := range expired {
-		if err := s.crdt.Delete(s.ctx, ds.NewKey(key)); err != nil {
-			errs = append(errs, fmt.Errorf("rating store: delete %s: %w", key, err))
-		}
-	}
-	if removed := len(expired) - len(errs); removed > 0 {
-		log.Infof("rating store: removed %d expired own records", removed)
-	}
-	return errors.Join(errs...)
+	return nil
 }
 
 // OnPut registers a hook fired for every record merged into the store, own or foreign.
@@ -273,6 +270,33 @@ func (s *Store) Close() error {
 	}
 	s.cancel()
 	return s.crdt.Close()
+}
+
+func dayDAG(dimension string, bucket int64) string {
+	return store.Day(bucket / bucketsPerDay).DAG(dimension)
+}
+
+// validateRecord refuses a received record its observer did not sign or
+// that is not in the DAG of its own dimension and day.
+func (s *Store) validateRecord(dagName, key string, value []byte) error {
+	rec, err := decodeRecord(key, value)
+	if err != nil {
+		return err
+	}
+	if dayDAG(rec.Dimension, rec.Bucket) != dagName {
+		return ErrForeignDAG
+	}
+	return s.verify(rec)
+}
+
+// compareRecords orders two versions of one record by when its observer
+// wrote them.
+func compareRecords(value, current []byte) int {
+	var rec, cur domain.RatingRecord
+	if json.Unmarshal(value, &rec) != nil || json.Unmarshal(current, &cur) != nil {
+		return 0
+	}
+	return rec.UpdatedAt.Compare(cur.UpdatedAt)
 }
 
 // recordKey is /record/{peerID}/{observerID}/{dimension}/{bucket}/{generation}.

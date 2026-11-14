@@ -447,17 +447,17 @@ func (s *TweetRepoTestSuite) TestRecordView_IncrementsAndDedupes() {
 	viewerA := ulid.Make().String()
 	viewerB := ulid.Make().String()
 
-	count, err := s.repo.RecordView(tweetId, viewerA)
+	count, err := s.repo.RecordView(tweetId, viewerA, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), count)
 
 	// Same viewer within TTL is a no-op.
-	count, err = s.repo.RecordView(tweetId, viewerA)
+	count, err = s.repo.RecordView(tweetId, viewerA, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), count)
 
 	// Different viewer increments.
-	count, err = s.repo.RecordView(tweetId, viewerB)
+	count, err = s.repo.RecordView(tweetId, viewerB, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(2), count)
 
@@ -467,10 +467,10 @@ func (s *TweetRepoTestSuite) TestRecordView_IncrementsAndDedupes() {
 }
 
 func (s *TweetRepoTestSuite) TestRecordView_InvalidParams() {
-	_, err := s.repo.RecordView("", "viewer")
+	_, err := s.repo.RecordView("", "viewer", true)
 	s.Error(err)
 
-	_, err = s.repo.RecordView("tweet", "")
+	_, err = s.repo.RecordView("tweet", "", true)
 	s.Error(err)
 }
 
@@ -496,7 +496,7 @@ func (s *TweetRepoTestSuite) TestRecordView_ConcurrentSafe() {
 		viewerId := ulid.Make().String()
 		go func() {
 			defer wg.Done()
-			if _, err := s.repo.RecordView(tweetId, viewerId); err != nil {
+			if _, err := s.repo.RecordView(tweetId, viewerId, true); err != nil {
 				errCh <- err
 			}
 		}()
@@ -519,11 +519,11 @@ func (s *TweetRepoTestSuite) TestRecordView_DifferentTweetsLockIndependently() {
 	tweetB := ulid.Make().String()
 	viewer := ulid.Make().String()
 
-	a, err := s.repo.RecordView(tweetA, viewer)
+	a, err := s.repo.RecordView(tweetA, viewer, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), a)
 
-	b, err := s.repo.RecordView(tweetB, viewer)
+	b, err := s.repo.RecordView(tweetB, viewer, true)
 	s.Require().NoError(err)
 	s.Equal(uint64(1), b)
 }
@@ -583,7 +583,7 @@ func newFakeTweetStats() *fakeTweetStats {
 	return &fakeTweetStats{vals: make(map[string]uint64)}
 }
 
-func (f *fakeTweetStats) GetAggregatedStat(key ds.Key) (uint64, error) {
+func (f *fakeTweetStats) GetAggregatedStat(key ds.Key, _ uint64) (uint64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.vals[key.String()], nil
@@ -642,6 +642,115 @@ func (s *TweetRepoTestSuite) TestRepliesCountReadsAggregatedStat() {
 	count, err := repo.RepliesCount(parentID)
 	s.Require().NoError(err)
 	s.Equal(uint64(5), count)
+}
+
+// TestCountsFallBackToLocalPastNetworkRetention covers a tweet whose day DAG
+// was purged: the network reads zero and the local counts must still show.
+func (s *TweetRepoTestSuite) TestCountsFallBackToLocalPastNetworkRetention() {
+	repo := NewTweetRepo(s.db, newFakeTweetStats())
+	parentID := ulid.Make().String()
+
+	_, err := repo.AddReply(domain.Tweet{
+		Id: ulid.Make().String(), RootId: parentID, ParentId: &parentID,
+		UserId: "user123", Text: "reply", CreatedAt: time.Now(),
+	}, false)
+	s.Require().NoError(err)
+	_, err = repo.RecordView(parentID, "viewer-1", false)
+	s.Require().NoError(err)
+	_, err = repo.NewRetweet(domain.Tweet{
+		Id: parentID, UserId: "author", RetweetedBy: func() *string { v := "retweeter"; return &v }(),
+		CreatedAt: time.Now(),
+	}, false)
+	s.Require().NoError(err)
+
+	replies, err := repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.EqualValues(1, replies)
+	views, err := repo.GetViewsCount(parentID)
+	s.Require().NoError(err)
+	s.EqualValues(1, views)
+	retweets, err := repo.RetweetsCount(parentID)
+	s.Require().NoError(err)
+	s.EqualValues(1, retweets)
+}
+
+type capRecordingStats struct {
+	fakeTweetStats
+	caps map[string]uint64
+}
+
+func (c *capRecordingStats) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
+	c.caps[key.String()] = perNodeCap
+	return 0, nil
+}
+
+// TestCountsReadWithTheirPerNodeRule pins which rule each tweet counter is
+// read with: retweets and views once per node, replies unlimited.
+func (s *TweetRepoTestSuite) TestCountsReadWithTheirPerNodeRule() {
+	stats := &capRecordingStats{caps: map[string]uint64{}}
+	repo := NewTweetRepo(s.db, stats)
+	tweetID := ulid.Make().String()
+
+	_, _ = repo.RetweetsCount(tweetID)
+	_, _ = repo.RepliesCount(tweetID)
+	_, _ = repo.GetViewsCount(tweetID)
+
+	retweets := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(reTweetsCountSubspace).AddRootID(tweetID).Build()
+	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
+	s.EqualValues(retweetsPerNode, stats.caps[retweets.DatastoreKey().String()])
+	s.EqualValues(repliesPerNode, stats.caps[tweetsCountKey(tweetID).DatastoreKey().String()])
+	s.EqualValues(viewsPerNode, stats.caps[views.DatastoreKey().String()])
+}
+
+func (s *TweetRepoTestSuite) TestRecordView_OnlyTheViewersNodeCountsInTheNetwork() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+	tweetID := ulid.Make().String()
+	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
+
+	_, err := repo.RecordView(tweetID, "remote-viewer", false)
+	s.Require().NoError(err)
+	s.Zero(stats.vals[views.DatastoreKey().String()], "a view received from the viewer's node is not counted again")
+
+	_, err = repo.RecordView(tweetID, "own-viewer", true)
+	s.Require().NoError(err)
+	_, err = repo.RecordView(tweetID, "own-viewer", true)
+	s.Require().NoError(err)
+	s.EqualValues(1, stats.vals[views.DatastoreKey().String()], "a viewer counts once")
+
+	count, err := repo.GetViewsCount(tweetID)
+	s.Require().NoError(err)
+	s.EqualValues(2, count, "both views are on this node")
+}
+
+func (s *TweetRepoTestSuite) TestCountsTakeTheReplicatedCountWhenItIsLarger() {
+	stats := newFakeTweetStats()
+	repo := NewTweetRepo(s.db, stats)
+	tweetID := ulid.Make().String()
+	retweets := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(reTweetsCountSubspace).AddRootID(tweetID).Build()
+	views := local_store.NewPrefixBuilder(TweetsNamespace).AddSubPrefix(viewsSubspace).AddRootID(tweetID).Build()
+	stats.vals[retweets.DatastoreKey().String()] = 4
+	stats.vals[views.DatastoreKey().String()] = 9
+
+	got, err := repo.RetweetsCount(tweetID)
+	s.Require().NoError(err)
+	s.EqualValues(4, got, "retweets known only from the network still count")
+	got, err = repo.GetViewsCount(tweetID)
+	s.Require().NoError(err)
+	s.EqualValues(9, got)
+}
+
+func (s *TweetRepoTestSuite) TestCountsOfAnUnknownTweetAreNotFound() {
+	repo := NewTweetRepo(s.db, newFakeTweetStats())
+	tweetID := ulid.Make().String()
+
+	_, err := repo.RetweetsCount(tweetID)
+	s.ErrorIs(err, ErrTweetNotFound)
+	_, err = repo.GetViewsCount(tweetID)
+	s.ErrorIs(err, ErrViewsNotFound)
+	replies, err := repo.RepliesCount(tweetID)
+	s.Require().NoError(err)
+	s.Zero(replies)
 }
 
 func (s *TweetRepoTestSuite) TestDeleteReply() {

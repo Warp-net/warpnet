@@ -29,11 +29,14 @@
 package stats
 
 import (
+	"cmp"
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +44,7 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
+	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -58,7 +62,7 @@ const (
 	decrNamespace = "decr"
 
 	// generationIDBytes is the size of the random nonce that tags
-	// every value this process writes to the CRDT. 128 bits make
+	// every value this process writes. 128 bits make
 	// collisions across the lifetime of the network infeasible, so
 	// no two process lifetimes ever share a sub-counter — even after
 	// total local-data loss followed by a re-bootstrap with the same
@@ -66,20 +70,37 @@ const (
 	generationIDBytes = 16
 
 	flushInterval = 30 * time.Second
+	purgeInterval = time.Hour
+
+	// dagPrefix names the day DAGs: one per day of tweet creation.
+	dagPrefix = "stats"
+	// retentionDays is how long a tweet's counters travel; older tweets
+	// are counted from local data only.
+	retentionDays = 30
+
+	counterSize     = 8
+	signedValueSize = counterSize + ed25519.SignatureSize
+
+	ErrNoSigningKey = warpnet.WarpError("crdt stats: node has no ed25519 private key")
+	ErrForeignDAG   = warpnet.WarpError("crdt stats: counter is not in the DAG of its tweet's day")
+	ErrBadSignature = warpnet.WarpError("crdt stats: counter is not signed by its node")
 )
 
 type counter struct {
 	total   uint64
 	flushed uint64
+	dag     string
 }
 
 // Store is a PN-counter replicated over go-ds-crdt: every process owns
-// the keys of its own generation, and a read sums them all.
+// the keys of its own generation and signs them with its node key, and a
+// read sums each node's own increments less its own decrements.
 type Store struct {
-	crdt       *crdt.Datastore
+	crdt       *store.MerkleCRDT
 	ctx        context.Context
 	cancel     context.CancelFunc
 	nodeID     string
+	privKey    ed25519.PrivateKey
 	generation string
 	stopChan   chan struct{}
 	stopOnce   sync.Once
@@ -99,6 +120,15 @@ func New(
 	node warpnet.P2PNode,
 	router store.Router,
 ) (*Store, error) {
+	key := node.Peerstore().PrivKey(node.ID())
+	if key == nil {
+		return nil, ErrNoSigningKey
+	}
+	privKey, err := key.Raw()
+	if err != nil || len(privKey) != ed25519.PrivateKeySize {
+		return nil, ErrNoSigningKey
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	generation, err := newGenerationID()
@@ -107,27 +137,32 @@ func New(
 		return nil, fmt.Errorf("failed to generate stats generation: %w", err)
 	}
 
+	s := &Store{
+		ctx:        ctx,
+		cancel:     cancel,
+		nodeID:     node.ID().String(),
+		privKey:    privKey,
+		generation: generation,
+		stopChan:   make(chan struct{}),
+		counters:   make(map[string]*counter),
+	}
+
 	crdtStore, err := store.New(ctx, store.Config{
 		Broadcaster: broadcaster,
 		Datastore:   datastore,
 		Node:        node,
 		Router:      router,
 		Prefix:      bitswapPrefix,
+		DAGPrefixes: []string{dagPrefix},
+		Validate:    validateCounter,
+		Compare:     compareTotals,
 	})
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-
-	s := &Store{
-		crdt:       crdtStore,
-		ctx:        ctx,
-		cancel:     cancel,
-		nodeID:     node.ID().String(),
-		generation: generation,
-		stopChan:   make(chan struct{}),
-		counters:   make(map[string]*counter),
-	}
+	crdtStore.Expire(dagPrefix, firstLiveDay(time.Now()))
+	s.crdt = crdtStore
 
 	s.wg.Add(1)
 	go s.run()
@@ -138,8 +173,10 @@ func New(
 func (s *Store) run() {
 	defer s.wg.Done()
 
-	ticker := time.NewTicker(flushInterval)
-	defer ticker.Stop()
+	flushTicker := time.NewTicker(flushInterval)
+	defer flushTicker.Stop()
+	purgeTicker := time.NewTicker(purgeInterval)
+	defer purgeTicker.Stop()
 
 	for {
 		select {
@@ -147,29 +184,49 @@ func (s *Store) run() {
 			return
 		case <-s.ctx.Done():
 			return
-		case <-ticker.C:
+		case <-flushTicker.C:
 			if err := s.flush(); err != nil {
+				log.Warnf("crdt stats: %v", err)
+			}
+		case <-purgeTicker.C:
+			if err := s.purge(time.Now()); err != nil {
 				log.Warnf("crdt stats: %v", err)
 			}
 		}
 	}
 }
 
-func (s *Store) GetAggregatedStat(key ds.Key) (uint64, error) {
-	positive, err := s.sumNamespace(incrNamespace, key)
+// GetAggregatedStat sums, over every node with a validly signed counter,
+// its increments less its decrements, at most perNodeCap per node when the
+// cap is not zero, so no node can lower another's count or stand for more
+// than one owner.
+func (s *Store) GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error) {
+	positive, err := s.sumByNode(incrNamespace, key)
 	if err != nil {
 		return 0, err
 	}
-	negative, err := s.sumNamespace(decrNamespace, key)
+	negative, err := s.sumByNode(decrNamespace, key)
 	if err != nil {
 		return 0, err
 	}
-	if positive < negative {
-		return 0, nil
+	var total uint64
+	for node, plus := range positive {
+		minus := negative[node]
+		if plus <= minus {
+			continue
+		}
+		count := plus - minus
+		if perNodeCap > 0 {
+			count = min(count, perNodeCap)
+		}
+		total += count
 	}
-	return positive - negative, nil
+	return total, nil
 }
 
+// Increment counts one event on the tweet whose ULID is in key. A tweet
+// past retention, or one without a ULID id, is counted only by the
+// caller's local data.
 func (s *Store) Increment(key ds.Key) error {
 	s.bump(incrNamespace, key)
 	return nil
@@ -181,13 +238,18 @@ func (s *Store) Decrement(key ds.Key) error {
 }
 
 func (s *Store) bump(namespace string, dataKey ds.Key) {
+	dag, ok := tweetDAG(dataKey)
+	if !ok || !s.crdt.IsLive(dag) {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	cacheKey := s.counterKey(namespace, dataKey).String()
 	c := s.counters[cacheKey]
 	if c == nil {
-		c = &counter{}
+		c = &counter{dag: dag}
 		s.counters[cacheKey] = c
 	}
 	c.total++
@@ -198,10 +260,10 @@ func (s *Store) flush() error {
 	defer s.flushMu.Unlock()
 
 	s.mu.Lock()
-	pending := make(map[string]uint64, len(s.counters))
+	pending := make(map[string]counter, len(s.counters))
 	for key, c := range s.counters {
 		if c.total != c.flushed {
-			pending[key] = c.total
+			pending[key] = *c
 		}
 	}
 	s.mu.Unlock()
@@ -210,25 +272,42 @@ func (s *Store) flush() error {
 		return nil
 	}
 
-	batch, err := s.crdt.Batch(s.ctx)
-	if err != nil {
-		return fmt.Errorf("open counter batch: %w", err)
-	}
-	for key, value := range pending {
-		if err := batch.Put(s.ctx, ds.NewKey(key), encodeCounter(value)); err != nil {
+	deltas := make([]crdt.Delta, 0, len(pending))
+	for key, c := range pending {
+		delta, err := s.crdt.Set().Add(s.ctx, key, s.signedValue(key, c.total))
+		if err != nil {
 			return fmt.Errorf("write counter %s: %w", key, err)
 		}
+		delta.SetDagName(c.dag)
+		deltas = append(deltas, delta)
 	}
-	if err := batch.Commit(s.ctx); err != nil {
+	if err := s.crdt.Publish(s.ctx, deltas...); err != nil {
 		return fmt.Errorf("commit %d counters: %w", len(pending), err)
 	}
 
 	s.mu.Lock()
-	for key, value := range pending {
-		s.counters[key].flushed = value
+	for key, c := range pending {
+		s.counters[key].flushed = c.total
 	}
 	s.mu.Unlock()
 	return nil
+}
+
+// purge drops the day DAGs of tweets past retention and forgets their
+// counters once flushed.
+func (s *Store) purge(now time.Time) error {
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+
+	s.crdt.Expire(dagPrefix, firstLiveDay(now))
+	s.mu.Lock()
+	for key, c := range s.counters {
+		if c.total == c.flushed && !s.crdt.IsLive(c.dag) {
+			delete(s.counters, key)
+		}
+	}
+	s.mu.Unlock()
+	return s.crdt.PurgeExpired(s.ctx)
 }
 
 func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {
@@ -238,31 +317,99 @@ func (s *Store) counterKey(namespace string, dataKey ds.Key) ds.Key {
 	))
 }
 
-func (s *Store) sumNamespace(namespace string, key ds.Key) (uint64, error) {
+// sumByNode adds up the components of one counter per writing node, this
+// process's unflushed count included. Only checked writes reach the set.
+func (s *Store) sumByNode(namespace string, key ds.Key) (map[string]uint64, error) {
 	prefix := ds.NewKey(
 		fmt.Sprintf("%s/%s/%s", counterPrefix, namespace, key.String()),
 	)
 	results, err := s.crdt.Query(s.ctx, ds.Query{Prefix: prefix.String()})
 	if err != nil {
-		return 0, fmt.Errorf("crdt stats: query %s: %w", prefix, err)
+		return nil, fmt.Errorf("crdt stats: query %s: %w", prefix, err)
 	}
 	defer func() { _ = results.Close() }()
 
-	var total uint64
+	byNode := make(map[string]uint64)
 	for r := range results.Next() {
 		if r.Error != nil {
-			return 0, fmt.Errorf("crdt stats: iterate %s: %w", prefix, r.Error)
+			return nil, fmt.Errorf("crdt stats: iterate %s: %w", prefix, r.Error)
 		}
-		total += decodeCounter(r.Value)
+		if len(r.Value) < counterSize {
+			continue
+		}
+		byNode[counterNode(r.Key)] += binary.BigEndian.Uint64(r.Value[:counterSize])
 	}
 
 	s.mu.Lock()
 	if c := s.counters[s.counterKey(namespace, key).String()]; c != nil {
-		total += c.total - c.flushed
+		byNode[s.nodeID] += c.total - c.flushed
 	}
 	s.mu.Unlock()
 
-	return total, nil
+	return byNode, nil
+}
+
+// signedValue is the big-endian total followed by the node's signature
+// over the key and the total. The total leads, so the CRDT's byte-wise
+// tie-break still keeps the larger of two totals.
+func (s *Store) signedValue(key string, total uint64) []byte {
+	value := binary.BigEndian.AppendUint64(make([]byte, 0, signedValueSize), total)
+	return append(value, ed25519.Sign(s.privKey, signingBytes(key, value[:counterSize]))...)
+}
+
+// validateCounter refuses a received counter the node in its key did not
+// sign or that is not in the DAG of its tweet's day.
+func validateCounter(dagName, key string, value []byte) error {
+	if dag, ok := tweetDAG(ds.NewKey(key)); !ok || dag != dagName {
+		return ErrForeignDAG
+	}
+	if len(value) != signedValueSize {
+		return ErrBadSignature
+	}
+	pubKey := warpnet.FromIDToPubKey(warpnet.FromStringToPeerID(counterNode(key)))
+	if len(pubKey) != ed25519.PublicKeySize ||
+		!ed25519.Verify(pubKey, signingBytes(key, value[:counterSize]), value[counterSize:]) {
+		return ErrBadSignature
+	}
+	return nil
+}
+
+// compareTotals orders two running totals of one counter: a node's total
+// only grows, so a smaller one is a replay.
+func compareTotals(value, current []byte) int {
+	if len(value) < counterSize || len(current) < counterSize {
+		return 0
+	}
+	return cmp.Compare(binary.BigEndian.Uint64(value[:counterSize]), binary.BigEndian.Uint64(current[:counterSize]))
+}
+
+// counterNode is the node a counter key belongs to: keys end in
+// /<node>/<generation>.
+func counterNode(key string) string {
+	parts := strings.Split(key, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[len(parts)-2]
+}
+
+func signingBytes(key string, total []byte) []byte {
+	return append(append([]byte(key), 0), total...)
+}
+
+// tweetDAG is the day DAG of the tweet a counter key belongs to: the only
+// ULID among the key's parts is the tweet id.
+func tweetDAG(key ds.Key) (string, bool) {
+	for _, part := range key.List() {
+		if id, err := ulid.ParseStrict(part); err == nil {
+			return store.DayAt(ulid.Time(id.Time())).DAG(dagPrefix), true
+		}
+	}
+	return "", false
+}
+
+func firstLiveDay(now time.Time) store.Day {
+	return store.DayAt(now) - retentionDays
 }
 
 // newGenerationID returns a hex-encoded 128-bit random nonce that
@@ -290,17 +437,4 @@ func (s *Store) Close() error {
 	s.wg.Wait()
 	s.cancel()
 	return s.crdt.Close()
-}
-
-func encodeCounter(value uint64) []byte {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, value)
-	return buf
-}
-
-func decodeCounter(data []byte) uint64 {
-	if len(data) < 8 {
-		return 0
-	}
-	return binary.BigEndian.Uint64(data)
 }

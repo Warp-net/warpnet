@@ -56,7 +56,7 @@ func TestPairedDeviceAuthorship(t *testing.T) {
 	t.Run("view from a paired device is accepted", func(t *testing.T) {
 		s := pairedDeviceStream(t, event.PUBLIC_POST_VIEW, ownNodeId, device, true)
 		h := StreamViewHandler(
-			stubViewRepo{recordFn: func(tweetId, viewerId string) (uint64, error) { return 7, nil }},
+			stubViewRepo{recordFn: func(tweetId, viewerId string, _ bool) (uint64, error) { return 7, nil }},
 			users,
 			stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}},
 		)

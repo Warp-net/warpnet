@@ -28,14 +28,22 @@ resulting from the use or misuse of this software.
 package store
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
 	ds "github.com/Warp-net/warpnet/database/datastore"
+	datastore "github.com/ipfs/go-datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
+	"github.com/ipfs/go-ds-crdt/pb"
+	ipld "github.com/ipfs/go-ipld-format"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -63,6 +71,10 @@ const (
 	rebroadcastInterval = 5 * time.Minute
 	dagSyncerTimeout    = 1 * time.Minute
 	numWorkers          = 16
+
+	// maxDeltaSize keeps a block well below the 1 MiB value limit of the
+	// echo node's in-memory Badger.
+	maxDeltaSize = 1 << 18
 )
 
 type Config struct {
@@ -73,9 +85,41 @@ type Config struct {
 	Prefix      string
 	PutHook     func(k ds.Key, v []byte)
 	DeleteHook  func(k ds.Key)
+	// DAGPrefixes limits the live day DAGs to these prefixes; with none,
+	// any prefix is live until it is expired.
+	DAGPrefixes []string
+	// Validate refuses, before a received block is merged, a write that
+	// does not belong in the store: not signed by its author or not kept
+	// in the DAG of its own day.
+	Validate func(dagName, key string, value []byte) error
+	// Compare orders two versions of one key by the same author, like
+	// cmp.Compare: a received version below the current one is a replay
+	// and is never merged.
+	Compare func(value, current []byte) int
 }
 
-func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
+// MerkleCRDT is a Merkle-CRDT kept in day DAGs: it publishes writes in
+// capped blocks, drops expired days and refuses their heads.
+type MerkleCRDT struct {
+	*crdt.MerkleCRDT
+
+	prefixes  map[string]struct{}
+	mu        sync.RWMutex
+	firstLive map[string]Day
+
+	lineage  *lineage
+	validate func(dagName, key string, value []byte) error
+}
+
+func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
+	m := &MerkleCRDT{firstLive: make(map[string]Day), validate: cfg.Validate}
+	if len(cfg.DAGPrefixes) > 0 {
+		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))
+		for _, p := range cfg.DAGPrefixes {
+			m.prefixes[p] = struct{}{}
+		}
+	}
+
 	baseStore := ds.MutexWrap(cfg.Datastore)
 	blockstore := ds.NewIdStore(ds.NewBlockstore(baseStore, ds.WriteThrough(true)))
 
@@ -100,24 +144,166 @@ func New(ctx context.Context, cfg Config) (*crdt.Datastore, error) {
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
-	crdtStore, err := crdt.New(
-		baseStore,
+	if err := m.purgeNotLive(ctx, baseStore, dagService, opts); err != nil {
+		log.Errorf("failed to purge DAGs that are not live: %v", err)
+	}
+
+	if putHook := opts.PutHook; putHook != nil {
+		opts.PutHook = func(k ds.Key, v []byte) {
+			if current, err := baseStore.Get(ctx, setValueKey(k.String())); err == nil && bytes.Equal(current, v) {
+				putHook(k, v)
+			}
+		}
+	}
+
+	m.lineage = newLineage(dagService)
+	crdtStore, err := crdt.NewMerkleCRDT(
+		versionedStore{Datastore: baseStore, compare: cfg.Compare},
 		ds.NewKey(""),
-		dagService,
-		cfg.Broadcaster,
+		m.lineage,
+		liveBroadcaster{Broadcaster: cfg.Broadcaster, crdt: m},
 		opts,
+		&crdt.MerkleCRDTOptions{
+			DeltaFactory: func() crdt.Delta {
+				return &checkedDelta{Delta: &pb.Delta{}, crdt: m}
+			},
+			Namespaces: crdt.InternalNamespaces{Set: setNamespace},
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
 
+	m.MerkleCRDT = crdtStore
+	for _, head := range crdtStore.InternalStats(ctx).Heads {
+		m.lineage.announce(head.Cid, head.DAGName)
+	}
+
 	go func() {
+		// Unconditional: a clean Close() mid-sync can leave a hole with the dirty bit unset.
 		if err := crdtStore.Repair(ctx); err != nil {
 			log.Errorf("failed to repair store: %v", err)
 		}
 	}()
 
-	return crdtStore, nil
+	return m, nil
+}
+
+// go-ds-crdt keeps, under the set namespace, each key's chosen value at
+// k/<key>/v and the priority it was chosen with at k/<key>/p (vendored
+// set.go).
+const (
+	setNamespace   = "s"
+	setValuePrefix = "/" + setNamespace + "/k"
+	setValueSuffix = "/v"
+	setPrioSuffix  = "/p"
+)
+
+var unrankedPriority = binary.AppendUvarint(nil, 1)
+
+func setValueKey(key string) datastore.Key {
+	return datastore.NewKey(setValuePrefix + key + setValueSuffix)
+}
+
+// versionedStore is the datastore go-ds-crdt keeps the set in. The
+// priority a block claims is not signed, so every stored priority reads as
+// the lowest: each write then reaches the value it would replace, and the
+// value is kept only if compare does not put it below the current one. The
+// set takes this decision under its own lock, so two blocks cannot both
+// pass a check against the same old value.
+type versionedStore struct {
+	datastore.Datastore
+
+	compare func(value, current []byte) int
+}
+
+func (v versionedStore) Get(ctx context.Context, key datastore.Key) ([]byte, error) {
+	if k := key.String(); strings.HasPrefix(k, setValuePrefix+"/") && strings.HasSuffix(k, setPrioSuffix) {
+		return unrankedPriority, nil
+	}
+	return v.Datastore.Get(ctx, key)
+}
+
+func (v versionedStore) Put(ctx context.Context, key datastore.Key, value []byte) error {
+	if k := key.String(); strings.HasPrefix(k, setValuePrefix+"/") && strings.HasSuffix(k, setValueSuffix) {
+		current, err := v.Datastore.Get(ctx, key)
+		if err == nil && v.compare(value, current) < 0 {
+			return nil
+		}
+	}
+	return v.Datastore.Put(ctx, key, value)
+}
+
+// purgeNotLive drops, before the checked store starts, every DAG that is
+// not live: its writes may predate the checks, and only the stock delta
+// sees all of them, so nothing it merged is left behind. It reads local
+// blocks only and talks to no one.
+func (m *MerkleCRDT) purgeNotLive(ctx context.Context, data datastore.Datastore, dags ipld.DAGService, opts *crdt.Options) error {
+	plain, err := crdt.NewMerkleCRDT(data, ds.NewKey(""), dags, idleBroadcaster{}, opts, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = plain.Close() }()
+
+	var errs []error
+	for _, head := range plain.InternalStats(ctx).Heads {
+		if m.IsLive(head.DAGName) {
+			continue
+		}
+		if _, err := plain.PurgeDAG(ctx, head.DAGName); err != nil {
+			errs = append(errs, fmt.Errorf("purge %q: %w", head.DAGName, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+type idleBroadcaster struct{}
+
+func (idleBroadcaster) Broadcast(context.Context, []byte) error { return nil }
+
+func (idleBroadcaster) Next(ctx context.Context) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per
+// block. It never shares a delta with crdt.Batch, whose pending delta
+// survives a failed commit.
+func (m *MerkleCRDT) Publish(ctx context.Context, deltas ...crdt.Delta) error {
+	slices.SortStableFunc(deltas, func(a, b crdt.Delta) int {
+		return strings.Compare(a.GetDagName(), b.GetDagName())
+	})
+	var (
+		block crdt.Delta
+		size  int
+	)
+	for _, delta := range deltas {
+		if block != nil && (block.GetDagName() != delta.GetDagName() || size+delta.Size() > maxDeltaSize) {
+			if _, err := m.MerkleCRDT.Publish(ctx, block); err != nil {
+				return err
+			}
+			block = nil
+		}
+		if block == nil {
+			block, size = delta, delta.Size()
+			continue
+		}
+		elems, err := block.GetElements()
+		if err != nil {
+			return err
+		}
+		moreElems, err := delta.GetElements()
+		if err != nil {
+			return err
+		}
+		block.SetElements(append(elems, moreElems...))
+		size += delta.Size()
+	}
+	if block == nil {
+		return nil
+	}
+	_, err := m.MerkleCRDT.Publish(ctx, block)
+	return err
 }
 
 type dedupLogger struct {

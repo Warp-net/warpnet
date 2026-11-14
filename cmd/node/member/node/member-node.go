@@ -272,7 +272,7 @@ func (m *MemberNode) Start() (err error) {
 		return fmt.Errorf("member: failed to start rating gossip broadcaster: %w", err)
 	}
 	m.ratingDb, err = ratingdb.New(
-		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable,
+		m.ctx, ratingBroadcaster, m.ratingRepo, m.node.Node(), m.dHashTable, rating.VerifyRecord, rating.DimensionNames(),
 	)
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize rating store: %w", err)

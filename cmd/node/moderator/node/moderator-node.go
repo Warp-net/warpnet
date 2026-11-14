@@ -84,7 +84,7 @@ type RatingProvider interface {
 
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
-	Put(rec domain.RatingRecord) error
+	Put(recs ...domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
 	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
@@ -238,7 +238,7 @@ func (mn *ModeratorNode) StartRating(gossip broadcast.GossipPubSuber, audit <-ch
 		return fmt.Errorf("moderator: failed to start rating gossip broadcaster: %w", err)
 	}
 	mn.ratingDb, err = ratingdb.New(
-		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable,
+		mn.ctx, broadcaster, mn.ratingStore, mn.node.Node(), mn.dHashTable, rating.VerifyRecord, rating.DimensionNames(),
 	)
 	if err != nil {
 		return fmt.Errorf("moderator: failed to initialize rating store: %w", err)

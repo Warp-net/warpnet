@@ -50,13 +50,17 @@ type memRecords struct {
 	puts []func(domain.RatingRecord)
 }
 
-func (m *memRecords) Put(rec domain.RatingRecord) error {
+func (m *memRecords) Put(recs ...domain.RatingRecord) error {
 	m.mu.Lock()
-	m.recs[rec.PeerID+"/"+rec.ObserverID+"/"+rec.Dimension+"/"+rec.Generation] = rec
+	for _, rec := range recs {
+		m.recs[rec.PeerID+"/"+rec.ObserverID+"/"+rec.Dimension+"/"+rec.Generation] = rec
+	}
 	hooks := m.puts
 	m.mu.Unlock()
-	for _, h := range hooks {
-		h(rec)
+	for _, rec := range recs {
+		for _, h := range hooks {
+			h(rec)
+		}
 	}
 	return nil
 }

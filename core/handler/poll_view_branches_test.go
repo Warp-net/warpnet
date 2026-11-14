@@ -286,7 +286,7 @@ func TestStreamViewHandlerRecordFailure(t *testing.T) {
 
 	userRepo, s := actorStream(t, viewer, nil)
 	repoErr := errors.New("counter down")
-	repo := stubViewRepo{recordFn: func(string, string) (uint64, error) { return 0, repoErr }}
+	repo := stubViewRepo{recordFn: func(string, string, bool) (uint64, error) { return 0, repoErr }}
 
 	h := StreamViewHandler(repo, userRepo, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 	_, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: viewer}), s)

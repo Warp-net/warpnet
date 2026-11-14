@@ -12,13 +12,13 @@ import (
 )
 
 type stubViewRepo struct {
-	recordFn func(tweetId, viewerId string) (uint64, error)
+	recordFn func(tweetId, viewerId string, isTransitive bool) (uint64, error)
 	getFn    func(tweetId string) (uint64, error)
 }
 
-func (s stubViewRepo) RecordView(tweetId, viewerId string) (uint64, error) {
+func (s stubViewRepo) RecordView(tweetId, viewerId string, isTransitive bool) (uint64, error) {
 	if s.recordFn != nil {
-		return s.recordFn(tweetId, viewerId)
+		return s.recordFn(tweetId, viewerId, isTransitive)
 	}
 	return 1, nil
 }
@@ -60,7 +60,7 @@ func TestStreamViewHandler(t *testing.T) {
 		var capturedViewerId string
 		users, conn := actorStream(t, author, nil)
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) {
+			recordFn: func(tweetId, viewerId string, _ bool) (uint64, error) {
 				capturedViewerId = viewerId
 				return 1, nil
 			},
@@ -82,7 +82,7 @@ func TestStreamViewHandler(t *testing.T) {
 		var capturedTweetId, capturedViewerId string
 		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) {
+			recordFn: func(tweetId, viewerId string, _ bool) (uint64, error) {
 				capturedTweetId = tweetId
 				capturedViewerId = viewerId
 				return 42, nil
@@ -105,7 +105,7 @@ func TestStreamViewHandler(t *testing.T) {
 		var capturedTweetId string
 		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) {
+			recordFn: func(tweetId, viewerId string, _ bool) (uint64, error) {
 				capturedTweetId = tweetId
 				return 1, nil
 			},
@@ -126,7 +126,7 @@ func TestStreamViewHandler(t *testing.T) {
 			return domain.User{Id: userId, NodeId: "remote-node"}, nil
 		})
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) { return 5, nil },
+			recordFn: func(tweetId, viewerId string, _ bool) (uint64, error) { return 5, nil },
 		}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -147,15 +147,14 @@ func TestStreamViewHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("forwarding errors fall back to local CRDT view", func(t *testing.T) {
-		recordCalled := false
+	t.Run("viewer's node counts its own view when forwarding fails", func(t *testing.T) {
+		var transitive bool
 		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) {
-				recordCalled = true
+			recordFn: func(tweetId, viewerId string, isTransitive bool) (uint64, error) {
+				transitive = isTransitive
 				return 9, nil
 			},
-			getFn: func(tweetId string) (uint64, error) { return 9, nil },
 		}, users, stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
 			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
@@ -167,37 +166,29 @@ func TestStreamViewHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if recordCalled {
-			t.Fatal("non-author node must not RecordView; only the author increments")
+		if !transitive {
+			t.Fatal("the viewer's own node puts its view into the replicated counter")
 		}
 		if resp.(event.ViewsCountResponse).Count != 9 {
-			t.Fatalf("expected fallback to CRDT count 9, got: %v", resp)
+			t.Fatalf("expected the local count 9, got: %v", resp)
 		}
 	})
 
-	t.Run("non-author node does not record locally on forward success", func(t *testing.T) {
-		recordCalled := false
-		users, conn := actorStream(t, owner, func(userId string) (domain.User, error) {
-			return domain.User{Id: userId, NodeId: "remote-node"}, nil
-		})
+	t.Run("author's node keeps a remote viewer's view local", func(t *testing.T) {
+		transitive := true
+		users, conn := actorStream(t, owner, nil)
 		h := StreamViewHandler(stubViewRepo{
-			recordFn: func(tweetId, viewerId string) (uint64, error) {
-				recordCalled = true
-				return 0, nil
+			recordFn: func(tweetId, viewerId string, isTransitive bool) (uint64, error) {
+				transitive = isTransitive
+				return 3, nil
 			},
-		}, users, stubStreamer{
-			nodeInfo: warpnet.NodeInfo{OwnerId: owner},
-			genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
-				return []byte(`{"count":5}`), nil
-			},
-		})
+		}, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 
-		_, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), conn)
-		if err != nil {
+		if _, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: owner}), conn); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if recordCalled {
-			t.Fatal("non-author node must not RecordView locally")
+		if transitive {
+			t.Fatal("only the viewer's node may count the view in the replicated counter")
 		}
 	})
 }
