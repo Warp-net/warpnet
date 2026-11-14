@@ -158,7 +158,7 @@ func NewMemberNode(
 	discService := discovery.NewDiscoveryService(ctx, userRepo, nodeRepo, ratelimit.NewIPLimiter(rateLimits))
 	mdnsService := mdns.NewMulticastDNS(ctx, discService.DiscoveryHandlerMDNS)
 
-	followingIds, err := fetchFollowingIds(owner.UserId, followRepo)
+	followingIds, err := fetchFollowingIds(owner.UserId, followRepo, userRepo)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +314,7 @@ func (m *MemberNode) Start() (err error) {
 	return nil
 }
 
-func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, err error) {
+func fetchFollowingIds(ownerId string, followRepo FollowStorer, userRepo UserProvider) (ids []string, err error) {
 	if followRepo == nil {
 		return ids, nil
 	}
@@ -328,11 +328,16 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer) (ids []string, e
 		if err != nil {
 			return ids, err
 		}
-		for _, id := range followings {
-			if id == ownerId {
+		users, err := userRepo.GetBatch(followings...)
+		if err != nil {
+			return ids, err
+		}
+		for _, u := range users {
+			// bridged networks never publish to the gossip topic
+			if u.Id == ownerId || fediverse.IsBridged(u.Network) {
 				continue
 			}
-			ids = append(ids, id)
+			ids = append(ids, u.Id)
 		}
 		if uint64(len(followings)) < limit {
 			break
