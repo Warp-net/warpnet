@@ -179,7 +179,7 @@ func TestFetchFollowingIds(t *testing.T) {
 
 	t.Run("skips bridged users", func(t *testing.T) {
 		repo := &pagedFollowStore{pages: [][]domain.ID{{"warp-1", "bridged-1"}}}
-		ids, err := fetchFollowingIds("owner-1", repo, bridgedUsers{"bridged-1": true})
+		ids, err := fetchFollowingIds("owner-1", repo, bridgedUsers{ids: map[string]bool{"bridged-1": true}})
 		require.NoError(t, err)
 		require.Equal(t, []string{"warp-1"}, ids)
 	})
@@ -191,16 +191,23 @@ func TestFetchFollowingIds(t *testing.T) {
 	})
 }
 
-type bridgedUsers map[string]bool
-
-func (b bridgedUsers) Get(userId string) (domain.User, error) {
-	if b[userId] {
-		return domain.User{Id: userId, Network: fediverse.MastodonNetwork}, nil
-	}
-	return domain.User{Id: userId}, nil
+// bridgedUsers serves only GetBatch; any other UserProvider call panics.
+type bridgedUsers struct {
+	UserProvider
+	ids map[string]bool
 }
-func (b bridgedUsers) Update(string, domain.User) (domain.User, error) { return domain.User{}, nil }
-func (b bridgedUsers) GetByNodeID(string) (domain.User, error)         { return domain.User{}, nil }
+
+func (b bridgedUsers) GetBatch(userIds ...string) ([]domain.User, error) {
+	users := make([]domain.User, 0, len(userIds))
+	for _, id := range userIds {
+		u := domain.User{Id: id}
+		if b.ids[id] {
+			u.Network = fediverse.MastodonNetwork
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}
 
 func idRange(n int) []domain.ID {
 	out := make([]domain.ID, 0, n)

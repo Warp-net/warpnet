@@ -314,7 +314,7 @@ func (m *MemberNode) Start() (err error) {
 	return nil
 }
 
-func fetchFollowingIds(ownerId string, followRepo FollowStorer, userRepo UserFetcher) (ids []string, err error) {
+func fetchFollowingIds(ownerId string, followRepo FollowStorer, userRepo UserProvider) (ids []string, err error) {
 	if followRepo == nil {
 		return ids, nil
 	}
@@ -328,13 +328,22 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer, userRepo UserFet
 		if err != nil {
 			return ids, err
 		}
+		// bridged networks never publish to the gossip topic
+		bridged := make(map[string]struct{})
+		users, err := userRepo.GetBatch(followings...)
+		if err != nil {
+			log.Warnf("fetch followings: get users: %v", err)
+		}
+		for _, u := range users {
+			if fediverse.IsBridged(u.Network) || u.NodeId == fediverse.GatewayNodeID() {
+				bridged[u.Id] = struct{}{}
+			}
+		}
 		for _, id := range followings {
 			if id == ownerId {
 				continue
 			}
-			// bridged networks never publish to the gossip topic
-			if u, err := userRepo.Get(id); err == nil &&
-				(fediverse.IsBridged(u.Network) || u.NodeId == fediverse.GatewayNodeID()) {
+			if _, ok := bridged[id]; ok {
 				continue
 			}
 			ids = append(ids, id)
