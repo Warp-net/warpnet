@@ -144,7 +144,7 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
-	if err := m.purgeNotLive(ctx, baseStore, dagService, opts); err != nil {
+	if err := m.purgeNotLive(ctx, cfg.Datastore, baseStore, dagService, opts); err != nil {
 		log.Errorf("failed to purge DAGs that are not live: %v", err)
 	}
 
@@ -237,16 +237,29 @@ func (v versionedStore) Put(ctx context.Context, key datastore.Key, value []byte
 // purgeNotLive drops, before the checked store starts, every DAG that is
 // not live: its writes may predate the checks, and only the stock delta
 // sees all of them, so nothing it merged is left behind. It reads local
-// blocks only and talks to no one.
-func (m *MerkleCRDT) purgeNotLive(ctx context.Context, data datastore.Datastore, dags ipld.DAGService, opts *crdt.Options) error {
+// blocks only and talks to no one. Walking the unnamed DAG from before day
+// DAGs takes minutes, so when it is there, or no DAG is live at all, the
+// whole store is cleared at once instead: whatever was live is fetched
+// again.
+func (m *MerkleCRDT) purgeNotLive(ctx context.Context, owner Datastore, data datastore.Datastore, dags ipld.DAGService, opts *crdt.Options) error {
 	plain, err := crdt.NewMerkleCRDT(data, ds.NewKey(""), dags, idleBroadcaster{}, opts, nil)
 	if err != nil {
 		return err
 	}
+	heads := plain.InternalStats(ctx).Heads
+
+	store, canClear := owner.(clearer)
+	if canClear && m.isWholeStoreExpired(heads) {
+		if err := plain.Close(); err != nil {
+			return err
+		}
+		log.Infof("crdt: clearing a store with no live DAG or with the unnamed one")
+		return store.Clear()
+	}
 	defer func() { _ = plain.Close() }()
 
 	var errs []error
-	for _, head := range plain.InternalStats(ctx).Heads {
+	for _, head := range heads {
 		if m.IsLive(head.DAGName) {
 			continue
 		}
@@ -255,6 +268,23 @@ func (m *MerkleCRDT) purgeNotLive(ctx context.Context, data datastore.Datastore,
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// clearer is a datastore that drops all of its keys at once.
+type clearer interface {
+	Clear() error
+}
+
+func (m *MerkleCRDT) isWholeStoreExpired(heads []crdt.Head) bool {
+	if len(heads) == 0 {
+		return false
+	}
+	for _, head := range heads {
+		if head.DAGName == "" {
+			return true
+		}
+	}
+	return !slices.ContainsFunc(heads, func(h crdt.Head) bool { return m.IsLive(h.DAGName) })
 }
 
 type idleBroadcaster struct{}

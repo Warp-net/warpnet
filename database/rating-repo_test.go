@@ -53,6 +53,30 @@ func (s *RatingRepoTestSuite) TestRatingRepoIsSeparateFromStats() {
 	assert.ErrorIs(s.T(), err, ds.ErrNotFound, "the two CRDTs must not see each other's keys")
 }
 
+func (s *RatingRepoTestSuite) TestClearDropsOnlyThisRepo() {
+	ctx := context.Background()
+	rating := NewRatingRepo(s.db)
+	stats := NewStatsRepo(s.db)
+	for _, key := range []string{"/s/k/record/a/v", "/blocks/abc", "/h/head"} {
+		s.Require().NoError(rating.Put(ctx, ds.NewKey(key), []byte("x")))
+	}
+	kept := ds.NewKey("/s/k/counter/v")
+	s.Require().NoError(stats.Put(ctx, kept, []byte("y")))
+
+	s.Require().NoError(rating.(*NodeRepo).Clear())
+
+	results, err := rating.Query(ctx, ds.Query{KeysOnly: true})
+	s.Require().NoError(err)
+	left, err := results.Rest()
+	s.Require().NoError(err)
+	assert.Empty(s.T(), left, "every key of the repo goes")
+	got, err := stats.Get(ctx, kept)
+	s.Require().NoError(err)
+	assert.Equal(s.T(), []byte("y"), got, "another repo in the same database is untouched")
+
+	s.Require().NoError(rating.Put(ctx, ds.NewKey("/after"), []byte("z")), "the repo is usable after a clear")
+}
+
 func TestRatingRepoTestSuite(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	suite.Run(t, new(RatingRepoTestSuite))
