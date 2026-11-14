@@ -48,7 +48,9 @@ type RatingStorer interface {
 	Delete(key local_store.DatabaseKey) error
 }
 
-const ratingPrefix = "RATING"
+// ratingPrefix holds the rating CRDT of day DAGs. The single-DAG history
+// before it, right under /RATING, is left unread.
+const ratingPrefix = "/RATING/DAYS"
 
 // NewRatingRepo backs the rating CRDT. It is kept apart from the stats
 // CRDT because each go-ds-crdt instance owns its whole namespace.

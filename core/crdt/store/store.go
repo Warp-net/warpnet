@@ -31,7 +31,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -43,7 +42,6 @@ import (
 	datastore "github.com/ipfs/go-datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
-	ipld "github.com/ipfs/go-ipld-format"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -144,10 +142,6 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	opts.RepairInterval = 0
 	opts.MultiHeadProcessing = true
 
-	if err := m.purgeNotLive(ctx, baseStore, dagService, opts); err != nil {
-		log.Errorf("failed to purge DAGs that are not live: %v", err)
-	}
-
 	if putHook := opts.PutHook; putHook != nil {
 		opts.PutHook = func(k ds.Key, v []byte) {
 			if current, err := baseStore.Get(ctx, setValueKey(k.String())); err == nil && bytes.Equal(current, v) {
@@ -232,38 +226,6 @@ func (v versionedStore) Put(ctx context.Context, key datastore.Key, value []byte
 		}
 	}
 	return v.Datastore.Put(ctx, key, value)
-}
-
-// purgeNotLive drops, before the checked store starts, every DAG that is
-// not live: its writes may predate the checks, and only the stock delta
-// sees all of them, so nothing it merged is left behind. It reads local
-// blocks only and talks to no one.
-func (m *MerkleCRDT) purgeNotLive(ctx context.Context, data datastore.Datastore, dags ipld.DAGService, opts *crdt.Options) error {
-	plain, err := crdt.NewMerkleCRDT(data, ds.NewKey(""), dags, idleBroadcaster{}, opts, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = plain.Close() }()
-
-	var errs []error
-	for _, head := range plain.InternalStats(ctx).Heads {
-		if m.IsLive(head.DAGName) {
-			continue
-		}
-		if _, err := plain.PurgeDAG(ctx, head.DAGName); err != nil {
-			errs = append(errs, fmt.Errorf("purge %q: %w", head.DAGName, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-type idleBroadcaster struct{}
-
-func (idleBroadcaster) Broadcast(context.Context, []byte) error { return nil }
-
-func (idleBroadcaster) Next(ctx context.Context) ([]byte, error) {
-	<-ctx.Done()
-	return nil, ctx.Err()
 }
 
 // Publish writes deltas in as few blocks as maxDeltaSize allows, one DAG per

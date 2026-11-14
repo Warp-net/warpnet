@@ -325,30 +325,6 @@ func TestStore_DeleteExpiredDropsWholeDaysOfThatDimension(t *testing.T) {
 		"the expired network day goes whole, foreign evidence included; other days and dimensions stay")
 }
 
-func TestStore_StartupDropsTheUnnamedDAG(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	data := dssync.MutexWrap(datastore.NewMapDatastore())
-
-	first, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords, testDimensions)
-	require.NoError(t, err)
-	old := ratingRecord(first.nodeID, "peer-a", "net", currentBucket())
-	key, err := recordKey(old)
-	require.NoError(t, err)
-	value, err := json.Marshal(old)
-	require.NoError(t, err)
-	require.NoError(t, first.crdt.Put(ctx, key, value))
-	require.NoError(t, first.Close())
-
-	second, err := New(ctx, &silentBroadcaster{}, data, newHost(t), idleRouter{}, acceptRecords, testDimensions)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = second.Close() })
-	require.Eventually(t, func() bool {
-		got, err := second.List("peer-a")
-		return err == nil && len(got) == 0 && len(second.crdt.InternalStats(ctx).Heads) == 0
-	}, 5*time.Second, 10*time.Millisecond, "a DAG that is not live is dropped before the startup repair walks it")
-}
-
 func TestStore_ListDropsRecordsStoredUnderAForeignKey(t *testing.T) {
 	store, _ := newLiveStore(t)
 

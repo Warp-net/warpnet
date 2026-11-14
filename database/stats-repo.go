@@ -20,10 +20,12 @@ type StatsStorer interface {
 	Delete(key local_store.DatabaseKey) error
 }
 
-const crdtPrefix = "CRDT"
+// statsPrefix holds the stats CRDT of signed counters in day DAGs. The
+// unsigned counters before it, under /CRDT, are left unread.
+const statsPrefix = "/STATS/DAYS"
 
 func NewStatsRepo(db StatsStorer) ds.Datastore {
-	prefix := crdtPrefix
+	prefix := statsPrefix
 	if !strings.HasPrefix(prefix, requiredPrefixSlash) {
 		prefix = requiredPrefixSlash + prefix
 	}

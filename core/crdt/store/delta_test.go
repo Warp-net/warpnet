@@ -25,6 +25,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type idleBroadcaster struct{}
+
+func (idleBroadcaster) Broadcast(context.Context, []byte) error { return nil }
+
+func (idleBroadcaster) Next(ctx context.Context) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 type noRouter struct{}
 
 func (noRouter) FindProvidersAsync(context.Context, warpnet.WarpCID, int) <-chan warpnet.WarpAddrInfo {
