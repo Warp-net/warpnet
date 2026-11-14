@@ -28,18 +28,11 @@ resulting from the use or misuse of this software.
 package store
 
 import (
-	"bytes"
-	"context"
-	"encoding/binary"
-	"math"
-	"reflect"
 	"slices"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
-	datastore "github.com/ipfs/go-datastore"
 	crdt "github.com/ipfs/go-ds-crdt"
 	"github.com/ipfs/go-ds-crdt/pb"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -47,9 +40,7 @@ const ErrForeignRoot = warpnet.WarpError("crdt store: block is not filed under t
 
 // checkedDelta is the delta every received block is read into. Before the
 // merge it refuses a block not filed under the DAG it was reached from, and
-// keeps no tombstones and only the writes the store accepts that are not
-// older than the key's current value; a newer write raises the block's
-// priority above the current one, so a replay cannot hold the key.
+// keeps no tombstones and only the writes the store accepts.
 type checkedDelta struct {
 	*pb.Delta
 
@@ -66,24 +57,9 @@ func (d *checkedDelta) Unmarshal(b []byte) error {
 		return ErrForeignRoot
 	}
 	d.Tombstones = nil
-	priority := d.Priority
 	d.Elements = slices.DeleteFunc(d.Elements, func(e *pb.Element) bool {
-		if d.crdt.validate(d.GetDagName(), e.GetKey(), e.GetValue()) != nil {
-			return true
-		}
-		current, currentPriority, ok := d.crdt.current(e.GetKey())
-		if !ok || bytes.Equal(current, e.GetValue()) {
-			return false
-		}
-		if d.crdt.compare(e.GetValue(), current) < 0 {
-			return true
-		}
-		if currentPriority >= priority && currentPriority < math.MaxUint64 {
-			priority = currentPriority + 1
-		}
-		return false
+		return d.crdt.validate(d.GetDagName(), e.GetKey(), e.GetValue()) != nil
 	})
-	d.Priority = priority
 	return nil
 }
 
@@ -121,57 +97,4 @@ func (d *checkedDelta) IsEmpty() bool {
 
 func (d *checkedDelta) Marshal() ([]byte, error) {
 	return proto.Marshal(d.Delta)
-}
-
-// go-ds-crdt keeps, under its set namespace, each key's winning value at
-// k/<key>/v and that value's priority at k/<key>/p (vendored set.go).
-const (
-	setKeysNs      = "k"
-	setValueSuffix = "v"
-	setPrioSuffix  = "p"
-)
-
-// readSetNamespace finds where go-ds-crdt keeps the set: the namespace is an
-// unexported field, so it is read by reflection. Any surprise in the
-// library's layout only turns the stale-version check off.
-func (m *MerkleCRDT) readSetNamespace() (ns datastore.Key, ok bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Errorf("crdt: reading the set namespace: %v", r)
-			ns, ok = datastore.Key{}, false
-		}
-	}()
-	set := reflect.ValueOf(m.MerkleCRDT.Datastore).Elem().FieldByName("set")
-	if !set.IsValid() || set.Kind() != reflect.Pointer || set.IsNil() {
-		return ns, false
-	}
-	field := set.Elem().FieldByName("namespace")
-	if !field.IsValid() || field.Type() != reflect.TypeFor[datastore.Key]() || field.NumField() != 1 {
-		return ns, false
-	}
-	return datastore.RawKey(field.Field(0).String()), true
-}
-
-// current is the value go-ds-crdt has chosen for key and the priority it
-// was chosen with.
-func (m *MerkleCRDT) current(key string) (value []byte, priority uint64, ok bool) {
-	ns := m.setNamespace.Load()
-	if ns == nil {
-		return nil, 0, false
-	}
-	keyNs := ns.ChildString(setKeysNs).ChildString(key)
-	ctx := context.Background()
-	value, err := m.data.Get(ctx, keyNs.ChildString(setValueSuffix))
-	if err != nil {
-		return nil, 0, false
-	}
-	raw, err := m.data.Get(ctx, keyNs.ChildString(setPrioSuffix))
-	if err != nil {
-		return nil, 0, false
-	}
-	stored, n := binary.Uvarint(raw)
-	if n <= 0 || stored == 0 {
-		return nil, 0, false
-	}
-	return value, stored - 1, true
 }

@@ -28,13 +28,14 @@ resulting from the use or misuse of this software.
 package store
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Warp-net/warpnet/core/warpnet"
@@ -106,15 +107,12 @@ type MerkleCRDT struct {
 	mu        sync.RWMutex
 	firstLive map[string]Day
 
-	data         datastore.Datastore
-	lineage      *lineage
-	validate     func(dagName, key string, value []byte) error
-	compare      func(value, current []byte) int
-	setNamespace atomic.Pointer[datastore.Key]
+	lineage  *lineage
+	validate func(dagName, key string, value []byte) error
 }
 
 func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
-	m := &MerkleCRDT{firstLive: make(map[string]Day), validate: cfg.Validate, compare: cfg.Compare}
+	m := &MerkleCRDT{firstLive: make(map[string]Day), validate: cfg.Validate}
 	if len(cfg.DAGPrefixes) > 0 {
 		m.prefixes = make(map[string]struct{}, len(cfg.DAGPrefixes))
 		for _, p := range cfg.DAGPrefixes {
@@ -150,28 +148,33 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 		log.Errorf("failed to purge DAGs that are not live: %v", err)
 	}
 
-	m.data = baseStore
+	if putHook := opts.PutHook; putHook != nil {
+		opts.PutHook = func(k ds.Key, v []byte) {
+			if current, err := baseStore.Get(ctx, setValueKey(k.String())); err == nil && bytes.Equal(current, v) {
+				putHook(k, v)
+			}
+		}
+	}
+
 	m.lineage = newLineage(dagService)
 	crdtStore, err := crdt.NewMerkleCRDT(
-		baseStore,
+		versionedStore{Datastore: baseStore, compare: cfg.Compare},
 		ds.NewKey(""),
 		m.lineage,
 		liveBroadcaster{Broadcaster: cfg.Broadcaster, crdt: m},
 		opts,
-		&crdt.MerkleCRDTOptions{DeltaFactory: func() crdt.Delta {
-			return &checkedDelta{Delta: &pb.Delta{}, crdt: m}
-		}},
+		&crdt.MerkleCRDTOptions{
+			DeltaFactory: func() crdt.Delta {
+				return &checkedDelta{Delta: &pb.Delta{}, crdt: m}
+			},
+			Namespaces: crdt.InternalNamespaces{Set: setNamespace},
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CRDT store: %w", err)
 	}
 
 	m.MerkleCRDT = crdtStore
-	if ns, ok := m.readSetNamespace(); ok {
-		m.setNamespace.Store(&ns)
-	} else {
-		log.Warnf("crdt store %s: go-ds-crdt layout changed, replayed old values are not refused", cfg.Prefix)
-	}
 	for _, head := range crdtStore.InternalStats(ctx).Heads {
 		m.lineage.announce(head.Cid, head.DAGName)
 	}
@@ -184,6 +187,51 @@ func New(ctx context.Context, cfg Config) (*MerkleCRDT, error) {
 	}()
 
 	return m, nil
+}
+
+// go-ds-crdt keeps, under the set namespace, each key's chosen value at
+// k/<key>/v and the priority it was chosen with at k/<key>/p (vendored
+// set.go).
+const (
+	setNamespace   = "s"
+	setValuePrefix = "/" + setNamespace + "/k"
+	setValueSuffix = "/v"
+	setPrioSuffix  = "/p"
+)
+
+var unrankedPriority = binary.AppendUvarint(nil, 1)
+
+func setValueKey(key string) datastore.Key {
+	return datastore.NewKey(setValuePrefix + key + setValueSuffix)
+}
+
+// versionedStore is the datastore go-ds-crdt keeps the set in. The
+// priority a block claims is not signed, so every stored priority reads as
+// the lowest: each write then reaches the value it would replace, and the
+// value is kept only if compare does not put it below the current one. The
+// set takes this decision under its own lock, so two blocks cannot both
+// pass a check against the same old value.
+type versionedStore struct {
+	datastore.Datastore
+
+	compare func(value, current []byte) int
+}
+
+func (v versionedStore) Get(ctx context.Context, key datastore.Key) ([]byte, error) {
+	if k := key.String(); strings.HasPrefix(k, setValuePrefix+"/") && strings.HasSuffix(k, setPrioSuffix) {
+		return unrankedPriority, nil
+	}
+	return v.Datastore.Get(ctx, key)
+}
+
+func (v versionedStore) Put(ctx context.Context, key datastore.Key, value []byte) error {
+	if k := key.String(); strings.HasPrefix(k, setValuePrefix+"/") && strings.HasSuffix(k, setValueSuffix) {
+		current, err := v.Datastore.Get(ctx, key)
+		if err == nil && v.compare(value, current) < 0 {
+			return nil
+		}
+	}
+	return v.Datastore.Put(ctx, key, value)
 }
 
 // purgeNotLive drops, before the checked store starts, every DAG that is
