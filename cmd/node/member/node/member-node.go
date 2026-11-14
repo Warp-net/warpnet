@@ -328,25 +328,16 @@ func fetchFollowingIds(ownerId string, followRepo FollowStorer, userRepo UserPro
 		if err != nil {
 			return ids, err
 		}
-		// bridged networks never publish to the gossip topic
-		bridged := make(map[string]struct{})
 		users, err := userRepo.GetBatch(followings...)
 		if err != nil {
-			log.Warnf("fetch followings: get users: %v", err)
+			return ids, err
 		}
 		for _, u := range users {
-			if fediverse.IsBridged(u.Network) || u.NodeId == fediverse.GatewayNodeID() {
-				bridged[u.Id] = struct{}{}
-			}
-		}
-		for _, id := range followings {
-			if id == ownerId {
+			// bridged networks never publish to the gossip topic
+			if u.Id == ownerId || fediverse.IsBridged(u.Network) {
 				continue
 			}
-			if _, ok := bridged[id]; ok {
-				continue
-			}
-			ids = append(ids, id)
+			ids = append(ids, u.Id)
 		}
 		if uint64(len(followings)) < limit {
 			break

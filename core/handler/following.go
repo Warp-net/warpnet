@@ -179,11 +179,10 @@ func StreamFollowHandler(
 		}
 
 		// bridged networks never publish to the gossip topic
-		if fediverse.IsBridged(followingUser.Network) || followingUser.NodeId == fediverse.GatewayNodeID() {
-			return event.Accepted, validateResponse(followDataResp)
-		}
-		if err := broadcaster.SubscribeUserUpdate(ev.FollowingId); err != nil {
-			return nil, err
+		if !fediverse.IsBridged(followingUser.Network) {
+			if err := broadcaster.SubscribeUserUpdate(ev.FollowingId); err != nil {
+				return nil, err
+			}
 		}
 
 		return event.Accepted, validateResponse(followDataResp)
@@ -309,11 +308,10 @@ func StreamUnfollowHandler(
 			return nil, err
 		}
 
-		if fediverse.IsBridged(followingUser.Network) || followingUser.NodeId == fediverse.GatewayNodeID() {
-			return event.Accepted, validateResponse(unfollowDataResp)
-		}
-		if err := broadcaster.UnsubscribeUserUpdate(ev.FollowingId); err != nil {
-			log.Infoln("unfollow unsubscribe:", err)
+		if !fediverse.IsBridged(followingUser.Network) {
+			if err := broadcaster.UnsubscribeUserUpdate(ev.FollowingId); err != nil {
+				log.Infoln("unfollow unsubscribe:", err)
+			}
 		}
 
 		return event.Accepted, validateResponse(unfollowDataResp)
