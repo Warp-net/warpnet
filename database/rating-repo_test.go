@@ -53,28 +53,23 @@ func (s *RatingRepoTestSuite) TestRatingRepoIsSeparateFromStats() {
 	assert.ErrorIs(s.T(), err, ds.ErrNotFound, "the two CRDTs must not see each other's keys")
 }
 
-func (s *RatingRepoTestSuite) TestNewReposDropTheOldSingleDAGHistory() {
+func (s *RatingRepoTestSuite) TestOldCRDTHistoryIsLeftUnread() {
 	ctx := context.Background()
-	for _, key := range []string{"/RATING/h/head", "/RATING/s/k/record/v", "/CRDT/s/k/counter/v"} {
-		s.Require().NoError(s.db.Set(local_store.DatabaseKey(key), []byte("old")))
-	}
-	rating := NewRatingRepo(s.db)
-	stats := NewStatsRepo(s.db)
-	s.Require().NoError(rating.Put(ctx, ds.NewKey("/h/day"), []byte("new")))
-	s.Require().NoError(stats.Put(ctx, ds.NewKey("/h/day"), []byte("new")))
+	s.Require().NoError(s.db.Set("/RATING/h/head", []byte("old rating")))
+	s.Require().NoError(s.db.Set("/CRDT/h/head", []byte("old stats")))
 
-	for _, key := range []string{"/RATING/h/head", "/RATING/s/k/record/v", "/CRDT/s/k/counter/v"} {
-		_, err := s.db.Get(local_store.DatabaseKey(key))
-		assert.True(s.T(), local_store.IsNotFoundError(err), "%s is old history and goes", key)
+	for _, repo := range []ds.Datastore{NewRatingRepo(s.db), NewStatsRepo(s.db)} {
+		_, err := repo.Get(ctx, ds.NewKey("/h/head"))
+		assert.ErrorIs(s.T(), err, ds.ErrNotFound, "the day-DAG CRDTs start from an empty namespace")
 	}
+	got, err := s.db.Get("/RATING/h/head")
+	s.Require().NoError(err)
+	assert.Equal(s.T(), []byte("old rating"), got, "the old history is not touched")
 
-	NewRatingRepo(s.db)
-	NewStatsRepo(s.db)
-	for _, repo := range []ds.Datastore{rating, stats} {
-		got, err := repo.Get(ctx, ds.NewKey("/h/day"))
-		s.Require().NoError(err, "a later start must not drop the day DAGs")
-		assert.Equal(s.T(), []byte("new"), got)
-	}
+	ctx2 := context.Background()
+	s.Require().NoError(NewRatingRepo(s.db).Put(ctx2, ds.NewKey("/h/day"), []byte("new")))
+	_, err = s.db.Get("/RATING/DAYS/h/day")
+	s.Require().NoError(err, "day DAG keys are a slash path, as badger-gui reads them")
 }
 
 func TestRatingRepoTestSuite(t *testing.T) {

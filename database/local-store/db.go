@@ -438,32 +438,6 @@ func (db *DB) GetSize(key DatabaseKey) (int64, error) {
 	return result, nil
 }
 
-// DropPrefix deletes every key under prefix at once, without reading them.
-// It does nothing if no key is there, since a drop stalls every write.
-func (db *DB) DropPrefix(prefix DatabaseKey) error {
-	if db == nil {
-		return ErrNotRunning
-	}
-	if !db.isRunning.Load() {
-		return ErrNotRunning
-	}
-	var found bool
-	err := db.badger.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-		opts.Prefix = prefix.Bytes()
-		it := txn.NewIterator(opts)
-		defer it.Close()
-		it.Rewind()
-		found = it.Valid()
-		return nil
-	})
-	if err != nil || !found {
-		return err
-	}
-	return db.badger.DropPrefix(prefix.Bytes())
-}
-
 func (db *DB) Delete(key DatabaseKey) error {
 	if db == nil {
 		return ErrNotRunning
