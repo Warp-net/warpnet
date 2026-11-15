@@ -5,11 +5,14 @@ import WarpnetTransport
 
 @MainActor
 struct PairingView: View {
+  private static let terms = URL(string: "https://github.com/Warp-net/docs/blob/main/legal/T%26C.md")!
+
   @Environment(PairingModel.self) private var pairing
   @Environment(Theme.self) private var theme
 
   @State private var isManualEntryPresented = false
   @State private var manualPayload = ""
+  @State private var isAgreementAccepted = false
 
   var body: some View {
     NavigationStack {
@@ -96,6 +99,14 @@ struct PairingView: View {
       }
       .listRowBackground(theme.primaryBackgroundColor)
       Section {
+        Text("warpnet.pairing.agreement-body")
+        Link("warpnet.pairing.agreement-terms", destination: Self.terms)
+        Toggle("warpnet.pairing.agreement-accept", isOn: $isAgreementAccepted)
+      } header: {
+        Text("warpnet.pairing.agreement-title")
+      }
+      .listRowBackground(theme.primaryBackgroundColor)
+      Section {
         Button {
           Task {
             await pairing.confirm()
@@ -106,6 +117,7 @@ struct PairingView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
+        .disabled(!isAgreementAccepted)
         Button("action.cancel", role: .cancel) {
           pairing.cancel()
         }

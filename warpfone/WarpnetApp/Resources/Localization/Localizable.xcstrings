@@ -3984,6 +3984,46 @@
         }
       }
     },
+    "warpnet.pairing.agreement-accept" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I agree"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.agreement-body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The content you publish — posts, replies, photos, videos and your profile — is distributed across the WarpNet peer-to-peer network, where other nodes store it and show it to other users. Messages are delivered to their recipients' nodes. Copies already received by other nodes may remain after you delete the original.\n\nWarpNet has zero tolerance for objectionable content and abusive users. You are solely responsible for what you publish; content and accounts that break this rule can be reported, hidden and blocked."
+          }
+        }
+      }
+    },
+    "warpnet.pairing.agreement-terms" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terms & Conditions"
+          }
+        }
+      }
+    },
+    "warpnet.pairing.agreement-title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Content and conduct"
+          }
+        }
+      }
+    },
     "warpnet.pairing.auto-failed" : {
       "localizations" : {
         "en" : {

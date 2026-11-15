@@ -181,9 +181,9 @@ resulting from the use or misuse of this software.
             </button>
             <button
               @click="setSignUpStep('step3')"
-              :disabled="!(userResponsibility && localStorageLoss && futureAds)"
+              :disabled="!(userResponsibility && contentDistribution && localStorageLoss && futureAds)"
               class="rounded-full bg-blue font-bold text-white mt-2 p-1 pl-3 pr-3 relative right-0 float-right hover:bg-darkblue"
-              :class="!(userResponsibility && localStorageLoss && futureAds) ? 'opacity-50 cursor-not-allowed' : ''"
+              :class="!(userResponsibility && contentDistribution && localStorageLoss && futureAds) ? 'opacity-50 cursor-not-allowed' : ''"
             >
               Next
             </button>
@@ -196,15 +196,30 @@ resulting from the use or misuse of this software.
               <p class="text-2xl font-bold">Important information</p>
             </div>
             <p class="text-sm text-dark mb-1">Step 2 of 4</p>
-            <p class="text-sm text-dark mb-4">Please acknowledge all three to continue.</p>
+            <p class="text-sm text-dark mb-4">Please acknowledge all four to continue.</p>
 
             <div class="mt-5 mb-8">
               <p class="font-bold text-xl mb-1">User Responsibility</p>
               <label class="flex justify-between items-top cursor-pointer">
                 <span>
-                  I acknowledge that I am solely responsible for the content I upload to WarpNet.
+                  I acknowledge that I am solely responsible for the content I upload to WarpNet. WarpNet has zero
+                  tolerance for objectionable content and abusive users: I will not publish such content, and content
+                  or accounts that break this rule can be reported, hidden and blocked.
                 </span>
                 <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="userResponsibility" />
+              </label>
+            </div>
+
+            <div class="mt-5 mb-8">
+              <p class="font-bold text-xl mb-1">Content Distribution</p>
+              <label class="flex justify-between items-top cursor-pointer">
+                <span>
+                  I agree that the content I publish — posts, replies, photos, videos and my profile — is distributed
+                  across the WarpNet peer-to-peer network, where other nodes store it and show it to other users.
+                  Messages are delivered to their recipients' nodes. Copies already received by other nodes may remain
+                  after I delete the original.
+                </span>
+                <input class="mt-2 ml-4 mr-4" type="checkbox" v-model="contentDistribution" />
               </label>
             </div>
 
@@ -372,6 +387,7 @@ export default {
       isDesktop: false,
 
       userResponsibility: false,
+      contentDistribution: false,
       futureAds: false,
       localStorageLoss: false,
       signUpError: "",
