@@ -101,7 +101,7 @@ type round struct {
 	report     *event.ReportEvent
 	votes      map[string]vote.Event
 	voteTimer  *time.Timer
-	countTimer *time.Timer
+	countdown  *time.Timer
 	finalTimer *time.Timer
 	// pending holds the counted outcome while this node stands by as a
 	// backup finalizer.
@@ -127,7 +127,7 @@ func newRound(id, self string, member Participant, schedule Schedule, onDone fun
 		onDone:   onDone,
 		votes:    make(map[string]vote.Event),
 	}
-	r.countTimer = time.AfterFunc(schedule.Window, r.count)
+	r.countdown = time.AfterFunc(schedule.Window, r.count)
 	return r
 }
 
@@ -177,7 +177,7 @@ func (r *round) stop() {
 
 func (r *round) closeLocked() {
 	r.closed = true
-	for _, t := range []*time.Timer{r.voteTimer, r.countTimer, r.finalTimer} {
+	for _, t := range []*time.Timer{r.voteTimer, r.countdown, r.finalTimer} {
 		if t != nil {
 			t.Stop()
 		}

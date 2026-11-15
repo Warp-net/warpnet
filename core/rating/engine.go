@@ -402,7 +402,7 @@ func (e *Engine) View(peerID warpnet.WarpPeerID) (domain.NodeRating, error) {
 			Name:   dim.String(),
 			Score:  int32(score),
 			Tier:   score.Tier().String(),
-			Recent: es.tallies(dim, now),
+			Recent: es.recent(dim, now),
 		})
 	}
 	for _, en := range es {

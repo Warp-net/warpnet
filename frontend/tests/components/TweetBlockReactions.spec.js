@@ -185,7 +185,7 @@ describe('TweetBlock reactions', () => {
     expect(totalCounter().textContent.trim()).toBe('3');
   });
 
-  it('drops the reaction from the tally up front when taking it back', async () => {
+  it('drops the reaction from the count up front when taking it back', async () => {
     warpnetService.unreactTweet.mockReturnValue(new Promise(() => {}));
     renderTweet();
 

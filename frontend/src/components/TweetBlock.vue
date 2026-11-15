@@ -1238,7 +1238,7 @@ export default {
         await warpnetService.setReactor(this.tweet.id, owner.user_id, owner, emoji)
       }
 
-      // The response carries this node's own tally, which on a bridged tweet
+      // The response carries this node's own count, which on a bridged tweet
       // counts only our reaction; the real breakdown comes from the author's
       // node, the way retweet() refreshes.
       try {
@@ -1248,7 +1248,7 @@ export default {
       }
     },
     // paintOwnReaction moves the viewer's own reaction to `emoji` ("" takes it
-    // back) in the tally on screen, so the chips and the counter follow the
+    // back) in the count on screen, so the chips and the counter follow the
     // click instead of waiting for the network.
     paintOwnReaction(emoji) {
       const reactions = {...this.reactions};

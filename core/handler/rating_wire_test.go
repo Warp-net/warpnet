@@ -171,10 +171,10 @@ func TestRatingRouteAnswersWithTheWireShapeTheUIReads(t *testing.T) {
 
 	recent := dim["recent"].([]any)
 	require.Len(t, recent, 1)
-	tally := recent[0].(map[string]any)
-	assert.Equal(t, []string{"count", "kind", "last_at"}, keysOf(tally))
-	assert.Equal(t, "bad_signature", tally["kind"])
-	assert.EqualValues(t, 2, tally["count"])
+	offence := recent[0].(map[string]any)
+	assert.Equal(t, []string{"count", "kind", "last_at"}, keysOf(offence))
+	assert.Equal(t, "bad_signature", offence["kind"])
+	assert.EqualValues(t, 2, offence["count"])
 
 	_, err = time.Parse(time.RFC3339Nano, wire["updated_at"].(string))
 	assert.NoError(t, err, "updated_at is an RFC 3339 time")

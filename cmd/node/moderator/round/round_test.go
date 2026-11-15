@@ -591,7 +591,7 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 
 // planCount is the whole rule of a round in one pure function, so it is
 // testable without a registry, a timer or a participant.
-func TestPlanTally_Roles(t *testing.T) {
+func TestPlanCount_Roles(t *testing.T) {
 	id := "round-x"
 	votes := func(ids ...string) map[string]vote.Event {
 		out := map[string]vote.Event{}
@@ -640,7 +640,7 @@ func TestPlanTally_Roles(t *testing.T) {
 
 // The trimmed-away voter keeps its place in the takeover chain, so a
 // two-vote round still has a backup behind the chair.
-func TestPlanTally_TrimmedVoterStaysInTheChain(t *testing.T) {
+func TestPlanCount_TrimmedVoterStaysInTheChain(t *testing.T) {
 	id := "round-y"
 	order := []string{"peer-a", "peer-b"}
 	sort.Slice(order, func(i, j int) bool { return pairHash(id, order[i]) < pairHash(id, order[j]) })

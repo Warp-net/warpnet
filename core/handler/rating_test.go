@@ -48,7 +48,7 @@ func TestOwnRatingIsWhatTheNetworkSays(t *testing.T) {
 		NodeID: "self", Overall: 750, Tier: "watched", Observers: 2,
 		Dimensions: []domain.DimensionRating{{
 			Name: "net", Score: 750, Tier: "watched",
-			Recent: []domain.OffenceTally{{Kind: "bad_signature", Count: 1}},
+			Recent: []domain.RecentOffence{{Kind: "bad_signature", Count: 1}},
 		}},
 	}}
 

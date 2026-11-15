@@ -334,7 +334,7 @@ function generateResponse(arg) {
 
         case PUBLIC_POST_REACT: {
             // A user holds one reaction per tweet: switching emoji moves the
-            // per-emoji tallies and leaves the total alone, like the node does.
+            // per-emoji counts and leaves the total alone, like the node does.
             const reactStats = mockMap.get("stats:"+arg.body.tweet_id)
             const emoji = arg.body.emoji || DEFAULT_REACTION
             const previous = reactStats.my_reaction
@@ -367,19 +367,19 @@ function generateResponse(arg) {
 
         case PUBLIC_POST_POLL_VOTE: {
             const pollKey = "poll:"+arg.body.tweet_id
-            const tally = mockMap.get(pollKey) || {votes: new Array(arg.body.options_num || 0).fill(0), voters: {}}
-            if (!(arg.body.owner_id in tally.voters)) {
-                tally.voters[arg.body.owner_id] = arg.body.option
-                tally.votes[arg.body.option] = (tally.votes[arg.body.option] || 0) + 1
-                mockMap.set(pollKey, tally)
+            const poll = mockMap.get(pollKey) || {votes: new Array(arg.body.options_num || 0).fill(0), voters: {}}
+            if (!(arg.body.owner_id in poll.voters)) {
+                poll.voters[arg.body.owner_id] = arg.body.option
+                poll.votes[arg.body.option] = (poll.votes[arg.body.option] || 0) + 1
+                mockMap.set(pollKey, poll)
             }
-            return pollResults(tally, arg.body.owner_id);
+            return pollResults(poll, arg.body.owner_id);
         }
 
         case PUBLIC_GET_POLL: {
-            const tally = mockMap.get("poll:"+arg.body.tweet_id)
-            if (!tally) return {tweet_id: arg.body.tweet_id, votes: new Array(arg.body.options_num || 0).fill(0), total_votes: 0};
-            return pollResults(tally, arg.body.owner_id);
+            const poll = mockMap.get("poll:"+arg.body.tweet_id)
+            if (!poll) return {tweet_id: arg.body.tweet_id, votes: new Array(arg.body.options_num || 0).fill(0), total_votes: 0};
+            return pollResults(poll, arg.body.owner_id);
         }
 
         case PUBLIC_POST_VIEW: {
@@ -539,11 +539,11 @@ function newUser() {
     }
 }
 
-function pollResults(tally, ownerId) {
-    const voted = tally.voters[ownerId];
+function pollResults(poll, ownerId) {
+    const voted = poll.voters[ownerId];
     return {
-        votes: tally.votes,
-        total_votes: tally.votes.reduce((sum, n) => sum + n, 0),
+        votes: poll.votes,
+        total_votes: poll.votes.reduce((sum, n) => sum + n, 0),
         voted_option: voted === undefined ? undefined : voted,
     }
 }

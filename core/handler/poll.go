@@ -130,7 +130,7 @@ func StreamPollVoteHandler(
 	}
 }
 
-// StreamGetPollHandler serves the vote tallies for a tweet's poll. Reads are
+// StreamGetPollHandler serves the vote counts for a tweet's poll. Reads are
 // forwarded to the author's node — it sees every vote — while "did I vote"
 // is answered from this node, which is where the local user's own vote is
 // recorded even when the author is offline.
@@ -183,7 +183,7 @@ func localPoll(tweetRepo PollTweetFetcher, authorId, tweetId string) (domain.Pol
 	return *tweet.Poll, true
 }
 
-// propagateVote forwards the vote to the tweet author's node so the tally
+// propagateVote forwards the vote to the tweet author's node so the count
 // everyone reads converges. An offline author is not a failure — the vote is
 // already recorded here and the CRDT counter carries it across.
 func propagateVote(
@@ -222,7 +222,7 @@ func propagateVote(
 	}
 }
 
-// forwardPollRead asks the author's node for the tally. ok=false means
+// forwardPollRead asks the author's node for the count. ok=false means
 // handle the read locally.
 func forwardPollRead(
 	ev event.GetPollEvent,

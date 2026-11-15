@@ -147,7 +147,7 @@ func (b bucket) start() time.Time
 type entries []entry
 func (es entries) penalty(dim Dimension, now time.Time) Score
 func (es entries) median(dim Dimension, now time.Time) (Score, int)
-func (es entries) tallies(dim Dimension) []domain.OffenceTally
+func (es entries) recent(dim Dimension) []domain.RecentOffence
 ```
 
 | Dimension | Half-life | Retention | Rationale |
@@ -611,7 +611,7 @@ is never recorded, and every module treats it as trusted.
 | gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)`, with `AppSpecificScore` reading the score the last standing left in the gossip's own cache; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go` |
 | DHT | `dht.QueryFilter` and `dht.RoutingTableFilter` refuse the peers a standing put at the floor, and let them back in when it recovers. A peer nobody has rated is admitted. | `core/dht/dht.go` |
 | Rate limits | a peer's buckets are built at the allowance its standing carries, `burst` and `perMinute` floored at 1 so no peer is ever starved outright. A standing that changes drops the peer's buckets, so it is measured against the allowance it has now. | `core/middleware/rate-limiter.go`, `core/middleware/middleware.go` |
-| Moderation votes | **Nothing.** Weighting a vote round's votes by rating was planned and rejected: `planTally` must be a pure function of the votes so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
+| Moderation votes | **Nothing.** Weighting a vote round's votes by rating was planned and rejected: `planCount` must be a pure function of the votes so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
 ### 6.5 Deliberately not done
@@ -676,10 +676,10 @@ type DimensionRating struct {
     Name   string         `json:"name"`
     Score  int32          `json:"score"`
     Tier   string         `json:"tier"`
-    Recent []OffenceTally `json:"recent"`
+    Recent []RecentOffence `json:"recent"`
 }
 
-type OffenceTally struct {
+type RecentOffence struct {
     Kind   string    `json:"kind"`
     Count  uint32    `json:"count"`
     LastAt time.Time `json:"last_at"`
@@ -806,7 +806,7 @@ Five stages, each independently reviewable, mergeable and testable.
 
 | File | Contents |
 |---|---|
-| `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `OffenceTally` — the wire DTOs |
+| `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `RecentOffence` — the wire DTOs |
 | `core/crdt/ratingstore` | `Store`: own go-ds-crdt datastore, key schema, encoding, merge hooks, own-records-only writes and deletes |
 | `core/crdt/statsstore` | the PN-counter, moved out of `core/crdt` so the two tenants share no package |
 | `core/crdt/broadcast` | the gossip broadcaster, moved out of the umbrella package and parametrised by topic |
@@ -829,7 +829,7 @@ New files:
 | `core/rating/rating.go` | `Dimension` with its half-life and retention, `Score` with its `Tier`, `Dimensions` per node type |
 | `core/rating/offence.go` | `Kind`, catalogue, accessors, `ParseKind` |
 | `core/rating/record.go` | `record`: signing bytes, sign, verify, validate; generation minting |
-| `core/rating/entries.go` | `bucket`, `entries`: decay, generation summing, penalty, median, tallies |
+| `core/rating/entries.go` | `bucket`, `entries`: decay, generation summing, penalty, median, counts |
 | `core/rating/indexer.go` | lazily loaded per-peer index, memoised scores, LRU eviction |
 | `core/rating/enforce.go` | `Tier` methods: the enforcement knobs |
 | `core/rating/engine.go` | `Engine`, `Storer`, `ConnectionsProvider`, local scoring, buffered writer, flush, GC, merge hooks |
@@ -929,11 +929,11 @@ different model exactly as hard as a bot with no model at all. The
 statistical tolerance therefore stays in the ledger, and only threshold
 crossings reach the rating.
 
-*Votes are not weighted by rating.* `planTally` is a pure function
+*Votes are not weighted by rating.* `planCount` is a pure function
 precisely so every participant reaches the same answer from the same
 votes, which is what lets the round pick a chair and a takeover order
 without exchanging a message. Each node holds its own view of every
-moderator, so weighted tallies would differ between participants and the
+moderator, so weighted counts would differ between participants and the
 round would split. Dissent is observed and replicated instead — cheap
 and capped, because model diversity produces it honestly.
 
