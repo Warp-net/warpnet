@@ -317,7 +317,7 @@ func StreamGetReactionsHandler(repo ReactedTweetsLister) warpnet.WarpHandlerFunc
 	}
 }
 
-// getReactionsWithDefault is a best-effort per-emoji tally for a
+// getReactionsWithDefault is a best-effort per-emoji count for a
 // react/unreact response: the count itself already succeeded, so a failing
 // lookup must not fail the request — it falls back to an empty map, which
 // marshals away under the field's omitempty just like a nil one.

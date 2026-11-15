@@ -742,7 +742,7 @@ func TestEngineIgnoresUnacquaintedObservers(t *testing.T) {
 	assert.Less(t, known.Score(victim.id), MaxScore, "the same record counts once the observer is known")
 }
 
-func TestViewIsThePublicMedianWithRecentTallies(t *testing.T) {
+func TestViewIsThePublicMedianWithRecentOffences(t *testing.T) {
 	self := newIdentity(t)
 	a := newIdentity(t)
 	b := newIdentity(t)
@@ -763,7 +763,7 @@ func TestViewIsThePublicMedianWithRecentTallies(t *testing.T) {
 	assert.Equal(t, TierTrusted.String(), view.Tier)
 	require.Len(t, view.Dimensions, 1)
 	assert.Equal(t, Network.String(), view.Dimensions[0].Name)
-	assert.Equal(t, []domain.OffenceTally{
+	assert.Equal(t, []domain.RecentOffence{
 		{Kind: KindRateLimitHit.String(), Count: 3, LastAt: hour.start()},
 		{Kind: KindBadSignature.String(), Count: 1, LastAt: hour.start()},
 	}, view.Dimensions[0].Recent, "raw counts, busiest first")

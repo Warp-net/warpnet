@@ -249,7 +249,7 @@ func (s *ReactionRepoTestSuite) TestReactions_SwitchKeepsTotal() {
 	s.Require().NoError(err)
 	s.Equal(map[string]uint64{"🔥": 1, "❤️": 1}, reactions)
 
-	// Switching moves the per-emoji tallies but not the reaction itself.
+	// Switching moves the per-emoji counts but not the reaction itself.
 	total, err = s.repo.React(tweetId, user1, "👍", true)
 	s.Require().NoError(err)
 	s.Equal(uint64(2), total)

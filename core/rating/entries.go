@@ -156,14 +156,14 @@ func (es entries) median(dim Dimension, now time.Time) (Score, int) {
 	return (scores[mid-1] + scores[mid]) / 2, len(scores) //nolint:mnd
 }
 
-// tallies are raw, undecayed counts per kind, busiest first.
-func (es entries) tallies(dim Dimension, now time.Time) []domain.OffenceTally {
-	type tally struct {
+// recent lists the raw, undecayed counts per kind, busiest first.
+func (es entries) recent(dim Dimension, now time.Time) []domain.RecentOffence {
+	type offence struct {
 		kind   Kind
 		count  uint32
 		lastAt time.Time
 	}
-	agg := make(map[Kind]*tally)
+	agg := make(map[Kind]*offence)
 	for _, e := range es {
 		if e.dim != dim {
 			continue
@@ -175,7 +175,7 @@ func (es entries) tallies(dim Dimension, now time.Time) []domain.OffenceTally {
 		for _, c := range e.counts {
 			t, ok := agg[c.kind]
 			if !ok {
-				t = &tally{kind: c.kind}
+				t = &offence{kind: c.kind}
 				agg[c.kind] = t
 			}
 			t.count += c.count
@@ -184,19 +184,19 @@ func (es entries) tallies(dim Dimension, now time.Time) []domain.OffenceTally {
 			}
 		}
 	}
-	sorted := make([]*tally, 0, len(agg))
+	sorted := make([]*offence, 0, len(agg))
 	for _, t := range agg {
 		sorted = append(sorted, t)
 	}
-	slices.SortFunc(sorted, func(a, b *tally) int {
+	slices.SortFunc(sorted, func(a, b *offence) int {
 		if a.count != b.count {
 			return int(b.count) - int(a.count)
 		}
 		return int(a.kind) - int(b.kind)
 	})
-	out := make([]domain.OffenceTally, 0, len(sorted))
+	out := make([]domain.RecentOffence, 0, len(sorted))
 	for _, t := range sorted {
-		out = append(out, domain.OffenceTally{Kind: t.kind.String(), Count: t.count, LastAt: t.lastAt})
+		out = append(out, domain.RecentOffence{Kind: t.kind.String(), Count: t.count, LastAt: t.lastAt})
 	}
 	return out
 }

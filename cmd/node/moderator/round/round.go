@@ -32,13 +32,12 @@ import (
 	"time"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
-	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	// voteWindow is how long a round collects votes before the tally.
+	// voteWindow is how long a round collects votes before the countdown.
 	voteWindow = 150 * time.Second
 	// failoverDelay spaces the takeover chain of the round's voters: the
 	// voter at rank k finalizes at k*failoverDelay unless a Final
@@ -70,23 +69,23 @@ func DefaultSchedule() Schedule {
 
 // Participant is the local voter a round acts for. This package owns the
 // voting protocol — who votes, when, who carries the decision — and knows
-// nothing of what a ballot means or what happens once a round decides:
+// nothing of what a vote means or what happens once a round decides:
 // everything domain-specific sits behind this interface, implemented by
 // the caller.
 type Participant interface {
-	// Ballot returns this participant's vote on the subject. The bool is
+	// Vote returns this participant's vote on the subject. The bool is
 	// false to abstain, which happens when the subject cannot be judged.
-	Ballot(reportID string, subject event.ReportEvent) (vote.Event, bool, error)
-	// Broadcast publishes a ballot (or a Final announcement) to the other
+	Vote(reportID string, subject event.ReportEvent) (vote.Event, bool, error)
+	// Broadcast publishes a vote (or a Final announcement) to the other
 	// participants.
 	Broadcast(v vote.Event) error
 	// Decided is invoked exactly once per round, on the single
 	// participant that carries the decision.
-	Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID)
+	Decided(subject event.ReportEvent, outcome vote.Event, votes []event.VerdictVote)
 }
 
-// round is one subject's vote round, self-contained: it collects ballots,
-// decides whether this participant should vote at all, tallies at the
+// round is one subject's vote round, self-contained: it collects votes,
+// decides whether this participant should vote at all, runs the countdown at the
 // window close, and either carries the decision (as chair) or stands by to
 // take over. It knows nothing about the participant's internals, the
 // population or the other rounds — it reaches the outside world only
@@ -98,26 +97,26 @@ type round struct {
 	schedule Schedule
 	onDone   func(id string)
 
-	mx         sync.Mutex
-	report     *event.ReportEvent
-	votes      map[string]vote.Event
-	voteTimer  *time.Timer
-	tallyTimer *time.Timer
-	finalTimer *time.Timer
-	// pending holds the tallied outcome while this node stands by as a
+	mx             sync.Mutex
+	report         *event.ReportEvent
+	votes          map[string]vote.Event
+	voteTimer      *time.Timer
+	countdownTimer *time.Timer
+	finalTimer     *time.Timer
+	// pending holds the countdown outcome while this node stands by as a
 	// backup finalizer.
 	pending *pendingOutcome
 	closed  bool
 }
 
-// pendingOutcome is a tallied round outcome parked on a backup voter.
+// pendingOutcome is a countdown outcome parked on a backup voter.
 type pendingOutcome struct {
 	subject event.ReportEvent
 	outcome vote.Event
-	voters  []domain.ID
+	votes   []event.VerdictVote
 }
 
-// newRound starts a round: the tally timer runs from creation, because a
+// newRound starts a round: the countdown timer runs from creation, because a
 // round may be opened by an incoming vote before this node sees the report.
 func newRound(id, self string, member Participant, schedule Schedule, onDone func(id string)) *round {
 	r := &round{
@@ -128,7 +127,7 @@ func newRound(id, self string, member Participant, schedule Schedule, onDone fun
 		onDone:   onDone,
 		votes:    make(map[string]vote.Event),
 	}
-	r.tallyTimer = time.AfterFunc(schedule.Window, r.tally)
+	r.countdownTimer = time.AfterFunc(schedule.Window, r.countdown)
 	return r
 }
 
@@ -157,10 +156,10 @@ func (r *round) addVote(v vote.Event) {
 	r.votes[v.ModeratorID] = v
 }
 
-// hasVoter reports whether a ballot from moderatorID entered this round. A
+// hasVoter reports whether a vote from moderatorID entered this round. A
 // Final announcement is only legitimate from the chair or a backup, both of
 // which voted, so the registry consults this before honoring one: a Final
-// from a peer with no ballot here is forged.
+// from a peer with no vote here is forged.
 func (r *round) hasVoter(moderatorID string) bool {
 	r.mx.Lock()
 	defer r.mx.Unlock()
@@ -178,7 +177,7 @@ func (r *round) stop() {
 
 func (r *round) closeLocked() {
 	r.closed = true
-	for _, t := range []*time.Timer{r.voteTimer, r.tallyTimer, r.finalTimer} {
+	for _, t := range []*time.Timer{r.voteTimer, r.countdownTimer, r.finalTimer} {
 		if t != nil {
 			t.Stop()
 		}
@@ -197,27 +196,27 @@ func (r *round) castVote() {
 	rep := *r.report
 	r.mx.Unlock()
 
-	v, ok, err := r.member.Ballot(r.id, rep)
+	v, ok, err := r.member.Vote(r.id, rep)
 	if err != nil {
-		log.Errorf("round %s: ballot: %v", r.id, err)
+		log.Errorf("round %s: vote: %v", r.id, err)
 		return
 	}
 	if !ok {
 		return
 	}
 
-	// Count the own ballot before broadcasting: loopback delivery is not
-	// guaranteed (addVote dedups if it does loop back), and the ballot
+	// Count the own vote before broadcasting: loopback delivery is not
+	// guaranteed (addVote dedups if it does loop back), and the vote
 	// must count even when the broadcast fails.
 	r.addVote(v)
 	if err := r.member.Broadcast(v); err != nil {
-		log.Errorf("round %s: broadcast ballot: %v", r.id, err)
+		log.Errorf("round %s: broadcast vote: %v", r.id, err)
 	}
 }
 
-// tally closes the voting window: planTally decides what this participant
+// countdown closes the voting window: planCountdown decides what this participant
 // is to the round, and this method only carries that decision out.
-func (r *round) tally() {
+func (r *round) countdown() {
 	r.mx.Lock()
 	if r.closed {
 		r.mx.Unlock()
@@ -228,7 +227,7 @@ func (r *round) tally() {
 	}
 
 	subject := r.report
-	p := planTally(r.id, r.self, r.votes, subject != nil)
+	p := planCountdown(r.id, r.self, r.votes, subject != nil)
 
 	switch p.role {
 	case roleBystander:
@@ -240,7 +239,7 @@ func (r *round) tally() {
 		r.onDone(r.id)
 
 	case roleBackup:
-		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, voters: p.voters}
+		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, votes: p.votes}
 		r.finalTimer = time.AfterFunc(time.Duration(p.rank)*r.schedule.Failover, r.takeOver)
 		r.mx.Unlock()
 		log.Infof("round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
@@ -252,7 +251,7 @@ func (r *round) tally() {
 		r.onDone(r.id)
 		log.Infof("round %s closed votes=%d result=%t chair=%s",
 			r.id, p.counted, bool(p.outcome.Result), p.chair)
-		r.decide(*subject, p.outcome, p.voters)
+		r.decide(*subject, p.outcome, p.votes)
 	}
 }
 
@@ -271,13 +270,13 @@ func (r *round) takeOver() {
 	r.onDone(r.id)
 
 	log.Warnf("round %s: chair stayed silent, taking over the decision", r.id)
-	r.decide(p.subject, p.outcome, p.voters)
+	r.decide(p.subject, p.outcome, p.votes)
 }
 
 // decide hands the outcome to the participant and then announces the round
 // finished, so the other voters cancel their takeover timers.
-func (r *round) decide(subject event.ReportEvent, outcome vote.Event, voters []domain.ID) {
-	r.member.Decided(subject, outcome, voters)
+func (r *round) decide(subject event.ReportEvent, outcome vote.Event, votes []event.VerdictVote) {
+	r.member.Decided(subject, outcome, votes)
 
 	final := outcome
 	final.ReportID = r.id

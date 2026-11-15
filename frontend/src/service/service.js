@@ -2272,7 +2272,7 @@ export const warpnetService = {
         return {count: unreactResp.count || 0, reactions: unreactResp.reactions || {}};
     },
 
-    // voteInPoll casts a final vote on a tweet's poll and returns the tally
+    // voteInPoll casts a final vote on a tweet's poll and returns the count
     // the node knows about, in the same shape as getPollResults.
     async voteInPoll(tweetId, userId, option, optionsNum) {
         const owner = this.getOwnerProfile()
@@ -2292,7 +2292,7 @@ export const warpnetService = {
     },
 
     // getPollResults returns {votes, total_votes, voted_option}. votes is the
-    // per-option tally in option order; voted_option is null until this user
+    // per-option count in option order; voted_option is null until this user
     // has voted.
     async getPollResults(tweetId, userId, optionsNum) {
         const owner = this.getOwnerProfile()

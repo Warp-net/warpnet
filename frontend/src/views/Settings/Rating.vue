@@ -70,12 +70,12 @@
           <div v-if="dim.recent && dim.recent.length" class="mt-3">
             <p class="text-sm font-bold text-dark">Recently observed</p>
             <div
-              v-for="tally in dim.recent"
-              :key="tally.kind"
+              v-for="offence in dim.recent"
+              :key="offence.kind"
               class="flex items-center text-sm py-1"
             >
-              <span>{{ offenceLabel(tally.kind) }}</span>
-              <span class="ml-auto text-dark">{{ tally.count }}&times;</span>
+              <span>{{ offenceLabel(offence.kind) }}</span>
+              <span class="ml-auto text-dark">{{ offence.count }}&times;</span>
             </div>
           </div>
         </div>

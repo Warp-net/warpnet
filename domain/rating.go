@@ -60,14 +60,14 @@ type NodeRating struct {
 
 // DimensionRating is one axis of a NodeRating.
 type DimensionRating struct {
-	Name   string         `json:"name"`
-	Score  int32          `json:"score"`
-	Tier   string         `json:"tier"`
-	Recent []OffenceTally `json:"recent"`
+	Name   string          `json:"name"`
+	Score  int32           `json:"score"`
+	Tier   string          `json:"tier"`
+	Recent []RecentOffence `json:"recent"`
 }
 
-// OffenceTally is the recent raw count of one offence kind.
-type OffenceTally struct {
+// RecentOffence is the recent raw count of one offence kind.
+type RecentOffence struct {
 	Kind   string    `json:"kind"`
 	Count  uint32    `json:"count"`
 	LastAt time.Time `json:"last_at"`

@@ -41,7 +41,7 @@ const (
 	// challenge costs the peer a single inference, so this can stay
 	// frequent enough to build a picture within a day.
 	auditInterval = 5 * time.Minute
-	// judgedCapacity bounds the texts held between casting a ballot and
+	// judgedCapacity bounds the texts held between casting a vote and
 	// the round deciding. Rounds close within a minute; this is slack for
 	// a burst of reports, not a cache.
 	judgedCapacity = 512

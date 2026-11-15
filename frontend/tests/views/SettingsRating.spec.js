@@ -24,7 +24,7 @@ const rating = (over = {}) => ({
   ...over,
 });
 const dim = (name, over = {}) => ({ name, score: 1000, tier: 'trusted', recent: [], ...over });
-const tally = (kind, count = 1) => ({ kind, count, last_at: '2026-09-29T23:00:00Z' });
+const offence = (kind, count = 1) => ({ kind, count, last_at: '2026-09-29T23:00:00Z' });
 
 // Wire names from the Go catalogue itself, so a kind added there without a
 // label here fails the audit below.
@@ -63,7 +63,7 @@ const renderLoaded = async (resp) => {
 const colors = (el, palette) => palette.filter((c) => el.classList.contains(c));
 const dimensionBlock = (label) => screen.getByText(label).closest('.py-4');
 const barOf = (block) => block.querySelector('[style*="width"]');
-const tallies = (block) =>
+const offences = (block) =>
   within(block)
     .queryAllByText(/^\d+×$/)
     .map((count) => [count.previousElementSibling.textContent, count.textContent]);
@@ -253,7 +253,7 @@ describe('Settings/Rating.vue recent offences', () => {
     ['null', null],
     ['empty', []],
     ['missing', undefined],
-  ])('leaves the tally list out when recent is %s', async (_, recent) => {
+  ])('leaves the offence list out when recent is %s', async (_, recent) => {
     await renderLoaded(rating({ dimensions: [dim('net', { score: 700, tier: 'watched', recent })] }));
 
     expect(dimensionBlock('Network')).toBeInTheDocument();
@@ -269,28 +269,28 @@ describe('Settings/Rating.vue recent offences', () => {
         dim('net', {
           score: 612,
           tier: 'watched',
-          recent: [tally('rate_limit_hit', 12), tally('bad_signature', 3), tally('dial_failure', 1)],
+          recent: [offence('rate_limit_hit', 12), offence('bad_signature', 3), offence('dial_failure', 1)],
         }),
-        dim('app', { score: 940, recent: [tally('write_flood', 2)] }),
+        dim('app', { score: 940, recent: [offence('write_flood', 2)] }),
       ],
     }));
 
     const net = dimensionBlock('Network');
     expect(within(net).getByText('Recently observed')).toBeInTheDocument();
-    expect(tallies(net)).toEqual([
+    expect(offences(net)).toEqual([
       ['Requests over the rate limit', '12×'],
       ['Messages with an invalid signature', '3×'],
       ['Failed connection attempts', '1×'],
     ]);
-    expect(tallies(dimensionBlock('Application'))).toEqual([['Excessive posting', '2×']]);
+    expect(offences(dimensionBlock('Application'))).toEqual([['Excessive posting', '2×']]);
   });
 
   it('shows an offence it has no label for by its wire name', async () => {
     await renderLoaded(rating({
-      dimensions: [dim('net', { recent: [tally('quantum_tunnelling', 5)] })],
+      dimensions: [dim('net', { recent: [offence('quantum_tunnelling', 5)] })],
     }));
 
-    expect(tallies(dimensionBlock('Network'))).toEqual([['quantum_tunnelling', '5×']]);
+    expect(offences(dimensionBlock('Network'))).toEqual([['quantum_tunnelling', '5×']]);
   });
 
   it('gives every offence in the backend catalogue a label of its own', async () => {
@@ -298,12 +298,12 @@ describe('Settings/Rating.vue recent offences', () => {
     expect(kinds, 'no offence kinds parsed from core/rating/offence.go').not.toHaveLength(0);
 
     await renderLoaded(rating({
-      dimensions: [dim('net', { recent: kinds.map((kind) => tally(kind)) })],
+      dimensions: [dim('net', { recent: kinds.map((kind) => offence(kind)) })],
     }));
 
     const unlabeled = kinds.filter((kind) => screen.queryByText(kind) !== null);
     expect(unlabeled).toEqual([]);
-    const labels = tallies(dimensionBlock('Network')).map(([label]) => label);
+    const labels = offences(dimensionBlock('Network')).map(([label]) => label);
     expect(labels).toHaveLength(kinds.length);
     expect(new Set(labels).size).toBe(kinds.length);
   });
