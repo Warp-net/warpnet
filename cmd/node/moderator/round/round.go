@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	// voteWindow is how long a round collects votes before the tally.
+	// voteWindow is how long a round collects votes before the count.
 	voteWindow = 150 * time.Second
 	// failoverDelay spaces the takeover chain of the round's voters: the
 	// voter at rank k finalizes at k*failoverDelay unless a Final
@@ -85,7 +85,7 @@ type Participant interface {
 }
 
 // round is one subject's vote round, self-contained: it collects votes,
-// decides whether this participant should vote at all, tallies at the
+// decides whether this participant should vote at all, counts at the
 // window close, and either carries the decision (as chair) or stands by to
 // take over. It knows nothing about the participant's internals, the
 // population or the other rounds — it reaches the outside world only
@@ -101,22 +101,22 @@ type round struct {
 	report     *event.ReportEvent
 	votes      map[string]vote.Event
 	voteTimer  *time.Timer
-	tallyTimer *time.Timer
+	countTimer *time.Timer
 	finalTimer *time.Timer
-	// pending holds the tallied outcome while this node stands by as a
+	// pending holds the counted outcome while this node stands by as a
 	// backup finalizer.
 	pending *pendingOutcome
 	closed  bool
 }
 
-// pendingOutcome is a tallied round outcome parked on a backup voter.
+// pendingOutcome is a counted round outcome parked on a backup voter.
 type pendingOutcome struct {
 	subject event.ReportEvent
 	outcome vote.Event
 	votes   []event.VerdictVote
 }
 
-// newRound starts a round: the tally timer runs from creation, because a
+// newRound starts a round: the count timer runs from creation, because a
 // round may be opened by an incoming vote before this node sees the report.
 func newRound(id, self string, member Participant, schedule Schedule, onDone func(id string)) *round {
 	r := &round{
@@ -127,7 +127,7 @@ func newRound(id, self string, member Participant, schedule Schedule, onDone fun
 		onDone:   onDone,
 		votes:    make(map[string]vote.Event),
 	}
-	r.tallyTimer = time.AfterFunc(schedule.Window, r.tally)
+	r.countTimer = time.AfterFunc(schedule.Window, r.count)
 	return r
 }
 
@@ -177,7 +177,7 @@ func (r *round) stop() {
 
 func (r *round) closeLocked() {
 	r.closed = true
-	for _, t := range []*time.Timer{r.voteTimer, r.tallyTimer, r.finalTimer} {
+	for _, t := range []*time.Timer{r.voteTimer, r.countTimer, r.finalTimer} {
 		if t != nil {
 			t.Stop()
 		}
@@ -214,9 +214,9 @@ func (r *round) castVote() {
 	}
 }
 
-// tally closes the voting window: planTally decides what this participant
+// count closes the voting window: planCount decides what this participant
 // is to the round, and this method only carries that decision out.
-func (r *round) tally() {
+func (r *round) count() {
 	r.mx.Lock()
 	if r.closed {
 		r.mx.Unlock()
@@ -227,7 +227,7 @@ func (r *round) tally() {
 	}
 
 	subject := r.report
-	p := planTally(r.id, r.self, r.votes, subject != nil)
+	p := planCount(r.id, r.self, r.votes, subject != nil)
 
 	switch p.role {
 	case roleBystander:

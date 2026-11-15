@@ -36,7 +36,7 @@ import (
 	"github.com/Warp-net/warpnet/event"
 )
 
-// Pure tally math: no state, no I/O. Every participant runs these over the
+// Pure vote-counting math: no state, no I/O. Every participant runs these over the
 // same votes and must reach the same answer, which is what lets a round
 // pick a chair and a takeover order without exchanging a single message.
 
@@ -60,7 +60,7 @@ func sortedVotes(id string, votes map[string]vote.Event) []vote.Event {
 }
 
 // trimEven drops the highest-ranked vote of an even count so a strict
-// majority always exists in the tally.
+// majority always exists in the count.
 func trimEven(ordered []vote.Event) []vote.Event {
 	if len(ordered) > 0 && len(ordered)%2 == 0 {
 		return ordered[:len(ordered)-1]
@@ -68,7 +68,7 @@ func trimEven(ordered []vote.Event) []vote.Event {
 	return ordered
 }
 
-// keptVotes is the tally set: hash-ordered votes trimmed to an odd count.
+// keptVotes is the set that gets counted: hash-ordered votes trimmed to an odd count.
 func keptVotes(id string, votes map[string]vote.Event) []vote.Event {
 	return trimEven(sortedVotes(id, votes))
 }
@@ -84,7 +84,7 @@ func rankOf(ordered []vote.Event, moderatorID string) int {
 	return -1
 }
 
-// role is what the tally makes of this participant for one round.
+// role is what the count makes of this participant for one round.
 type role int
 
 const (
@@ -107,21 +107,21 @@ type plan struct {
 	chair   string
 	outcome vote.Event
 	votes   []event.VerdictVote
-	// counted is how many votes entered the tally, for the log line.
+	// counted is how many votes entered the count, for the log line.
 	counted int
 	// orphaned marks a participant that voted on a subject it never saw,
 	// which only happens if someone forged votes naming it.
 	orphaned bool
 }
 
-// planTally decides a round from its votes alone.
-func planTally(id, self string, votes map[string]vote.Event, haveSubject bool) plan {
+// planCount decides a round from its votes alone.
+func planCount(id, self string, votes map[string]vote.Event, haveSubject bool) plan {
 	ordered := sortedVotes(id, votes)
 	kept := trimEven(ordered)
 
 	// The takeover chain ranks over the full voter order, pre-trim: a
 	// voter dropped by the odd-count trim still holds everything needed
-	// to carry the kept tally if the chair dies.
+	// to carry the kept count if the chair dies.
 	rank := rankOf(ordered, self)
 	if len(kept) == 0 || rank < 0 {
 		return plan{role: roleBystander}

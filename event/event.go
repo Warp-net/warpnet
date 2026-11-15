@@ -671,7 +671,7 @@ type ModerationVerdictEvent struct {
 	// ReporterID is set only on the reporter-bound delivery; empty on the
 	// isolation broadcast. The handler keys on it to notify only the reporter.
 	ReporterID domain.ID `json:"reporter_id,omitempty"`
-	// Votes are the round's tallied votes, each signed by its voter,
+	// Votes are the round's counted votes, each signed by its voter,
 	// so a receiver recounts the round instead of trusting the chair.
 	// The chair signature leaves them out: every vote carries its own.
 	Votes  []VerdictVote `json:"votes,omitempty"`
@@ -767,7 +767,7 @@ type VerdictVote struct {
 	Signature   string                  `json:"signature"`
 }
 
-// MajorityResult is the tally rule moderator rounds and members share:
+// MajorityResult is the counting rule moderator rounds and members share:
 // FAIL only on a strict majority.
 func MajorityResult(failCount, total int) domain.ModerationResult {
 	if failCount*2 > total {

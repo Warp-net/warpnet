@@ -154,14 +154,14 @@ func activeCount(rs *Registry) int {
 	return len(rs.active)
 }
 
-// closeWindow runs the tally as if the vote window had elapsed.
+// closeWindow runs the count as if the vote window had elapsed.
 func closeWindow(t *testing.T, rs *Registry, id string) {
 	t.Helper()
 	r := liveRound(rs, id)
 	if r == nil {
 		t.Fatalf("no live round for %s", id)
 	}
-	r.tally()
+	r.count()
 }
 
 // rankedPeers finds n synthetic participant ids that sort above (or below)
@@ -183,7 +183,7 @@ func rankedPeers(t *testing.T, reportID, pivot string, above bool, n int) []stri
 	return out
 }
 
-// A lone participant is its own chair: it votes, tallies and carries the
+// A lone participant is its own chair: it votes, counts and carries the
 // decision.
 func TestRound_SoleVoterDecides(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
@@ -260,7 +260,7 @@ func TestRound_MajorityOverrulesOwnVote(t *testing.T) {
 	}
 }
 
-// A participant that is not the chair tallies but stays silent.
+// A participant that is not the chair counts but stays silent.
 func TestRound_NonChairStandsBy(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	rs := NewRegistry("self", member, frozen())
@@ -312,7 +312,7 @@ func TestRound_BackupTakesOverSilentChair(t *testing.T) {
 
 	d := member.lastDecision(t)
 	if d.outcome.Result != domain.FAIL {
-		t.Fatalf("the backup must carry the tallied outcome, got %+v", d.outcome)
+		t.Fatalf("the backup must carry the counted outcome, got %+v", d.outcome)
 	}
 	if finals := member.finals(); len(finals) != 1 || finals[0].ModeratorID != "self" {
 		t.Fatalf("the backup announces under its own identity, got %+v", finals)
@@ -589,7 +589,7 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 	}
 }
 
-// planTally is the whole rule of a round in one pure function, so it is
+// planCount is the whole rule of a round in one pure function, so it is
 // testable without a registry, a timer or a participant.
 func TestPlanTally_Roles(t *testing.T) {
 	id := "round-x"
@@ -608,7 +608,7 @@ func TestPlanTally_Roles(t *testing.T) {
 
 	order := byRank("peer-a", "peer-b", "peer-c")
 
-	p := planTally(id, order[0], votes(order...), true)
+	p := planCount(id, order[0], votes(order...), true)
 	if p.role != roleChair || p.rank != 0 || p.chair != order[0] {
 		t.Fatalf("the lowest-ranked voter chairs, got %+v", p)
 	}
@@ -616,23 +616,23 @@ func TestPlanTally_Roles(t *testing.T) {
 		t.Fatalf("all three votes must count, got %+v", p)
 	}
 
-	p = planTally(id, order[1], votes(order...), true)
+	p = planCount(id, order[1], votes(order...), true)
 	if p.role != roleBackup || p.rank != 1 {
 		t.Fatalf("the next voter stands by at rank 1, got %+v", p)
 	}
 
-	p = planTally(id, "never-voted", votes(order...), true)
+	p = planCount(id, "never-voted", votes(order...), true)
 	if p.role != roleBystander {
 		t.Fatalf("a non-voter has nothing to do, got %+v", p)
 	}
 
-	p = planTally(id, order[0], map[string]vote.Event{}, true)
+	p = planCount(id, order[0], map[string]vote.Event{}, true)
 	if p.role != roleBystander {
 		t.Fatalf("an empty round decides nothing, got %+v", p)
 	}
 
 	// Votes naming this participant on a subject it never saw: forged.
-	p = planTally(id, order[0], votes(order...), false)
+	p = planCount(id, order[0], votes(order...), false)
 	if p.role != roleBystander || !p.orphaned {
 		t.Fatalf("a voter without the subject must stand down as orphaned, got %+v", p)
 	}
@@ -650,11 +650,11 @@ func TestPlanTally_TrimmedVoterStaysInTheChain(t *testing.T) {
 		order[1]: voteFrom(id, order[1], domain.FAIL),
 	}
 
-	p := planTally(id, order[1], votes, true)
+	p := planCount(id, order[1], votes, true)
 	if p.role != roleBackup || p.rank != 1 {
 		t.Fatalf("the trimmed voter must still guard the round, got %+v", p)
 	}
 	if p.counted != 1 {
-		t.Fatalf("the tally itself keeps an odd count, got %d", p.counted)
+		t.Fatalf("the counted set itself stays odd, got %d", p.counted)
 	}
 }
