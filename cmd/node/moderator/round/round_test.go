@@ -33,7 +33,7 @@ type stubMember struct {
 type decision struct {
 	subject event.ReportEvent
 	outcome vote.Event
-	votes   []event.VerdictVote
+	signed  []event.VerdictVote
 }
 
 func newStubMember(id string, result domain.ModerationResult) *stubMember {
@@ -200,8 +200,8 @@ func TestRound_SoleVoterDecides(t *testing.T) {
 	if d.outcome.Result != domain.FAIL {
 		t.Fatalf("expected the FAIL vote to carry, got %+v", d.outcome)
 	}
-	if len(d.votes) != 1 || d.votes[0].ModeratorID != "self" {
-		t.Fatalf("expected a single voter, got %v", d.votes)
+	if len(d.signed) != 1 || d.signed[0].ModeratorID != "self" {
+		t.Fatalf("expected a single voter, got %v", d.signed)
 	}
 	if finals := member.finals(); len(finals) != 1 {
 		t.Fatalf("the decision must be announced exactly once, got %d", len(finals))
@@ -232,8 +232,8 @@ func TestRound_MajorityDecides(t *testing.T) {
 	if d.outcome.Result != domain.FAIL {
 		t.Fatal("2 of 3 FAIL must decide FAIL")
 	}
-	if len(d.votes) != 3 {
-		t.Fatalf("expected 3 voters, got %v", d.votes)
+	if len(d.signed) != 3 {
+		t.Fatalf("expected 3 voters, got %v", d.signed)
 	}
 }
 
@@ -612,7 +612,7 @@ func TestPlanTally_Roles(t *testing.T) {
 	if p.role != roleChair || p.rank != 0 || p.chair != order[0] {
 		t.Fatalf("the lowest-ranked voter chairs, got %+v", p)
 	}
-	if p.counted != 3 || len(p.votes) != 3 {
+	if p.counted != 3 || len(p.signed) != 3 {
 		t.Fatalf("all three votes must count, got %+v", p)
 	}
 

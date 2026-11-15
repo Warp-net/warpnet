@@ -106,7 +106,7 @@ type plan struct {
 	rank    int
 	chair   string
 	outcome vote.Event
-	votes   []event.VerdictVote
+	signed  []event.VerdictVote
 	// counted is how many votes entered the tally, for the log line.
 	counted int
 	// orphaned marks a participant that voted on a subject it never saw,
@@ -135,7 +135,7 @@ func planTally(id, self string, votes map[string]vote.Event, haveSubject bool) p
 		rank:    rank,
 		chair:   kept[0].ModeratorID,
 		outcome: outcome,
-		votes:   signed,
+		signed:  signed,
 		counted: len(kept),
 	}
 	if rank == 0 {
@@ -158,17 +158,17 @@ func aggregate(kept []vote.Event) (vote.Event, []event.VerdictVote) {
 	}
 	majority := event.MajorityResult(failCount, len(kept))
 
-	votes := make([]event.VerdictVote, 0, len(kept))
+	signed := make([]event.VerdictVote, 0, len(kept))
 	for _, v := range kept {
-		votes = append(votes, event.VerdictVote{
+		signed = append(signed, event.VerdictVote{
 			ModeratorID: v.ModeratorID, Result: v.Result, Signature: v.Signature,
 		})
 	}
 
 	for _, v := range kept {
 		if v.Result == majority {
-			return v, votes
+			return v, signed
 		}
 	}
-	return vote.Event{Result: majority}, votes
+	return vote.Event{Result: majority}, signed
 }

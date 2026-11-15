@@ -113,7 +113,7 @@ type round struct {
 type pendingOutcome struct {
 	subject event.ReportEvent
 	outcome vote.Event
-	votes   []event.VerdictVote
+	signed  []event.VerdictVote
 }
 
 // newRound starts a round: the tally timer runs from creation, because a
@@ -239,7 +239,7 @@ func (r *round) tally() {
 		r.onDone(r.id)
 
 	case roleBackup:
-		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, votes: p.votes}
+		r.pending = &pendingOutcome{subject: *subject, outcome: p.outcome, signed: p.signed}
 		r.finalTimer = time.AfterFunc(time.Duration(p.rank)*r.schedule.Failover, r.takeOver)
 		r.mx.Unlock()
 		log.Infof("round %s closed votes=%d result=%t chair=%s (standing by at rank %d)",
@@ -251,7 +251,7 @@ func (r *round) tally() {
 		r.onDone(r.id)
 		log.Infof("round %s closed votes=%d result=%t chair=%s",
 			r.id, p.counted, bool(p.outcome.Result), p.chair)
-		r.decide(*subject, p.outcome, p.votes)
+		r.decide(*subject, p.outcome, p.signed)
 	}
 }
 
@@ -270,7 +270,7 @@ func (r *round) takeOver() {
 	r.onDone(r.id)
 
 	log.Warnf("round %s: chair stayed silent, taking over the decision", r.id)
-	r.decide(p.subject, p.outcome, p.votes)
+	r.decide(p.subject, p.outcome, p.signed)
 }
 
 // decide hands the outcome to the participant and then announces the round

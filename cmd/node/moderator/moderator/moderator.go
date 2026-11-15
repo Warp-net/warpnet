@@ -300,7 +300,7 @@ func (m *Moderator) Vote(reportID string, rep event.ReportEvent) (vote.Event, bo
 	// concludes turns it into an audit reference.
 	m.holdJudged(reportID, a.text)
 
-	own := a.vote
+	own := a.cast
 	own.ReportID = reportID
 	own.Type = rep.Type
 	own.ModeratorID = m.selfID()
@@ -342,7 +342,7 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 // it will cast, plus the text the engine actually judged. The text is kept
 // so a decided round can file it as an audit reference.
 type assessment struct {
-	vote vote.Event
+	cast vote.Event
 	text string
 }
 
@@ -351,7 +351,7 @@ type assessment struct {
 // carries no text: nothing was judged, so there is nothing to reference.
 func unavailableVote(objectID *domain.ID, userID domain.ID) assessment {
 	reason := event.ModerationReasonUnavailable
-	return assessment{vote: vote.Event{
+	return assessment{cast: vote.Event{
 		Result: domain.OK, Reason: &reason, ObjectID: objectID, UserID: userID,
 	}}
 }
@@ -411,7 +411,7 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (assessment, bool, e
 		log.Infof("moderator: tweet %s already moderated ok=%t, reusing verdict",
 			tweet.Id, bool(tweet.Moderation.IsOk))
 		return assessment{
-			vote: vote.Event{
+			cast: vote.Event{
 				Result:   tweet.Moderation.IsOk,
 				Reason:   tweet.Moderation.Reason,
 				ObjectID: &tweet.Id,
@@ -427,7 +427,7 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (assessment, bool, e
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
 	return assessment{
-		vote: vote.Event{
+		cast: vote.Event{
 			Result:   domain.ModerationResult(ok),
 			Reason:   &reason,
 			ObjectID: &tweet.Id,
@@ -469,7 +469,7 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (assessment, bool, er
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
 	return assessment{
-		vote: vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id},
+		cast: vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id},
 		text: text,
 	}, true, nil
 }
