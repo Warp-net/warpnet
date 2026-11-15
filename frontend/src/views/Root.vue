@@ -337,9 +337,7 @@ resulting from the use or misuse of this software.
 
             <p>
               By signing up, you agree to our
-              <a href="https://github.com/Warp-net/docs/blob/main/legal/T%26C.md" target="_blank" rel="noopener" class="text-blue">Terms</a>
-              and
-              <a href="https://github.com/Warp-net/docs/blob/main/legal/PRIVACY-POLICY.md" target="_blank" rel="noopener" class="text-blue">Privacy Policy</a>.
+              <a href="https://warpnet.site/legal-doc" target="_blank" rel="noopener" class="text-blue">Terms and Privacy Policy</a>.
             </p>
             <button
               v-if="!isLoading"

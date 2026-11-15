@@ -5,7 +5,7 @@ import WarpnetTransport
 
 @MainActor
 struct PairingView: View {
-  private static let terms = URL(string: "https://github.com/Warp-net/docs/blob/main/legal/T%26C.md")!
+  private static let terms = URL(string: "https://warpnet.site/legal-doc")!
 
   @Environment(PairingModel.self) private var pairing
   @Environment(Theme.self) private var theme
