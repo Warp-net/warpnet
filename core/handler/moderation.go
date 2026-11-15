@@ -116,7 +116,7 @@ func StreamModerationResultHandler(
 			return nil, ErrBadModeratorSignature
 		}
 		// A key of one's own is free, so the chair signature proves
-		// nothing on its own: the verdict must recount from its ballots.
+		// nothing on its own: the verdict must recount from its votes.
 		if err := ev.VerifyQuorum(); err != nil {
 			log.Warnf("moderation: dropping verdict from %s: %v", ev.ModeratorID, err)
 			return nil, err

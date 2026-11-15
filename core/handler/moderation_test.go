@@ -31,36 +31,36 @@ func moderatorTestKey(t *testing.T, seed string) (ed25519.PrivateKey, string) {
 }
 
 // signedResult stamps a verdict with a valid moderator identity, a quorum
-// of agreeing ballots and the chair signature, the way a moderator ships one.
+// of agreeing votes and the chair signature, the way a moderator ships one.
 func signedResult(t *testing.T, ev event.ModerationVerdictEvent) []byte {
 	t.Helper()
-	return withBallots(t, ev, "moderation-handler-test", "voter-1", "voter-2")
+	return withVotes(t, ev, "moderation-handler-test", "voter-1", "voter-2")
 }
 
-// withBallots signs the verdict as the first voter after attaching one
-// agreeing ballot per voter seed.
-func withBallots(t *testing.T, ev event.ModerationVerdictEvent, voterSeeds ...string) []byte {
+// withVotes signs the verdict as the first voter after attaching one
+// agreeing vote per voter seed.
+func withVotes(t *testing.T, ev event.ModerationVerdictEvent, voterSeeds ...string) []byte {
 	t.Helper()
 	return withDissent(t, ev, nil, voterSeeds...)
 }
 
-// withDissent is withBallots where the voters listed in dissent vote
+// withDissent is withVotes where the voters listed in dissent vote
 // against the verdict.
 func withDissent(t *testing.T, ev event.ModerationVerdictEvent, dissent map[string]bool, voterSeeds ...string) []byte {
 	t.Helper()
-	ev.Ballots = nil
+	ev.Votes = nil
 	for _, seed := range voterSeeds {
-		ev.Ballots = append(ev.Ballots, ballotFor(t, ev, seed, ev.Verdict != domain.ModerationResult(dissent[seed])))
+		ev.Votes = append(ev.Votes, voteFor(t, ev, seed, ev.Verdict != domain.ModerationResult(dissent[seed])))
 	}
 	priv, id := moderatorTestKey(t, voterSeeds[0])
 	ev.ModeratorID = id
 	return marshal(t, ev.Signed(priv))
 }
 
-func ballotFor(t *testing.T, ev event.ModerationVerdictEvent, seed string, result domain.ModerationResult) event.VerdictBallot {
+func voteFor(t *testing.T, ev event.ModerationVerdictEvent, seed string, result domain.ModerationResult) event.VerdictVote {
 	t.Helper()
 	priv, id := moderatorTestKey(t, seed)
-	return event.VerdictBallot{ModeratorID: id, Result: result, Signature: ev.SignBallot(priv, id, result)}
+	return event.VerdictVote{ModeratorID: id, Result: result, Signature: ev.SignVote(priv, id, result)}
 }
 
 type stubModerationNotifier struct {
@@ -307,37 +307,37 @@ func TestStreamModerationResultHandler(t *testing.T) {
 
 	// A fresh keypair is free: a verdict signed by its own throwaway key is
 	// exactly what anyone on the followers topic can produce.
-	t.Run("self-signed verdict without ballots is dropped", func(t *testing.T) {
+	t.Run("self-signed verdict without votes is dropped", func(t *testing.T) {
 		priv, id := moderatorTestKey(t, "self-appointed")
 		ev := failVerdict()
 		ev.ModeratorID = id
 		expectNoQuorum(t, marshal(t, ev.Signed(priv)))
 	})
 
-	t.Run("self-signed verdict with its own ballot is dropped", func(t *testing.T) {
-		expectNoQuorum(t, withBallots(t, failVerdict(), "self-appointed"))
+	t.Run("self-signed verdict with its own vote is dropped", func(t *testing.T) {
+		expectNoQuorum(t, withVotes(t, failVerdict(), "self-appointed"))
 	})
 
-	t.Run("sub-quorum of ballots is dropped", func(t *testing.T) {
-		expectNoQuorum(t, withBallots(t, failVerdict(), "voter-a", "voter-b"))
+	t.Run("sub-quorum of votes is dropped", func(t *testing.T) {
+		expectNoQuorum(t, withVotes(t, failVerdict(), "voter-a", "voter-b"))
 	})
 
-	t.Run("FAIL carried by a minority of ballots is dropped", func(t *testing.T) {
+	t.Run("FAIL carried by a minority of votes is dropped", func(t *testing.T) {
 		dissent := map[string]bool{"voter-b": true, "voter-c": true}
 		expectNoQuorum(t, withDissent(t, failVerdict(), dissent, "voter-a", "voter-b", "voter-c"))
 	})
 
 	t.Run("duplicate voters are counted once", func(t *testing.T) {
-		expectNoQuorum(t, withBallots(t, failVerdict(), "voter-a", "voter-a", "voter-a"))
+		expectNoQuorum(t, withVotes(t, failVerdict(), "voter-a", "voter-a", "voter-a"))
 	})
 
-	t.Run("ballot not signed by its voter is not counted", func(t *testing.T) {
+	t.Run("vote not signed by its voter is not counted", func(t *testing.T) {
 		ev := failVerdict()
-		forged := ballotFor(t, ev, "impostor", domain.FAIL)
+		forged := voteFor(t, ev, "impostor", domain.FAIL)
 		_, forged.ModeratorID = moderatorTestKey(t, "voter-c")
-		ev.Ballots = []event.VerdictBallot{
-			ballotFor(t, ev, "voter-a", domain.FAIL),
-			ballotFor(t, ev, "voter-b", domain.FAIL),
+		ev.Votes = []event.VerdictVote{
+			voteFor(t, ev, "voter-a", domain.FAIL),
+			voteFor(t, ev, "voter-b", domain.FAIL),
 			forged,
 		}
 		priv, id := moderatorTestKey(t, "voter-a")
@@ -345,13 +345,13 @@ func TestStreamModerationResultHandler(t *testing.T) {
 		expectNoQuorum(t, marshal(t, ev.Signed(priv)))
 	})
 
-	t.Run("ballots on another tweet are not counted", func(t *testing.T) {
+	t.Run("votes on another tweet are not counted", func(t *testing.T) {
 		ev := failVerdict()
 		other := ev
 		otherTweet := "tweet-2"
 		other.ObjectID = &otherTweet
 		for _, seed := range []string{"voter-a", "voter-b", "voter-c"} {
-			ev.Ballots = append(ev.Ballots, ballotFor(t, other, seed, domain.FAIL))
+			ev.Votes = append(ev.Votes, voteFor(t, other, seed, domain.FAIL))
 		}
 		priv, id := moderatorTestKey(t, "voter-a")
 		ev.ModeratorID = id
@@ -361,10 +361,10 @@ func TestStreamModerationResultHandler(t *testing.T) {
 	t.Run("OK verdict without a quorum does not notify the reporter", func(t *testing.T) {
 		ev := failVerdict()
 		ev.Verdict = domain.OK
-		expectNoQuorum(t, withBallots(t, ev, "self-appointed"))
+		expectNoQuorum(t, withVotes(t, ev, "self-appointed"))
 	})
 
-	t.Run("strict majority of signed ballots is applied", func(t *testing.T) {
+	t.Run("strict majority of signed votes is applied", func(t *testing.T) {
 		tweetUpdated := false
 		h := mkHandler(
 			stubModerationNotifier{},

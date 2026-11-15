@@ -106,7 +106,7 @@ type plan struct {
 	rank    int
 	chair   string
 	outcome vote.Event
-	ballots []event.VerdictBallot
+	votes   []event.VerdictVote
 	// counted is how many ballots entered the tally, for the log line.
 	counted int
 	// orphaned marks a participant that voted on a subject it never saw,
@@ -135,7 +135,7 @@ func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool)
 		rank:    rank,
 		chair:   kept[0].ModeratorID,
 		outcome: outcome,
-		ballots: signed,
+		votes:   signed,
 		counted: len(kept),
 	}
 	if rank == 0 {
@@ -149,7 +149,7 @@ func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool)
 // aggregate reduces the kept ballots to the round outcome: FAIL on strict
 // majority, returning the lowest-ranked ballot of the winning side so every
 // participant aggregates identically.
-func aggregate(kept []vote.Event) (vote.Event, []event.VerdictBallot) {
+func aggregate(kept []vote.Event) (vote.Event, []event.VerdictVote) {
 	failCount := 0
 	for _, v := range kept {
 		if !bool(v.Result) {
@@ -158,17 +158,17 @@ func aggregate(kept []vote.Event) (vote.Event, []event.VerdictBallot) {
 	}
 	majority := event.MajorityResult(failCount, len(kept))
 
-	ballots := make([]event.VerdictBallot, 0, len(kept))
+	votes := make([]event.VerdictVote, 0, len(kept))
 	for _, v := range kept {
-		ballots = append(ballots, event.VerdictBallot{
+		votes = append(votes, event.VerdictVote{
 			ModeratorID: v.ModeratorID, Result: v.Result, Signature: v.Signature,
 		})
 	}
 
 	for _, v := range kept {
 		if v.Result == majority {
-			return v, ballots
+			return v, votes
 		}
 	}
-	return vote.Event{Result: majority}, ballots
+	return vote.Event{Result: majority}, votes
 }

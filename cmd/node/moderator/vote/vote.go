@@ -61,7 +61,7 @@ type Event struct {
 	// was finalized. It cancels the deterministic takeover chain on every
 	// other voter and is never counted as a vote.
 	Final bool `json:"final,omitempty"`
-	// Signature is the voter's event.VerdictBallot signature, shipped
+	// Signature is the voter's event.VerdictVote signature, shipped
 	// inside the verdict.
 	Signature string `json:"signature,omitempty"`
 }

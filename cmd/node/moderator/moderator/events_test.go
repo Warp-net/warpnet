@@ -43,7 +43,7 @@ func TestAnUpheldReportChargesTheNodeThatHostsTheOffender(t *testing.T) {
 	m := decidedModerator(t)
 	rep := tweetReport("tweet-1")
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictBallot{{ModeratorID: "mod-a"}})
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	events := ruled(t, m)
 	require.Len(t, events, 1)
@@ -55,7 +55,7 @@ func TestAnUpheldReportChargesTheNodeThatHostsTheOffender(t *testing.T) {
 func TestAClearedReportChargesNobody(t *testing.T) {
 	m := decidedModerator(t)
 
-	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.OK, ""), []event.VerdictBallot{{ModeratorID: "mod-a"}})
+	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.OK, ""), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	assert.Empty(t, ruled(t, m), "a report the quorum cleared is not an offence")
 }
@@ -65,7 +65,7 @@ func TestAReportThatNamesNoNodeChargesNobody(t *testing.T) {
 	rep := tweetReport("tweet-1")
 	rep.TargetNodeID = ""
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictBallot{{ModeratorID: "mod-a"}})
+	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	assert.Empty(t, ruled(t, m))
 }
