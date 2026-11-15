@@ -141,6 +141,36 @@ publish "verdicts" against people you dislike. A single machine cannot do it:
   malicious is only one vote out of an odd number, and it takes a strict
   majority to act.
 
+The whole path, from a report to what your app does with the verdict:
+
+```mermaid
+flowchart TD
+    R["A report is broadcast to all moderators"] --> O["Each moderator works out the same<br/>unpredictable order from the report"]
+    O --> E{"Three votes already in<br/>when a moderator's turn comes?"}
+    E -- yes --> S["It stays out"]
+    E -- no --> J["It fetches the content and judges it"]
+    J --> V["It signs its own vote and broadcasts it"]
+    V --> W["The voting window closes"]
+    W --> T["Votes are put in order;<br/>an even count drops one vote"]
+    T --> M{"Strict majority<br/>against the content?"}
+    M -- yes --> FAIL["Outcome: violation"]
+    M -- "no, or a tie" --> OK["Outcome: no violation"]
+    FAIL --> P["The first moderator in line signs the verdict<br/>and attaches every counted vote"]
+    OK --> P
+    P --> X{"Did it publish in time?"}
+    X -- no --> B["The next one in line publishes instead"]
+    B --> A
+    X -- yes --> A["Your app receives the verdict"]
+    A --> C1{"Publisher's signature valid?"}
+    C1 -- no --> D["Verdict discarded:<br/>nothing changes, nobody is notified"]
+    C1 -- yes --> C2["Recount: drop votes whose signature<br/>does not match their moderator,<br/>count each moderator once"]
+    C2 --> C3{"At least three moderators left?"}
+    C3 -- no --> D
+    C3 -- yes --> C4{"Their majority matches the verdict?"}
+    C4 -- no --> D
+    C4 -- yes --> AP["Verdict applied: the reporter is notified;<br/>on a violation the content is shadow-banned"]
+```
+
 What this does **not** stop: a moderator identity is just a key, and keys cost
 nothing. Anyone who generates three throwaway keys can sign three votes and
 build a verdict every app will accept, without running a moderator or ever
