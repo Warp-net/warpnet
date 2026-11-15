@@ -165,7 +165,7 @@ func assertUnavailable(t *testing.T, a assessment) {
 	if a.text != "" {
 		t.Fatalf("nothing was judged, so no reference may be kept: %q", a.text)
 	}
-	v := a.cast
+	v := a.vote
 	if v.Result != domain.OK {
 		t.Fatal("an unreviewable report must carry an OK (no-op) result")
 	}
@@ -225,10 +225,10 @@ func TestAssessTweetReport_ValidTweetReachesEngine(t *testing.T) {
 	if rec.text != "hello world" {
 		t.Fatalf("engine got %q, want %q", rec.text, "hello world")
 	}
-	if v.cast.Result != domain.OK {
+	if v.vote.Result != domain.OK {
 		t.Fatal("recordingEngine clears content, expected an OK verdict")
 	}
-	if v.cast.ObjectID == nil || *v.cast.ObjectID != "tweet-1" || v.cast.UserID != "offender" {
+	if v.vote.ObjectID == nil || *v.vote.ObjectID != "tweet-1" || v.vote.UserID != "offender" {
 		t.Fatalf("verdict must carry the tweet identifiers, got %+v", v)
 	}
 }
@@ -461,11 +461,11 @@ func TestAssessTweetReport_AlreadyModeratedReusesVerdict(t *testing.T) {
 	if rec.called {
 		t.Fatal("engine must not re-run on an already moderated tweet")
 	}
-	if v.cast.Result != domain.FAIL {
+	if v.vote.Result != domain.FAIL {
 		t.Fatal("the stored FAIL verdict must be reused")
 	}
-	if v.cast.Reason == nil || *v.cast.Reason != reason {
-		t.Fatalf("the stored reason must be reused, got %v", v.cast.Reason)
+	if v.vote.Reason == nil || *v.vote.Reason != reason {
+		t.Fatalf("the stored reason must be reused, got %v", v.vote.Reason)
 	}
 }
 
@@ -489,7 +489,7 @@ func TestAssessUserReport_ValidProfileReachesEngine(t *testing.T) {
 	if rec.text != "troll\nsome bio" {
 		t.Fatalf("engine got %q, want the concatenated profile text", rec.text)
 	}
-	if v.cast.Result != domain.OK || v.cast.UserID != "user-1" {
+	if v.vote.Result != domain.OK || v.vote.UserID != "user-1" {
 		t.Fatalf("unexpected verdict %+v", v)
 	}
 }
