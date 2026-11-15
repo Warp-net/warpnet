@@ -6,7 +6,7 @@ package moderator
 // member node that never judged anything cannot end a round by broadcasting a
 // signed Final, so it can neither silence a report nor relabel the audit
 // reference. Before the fix such a Final closed every moderator's round before
-// the count and filed the judged text under the stranger's chosen verdict.
+// the countdown and filed the judged text under the stranger's chosen verdict.
 
 import (
 	"context"

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	// voteWindow is how long a round collects votes before the count.
+	// voteWindow is how long a round collects votes before the countdown.
 	voteWindow = 150 * time.Second
 	// failoverDelay spaces the takeover chain of the round's voters: the
 	// voter at rank k finalizes at k*failoverDelay unless a Final
@@ -85,7 +85,7 @@ type Participant interface {
 }
 
 // round is one subject's vote round, self-contained: it collects votes,
-// decides whether this participant should vote at all, counts at the
+// decides whether this participant should vote at all, runs the countdown at the
 // window close, and either carries the decision (as chair) or stands by to
 // take over. It knows nothing about the participant's internals, the
 // population or the other rounds — it reaches the outside world only
@@ -97,26 +97,26 @@ type round struct {
 	schedule Schedule
 	onDone   func(id string)
 
-	mx         sync.Mutex
-	report     *event.ReportEvent
-	votes      map[string]vote.Event
-	voteTimer  *time.Timer
-	countdown  *time.Timer
-	finalTimer *time.Timer
-	// pending holds the counted outcome while this node stands by as a
+	mx             sync.Mutex
+	report         *event.ReportEvent
+	votes          map[string]vote.Event
+	voteTimer      *time.Timer
+	countdownTimer *time.Timer
+	finalTimer     *time.Timer
+	// pending holds the countdown outcome while this node stands by as a
 	// backup finalizer.
 	pending *pendingOutcome
 	closed  bool
 }
 
-// pendingOutcome is a counted round outcome parked on a backup voter.
+// pendingOutcome is a countdown outcome parked on a backup voter.
 type pendingOutcome struct {
 	subject event.ReportEvent
 	outcome vote.Event
 	votes   []event.VerdictVote
 }
 
-// newRound starts a round: the count timer runs from creation, because a
+// newRound starts a round: the countdown timer runs from creation, because a
 // round may be opened by an incoming vote before this node sees the report.
 func newRound(id, self string, member Participant, schedule Schedule, onDone func(id string)) *round {
 	r := &round{
@@ -127,7 +127,7 @@ func newRound(id, self string, member Participant, schedule Schedule, onDone fun
 		onDone:   onDone,
 		votes:    make(map[string]vote.Event),
 	}
-	r.countdown = time.AfterFunc(schedule.Window, r.count)
+	r.countdownTimer = time.AfterFunc(schedule.Window, r.countdown)
 	return r
 }
 
@@ -177,7 +177,7 @@ func (r *round) stop() {
 
 func (r *round) closeLocked() {
 	r.closed = true
-	for _, t := range []*time.Timer{r.voteTimer, r.countdown, r.finalTimer} {
+	for _, t := range []*time.Timer{r.voteTimer, r.countdownTimer, r.finalTimer} {
 		if t != nil {
 			t.Stop()
 		}
@@ -214,9 +214,9 @@ func (r *round) castVote() {
 	}
 }
 
-// count closes the voting window: planCount decides what this participant
+// countdown closes the voting window: planCountdown decides what this participant
 // is to the round, and this method only carries that decision out.
-func (r *round) count() {
+func (r *round) countdown() {
 	r.mx.Lock()
 	if r.closed {
 		r.mx.Unlock()
@@ -227,7 +227,7 @@ func (r *round) count() {
 	}
 
 	subject := r.report
-	p := planCount(r.id, r.self, r.votes, subject != nil)
+	p := planCountdown(r.id, r.self, r.votes, subject != nil)
 
 	switch p.role {
 	case roleBystander:

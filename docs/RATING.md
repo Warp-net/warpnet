@@ -611,7 +611,7 @@ is never recorded, and every module treats it as trusted.
 | gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)`, with `AppSpecificScore` reading the score the last standing left in the gossip's own cache; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go` |
 | DHT | `dht.QueryFilter` and `dht.RoutingTableFilter` refuse the peers a standing put at the floor, and let them back in when it recovers. A peer nobody has rated is admitted. | `core/dht/dht.go` |
 | Rate limits | a peer's buckets are built at the allowance its standing carries, `burst` and `perMinute` floored at 1 so no peer is ever starved outright. A standing that changes drops the peer's buckets, so it is measured against the allowance it has now. | `core/middleware/rate-limiter.go`, `core/middleware/middleware.go` |
-| Moderation votes | **Nothing.** Weighting a vote round's votes by rating was planned and rejected: `planCount` must be a pure function of the votes so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
+| Moderation votes | **Nothing.** Weighting a vote round's votes by rating was planned and rejected: `planCountdown` must be a pure function of the votes so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
 ### 6.5 Deliberately not done
@@ -929,7 +929,7 @@ different model exactly as hard as a bot with no model at all. The
 statistical tolerance therefore stays in the ledger, and only threshold
 crossings reach the rating.
 
-*Votes are not weighted by rating.* `planCount` is a pure function
+*Votes are not weighted by rating.* `planCountdown` is a pure function
 precisely so every participant reaches the same answer from the same
 votes, which is what lets the round pick a chair and a takeover order
 without exchanging a message. Each node holds its own view of every
