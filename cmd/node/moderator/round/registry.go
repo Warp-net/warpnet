@@ -92,7 +92,7 @@ func (rs *Registry) Open(rep event.ReportEvent) {
 	r.setReport(rep, delay)
 }
 
-// AddVote routes an incoming ballot to its round, opening one if the ballot
+// AddVote routes an incoming vote to its round, opening one if the vote
 // arrived before the subject did.
 func (rs *Registry) AddVote(v vote.Event) {
 	rs.mx.Lock()

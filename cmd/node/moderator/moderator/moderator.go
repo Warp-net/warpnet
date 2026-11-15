@@ -276,10 +276,10 @@ func (m *Moderator) Broadcast(v vote.Event) error {
 	return m.votes.PublishVote(v)
 }
 
-// Ballot implements round.Participant: it runs the engine over the reported
-// object and returns this moderator's finished ballot. The bool is false
+// Vote implements round.Participant: it runs the engine over the reported
+// object and returns this moderator's finished vote. The bool is false
 // when the report is unusable and no vote should be cast at all.
-func (m *Moderator) Ballot(reportID string, rep event.ReportEvent) (vote.Event, bool, error) {
+func (m *Moderator) Vote(reportID string, rep event.ReportEvent) (vote.Event, bool, error) {
 	var (
 		a   assessment
 		ok  bool
@@ -300,13 +300,13 @@ func (m *Moderator) Ballot(reportID string, rep event.ReportEvent) (vote.Event, 
 	// concludes turns it into an audit reference.
 	m.holdJudged(reportID, a.text)
 
-	ballot := a.ballot
-	ballot.ReportID = reportID
-	ballot.Type = rep.Type
-	ballot.ModeratorID = m.selfID()
-	subject := event.ModerationVerdictEvent{Type: rep.Type, UserID: ballot.UserID, ObjectID: ballot.ObjectID}
-	ballot.Signature = subject.SignVote(m.privKey, ballot.ModeratorID, ballot.Result)
-	return ballot, true, nil
+	own := a.vote
+	own.ReportID = reportID
+	own.Type = rep.Type
+	own.ModeratorID = m.selfID()
+	subject := event.ModerationVerdictEvent{Type: rep.Type, UserID: own.UserID, ObjectID: own.ObjectID}
+	own.Signature = subject.SignVote(m.privKey, own.ModeratorID, own.Result)
+	return own, true, nil
 }
 
 // notifyReporter re-sends the verdict to the reporter's node on the same
@@ -338,20 +338,20 @@ func (m *Moderator) notifyReporter(rep event.ReportEvent, outcome vote.Event, vo
 	}
 }
 
-// assessment is what this moderator made of a reported object: the ballot
+// assessment is what this moderator made of a reported object: the vote
 // it will cast, plus the text the engine actually judged. The text is kept
 // so a decided round can file it as an audit reference.
 type assessment struct {
-	ballot vote.Event
-	text   string
+	vote vote.Event
+	text string
 }
 
-// unavailableVote is the ballot for content that could not be reviewed: an
+// unavailableVote is the vote for content that could not be reviewed: an
 // OK (no-op) result with a sentinel reason the reporter recognises. It
 // carries no text: nothing was judged, so there is nothing to reference.
 func unavailableVote(objectID *domain.ID, userID domain.ID) assessment {
 	reason := event.ModerationReasonUnavailable
-	return assessment{ballot: vote.Event{
+	return assessment{vote: vote.Event{
 		Result: domain.OK, Reason: &reason, ObjectID: objectID, UserID: userID,
 	}}
 }
@@ -411,7 +411,7 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (assessment, bool, e
 		log.Infof("moderator: tweet %s already moderated ok=%t, reusing verdict",
 			tweet.Id, bool(tweet.Moderation.IsOk))
 		return assessment{
-			ballot: vote.Event{
+			vote: vote.Event{
 				Result:   tweet.Moderation.IsOk,
 				Reason:   tweet.Moderation.Reason,
 				ObjectID: &tweet.Id,
@@ -427,7 +427,7 @@ func (m *Moderator) assessTweetReport(ev event.ReportEvent) (assessment, bool, e
 	}
 	log.Infof("moderator: tweet verdict tweet=%s ok=%t", tweet.Id, ok)
 	return assessment{
-		ballot: vote.Event{
+		vote: vote.Event{
 			Result:   domain.ModerationResult(ok),
 			Reason:   &reason,
 			ObjectID: &tweet.Id,
@@ -469,8 +469,8 @@ func (m *Moderator) assessUserReport(ev event.ReportEvent) (assessment, bool, er
 	}
 	log.Infof("moderator: user verdict user=%s ok=%t", user.Id, ok)
 	return assessment{
-		ballot: vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id},
-		text:   text,
+		vote: vote.Event{Result: domain.ModerationResult(ok), Reason: &reason, UserID: user.Id},
+		text: text,
 	}, true, nil
 }
 

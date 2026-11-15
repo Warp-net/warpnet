@@ -44,7 +44,7 @@ func TestMarkFinalizedIsIdempotent(t *testing.T) {
 	rs := NewRegistry("self", newStubMember("self", domain.OK), frozen())
 	id := subject("tweet-1").ReportID()
 	rs.Open(subject("tweet-1"))
-	rs.AddVote(ballotFrom(id, "moderator-a", domain.OK)) // the announcer must have voted
+	rs.AddVote(voteFrom(id, "moderator-a", domain.OK)) // the announcer must have voted
 
 	require.True(t, rs.MarkFinalized(id, "moderator-a"))
 	require.Zero(t, rs.Len(), "finalizing stops the live round")
@@ -60,7 +60,7 @@ func TestFinalizedRoundsExpire(t *testing.T) {
 	rs := NewRegistry("self", newStubMember("self", domain.OK), frozen())
 	id := subject("tweet-1").ReportID()
 	rs.Open(subject("tweet-1"))
-	rs.AddVote(ballotFrom(id, "moderator-a", domain.OK)) // the announcer must have voted
+	rs.AddVote(voteFrom(id, "moderator-a", domain.OK)) // the announcer must have voted
 
 	require.True(t, rs.MarkFinalized(id, "moderator-a"))
 
@@ -106,18 +106,18 @@ func TestVoteDelayPrunesStaleParticipants(t *testing.T) {
 	require.True(t, live)
 }
 
-// failingMember refuses to produce a ballot, or fails to broadcast one.
+// failingMember refuses to produce a vote, or fails to broadcast one.
 type failingMember struct {
 	*stubMember
-	ballotErr    error
+	voteErr      error
 	broadcastErr error
 }
 
-func (m *failingMember) Ballot(reportID string, subject event.ReportEvent) (vote.Event, bool, error) {
-	if m.ballotErr != nil {
-		return vote.Event{}, false, m.ballotErr
+func (m *failingMember) Vote(reportID string, subject event.ReportEvent) (vote.Event, bool, error) {
+	if m.voteErr != nil {
+		return vote.Event{}, false, m.voteErr
 	}
-	return m.stubMember.Ballot(reportID, subject)
+	return m.stubMember.Vote(reportID, subject)
 }
 
 func (m *failingMember) Broadcast(v vote.Event) error {
@@ -129,10 +129,10 @@ func (m *failingMember) Broadcast(v vote.Event) error {
 }
 
 func TestCastVoteToleratesMemberFailures(t *testing.T) {
-	t.Run("a failed ballot casts nothing", func(t *testing.T) {
+	t.Run("a failed vote casts nothing", func(t *testing.T) {
 		member := &failingMember{
 			stubMember: newStubMember("self", domain.OK),
-			ballotErr:  errors.New("engine down"),
+			voteErr:    errors.New("engine down"),
 		}
 		rs := NewRegistry("self", member, Schedule{Window: time.Hour, Failover: time.Hour, Step: 0})
 		rs.Open(subject("tweet-1"))
@@ -144,7 +144,7 @@ func TestCastVoteToleratesMemberFailures(t *testing.T) {
 		rs.StopAll()
 	})
 
-	t.Run("a failed broadcast still counts the own ballot", func(t *testing.T) {
+	t.Run("a failed broadcast still counts the own vote", func(t *testing.T) {
 		member := &failingMember{
 			stubMember:   newStubMember("self", domain.OK),
 			broadcastErr: errors.New("gossip down"),
@@ -166,7 +166,7 @@ func TestClosedRoundIgnoresLateInput(t *testing.T) {
 	id := rep.ReportID()
 
 	// open the round without a report so nothing schedules this node's own
-	// ballot: the test is about what a *closed* round accepts
+	// vote: the test is about what a *closed* round accepts
 	rs.mx.Lock()
 	r := rs.ensureLocked(id)
 	rs.mx.Unlock()
@@ -194,7 +194,7 @@ func TestRepeatReportIsIgnored(t *testing.T) {
 }
 
 func TestDuplicateVoteIsIgnored(t *testing.T) {
-	// an abstaining member never adds a ballot of its own, so the only votes
+	// an abstaining member never adds a vote of its own, so the only votes
 	// in the round are the ones this test delivers
 	member := newStubMember("self", domain.OK)
 	member.abstain = true

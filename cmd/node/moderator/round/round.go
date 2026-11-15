@@ -69,14 +69,14 @@ func DefaultSchedule() Schedule {
 
 // Participant is the local voter a round acts for. This package owns the
 // voting protocol — who votes, when, who carries the decision — and knows
-// nothing of what a ballot means or what happens once a round decides:
+// nothing of what a vote means or what happens once a round decides:
 // everything domain-specific sits behind this interface, implemented by
 // the caller.
 type Participant interface {
-	// Ballot returns this participant's vote on the subject. The bool is
+	// Vote returns this participant's vote on the subject. The bool is
 	// false to abstain, which happens when the subject cannot be judged.
-	Ballot(reportID string, subject event.ReportEvent) (vote.Event, bool, error)
-	// Broadcast publishes a ballot (or a Final announcement) to the other
+	Vote(reportID string, subject event.ReportEvent) (vote.Event, bool, error)
+	// Broadcast publishes a vote (or a Final announcement) to the other
 	// participants.
 	Broadcast(v vote.Event) error
 	// Decided is invoked exactly once per round, on the single
@@ -84,7 +84,7 @@ type Participant interface {
 	Decided(subject event.ReportEvent, outcome vote.Event, votes []event.VerdictVote)
 }
 
-// round is one subject's vote round, self-contained: it collects ballots,
+// round is one subject's vote round, self-contained: it collects votes,
 // decides whether this participant should vote at all, tallies at the
 // window close, and either carries the decision (as chair) or stands by to
 // take over. It knows nothing about the participant's internals, the
@@ -156,10 +156,10 @@ func (r *round) addVote(v vote.Event) {
 	r.votes[v.ModeratorID] = v
 }
 
-// hasVoter reports whether a ballot from moderatorID entered this round. A
+// hasVoter reports whether a vote from moderatorID entered this round. A
 // Final announcement is only legitimate from the chair or a backup, both of
 // which voted, so the registry consults this before honoring one: a Final
-// from a peer with no ballot here is forged.
+// from a peer with no vote here is forged.
 func (r *round) hasVoter(moderatorID string) bool {
 	r.mx.Lock()
 	defer r.mx.Unlock()
@@ -196,21 +196,21 @@ func (r *round) castVote() {
 	rep := *r.report
 	r.mx.Unlock()
 
-	v, ok, err := r.member.Ballot(r.id, rep)
+	v, ok, err := r.member.Vote(r.id, rep)
 	if err != nil {
-		log.Errorf("round %s: ballot: %v", r.id, err)
+		log.Errorf("round %s: vote: %v", r.id, err)
 		return
 	}
 	if !ok {
 		return
 	}
 
-	// Count the own ballot before broadcasting: loopback delivery is not
-	// guaranteed (addVote dedups if it does loop back), and the ballot
+	// Count the own vote before broadcasting: loopback delivery is not
+	// guaranteed (addVote dedups if it does loop back), and the vote
 	// must count even when the broadcast fails.
 	r.addVote(v)
 	if err := r.member.Broadcast(v); err != nil {
-		log.Errorf("round %s: broadcast ballot: %v", r.id, err)
+		log.Errorf("round %s: broadcast vote: %v", r.id, err)
 	}
 }
 

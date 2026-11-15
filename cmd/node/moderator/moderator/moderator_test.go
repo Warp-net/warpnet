@@ -165,7 +165,7 @@ func assertUnavailable(t *testing.T, a assessment) {
 	if a.text != "" {
 		t.Fatalf("nothing was judged, so no reference may be kept: %q", a.text)
 	}
-	v := a.ballot
+	v := a.vote
 	if v.Result != domain.OK {
 		t.Fatal("an unreviewable report must carry an OK (no-op) result")
 	}
@@ -225,10 +225,10 @@ func TestAssessTweetReport_ValidTweetReachesEngine(t *testing.T) {
 	if rec.text != "hello world" {
 		t.Fatalf("engine got %q, want %q", rec.text, "hello world")
 	}
-	if v.ballot.Result != domain.OK {
+	if v.vote.Result != domain.OK {
 		t.Fatal("recordingEngine clears content, expected an OK verdict")
 	}
-	if v.ballot.ObjectID == nil || *v.ballot.ObjectID != "tweet-1" || v.ballot.UserID != "offender" {
+	if v.vote.ObjectID == nil || *v.vote.ObjectID != "tweet-1" || v.vote.UserID != "offender" {
 		t.Fatalf("verdict must carry the tweet identifiers, got %+v", v)
 	}
 }
@@ -461,11 +461,11 @@ func TestAssessTweetReport_AlreadyModeratedReusesVerdict(t *testing.T) {
 	if rec.called {
 		t.Fatal("engine must not re-run on an already moderated tweet")
 	}
-	if v.ballot.Result != domain.FAIL {
+	if v.vote.Result != domain.FAIL {
 		t.Fatal("the stored FAIL verdict must be reused")
 	}
-	if v.ballot.Reason == nil || *v.ballot.Reason != reason {
-		t.Fatalf("the stored reason must be reused, got %v", v.ballot.Reason)
+	if v.vote.Reason == nil || *v.vote.Reason != reason {
+		t.Fatalf("the stored reason must be reused, got %v", v.vote.Reason)
 	}
 }
 
@@ -489,7 +489,7 @@ func TestAssessUserReport_ValidProfileReachesEngine(t *testing.T) {
 	if rec.text != "troll\nsome bio" {
 		t.Fatalf("engine got %q, want the concatenated profile text", rec.text)
 	}
-	if v.ballot.Result != domain.OK || v.ballot.UserID != "user-1" {
+	if v.vote.Result != domain.OK || v.vote.UserID != "user-1" {
 		t.Fatalf("unexpected verdict %+v", v)
 	}
 }
@@ -566,9 +566,9 @@ func TestAssessUserReport_EmptyProfileTextYieldsUnavailable(t *testing.T) {
 
 // --- round.Participant implementation ---
 
-// Ballot stamps the round identity onto whatever the assessment produced,
-// so the round itself never has to know how a ballot is built.
-func TestBallot_StampsRoundIdentity(t *testing.T) {
+// Vote stamps the round identity onto whatever the assessment produced,
+// so the round itself never has to know how a vote is built.
+func TestVote_StampsRoundIdentity(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false, reason: "Hate"})
 
 	node := stubModeratorNode{
@@ -577,29 +577,29 @@ func TestBallot_StampsRoundIdentity(t *testing.T) {
 	}
 	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
 
-	v, ok, err := m.Ballot("round-42", tweetReport("tweet-1"))
+	v, ok, err := m.Vote("round-42", tweetReport("tweet-1"))
 	if err != nil || !ok {
-		t.Fatalf("Ballot: %v ok=%t", err, ok)
+		t.Fatalf("Vote: %v ok=%t", err, ok)
 	}
 	if v.ReportID != "round-42" {
-		t.Fatalf("the ballot must carry the round id, got %q", v.ReportID)
+		t.Fatalf("the vote must carry the round id, got %q", v.ReportID)
 	}
 	if v.ModeratorID != m.selfID() {
-		t.Fatalf("the ballot must be cast under this node's id, got %q", v.ModeratorID)
+		t.Fatalf("the vote must be cast under this node's id, got %q", v.ModeratorID)
 	}
 	if v.Type != domain.ModerationTweetType || v.Result != domain.FAIL {
-		t.Fatalf("unexpected ballot %+v", v)
+		t.Fatalf("unexpected vote %+v", v)
 	}
 }
 
-func TestBallot_UnsupportedTypeAbstains(t *testing.T) {
+func TestVote_UnsupportedTypeAbstains(t *testing.T) {
 	withEngine(t, fixedEngine{ok: false})
 
 	m, _ := newTestModerator(t, stubModeratorNode{id: "mod-self"}, stubPublisher{}, nil)
 
 	rep := tweetReport("tweet-1")
 	rep.Type = domain.ModerationImageType
-	if _, ok, err := m.Ballot("round-1", rep); ok || err != nil {
+	if _, ok, err := m.Vote("round-1", rep); ok || err != nil {
 		t.Fatalf("an unsupported report type must abstain, got ok=%t err=%v", ok, err)
 	}
 }
@@ -626,7 +626,7 @@ func decidedFixture(t *testing.T, privKey ed25519.PrivateKey) (*Moderator, *reco
 	return m, pub, delivered, deliveredTo
 }
 
-func decidedBallot(result domain.ModerationResult, reason string) vote.Event {
+func decidedVote(result domain.ModerationResult, reason string) vote.Event {
 	objectID := domain.ID("tweet-1")
 	return vote.Event{
 		ReportID: "round-1", Type: domain.ModerationTweetType,
@@ -647,7 +647,7 @@ func TestDecided_FailNotifiesReporterAndIsolates(t *testing.T) {
 	rep.ReporterNodeID = "reporter-node-1"
 	votes := []event.VerdictVote{{ModeratorID: "mod-a"}, {ModeratorID: "mod-b"}, {ModeratorID: "mod-c"}}
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), votes)
+	m.Decided(rep, decidedVote(domain.FAIL, "Hate"), votes)
 
 	if len(*delivered) != 1 {
 		t.Fatalf("expected exactly one reporter delivery, got %d", len(*delivered))
@@ -659,7 +659,7 @@ func TestDecided_FailNotifiesReporterAndIsolates(t *testing.T) {
 	if got.Verdict != domain.FAIL || len(got.Votes) != 3 {
 		t.Fatalf("the verdict must carry the outcome and its votes, got %+v", got)
 	}
-	// The verdict goes out under THIS node's identity, not the ballot's.
+	// The verdict goes out under THIS node's identity, not the vote's.
 	if got.ModeratorID != m.selfID() {
 		t.Fatalf("expected the deciding node's id, got %q", got.ModeratorID)
 	}
@@ -678,7 +678,7 @@ func TestDecided_OkNotifiesReporterWithoutIsolation(t *testing.T) {
 	rep.ReporterID = "reporter-1"
 	rep.ReporterNodeID = "reporter-node-1"
 
-	m.Decided(rep, decidedBallot(domain.OK, ""), []event.VerdictVote{{ModeratorID: "mod-a"}})
+	m.Decided(rep, decidedVote(domain.OK, ""), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	if len(*delivered) != 1 || (*delivered)[0].Verdict != domain.OK {
 		t.Fatalf("the reporter must hear the OK verdict, got %+v", *delivered)
@@ -693,7 +693,7 @@ func TestDecided_OkNotifiesReporterWithoutIsolation(t *testing.T) {
 func TestDecided_NoReporterStillIsolates(t *testing.T) {
 	m, pub, delivered, _ := decidedFixture(t, nil)
 
-	m.Decided(tweetReport("tweet-1"), decidedBallot(domain.FAIL, "Hate"), []event.VerdictVote{{ModeratorID: "mod-a"}})
+	m.Decided(tweetReport("tweet-1"), decidedVote(domain.FAIL, "Hate"), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	if len(*delivered) != 0 {
 		t.Fatalf("without a reporter node there is nobody to notify, got %+v", *delivered)
@@ -735,11 +735,11 @@ func TestDecided_FilesTheJudgedTextAsReference(t *testing.T) {
 	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
 
 	rep := tweetReport("tweet-1")
-	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
-		t.Fatalf("Ballot: %v ok=%t", err, ok)
+	if _, ok, err := m.Vote(rep.ReportID(), rep); err != nil || !ok {
+		t.Fatalf("Vote: %v ok=%t", err, ok)
 	}
 
-	m.Decided(rep, decidedBallot(domain.FAIL, "Hate"), []event.VerdictVote{{ModeratorID: "mod-a"}})
+	m.Decided(rep, decidedVote(domain.FAIL, "Hate"), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	_, unsafe := m.corpus.Len()
 	if unsafe != 1 {
@@ -749,7 +749,7 @@ func TestDecided_FilesTheJudgedTextAsReference(t *testing.T) {
 
 // A round this node never voted on leaves no reference: it never fetched
 // the text, so it has nothing to vouch for.
-func TestFileReference_WithoutOwnBallotIsNoop(t *testing.T) {
+func TestFileReference_WithoutOwnVoteIsNoop(t *testing.T) {
 	m, _ := newTestModerator(t, stubModeratorNode{id: "mod-self"}, stubPublisher{}, nil)
 
 	m.fileReference("some-round-nobody-here-voted-on", domain.FAIL)
@@ -771,19 +771,19 @@ func TestHandleVote_FinalFilesTheReference(t *testing.T) {
 	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
 
 	rep := tweetReport("tweet-1")
-	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
-		t.Fatalf("Ballot: %v ok=%t", err, ok)
+	if _, ok, err := m.Vote(rep.ReportID(), rep); err != nil || !ok {
+		t.Fatalf("Vote: %v ok=%t", err, ok)
 	}
 
-	// The chair's ballot reaches this node before its Final, so the round
+	// The chair's vote reaches this node before its Final, so the round
 	// holds a vote from the announcer; without it the Final is treated as
 	// forged and ignored.
-	chairBallot := vote.Event{
+	chairVote := vote.Event{
 		ReportID: rep.ReportID(), Type: domain.ModerationTweetType,
 		Result: domain.OK, ModeratorID: "some-chair",
 	}
-	if err := m.handleVote(chairBallot); err != nil {
-		t.Fatalf("handleVote ballot: %v", err)
+	if err := m.handleVote(chairVote); err != nil {
+		t.Fatalf("handleVote: %v", err)
 	}
 
 	final := vote.Event{
@@ -800,7 +800,7 @@ func TestHandleVote_FinalFilesTheReference(t *testing.T) {
 }
 
 // Unreviewable content judged nothing, so it must never become a reference.
-func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
+func TestVote_UnreviewableLeavesNoReference(t *testing.T) {
 	rec := &recordingEngine{}
 	withEngine(t, rec)
 
@@ -808,10 +808,10 @@ func TestBallot_UnreviewableLeavesNoReference(t *testing.T) {
 	m, _ := newTestModerator(t, node, stubPublisher{}, nil)
 
 	rep := tweetReport("tweet-1")
-	if _, ok, err := m.Ballot(rep.ReportID(), rep); err != nil || !ok {
-		t.Fatalf("Ballot: %v ok=%t", err, ok)
+	if _, ok, err := m.Vote(rep.ReportID(), rep); err != nil || !ok {
+		t.Fatalf("Vote: %v ok=%t", err, ok)
 	}
-	m.Decided(rep, decidedBallot(domain.OK, ""), []event.VerdictVote{{ModeratorID: "mod-a"}})
+	m.Decided(rep, decidedVote(domain.OK, ""), []event.VerdictVote{{ModeratorID: "mod-a"}})
 
 	if safe, unsafe := m.corpus.Len(); safe != 0 || unsafe != 0 {
 		t.Fatalf("nothing was judged, so nothing may be referenced: %d/%d", safe, unsafe)

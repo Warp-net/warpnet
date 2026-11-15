@@ -68,7 +68,7 @@ func TestTroikaIntegration_ForeignFinalRejected(t *testing.T) {
 	t.Cleanup(func() { _ = reporterPS.Close() })
 	require.NoError(t, reporterPS.Gossip().SubscribeRaw(event.ReportsTopic, func([]byte) error { return nil }))
 
-	// The attacker is an ordinary member node: no engine, no ballot, no role.
+	// The attacker is an ordinary member node: no engine, no vote, no role.
 	// It only listens to the two moderation topics to learn the round id.
 	attackerHost := newTroikaHost(t)
 	hosts = append(hosts, attackerHost)
@@ -125,13 +125,13 @@ func TestTroikaIntegration_ForeignFinalRejected(t *testing.T) {
 	}))
 	opened := time.Now()
 
-	// Wait until the attacker has seen the report and all three ballots, so
+	// Wait until the attacker has seen the report and all three votes, so
 	// the rounds are open and fully voted when the forged Final lands.
 	require.Eventually(t, func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return reportID != "" && len(voters) == 3
-	}, window/2, 100*time.Millisecond, "the attacker never saw the report and all three ballots")
+	}, window/2, 100*time.Millisecond, "the attacker never saw the report and all three votes")
 
 	// A Final the attacker was never entitled to, with the verdict reversed.
 	mu.Lock()
