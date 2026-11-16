@@ -205,7 +205,40 @@ class WarpnetClient(
      * Protocol-level errors (4xx-style ResponseError) propagate
      * immediately, except a rate-limited one, which is retried.
      */
-    suspend fun request(protocolId: String, bodyJson: String): String = withContext(Dispatchers.IO) {
+    suspend fun request(protocolId: String, bodyJson: String): String = retrying {
+        binding.stream(protocolId, signedEnvelopeJson(protocolId, bodyJson))
+    }
+
+    /**
+     * Like [request] for large responses such as videos: the response comes
+     * back as bytes, without the string copies. A small response is checked
+     * for a ResponseError like [request] does.
+     */
+    suspend fun requestBytes(protocolId: String, bodyJson: String): ByteArray {
+        var response = ByteArray(0)
+        retrying {
+            response = binding.streamBytes(protocolId, signedEnvelopeJson(protocolId, bodyJson))
+            if (response.size < SMALL_RESPONSE_BYTES) String(response, Charsets.UTF_8) else ""
+        }
+        return response
+    }
+
+    // Rebuilt + re-signed on each attempt so the timestamp matches the wire
+    // and the signature stays valid against the freshly-sent body.
+    private fun signedEnvelopeJson(protocolId: String, bodyJson: String): String {
+        val instant = Instant.now()
+        val timestamp = DateTimeFormatter.ISO_INSTANT.format(instant)
+        val epochNanos = instant.epochSecond * 1_000_000_000L + instant.nano
+        val envelope = WarpnetEnvelope.unsigned(
+            body = bodyJson,
+            nodeId = signer.peerId,
+            path = protocolId,
+            timestamp = timestamp,
+        ).copy(signature = signer.sign(bodyJson + epochNanos + protocolId))
+        return buildEnvelopeJson(envelope)
+    }
+
+    private suspend fun retrying(send: () -> String): String = withContext(Dispatchers.IO) {
         // No mutex: the Go binding's libp2p host is thread-safe and yamux
         // multiplexes concurrent streams over the single connection.
         // Serialising here made every refresh block behind the slowest
@@ -219,21 +252,7 @@ class WarpnetClient(
             if (_state.value !is ConnectionState.Connected) {
                 throw WarpnetException.NotConnected()
             }
-            // Rebuild + re-sign the envelope each attempt so the
-            // timestamp matches the wire and the signature stays valid
-            // against the freshly-sent body.
-            val instant = Instant.now()
-            val timestamp = DateTimeFormatter.ISO_INSTANT.format(instant)
-            val epochNanos = instant.epochSecond * 1_000_000_000L + instant.nano
-            val envelope = WarpnetEnvelope.unsigned(
-                body = bodyJson,
-                nodeId = signer.peerId,
-                path = protocolId,
-                timestamp = timestamp,
-            ).copy(signature = signer.sign(bodyJson + epochNanos + protocolId))
-
-            val requestJson = buildEnvelopeJson(envelope)
-            val raw = binding.stream(protocolId, requestJson)
+            val raw = send()
 
             try {
                 throwIfErrorResponse(raw)
@@ -369,6 +388,9 @@ class WarpnetClient(
         // a paged getTimeline still returns within ~30s on a flaky link
         // before the ViewModel decides to show "an error occurred".
         val STREAM_RETRY_BACKOFFS = longArrayOf(500L, 1_500L, 4_000L, 8_000L)
+
+        // Below this a bytes response may be a ResponseError rather than a video.
+        const val SMALL_RESPONSE_BYTES = 64 * 1024
     }
 }
 
@@ -380,6 +402,13 @@ interface WarpnetBinding {
     fun initialize(privKeyHex: String, warpNetwork: String, pskHex: String, bootstrapNodes: String): String
     fun connect(addrInfo: String): String
     fun stream(protocolId: String, data: String): String
+
+    /**
+     * Like [stream], but the response, or the error text, stays bytes; see
+     * warpdroid/node/mobile.go:Stream.
+     */
+    fun streamBytes(protocolId: String, data: String): ByteArray = stream(protocolId, data).toByteArray()
+
     fun peerId(): String
     fun isConnected(): Boolean
     /**
@@ -446,7 +475,10 @@ object DefaultBinding : WarpnetBinding {
         node.Node.connect(addrInfo)
 
     override fun stream(protocolId: String, data: String): String =
-        node.Node.stream(protocolId, data)
+        String(streamBytes(protocolId, data), Charsets.UTF_8)
+
+    override fun streamBytes(protocolId: String, data: String): ByteArray =
+        node.Node.stream(protocolId, data) ?: ByteArray(0)
 
     override fun peerId(): String = node.Node.peerID()
 

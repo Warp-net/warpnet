@@ -15,7 +15,11 @@ import WarpnetTransport
     }
 
     func stream(protocolId: String, data: String) -> String {
-      NodeStream(protocolId, data)
+      String(decoding: streamBytes(protocolId: protocolId, data: data), as: UTF8.self)
+    }
+
+    func streamBytes(protocolId: String, data: String) -> Data {
+      NodeStream(protocolId, data) ?? Data()
     }
 
     func peerId() -> String {
