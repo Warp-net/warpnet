@@ -34,51 +34,8 @@ func TestGatewayNodeID(t *testing.T) {
 	SetGatewayNodeID("")
 	require.Equal(t, DefaultGatewayNodeID, GatewayNodeID(), "an empty id must not clear the default")
 
-	SetGatewayNodeID(LegacyGatewayNodeID)
-	require.Equal(t, DefaultGatewayNodeID, GatewayNodeID(), "the public legacy id must never be trusted")
-
 	SetGatewayNodeID("12D3KooWCustomGateway")
 	require.Equal(t, "12D3KooWCustomGateway", GatewayNodeID())
-}
-
-type stubMigrator struct {
-	pages   [][]domain.User
-	updated []domain.User
-}
-
-func (s *stubMigrator) List(_ *uint64, cursor *string) ([]domain.User, string, error) {
-	i := 0
-	if cursor != nil && *cursor != "" {
-		i = int((*cursor)[0] - '0')
-	}
-	if i >= len(s.pages) {
-		return nil, "end", nil
-	}
-	next := "end"
-	if i+1 < len(s.pages) {
-		next = string(rune('0' + i + 1))
-	}
-	return s.pages[i], next, nil
-}
-
-func (s *stubMigrator) Update(_ string, newUser domain.User) (domain.User, error) {
-	s.updated = append(s.updated, newUser)
-	return newUser, nil
-}
-
-func TestMigrateLegacyGatewayUsers(t *testing.T) {
-	repo := &stubMigrator{pages: [][]domain.User{
-		{{Id: "a@mastodon.social", NodeId: LegacyGatewayNodeID, RoundTripTime: 7}, {Id: "warp", NodeId: "12D3KooWMember"}},
-		{{Id: "b@threads.net", NodeId: LegacyGatewayNodeID}},
-	}}
-	n, err := MigrateLegacyGatewayUsers(repo)
-	require.NoError(t, err)
-	require.Equal(t, 2, n)
-	require.Len(t, repo.updated, 2)
-	for _, u := range repo.updated {
-		require.Equal(t, GatewayNodeID(), u.NodeId)
-	}
-	require.Equal(t, int64(7), repo.updated[0].RoundTripTime, "the rest of the profile must be kept")
 }
 
 func TestSeedEntryUser(t *testing.T) {

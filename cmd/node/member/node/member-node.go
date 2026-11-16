@@ -118,6 +118,15 @@ func NewMemberNode(
 	if gw, err := database.NewSettingsRepo(db).GetGatewaySettings(); err == nil {
 		fediverse.SetGatewayNodeID(gw.NodeID)
 	}
+	// The default gateway's libp2p key comes from a public seed: trust a
+	// connection to it only once it proves the gateway's RSA key.
+	if fediverse.GatewayNodeID() == fediverse.DefaultGatewayNodeID {
+		prover, perr := fediverse.NewGatewayProver(privKey, fediverse.DefaultGatewayPublicKeyPEM)
+		if perr != nil {
+			return nil, perr
+		}
+		warpnet.RequireConnProof(warpnet.FromStringToPeerID(fediverse.DefaultGatewayNodeID), prover)
+	}
 
 	rateLimits, _ := database.NewSettingsRepo(db).GetRateLimitSettings()
 
@@ -147,11 +156,6 @@ func NewMemberNode(
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
-	if n, err := fediverse.MigrateLegacyGatewayUsers(database.NewUserRepo(db)); err != nil {
-		log.Errorf("member: migrating legacy gateway users: %v", err)
-	} else if n > 0 {
-		log.Infof("member: moved %d users off the legacy gateway id", n)
-	}
 
 	notifier := notifications.New(
 		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),
@@ -282,6 +286,8 @@ func (m *MemberNode) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("member: failed to initialize rating store: %w", err)
 	}
+
+	m.node.Node().Network().Notify(warpnet.ForgetConnNotifiee())
 
 	m.rating, err = rating.NewEngine(
 		m.ctx, m.ratingDb, m.node.Node().Network(), m.privKey, warpnet.MemberNode,

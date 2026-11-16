@@ -100,6 +100,7 @@ const (
 	PUBLIC_GET_WALLET_ADDRESS          = "/public/get/wallet/address/0.0.0"
 	PUBLIC_GET_FOLLOWERS               = "/public/get/followers/0.0.0"
 	PUBLIC_GET_INFO                    = "/public/get/info/0.0.0"
+	PUBLIC_GET_GATEWAY_PROOF           = "/public/get/gateway/proof/0.0.0"
 	PUBLIC_GET_TWEET                   = "/public/get/tweet/0.0.0"
 	PUBLIC_GET_TWEET_STATS             = "/public/get/tweetstats/0.0.0"
 	PUBLIC_GET_TWEETS                  = "/public/get/tweets/0.0.0"

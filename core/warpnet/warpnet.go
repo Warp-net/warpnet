@@ -255,6 +255,11 @@ func VerifyAuthorship(s WarpStream, actorNodeId string) error {
 		return ErrForeignAuthor
 	}
 	if actorNodeId == s.Conn().RemotePeer().String() {
+		ctx, cancel := context.WithTimeout(context.Background(), connProofTimeout)
+		defer cancel()
+		if err := ProveConn(ctx, s.Conn()); err != nil {
+			return ErrForeignAuthor
+		}
 		return nil
 	}
 	p, ok := s.(PairedAliasStream)

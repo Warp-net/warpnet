@@ -120,7 +120,7 @@ func StreamGetGatewaySettingsHandler(
 		if err != nil {
 			return nil, err
 		}
-		if settings.NodeID == "" || settings.NodeID == fediverse.LegacyGatewayNodeID {
+		if settings.NodeID == "" {
 			settings.NodeID = fediverse.DefaultGatewayNodeID
 		}
 		return event.GetGatewaySettingsResponse(settings), nil
@@ -135,7 +135,7 @@ func StreamUpdateGatewaySettingsHandler(
 		if err := json.Unmarshal(buf, &ev); err != nil {
 			return nil, err
 		}
-		if ev.NodeID == "" || ev.NodeID == fediverse.LegacyGatewayNodeID {
+		if ev.NodeID == "" {
 			ev.NodeID = fediverse.DefaultGatewayNodeID
 		}
 		if err := repo.SetGatewaySettings(ev); err != nil {

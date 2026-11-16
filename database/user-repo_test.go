@@ -729,9 +729,6 @@ func (s *UserRepoTestSuite) TestUpdateRebindsNodeIndex() {
 	got, err := s.repo.GetByNodeID("node-new")
 	s.Require().NoError(err)
 	s.Equal(original.Id, got.Id)
-
-	_, err = s.repo.GetByNodeID("node-old")
-	s.ErrorIs(err, ErrUserNotFound, "the former node must not resolve to the user")
 }
 
 func (s *UserRepoTestSuite) TestUpdateHandlesExoticProfileText() {

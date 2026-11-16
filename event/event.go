@@ -775,6 +775,18 @@ type GetNotificationSettingsResponse = domain.NotificationSettings
 // UpdateNotificationSettingsEvent defines model for UpdateNotificationSettingsEvent.
 type UpdateNotificationSettingsEvent = domain.NotificationSettings
 
+// GatewayProofEvent asks the ActivityPub gateway to sign Nonce (base64) with
+// its RSA key, proving the connection reaches the real gateway.
+type GatewayProofEvent struct {
+	Nonce string `json:"nonce"`
+}
+
+// GatewayProofResponse carries the base64 RSA PKCS#1 v1.5 SHA-256 signature
+// over fediverse.GatewayProofBytes.
+type GatewayProofResponse struct {
+	Signature string `json:"signature"`
+}
+
 // GetGatewaySettingsEvent defines model for GetGatewaySettingsEvent.
 type GetGatewaySettingsEvent struct{}
 

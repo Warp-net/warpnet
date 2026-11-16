@@ -106,19 +106,6 @@ func TestStreamUpdateNotificationSettingsHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy node id is replaced by default", func(t *testing.T) {
-		var saved domain.GatewaySettings
-		h := StreamUpdateGatewaySettingsHandler(stubGatewayRepo{
-			setFn: func(gs domain.GatewaySettings) error { saved = gs; return nil },
-		})
-		if _, err := h(marshal(t, event.UpdateGatewaySettingsEvent{NodeID: fediverse.LegacyGatewayNodeID}), nil); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if saved.NodeID != fediverse.DefaultGatewayNodeID {
-			t.Fatalf("expected default node id persisted, got %+v", saved)
-		}
-	})
-
 	t.Run("repo error surfaces", func(t *testing.T) {
 		repoErr := errors.New("db failed")
 		h := StreamUpdateNotificationSettingsHandler(stubSettingsRepo{
@@ -167,21 +154,6 @@ func TestStreamGetGatewaySettingsHandler(t *testing.T) {
 
 	t.Run("defaults when unset", func(t *testing.T) {
 		h := StreamGetGatewaySettingsHandler(stubGatewayRepo{})
-		resp, err := h([]byte("{}"), nil)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if resp.(event.GetGatewaySettingsResponse).NodeID != fediverse.DefaultGatewayNodeID {
-			t.Fatalf("expected default node id, got %+v", resp)
-		}
-	})
-
-	t.Run("legacy node id reads as default", func(t *testing.T) {
-		h := StreamGetGatewaySettingsHandler(stubGatewayRepo{
-			getFn: func() (domain.GatewaySettings, error) {
-				return domain.GatewaySettings{NodeID: fediverse.LegacyGatewayNodeID}, nil
-			},
-		})
 		resp, err := h([]byte("{}"), nil)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)

@@ -169,7 +169,8 @@ func (p *streamPool) sendWithRetry(serverInfo warpnet.WarpAddrInfo, r WarpRoute,
 		log.Debugf("stream: peer %s: %s: retrying after a lost response", serverInfo.ID, r)
 		bt, err = p.send(serverInfo, r, bodyBytes, msgID)
 	}
-	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) {
+	if err == nil || errors.Is(err, warpnet.ErrNodeIsOffline) || errors.Is(err, ErrResponseRead) ||
+		errors.Is(err, warpnet.ErrConnNotProven) {
 		return bt, err
 	}
 
@@ -229,6 +230,9 @@ func (p *streamPool) send(
 		return nil, fmt.Errorf("stream: new: %w", err)
 	}
 	defer closeStream(stream)
+	if perr := warpnet.ProveConn(ctx, stream.Conn()); perr != nil {
+		return nil, fmt.Errorf("stream: %s: %w", serverInfo.ID, perr)
+	}
 
 	if msgID == "" {
 		msgID = ulid.Make().String()
