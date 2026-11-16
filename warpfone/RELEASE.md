@@ -16,8 +16,40 @@ The workflow reads these repository secrets:
 - `APPLE_TEAM_ID`: the developer team that owns the `site.warpnet.warpfone`
   bundle ids and the `group.site.warpnet.warpfone` app group.
 - `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`: an App Store Connect API key
-  with the App Manager role, and the contents of its `.p8` file. Xcode uses it
-  to create the signing certificates and profiles and to upload the build.
+  with the App Manager role, and the contents of its `.p8` file. It fetches
+  or creates the App Store profiles and uploads the build.
+- `DIST_CERT_P12`, `DIST_CERT_PASSWORD`: the Apple Distribution certificate
+  with its private key as a base64-encoded `.p12`, and its password.
+
+The archive is signed manually: automatic signing needs a development
+profile, which Apple issues only to teams with registered devices.
+
+### Signing setup
+
+Done once, and again when the certificate expires. No Mac is needed.
+
+1. In Certificates, Identifiers & Profiles, register the app group
+   `group.site.warpnet.warpfone` and the App IDs `site.warpnet.warpfone`,
+   `site.warpnet.warpfone.ShareExtension` and
+   `site.warpnet.warpfone.ActionExtension`. Enable App
+   Groups (with that group) on the app and the share extension, and Fonts on
+   the app.
+2. Create the certificate signing request and the private key:
+
+   ```bash
+   openssl req -new -newkey rsa:2048 -nodes -keyout dist.key -out dist.csr -subj "/CN=Warpnet Distribution"
+   ```
+
+3. Under Certificates, add an Apple Distribution certificate from `dist.csr`
+   and download `distribution.cer`. Pack it with the key:
+
+   ```bash
+   openssl x509 -inform DER -in distribution.cer -out dist.pem
+   openssl pkcs12 -export -legacy -inkey dist.key -in dist.pem -out dist.p12
+   ```
+
+4. Store `base64 -w0 dist.p12` and the export password as the secrets above.
+   Delete `dist.key` and `dist.p12`.
 
 ## Export compliance
 
