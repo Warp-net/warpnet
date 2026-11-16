@@ -12,9 +12,6 @@ import UserNotifications
 enum BackgroundRefresh {
   static let identifier = "site.warpnet.warpfone.refresh"
   private static let interval: TimeInterval = 15 * 60
-  // iOS gives a refresh about 30 seconds; queued posts wait for the next one
-  // when the node took most of them.
-  private static let publishBudget: TimeInterval = 15
 
   static func register() {
     BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { task in
@@ -37,9 +34,8 @@ enum BackgroundRefresh {
 
   private static func run(_ pending: PendingTask) {
     schedule()
-    let started = Date()
     let work = Task { @MainActor in
-      pending.complete(success: await refresh(startedAt: started))
+      pending.complete(success: await refresh())
     }
     // The node's calls can't be cancelled, so the task is completed here
     // rather than when they return.
@@ -49,7 +45,7 @@ enum BackgroundRefresh {
     }
   }
 
-  private static func refresh(startedAt: Date) async -> Bool {
+  private static func refresh() async -> Bool {
     let pairing = PairingModel.shared
     let accounts = AppAccountsManager.shared
     if accounts.currentClient.isAuth {
@@ -62,9 +58,6 @@ enum BackgroundRefresh {
     let notifications = try? await client.pushes(after: UserDefaults.standard.string(forKey: StreamWatcher.lastSeenPushKey))
     if let notifications, !Task.isCancelled {
       await deliver(notifications)
-    }
-    if !Task.isCancelled, Date().timeIntervalSince(startedAt) < publishBudget {
-      await SharedPostPublisher.publish(with: client)
     }
     if UIApplication.shared.applicationState == .background {
       await pairing.pause()

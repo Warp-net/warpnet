@@ -47,7 +47,6 @@ struct WarpnetApp: App {
       await currentInstance.fetchCurrentInstance()
       watcher.setClient(client: client)
       watcher.watch()
-      await SharedPostPublisher.publish(with: client)
     }
   }
 
@@ -63,7 +62,6 @@ struct WarpnetApp: App {
       Task {
         await pairing.resume()
         watcher.watch()
-        await SharedPostPublisher.publish(with: appAccountsManager.currentClient)
       }
     default:
       break

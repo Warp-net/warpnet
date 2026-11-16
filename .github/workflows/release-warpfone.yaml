@@ -55,9 +55,9 @@ jobs:
 
       # Automatic signing archives with a development profile, which Apple
       # issues only to teams with registered devices, so the archive is signed
-      # manually with a stored distribution certificate and App Store profiles
+      # manually with a stored distribution certificate and an App Store profile
       # that sigh fetches, or creates, through the App Store Connect key.
-      - name: Install the distribution certificate and profiles
+      - name: Install the distribution certificate and profile
         env:
           FASTLANE_OPT_OUT_USAGE: "YES"
           FASTLANE_SKIP_UPDATE_CHECK: "YES"
@@ -82,24 +82,18 @@ jobs:
             "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" "$RUNNER_TEMP/asc/api_key.json"
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles" \
                    "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-          for pair in PROFILE_APP=site.warpnet.warpfone \
-                      PROFILE_SHARE_EXTENSION=site.warpnet.warpfone.ShareExtension \
-                      PROFILE_ACTION_EXTENSION=site.warpnet.warpfone.ActionExtension; do
-            var="${pair%%=*}"
-            profile="$RUNNER_TEMP/$var.mobileprovision"
-            fastlane run get_provisioning_profile \
-              app_identifier:"${pair#*=}" \
-              api_key_path:"$RUNNER_TEMP/asc/api_key.json" \
-              output_path:"$RUNNER_TEMP" \
-              filename:"$var.mobileprovision" \
-              skip_install:true
-            security cms -D -i "$profile" > "$profile.plist"
-            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile.plist")"
-            name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile.plist")"
-            cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
-            cp "$profile" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"
-            echo "${var}_NAME=$name" >> "$GITHUB_ENV"
-          done
+          profile="$RUNNER_TEMP/PROFILE_APP.mobileprovision"
+          fastlane run get_provisioning_profile \
+            app_identifier:site.warpnet.warpfone \
+            api_key_path:"$RUNNER_TEMP/asc/api_key.json" \
+            output_path:"$RUNNER_TEMP" \
+            filename:PROFILE_APP.mobileprovision \
+            skip_install:true
+          security cms -D -i "$profile" > "$profile.plist"
+          uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile.plist")"
+          cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+          cp "$profile" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"
+          echo "PROFILE_APP_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile.plist")" >> "$GITHUB_ENV"
 
       - name: Archive
         run: |
@@ -114,9 +108,7 @@ jobs:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
             'PROVISIONING_PROFILE_SPECIFIER=$(WARPFONE_PROFILE_$(TARGET_NAME))' \
-            WARPFONE_PROFILE_WarpnetApp="$PROFILE_APP_NAME" \
-            WARPFONE_PROFILE_WarpnetShareExtension="$PROFILE_SHARE_EXTENSION_NAME" \
-            WARPFONE_PROFILE_WarpnetActionExtension="$PROFILE_ACTION_EXTENSION_NAME"
+            WARPFONE_PROFILE_WarpnetApp="$PROFILE_APP_NAME"
 
       - name: Upload to TestFlight
         run: |
@@ -139,10 +131,6 @@ jobs:
             <dict>
               <key>site.warpnet.warpfone</key>
               <string>$PROFILE_APP_NAME</string>
-              <key>site.warpnet.warpfone.ShareExtension</key>
-              <string>$PROFILE_SHARE_EXTENSION_NAME</string>
-              <key>site.warpnet.warpfone.ActionExtension</key>
-              <string>$PROFILE_ACTION_EXTENSION_NAME</string>
             </dict>
             <key>manageAppVersionAndBuildNumber</key>
             <false/>

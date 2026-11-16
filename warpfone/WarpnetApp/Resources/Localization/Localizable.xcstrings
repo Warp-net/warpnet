@@ -4553,36 +4553,6 @@
         }
       }
     },
-    "warpnet.share.hint" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Warpnet publishes this tweet the next time it reaches your node."
-          }
-        }
-      }
-    },
-    "warpnet.share.not-published" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tweet not published"
-          }
-        }
-      }
-    },
-    "warpnet.share.unconfirmed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tweet not confirmed"
-          }
-        }
-      }
-    },
     "warpnet.startup.account" : {
       "localizations" : {
         "en" : {

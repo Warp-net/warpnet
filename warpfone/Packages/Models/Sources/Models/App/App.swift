@@ -5,5 +5,4 @@ import Foundation
 public enum AppInfo {
   public static let scheme = "warpfone://"
   public static let weblink = "https://github.com/Warp-net/warpnet"
-  public static let appGroup = Bundle.main.object(forInfoDictionaryKey: "AppGroup") as? String
 }

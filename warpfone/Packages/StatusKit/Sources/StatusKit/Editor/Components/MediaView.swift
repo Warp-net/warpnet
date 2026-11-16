@@ -99,8 +99,6 @@ extension StatusEditor {
               makeRemoteMediaView(mediaAttachement: attachement)
             } else if container.image != nil {
               makeLocalImageView(container: container)
-            } else if viewModel.mode.isInShareExtension {
-              sharedMediaView
             } else if let error = container.error {
               makeErrorView(error: error)
             } else {
@@ -122,12 +120,12 @@ extension StatusEditor {
       ZStack(alignment: .center) {
         Image(uiImage: container.image!)
           .resizable()
-          .blur(radius: container.mediaAttachment == nil && !viewModel.mode.isInShareExtension ? 20 : 0)
+          .blur(radius: container.mediaAttachment == nil ? 20 : 0)
           .scaledToFill()
           .cornerRadius(8)
         if container.error != nil {
           Text("status.editor.error.upload")
-        } else if container.mediaAttachment == nil, !viewModel.mode.isInShareExtension {
+        } else if container.mediaAttachment == nil {
           ProgressView()
         }
       }
@@ -213,18 +211,6 @@ extension StatusEditor {
       viewModel.mediaContainers.removeAll {
         $0.id == container.id
       }
-    }
-
-    private var sharedMediaView: some View {
-      ZStack(alignment: .center) {
-        Rectangle()
-          .foregroundColor(theme.secondaryBackgroundColor)
-          .accessibilityHidden(true)
-        Image(systemName: "film")
-          .font(.largeTitle)
-          .foregroundStyle(.secondary)
-      }
-      .cornerRadius(8)
     }
 
     private var placeholderView: some View {
