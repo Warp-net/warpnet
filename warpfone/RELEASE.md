@@ -49,15 +49,11 @@ Done once, and again when the certificate expires. No Mac is needed.
 
 ## Export compliance
 
-The app declares `ITSAppUsesNonExemptEncryption`: the node encrypts its
-peer-to-peer traffic (Noise with X25519, ChaCha20-Poly1305 and Ed25519
-signatures) with its own code rather than only through Apple's networking
-stack. App Store Connect therefore asks for export compliance information on
-the first upload. The encryption is standard and the app is sold to the
-public, which usually fits the mass-market classification (ECCN 5D992.c) with
-an annual self-classification report to the US Bureau of Industry and
-Security; France requires a separate declaration for distribution there.
-Confirm the classification before the first external release.
+The node encrypts its peer-to-peer traffic with standard algorithms only
+(Noise with X25519, ChaCha20-Poly1305 and Ed25519 signatures), so the app sets
+`ITSAppUsesNonExemptEncryption` to false. With it set to true, App Store
+Connect refuses every upload that lacks the `ITSEncryptionExportComplianceCode`
+of approved encryption documentation.
 
 ## App Review
 
