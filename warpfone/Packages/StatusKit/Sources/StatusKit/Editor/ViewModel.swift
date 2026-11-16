@@ -113,7 +113,7 @@ extension StatusEditor {
     }
 
     var shouldDisablePollButton: Bool {
-      !mediaContainers.isEmpty || mode.isInShareExtension
+      !mediaContainers.isEmpty
     }
 
     var shouldDisplayDismissWarning: Bool {
@@ -123,7 +123,7 @@ extension StatusEditor {
         modifiedStatusText = String(modifiedStatusText.dropFirst(mentionString.count))
       }
 
-      return !modifiedStatusText.isEmpty && !mode.isInShareExtension
+      return !modifiedStatusText.isEmpty
     }
 
     var mentionsSuggestions: [Account] = []
@@ -172,7 +172,7 @@ extension StatusEditor {
                               poll: pollData,
                               quotedStatusId: quotedStatusId)
         switch mode {
-        case .new, .replyTo, .quote, .mention, .shareExtension, .redraft:
+        case .new, .replyTo, .quote, .mention, .redraft:
           postStatus = try await client.post(endpoint: Statuses.postStatus(json: data))
           if let postStatus {
             StreamWatcher.shared.emmitPostEvent(for: postStatus)
@@ -239,9 +239,6 @@ extension StatusEditor {
       switch mode {
       case .new:
         break
-      case let .shareExtension(items):
-        itemsProvider = items
-        processItemsProvider(items: items)
       case let .replyTo(status):
         var mentionString = ""
         if (status.reblog?.account.acct ?? status.account.acct) != currentAccount?.acct {
@@ -584,7 +581,6 @@ extension StatusEditor {
     }
 
     func upload(container: MediaContainer) async {
-      guard !mode.isInShareExtension else { return }
       if let index = indexOf(container: container) {
         let originalContainer = mediaContainers[index]
         guard originalContainer.mediaAttachment == nil else { return }
@@ -605,7 +601,7 @@ extension StatusEditor {
             if let index = indexOf(container: newContainer) {
               mediaContainers[index] = MediaContainer(
                 id: originalContainer.id,
-                image: mode.isInShareExtension ? originalContainer.image : nil,
+                image: nil,
                 movieTransferable: nil,
                 gifTransferable: nil,
                 mediaAttachment: uploadedMedia,
@@ -620,7 +616,7 @@ extension StatusEditor {
             if let index = indexOf(container: newContainer) {
               mediaContainers[index] = MediaContainer(
                 id: originalContainer.id,
-                image: mode.isInShareExtension ? originalContainer.image : nil,
+                image: nil,
                 movieTransferable: originalContainer.movieTransferable,
                 gifTransferable: nil,
                 mediaAttachment: uploadedMedia,
@@ -632,7 +628,7 @@ extension StatusEditor {
             if let index = indexOf(container: newContainer) {
               mediaContainers[index] = MediaContainer(
                 id: originalContainer.id,
-                image: mode.isInShareExtension ? originalContainer.image : nil,
+                image: nil,
                 movieTransferable: nil,
                 gifTransferable: originalContainer.gifTransferable,
                 mediaAttachment: uploadedMedia,
@@ -652,38 +648,6 @@ extension StatusEditor {
             )
           }
         }
-      }
-    }
-
-    func queueSharedPost() async -> Bool {
-      do {
-        let directory = SharedStore.directory
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let compressor = Compressor()
-        var files: [String] = []
-        for container in mediaContainers {
-          if let image = container.image {
-            let name = "\(UUID().uuidString).jpg"
-            try await compressor.compressImageForUpload(image).write(to: directory.appending(path: name))
-            files.append(name)
-          } else if let url = container.movieTransferable?.url,
-                    let compressed = await compressor.compressVideo(url)
-          {
-            let name = "\(UUID().uuidString).\(compressed.pathExtension.isEmpty ? "mp4" : compressed.pathExtension)"
-            try FileManager.default.copyItem(at: compressed, to: directory.appending(path: name))
-            files.append(name)
-          } else if let gif = container.gifTransferable?.data {
-            let name = "\(UUID().uuidString).gif"
-            try gif.write(to: directory.appending(path: name))
-            files.append(name)
-          }
-        }
-        try SharedStore.enqueue(SharedPost(content: statusText.string, mediaFiles: files))
-        return true
-      } catch {
-        postingError = error.localizedDescription
-        showPostingErrorAlert = true
-        return false
       }
     }
 

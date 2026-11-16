@@ -10,17 +10,6 @@ public extension StatusEditor.ViewModel {
     case redraft(status: Status)
     case quote(status: Status)
     case mention(account: Account)
-    case shareExtension(items: [NSItemProvider])
-
-    var isInShareExtension: Bool {
-      switch self {
-      case .shareExtension:
-        true
-      default:
-        false
-      }
-    }
-
     var isEditing: Bool {
       switch self {
       case .edit:
@@ -52,7 +41,7 @@ public extension StatusEditor.ViewModel {
 
     var title: LocalizedStringKey {
       switch self {
-      case .new, .mention, .shareExtension, .redraft:
+      case .new, .mention, .redraft:
         "status.editor.mode.new"
       case .edit:
         "status.editor.mode.edit"

@@ -45,14 +45,6 @@ extension StatusEditor {
             textInput
             pollView
             characterCountAndLangView
-            if viewModel.mode.isInShareExtension {
-              Text("warpnet.share.hint")
-                .font(.scaledFootnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, .layoutPadding)
-                .padding(.bottom, 8)
-            }
             MediaView(viewModel: viewModel)
             embeddedStatus
           }
@@ -70,15 +62,9 @@ extension StatusEditor {
     private var accountHeaderView: some View {
       if let account = currentAccount.account, !viewModel.mode.isEditing {
         HStack {
-          if viewModel.mode.isInShareExtension {
-            AppAccountsSelectorView(routerPath: RouterPath(),
-                                    accountCreationEnabled: false,
-                                    avatarConfig: .status)
-          } else {
-            AvatarView(account.avatar, config: AvatarView.FrameConfig.status)
-              .environment(theme)
-              .accessibilityHidden(true)
-          }
+          AvatarView(account.avatar, config: AvatarView.FrameConfig.status)
+            .environment(theme)
+            .accessibilityHidden(true)
 
           Text(account.safeDisplayName)
             .font(.scaledSubheadline)
@@ -181,13 +167,12 @@ extension StatusEditor {
       viewModel.theme = theme
       viewModel.preferences = preferences
       viewModel.prepareStatusText()
-      if !client.isAuth, !viewModel.mode.isInShareExtension {
+      if !client.isAuth {
         #if targetEnvironment(macCatalyst)
           dismissWindow()
         #else
           dismiss()
         #endif
-        NotificationCenter.default.post(name: .shareSheetClose, object: nil)
       }
     }
   }

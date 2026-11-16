@@ -407,3 +407,16 @@ carry that line, so they are named here instead.
   Packages/Env/Package.swift
   WarpnetApp.xcodeproj/project.pbxproj
   WarpnetApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+2026-11-16, extensions
+- The share and action extensions are gone with their targets, schemes and
+  directories, and so is everything that served them: the editor's share
+  mode, the queue of shared tweets (SharedPost.swift and
+  SharedPostPublisher.swift were deleted), the app group and the
+  shareSheetClose notification.
+- Files without the notice line:
+  WarpnetApp.xcodeproj/project.pbxproj
+  WarpnetApp/Info.plist
+  WarpnetApp/App/WarpnetApp.entitlements
+  WarpnetApp/App/WarpnetApp-release.entitlements
+  WarpnetApp/Resources/Localization/Localizable.xcstrings

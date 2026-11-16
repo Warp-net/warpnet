@@ -17,7 +17,7 @@ The workflow reads these repository secrets:
   bundle ids and the `group.site.warpnet.warpfone` app group.
 - `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`: an App Store Connect API key
   with the App Manager role, and the contents of its `.p8` file. It fetches
-  or creates the App Store profiles and uploads the build.
+  or creates the App Store profile and uploads the build.
 - `DIST_CERT_P12`, `DIST_CERT_PASSWORD`: the Apple Distribution certificate
   with its private key as a base64-encoded `.p12`, and its password.
 
@@ -28,12 +28,8 @@ profile, which Apple issues only to teams with registered devices.
 
 Done once, and again when the certificate expires. No Mac is needed.
 
-1. In Certificates, Identifiers & Profiles, register the app group
-   `group.site.warpnet.warpfone` and the App IDs `site.warpnet.warpfone`,
-   `site.warpnet.warpfone.ShareExtension` and
-   `site.warpnet.warpfone.ActionExtension`. Enable App
-   Groups (with that group) on the app and the share extension, and Fonts on
-   the app.
+1. In Certificates, Identifiers & Profiles, register the App ID
+   `site.warpnet.warpfone` with the Fonts capability.
 2. Create the certificate signing request and the private key:
 
    ```bash

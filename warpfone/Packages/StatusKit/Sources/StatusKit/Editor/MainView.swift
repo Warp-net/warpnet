@@ -14,7 +14,6 @@ import UIKit
 extension StatusEditor {
   @MainActor
   public struct MainView: View {
-    @Environment(AppAccountsManager.self) private var appAccounts
     @Environment(CurrentAccount.self) private var currentAccount
     @Environment(Theme.self) private var theme
 
@@ -100,15 +99,6 @@ extension StatusEditor {
           }
         )
         .interactiveDismissDisabled(mainSEVM.shouldDisplayDismissWarning)
-        .onChange(of: appAccounts.currentClient) { _, newValue in
-          if mainSEVM.mode.isInShareExtension {
-            currentAccount.setClient(client: newValue)
-            mainSEVM.client = newValue
-            for post in followUpSEVMs {
-              post.client = newValue
-            }
-          }
-        }
         .onDrop(of: [.image, .video, .gif, .mpeg4Movie, .quickTimeMovie, .movie],
                 delegate: focusedSEVM)
         .onChange(of: currentAccount.account?.id) {

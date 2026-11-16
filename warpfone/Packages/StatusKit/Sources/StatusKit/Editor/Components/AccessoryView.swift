@@ -105,14 +105,12 @@ extension StatusEditor {
       .disabled(viewModel.showPoll)
 
       
-      if !focusedSEVM.mode.isInShareExtension {
-        Button {
-          followUpSEVMs.append(ViewModel(mode: .new))
-        } label: {
-          Image(systemName: "arrowshape.turn.up.left.circle.fill")
-        }
-        .disabled(!canAddNewSEVM)
+      Button {
+        followUpSEVMs.append(ViewModel(mode: .new))
+      } label: {
+        Image(systemName: "arrowshape.turn.up.left.circle.fill")
       }
+      .disabled(!canAddNewSEVM)
 
       Spacer()
       
