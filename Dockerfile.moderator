@@ -21,7 +21,7 @@ ENV GOGC=50
 
 RUN go mod download
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    git submodule update --init --recursive && \
+    { ls core/moderation/*.go >/dev/null 2>&1 || git submodule update --init --recursive; } && \
     go build -tags=llama -ldflags "-s -w" -gcflags=all=-l -mod=mod  -v -o warpnet cmd/node/moderator/main.go
 
 CMD ["/warpnet/warpnet"]
