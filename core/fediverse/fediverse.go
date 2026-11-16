@@ -35,6 +35,7 @@ import (
 	"errors"
 	"strings"
 
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
 )
@@ -45,10 +46,14 @@ const (
 	MastodonNetwork = "mastodon"
 
 	// DefaultGatewayNodeID is the libp2p peer id of the ActivityPub gateway,
-	// deterministically derived from its fixed seed. It is the home node of
+	// deterministically derived from its secret seed. It is the home node of
 	// every bridged Mastodon user, and the fallback when the owner has not
 	// configured a different gateway in settings.
-	DefaultGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
+	DefaultGatewayNodeID = "NEW_GATEWAY_PEER_ID"
+	// LegacyGatewayNodeID is the gateway id derived from its former public
+	// seed: anyone can run a node with it, so it is never trusted and users
+	// homed on it are moved to the current gateway (MigrateLegacyGatewayUsers).
+	LegacyGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
 
 	// ThreadsNetwork is the User.Network tag for accounts bridged in from Meta's
 	// Threads. They arrive through the same gateway and behave the same locally,
@@ -92,13 +97,52 @@ var gatewayNodeID = DefaultGatewayNodeID
 func GatewayNodeID() string { return gatewayNodeID }
 
 // SetGatewayNodeID overrides the effective gateway peer id from the owner's
-// settings. Called once at startup, before seeding and discovery; an empty id
-// is ignored so DefaultGatewayNodeID stands.
+// settings. Called once at startup, before seeding and discovery; an empty or
+// legacy id is ignored so DefaultGatewayNodeID stands.
 func SetGatewayNodeID(id string) {
-	if id == "" {
+	if id == "" || id == LegacyGatewayNodeID {
 		return
 	}
 	gatewayNodeID = id
+}
+
+// UserMigrator is the subset of the user repository the legacy migration needs.
+type UserMigrator interface {
+	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	Update(userId string, newUser domain.User) (domain.User, error)
+}
+
+// MigrateLegacyGatewayUsers re-homes every stored user whose node is the
+// legacy gateway id onto the effective gateway, so authorship checks stop
+// trusting the publicly derivable key. Call it after SetGatewayNodeID.
+func MigrateLegacyGatewayUsers(repo UserMigrator) (int, error) {
+	limit := uint64(100)
+	var (
+		cursor string
+		legacy []domain.User
+	)
+	for {
+		users, cur, err := repo.List(&limit, &cursor)
+		if err != nil {
+			return 0, err
+		}
+		for _, u := range users {
+			if u.NodeId == LegacyGatewayNodeID {
+				legacy = append(legacy, u)
+			}
+		}
+		if len(users) == 0 || cur == "" || cur == local_store.EndCursor || cur == cursor {
+			break
+		}
+		cursor = cur
+	}
+	for _, u := range legacy {
+		u.NodeId = gatewayNodeID
+		if _, err := repo.Update(u.Id, u); err != nil {
+			return 0, err
+		}
+	}
+	return len(legacy), nil
 }
 
 // UserSeeder is the subset of the user repository the seeding needs.

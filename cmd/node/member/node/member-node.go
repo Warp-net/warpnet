@@ -147,6 +147,11 @@ func NewMemberNode(
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
+	if n, err := fediverse.MigrateLegacyGatewayUsers(database.NewUserRepo(db)); err != nil {
+		log.Errorf("member: migrating legacy gateway users: %v", err)
+	} else if n > 0 {
+		log.Infof("member: moved %d users off the legacy gateway id", n)
+	}
 
 	notifier := notifications.New(
 		notifications.NewStoreChannel(database.NewNotificationsRepo(db)),

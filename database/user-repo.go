@@ -377,6 +377,11 @@ func (repo *UserRepo) GetByNodeID(nodeID string) (user domain.User, err error) {
 	if err != nil {
 		return user, err
 	}
+	// The index outlives a node change (Update never drops the old entry): a
+	// user now homed elsewhere must not be resolved from their former node.
+	if user.NodeId != nodeID {
+		return domain.User{}, ErrUserNotFound
+	}
 
 	return user, nil
 }
