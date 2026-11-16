@@ -53,6 +53,52 @@ jobs:
           mkdir -p "$RUNNER_TEMP/asc"
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
 
+      # Automatic signing archives with a development profile, which Apple
+      # issues only to teams with registered devices, so the archive is signed
+      # manually with a stored distribution certificate and App Store profiles
+      # that sigh fetches, or creates, through the App Store Connect key.
+      - name: Install the distribution certificate and profiles
+        env:
+          DIST_CERT_P12: ${{ secrets.DIST_CERT_P12 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -hex 16)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$keychain" -P "$DIST_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm "$RUNNER_TEMP/dist.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+          command -v fastlane > /dev/null || brew install fastlane
+          python3 -c 'import json, os, sys; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": open(sys.argv[1]).read()}, open(sys.argv[2], "w"))' \
+            "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" "$RUNNER_TEMP/asc/api_key.json"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                   "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          for pair in PROFILE_APP=site.warpnet.warpfone \
+                      PROFILE_SHARE_EXTENSION=site.warpnet.warpfone.ShareExtension \
+                      PROFILE_ACTION_EXTENSION=site.warpnet.warpfone.ActionExtension; do
+            var="${pair%%=*}"
+            profile="$RUNNER_TEMP/$var.mobileprovision"
+            fastlane run get_provisioning_profile \
+              app_identifier:"${pair#*=}" \
+              api_key_path:"$RUNNER_TEMP/asc/api_key.json" \
+              output_path:"$RUNNER_TEMP" \
+              filename:"$var.mobileprovision" \
+              skip_install:true
+            security cms -D -i "$profile" > "$profile.plist"
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile.plist")"
+            name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile.plist")"
+            cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+            cp "$profile" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.mobileprovision"
+            echo "${var}_NAME=$name" >> "$GITHUB_ENV"
+          done
+
       - name: Archive
         run: |
           xcodebuild archive \
@@ -61,12 +107,14 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/warpfone.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            CODE_SIGN_IDENTITY="Apple Distribution"
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
+            'PROVISIONING_PROFILE_SPECIFIER=$(WARPFONE_PROFILE_$(TARGET_NAME))' \
+            WARPFONE_PROFILE_WarpnetApp="$PROFILE_APP_NAME" \
+            WARPFONE_PROFILE_WarpnetShareExtension="$PROFILE_SHARE_EXTENSION_NAME" \
+            WARPFONE_PROFILE_WarpnetActionExtension="$PROFILE_ACTION_EXTENSION_NAME"
 
       - name: Upload to TestFlight
         run: |
@@ -82,7 +130,18 @@ jobs:
             <key>teamID</key>
             <string>$TEAM_ID</string>
             <key>signingStyle</key>
-            <string>automatic</string>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>site.warpnet.warpfone</key>
+              <string>$PROFILE_APP_NAME</string>
+              <key>site.warpnet.warpfone.ShareExtension</key>
+              <string>$PROFILE_SHARE_EXTENSION_NAME</string>
+              <key>site.warpnet.warpfone.ActionExtension</key>
+              <string>$PROFILE_ACTION_EXTENSION_NAME</string>
+            </dict>
             <key>manageAppVersionAndBuildNumber</key>
             <false/>
           </dict>
@@ -97,6 +156,10 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-      - name: Remove the App Store Connect key
+      - name: Remove the signing material
         if: always()
-        run: rm -rf "$RUNNER_TEMP/asc"
+        run: |
+          rm -rf "$RUNNER_TEMP/asc" "$RUNNER_TEMP"/PROFILE_*
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then
+            security delete-keychain "$SIGNING_KEYCHAIN" || true
+          fi
