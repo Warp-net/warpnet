@@ -59,6 +59,8 @@ jobs:
       # that sigh fetches, or creates, through the App Store Connect key.
       - name: Install the distribution certificate and profiles
         env:
+          FASTLANE_OPT_OUT_USAGE: "YES"
+          FASTLANE_SKIP_UPDATE_CHECK: "YES"
           DIST_CERT_P12: ${{ secrets.DIST_CERT_P12 }}
           DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
         run: |
@@ -76,7 +78,7 @@ jobs:
           echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
           command -v fastlane > /dev/null || brew install fastlane
-          python3 -c 'import json, os, sys; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": open(sys.argv[1]).read()}, open(sys.argv[2], "w"))' \
+          python3 -c 'import json, os, sys; json.dump({"key_id": os.environ["ASC_KEY_ID"], "issuer_id": os.environ["ASC_ISSUER_ID"], "key": open(sys.argv[1]).read(), "in_house": False}, open(sys.argv[2], "w"))' \
             "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" "$RUNNER_TEMP/asc/api_key.json"
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles" \
                    "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
