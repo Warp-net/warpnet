@@ -120,7 +120,6 @@ class WarpnetRepository @Inject constructor(
     private val uploadVideoAdapter = moshi.adapter<site.warpnet.transport.dto.UploadVideoEvent>()
     private val uploadVideoRespAdapter = moshi.adapter<site.warpnet.transport.dto.UploadVideoResponse>()
     private val getVideoEventAdapter = moshi.adapter<site.warpnet.transport.dto.GetVideoEvent>()
-    private val getVideoRespAdapter = moshi.adapter<site.warpnet.transport.dto.GetVideoResponse>()
     private val pollVoteAdapter = moshi.adapter<site.warpnet.transport.dto.PollVoteEvent>()
     private val getPollAdapter = moshi.adapter<site.warpnet.transport.dto.GetPollEvent>()
     private val pollResultsAdapter = moshi.adapter<site.warpnet.transport.dto.PollResultsResponse>()
@@ -516,19 +515,37 @@ class WarpnetRepository @Inject constructor(
 
     suspend fun getVideoBytes(userId: String, key: String, chat: Boolean = false): ByteArray? {
         if (userId.isBlank() || key.isBlank()) return null
-        val raw = client.request(
+        val raw = client.requestBytes(
             if (chat) ProtocolIds.PUBLIC_GET_CHAT_VIDEO else ProtocolIds.PUBLIC_GET_VIDEO,
             getVideoEventAdapter.toJson(
                 site.warpnet.transport.dto.GetVideoEvent(userId = userId, key = key),
             ),
         )
-        val file = getVideoRespAdapter.fromJson(raw)?.file.orEmpty()
-        if (file.isEmpty()) return null
-        val comma = file.indexOf(',')
-        val b64 = if (comma >= 0) file.substring(comma + 1) else file
-        return runCatching { android.util.Base64.decode(b64, android.util.Base64.DEFAULT) }
+        // {"file":"data:video/mp4;base64,<base64>",...}: base64 holds no quote,
+        // so it is decoded in place instead of through a JSON string.
+        val file = raw.indexOf(VIDEO_FILE_FIELD)
+        if (file < 0) return null
+        val start = raw.indexOf(','.code.toByte(), file + VIDEO_FILE_FIELD.size) + 1
+        val end = raw.indexOf('"'.code.toByte(), start)
+        if (start <= 0 || end < 0) return null
+        // Without the padding the decoder sizes its output exactly, so it is not copied again.
+        var length = end - start
+        while (length > 0 && raw[start + length - 1] == '='.code.toByte()) length--
+        return runCatching { android.util.Base64.decode(raw, start, length, android.util.Base64.DEFAULT) }
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun ByteArray.indexOf(byte: Byte, from: Int): Int {
+        for (i in from until size) if (this[i] == byte) return i
+        return -1
+    }
+
+    private fun ByteArray.indexOf(needle: ByteArray): Int {
+        for (i in 0..minOf(size - needle.size, VIDEO_FIELD_SEARCH_BYTES)) {
+            if ((needle.indices).all { this[i + it] == needle[it] }) return i
+        }
+        return -1
     }
 
     // -----------------------------------------------------------------
@@ -1632,6 +1649,8 @@ class WarpnetRepository @Inject constructor(
         const val TWEET_CACHE_TTL_MILLIS = 6L * 60L * 60L * 1000L
         // Total image-blob bytes kept in memory before LRU eviction.
         const val IMAGE_CACHE_MAX_BYTES = 8 * 1024 * 1024
+        val VIDEO_FILE_FIELD = "\"file\":\"".toByteArray()
+        const val VIDEO_FIELD_SEARCH_BYTES = 64
         val FEDI_HANDLE_RE = Regex("""@?([\w.-]+)@([a-z0-9-]+(?:\.[a-z0-9-]+)+)""", RegexOption.IGNORE_CASE)
         val FEDI_PROFILE_RE = Regex("""https?://(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)/@([\w.-]+)/?""", RegexOption.IGNORE_CASE)
     }

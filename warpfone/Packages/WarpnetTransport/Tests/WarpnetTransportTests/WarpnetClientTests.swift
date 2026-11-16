@@ -164,6 +164,22 @@ final class WarpnetClientTests: XCTestCase {
     XCTAssertEqual(binding.streamCalls.count, 1)
   }
 
+  func testBytesRequestsRetryAndReportNodeErrors() async throws {
+    let video = String(repeating: "A", count: 8192)
+    let binding = FakeBinding()
+    binding.streamResults = ["failed to open stream: x", video, #"{"code":5000,"message":"boom"}"#]
+    let client = try await connectedClient(binding)
+    let raw = try await client.requestBytes(ProtocolIds.PUBLIC_GET_VIDEO, body: "{}")
+    XCTAssertEqual(raw, Data(video.utf8))
+    XCTAssertEqual(binding.streamCalls.count, 2)
+    do {
+      _ = try await client.requestBytes(ProtocolIds.PUBLIC_GET_VIDEO, body: "{}")
+      XCTFail("expected a failure")
+    } catch {
+      XCTAssertEqual(error as? WarpnetError, .protocolError(code: 5000, message: "boom"))
+    }
+  }
+
   func testRetriesStopAtTheBudget() async throws {
     let binding = FakeBinding()
     binding.streamResults = Array(repeating: "failed to open stream: x", count: 5)

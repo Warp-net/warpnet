@@ -15,7 +15,6 @@ import androidx.media3.datasource.DataSpec
 import java.io.IOException
 import kotlin.math.min
 import kotlinx.coroutines.runBlocking
-import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 private const val WARPNET_VIDEO_PREFIX = "warpnet://video/"
 private const val WARPNET_CHAT_VIDEO_PREFIX = "warpnet://chatvideo/"
@@ -38,7 +37,7 @@ internal data class WarpnetVideoRef(val userId: String, val key: String, val cha
 
 @OptIn(UnstableApi::class)
 class WarpnetVideoDataSource(
-    private val repo: WarpnetRepository,
+    private val cache: WarpnetVideoCache,
 ) : BaseDataSource(/* isNetwork = */ true) {
 
     private var data: ByteArray? = null
@@ -53,7 +52,7 @@ class WarpnetVideoDataSource(
             ?: throw IOException("not a warpnet video uri: ${dataSpec.uri}")
 
         val bytes = try {
-            runBlocking { repo.getVideoBytes(ref.userId, ref.key, ref.chat) }
+            runBlocking { cache.get(ref) }
         } catch (e: Exception) {
             throw IOException("warpnet video ${ref.key} could not be fetched", e)
         } ?: throw IOException("warpnet video not found: ${ref.key}")
@@ -131,9 +130,9 @@ class WarpnetVideoDataSource(
     @OptIn(UnstableApi::class)
     class Factory(
         private val fallback: DataSource.Factory,
-        private val repo: WarpnetRepository,
+        private val cache: WarpnetVideoCache,
     ) : DataSource.Factory {
         override fun createDataSource(): DataSource =
-            Dispatching(WarpnetVideoDataSource(repo), fallback.createDataSource())
+            Dispatching(WarpnetVideoDataSource(cache), fallback.createDataSource())
     }
 }

@@ -46,6 +46,12 @@ struct LRUCache<Key: Hashable, Value> {
     }
   }
 
+  mutating func removeAll() {
+    entries.removeAll()
+    order.removeAll()
+    totalCost = 0
+  }
+
   private mutating func touch(_ key: Key) {
     if let index = order.firstIndex(of: key) {
       order.remove(at: index)

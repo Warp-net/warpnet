@@ -68,18 +68,20 @@ func Connect(addrInfo string) string {
 	return ""
 }
 
-func Stream(protocolID string, data string) string {
+// Stream returns the response, or the error text, as bytes: a large response
+// such as a video then reaches the caller without string conversions.
+func Stream(protocolID string, data string) []byte {
 	c := clientInstance.Load()
 	if c == nil {
-		return "client not initialized"
+		return []byte("client not initialized")
 	}
 
 	response, err := c.stream(protocolID, []byte(data))
 	if err != nil {
-		return err.Error()
+		return []byte(err.Error())
 	}
 
-	return string(response)
+	return response
 }
 
 // Sign returns the base64-encoded Ed25519 signature of the given signing input

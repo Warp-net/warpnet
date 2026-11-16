@@ -70,7 +70,7 @@ func TestStreamFailsWhenNotInitialized(t *testing.T) {
 	clientInstance.Store(nil)
 
 	result := Stream("/test/protocol", "{}")
-	if result != "client not initialized" {
+	if string(result) != "client not initialized" {
 		t.Fatalf("expected client-not-initialized error, got: %q", result)
 	}
 }
