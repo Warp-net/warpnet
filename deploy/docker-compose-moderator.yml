@@ -1,0 +1,58 @@
+services:
+  m1:
+    container_name: m1
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    mem_reservation: 96m
+    oom_score_adj: 500
+    environment:
+      - NODE_PORT=4044
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - GOMEMLIMIT=64MiB
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      # The model path is hardcoded relative to the container CWD (/warpnet).
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+
+  m2:
+    container_name: m2
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    mem_reservation: 96m
+    oom_score_adj: 500
+    environment:
+      - NODE_PORT=4045
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - GOMEMLIMIT=64MiB
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
+
+  m3:
+    container_name: m3
+    image: ghcr.io/warp-net/warpnet-moderator:latest
+    network_mode: host
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    mem_reservation: 96m
+    oom_score_adj: 500
+    environment:
+      - NODE_PORT=4046
+      - NODE_NETWORK=testnet
+      - LOGGING_LEVEL=info
+      - LOGGING_FORMAT=json
+      - GOMEMLIMIT=64MiB
+    volumes:
+      - /root/.warpdata:/root/.warpdata:rw
+      - /root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf:/warpnet/Llama-Guard-3-1B-Q4_K_M.gguf:ro
