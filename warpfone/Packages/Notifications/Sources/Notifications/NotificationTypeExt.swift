@@ -19,6 +19,10 @@ extension Models.Notification.NotificationType {
       "warpnet.notifications.label.message"
     case .moderation:
       "warpnet.notifications.label.moderation"
+    case .newUser:
+      "warpnet.notifications.label.new-user"
+    case .orderLimit:
+      "warpnet.notifications.label.order-limit"
     }
   }
 
@@ -36,6 +40,10 @@ extension Models.Notification.NotificationType {
       Image(systemName: "envelope.fill")
     case .moderation:
       Image(systemName: "hammer.fill")
+    case .newUser:
+      Image(systemName: "person.fill")
+    case .orderLimit:
+      Image(systemName: "cart.fill")
     }
   }
 
@@ -45,11 +53,11 @@ extension Models.Notification.NotificationType {
       Theme.shared.tintColor.opacity(0.80)
     case .reblog:
       Color.teal.opacity(0.80)
-    case .follow:
+    case .follow, .newUser:
       Color.cyan.opacity(0.80)
     case .favourite:
       Color.red.opacity(0.80)
-    case .moderation:
+    case .moderation, .orderLimit:
       Color.orange.opacity(0.80)
     }
   }
@@ -68,6 +76,10 @@ extension Models.Notification.NotificationType {
       "warpnet.notifications.menu-title.message"
     case .moderation:
       "warpnet.notifications.menu-title.moderation"
+    case .newUser:
+      "warpnet.notifications.menu-title.new-user"
+    case .orderLimit:
+      "warpnet.notifications.menu-title.order-limit"
     }
   }
 }

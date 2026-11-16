@@ -173,7 +173,7 @@ struct NotificationRowView: View {
         Spacer()
       }
       .environment(\.isCompact, true)
-    } else if type == .moderation {
+    } else if type == .moderation || type == .orderLimit {
       Text(notification.text ?? "")
         .font(.scaledCallout)
         .foregroundStyle(.secondary)

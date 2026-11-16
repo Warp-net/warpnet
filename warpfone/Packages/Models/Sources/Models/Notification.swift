@@ -3,6 +3,8 @@ import Foundation
 public struct Notification: Decodable, Identifiable, Equatable {
   public enum NotificationType: String, CaseIterable {
     case follow, mention, reblog, favourite, message, moderation
+    case newUser = "new_user"
+    case orderLimit = "order_limit"
   }
 
   public let id: String

@@ -589,6 +589,8 @@ struct WarpnetRouter: Sendable {
     case "mention", "reply": "mention"
     case "message": "message"
     case "moderation": "moderation"
+    case "new_user": "new_user"
+    case "order_limit": "order_limit"
     default: nil
     }
   }
