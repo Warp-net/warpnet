@@ -56,8 +56,12 @@ type PollStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
+// votesPerNode is the most one node adds to an option's replicated votes:
+// its owner votes once.
+const votesPerNode = 1
+
 type PollStatsStorer interface {
-	GetAggregatedStat(key ds.Key) (uint64, error)
+	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
 	Increment(key ds.Key) error
 }
 
@@ -187,12 +191,13 @@ func (repo *PollRepo) Results(tweetId string, optionsNum int) (votes []uint64, e
 func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 	incrKey := pollVotesKey(tweetId, option, VotesIncrSubNamespace)
 
+	var replicated uint64
 	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey())
-		if err == nil {
-			return total, nil
+		total, err := repo.statsDb.GetAggregatedStat(incrKey.DatastoreKey(), votesPerNode)
+		if err != nil {
+			log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
 		}
-		log.Warnf("crdt poll votes not found for %s option %d - %s", tweetId, option, err)
+		replicated = total
 	}
 
 	incr, err := repo.localCounter(incrKey)
@@ -204,9 +209,9 @@ func (repo *PollRepo) optionVotes(tweetId string, option int) (uint64, error) {
 		return 0, err
 	}
 	if decr >= incr {
-		return 0, nil
+		return replicated, nil
 	}
-	return incr - decr, nil
+	return max(incr-decr, replicated), nil
 }
 
 // localCounter reads a counter this node keeps. A missing key means nothing

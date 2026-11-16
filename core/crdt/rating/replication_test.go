@@ -7,7 +7,6 @@ package rating
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -15,9 +14,7 @@ import (
 	"github.com/Warp-net/warpnet/core/crdt/broadcast"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/json"
-	"github.com/ipfs/boxo/blockstore"
 	datastore "github.com/ipfs/go-datastore"
-	dsq "github.com/ipfs/go-datastore/query"
 	dssync "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -216,7 +213,7 @@ func (r *replica) open(t *testing.T) {
 	t.Helper()
 	bc, err := broadcast.NewGossip(r.ctx, r.gossip, GossipTopic)
 	require.NoError(t, err)
-	s, err := New(r.ctx, bc, r.data, r.host, idleRouter{})
+	s, err := New(r.ctx, bc, r.data, r.host, idleRouter{}, acceptRecords, testDimensions)
 	require.NoError(t, err)
 	r.puts, r.deletes = &recordLog{}, &recordLog{}
 	s.OnPut(r.puts.hook)
@@ -291,17 +288,26 @@ func awaitMesh(t *testing.T, rs ...*replica) {
 	}
 }
 
-// settle waits until every replica holds the same single head: the history
-// so far is one chain, not branches still being merged.
+// settle waits until every replica holds the same single head per DAG: the
+// history so far is one chain per day, not branches still being merged.
 func settle(t *testing.T, rs ...*replica) {
 	t.Helper()
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		want := rs[0].store.crdt.InternalStats(context.Background()).Heads
-		assert.Len(collect, want, 1)
-		for _, r := range rs[1:] {
-			assert.Equal(collect, want, r.store.crdt.InternalStats(context.Background()).Heads, r.name)
+	heads := func(r *replica) map[string][]string {
+		byDAG := map[string][]string{}
+		for _, h := range r.store.crdt.InternalStats(context.Background()).Heads {
+			byDAG[h.DAGName] = append(byDAG[h.DAGName], h.Cid.String())
 		}
-	}, replicationTimeout, replicationTick, "the replicas never settled on one head")
+		return byDAG
+	}
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		want := heads(rs[0])
+		for name, cids := range want {
+			assert.Len(collect, cids, 1, name)
+		}
+		for _, r := range rs[1:] {
+			assert.Equal(collect, want, heads(r), r.name)
+		}
+	}, replicationTimeout, replicationTick, "the replicas never settled on one head per DAG")
 }
 
 // newCluster connects the hosts before their stores start, as the bootstrap
@@ -392,7 +398,7 @@ func TestReplication_AnOverwriteConvergesToTheNewestValueEverywhere(t *testing.T
 	}
 }
 
-func TestReplication_DeleteExpiredTombstonesOnlyTheOwnersOldRecordEverywhere(t *testing.T) {
+func TestReplication_DeleteExpiredDropsTheDayOnlyWhereItRuns(t *testing.T) {
 	rs := newCluster(t, "A", "B", "C")
 	a, b, c := rs[0], rs[1], rs[2]
 	now := currentBucket()
@@ -402,24 +408,27 @@ func TestReplication_DeleteExpiredTombstonesOnlyTheOwnersOldRecordEverywhere(t *
 	aOldApp := ratingRecord(a.id(), observedPeer, "app", now-48)
 	bOld := ratingRecord(b.id(), observedPeer, "net", now-48)
 	cOld := ratingRecord(c.id(), observedPeer, "net", now-48)
-	for _, rec := range []domain.RatingRecord{aOld, aNew, aOldApp} {
-		require.NoError(t, a.store.Put(rec))
-	}
+	require.NoError(t, a.store.Put(aOld, aNew, aOldApp))
 	require.NoError(t, b.store.Put(bOld))
 	require.NoError(t, c.store.Put(cOld))
+	all := []domain.RatingRecord{aOld, aNew, aOldApp, bOld, cOld}
 	for _, r := range rs {
-		r.eventuallyLists(t, observedPeer, aOld, aNew, aOldApp, bOld, cOld)
+		r.eventuallyLists(t, observedPeer, all...)
 	}
 
 	require.NoError(t, a.store.DeleteExpired("net", now-24))
-
-	for _, r := range rs {
-		r.eventuallyLists(t, observedPeer, aNew, aOldApp, bOld, cOld)
+	a.eventuallyLists(t, observedPeer, aNew, aOldApp)
+	for _, rec := range []domain.RatingRecord{aOld, bOld, cOld} {
+		a.eventuallyHooked(t, a.deletes, keyFields(rec))
 	}
 	for _, r := range []*replica{b, c} {
-		r.eventuallyHooked(t, r.deletes, keyFields(aOld))
-		assert.Equal(t, []domain.RatingRecord{keyFields(aOld)}, r.deletes.snapshot(),
-			"%s: the tombstone covers A's expired key and nothing else", r.name)
+		r.eventuallyLists(t, observedPeer, all...)
+		assert.Empty(t, r.deletes.snapshot(), "%s: a day dropped elsewhere is not dropped here", r.name)
+	}
+
+	for _, r := range []*replica{b, c} {
+		require.NoError(t, r.store.DeleteExpired("net", now-24))
+		r.eventuallyLists(t, observedPeer, aNew, aOldApp)
 	}
 }
 
@@ -433,18 +442,16 @@ func TestReplication_ARecordUnderAForeignKeyNeverSurfacesOnOtherReplicas(t *test
 	require.NoError(t, err)
 	forged, err := json.Marshal(ratingRecord(a.id(), otherPeer, "net", now))
 	require.NoError(t, err)
-	require.NoError(t, a.store.crdt.Put(context.Background(), key, forged))
+	publishInEpoch(t, a.store, key.String(), forged, dayDAG("net", now))
 
 	marker := ratingRecord(a.id(), observedPeer, "app", now)
 	require.NoError(t, a.store.Put(marker))
 
 	for _, r := range []*replica{b, c} {
-		require.EventuallyWithT(t, func(collect *assert.CollectT) {
-			value, err := r.store.crdt.Get(context.Background(), key)
-			assert.NoError(collect, err)
-			assert.Equal(collect, forged, value)
-		}, replicationTimeout, replicationTick, "%s never received the forged value", r.name)
 		r.eventuallyHooked(t, r.puts, marker)
+		has, err := r.store.crdt.Has(context.Background(), key)
+		require.NoError(t, err)
+		assert.False(t, has, "%s: a value whose content does not match its key is refused before the merge", r.name)
 
 		got, err := r.store.List(observedPeer)
 		require.NoError(t, err)
@@ -469,8 +476,6 @@ func TestReplication_ALateJoinerConvergesOnTheFullHistory(t *testing.T) {
 			a, b, c := rs[0], rs[1], rs[2]
 			now := currentBucket()
 
-			// Each write settles before the next, so the history is one chain:
-			// concurrent branches would expose the tombstone race tested below.
 			write := func(r *replica, rec domain.RatingRecord) {
 				require.NoError(t, r.store.Put(rec))
 				settle(t, rs...)
@@ -485,8 +490,9 @@ func TestReplication_ALateJoinerConvergesOnTheFullHistory(t *testing.T) {
 			write(c, cMod)
 			aNet = withCount(aNet, 4)
 			write(a, aNet)
-			require.NoError(t, a.store.DeleteExpired("net", now-24))
-			settle(t, rs...)
+			for _, r := range rs {
+				require.NoError(t, r.store.DeleteExpired("net", now-24))
+			}
 			history := []domain.RatingRecord{aNet, bApp, cMod}
 			for _, r := range rs {
 				r.eventuallyLists(t, observedPeer, history...)
@@ -502,107 +508,20 @@ func TestReplication_ALateJoinerConvergesOnTheFullHistory(t *testing.T) {
 			}
 			awaitMesh(t, a, b, c, d)
 
-			next := ratingRecord(b.id(), otherPeer, "net", now)
-			require.NoError(t, b.store.Put(next))
+			next := []domain.RatingRecord{
+				ratingRecord(b.id(), otherPeer, "net", now),
+				ratingRecord(b.id(), otherPeer, "app", now),
+				ratingRecord(c.id(), otherPeer, "mod", now),
+			}
+			require.NoError(t, b.store.Put(next[0], next[1]))
+			require.NoError(t, c.store.Put(next[2]))
 
-			d.eventuallyLists(t, otherPeer, next)
+			d.eventuallyLists(t, otherPeer, next...)
 			d.eventuallyLists(t, observedPeer, history...)
 		})
 	}
 }
 
-type replayBroadcaster struct{ next chan []byte }
-
-func (b *replayBroadcaster) Broadcast(context.Context, []byte) error { return nil }
-
-func (b *replayBroadcaster) Next(ctx context.Context) ([]byte, error) {
-	select {
-	case data := <-b.next:
-		return data, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func hooked(log *recordLog, rec domain.RatingRecord) bool {
-	for _, got := range log.snapshot() {
-		if assert.ObjectsAreEqual(rec, got) {
-			return true
-		}
-	}
-	return false
-}
-
-// A replica syncing sibling branches, as a late joiner does, merges a record
-// and the tombstone that removes it on two workers at once.
-func TestReplication_ARecordMergedAlongsideItsTombstoneStaysDeleted(t *testing.T) {
-	t.Skip("known bug, go-ds-crdt set.go: putTombs runs outside putElemsMux, so a concurrent putElems " +
-		"of the same key stores the value after the tombstone cleared it; 20-35% of the merges below keep the record")
-
-	ctx := context.Background()
-	now := currentBucket()
-
-	// the author's DAG: one block adding doomed and a marker, one tombstoning doomed
-	blocks := dssync.MutexWrap(datastore.NewMapDatastore())
-	bc := &silentBroadcaster{}
-	author, err := New(ctx, bc, blocks, newHost(t), idleRouter{})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = author.Close() })
-
-	doomed := ratingRecord(author.nodeID, observedPeer, "net", now-48)
-	marker := ratingRecord(author.nodeID, observedPeer, "app", now)
-	batch, err := author.crdt.Batch(ctx)
-	require.NoError(t, err)
-	for _, rec := range []domain.RatingRecord{doomed, marker} {
-		key, err := recordKey(rec)
-		require.NoError(t, err)
-		value, err := json.Marshal(rec)
-		require.NoError(t, err)
-		require.NoError(t, batch.Put(ctx, key, value))
-	}
-	require.NoError(t, batch.Commit(ctx))
-	require.NoError(t, author.DeleteExpired("net", now-24))
-	require.Equal(t, 2, bc.count())
-
-	for run := range 100 {
-		data := dssync.MutexWrap(datastore.NewMapDatastore())
-		results, err := blocks.Query(ctx, dsq.Query{Prefix: blockstore.BlockPrefix.String()})
-		require.NoError(t, err)
-		for r := range results.Next() {
-			require.NoError(t, r.Error)
-			require.NoError(t, data.Put(ctx, datastore.NewKey(r.Key), r.Value))
-		}
-
-		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
-		require.NoError(t, err)
-		replay := &replayBroadcaster{next: make(chan []byte, 2)}
-		s, err := New(ctx, replay, data, h, idleRouter{})
-		require.NoError(t, err)
-		puts, deletes := &recordLog{}, &recordLog{}
-		s.OnPut(puts.hook)
-		s.OnDelete(deletes.hook)
-
-		// both heads at once: the blocks are local, so the two merges overlap
-		replay.next <- bc.published[1]
-		replay.next <- bc.published[0]
-		require.Eventually(t, func() bool {
-			got, err := s.List(observedPeer)
-			return err == nil && slices.ContainsFunc(got, func(rec domain.RatingRecord) bool {
-				return assert.ObjectsAreEqual(marker, rec)
-			}) && len(deletes.snapshot()) > 0
-		}, replicationTimeout, time.Millisecond, "run %d: the blocks were never merged", run)
-
-		got, err := s.List(observedPeer)
-		require.NoError(t, err)
-		assert.Equal(t, []domain.RatingRecord{marker}, got, "run %d: the tombstone lost to the record it removes (put hook fired: %t)", run, hooked(puts, doomed))
-
-		_ = s.Close()
-		_ = h.Close()
-	}
-}
-
-// restartProcess brings the node back as a new process would: same identity,
-// same datastore, a new host that has not reconnected yet.
 func restartProcess(t *testing.T, r *replica, peers ...*replica) {
 	t.Helper()
 	priv := r.host.Peerstore().PrivKey(r.host.ID())
@@ -675,4 +594,81 @@ func TestReplication_ARestartedReplicaKeepsItsRecordsAndReplicatesBothWays(t *te
 			a.eventuallyHooked(t, a.puts, bNext)
 		})
 	}
+}
+
+func TestReplication_AForgedRecordCannotDisplaceTheObserversOwn(t *testing.T) {
+	rs := newCluster(t, "A", "B", "C")
+	a, b, c := rs[0], rs[1], rs[2]
+	now := currentBucket()
+
+	honest := ratingRecord(a.id(), observedPeer, "net", now)
+	require.NoError(t, a.store.Put(honest))
+	b.eventuallyLists(t, observedPeer, honest)
+
+	forged := honest
+	forged.Offences = []domain.OffenceCount{{Kind: "bad_signature", Count: 1000}}
+	forged.Signature = forgedSignature
+	key, err := recordKey(forged)
+	require.NoError(t, err)
+	value, err := json.Marshal(forged)
+	require.NoError(t, err)
+	publishInEpoch(t, b.store, key.String(), value, dayDAG("net", now))
+
+	marker := ratingRecord(b.id(), otherPeer, "net", now)
+	require.NoError(t, b.store.Put(marker))
+	c.eventuallyLists(t, otherPeer, marker)
+
+	got, err := c.store.List(observedPeer)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.RatingRecord{honest}, got,
+		"a record its observer did not sign is refused before it can win the key")
+}
+
+func TestReplication_ARecordOutsideItsDayDAGIsRefused(t *testing.T) {
+	rs := newCluster(t, "A", "B")
+	a, b := rs[0], rs[1]
+	now := currentBucket()
+
+	old := ratingRecord(a.id(), observedPeer, "net", now-60*bucketsPerDay)
+	key, err := recordKey(old)
+	require.NoError(t, err)
+	value, err := json.Marshal(old)
+	require.NoError(t, err)
+	publishInEpoch(t, a.store, key.String(), value, dayDAG("net", now))
+
+	marker := ratingRecord(a.id(), otherPeer, "net", now)
+	require.NoError(t, a.store.Put(marker))
+	b.eventuallyLists(t, otherPeer, marker)
+
+	has, err := b.store.crdt.Has(context.Background(), key)
+	require.NoError(t, err)
+	assert.False(t, has, "a record filed under another day's DAG would outlive its own day")
+}
+
+func TestReplication_AReplayedOlderRecordCannotWinTheKey(t *testing.T) {
+	rs := newCluster(t, "A", "B", "C")
+	a, b, c := rs[0], rs[1], rs[2]
+	now := currentBucket()
+
+	first := ratingRecord(a.id(), observedPeer, "net", now)
+	require.NoError(t, a.store.Put(first))
+	latest := first
+	latest.Offences = []domain.OffenceCount{{Kind: "bad_signature", Count: 5}}
+	latest.UpdatedAt = first.UpdatedAt.Add(time.Minute)
+	require.NoError(t, a.store.Put(latest))
+	b.eventuallyLists(t, observedPeer, latest)
+	c.eventuallyLists(t, observedPeer, latest)
+
+	key, err := recordKey(first)
+	require.NoError(t, err)
+	replay, err := json.Marshal(first)
+	require.NoError(t, err)
+	publishInEpoch(t, b.store, key.String(), replay, dayDAG("net", now))
+	marker := ratingRecord(b.id(), otherPeer, "net", now)
+	require.NoError(t, b.store.Put(marker))
+	c.eventuallyLists(t, otherPeer, marker)
+
+	got, err := c.store.List(observedPeer)
+	require.NoError(t, err)
+	assert.Equal(t, []domain.RatingRecord{latest}, got, "an observer's earlier record, replayed at a higher priority, does not undo its latest")
 }

@@ -113,7 +113,27 @@ public actor WarpnetClient {
   }
 
   public func request(_ protocolId: String, body: String) async throws -> String {
-    var attempt = 0
+    try await retrying {
+      let raw = try await self.send(protocolId: protocolId, body: body)
+      try Self.throwIfErrorResponse(raw)
+      return raw
+    }
+  }
+
+  /// Like `request` for large responses such as videos: the response comes
+  /// back as bytes, without string copies.
+  public func requestBytes(_ protocolId: String, body: String) async throws -> Data {
+    try await retrying {
+      let raw = try await self.send(protocolId: protocolId, body: body) { $0.streamBytes(protocolId: protocolId, data: $1) }
+      if raw.count <= Self.maxErrorResponseBytes {
+        try Self.throwIfErrorResponse(String(decoding: raw, as: UTF8.self))
+      }
+      return raw
+    }
+  }
+
+  private func retrying<T>(_ attempt: () async throws -> T) async throws -> T {
+    var retries = 0
     while true {
       if state != .connected, isControlBusy {
         await lockControl()
@@ -121,13 +141,11 @@ public actor WarpnetClient {
       }
       guard state == .connected else { throw WarpnetError.notConnected }
       do {
-        let raw = try await send(protocolId: protocolId, body: body)
-        try Self.throwIfErrorResponse(raw)
-        return raw
+        return try await attempt()
       } catch let error as WarpnetError {
-        guard attempt < retryBackoffs.count, Self.isRetryable(error) else { throw error }
-        try await Task.sleep(for: retryBackoffs[attempt])
-        attempt += 1
+        guard retries < retryBackoffs.count, Self.isRetryable(error) else { throw error }
+        try await Task.sleep(for: retryBackoffs[retries])
+        retries += 1
       }
     }
   }
@@ -168,8 +186,14 @@ public actor WarpnetClient {
   }
 
   private func send(protocolId: String, body: String) async throws -> String {
+    try await send(protocolId: protocolId, body: body) { $0.stream(protocolId: protocolId, data: $1) }
+  }
+
+  private func send<Response: Sendable>(protocolId: String, body: String,
+                                        _ transport: @escaping @Sendable (WarpnetBinding, String) -> Response) async throws -> Response
+  {
     let binding = binding
-    let result: Result<String, WarpnetError> = await runBlocking {
+    let result: Result<Response, WarpnetError> = await runBlocking {
       var envelope = WarpnetEnvelope(body: body,
                                      nodeId: binding.peerId(),
                                      path: protocolId,
@@ -179,7 +203,7 @@ public actor WarpnetClient {
         return .failure(.signingUnavailable(signature.isEmpty ? "binding not initialised" : signature))
       }
       envelope.signature = signature
-      return .success(binding.stream(protocolId: protocolId, data: envelope.json()))
+      return .success(transport(binding, envelope.json()))
     }
     return try result.get()
   }

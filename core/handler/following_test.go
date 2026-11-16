@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
@@ -370,6 +371,26 @@ func TestStreamFollowHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("I follow a bridged user - no gossip topic", func(t *testing.T) {
+		acceptedResp, _ := json.Marshal(event.Accepted)
+		bridged := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "gateway-node", Network: fediverse.MastodonNetwork}, nil
+		}}
+		h := StreamFollowHandler(stubFollowBroadcaster{subscribeFn: func(userId string) error {
+			t.Fatal("bridged user must not get a gossip topic")
+			return nil
+		}}, stubFollowRepo{}, ownerAuth, bridged, stubModerationNotifier{}, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			return acceptedResp, nil
+		}})
+		resp, err := h(marshal(t, event.NewFollowEvent{FollowerId: owner, FollowingId: following}), senderStream)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if resp != event.Accepted {
+			t.Fatalf("expected accepted, got: %v", resp)
+		}
+	})
+
 	t.Run("I follow someone - subscribe error", func(t *testing.T) {
 		subErr := errors.New("subscribe failed")
 		acceptedResp, _ := json.Marshal(event.Accepted)
@@ -651,6 +672,22 @@ func TestStreamUnfollowHandler(t *testing.T) {
 		}
 		if !unsubscribed {
 			t.Fatal("expected broadcaster unsubscribe to be called")
+		}
+	})
+
+	t.Run("I unfollow a bridged user - no gossip topic", func(t *testing.T) {
+		acceptedResp, _ := json.Marshal(event.Accepted)
+		bridged := stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: "gateway-node", Network: fediverse.ThreadsNetwork}, nil
+		}}
+		h := StreamUnfollowHandler(stubFollowBroadcaster{unsubscribeFn: func(userId string) error {
+			t.Fatal("bridged user has no gossip topic to leave")
+			return nil
+		}}, stubFollowRepo{}, ownerAuth, bridged, stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, data any) ([]byte, error) {
+			return acceptedResp, nil
+		}})
+		if _, err := h(marshal(t, event.NewUnfollowEvent{FollowerId: owner, FollowingId: following}), senderStream); err != nil {
+			t.Fatalf("unexpected err: %v", err)
 		}
 	})
 }

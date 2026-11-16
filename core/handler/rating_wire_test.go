@@ -50,13 +50,17 @@ type memRecords struct {
 	puts []func(domain.RatingRecord)
 }
 
-func (m *memRecords) Put(rec domain.RatingRecord) error {
+func (m *memRecords) Put(recs ...domain.RatingRecord) error {
 	m.mu.Lock()
-	m.recs[rec.PeerID+"/"+rec.ObserverID+"/"+rec.Dimension+"/"+rec.Generation] = rec
+	for _, rec := range recs {
+		m.recs[rec.PeerID+"/"+rec.ObserverID+"/"+rec.Dimension+"/"+rec.Generation] = rec
+	}
 	hooks := m.puts
 	m.mu.Unlock()
-	for _, h := range hooks {
-		h(rec)
+	for _, rec := range recs {
+		for _, h := range hooks {
+			h(rec)
+		}
 	}
 	return nil
 }
@@ -171,10 +175,10 @@ func TestRatingRouteAnswersWithTheWireShapeTheUIReads(t *testing.T) {
 
 	recent := dim["recent"].([]any)
 	require.Len(t, recent, 1)
-	tally := recent[0].(map[string]any)
-	assert.Equal(t, []string{"count", "kind", "last_at"}, keysOf(tally))
-	assert.Equal(t, "bad_signature", tally["kind"])
-	assert.EqualValues(t, 2, tally["count"])
+	offence := recent[0].(map[string]any)
+	assert.Equal(t, []string{"count", "kind", "last_at"}, keysOf(offence))
+	assert.Equal(t, "bad_signature", offence["kind"])
+	assert.EqualValues(t, 2, offence["count"])
 
 	_, err = time.Parse(time.RFC3339Nano, wire["updated_at"].(string))
 	assert.NoError(t, err, "updated_at is an RFC 3339 time")

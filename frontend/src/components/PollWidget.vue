@@ -57,7 +57,7 @@ export default {
       if (!expiresAt) return false;
       return new Date(expiresAt).getTime() <= Date.now();
     },
-    // Same rule as Twitter: the tally stays hidden until you've had your say
+    // Same rule as Twitter: the count stays hidden until you've had your say
     // or the poll has closed, so early results can't steer later voters.
     showResults() {
       return this.closed || this.votedOption !== null;
@@ -106,7 +106,7 @@ export default {
         );
         // The transport turns a node-side failure into an empty body, so an
         // unusable answer must leave the choices clickable rather than
-        // showing an empty tally as if the vote had landed.
+        // showing an empty count as if the vote had landed.
         if (!this.applyResults(results)) {
           toast.error("Couldn't cast your vote. Please try again.");
           return;

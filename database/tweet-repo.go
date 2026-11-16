@@ -74,8 +74,17 @@ type tweetGetter interface {
 	Get(key local.DatabaseKey) ([]byte, error)
 	GetExpiration(key local.DatabaseKey) (uint64, error)
 }
+
+// The most one node adds to a tweet's replicated counters: its owner
+// retweets and views once, and may reply any number of times.
+const (
+	retweetsPerNode = 1
+	viewsPerNode    = 1
+	repliesPerNode  = 0 // no limit
+)
+
 type TweetStatsStorer interface {
-	GetAggregatedStat(key ds.Key) (uint64, error)
+	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
 	Increment(key ds.Key) error
 	Decrement(key ds.Key) error
 }
@@ -547,14 +556,26 @@ func (repo *TweetRepo) RepliesCount(tweetId string) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("empty tweet id")
 	}
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(tweetsCountKey(tweetId).DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt replies count not found for %s - %s", tweetId, err)
+	localCount, err := repo.TweetsCount(tweetId)
+	if err != nil {
+		return 0, err
 	}
-	return repo.TweetsCount(tweetId)
+	replicated := repo.replicatedCount(tweetsCountKey(tweetId), repliesPerNode)
+	return max(localCount, replicated), nil
+}
+
+// replicatedCount is the CRDT count of a tweet, zero once the tweet is past
+// retention; readers take the larger of it and their local count.
+func (repo *TweetRepo) replicatedCount(key local.DatabaseKey, perNodeCap uint64) uint64 {
+	if repo.statsDb == nil {
+		return 0
+	}
+	total, err := repo.statsDb.GetAggregatedStat(key.DatastoreKey(), perNodeCap)
+	if err != nil {
+		log.Warnf("crdt count %s: %v", key, err)
+		return 0
+	}
+	return total
 }
 
 func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) (domain.Tweet, error) {
@@ -759,23 +780,18 @@ func (repo *TweetRepo) RetweetsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(retweetCountKey.DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt retweets count not found for %s - %s", tweetId, err)
-	}
-
+	replicated := repo.replicatedCount(retweetCountKey, retweetsPerNode)
 	bt, err := repo.db.Get(retweetCountKey)
 	if local.IsNotFoundError(err) {
-		return 0, ErrTweetNotFound
+		if replicated == 0 {
+			return 0, ErrTweetNotFound
+		}
+		return replicated, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	count := binary.BigEndian.Uint64(bt)
-	return count, nil
+	return max(binary.BigEndian.Uint64(bt), replicated), nil
 }
 
 type retweetersIDs = []string
@@ -820,9 +836,9 @@ func (repo *TweetRepo) Retweeters(tweetId string, limit *uint64, cursor *string)
 // views from the same viewer — across sessions, restarts, days — are
 // no-ops. The first call wins; the counter is incremented exactly once
 // per unique viewer. The increment is atomic via the underlying
-// transaction and replicated through the CRDT stats store, so it is
-// safe under concurrent calls across nodes.
-func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
+// transaction. isTransitive puts the view into the replicated counter too;
+// the handler sets it only on the viewer's own node.
+func (repo *TweetRepo) RecordView(tweetId, viewerId string, isTransitive bool) (uint64, error) {
 	if tweetId == "" {
 		return 0, local.DBError("view: empty tweet id")
 	}
@@ -875,7 +891,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string) (uint64, error) {
 	if err := txn.Commit(); err != nil {
 		return 0, err
 	}
-	if repo.statsDb != nil {
+	if repo.statsDb != nil && isTransitive {
 		if err := repo.statsDb.Increment(viewsKey.DatastoreKey()); err != nil {
 			log.Warnf("view: stats db increment: %v", err)
 		}
@@ -897,20 +913,16 @@ func (repo *TweetRepo) GetViewsCount(tweetId string) (uint64, error) {
 		AddRootID(tweetId).
 		Build()
 
-	if repo.statsDb != nil {
-		total, err := repo.statsDb.GetAggregatedStat(viewsKey.DatastoreKey())
-		if err == nil {
-			return total, nil
-		}
-		log.Warnf("crdt views count not found for %s - %s", tweetId, err)
-	}
-
+	replicated := repo.replicatedCount(viewsKey, viewsPerNode)
 	bt, err := repo.db.Get(viewsKey)
 	if local.IsNotFoundError(err) {
-		return 0, ErrViewsNotFound
+		if replicated == 0 {
+			return 0, ErrViewsNotFound
+		}
+		return replicated, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-	return binary.BigEndian.Uint64(bt), nil
+	return max(binary.BigEndian.Uint64(bt), replicated), nil
 }

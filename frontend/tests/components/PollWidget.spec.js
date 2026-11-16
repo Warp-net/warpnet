@@ -58,7 +58,7 @@ describe('PollWidget', () => {
     expect(getByText('Dogs').tagName).toBe('BUTTON');
   });
 
-  it('hides the tally until the reader has voted', async () => {
+  it('hides the count until the reader has voted', async () => {
     warpnetService.getPollResults.mockResolvedValue({
       tweet_id: 't1', votes: [7, 3], total_votes: 10,
     });
@@ -69,7 +69,7 @@ describe('PollWidget', () => {
     expect(container.textContent).not.toContain('%');
   });
 
-  it('reveals the tally and marks the choice after voting', async () => {
+  it('reveals the count and marks the choice after voting', async () => {
     warpnetService.voteInPoll.mockResolvedValue({
       tweet_id: 't1', votes: [1, 0], total_votes: 1, voted_option: 0,
     });

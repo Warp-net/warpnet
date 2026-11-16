@@ -55,8 +55,12 @@ type ReactionStorer interface {
 	NewTxn() (local_store.WarpTransactioner, error)
 }
 
+// reactionsPerNode is the most one node adds to a tweet's replicated
+// reactions: its owner reacts once.
+const reactionsPerNode = 1
+
 type ReactionStatsStorer interface {
-	GetAggregatedStat(key ds.Key) (uint64, error)
+	GetAggregatedStat(key ds.Key, perNodeCap uint64) (uint64, error)
 	Increment(key ds.Key) error
 	Decrement(key ds.Key) error
 }
@@ -289,7 +293,7 @@ func (repo *ReactionRepo) ReactionsCount(tweetId string) (reactionsNum uint64, e
 
 	var networkTotal uint64
 	if repo.statsDb != nil {
-		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey())
+		total, statErr := repo.statsDb.GetAggregatedStat(reactionKey.DatastoreKey(), reactionsPerNode)
 		if statErr != nil {
 			log.Warnf("get reactions stat: %v", statErr)
 		} else {

@@ -388,14 +388,14 @@ func TestStreamGetPollHandler(t *testing.T) {
 		}
 		out := resp.(event.PollResultsResponse)
 		if out.TotalVotes != 10 {
-			t.Fatalf("expected the author's tally, got: %d", out.TotalVotes)
+			t.Fatalf("expected the author's count, got: %d", out.TotalVotes)
 		}
 		if out.VotedOption == nil || *out.VotedOption != 1 {
 			t.Fatalf("unexpected voted option: %v", out.VotedOption)
 		}
 	})
 
-	t.Run("offline author falls back to the local tally", func(t *testing.T) {
+	t.Run("offline author falls back to the local count", func(t *testing.T) {
 		streamer := stubStreamer{
 			nodeInfo: warpnet.NodeInfo{OwnerId: reader},
 			genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {

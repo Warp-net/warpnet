@@ -489,6 +489,27 @@ func TestSelfUpdaterRejectsUnsignedRelease(t *testing.T) {
 	assert.NoFileExists(t, binary.StagePath(testAsset), "an unsigned release must not even be downloaded")
 }
 
+func TestSelfUpdaterDoesNotAskAboutUnsignedRelease(t *testing.T) {
+	archive := tarGz(t, testBinary, []byte("new binary"))
+	sums := sumsFor(archive)
+	signRelease(t, sums)
+	u, binary := signedUpdaterFixture(t, "v0.7.548", archive, sums, nil)
+	u.isApprovalRequired = true
+
+	errs := make(chan error, 1)
+	go func() { errs <- u.checkAndUpdate(nil) }()
+
+	select {
+	case err := <-errs:
+		require.ErrorIs(t, err, ErrReleaseUnsigned)
+	case <-time.After(approverWait):
+		t.Fatal("the owner is asked about a release whose signature is not uploaded yet")
+	}
+	_, next, _ := u.GetPendingUpdate()
+	assert.Empty(t, next)
+	assert.False(t, binary.restarted)
+}
+
 func TestSelfUpdaterRejectsForgedListing(t *testing.T) {
 	forged := tarGz(t, testBinary, []byte("forged binary"))
 	sums := sumsFor(forged)

@@ -78,4 +78,14 @@ final class WarpnetDtosTests: XCTestCase {
       guard case .serializationError = $0 as? WarpnetError else { return XCTFail("got \($0)") }
     }
   }
+
+  func testVideoIsDecodedFromTheRawResponse() {
+    let video = Data((0 ..< 1000).map { UInt8($0 % 256) })
+    let raw = Data(#"{"file":"data:video/mp4;base64,\#(video.base64EncodedString())","size":1}"#.utf8)
+    XCTAssertEqual(GetVideoResponse.video(from: raw), video)
+    XCTAssertNil(GetVideoResponse.video(from: Data(#"{"file":"","size":0}"#.utf8)))
+    XCTAssertNil(GetVideoResponse.video(from: Data(#"{"file":""}"#.utf8)))
+    XCTAssertNil(GetVideoResponse.video(from: Data(#"{"code":5000,"message":"boom"}"#.utf8)))
+    XCTAssertNil(GetVideoResponse.video(from: Data(#"{"file":"data:video/mp4;base64,@@@@"}"#.utf8)))
+  }
 }

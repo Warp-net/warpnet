@@ -147,7 +147,7 @@ func (b bucket) start() time.Time
 type entries []entry
 func (es entries) penalty(dim Dimension, now time.Time) Score
 func (es entries) median(dim Dimension, now time.Time) (Score, int)
-func (es entries) tallies(dim Dimension) []domain.OffenceTally
+func (es entries) recent(dim Dimension) []domain.RecentOffence
 ```
 
 | Dimension | Half-life | Retention | Rationale |
@@ -248,7 +248,7 @@ that reach `TierFloor` quickly, and only from first-hand evidence.
 | Kind | Weight | Ceiling | Source |
 |---|---|---|---|
 | `KindVerdictMalformed` | 200 | — | missing object or user id on a verdict whose signature already verified, charged by whichever node the verdict reached — `core/handler/moderation.go` emits it on the member too, which is why a member witnesses this axis. An unknown type is *not* charged: a moderator on a newer build is entitled to a type this node has not heard of yet |
-| `KindVerdictOutlier` | 60 | 400 | ballot disagreeing with the round's own outcome |
+| `KindVerdictOutlier` | 60 | 400 | vote disagreeing with the round's own outcome |
 | `KindAuditWrong` | 60 | 400 | the audit ledger's standing worsening to Suspect |
 | `KindAuditInvalid` | 500 | — | the audit ledger's standing worsening to Banned |
 | `KindAuditUnreachable` | 5 | 100 | `audit.OutcomeUnreachable`, per probe |
@@ -611,7 +611,7 @@ is never recorded, and every module treats it as trusted.
 | gossipsub | `pubsub.NewGossipSub` gains `pubsub.WithPeerScore(params, thresholds)`, with `AppSpecificScore` reading the score the last standing left in the gossip's own cache; `GraylistThreshold: -100`. Per §6.3 only first-hand evidence reaches the graylist range. | `core/pubsub/gossip.go` |
 | DHT | `dht.QueryFilter` and `dht.RoutingTableFilter` refuse the peers a standing put at the floor, and let them back in when it recovers. A peer nobody has rated is admitted. | `core/dht/dht.go` |
 | Rate limits | a peer's buckets are built at the allowance its standing carries, `burst` and `perMinute` floored at 1 so no peer is ever starved outright. A standing that changes drops the peer's buckets, so it is measured against the allowance it has now. | `core/middleware/rate-limiter.go`, `core/middleware/middleware.go` |
-| Moderation ballots | **Nothing.** Weighting a vote round's ballots by rating was planned and rejected: `planTally` must be a pure function of the ballots so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
+| Moderation votes | **Nothing.** Weighting a vote round's votes by rating was planned and rejected: `planCountdown` must be a pure function of the votes so every participant reaches the same answer, and a locally-held rating is not. See Stage 3. | `cmd/node/moderator/round/` |
 | Discovery | the new per-peer discovery bucket (§7d) is scaled by the same multiplier, so an offender's discovery entries are dropped first under pressure. | `core/discovery/rate-limiter.go` |
 
 ### 6.5 Deliberately not done
@@ -676,10 +676,10 @@ type DimensionRating struct {
     Name   string         `json:"name"`
     Score  int32          `json:"score"`
     Tier   string         `json:"tier"`
-    Recent []OffenceTally `json:"recent"`
+    Recent []RecentOffence `json:"recent"`
 }
 
-type OffenceTally struct {
+type RecentOffence struct {
     Kind   string    `json:"kind"`
     Count  uint32    `json:"count"`
     LastAt time.Time `json:"last_at"`
@@ -806,7 +806,7 @@ Five stages, each independently reviewable, mergeable and testable.
 
 | File | Contents |
 |---|---|
-| `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `OffenceTally` — the wire DTOs |
+| `domain/rating.go` | `RatingRecord`, `OffenceCount` — the persisted unit; `NodeRating`, `DimensionRating`, `RecentOffence` — the wire DTOs |
 | `core/crdt/ratingstore` | `Store`: own go-ds-crdt datastore, key schema, encoding, merge hooks, own-records-only writes and deletes |
 | `core/crdt/statsstore` | the PN-counter, moved out of `core/crdt` so the two tenants share no package |
 | `core/crdt/broadcast` | the gossip broadcaster, moved out of the umbrella package and parametrised by topic |
@@ -829,7 +829,7 @@ New files:
 | `core/rating/rating.go` | `Dimension` with its half-life and retention, `Score` with its `Tier`, `Dimensions` per node type |
 | `core/rating/offence.go` | `Kind`, catalogue, accessors, `ParseKind` |
 | `core/rating/record.go` | `record`: signing bytes, sign, verify, validate; generation minting |
-| `core/rating/entries.go` | `bucket`, `entries`: decay, generation summing, penalty, median, tallies |
+| `core/rating/entries.go` | `bucket`, `entries`: decay, generation summing, penalty, median, counts |
 | `core/rating/indexer.go` | lazily loaded per-peer index, memoised scores, LRU eviction |
 | `core/rating/enforce.go` | `Tier` methods: the enforcement knobs |
 | `core/rating/engine.go` | `Engine`, `Storer`, `ConnectionsProvider`, local scoring, buffered writer, flush, GC, merge hooks |
@@ -912,8 +912,8 @@ one else's; `overall == min(dimensions)`; a single cleared report costs zero; th
 |---|---|
 | `cmd/node/moderator/audit/ledger.go` | `Ledger` gains a `rating.Reporter` and files an observation when a peer's standing **worsens** — once per crossing, so a long audit does not grind a peer down for a conclusion it already drew |
 | `core/handler/moderation.go` | `KindVerdictMalformed` — observed by *member* nodes about *moderators*, the cross-role case the CRDT exists for |
-| `cmd/node/moderator/round/round.go` | new optional `BallotObserver` capability, handed every ballot of a decided round |
-| `cmd/node/moderator/moderator/audit.go` | implements `BallotObserver`: charges `KindVerdictOutlier` to moderators that voted against the outcome |
+| `cmd/node/moderator/round/round.go` | new optional `VoteObserver` capability, handed every vote of a decided round |
+| `cmd/node/moderator/moderator/audit.go` | implements `VoteObserver`: charges `KindVerdictOutlier` to moderators that voted against the outcome |
 | `cmd/node/moderator/moderator/moderator.go` | ledger wired to the node's rating store |
 | `docs/MODERATION.md` | user-facing sections on moderator standing and on the node's own rating |
 | `cmd/node/moderator/audit/doc.go` | gap (1) marked partly addressed, with what is still missing |
@@ -929,11 +929,11 @@ different model exactly as hard as a bot with no model at all. The
 statistical tolerance therefore stays in the ledger, and only threshold
 crossings reach the rating.
 
-*Ballots are not weighted by rating.* `planTally` is a pure function
+*Votes are not weighted by rating.* `planCountdown` is a pure function
 precisely so every participant reaches the same answer from the same
-ballots, which is what lets the round pick a chair and a takeover order
+votes, which is what lets the round pick a chair and a takeover order
 without exchanging a message. Each node holds its own view of every
-moderator, so weighted tallies would differ between participants and the
+moderator, so weighted counts would differ between participants and the
 round would split. Dissent is observed and replicated instead — cheap
 and capped, because model diversity produces it honestly.
 
@@ -972,7 +972,7 @@ Stated plainly, in the spirit of `cmd/node/moderator/audit/doc.go`.
 4. **Model diversity still muddies the moderation dimension.**
    `KindVerdictOutlier` carries a low weight and a ceiling because gap (2) of
    `audit/doc.go` — establishing model identity rather than assuming it — is
-   unsolved. Until it is, a moderator's score must weight ballots, never
+   unsolved. Until it is, a moderator's score must weight votes, never
    disqualify them.
 5. **Rating is not evidence.** A record proves an observer *claimed* something,
    not that it happened. Nothing here reaches the standard needed to ban a node,

@@ -96,7 +96,7 @@ func newRatingStack(t *testing.T, db *local_store.DB, priv ed25519.PrivateKey, l
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	store, err := ratingdb.New(ctx, localBroadcaster{}, database.NewRatingRepo(db), host, noProviders{})
+	store, err := ratingdb.New(ctx, localBroadcaster{}, database.NewRatingRepo(db), host, noProviders{}, rating.VerifyRecord, rating.DimensionNames())
 	require.NoError(t, err)
 
 	s := &ratingStack{self: self, priv: priv, db: db, store: store, ratings: rating.NewPeersRatings()}

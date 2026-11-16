@@ -82,16 +82,16 @@ func TestMedianIsUnweighted(t *testing.T) {
 	assert.Zero(t, observers)
 }
 
-func TestTalliesAreUndecayedAndSortedByCount(t *testing.T) {
+func TestRecentIsUndecayedAndSortedByCount(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	es := entries{
 		testEntry("a", Network, bucketAt(now.Add(-48*time.Hour)), genA, kindCount{KindRateLimitHit, 30}),
 		testEntry("b", Network, bucketAt(now), genA, kindCount{KindRateLimitHit, 7}, kindCount{KindMalformedFrame, 4}),
 		testEntry("b", Application, bucketAt(now), genA, kindCount{KindWriteFlood, 9}),
 	}
-	got := es.tallies(Network, now)
+	got := es.recent(Network, now)
 	require.Len(t, got, 2, "another dimension's offences stay out")
-	assert.Equal(t, domain.OffenceTally{Kind: KindRateLimitHit.String(), Count: 37, LastAt: bucketAt(now).start()}, got[0],
+	assert.Equal(t, domain.RecentOffence{Kind: KindRateLimitHit.String(), Count: 37, LastAt: bucketAt(now).start()}, got[0],
 		"counts are raw, not decayed, and the last sighting is the newest bucket")
 	assert.Equal(t, KindMalformedFrame.String(), got[1].Kind)
 	assert.EqualValues(t, 4, got[1].Count)
@@ -124,14 +124,14 @@ func TestMedianIgnoresObserversThatHaveNothingFreshToSay(t *testing.T) {
 	assert.Zero(t, observers)
 }
 
-func TestTalliesDropObservationsPastTheRetentionHorizon(t *testing.T) {
+func TestRecentDropsObservationsPastTheRetentionHorizon(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Hour)
 	es := entries{
 		testEntry("a", Network, bucketAt(now.Add(-Network.Retention()-time.Hour)), genA, kindCount{KindRateLimitHit, 500}),
 		testEntry("b", Network, bucketAt(now), genA, kindCount{KindRateLimitHit, 3}),
 	}
 
-	got := es.tallies(Network, now)
+	got := es.recent(Network, now)
 	require.Len(t, got, 1)
 	assert.EqualValues(t, 3, got[0].Count, "only what still counts is shown")
 

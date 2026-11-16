@@ -141,9 +141,9 @@ describe('Root.vue', () => {
     await fireEvent.update(usernameField, 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-    // Step 2: three checkboxes, then Next appears
+    // Step 2: four checkboxes, then Next appears
     const checkboxes = await screen.findAllByRole('checkbox');
-    expect(checkboxes).toHaveLength(3);
+    expect(checkboxes).toHaveLength(4);
     for (const cb of checkboxes) {
       await fireEvent.click(cb);
     }

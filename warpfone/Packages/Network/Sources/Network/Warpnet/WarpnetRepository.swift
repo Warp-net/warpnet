@@ -57,6 +57,9 @@ actor WarpnetRepository {
   private var addresses = LRUCache<String, StatusAddress>(maxCost: 4096)
   private var stats = LRUCache<String, TweetStatsResponse>(maxCost: 2048, ttl: 300)
   private var images = LRUCache<String, Data>(maxCost: 8 << 20)
+  // Only the last video played, in memory: a video is tens of megabytes.
+  private var videos = LRUCache<String, Data>(maxCost: 1)
+  private var videoFetches: [String: Task<Data, Error>] = [:]
   private var cursors = LRUCache<String, String>(maxCost: 2048)
   private var retweeted = Set<String>()
   private var bookmarks: Set<String>
@@ -381,10 +384,28 @@ actor WarpnetRepository {
   }
 
   func videoData(userId: String, key: String) async throws -> Data {
-    let response: GetVideoResponse = try await call(ProtocolIds.PUBLIC_GET_VIDEO, GetVideoEvent(userId: userId, key: key))
-    guard let data = Self.decodeFile(response.file) else {
-      throw WarpnetRoutingError.emptyResponse(ProtocolIds.PUBLIC_GET_VIDEO)
+    let cacheKey = "\(userId)/\(key)"
+    if let cached = videos.value(for: cacheKey) {
+      return cached
     }
+    if let pending = videoFetches[cacheKey] {
+      return try await pending.value
+    }
+    // Drop the previous video first, so it does not sit next to the new one at the peak.
+    videos.removeAll()
+    let client = session.client
+    let body = try WarpnetJSON.encode(GetVideoEvent(userId: userId, key: key))
+    let fetch = Task {
+      let raw = try await client.requestBytes(ProtocolIds.PUBLIC_GET_VIDEO, body: body)
+      guard let data = GetVideoResponse.video(from: raw) else {
+        throw WarpnetRoutingError.emptyResponse(ProtocolIds.PUBLIC_GET_VIDEO)
+      }
+      return data
+    }
+    videoFetches[cacheKey] = fetch
+    defer { videoFetches[cacheKey] = nil }
+    let data = try await fetch.value
+    videos.set(data, for: cacheKey)
     return data
   }
 

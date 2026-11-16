@@ -33,11 +33,11 @@ import (
 	"sort"
 
 	"github.com/Warp-net/warpnet/cmd/node/moderator/vote"
-	"github.com/Warp-net/warpnet/domain"
+	"github.com/Warp-net/warpnet/event"
 )
 
-// Pure tally math: no state, no I/O. Every participant runs these over the
-// same ballots and must reach the same answer, which is what lets a round
+// Pure countdown math: no state, no I/O. Every participant runs these over the
+// same votes and must reach the same answer, which is what lets a round
 // pick a chair and a takeover order without exchanging a single message.
 
 // pairHash orders (round, participant) pairs. It drives the volunteer
@@ -60,7 +60,7 @@ func sortedVotes(id string, votes map[string]vote.Event) []vote.Event {
 }
 
 // trimEven drops the highest-ranked vote of an even count so a strict
-// majority always exists in the tally.
+// majority always exists in the countdown.
 func trimEven(ordered []vote.Event) []vote.Event {
 	if len(ordered) > 0 && len(ordered)%2 == 0 {
 		return ordered[:len(ordered)-1]
@@ -68,12 +68,12 @@ func trimEven(ordered []vote.Event) []vote.Event {
 	return ordered
 }
 
-// keptVotes is the tally set: hash-ordered votes trimmed to an odd count.
+// keptVotes is the countdown set: hash-ordered votes trimmed to an odd count.
 func keptVotes(id string, votes map[string]vote.Event) []vote.Event {
 	return trimEven(sortedVotes(id, votes))
 }
 
-// rankOf reports a participant's position in the ordered ballots, or -1
+// rankOf reports a participant's position in the ordered votes, or -1
 // when it did not vote.
 func rankOf(ordered []vote.Event, moderatorID string) int {
 	for i, v := range ordered {
@@ -84,11 +84,11 @@ func rankOf(ordered []vote.Event, moderatorID string) int {
 	return -1
 }
 
-// role is what the tally makes of this participant for one round.
+// role is what the countdown makes of this participant for one round.
 type role int
 
 const (
-	// roleBystander: nothing to do — no ballots, or this participant did
+	// roleBystander: nothing to do — no votes, or this participant did
 	// not vote, or it never saw the subject.
 	roleBystander role = iota
 	// roleChair: carry the decision now.
@@ -98,30 +98,30 @@ const (
 )
 
 // plan is the whole decision a round makes when its window closes: who
-// this participant is, what the ballots add up to, and how long to wait
-// before stepping in. A pure function of the ballots — no state touched,
+// this participant is, what the votes add up to, and how long to wait
+// before stepping in. A pure function of the votes — no state touched,
 // no side effects — so the rule can be read and tested on its own.
 type plan struct {
 	role    role
 	rank    int
 	chair   string
 	outcome vote.Event
-	voters  []domain.ID
-	// counted is how many ballots entered the tally, for the log line.
+	votes   []event.VerdictVote
+	// counted is how many votes entered the countdown, for the log line.
 	counted int
 	// orphaned marks a participant that voted on a subject it never saw,
-	// which only happens if someone forged ballots naming it.
+	// which only happens if someone forged votes naming it.
 	orphaned bool
 }
 
-// planTally decides a round from its ballots alone.
-func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool) plan {
-	ordered := sortedVotes(id, ballots)
+// planCountdown decides a round from its votes alone.
+func planCountdown(id, self string, votes map[string]vote.Event, haveSubject bool) plan {
+	ordered := sortedVotes(id, votes)
 	kept := trimEven(ordered)
 
 	// The takeover chain ranks over the full voter order, pre-trim: a
 	// voter dropped by the odd-count trim still holds everything needed
-	// to carry the kept tally if the chair dies.
+	// to carry the kept countdown if the chair dies.
 	rank := rankOf(ordered, self)
 	if len(kept) == 0 || rank < 0 {
 		return plan{role: roleBystander}
@@ -135,7 +135,7 @@ func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool)
 		rank:    rank,
 		chair:   kept[0].ModeratorID,
 		outcome: outcome,
-		voters:  voters,
+		votes:   voters,
 		counted: len(kept),
 	}
 	if rank == 0 {
@@ -146,30 +146,29 @@ func planTally(id, self string, ballots map[string]vote.Event, haveSubject bool)
 	return p
 }
 
-// aggregate reduces the kept ballots to the round outcome: FAIL on strict
-// majority, returning the lowest-ranked ballot of the winning side so every
+// aggregate reduces the kept votes to the round outcome: FAIL on strict
+// majority, returning the lowest-ranked vote of the winning side so every
 // participant aggregates identically.
-func aggregate(kept []vote.Event) (vote.Event, []domain.ID) {
+func aggregate(kept []vote.Event) (vote.Event, []event.VerdictVote) {
 	failCount := 0
 	for _, v := range kept {
 		if !bool(v.Result) {
 			failCount++
 		}
 	}
-	majority := domain.OK
-	if failCount*2 > len(kept) {
-		majority = domain.FAIL
-	}
+	majority := event.MajorityResult(failCount, len(kept))
 
-	voters := make([]domain.ID, 0, len(kept))
+	votes := make([]event.VerdictVote, 0, len(kept))
 	for _, v := range kept {
-		voters = append(voters, domain.ID(v.ModeratorID))
+		votes = append(votes, event.VerdictVote{
+			ModeratorID: v.ModeratorID, Result: v.Result, Signature: v.Signature,
+		})
 	}
 
 	for _, v := range kept {
 		if v.Result == majority {
-			return v, voters
+			return v, votes
 		}
 	}
-	return vote.Event{Result: majority}, voters
+	return vote.Event{Result: majority}, votes
 }

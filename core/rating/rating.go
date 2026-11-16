@@ -46,6 +46,19 @@ const (
 	Moderation                   // moderator nodes
 )
 
+// dimensions is every dimension a record may carry.
+var dimensions = []Dimension{Network, Application, Moderation}
+
+// DimensionNames are the wire names of every dimension, for a store that
+// keeps records of these dimensions only.
+func DimensionNames() []string {
+	names := make([]string, 0, len(dimensions))
+	for _, d := range dimensions {
+		names = append(names, d.String())
+	}
+	return names
+}
+
 // retentionHalfLives is how many half-lives a record stays relevant.
 const retentionHalfLives = 8
 

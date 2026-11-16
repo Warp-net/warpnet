@@ -260,6 +260,7 @@ struct WarpnetRouter: Sendable {
                              videoKey: video,
                              poll: poll)
     let created: WarpnetTweet = try await repository.call(ProtocolIds.PRIVATE_POST_TWEET, draft)
+    await repository.forgetUser(viewer.userId)
     guard let status = await repository.status(created) else { throw WarpnetRoutingError.emptyResponse(ProtocolIds.PRIVATE_POST_TWEET) }
     return status
   }
@@ -279,6 +280,7 @@ struct WarpnetRouter: Sendable {
                              quotedTweetId: source.tweetId,
                              quotedUserId: source.userId)
     let created: WarpnetTweet = try await repository.call(ProtocolIds.PUBLIC_POST_RETWEET, draft)
+    await repository.forgetUser(viewer.userId)
     guard let status = await repository.status(created) else { throw WarpnetRoutingError.emptyResponse(ProtocolIds.PUBLIC_POST_RETWEET) }
     return status
   }
@@ -303,6 +305,7 @@ struct WarpnetRouter: Sendable {
                                                parentId: address.parentId,
                                                rootId: address.rootId))
     await repository.forgetTweet(address.tweetId)
+    await repository.forgetUser(viewerId)
   }
 
   private func react(_ id: String, emoji: String, viewerId: String) async throws -> Response {
@@ -589,6 +592,8 @@ struct WarpnetRouter: Sendable {
     case "mention", "reply": "mention"
     case "message": "message"
     case "moderation": "moderation"
+    case "new_user": "new_user"
+    case "order_limit": "order_limit"
     default: nil
     }
   }

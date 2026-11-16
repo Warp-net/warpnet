@@ -83,7 +83,7 @@ func TestPollResults(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("propagates the tally failure", func(t *testing.T) {
+	t.Run("propagates the count failure", func(t *testing.T) {
 		repoErr := errors.New("down")
 		repo := stubPollRepo{resultsFn: func(string, int) ([]uint64, error) { return nil, repoErr }}
 		_, err := pollResults(repo, "tweet", "user", 2)
@@ -210,7 +210,7 @@ func TestForwardPollRead(t *testing.T) {
 		require.False(t, ok)
 	})
 
-	t.Run("empty tally is read locally", func(t *testing.T) {
+	t.Run("empty count is read locally", func(t *testing.T) {
 		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return json.Marshal(event.PollResultsResponse{TweetId: "tweet-1"})
 		}}
@@ -218,7 +218,7 @@ func TestForwardPollRead(t *testing.T) {
 		require.False(t, ok)
 	})
 
-	t.Run("remote tally wins", func(t *testing.T) {
+	t.Run("remote count wins", func(t *testing.T) {
 		streamer := stubStreamer{nodeInfo: selfInfo, genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
 			return json.Marshal(event.PollResultsResponse{TweetId: "tweet-1", Votes: []uint64{1, 2}, TotalVotes: 3})
 		}}
@@ -286,7 +286,7 @@ func TestStreamViewHandlerRecordFailure(t *testing.T) {
 
 	userRepo, s := actorStream(t, viewer, nil)
 	repoErr := errors.New("counter down")
-	repo := stubViewRepo{recordFn: func(string, string) (uint64, error) { return 0, repoErr }}
+	repo := stubViewRepo{recordFn: func(string, string, bool) (uint64, error) { return 0, repoErr }}
 
 	h := StreamViewHandler(repo, userRepo, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: author}})
 	_, err := h(marshal(t, event.ViewEvent{TweetId: tweetId, UserId: author, ViewerId: viewer}), s)

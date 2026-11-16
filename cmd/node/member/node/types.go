@@ -157,7 +157,7 @@ type PeerRater interface {
 
 // RatingStorer is the replicated record store the rating engine writes to.
 type RatingStorer interface {
-	Put(rec domain.RatingRecord) error
+	Put(recs ...domain.RatingRecord) error
 	List(peerID string) ([]domain.RatingRecord, error)
 	PeerIDs() ([]string, error)
 	DeleteExpired(dimension string, beforeBucket int64) error
@@ -237,7 +237,7 @@ type Storer interface {
 type StatsStorer interface {
 	Increment(key datastore.Key) error
 	Decrement(key datastore.Key) error
-	GetAggregatedStat(key datastore.Key) (uint64, error)
+	GetAggregatedStat(key datastore.Key, perNodeCap uint64) (uint64, error)
 	Close() error
 }
 
@@ -367,7 +367,7 @@ type TweetsProvider interface {
 	List(string, *uint64, *string) ([]domain.Tweet, string, error)
 	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
 	Pin(userId string, tweetId string) (domain.Tweet, error)
-	RecordView(tweetId string, viewerId string) (uint64, error)
+	RecordView(tweetId, viewerId string, isTransitive bool) (uint64, error)
 	RepliesCount(tweetId string) (reactionsNum uint64, err error)
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	RetweetsCount(tweetId string) (uint64, error)

@@ -154,6 +154,21 @@ func TestFailedWriteStaysDirtyAndRetries(t *testing.T) {
 	assert.Equal(t, 1, store.len(), "a failed write must be retried, not dropped")
 }
 
+func TestFlushWritesAllDirtyRecordsAtOnce(t *testing.T) {
+	self := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e := newMemberEngine(t, self, store, clock)
+
+	for range 5 {
+		require.NoError(t, e.record(newIdentity(t).id, KindBadSignature))
+	}
+	flushNow(t, e)
+
+	assert.Equal(t, 5, store.len())
+	assert.Equal(t, 1, store.putCalls, "one write per flush keeps the DAG one block deep per flush")
+}
+
 func TestScoreDropsOnFirstHandEvidence(t *testing.T) {
 	self := newIdentity(t)
 	other := newIdentity(t)
@@ -401,7 +416,7 @@ func TestLateRecordIsDroppedWithoutBlame(t *testing.T) {
 	assert.Equal(t, MaxScore, e.Score(peer.id), "an honest node that has not pruned yet is not a forger")
 }
 
-func TestGCExpiresOnlyOwnRecordsPerDimension(t *testing.T) {
+func TestGCExpiresEveryRecordPerDimension(t *testing.T) {
 	self := newIdentity(t)
 	peer := newIdentity(t)
 	rated := newIdentity(t)
@@ -425,9 +440,41 @@ func TestGCExpiresOnlyOwnRecordsPerDimension(t *testing.T) {
 		{dimension: Moderation.String(), beforeBucket: int64(bucketAt(now.Add(-Moderation.Retention())))},
 	}, store.expiries(), "every dimension this node witnesses is pruned at its own retention")
 
-	records := store.records()
-	require.Len(t, records, 1, "only our own expired record may go")
-	assert.Equal(t, foreign, records[0], "another node's evidence is never ours to prune")
+	assert.Empty(t, store.records(), "past retention, own and foreign evidence alike goes")
+}
+
+func TestGCExpiresDimensionsARelayDoesNotWitness(t *testing.T) {
+	self := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	relay := newTestEngine(t, self, store, clock, warpnet.RelayNode)
+
+	relay.gc()
+
+	expiries := store.expiries()
+	dims := make([]string, 0, len(expiries))
+	for _, exp := range expiries {
+		dims = append(dims, exp.dimension)
+	}
+	assert.ElementsMatch(t, DimensionNames(), dims,
+		"a relay keeps the replica of every dimension, so it must expire every one")
+}
+
+func TestAFailedBatchedWriteKeepsEveryRecordDirty(t *testing.T) {
+	self := newIdentity(t)
+	clock := newClock()
+	store := newFakeStore(self.id)
+	e := newMemberEngine(t, self, store, clock)
+
+	for range 3 {
+		require.NoError(t, e.record(newIdentity(t).id, KindBadSignature))
+	}
+	store.setPutErr(errors.New("datastore is down"))
+	require.Error(t, e.flush())
+
+	store.setPutErr(nil)
+	flushNow(t, e)
+	assert.Equal(t, 3, store.len(), "one failed write of the whole flush retries all of it")
 }
 
 func TestEvictedPeerReloadsFromTheStore(t *testing.T) {
@@ -695,7 +742,7 @@ func TestEngineIgnoresUnacquaintedObservers(t *testing.T) {
 	assert.Less(t, known.Score(victim.id), MaxScore, "the same record counts once the observer is known")
 }
 
-func TestViewIsThePublicMedianWithRecentTallies(t *testing.T) {
+func TestViewIsThePublicMedianWithRecentOffences(t *testing.T) {
 	self := newIdentity(t)
 	a := newIdentity(t)
 	b := newIdentity(t)
@@ -716,7 +763,7 @@ func TestViewIsThePublicMedianWithRecentTallies(t *testing.T) {
 	assert.Equal(t, TierTrusted.String(), view.Tier)
 	require.Len(t, view.Dimensions, 1)
 	assert.Equal(t, Network.String(), view.Dimensions[0].Name)
-	assert.Equal(t, []domain.OffenceTally{
+	assert.Equal(t, []domain.RecentOffence{
 		{Kind: KindRateLimitHit.String(), Count: 3, LastAt: hour.start()},
 		{Kind: KindBadSignature.String(), Count: 1, LastAt: hour.start()},
 	}, view.Dimensions[0].Recent, "raw counts, busiest first")

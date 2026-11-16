@@ -825,6 +825,21 @@ public struct GetVideoResponse: Decodable, Equatable, Sendable {
   }
 }
 
+public extension GetVideoResponse {
+  /// The video in a raw GetVideoResponse, `{"file":"data:<mime>;base64,<base64>",...}`.
+  /// Base64 holds no quote, so it is decoded in place instead of through a
+  /// JSON string. Nil when the node has no such video.
+  static func video(from raw: Data) -> Data? {
+    let field = Data(#""file":""#.utf8)
+    guard let file = raw.prefix(64).range(of: field),
+          let comma = raw[file.upperBound...].firstIndex(of: UInt8(ascii: ",")),
+          let end = raw[comma...].firstIndex(of: UInt8(ascii: "\""))
+    else { return nil }
+    guard let video = Data(base64Encoded: raw[raw.index(after: comma) ..< end]), !video.isEmpty else { return nil }
+    return video
+  }
+}
+
 public struct WarpnetMessage: Decodable, Equatable, Sendable {
   public var id: String
   public var chatId: String

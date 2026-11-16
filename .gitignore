@@ -66,3 +66,6 @@ frontend/node_modules
 /.claude/
 /.codex/
 /AGENTS.md
+
+# Apple developer directories
+/ios-signing/

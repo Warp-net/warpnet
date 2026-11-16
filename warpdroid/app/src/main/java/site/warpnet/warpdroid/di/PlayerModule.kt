@@ -58,8 +58,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
+import site.warpnet.warpdroid.util.WarpnetVideoCache
 import site.warpnet.warpdroid.util.WarpnetVideoDataSource
-import site.warpnet.warpdroid.warpnet.WarpnetRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -175,11 +175,11 @@ object PlayerModule {
     fun provideDataSourceFactory(
         @ApplicationContext context: Context,
         okHttpClient: OkHttpClient,
-        warpnetRepository: WarpnetRepository,
+        videoCache: WarpnetVideoCache,
     ): DataSource.Factory {
         return WarpnetVideoDataSource.Factory(
             DefaultDataSource.Factory(context, OkHttpDataSource.Factory(okHttpClient)),
-            warpnetRepository,
+            videoCache,
         )
     }
 

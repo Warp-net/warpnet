@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/mdns"
 	"github.com/Warp-net/warpnet/core/middleware"
 	corenode "github.com/Warp-net/warpnet/core/node"
@@ -158,7 +159,7 @@ func TestNewMemberNodeCarriesFollowings(t *testing.T) {
 
 func TestFetchFollowingIds(t *testing.T) {
 	t.Run("nil repo yields nothing", func(t *testing.T) {
-		ids, err := fetchFollowingIds("owner-1", nil)
+		ids, err := fetchFollowingIds("owner-1", nil, nil)
 		require.NoError(t, err)
 		require.Empty(t, ids)
 	})
@@ -169,18 +170,43 @@ func TestFetchFollowingIds(t *testing.T) {
 			append(idRange(19), "owner-1"),
 			{"late-1"},
 		}}
-		ids, err := fetchFollowingIds("owner-1", repo)
+		ids, err := fetchFollowingIds("owner-1", repo, bridgedUsers{})
 		require.NoError(t, err)
 		require.NotContains(t, ids, domain.ID("owner-1"))
 		require.Contains(t, ids, "late-1")
 		require.Len(t, ids, 20)
 	})
 
+	t.Run("skips bridged users", func(t *testing.T) {
+		repo := &pagedFollowStore{pages: [][]domain.ID{{"warp-1", "bridged-1"}}}
+		ids, err := fetchFollowingIds("owner-1", repo, bridgedUsers{ids: map[string]bool{"bridged-1": true}})
+		require.NoError(t, err)
+		require.Equal(t, []string{"warp-1"}, ids)
+	})
+
 	t.Run("a lookup failure surfaces", func(t *testing.T) {
 		repo := &pagedFollowStore{err: errors.New("store down")}
-		_, err := fetchFollowingIds("owner-1", repo)
+		_, err := fetchFollowingIds("owner-1", repo, bridgedUsers{})
 		require.Error(t, err)
 	})
+}
+
+// bridgedUsers serves only GetBatch; any other UserProvider call panics.
+type bridgedUsers struct {
+	UserProvider
+	ids map[string]bool
+}
+
+func (b bridgedUsers) GetBatch(userIds ...string) ([]domain.User, error) {
+	users := make([]domain.User, 0, len(userIds))
+	for _, id := range userIds {
+		u := domain.User{Id: id}
+		if b.ids[id] {
+			u.Network = fediverse.MastodonNetwork
+		}
+		users = append(users, u)
+	}
+	return users, nil
 }
 
 func idRange(n int) []domain.ID {

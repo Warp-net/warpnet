@@ -15,16 +15,16 @@ import (
 
 // stubMember is a Participant that votes a fixed way and records what the
 // round asked of it. No moderator, no engine: this package must be testable
-// without knowing what a ballot means.
+// without knowing what a vote means.
 type stubMember struct {
 	id     string
 	result domain.ModerationResult
 	reason string
-	// abstain makes Ballot decline to vote.
+	// abstain makes Vote decline to vote.
 	abstain bool
 
 	mu        sync.Mutex
-	ballots   int
+	votes     int
 	broadcast []vote.Event
 	decisions []decision
 	ready     chan struct{}
@@ -33,16 +33,16 @@ type stubMember struct {
 type decision struct {
 	subject event.ReportEvent
 	outcome vote.Event
-	voters  []domain.ID
+	votes   []event.VerdictVote
 }
 
 func newStubMember(id string, result domain.ModerationResult) *stubMember {
 	return &stubMember{id: id, result: result, reason: "because", ready: make(chan struct{}, 8)}
 }
 
-func (s *stubMember) Ballot(reportID string, subject event.ReportEvent) (vote.Event, bool, error) {
+func (s *stubMember) Vote(reportID string, subject event.ReportEvent) (vote.Event, bool, error) {
 	s.mu.Lock()
-	s.ballots++
+	s.votes++
 	s.mu.Unlock()
 	if s.abstain {
 		return vote.Event{}, false, nil
@@ -70,16 +70,16 @@ func (s *stubMember) Broadcast(v vote.Event) error {
 	return nil
 }
 
-func (s *stubMember) Decided(subject event.ReportEvent, outcome vote.Event, voters []domain.ID) {
+func (s *stubMember) Decided(subject event.ReportEvent, outcome vote.Event, votes []event.VerdictVote) {
 	s.mu.Lock()
-	s.decisions = append(s.decisions, decision{subject, outcome, voters})
+	s.decisions = append(s.decisions, decision{subject, outcome, votes})
 	s.mu.Unlock()
 }
 
-func (s *stubMember) counts() (ballots int, broadcasts int, decisions int) {
+func (s *stubMember) counts() (votes int, broadcasts int, decisions int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.ballots, len(s.broadcast), len(s.decisions)
+	return s.votes, len(s.broadcast), len(s.decisions)
 }
 
 func (s *stubMember) lastDecision(t *testing.T) decision {
@@ -104,13 +104,13 @@ func (s *stubMember) finals() []vote.Event {
 	return out
 }
 
-// waitBallot blocks until the round broadcasts something.
-func (s *stubMember) waitBallot(t *testing.T) {
+// waitVote blocks until the round broadcasts something.
+func (s *stubMember) waitVote(t *testing.T) {
 	t.Helper()
 	select {
 	case <-s.ready:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the round never broadcast a ballot")
+		t.Fatal("the round never broadcast a vote")
 	}
 }
 
@@ -130,7 +130,7 @@ func subject(objectID string) event.ReportEvent {
 	}
 }
 
-func ballotFrom(reportID, member string, result domain.ModerationResult) vote.Event {
+func voteFrom(reportID, member string, result domain.ModerationResult) vote.Event {
 	objectID := domain.ID("tweet-1")
 	return vote.Event{
 		ReportID:    reportID,
@@ -154,14 +154,14 @@ func activeCount(rs *Registry) int {
 	return len(rs.active)
 }
 
-// closeWindow runs the tally as if the vote window had elapsed.
+// closeWindow runs the countdown as if the vote window had elapsed.
 func closeWindow(t *testing.T, rs *Registry, id string) {
 	t.Helper()
 	r := liveRound(rs, id)
 	if r == nil {
 		t.Fatalf("no live round for %s", id)
 	}
-	r.tally()
+	r.countdown()
 }
 
 // rankedPeers finds n synthetic participant ids that sort above (or below)
@@ -183,7 +183,7 @@ func rankedPeers(t *testing.T, reportID, pivot string, above bool, n int) []stri
 	return out
 }
 
-// A lone participant is its own chair: it votes, tallies and carries the
+// A lone participant is its own chair: it votes, runs the countdown and carries the
 // decision.
 func TestRound_SoleVoterDecides(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
@@ -192,16 +192,16 @@ func TestRound_SoleVoterDecides(t *testing.T) {
 
 	subj := subject("tweet-1")
 	rs.Open(subj)
-	member.waitBallot(t)
+	member.waitVote(t)
 
 	closeWindow(t, rs, subj.ReportID())
 
 	d := member.lastDecision(t)
 	if d.outcome.Result != domain.FAIL {
-		t.Fatalf("expected the FAIL ballot to carry, got %+v", d.outcome)
+		t.Fatalf("expected the FAIL vote to carry, got %+v", d.outcome)
 	}
-	if len(d.voters) != 1 || d.voters[0] != "self" {
-		t.Fatalf("expected a single voter, got %v", d.voters)
+	if len(d.votes) != 1 || d.votes[0].ModeratorID != "self" {
+		t.Fatalf("expected a single voter, got %v", d.votes)
 	}
 	if finals := member.finals(); len(finals) != 1 {
 		t.Fatalf("the decision must be announced exactly once, got %d", len(finals))
@@ -211,7 +211,7 @@ func TestRound_SoleVoterDecides(t *testing.T) {
 	}
 }
 
-// Two FAIL ballots against one OK: strict majority decides.
+// Two FAIL votes against one OK: strict majority decides.
 func TestRound_MajorityDecides(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	rs := NewRegistry("self", member, frozen())
@@ -222,9 +222,9 @@ func TestRound_MajorityDecides(t *testing.T) {
 	others := rankedPeers(t, id, "self", true, 2) // self ranks first -> chair
 
 	rs.Open(subj)
-	member.waitBallot(t)
-	rs.AddVote(ballotFrom(id, others[0], domain.FAIL))
-	rs.AddVote(ballotFrom(id, others[1], domain.OK))
+	member.waitVote(t)
+	rs.AddVote(voteFrom(id, others[0], domain.FAIL))
+	rs.AddVote(voteFrom(id, others[1], domain.OK))
 
 	closeWindow(t, rs, id)
 
@@ -232,14 +232,14 @@ func TestRound_MajorityDecides(t *testing.T) {
 	if d.outcome.Result != domain.FAIL {
 		t.Fatal("2 of 3 FAIL must decide FAIL")
 	}
-	if len(d.voters) != 3 {
-		t.Fatalf("expected 3 voters, got %v", d.voters)
+	if len(d.votes) != 3 {
+		t.Fatalf("expected 3 voters, got %v", d.votes)
 	}
 }
 
 // The same round with the majority the other way: one FAIL cannot outvote
-// two OK ballots.
-func TestRound_MajorityOverrulesOwnBallot(t *testing.T) {
+// two OK votes.
+func TestRound_MajorityOverrulesOwnVote(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	rs := NewRegistry("self", member, frozen())
 	t.Cleanup(rs.StopAll)
@@ -249,9 +249,9 @@ func TestRound_MajorityOverrulesOwnBallot(t *testing.T) {
 	others := rankedPeers(t, id, "self", true, 2)
 
 	rs.Open(subj)
-	member.waitBallot(t)
-	rs.AddVote(ballotFrom(id, others[0], domain.OK))
-	rs.AddVote(ballotFrom(id, others[1], domain.OK))
+	member.waitVote(t)
+	rs.AddVote(voteFrom(id, others[0], domain.OK))
+	rs.AddVote(voteFrom(id, others[1], domain.OK))
 
 	closeWindow(t, rs, id)
 
@@ -260,7 +260,7 @@ func TestRound_MajorityOverrulesOwnBallot(t *testing.T) {
 	}
 }
 
-// A participant that is not the chair tallies but stays silent.
+// A participant that is not the chair runs the countdown but stays silent.
 func TestRound_NonChairStandsBy(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	rs := NewRegistry("self", member, frozen())
@@ -272,9 +272,9 @@ func TestRound_NonChairStandsBy(t *testing.T) {
 	above := rankedPeers(t, id, "self", true, 1)
 
 	rs.Open(subj)
-	member.waitBallot(t)
-	rs.AddVote(ballotFrom(id, below[0], domain.FAIL))
-	rs.AddVote(ballotFrom(id, above[0], domain.FAIL))
+	member.waitVote(t)
+	rs.AddVote(voteFrom(id, below[0], domain.FAIL))
+	rs.AddVote(voteFrom(id, above[0], domain.FAIL))
 
 	closeWindow(t, rs, id)
 
@@ -298,9 +298,9 @@ func TestRound_BackupTakesOverSilentChair(t *testing.T) {
 	above := rankedPeers(t, id, "self", true, 1)
 
 	rs.Open(subj)
-	member.waitBallot(t)
-	rs.AddVote(ballotFrom(id, below[0], domain.FAIL))
-	rs.AddVote(ballotFrom(id, above[0], domain.FAIL))
+	member.waitVote(t)
+	rs.AddVote(voteFrom(id, below[0], domain.FAIL))
+	rs.AddVote(voteFrom(id, above[0], domain.FAIL))
 	closeWindow(t, rs, id)
 
 	r := liveRound(rs, id)
@@ -312,7 +312,7 @@ func TestRound_BackupTakesOverSilentChair(t *testing.T) {
 
 	d := member.lastDecision(t)
 	if d.outcome.Result != domain.FAIL {
-		t.Fatalf("the backup must carry the tallied outcome, got %+v", d.outcome)
+		t.Fatalf("the backup must carry the countdown outcome, got %+v", d.outcome)
 	}
 	if finals := member.finals(); len(finals) != 1 || finals[0].ModeratorID != "self" {
 		t.Fatalf("the backup announces under its own identity, got %+v", finals)
@@ -331,9 +331,9 @@ func TestRound_FinalAnnouncementCancelsTakeover(t *testing.T) {
 	above := rankedPeers(t, id, "self", true, 1)
 
 	rs.Open(subj)
-	member.waitBallot(t)
-	rs.AddVote(ballotFrom(id, below[0], domain.FAIL))
-	rs.AddVote(ballotFrom(id, above[0], domain.FAIL))
+	member.waitVote(t)
+	rs.AddVote(voteFrom(id, below[0], domain.FAIL))
+	rs.AddVote(voteFrom(id, above[0], domain.FAIL))
 	closeWindow(t, rs, id)
 
 	parked := liveRound(rs, id)
@@ -352,7 +352,7 @@ func TestRound_FinalAnnouncementCancelsTakeover(t *testing.T) {
 	}
 }
 
-// A round already served by a quorum costs a late voter nothing: no ballot,
+// A round already served by a quorum costs a late voter nothing: no vote,
 // no broadcast.
 func TestRound_LateVoterIsSuppressed(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
@@ -366,7 +366,7 @@ func TestRound_LateVoterIsSuppressed(t *testing.T) {
 		if i%2 == 0 {
 			result = domain.OK
 		}
-		rs.AddVote(ballotFrom(id, peer, result))
+		rs.AddVote(voteFrom(id, peer, result))
 	}
 
 	// The subject arrives after the quorum; the volunteer timer is frozen,
@@ -374,12 +374,12 @@ func TestRound_LateVoterIsSuppressed(t *testing.T) {
 	rs.Open(subj)
 	liveRound(rs, id).castVote()
 
-	if ballots, broadcasts, _ := member.counts(); ballots != 0 || broadcasts != 0 {
-		t.Fatalf("a suppressed voter must not be asked for a ballot, got %d ballots %d broadcasts", ballots, broadcasts)
+	if votes, broadcasts, _ := member.counts(); votes != 0 || broadcasts != 0 {
+		t.Fatalf("a suppressed voter must not be asked for a vote, got %d votes %d broadcasts", votes, broadcasts)
 	}
 }
 
-// An abstaining participant produces no ballot at all.
+// An abstaining participant produces no vote at all.
 func TestRound_AbstainingVoterBroadcastsNothing(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	member.abstain = true
@@ -390,28 +390,28 @@ func TestRound_AbstainingVoterBroadcastsNothing(t *testing.T) {
 	r.setReport(subj, time.Hour)
 	r.castVote()
 
-	if ballots, broadcasts, _ := member.counts(); ballots != 1 || broadcasts != 0 {
-		t.Fatalf("an abstention must not broadcast, got %d ballots %d broadcasts", ballots, broadcasts)
+	if votes, broadcasts, _ := member.counts(); votes != 1 || broadcasts != 0 {
+		t.Fatalf("an abstention must not broadcast, got %d votes %d broadcasts", votes, broadcasts)
 	}
 }
 
-func TestRegistry_DedupsBallotsByParticipant(t *testing.T) {
+func TestRegistry_DedupsVotesByParticipant(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	rs := NewRegistry("self", member, frozen())
 	t.Cleanup(rs.StopAll)
 
 	id := subject("tweet-1").ReportID()
-	rs.AddVote(ballotFrom(id, "peer-a", domain.FAIL))
-	rs.AddVote(ballotFrom(id, "peer-a", domain.OK)) // second ballot, same peer
+	rs.AddVote(voteFrom(id, "peer-a", domain.FAIL))
+	rs.AddVote(voteFrom(id, "peer-a", domain.OK)) // second vote, same peer
 
 	r := liveRound(rs, id)
 	r.mx.Lock()
 	defer r.mx.Unlock()
 	if len(r.votes) != 1 {
-		t.Fatalf("expected exactly one counted ballot, got %d", len(r.votes))
+		t.Fatalf("expected exactly one counted vote, got %d", len(r.votes))
 	}
 	if bool(r.votes["peer-a"].Result) {
-		t.Fatal("the first ballot must win, not be overwritten")
+		t.Fatal("the first vote must win, not be overwritten")
 	}
 }
 
@@ -422,11 +422,11 @@ func TestRegistry_DecidedRoundIsNotReopened(t *testing.T) {
 
 	subj := subject("tweet-1")
 	id := subj.ReportID()
-	rs.AddVote(ballotFrom(id, "peer-a", domain.FAIL))
+	rs.AddVote(voteFrom(id, "peer-a", domain.FAIL))
 	closeWindow(t, rs, id)
 
 	// Late gossip after the round is spent.
-	rs.AddVote(ballotFrom(id, "peer-b", domain.FAIL))
+	rs.AddVote(voteFrom(id, "peer-b", domain.FAIL))
 	rs.Open(subj)
 
 	if activeCount(rs) != 0 {
@@ -434,7 +434,7 @@ func TestRegistry_DecidedRoundIsNotReopened(t *testing.T) {
 	}
 }
 
-func TestRegistry_FinalAnnouncementIsNotABallot(t *testing.T) {
+func TestRegistry_FinalAnnouncementIsNotAVote(t *testing.T) {
 	member := newStubMember("self", domain.FAIL)
 	rs := NewRegistry("self", member, frozen())
 	t.Cleanup(rs.StopAll)
@@ -449,7 +449,7 @@ func TestRegistry_FinalAnnouncementIsNotABallot(t *testing.T) {
 
 	// The bogus announcement was ignored rather than recorded as finalized,
 	// so a genuine report for the same id is still free to open its round.
-	rs.AddVote(ballotFrom(id, "peer-b", domain.FAIL))
+	rs.AddVote(voteFrom(id, "peer-b", domain.FAIL))
 	if activeCount(rs) != 1 {
 		t.Fatal("an unverified announcement must not suppress a genuine round")
 	}
@@ -464,7 +464,7 @@ func TestMarkFinalized_RejectsForgedFinal(t *testing.T) {
 	t.Cleanup(rs.StopAll)
 
 	id := subject("tweet-1").ReportID()
-	rs.AddVote(ballotFrom(id, "chair", domain.FAIL))
+	rs.AddVote(voteFrom(id, "chair", domain.FAIL))
 
 	if rs.MarkFinalized(id, "stranger") {
 		t.Fatal("a non-voter's Final must be rejected")
@@ -530,34 +530,34 @@ func TestVoteDelay_LargePopulationDefersMostRounds(t *testing.T) {
 
 func TestKeptVotes_EvenCountTrimmedDeterministically(t *testing.T) {
 	id := "round-x"
-	ballots := map[string]vote.Event{}
+	votes := map[string]vote.Event{}
 	for _, peer := range []string{"peer-a", "peer-b", "peer-c", "peer-d"} {
-		ballots[peer] = vote.Event{ReportID: id, ModeratorID: peer}
+		votes[peer] = vote.Event{ReportID: id, ModeratorID: peer}
 	}
 
-	kept := keptVotes(id, ballots)
+	kept := keptVotes(id, votes)
 	if len(kept) != 3 {
-		t.Fatalf("4 ballots must be trimmed to 3, got %d", len(kept))
+		t.Fatalf("4 votes must be trimmed to 3, got %d", len(kept))
 	}
 
 	order := []string{"peer-a", "peer-b", "peer-c", "peer-d"}
 	sort.Slice(order, func(i, j int) bool { return pairHash(id, order[i]) < pairHash(id, order[j]) })
 	for i := range kept {
 		if kept[i].ModeratorID != order[i] {
-			t.Fatalf("kept ballots must be hash-ordered: got %s at %d, want %s", kept[i].ModeratorID, i, order[i])
+			t.Fatalf("kept votes must be hash-ordered: got %s at %d, want %s", kept[i].ModeratorID, i, order[i])
 		}
 	}
 	dropped := order[len(order)-1]
 	for _, v := range kept {
 		if v.ModeratorID == dropped {
-			t.Fatalf("the highest-ranked ballot %s must be the one dropped", dropped)
+			t.Fatalf("the highest-ranked vote %s must be the one dropped", dropped)
 		}
 	}
 }
 
 func TestAggregate_MajorityAndTieRules(t *testing.T) {
 	mk := func(id string, res domain.ModerationResult) vote.Event {
-		return ballotFrom("round-x", id, res)
+		return voteFrom("round-x", id, res)
 	}
 
 	outcome, voters := aggregate([]vote.Event{
@@ -585,18 +585,18 @@ func TestAggregate_MajorityAndTieRules(t *testing.T) {
 
 	outcome, voters = aggregate([]vote.Event{mk("peer-a", domain.FAIL)})
 	if outcome.Result != domain.FAIL || len(voters) != 1 {
-		t.Fatalf("a single FAIL ballot must stand, got %+v %v", outcome, voters)
+		t.Fatalf("a single FAIL vote must stand, got %+v %v", outcome, voters)
 	}
 }
 
-// planTally is the whole rule of a round in one pure function, so it is
+// planCountdown is the whole rule of a round in one pure function, so it is
 // testable without a registry, a timer or a participant.
-func TestPlanTally_Roles(t *testing.T) {
+func TestPlanCountdown_Roles(t *testing.T) {
 	id := "round-x"
-	ballots := func(ids ...string) map[string]vote.Event {
+	votes := func(ids ...string) map[string]vote.Event {
 		out := map[string]vote.Event{}
 		for _, peer := range ids {
-			out[peer] = ballotFrom(id, peer, domain.FAIL)
+			out[peer] = voteFrom(id, peer, domain.FAIL)
 		}
 		return out
 	}
@@ -608,53 +608,53 @@ func TestPlanTally_Roles(t *testing.T) {
 
 	order := byRank("peer-a", "peer-b", "peer-c")
 
-	p := planTally(id, order[0], ballots(order...), true)
+	p := planCountdown(id, order[0], votes(order...), true)
 	if p.role != roleChair || p.rank != 0 || p.chair != order[0] {
 		t.Fatalf("the lowest-ranked voter chairs, got %+v", p)
 	}
-	if p.counted != 3 || len(p.voters) != 3 {
-		t.Fatalf("all three ballots must count, got %+v", p)
+	if p.counted != 3 || len(p.votes) != 3 {
+		t.Fatalf("all three votes must count, got %+v", p)
 	}
 
-	p = planTally(id, order[1], ballots(order...), true)
+	p = planCountdown(id, order[1], votes(order...), true)
 	if p.role != roleBackup || p.rank != 1 {
 		t.Fatalf("the next voter stands by at rank 1, got %+v", p)
 	}
 
-	p = planTally(id, "never-voted", ballots(order...), true)
+	p = planCountdown(id, "never-voted", votes(order...), true)
 	if p.role != roleBystander {
 		t.Fatalf("a non-voter has nothing to do, got %+v", p)
 	}
 
-	p = planTally(id, order[0], map[string]vote.Event{}, true)
+	p = planCountdown(id, order[0], map[string]vote.Event{}, true)
 	if p.role != roleBystander {
 		t.Fatalf("an empty round decides nothing, got %+v", p)
 	}
 
-	// Ballots naming this participant on a subject it never saw: forged.
-	p = planTally(id, order[0], ballots(order...), false)
+	// Votes naming this participant on a subject it never saw: forged.
+	p = planCountdown(id, order[0], votes(order...), false)
 	if p.role != roleBystander || !p.orphaned {
 		t.Fatalf("a voter without the subject must stand down as orphaned, got %+v", p)
 	}
 }
 
 // The trimmed-away voter keeps its place in the takeover chain, so a
-// two-ballot round still has a backup behind the chair.
-func TestPlanTally_TrimmedVoterStaysInTheChain(t *testing.T) {
+// two-vote round still has a backup behind the chair.
+func TestPlanCountdown_TrimmedVoterStaysInTheChain(t *testing.T) {
 	id := "round-y"
 	order := []string{"peer-a", "peer-b"}
 	sort.Slice(order, func(i, j int) bool { return pairHash(id, order[i]) < pairHash(id, order[j]) })
 
-	ballots := map[string]vote.Event{
-		order[0]: ballotFrom(id, order[0], domain.FAIL),
-		order[1]: ballotFrom(id, order[1], domain.FAIL),
+	votes := map[string]vote.Event{
+		order[0]: voteFrom(id, order[0], domain.FAIL),
+		order[1]: voteFrom(id, order[1], domain.FAIL),
 	}
 
-	p := planTally(id, order[1], ballots, true)
+	p := planCountdown(id, order[1], votes, true)
 	if p.role != roleBackup || p.rank != 1 {
 		t.Fatalf("the trimmed voter must still guard the round, got %+v", p)
 	}
 	if p.counted != 1 {
-		t.Fatalf("the tally itself keeps an odd count, got %d", p.counted)
+		t.Fatalf("the countdown set itself stays odd, got %d", p.counted)
 	}
 }

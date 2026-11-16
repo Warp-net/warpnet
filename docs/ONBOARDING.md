@@ -893,7 +893,7 @@ LOGGING_LEVEL=debug ./build/bin/warpnet --node.network testnet   # verbose logs
 | `core/dht` / `core/mdns` | Kademlia routing & bootstrap; LAN discovery. | Decentralized "phone book". |
 | `core/pubsub` | GossipSub topics (discovery, notifications). | Broadcast without a broker. |
 | `core/relay` | CircuitRelay v2. | Most users are behind NAT; relays let them be reached without a server holding their data. |
-| `core/crdt` | Conflict-free counters for stats (likes/retweets/replies). | Counts must converge across nodes with no central tally and survive crashes. |
+| `core/crdt` | Conflict-free counters for stats (likes/retweets/replies). | Counts must converge across nodes with no central count and survive crashes. |
 | `core/warpnet` | Type aliases & protocol constants over libp2p. | One place for the libp2p surface. |
 
 ### The wire protocol
@@ -971,7 +971,7 @@ Storage is **BadgerDB** (embedded LSM key-value store) behind a **repository
 pattern** in `database/`, with hierarchical prefix keys (e.g.
 `/LIKES/INCR/<tweetID>`) for cheap range scans/pagination. Counters that must
 converge across nodes (likes, retweets, replies) are kept as a **CRDT
-PN-counter** in `core/crdt` and gossiped — *because there is no central tally to
+PN-counter** in `core/crdt` and gossiped — *because there is no central count to
 be authoritative*. `database/like-repo.go` is the canonical example.
 
 ### libp2p networking

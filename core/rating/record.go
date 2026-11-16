@@ -121,6 +121,13 @@ func (r record) signed(priv ed25519.PrivateKey) (record, error) {
 	return r, nil
 }
 
+// VerifyRecord checks a record's signature against the key in its
+// observer's peer id, for a store that must refuse a forged record before
+// merging it.
+func VerifyRecord(rec domain.RatingRecord) error {
+	return record(rec).verify()
+}
+
 // verify checks the signature against the key embedded in the observer's peer id.
 func (r record) verify() error {
 	if r.Signature == "" {
