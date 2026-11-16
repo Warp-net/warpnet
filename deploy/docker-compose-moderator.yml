@@ -1,7 +1,9 @@
 services:
   m1:
     container_name: m1
-    image: ghcr.io/warp-net/warpnet-moderator:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile.moderator
     network_mode: host
     restart: unless-stopped
     mem_limit: 256m
@@ -21,7 +23,9 @@ services:
 
   m2:
     container_name: m2
-    image: ghcr.io/warp-net/warpnet-moderator:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile.moderator
     network_mode: host
     restart: unless-stopped
     mem_limit: 256m
@@ -40,7 +44,9 @@ services:
 
   m3:
     container_name: m3
-    image: ghcr.io/warp-net/warpnet-moderator:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile.moderator
     network_mode: host
     restart: unless-stopped
     mem_limit: 256m
