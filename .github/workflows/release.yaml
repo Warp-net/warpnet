@@ -24,8 +24,6 @@ jobs:
             platform: linux/amd64
           - os: ubuntu-24.04-arm
             platform: linux/arm64
-          - os: macos-latest
-            platform: darwin/universal
           - os: windows-latest
             platform: windows/amd64
 
@@ -119,14 +117,6 @@ jobs:
           tar -C out/linux_arm64 -czf warpnet_linux_arm64.tar.gz .
           shasum -a 256 warpnet_linux_arm64.tar.gz > warpnet_linux_arm64_checksums.txt
 
-      - name: Package + checksum (macOS)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: |
-          mkdir -p out/darwin
-          mv cmd/node/member/build/bin/* out/darwin/warpnet.app
-          tar -C out/darwin -czf warpnet_darwin.tar.gz .
-          shasum -a 256 warpnet_darwin.tar.gz > warpnet_darwin_checksums.txt
-
       - name: Package + checksum (Windows)
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
@@ -153,8 +143,6 @@ jobs:
             warpnet_linux_amd64_checksums.txt
             warpnet_linux_arm64.tar.gz
             warpnet_linux_arm64_checksums.txt
-            warpnet_darwin.tar.gz
-            warpnet_darwin_checksums.txt
             warpnet_windows_amd64.zip
             warpnet_windows_amd64_checksums.txt
 
@@ -386,3 +374,9 @@ jobs:
             exit 1
           fi
           echo "Codeberg now serves $published"
+
+  release-warpfone:
+    uses: ./.github/workflows/release-warpfone.yaml
+    with:
+      tag: ${{ github.event.inputs.tag }}
+    secrets: inherit
