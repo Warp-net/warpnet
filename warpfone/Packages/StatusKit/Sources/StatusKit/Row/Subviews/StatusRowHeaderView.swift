@@ -90,9 +90,11 @@ struct StatusRowHeaderView: View {
   }
 
   private var dateView: some View {
-    Text(viewModel.finalStatus.createdAt.relativeFormatted)
-    .font(.scaledFootnote)
-    .foregroundStyle(.secondary)
-    .lineLimit(1)
+    TimelineView(.periodic(from: .now, by: 15)) { _ in
+      Text(viewModel.finalStatus.createdAt.relativeFormatted)
+        .font(.scaledFootnote)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
   }
 }

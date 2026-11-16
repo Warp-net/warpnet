@@ -321,8 +321,10 @@ final class WarpnetRouterTests: XCTestCase {
       switch route {
       case ProtocolIds.PRIVATE_GET_NOTIFICATIONS:
         return ScriptedNode.json(["notifications": [
-          ["id": "02", "type": "follow", "text": "Bob followed you", "actor_id": "01BOB", "created_at": "2026-10-17T08:00:00Z"],
-          ["id": "01", "type": "new_user", "text": "x", "created_at": "2026-10-17T07:00:00Z"],
+          ["id": "04", "type": "follow", "text": "Bob followed you", "actor_id": "01BOB", "created_at": "2026-10-17T08:00:00Z"],
+          ["id": "03", "type": "new_user", "text": "Eve joined Warpnet", "actor_id": "01EVE", "created_at": "2026-10-17T07:30:00Z"],
+          ["id": "02", "type": "order_limit", "text": "Max bought 10 of your tweets", "actor_id": "01MAX", "created_at": "2026-10-17T07:15:00Z"],
+          ["id": "01", "type": "unknown_kind", "text": "x", "created_at": "2026-10-17T07:00:00Z"],
         ], "cursor": "end"])
       default:
         return Self.standardNode(route, body, timeline: [])
@@ -330,9 +332,10 @@ final class WarpnetRouterTests: XCTestCase {
     }
     let notifications = try await decoder.decode([Models.Notification].self,
                                            from: router.route(Notifications.notifications(minId: nil, maxId: nil, types: nil, limit: 40), method: .get).body)
-    XCTAssertEqual(notifications.map(\.id), ["02"])
-    XCTAssertEqual(notifications.first?.supportedType, .follow)
-    XCTAssertEqual(notifications.first?.account.id, "01BOB")
+    XCTAssertEqual(notifications.map(\.id), ["04", "03", "02"])
+    XCTAssertEqual(notifications.map(\.supportedType), [.follow, .newUser, .orderLimit])
+    XCTAssertEqual(notifications.map(\.account.id), ["01BOB", "01EVE", "01MAX"])
+    XCTAssertEqual(notifications.last?.text, "Max bought 10 of your tweets")
   }
 
   func testNotificationsFilterTypesFillThePageAndPageFromAnyId() async throws {
@@ -352,7 +355,7 @@ final class WarpnetRouterTests: XCTestCase {
     }
     let follows = try await decoder.decode([Models.Notification].self,
                                            from: router.route(Notifications.notifications(minId: nil, maxId: nil,
-                                                                                          types: ["favourite", "reblog", "mention"],
+                                                                                          types: ["favourite", "reblog", "mention", "new_user"],
                                                                                           limit: 20),
                                                               method: .get).body)
     XCTAssertEqual(follows.map(\.id), ["05", "02"])

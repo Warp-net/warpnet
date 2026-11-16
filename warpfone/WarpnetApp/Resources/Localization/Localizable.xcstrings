@@ -3954,6 +3954,26 @@
         }
       }
     },
+    "warpnet.notifications.label.new-user" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "joined Warpnet"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.label.order-limit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reached your hourly order limit"
+          }
+        }
+      }
+    },
     "warpnet.notifications.menu-title.message" : {
       "localizations" : {
         "en" : {
@@ -3970,6 +3990,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Moderation"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.menu-title.new-user" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New users"
+          }
+        }
+      }
+    },
+    "warpnet.notifications.menu-title.order-limit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order limits"
           }
         }
       }
@@ -4300,6 +4340,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Moderation update"
+          }
+        }
+      }
+    },
+    "warpnet.push.new-user" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joined Warpnet"
+          }
+        }
+      }
+    },
+    "warpnet.push.order-limit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reached your hourly order limit"
           }
         }
       }

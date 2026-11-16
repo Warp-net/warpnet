@@ -103,6 +103,10 @@ enum BackgroundRefresh {
       String(localized: "warpnet.push.message")
     case .moderation:
       notification.text ?? String(localized: "warpnet.push.moderation")
+    case .newUser:
+      String(localized: "warpnet.push.new-user")
+    case .orderLimit:
+      notification.text ?? String(localized: "warpnet.push.order-limit")
     case nil:
       nil
     }

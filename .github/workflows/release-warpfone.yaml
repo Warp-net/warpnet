@@ -2,9 +2,16 @@ name: Release / Warpfone
 
 # Builds an existing tag and uploads it to TestFlight. The workflow never bumps
 # versions, never commits and never pushes tags: the version comes from
-# warpfone/Version.xcconfig at that tag.
+# warpfone/Version.xcconfig at that tag. The Release workflow calls it for every
+# release; run it by hand to ship the iOS app alone.
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing Git tag to build (e.g., v1.0.0)"
+        required: true
+        type: string
+  workflow_call:
     inputs:
       tag:
         description: "Existing Git tag to build (e.g., v1.0.0)"
@@ -25,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag }}
+          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-go@v5
         with:
