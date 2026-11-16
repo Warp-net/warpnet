@@ -157,7 +157,8 @@ func TestVerifyAuthorshipRequiresGatewayProof(t *testing.T) {
 	otherKey, _ := rsaKeyPEM(t)
 	t.Cleanup(func() { warpnet.RequireConnProof("", nil) })
 
-	authorship := func(t *testing.T, rsaKey *rsa.PrivateKey) (error, func() bool) {
+	authorship := func(t *testing.T, rsaKey *rsa.PrivateKey) (func() bool, error) {
+		t.Helper()
 		member, memberPriv := seededHost(t, "member-"+t.Name())
 		gw, _ := seededHost(t, "public-gateway-seed")
 		serveProof(gw, rsaKey, func(p peer.ID) string { return p.String() })
@@ -183,17 +184,17 @@ func TestVerifyAuthorshipRequiresGatewayProof(t *testing.T) {
 			t.Fatal("no authorship verdict")
 		}
 		_ = s.Close()
-		return got, func() bool { return len(member.Network().ConnsToPeer(gw.ID())) > 0 }
+		return func() bool { return len(member.Network().ConnsToPeer(gw.ID())) > 0 }, got
 	}
 
 	t.Run("the real gateway is trusted", func(t *testing.T) {
-		err, connected := authorship(t, gwKey)
+		connected, err := authorship(t, gwKey)
 		require.NoError(t, err)
 		require.True(t, connected())
 	})
 
 	t.Run("an impostor is refused and disconnected", func(t *testing.T) {
-		err, connected := authorship(t, otherKey)
+		connected, err := authorship(t, otherKey)
 		require.ErrorIs(t, err, warpnet.ErrForeignAuthor)
 		require.Eventually(t, func() bool { return !connected() }, time.Second, 10*time.Millisecond)
 	})

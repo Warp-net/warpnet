@@ -47,6 +47,7 @@ type ConnProver func(ctx context.Context, c WarpConn) error
 // gateway): each connection to it must pass the prover before it is trusted.
 var connProof = struct {
 	sync.Mutex
+
 	peer   WarpPeerID
 	prove  ConnProver
 	proven map[string]struct{}
