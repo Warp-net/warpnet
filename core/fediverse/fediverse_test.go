@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/require"
 )
@@ -85,12 +86,22 @@ func TestErrNotSupported(t *testing.T) {
 
 func TestIsBridged(t *testing.T) {
 	for network, want := range map[string]bool{
-		MastodonNetwork: true, ThreadsNetwork: true, "": false, "warpnet": false, "testnet": false,
+		MastodonNetwork: true, ThreadsNetwork: true, "nostr": true, "any-other": true,
+		"": false, "warpnet": false, "mainnet": false, "testnet": false,
 	} {
 		if got := IsBridged(network); got != want {
 			t.Errorf("IsBridged(%q) = %v, want %v", network, got, want)
 		}
 	}
+}
+
+func TestIsBridgedOwnPrivateNetwork(t *testing.T) {
+	original := config.Config().Node.Network
+	t.Cleanup(func() { config.SetNetwork(original) })
+
+	config.SetNetwork("private")
+	require.False(t, IsBridged("private"), "this node's own network is native")
+	require.True(t, IsBridged("nostr"))
 }
 
 func TestIsFederatedWarpnet(t *testing.T) {
