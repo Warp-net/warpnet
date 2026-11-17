@@ -48,14 +48,20 @@ const noticeTemplate = " %s version %s. Copyright (C) <%s> <%s>. This program co
 
 var warpnetBootstrapNodes = []string{
 	"/ip4/207.154.221.44/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
+	"/ip6/2a03:b0c0:3:f0:0:3:2477:f000/tcp/4001/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
+	"/ip6/2a03:b0c0:3:f0:0:3:2477:f000/tcp/4002/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
+	"/ip6/2a03:b0c0:3:f0:0:3:2477:f000/tcp/4003/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
 }
 
 var testnetBootstrapNodes = []string{
 	"/ip4/207.154.221.44/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
+	"/ip6/2a03:b0c0:3:f0:0:3:2477:f000/tcp/4011/p2p/12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j",
 	"/ip4/207.154.221.44/tcp/4022/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
+	"/ip6/2a03:b0c0:3:f0:0:3:2477:f000/tcp/4022/p2p/12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU",
 	"/ip4/207.154.221.44/tcp/4033/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
+	"/ip6/2a03:b0c0:3:f0:0:3:2477:f000/tcp/4033/p2p/12D3KooWNXSGyfTuYc3JznW48jay73BtQgHszWfPpyF581EWcpGJ",
 }
 
 var configSingleton config
@@ -238,18 +244,7 @@ func (n node) AddrInfos() (infos []warpnet.WarpAddrInfo, err error) {
 	if len(n.Bootstrap) == 0 {
 		return infos, nil
 	}
-	for _, addr := range n.Bootstrap {
-		maddr, err := warpnet.NewMultiaddr(addr)
-		if err != nil {
-			return nil, err
-		}
-		addrInfo, err := warpnet.AddrInfoFromP2pAddr(maddr)
-		if err != nil {
-			return nil, err
-		}
-		infos = append(infos, *addrInfo)
-	}
-	return infos, nil
+	return warpnet.AddrInfosFromStrings(n.Bootstrap)
 }
 
 func getAppPath() string {

@@ -156,12 +156,9 @@ func NewConnManager(limiter rcmgr.Limiter, lowWater, highWater int) (*connmgr.Ba
 }
 
 func EnableAutoRelayWithStaticRelays(static []WarpAddrInfo, currentNodeID WarpPeerID) func() libp2p.Option {
-	for i, info := range static {
-		if info.ID == currentNodeID {
-			static = slices.Delete(static, i, i+1)
-			break
-		}
-	}
+	static = slices.DeleteFunc(slices.Clone(static), func(info WarpAddrInfo) bool {
+		return info.ID == currentNodeID
+	})
 	return func() libp2p.Option {
 		return func(cfg *libp2pConfig.Config) error {
 			if len(static) == 0 {

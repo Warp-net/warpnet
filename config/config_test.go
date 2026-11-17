@@ -420,13 +420,16 @@ func TestAddrInfos(t *testing.T) {
 		assert.Empty(t, infos)
 	})
 
-	t.Run("parses every peer", func(t *testing.T) {
-		infos, err := node{Bootstrap: warpnetBootstrapNodes}.AddrInfos()
-		require.NoError(t, err)
-		require.Len(t, infos, len(warpnetBootstrapNodes))
-		for _, info := range infos {
-			assert.NotEmpty(t, info.ID.String())
-			assert.NotEmpty(t, info.Addrs)
+	t.Run("one entry per peer with its IPv4 and IPv6 addresses", func(t *testing.T) {
+		for _, list := range [][]string{warpnetBootstrapNodes, testnetBootstrapNodes} {
+			infos, err := node{Bootstrap: list}.AddrInfos()
+			require.NoError(t, err)
+			require.Len(t, infos, 3)
+			for _, info := range infos {
+				require.Len(t, info.Addrs, 2, info.ID.String())
+				assert.Contains(t, info.Addrs[0].String(), "/ip4/")
+				assert.Contains(t, info.Addrs[1].String(), "/ip6/")
+			}
 		}
 	})
 
