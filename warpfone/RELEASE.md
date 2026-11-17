@@ -14,7 +14,7 @@ app ships with the desktop and Android builds; it can also be run alone.
 The workflow reads these repository secrets:
 
 - `APPLE_TEAM_ID`: the developer team that owns the `site.warpnet.warpfone`
-  bundle ids and the `group.site.warpnet.warpfone` app group.
+  bundle id.
 - `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`: an App Store Connect API key
   with the App Manager role, and the contents of its `.p8` file. It fetches
   or creates the App Store profile and uploads the build.
