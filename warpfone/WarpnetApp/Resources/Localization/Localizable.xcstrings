@@ -2276,46 +2276,6 @@
         }
       }
     },
-    "settings.general.browser" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Browser"
-          }
-        }
-      }
-    },
-    "settings.general.browser.in-app" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In-App Browser"
-          }
-        }
-      }
-    },
-    "settings.general.browser.in-app.readerview" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In-App Browser Reader View"
-          }
-        }
-      }
-    },
-    "settings.general.browser.system" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "System Browser"
-          }
-        }
-      }
-    },
     "settings.general.content" : {
       "localizations" : {
         "en" : {

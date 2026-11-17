@@ -9,7 +9,6 @@ import SwiftUI
 @MainActor
 @Observable public class UserPreferences {
   class Storage {
-    @AppStorage("preferred_browser") public var preferredBrowser: PreferredBrowser = .inAppSafari
     @AppStorage("show_pending_at_bottom") public var pendingShownAtBottom: Bool = false
     @AppStorage("show_pending_left") public var pendingShownLeft: Bool = false
 
@@ -17,8 +16,6 @@ import SwiftUI
 
     @AppStorage("autoplay_video") public var autoPlayVideo = true
     @AppStorage("mute_video") public var muteVideo = true
-
-    @AppStorage("inAppBrowserReaderView") public var inAppBrowserReaderView = false
 
     @AppStorage("haptic_tab") public var hapticTabSelectionEnabled = true
     @AppStorage("haptic_timeline") public var hapticTimelineEnabled = true
@@ -47,12 +44,6 @@ import SwiftUI
 
   public static let shared = UserPreferences()
   private let storage = Storage()
-
-  public var preferredBrowser: PreferredBrowser {
-    didSet {
-      storage.preferredBrowser = preferredBrowser
-    }
-  }
 
   public var pendingShownAtBottom: Bool {
     didSet {
@@ -98,12 +89,6 @@ import SwiftUI
   public var muteVideo: Bool {
     didSet {
       storage.muteVideo = muteVideo
-    }
-  }
-
-  public var inAppBrowserReaderView: Bool {
-    didSet {
-      storage.inAppBrowserReaderView = inAppBrowserReaderView
     }
   }
 
@@ -225,10 +210,8 @@ import SwiftUI
   }
 
   private init() {
-    preferredBrowser = storage.preferredBrowser
     isSocialKeyboardEnabled = storage.isSocialKeyboardEnabled
     autoPlayVideo = storage.autoPlayVideo
-    inAppBrowserReaderView = storage.inAppBrowserReaderView
     hapticTabSelectionEnabled = storage.hapticTabSelectionEnabled
     hapticTimelineEnabled = storage.hapticTimelineEnabled
     hapticButtonPressEnabled = storage.hapticButtonPressEnabled
