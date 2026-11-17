@@ -186,14 +186,10 @@ func main() {
 				networkSettings.Bootstrap = config.Config().Node.Bootstrap
 			}
 
-			var infos []warpnet.WarpAddrInfo
-			for _, addr := range networkSettings.Bootstrap {
-				info, err := warpnet.AddrInfoFromString(addr)
-				if err != nil {
-					log.Errorf("remote: bootstrap infos: %v", err)
-					return
-				}
-				infos = append(infos, *info)
+			infos, err := warpnet.AddrInfosFromStrings(networkSettings.Bootstrap)
+			if err != nil {
+				log.Errorf("remote: bootstrap infos: %v", err)
+				return
 			}
 			bootstrapPeers = networkSettings.Bootstrap
 

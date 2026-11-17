@@ -22,3 +22,16 @@ func TestSetPrivateDurationFieldReportsMissingField(t *testing.T) {
 	err := setPrivateDurationField(&Swarm{}, "thisFieldDoesNotExist", time.Second)
 	require.ErrorIs(t, err, ErrFieldNotFound)
 }
+
+// The relay hands the same bootstrap slice to the DHT, so dropping itself must
+// not rewrite the caller's list.
+func TestEnableAutoRelayWithStaticRelaysKeepsCallerList(t *testing.T) {
+	self := FromStringToPeerID("12D3KooWMKZFrp1BDKg9amtkv5zWnLhuUXN32nhqMvbtMdV2hz7j")
+	other := FromStringToPeerID("12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU")
+	static := []WarpAddrInfo{{ID: self}, {ID: other}}
+
+	var cfg libp2pConfig.Config
+	require.NoError(t, cfg.Apply(EnableAutoRelayWithStaticRelays(static, self)()))
+	require.True(t, cfg.EnableAutoRelay)
+	require.Equal(t, []WarpAddrInfo{{ID: self}, {ID: other}}, static)
+}
