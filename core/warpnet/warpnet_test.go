@@ -306,6 +306,24 @@ func TestAddrInfoParsing(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestAddrInfosFromStringsMergesOnePeer(t *testing.T) {
+	other := "12D3KooWSjbYrsVoXzJcEtmgJLMVCbPXMzJmNN1JkEZB9LJ2rnmU"
+	infos, err := AddrInfosFromStrings([]string{
+		"/ip4/1.2.3.4/tcp/4001/p2p/" + knownPeerID,
+		"/ip4/1.2.3.4/tcp/4002/p2p/" + other,
+		"/ip6/2001:db8::1/tcp/4001/p2p/" + knownPeerID,
+	})
+	require.NoError(t, err)
+	require.Len(t, infos, 2)
+	assert.Equal(t, knownPeerID, infos[0].ID.String())
+	assert.Equal(t, other, infos[1].ID.String())
+	require.Len(t, infos[0].Addrs, 2)
+	assert.Equal(t, "/ip6/2001:db8::1/tcp/4001", infos[0].Addrs[1].String())
+
+	_, err = AddrInfosFromStrings([]string{"/ip4/1.2.3.4/tcp/4001"})
+	assert.Error(t, err)
+}
+
 func TestHostStatsAreAlwaysPopulated(t *testing.T) {
 	assert.NotPanics(t, func() {
 		mem := GetMemoryStats()

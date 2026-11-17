@@ -36,6 +36,7 @@ import (
 	gonet "net"
 	"net/netip"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -485,6 +486,25 @@ func AddrInfoFromP2pAddr(m multiaddr.Multiaddr) (*WarpAddrInfo, error) {
 
 func AddrInfoFromString(s string) (*WarpAddrInfo, error) {
 	return peer.AddrInfoFromString(s)
+}
+
+// AddrInfosFromStrings merges the addresses of one peer, listed once per
+// address family, into a single AddrInfo, keeping the order peers first appear in.
+func AddrInfosFromStrings(addrs []string) ([]WarpAddrInfo, error) {
+	infos := make([]WarpAddrInfo, 0, len(addrs))
+	for _, addr := range addrs {
+		info, err := peer.AddrInfoFromString(addr)
+		if err != nil {
+			return nil, err
+		}
+		i := slices.IndexFunc(infos, func(known WarpAddrInfo) bool { return known.ID == info.ID })
+		if i < 0 {
+			infos = append(infos, *info)
+			continue
+		}
+		infos[i].Addrs = append(infos[i].Addrs, info.Addrs...)
+	}
+	return infos, nil
 }
 
 func NewPeerstore(ctx context.Context, db WarpBatching) (WarpPeerstore, error) {

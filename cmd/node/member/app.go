@@ -294,13 +294,9 @@ func (a *App) startMemberNode() (NodeServer, error) {
 		networkSettings.Bootstrap = config.Config().Node.Bootstrap
 	}
 
-	var infos []warpnet.WarpAddrInfo
-	for _, addr := range networkSettings.Bootstrap {
-		info, err := warpnet.AddrInfoFromString(addr)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap nodes infos: %w", err)
-		}
-		infos = append(infos, *info)
+	infos, err := warpnet.AddrInfosFromStrings(networkSettings.Bootstrap)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap nodes infos: %w", err)
 	}
 	a.bootstrapPeers = networkSettings.Bootstrap
 
