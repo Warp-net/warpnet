@@ -287,13 +287,13 @@ func (db *DB) Run(username, password string) (err error) {
 	}
 
 	if !db.badgerOpts.InMemory {
-		go db.runEventualGC(db.badger, db.stopChan)
+		go db.runEventualGC()
 	}
 
 	return nil
 }
 
-func (db *DB) runEventualGC(handle *badger.DB, stopChan <-chan struct{}) {
+func (db *DB) runEventualGC() {
 	if db.badgerOpts.InMemory {
 		return
 	}
@@ -304,7 +304,7 @@ func (db *DB) runEventualGC(handle *badger.DB, stopChan <-chan struct{}) {
 	dirTicker := time.NewTicker(time.Second)
 	defer dirTicker.Stop()
 
-	_ = handle.RunValueLogGC(db.discardRatioGC)
+	_ = db.badger.RunValueLogGC(db.discardRatioGC)
 	for {
 		select {
 		case <-dirTicker.C:
@@ -314,7 +314,7 @@ func (db *DB) runEventualGC(handle *badger.DB, stopChan <-chan struct{}) {
 			}
 		case <-gcTicker.C:
 			for {
-				err := handle.RunValueLogGC(db.discardRatioGC)
+				err := db.badger.RunValueLogGC(db.discardRatioGC)
 				if errors.Is(err, badger.ErrNoRewrite) ||
 					errors.Is(err, badger.ErrRejected) {
 					break
@@ -322,7 +322,7 @@ func (db *DB) runEventualGC(handle *badger.DB, stopChan <-chan struct{}) {
 				time.Sleep(db.sleepGC)
 			}
 			log.Infoln("database: garbage collection complete")
-		case <-stopChan:
+		case <-db.stopChan:
 			return
 		}
 	}
