@@ -16,6 +16,8 @@ final class PairingModel {
 
   static let shared = PairingModel(session: makeWarpnetSession(), accounts: .shared)
 
+  private static let restoreRetries = 3
+
   private(set) var phase: Phase = .scanning
   var notice: String?
 
@@ -56,7 +58,14 @@ final class PairingModel {
   func restore() async {
     guard let session else { return }
     phase = .restoring
-    guard let outcome = await session.restore() else {
+    var restored = await session.restore()
+    for _ in 0 ..< Self.restoreRetries {
+      guard case .transportError = restored else { break }
+      try? await Task.sleep(for: .seconds(1))
+      guard !Task.isCancelled else { break }
+      restored = await session.restore()
+    }
+    guard let outcome = restored else {
       phase = .scanning
       return
     }
