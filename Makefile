@@ -64,3 +64,7 @@ aar:
 
 copy-gguf:
 	scp Llama-Guard-3-1B-Q4_K_M.gguf root@207.154.221.44:/root/.warpdata/Llama-Guard-3-1B-Q4_K_M.gguf
+
+tag:
+	git fetch origin && V=$(git show origin/main:version) && git tag -a "v$V" -m "Release version $V" origin/main
+	git push origin "v$V" && git push codeberg "v$V"
