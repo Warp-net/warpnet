@@ -71,27 +71,6 @@ func NewAliasesRepo(db AliasesStorer) *AliasesRepo {
 	return &AliasesRepo{db: db}
 }
 
-// listAliasRecords reads every record: tombstones are never removed, so a
-// single bounded page would sooner or later hide the devices paired after them.
-func listAliasRecords(txn local_store.WarpTransactioner, prefix local_store.DatabaseKey) ([]local_store.ListItem, error) {
-	var (
-		records []local_store.ListItem
-		cursor  string
-		limit   = uint64(aliasPageSize)
-	)
-	for {
-		items, cur, err := txn.List(prefix, &limit, &cursor)
-		if err != nil {
-			return nil, err
-		}
-		records = append(records, items...)
-		if uint64(len(items)) < limit {
-			return records, nil
-		}
-		cursor = cur
-	}
-}
-
 func (repo *AliasesRepo) GetAliases() (aliases []domain.Alias, err error) {
 	if repo.db == nil {
 		return nil, ErrNilAliasesRepo
@@ -108,27 +87,37 @@ func (repo *AliasesRepo) GetAliases() (aliases []domain.Alias, err error) {
 	}
 	defer txn.Rollback()
 
-	items, err := listAliasRecords(txn, aliasesPrefix)
-	if err != nil {
-		return aliases, err
-	}
-
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		var alias domain.Alias
-		if err := json.Unmarshal(item.Value, &alias); err != nil {
+	// Every page is read: tombstones are never removed, so a single bounded
+	// page would sooner or later hide the devices paired after them.
+	var (
+		cursor string
+		limit  = uint64(aliasPageSize)
+		seen   = make(map[string]struct{}, MaxAliases)
+	)
+	for {
+		items, cur, err := txn.List(aliasesPrefix, &limit, &cursor)
+		if err != nil {
 			return aliases, err
 		}
-		if alias.IsRevoked() {
-			continue
+		for _, item := range items {
+			var alias domain.Alias
+			if err := json.Unmarshal(item.Value, &alias); err != nil {
+				return aliases, err
+			}
+			if alias.IsRevoked() {
+				continue
+			}
+			if _, ok := seen[alias.NodeId]; ok {
+				continue
+			}
+			seen[alias.NodeId] = struct{}{}
+			aliases = append(aliases, alias)
 		}
-		if _, ok := seen[alias.NodeId]; ok {
-			continue
+		if uint64(len(items)) < limit {
+			return aliases, nil
 		}
-		seen[alias.NodeId] = struct{}{}
-		aliases = append(aliases, alias)
+		cursor = cur
 	}
-	return aliases, nil
 }
 
 func (repo *AliasesRepo) GetNodeIDs() (ids []string, err error) {
@@ -156,10 +145,11 @@ func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
-		AddRootID("None").
-		AddRange(local_store.NoneRangeKey).
-		Build()
+	paired, err := repo.GetAliases()
+	if err != nil {
+		return err
+	}
+
 	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
 		AddRootID("None").
 		AddRange(local_store.NoneRangeKey).
@@ -172,53 +162,29 @@ func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	}
 	defer txn.Rollback()
 
-	items, err := listAliasRecords(txn, aliasesPrefix)
-	if err != nil {
-		return err
-	}
-
 	var (
-		others   = make(map[string]struct{}, len(items))
 		previous domain.Alias
 		isPaired bool
 	)
-
-	for _, item := range items {
-		var stored domain.Alias
-		if err := json.Unmarshal(item.Value, &stored); err != nil {
+	stored, err := txn.Get(aliasKey)
+	if err != nil && !local_store.IsNotFoundError(err) {
+		return err
+	}
+	if err == nil {
+		if err := json.Unmarshal(stored, &previous); err != nil {
 			return err
 		}
-		if stored.NodeId != alias.NodeId {
-			if !stored.IsRevoked() {
-				others[stored.NodeId] = struct{}{}
-			}
-			continue
+		// The owner unpaired this device while it still held a working
+		// pairing payload, so the payload itself no longer counts. Only one
+		// the owner has shown since — carrying a session token this node did
+		// not issue before — pairs it back.
+		if previous.IsRevoked() && previous.Token == alias.Token {
+			return ErrAliasRevoked
 		}
-		if stored.IsRevoked() {
-			// The owner unpaired this device while it still held a
-			// working pairing payload, so the payload itself no longer
-			// counts. Only one the owner has shown since — carrying a
-			// session token this node did not issue before — pairs it
-			// back.
-			if stored.Token == alias.Token {
-				return ErrAliasRevoked
-			}
-			continue
-		}
-		if !isPaired {
-			previous, isPaired = stored, true
-		}
-		// Devices used to be stored under a random ULID, which gave one
-		// device a record per pair refresh. Fold those away.
-		if local_store.DatabaseKey(item.Key) == aliasKey {
-			continue
-		}
-		if err := txn.Delete(local_store.DatabaseKey(item.Key)); err != nil {
-			return err
-		}
+		isPaired = !previous.IsRevoked()
 	}
 
-	if !isPaired && len(others) >= MaxAliases {
+	if !isPaired && len(paired) >= MaxAliases {
 		return ErrTooManyAliases
 	}
 	if isPaired {
@@ -261,10 +227,6 @@ func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
-	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
-		AddRootID("None").
-		AddRange(local_store.NoneRangeKey).
-		Build()
 	aliasKey := local_store.NewPrefixBuilder(AliasesRepoName).
 		AddRootID("None").
 		AddRange(local_store.NoneRangeKey).
@@ -277,35 +239,18 @@ func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
 	}
 	defer txn.Rollback()
 
-	items, err := listAliasRecords(txn, aliasesPrefix)
+	stored, err := txn.Get(aliasKey)
+	if local_store.IsNotFoundError(err) {
+		return ErrAliasNotFound
+	}
 	if err != nil {
 		return err
 	}
-
-	var (
-		revoked  domain.Alias
-		isPaired bool
-	)
-
-	for _, item := range items {
-		var stored domain.Alias
-		if err := json.Unmarshal(item.Value, &stored); err != nil {
-			return err
-		}
-		if stored.NodeId != nodeId || stored.IsRevoked() {
-			continue
-		}
-		if !isPaired {
-			revoked, isPaired = stored, true
-		}
-		if local_store.DatabaseKey(item.Key) == aliasKey {
-			continue
-		}
-		if err := txn.Delete(local_store.DatabaseKey(item.Key)); err != nil {
-			return err
-		}
+	var revoked domain.Alias
+	if err := json.Unmarshal(stored, &revoked); err != nil {
+		return err
 	}
-	if !isPaired {
+	if revoked.IsRevoked() {
 		return ErrAliasNotFound
 	}
 
