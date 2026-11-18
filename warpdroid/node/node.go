@@ -18,6 +18,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -56,6 +57,7 @@ type clientNode struct {
 	mu            sync.RWMutex
 	dht           *dht.IpfsDHT
 	privKey       crypto.PrivKey
+	limiter       *pairedNodeLimiter
 
 	// Event ring buffer for libp2p connectedness changes. Notifiee
 	// callbacks push here cheaply; the buffer is drained to log only
@@ -63,6 +65,33 @@ type clientNode struct {
 	// don't have a polling goroutine eating the battery).
 	eventsMu sync.Mutex
 	events   []string
+}
+
+// pairedNodeLimiter lifts the per-peer limits from the paired node: it is the
+// owner's own node, and dials to all of its addresses run at once.
+type pairedNodeLimiter struct {
+	rcmgr.Limiter
+	unlimited rcmgr.Limiter
+	paired    atomic.Pointer[peer.ID]
+}
+
+func (l *pairedNodeLimiter) isPaired(p peer.ID) bool {
+	paired := l.paired.Load()
+	return paired != nil && *paired == p
+}
+
+func (l *pairedNodeLimiter) GetPeerLimits(p peer.ID) rcmgr.Limit {
+	if l.isPaired(p) {
+		return l.unlimited.GetPeerLimits(p)
+	}
+	return l.Limiter.GetPeerLimits(p)
+}
+
+func (l *pairedNodeLimiter) GetStreamLimits(p peer.ID) rcmgr.Limit {
+	if l.isPaired(p) {
+		return l.unlimited.GetStreamLimits(p)
+	}
+	return l.Limiter.GetStreamLimits(p)
 }
 
 // nodeNotifiee is a network.Notifiee that records connection events into
@@ -162,10 +191,13 @@ func newClient(
 
 	limits := rcmgr.DefaultLimits
 	libp2p.SetDefaultServiceLimits(&limits)
-	limiter := rcmgr.NewFixedLimiter(limits.Scale(
-		16<<20, // 16 MB
-		128,
-	))
+	limiter := &pairedNodeLimiter{
+		Limiter: rcmgr.NewFixedLimiter(limits.Scale(
+			16<<20, // 16 MB
+			128,
+		)),
+		unlimited: rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits),
+	}
 	rm, _ := rcmgr.NewResourceManager(limiter)
 
 	ya := yamux.DefaultTransport
@@ -232,11 +264,12 @@ func newClient(
 		cancel:  cancel,
 		dht:     hashTable,
 		privKey: privateKey,
+		limiter: limiter,
 	}
 	h.Network().Notify(&nodeNotifiee{c: cn})
 
 	for _, addr := range bootstrapNodes {
-		if _, err := cn.dial(addr); err != nil {
+		if _, err := cn.dial(addr, false); err != nil {
 			logf(LogLevelWarn, "failed to connect to bootstrap node %s: %v", addr, err)
 			continue
 		}
@@ -286,7 +319,7 @@ func (c *clientNode) connect(peerInfo string) error {
 		return fmt.Errorf("not connected to desktop node")
 	}
 
-	peerID, err := c.dial(peerInfo)
+	peerID, err := c.dial(peerInfo, true)
 	if err != nil {
 		return err
 	}
@@ -306,7 +339,7 @@ func (c *clientNode) connect(peerInfo string) error {
 // peer and hands them all to host.Connect in one call so the dial ranker
 // can rank and dial them in parallel. It leaves the paired peer alone, so
 // bootstrap nodes dialled through it never stand in for the desktop node.
-func (c *clientNode) dial(peerInfo string) (peer.ID, error) {
+func (c *clientNode) dial(peerInfo string, isPaired bool) (peer.ID, error) {
 	var (
 		peerID peer.ID
 		addrs  []multiaddr.Multiaddr
@@ -344,6 +377,9 @@ func (c *clientNode) dial(peerInfo string) (peer.ID, error) {
 	}
 	if err := peerID.Validate(); err != nil {
 		return "", err
+	}
+	if isPaired {
+		c.limiter.paired.Store(&peerID)
 	}
 
 	// Peerstore is internally thread-safe and host.Connect can take 30s —
