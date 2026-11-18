@@ -48,7 +48,7 @@ public struct AuthNodeInfo: Codable, Equatable, Sendable {
   }
 
   public var dialCandidates: [String] {
-    dialAddrs(addresses, peerId: nodeId)
+    dialAddrs(addresses, peerId: nodeId, relays: bootstrapPeers)
   }
 }
 

@@ -7,6 +7,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +109,71 @@ func TestBootstrapDialLeavesPairedPeerUnset(t *testing.T) {
 	}
 	if !cn.isConnected() {
 		t.Fatal("connect must make the dialled peer the paired node")
+	}
+}
+
+// The paired node is dialled on all of its addresses at once, so the per-peer
+// limits that hold for every other peer must not apply to it.
+func TestPairedNodeIsNotLimited(t *testing.T) {
+	psk := freshPSK(t)
+	newPeer := func() (string, peer.ID) {
+		h, err := libp2p.New(
+			libp2p.NoTransports,
+			libp2p.Transport(camouflage.NewCamouflageTransport),
+			libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"),
+			libp2p.PrivateNetwork(psk),
+			libp2p.Security(noise.ID, noise.New),
+			libp2p.Muxer(yamux.ID, yamux.DefaultTransport),
+		)
+		if err != nil {
+			t.Fatalf("peer host: %v", err)
+		}
+		t.Cleanup(func() { _ = h.Close() })
+		return h.Addrs()[0].String() + "/p2p/" + h.ID().String(), h.ID()
+	}
+	bootstrapAddr, stranger := newPeer()
+	pairedAddr, paired := newPeer()
+
+	cn, err := newClient(freshKey(t), psk, "testnet", []string{bootstrapAddr})
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
+	defer cn.close()
+	if err := cn.connect(pairedAddr); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+
+	var scopes []network.ConnManagementScope
+	defer func() {
+		for _, scope := range scopes {
+			scope.Done()
+		}
+	}()
+	reserve := func(p peer.ID) error {
+		scope, err := cn.host.Network().ResourceManager().OpenConnection(
+			network.DirOutbound, true, multiaddr.StringCast("/ip4/10.0.0."+strconv.Itoa(len(scopes)+1)+"/tcp/4001"),
+		)
+		if err != nil {
+			return err
+		}
+		scopes = append(scopes, scope)
+		return scope.SetPeer(p)
+	}
+
+	const dials = 16
+	for i := range dials {
+		if err := reserve(paired); err != nil {
+			t.Fatalf("dial %d to the paired node: %v", i, err)
+		}
+	}
+	var limited error
+	for range dials {
+		if limited = reserve(stranger); limited != nil {
+			break
+		}
+	}
+	if !errors.Is(limited, network.ErrResourceLimitExceeded) {
+		t.Fatalf("expected another peer to stay limited, got %v", limited)
 	}
 }
 
