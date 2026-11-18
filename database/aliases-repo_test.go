@@ -30,6 +30,7 @@ package database
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,6 +156,40 @@ func (s *AliasesRepoTestSuite) TestSetAlias_LimitReached() {
 	ids, err := s.repo.GetNodeIDs()
 	s.Require().NoError(err)
 	assert.Len(s.T(), ids, MaxAliases)
+}
+
+func TestSetAlias_SimultaneousPairingKeepsTheLimit(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	assert.NoError(t, err)
+	defer db.Close()
+	assert.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	repo := NewAliasesRepo(db)
+
+	const devices = MaxAliases * 3
+	errs := make([]error, devices)
+	var wg sync.WaitGroup
+	for i := range devices {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("device-%03d", i), Token: "tok"})
+		}()
+	}
+	wg.Wait()
+
+	paired := 0
+	for _, err := range errs {
+		if err == nil {
+			paired++
+			continue
+		}
+		assert.ErrorIs(t, err, ErrTooManyAliases)
+	}
+	assert.Equal(t, MaxAliases, paired)
+
+	ids, err := repo.GetNodeIDs()
+	assert.NoError(t, err)
+	assert.Len(t, ids, MaxAliases)
 }
 
 func (s *AliasesRepoTestSuite) TestSetAlias_EmptyNodeId() {

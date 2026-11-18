@@ -29,6 +29,7 @@ package database
 
 import (
 	"github.com/oklog/ulid/v2"
+	"sync"
 	"time"
 
 	"github.com/Warp-net/warpnet/database/local-store"
@@ -63,6 +64,10 @@ type AliasesStorer interface {
 
 type AliasesRepo struct {
 	db AliasesStorer
+
+	// mu serializes pairing: the device limit is checked on a range scan,
+	// and a transaction does not conflict on keys added inside that range.
+	mu sync.Mutex
 }
 
 func NewAliasesRepo(db AliasesStorer) *AliasesRepo {
@@ -130,6 +135,9 @@ func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	if alias.NodeId == "" {
 		return local_store.DBError("empty alias node id")
 	}
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 
 	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
 		AddRootID("None").
@@ -233,6 +241,9 @@ func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
 	if nodeId == "" {
 		return local_store.DBError("empty alias node id")
 	}
+
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
 
 	aliasesPrefix := local_store.NewPrefixBuilder(AliasesRepoName).
 		AddRootID("None").
