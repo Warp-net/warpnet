@@ -81,12 +81,10 @@ func StreamNodesPairingHandler(
 			log.Errorf("pair: keepalive acquire: %v", err)
 		}
 
-		println()
 		log.Infof(
 			"paired device %s:%s",
 			s.Conn().RemotePeer().String(), s.Conn().RemoteMultiaddr().String(),
 		)
-		println()
 
 		nodeAddrs := n.Addrs()
 		addrs := make([]string, 0, len(nodeAddrs))
