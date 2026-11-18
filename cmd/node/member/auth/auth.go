@@ -52,7 +52,7 @@ func (e authError) Error() string {
 }
 
 const (
-	errUsernamesMismatch    authError = "username doesn't exist"
+	errUsernamesMismatch    authError = "login doesn't exist"
 	errAlreadyAuthenticated authError = "already authenticated"
 )
 

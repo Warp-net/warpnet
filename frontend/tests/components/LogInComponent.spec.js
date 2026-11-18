@@ -39,7 +39,7 @@ describe('LogInComponent', () => {
   it('renders username and password fields with a login button', () => {
     renderLogin();
 
-    expect(screen.getByLabelText(/Username/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Login/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Password/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Log in/i })).toBeInTheDocument();
   });
@@ -47,7 +47,7 @@ describe('LogInComponent', () => {
   it('starts with empty inputs and no error visible', () => {
     renderLogin();
 
-    expect(screen.getByLabelText(/Username/i)).toHaveValue('');
+    expect(screen.getByLabelText(/Login/i)).toHaveValue('');
     expect(screen.getByLabelText(/Password/i)).toHaveValue('');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe('LogInComponent', () => {
   it('lets the user type into the username and password fields', async () => {
     renderLogin();
 
-    const username = screen.getByLabelText(/Username/i);
+    const username = screen.getByLabelText(/Login/i);
     const password = screen.getByLabelText(/Password/i);
 
     await fireEvent.update(username, 'alice');
@@ -77,7 +77,7 @@ describe('LogInComponent', () => {
   it('calls signInUser with the entered credentials when Log in is clicked', async () => {
     renderLogin();
 
-    await fireEvent.update(screen.getByLabelText(/Username/i), 'alice');
+    await fireEvent.update(screen.getByLabelText(/Login/i), 'alice');
     await fireEvent.update(screen.getByLabelText(/Password/i), 's3cret');
     await fireEvent.click(screen.getByRole('button', { name: /Log in/i }));
 
@@ -92,7 +92,7 @@ describe('LogInComponent', () => {
   it('navigates to Home on successful sign in', async () => {
     renderLogin();
 
-    await fireEvent.update(screen.getByLabelText(/Username/i), 'alice');
+    await fireEvent.update(screen.getByLabelText(/Login/i), 'alice');
     await fireEvent.update(screen.getByLabelText(/Password/i), 's3cret');
     await fireEvent.click(screen.getByRole('button', { name: /Log in/i }));
 
@@ -104,7 +104,7 @@ describe('LogInComponent', () => {
   it('submits when the user presses Enter in the password field', async () => {
     renderLogin();
 
-    await fireEvent.update(screen.getByLabelText(/Username/i), 'alice');
+    await fireEvent.update(screen.getByLabelText(/Login/i), 'alice');
     const password = screen.getByLabelText(/Password/i);
     await fireEvent.update(password, 's3cret');
     await fireEvent.keyDown(password, { key: 'Enter', code: 'Enter' });
@@ -127,7 +127,7 @@ describe('LogInComponent', () => {
 
     renderLogin();
 
-    await fireEvent.update(screen.getByLabelText(/Username/i), 'alice');
+    await fireEvent.update(screen.getByLabelText(/Login/i), 'alice');
     await fireEvent.update(screen.getByLabelText(/Password/i), 's3cret');
     await fireEvent.click(screen.getByRole('button', { name: /Log in/i }));
 
@@ -150,7 +150,7 @@ describe('LogInComponent', () => {
 
     renderLogin();
 
-    await fireEvent.update(screen.getByLabelText(/Username/i), 'alice');
+    await fireEvent.update(screen.getByLabelText(/Login/i), 'alice');
     await fireEvent.update(screen.getByLabelText(/Password/i), 'wrong');
     await fireEvent.click(screen.getByRole('button', { name: /Log in/i }));
 
