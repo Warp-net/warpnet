@@ -29,6 +29,7 @@ package database
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -661,10 +662,6 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	}
 	defer txn.Rollback()
 
-	if err := txn.Set(retweetersKey, []byte(*tweet.RetweetedBy)); err != nil {
-		return tweet, err
-	}
-
 	// A quote — a regular tweet that *references* another tweet —
 	// is signalled by a non-empty QuotedTweetId on the wire. Store
 	// it as its own tweet under the retweeter's namespace with a
@@ -675,6 +672,24 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	// source's "X people retweeted me" count. The reader decides
 	// from QuotedTweetId whether to render an embedded preview.
 	isQuote := tweet.QuotedTweetId != nil && *tweet.QuotedTweetId != ""
+	if !isQuote {
+		retweetId := tweet.Id
+		if tweet.UserId == *tweet.RetweetedBy {
+			retweetId = domain.RetweetPrefix + tweet.Id
+		}
+		existing, _, err := get(txn, *tweet.RetweetedBy, retweetId)
+		if err == nil {
+			return existing, nil // one user retweets a tweet once
+		}
+		if !errors.Is(err, ErrTweetNotFound) {
+			return tweet, err
+		}
+	}
+
+	if err := txn.Set(retweetersKey, []byte(*tweet.RetweetedBy)); err != nil {
+		return tweet, err
+	}
+
 	switch {
 	case isQuote:
 		tweet.Id = ulid.Make().String()

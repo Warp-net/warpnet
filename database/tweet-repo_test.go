@@ -1276,6 +1276,81 @@ func (s *TweetRepoLifecycleTestSuite) TestDoubleRetweetDoesNotDuplicateRetweeter
 	got, _, err := s.repo.Retweeters(tweet.Id, nil, nil)
 	s.Require().NoError(err)
 	s.Len(got, 1, "one user is one retweeter no matter how often they click")
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count, "a repeat retweet must not count")
+
+	s.Require().NoError(s.repo.UnRetweet(booster, tweet.Id, false))
+	count, err = s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count, "one unretweet must cancel the retweet")
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestDoubleRetweetOfOwnTweetCountsOnce() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost myself twice")
+
+	for i := 0; i < 2; i++ {
+		retweet, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &author,
+		}, false)
+		s.Require().NoError(err)
+		s.Equal(domain.RetweetPrefix+tweet.Id, retweet.Id)
+	}
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestConcurrentRetweetsBySameUserCountOnce() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "two devices, one user")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.repo.NewRetweet(domain.Tweet{
+				Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
+			}, false)
+			if err != nil {
+				s.ErrorIs(err, local_store.ErrConflict)
+			}
+		}()
+	}
+	wg.Wait()
+
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestQuoteDoesNotBlockPlainRetweet() {
+	author := ulid.Make().String()
+	booster := ulid.Make().String()
+	tweet := s.newTweet(author, "quote, then boost")
+
+	for i := 0; i < 2; i++ {
+		_, err := s.repo.NewRetweet(domain.Tweet{
+			Id: tweet.Id, UserId: booster, Text: "my take", RetweetedBy: &booster,
+			QuotedTweetId: &tweet.Id, QuotedUserId: &author,
+		}, false)
+		s.Require().NoError(err)
+	}
+	_, err := s.repo.NewRetweet(domain.Tweet{
+		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
+	}, false)
+	s.Require().NoError(err)
+
+	_, err = s.repo.Get(booster, tweet.Id)
+	s.NoError(err, "the plain retweet must be stored after the quotes")
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(3), count, "every quote and the plain retweet count")
 }
 
 func (s *TweetRepoLifecycleTestSuite) TestRetweetWithoutRetweeterIsRejected() {
