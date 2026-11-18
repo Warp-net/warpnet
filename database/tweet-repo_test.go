@@ -1347,6 +1347,81 @@ func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfSelfRetweetAfterSourceIsDel
 	s.Equal(uint64(0), count)
 }
 
+func (s *TweetRepoLifecycleTestSuite) TestSimultaneousTweetsAreAllStored() {
+	author := ulid.Make().String()
+	const tweets = 64
+
+	errs := make([]error, tweets)
+	var wg sync.WaitGroup
+	for i := 0; i < tweets; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = s.repo.Create(author, domain.Tweet{UserId: author, Text: strconv.Itoa(i)})
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(tweets), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestSimultaneousDeletesKeepTheCount() {
+	author := ulid.Make().String()
+	const tweets = 32
+
+	ids := make([]string, tweets)
+	for i := range ids {
+		ids[i] = s.newTweet(author, strconv.Itoa(i)).Id
+	}
+
+	errs := make([]error, tweets)
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = s.repo.Delete(author, id)
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestSimultaneousRepliesToOneTweetAreAllStored() {
+	author := ulid.Make().String()
+	parent := s.newTweet(author, "thread").Id
+	const replies = 32
+
+	errs := make([]error, replies)
+	var wg sync.WaitGroup
+	for i := 0; i < replies; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = s.repo.AddReply(domain.Tweet{UserId: author, Text: strconv.Itoa(i), ParentId: &parent}, false)
+		}()
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.RepliesCount(parent)
+	s.Require().NoError(err)
+	s.Equal(uint64(replies), count)
+}
+
 func (s *TweetRepoLifecycleTestSuite) TestQuoteDoesNotBlockPlainRetweet() {
 	author := ulid.Make().String()
 	booster := ulid.Make().String()

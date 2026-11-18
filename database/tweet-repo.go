@@ -90,25 +90,27 @@ type TweetStatsStorer interface {
 	Decrement(key ds.Key) error
 }
 
-const viewLockShards = 64
+const counterLockShards = 64
 
 type TweetRepo struct {
 	db      TweetsStorer
 	statsDb TweetStatsStorer
 
-	viewLocks [viewLockShards]sync.Mutex
+	// counterLocks serialize writers of one counter key, which would otherwise
+	// fail each other with a transaction conflict the clients do not retry.
+	counterLocks [counterLockShards]sync.Mutex
 }
 
 func NewTweetRepo(db TweetsStorer, statsDb TweetStatsStorer) *TweetRepo {
 	return &TweetRepo{db: db, statsDb: statsDb}
 }
 
-func (repo *TweetRepo) viewLock(tweetId string) *sync.Mutex {
+func (repo *TweetRepo) counterLock(id string) *sync.Mutex {
 	var h uint32
-	for i := 0; i < len(tweetId); i++ {
-		h = h*31 + uint32(tweetId[i])
+	for i := 0; i < len(id); i++ {
+		h = h*31 + uint32(id[i])
 	}
-	return &repo.viewLocks[h%viewLockShards]
+	return &repo.counterLocks[h%counterLockShards]
 }
 
 // Create adds a new tweet to the database
@@ -157,6 +159,10 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 		tweet.Network = "warpnet"
 	}
 	tweet.RootId = tweet.Id
+
+	mu := repo.counterLock(userId)
+	mu.Lock()
+	defer mu.Unlock()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -417,6 +423,10 @@ func (repo *TweetRepo) TweetsCount(userId string) (uint64, error) {
 
 // Delete removes a tweet by its ID
 func (repo *TweetRepo) Delete(userID, tweetID string) error {
+	mu := repo.counterLock(userID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return err
@@ -526,6 +536,10 @@ func (repo *TweetRepo) AddReply(reply domain.Tweet, isTransitive bool) (domain.T
 	parentID := *reply.ParentId
 	countKey := tweetsCountKey(parentID)
 
+	mu := repo.counterLock(parentID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	txn, err := repo.db.NewTxn()
 	if err != nil {
 		return reply, fmt.Errorf("creating transaction: %w", err)
@@ -587,6 +601,10 @@ func (repo *TweetRepo) DeleteReply(parentID, replyID string, isTransitive bool) 
 	if parentID == "" || replyID == "" {
 		return reply, local.DBError("parentID or replyID cannot be empty")
 	}
+
+	mu := repo.counterLock(parentID)
+	mu.Lock()
+	defer mu.Unlock()
 
 	txn, err := repo.db.NewTxn()
 	if err != nil {
@@ -883,7 +901,7 @@ func (repo *TweetRepo) RecordView(tweetId, viewerId string, isTransitive bool) (
 		AddParentId(viewerId).
 		Build()
 
-	mu := repo.viewLock(tweetId)
+	mu := repo.counterLock(tweetId)
 	mu.Lock()
 	defer mu.Unlock()
 
