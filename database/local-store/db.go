@@ -157,9 +157,9 @@ type DB struct {
 	// openTxns counts the transactions Close lets finish: finishing one on a
 	// closed badger blocks once the watermark channel fills up.
 	openTxns atomic.Int64
-	// collector is the garbage collection goroutine. Close waits for it, since
-	// it reads the fields the next login replaces.
-	collector sync.WaitGroup
+	// closeWaiter lets Close wait for the garbage collection goroutine, which
+	// reads the fields the next login replaces.
+	closeWaiter sync.WaitGroup
 
 	dbPath          string
 	hasFirstRunFlag bool
@@ -290,7 +290,7 @@ func (db *DB) Run(username, password string) (err error) {
 	}
 
 	if !db.badgerOpts.InMemory {
-		db.collector.Go(db.runEventualGC)
+		db.runEventualGC()
 	}
 
 	return nil
@@ -300,39 +300,41 @@ func (db *DB) runEventualGC() {
 	if db.badgerOpts.InMemory {
 		return
 	}
-	log.Infoln("database: garbage collection started")
-	gcTicker := time.NewTicker(db.intervalGC)
-	defer gcTicker.Stop()
+	db.closeWaiter.Go(func() {
+		log.Infoln("database: garbage collection started")
+		gcTicker := time.NewTicker(db.intervalGC)
+		defer gcTicker.Stop()
 
-	dirTicker := time.NewTicker(time.Second)
-	defer dirTicker.Stop()
+		dirTicker := time.NewTicker(time.Second)
+		defer dirTicker.Stop()
 
-	_ = db.badger.RunValueLogGC(db.discardRatioGC)
-	for {
-		select {
-		case <-dirTicker.C:
-			isFound := findFirstRunFlag(db.dbPath)
-			if !isFound {
-				panic("database: folder was emptied")
-			}
-		case <-gcTicker.C:
-			for {
-				err := db.badger.RunValueLogGC(db.discardRatioGC)
-				if errors.Is(err, badger.ErrNoRewrite) ||
-					errors.Is(err, badger.ErrRejected) {
-					break
+		_ = db.badger.RunValueLogGC(db.discardRatioGC)
+		for {
+			select {
+			case <-dirTicker.C:
+				isFound := findFirstRunFlag(db.dbPath)
+				if !isFound {
+					panic("database: folder was emptied")
 				}
-				select {
-				case <-db.stopChan:
-					return
-				case <-time.After(db.sleepGC):
+			case <-gcTicker.C:
+				for {
+					err := db.badger.RunValueLogGC(db.discardRatioGC)
+					if errors.Is(err, badger.ErrNoRewrite) ||
+						errors.Is(err, badger.ErrRejected) {
+						break
+					}
+					select {
+					case <-db.stopChan:
+						return
+					case <-time.After(db.sleepGC):
+					}
 				}
+				log.Infoln("database: garbage collection complete")
+			case <-db.stopChan:
+				return
 			}
-			log.Infoln("database: garbage collection complete")
-		case <-db.stopChan:
-			return
 		}
-	}
+	})
 }
 
 func (db *DB) Stats() map[string]string {
@@ -1031,7 +1033,7 @@ func (db *DB) Close() {
 	for db.openTxns.Load() > 0 && time.Now().Before(deadline) {
 		time.Sleep(closeDrainPoll)
 	}
-	db.collector.Wait()
+	db.closeWaiter.Wait()
 
 	db.lifecycle.Lock()
 	defer db.lifecycle.Unlock()
