@@ -798,22 +798,38 @@ func StreamDeleteTweetHandler(
 		// Deleting an own tweet only cleans up local state here; the shared
 		// (CRDT) like/retweet counts are owned by the actors' own nodes, so
 		// this node must not adjust them (isTransitive=false).
-		if _, err := reactionRepo.Unreact(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), false); err != nil {
+		_, err = reactionRepo.Unreact(strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), ev.UserId, false)
+		if err != nil && !errors.Is(err, database.ErrReactionsNotFound) {
 			log.Errorf("delete tweet: unliking tweet: %v", err)
 		}
 
-		t, _ := repo.Get(ev.UserId, domain.RetweetPrefix+ev.TweetId)
+		sourceId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+		deleted, _ := repo.Get(ev.UserId, sourceId)
+
+		// Nothing stored under this id: a repeated delete still removes a feed
+		// entry the first one left behind, and the caller learns nothing was
+		// deleted, which matters for a reply addressed without its parent.
+		err = repo.Delete(ev.UserId, sourceId)
+		if errors.Is(err, database.ErrTweetNotFound) {
+			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
+				log.Errorf("delete tweet: timeline delete: %v", err)
+			}
+			return nil, err
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		// Unwound after the delete: a retweet stored later than this read sees
+		// the source gone and unwinds itself.
+		t, _ := repo.Get(ev.UserId, domain.RetweetPrefix+sourceId)
 		if t.RetweetedBy != nil {
 			_ = repo.UnRetweet(*t.RetweetedBy, t.Id, false)
 		}
-
-		deleted, _ := repo.Get(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
-
-		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
-			return nil, err
-		}
-		if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
-			log.Errorf("delete tweet: timeline delete: %v", err)
+		for _, id := range []string{sourceId, domain.RetweetPrefix + sourceId} {
+			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, id); err != nil {
+				log.Errorf("delete tweet: timeline delete: %v", err)
+			}
 		}
 
 		owner := authRepo.GetOwner()
@@ -1104,6 +1120,14 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		if timelineRepo != nil {
 			if err := timelineRepo.AddTweetToTimeline(out.UserId, out); err != nil {
 				log.Warnf("edit tweet: timeline refresh failed: %v", err)
+			}
+			// A delete that landed before the refresh has already cleaned the
+			// timeline, so the refresh just brought the tweet back.
+			if _, err := repo.Get(out.UserId, out.Id); errors.Is(err, database.ErrTweetNotFound) {
+				if err := timelineRepo.DeleteTweetFromTimeline(out.UserId, out.Id); err != nil {
+					log.Errorf("edit tweet: timeline delete: %v", err)
+				}
+				return nil, err
 			}
 		}
 

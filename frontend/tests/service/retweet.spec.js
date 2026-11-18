@@ -133,3 +133,19 @@ describe('unretweetTweet', () => {
     expect(sent.body).toEqual({ retweeter_id: owner.user_id, tweet_id: 't1' });
   });
 });
+
+describe('retweetTweet', () => {
+  it('sends the parent of a retweeted reply', async () => {
+    await warpnetService.retweetTweet({
+      tweetId: 'reply-1', userId: 'author1', username: 'author', text: 'hi', parentId: 'parent-1',
+    });
+
+    expect(JSON.stringify(Call.mock.calls[0])).toContain('parent-1');
+  });
+
+  it('sends no parent for a root tweet', async () => {
+    await warpnetService.retweetTweet({ tweetId: 'root-1', userId: 'author1', username: 'author', text: 'hi' });
+
+    expect(JSON.stringify(Call.mock.calls[0])).not.toContain('parent_id');
+  });
+});

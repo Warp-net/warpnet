@@ -578,3 +578,41 @@ func TestNormalizeReaction(t *testing.T) {
 		}
 	}
 }
+
+func TestStreamUnreactionHandler_NothingToTakeBackSucceeds(t *testing.T) {
+	const owner, tweetId = "owner-1", "tweet-1"
+	_, conn := authorStream(t)
+	users := stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: conn.Conn().RemotePeer().String()}, nil
+	}}
+	repo := stubReactionRepo{unreactFn: func(_, _ string) (uint64, error) {
+		return 0, database.ErrReactionsNotFound
+	}}
+
+	resp, err := StreamUnreactionHandler(repo, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(
+		marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), conn,
+	)
+	if err != nil {
+		t.Fatalf("an unlike of a tweet without reactions must succeed: %v", err)
+	}
+	if got := resp.(event.ReactionsCountResponse).Count; got != 0 {
+		t.Fatalf("expected zero reactions, got %d", got)
+	}
+}
+
+func TestStreamUnreactionHandler_RealFailureStillFails(t *testing.T) {
+	const owner, tweetId = "owner-1", "tweet-1"
+	_, conn := authorStream(t)
+	users := stubReactionUserRepo{getFn: func(userId string) (domain.User, error) {
+		return domain.User{Id: userId, NodeId: conn.Conn().RemotePeer().String()}, nil
+	}}
+	repoErr := errors.New("db down")
+	repo := stubReactionRepo{unreactFn: func(_, _ string) (uint64, error) { return 0, repoErr }}
+
+	_, err := StreamUnreactionHandler(repo, users, stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}})(
+		marshal(t, event.UnreactionEvent{TweetId: tweetId, OwnerId: owner, UserId: owner}), conn,
+	)
+	if !errors.Is(err, repoErr) {
+		t.Fatalf("expected the repo error, got %v", err)
+	}
+}

@@ -636,6 +636,8 @@ class WarpnetRepository @Inject constructor(
         retweeterId: String,
         retweeterUsername: String,
         sourceAuthorId: String? = null,
+        // A reply lives under its parent: the node needs it to find the source.
+        sourceParentId: String? = null,
         // A plain retweet echoes the source tweet, so the wire copy has to
         // carry the source's body and author display name — the same fields
         // the Vue frontend forwards from the tweet it already holds. Empty
@@ -663,6 +665,7 @@ class WarpnetRepository @Inject constructor(
                 text = sourceText,
                 userId = sourceAuthorId ?: retweeterId,
                 username = sourceUsername.ifBlank { retweeterUsername },
+                parentId = sourceParentId,
                 retweetedBy = retweeterId,
             )
         }
