@@ -143,24 +143,6 @@ struct SettingsTabs: View {
   private var otherSections: some View {
     @Bindable var preferences = preferences
     Section {
-      #if !targetEnvironment(macCatalyst)
-        Picker(selection: $preferences.preferredBrowser) {
-          ForEach(PreferredBrowser.allCases, id: \.rawValue) { browser in
-            switch browser {
-            case .inAppSafari:
-              Text("settings.general.browser.in-app").tag(browser)
-            case .safari:
-              Text("settings.general.browser.system").tag(browser)
-            }
-          }
-        } label: {
-          Label("settings.general.browser", systemImage: "network")
-        }
-        Toggle(isOn: $preferences.inAppBrowserReaderView) {
-          Label("settings.general.browser.in-app.readerview", systemImage: "doc.plaintext")
-        }
-        .disabled(preferences.preferredBrowser != PreferredBrowser.inAppSafari)
-      #endif
       Toggle(isOn: $preferences.isSocialKeyboardEnabled) {
         Label("settings.other.social-keyboard", systemImage: "keyboard")
       }
