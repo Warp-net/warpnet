@@ -371,7 +371,11 @@ func (rn *RelayNode) Network() warpnet.WarpNetwork {
 }
 
 func (rn *RelayNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
-	return rn.node.Node().Connect(rn.ctx, info)
+	host := rn.node.Node()
+	if host == nil { // stopped while discovery still delivers peers
+		return warpnet.ErrNodeIsOffline
+	}
+	return host.Connect(rn.ctx, info)
 }
 
 func (rn *RelayNode) Stop() {

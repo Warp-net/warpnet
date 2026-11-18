@@ -1174,7 +1174,11 @@ func (m *MemberNode) Addrs() []warpnet.WarpAddress {
 }
 
 func (m *MemberNode) SimpleConnect(info warpnet.WarpAddrInfo) error {
-	return m.node.Node().Connect(m.ctx, info)
+	host := m.node.Node()
+	if host == nil { // stopped while discovery still delivers peers
+		return warpnet.ErrNodeIsOffline
+	}
+	return host.Connect(m.ctx, info)
 }
 
 func (m *MemberNode) Stop() {

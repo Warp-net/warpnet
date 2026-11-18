@@ -187,3 +187,9 @@ func TestRelayStopClosesTheRatingBeforeTheGossip(t *testing.T) {
 
 	require.Equal(t, []string{"rating", "pubsub"}, order.closed)
 }
+
+func TestRelaySimpleConnectAfterStopReportsOffline(t *testing.T) {
+	rn := &RelayNode{ctx: context.Background(), node: &corenode.WarpNode{}}
+
+	require.ErrorIs(t, rn.SimpleConnect(warpnet.WarpAddrInfo{}), warpnet.ErrNodeIsOffline)
+}
