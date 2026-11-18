@@ -114,7 +114,7 @@ describe('Root.vue', () => {
 
     expect(await screen.findByText(/Create your account/i)).toBeInTheDocument();
     expect(screen.getByText(/Step 1 of 4/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Username/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Login/i)).toBeInTheDocument();
   });
 
   it('keeps the Next button disabled in step 1 while username is empty (disabled state)', async () => {
@@ -137,7 +137,7 @@ describe('Root.vue', () => {
     );
 
     // Step 1: username
-    const usernameField = await screen.findByLabelText(/Username/i);
+    const usernameField = await screen.findByLabelText(/Login/i);
     await fireEvent.update(usernameField, 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
@@ -206,7 +206,7 @@ describe('Root.vue', () => {
     );
 
     // Step 1
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.update(await screen.findByLabelText(/Login/i), 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     // Step 2
@@ -241,7 +241,7 @@ describe('Root.vue', () => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.update(await screen.findByLabelText(/Login/i), 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     const checkboxes = await screen.findAllByRole('checkbox');
@@ -269,7 +269,7 @@ describe('Root.vue', () => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), username);
+    await fireEvent.update(await screen.findByLabelText(/Login/i), username);
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
     const checkboxes = await screen.findAllByRole('checkbox');
@@ -352,7 +352,7 @@ describe('Root.vue', () => {
     await fireEvent.click(
       await screen.findByRole('button', { name: /^Sign up$/ })
     );
-    await fireEvent.update(await screen.findByLabelText(/Username/i), 'alice');
+    await fireEvent.update(await screen.findByLabelText(/Login/i), 'alice');
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     const checkboxes = await screen.findAllByRole('checkbox');
     for (const cb of checkboxes) await fireEvent.click(cb);

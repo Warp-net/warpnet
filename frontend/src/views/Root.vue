@@ -157,7 +157,7 @@ resulting from the use or misuse of this software.
             </div>
             <p class="text-sm text-dark mb-4">Step 1 of 4</p>
             <div class="w-full bg-lightblue border-b-2 border-dark mb-8 p-2">
-              <label for="signup-username" class="text-dark">Username</label>
+              <label for="signup-username" class="text-dark">Login</label>
               <input
                 id="signup-username"
                 v-model="username"

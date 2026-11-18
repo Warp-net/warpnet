@@ -23,7 +23,7 @@ resulting from the use or misuse of this software.
 -->
 <template>
     <div class="w-full bg-lightblue border-b-2 border-dark mt-10 mb-6 p-2 input_field">
-      <label for="login-username" class="text-dark text-center block">Username</label>
+      <label for="login-username" class="text-dark text-center block">Login</label>
       <input
           id="login-username"
           v-model="username"
