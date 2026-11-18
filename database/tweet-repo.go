@@ -448,6 +448,9 @@ func deleteTweet(txn local.WarpTransactioner, userId, tweetId string) error {
 		AddParentId(tweetId).
 		Build()
 	sortableKeyBytes, err := txn.Get(fixedKey)
+	if local.IsNotFoundError(err) {
+		return ErrTweetNotFound
+	}
 	if err != nil {
 		return err
 	}

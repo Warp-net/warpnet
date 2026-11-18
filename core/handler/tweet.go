@@ -809,7 +809,10 @@ func StreamDeleteTweetHandler(
 
 		deleted, _ := repo.Get(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
 
-		if err := repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)); err != nil {
+		// An already deleted tweet still goes through the timeline cleanup, so
+		// a repeated delete can remove an entry the first one left behind.
+		err = repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
+		if err != nil && !errors.Is(err, database.ErrTweetNotFound) {
 			return nil, err
 		}
 		if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
@@ -1104,6 +1107,14 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		if timelineRepo != nil {
 			if err := timelineRepo.AddTweetToTimeline(out.UserId, out); err != nil {
 				log.Warnf("edit tweet: timeline refresh failed: %v", err)
+			}
+			// A delete that landed before the refresh has already cleaned the
+			// timeline, so the refresh just brought the tweet back.
+			if _, err := repo.Get(out.UserId, out.Id); errors.Is(err, database.ErrTweetNotFound) {
+				if err := timelineRepo.DeleteTweetFromTimeline(out.UserId, out.Id); err != nil {
+					log.Errorf("edit tweet: timeline delete: %v", err)
+				}
+				return nil, err
 			}
 		}
 

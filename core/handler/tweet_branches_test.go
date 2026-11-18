@@ -479,3 +479,55 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// deleteBeforeRefreshTimeline runs beforeAdd right before the timeline refresh
+// of an edit, the window in which a delete from another device can land.
+type deleteBeforeRefreshTimeline struct {
+	*database.TimelineRepo
+	beforeAdd func()
+}
+
+func (r deleteBeforeRefreshTimeline) AddTweetToTimeline(userId string, tweet domain.Tweet) error {
+	r.beforeAdd()
+	return r.TimelineRepo.AddTweetToTimeline(userId, tweet)
+}
+
+func TestEditRacingDeleteLeavesNoTweetInTimeline(t *testing.T) {
+	const owner = "owner-1"
+	tweetRepo, timelineRepo := newRetweetRepos(t)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "original", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	require.NoError(t, timelineRepo.AddTweetToTimeline(owner, tweet))
+
+	remove := StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, timelineRepo, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+	)
+	timeline := deleteBeforeRefreshTimeline{TimelineRepo: timelineRepo, beforeAdd: func() {
+		_, err := remove(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+		require.NoError(t, err)
+	}}
+
+	_, err = StreamEditTweetHandler(tweetRepo, timeline)(
+		marshal(t, event.EditTweetEvent{UserId: owner, TweetId: tweet.Id, Text: "edited"}), nil,
+	)
+	require.ErrorIs(t, err, database.ErrTweetNotFound)
+	require.Empty(t, timelineIds(t, timelineRepo, owner))
+}
+
+func TestRepeatedDeleteRemovesTimelineLeftover(t *testing.T) {
+	const owner = "owner-1"
+	tweetRepo, timelineRepo := newRetweetRepos(t)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "gone", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	require.NoError(t, timelineRepo.AddTweetToTimeline(owner, tweet))
+	require.NoError(t, tweetRepo.Delete(owner, tweet.Id))
+
+	out, err := StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, timelineRepo, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+	require.NoError(t, err)
+	require.Equal(t, event.Accepted, out)
+	require.Empty(t, timelineIds(t, timelineRepo, owner))
+}
