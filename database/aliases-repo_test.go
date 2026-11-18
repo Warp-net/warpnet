@@ -192,6 +192,34 @@ func TestSetAlias_SimultaneousPairingKeepsTheLimit(t *testing.T) {
 	assert.Len(t, ids, MaxAliases)
 }
 
+func TestAliases_TombstonesNeverHideLiveDevices(t *testing.T) {
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	assert.NoError(t, err)
+	defer db.Close()
+	assert.NoError(t, NewAuthRepo(db, "test").Authenticate("test", "test"))
+	repo := NewAliasesRepo(db)
+
+	const revoked = aliasPageSize*2 + 5
+	for i := range revoked {
+		nodeId := fmt.Sprintf("a-revoked-%03d", i)
+		assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: nodeId, Token: "tok"}))
+		assert.NoError(t, repo.DeleteAlias(nodeId))
+	}
+
+	// Live ids sort after every tombstone, past the first pages of the scan.
+	for i := range MaxAliases {
+		assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: fmt.Sprintf("z-live-%03d", i), Token: "tok"}))
+	}
+	ids, err := repo.GetNodeIDs()
+	assert.NoError(t, err)
+	assert.Len(t, ids, MaxAliases, "every paired device must stay authorized")
+
+	assert.ErrorIs(t, repo.SetAlias(domain.Alias{NodeId: "z-live-extra", Token: "tok"}), ErrTooManyAliases)
+	assert.NoError(t, repo.SetAlias(domain.Alias{NodeId: "z-live-000", Token: "tok"}), "a refresh takes no new slot")
+	assert.NoError(t, repo.DeleteAlias("z-live-009"), "a device past the first pages can be revoked")
+	assert.ErrorIs(t, repo.SetAlias(domain.Alias{NodeId: "z-live-009", Token: "tok"}), ErrAliasRevoked)
+}
+
 func (s *AliasesRepoTestSuite) TestSetAlias_EmptyNodeId() {
 	assert.Error(s.T(), s.repo.SetAlias(domain.Alias{Token: "tok"}))
 }

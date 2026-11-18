@@ -43,10 +43,7 @@ const (
 	// MaxAliases is how many devices may stay paired to a node at once.
 	MaxAliases = 10
 
-	// aliasScanLimit bounds the scan that folds stale records away:
-	// devices used to be stored under a random ULID, which gave one
-	// device a record per pair refresh.
-	aliasScanLimit = 100
+	aliasPageSize = 100
 
 	aliasTTL = time.Hour * 72
 )
@@ -74,6 +71,27 @@ func NewAliasesRepo(db AliasesStorer) *AliasesRepo {
 	return &AliasesRepo{db: db}
 }
 
+// listAliasRecords reads every record: tombstones are never removed, so a
+// single bounded page would sooner or later hide the devices paired after them.
+func listAliasRecords(txn local_store.WarpTransactioner, prefix local_store.DatabaseKey) ([]local_store.ListItem, error) {
+	var (
+		records []local_store.ListItem
+		cursor  string
+		limit   = uint64(aliasPageSize)
+	)
+	for {
+		items, cur, err := txn.List(prefix, &limit, &cursor)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, items...)
+		if uint64(len(items)) < limit {
+			return records, nil
+		}
+		cursor = cur
+	}
+}
+
 func (repo *AliasesRepo) GetAliases() (aliases []domain.Alias, err error) {
 	if repo.db == nil {
 		return nil, ErrNilAliasesRepo
@@ -90,8 +108,7 @@ func (repo *AliasesRepo) GetAliases() (aliases []domain.Alias, err error) {
 	}
 	defer txn.Rollback()
 
-	limit := uint64(aliasScanLimit)
-	items, _, err := txn.List(aliasesPrefix, &limit, nil)
+	items, err := listAliasRecords(txn, aliasesPrefix)
 	if err != nil {
 		return aliases, err
 	}
@@ -155,8 +172,7 @@ func (repo *AliasesRepo) SetAlias(alias domain.Alias) error {
 	}
 	defer txn.Rollback()
 
-	limit := uint64(aliasScanLimit)
-	items, _, err := txn.List(aliasesPrefix, &limit, nil)
+	items, err := listAliasRecords(txn, aliasesPrefix)
 	if err != nil {
 		return err
 	}
@@ -261,8 +277,7 @@ func (repo *AliasesRepo) DeleteAlias(nodeId string) error {
 	}
 	defer txn.Rollback()
 
-	limit := uint64(aliasScanLimit)
-	items, _, err := txn.List(aliasesPrefix, &limit, nil)
+	items, err := listAliasRecords(txn, aliasesPrefix)
 	if err != nil {
 		return err
 	}
