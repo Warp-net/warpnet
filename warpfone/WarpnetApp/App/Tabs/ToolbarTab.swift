@@ -17,7 +17,7 @@ struct ToolbarTab: ToolbarContent {
     if !isSecondaryColumn {
       StatusEditorToolbarItem()
       ToolbarItem(placement: .navigationBarTrailing) {
-        ConnectionDot(monitor: pairing.monitor)
+        ConnectionIndicator(monitor: pairing.monitor)
       }
       if UIDevice.current.userInterfaceIdiom != .pad ||
           (UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .compact) {
