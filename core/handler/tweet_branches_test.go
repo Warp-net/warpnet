@@ -12,6 +12,7 @@ import (
 	"github.com/Warp-net/warpnet/core/stream"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -103,6 +104,26 @@ func TestStreamEditTweetHandlerBranches(t *testing.T) {
 			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "same"}), nil)
 		require.NoError(t, err)
 		require.Equal(t, "same", domain.Tweet(out.(event.EditTweetResponse)).Text)
+	})
+
+	t.Run("a failing recheck does not fail the edit", func(t *testing.T) {
+		gets := 0
+		repo := stubTweetRepo{getFn: func(u, id string) (domain.Tweet, error) {
+			gets++
+			if gets > 2 {
+				return domain.Tweet{}, errors.New("down")
+			}
+			return domain.Tweet{Id: id, UserId: u, Text: "old"}, nil
+		}}
+		var removed bool
+		timeline := stubTimelineRepo{deleteFn: func(_, _ string) error {
+			removed = true
+			return nil
+		}}
+		_, err := StreamEditTweetHandler(repo, timeline)(
+			marshal(t, event.EditTweetEvent{UserId: userId, TweetId: tweetId, Text: "new"}), nil)
+		require.NoError(t, err)
+		require.False(t, removed, "only a tweet known to be gone leaves the timeline")
 	})
 
 	t.Run("only the author may edit", func(t *testing.T) {
@@ -544,4 +565,50 @@ func TestRepeatedDeleteRemovesTimelineLeftover(t *testing.T) {
 	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
 	require.ErrorIs(t, err, database.ErrTweetNotFound)
 	require.Empty(t, timelineIds(t, timelineRepo, owner))
+}
+
+func TestDeleteTakesBackOnlyTheAuthorsReaction(t *testing.T) {
+	const owner, fan = "owner-1", "fan-1"
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	require.NoError(t, database.NewAuthRepo(db, "test").Authenticate("test", "test"))
+
+	tweetRepo, timelineRepo := database.NewTweetRepo(db, nil), database.NewTimelineRepo(db)
+	reactionRepo := database.NewReactionRepo(db, nil)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "liked", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	_, err = reactionRepo.React(tweet.Id, owner, defaultReaction, false)
+	require.NoError(t, err)
+	_, err = reactionRepo.React(tweet.Id, fan, defaultReaction, false)
+	require.NoError(t, err)
+
+	_, err = StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, timelineRepo, reactionRepo, stubTweetMediaRepo{}, stubStreamer{},
+	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+	require.NoError(t, err)
+
+	reactors, _, err := reactionRepo.Reactors(tweet.Id, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{fan}, reactors)
+}
+
+func TestDeleteOfATweetWithoutReactionsSucceeds(t *testing.T) {
+	const owner = "owner-1"
+	db, err := local_store.New("", local_store.DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	t.Cleanup(db.Close)
+	require.NoError(t, database.NewAuthRepo(db, "test").Authenticate("test", "test"))
+
+	tweetRepo := database.NewTweetRepo(db, nil)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "quiet", CreatedAt: time.Now()})
+	require.NoError(t, err)
+
+	out, err := StreamDeleteTweetHandler(
+		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+		tweetRepo, database.NewTimelineRepo(db), database.NewReactionRepo(db, nil), stubTweetMediaRepo{}, stubStreamer{},
+	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
+	require.NoError(t, err)
+	require.Equal(t, event.Accepted, out)
 }

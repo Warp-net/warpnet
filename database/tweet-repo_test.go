@@ -1422,6 +1422,101 @@ func (s *TweetRepoLifecycleTestSuite) TestSimultaneousRepliesToOneTweetAreAllSto
 	s.Equal(uint64(replies), count)
 }
 
+func (s *TweetRepoLifecycleTestSuite) TestOneTweetDeletedSimultaneouslyCountsOnce() {
+	author := ulid.Make().String()
+	kept := s.newTweet(author, "stays")
+	tweet := s.newTweet(author, "deleted from every device")
+
+	errs := make([]error, 16)
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = s.repo.Delete(author, tweet.Id)
+		}()
+	}
+	wg.Wait()
+
+	deleted := 0
+	for _, err := range errs {
+		if err == nil {
+			deleted++
+			continue
+		}
+		s.ErrorIs(err, ErrTweetNotFound)
+	}
+	s.Equal(1, deleted)
+
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+	_, err = s.repo.Get(author, kept.Id)
+	s.NoError(err)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestOneReplyDeletedSimultaneouslyCountsOnce() {
+	author := ulid.Make().String()
+	parent := s.newTweet(author, "thread").Id
+	_, err := s.repo.AddReply(domain.Tweet{UserId: author, Text: "stays", ParentId: &parent}, false)
+	s.Require().NoError(err)
+	reply, err := s.repo.AddReply(domain.Tweet{UserId: author, Text: "goes", ParentId: &parent}, false)
+	s.Require().NoError(err)
+
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = s.repo.DeleteReply(parent, reply.Id, false)
+		}()
+	}
+	wg.Wait()
+
+	count, err := s.repo.RepliesCount(parent)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+}
+
+func (s *TweetRepoLifecycleTestSuite) TestMixedWritesOfOneAuthorKeepTheCount() {
+	author := ulid.Make().String()
+	parent := s.newTweet(author, "thread").Id
+	const workers = 24
+
+	seeded := make([]string, workers)
+	for i := range seeded {
+		seeded[i] = s.newTweet(author, "to delete").Id
+	}
+
+	errs := make(chan error, workers*4)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.repo.Create(author, domain.Tweet{UserId: author, Text: strconv.Itoa(i)})
+			errs <- err
+			errs <- s.repo.Delete(author, seeded[i])
+			_, err = s.repo.AddReply(domain.Tweet{UserId: author, Text: "reply", ParentId: &parent}, false)
+			errs <- err
+			_, err = s.repo.RecordView(parent, strconv.Itoa(i), false)
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		s.NoError(err)
+	}
+	count, err := s.repo.TweetsCount(author)
+	s.Require().NoError(err)
+	s.Equal(uint64(workers+1), count, "the thread root plus one new tweet per worker")
+	replies, err := s.repo.RepliesCount(parent)
+	s.Require().NoError(err)
+	s.Equal(uint64(workers), replies)
+}
+
 func (s *TweetRepoLifecycleTestSuite) TestRetweetOfDeletedTweetIsRefused() {
 	author := ulid.Make().String()
 	booster := ulid.Make().String()
