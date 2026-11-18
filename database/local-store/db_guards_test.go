@@ -195,3 +195,65 @@ func TestCloseUnderLoadLeavesNoOperationHanging(t *testing.T) {
 		}
 	}
 }
+
+// More open transactions than badger's watermark channel holds: finishing them
+// on an already closed badger would block forever.
+func TestCloseLetsOpenTransactionsFinish(t *testing.T) {
+	db, err := New("", DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+
+	txns := make([]WarpTransactioner, 0, 256)
+	for range cap(txns) {
+		txn, err := db.NewTxn()
+		require.NoError(t, err)
+		txns = append(txns, txn)
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		db.Close()
+		close(closed)
+	}()
+	require.Eventually(t, db.IsClosed, 5*time.Second, time.Millisecond)
+
+	_, err = db.NewTxn()
+	require.ErrorIs(t, err, ErrNotRunning, "a closing store takes no new work")
+	_, err = db.Get(DatabaseKey("/LOAD/key"))
+	require.ErrorIs(t, err, ErrNotRunning, "and refuses reads made inside an open transaction")
+
+	finished := make(chan struct{})
+	go func() {
+		for _, txn := range txns {
+			txn.Rollback()
+		}
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(closeDrainTimeout + 10*time.Second):
+		t.Fatal("open transactions hang on the closing store")
+	}
+	<-closed
+}
+
+func TestCloseDoesNotWaitForeverForALeakedTransaction(t *testing.T) {
+	db, err := New("", DefaultOptions().WithInMemory(true))
+	require.NoError(t, err)
+	require.NoError(t, db.Run("user", "password"))
+
+	leaked, err := db.NewTxn()
+	require.NoError(t, err)
+
+	closed := make(chan struct{})
+	go func() {
+		db.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(closeDrainTimeout + 10*time.Second):
+		t.Fatal("a leaked transaction blocks the close")
+	}
+	leaked.Rollback()
+}
