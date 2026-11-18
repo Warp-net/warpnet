@@ -1329,6 +1329,24 @@ func (s *TweetRepoLifecycleTestSuite) TestConcurrentRetweetsBySameUserCountOnce(
 	s.Equal(uint64(1), count)
 }
 
+func (s *TweetRepoLifecycleTestSuite) TestUnRetweetOfSelfRetweetAfterSourceIsDeleted() {
+	author := ulid.Make().String()
+	tweet := s.newTweet(author, "boost, then delete")
+	_, err := s.repo.NewRetweet(domain.Tweet{
+		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &author,
+	}, false)
+	s.Require().NoError(err)
+	s.Require().NoError(s.repo.Delete(author, tweet.Id))
+
+	s.Require().NoError(s.repo.UnRetweet(author, tweet.Id, false))
+
+	_, err = s.repo.Get(author, domain.RetweetPrefix+tweet.Id)
+	s.ErrorIs(err, ErrTweetNotFound)
+	count, err := s.repo.RetweetsCount(tweet.Id)
+	s.Require().NoError(err)
+	s.Equal(uint64(0), count)
+}
+
 func (s *TweetRepoLifecycleTestSuite) TestQuoteDoesNotBlockPlainRetweet() {
 	author := ulid.Make().String()
 	booster := ulid.Make().String()

@@ -749,13 +749,20 @@ func (repo *TweetRepo) UnRetweet(retweetedByUserID, tweetId string, isTransitive
 	}
 	defer txn.Rollback()
 
-	tweet, _, err := get(txn, retweetedByUserID, sourceTweetId)
-	if err != nil {
+	// A self-retweet is found by its own record: its source may be deleted.
+	retweetId := domain.RetweetPrefix + sourceTweetId
+	_, _, err = get(txn, retweetedByUserID, retweetId)
+	if err != nil && !errors.Is(err, ErrTweetNotFound) {
 		return err
 	}
-	retweetId := sourceTweetId
-	if tweet.UserId == retweetedByUserID {
-		retweetId = domain.RetweetPrefix + sourceTweetId
+	if err != nil {
+		tweet, _, err := get(txn, retweetedByUserID, sourceTweetId)
+		if err != nil {
+			return err
+		}
+		if tweet.UserId != retweetedByUserID {
+			retweetId = sourceTweetId
+		}
 	}
 
 	if err := txn.Delete(retweetersKey); err != nil {

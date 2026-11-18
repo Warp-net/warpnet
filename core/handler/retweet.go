@@ -98,24 +98,9 @@ func StreamNewReTweetHandler(
 			return nil, err
 		}
 
-		source, err := tweetRepo.Get(retweetEvent.UserId, strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix))
-		if err == nil && source.IsSponsored() {
-			retweetEvent.Price = source.Price
-		}
-		retweetEvent = retweetEvent.Teaser()
-
 		ownNodeInfo := streamer.NodeInfo()
 		ownerId := ownNodeInfo.OwnerId
 		isOwnerRetweeter := ownerId == *retweetEvent.RetweetedBy
-
-		// The network-wide (CRDT) retweet counter is bumped only on the
-		// retweeter's own node, so a retweet stored on both the retweeter's and
-		// the source author's node is counted once.
-		retweet, err := tweetRepo.NewRetweet(retweetEvent, isOwnerRetweeter)
-		if err != nil {
-			log.Errorf("retweet handler failed: %v", err)
-			return nil, err
-		}
 
 		// A quote is a regular tweet authored by the retweeter that
 		// references another tweet through QuotedTweetId / QuotedUserId.
@@ -129,6 +114,31 @@ func StreamNewReTweetHandler(
 			sourceAuthorId = *retweetEvent.QuotedUserId
 		}
 		sourceTweetId := strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix)
+
+		// Only the owner's own root tweets are stored where this node can tell
+		// that they are gone: replies live under their parent, foreign tweets
+		// may never have been stored here.
+		isReply := retweetEvent.ParentId != nil && *retweetEvent.ParentId != "" && *retweetEvent.ParentId != sourceTweetId
+		isOwnRootSource := !isQuote && !isReply && retweetEvent.UserId == ownerId
+
+		source, err := tweetRepo.Get(retweetEvent.UserId, sourceTweetId)
+		if isOwnRootSource && errors.Is(err, database.ErrTweetNotFound) {
+			return nil, err
+		}
+		if err == nil && source.IsSponsored() {
+			retweetEvent.Price = source.Price
+		}
+		retweetEvent = retweetEvent.Teaser()
+
+		// The network-wide (CRDT) retweet counter is bumped only on the
+		// retweeter's own node, so a retweet stored on both the retweeter's and
+		// the source author's node is counted once.
+		retweet, err := tweetRepo.NewRetweet(retweetEvent, isOwnerRetweeter)
+		if err != nil {
+			log.Errorf("retweet handler failed: %v", err)
+			return nil, err
+		}
+
 		if isQuote {
 			sourceTweetId = *retweetEvent.QuotedTweetId
 		}
@@ -137,6 +147,19 @@ func StreamNewReTweetHandler(
 			// owner retweeted it
 			if err = timelineRepo.AddTweetToTimeline(ownerId, retweet); err != nil {
 				log.Infof("fail adding retweet to timeline: %v", err)
+			}
+		}
+
+		if isOwnerRetweeter && isOwnRootSource {
+			// The source may have been deleted from another device meanwhile.
+			if _, err := tweetRepo.Get(ownerId, sourceTweetId); errors.Is(err, database.ErrTweetNotFound) {
+				if err := tweetRepo.UnRetweet(ownerId, sourceTweetId, true); err != nil && !errors.Is(err, database.ErrTweetNotFound) {
+					log.Errorf("retweet handler: unwinding retweet of a deleted tweet: %v", err)
+				}
+				if err := timelineRepo.DeleteTweetFromTimeline(ownerId, retweet.Id); err != nil {
+					log.Errorf("retweet handler: timeline delete: %v", err)
+				}
+				return nil, err
 			}
 		}
 

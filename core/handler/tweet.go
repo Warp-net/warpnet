@@ -802,21 +802,26 @@ func StreamDeleteTweetHandler(
 			log.Errorf("delete tweet: unliking tweet: %v", err)
 		}
 
-		t, _ := repo.Get(ev.UserId, domain.RetweetPrefix+ev.TweetId)
-		if t.RetweetedBy != nil {
-			_ = repo.UnRetweet(*t.RetweetedBy, t.Id, false)
-		}
-
-		deleted, _ := repo.Get(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
+		sourceId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+		deleted, _ := repo.Get(ev.UserId, sourceId)
 
 		// An already deleted tweet still goes through the timeline cleanup, so
 		// a repeated delete can remove an entry the first one left behind.
-		err = repo.Delete(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix))
+		err = repo.Delete(ev.UserId, sourceId)
 		if err != nil && !errors.Is(err, database.ErrTweetNotFound) {
 			return nil, err
 		}
-		if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
-			log.Errorf("delete tweet: timeline delete: %v", err)
+
+		// Unwound after the delete: a retweet stored later than this read sees
+		// the source gone and unwinds itself.
+		t, _ := repo.Get(ev.UserId, domain.RetweetPrefix+sourceId)
+		if t.RetweetedBy != nil {
+			_ = repo.UnRetweet(*t.RetweetedBy, t.Id, false)
+		}
+		for _, id := range []string{sourceId, domain.RetweetPrefix + sourceId} {
+			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, id); err != nil {
+				log.Errorf("delete tweet: timeline delete: %v", err)
+			}
 		}
 
 		owner := authRepo.GetOwner()

@@ -742,3 +742,142 @@ func TestStreamNewReTweetHandler_SponsoredSourceKeepsOnlyTheTeaser(t *testing.T)
 		t.Fatalf("a retweet of a sponsored tweet must carry only the teaser, got %+v", stored)
 	}
 }
+
+// deleteBeforeRetweetRepo runs beforeRetweet right before the retweet is stored,
+// the window in which a delete from another device can land.
+type deleteBeforeRetweetRepo struct {
+	*database.TweetRepo
+	beforeRetweet func()
+}
+
+func (r deleteBeforeRetweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (domain.Tweet, error) {
+	r.beforeRetweet()
+	return r.TweetRepo.NewRetweet(tweet, isTransitive)
+}
+
+type ownRetweetFixture struct {
+	owner     string
+	tweetRepo *database.TweetRepo
+	timeline  *database.TimelineRepo
+	users     stubRetweetUserRepo
+	streamer  stubStreamer
+	conn      warpnet.WarpStream
+	tweet     domain.Tweet
+	remove    warpnet.WarpHandlerFunc
+}
+
+func newOwnRetweetFixture(t *testing.T) ownRetweetFixture {
+	t.Helper()
+	const owner = "alice"
+	tweetRepo, timeline := newRetweetRepos(t)
+	_, conn := authorStream(t)
+	tweet, err := tweetRepo.Create(owner, domain.Tweet{UserId: owner, Text: "original", CreatedAt: time.Now()})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := timeline.AddTweetToTimeline(owner, tweet); err != nil {
+		t.Fatalf("timeline: %v", err)
+	}
+	return ownRetweetFixture{
+		owner:     owner,
+		tweetRepo: tweetRepo,
+		timeline:  timeline,
+		users: stubRetweetUserRepo{getFn: func(userId string) (domain.User, error) {
+			return domain.User{Id: userId, NodeId: conn.Conn().RemotePeer().String()}, nil
+		}},
+		streamer: stubStreamer{nodeInfo: warpnet.NodeInfo{OwnerId: owner}},
+		conn:     conn,
+		tweet:    tweet,
+		remove: StreamDeleteTweetHandler(
+			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+			tweetRepo, timeline, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+		),
+	}
+}
+
+func (f ownRetweetFixture) retweetEvent() event.NewRetweetEvent {
+	by := f.owner
+	source := f.tweet
+	source.RetweetedBy = &by
+	return event.NewRetweetEvent(source)
+}
+
+func (f ownRetweetFixture) deleteSource(t *testing.T) {
+	t.Helper()
+	if _, err := f.remove(marshal(t, event.DeleteTweetEvent{UserId: f.owner, TweetId: f.tweet.Id}), nil); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+}
+
+func (f ownRetweetFixture) requireNoRetweetLeft(t *testing.T) {
+	t.Helper()
+	if ids := timelineIds(t, f.timeline, f.owner); len(ids) != 0 {
+		t.Fatalf("expected an empty timeline, got %v", ids)
+	}
+	if _, err := f.tweetRepo.Get(f.owner, domain.RetweetPrefix+f.tweet.Id); !errors.Is(err, database.ErrTweetNotFound) {
+		t.Fatalf("expected the retweet gone, got %v", err)
+	}
+	if count, err := f.tweetRepo.RetweetsCount(f.tweet.Id); err == nil && count != 0 {
+		t.Fatalf("expected no retweets, got %d", count)
+	}
+}
+
+func TestRetweetOfDeletedOwnTweetIsRefused(t *testing.T) {
+	f := newOwnRetweetFixture(t)
+	f.deleteSource(t)
+
+	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
+	if _, err := h(marshal(t, f.retweetEvent()), f.conn); !errors.Is(err, database.ErrTweetNotFound) {
+		t.Fatalf("expected tweet not found, got %v", err)
+	}
+	f.requireNoRetweetLeft(t)
+}
+
+func TestRetweetOfOwnReplyIsAccepted(t *testing.T) {
+	f := newOwnRetweetFixture(t)
+	parent := f.tweet.Id
+	reply, err := f.tweetRepo.AddReply(domain.Tweet{UserId: f.owner, Text: "reply", ParentId: &parent}, true)
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	by := f.owner
+	reply.RetweetedBy = &by
+
+	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
+	if _, err := h(marshal(t, event.NewRetweetEvent(reply)), f.conn); err != nil {
+		t.Fatalf("a reply is stored under its parent and must stay retweetable: %v", err)
+	}
+}
+
+func TestDeleteRemovesOwnRetweetFromTimeline(t *testing.T) {
+	f := newOwnRetweetFixture(t)
+	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
+	if _, err := h(marshal(t, f.retweetEvent()), f.conn); err != nil {
+		t.Fatalf("retweet: %v", err)
+	}
+
+	f.deleteSource(t)
+	f.requireNoRetweetLeft(t)
+}
+
+func TestRetweetRacingDeleteLeavesNothing(t *testing.T) {
+	t.Run("delete lands before the retweet is stored", func(t *testing.T) {
+		f := newOwnRetweetFixture(t)
+		repo := deleteBeforeRetweetRepo{TweetRepo: f.tweetRepo, beforeRetweet: func() { f.deleteSource(t) }}
+		h := StreamNewReTweetHandler(f.users, repo, f.timeline, stubModerationNotifier{}, f.streamer)
+		if _, err := h(marshal(t, f.retweetEvent()), f.conn); !errors.Is(err, database.ErrTweetNotFound) {
+			t.Fatalf("expected tweet not found, got %v", err)
+		}
+		f.requireNoRetweetLeft(t)
+	})
+
+	t.Run("delete lands before the timeline entry is added", func(t *testing.T) {
+		f := newOwnRetweetFixture(t)
+		timeline := deleteBeforeRefreshTimeline{TimelineRepo: f.timeline, beforeAdd: func() { f.deleteSource(t) }}
+		h := StreamNewReTweetHandler(f.users, f.tweetRepo, timeline, stubModerationNotifier{}, f.streamer)
+		if _, err := h(marshal(t, f.retweetEvent()), f.conn); !errors.Is(err, database.ErrTweetNotFound) {
+			t.Fatalf("expected tweet not found, got %v", err)
+		}
+		f.requireNoRetweetLeft(t)
+	})
+}
