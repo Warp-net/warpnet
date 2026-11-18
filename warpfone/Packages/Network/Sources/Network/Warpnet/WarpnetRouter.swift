@@ -169,6 +169,7 @@ struct WarpnetRouter: Sendable {
       try await repository.send(ProtocolIds.PUBLIC_POST_RETWEET,
                                 WarpnetTweet(id: address.tweetId,
                                              createdAt: WarpnetTimestamp.rfc3339(nanos: WarpnetTimestamp.nowNanos()),
+                                             parentId: tweet.parentId,
                                              retweetedBy: pairing.userId,
                                              rootId: "",
                                              text: tweet.text,

@@ -121,6 +121,18 @@ describe('TweetBlock retweet button', () => {
     await waitForLabel('Undo retweet');
   });
 
+  it('names the parent when the retweeted tweet is a reply', async () => {
+    await renderTweet({ parent_id: 'parent-1' });
+    await waitForLabel('Retweet');
+
+    await fireEvent.click(retweetButton());
+    await fireEvent.click(menuItem('Retweet'));
+
+    await waitFor(() => expect(warpnetService.retweetTweet).toHaveBeenCalledWith(
+      expect.objectContaining({ tweetId: 't1', parentId: 'parent-1' }),
+    ));
+  });
+
   it('undoes the viewer’s retweet in one click', async () => {
     await renderTweet({ retweeted_by: owner.user_id });
     await waitForLabel('Undo retweet');

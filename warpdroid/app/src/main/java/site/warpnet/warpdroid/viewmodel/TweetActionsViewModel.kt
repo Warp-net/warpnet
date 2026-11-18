@@ -91,6 +91,7 @@ abstract class TweetActionsViewModel(
                     statusId = source.id,
                     visibility = visibility.stringValue,
                     sourceAuthorId = source.account.id,
+                    sourceParentId = source.inReplyToId,
                     sourceText = source.content,
                     sourceUsername = source.account.displayName?.ifBlank { source.account.username }
                         ?: source.account.username,

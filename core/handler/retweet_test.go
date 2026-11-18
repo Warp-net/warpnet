@@ -57,7 +57,6 @@ func (s stubReTweetRepo) Get(userID, tweetID string) (domain.Tweet, error) {
 	}
 	return domain.Tweet{Id: tweetID, UserId: userID}, nil
 }
-func (s stubReTweetRepo) IsDeleted(_, _ string) bool { return false }
 func (s stubReTweetRepo) NewRetweet(tweet domain.Tweet, _ bool) (domain.Tweet, error) {
 	if s.newRetweetFn != nil {
 		return s.newRetweetFn(tweet)
@@ -844,48 +843,22 @@ func TestRetweetOfOwnReplyIsAccepted(t *testing.T) {
 	}
 	by := f.owner
 
-	// No client sends parent_id with a retweet: this is the whole wire payload.
 	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
-	payload := event.NewRetweetEvent{Id: reply.Id, UserId: f.owner, Text: reply.Text, RetweetedBy: &by, CreatedAt: time.Now()}
+	payload := event.NewRetweetEvent{
+		Id: reply.Id, UserId: f.owner, Text: reply.Text, ParentId: &parent, RetweetedBy: &by, CreatedAt: time.Now(),
+	}
 	if _, err := h(marshal(t, payload), f.conn); err != nil {
 		t.Fatalf("a reply is stored under its parent and must stay retweetable: %v", err)
 	}
-	if _, err := f.tweetRepo.Get(f.owner, domain.RetweetPrefix+reply.Id); err != nil {
+	stored, err := f.tweetRepo.Get(f.owner, domain.RetweetPrefix+reply.Id)
+	if err != nil {
 		t.Fatalf("expected the retweet stored: %v", err)
+	}
+	if stored.ParentId != nil {
+		t.Fatalf("the retweet itself must not read as a reply, got parent %q", *stored.ParentId)
 	}
 	if count, err := f.tweetRepo.RetweetsCount(reply.Id); err != nil || count != 1 {
 		t.Fatalf("expected one retweet, got %d (%v)", count, err)
-	}
-}
-
-func TestRetweetOfTweetNeverStoredHereIsAccepted(t *testing.T) {
-	f := newOwnRetweetFixture(t)
-	by := f.owner
-
-	// warpdroid falls back to the retweeter's id when it lacks the source author.
-	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
-	payload := event.NewRetweetEvent{Id: "foreign-tweet", UserId: f.owner, Text: "foreign", RetweetedBy: &by, CreatedAt: time.Now()}
-	if _, err := h(marshal(t, payload), f.conn); err != nil {
-		t.Fatalf("an unknown source is not a deleted one: %v", err)
-	}
-}
-
-func TestRetweetOfForeignTweetDeletedHereIsRefused(t *testing.T) {
-	f := newOwnRetweetFixture(t)
-	const author = "bob"
-	tweet, err := f.tweetRepo.Create(author, domain.Tweet{UserId: author, Text: "soon gone", CreatedAt: time.Now()})
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if err := f.tweetRepo.Delete(author, tweet.Id); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-
-	by := f.owner
-	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
-	payload := event.NewRetweetEvent{Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &by, CreatedAt: time.Now()}
-	if _, err := h(marshal(t, payload), f.conn); !errors.Is(err, database.ErrTweetNotFound) {
-		t.Fatalf("expected tweet not found, got %v", err)
 	}
 }
 
@@ -955,7 +928,9 @@ func TestDeleteOfReplyWithoutParentChangesNothing(t *testing.T) {
 	}
 	by := f.owner
 	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
-	payload := event.NewRetweetEvent{Id: reply.Id, UserId: f.owner, Text: reply.Text, RetweetedBy: &by, CreatedAt: time.Now()}
+	payload := event.NewRetweetEvent{
+		Id: reply.Id, UserId: f.owner, Text: reply.Text, ParentId: &parent, RetweetedBy: &by, CreatedAt: time.Now(),
+	}
 	if _, err := h(marshal(t, payload), f.conn); err != nil {
 		t.Fatalf("retweet: %v", err)
 	}
@@ -1036,5 +1011,62 @@ func TestRetweetAgainstDeleteNeverLeavesARetweetBehind(t *testing.T) {
 		if _, err := f.tweetRepo.Get(f.owner, domain.RetweetPrefix+f.tweet.Id); !errors.Is(err, database.ErrTweetNotFound) {
 			t.Fatalf("round %d: expected the retweet gone, got %v", round, err)
 		}
+	}
+}
+
+func TestRetweetOfForeignReplyIsForwardedWithItsParent(t *testing.T) {
+	f := newOwnRetweetFixture(t)
+	by, parent := f.owner, "bobs-root"
+
+	var forwarded event.NewRetweetEvent
+	streamer := stubStreamer{
+		nodeInfo: warpnet.NodeInfo{OwnerId: f.owner},
+		genericStreamFn: func(_ string, _ stream.WarpRoute, data any) ([]byte, error) {
+			forwarded = data.(event.NewRetweetEvent)
+			return nil, nil
+		},
+	}
+	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, streamer)
+	payload := event.NewRetweetEvent{
+		Id: "bobs-reply", UserId: "bob", Text: "reply", ParentId: &parent, RetweetedBy: &by, CreatedAt: time.Now(),
+	}
+	if _, err := h(marshal(t, payload), f.conn); err != nil {
+		t.Fatalf("retweet: %v", err)
+	}
+	if forwarded.ParentId == nil || *forwarded.ParentId != parent {
+		t.Fatalf("the author's node needs the parent to find its reply, got %+v", forwarded.ParentId)
+	}
+}
+
+func TestForwardedRetweetOfOwnReplyIsAccepted(t *testing.T) {
+	f := newOwnRetweetFixture(t)
+	parent := f.tweet.Id
+	reply, err := f.tweetRepo.AddReply(domain.Tweet{UserId: f.owner, Text: "reply", ParentId: &parent}, true)
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+
+	by := "bob"
+	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
+	payload := event.NewRetweetEvent{
+		Id: reply.Id, UserId: f.owner, Text: reply.Text, ParentId: &parent, RetweetedBy: &by, CreatedAt: time.Now(),
+	}
+	if _, err := h(marshal(t, payload), f.conn); err != nil {
+		t.Fatalf("a remote retweet of the owner's reply must be accepted: %v", err)
+	}
+	if count, err := f.tweetRepo.RetweetsCount(reply.Id); err != nil || count != 1 {
+		t.Fatalf("expected one retweet, got %d (%v)", count, err)
+	}
+}
+
+func TestRetweetOfRootTweetWithItsOwnIdAsParentIsChecked(t *testing.T) {
+	f := newOwnRetweetFixture(t)
+	f.deleteSource(t)
+
+	ev := f.retweetEvent()
+	ev.ParentId = &ev.Id
+	h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
+	if _, err := h(marshal(t, ev), f.conn); !errors.Is(err, database.ErrTweetNotFound) {
+		t.Fatalf("a root tweet naming itself as parent is not a reply, got %v", err)
 	}
 }

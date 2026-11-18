@@ -57,7 +57,6 @@ const (
 	TweetsNamespace         = "/TWEETS"
 	tweetsCountSubspace     = "TWEETSCOUNT"
 	tweetsModeratedSubspace = "TWEETSMODERATED"
-	tweetsDeletedSubspace   = "TWEETSDELETED"
 	reTweetsCountSubspace   = "RETWEETSCOUNT"
 	reTweetersSubspace      = "RETWEETERS"
 	viewsSubspace           = "VIEWS"
@@ -92,10 +91,6 @@ type TweetStatsStorer interface {
 }
 
 const counterLockShards = 64
-
-// deletedTweetTTL is how long a deleted tweet stays known as deleted, longer
-// than a client plausibly keeps showing it.
-const deletedTweetTTL = 30 * 24 * time.Hour
 
 type TweetRepo struct {
 	db      TweetsStorer
@@ -177,9 +172,6 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 
 	newTweet, err := storeTweet(txn, userId, tweet, duration, false)
 	if err != nil {
-		return newTweet, err
-	}
-	if err := txn.Delete(deletedTweetKey(userId, tweet.Id)); err != nil {
 		return newTweet, err
 	}
 
@@ -444,9 +436,6 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 	if err := deleteTweet(txn, userID, tweetID); err != nil {
 		return err
 	}
-	if err := txn.SetWithTTL(deletedTweetKey(userID, tweetID), []byte(""), deletedTweetTTL); err != nil {
-		return err
-	}
 	countKey := local.NewPrefixBuilder(TweetsNamespace).
 		AddSubPrefix(tweetsCountSubspace).
 		AddRootID(userID).
@@ -460,22 +449,6 @@ func (repo *TweetRepo) Delete(userID, tweetID string) error {
 		return err
 	}
 	return nil
-}
-
-func deletedTweetKey(userId, tweetId string) local.DatabaseKey {
-	return local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsDeletedSubspace).
-		AddRootID(userId).
-		AddRange(local.FixedRangeKey).
-		AddParentId(tweetId).
-		Build()
-}
-
-// IsDeleted tells a tweet deleted on this node from one it never stored under
-// this user: replies live under their parent, foreign tweets may be absent.
-func (repo *TweetRepo) IsDeleted(userId, tweetId string) bool {
-	_, err := repo.db.Get(deletedTweetKey(userId, tweetId))
-	return err == nil
 }
 
 func deleteTweet(txn local.WarpTransactioner, userId, tweetId string) error {
@@ -721,28 +694,18 @@ func (repo *TweetRepo) NewRetweet(tweet domain.Tweet, isTransitive bool) (_ doma
 	// source's "X people retweeted me" count. The reader decides
 	// from QuotedTweetId whether to render an embedded preview.
 	isQuote := tweet.QuotedTweetId != nil && *tweet.QuotedTweetId != ""
-
-	// Read in this transaction, so a delete committing meanwhile conflicts.
-	_, deletedErr := txn.Get(deletedTweetKey(tweet.UserId, sourceTweetId))
-	switch {
-	case isQuote:
-	case deletedErr == nil:
-		return tweet, ErrTweetNotFound
-	case !local.IsNotFoundError(deletedErr):
-		return tweet, deletedErr
-	}
-
-	retweetId := tweet.Id
-	if tweet.UserId == *tweet.RetweetedBy {
-		retweetId = domain.RetweetPrefix + tweet.Id
-	}
-	existing, _, existingErr := get(txn, *tweet.RetweetedBy, retweetId)
-	switch {
-	case isQuote:
-	case existingErr != nil && !errors.Is(existingErr, ErrTweetNotFound):
-		return tweet, existingErr
-	case existingErr == nil && existing.RetweetedBy != nil && *existing.RetweetedBy == *tweet.RetweetedBy:
-		return existing, nil // one user retweets a tweet once
+	if !isQuote {
+		retweetId := tweet.Id
+		if tweet.UserId == *tweet.RetweetedBy {
+			retweetId = domain.RetweetPrefix + tweet.Id
+		}
+		existing, _, err := get(txn, *tweet.RetweetedBy, retweetId)
+		if err != nil && !errors.Is(err, ErrTweetNotFound) {
+			return tweet, err
+		}
+		if err == nil && existing.RetweetedBy != nil && *existing.RetweetedBy == *tweet.RetweetedBy {
+			return existing, nil // one user retweets a tweet once
+		}
 	}
 
 	if err := txn.Set(retweetersKey, []byte(*tweet.RetweetedBy)); err != nil {

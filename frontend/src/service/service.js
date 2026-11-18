@@ -2397,7 +2397,7 @@ export const warpnetService = {
         localStorage.removeItem(cacheKey)
     },
 
-    async retweetTweet({tweetId, userId, username, text, comment}) {
+    async retweetTweet({tweetId, userId, username, text, comment, parentId}) {
         const owner = this.getOwnerProfile()
         tweetId = sourceTweetId(tweetId)
 
@@ -2430,6 +2430,7 @@ export const warpnetService = {
                 user_id: userId,
                 username: username,
                 text: text,
+                parent_id: parentId,
                 retweeted_by: owner.user_id,
                 created_at: new Date().toISOString(),
                 root_id: "",

@@ -1517,61 +1517,6 @@ func (s *TweetRepoLifecycleTestSuite) TestMixedWritesOfOneAuthorKeepTheCount() {
 	s.Equal(uint64(workers), replies)
 }
 
-func (s *TweetRepoLifecycleTestSuite) TestRetweetOfDeletedTweetIsRefused() {
-	author := ulid.Make().String()
-	booster := ulid.Make().String()
-	tweet := s.newTweet(author, "gone")
-	s.Require().NoError(s.repo.Delete(author, tweet.Id))
-	s.True(s.repo.IsDeleted(author, tweet.Id))
-
-	_, err := s.repo.NewRetweet(domain.Tweet{
-		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
-	}, false)
-	s.ErrorIs(err, ErrTweetNotFound)
-
-	_, err = s.repo.RetweetsCount(tweet.Id)
-	s.ErrorIs(err, ErrTweetNotFound, "a refused retweet leaves no counter")
-}
-
-func (s *TweetRepoLifecycleTestSuite) TestDeletedMarkIsScopedToTheAuthor() {
-	author := ulid.Make().String()
-	other := ulid.Make().String()
-	booster := ulid.Make().String()
-	tweet := s.newTweet(author, "gone")
-	s.Require().NoError(s.repo.Delete(author, tweet.Id))
-
-	s.False(s.repo.IsDeleted(other, tweet.Id))
-	_, err := s.repo.NewRetweet(domain.Tweet{
-		Id: tweet.Id, UserId: other, Text: tweet.Text, RetweetedBy: &booster,
-	}, false)
-	s.NoError(err)
-}
-
-func (s *TweetRepoLifecycleTestSuite) TestNeverStoredTweetIsNotDeleted() {
-	s.False(s.repo.IsDeleted(ulid.Make().String(), ulid.Make().String()))
-
-	author := ulid.Make().String()
-	missing := ulid.Make().String()
-	s.Error(s.repo.Delete(author, missing))
-	s.False(s.repo.IsDeleted(author, missing), "a failed delete marks nothing")
-}
-
-func (s *TweetRepoLifecycleTestSuite) TestStoredAgainTweetIsRetweetable() {
-	author := ulid.Make().String()
-	booster := ulid.Make().String()
-	tweet := s.newTweet(author, "back again")
-	s.Require().NoError(s.repo.Delete(author, tweet.Id))
-
-	_, err := s.repo.Create(author, tweet)
-	s.Require().NoError(err)
-	s.False(s.repo.IsDeleted(author, tweet.Id))
-
-	_, err = s.repo.NewRetweet(domain.Tweet{
-		Id: tweet.Id, UserId: author, Text: tweet.Text, RetweetedBy: &booster,
-	}, false)
-	s.NoError(err)
-}
-
 func (s *TweetRepoLifecycleTestSuite) TestRepeatRetweetByItsFeedIdCountsOnce() {
 	author := ulid.Make().String()
 	tweet := s.newTweet(author, "retweeted from the feed entry")

@@ -1124,6 +1124,7 @@ export default {
         userId: this.tweet.user_id,
         username: this.tweet.username,
         text: this.tweet.text,
+        parentId: this.tweet.parent_id || undefined,
       }
       const alreadyRetweeted = this.retweeted
       try {
