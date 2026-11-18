@@ -8,10 +8,18 @@ private let unreachablePrefixes = [
   "/ip6zone/",
 ]
 
-public func dialAddrs(_ addresses: [String], peerId: String) -> [String] {
-  addresses
+/// `relays` are the node's bootstrap peers, where it holds its reservations.
+/// The announced `addresses` are taken before those exist, so circuits are
+/// built here: away from home they are the only way to reach the node.
+public func dialAddrs(_ addresses: [String], peerId: String, relays: [String] = []) -> [String] {
+  let direct = addresses
     .filter { !isUnreachableFromDevice($0) }
     .map { "\($0)/p2p/\(peerId)" }
+  let relayed = relays
+    .filter { !$0.hasSuffix("/p2p/\(peerId)") }
+    .map { "\($0)/p2p-circuit/p2p/\(peerId)" }
+  var seen = Set<String>()
+  return (direct + relayed).filter { seen.insert($0).inserted }
 }
 
 func isUnreachableFromDevice(_ addr: String) -> Bool {

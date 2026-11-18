@@ -28,7 +28,7 @@ data class PairedNode(
     val network: String,
     val bootstrapAddrs: List<String>,
 ) {
-    val dialCandidates: List<String> get() = dialAddrs(addresses, pinnedPeerId)
+    val dialCandidates: List<String> get() = dialAddrs(addresses, pinnedPeerId, bootstrapAddrs)
 
     companion object {
         fun from(info: AuthNodeInfo): PairedNode = PairedNode(

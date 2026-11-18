@@ -135,4 +135,22 @@ final class QrPayloadTests: XCTestCase {
       "/dns4/node.example/tcp/4001/p2p/P",
     ])
   }
+
+  func testDialAddrsReachTheNodeThroughEveryRelayAfterItsDirectAddresses() {
+    XCTAssertEqual(dialAddrs(["/ip4/10.0.0.2/tcp/4001"], peerId: "P", relays: ["/ip4/1.2.3.4/tcp/4001/p2p/R"]), [
+      "/ip4/10.0.0.2/tcp/4001/p2p/P",
+      "/ip4/1.2.3.4/tcp/4001/p2p/R/p2p-circuit/p2p/P",
+    ])
+  }
+
+  func testDialAddrsDialACircuitTheNodeAlreadyAnnouncedOnce() {
+    let relay = "/ip4/1.2.3.4/tcp/4001/p2p/R"
+    XCTAssertEqual(dialAddrs(["\(relay)/p2p-circuit"], peerId: "P", relays: [relay]), [
+      "\(relay)/p2p-circuit/p2p/P",
+    ])
+  }
+
+  func testDialAddrsNeverMakeTheNodeItsOwnRelay() {
+    XCTAssertEqual(dialAddrs([], peerId: "P", relays: ["/ip4/1.2.3.4/tcp/4001/p2p/P"]), [])
+  }
 }
