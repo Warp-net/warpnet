@@ -3,7 +3,10 @@ package local_store
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -140,4 +143,55 @@ func TestListSkipsFixedKeysUnderAScannedPrefix(t *testing.T) {
 		require.NotContains(t, item.Key, FixedKey, "fixed pointer rows are skipped by a scan")
 	}
 	require.Len(t, items, 1)
+}
+
+// A logout closes the store while paired devices keep sending requests: every
+// operation must finish, refused or not, instead of parking inside badger.
+func TestCloseUnderLoadLeavesNoOperationHanging(t *testing.T) {
+	const (
+		rounds  = 5
+		workers = 256
+	)
+	for round := range rounds {
+		db, err := New("", DefaultOptions().WithInMemory(true))
+		require.NoError(t, err)
+		require.NoError(t, db.Run("user", "password"))
+
+		var wg sync.WaitGroup
+		for worker := range workers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() { _ = recover() }() // badger panics on a txn caught by the close
+				key := DatabaseKey(fmt.Sprintf("/LOAD/%d", worker))
+				for {
+					if err := db.Set(key, []byte("v")); errors.Is(err, ErrNotRunning) {
+						return
+					}
+					txn, err := db.NewTxn()
+					if err != nil {
+						return
+					}
+					_, _ = txn.Get(key)
+					_ = txn.Set(key, []byte("w"))
+					_ = txn.Commit()
+					txn.Rollback()
+				}
+			}()
+		}
+
+		time.Sleep(20 * time.Millisecond)
+		db.Close()
+
+		finished := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(finished)
+		}()
+		select {
+		case <-finished:
+		case <-time.After(30 * time.Second):
+			t.Fatalf("round %d: operations hang after the store closed", round)
+		}
+	}
 }

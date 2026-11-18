@@ -37,6 +37,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -150,6 +151,9 @@ type DB struct {
 	sequence *badger.Sequence
 
 	isRunning *atomic.Bool
+	// lifecycle keeps Close from pulling badger out from under a starting
+	// operation: a transaction begun on a closed badger blocks forever.
+	lifecycle sync.RWMutex
 
 	dbPath          string
 	hasFirstRunFlag bool
@@ -280,13 +284,13 @@ func (db *DB) Run(username, password string) (err error) {
 	}
 
 	if !db.badgerOpts.InMemory {
-		go db.runEventualGC()
+		go db.runEventualGC(db.badger, db.stopChan)
 	}
 
 	return nil
 }
 
-func (db *DB) runEventualGC() {
+func (db *DB) runEventualGC(handle *badger.DB, stopChan <-chan struct{}) {
 	if db.badgerOpts.InMemory {
 		return
 	}
@@ -297,7 +301,7 @@ func (db *DB) runEventualGC() {
 	dirTicker := time.NewTicker(time.Second)
 	defer dirTicker.Stop()
 
-	_ = db.badger.RunValueLogGC(db.discardRatioGC)
+	_ = handle.RunValueLogGC(db.discardRatioGC)
 	for {
 		select {
 		case <-dirTicker.C:
@@ -307,7 +311,7 @@ func (db *DB) runEventualGC() {
 			}
 		case <-gcTicker.C:
 			for {
-				err := db.badger.RunValueLogGC(db.discardRatioGC)
+				err := handle.RunValueLogGC(db.discardRatioGC)
 				if errors.Is(err, badger.ErrNoRewrite) ||
 					errors.Is(err, badger.ErrRejected) {
 					break
@@ -315,14 +319,19 @@ func (db *DB) runEventualGC() {
 				time.Sleep(db.sleepGC)
 			}
 			log.Infoln("database: garbage collection complete")
-		case <-db.stopChan:
+		case <-stopChan:
 			return
 		}
 	}
 }
 
 func (db *DB) Stats() map[string]string {
-	if db == nil || !db.isRunning.Load() {
+	if db == nil {
+		return map[string]string{}
+	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
+	if !db.isRunning.Load() {
 		return map[string]string{}
 	}
 	lsm, vlog := db.badger.Size()
@@ -343,6 +352,8 @@ func (db *DB) Set(key DatabaseKey, value []byte) error {
 	if db == nil {
 		return ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -357,6 +368,8 @@ func (db *DB) SetWithTTL(key DatabaseKey, value []byte, ttl time.Duration) error
 	if db == nil {
 		return ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -371,6 +384,8 @@ func (db *DB) Get(key DatabaseKey) ([]byte, error) {
 	if db == nil {
 		return nil, ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
@@ -394,6 +409,8 @@ func (db *DB) GetExpiration(key DatabaseKey) (uint64, error) {
 	if db == nil {
 		return 0, ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return 0, ErrNotRunning
 	}
@@ -418,6 +435,8 @@ func (db *DB) GetSize(key DatabaseKey) (int64, error) {
 	if db == nil {
 		return 0, ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return 0, ErrNotRunning
 	}
@@ -442,6 +461,8 @@ func (db *DB) Delete(key DatabaseKey) error {
 	if db == nil {
 		return ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return ErrNotRunning
 	}
@@ -482,6 +503,8 @@ func (db *DB) NewTxn() (WarpTransactioner, error) {
 	if db == nil {
 		return nil, ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
@@ -502,6 +525,8 @@ func (db *DB) NewReadTxn() (WarpTransactioner, error) {
 	if db == nil {
 		return nil, ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return nil, ErrNotRunning
 	}
@@ -877,6 +902,8 @@ func (db *DB) NextSequence() (uint64, error) {
 	if db == nil {
 		return 0, ErrNotRunning
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	if !db.isRunning.Load() {
 		return 0, ErrNotRunning
 	}
@@ -895,11 +922,15 @@ func (db *DB) GC() {
 	if db == nil {
 		panic(ErrNotRunning)
 	}
-	if !db.isRunning.Load() {
+	db.lifecycle.RLock()
+	handle := db.badger
+	isRunning := db.isRunning.Load()
+	db.lifecycle.RUnlock()
+	if !isRunning {
 		return
 	}
 	for {
-		if err := db.badger.RunValueLogGC(discardRatio); err != nil {
+		if err := handle.RunValueLogGC(discardRatio); err != nil {
 			return
 		}
 	}
@@ -909,11 +940,18 @@ func (db *DB) InnerDB() *badger.DB {
 	if db == nil {
 		panic(ErrNotRunning)
 	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
 	return db.badger
 }
 
 func (db *DB) Sync() error {
-	if db == nil || db.badger == nil {
+	if db == nil {
+		return ErrNotRunning
+	}
+	db.lifecycle.RLock()
+	defer db.lifecycle.RUnlock()
+	if db.badger == nil {
 		return ErrNotRunning
 	}
 	if db.badgerOpts.InMemory {
@@ -954,22 +992,23 @@ func (db *DB) Close() {
 		return
 	}
 	log.Infoln("closing database...")
-	if db.sequence != nil {
-		_ = db.sequence.Release()
-	}
+	db.lifecycle.Lock()
+	defer db.lifecycle.Unlock()
 	if db.badger == nil {
 		return
 	}
-	if !db.isRunning.Load() {
+	if !db.isRunning.Swap(false) {
 		return
 	}
 	close(db.stopChan)
+	if db.sequence != nil {
+		_ = db.sequence.Release()
+	}
 
 	if err := db.badger.Close(); err != nil {
 		log.Infof("database: close: %v", err)
 		return
 	}
-	db.isRunning.Store(false)
 	db.badger = nil
 }
 
