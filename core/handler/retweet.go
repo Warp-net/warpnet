@@ -150,17 +150,19 @@ func StreamNewReTweetHandler(
 			}
 		}
 
+		// The source may have been deleted from another device meanwhile.
+		var sourceErr error
 		if isOwnerRetweeter && isOwnRootSource {
-			// The source may have been deleted from another device meanwhile.
-			if _, err := tweetRepo.Get(ownerId, sourceTweetId); errors.Is(err, database.ErrTweetNotFound) {
-				if err := tweetRepo.UnRetweet(ownerId, sourceTweetId, true); err != nil && !errors.Is(err, database.ErrTweetNotFound) {
-					log.Errorf("retweet handler: unwinding retweet of a deleted tweet: %v", err)
-				}
-				if err := timelineRepo.DeleteTweetFromTimeline(ownerId, retweet.Id); err != nil {
-					log.Errorf("retweet handler: timeline delete: %v", err)
-				}
-				return nil, err
+			_, sourceErr = tweetRepo.Get(ownerId, sourceTweetId)
+		}
+		if errors.Is(sourceErr, database.ErrTweetNotFound) {
+			if err := tweetRepo.UnRetweet(ownerId, sourceTweetId, true); err != nil && !errors.Is(err, database.ErrTweetNotFound) {
+				log.Errorf("retweet handler: unwinding retweet of a deleted tweet: %v", err)
 			}
+			if err := timelineRepo.DeleteTweetFromTimeline(ownerId, retweet.Id); err != nil {
+				log.Errorf("retweet handler: timeline delete: %v", err)
+			}
+			return nil, sourceErr
 		}
 
 		isOwnTweetRetweet := ownerId == sourceAuthorId // my own tweet retweet
