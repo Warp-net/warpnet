@@ -439,6 +439,21 @@ func TestStreamDeleteTweetHandlerBranches(t *testing.T) {
 		require.Equal(t, event.Accepted, out)
 	})
 
+	t.Run("the author's own reaction is taken back from the tweet", func(t *testing.T) {
+		var gotTweet, gotUser string
+		reactions := stubTweetReactionRepo{unreactFn: func(tweet, user string) (uint64, error) {
+			gotTweet, gotUser = tweet, user
+			return 0, nil
+		}}
+		_, err := StreamDeleteTweetHandler(
+			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
+			stubTweetRepo{}, stubTimelineRepo{}, reactions, stubTweetMediaRepo{}, stubStreamer{},
+		)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: domain.RetweetPrefix + tweetId}), nil)
+		require.NoError(t, err)
+		require.Equal(t, tweetId, gotTweet)
+		require.Equal(t, owner, gotUser)
+	})
+
 	t.Run("retweet record is unwound", func(t *testing.T) {
 		by := "retweeter-1"
 		var unretweeted string

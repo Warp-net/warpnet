@@ -798,7 +798,8 @@ func StreamDeleteTweetHandler(
 		// Deleting an own tweet only cleans up local state here; the shared
 		// (CRDT) like/retweet counts are owned by the actors' own nodes, so
 		// this node must not adjust them (isTransitive=false).
-		if _, err := reactionRepo.Unreact(ev.UserId, strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), false); err != nil {
+		_, err = reactionRepo.Unreact(strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix), ev.UserId, false)
+		if err != nil && !errors.Is(err, database.ErrReactionsNotFound) {
 			log.Errorf("delete tweet: unliking tweet: %v", err)
 		}
 
