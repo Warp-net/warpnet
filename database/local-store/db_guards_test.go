@@ -417,3 +417,21 @@ func TestMaintenanceCallsSurviveAClose(t *testing.T) {
 	require.Empty(t, db.Stats())
 	require.NotPanics(t, db.GC)
 }
+
+func TestLoginAfterLogoutWhileCollecting(t *testing.T) {
+	db, err := New(t.TempDir(), DefaultOptions().
+		WithIntervalGC(time.Millisecond).
+		WithSleepGC(time.Hour).
+		WithDiscardRatioGC(0.5))
+	require.NoError(t, err)
+
+	for range 20 {
+		require.NoError(t, db.Run("user", "password"))
+		require.NoError(t, db.Set(DatabaseKey("/GC/key"), make([]byte, 2048)))
+		time.Sleep(5 * time.Millisecond)
+
+		start := time.Now()
+		db.Close()
+		require.Less(t, time.Since(start), time.Minute, "the close must not sit out the collector's pause")
+	}
+}
