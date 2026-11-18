@@ -806,10 +806,17 @@ func StreamDeleteTweetHandler(
 		sourceId := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
 		deleted, _ := repo.Get(ev.UserId, sourceId)
 
-		// An already deleted tweet still goes through the timeline cleanup, so
-		// a repeated delete can remove an entry the first one left behind.
+		// Nothing stored under this id: a repeated delete still removes a feed
+		// entry the first one left behind, and the caller learns nothing was
+		// deleted, which matters for a reply addressed without its parent.
 		err = repo.Delete(ev.UserId, sourceId)
-		if err != nil && !errors.Is(err, database.ErrTweetNotFound) {
+		if errors.Is(err, database.ErrTweetNotFound) {
+			if err := timelineRepo.DeleteTweetFromTimeline(ev.UserId, ev.TweetId); err != nil {
+				log.Errorf("delete tweet: timeline delete: %v", err)
+			}
+			return nil, err
+		}
+		if err != nil {
 			return nil, err
 		}
 

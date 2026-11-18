@@ -357,6 +357,7 @@ type TweetsProvider interface {
 	Blocklist(tweetId string) error
 	Create(_ string, tweet domain.Tweet) (domain.Tweet, error)
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
+	IsDeleted(userId, tweetId string) bool
 	Delete(userID string, tweetID string) error
 	DeleteReply(parentID string, replyID string, isTransitive bool) (domain.Tweet, error)
 	Get(userID string, tweetID string) (tweet domain.Tweet, err error)

@@ -58,6 +58,7 @@ type OwnerReTweetStorer interface {
 
 type ReTweetsStorer interface {
 	Get(userID, tweetID string) (tweet domain.Tweet, err error)
+	IsDeleted(userId, tweetId string) bool
 	NewRetweet(tweet domain.Tweet, isTransitive bool) (_ domain.Tweet, err error)
 	UnRetweet(retweetedByUserID, tweetId string, isTransitive bool) error
 	RetweetsCount(tweetId string) (uint64, error)
@@ -115,16 +116,7 @@ func StreamNewReTweetHandler(
 		}
 		sourceTweetId := strings.TrimPrefix(retweetEvent.Id, domain.RetweetPrefix)
 
-		// Only the owner's own root tweets are stored where this node can tell
-		// that they are gone: replies live under their parent, foreign tweets
-		// may never have been stored here.
-		isReply := retweetEvent.ParentId != nil && *retweetEvent.ParentId != "" && *retweetEvent.ParentId != sourceTweetId
-		isOwnRootSource := !isQuote && !isReply && retweetEvent.UserId == ownerId
-
 		source, err := tweetRepo.Get(retweetEvent.UserId, sourceTweetId)
-		if isOwnRootSource && errors.Is(err, database.ErrTweetNotFound) {
-			return nil, err
-		}
 		if err == nil && source.IsSponsored() {
 			retweetEvent.Price = source.Price
 		}
@@ -151,18 +143,14 @@ func StreamNewReTweetHandler(
 		}
 
 		// The source may have been deleted from another device meanwhile.
-		var sourceErr error
-		if isOwnerRetweeter && isOwnRootSource {
-			_, sourceErr = tweetRepo.Get(ownerId, sourceTweetId)
-		}
-		if errors.Is(sourceErr, database.ErrTweetNotFound) {
+		if isOwnerRetweeter && !isQuote && tweetRepo.IsDeleted(retweetEvent.UserId, sourceTweetId) {
 			if err := tweetRepo.UnRetweet(ownerId, sourceTweetId, true); err != nil && !errors.Is(err, database.ErrTweetNotFound) {
 				log.Errorf("retweet handler: unwinding retweet of a deleted tweet: %v", err)
 			}
 			if err := timelineRepo.DeleteTweetFromTimeline(ownerId, retweet.Id); err != nil {
 				log.Errorf("retweet handler: timeline delete: %v", err)
 			}
-			return nil, sourceErr
+			return nil, database.ErrTweetNotFound
 		}
 
 		isOwnTweetRetweet := ownerId == sourceAuthorId // my own tweet retweet

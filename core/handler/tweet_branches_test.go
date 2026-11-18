@@ -538,11 +538,10 @@ func TestRepeatedDeleteRemovesTimelineLeftover(t *testing.T) {
 	require.NoError(t, timelineRepo.AddTweetToTimeline(owner, tweet))
 	require.NoError(t, tweetRepo.Delete(owner, tweet.Id))
 
-	out, err := StreamDeleteTweetHandler(
+	_, err = StreamDeleteTweetHandler(
 		stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
 		tweetRepo, timelineRepo, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
 	)(marshal(t, event.DeleteTweetEvent{UserId: owner, TweetId: tweet.Id}), nil)
-	require.NoError(t, err)
-	require.Equal(t, event.Accepted, out)
+	require.ErrorIs(t, err, database.ErrTweetNotFound)
 	require.Empty(t, timelineIds(t, timelineRepo, owner))
 }
