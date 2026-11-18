@@ -4,6 +4,7 @@ package handler
 import (
 	"errors"
 	"math/big"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -985,32 +986,35 @@ func TestRetweetRacingDeleteLeavesNothing(t *testing.T) {
 
 func TestRetweetAgainstDeleteNeverLeavesARetweetBehind(t *testing.T) {
 	for round := range 40 {
-		f := newOwnRetweetFixture(t)
-		h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
+		// A subtest per round closes its store: open stores hold hundreds of MiB.
+		t.Run(strconv.Itoa(round), func(t *testing.T) {
+			f := newOwnRetweetFixture(t)
+			h := StreamNewReTweetHandler(f.users, f.tweetRepo, f.timeline, stubModerationNotifier{}, f.streamer)
 
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			_, _ = h(marshal(t, f.retweetEvent()), f.conn) // refused or accepted, both are fine
-		}()
-		go func() {
-			defer wg.Done()
-			for {
-				_, err := f.remove(marshal(t, event.DeleteTweetEvent{UserId: f.owner, TweetId: f.tweet.Id}), nil)
-				if !errors.Is(err, local_store.ErrConflict) {
-					return
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				_, _ = h(marshal(t, f.retweetEvent()), f.conn) // refused or accepted, both are fine
+			}()
+			go func() {
+				defer wg.Done()
+				for {
+					_, err := f.remove(marshal(t, event.DeleteTweetEvent{UserId: f.owner, TweetId: f.tweet.Id}), nil)
+					if !errors.Is(err, local_store.ErrConflict) {
+						return
+					}
 				}
-			}
-		}()
-		wg.Wait()
+			}()
+			wg.Wait()
 
-		if ids := timelineIds(t, f.timeline, f.owner); len(ids) != 0 {
-			t.Fatalf("round %d: expected an empty timeline, got %v", round, ids)
-		}
-		if _, err := f.tweetRepo.Get(f.owner, domain.RetweetPrefix+f.tweet.Id); !errors.Is(err, database.ErrTweetNotFound) {
-			t.Fatalf("round %d: expected the retweet gone, got %v", round, err)
-		}
+			if ids := timelineIds(t, f.timeline, f.owner); len(ids) != 0 {
+				t.Fatalf("expected an empty timeline, got %v", ids)
+			}
+			if _, err := f.tweetRepo.Get(f.owner, domain.RetweetPrefix+f.tweet.Id); !errors.Is(err, database.ErrTweetNotFound) {
+				t.Fatalf("expected the retweet gone, got %v", err)
+			}
+		})
 	}
 }
 
