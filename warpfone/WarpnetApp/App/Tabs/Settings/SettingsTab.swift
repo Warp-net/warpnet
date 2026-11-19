@@ -55,7 +55,7 @@ struct SettingsTabs: View {
             }
           }
         }
-        if UIDevice.current.userInterfaceIdiom == .pad, !preferences.showiPadSecondaryColumn, !isModal {
+        if horizontalSizeClass == .regular, !preferences.showiPadSecondaryColumn, !isModal {
           SecondaryColumnToolbarItem()
         }
       }
@@ -120,11 +120,11 @@ struct SettingsTabs: View {
       NavigationLink(destination: SwipeActionsSettingsView()) {
         Label("settings.general.swipeactions", systemImage: "hand.draw")
       }
-      if UIDevice.current.userInterfaceIdiom == .phone || horizontalSizeClass == .compact {
+      if horizontalSizeClass != .regular {
         NavigationLink(destination: TabbarEntriesSettingsView()) {
           Label("settings.general.tabbarEntries", systemImage: "platter.filled.bottom.iphone")
         }
-      } else if UIDevice.current.userInterfaceIdiom == .pad || UIDevice.current.userInterfaceIdiom == .mac {
+      } else {
         NavigationLink(destination: SidebarEntriesSettingsView()) {
           Label("settings.general.sidebarEntries", systemImage: "sidebar.squares.leading")
         }

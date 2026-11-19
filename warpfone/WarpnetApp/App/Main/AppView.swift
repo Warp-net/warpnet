@@ -50,17 +50,12 @@ struct AppView: View {
       }
   }
 
-  @ViewBuilder
   private var platformView: some View {
-    if UIDevice.current.userInterfaceIdiom == .pad || UIDevice.current.userInterfaceIdiom == .mac {
-      sidebarView
-    } else {
-      tabBarView
-    }
+    sidebarView
   }
   
   var availableTabs: [Tab] {
-    if UIDevice.current.userInterfaceIdiom == .phone || horizontalSizeClass == .compact {
+    if horizontalSizeClass != .regular {
       return iosTabs.tabs
     }
     return sidebarTabs.tabs.map{ $0.tab }
@@ -88,6 +83,7 @@ struct AppView: View {
     })) {
       ForEach(availableTabs) { tab in
         tab.makeContentView(selectedTab: $selectedTab, popToRootTab: $popToRootTab)
+          .toolbar(horizontalSizeClass == .regular ? .hidden : .automatic, for: .tabBar)
           .tabItem {
             if userPreferences.showiPhoneTabLabel {
               tab.label
@@ -101,8 +97,12 @@ struct AppView: View {
           .toolbarBackground(theme.primaryBackgroundColor.opacity(0.30), for: .tabBar)
       }
     }
+    .introspect(.tabView, on: .iOS(.v17)) { (tabview: UITabBarController) in
+      tabview.tabBar.isHidden = horizontalSizeClass == .regular
+      tabview.customizableViewControllers = []
+      tabview.moreNavigationController.isNavigationBarHidden = true
+    }
     .id(appAccountsManager.currentClient.id)
-    .withSheetDestinations(sheetDestinations: $appRouterPath.presentedSheet)
   }
 
   private func badgeFor(tab: Tab) -> Int {
@@ -117,32 +117,27 @@ struct AppView: View {
                 popToRootTab: $popToRootTab,
                 tabs: availableTabs)
     {
-      HStack(spacing: 0) {
-        TabView(selection: $selectedTab) {
-          ForEach(availableTabs) { tab in
-            tab
-              .makeContentView(selectedTab: $selectedTab, popToRootTab: $popToRootTab)
-              .tabItem {
-                tab.label
-              }
-              .tag(tab)
+      VerticalBarEdgeReader { barEdge in
+        HStack(spacing: 0) {
+          if showsSecondaryColumn, barEdge == .trailing {
+            notificationsSecondaryColumn
+            Divider().edgesIgnoringSafeArea(.all)
           }
-        }
-        .introspect(.tabView, on: .iOS(.v17)) { (tabview: UITabBarController) in
-          tabview.tabBar.isHidden = horizontalSizeClass == .regular
-          tabview.customizableViewControllers = []
-          tabview.moreNavigationController.isNavigationBarHidden = true
-        }
-        if horizontalSizeClass == .regular,
-           appAccountsManager.currentClient.isAuth,
-           userPreferences.showiPadSecondaryColumn
-        {
-          Divider().edgesIgnoringSafeArea(.all)
-          notificationsSecondaryColumn
+          tabBarView
+          if showsSecondaryColumn, barEdge != .trailing {
+            Divider().edgesIgnoringSafeArea(.all)
+            notificationsSecondaryColumn
+          }
         }
       }
     }
     .environment(appRouterPath)
+  }
+
+  private var showsSecondaryColumn: Bool {
+    horizontalSizeClass == .regular
+      && appAccountsManager.currentClient.isAuth
+      && userPreferences.showiPadSecondaryColumn
   }
 
   var notificationsSecondaryColumn: some View {

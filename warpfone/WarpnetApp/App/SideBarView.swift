@@ -147,6 +147,29 @@ struct SideBarView<Content: View>: View {
   }
 }
 
+/// Passes the edge where the system places its vertical bar, or nil where it has none.
+struct VerticalBarEdgeReader<Content: View>: View {
+  @ViewBuilder var content: (HorizontalEdge?) -> Content
+
+  var body: some View {
+    if #available(iOS 27.1, *) {
+      VerticalBarEdgeEnvironmentReader(content: content)
+    } else {
+      content(nil)
+    }
+  }
+}
+
+@available(iOS 27.1, *)
+private struct VerticalBarEdgeEnvironmentReader<Content: View>: View {
+  @Environment(\.toolbarVerticalEdge) private var barEdge
+  var content: (HorizontalEdge?) -> Content
+
+  var body: some View {
+    content(barEdge)
+  }
+}
+
 private struct SideBarIcon: View {
   @Environment(Theme.self) private var theme
 
