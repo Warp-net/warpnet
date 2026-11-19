@@ -124,3 +124,14 @@ func TestSponsoredSettings_ClaimMinStakeTRX(t *testing.T) {
 	lowered := SponsoredSettings{MinStakeTRX: 100, PreviousMinStakeTRX: 500, ChangedAt: now.Add(-time.Hour)}
 	assert.Equal(t, uint64(100), lowered.ClaimMinStakeTRX(now), "a lowered threshold holds at once")
 }
+
+func TestOwner_LoginIsStoredUnderItsOwnKey(t *testing.T) {
+	data, err := json.Marshal(Owner{UserId: "u1", Login: "alice"})
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"login":"alice"`)
+	assert.NotContains(t, string(data), `"username"`, "the login is not a profile name")
+
+	var owner Owner
+	require.NoError(t, json.Unmarshal(data, &owner))
+	assert.Equal(t, "alice", owner.Login)
+}

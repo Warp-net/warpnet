@@ -148,7 +148,7 @@ func (f *failingBlocklistRemover) BlocklistRemove(string) error {
 
 func TestStreamGetWhoToFollowHandlerBranches(t *testing.T) {
 	const ownerId = "owner-1"
-	owner := domain.Owner{UserId: ownerId, NodeId: "own-node", Username: "me"}
+	owner := domain.Owner{UserId: ownerId, NodeId: "own-node", Login: "me"}
 	auth := stubAuth{owner: owner}
 
 	t.Run("followings lookup failure is tolerated", func(t *testing.T) {

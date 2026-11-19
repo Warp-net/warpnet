@@ -330,7 +330,7 @@ func TestAuthRepoErrorPaths(t *testing.T) {
 
 		require.Equal(t, domain.Owner{}, repo.GetOwner())
 
-		owner, err := repo.SetOwner(domain.Owner{UserId: "owner-1", Username: "owner"})
+		owner, err := repo.SetOwner(domain.Owner{UserId: "owner-1", Login: "owner"})
 		require.NoError(t, err)
 		require.False(t, owner.CreatedAt.IsZero())
 		require.Equal(t, "owner-1", repo.GetOwner().UserId)

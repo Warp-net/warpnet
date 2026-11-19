@@ -245,9 +245,56 @@ func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 	assert.Equal(t, created[0].Id, updated[0].Id, "the same identity must be carried through")
 }
 
+func TestAuthLogin_OwnerKeepsTheLogin(t *testing.T) {
+	t.Run("a first login stores the login on the owner, not on the profile", func(t *testing.T) {
+		repo := newFakeAuthRepo()
+		users := &fakeUserRepo{}
+		as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
+
+		_, err := as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
+		require.NoError(t, err)
+
+		assert.Equal(t, "alice", repo.GetOwner().Login)
+		created, updated := users.snapshot()
+		require.Len(t, created, 1)
+		assert.Equal(t, defaultUsername, created[0].Username)
+		require.Len(t, updated, 1)
+		assert.NotEqual(t, "alice", updated[0].Username, "the login never reaches the profile")
+	})
+
+	t.Run("an owner stored without the login gets it on login", func(t *testing.T) {
+		repo := newFakeAuthRepo()
+		repo.owner = domain.Owner{UserId: "existing-id", CreatedAt: time.Now().Add(-time.Hour)}
+		users := &fakeUserRepo{}
+		as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
+
+		_, err := as.AuthLogin(event.LoginEvent{Username: "alice", Password: "Claude1234$"}, security.PSK{})
+		require.NoError(t, err)
+
+		owner := repo.GetOwner()
+		assert.Equal(t, "alice", owner.Login)
+		assert.Equal(t, "existing-id", owner.UserId, "the owner is updated, not replaced")
+		created, _ := users.snapshot()
+		assert.Empty(t, created)
+	})
+
+	t.Run("the login is not compared with the stored one: the opened store proves it", func(t *testing.T) {
+		repo := newFakeAuthRepo()
+		repo.owner = domain.Owner{UserId: "existing-id", Login: "alice", CreatedAt: time.Now().Add(-time.Hour)}
+		users := &fakeUserRepo{}
+		as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
+
+		_, err := as.AuthLogin(event.LoginEvent{Username: "bob", Password: "Claude1234$"}, security.PSK{})
+		require.NoError(t, err)
+		assert.True(t, as.IsAuthenticated())
+		assert.Equal(t, "bob", repo.GetOwner().Login)
+		assert.Equal(t, "existing-id", repo.GetOwner().UserId)
+	})
+}
+
 func TestAuthLogin_ReturningOwnerIsNotRecreated(t *testing.T) {
 	repo := newFakeAuthRepo()
-	repo.owner = domain.Owner{UserId: "existing-id", Username: "alice", CreatedAt: time.Now().Add(-time.Hour)}
+	repo.owner = domain.Owner{UserId: "existing-id", Login: "alice", CreatedAt: time.Now().Add(-time.Hour)}
 	users := &fakeUserRepo{}
 
 	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
@@ -263,7 +310,7 @@ func TestAuthLogin_ReturningOwnerIsNotRecreated(t *testing.T) {
 
 func TestAuthLogin_ReloginKeepsRenamedProfileUsername(t *testing.T) {
 	repo := newFakeAuthRepo()
-	repo.owner = domain.Owner{UserId: "existing-id", Username: "alice", CreatedAt: time.Now().Add(-time.Hour)}
+	repo.owner = domain.Owner{UserId: "existing-id", Login: "alice", CreatedAt: time.Now().Add(-time.Hour)}
 	users := &fakeUserRepo{}
 
 	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})

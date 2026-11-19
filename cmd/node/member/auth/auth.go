@@ -137,7 +137,7 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		log.Infoln("creating new user:", id)
 		owner, err = as.authPersistence.SetOwner(domain.Owner{
 			CreatedAt:       time.Now(),
-			Username:        message.Username,
+			Login:           message.Username,
 			UserId:          id,
 			RedundantUserID: id,
 		})
@@ -182,12 +182,13 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 
 		// user.Username is deliberately left empty: the repo's merge-style
 		// Update keeps the profile's (possibly renamed) username, while
-		// owner.Username stays the immutable login name.
+		// owner.Login stays the immutable login name.
 		user.Id = owner.UserId
 		user.CreatedAt = owner.CreatedAt
 		user.RoundTripTime = math.MaxInt64 // put your own user at the end of a who-to-follow list
 		user.NodeId = authInfo.ID
 		owner.NodeId = authInfo.ID
+		owner.Login = message.Username // the decrypted store proved it; an older record lacks it
 
 		log.Infof(
 			"auth: user authenticated: id: %s, node_id: %s, created_at: %s, latency: %d",
