@@ -426,7 +426,7 @@ class NotificationsActivity : BaseActivity() {
                 ) { openAccount(n.account.id) },
             ) { append(name) }
             if (others > 0) append(resources.getQuantityString(R.plurals.notification_and_others, others, others))
-            val action = notificationActions.firstNotNullOfOrNull { it.find(n.text) }?.value
+            val action = notificationAction(n.text)
             append(
                 when {
                     action != null -> action
@@ -592,6 +592,10 @@ private val notificationActions = listOf(
     " joined Warpnet$",
     " bought \\d+ of your tweets .*$",
 ).map(::Regex)
+
+// The action part of the node's text, whatever name the node put before it.
+internal fun notificationAction(text: String): String? =
+    notificationActions.firstNotNullOfOrNull { it.find(text) }?.value
 
 // Type names as notificationTypeFromString resolves the node's types; the
 // empty one shows everything.
