@@ -2678,6 +2678,16 @@ export const warpnetService = {
         });
     },
 
+    // allowNostr records the sign-up consent to show the owner's content on
+    // Nostr. The gateway reads it from the profile metadata; it is never
+    // revoked.
+    async allowNostr() {
+        return await this.sendToNode({
+            path: PRIVATE_POST_USER,
+            body: {metadata: {nostr: 'allow'}},
+        });
+    },
+
     cacheDataSaver(enabled) {
         try {
             localStorage.setItem(DATA_SAVER_STORAGE_KEY, enabled ? 'true' : 'false');
