@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="relative">
+  <div class="relative" data-tour="search">
     <button
       type="button"
       @click="submit()"

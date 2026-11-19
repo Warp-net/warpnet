@@ -22,7 +22,7 @@ Use at your own risk. The maintainers shall not be liable for any damages or dat
 resulting from the use or misuse of this software.
 -->
 <template>
-  <div class="w-full rounded-lg bg-lightest my-4">
+  <div class="w-full rounded-lg bg-lightest my-4" data-tour="who-to-follow">
     <div class="p-3 flex items-center">
       <p class="text-lg font-bold">Who to follow</p>
     </div>

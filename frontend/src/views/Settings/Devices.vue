@@ -25,6 +25,15 @@
           own, whatever it still holds. Scanning this node's QR code on it again
           pairs it as a new device.
         </p>
+        <!-- The mobile apps tint their toolbar monitor with these exact colours. -->
+        <p class="text-sm text-dark mt-2">
+          A paired phone shows a monitor icon in its top bar:
+          <i class="fas fa-desktop mx-1" style="color: #19a341" aria-hidden="true"></i><strong>green</strong>
+          while it is connected to this node, directly or through a relay;
+          <i class="fas fa-desktop mx-1" style="color: #df1553" aria-hidden="true"></i><strong>red</strong>
+          while this node is unreachable — the app is closed, the computer is offline, or the
+          network is down. The phone keeps trying to reconnect.
+        </p>
       </div>
 
       <Loader :loading="loading" />

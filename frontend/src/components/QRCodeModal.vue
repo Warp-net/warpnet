@@ -131,6 +131,23 @@ resulting from the use or misuse of this software.
             <li>The phone keeps a reference to <em>this</em> node — keep this app running for it to connect.</li>
           </ol>
 
+          <!-- The mobile apps tint their toolbar monitor with these exact colours. -->
+          <div class="mt-4 rounded-lg border border-gray-200 p-3 text-sm text-gray-700">
+            <p class="font-semibold mb-1">After pairing</p>
+            <p class="mb-2">
+              The phone reads and posts as you through this node, and shows up in
+              Settings → Devices. A monitor icon in the phone app's top bar shows the link:
+            </p>
+            <p class="flex items-start gap-2">
+              <i class="fas fa-desktop mt-0.5" style="color: #19a341" aria-hidden="true"></i>
+              <span><strong>Green</strong> — connected to this node, directly or through a relay.</span>
+            </p>
+            <p class="flex items-start gap-2 mt-1">
+              <i class="fas fa-desktop mt-0.5" style="color: #df1553" aria-hidden="true"></i>
+              <span><strong>Red</strong> — this node is unreachable: the app is closed, the computer is offline, or the network is down. The phone keeps trying to reconnect.</span>
+            </p>
+          </div>
+
           <p class="text-xs text-gray-500 text-center mt-4">
             You can reopen this dialog any time from the side-nav menu.
           </p>
