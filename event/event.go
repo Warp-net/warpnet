@@ -1019,11 +1019,14 @@ type SearchUsersEvent struct {
 // SearchUsersResponse defines model for SearchUsersResponse.
 type SearchUsersResponse = UsersResponse
 
-// EditTweetEvent defines model for EditTweetEvent.
+// EditTweetEvent defines model for EditTweetEvent. A reply is addressed by
+// its parent like in GetTweetEvent: ParentId, falling back to RootId.
 type EditTweetEvent struct {
-	TweetId domain.ID `json:"tweet_id"`
-	UserId  domain.ID `json:"user_id"`
-	Text    string    `json:"text"`
+	TweetId  domain.ID `json:"tweet_id"`
+	UserId   domain.ID `json:"user_id"`
+	ParentId domain.ID `json:"parent_id,omitempty"`
+	RootId   domain.ID `json:"root_id,omitempty"`
+	Text     string    `json:"text"`
 }
 
 // EditTweetResponse defines model for EditTweetResponse.

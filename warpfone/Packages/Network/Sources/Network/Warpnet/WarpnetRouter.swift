@@ -100,6 +100,10 @@ struct WarpnetRouter: Sendable {
       return try await repository.imageData(userId: parts[0], key: parts[1])
     case "video":
       return try await repository.videoData(userId: parts[0], key: parts[1])
+    case "chat-image":
+      return try await repository.imageData(userId: parts[0], key: parts[1], route: ProtocolIds.PUBLIC_GET_CHAT_IMAGE)
+    case "chat-video":
+      return try await repository.videoData(userId: parts[0], key: parts[1], route: ProtocolIds.PUBLIC_GET_CHAT_VIDEO)
     default:
       throw WarpnetRoutingError.invalidMedia(url.absoluteString)
     }
@@ -148,6 +152,7 @@ struct WarpnetRouter: Sendable {
       let edited: WarpnetTweet = try await repository.call(ProtocolIds.PRIVATE_POST_TWEET_EDIT,
                                                            EditTweetEvent(tweetId: address.tweetId,
                                                                           userId: pairing.userId,
+                                                                          parentId: address.parentId,
                                                                           text: json.status))
       await repository.forgetTweet(address.tweetId)
       guard let status = await repository.status(edited) else { throw WarpnetRoutingError.unknownStatus(id) }
@@ -568,8 +573,14 @@ struct WarpnetRouter: Sendable {
     let actors = await repository.users(supported.compactMap { $0.0.actorId })
     let repository = repository
     let statuses = await repository.concurrentMap(supported) { item, type -> MastodonStatus? in
-      // A reply notice names the viewer's own tweet, not the reply.
-      guard let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", type != "message", item.type != "reply" else { return nil }
+      guard let tweetId = item.tweetId, !tweetId.isEmpty, type != "follow", type != "message" else { return nil }
+      if item.type == "reply" {
+        // A reply notice names the viewer's own tweet, not the reply, so show the actor's reply to it.
+        guard let actorId = item.actorId,
+              let reply = await repository.reply(to: tweetId, by: actorId, near: item.createdAt, viewerId: viewerId)
+        else { return nil }
+        return await repository.status(reply, filterContext: "notifications")
+      }
       return try? await repository.status(at: StatusAddress(tweetId: tweetId, userId: viewerId), filterContext: "notifications")
     }
     return zip(supported, statuses).map { entry, status in

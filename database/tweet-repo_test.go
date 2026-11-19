@@ -373,6 +373,25 @@ func (s *TweetRepoTestSuite) TestTweetsCount() {
 	s.Equal(uint64(1), count)
 }
 
+// A peer's tweets are cached again on every refresh of their profile.
+func (s *TweetRepoTestSuite) TestTweetsCountIgnoresStoringTheSameTweetAgain() {
+	userId := ulid.Make().String()
+	tweet := domain.Tweet{Id: ulid.Make().String(), UserId: userId, Text: "cached", CreatedAt: time.Now()}
+
+	for range 3 {
+		_, err := s.repo.CreateWithTTL(userId, tweet, time.Hour)
+		s.Require().NoError(err)
+	}
+
+	count, err := s.repo.TweetsCount(userId)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
+	limit := uint64(10)
+	list, _, err := s.repo.List(userId, &limit, nil)
+	s.Require().NoError(err)
+	s.Len(list, 1)
+}
+
 func (s *TweetRepoTestSuite) TestListTweets() {
 	userId := ulid.Make().String()
 	for i := 0; i < 3; i++ {
@@ -548,6 +567,35 @@ func (s *TweetRepoTestSuite) TestAddAndGetReply() {
 	s.Require().NoError(err)
 	s.Equal(reply.Text, got.Text)
 	s.Equal(reply.UserId, got.UserId)
+}
+
+func (s *TweetRepoTestSuite) TestUpdateReply() {
+	parentID := ulid.Make().String()
+	reply := domain.Tweet{
+		Id:        ulid.Make().String(),
+		RootId:    parentID,
+		ParentId:  &parentID,
+		UserId:    "user123",
+		Text:      "before",
+		CreatedAt: time.Now(),
+	}
+	_, err := s.repo.AddReply(reply, true)
+	s.Require().NoError(err)
+
+	s.ErrorIs(s.repo.Update(domain.Tweet{Id: reply.Id, UserId: reply.UserId, Text: "after"}), ErrTweetNotFound,
+		"a reply is not among its author's tweets")
+	s.Require().NoError(s.repo.UpdateReply(parentID, domain.Tweet{Id: reply.Id, UserId: reply.UserId, Text: "after"}))
+
+	got, err := s.repo.GetReply(parentID, reply.Id)
+	s.Require().NoError(err)
+	s.Equal("after", got.Text)
+	s.NotNil(got.UpdatedAt)
+	replies, _, err := s.repo.GetReplies(parentID, nil, nil)
+	s.Require().NoError(err)
+	s.Len(replies, 1)
+	count, err := s.repo.RepliesCount(parentID)
+	s.Require().NoError(err)
+	s.Equal(uint64(1), count)
 }
 
 func (s *TweetRepoTestSuite) TestRepliesCount() {

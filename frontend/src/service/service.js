@@ -1462,16 +1462,21 @@ export const warpnetService = {
         });
     },
 
-    async editTweet(tweetId, text) {
+    // A reply is stored under its parent, so the node needs parentId to find it.
+    async editTweet(tweetId, text, parentId) {
         const owner = this.getOwnerProfile()
         if (!owner) return null;
+        const body = {
+            tweet_id: tweetId,
+            user_id: owner.user_id,
+            text: text,
+        };
+        if (parentId) {
+            body.parent_id = parentId;
+        }
         return await this.sendToNode({
             path: PRIVATE_POST_TWEET_EDIT,
-            body: {
-                tweet_id: tweetId,
-                user_id: owner.user_id,
-                text: text,
-            },
+            body,
         });
     },
 

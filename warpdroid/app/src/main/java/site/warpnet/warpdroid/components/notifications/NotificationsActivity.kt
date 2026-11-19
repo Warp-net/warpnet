@@ -411,8 +411,8 @@ class NotificationsActivity : BaseActivity() {
         }
     }
 
-    // The node writes "<username> <action>"; the username becomes a link to
-    // the actor, the action stays as the node phrased it.
+    // The name comes from the actor's profile, so a rename shows; the action
+    // stays as the node phrased it.
     private fun notificationLabel(group: NotificationGroup, hasActor: Boolean): AnnotatedString {
         val n = group.head
         val name = n.account.name
@@ -426,7 +426,14 @@ class NotificationsActivity : BaseActivity() {
                 ) { openAccount(n.account.id) },
             ) { append(name) }
             if (others > 0) append(resources.getQuantityString(R.plurals.notification_and_others, others, others))
-            append(if (n.text.startsWith("$name ")) n.text.removePrefix(name) else " · ${n.text}")
+            val action = notificationAction(n.text)
+            append(
+                when {
+                    action != null -> action
+                    n.text.startsWith("$name ") -> n.text.removePrefix(name)
+                    else -> " · ${n.text}"
+                },
+            )
         }
     }
 
@@ -573,6 +580,22 @@ private fun List<Notification>.grouped(typeFilter: String): List<NotificationGro
             else -> n.id
         }
     }.map { (key, items) -> NotificationGroup(key, items) }
+
+// The node writes "<username> <action>" with the name as it knew it then.
+private val notificationActions = listOf(
+    " started following you$",
+    " reacted your tweet$",
+    " retweeted your tweet$",
+    " quoted your tweet$",
+    " replied to your tweet$",
+    " sent you a message$",
+    " joined Warpnet$",
+    " bought \\d+ of your tweets .*$",
+).map(::Regex)
+
+// The action part of the node's text, whatever name the node put before it.
+internal fun notificationAction(text: String): String? =
+    notificationActions.firstNotNullOfOrNull { it.find(text) }?.value
 
 // Type names as notificationTypeFromString resolves the node's types; the
 // empty one shows everything.

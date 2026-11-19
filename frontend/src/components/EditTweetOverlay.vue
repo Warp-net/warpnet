@@ -126,7 +126,7 @@ export default {
       if (!newText) return;
       this.saving = true;
       try {
-        const updated = await warpnetService.editTweet(this.tweet.id, newText);
+        const updated = await warpnetService.editTweet(this.tweet.id, newText, this.tweet.parent_id);
         this.$emit('saved', updated || { ...this.tweet, text: newText });
         toast.success('Tweet updated.');
         this.$emit('close');

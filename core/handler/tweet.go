@@ -92,6 +92,7 @@ type TweetsStorer interface {
 	Retweeters(tweetId string, limit *uint64, cursor *string) (_ []string, cur string, err error)
 	CreateWithTTL(userId string, tweet domain.Tweet, duration time.Duration) (domain.Tweet, error)
 	Update(tweet domain.Tweet) error
+	UpdateReply(parentID string, reply domain.Tweet) error
 	Pin(userId, tweetId string) (domain.Tweet, error)
 	Unpin(userId, tweetId string) (domain.Tweet, error)
 	AppendEdit(edit domain.TweetEdit) (domain.TweetEdit, error)
@@ -693,7 +694,9 @@ func tweetsRefreshBackground(
 		if repo.IsBlocklisted(tweet.Id) {
 			continue
 		}
-		_, _ = repo.CreateWithTTL(tweet.UserId, tweet, time.Hour*24*30) //nolint:mnd
+		// Cache under the list's owner: a retweet in it carries the source
+		// author's UserId and does not belong to that author's own tweets.
+		_, _ = repo.CreateWithTTL(ev.UserId, tweet, time.Hour*24*30) //nolint:mnd
 		if tweet.UserId != ev.UserId || !tweet.IsSponsored() || len(tweet.ImageHashes) == 0 {
 			continue
 		}
@@ -774,6 +777,7 @@ func StreamDeleteTweetHandler(
 	reactionRepo ReactionTweetStorer,
 	mediaRepo TweetMediaDeleter,
 	streamer TweetStreamer,
+	userRepo TweetUserFetcher,
 ) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.DeleteTweetEvent
@@ -792,7 +796,7 @@ func StreamDeleteTweetHandler(
 		// delete it from the thread index under its parent and forward the
 		// deletion to the parent author's node.
 		if parent := replyParent(ev.ParentId, ev.RootId); parent != "" && parent != ev.TweetId {
-			return deleteReply(ev, repo, streamer)
+			return deleteReply(ev, repo, streamer, userRepo)
 		}
 
 		// Deleting an own tweet only cleans up local state here; the shared
@@ -860,6 +864,7 @@ func deleteReply(
 	ev event.DeleteTweetEvent,
 	repo TweetsStorer,
 	streamer TweetStreamer,
+	userRepo TweetUserFetcher,
 ) (any, error) {
 	parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
 	id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
@@ -883,8 +888,127 @@ func deleteReply(
 		log.Errorf("delete reply handler failed: %v", err)
 		return nil, err
 	}
+	if isOwnReply && reply.ParentUserId != nil {
+		forwardToParentAuthor(*reply.ParentUserId, event.PUBLIC_DELETE_REPLY, event.DeleteTweetEvent{
+			TweetId:  id,
+			UserId:   reply.UserId,
+			ParentId: parentId,
+			RootId:   reply.RootId,
+		}, userRepo, streamer)
+	}
 
 	return event.Accepted, nil
+}
+
+// forwardToParentAuthor hands a change of an own reply to the parent tweet
+// author's node, which serves the thread. The local change stands whatever
+// that node answers.
+func forwardToParentAuthor(
+	parentUserId string, route stream.WarpRoute, body any, userRepo TweetUserFetcher, streamer TweetStreamer,
+) {
+	if userRepo == nil || streamer == nil || parentUserId == "" || parentUserId == streamer.NodeInfo().OwnerId {
+		return
+	}
+	parentUser, err := userRepo.Get(parentUserId)
+	if err != nil || parentUser.NodeId == "" || parentUser.NodeId == streamer.NodeInfo().ID.String() {
+		return
+	}
+	resp, err := streamer.GenericStream(parentUser.NodeId, route, body)
+	if errors.Is(err, warpnet.ErrNodeIsOffline) {
+		return
+	}
+	if err != nil {
+		log.Errorf("reply: forward %s to %s: %v", route, parentUser.NodeId, err)
+		return
+	}
+	var possibleError event.ResponseError
+	if _ = json.Unmarshal(resp, &possibleError); possibleError.Code != 0 {
+		log.Errorf("reply: forward %s: %s", route, possibleError.Message)
+	}
+}
+
+// StreamEditReplyHandler applies a reply author's edit to the copy of the
+// reply this node keeps as the parent tweet's author.
+func StreamEditReplyHandler(repo TweetsStorer, userRepo TweetUserFetcher, streamer TweetStreamer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.EditTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("edit reply: empty user id")
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("edit reply: empty tweet id")
+		}
+		parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
+		if parentId == "" || parentId == ev.TweetId {
+			return nil, warpnet.WarpError("edit reply: empty parent id")
+		}
+		if ev.Text == "" {
+			return nil, warpnet.WarpError("edit reply: empty text")
+		}
+		if len(ev.Text) > tweetByteLimit {
+			return nil, warpnet.WarpError("tweet text is too long")
+		}
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId); err != nil {
+			return nil, err
+		}
+
+		reply, err := repo.GetReply(parentId, ev.TweetId)
+		if err != nil {
+			return nil, err
+		}
+		if reply.UserId != ev.UserId {
+			return nil, warpnet.ErrForeignAuthor
+		}
+		reply.Text = ev.Text
+		if err := repo.UpdateReply(parentId, reply); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
+	}
+}
+
+// StreamDeleteReplyHandler removes a reply its author deleted from the copy
+// this node keeps as the parent tweet's author.
+func StreamDeleteReplyHandler(repo TweetsStorer, userRepo TweetUserFetcher, streamer TweetStreamer) warpnet.WarpHandlerFunc {
+	return func(buf []byte, s warpnet.WarpStream) (any, error) {
+		var ev event.DeleteTweetEvent
+		if err := json.Unmarshal(buf, &ev); err != nil {
+			return nil, err
+		}
+		if ev.UserId == "" {
+			return nil, warpnet.WarpError("delete reply: empty user id")
+		}
+		if ev.TweetId == "" {
+			return nil, warpnet.WarpError("delete reply: empty tweet id")
+		}
+		parentId := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
+		if parentId == "" || parentId == ev.TweetId {
+			return nil, warpnet.WarpError("delete reply: empty parent id")
+		}
+		if _, err := authorship.VerifyActor(userRepo, streamer, s, ev.UserId); err != nil {
+			return nil, err
+		}
+
+		id := strings.TrimPrefix(ev.TweetId, domain.RetweetPrefix)
+		reply, err := repo.GetReply(parentId, id)
+		if errors.Is(err, database.ErrTweetNotFound) {
+			return event.Accepted, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if reply.UserId != ev.UserId {
+			return nil, warpnet.ErrForeignAuthor
+		}
+		// The replier's own node adjusts the network-wide (CRDT) counter.
+		if _, err := repo.DeleteReply(parentId, id, false); err != nil {
+			return nil, err
+		}
+		return event.Accepted, nil
+	}
 }
 
 type RetweetsTweetStorer interface {
@@ -1058,7 +1182,9 @@ func StreamUnpinTweetHandler(repo TweetsStorer, userRepo TweetUserFetcher) warpn
 	}
 }
 
-func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) warpnet.WarpHandlerFunc {
+func StreamEditTweetHandler(
+	repo TweetsStorer, timelineRepo TimelineUpdater, userRepo TweetUserFetcher, streamer TweetStreamer,
+) warpnet.WarpHandlerFunc {
 	return func(buf []byte, s warpnet.WarpStream) (any, error) {
 		var ev event.EditTweetEvent
 		if err := json.Unmarshal(buf, &ev); err != nil {
@@ -1077,7 +1203,16 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 			return nil, warpnet.WarpError("tweet text is too long")
 		}
 
-		existing, err := repo.Get(ev.UserId, ev.TweetId)
+		// A reply lives in the thread index under its parent, not among the
+		// author's tweets.
+		parent := strings.TrimPrefix(replyParent(ev.ParentId, ev.RootId), domain.RetweetPrefix)
+		isReply := parent != "" && parent != ev.TweetId
+		namespace := ev.UserId
+		if isReply {
+			namespace = parent
+		}
+
+		existing, err := repo.Get(namespace, ev.TweetId)
 		if err != nil {
 			return nil, err
 		}
@@ -1104,11 +1239,25 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 
 		updated := existing
 		updated.Text = ev.Text
-		if err := repo.Update(updated); err != nil {
+		if isReply {
+			err = repo.UpdateReply(parent, updated)
+		} else {
+			err = repo.Update(updated)
+		}
+		if err != nil {
 			return nil, err
 		}
+		if isReply && existing.ParentUserId != nil {
+			forwardToParentAuthor(*existing.ParentUserId, event.PUBLIC_POST_REPLY_EDIT, event.EditTweetEvent{
+				TweetId:  existing.Id,
+				UserId:   existing.UserId,
+				ParentId: parent,
+				RootId:   existing.RootId,
+				Text:     ev.Text,
+			}, userRepo, streamer)
+		}
 		// Re-fetch so the response carries the storage-canonical UpdatedAt.
-		out, err := repo.Get(existing.UserId, existing.Id)
+		out, err := repo.Get(namespace, existing.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -1117,7 +1266,7 @@ func StreamEditTweetHandler(repo TweetsStorer, timelineRepo TimelineUpdater) war
 		// a snapshot of the tweet at the time it was added, so without
 		// this refresh the Home feed would keep serving the pre-edit
 		// text until the timeline entry is naturally rewritten.
-		if timelineRepo != nil {
+		if timelineRepo != nil && !isReply {
 			if err := timelineRepo.AddTweetToTimeline(out.UserId, out); err != nil {
 				log.Warnf("edit tweet: timeline refresh failed: %v", err)
 			}

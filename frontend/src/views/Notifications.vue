@@ -259,6 +259,18 @@ const TYPE_FILTERS = [
   ['order_limit', 'Order limits'],
 ];
 
+// The node writes "<username> <action>" with the name as it knew it then.
+const ACTIONS = [
+  / started following you$/,
+  / reacted your tweet$/,
+  / retweeted your tweet$/,
+  / quoted your tweet$/,
+  / replied to your tweet$/,
+  / sent you a message$/,
+  / joined Warpnet$/,
+  / bought \d+ of your tweets .*$/,
+];
+
 export default {
   name: "Notifications",
   components: {
@@ -402,14 +414,16 @@ export default {
     actorName(actorId) {
       return this.actorProfiles[actorId]?.username || '';
     },
-    // The node writes "<username> <action>"; the username becomes a link to
-    // the actor, the action stays as the node phrased it.
+    // The name comes from the actor's profile, so a rename shows; the action
+    // stays as the node phrased it.
     labelOf(group) {
       const name = this.actorName(group.actors[0]);
       const text = group.head.text || '';
       if (!name) return { name: '', rest: text };
       const others = group.actors.length - 1;
       const and = others > 0 ? ` and ${others} ${others === 1 ? 'other' : 'others'}` : '';
+      const action = ACTIONS.map(re => text.match(re)).find(Boolean);
+      if (action) return { name, rest: and + action[0] };
       if (text.startsWith(name + ' ')) return { name, rest: and + text.slice(name.length) };
       return { name, rest: and + ' · ' + text };
     },

@@ -151,7 +151,7 @@ type Owner struct {
 	NodeId          string    `json:"node_id"`
 	UserId          string    `json:"user_id"`
 	RedundantUserID string    `json:"id"`
-	Username        string    `json:"username"`
+	Login           string    `json:"login"`
 }
 
 const RetweetPrefix = "RT:"

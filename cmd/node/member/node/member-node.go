@@ -597,12 +597,20 @@ func (m *MemberNode) tweetHandlers(
 			handler.StreamNewReplyHandler(r.tweetRepo, userRepo, m.notifier, m, m.ratings),
 		},
 		{
+			event.PUBLIC_POST_REPLY_EDIT,
+			handler.StreamEditReplyHandler(r.tweetRepo, userRepo, m),
+		},
+		{
+			event.PUBLIC_DELETE_REPLY,
+			handler.StreamDeleteReplyHandler(r.tweetRepo, userRepo, m),
+		},
+		{
 			event.PRIVATE_POST_IMPORT_TWITTER_TWEET,
 			handler.StreamImportTweetHandler(m, m.privKey, r.tweetRepo, r.mediaRepo, userRepo),
 		},
 		{
 			event.PRIVATE_DELETE_TWEET,
-			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, r.mediaRepo, m),
+			handler.StreamDeleteTweetHandler(m.pubsubService, authRepo, r.tweetRepo, r.timelineRepo, r.reactionRepo, r.mediaRepo, m, userRepo),
 		},
 		{
 			event.PUBLIC_POST_TIMELINE,
@@ -626,7 +634,7 @@ func (m *MemberNode) tweetHandlers(
 		},
 		{
 			event.PRIVATE_POST_TWEET_EDIT,
-			handler.StreamEditTweetHandler(r.tweetRepo, r.timelineRepo),
+			handler.StreamEditTweetHandler(r.tweetRepo, r.timelineRepo, userRepo, m),
 		},
 		{
 			event.PUBLIC_POST_PIN,

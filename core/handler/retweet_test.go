@@ -694,7 +694,7 @@ func TestEditOfSelfRetweetedTweetKeepsTheTweet(t *testing.T) {
 		t.Fatalf("retweet: %v", err)
 	}
 
-	edit := StreamEditTweetHandler(tweetRepo, timelineRepo)
+	edit := StreamEditTweetHandler(tweetRepo, timelineRepo, nil, nil)
 	if _, err := edit(marshal(t, event.EditTweetEvent{UserId: owner, TweetId: original.Id, Text: "edited"}), nil); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
@@ -792,7 +792,7 @@ func newOwnRetweetFixture(t *testing.T) ownRetweetFixture {
 		tweet:    tweet,
 		remove: StreamDeleteTweetHandler(
 			stubTweetBroadcaster{}, stubAuth{owner: domain.Owner{UserId: owner}},
-			tweetRepo, timeline, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{},
+			tweetRepo, timeline, stubTweetReactionRepo{}, stubTweetMediaRepo{}, stubStreamer{}, nil,
 		),
 	}
 }

@@ -196,6 +196,30 @@ describe('Notifications.vue', () => {
     expect(screen.getByText(/reacted your tweet/)).toBeInTheDocument();
   });
 
+  it('names the actor by their profile, not by the name stored in the text', async () => {
+    warpnetService.getNotifications.mockResolvedValueOnce({
+      unread_count: 1,
+      notifications: [
+        {
+          id: 'n1',
+          type: 'follow',
+          user_id: 'alice',
+          actor_id: 'bob',
+          text: 'Anonymous started following you',
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    warpnetService.getProfile.mockImplementation((id) =>
+      Promise.resolve(id === 'bob' ? { id: 'bob', username: 'Bob' } : { user_id: id, locked: false })
+    );
+
+    renderNotifications();
+
+    expect(await screen.findByText('Bob', { selector: 'button' })).toBeInTheDocument();
+    expect(screen.getByText(/started following you/).textContent).not.toContain('Anonymous');
+  });
+
   it('groups reactions to one tweet into a row naming the others', async () => {
     const at = new Date().toISOString();
     warpnetService.getNotifications.mockResolvedValueOnce({
