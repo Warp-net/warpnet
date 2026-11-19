@@ -146,6 +146,7 @@ func NewMemberNode(
 	}
 
 	// Seed the mastodon gateway user with a plain repo so it doesn't notify.
+	fediverse.MoveOffLegacyGateway(database.NewUserRepo(db))
 	fediverse.SeedEntryUser(database.NewUserRepo(db))
 
 	notifier := notifications.New(

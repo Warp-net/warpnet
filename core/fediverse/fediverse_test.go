@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Warp-net/warpnet/config"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +118,47 @@ func TestIsFederatedWarpnet(t *testing.T) {
 			t.Errorf("IsFederatedWarpnet(%q) = %v, want %v", id, got, want)
 		}
 	}
+}
+
+type stubMigrator struct {
+	pages   [][]domain.User
+	updated []domain.User
+}
+
+func (s *stubMigrator) List(_ *uint64, cursor *string) ([]domain.User, string, error) {
+	i := 0
+	if *cursor != "" {
+		i = int((*cursor)[0] - '0')
+	}
+	if i >= len(s.pages) {
+		return nil, local_store.EndCursor, nil
+	}
+	next := local_store.EndCursor
+	if i+1 < len(s.pages) {
+		next = string(rune('0' + i + 1))
+	}
+	return s.pages[i], next, nil
+}
+
+func (s *stubMigrator) Update(_ string, u domain.User) (domain.User, error) {
+	s.updated = append(s.updated, u)
+	return u, nil
+}
+
+func TestMoveOffLegacyGateway(t *testing.T) {
+	repo := &stubMigrator{pages: [][]domain.User{
+		{{Id: "a@mastodon.social", NodeId: legacyGatewayNodeID}, {Id: "native", NodeId: "12D3KooWOther"}},
+		{{Id: "b@threads.net", NodeId: legacyGatewayNodeID}},
+	}}
+	MoveOffLegacyGateway(repo)
+	require.Len(t, repo.updated, 2)
+	for _, u := range repo.updated {
+		require.Equal(t, GatewayNodeID(), u.NodeId)
+	}
+}
+
+func TestLegacyGatewayIDIsNotAccepted(t *testing.T) {
+	original := GatewayNodeID()
+	SetGatewayNodeID(legacyGatewayNodeID)
+	require.Equal(t, original, GatewayNodeID(), "the legacy gateway id is claimable by anyone")
 }

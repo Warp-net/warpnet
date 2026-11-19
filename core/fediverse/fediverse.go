@@ -37,6 +37,7 @@ import (
 
 	"github.com/Warp-net/warpnet/config"
 	"github.com/Warp-net/warpnet/core/warpnet"
+	local_store "github.com/Warp-net/warpnet/database/local-store"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
 )
@@ -47,10 +48,14 @@ const (
 	MastodonNetwork = "mastodon"
 
 	// DefaultGatewayNodeID is the libp2p peer id of the ActivityPub gateway,
-	// deterministically derived from its fixed seed. It is the home node of
-	// every bridged Mastodon user, and the fallback when the owner has not
-	// configured a different gateway in settings.
-	DefaultGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
+	// derived from its secret seed. It is the home node of every bridged
+	// Mastodon user, and the fallback when the owner has not configured a
+	// different gateway in settings.
+	DefaultGatewayNodeID = "12D3KooWMssamruVNsZpwUMKMmZ8WbHNfFMBQEtq8SgHfo12JSUr"
+
+	// legacyGatewayNodeID is the gateway id from when its seed was public;
+	// anyone could claim it, so nothing is trusted to it any more.
+	legacyGatewayNodeID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK"
 
 	// ThreadsNetwork is the User.Network tag for accounts bridged in from Meta's
 	// Threads. They arrive through the same gateway and behave the same locally,
@@ -102,10 +107,39 @@ func GatewayNodeID() string { return gatewayNodeID }
 // settings. Called once at startup, before seeding and discovery; an empty id
 // is ignored so DefaultGatewayNodeID stands.
 func SetGatewayNodeID(id string) {
-	if id == "" {
+	if id == "" || id == legacyGatewayNodeID {
 		return
 	}
 	gatewayNodeID = id
+}
+
+// UserMigrator is the subset of the user repository the gateway move needs.
+type UserMigrator interface {
+	List(limit *uint64, cursor *string) ([]domain.User, string, error)
+	Update(userId string, newUser domain.User) (domain.User, error)
+}
+
+// MoveOffLegacyGateway re-homes users stored with the legacy gateway id onto
+// the current gateway, so they keep resolving after the gateway's id change.
+func MoveOffLegacyGateway(repo UserMigrator) {
+	limit := uint64(100)
+	cursor := ""
+	for {
+		users, next, err := repo.List(&limit, &cursor)
+		if err != nil {
+			return
+		}
+		for _, u := range users {
+			if u.NodeId == legacyGatewayNodeID {
+				u.NodeId = gatewayNodeID
+				_, _ = repo.Update(u.Id, u)
+			}
+		}
+		if len(users) == 0 || next == "" || next == local_store.EndCursor || next == cursor {
+			return
+		}
+		cursor = next
+	}
 }
 
 // UserSeeder is the subset of the user repository the seeding needs.
