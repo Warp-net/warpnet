@@ -35,6 +35,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Warp-net/warpnet/config"
+	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/domain"
 	"github.com/oklog/ulid/v2"
 )
@@ -66,10 +68,15 @@ const (
 	ThreadsEntryHandle = "zuck@threads.net"
 )
 
-// IsBridged reports whether a User.Network tag names a network bridged in
-// through the ActivityPub gateway rather than Warpnet itself.
+// IsBridged reports whether a User.Network tag names a network other than this
+// node's own Warpnet network. Records default to "warpnet" whatever the node's
+// network, and "mainnet" is its legacy spelling, so both count as native.
 func IsBridged(network string) bool {
-	return network == MastodonNetwork || network == ThreadsNetwork
+	switch network {
+	case "", warpnet.WarpnetName, "mainnet", "testnet", config.Config().Node.Network:
+		return false
+	}
+	return true
 }
 
 func IsFederatedWarpnet(user domain.User) bool {

@@ -55,6 +55,13 @@ resulting from the use or misuse of this software.
     <circle cx="12" cy="12" r="3.1" />
     <path d="M15.1 12v2.1a2.3 2.3 0 0 0 4.2 1.2" />
   </svg>
+  <!-- Any other bridged network gets a generic "external network" mark. -->
+  <i
+    v-else
+    :class="['fas fa-globe', colorClass, sizeClass]"
+    role="img"
+    :aria-label="network"
+  ></i>
 </template>
 
 <script>
