@@ -184,14 +184,16 @@ object WarpnetMapper {
             showingRetweets = true,
         )
 
-    // The wire shape (domain.Notification) embeds the actor in [text]
-    // ("Alice reacted your tweet") and exposes only the recipient's user_id,
-    // so the UI gets a stub account; the visible content is text + type.
+    // The stub names the actor by the node's pre-composed [text]
+    // ("Alice reacted your tweet"); a moderation notice has no actor and
+    // falls back to the recipient.
     fun WarpnetNotification.toNotification(): Notification = Notification(
         id = id,
         type = notificationTypeFromString(type),
-        account = stubTimelineUser(userId, text),
+        account = stubTimelineUser(actorId?.ifBlank { null } ?: userId, text),
         status = null,
+        createdAt = parseDate(createdAt),
+        text = text,
     )
 
     private fun parseDate(raw: String): Date =
