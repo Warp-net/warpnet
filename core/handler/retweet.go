@@ -170,7 +170,7 @@ func StreamNewReTweetHandler(
 		isOwnTweetRetweet := ownerId == sourceAuthorId // my own tweet retweet
 		if isOwnTweetRetweet {                         //nolint:nestif
 			if !isOwnerRetweeter {
-				notifyUsername := authorship.CurrentName(streamer, s, retweeter)
+				notifyUsername := retweeter.Username
 				notifyText := notifyUsername + " retweeted your tweet"
 				if isQuote {
 					notifyText = notifyUsername + " quoted your tweet"

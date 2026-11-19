@@ -11,7 +11,6 @@ import (
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/database"
 	"github.com/Warp-net/warpnet/domain"
-	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
 	"github.com/stretchr/testify/require"
 )
@@ -171,42 +170,5 @@ func TestVerifyActor(t *testing.T) {
 	t.Run("an unresolvable actor is rejected", func(t *testing.T) {
 		_, err := VerifyActor(&stubUserStore{}, stubStreamer{}, nil, actorId)
 		require.ErrorIs(t, err, warpnet.ErrForeignAuthor)
-	})
-}
-
-func TestCurrentName(t *testing.T) {
-	selfId, _ := peerStream(t)
-	nodeId, own := peerStream(t)
-	s, _ := stream.NewLoopbackStream(selfId, nodeId, "/test/route/0.0.0")
-	actor := domain.User{Id: "actor-1", Username: "Anonymous", NodeId: nodeId.String()}
-	answer := func(u domain.User) stubStreamer {
-		return stubStreamer{fn: func(id string, path stream.WarpRoute, _ any) ([]byte, error) {
-			require.Equal(t, nodeId.String(), id)
-			require.Equal(t, stream.WarpRoute(event.PUBLIC_GET_USER), path)
-			return json.Marshal(u)
-		}}
-	}
-
-	t.Run("the actor's node names them as they are now", func(t *testing.T) {
-		require.Equal(t, "Bob", CurrentName(answer(domain.User{Id: "actor-1", Username: "Bob"}), s, actor))
-	})
-
-	t.Run("the stored name stays when the node fails or answers for someone else", func(t *testing.T) {
-		failing := stubStreamer{fn: func(string, stream.WarpRoute, any) ([]byte, error) { return nil, errors.New("offline") }}
-		require.Equal(t, "Anonymous", CurrentName(failing, s, actor))
-		require.Equal(t, "Anonymous", CurrentName(answer(domain.User{Id: "other", Username: "Eve"}), s, actor))
-		require.Equal(t, "Anonymous", CurrentName(answer(domain.User{Id: "actor-1"}), s, actor))
-	})
-
-	t.Run("only the actor's own node is asked", func(t *testing.T) {
-		never := stubStreamer{fn: func(string, stream.WarpRoute, any) ([]byte, error) {
-			t.Fatal("must not ask a node that is not the actor's")
-			return nil, nil
-		}}
-		relayed := actor
-		relayed.NodeId = "another-node"
-		require.Equal(t, "Anonymous", CurrentName(never, s, relayed))
-		require.Equal(t, "Anonymous", CurrentName(never, nil, actor))
-		require.Equal(t, "Anonymous", CurrentName(never, own, actor), "a request from this node itself")
 	})
 }

@@ -477,32 +477,19 @@ func TestStreamFollowHandlerFetchesUnknownFollower(t *testing.T) {
 		}
 	})
 
-	// A known follower is not re-resolved; only the notification asks their
-	// node for the current name, which the stored copy misses after a rename.
 	t.Run("a follower already in the db is not requested", func(t *testing.T) {
 		followed := false
-		var notified string
-		requests := 0
 		h := StreamFollowHandler(
 			stubFollowBroadcaster{},
 			stubFollowRepo{followFn: func(string, string) error { followed = true; return nil }},
 			stubAuth{owner: domain.Owner{UserId: owner}},
-			stubFollowUserRepo{
-				getFn: func(userId string) (domain.User, error) {
-					return domain.User{Id: userId, Username: "Anonymous", NodeId: senderPeer.String()}, nil
-				},
-				createFn: func(domain.User) (domain.User, error) {
-					t.Fatal("a known follower must not be stored again")
-					return domain.User{}, nil
-				},
-			},
-			stubModerationNotifier{addFn: func(not domain.Notification) error { notified = not.Text; return nil }},
-			stubFollowStreamer{genericStreamFn: func(nodeId string, path stream.WarpRoute, _ any) ([]byte, error) {
-				requests++
-				if path != event.PUBLIC_GET_USER || nodeId != senderPeer.String() {
-					t.Fatalf("unexpected request %q to %q", path, nodeId)
-				}
-				return json.Marshal(domain.User{Id: "known-1", Username: "Vadim", NodeId: senderPeer.String()})
+			stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
+				return domain.User{Id: userId, Username: "Vadim", NodeId: senderPeer.String()}, nil
+			}},
+			stubModerationNotifier{},
+			stubFollowStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
+				t.Fatal("a known follower must not be requested from the network")
+				return nil, nil
 			}},
 		)
 		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: "known-1", FollowingId: owner}), senderStream); err != nil {
@@ -510,34 +497,6 @@ func TestStreamFollowHandlerFetchesUnknownFollower(t *testing.T) {
 		}
 		if !followed {
 			t.Fatal("follow was not stored")
-		}
-		if requests != 1 {
-			t.Fatalf("requests = %d, want only the name for the notification", requests)
-		}
-		if notified != "Vadim started following you" {
-			t.Fatalf("notification = %q", notified)
-		}
-	})
-
-	t.Run("the stored name is kept when the follower's node does not answer", func(t *testing.T) {
-		var notified string
-		h := StreamFollowHandler(
-			stubFollowBroadcaster{},
-			stubFollowRepo{followFn: func(string, string) error { return nil }},
-			stubAuth{owner: domain.Owner{UserId: owner}},
-			stubFollowUserRepo{getFn: func(userId string) (domain.User, error) {
-				return domain.User{Id: userId, Username: "Vadim", NodeId: senderPeer.String()}, nil
-			}},
-			stubModerationNotifier{addFn: func(not domain.Notification) error { notified = not.Text; return nil }},
-			stubFollowStreamer{genericStreamFn: func(string, stream.WarpRoute, any) ([]byte, error) {
-				return nil, errors.New("node unreachable")
-			}},
-		)
-		if _, err := h(marshal(t, event.NewFollowEvent{FollowerId: "known-1", FollowingId: owner}), senderStream); err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if notified != "Vadim started following you" {
-			t.Fatalf("notification = %q", notified)
 		}
 	})
 

@@ -95,27 +95,3 @@ func VerifyActor(
 	}
 	return actor, warpnet.VerifyAuthorship(s, actor.NodeId)
 }
-
-// CurrentName is the actor's username as their own node has it now, asked only
-// when the request came from that node. The local copy is the profile as first
-// seen, so it misses a later rename, such as a new account leaving the default
-// name. Falls back to the local copy.
-func CurrentName(streamer NodeStreamer, s warpnet.WarpStream, actor domain.User) string {
-	if s == nil || s.Conn() == nil || actor.NodeId == "" || s.Conn().RemotePeer().String() != actor.NodeId ||
-		s.Conn().RemotePeer() == s.Conn().LocalPeer() { // never a self request
-		return actor.Username
-	}
-	resp, err := streamer.GenericStream(actor.NodeId, event.PUBLIC_GET_USER, event.GetUserEvent{
-		UserId: domain.ID(actor.Id),
-		NodeId: actor.NodeId,
-	})
-	if err != nil {
-		log.Debugf("current name of %s: %v", actor.Id, err)
-		return actor.Username
-	}
-	var fresh domain.User
-	if err := json.Unmarshal(resp, &fresh); err != nil || fresh.Id != actor.Id || fresh.Username == "" {
-		return actor.Username
-	}
-	return fresh.Username
-}
