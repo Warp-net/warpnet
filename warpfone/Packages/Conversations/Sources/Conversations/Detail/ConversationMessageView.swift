@@ -10,6 +10,8 @@ import SwiftUI
 @MainActor
 struct ConversationMessageView: View {
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
   @Environment(QuickLook.self) private var quickLook
   @Environment(RouterPath.self) private var routerPath
   @Environment(CurrentAccount.self) private var currentAccount
@@ -109,7 +111,7 @@ struct ConversationMessageView: View {
 
   private func mediaWidth(proxy: GeometryProxy) -> CGFloat {
     var width = proxy.frame(in: .local).width
-    if UIDevice.current.userInterfaceIdiom == .pad {
+    if horizontalSizeClass == .regular && verticalSizeClass == .regular {
       width = width * 0.60
     }
     return width

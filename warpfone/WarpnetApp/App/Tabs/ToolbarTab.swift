@@ -7,6 +7,7 @@ import DesignSystem
 struct ToolbarTab: ToolbarContent {
   @Environment(\.isSecondaryColumn) private var isSecondaryColumn: Bool
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
   
   @Environment(UserPreferences.self) private var userPreferences
   @Environment(PairingModel.self) private var pairing
@@ -19,14 +20,13 @@ struct ToolbarTab: ToolbarContent {
       ToolbarItem(placement: .navigationBarTrailing) {
         ConnectionIndicator(monitor: pairing.monitor)
       }
-      if UIDevice.current.userInterfaceIdiom != .pad ||
-          (UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .compact) {
+      if !(horizontalSizeClass == .regular && verticalSizeClass == .regular) {
         ToolbarItem(placement: .navigationBarLeading) {
           AppAccountsSelectorView(routerPath: routerPath)
         }
       }
     }
-    if UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular {
+    if horizontalSizeClass == .regular && verticalSizeClass == .regular {
       if (!isSecondaryColumn && !userPreferences.showiPadSecondaryColumn) || isSecondaryColumn {
         SecondaryColumnToolbarItem()
       }
