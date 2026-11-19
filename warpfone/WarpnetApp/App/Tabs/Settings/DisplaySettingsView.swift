@@ -19,6 +19,7 @@ struct DisplaySettingsView: View {
   typealias FontState = Theme.FontState
 
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
   @Environment(Theme.self) private var theme
   @Environment(UserPreferences.self) private var userPreferences
 
@@ -204,7 +205,7 @@ struct DisplaySettingsView: View {
   private var platformsSection: some View {
     @Bindable var userPreferences = userPreferences
 
-    if horizontalSizeClass == .regular {
+    if horizontalSizeClass == .regular && verticalSizeClass == .regular {
       Section("settings.display.section.platform") {
         Toggle("settings.display.show-ipad-column", isOn: $userPreferences.showiPadSecondaryColumn)
       }

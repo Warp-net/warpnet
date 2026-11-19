@@ -12,6 +12,7 @@ import SwiftUIIntrospect
 struct SideBarView<Content: View>: View {
   @Environment(\.openWindow) private var openWindow
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   @Environment(AppAccountsManager.self) private var appAccounts
   @Environment(CurrentAccount.self) private var currentAccount
@@ -117,7 +118,7 @@ struct SideBarView<Content: View>: View {
   var body: some View {
     @Bindable var routerPath = routerPath
     HStack(spacing: 0) {
-      if horizontalSizeClass == .regular {
+      if horizontalSizeClass == .regular && verticalSizeClass == .regular {
         ScrollView {
           VStack(alignment: .center) {
             if appAccounts.currentClient.isAuth {

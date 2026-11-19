@@ -14,6 +14,7 @@ import SwiftUI
 struct SettingsTabs: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   @Environment(PairingModel.self) private var pairing
   @Environment(UserPreferences.self) private var preferences
@@ -55,7 +56,7 @@ struct SettingsTabs: View {
             }
           }
         }
-        if horizontalSizeClass == .regular, !preferences.showiPadSecondaryColumn, !isModal {
+        if horizontalSizeClass == .regular && verticalSizeClass == .regular, !preferences.showiPadSecondaryColumn, !isModal {
           SecondaryColumnToolbarItem()
         }
       }
@@ -120,7 +121,7 @@ struct SettingsTabs: View {
       NavigationLink(destination: SwipeActionsSettingsView()) {
         Label("settings.general.swipeactions", systemImage: "hand.draw")
       }
-      if horizontalSizeClass != .regular {
+      if !(horizontalSizeClass == .regular && verticalSizeClass == .regular) {
         NavigationLink(destination: TabbarEntriesSettingsView()) {
           Label("settings.general.tabbarEntries", systemImage: "platter.filled.bottom.iphone")
         }

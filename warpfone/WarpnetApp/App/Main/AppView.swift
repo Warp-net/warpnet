@@ -21,6 +21,7 @@ struct AppView: View {
   
   @Environment(\.openWindow) var openWindow
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
   
   @Binding var selectedTab: Tab
   @Binding var appRouterPath: RouterPath
@@ -55,7 +56,7 @@ struct AppView: View {
   }
   
   var availableTabs: [Tab] {
-    if horizontalSizeClass != .regular {
+    if !isWideLayout {
       return iosTabs.tabs
     }
     return sidebarTabs.tabs.map{ $0.tab }
@@ -83,7 +84,7 @@ struct AppView: View {
     })) {
       ForEach(availableTabs) { tab in
         tab.makeContentView(selectedTab: $selectedTab, popToRootTab: $popToRootTab)
-          .toolbar(horizontalSizeClass == .regular ? .hidden : .automatic, for: .tabBar)
+          .toolbar(isWideLayout ? .hidden : .automatic, for: .tabBar)
           .tabItem {
             if userPreferences.showiPhoneTabLabel {
               tab.label
@@ -98,7 +99,7 @@ struct AppView: View {
       }
     }
     .introspect(.tabView, on: .iOS(.v17)) { (tabview: UITabBarController) in
-      tabview.tabBar.isHidden = horizontalSizeClass == .regular
+      tabview.tabBar.isHidden = isWideLayout
       tabview.customizableViewControllers = []
       tabview.moreNavigationController.isNavigationBarHidden = true
     }
@@ -134,8 +135,13 @@ struct AppView: View {
     .environment(appRouterPath)
   }
 
+  // iPhone Plus/Max in landscape is regular width but compact height; it keeps the phone layout.
+  private var isWideLayout: Bool {
+    horizontalSizeClass == .regular && verticalSizeClass == .regular
+  }
+
   private var showsSecondaryColumn: Bool {
-    horizontalSizeClass == .regular
+    isWideLayout
       && appAccountsManager.currentClient.isAuth
       && userPreferences.showiPadSecondaryColumn
   }
