@@ -75,7 +75,6 @@ public enum ProtocolIds {
   public static let PUBLIC_GET_TWEETS = "/public/get/tweets/0.0.0"
   public static let PUBLIC_GET_USER = "/public/get/user/0.0.0"
   public static let PUBLIC_GET_USERS = "/public/get/users/0.0.0"
-  public static let PUBLIC_GET_NOSTR_KEY = "/public/get/nostr/key/0.0.0"
   public static let PUBLIC_GET_WHOTOFOLLOW = "/public/get/whotofollow/0.0.0"
   public static let PUBLIC_POST_CHAT = "/public/post/chat/0.0.0"
   public static let PUBLIC_POST_FOLLOW = "/public/post/follow/0.0.0"

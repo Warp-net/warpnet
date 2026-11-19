@@ -68,7 +68,7 @@ import {toast} from "@/lib/toast";
 
 // Mirror of fediverse.DefaultGatewayNodeID; used as the reset value and as a
 // fallback if the node response omits node_id.
-const DEFAULT_GATEWAY_NODE_ID = "12D3KooWRyHvpYFjCzorxuSyXFigPfhYaHh1GW1JmwQJSPdmj4JK";
+const DEFAULT_GATEWAY_NODE_ID = "12D3KooWMssamruVNsZpwUMKMmZ8WbHNfFMBQEtq8SgHfo12JSUr";
 
 export default {
   name: "SettingsGateway",

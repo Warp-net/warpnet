@@ -29,6 +29,7 @@ package stream
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -36,6 +37,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Warp-net/warpnet/core/fediverse"
 	"github.com/Warp-net/warpnet/core/warpnet"
 	"github.com/Warp-net/warpnet/event"
 	"github.com/Warp-net/warpnet/json"
@@ -243,6 +245,11 @@ func (p *streamPool) send(
 		Version:     "0.0.0", // TODO event message version
 	}
 	msg.Signature = security.Sign(p.privKey, msg.SigningBytes())
+	if serverInfo.ID.String() == fediverse.GatewayNodeID() {
+		if key, kerr := security.BridgeKey(p.privKey); kerr == nil {
+			msg.BridgeKey = hex.EncodeToString(key)
+		}
+	}
 	data, _ := json.Marshal(msg)
 
 	if data != nil {

@@ -339,6 +339,9 @@ type Message struct {
 	Timestamp   time.Time       `json:"timestamp"`
 	Version     string          `json:"version"`
 	Signature   string          `json:"signature"`
+	// BridgeKey is set only on messages to the gateway: the key it acts with
+	// for the sender on bridged networks.
+	BridgeKey string `json:"bridge_key,omitempty"`
 }
 
 // SigningBytes returns the bytes an ed25519 signature covers: the raw body, the
@@ -866,18 +869,6 @@ type GetNotificationSettingsResponse = domain.NotificationSettings
 
 // UpdateNotificationSettingsEvent defines model for UpdateNotificationSettingsEvent.
 type UpdateNotificationSettingsEvent = domain.NotificationSettings
-
-// GetNostrKeyEvent asks a node for its owner's Nostr secret key. Only the
-// gateway is answered, and only when the owner allowed Nostr.
-type GetNostrKeyEvent struct {
-	UserId string `json:"user_id"`
-}
-
-// GetNostrKeyResponse carries the hex secp256k1 secret key.
-type GetNostrKeyResponse struct {
-	UserId string `json:"user_id"`
-	Key    string `json:"key"`
-}
 
 // GetGatewaySettingsEvent defines model for GetGatewaySettingsEvent.
 type GetGatewaySettingsEvent struct{}
