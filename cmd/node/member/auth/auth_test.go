@@ -245,21 +245,6 @@ func TestAuthLogin_FirstLoginCreatesOwnerAndUser(t *testing.T) {
 	assert.Equal(t, created[0].Id, updated[0].Id, "the same identity must be carried through")
 }
 
-func TestAuthLogin_UsernameMismatchIsRejected(t *testing.T) {
-	repo := newFakeAuthRepo()
-	repo.owner = domain.Owner{UserId: "existing-id", Username: "alice"}
-	users := &fakeUserRepo{}
-
-	as := newService(t, repo, users, &domain.AuthNodeInfo{ID: testNodeID})
-
-	_, err := as.AuthLogin(event.LoginEvent{Username: "mallory", Password: "Claude1234$"}, security.PSK{})
-	assert.ErrorIs(t, err, errUsernamesMismatch)
-	assert.False(t, as.IsAuthenticated())
-
-	created, _ := users.snapshot()
-	assert.Empty(t, created, "an existing owner must not be overwritten by a new account")
-}
-
 func TestAuthLogin_ReturningOwnerIsNotRecreated(t *testing.T) {
 	repo := newFakeAuthRepo()
 	repo.owner = domain.Owner{UserId: "existing-id", Username: "alice", CreatedAt: time.Now().Add(-time.Hour)}

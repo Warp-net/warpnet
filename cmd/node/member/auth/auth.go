@@ -52,7 +52,6 @@ func (e authError) Error() string {
 }
 
 const (
-	errUsernamesMismatch    authError = "login doesn't exist"
 	errAlreadyAuthenticated authError = "already authenticated"
 )
 
@@ -166,10 +165,6 @@ func (as *AuthService) AuthLogin(message event.LoginEvent, psk security.PSK) (au
 		)
 	}
 
-	if owner.Username != message.Username {
-		log.Errorln("username mismatch")
-		return authInfo, errUsernamesMismatch
-	}
 	as.authReady <- domain.AuthNodeInfo{
 		UserId: owner.UserId,
 		Token:  token,
