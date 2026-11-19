@@ -129,7 +129,7 @@ func StreamFollowHandler(
 			if err == nil {
 				if notifyErr := notifyRepo.Add(domain.Notification{
 					Type:        domain.NotificationFollowType,
-					Text:        followerUser.Username + " started following you",
+					Text:        authorship.CurrentName(streamer, s, followerUser) + " started following you",
 					RecepientId: ownerUserId,
 					ActorId:     ev.FollowerId,
 				}); notifyErr != nil {

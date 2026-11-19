@@ -95,7 +95,6 @@ private struct DismissToolbarItem: ToolbarContent {
       } label: {
         Image(systemName: "xmark.circle")
       }
-      .opacity(0)
       .keyboardShortcut(.cancelAction)
     }
   }

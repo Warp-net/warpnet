@@ -95,6 +95,16 @@ final class QrPayloadTests: XCTestCase {
     ])
   }
 
+  func testValidatorAcceptsJsonTypedWithSmartQuotes() {
+    let typed = Self.pairingJson.replacingOccurrences(of: "\":\"", with: "”:“").replacingOccurrences(of: "{\"", with: "{“")
+    XCTAssertNotEqual(typed, Self.pairingJson)
+    guard case let .valid(info, rawJson) = AuthNodeInfoValidator.validate(typed) else {
+      return XCTFail("expected a valid pairing")
+    }
+    XCTAssertEqual(rawJson, Self.pairingJson)
+    XCTAssertEqual(info.token, "secret-token")
+  }
+
   func testValidatorNamesMissingFields() {
     let result = AuthNodeInfoValidator.validate(#"{"token":"t","addresses":[]}"#)
     XCTAssertEqual(result, .invalid(

@@ -381,17 +381,21 @@ public struct SearchUsersEvent: Encodable, Equatable, Sendable {
 public struct EditTweetEvent: Encodable, Equatable, Sendable {
   public var tweetId: String
   public var userId: String
+  /// A reply is stored under its parent, so the node needs it to find the reply.
+  public var parentId: String?
   public var text: String
 
   enum CodingKeys: String, CodingKey {
     case tweetId = "tweet_id"
     case userId = "user_id"
+    case parentId = "parent_id"
     case text
   }
 
-  public init(tweetId: String, userId: String, text: String) {
+  public init(tweetId: String, userId: String, parentId: String? = nil, text: String) {
     self.tweetId = tweetId
     self.userId = userId
+    self.parentId = parentId.flatMap { $0.isEmpty ? nil : $0 }
     self.text = text
   }
 }

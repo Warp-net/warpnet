@@ -170,19 +170,27 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 	}
 	defer txn.Rollback()
 
+	// Peers' tweets are cached again on every profile refresh: only a tweet
+	// new to this namespace may count.
+	_, _, getErr := get(txn, userId, tweet.Id)
+	if getErr != nil && !errors.Is(getErr, ErrTweetNotFound) {
+		return tweet, getErr
+	}
+	isNew := getErr != nil
+
 	newTweet, err := storeTweet(txn, userId, tweet, duration, false)
 	if err != nil {
 		return newTweet, err
 	}
 
-	countKey := local.NewPrefixBuilder(TweetsNamespace).
-		AddSubPrefix(tweetsCountSubspace).
-		AddRootID(userId).
-		Build()
-
-	_, err = txn.Increment(countKey)
-	if err != nil {
-		return newTweet, err
+	if isNew {
+		countKey := local.NewPrefixBuilder(TweetsNamespace).
+			AddSubPrefix(tweetsCountSubspace).
+			AddRootID(userId).
+			Build()
+		if _, err = txn.Increment(countKey); err != nil {
+			return newTweet, err
+		}
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -193,6 +201,18 @@ func (repo *TweetRepo) CreateWithTTL(userId string, tweet domain.Tweet, duration
 }
 
 func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
+	return repo.update(updateTweet.UserId, updateTweet)
+}
+
+// UpdateReply updates a reply, which lives in the thread index under its parent.
+func (repo *TweetRepo) UpdateReply(parentID string, reply domain.Tweet) error {
+	if parentID == "" {
+		return local.DBError("no parent id")
+	}
+	return repo.update(parentID, reply)
+}
+
+func (repo *TweetRepo) update(rootID string, updateTweet domain.Tweet) error {
 	if updateTweet.Id == "" {
 		return local.DBError("no tweet id")
 	}
@@ -207,7 +227,7 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	}
 	defer txn.Rollback()
 
-	existedTweet, expiresAt, err := get(txn, updateTweet.UserId, updateTweet.Id)
+	existedTweet, expiresAt, err := get(txn, rootID, updateTweet.Id)
 	if err != nil {
 		return err
 	}
@@ -226,7 +246,7 @@ func (repo *TweetRepo) Update(updateTweet domain.Tweet) error {
 	if ttl <= 0 { //nolint:modernize
 		ttl = 0
 	}
-	_, err = storeTweet(txn, existedTweet.UserId, existedTweet, ttl, true)
+	_, err = storeTweet(txn, rootID, existedTweet, ttl, true)
 	if err != nil {
 		return err
 	}

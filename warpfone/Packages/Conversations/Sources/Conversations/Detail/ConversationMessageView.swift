@@ -118,7 +118,8 @@ struct ConversationMessageView: View {
   private func makeMediaView(_ attachement: MediaAttachment) -> some View {
     GeometryReader { proxy in
       let width = mediaWidth(proxy: proxy)
-      if let url = attachement.url {
+      // A video shows its still frame; the viewer plays it on tap.
+      if let url = attachement.previewUrl ?? attachement.url {
         LazyImage(request: makeImageRequest(for: url,
                                             size: .init(width: width, height: 200)))
         { state in

@@ -73,6 +73,7 @@ struct PairingView: View {
         .listRowBackground(theme.primaryBackgroundColor)
         Section {
           Button("warpnet.pairing.manual") {
+            manualPayload = ""
             isManualEntryPresented = true
           }
         }

@@ -1,3 +1,5 @@
+// Modified by Warpnet. See NOTICE.
+
 import DesignSystem
 import Env
 import Models
@@ -33,17 +35,14 @@ public struct StatusPollView: View {
     return Int(round(CGFloat(vote) * 100 / CGFloat(totalVote)))
   }
 
-  private func isSelected(option: Poll.Option) -> Bool {
-    if let optionIndex = viewModel.poll.options.firstIndex(where: { $0.id == option.id }),
-       let _ = viewModel.votes.firstIndex(of: optionIndex)
-    {
-      return true
-    }
-    return false
+  // Option ids are fresh UUIDs on every decode, so a refetched poll would
+  // orphan them; the option's position is what the vote carries anyway.
+  private func isSelected(index: Int) -> Bool {
+    viewModel.votes.contains(index)
   }
 
-  private func buttonImage(option: Poll.Option) -> some View {
-    let isSelected = isSelected(option: option)
+  private func buttonImage(index: Int) -> some View {
+    let isSelected = isSelected(index: index)
     var imageName = ""
     if viewModel.poll.multiple {
       if isSelected {
@@ -65,13 +64,13 @@ public struct StatusPollView: View {
   public var body: some View {
     let isInteractive = viewModel.poll.expired == false && (viewModel.poll.voted ?? true) == false
     VStack(alignment: .leading) {
-      ForEach(Array(viewModel.poll.options.enumerated()), id: \.element.id) { index, option in
+      ForEach(Array(viewModel.poll.options.enumerated()), id: \.offset) { index, option in
         HStack {
           if status.account.id == currentAccount.account?.id {
-            makeBarView(for: option, buttonImage: EmptyView())
+            makeBarView(for: option, index: index, buttonImage: EmptyView())
               .disabled(true)
           } else {
-            makeBarView(for: option, buttonImage: buttonImage(option: option))
+            makeBarView(for: option, index: index, buttonImage: buttonImage(index: index))
               .disabled(isInteractive == false)
           }
           if viewModel.showResults || status.account.id == currentAccount.account?.id {
@@ -86,7 +85,7 @@ public struct StatusPollView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(combinedAccessibilityLabel(for: option, index: index))
         .accessibilityRespondsToUserInteraction(isInteractive)
-        .accessibilityAddTraits(isSelected(option: option) ? .isSelected : [])
+        .accessibilityAddTraits(isSelected(index: index) ? .isSelected : [])
         .accessibilityAddTraits(isInteractive ? [] : .isStaticText)
         .accessibilityRemoveTraits(isInteractive ? [] : .isButton)
       }
@@ -146,11 +145,9 @@ public struct StatusPollView: View {
   }
 
   @ViewBuilder
-  private func makeBarView(for option: Poll.Option, buttonImage: some View) -> some View {
+  private func makeBarView(for option: Poll.Option, index: Int, buttonImage: some View) -> some View {
     Button {
-      if !viewModel.poll.expired,
-         let index = viewModel.poll.options.firstIndex(where: { $0.id == option.id })
-      {
+      if !viewModel.poll.expired, viewModel.poll.options.indices.contains(index) {
         withAnimation {
           viewModel.handleSelection(index)
         }

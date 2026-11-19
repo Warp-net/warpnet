@@ -375,4 +375,5 @@ type TweetsProvider interface {
 	UnRetweet(retweetedByUserID string, tweetId string, isTransitive bool) error
 	Unpin(userId string, tweetId string) (domain.Tweet, error)
 	Update(tweet domain.Tweet) error
+	UpdateReply(parentID string, reply domain.Tweet) error
 }

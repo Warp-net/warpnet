@@ -15,7 +15,11 @@ public enum QrPayloadCodec {
 
   public static func decode(_ payload: String) throws -> String {
     let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty || trimmed.hasPrefix("{") { return trimmed }
+    // The iOS keyboard types “ ” in place of ", which hand-typed JSON cannot survive;
+    // Base45 has no quote characters, so only the JSON form is touched.
+    if trimmed.isEmpty || trimmed.hasPrefix("{") {
+      return trimmed.replacingOccurrences(of: "[“”„‟]", with: "\"", options: .regularExpression)
+    }
     guard trimmed.utf8.count <= maxEncodedChars else { throw DecodingError.tooLong }
     let json = try gunzip(Base45.decode(trimmed), limit: maxDecodedBytes)
     guard let text = String(data: json, encoding: .utf8) else { throw DecodingError.notUTF8 }

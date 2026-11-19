@@ -129,7 +129,7 @@ func StreamReactionHandler(
 
 		isSomeoneReactedToMe := ev.OwnerId != ownNodeInfo.OwnerId
 		if isSomeoneReactedToMe { // reactions exchange finished
-			notifyUsername := reactor.Username
+			notifyUsername := authorship.CurrentName(streamer, s, reactor)
 			if err := notifyRepo.Add(domain.Notification{
 				Type:        domain.NotificationReactionType,
 				Text:        notifyUsername + " reacted your tweet",

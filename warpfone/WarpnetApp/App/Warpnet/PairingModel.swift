@@ -98,7 +98,8 @@ final class PairingModel {
     case let .success(info):
       finish(info)
     case let .rejected(code, message):
-      phase = .failed(String(localized: "warpnet.pairing.error.rejected-\(code)-\(message)"), canRetry: false)
+      // A string, so the code is not shown with a thousands separator ("5.000").
+      phase = .failed(String(localized: "warpnet.pairing.error.rejected-\(String(code))-\(message)"), canRetry: false)
     case .peerIdMismatch:
       phase = .failed(String(localized: "warpnet.pairing.error.peer-mismatch"), canRetry: false)
     case let .transportError(message):

@@ -30,6 +30,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/Warp-net/warpnet/core/authorship"
 	"github.com/Warp-net/warpnet/core/fediverse"
 	"strings"
 	"time"
@@ -383,7 +384,7 @@ func StreamNewMessageHandler(repo ChatStorer, userRepo ChatUserFetcher, notifyRe
 			log.Infoln("received new message!")
 			if err := notifyRepo.Add(domain.Notification{
 				Type:        domain.NotificationMessageType,
-				Text:        sender.Username + " sent you a message",
+				Text:        authorship.CurrentName(streamer, s, sender) + " sent you a message",
 				RecepientId: ownerId,
 				ActorId:     ev.SenderId,
 			}); err != nil {
